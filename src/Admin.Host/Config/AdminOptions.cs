@@ -4,8 +4,10 @@ namespace Admin.Host.Config;
 /// Everything the console needs to know about the workstation, bound from the
 /// <c>Admin</c> section of appsettings, from <c>BLUEPRINT_Admin__Key</c>
 /// environment variables and from <c>--Admin:Key=value</c> on the command line.
-/// Relative directories resolve against the working directory the host was
-/// started from, so the README says to start it from the repository root.
+/// Relative <see cref="BackendDir"/>/<see cref="FrontendDir"/> resolve against
+/// the repository root, located by walking up from the executable to
+/// <c>BlueprintAdmin.slnx</c> (see <c>Config/RepoRoot.cs</c>), independent of
+/// the process's working directory.
 /// </summary>
 public sealed class AdminOptions
 {
