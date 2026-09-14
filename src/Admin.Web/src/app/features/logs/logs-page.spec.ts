@@ -1,28 +1,39 @@
 import { TestBed } from '@angular/core/testing';
 import { Subject, of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
+import { JobSummary } from '../../core/host/host-types';
 import { JobEvent, SseClient } from '../../core/host/sse-client';
 import { LogsPage } from './logs-page';
 
 describe('LogsPage', () => {
   let events: Subject<JobEvent>;
+  let streams: Record<string, Subject<JobEvent>>;
+  let sseFollow: ReturnType<typeof vi.fn>;
   let host: { followLogs: ReturnType<typeof vi.fn> };
 
-  beforeEach(() => {
-    events = new Subject<JobEvent>();
-    host = { followLogs: vi.fn(() => of({ id: 'logs-1', commandLine: 'docker compose logs -f', state: 'Running', exitCode: null, startedAt: '' })) };
-    TestBed.configureTestingModule({
-      imports: [LogsPage],
-      providers: [
-        { provide: HostClient, useValue: host },
-        { provide: SseClient, useValue: { follow: () => events.asObservable() } },
-      ],
-    });
-  });
+  function summary(id: string): JobSummary {
+    return { id, commandLine: 'docker compose logs -f', state: 'Running', exitCode: null, startedAt: '' };
+  }
 
   function line(sequence: number, text: string): JobEvent {
     return { kind: 'line', line: { sequence, at: '', stream: 'Stdout', text } };
   }
+
+  beforeEach(() => {
+    events = new Subject<JobEvent>();
+    // Keyed by job id so a test can give distinct SSE streams to distinct POST responses;
+    // existing tests only ever see the default 'logs-1' job, which maps to `events`.
+    streams = { 'logs-1': events };
+    sseFollow = vi.fn((jobId: string) => (streams[jobId] ??= new Subject<JobEvent>()).asObservable());
+    host = { followLogs: vi.fn(() => of(summary('logs-1'))) };
+    TestBed.configureTestingModule({
+      imports: [LogsPage],
+      providers: [
+        { provide: HostClient, useValue: host },
+        { provide: SseClient, useValue: { follow: sseFollow } },
+      ],
+    });
+  });
 
   it('follows the selected services and shows lines', () => {
     const fixture = TestBed.createComponent(LogsPage);
@@ -61,5 +72,54 @@ describe('LogsPage', () => {
     expect(fixture.nativeElement.textContent).toContain('Docker did not answer.');
     expect(fixture.nativeElement.querySelector('.live')).toBeNull();
     expect(fixture.componentInstance.following()).toBe(false);
+  });
+
+  it('ignores a follow response that arrives after Stop', () => {
+    const post = new Subject<JobSummary>();
+    host.followLogs.mockReturnValueOnce(post.asObservable());
+
+    const fixture = TestBed.createComponent(LogsPage);
+    fixture.componentInstance.follow();
+    fixture.componentInstance.stop();
+    sseFollow.mockClear();
+
+    post.next(summary('late-1'));
+    fixture.detectChanges();
+
+    expect(sseFollow).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.following()).toBe(false);
+    expect(fixture.nativeElement.querySelector('.live')).toBeNull();
+  });
+
+  it('a second Follow replaces the first even if the first answers late', () => {
+    const postA = new Subject<JobSummary>();
+    const postB = new Subject<JobSummary>();
+    host.followLogs.mockReturnValueOnce(postA.asObservable()).mockReturnValueOnce(postB.asObservable());
+
+    const fixture = TestBed.createComponent(LogsPage);
+    fixture.componentInstance.follow();
+    fixture.componentInstance.follow();
+
+    postB.next(summary('job-b'));
+    streams['job-b'].next(line(0, 'job-b line'));
+    postA.next(summary('job-a'));
+    fixture.detectChanges();
+
+    expect(sseFollow.mock.calls.map((c) => c[0])).toEqual(['job-b']);
+    expect(fixture.componentInstance.lines().map((l) => l.text)).toEqual(['job-b line']);
+  });
+
+  it('destroying the page while a follow is in flight opens no stream', () => {
+    const post = new Subject<JobSummary>();
+    host.followLogs.mockReturnValueOnce(post.asObservable());
+
+    const fixture = TestBed.createComponent(LogsPage);
+    fixture.componentInstance.follow();
+    fixture.destroy();
+    sseFollow.mockClear();
+
+    post.next(summary('late-2'));
+
+    expect(sseFollow).not.toHaveBeenCalled();
   });
 });
