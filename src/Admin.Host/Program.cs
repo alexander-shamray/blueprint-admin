@@ -25,9 +25,15 @@ string baseDir = RepoRoot.Find(AppContext.BaseDirectory) ?? Environment.CurrentD
 builder.Services.AddSingleton(sp => RepoPaths.From(sp.GetRequiredService<IOptions<AdminOptions>>().Value, baseDir));
 
 // Loopback by construction: there is no setting that binds anything else,
-// because the host holds realm passwords and can wipe volumes (spec §8).
+// because the host holds realm passwords and can wipe volumes (spec §8). The
+// default builder loads Kestrel:Endpoints from configuration and Kestrel adds
+// those beside a code-backed listener, so that loader is replaced with an
+// empty one first.
 builder.WebHost.ConfigureKestrel((context, kestrel) =>
-    kestrel.Listen(IPAddress.Loopback, context.Configuration.GetValue($"{AdminOptions.Section}:Port", 5300)));
+{
+    kestrel.Configure(new ConfigurationBuilder().Build());
+    kestrel.Listen(IPAddress.Loopback, context.Configuration.GetValue($"{AdminOptions.Section}:Port", 5300));
+});
 
 builder.Services.AddProblemDetails();
 builder.Services.ConfigureHttpJsonOptions(json => json.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
