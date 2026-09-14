@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { of, throwError } from 'rxjs';
+import { delay, of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { SseClient } from '../../core/host/sse-client';
 import { StackPage } from './stack-page';
@@ -110,6 +110,27 @@ describe('StackPage', () => {
 
     const rows = Array.from(fixture.nativeElement.querySelectorAll('tbody tr')) as HTMLElement[];
     expect(rows.length).toBe(2);
+    expect(fixture.nativeElement.textContent).not.toContain('The host did not answer');
+  });
+
+  it('lets a slow poll finish instead of cancelling it on the next tick', async () => {
+    // docker compose ps can take longer than the 3 s tick; a cancelled request kills the ps on
+    // the host, so if each tick replaced the last one no answer would ever arrive.
+    host.stack.mockImplementation(() => of(stack).pipe(delay(5000)));
+
+    const fixture = TestBed.createComponent(StackPage);
+    fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(3000);
+    fixture.detectChanges();
+
+    expect(host.stack).toHaveBeenCalledTimes(1);
+    expect(fixture.nativeElement.querySelectorAll('tbody tr').length).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(2000);
+    fixture.detectChanges();
+
+    expect(host.stack).toHaveBeenCalledTimes(1);
+    expect(fixture.nativeElement.querySelectorAll('tbody tr').length).toBe(2);
     expect(fixture.nativeElement.textContent).not.toContain('The host did not answer');
   });
 
