@@ -17,6 +17,7 @@ test('wiping volumes needs the typed confirmation', async ({ page }) => {
   const wipe = page.getByRole('button', { name: 'Down and wipe' });
 
   await expect(wipe).toBeDisabled();
+  await expect(page.getByPlaceholder('type: down -v')).toHaveAccessibleName('Type down -v to confirm wiping volumes');
   await page.getByPlaceholder('type: down -v').fill('down -v');
   await expect(wipe).toBeEnabled();
 

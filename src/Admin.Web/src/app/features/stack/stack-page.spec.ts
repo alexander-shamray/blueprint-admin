@@ -94,6 +94,16 @@ describe('StackPage', () => {
     expect(host.backendDown).toHaveBeenCalledWith(true, 'down -v');
   });
 
+  it('gives the wipe confirmation input an accessible name', async () => {
+    const fixture = TestBed.createComponent(StackPage);
+    fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(0);
+    fixture.detectChanges();
+
+    const confirm = fixture.nativeElement.querySelector('input[placeholder="type: down -v"]') as HTMLInputElement;
+    expect(confirm.getAttribute('aria-label')).toBe('Type down -v to confirm wiping volumes');
+  });
+
   it('keeps polling after a failed request', async () => {
     host.stack.mockReturnValueOnce(throwError(() => new Error('network down')));
 

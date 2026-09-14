@@ -2,7 +2,7 @@
   <button class="up" (click)="up()">Up</button>
   <button class="down" (click)="down()">Down</button>
   <span class="wipe-box">
-    <input placeholder="type: down -v" [ngModel]="confirmText()" (ngModelChange)="confirmText.set($event)" />
+    <input aria-label="Type down -v to confirm wiping volumes" placeholder="type: down -v" [ngModel]="confirmText()" (ngModelChange)="confirmText.set($event)" />
     <button class="wipe" [disabled]="!canWipe()" (click)="wipe()">Down and wipe</button>
   </span>
   @if (config(); as c) {
