@@ -24,6 +24,20 @@ public static class FakePlatformScripts
         "rabbitmq      | 2026-09-14 07:00:00.000 [info] <0.1.0> connection accepted from ordering-api",
     ];
 
+    // npm start in the frontend clone as the Angular dev server prints it. It
+    // keeps running until stopped, as ng serve does.
+    private static readonly string[] NgServeLines =
+    [
+        "> blueprint-frontend@0.0.0 start",
+        "> ng serve",
+        "Initial chunk files | Names  | Raw size",
+        "main.js             | main   | 212.40 kB",
+        "styles.css          | styles |  95.12 kB",
+        "Application bundle generation complete. [2.315 seconds]",
+        "Watch mode enabled. Watching for file changes...",
+        "  Local:   http://localhost:5173/",
+    ];
+
     public static FakeProcessRunner Script(FakeProcessRunner runner, string composeFile)
     {
         string prefix = $"compose -f {composeFile} ";
@@ -49,7 +63,8 @@ public static class FakePlatformScripts
                 " Container commerce-catalog-api-1  Removed",
                 " Container commerce-sql-1  Removed",
                 " Network commerce_default  Removed")
-            .OnLongRunning("docker", prefix + "logs -f --tail 200", services => FollowLogLines.Where(l => services.Count == 0 || services.Contains(ServiceOf(l))));
+            .OnLongRunning("docker", prefix + "logs -f --tail 200", services => FollowLogLines.Where(l => services.Count == 0 || services.Contains(ServiceOf(l))))
+            .OnLongRunning("npm", "start", NgServeLines);
     }
 
     public static IReadOnlyList<string> ComposePsLines()

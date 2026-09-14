@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Admin.Host.Compose;
 using Admin.Host.Config;
 using Admin.Host.Fakes;
+using Admin.Host.Frontend;
 using Admin.Host.Jobs;
 using Admin.Host.Security;
 using Admin.Host.Stack;
@@ -60,6 +61,18 @@ builder.Services.AddSingleton<IProcessRunner>(sp =>
 
 builder.Services.AddSingleton<ComposeService>();
 builder.Services.AddSingleton<LogFollower>();
+
+// In FakePlatform mode the frontend clone may not exist at all, and its npm
+// start is a recording, so the node_modules check would refuse for nothing.
+builder.Services.AddSingleton(sp =>
+{
+    Func<string, bool> installed = sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform
+        ? _ => true
+        : FrontendSupervisor.HasNodeModules;
+
+    return new FrontendSupervisor(sp.GetRequiredService<IProcessRunner>(), sp.GetRequiredService<RepoPaths>(), installed);
+});
+
 builder.Services.AddHttpClient<PlatformProbe>().ConfigurePrimaryHttpMessageHandler(sp =>
     sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform
         ? new FakePlatformHandler()
@@ -98,6 +111,7 @@ if (spaFiles is not null)
 app.MapConfig();
 app.MapJobs();
 app.MapStack();
+app.MapFrontend();
 
 // MapFallbackToFile's route has no literal segments, so without this it
 // would also catch an unmatched /api/nope (it has no dot, so it passes the
