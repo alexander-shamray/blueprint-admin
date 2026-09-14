@@ -28,6 +28,19 @@
     <NoWarn>$(NoWarn);CA1707</NoWarn>
   </PropertyGroup>
 
+  <!--
+    CA1711 bans a reserved suffix on a type name so a consumer is not misled
+    about what the type derives from. It fires on `OutputStream` (Jobs), where
+    the suffix is not incorrect: the name means the stdout/stderr stream of a
+    child process, not System.IO.Stream. The rule protects a consumer of a
+    published library who cannot rename the type themselves, and there is no
+    such consumer here — nothing in this repo is published, every project is
+    referenced by C# inside it.
+  -->
+  <PropertyGroup Label="Analysis suppressions">
+    <NoWarn>$(NoWarn);CA1711</NoWarn>
+  </PropertyGroup>
+
   <PropertyGroup Label="Build">
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
