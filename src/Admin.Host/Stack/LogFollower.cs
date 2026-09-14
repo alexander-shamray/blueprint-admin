@@ -26,6 +26,10 @@ public sealed class LogFollower(ComposeService compose, IProcessRunner runner) :
                 await runner.StopAsync(previous, CancellationToken.None);
             }
 
+            // A request aborted during that stop wants no follow: starting one anyway
+            // would leave a logs -f running that nothing is reading.
+            cancellationToken.ThrowIfCancellationRequested();
+
             current = compose.FollowLogs(services);
 
             return current;
