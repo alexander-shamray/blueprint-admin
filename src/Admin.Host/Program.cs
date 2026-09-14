@@ -6,6 +6,7 @@ using Admin.Host.Fakes;
 using Admin.Host.Jobs;
 using Admin.Host.Security;
 using Admin.Host.Stack;
+using Microsoft.AspNetCore.HostFiltering;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
 
@@ -34,6 +35,11 @@ builder.WebHost.ConfigureKestrel((context, kestrel) =>
     kestrel.Configure(new ConfigurationBuilder().Build());
     kestrel.Listen(IPAddress.Loopback, context.Configuration.GetValue($"{AdminOptions.Section}:Port", 5300));
 });
+
+// Host filtering is the DNS-rebinding half of the loopback defence, so its
+// names are pinned here too: the default builder fills AllowedHosts from
+// configuration only when code leaves it empty, and configuration could say *.
+builder.Services.Configure<HostFilteringOptions>(hosts => hosts.AllowedHosts = [.. LoopbackOriginGuard.LoopbackHosts]);
 
 builder.Services.AddProblemDetails();
 builder.Services.ConfigureHttpJsonOptions(json => json.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));

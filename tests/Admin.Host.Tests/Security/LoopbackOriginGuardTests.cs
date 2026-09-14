@@ -1,8 +1,11 @@
 using System.Net;
 using Admin.Host.Fakes;
 using Admin.Host.Tests.TestSupport;
-using Microsoft.Extensions.Configuration;
+using Microsoft.AspNetCore.HostFiltering;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Shouldly;
 
 namespace Admin.Host.Tests.Security;
@@ -73,8 +76,21 @@ public sealed class LoopbackOriginGuardTests : IClassFixture<AdminHostFactory>
     }
 
     [Fact]
+    public async Task Configuring_AllowedHosts_to_any_host_still_rejects_a_foreign_host_name()
+    {
+        using WebApplicationFactory<Program> widened = factory.WithWebHostBuilder(builder => builder.UseSetting("AllowedHosts", "*"));
+        using HttpClient widenedClient = widened.CreateClient();
+        using HttpRequestMessage request = new(HttpMethod.Get, "/api/config");
+        request.Headers.Host = "evil.example";
+
+        using HttpResponseMessage response = await widenedClient.SendAsync(request, TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public void Allowed_hosts_are_the_loopback_names_only()
     {
-        factory.Services.GetRequiredService<IConfiguration>()["AllowedHosts"].ShouldBe("127.0.0.1;localhost;[::1]");
+        factory.Services.GetRequiredService<IOptions<HostFilteringOptions>>().Value.AllowedHosts.ShouldBe(["127.0.0.1", "localhost", "[::1]"]);
     }
 }

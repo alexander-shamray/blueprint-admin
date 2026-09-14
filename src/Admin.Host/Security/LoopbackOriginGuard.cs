@@ -9,11 +9,11 @@ namespace Admin.Host.Security;
 /// <c>Sec-Fetch-Site</c> is <c>cross-site</c>, is a 403 before any endpoint runs.
 /// A request with neither header (curl, tests) passes, and so does the dev server
 /// on 5301, which proxies with a loopback Origin. DNS rebinding is the other half
-/// and is closed by <c>AllowedHosts</c> in appsettings.json.
+/// and is closed by host filtering, pinned to <see cref="LoopbackHosts"/> in Program.cs.
 /// </summary>
 public static class LoopbackOriginGuard
 {
-    private static readonly string[] LoopbackHosts = ["127.0.0.1", "localhost", "[::1]"];
+    public static readonly IReadOnlyList<string> LoopbackHosts = ["127.0.0.1", "localhost", "[::1]"];
 
     public static IApplicationBuilder UseLoopbackOriginGuard(this IApplicationBuilder app) =>
         app.Use(async (context, next) =>
