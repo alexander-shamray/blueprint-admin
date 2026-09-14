@@ -74,6 +74,21 @@ describe('LogsPage', () => {
     expect(fixture.componentInstance.following()).toBe(false);
   });
 
+  it('shows the stream error, leaves live mode and keeps the lines already received', () => {
+    const fixture = TestBed.createComponent(LogsPage);
+    fixture.componentInstance.follow();
+    events.next(line(0, 'gateway | started'));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.live')).not.toBeNull();
+
+    events.error(new Error('The host closed the job stream.'));
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.error')?.textContent).toContain('The host closed the job stream.');
+    expect(fixture.nativeElement.querySelector('.live')).toBeNull();
+    expect(fixture.componentInstance.lines().map((l) => l.text)).toEqual(['gateway | started']);
+  });
+
   it('ignores a follow response that arrives after Stop', () => {
     const post = new Subject<JobSummary>();
     host.followLogs.mockReturnValueOnce(post.asObservable());

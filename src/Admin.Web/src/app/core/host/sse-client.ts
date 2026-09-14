@@ -26,8 +26,15 @@ export class SseClient {
       );
       source.addEventListener('exited', (e: MessageEvent) => {
         subscriber.next({ kind: 'exited', exitCode: (JSON.parse(e.data) as { exitCode: number }).exitCode });
-        source.close();
+        // complete() runs the teardown below, which closes the source.
         subscriber.complete();
+      });
+      // An error while CONNECTING is the browser retrying on its own; only CLOSED means it has
+      // given up (the host answered 404 for a job it no longer has, or not an event stream).
+      source.addEventListener('error', () => {
+        if (source.readyState === EventSource.CLOSED) {
+          subscriber.error(new Error('The host closed the job stream.'));
+        }
       });
 
       return () => source.close();

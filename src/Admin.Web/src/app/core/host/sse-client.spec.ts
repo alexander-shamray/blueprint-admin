@@ -2,9 +2,17 @@ import { TestBed } from '@angular/core/testing';
 import { JobEvent, SseClient } from './sse-client';
 
 class FakeEventSource {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSED = 2;
   static instances: FakeEventSource[] = [];
   readonly listeners = new Map<string, (e: MessageEvent) => void>();
-  closed = false;
+  readyState = FakeEventSource.OPEN;
+  closeCount = 0;
+
+  get closed(): boolean {
+    return this.closeCount > 0;
+  }
 
   constructor(readonly url: string) {
     FakeEventSource.instances.push(this);
@@ -15,11 +23,18 @@ class FakeEventSource {
   }
 
   close(): void {
-    this.closed = true;
+    this.closeCount++;
+    this.readyState = FakeEventSource.CLOSED;
   }
 
   emit(type: string, data: unknown, lastEventId = ''): void {
     this.listeners.get(type)?.(new MessageEvent(type, { data: JSON.stringify(data), lastEventId }));
+  }
+
+  /** What the browser does on a dropped connection: set readyState, then fire a plain `error`. */
+  fail(readyState: number): void {
+    this.readyState = readyState;
+    this.listeners.get('error')?.(new Event('error') as MessageEvent);
   }
 }
 
@@ -48,7 +63,31 @@ describe('SseClient', () => {
       { kind: 'exited', exitCode: 0 },
     ]);
     expect(completed).toBe(true);
-    expect(source.closed).toBe(true);
+    expect(source.closeCount).toBe(1);
+  });
+
+  it('treats an error while reconnecting as a reconnect, not a failure', () => {
+    const client = TestBed.inject(SseClient);
+    let failed: unknown;
+
+    client.follow('j3').subscribe({ error: (e) => (failed = e) });
+    const source = FakeEventSource.instances[0];
+    source.fail(FakeEventSource.CONNECTING);
+
+    expect(failed).toBeUndefined();
+    expect(source.closed).toBe(false);
+  });
+
+  it('errors the stream once the browser has given up on the connection', () => {
+    const client = TestBed.inject(SseClient);
+    let failed: unknown;
+
+    client.follow('j4').subscribe({ error: (e) => (failed = e) });
+    const source = FakeEventSource.instances[0];
+    source.fail(FakeEventSource.CLOSED);
+
+    expect(failed).toBeInstanceOf(Error);
+    expect(source.closeCount).toBeLessThanOrEqual(1);
   });
 
   it('opens a plain follow with no query, so a reconnect resumes from Last-Event-ID', () => {
