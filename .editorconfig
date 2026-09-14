@@ -1,12 +1,16 @@
 root = true
 
-# House style for .NET 10 and C# 14. This governs both the C# samples in
-# docs/backend-architecture/ and the solution that will be built in src/ and
-# tests/ — one dialect, so a sample and its implementation read identically.
-# docs/style-guide.md carries the prose version, including the settled choices
-# a reviewer might otherwise try to "correct".
+# House style for .NET 10 and C# 14, taken from the backend this console
+# drives, dotnet-ddd-blueprint
+# (https://github.com/alexander-shamray/dotnet-ddd-blueprint), so admin code
+# reads like the code it operates.
 #
-# This is the .editorconfig delivery-plan PR-01 ships. Treat it as source.
+# Every path and document named in the comments below — docs/style-guide.md,
+# docs/backend-architecture/, ADR-019, delivery-plan PR-01, the Python gates —
+# lives in that repository, not in this one. docs/style-guide.md there carries
+# the prose version of each rule, including the settled choices a reviewer
+# might otherwise try to "correct". In this repository the build enforces the
+# rules at `warning` (via Directory.Build.props) and review carries the rest.
 #
 # PR-01 also sets EnforceCodeStyleInBuild (ADR-019), which promotes this file
 # from an editor convenience to a build input — but only for rules configured
