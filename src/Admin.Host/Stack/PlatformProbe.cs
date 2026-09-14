@@ -38,6 +38,14 @@ public sealed class PlatformProbe(HttpClient http, IOptions<AdminOptions> option
 
     private async Task<Reachability> ProbeOneAsync(string name, string url, CancellationToken cancellationToken)
     {
+        // The URLs are configurable: one that is not absolute http(s), such as
+        // localhost:5000, is that target down rather than an exception that
+        // Task.WhenAll would turn into a 500 for the whole Stack screen.
+        if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            return new Reachability(name, url, false, null);
+        }
+
         using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(PerTarget);
 

@@ -70,6 +70,23 @@ public sealed class PlatformProbeTests
         ]);
     }
 
+    [Theory]
+    [InlineData("localhost:5000")]
+    [InlineData("not a url")]
+    public async Task A_malformed_base_url_reports_that_target_down_and_probes_the_rest(string gatewayUrl)
+    {
+        PlatformProbe probe = new(
+            new HttpClient(new ScriptedHandler(_ => new HttpResponseMessage(HttpStatusCode.OK))),
+            Options.Create(new AdminOptions { GatewayUrl = gatewayUrl }));
+
+        IReadOnlyList<Reachability> result = await probe.ProbeAsync(TestContext.Current.CancellationToken);
+
+        Reachability gateway = result.Single(r => r.Name == "gateway");
+        gateway.Up.ShouldBeFalse();
+        gateway.Status.ShouldBeNull();
+        result.Where(r => r.Name != "gateway").ShouldAllBe(r => r.Up);
+    }
+
     [Fact]
     public async Task A_target_that_never_answers_is_reported_down()
     {
