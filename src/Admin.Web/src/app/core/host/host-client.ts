@@ -24,6 +24,14 @@ export class HostClient {
     return this.http.post<JobSummary>('/api/stack/backend/down', { wipeVolumes, confirm });
   }
 
+  frontendStart(): Observable<JobSummary> {
+    return this.http.post<JobSummary>('/api/stack/frontend/start', null);
+  }
+
+  frontendStop(): Observable<JobSummary> {
+    return this.http.post<JobSummary>('/api/stack/frontend/stop', null);
+  }
+
   followLogs(services: string[]): Observable<JobSummary> {
     return this.http.post<JobSummary>('/api/logs/follow', { services });
   }
