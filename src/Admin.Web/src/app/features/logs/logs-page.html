@@ -6,7 +6,7 @@
   </div>
   <div class="buttons">
     <button class="follow" (click)="follow()">Follow</button>
-    <button class="stop" [disabled]="!following()" (click)="stop()">Stop</button>
+    <button class="stop" [disabled]="!(pending() || following())" (click)="stop()">Stop</button>
     <button (click)="clear()">Clear</button>
     <input aria-label="Filter" placeholder="filter text" [ngModel]="filter()" (ngModelChange)="filter.set($event)" />
     <input aria-label="Correlation id" placeholder="correlation id" [ngModel]="correlationId()" (ngModelChange)="correlationId.set($event)" />

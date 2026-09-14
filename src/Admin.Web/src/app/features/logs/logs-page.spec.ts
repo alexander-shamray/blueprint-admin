@@ -124,6 +124,33 @@ describe('LogsPage', () => {
     expect(fixture.componentInstance.lines().map((l) => l.text)).toEqual(['job-b line']);
   });
 
+  it('enables Stop while the follow request is in flight, and clicking it cancels the request', () => {
+    const post = new Subject<JobSummary>();
+    host.followLogs.mockReturnValueOnce(post.asObservable());
+
+    const fixture = TestBed.createComponent(LogsPage);
+    fixture.detectChanges();
+    const stopButton = fixture.nativeElement.querySelector('button.stop') as HTMLButtonElement;
+    expect(stopButton.disabled).toBe(true);
+
+    (fixture.nativeElement.querySelector('button.follow') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(post.observed).toBe(true);
+    expect(stopButton.disabled).toBe(false);
+    expect(fixture.nativeElement.querySelector('.live')).toBeNull();
+
+    stopButton.click();
+    fixture.detectChanges();
+
+    expect(post.observed).toBe(false);
+    expect(stopButton.disabled).toBe(true);
+    post.next(summary('late-3'));
+    fixture.detectChanges();
+    expect(sseFollow).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('.live')).toBeNull();
+  });
+
   it('destroying the page while a follow is in flight opens no stream', () => {
     const post = new Subject<JobSummary>();
     host.followLogs.mockReturnValueOnce(post.asObservable());

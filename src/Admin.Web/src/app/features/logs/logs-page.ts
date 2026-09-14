@@ -26,6 +26,8 @@ export class LogsPage {
   readonly services = COMPOSE_SERVICES;
   readonly selected = signal<string[]>([]);
   readonly following = signal(false);
+  /** The follow request is out and has not answered: Stop must be able to cancel it. */
+  readonly pending = signal(false);
   readonly filter = signal('');
   readonly correlationId = signal('');
   readonly lines = signal<OutputLine[]>([]);
@@ -57,10 +59,12 @@ export class LogsPage {
     this.stop();
     this.error.set(null);
     this.lines.set([]);
+    this.pending.set(true);
     this.subscription = this.host
       .followLogs(this.selected())
       .pipe(
         switchMap((job) => {
+          this.pending.set(false);
           this.following.set(true);
           return this.sse.follow(job.id);
         }),
@@ -70,6 +74,7 @@ export class LogsPage {
           if (event.kind === 'line') {
             this.lines.update((all) => (all.length >= MAX_LINES ? [...all.slice(1), event.line] : [...all, event.line]));
           } else {
+            this.pending.set(false);
             this.following.set(false);
           }
         },
@@ -77,15 +82,20 @@ export class LogsPage {
           // Not yet following means the POST itself failed; already following means the SSE stream did.
           const fallback = this.following() ? undefined : 'The host refused the request.';
           this.error.set(this.describeError(e, fallback));
+          this.pending.set(false);
           this.following.set(false);
         },
-        complete: () => this.following.set(false),
+        complete: () => {
+          this.pending.set(false);
+          this.following.set(false);
+        },
       });
   }
 
   stop(): void {
     this.subscription?.unsubscribe();
     this.subscription = undefined;
+    this.pending.set(false);
     this.following.set(false);
   }
 
