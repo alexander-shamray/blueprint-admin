@@ -36,14 +36,19 @@ builder.Services.AddSingleton<JobRegistry>();
 // Both runners are registered; which one IProcessRunner resolves to is
 // decided from options at resolve time, for the same reason RepoPaths is.
 builder.Services.AddSingleton<ProcessRunner>();
-builder.Services.AddSingleton<FakeProcessRunner>();
+builder.Services.AddSingleton(sp => FakePlatformScripts.Script(
+    new FakeProcessRunner(sp.GetRequiredService<JobRegistry>()),
+    sp.GetRequiredService<RepoPaths>().ComposeFile));
 builder.Services.AddSingleton<IProcessRunner>(sp =>
     sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform
         ? sp.GetRequiredService<FakeProcessRunner>()
         : sp.GetRequiredService<ProcessRunner>());
 
 builder.Services.AddSingleton<ComposeService>();
-builder.Services.AddHttpClient<PlatformProbe>();
+builder.Services.AddHttpClient<PlatformProbe>().ConfigurePrimaryHttpMessageHandler(sp =>
+    sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform
+        ? new FakePlatformHandler()
+        : new HttpClientHandler());
 
 WebApplication app = builder.Build();
 
