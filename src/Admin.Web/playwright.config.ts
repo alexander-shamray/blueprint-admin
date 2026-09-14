@@ -4,6 +4,8 @@ const url = 'http://127.0.0.1:5300';
 
 export default defineConfig({
   testDir: './e2e',
+  // Refuses to run against a reused host that is not in FakePlatform mode: the smoke wipes volumes.
+  globalSetup: './e2e/global-setup.ts',
   timeout: 30_000,
   fullyParallel: false,
   retries: process.env['CI'] ? 1 : 0,
