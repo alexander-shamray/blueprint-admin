@@ -40,6 +40,16 @@ public sealed class AdminOptions
     public string ClientId { get; set; } = "web-app";
 
     /// <summary>
+    /// Where the built SPA lives, resolved against the repository root (not
+    /// the process's working directory or content root, which are wrong when
+    /// Playwright starts the host from <c>src/Admin.Web</c>). Angular's
+    /// <c>outputPath</c> writes there; when the directory does not exist yet
+    /// (no build has run), static files and the SPA fallback are skipped and
+    /// the API is unaffected.
+    /// </summary>
+    public string WebRoot { get; set; } = "src/Admin.Host/wwwroot";
+
+    /// <summary>
     /// Swap every child process and every outbound HTTP call for recorded
     /// fakes, so the console runs with no Docker and no clones. This is how
     /// the SPA is developed and how CI runs the Playwright smoke.

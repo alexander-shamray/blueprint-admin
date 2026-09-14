@@ -5,6 +5,7 @@ using Admin.Host.Config;
 using Admin.Host.Fakes;
 using Admin.Host.Jobs;
 using Admin.Host.Stack;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
@@ -58,9 +59,40 @@ _ = app.Services.GetRequiredService<RepoPaths>();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
+// The SPA build lands under this repository-root-relative directory
+// (Admin:WebRoot, angular.json's outputPath) regardless of the process's
+// working directory or environment: Playwright starts the host from
+// src/Admin.Web without ASPNETCORE_ENVIRONMENT=Development, where the
+// default content-root "wwwroot" resolution would be wrong. When there is no
+// build yet the directory does not exist, so static files and the fallback
+// below are skipped entirely and the API is unaffected — PhysicalFileProvider
+// throws on a missing root.
+string webRootPath = Path.GetFullPath(
+    app.Services.GetRequiredService<IOptions<AdminOptions>>().Value.WebRoot, baseDir);
+IFileProvider? spaFiles = Directory.Exists(webRootPath) ? new PhysicalFileProvider(webRootPath) : null;
+
+if (spaFiles is not null)
+{
+    app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = spaFiles });
+    app.UseStaticFiles(new StaticFileOptions { FileProvider = spaFiles });
+}
+
 app.MapConfig();
 app.MapJobs();
 app.MapStack();
+
+// MapFallbackToFile's route has no literal segments, so without this it
+// would also catch an unmatched /api/nope (it has no dot, so it passes the
+// :nonfile constraint too) and serve index.html for it. This catch-all has a
+// literal "api" segment, which endpoint routing always prefers over the
+// fallback's, so a real /api/* route above still wins and only a truly
+// unknown one lands here as a genuine 404.
+app.Map("/api/{**catchAll}", () => Results.NotFound());
+
+if (spaFiles is not null)
+{
+    app.MapFallbackToFile("index.html", new StaticFileOptions { FileProvider = spaFiles }).ShortCircuit();
+}
 
 app.Run();
 
