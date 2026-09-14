@@ -3,18 +3,13 @@
   "version": "0.2.0",
   "configurations": [
     {
+      // angular.json serves on 127.0.0.1:5301 and proxies /api to the host (proxy.conf.json).
+      // There is no test profile: `npm test` runs Vitest once, with nothing to attach a browser to.
       "name": "ng serve",
       "type": "chrome",
       "request": "launch",
       "preLaunchTask": "npm: start",
-      "url": "http://localhost:4200/"
-    },
-    {
-      "name": "ng test",
-      "type": "chrome",
-      "request": "launch",
-      "preLaunchTask": "npm: test",
-      "url": "http://localhost:9876/debug.html"
+      "url": "http://127.0.0.1:5301/"
     }
   ]
 }
