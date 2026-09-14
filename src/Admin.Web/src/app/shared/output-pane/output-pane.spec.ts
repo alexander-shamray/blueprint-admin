@@ -20,7 +20,8 @@ describe('OutputPane', () => {
     const pre = fixture.nativeElement.querySelector('pre') as HTMLElement;
     expect(sse.follow).toHaveBeenCalledWith('j1');
     expect(pre.textContent).toContain('one');
-    expect(pre.querySelector('.stderr')?.textContent).toContain('two');
+    expect(pre.querySelector('.stderr')?.textContent?.trim()).toBe('[stderr] two');
+    expect(pre.textContent).not.toContain('[stderr] one');
     expect(fixture.nativeElement.textContent).toContain('exited 3');
   });
 });

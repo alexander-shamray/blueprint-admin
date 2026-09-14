@@ -60,6 +60,23 @@ describe('LogsPage', () => {
     expect(rows[0].classList.contains('hit')).toBe(true);
   });
 
+  it('marks correlation matches and stderr lines with text, not only colour', () => {
+    const fixture = TestBed.createComponent(LogsPage);
+    fixture.componentInstance.follow();
+    events.next(line(0, 'gateway | proxying CorrelationId=abc'));
+    events.next({ kind: 'line', line: { sequence: 1, at: '', stream: 'Stderr', text: 'catalog-api | failed' } });
+    events.next(line(2, 'catalog-api | listed products'));
+    fixture.componentInstance.correlationId.set('abc');
+    fixture.detectChanges();
+
+    const rows = Array.from(fixture.nativeElement.querySelectorAll('.line')) as HTMLElement[];
+    expect(rows.map((r) => r.textContent?.trim())).toEqual([
+      '[match] gateway | proxying CorrelationId=abc',
+      '[stderr] catalog-api | failed',
+      'catalog-api | listed products',
+    ]);
+  });
+
   it('shows the problem detail when the follow request fails and does not go live', () => {
     host.followLogs.mockReturnValueOnce(
       throwError(() => ({ error: { title: 'Backend unreachable', detail: 'Docker did not answer.' } })),

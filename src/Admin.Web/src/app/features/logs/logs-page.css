@@ -6,3 +6,4 @@
 .log { height: 60vh; overflow: auto; background: #111; color: #ddd; padding: 0.75rem; font-size: 0.8rem; }
 .line.hit { background: #443; }
 .line.stderr { color: #f88; }
+.tag { font-weight: 600; }

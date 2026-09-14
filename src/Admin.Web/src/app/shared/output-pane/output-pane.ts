@@ -7,12 +7,13 @@ import { SseClient } from '../../core/host/sse-client';
 @Component({
   selector: 'app-output-pane',
   template: `
-    <pre #pane class="pane">@for (l of lines(); track l.sequence) {<span [class.stderr]="l.stream === 'Stderr'">{{ l.text }}
+    <pre #pane class="pane">@for (l of lines(); track l.sequence) {<span [class.stderr]="l.stream === 'Stderr'">@if (l.stream === 'Stderr') {<span class="tag">[stderr] </span>}{{ l.text }}
 </span>}@if (exitCode() !== null) {<span class="exit">exited {{ exitCode() }}</span>}</pre>
   `,
   styles: `
     .pane { max-height: 24rem; overflow: auto; background: #111; color: #ddd; padding: 0.75rem; font-size: 0.8rem; }
     .stderr { color: #f88; }
+    .tag { font-weight: 600; }
     .exit { color: #8cf; }
   `,
 })

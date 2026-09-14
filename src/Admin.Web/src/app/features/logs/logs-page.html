@@ -18,5 +18,5 @@
   <p class="error">{{ e }}</p>
 }
 
-<pre class="log">@for (l of visible(); track l.sequence) {<span class="line" [class.hit]="isHit(l)" [class.stderr]="l.stream === 'Stderr'">{{ l.text }}
+<pre class="log">@for (l of visible(); track l.sequence) {<span class="line" [class.hit]="isHit(l)" [class.stderr]="l.stream === 'Stderr'">@if (isHit(l)) {<span class="tag">[match] </span>}@if (l.stream === 'Stderr') {<span class="tag">[stderr] </span>}{{ l.text }}
 </span>}</pre>
