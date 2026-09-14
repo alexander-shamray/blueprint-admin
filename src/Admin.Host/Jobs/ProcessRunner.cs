@@ -8,7 +8,8 @@ namespace Admin.Host.Jobs;
 /// Real child processes. Output is read line by line on the process's own
 /// threads; the ring buffer in <see cref="Job"/> is what makes that safe to
 /// read from a request. This is the one type that knows a process has a tree,
-/// which is what makes <c>ng serve</c> stoppable on Windows. Disposed with the
+/// which is what makes <c>ng serve</c> stoppable on Windows; with <see cref="ExecutableResolver"/>
+/// it is also what makes <c>npm</c> startable there. Disposed with the
 /// host's service provider, it kills every tree still running, so a
 /// <c>docker compose logs -f</c> does not outlive the host.
 /// </summary>
@@ -23,7 +24,7 @@ public sealed partial class ProcessRunner(JobRegistry registry, ILogger<ProcessR
     {
         Job job = registry.Create(spec);
 
-        ProcessStartInfo info = new(spec.FileName)
+        ProcessStartInfo info = new(ExecutableResolver.Resolve(spec.FileName))
         {
             WorkingDirectory = spec.WorkingDirectory,
             RedirectStandardOutput = true,

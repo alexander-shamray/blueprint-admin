@@ -98,4 +98,18 @@ public sealed class ProcessRunnerTests
 
         job.State.ShouldBe(JobState.Exited);
     }
+
+    [Fact]
+    public async Task Npm_starts_by_its_bare_name_on_every_platform()
+    {
+        // On Windows npm is npm.cmd, and CreateProcess only appends .exe; the
+        // frontend supervisor starts "npm start" by name (spec §2.1).
+        ProcessSpec spec = new("npm", ["--version"], Environment.CurrentDirectory);
+
+        Job job = Runner.Start(spec);
+        int exit = await job.Completion.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+
+        exit.ShouldBe(0, string.Join(Environment.NewLine, job.Since(-1).Select(l => l.Text)));
+        job.Since(-1).ShouldContain(l => l.Stream == OutputStream.Stdout && l.Text.Length > 0);
+    }
 }
