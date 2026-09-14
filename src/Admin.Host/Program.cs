@@ -4,6 +4,7 @@ using Admin.Host.Compose;
 using Admin.Host.Config;
 using Admin.Host.Fakes;
 using Admin.Host.Jobs;
+using Admin.Host.Security;
 using Admin.Host.Stack;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
@@ -58,6 +59,10 @@ _ = app.Services.GetRequiredService<RepoPaths>();
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+
+// Before static files and endpoints: a cross-site page must not be able to
+// drive /api even though it cannot read the answer (spec §8).
+app.UseLoopbackOriginGuard();
 
 // The SPA build lands under this repository-root-relative directory
 // (Admin:WebRoot, angular.json's outputPath) regardless of the process's
