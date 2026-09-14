@@ -55,6 +55,33 @@ public sealed class FakeProcessRunnerTests
     }
 
     [Fact]
+    public void Concurrent_starts_record_every_spec()
+    {
+        // One runner is a singleton that concurrent requests share. 1000 rather than 50
+        // so that an unsynchronised List<T>.Add loses entries on most runs.
+        const int Starts = 1000;
+        FakeProcessRunner runner = new FakeProcessRunner(registry).On("docker", "compose", 0, "ok");
+
+        Parallel.For(0, Starts, i => runner.Start(new ProcessSpec("docker", ["compose", $"{i}"], "/b")));
+
+        runner.Started.Count.ShouldBe(Starts);
+        runner.Started.Select(s => s.Arguments[1]).Distinct().Count().ShouldBe(Starts);
+    }
+
+    [Fact]
+    public void Started_is_a_snapshot_that_later_starts_do_not_change()
+    {
+        FakeProcessRunner runner = new FakeProcessRunner(registry).On("docker", "compose", 0, "ok");
+        runner.Start(new ProcessSpec("docker", ["compose", "ps"], "/b"));
+
+        IReadOnlyList<ProcessSpec> before = runner.Started;
+        runner.Start(new ProcessSpec("docker", ["compose", "up"], "/b"));
+
+        before.Count.ShouldBe(1);
+        runner.Started.Count.ShouldBe(2);
+    }
+
+    [Fact]
     public async Task An_unscripted_command_exits_127_with_a_message()
     {
         FakeProcessRunner runner = new(registry);
