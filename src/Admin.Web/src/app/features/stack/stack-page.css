@@ -5,5 +5,5 @@
 .reachability .down { background: #fdd; }
 table { border-collapse: collapse; margin-bottom: 1rem; }
 td, th { padding: 0.25rem 0.75rem; border-bottom: 1px solid #eee; text-align: left; }
-tr.exited td { color: #888; }
+tr.exited td { color: #666; }
 .error { color: #b00; }
