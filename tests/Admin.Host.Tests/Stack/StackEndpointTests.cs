@@ -90,4 +90,21 @@ public sealed class StackEndpointTests : IClassFixture<AdminHostFactory>
         job.GetProperty("state").GetString().ShouldBe("Running");
         job.GetProperty("commandLine").GetString().ShouldEndWith("logs -f --tail 200 gateway");
     }
+
+    [Fact]
+    public async Task A_second_follow_stops_the_first_so_only_one_logs_process_runs()
+    {
+        HttpResponseMessage first = await client.PostAsJsonAsync("/api/logs/follow", new { services = GatewayOnly }, TestContext.Current.CancellationToken);
+        string firstId = (await first.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken)).GetProperty("id").GetString()!;
+
+        HttpResponseMessage second = await client.PostAsJsonAsync("/api/logs/follow", new { services = GatewayOnly }, TestContext.Current.CancellationToken);
+        JsonElement secondJob = await second.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken);
+
+        second.StatusCode.ShouldBe(HttpStatusCode.Accepted);
+        secondJob.GetProperty("state").GetString().ShouldBe("Running");
+        JsonElement firstNow = await client.GetFromJsonAsync<JsonElement>($"/api/jobs/{firstId}", TestContext.Current.CancellationToken);
+        firstNow.GetProperty("summary").GetProperty("state").GetString().ShouldBe("Exited");
+        JsonElement secondNow = await client.GetFromJsonAsync<JsonElement>($"/api/jobs/{secondJob.GetProperty("id").GetString()}", TestContext.Current.CancellationToken);
+        secondNow.GetProperty("summary").GetProperty("state").GetString().ShouldBe("Running");
+    }
 }

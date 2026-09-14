@@ -31,8 +31,8 @@ public static class StackEndpoints
             return TypedResults.Accepted((string?)null, JobSummary.Of(compose.Down(request.WipeVolumes)));
         });
 
-        app.MapPost("/api/logs/follow", (FollowRequest request, ComposeService compose) =>
-            TypedResults.Accepted((string?)null, JobSummary.Of(compose.FollowLogs(request.Services ?? []))));
+        app.MapPost("/api/logs/follow", async (FollowRequest request, LogFollower follower, CancellationToken cancellationToken) =>
+            TypedResults.Accepted((string?)null, JobSummary.Of(await follower.StartAsync(request.Services ?? [], cancellationToken))));
 
         return app;
     }

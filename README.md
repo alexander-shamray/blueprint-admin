@@ -58,8 +58,10 @@ are the spec's later phases.
 
 ## Known limits in phase 1
 
-- Stop on the Logs screen closes the browser's stream; the host's `logs -f`
-  job keeps running until phase 2 adds a stop endpoint.
+- The host keeps at most one `logs -f` job: Follow stops the previous one
+  before starting the next. Stop on the Logs screen only closes the browser's
+  stream; the job keeps running until the next Follow, or until phase 2 adds a
+  stop endpoint.
 - No frontend start/stop yet.
 - No API console, broker inspection or event trace yet.
 

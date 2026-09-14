@@ -47,6 +47,7 @@ builder.Services.AddSingleton<IProcessRunner>(sp =>
         : sp.GetRequiredService<ProcessRunner>());
 
 builder.Services.AddSingleton<ComposeService>();
+builder.Services.AddSingleton<LogFollower>();
 builder.Services.AddHttpClient<PlatformProbe>().ConfigurePrimaryHttpMessageHandler(sp =>
     sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform
         ? new FakePlatformHandler()
