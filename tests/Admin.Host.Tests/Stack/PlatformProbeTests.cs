@@ -42,6 +42,35 @@ public sealed class PlatformProbeTests
     }
 
     [Fact]
+    public async Task Base_urls_with_a_trailing_slash_do_not_double_the_slash()
+    {
+        AdminOptions slashed = new()
+        {
+            GatewayUrl = "http://localhost:5000/",
+            CatalogUrl = "http://localhost:5102/",
+            OrderingUrl = "http://localhost:5101/",
+            BffUrl = "http://localhost:5200/",
+            KeycloakUrl = "http://localhost:8080/",
+            GrafanaUrl = "http://localhost:3000/",
+            ClientUrl = "http://localhost:5173/",
+        };
+        PlatformProbe probe = new(new HttpClient(new ScriptedHandler(_ => new HttpResponseMessage(HttpStatusCode.OK))), Options.Create(slashed));
+
+        IReadOnlyList<Reachability> result = await probe.ProbeAsync(TestContext.Current.CancellationToken);
+
+        result.Select(r => r.Url).ShouldBe(
+        [
+            "http://localhost:5000/health/ready",
+            "http://localhost:5102/health/ready",
+            "http://localhost:5101/health/ready",
+            "http://localhost:5200/health/ready",
+            "http://localhost:8080/realms/commerce",
+            "http://localhost:3000/api/health",
+            "http://localhost:5173/",
+        ]);
+    }
+
+    [Fact]
     public async Task A_target_that_never_answers_is_reported_down()
     {
         PlatformProbe probe = DelayedProbe(async (request, cancellationToken) =>

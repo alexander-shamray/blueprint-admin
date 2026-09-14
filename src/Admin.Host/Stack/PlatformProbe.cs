@@ -21,17 +21,20 @@ public sealed class PlatformProbe(HttpClient http, IOptions<AdminOptions> option
 
         (string Name, string Url)[] targets =
         [
-            ("gateway", $"{o.GatewayUrl}/health/ready"),
-            ("catalog", $"{o.CatalogUrl}/health/ready"),
-            ("ordering", $"{o.OrderingUrl}/health/ready"),
-            ("bff", $"{o.BffUrl}/health/ready"),
-            ("keycloak", $"{o.KeycloakUrl}/realms/{o.Realm}"),
-            ("grafana", $"{o.GrafanaUrl}/api/health"),
-            ("client", $"{o.ClientUrl}/"),
+            ("gateway", Join(o.GatewayUrl, "/health/ready")),
+            ("catalog", Join(o.CatalogUrl, "/health/ready")),
+            ("ordering", Join(o.OrderingUrl, "/health/ready")),
+            ("bff", Join(o.BffUrl, "/health/ready")),
+            ("keycloak", Join(o.KeycloakUrl, $"/realms/{o.Realm}")),
+            ("grafana", Join(o.GrafanaUrl, "/api/health")),
+            ("client", Join(o.ClientUrl, "/")),
         ];
 
         return await Task.WhenAll(targets.Select(t => ProbeOneAsync(t.Name, t.Url, cancellationToken)));
     }
+
+    // Configured base URLs may end in a slash; a doubled slash is a different route.
+    private static string Join(string baseUrl, string path) => baseUrl.TrimEnd('/') + path;
 
     private async Task<Reachability> ProbeOneAsync(string name, string url, CancellationToken cancellationToken)
     {
