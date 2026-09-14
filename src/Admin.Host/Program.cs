@@ -1,8 +1,10 @@
 using System.Net;
 using System.Text.Json.Serialization;
+using Admin.Host.Compose;
 using Admin.Host.Config;
 using Admin.Host.Fakes;
 using Admin.Host.Jobs;
+using Admin.Host.Stack;
 using Microsoft.Extensions.Options;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
@@ -40,6 +42,9 @@ builder.Services.AddSingleton<IProcessRunner>(sp =>
         ? sp.GetRequiredService<FakeProcessRunner>()
         : sp.GetRequiredService<ProcessRunner>());
 
+builder.Services.AddSingleton<ComposeService>();
+builder.Services.AddHttpClient<PlatformProbe>();
+
 WebApplication app = builder.Build();
 
 // Resolve once so a wrong directory fails startup with the key to fix.
@@ -50,6 +55,7 @@ app.UseStatusCodePages();
 
 app.MapConfig();
 app.MapJobs();
+app.MapStack();
 
 app.Run();
 
