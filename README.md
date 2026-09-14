@@ -68,7 +68,8 @@ are the spec's later phases.
 ## Tests
 
     dotnet test                                # host, xunit
-    cd src/Admin.Web && npm test               # SPA, Vitest
-    dotnet build && cd src/Admin.Web && npm run build && npm run e2e   # Playwright against the fake host
+    (cd src/Admin.Web && npm test)             # SPA, Vitest
+    (cd src/Admin.Web && npx playwright install chromium)   # once per workstation
+    dotnet build && (cd src/Admin.Web && npm run build && npm run e2e)   # Playwright against the fake host
 
 `.github/workflows/ci.yml` runs the same three on every push and pull request.
