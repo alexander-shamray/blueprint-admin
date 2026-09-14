@@ -53,4 +53,36 @@ public sealed class JobRegistryTests
         registry.Find(running.Id).ShouldNotBeNull();
         registry.All().Count.ShouldBe(JobRegistry.KeepExited + 1);
     }
+
+    [Fact]
+    public async Task Exited_jobs_are_trimmed_when_they_exit_without_another_create()
+    {
+        FakeTimeProvider time = new();
+        JobRegistry registry = new(time);
+        List<Job> jobs = [];
+
+        for (int i = 0; i < JobRegistry.KeepExited + 2; i++)
+        {
+            jobs.Add(registry.Create(Spec));
+            time.Advance(TimeSpan.FromSeconds(1));
+        }
+
+        foreach (Job job in jobs)
+        {
+            job.MarkExited(0);
+        }
+
+        // The trim runs as a continuation of each job's completion, off this thread.
+        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(5));
+        while (registry.All().Count > JobRegistry.KeepExited && !timeout.IsCancellationRequested)
+        {
+            await Task.Delay(10, TestContext.Current.CancellationToken);
+        }
+
+        registry.All().Count.ShouldBe(JobRegistry.KeepExited);
+        registry.Find(jobs[0].Id).ShouldBeNull();
+        registry.Find(jobs[1].Id).ShouldBeNull();
+        registry.Find(jobs[2].Id).ShouldNotBeNull();
+    }
 }
