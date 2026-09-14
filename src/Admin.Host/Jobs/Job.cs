@@ -7,6 +7,9 @@ namespace Admin.Host.Jobs;
 /// One run of a child process: its output as a bounded ring of numbered lines,
 /// and a channel per live follower. One-shot commands and long-running ones
 /// are the same type so that every command's output is visible the same way.
+/// A follower's channel holds at most a ring's worth of lines: one that falls
+/// that far behind is ended rather than buffered without bound, and resumes
+/// from the ring by sequence number (an EventSource does this on its own).
 /// </summary>
 public sealed class Job
 {
@@ -38,6 +41,18 @@ public sealed class Job
 
     public Task<int> Completion => completion.Task;
 
+    /// <summary>Live followers still registered; for tests.</summary>
+    internal int FollowerCount
+    {
+        get
+        {
+            lock (gate)
+            {
+                return followers.Count;
+            }
+        }
+    }
+
     public void Append(OutputStream stream, string text)
     {
         lock (gate)
@@ -46,10 +61,20 @@ public sealed class Job
             ring[next % ring.Length] = line;
             next++;
 
-            foreach (Channel<OutputLine> follower in followers)
+            // Never wait on a slow reader here: this runs on the process's output
+            // thread. A full channel means that follower is a ring behind, so it is
+            // completed (it drains what it has, then ends) and dropped.
+            followers.RemoveAll(follower =>
             {
-                follower.Writer.TryWrite(line);
-            }
+                if (follower.Writer.TryWrite(line))
+                {
+                    return false;
+                }
+
+                follower.Writer.TryComplete();
+
+                return true;
+            });
         }
     }
 
@@ -83,6 +108,15 @@ public sealed class Job
         }
     }
 
+    /// <summary>True when a line newer than <paramref name="sequence"/> has been appended.</summary>
+    public bool HasLinesAfter(long sequence)
+    {
+        lock (gate)
+        {
+            return next - 1 > sequence;
+        }
+    }
+
     public IReadOnlyList<OutputLine> Tail(int count)
     {
         lock (gate)
@@ -91,7 +125,11 @@ public sealed class Job
         }
     }
 
-    /// <summary>Replay what is buffered after <paramref name="afterSequence"/>, then every new line until the job exits.</summary>
+    /// <summary>
+    /// Replay what is buffered after <paramref name="afterSequence"/>, then every new line until the job
+    /// exits or this follower falls a ring's worth of lines behind. Only in the first case is nothing left
+    /// after the last line yielded; <see cref="HasLinesAfter"/> tells the two apart.
+    /// </summary>
     public IAsyncEnumerable<OutputLine> Follow(long afterSequence, CancellationToken cancellationToken)
     {
         IReadOnlyList<OutputLine> replay;
@@ -103,7 +141,11 @@ public sealed class Job
 
             if (State == JobState.Running)
             {
-                live = Channel.CreateUnbounded<OutputLine>(new UnboundedChannelOptions { SingleReader = true });
+                live = Channel.CreateBounded<OutputLine>(new BoundedChannelOptions(ring.Length)
+                {
+                    SingleReader = true,
+                    FullMode = BoundedChannelFullMode.Wait,
+                });
                 followers.Add(live);
             }
         }

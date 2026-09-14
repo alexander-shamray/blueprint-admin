@@ -90,6 +90,54 @@ public sealed class JobTests
     }
 
     [Fact]
+    public async Task A_follower_that_falls_a_ring_behind_is_ended_and_removed_without_blocking_Append()
+    {
+        Job job = NewJob(capacity: 3);
+        IAsyncEnumerable<OutputLine> follower = job.Follow(-1, TestContext.Current.CancellationToken);
+
+        // Nobody reads: the fourth line finds the follower's queue full.
+        await Task.Run(() =>
+        {
+            for (int i = 0; i < 10; i++)
+            {
+                job.Append(OutputStream.Stdout, $"line {i}");
+            }
+        }, TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        job.FollowerCount.ShouldBe(0);
+
+        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(5));
+        List<string> seen = [];
+        await foreach (OutputLine line in follower.WithCancellation(timeout.Token))
+        {
+            seen.Add(line.Text);
+        }
+
+        seen.ShouldBe(["line 0", "line 1", "line 2"]);
+        job.State.ShouldBe(JobState.Running);
+    }
+
+    [Fact]
+    public async Task A_follower_that_keeps_up_receives_every_line_past_the_capacity()
+    {
+        Job job = NewJob(capacity: 3);
+        await using IAsyncEnumerator<OutputLine> follower = job.Follow(-1, TestContext.Current.CancellationToken).GetAsyncEnumerator(TestContext.Current.CancellationToken);
+
+        for (int i = 0; i < 10; i++)
+        {
+            job.Append(OutputStream.Stdout, $"line {i}");
+            (await follower.MoveNextAsync()).ShouldBeTrue();
+            follower.Current.Text.ShouldBe($"line {i}");
+        }
+
+        job.MarkExited(0);
+
+        (await follower.MoveNextAsync()).ShouldBeFalse();
+        job.FollowerCount.ShouldBe(0);
+    }
+
+    [Fact]
     public void MarkExited_twice_keeps_the_first_exit_code()
     {
         Job job = NewJob();
