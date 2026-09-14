@@ -8,11 +8,16 @@ namespace Admin.Host.Jobs;
 /// Real child processes. Output is read line by line on the process's own
 /// threads; the ring buffer in <see cref="Job"/> is what makes that safe to
 /// read from a request. This is the one type that knows a process has a tree,
-/// which is what makes <c>ng serve</c> stoppable on Windows.
+/// which is what makes <c>ng serve</c> stoppable on Windows. Disposed with the
+/// host's service provider, it kills every tree still running, so a
+/// <c>docker compose logs -f</c> does not outlive the host.
 /// </summary>
-public sealed partial class ProcessRunner(JobRegistry registry, ILogger<ProcessRunner> logger) : IProcessRunner
+public sealed partial class ProcessRunner(JobRegistry registry, ILogger<ProcessRunner> logger) : IProcessRunner, IAsyncDisposable
 {
-    private readonly ConcurrentDictionary<string, Process> processes = new();
+    private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(5);
+
+    private readonly ConcurrentDictionary<string, (Job Job, Process Process)> processes = new();
+    private int disposed;
 
     public Job Start(ProcessSpec spec)
     {
@@ -66,7 +71,7 @@ public sealed partial class ProcessRunner(JobRegistry registry, ILogger<ProcessR
 
         // The dictionary entry must exist before anything async happens so
         // that StopAsync can always find a running process.
-        processes[job.Id] = process;
+        processes[job.Id] = (job, process);
 
         // Begin the async readers before awaiting exit. Doing this on the
         // Exited event instead (as raised via EnableRaisingEvents) races: for
@@ -86,11 +91,53 @@ public sealed partial class ProcessRunner(JobRegistry registry, ILogger<ProcessR
 
     public async Task StopAsync(Job job, CancellationToken cancellationToken)
     {
-        if (!processes.TryGetValue(job.Id, out Process? process))
+        if (!processes.TryGetValue(job.Id, out (Job Job, Process Process) tracked))
         {
             return;
         }
 
+        Kill(tracked.Process);
+
+        await job.Completion.WaitAsync(cancellationToken);
+    }
+
+    /// <summary>Kill every process tree still running and wait, at most a few seconds, for their jobs to exit.</summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref disposed, 1) == 1)
+        {
+            return;
+        }
+
+        List<Task<int>> exits = [];
+
+        foreach ((Job job, Process process) in processes.Values)
+        {
+            try
+            {
+                Kill(process);
+            }
+            catch (Win32Exception ex)
+            {
+                LogCouldNotKill(ex, job.Spec.CommandLine);
+            }
+
+            exits.Add(job.Completion);
+        }
+
+        try
+        {
+            // Bounded: a tree that will not die must not hang the host's shutdown.
+            await Task.WhenAll(exits).WaitAsync(ShutdownTimeout).ConfigureAwait(false);
+        }
+        catch (TimeoutException ex)
+        {
+            LogShutdownTimedOut(ex, exits.Count(e => !e.IsCompleted));
+        }
+    }
+
+    private static void Kill(Process process)
+    {
         try
         {
             process.Kill(entireProcessTree: true);
@@ -100,8 +147,6 @@ public sealed partial class ProcessRunner(JobRegistry registry, ILogger<ProcessR
             // Already exited - and possibly already disposed by
             // CompleteWhenExitedAsync - between the lookup and the kill.
         }
-
-        await job.Completion.WaitAsync(cancellationToken);
     }
 
     private async Task CompleteWhenExitedAsync(Job job, Process process)
@@ -120,4 +165,10 @@ public sealed partial class ProcessRunner(JobRegistry registry, ILogger<ProcessR
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not start {CommandLine}")]
     private partial void LogCouldNotStart(Exception ex, string commandLine);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not kill {CommandLine} at shutdown")]
+    private partial void LogCouldNotKill(Exception ex, string commandLine);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{Count} child processes had not exited when shutdown stopped waiting")]
+    private partial void LogShutdownTimedOut(Exception ex, int count);
 }

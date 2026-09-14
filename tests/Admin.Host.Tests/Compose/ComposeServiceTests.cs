@@ -7,7 +7,7 @@ using Shouldly;
 
 namespace Admin.Host.Tests.Compose;
 
-public sealed class ComposeServiceTests
+public sealed class ComposeServiceTests : IAsyncDisposable
 {
     private static readonly RepoPaths Paths = new("/repo/backend", "/repo/frontend", "/repo/backend/deploy/compose/docker-compose.yml");
     private readonly JobRegistry registry = new(new FakeTimeProvider());
@@ -19,6 +19,8 @@ public sealed class ComposeServiceTests
     }
 
     private ComposeService Service => new(runner, Paths);
+
+    public ValueTask DisposeAsync() => runner.DisposeAsync();
 
     [Fact]
     public void Up_runs_compose_up_detached_and_waits()

@@ -43,6 +43,21 @@ public sealed class ProcessRunnerTests
     }
 
     [Fact]
+    public async Task Disposing_the_runner_kills_a_long_running_child_and_its_job_exits()
+    {
+        ProcessSpec spec = new("node", ["-e", "setInterval(() => console.log('tick'), 50)"], Environment.CurrentDirectory);
+        ProcessRunner runner = Runner;
+
+        Job job = runner.Start(spec);
+        await Task.Delay(300, TestContext.Current.CancellationToken);
+        job.State.ShouldBe(JobState.Running);
+
+        await runner.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken);
+
+        job.State.ShouldBe(JobState.Exited);
+    }
+
+    [Fact]
     public async Task A_missing_executable_is_an_exited_job_not_an_exception()
     {
         ProcessSpec spec = new("definitely-not-on-path-4f2c", [], Environment.CurrentDirectory);

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Admin.Host.Jobs;
 
 namespace Admin.Host.Fakes;
@@ -6,10 +7,11 @@ namespace Admin.Host.Fakes;
 /// A process runner that replays scripts instead of starting processes. Lives
 /// in the host, not the test project, because FakePlatform mode ships it.
 /// </summary>
-public sealed class FakeProcessRunner(JobRegistry registry) : IProcessRunner
+public sealed class FakeProcessRunner(JobRegistry registry) : IProcessRunner, IAsyncDisposable
 {
     private readonly List<FakeScript> scripts = [];
     private readonly List<ProcessSpec> started = [];
+    private readonly ConcurrentQueue<Job> longRunning = new();
 
     public IReadOnlyList<ProcessSpec> Started => started;
 
@@ -58,6 +60,10 @@ public sealed class FakeProcessRunner(JobRegistry registry) : IProcessRunner
         {
             job.MarkExited(exitCode);
         }
+        else
+        {
+            longRunning.Enqueue(job);
+        }
 
         return job;
     }
@@ -67,6 +73,17 @@ public sealed class FakeProcessRunner(JobRegistry registry) : IProcessRunner
         job.MarkExited(-1);
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>Host shutdown: a scripted long-running job ends as a killed process would.</summary>
+    public ValueTask DisposeAsync()
+    {
+        foreach (Job job in longRunning)
+        {
+            job.MarkExited(-1);
+        }
+
+        return ValueTask.CompletedTask;
     }
 
     private sealed record FakeScript(string FileName, string ArgumentPrefix, int? ExitCode, Func<IReadOnlyList<string>, IEnumerable<string>> Lines);

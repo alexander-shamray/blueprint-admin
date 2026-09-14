@@ -41,6 +41,20 @@ public sealed class FakeProcessRunnerTests
     }
 
     [Fact]
+    public async Task Disposing_the_runner_marks_its_running_jobs_exited()
+    {
+        FakeProcessRunner runner = new FakeProcessRunner(registry)
+            .OnLongRunning("docker", "compose -f x logs", "gateway | started");
+
+        Job job = runner.Start(new ProcessSpec("docker", ["compose", "-f", "x", "logs", "-f"], "/b"));
+        job.State.ShouldBe(JobState.Running);
+
+        await runner.DisposeAsync();
+
+        job.State.ShouldBe(JobState.Exited);
+    }
+
+    [Fact]
     public async Task An_unscripted_command_exits_127_with_a_message()
     {
         FakeProcessRunner runner = new(registry);
