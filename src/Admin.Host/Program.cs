@@ -1,5 +1,8 @@
 using System.Net;
+using System.Text.Json.Serialization;
 using Admin.Host.Config;
+using Admin.Host.Fakes;
+using Admin.Host.Jobs;
 using Microsoft.Extensions.Options;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
@@ -23,6 +26,19 @@ builder.WebHost.ConfigureKestrel((context, kestrel) =>
     kestrel.Listen(IPAddress.Loopback, context.Configuration.GetValue($"{AdminOptions.Section}:Port", 5300)));
 
 builder.Services.AddProblemDetails();
+builder.Services.ConfigureHttpJsonOptions(json => json.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<JobRegistry>();
+
+// Both runners are registered; which one IProcessRunner resolves to is
+// decided from options at resolve time, for the same reason RepoPaths is.
+builder.Services.AddSingleton<ProcessRunner>();
+builder.Services.AddSingleton<FakeProcessRunner>();
+builder.Services.AddSingleton<IProcessRunner>(sp =>
+    sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform
+        ? sp.GetRequiredService<FakeProcessRunner>()
+        : sp.GetRequiredService<ProcessRunner>());
 
 WebApplication app = builder.Build();
 
@@ -33,6 +49,7 @@ app.UseExceptionHandler();
 app.UseStatusCodePages();
 
 app.MapConfig();
+app.MapJobs();
 
 app.Run();
 
