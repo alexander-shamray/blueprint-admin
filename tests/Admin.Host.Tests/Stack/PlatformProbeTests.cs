@@ -13,8 +13,16 @@ public sealed class PlatformProbeTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => Task.FromResult(respond(request));
     }
 
+    private sealed class DelayedHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => respond(request, cancellationToken);
+    }
+
     private static PlatformProbe Probe(Func<HttpRequestMessage, HttpResponseMessage> respond) =>
         new(new HttpClient(new ScriptedHandler(respond)), Options.Create(new AdminOptions()));
+
+    private static PlatformProbe DelayedProbe(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond) =>
+        new(new HttpClient(new DelayedHandler(respond)), Options.Create(new AdminOptions()));
 
     [Fact]
     public async Task Reports_each_surface_in_order_with_its_status()
@@ -31,5 +39,40 @@ public sealed class PlatformProbeTests
         result.Single(r => r.Name == "grafana").ShouldBe(new Reachability("grafana", "http://localhost:3000/api/health", false, null));
         result.Single(r => r.Name == "gateway").Up.ShouldBeFalse();
         result.Single(r => r.Name == "gateway").Status.ShouldBe(503);
+    }
+
+    [Fact]
+    public async Task A_target_that_never_answers_is_reported_down()
+    {
+        PlatformProbe probe = DelayedProbe(async (request, cancellationToken) =>
+        {
+            if (request.RequestUri!.Port == 3000)
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+
+        IReadOnlyList<Reachability> result = await probe.ProbeAsync(TestContext.Current.CancellationToken);
+
+        result.Single(r => r.Name == "grafana").ShouldBe(new Reachability("grafana", "http://localhost:3000/api/health", false, null));
+        result.Single(r => r.Name == "keycloak").Up.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task A_cancelled_caller_is_not_reported_as_down()
+    {
+        PlatformProbe probe = DelayedProbe(async (request, cancellationToken) =>
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+
+        using CancellationTokenSource cts = new();
+        cts.CancelAfter(TimeSpan.FromMilliseconds(100));
+
+        await Should.ThrowAsync<OperationCanceledException>(() => probe.ProbeAsync(cts.Token));
     }
 }

@@ -44,7 +44,14 @@ public sealed class PlatformProbe(HttpClient http, IOptions<AdminOptions> option
 
             return new Reachability(name, url, response.IsSuccessStatusCode, (int)response.StatusCode);
         }
-        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // The linked token fired from CancelAfter, not from the caller: a
+            // genuine per-target timeout, reported as down. If the caller's own
+            // token is what cancelled, let it propagate as cancellation instead.
+            return new Reachability(name, url, false, null);
+        }
+        catch (HttpRequestException)
         {
             return new Reachability(name, url, false, null);
         }
