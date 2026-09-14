@@ -15,12 +15,16 @@ public sealed class FakeProcessRunner(JobRegistry registry) : IProcessRunner
 
     public FakeProcessRunner On(string fileName, string argumentPrefix, int exitCode, params string[] lines)
     {
-        scripts.Add(new FakeScript(fileName, argumentPrefix, exitCode, lines));
+        scripts.Add(new FakeScript(fileName, argumentPrefix, exitCode, _ => lines));
 
         return this;
     }
 
-    public FakeProcessRunner OnLongRunning(string fileName, string argumentPrefix, params string[] lines)
+    public FakeProcessRunner OnLongRunning(string fileName, string argumentPrefix, params string[] lines) =>
+        OnLongRunning(fileName, argumentPrefix, _ => lines);
+
+    /// <summary>A long-running script whose lines depend on the arguments that follow <paramref name="argumentPrefix"/>.</summary>
+    public FakeProcessRunner OnLongRunning(string fileName, string argumentPrefix, Func<IReadOnlyList<string>, IEnumerable<string>> lines)
     {
         scripts.Add(new FakeScript(fileName, argumentPrefix, null, lines));
 
@@ -43,7 +47,9 @@ public sealed class FakeProcessRunner(JobRegistry registry) : IProcessRunner
             return job;
         }
 
-        foreach (string line in script.Lines)
+        string[] rest = arguments[script.ArgumentPrefix.Length..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (string line in script.Lines(rest))
         {
             job.Append(OutputStream.Stdout, line);
         }
@@ -63,5 +69,5 @@ public sealed class FakeProcessRunner(JobRegistry registry) : IProcessRunner
         return Task.CompletedTask;
     }
 
-    private sealed record FakeScript(string FileName, string ArgumentPrefix, int? ExitCode, IReadOnlyList<string> Lines);
+    private sealed record FakeScript(string FileName, string ArgumentPrefix, int? ExitCode, Func<IReadOnlyList<string>, IEnumerable<string>> Lines);
 }

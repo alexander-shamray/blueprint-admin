@@ -42,6 +42,26 @@ public sealed class FakePlatformTests : IClassFixture<AdminHostFactory>
         job.GetProperty("lines").EnumerateArray().Count().ShouldBe(6);
     }
 
+    // The recorded logs -f output, by Compose service prefix: gateway 3,
+    // catalog-api 4, ordering-api 3, web-bff 1, rabbitmq 1; twelve in all.
+    [Fact]
+    public async Task Logs_follow_of_no_services_replays_every_recorded_line()
+    {
+        IReadOnlyList<string> lines = await FollowAsync([]);
+
+        lines.Count.ShouldBe(12);
+    }
+
+    [Fact]
+    public async Task Logs_follow_replays_only_the_selected_services()
+    {
+        IReadOnlyList<string> lines = await FollowAsync(["gateway", "ordering-api"]);
+
+        // gateway 3 + ordering-api 3.
+        lines.Count.ShouldBe(6);
+        lines.ShouldAllBe(t => t.StartsWith("gateway ", StringComparison.Ordinal) || t.StartsWith("ordering-api ", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task Logs_follow_carries_a_correlation_id_line()
     {
@@ -52,5 +72,14 @@ public sealed class FakePlatformTests : IClassFixture<AdminHostFactory>
 
         job.GetProperty("summary").GetProperty("state").GetString().ShouldBe("Running");
         job.GetProperty("lines").EnumerateArray().Select(l => l.GetProperty("text").GetString()!).ShouldContain(t => t.Contains("CorrelationId=fake-corr-0001"));
+    }
+
+    private async Task<IReadOnlyList<string>> FollowAsync(string[] services)
+    {
+        HttpResponseMessage started = await client.PostAsJsonAsync("/api/logs/follow", new { services }, TestContext.Current.CancellationToken);
+        string id = (await started.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken)).GetProperty("id").GetString()!;
+        JsonElement job = await client.GetFromJsonAsync<JsonElement>($"/api/jobs/{id}", TestContext.Current.CancellationToken);
+
+        return [.. job.GetProperty("lines").EnumerateArray().Select(l => l.GetProperty("text").GetString()!)];
     }
 }
