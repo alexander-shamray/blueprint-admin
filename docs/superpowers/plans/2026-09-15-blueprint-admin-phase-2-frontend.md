@@ -1198,3 +1198,33 @@ Run `dotnet run --project src/Admin.Host`, open http://127.0.0.1:5300/stack, cli
 git add src/Admin.Web/e2e/frontend.spec.ts README.md CLAUDE.md
 git commit -m "test(web): Playwright smoke for frontend start and stop; docs for phase 2"
 ```
+
+---
+
+### Task 6: Stop reaches every descendant on Windows, and never hangs
+
+*Added during execution (ledger ruling after Task 5's real-mode check).* Against a real host, `POST /api/stack/frontend/stop` hung for minutes: the tracked `npm.cmd` root and an intermediate `cmd.exe` had already exited, the `ng serve` `node.exe` survived as an orphan holding 5173 and the inherited stdout/stderr pipes, `Process.Kill(entireProcessTree: true)` (which walks live parent links) could not find it, and `ProcessRunner.StopAsync` awaits `job.Completion`, which `CompleteWhenExitedAsync` only completes once the pipes reach EOF. Spec §5.2 makes killing the tree "the reason `ng serve` can be stopped at all on Windows"; phase 2 is not done without it.
+
+**Files:**
+- Modify: `src/Admin.Host/Jobs/ProcessRunner.cs`
+- Create (if the design below needs it): `src/Admin.Host/Jobs/WindowsJobObject.cs` (P/Invoke wrapper, `[SupportedOSPlatform("windows")]`)
+- Modify: `tests/Admin.Host.Tests/Jobs/ProcessRunnerTests.cs`
+- Modify: `CLAUDE.md` only if the OS-boundary sentence (Owners paragraph) no longer names the right files
+- Modify: `docs/superpowers/plans/2026-09-15-blueprint-admin-phase-2-frontend.md` is already amended by the controller; commit it with this task
+
+**Interfaces:**
+- Consumes: `IProcessRunner.Start(ProcessSpec)` / `StopAsync(Job, CancellationToken)`, `Job.MarkExited(int)` (idempotent: a second call is a no-op), `Job.Completion`, `ExecutableResolver.Resolve`.
+- Produces: no signature changes. Behavioural contract of `ProcessRunner`:
+  1. `StopAsync` kills the started process **and every process it started, directly or through intermediates that have since exited**, on Windows.
+  2. `StopAsync` returns within a bounded time (the kill, then at most 10 seconds' wait) even if some handle keeps the output pipes open; in that case the job is marked exited with `-1` and a warning is logged, so a Stop request never hangs.
+  3. A root that exits on its own while descendants still write output keeps the job `Running` (the output is still live) and `StopAsync` still kills those descendants.
+  4. Host disposal (`DisposeAsync`) has the same reach.
+
+**Required approach (Windows):** assign each started process to its own Win32 Job Object immediately after `Process.Start()` (`CreateJobObject`, `SetInformationJobObject` with `JOBOBJECT_EXTENDED_LIMIT_INFORMATION.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, `AssignProcessToJobObject`); stop with `TerminateJobObject`; close the job handle when the job completes. Descendants inherit job membership, so orphans are reached, and kill-on-close also means a crashed host takes its children with it. Keep `Kill(entireProcessTree: true)` as the non-Windows path and as the Windows fallback when assignment fails (log it). Document the unavoidable window: a child spawned between `Process.Start()` and assignment escapes the job; for `npm`, `docker` and `node` the first spawn comes after runtime start-up. Use `SafeHandle` for the job handle and `[LibraryImport]`/`[DllImport]` per the analyser policy.
+
+- [ ] **Step 1: Reproduce with a failing test (Windows)** — in `ProcessRunnerTests`, a test that starts `node -e` with a script that spawns an intermediate `node` which spawns a long-lived grandchild (`stdio: 'inherit'`, the grandchild prints `pid=<process.pid>` then ticks every 50 ms) and then **exits**; the root may also exit. Wait until the `pid=` line appears, call `StopAsync` wrapped in `WaitAsync(TimeSpan.FromSeconds(20))`, then assert the job is `Exited` and the grandchild PID is no longer a running process. Mark it Windows-only (xunit v3 `Assert.SkipUnless(OperatingSystem.IsWindows(), ...)` or the project's existing skip idiom). Run it: it must FAIL today (timeout or surviving PID). Record the RED output.
+- [ ] **Step 2: A bounded-stop test (all platforms)** — a runner-level test showing `StopAsync` returns within ~15 s and the job is `Exited` even when a descendant that escaped the kill still holds the pipes. If no portable way exists to make a descendant escape, cover contract 2 on Windows by spawning the grandchild detached from the job via `cmd /c start /b` is NOT acceptable (it would be inside the job); instead unit-test the timeout path by extracting the wait into a small internal seam, or state in the report why contract 2 is covered by Step 1 alone.
+- [ ] **Step 3: Implement** the Job Object path and the bounded wait.
+- [ ] **Step 4: Run** `dotnet format whitespace BlueprintAdmin.slnx && dotnet build && dotnet test` (all pass, output pristine).
+- [ ] **Step 5: Real-mode verification (Windows workstation):** with `../blueprint-frontend/node_modules` present and ports 5300/5173 free, run the real host (`dotnet run --project src/Admin.Host`), and three times: `POST /api/stack/frontend/start` → poll `GET /api/stack` until the `client` reachability entry is up → `POST /api/stack/frontend/stop` returns 200 within 15 s with `exitCode` present → `netstat -ano | findstr :5173` shows no LISTENING socket and no `node.exe` with `ng.js serve` in its command line remains. Then stop the host (Ctrl+C-equivalent kill of the process you started) and confirm 5300 and 5173 are free. Paste the outputs in the report.
+- [ ] **Step 6: Commit** — `fix(host): stop kills orphaned descendants through a Windows job object and never hangs`, including the amended plan file.
