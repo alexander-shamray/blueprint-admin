@@ -8,7 +8,7 @@ namespace Admin.Host.Compose;
 /// Every Compose command the console runs, built from <see cref="RepoPaths"/>
 /// and run in the backend clone: the exact lines run-locally.md gives.
 /// </summary>
-public sealed class ComposeService(IProcessRunner runner, RepoPaths paths)
+public sealed class ComposeService(IProcessRunner runner, RepoPaths paths, TimeProvider time)
 {
     private static readonly TimeSpan PsTimeout = TimeSpan.FromSeconds(30);
 
@@ -27,7 +27,7 @@ public sealed class ComposeService(IProcessRunner runner, RepoPaths paths)
 
         try
         {
-            exitCode = await job.Completion.WaitAsync(PsTimeout, cancellationToken);
+            exitCode = await job.Completion.WaitAsync(PsTimeout, time, cancellationToken);
         }
         catch (TimeoutException)
         {

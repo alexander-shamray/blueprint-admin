@@ -10,15 +10,17 @@ namespace Admin.Host.Tests.Compose;
 public sealed class ComposeServiceTests : IAsyncDisposable
 {
     private static readonly RepoPaths Paths = new("/repo/backend", "/repo/frontend", "/repo/backend/deploy/compose/docker-compose.yml");
-    private readonly JobRegistry registry = new(new FakeTimeProvider());
+    private readonly FakeTimeProvider time = new();
+    private readonly JobRegistry registry;
     private readonly FakeProcessRunner runner;
 
     public ComposeServiceTests()
     {
+        registry = new JobRegistry(time);
         runner = new FakeProcessRunner(registry);
     }
 
-    private ComposeService Service => new(runner, Paths);
+    private ComposeService Service => new(runner, Paths, time);
 
     public ValueTask DisposeAsync() => runner.DisposeAsync();
 
@@ -106,6 +108,24 @@ public sealed class ComposeServiceTests : IAsyncDisposable
         await cts.CancelAsync();
 
         await Should.ThrowAsync<OperationCanceledException>(() => psTask);
+        registry.All().Single().State.ShouldBe(JobState.Exited);
+    }
+
+    [Fact]
+    public async Task Ps_stops_the_job_and_is_unreachable_when_it_does_not_answer_within_30_seconds()
+    {
+        runner.OnLongRunning("docker", $"compose -f {Paths.ComposeFile} ps");
+
+        Task<ComposeStatus> psTask = Service.PsAsync(TestContext.Current.CancellationToken);
+
+        time.Advance(TimeSpan.FromSeconds(29));
+        psTask.IsCompleted.ShouldBeFalse();
+
+        time.Advance(TimeSpan.FromSeconds(1));
+        ComposeStatus status = await psTask.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        status.Reachable.ShouldBeFalse();
+        status.Error.ShouldNotBeNull().ShouldContain("did not answer within 30 seconds");
         registry.All().Single().State.ShouldBe(JobState.Exited);
     }
 

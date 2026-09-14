@@ -19,7 +19,7 @@ public sealed class LogFollowerTests
         FakeProcessRunner fake = new FakeProcessRunner(registry).OnLongRunning("docker", "compose", "gateway | started");
         using CancellationTokenSource request = new();
         CancellingRunner runner = new(fake, request);
-        using LogFollower follower = new(new ComposeService(runner, Paths), runner);
+        using LogFollower follower = new(new ComposeService(runner, Paths, TimeProvider.System), runner);
 
         Job previous = await follower.StartAsync([], TestContext.Current.CancellationToken);
 
