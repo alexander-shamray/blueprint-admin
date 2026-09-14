@@ -1,0 +1,49 @@
+<Project>
+
+  <!-- Target: the same platform-wide decision as the backend's, .NET 10 LTS and C# 14. -->
+  <PropertyGroup Label="Target">
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <!-- Output: one artifacts/ directory at the root, nothing beside a .csproj. -->
+  <PropertyGroup Label="Output">
+    <UseArtifactsOutput>true</UseArtifactsOutput>
+    <ArtifactsPath>$(MSBuildThisFileDirectory)artifacts</ArtifactsPath>
+  </PropertyGroup>
+
+  <!-- Analysis: the backend's ADR-019 policy. IDE0055, IDE0065 and IDE0161 are
+       build errors through .editorconfig; everything else stays a suggestion. -->
+  <PropertyGroup Label="Analysis">
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest-Recommended</AnalysisLevel>
+  </PropertyGroup>
+
+  <!-- Test names are sentences with underscores; CA1707 would ban them. -->
+  <PropertyGroup Label="Test analysis" Condition="$(MSBuildProjectName.EndsWith('Tests'))">
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+
+  <!--
+    CA1711 bans a reserved suffix on a type name so a consumer is not misled
+    about what the type derives from. It fires on `OutputStream` (Jobs), where
+    the suffix is not incorrect: the name means the stdout/stderr stream of a
+    child process, not System.IO.Stream. The rule protects a consumer of a
+    published library who cannot rename the type themselves, and there is no
+    such consumer here — nothing in this repo is published, every project is
+    referenced by C# inside it.
+  -->
+  <PropertyGroup Label="Analysis suppressions">
+    <NoWarn>$(NoWarn);CA1711</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Build">
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,22 @@
+<section class="controls">
+  <div class="services">
+    @for (s of services; track s) {
+      <label><input type="checkbox" [checked]="selected().includes(s)" (change)="toggle(s, $any($event.target).checked)" /> {{ s }}</label>
+    }
+  </div>
+  <div class="buttons">
+    <button class="follow" (click)="follow()">Follow</button>
+    <button class="stop" [disabled]="!(pending() || following())" (click)="stop()">Stop</button>
+    <button (click)="clear()">Clear</button>
+    <input aria-label="Filter" placeholder="filter text" [ngModel]="filter()" (ngModelChange)="filter.set($event)" />
+    <input aria-label="Correlation id" placeholder="correlation id" [ngModel]="correlationId()" (ngModelChange)="correlationId.set($event)" />
+    @if (following()) {<span class="live">live</span>}
+  </div>
+</section>
+
+@if (error(); as e) {
+  <p class="error">{{ e }}</p>
+}
+
+<pre class="log">@for (l of visible(); track l.sequence) {<span class="line" [class.hit]="isHit(l)" [class.stderr]="l.stream === 'Stderr'">@if (isHit(l)) {<span class="tag">[match] </span>}@if (l.stream === 'Stderr') {<span class="tag">[stderr] </span>}{{ l.text }}
+</span>}</pre>

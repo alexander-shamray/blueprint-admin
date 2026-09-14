@@ -1,0 +1,12 @@
+# In .gitattributes the last matching line wins, so the catch-all comes first
+# and every narrower rule below it overrides it.
+
+# Everything is LF by default: shell, Python and YAML are read on Linux
+# runners, and the Angular toolchain is indifferent.
+* text=auto eol=lf
+
+# .editorconfig asks for CRLF and IDE0055 is a build error, so a .cs that
+# arrives LF fails the build on every line. Normalise to LF in the store and
+# check out CRLF for C# everywhere, as the backend does. This must stay below
+# the catch-all above, or the catch-all's eol=lf wins.
+*.cs text eol=crlf

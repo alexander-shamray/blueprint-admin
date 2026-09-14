@@ -1,0 +1,15 @@
+{
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // angular.json serves on 127.0.0.1:5301 and proxies /api to the host (proxy.conf.json).
+      // There is no test profile: `npm test` runs Vitest once, with nothing to attach a browser to.
+      "name": "ng serve",
+      "type": "chrome",
+      "request": "launch",
+      "preLaunchTask": "npm: start",
+      "url": "http://127.0.0.1:5301/"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- Settings come from Directory.Build.props. No packages in phase 1: the
+       shared framework carries minimal APIs, options, HttpClientFactory and
+       Server-Sent Events. -->
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Admin.Host.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Fakes\fixtures\compose-ps.jsonl" LogicalName="compose-ps.jsonl" />
+  </ItemGroup>
+
+</Project>

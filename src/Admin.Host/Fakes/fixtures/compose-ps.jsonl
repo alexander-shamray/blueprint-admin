@@ -1,0 +1,13 @@
+{"Name":"commerce-sql-1","Service":"sql","State":"running","Health":"healthy","ExitCode":0,"Publishers":[{"URL":"127.0.0.1","TargetPort":1433,"PublishedPort":1433,"Protocol":"tcp"}]}
+{"Name":"commerce-redis-cache-1","Service":"redis-cache","State":"running","Health":"healthy","ExitCode":0,"Publishers":[{"URL":"127.0.0.1","TargetPort":6379,"PublishedPort":6379,"Protocol":"tcp"}]}
+{"Name":"commerce-redis-coordination-1","Service":"redis-coordination","State":"running","Health":"healthy","ExitCode":0,"Publishers":[{"URL":"127.0.0.1","TargetPort":6379,"PublishedPort":6380,"Protocol":"tcp"}]}
+{"Name":"commerce-rabbitmq-1","Service":"rabbitmq","State":"running","Health":"healthy","ExitCode":0,"Publishers":[{"URL":"127.0.0.1","TargetPort":5672,"PublishedPort":5672,"Protocol":"tcp"},{"URL":"127.0.0.1","TargetPort":15672,"PublishedPort":15672,"Protocol":"tcp"}]}
+{"Name":"commerce-keycloak-1","Service":"keycloak","State":"running","Health":"healthy","ExitCode":0,"Publishers":[{"URL":"127.0.0.1","TargetPort":8080,"PublishedPort":8080,"Protocol":"tcp"}]}
+{"Name":"commerce-otel-collector-1","Service":"otel-collector","State":"running","Health":"","ExitCode":0,"Publishers":[{"URL":"127.0.0.1","TargetPort":4317,"PublishedPort":4317,"Protocol":"tcp"},{"URL":"127.0.0.1","TargetPort":4318,"PublishedPort":4318,"Protocol":"tcp"}]}
+{"Name":"commerce-grafana-1","Service":"grafana","State":"running","Health":"","ExitCode":0,"Publishers":[{"URL":"127.0.0.1","TargetPort":3000,"PublishedPort":3000,"Protocol":"tcp"}]}
+{"Name":"commerce-catalog-migrator-1","Service":"catalog-migrator","State":"exited","Health":"","ExitCode":0,"Publishers":[]}
+{"Name":"commerce-catalog-api-1","Service":"catalog-api","State":"running","Health":"healthy","ExitCode":0,"Publishers":[{"URL":"127.0.0.1","TargetPort":8080,"PublishedPort":5102,"Protocol":"tcp"}]}
+{"Name":"commerce-ordering-migrator-1","Service":"ordering-migrator","State":"exited","Health":"","ExitCode":0,"Publishers":[]}
+{"Name":"commerce-ordering-api-1","Service":"ordering-api","State":"running","Health":"healthy","ExitCode":0,"Publishers":[{"URL":"127.0.0.1","TargetPort":8080,"PublishedPort":5101,"Protocol":"tcp"}]}
+{"Name":"commerce-gateway-1","Service":"gateway","State":"running","Health":"healthy","ExitCode":0,"Publishers":[{"URL":"127.0.0.1","TargetPort":8080,"PublishedPort":5000,"Protocol":"tcp"}]}
+{"Name":"commerce-web-bff-1","Service":"web-bff","State":"running","Health":"healthy","ExitCode":0,"Publishers":[{"URL":"127.0.0.1","TargetPort":8080,"PublishedPort":5200,"Protocol":"tcp"}]}

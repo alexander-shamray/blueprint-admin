@@ -1,0 +1,11 @@
+<header class="bar">
+  <strong>blueprint-admin</strong>
+  <nav>
+    <a routerLink="/stack" routerLinkActive="active">Stack</a>
+    <a routerLink="/logs" routerLinkActive="active">Logs</a>
+  </nav>
+  @if (config(); as c) {
+    <span class="hint">{{ c.backendDir }} @if (c.fakePlatform) {<em>(fake platform)</em>}</span>
+  }
+</header>
+<main><router-outlet /></main>
