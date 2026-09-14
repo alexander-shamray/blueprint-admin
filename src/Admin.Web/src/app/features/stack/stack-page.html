@@ -18,6 +18,10 @@
   <p class="error">{{ e }}</p>
 }
 
+@if (pollError(); as pe) {
+  <p class="error">The host did not answer: {{ pe }}</p>
+}
+
 @if (stack(); as s) {
   <p class="reachability">
     @for (r of s.reachability; track r.name) {

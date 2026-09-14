@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { SseClient } from '../../core/host/sse-client';
 import { StackPage } from './stack-page';
@@ -92,5 +92,44 @@ describe('StackPage', () => {
 
     wipe.click();
     expect(host.backendDown).toHaveBeenCalledWith(true, 'down -v');
+  });
+
+  it('keeps polling after a failed request', async () => {
+    host.stack.mockReturnValueOnce(throwError(() => new Error('network down')));
+
+    const fixture = TestBed.createComponent(StackPage);
+    fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(0);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('The host did not answer: network down');
+    expect(fixture.nativeElement.querySelectorAll('tbody tr').length).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(3000);
+    fixture.detectChanges();
+
+    const rows = Array.from(fixture.nativeElement.querySelectorAll('tbody tr')) as HTMLElement[];
+    expect(rows.length).toBe(2);
+    expect(fixture.nativeElement.textContent).not.toContain('The host did not answer');
+  });
+
+  it('shows the problem detail when the host refuses a wipe', async () => {
+    host.backendDown.mockReturnValueOnce(
+      throwError(() => ({
+        error: { title: 'Confirmation required', detail: 'Wiping volumes destroys databases and broker state.' },
+      })),
+    );
+
+    const fixture = TestBed.createComponent(StackPage);
+    fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(0);
+    fixture.detectChanges();
+
+    fixture.componentInstance.confirmText.set('down -v');
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('button.wipe') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Wiping volumes destroys databases and broker state.');
   });
 });
