@@ -63,8 +63,11 @@ console, broker inspection and the event trace are the spec's later phases.
   stream; the job keeps running until the next Follow or until the host exits.
 - The console runs `npm start` but never `npm ci`: with no `node_modules` in
   the frontend clone, Start is refused and the screen says so.
-- A client started by hand is not the console's: Start runs a second
-  `npm start`, which exits because port 5173 is taken, and its output says so.
+- The console does not track a client started by hand: Start still runs a
+  second `npm start`, which competes for port 5173, and its output shows
+  what `ng serve` did.
+- Stop gives up waiting after 10 s and says so in the output; the process
+  may still be running.
 - No API console, broker inspection or event trace yet.
 
 ## Tests
