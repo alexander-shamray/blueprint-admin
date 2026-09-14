@@ -6,8 +6,9 @@ export type JobEvent = { kind: 'line'; line: OutputLine } | { kind: 'exited'; ex
 
 /**
  * One job's Server-Sent Events as an Observable. The browser's EventSource
- * reconnects on its own and resends Last-Event-ID, which the host honours;
- * `after` is for a deliberate reopen at a known sequence.
+ * reconnects on its own to the same URL and adds Last-Event-ID; the host
+ * prefers that header over `?after`, and a plain follow sends no `after` at
+ * all. `after` is only for a deliberate reopen at a known sequence.
  *
  * The app is zoneless, so nothing schedules change detection when these
  * emissions land outside an Angular-aware source; a consumer must hold them
@@ -17,7 +18,8 @@ export type JobEvent = { kind: 'line'; line: OutputLine } | { kind: 'exited'; ex
 export class SseClient {
   follow(jobId: string, after = -1): Observable<JobEvent> {
     return new Observable<JobEvent>((subscriber) => {
-      const source = new EventSource(`/api/jobs/${encodeURIComponent(jobId)}/stream?after=${after}`);
+      const query = after === -1 ? '' : `?after=${after}`;
+      const source = new EventSource(`/api/jobs/${encodeURIComponent(jobId)}/stream${query}`);
 
       source.addEventListener('line', (e: MessageEvent) =>
         subscriber.next({ kind: 'line', line: JSON.parse(e.data) as OutputLine }),

@@ -94,4 +94,21 @@ public sealed class JobEndpointTests : IClassFixture<AdminHostFactory>
         body.ShouldNotContain("\"text\":\"a\"");
         body.ShouldContain("\"text\":\"b\"");
     }
+
+    [Fact]
+    public async Task The_last_event_id_header_wins_over_the_after_query_on_reconnect()
+    {
+        // EventSource reconnects to the URL it was opened with and adds Last-Event-ID,
+        // so a stale ?after must not replay lines the browser has already seen.
+        Job job = Runner.On("echo", "three", 0, "a", "b", "c").Start(new ProcessSpec("echo", ["three"], "/"));
+        using HttpRequestMessage request = new(HttpMethod.Get, $"/api/jobs/{job.Id}/stream?after=0");
+        request.Headers.Add("Last-Event-ID", "1");
+
+        using HttpResponseMessage response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+        string body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        body.ShouldNotContain("\"text\":\"a\"");
+        body.ShouldNotContain("\"text\":\"b\"");
+        body.ShouldContain("\"text\":\"c\"");
+    }
 }

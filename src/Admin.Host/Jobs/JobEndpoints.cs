@@ -21,7 +21,9 @@ public static class JobEndpoints
                 return TypedResults.Problem(statusCode: StatusCodes.Status404NotFound, title: "No such job", detail: id);
             }
 
-            long resumeAfter = after ?? ParseLastEventId(context) ?? -1;
+            // The header wins: EventSource reconnects to the URL it was opened with, so
+            // an explicit ?after is stale once the browser has sent Last-Event-ID (spec §5.10).
+            long resumeAfter = ParseLastEventId(context) ?? after ?? -1;
 
             return TypedResults.ServerSentEvents(JobStream.Events(job, resumeAfter, cancellationToken));
         });

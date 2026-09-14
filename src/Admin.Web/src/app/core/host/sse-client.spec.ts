@@ -51,6 +51,14 @@ describe('SseClient', () => {
     expect(source.closed).toBe(true);
   });
 
+  it('opens a plain follow with no query, so a reconnect resumes from Last-Event-ID', () => {
+    const client = TestBed.inject(SseClient);
+
+    client.follow('j1').subscribe();
+
+    expect(FakeEventSource.instances[0].url).toBe('/api/jobs/j1/stream');
+  });
+
   it('closes the source on unsubscribe', () => {
     const client = TestBed.inject(SseClient);
 
