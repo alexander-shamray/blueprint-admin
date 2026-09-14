@@ -15,8 +15,7 @@ public sealed class LoopbackBindingTests
     [Fact]
     public async Task Configuration_cannot_add_a_listener_beside_the_loopback_one()
     {
-        int adminPort = FreePort();
-        int widePort = FreePort();
+        (int adminPort, int widePort) = TwoFreePorts();
         ProcessStartInfo start = new(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet")
         {
             WorkingDirectory = AppContext.BaseDirectory,
@@ -49,12 +48,17 @@ public sealed class LoopbackBindingTests
         }
     }
 
-    private static int FreePort()
+    // Both probes stay open until both ports are known, so the OS cannot hand the
+    // same port out twice; a shared port would let the loopback listener answer
+    // for the wide one.
+    private static (int First, int Second) TwoFreePorts()
     {
-        using TcpListener probe = new(IPAddress.Loopback, 0);
-        probe.Start();
+        using TcpListener first = new(IPAddress.Loopback, 0);
+        using TcpListener second = new(IPAddress.Loopback, 0);
+        first.Start();
+        second.Start();
 
-        return ((IPEndPoint)probe.LocalEndpoint).Port;
+        return (((IPEndPoint)first.LocalEndpoint).Port, ((IPEndPoint)second.LocalEndpoint).Port);
     }
 
     private static async Task<bool> WaitForListenerAsync(int port, Process host)
