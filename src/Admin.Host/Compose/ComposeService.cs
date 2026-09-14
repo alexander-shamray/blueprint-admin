@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Admin.Host.Config;
 using Admin.Host.Jobs;
 
@@ -34,6 +35,16 @@ public sealed class ComposeService(IProcessRunner runner, RepoPaths paths)
 
             return ComposeStatus.Unreachable("docker compose ps did not answer within 30 seconds");
         }
+        catch (OperationCanceledException)
+        {
+            // The caller's own token cancelled the wait, not the timeout: stop the
+            // orphaned process with a fresh token so the stop itself is not
+            // cancelled, then let the cancellation propagate as cancellation, not
+            // as an Unreachable status.
+            await runner.StopAsync(job, CancellationToken.None);
+
+            throw;
+        }
 
         IReadOnlyList<OutputLine> lines = job.Since(-1);
 
@@ -44,7 +55,14 @@ public sealed class ComposeService(IProcessRunner runner, RepoPaths paths)
             return ComposeStatus.Unreachable(lastError ?? $"docker compose ps exited with {exitCode}");
         }
 
-        return ComposeStatus.Up(ComposePsParser.Parse(lines.Where(l => l.Stream == OutputStream.Stdout).Select(l => l.Text)));
+        try
+        {
+            return ComposeStatus.Up(ComposePsParser.Parse(lines.Where(l => l.Stream == OutputStream.Stdout).Select(l => l.Text)));
+        }
+        catch (JsonException ex)
+        {
+            return ComposeStatus.Unreachable($"docker compose ps output could not be parsed: {ex.Message}");
+        }
     }
 
     private Job Run(params string[] args) => runner.Start(new ProcessSpec("docker", ["compose", "-f", paths.ComposeFile, .. args], paths.BackendDir));

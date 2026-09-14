@@ -10,7 +10,13 @@ namespace Admin.Host.Tests.Compose;
 public sealed class ComposeServiceTests
 {
     private static readonly RepoPaths Paths = new("/repo/backend", "/repo/frontend", "/repo/backend/deploy/compose/docker-compose.yml");
-    private readonly FakeProcessRunner runner = new(new JobRegistry(new FakeTimeProvider()));
+    private readonly JobRegistry registry = new(new FakeTimeProvider());
+    private readonly FakeProcessRunner runner;
+
+    public ComposeServiceTests()
+    {
+        runner = new FakeProcessRunner(registry);
+    }
 
     private ComposeService Service => new(runner, Paths);
 
@@ -84,5 +90,35 @@ public sealed class ComposeServiceTests
 
         status.Reachable.ShouldBeFalse();
         status.Error.ShouldStartWith("fake: no script for docker compose");
+    }
+
+    [Fact]
+    public async Task Ps_stops_the_job_when_the_caller_cancels_before_it_answers()
+    {
+        // A long-running script never exits on its own, the same shape as a
+        // docker compose ps that never answers because the daemon is stuck.
+        runner.OnLongRunning("docker", $"compose -f {Paths.ComposeFile} ps");
+        using CancellationTokenSource cts = new();
+
+        Task<ComposeStatus> psTask = Service.PsAsync(cts.Token);
+        await cts.CancelAsync();
+
+        await Should.ThrowAsync<OperationCanceledException>(() => psTask);
+        registry.All().Single().State.ShouldBe(JobState.Exited);
+    }
+
+    [Fact]
+    public async Task Ps_is_unreachable_when_the_output_cannot_be_parsed()
+    {
+        // A warning line on stdout ahead of the JSON rows, or truncated output,
+        // is not valid JSON; the parser throws and PsAsync must not propagate it.
+        runner.On("docker", $"compose -f {Paths.ComposeFile} ps -a --format json", 0,
+            """{"Name":"commerce-gateway-1","Service":"gateway","State":"running","Health":"healthy","ExitCode":0,"Publishers":[]}""",
+            "WARN[0000] something");
+
+        ComposeStatus status = await Service.PsAsync(TestContext.Current.CancellationToken);
+
+        status.Reachable.ShouldBeFalse();
+        status.Error.ShouldNotBeNull().ShouldContain("could not be parsed");
     }
 }
