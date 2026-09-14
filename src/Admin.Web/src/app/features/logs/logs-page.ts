@@ -5,6 +5,11 @@ import { HostClient } from '../../core/host/host-client';
 import { OutputLine } from '../../core/host/host-types';
 import { SseClient } from '../../core/host/sse-client';
 
+/**
+ * The platform's Compose services, owned by the backend: infrastructure.yml (sql through grafana) and
+ * services/catalog.yml, gateway.yml, ordering.yml and web-bff.yml under deploy/compose/ in dotnet-ddd-blueprint.
+ * Update this list when a service is added there or renamed.
+ */
 export const COMPOSE_SERVICES = [
   'sql', 'redis-cache', 'redis-coordination', 'rabbitmq', 'keycloak', 'otel-collector', 'grafana',
   'catalog-migrator', 'catalog-api', 'gateway', 'ordering-migrator', 'ordering-api', 'web-bff',
