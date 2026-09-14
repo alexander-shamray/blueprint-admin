@@ -1,0 +1,19 @@
+# Build output for every project, per Directory.Build.props's Output group.
+/artifacts/
+[Bb]in/
+[Oo]bj/
+
+# The SPA build lands in the host's wwwroot so one URL serves both; it is
+# produced by `ng build`, never committed.
+/src/Admin.Host/wwwroot/
+
+# Angular
+/src/Admin.Web/node_modules/
+/src/Admin.Web/dist/
+/src/Admin.Web/.angular/
+/src/Admin.Web/test-results/
+/src/Admin.Web/playwright-report/
+
+# Per-developer overrides
+.claude/settings.local.json
+.remember/

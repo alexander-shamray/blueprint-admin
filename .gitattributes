@@ -1,0 +1,8 @@
+# .editorconfig asks for CRLF and IDE0055 is a build error, so a .cs that
+# arrives LF fails the build on every line. Normalise to LF in the store and
+# check out CRLF for C# everywhere, as the backend does.
+*.cs text eol=crlf
+
+# Everything else is LF: shell, Python and YAML are read on Linux runners,
+# and the Angular toolchain is indifferent.
+* text=auto eol=lf
