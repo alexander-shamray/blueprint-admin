@@ -7,7 +7,10 @@ namespace Admin.Host.Jobs;
 /// PATHEXT the way a shell does. Off Windows, and for a name that already
 /// carries an extension or a directory, the name is returned unchanged; a name
 /// that resolves nowhere is returned unchanged too, so the start fails with the
-/// name the user recognises.
+/// name the user recognises. A name may resolve to a <c>.cmd</c> or <c>.bat</c>,
+/// which Windows runs through <c>cmd.exe</c> without escaping its
+/// metacharacters, so arguments passed to such a command must never carry
+/// user input.
 /// </summary>
 public static class ExecutableResolver
 {

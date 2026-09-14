@@ -18,10 +18,14 @@ namespace Admin.Host.Jobs;
 /// after it starts, and stopping it terminates the job: <c>npm start</c> reaches
 /// <c>ng serve</c> through a <c>cmd.exe</c> that exits first, and the orphan it
 /// leaves is invisible to <see cref="Process.Kill(bool)"/>, which walks live
-/// parent links. A child spawned between <see cref="Process.Start()"/> and the
-/// assignment escapes the job; <c>npm</c>, <c>docker</c> and <c>node</c> spawn
-/// nothing until their runtime has started, which takes far longer than that window.
-/// Elsewhere, and on Windows when the assignment fails, the kill is the tree walk.
+/// parent links. Assignment follows <see cref="Process.Start()"/> within
+/// microseconds, so the window in which a child spawned before the assignment
+/// escapes the job is tiny but real. Such a child is not killed directly, but
+/// it does not make a stop hang: <see cref="StopAsync"/> is bounded regardless,
+/// and closing the kill-on-close job when the job completes (see
+/// <see cref="CompleteWhenExitedAsync"/>) also ends any descendant that
+/// outlived the root and was still inside the job. Elsewhere, and on Windows
+/// when the assignment fails, the kill is the tree walk.
 /// </remarks>
 public sealed partial class ProcessRunner : IProcessRunner, IAsyncDisposable
 {
@@ -127,7 +131,9 @@ public sealed partial class ProcessRunner : IProcessRunner, IAsyncDisposable
     /// Kill the process and everything it started, then wait a bounded time (ten
     /// seconds) for its output to end. A job whose output is still open after that,
     /// because some process the kill did not reach holds the pipes, is marked exited
-    /// with -1, so a stop never hangs.
+    /// with -1, so a stop never hangs. After a timed-out stop the tracked entry and
+    /// the process/job handles remain until the pipes eventually close or the host
+    /// exits; a restart in the meantime runs beside the old process.
     /// </summary>
     public async Task StopAsync(Job job, CancellationToken cancellationToken)
     {
@@ -142,9 +148,10 @@ public sealed partial class ProcessRunner : IProcessRunner, IAsyncDisposable
         {
             await job.Completion.WaitAsync(stopWait, cancellationToken).ConfigureAwait(false);
         }
-        catch (TimeoutException ex)
+        catch (TimeoutException)
         {
-            LogStopTimedOut(ex, job.Spec.CommandLine, stopWait);
+            LogStopTimedOut(job.Spec.CommandLine, stopWait);
+            job.Append(OutputStream.Stderr, $"Stopped waiting after {stopWait.TotalSeconds:0} s; a process may still be running and holding the output.");
             job.MarkExited(-1);
         }
     }
@@ -268,7 +275,7 @@ public sealed partial class ProcessRunner : IProcessRunner, IAsyncDisposable
     private partial void LogCouldNotAssignJobObject(Exception ex, string commandLine);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Output of {CommandLine} was still open {Wait} after the kill; the job is marked exited with -1")]
-    private partial void LogStopTimedOut(Exception ex, string commandLine, TimeSpan wait);
+    private partial void LogStopTimedOut(string commandLine, TimeSpan wait);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "{Count} child processes had not exited when shutdown stopped waiting")]
     private partial void LogShutdownTimedOut(Exception ex, int count);

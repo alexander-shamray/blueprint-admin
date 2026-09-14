@@ -174,7 +174,10 @@ public sealed class ProcessRunnerTests
             await runner.StopAsync(job, TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken);
 
             job.Status.ShouldBe((JobState.Exited, -1));
-            logger.Entries.ShouldContain(e => e.Level == LogLevel.Warning && e.Message.Contains(job.Spec.CommandLine, StringComparison.Ordinal));
+            job.Since(-1).ShouldContain(l => l.Stream == OutputStream.Stderr && l.Text.Contains("Stopped waiting", StringComparison.Ordinal));
+            logger.Entries.ShouldContain(e => e.Level == LogLevel.Warning
+                && e.Message.Contains("was still open", StringComparison.Ordinal)
+                && e.Message.Contains(job.Spec.CommandLine, StringComparison.Ordinal));
         }
         finally
         {
