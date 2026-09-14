@@ -23,4 +23,24 @@ describe('App', () => {
     expect(fixture.nativeElement.textContent).toContain('C:/dev/blueprint-backend');
     expect(fixture.nativeElement.textContent).toContain('(fake platform)');
   });
+
+  it('still renders the shell when the initial config request fails', async () => {
+    TestBed.configureTestingModule({
+      imports: [App],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
+    });
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/config')
+      .flush('offline', { status: 0, statusText: 'Unknown Error' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const nav = fixture.nativeElement.querySelectorAll('nav a');
+    expect(nav.length).toBe(2);
+    expect(fixture.nativeElement.querySelector('router-outlet')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.hint')).toBeFalsy();
+  });
 });
