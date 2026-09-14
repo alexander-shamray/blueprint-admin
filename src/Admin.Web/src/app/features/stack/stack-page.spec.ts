@@ -65,6 +65,26 @@ describe('StackPage', () => {
     expect(fixture.nativeElement.querySelector('.reachability')?.textContent).toContain('gateway');
   });
 
+  it('renders each reachability chip as name, up/down text and status, omitting status when unknown', async () => {
+    host.stack.mockReturnValueOnce(
+      of({
+        ...stack,
+        reachability: [
+          { name: 'gateway', url: 'http://localhost:5000/health/ready', up: true, status: 200 },
+          { name: 'grafana', url: 'http://localhost:3000', up: false, status: null },
+        ],
+      }),
+    );
+
+    const fixture = TestBed.createComponent(StackPage);
+    fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(0);
+    fixture.detectChanges();
+
+    const chips = Array.from(fixture.nativeElement.querySelectorAll('.reachability span')) as HTMLElement[];
+    expect(chips.map((c) => c.textContent?.replace(/\s+/g, ' ').trim())).toEqual(['gateway up 200', 'grafana down']);
+  });
+
   it('starts an up job and hands its id to the output pane', async () => {
     const fixture = TestBed.createComponent(StackPage);
     fixture.detectChanges();
