@@ -202,6 +202,13 @@ public sealed class Job
 
     private List<OutputLine> SinceUnlocked(long afterSequence)
     {
+        // A client that has seen the latest line has nothing to replay; returning
+        // here also keeps afterSequence + 1 from wrapping at long.MaxValue.
+        if (afterSequence >= next - 1)
+        {
+            return [];
+        }
+
         long first = Math.Max(afterSequence + 1, next - ring.Length);
         List<OutputLine> lines = [];
 

@@ -48,6 +48,16 @@ public sealed class JobTests
     }
 
     [Fact]
+    public void Since_the_largest_sequence_returns_nothing_rather_than_the_whole_ring()
+    {
+        Job job = NewJob();
+        job.Append(OutputStream.Stdout, "a");
+        job.Append(OutputStream.Stdout, "b");
+
+        job.Since(long.MaxValue).ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task Follow_replays_buffered_lines_then_streams_live_until_exit()
     {
         Job job = NewJob();
