@@ -1,0 +1,9 @@
+.actions { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
+.links { margin-left: auto; display: flex; gap: 0.75rem; }
+.reachability span { display: inline-block; margin-right: 0.75rem; padding: 0.1rem 0.4rem; border-radius: 3px; }
+.reachability .up { background: #dfd; }
+.reachability .down { background: #fdd; }
+table { border-collapse: collapse; margin-bottom: 1rem; }
+td, th { padding: 0.25rem 0.75rem; border-bottom: 1px solid #eee; text-align: left; }
+tr.exited td { color: #888; }
+.error { color: #b00; }

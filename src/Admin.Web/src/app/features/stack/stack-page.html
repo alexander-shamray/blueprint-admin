@@ -1,0 +1,49 @@
+<section class="actions">
+  <button class="up" (click)="up()">Up</button>
+  <button class="down" (click)="down()">Down</button>
+  <span class="wipe-box">
+    <input placeholder="type: down -v" [ngModel]="confirmText()" (ngModelChange)="confirmText.set($event)" />
+    <button class="wipe" [disabled]="!canWipe()" (click)="wipe()">Down and wipe</button>
+  </span>
+  @if (config(); as c) {
+    <span class="links">
+      <a [href]="c.urls.client" target="_blank">client</a>
+      <a [href]="c.urls.grafana" target="_blank">grafana</a>
+      <a [href]="c.urls.keycloak" target="_blank">keycloak</a>
+    </span>
+  }
+</section>
+
+@if (error(); as e) {
+  <p class="error">{{ e }}</p>
+}
+
+@if (stack(); as s) {
+  <p class="reachability">
+    @for (r of s.reachability; track r.name) {
+      <span [class.up]="r.up" [class.down]="!r.up" [title]="r.url">{{ r.name }} {{ r.status ?? '·' }}</span>
+    }
+  </p>
+
+  @if (!s.backend.reachable) {
+    <p class="error">Docker did not answer: {{ s.backend.error }}</p>
+  }
+
+  <table>
+    <thead><tr><th>Service</th><th>State</th><th>Health</th><th>Ports</th></tr></thead>
+    <tbody>
+      @for (svc of s.backend.services; track svc.service) {
+        <tr [class.exited]="svc.state === 'exited'">
+          <td>{{ svc.service }}</td>
+          <td>{{ svc.state }}</td>
+          <td>{{ svc.health ?? '—' }}</td>
+          <td>{{ svc.publishedPorts.length ? svc.publishedPorts.join(', ') : '—' }}</td>
+        </tr>
+      }
+    </tbody>
+  </table>
+} @else {
+  <p>Loading…</p>
+}
+
+<app-output-pane [jobId]="jobId()" />
