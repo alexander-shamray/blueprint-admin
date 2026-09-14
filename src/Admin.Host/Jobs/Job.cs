@@ -39,6 +39,22 @@ public sealed class Job
 
     public int? ExitCode { get; private set; }
 
+    /// <summary>
+    /// An atomic snapshot of <see cref="State"/> and <see cref="ExitCode"/>: reading the two
+    /// properties separately can observe them mid-update from <see cref="MarkExited"/> (Running
+    /// with an exit code, or Exited without one).
+    /// </summary>
+    public (JobState State, int? ExitCode) Status
+    {
+        get
+        {
+            lock (gate)
+            {
+                return (State, ExitCode);
+            }
+        }
+    }
+
     public Task<int> Completion => completion.Task;
 
     /// <summary>Live followers still registered; for tests.</summary>
