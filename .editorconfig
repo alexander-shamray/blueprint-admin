@@ -24,9 +24,11 @@ root = true
 # exception Roslyn cannot express, and a rule whose carve-out lives in prose
 # must not fail a build it cannot evaluate.
 
+# LF everywhere except C#, matching .gitattributes: git checks C# out CRLF and
+# everything else LF, so an editor must not rewrite one against the other.
 [*]
 charset = utf-8
-end_of_line = crlf
+end_of_line = lf
 insert_final_newline = true
 trim_trailing_whitespace = true
 indent_style = space
@@ -42,7 +44,7 @@ indent_size = 2
 [*.{json,yml,yaml}]
 indent_size = 2
 
-# The one file type that overrides end_of_line above, and it is not a
+# Python restates the root LF rule on purpose, and it is not a
 # preference. The licence gate (.github/licence-gate/) runs on a Linux runner,
 # and a CRLF shebang makes the kernel look for an interpreter named
 # `python3\r` — "bad interpreter", on a line that looks correct in every editor.
@@ -52,6 +54,7 @@ end_of_line = lf
 indent_size = 4
 
 [*.{cs,csx}]
+end_of_line = crlf
 indent_size = 4
 tab_width = 4
 
