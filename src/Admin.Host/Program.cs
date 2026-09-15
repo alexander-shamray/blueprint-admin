@@ -145,11 +145,8 @@ app.MapApi();
 // :nonfile constraint too) and serve index.html for it. This catch-all has a
 // literal "api" segment, which endpoint routing always prefers over the
 // fallback's, so a real /api/* route above still wins and only a truly
-// unknown one lands here as a genuine 404. The route requires a segment
-// after "api" ({first}), so the bare "/api" and "/api/" — the SPA's own API
-// screen route (src/Admin.Web/src/app/app.routes.ts) — fall through to the
-// SPA fallback below instead of being swallowed here.
-app.Map("/api/{first}/{**catchAll}", () => Results.NotFound());
+// unknown one lands here as a genuine 404.
+app.Map("/api/{**catchAll}", () => Results.NotFound());
 
 if (spaFiles is not null)
 {
