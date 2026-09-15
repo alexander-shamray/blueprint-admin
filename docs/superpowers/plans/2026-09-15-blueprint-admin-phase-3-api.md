@@ -1591,8 +1591,11 @@ public sealed class ApiCatalog(HttpClient http, TokenService tokens, IOptions<Ad
         {
             AdminOptions o = options.Value;
             (string Name, string BaseUrl)[] services = [("catalog", o.CatalogUrl), ("ordering", o.OrderingUrl)];
+
+            // One grant for both documents: two concurrent loads would each miss the empty cache and mint twice.
+            (string? bearer, string? tokenError) = await BearerAsync(o, cancellationToken);
             (ApiSource Source, IReadOnlyList<ApiOperation>? Operations)[] loads =
-                await Task.WhenAll(services.Select(s => LoadAsync(s.Name, s.BaseUrl, o, cancellationToken)));
+                await Task.WhenAll(services.Select(s => LoadAsync(s.Name, s.BaseUrl, o, bearer, tokenError, cancellationToken)));
             List<ApiOperation> operations = [];
 
             foreach ((ApiSource source, IReadOnlyList<ApiOperation>? loaded) in loads)
@@ -1619,7 +1622,28 @@ public sealed class ApiCatalog(HttpClient http, TokenService tokens, IOptions<Ad
         }
     }
 
-    private async Task<(ApiSource, IReadOnlyList<ApiOperation>?)> LoadAsync(string name, string baseUrl, AdminOptions o, CancellationToken cancellationToken)
+    /// <summary>A token for the realm user named demo, else the first configured user; or why there is none.</summary>
+    private async Task<(string? Bearer, string? Error)> BearerAsync(AdminOptions o, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<RealmUser> users = RealmUsers.Of(o);
+        RealmUser? user = users.FirstOrDefault(u => u.Username == "demo") ?? users.FirstOrDefault();
+
+        if (user is null)
+        {
+            return (null, "No realm user is configured to fetch the document with.");
+        }
+
+        return await tokens.GetAsync(user.Username, user.Password, cancellationToken) switch
+        {
+            TokenIssued issued => (issued.AccessToken, null),
+            TokenRejected rejected => (null, $"The token request for {user.Username} answered {rejected.Status}."),
+            KeycloakUnreachable unreachable => (null, $"Keycloak did not answer: {unreachable.Error}"),
+            _ => (null, $"No token for {user.Username}."),
+        };
+    }
+
+    private async Task<(ApiSource, IReadOnlyList<ApiOperation>?)> LoadAsync(
+        string name, string baseUrl, AdminOptions o, string? bearer, string? tokenError, CancellationToken cancellationToken)
     {
         string documentUrl = baseUrl.TrimEnd('/') + "/openapi/v1.json";
         (ApiSource, IReadOnlyList<ApiOperation>?) Unavailable(string error) => (new ApiSource(name, documentUrl, false, error), null);
@@ -1629,56 +1653,41 @@ public sealed class ApiCatalog(HttpClient http, TokenService tokens, IOptions<Ad
             return Unavailable($"{documentUrl} is not an absolute http(s) URL.");
         }
 
-        IReadOnlyList<RealmUser> users = RealmUsers.Of(o);
-        RealmUser? user = users.FirstOrDefault(u => u.Username == "demo") ?? users.FirstOrDefault();
-
-        if (user is null)
+        if (bearer is null)
         {
-            return Unavailable("No realm user is configured to fetch the document with.");
+            return Unavailable(tokenError ?? "No token.");
         }
 
-        switch (await tokens.GetAsync(user.Username, user.Password, cancellationToken))
+        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(DocumentTimeout);
+
+        try
         {
-            case TokenRejected rejected:
-                return Unavailable($"The token request for {user.Username} answered {rejected.Status}.");
-            case KeycloakUnreachable unreachable:
-                return Unavailable($"Keycloak did not answer: {unreachable.Error}");
-            case TokenIssued issued:
-                using (CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
-                {
-                    timeout.CancelAfter(DocumentTimeout);
+            using HttpRequestMessage request = new(HttpMethod.Get, uri);
+            request.Headers.Authorization = new("Bearer", bearer);
+            using HttpResponseMessage response = await http.SendAsync(request, timeout.Token);
 
-                    try
-                    {
-                        using HttpRequestMessage request = new(HttpMethod.Get, uri);
-                        request.Headers.Authorization = new("Bearer", issued.AccessToken);
-                        using HttpResponseMessage response = await http.SendAsync(request, timeout.Token);
+            if (!response.IsSuccessStatusCode)
+            {
+                return Unavailable($"{documentUrl} answered {(int)response.StatusCode}.");
+            }
 
-                        if (!response.IsSuccessStatusCode)
-                        {
-                            return Unavailable($"{documentUrl} answered {(int)response.StatusCode}.");
-                        }
+            await using Stream body = await response.Content.ReadAsStreamAsync(timeout.Token);
+            using JsonDocument document = await JsonDocument.ParseAsync(body, cancellationToken: timeout.Token);
 
-                        await using Stream body = await response.Content.ReadAsStreamAsync(timeout.Token);
-                        using JsonDocument document = await JsonDocument.ParseAsync(body, cancellationToken: timeout.Token);
-
-                        return (new ApiSource(name, documentUrl, true, null), OpenApiReader.Read(name, document.RootElement, o.GatewayUrl));
-                    }
-                    catch (HttpRequestException e)
-                    {
-                        return Unavailable(e.Message);
-                    }
-                    catch (JsonException e)
-                    {
-                        return Unavailable($"{documentUrl} is not JSON: {e.Message}");
-                    }
-                    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-                    {
-                        return Unavailable($"{documentUrl} did not answer within {DocumentTimeout.TotalSeconds:0} s.");
-                    }
-                }
-            default:
-                return Unavailable($"No token for {user.Username}.");
+            return (new ApiSource(name, documentUrl, true, null), OpenApiReader.Read(name, document.RootElement, o.GatewayUrl));
+        }
+        catch (HttpRequestException e)
+        {
+            return Unavailable(e.Message);
+        }
+        catch (JsonException e)
+        {
+            return Unavailable($"{documentUrl} is not JSON: {e.Message}");
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return Unavailable($"{documentUrl} did not answer within {DocumentTimeout.TotalSeconds:0} s.");
         }
     }
 }
