@@ -279,6 +279,23 @@ public sealed class RequestProxyTests
     }
 
     [Fact]
+    public async Task No_headers_within_thirty_seconds_is_unreached_with_the_timeout()
+    {
+        FakeTimeProvider time = new();
+        ScriptedHandler handler = new(async (_, token) =>
+        {
+            time.Advance(TimeSpan.FromSeconds(31));
+            await Task.Delay(Timeout.Infinite, token);
+
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+
+        ProxyUnreached unreached = (await Proxy(handler, time: time).SendAsync(Get(), Token)).ShouldBeOfType<ProxyUnreached>();
+
+        unreached.Error.ShouldBe("No answer within 30 s.");
+    }
+
+    [Fact]
     public async Task The_timeout_firing_during_the_body_read_is_responded_not_unreached()
     {
         FakeTimeProvider time = new();
