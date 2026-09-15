@@ -86,8 +86,30 @@ describe('BrokerPage', () => {
 
     const fixture = render();
 
-    expect(fixture.nativeElement.textContent).toContain('The broker did not answer: service "rabbitmq" is not running');
+    const message = fixture.nativeElement.querySelector('p.error');
+    expect(message?.textContent).toContain('The broker did not answer: service "rabbitmq" is not running');
+    expect(message?.getAttribute('role')).toBe('alert');
     expect(fixture.nativeElement.querySelector('app-drained-indicator')).toBeNull();
+  });
+
+  it('marks the exchanges broker-unreachable message as an alert', () => {
+    host.brokerExchanges.mockReturnValue(of({ ...exchanges, reachable: false, error: 'service "rabbitmq" is not running', exchanges: [] }));
+
+    const fixture = render();
+
+    const messages = Array.from(fixture.nativeElement.querySelectorAll('p.error')) as HTMLElement[];
+    const exchangesMessage = messages.find((m) => m.textContent?.includes('service "rabbitmq" is not running'));
+    expect(exchangesMessage?.getAttribute('role')).toBe('alert');
+  });
+
+  it('marks the permissions broker-unreachable message as an alert', () => {
+    host.brokerPermissions.mockReturnValue(of({ ...permissions, reachable: false, error: 'service "rabbitmq" is not running', permissions: [] }));
+
+    const fixture = render();
+
+    const messages = Array.from(fixture.nativeElement.querySelectorAll('p.error')) as HTMLElement[];
+    const permissionsMessage = messages.find((m) => m.textContent?.includes('service "rabbitmq" is not running'));
+    expect(permissionsMessage?.getAttribute('role')).toBe('alert');
   });
 
   it('refresh reads all three again', () => {

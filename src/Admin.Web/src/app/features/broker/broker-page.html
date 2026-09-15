@@ -22,7 +22,7 @@
       </tbody>
     </table>
   } @else {
-    <p class="error">The broker did not answer: {{ q.error }}</p>
+    <p class="error" role="alert">The broker did not answer: {{ q.error }}</p>
   }
 } @else if (!queuesError()) {
   <p>Loading…</p>
@@ -46,7 +46,7 @@
       </tbody>
     </table>
   } @else {
-    <p class="error">The broker did not answer: {{ x.error }}</p>
+    <p class="error" role="alert">The broker did not answer: {{ x.error }}</p>
   }
 }
 
@@ -70,6 +70,6 @@
       </tbody>
     </table>
   } @else {
-    <p class="error">The broker did not answer: {{ p.error }}</p>
+    <p class="error" role="alert">The broker did not answer: {{ p.error }}</p>
   }
 }
