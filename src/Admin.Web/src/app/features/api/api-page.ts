@@ -105,7 +105,10 @@ export class ApiPage {
 
   reload(): void {
     this.host.reloadOperations().subscribe({
-      next: (view) => this.catalog.set(view),
+      next: (view) => {
+        this.error.set(null);
+        this.catalog.set(view);
+      },
       error: (e: unknown) => this.error.set(this.describe(e)),
     });
   }

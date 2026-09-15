@@ -15,10 +15,11 @@
 .block textarea { font-family: monospace; }
 .param { font-family: monospace; font-size: 0.85rem; }
 .policy { color: #555; font-size: 0.85rem; margin: 0; }
-.claims, .body, .headers { background: #111; color: #ddd; padding: 0.5rem; overflow: auto; max-height: 40vh; font-size: 0.8rem; }
+.claims, .access-token, .body, .headers { background: #111; color: #ddd; padding: 0.5rem; overflow: auto; max-height: 40vh; font-size: 0.8rem; }
 .status { font-weight: 700; margin-right: 0.75rem; }
 .status.ok { color: #080; }
 .status.bad { color: #b00; }
 .elapsed, .correlation { margin-right: 0.75rem; font-family: monospace; }
 .response.unreached, .response.rejected { border-left: 4px solid #b00; padding-left: 0.5rem; }
 .history button { background: none; border: 0; cursor: pointer; font-family: monospace; padding: 0.1rem 0; }
+.access-token { white-space: pre-wrap; word-break: break-all; }

@@ -43,6 +43,8 @@
     </div>
 
     @if (token(); as t) {
+      <p class="expires">{{ t.username }}'s token, expires {{ t.expiresAt }}</p>
+      <pre class="access-token">{{ t.accessToken }}</pre>
       <pre class="claims">{{ claims(t) }}</pre>
     }
 

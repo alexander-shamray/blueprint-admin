@@ -268,6 +268,8 @@ describe('ApiPage', () => {
 
     expect(host.token).toHaveBeenCalledWith({ username: 'demo', password: null });
     expect(fixture.nativeElement.querySelector('.claims')?.textContent).toContain('catalog:write');
+    expect(fixture.nativeElement.querySelector('.access-token')?.textContent).toContain('a.b.c');
+    expect(fixture.nativeElement.querySelector('.expires')?.textContent).toContain('2026-09-15T08:05:00Z');
   });
 
   it('reloads the catalog', () => {
@@ -275,6 +277,16 @@ describe('ApiPage', () => {
     click(fixture, 'Reload');
 
     expect(host.reloadOperations).toHaveBeenCalled();
+  });
+
+  it('a reload that succeeds after one that failed clears the error', () => {
+    host.reloadOperations.mockReturnValueOnce(throwError(() => ({ message: 'down' })));
+    const fixture = render();
+    click(fixture, 'Reload');
+    expect(fixture.nativeElement.querySelector('.error')?.textContent).toContain('down');
+
+    click(fixture, 'Reload');
+    expect(fixture.nativeElement.querySelector('.error')).toBeNull();
   });
 
   it('selecting another operation clears a previous error and response', () => {
