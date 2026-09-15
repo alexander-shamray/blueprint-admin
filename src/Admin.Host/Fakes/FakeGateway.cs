@@ -38,7 +38,8 @@ internal static partial class FakeGateway
             ("POST", "/api/v1/orders") => Authorize(permissions, "orders:write", () => FakeHttp.Json(HttpStatusCode.OK, $"\"{PlacedOrderId}\"")),
             ("POST", var p) when CancelPath().IsMatch(p) => Authorize(permissions, "orders:cancel", () => new HttpResponseMessage(HttpStatusCode.NoContent)),
             ("POST", "/bff/v1/checkout/quote") => Authorize(permissions, null, () => FakeHttp.Json(HttpStatusCode.OK, Quote)),
-            (_, var p) when p.StartsWith("/api/v1/inventory", StringComparison.Ordinal) => new HttpResponseMessage(HttpStatusCode.BadGateway),
+            // The route's inventory:admin policy runs before the gateway finds Inventory absent.
+            (_, var p) when p.StartsWith("/api/v1/inventory", StringComparison.Ordinal) => Authorize(permissions, "inventory:admin", () => new HttpResponseMessage(HttpStatusCode.BadGateway)),
             _ => FakeHttp.Problem(HttpStatusCode.NotFound, "Not Found"),
         };
 

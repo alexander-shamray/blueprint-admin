@@ -121,7 +121,28 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
             .GetProperty("status").GetInt32().ShouldBe(204);
         (await ProxyAsync(new { method = "POST", url = "http://localhost:5000/bff/v1/checkout/quote", body = "{}", identity = new { username = "browser" } }))
             .GetProperty("body").GetString()!.ShouldContain("\"total\"");
-        (await ProxyAsync(new { method = "GET", url = "http://localhost:5000/api/v1/inventory/items", identity = new { username = "demo" } }))
-            .GetProperty("status").GetInt32().ShouldBe(502);
+    }
+
+    [Theory]
+    [InlineData(null, 401)]
+    [InlineData("demo", 403)]
+    [InlineData("browser", 403)]
+    public async Task Inventory_is_refused_by_the_gateway_policy_before_its_absent_upstream(string? username, int status)
+    {
+        (await ProxyAsync(new { method = "GET", url = "http://localhost:5000/api/v1/inventory/items", identity = new { username } }))
+            .GetProperty("status").GetInt32().ShouldBe(status);
+    }
+
+    [Fact]
+    public async Task Inventory_with_the_admin_permission_reaches_the_absent_upstream_and_is_a_bad_gateway()
+    {
+        JsonElement result = await ProxyAsync(new
+        {
+            method = "GET",
+            url = "http://localhost:5000/api/v1/inventory/items",
+            headers = new Dictionary<string, string> { ["Authorization"] = $"Bearer {Identity.TokenServiceTests.Jwt("""{"permission":["inventory:admin"]}""")}" },
+        });
+
+        result.GetProperty("status").GetInt32().ShouldBe(502);
     }
 }
