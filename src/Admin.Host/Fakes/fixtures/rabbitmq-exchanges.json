@@ -1,0 +1,17 @@
+[
+{"name":"amq.topic","type":"topic"}
+,{"name":"","type":"direct"}
+,{"name":"amq.direct","type":"direct"}
+,{"name":"amq.rabbitmq.trace","type":"topic"}
+,{"name":"amq.match","type":"headers"}
+,{"name":"amq.headers","type":"headers"}
+,{"name":"amq.fanout","type":"fanout"}
+,{"name":"ordering-catalog-events","type":"fanout"}
+,{"name":"ordering-commands","type":"fanout"}
+,{"name":"ordering-fulfilment-saga","type":"fanout"}
+,{"name":"ordering-fulfilment-saga_delay","type":"x-delayed-message"}
+,{"name":"ordering-stock-events","type":"fanout"}
+,{"name":"Common.Contracts.Catalog.V1:ProductPublished","type":"fanout"}
+,{"name":"Common.Contracts.Catalog.V1:PriceChanged","type":"fanout"}
+,{"name":"Common.Contracts.Catalog.V1:ProductDiscontinued","type":"fanout"}
+]

@@ -63,13 +63,19 @@ public static class FakePlatformScripts
                 " Container commerce-catalog-api-1  Removed",
                 " Container commerce-sql-1  Removed",
                 " Network commerce_default  Removed")
+            .On("docker", prefix + "exec -T rabbitmq rabbitmqctl list_queues name messages --formatter json", 0, [.. FixtureLines("rabbitmq-queues.json")])
+            .On("docker", prefix + "exec -T rabbitmq rabbitmqctl list_exchanges name type --formatter json", 0, [.. FixtureLines("rabbitmq-exchanges.json")])
+            .On("docker", prefix + "exec -T rabbitmq rabbitmqctl list_permissions --formatter json", 0, [.. FixtureLines("rabbitmq-permissions.json")])
             .OnLongRunning("docker", prefix + "logs -f --tail 200", services => FollowLogLines.Where(l => services.Count == 0 || services.Contains(ServiceOf(l))))
             .OnLongRunning("npm", "start", NgServeLines);
     }
 
-    public static IReadOnlyList<string> ComposePsLines()
+    public static IReadOnlyList<string> ComposePsLines() => FixtureLines("compose-ps.jsonl");
+
+    /// <summary>A recorded output embedded under its logical name, one entry per non-empty line.</summary>
+    public static IReadOnlyList<string> FixtureLines(string logicalName)
     {
-        using Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("compose-ps.jsonl")!;
+        using Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(logicalName)!;
         using StreamReader reader = new(stream);
 
         return reader.ReadToEnd().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

@@ -1,0 +1,4 @@
+[
+{"user":"catalog-svc","configure":"^(Common\\.Contracts(\\.Catalog\\.V1:|:)|MassTransit:)","write":"^(Common\\.Contracts(\\.Catalog\\.V1:|:)|MassTransit:)","read":"^(Common\\.Contracts\\.Catalog\\.V1:|MassTransit:)"}
+,{"user":"ordering-svc","configure":"^(ordering-|inventory-commands|payments-commands|Common\\.Contracts|Ordering\\.Infrastructure\\.Messaging:|MassTransit:)","write":"^(ordering-|inventory-commands|payments-commands|Common\\.Contracts(\\.Ordering\\.V1:|:)|Ordering\\.Infrastructure\\.Messaging:|MassTransit:)","read":"^(ordering-|inventory-commands|payments-commands|Common\\.Contracts|Ordering\\.Infrastructure\\.Messaging:|MassTransit:)"}
+]

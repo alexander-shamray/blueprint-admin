@@ -12,6 +12,9 @@
     <EmbeddedResource Include="Fakes\fixtures\compose-ps.jsonl" LogicalName="compose-ps.jsonl" />
     <EmbeddedResource Include="Fakes\fixtures\openapi-catalog.json" LogicalName="openapi-catalog.json" />
     <EmbeddedResource Include="Fakes\fixtures\openapi-ordering.json" LogicalName="openapi-ordering.json" />
+    <EmbeddedResource Include="Fakes\fixtures\rabbitmq-queues.json" LogicalName="rabbitmq-queues.json" />
+    <EmbeddedResource Include="Fakes\fixtures\rabbitmq-exchanges.json" LogicalName="rabbitmq-exchanges.json" />
+    <EmbeddedResource Include="Fakes\fixtures\rabbitmq-permissions.json" LogicalName="rabbitmq-permissions.json" />
   </ItemGroup>
 
 </Project>
