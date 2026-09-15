@@ -101,6 +101,20 @@ describe('BrokerPage', () => {
     expect(rows(fixture, 'queues').length).toBe(2);
   });
 
+  it('a failed exchanges read is not cleared by a later queues auto-refresh success', async () => {
+    vi.useFakeTimers();
+    host.brokerExchanges.mockReturnValueOnce(throwError(() => ({ error: { title: 'Server error', detail: 'exchanges boom' } })));
+    const fixture = render();
+
+    expect(fixture.nativeElement.textContent).toContain('exchanges boom');
+
+    fixture.componentInstance.setAutoRefresh(true);
+    await vi.advanceTimersByTimeAsync(5000);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('exchanges boom');
+  });
+
   it('auto-refresh re-reads queues every 5 seconds, only queues, until turned off', async () => {
     vi.useFakeTimers();
     const fixture = render();

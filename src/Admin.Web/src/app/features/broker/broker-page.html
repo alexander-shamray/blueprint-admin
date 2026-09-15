@@ -3,11 +3,10 @@
   <label><input type="checkbox" [ngModel]="autoRefresh()" (ngModelChange)="setAutoRefresh($event)" /> Refresh queues every 5 s</label>
 </section>
 
-@if (error(); as e) {
+<h2>Queues</h2>
+@if (queuesError(); as e) {
   <p class="error" role="alert">The host did not answer: {{ e }}</p>
 }
-
-<h2>Queues</h2>
 @if (queues(); as q) {
   @if (q.reachable) {
     <app-drained-indicator [projection]="q.projection" />
@@ -30,6 +29,9 @@
 }
 
 <h2>Exchanges</h2>
+@if (exchangesError(); as e) {
+  <p class="error" role="alert">The host did not answer: {{ e }}</p>
+}
 @if (exchanges(); as x) {
   @if (x.reachable) {
     <table class="exchanges">
@@ -49,6 +51,9 @@
 }
 
 <h2>Permissions</h2>
+@if (permissionsError(); as e) {
+  <p class="error" role="alert">The host did not answer: {{ e }}</p>
+}
 @if (permissions(); as p) {
   @if (p.reachable) {
     <table class="permissions">

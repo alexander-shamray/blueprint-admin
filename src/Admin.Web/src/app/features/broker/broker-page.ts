@@ -1,7 +1,7 @@
-import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { Component, DestroyRef, WritableSignal, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { EMPTY, Observable, Subscription, catchError, exhaustMap, timer } from 'rxjs';
+import { EMPTY, Observable, Subscription, catchError, exhaustMap, tap, timer } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { ExchangesView, PermissionsView, QueuesView } from '../../core/host/host-types';
 import { DrainedIndicator } from '../../shared/drained-indicator/drained-indicator';
@@ -29,8 +29,15 @@ export class BrokerPage {
   readonly exchanges = signal<ExchangesView | null>(null);
   readonly permissions = signal<PermissionsView | null>(null);
   readonly autoRefresh = signal(false);
-  /** A failed read; the last good listing stays on screen, and the next good queue read clears it. */
-  readonly error = signal<string | null>(null);
+  /**
+   * One failed-read signal per endpoint, not a shared one: each is set only by its own read's
+   * failure and cleared only by that same read's success, so an exchanges or permissions failure
+   * is not silently hidden by the next successful queues auto-refresh tick (only queues auto-refreshes).
+   * The last good listing stays on screen meanwhile.
+   */
+  readonly queuesError = signal<string | null>(null);
+  readonly exchangesError = signal<string | null>(null);
+  readonly permissionsError = signal<string | null>(null);
 
   constructor() {
     this.destroyRef.onDestroy(() => this.auto?.unsubscribe());
@@ -38,12 +45,9 @@ export class BrokerPage {
   }
 
   refresh(): void {
-    this.read(this.host.brokerQueues()).subscribe((view) => {
-      this.error.set(null);
-      this.queues.set(view);
-    });
-    this.read(this.host.brokerExchanges()).subscribe((view) => this.exchanges.set(view));
-    this.read(this.host.brokerPermissions()).subscribe((view) => this.permissions.set(view));
+    this.read(this.host.brokerQueues(), this.queuesError).subscribe((view) => this.queues.set(view));
+    this.read(this.host.brokerExchanges(), this.exchangesError).subscribe((view) => this.exchanges.set(view));
+    this.read(this.host.brokerPermissions(), this.permissionsError).subscribe((view) => this.permissions.set(view));
   }
 
   /** `exhaustMap` skips a tick while a read is out: a slow rabbitmqctl must not queue reads behind it. */
@@ -52,11 +56,8 @@ export class BrokerPage {
     this.auto?.unsubscribe();
     this.auto = on
       ? timer(AUTO_REFRESH_MS, AUTO_REFRESH_MS)
-          .pipe(exhaustMap(() => this.read(this.host.brokerQueues())))
-          .subscribe((view) => {
-            this.error.set(null);
-            this.queues.set(view);
-          })
+          .pipe(exhaustMap(() => this.read(this.host.brokerQueues(), this.queuesError)))
+          .subscribe((view) => this.queues.set(view))
       : undefined;
   }
 
@@ -64,11 +65,13 @@ export class BrokerPage {
     return name === '' ? '(default)' : name;
   }
 
-  private read<T>(request: Observable<T>): Observable<T> {
+  /** Clears `error` on a successful emission and sets it on failure, so each read owns only its own signal. */
+  private read<T>(request: Observable<T>, error: WritableSignal<string | null>): Observable<T> {
     return request.pipe(
       takeUntilDestroyed(this.destroyRef),
+      tap(() => error.set(null)),
       catchError((e: unknown) => {
-        this.error.set(this.describeError(e));
+        error.set(this.describeError(e));
         return EMPTY;
       }),
     );
