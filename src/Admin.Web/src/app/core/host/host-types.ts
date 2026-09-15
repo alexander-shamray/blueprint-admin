@@ -144,3 +144,49 @@ export type ProxyResult =
     }
   | { outcome: 'unreached'; error: string; elapsedMs: number; correlationId: string }
   | { outcome: 'tokenRejected'; status: number; body: string; correlationId: string };
+
+/** A queue and its depth; `messages` is ready plus unacknowledged, as rabbitmqctl reports it (spec §5.5). */
+export interface BrokerQueue {
+  name: string;
+  messages: number | null;
+  isErrorQueue: boolean;
+}
+
+/** Whether a queue has caught up: declared and empty. `ordering-catalog-events` is Ordering's price projection. */
+export interface ProjectionDrain {
+  queue: string;
+  found: boolean;
+  messages: number | null;
+  drained: boolean;
+}
+
+export interface QueuesView {
+  reachable: boolean;
+  error: string | null;
+  queues: BrokerQueue[];
+  projection: ProjectionDrain;
+}
+
+export interface BrokerExchange {
+  name: string;
+  type: string;
+}
+
+export interface ExchangesView {
+  reachable: boolean;
+  error: string | null;
+  exchanges: BrokerExchange[];
+}
+
+export interface BrokerPermission {
+  user: string;
+  configure: string;
+  write: string;
+  read: string;
+}
+
+export interface PermissionsView {
+  reachable: boolean;
+  error: string | null;
+  permissions: BrokerPermission[];
+}

@@ -104,4 +104,21 @@ describe('HostClient', () => {
     expect(req.request.body).toEqual(request);
     req.flush({ outcome: 'unreached', error: 'refused', elapsedMs: 1, correlationId: 'c' });
   });
+
+  it('reads the broker queues, exchanges and permissions', () => {
+    client.brokerQueues().subscribe();
+    const queues = http.expectOne('/api/broker/queues');
+    expect(queues.request.method).toBe('GET');
+    queues.flush({ reachable: true, error: null, queues: [], projection: { queue: 'ordering-catalog-events', found: false, messages: null, drained: false } });
+
+    client.brokerExchanges().subscribe();
+    const exchanges = http.expectOne('/api/broker/exchanges');
+    expect(exchanges.request.method).toBe('GET');
+    exchanges.flush({ reachable: true, error: null, exchanges: [] });
+
+    client.brokerPermissions().subscribe();
+    const permissions = http.expectOne('/api/broker/permissions');
+    expect(permissions.request.method).toBe('GET');
+    permissions.flush({ reachable: true, error: null, permissions: [] });
+  });
 });
