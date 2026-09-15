@@ -1,9 +1,11 @@
 using System.Net;
 using System.Text.Json.Serialization;
+using Admin.Host.Api;
 using Admin.Host.Compose;
 using Admin.Host.Config;
 using Admin.Host.Fakes;
 using Admin.Host.Frontend;
+using Admin.Host.Identity;
 using Admin.Host.Jobs;
 using Admin.Host.Security;
 using Admin.Host.Stack;
@@ -75,8 +77,31 @@ builder.Services.AddSingleton(sp =>
 
 builder.Services.AddHttpClient<PlatformProbe>().ConfigurePrimaryHttpMessageHandler(sp =>
     sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform
-        ? new FakePlatformHandler()
+        ? new FakePlatformHandler(sp.GetRequiredService<IOptions<AdminOptions>>().Value)
         : new HttpClientHandler());
+
+// One client for Keycloak, the OpenAPI documents and the proxy. No redirects and no cookies: a
+// 302 or a Set-Cookie from the platform is part of the answer the proxy shows, not something to
+// act on (spec §5.7). The token cache and the catalog cache live in singletons, so the client is
+// created once for them rather than injected as a typed client.
+builder.Services.AddHttpClient("platform").ConfigurePrimaryHttpMessageHandler(sp =>
+    sp.GetRequiredService<IOptions<AdminOptions>>().Value is { FakePlatform: true } fake
+        ? new FakePlatformHandler(fake)
+        : new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
+
+builder.Services.AddSingleton(sp => new TokenService(
+    sp.GetRequiredService<IHttpClientFactory>().CreateClient("platform"),
+    sp.GetRequiredService<IOptions<AdminOptions>>(),
+    sp.GetRequiredService<TimeProvider>()));
+builder.Services.AddSingleton(sp => new ApiCatalog(
+    sp.GetRequiredService<IHttpClientFactory>().CreateClient("platform"),
+    sp.GetRequiredService<TokenService>(),
+    sp.GetRequiredService<IOptions<AdminOptions>>()));
+builder.Services.AddSingleton(sp => new RequestProxy(
+    sp.GetRequiredService<IHttpClientFactory>().CreateClient("platform"),
+    sp.GetRequiredService<TokenService>(),
+    sp.GetRequiredService<IOptions<AdminOptions>>(),
+    sp.GetRequiredService<TimeProvider>()));
 
 WebApplication app = builder.Build();
 
@@ -112,6 +137,8 @@ app.MapConfig();
 app.MapJobs();
 app.MapStack();
 app.MapFrontend();
+app.MapIdentity();
+app.MapApi();
 
 // MapFallbackToFile's route has no literal segments, so without this it
 // would also catch an unmatched /api/nope (it has no dot, so it passes the
