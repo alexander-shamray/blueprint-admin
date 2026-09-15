@@ -13,16 +13,33 @@ const stack = {
       { service: 'catalog-migrator', state: 'exited', health: null, exitCode: 0, publishedPorts: [] },
     ],
   },
-  reachability: [{ name: 'gateway', url: 'http://localhost:5000/health/ready', up: true, status: 200 }],
+  frontend: { job: null, installed: true },
+  reachability: [
+    { name: 'gateway', url: 'http://localhost:5000/health/ready', up: true, status: 200 },
+    { name: 'client', url: 'http://localhost:5173/', up: false, status: null },
+  ],
 };
 
 const config = {
-  backendDir: '', frontendDir: '', composeFile: '', fakePlatform: true,
+  backendDir: '', frontendDir: '/work/blueprint-frontend', composeFile: '', fakePlatform: true,
   urls: { gateway: 'http://localhost:5000', catalog: '', ordering: '', bff: '', keycloak: 'http://localhost:8080', grafana: 'http://localhost:3000', client: 'http://localhost:5173' },
 };
 
+const runningJob = { id: 'fe-1', commandLine: 'npm start', state: 'Running', exitCode: null, startedAt: '' };
+
+function text(el: Element | null): string {
+  return el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+}
+
 describe('StackPage', () => {
-  let host: { stack: ReturnType<typeof vi.fn>; config: ReturnType<typeof vi.fn>; backendUp: ReturnType<typeof vi.fn>; backendDown: ReturnType<typeof vi.fn> };
+  let host: {
+    stack: ReturnType<typeof vi.fn>;
+    config: ReturnType<typeof vi.fn>;
+    backendUp: ReturnType<typeof vi.fn>;
+    backendDown: ReturnType<typeof vi.fn>;
+    frontendStart: ReturnType<typeof vi.fn>;
+    frontendStop: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     // The page polls /api/stack via `timer(0, 3000)`, a real macrotask even at a 0ms delay.
@@ -37,6 +54,8 @@ describe('StackPage', () => {
       config: vi.fn(() => of(config)),
       backendUp: vi.fn(() => of({ id: 'up-1', commandLine: 'docker compose up', state: 'Running', exitCode: null, startedAt: '' })),
       backendDown: vi.fn(() => of({ id: 'down-1', commandLine: 'docker compose down', state: 'Running', exitCode: null, startedAt: '' })),
+      frontendStart: vi.fn(() => of({ id: 'fe-1', commandLine: 'npm start', state: 'Running', exitCode: null, startedAt: '' })),
+      frontendStop: vi.fn(() => of({ id: 'fe-1', commandLine: 'npm start', state: 'Exited', exitCode: -1, startedAt: '' })),
     };
     TestBed.configureTestingModule({
       imports: [StackPage],
@@ -182,5 +201,94 @@ describe('StackPage', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('Wiping volumes destroys databases and broker state.');
+  });
+
+  describe('reference client', () => {
+    async function render() {
+      const fixture = TestBed.createComponent(StackPage);
+      fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(0);
+      fixture.detectChanges();
+      const q = (selector: string) => fixture.nativeElement.querySelector(selector) as HTMLButtonElement | null;
+      return { fixture, q };
+    }
+
+    it('shows a frontend that was never started, with Start enabled and Stop disabled', async () => {
+      const { fixture, q } = await render();
+
+      expect(text(q('.frontend-status'))).toBe('npm start not started client does not answer');
+      expect(q('button.frontend-start')!.disabled).toBe(false);
+      expect(q('button.frontend-stop')!.disabled).toBe(true);
+      expect(q('button.frontend-output')).toBeNull();
+      expect(fixture.nativeElement.textContent).not.toContain('npm ci');
+    });
+
+    it('starts the frontend and hands its job to the output pane', async () => {
+      const { fixture, q } = await render();
+
+      q('button.frontend-start')!.click();
+      fixture.detectChanges();
+
+      expect(host.frontendStart).toHaveBeenCalled();
+      expect(fixture.componentInstance.jobId()).toBe('fe-1');
+    });
+
+    it('disables Start and enables Stop while npm start runs, and Stop calls the host', async () => {
+      host.stack.mockReturnValue(
+        of({
+          ...stack,
+          frontend: { job: runningJob, installed: true },
+          reachability: [{ name: 'client', url: 'http://localhost:5173/', up: true, status: 200 }],
+        }),
+      );
+      const { fixture, q } = await render();
+
+      expect(text(q('.frontend-status'))).toBe('npm start running client answers');
+      expect(q('button.frontend-start')!.disabled).toBe(true);
+      expect(q('button.frontend-stop')!.disabled).toBe(false);
+
+      q('button.frontend-stop')!.click();
+      fixture.detectChanges();
+
+      expect(host.frontendStop).toHaveBeenCalled();
+      expect(fixture.componentInstance.jobId()).toBe('fe-1');
+    });
+
+    it('shows the exit code of a job that ended', async () => {
+      host.stack.mockReturnValue(of({ ...stack, frontend: { job: { ...runningJob, state: 'Exited', exitCode: 1 }, installed: true } }));
+      const { q } = await render();
+
+      expect(text(q('.frontend-status'))).toContain('npm start exited 1');
+      expect(q('button.frontend-start')!.disabled).toBe(false);
+    });
+
+    it('opens the output of the last job on Show output', async () => {
+      host.stack.mockReturnValue(of({ ...stack, frontend: { job: runningJob, installed: true } }));
+      const { fixture, q } = await render();
+
+      q('button.frontend-output')!.click();
+
+      expect(fixture.componentInstance.jobId()).toBe('fe-1');
+    });
+
+    it('says npm ci is needed and disables Start when node_modules is absent', async () => {
+      host.stack.mockReturnValue(of({ ...stack, frontend: { job: null, installed: false } }));
+      const { fixture, q } = await render();
+
+      expect(fixture.nativeElement.textContent).toContain('/work/blueprint-frontend has no node_modules. Run npm ci there; the console does not.');
+      expect(q('button.frontend-start')!.disabled).toBe(true);
+    });
+
+    it("shows the host's refusal when a start conflicts", async () => {
+      host.frontendStart.mockReturnValueOnce(
+        throwError(() => ({ error: { title: 'Frontend already running', detail: 'npm start is job fe-0. Stop it first.' } })),
+      );
+      const { fixture, q } = await render();
+
+      q('button.frontend-start')!.click();
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.textContent).toContain('npm start is job fe-0. Stop it first.');
+    });
   });
 });

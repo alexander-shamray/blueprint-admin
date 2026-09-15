@@ -21,7 +21,11 @@ Owners of facts you will be tempted to restate: ports and URLs are
 `src/Admin.Host/Config/AdminOptions.cs` (defaults) and `src/Admin.Web/angular.json`
 (dev server) and `src/Admin.Web/proxy.conf.json`; the Compose service list is
 the backend's `deploy/compose/`; the fake platform's recordings are
-`src/Admin.Host/Fakes/`.
+`src/Admin.Host/Fakes/`. The operating system is known in three files only,
+`src/Admin.Host/Jobs/ProcessRunner.cs` (tree kill),
+`src/Admin.Host/Jobs/WindowsJobObject.cs` (the Windows job object that reaches
+orphaned descendants) and `src/Admin.Host/Jobs/ExecutableResolver.cs` (`npm` is
+`npm.cmd` on Windows); start commands by bare name.
 
 ## Rules that the build enforces
 

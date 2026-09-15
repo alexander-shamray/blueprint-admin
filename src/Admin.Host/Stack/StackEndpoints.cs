@@ -1,4 +1,5 @@
 using Admin.Host.Compose;
+using Admin.Host.Frontend;
 using Admin.Host.Jobs;
 using Microsoft.AspNetCore.Http.HttpResults;
 
@@ -8,12 +9,12 @@ public static class StackEndpoints
 {
     public static IEndpointRouteBuilder MapStack(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/stack", async (ComposeService compose, PlatformProbe probe, CancellationToken cancellationToken) =>
+        app.MapGet("/api/stack", async (ComposeService compose, FrontendSupervisor frontend, PlatformProbe probe, CancellationToken cancellationToken) =>
         {
             Task<ComposeStatus> backend = compose.PsAsync(cancellationToken);
             Task<IReadOnlyList<Reachability>> reachability = probe.ProbeAsync(cancellationToken);
 
-            return TypedResults.Ok(new StackView(await backend, await reachability));
+            return TypedResults.Ok(new StackView(await backend, frontend.Status(), await reachability));
         });
 
         app.MapPost("/api/stack/backend/up", (ComposeService compose) => TypedResults.Accepted((string?)null, JobSummary.Of(compose.Up())));
@@ -38,7 +39,7 @@ public static class StackEndpoints
     }
 }
 
-public sealed record StackView(ComposeStatus Backend, IReadOnlyList<Reachability> Reachability);
+public sealed record StackView(ComposeStatus Backend, FrontendStatus Frontend, IReadOnlyList<Reachability> Reachability);
 
 public sealed record DownRequest(bool WipeVolumes, string? Confirm);
 

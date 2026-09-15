@@ -42,4 +42,20 @@ describe('HostClient', () => {
     expect(req.request.body).toEqual({ services: ['gateway'] });
     req.flush({ id: 'j2', commandLine: 'docker compose logs -f', state: 'Running', exitCode: null, startedAt: '' });
   });
+
+  it('starts the frontend', () => {
+    client.frontendStart().subscribe();
+
+    const req = http.expectOne('/api/stack/frontend/start');
+    expect(req.request.method).toBe('POST');
+    req.flush({ id: 'fe-1', commandLine: 'npm start', state: 'Running', exitCode: null, startedAt: '' });
+  });
+
+  it('stops the frontend', () => {
+    client.frontendStop().subscribe();
+
+    const req = http.expectOne('/api/stack/frontend/stop');
+    expect(req.request.method).toBe('POST');
+    req.flush({ id: 'fe-1', commandLine: 'npm start', state: 'Exited', exitCode: -1, startedAt: '' });
+  });
 });

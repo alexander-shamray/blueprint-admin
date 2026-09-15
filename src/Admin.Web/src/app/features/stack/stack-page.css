@@ -7,3 +7,9 @@ table { border-collapse: collapse; margin-bottom: 1rem; }
 td, th { padding: 0.25rem 0.75rem; border-bottom: 1px solid #eee; text-align: left; }
 tr.exited td { color: #666; }
 .error { color: #b00; }
+.frontend { margin-bottom: 1rem; }
+.frontend h2 { font-size: 1rem; margin: 0 0 0.5rem; }
+.frontend-status span { margin-left: 0.75rem; padding: 0.1rem 0.4rem; border-radius: 3px; }
+.frontend-status .up { background: #dfd; }
+.frontend-status .down { background: #fdd; }
+.frontend button { margin-right: 0.5rem; }

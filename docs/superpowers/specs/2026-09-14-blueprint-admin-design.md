@@ -195,9 +195,16 @@ stdout and stderr line by line into a `Job`, and returns it. A `Job` has an
 id, the command line, `Running`/`Exited` state, the exit code, a bounded ring
 buffer of the last 2000 lines with a monotonic sequence number, and a
 broadcast channel that live subscribers read from. `Stop(jobId)` kills the
-process tree: `taskkill /T /F` on Windows, the process group elsewhere. This
-is the one place the console knows about the operating system, and it is the
-reason `ng serve` can be stopped at all on Windows.
+process tree: on Windows each started process is assigned to its own Job
+Object (kill-on-close), and Stop terminates the job, reaching orphaned
+descendants that a parent-link walk would miss; elsewhere, and as the Windows
+fallback when assignment fails, it is `Process.Kill(entireProcessTree: true)`.
+Stop waits at most 10 s after the kill, then marks the job exited -1 and logs,
+so a stop never hangs. Bare command names resolve through PATH/PATHEXT on
+Windows (`npm` is `npm.cmd`). The operating system is known only inside
+`src/Admin.Host/Jobs/` (`ProcessRunner.cs`, `WindowsJobObject.cs`,
+`ExecutableResolver.cs`), which is the reason `ng serve` can be stopped at all
+on Windows.
 
 Jobs are kept in memory for the life of the host, `Exited` jobs are trimmed
 past the last 50. One-shot commands (`up`, `down`, `ps`, `exec`) are jobs too,
@@ -394,8 +401,9 @@ cannot be used as an open relay from a tab the developer left open.
 ## 10. Testing
 
 **Host** (`tests/Admin.Host.Tests`, xunit):
-- `FakeProcessRunner` replays recorded `docker compose ps --format json`,
-  `rabbitmqctl --formatter json` and `npm start` output from fixture files;
+- `FakeProcessRunner` replays recorded `docker compose ps --format json` and
+  `rabbitmqctl --formatter json` output from fixture files, and `npm start`
+  output from an in-code recording in `src/Admin.Host/Fakes/FakePlatformScripts.cs`;
   `ComposeService`, `BrokerService` and `FrontendSupervisor` are tested
   against it, including the failure shapes (`docker` absent, daemon down,
   `node_modules` absent).

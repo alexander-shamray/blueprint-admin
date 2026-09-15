@@ -46,6 +46,27 @@
       }
     </tbody>
   </table>
+
+  <section class="frontend">
+    <h2>Reference client</h2>
+    <p class="frontend-status">
+      npm start
+      @if (s.frontend.job; as job) {
+        @if (job.state === 'Running') { running } @else { exited {{ job.exitCode }} }
+      } @else {
+        not started
+      }
+      <span [class.up]="clientUp()" [class.down]="!clientUp()">client {{ clientUp() ? 'answers' : 'does not answer' }}</span>
+    </p>
+    @if (!s.frontend.installed) {
+      <p class="error">{{ config()?.frontendDir ?? 'The frontend clone' }} has no node_modules. Run npm ci there; the console does not.</p>
+    }
+    <button class="frontend-start" [disabled]="frontendRunning() || !s.frontend.installed" (click)="startFrontend()">Start frontend</button>
+    <button class="frontend-stop" [disabled]="!frontendRunning()" (click)="stopFrontend()">Stop frontend</button>
+    @if (s.frontend.job) {
+      <button class="frontend-output" (click)="showFrontendOutput()">Show output</button>
+    }
+  </section>
 } @else {
   <p>Loading…</p>
 }

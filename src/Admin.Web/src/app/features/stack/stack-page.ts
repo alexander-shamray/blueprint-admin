@@ -54,6 +54,10 @@ export class StackPage {
   readonly canWipe = computed(() => this.confirmText() === 'down -v');
   readonly error = signal<string | null>(null);
 
+  /** Whether the client's port answers: the `client` reachability entry, which is how spec §5.4's port check reaches this screen. */
+  readonly clientUp = computed(() => this.stack()?.reachability.find((r) => r.name === 'client')?.up ?? false);
+  readonly frontendRunning = computed(() => this.stack()?.frontend.job?.state === 'Running');
+
   up(): void {
     this.host.backendUp().subscribe(this.started);
   }
@@ -68,6 +72,21 @@ export class StackPage {
     }
     this.host.backendDown(true, this.confirmText()).subscribe(this.started);
     this.confirmText.set('');
+  }
+
+  startFrontend(): void {
+    this.host.frontendStart().subscribe(this.started);
+  }
+
+  stopFrontend(): void {
+    this.host.frontendStop().subscribe(this.started);
+  }
+
+  showFrontendOutput(): void {
+    const id = this.stack()?.frontend.job?.id;
+    if (id) {
+      this.jobId.set(id);
+    }
   }
 
   private readonly started = {
