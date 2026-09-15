@@ -78,6 +78,8 @@ Broker inspection and the event trace are the spec's later phases.
 - Operation examples are the bodies `run-locally.md` sends where there is one,
   otherwise placeholders built from the schema; the documents carry none.
 - API history is kept only while the screen is open.
+- The identity picker offers demo/demo and browser/browser; configuring any user
+  replaces both: `--Admin:Users:0:Username=ops --Admin:Users:0:Password=…`.
 - No broker inspection or event trace yet.
 
 ## Tests
