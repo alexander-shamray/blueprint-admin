@@ -137,6 +137,8 @@ export type ProxyResult =
       headers: Record<string, string[]>;
       body: string;
       bodyTruncated: boolean;
+      /** Why the body read broke off after the response began; null when it was read to its end. */
+      bodyError: string | null;
       elapsedMs: number;
       correlationId: string;
     }

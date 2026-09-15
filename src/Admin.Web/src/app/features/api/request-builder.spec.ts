@@ -21,6 +21,13 @@ describe('request-builder', () => {
     });
   });
 
+  it('reports a header line whose name repeats an earlier one ignoring case', () => {
+    expect(parseHeaders('Content-Type: text/plain\ncontent-type: application/json')).toEqual({
+      headers: { 'Content-Type': 'text/plain' },
+      invalid: ['content-type: application/json'],
+    });
+  });
+
   it('replaces commandId in a JSON object body and leaves anything else untouched', () => {
     expect(withFreshCommandId('{"commandId":"0","name":"x"}', 'new-id')).toBe('{\n  "commandId": "new-id",\n  "name": "x"\n}');
     expect(withFreshCommandId('{"name":"x"}', 'new-id')).toBe('{"name":"x"}');

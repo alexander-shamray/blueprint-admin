@@ -32,7 +32,7 @@ const catalog: ApiCatalogView = {
 
 const responded: ProxyResult = {
   outcome: 'responded', status: 200, headers: { 'Content-Type': ['application/json'] },
-  body: '{"items":[]}', bodyTruncated: false, elapsedMs: 12, correlationId: 'corr-1',
+  body: '{"items":[]}', bodyTruncated: false, bodyError: null, elapsedMs: 12, correlationId: 'corr-1',
 };
 
 describe('ApiPage', () => {
@@ -148,6 +148,72 @@ describe('ApiPage', () => {
     rows[1].click();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.response .correlation')?.textContent).toContain('corr-1');
+  });
+
+  it('restoring an entry restores its operation and headers, so Send mints a fresh commandId for it', () => {
+    let n = 0;
+    TestBed.overrideProvider(UUID, { useValue: () => `uuid-${++n}` });
+    const fixture = render();
+    const page = fixture.componentInstance;
+    click(fixture, 'POST PublishProduct');
+    page.headersText.set('Accept-Language: en');
+    click(fixture, 'Send');
+
+    click(fixture, 'GET GetProducts');
+    page.headersText.set('');
+    page.setQueryValue('limit', '5');
+    (fixture.nativeElement.querySelector('.history li button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(page.selectedId()).toBe('catalog:PublishProduct');
+    expect(page.headersText()).toBe('Accept-Language: en');
+    expect(page.queryValues()).toEqual({});
+    click(fixture, 'Send');
+
+    const resent = host.proxy.mock.calls[1][0];
+    expect(resent.url).toBe('http://localhost:5000/api/v1/catalog/products/');
+    expect(resent.headers).toEqual({ 'Accept-Language': 'en' });
+    expect(JSON.parse(resent.body).commandId).toBe('uuid-2');
+  });
+
+  it('restoring an entry cancels a pending send: a late response is dropped', () => {
+    const fixture = render();
+    click(fixture, 'Send');
+    const subject = new Subject<ProxyResult>();
+    host.proxy.mockReturnValue(subject);
+    click(fixture, 'Send');
+
+    (fixture.nativeElement.querySelector('.history li button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    subject.next({ ...responded, status: 500, correlationId: 'late' });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.response .correlation')?.textContent).toContain('corr-1');
+    expect(fixture.nativeElement.querySelectorAll('.history li')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('button.send')?.disabled).toBe(false);
+  });
+
+  it('refuses to send or show a token for a custom identity with no username', () => {
+    const fixture = render();
+    const page = fixture.componentInstance;
+    page.setCustom('  ', 'pw');
+    click(fixture, 'Send');
+
+    expect(host.proxy).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('.error')?.textContent).toContain('Enter a username for the custom identity.');
+
+    page.error.set(null);
+    click(fixture, 'Show token');
+    expect(host.token).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('.error')?.textContent).toContain('Enter a username for the custom identity.');
+  });
+
+  it('notes a body that broke off after the response began', () => {
+    host.proxy.mockReturnValue(of({ ...responded, body: '{"items":[', bodyError: 'The response ended prematurely.' }));
+    const fixture = render();
+    click(fixture, 'Send');
+
+    expect(fixture.nativeElement.querySelector('.response .body-error')?.textContent).toContain('The response ended prematurely.');
   });
 
   it('shows the token claims for the chosen identity', () => {

@@ -12,6 +12,9 @@ export interface HistoryEntry {
   seq: number;
   at: Date;
   name: string;
+  /** The operation selected when sent, so a restored entry resends with that operation's commandId handling. */
+  operationId: string | null;
+  headersText: string;
   identity: string;
   request: ProxyRequest;
   result: ProxyResult;
@@ -137,10 +140,12 @@ export class ApiPage {
   }
 
   send(): void {
+    if (this.customWithoutUsername()) return;
     const operation = this.operation();
-    const { headers, invalid } = parseHeaders(this.headersText());
+    const headersText = this.headersText();
+    const { headers, invalid } = parseHeaders(headersText);
     if (invalid.length > 0) {
-      this.error.set(`Not a "Name: value" header line: ${invalid[0]}`);
+      this.error.set(`Not a "Name: value" header line, or a name given twice: ${invalid[0]}`);
       return;
     }
 
@@ -159,6 +164,7 @@ export class ApiPage {
       correlationId: this.correlationId().trim() || null,
     };
     const name = operation?.name ?? `${request.method} ${request.url}`;
+    const operationId = operation?.id ?? null;
     const identity = this.identity.label();
 
     this.error.set(null);
@@ -167,7 +173,7 @@ export class ApiPage {
     this.sending = this.host.proxy(request).subscribe({
       next: (result) => {
         this.result.set(result);
-        this.history.update((all) => [{ seq: ++this.seq, at: new Date(), name, identity, request, result }, ...all].slice(0, MAX_HISTORY));
+        this.history.update((all) => [{ seq: ++this.seq, at: new Date(), name, operationId, headersText, identity, request, result }, ...all].slice(0, MAX_HISTORY));
         this.pending.set(false);
       },
       error: (e: unknown) => {
@@ -177,17 +183,25 @@ export class ApiPage {
     });
   }
 
+  /** Puts a past request back as it was sent; its URL is already filled, so the parameter inputs start empty. */
   restore(entry: HistoryEntry): void {
+    this.sending?.unsubscribe();
+    this.sending = undefined;
+    this.pending.set(false);
+    this.error.set(null);
     this.result.set(entry.result);
+    this.selectedId.set(entry.operationId);
     this.method.set(entry.request.method);
     this.url.set(entry.request.url);
     this.pathValues.set({});
     this.queryValues.set({});
+    this.headersText.set(entry.headersText);
     this.body.set(entry.request.body ?? '');
     this.correlationId.set(entry.request.correlationId ?? '');
   }
 
   showToken(): void {
+    if (this.customWithoutUsername()) return;
     const request = this.identity.request();
     this.token.set(null);
     if (!request) {
@@ -211,6 +225,14 @@ export class ApiPage {
     const r = entry.result;
     const outcome = r.outcome === 'responded' ? String(r.status) : r.outcome === 'tokenRejected' ? `token ${r.status}` : 'unreached';
     return `${outcome} ${entry.name} as ${entry.identity}`;
+  }
+
+  /** A custom identity with a blank username would go out as anonymous while history says "(custom)". */
+  private customWithoutUsername(): boolean {
+    const c = this.identity.choice();
+    if (c.kind !== CUSTOM || c.username.trim()) return false;
+    this.error.set('Enter a username for the custom identity.');
+    return true;
   }
 
   /** A problem's `detail`/`title`, Keycloak's `error_description`, else the error's message. */

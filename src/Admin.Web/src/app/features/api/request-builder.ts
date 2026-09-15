@@ -8,19 +8,25 @@ export function buildUrl(template: string, path: Record<string, string>, query: 
   return qs ? `${filled}${filled.includes('?') ? '&' : '?'}${qs}` : filled;
 }
 
-/** One `Name: value` per line; blank lines are skipped and any other line is reported. */
+/**
+ * One `Name: value` per line; blank lines are skipped. Any other line is reported, and so is a line
+ * whose name repeats an earlier one ignoring case (the host refuses the pair).
+ */
 export function parseHeaders(text: string): { headers: Record<string, string>; invalid: string[] } {
   const headers: Record<string, string> = {};
   const invalid: string[] = [];
+  const seen = new Set<string>();
   for (const raw of text.split('\n')) {
     const line = raw.trim();
     if (!line) continue;
     const colon = line.indexOf(':');
-    if (colon <= 0) {
+    const name = line.slice(0, colon).trim();
+    if (colon <= 0 || seen.has(name.toLowerCase())) {
       invalid.push(line);
       continue;
     }
-    headers[line.slice(0, colon).trim()] = line.slice(colon + 1).trim();
+    seen.add(name.toLowerCase());
+    headers[name] = line.slice(colon + 1).trim();
   }
   return { headers, invalid };
 }

@@ -95,6 +95,7 @@
             <details><summary>Headers</summary><pre class="headers">{{ headerLines().join('\n') }}</pre></details>
             <pre class="body">{{ prettyBody() }}</pre>
             @if (r.bodyTruncated) {<p class="note">Body truncated at 1 MiB.</p>}
+            @if (r.bodyError; as bodyError) {<p class="note body-error">Body incomplete: {{ bodyError }}</p>}
           </section>
         }
         @case ('tokenRejected') {
