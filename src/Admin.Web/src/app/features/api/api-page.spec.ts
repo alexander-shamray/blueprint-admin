@@ -254,6 +254,31 @@ describe('ApiPage', () => {
     expect(fixture.nativeElement.querySelector('.error')?.textContent).toContain('Enter a username for the custom identity.');
   });
 
+  it('shows a repeated response header as one line per value', () => {
+    host.proxy.mockReturnValue(of({ ...responded, headers: { 'Set-Cookie': ['a=1; Expires=Wed, 16 Sep 2026 08:00:00 GMT', 'b=2'] } }));
+    const fixture = render();
+    click(fixture, 'Send');
+
+    expect(fixture.componentInstance.headerLines()).toEqual(['Set-Cookie: a=1; Expires=Wed, 16 Sep 2026 08:00:00 GMT', 'Set-Cookie: b=2']);
+  });
+
+  it('a new send clears the previous response, so a refused one is not shown beside it', () => {
+    const fixture = render();
+    click(fixture, 'Send');
+    expect(fixture.nativeElement.querySelector('.response')).not.toBeNull();
+
+    fixture.componentInstance.headersText.set('not a header');
+    click(fixture, 'Send');
+    expect(fixture.nativeElement.querySelector('.error')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.response')).toBeNull();
+
+    fixture.componentInstance.headersText.set('');
+    host.proxy.mockReturnValue(throwError(() => ({ error: { detail: 'not sent' } })));
+    click(fixture, 'Send');
+    expect(fixture.nativeElement.querySelector('.response')).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('.history li')).toHaveLength(1);
+  });
+
   it('notes a body that broke off after the response began', () => {
     host.proxy.mockReturnValue(of({ ...responded, body: '{"items":[', bodyError: 'The response ended prematurely.' }));
     const fixture = render();

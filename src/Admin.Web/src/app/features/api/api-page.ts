@@ -82,7 +82,8 @@ export class ApiPage {
 
   readonly headerLines = computed(() => {
     const r = this.result();
-    return r?.outcome === 'responded' ? Object.entries(r.headers).map(([name, values]) => `${name}: ${values.join(', ')}`) : [];
+    // One line per value: fields such as Set-Cookie cannot be joined with commas.
+    return r?.outcome === 'responded' ? Object.entries(r.headers).flatMap(([name, values]) => values.map((value) => `${name}: ${value}`)) : [];
   });
 
   constructor() {
@@ -154,6 +155,8 @@ export class ApiPage {
   }
 
   send(): void {
+    // The last response stays in history; left on screen it would read as this attempt's.
+    this.result.set(null);
     if (this.customWithoutUsername()) return;
     const operation = this.operation();
     const headersText = this.headersText();
