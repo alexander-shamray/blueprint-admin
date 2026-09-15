@@ -622,6 +622,29 @@ describe('ApiPage', () => {
     expect(fixture.componentInstance.projection()?.drained).toBe(false);
   });
 
+  it('cancels a still-open poll when the two-minute cap ends the watch', async () => {
+    vi.useFakeTimers();
+    const openPoll = new Subject<QueuesView>();
+    host.brokerQueues.mockReturnValueOnce(of(waitingView)).mockReturnValue(openPoll);
+    const fixture = render();
+    fixture.componentInstance.select(catalog.operations[1]);
+    fixture.componentInstance.send();
+    await vi.advanceTimersByTimeAsync(0);
+
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(openPoll.observed).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(118_000);
+    fixture.detectChanges();
+
+    expect(openPoll.observed).toBe(false);
+    expect(fixture.nativeElement.querySelector('.response')?.textContent).toContain('Stopped watching after 2 minutes; the Broker screen shows the queue.');
+
+    openPoll.next(drainedView);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.projection()?.drained).toBe(false);
+  });
+
   it('does not say the cap ended the watch when the queue drains first', async () => {
     vi.useFakeTimers();
     host.brokerQueues.mockReturnValueOnce(of(waitingView)).mockReturnValue(of(drainedView));

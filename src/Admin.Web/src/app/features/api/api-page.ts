@@ -346,7 +346,6 @@ export class ApiPage {
     this.stopWatchingProjection();
     this.watchingProjection = timer(0, DRAIN_POLL_MS)
       .pipe(
-        takeUntil(timer(DRAIN_WATCH_MS).pipe(tap(() => this.projectionWatchExpired.set(true)))),
         exhaustMap(() =>
           this.host.brokerQueues().pipe(
             catchError((e: unknown) => {
@@ -356,6 +355,9 @@ export class ApiPage {
             }),
           ),
         ),
+        // After exhaustMap, so the cap also unsubscribes a still-open brokerQueues() request instead of
+        // just stopping the outer timer and leaving exhaustMap waiting on it forever.
+        takeUntil(timer(DRAIN_WATCH_MS).pipe(tap(() => this.projectionWatchExpired.set(true)))),
         takeWhile((view) => view.reachable && view.projection.found && !view.projection.drained, true),
       )
       .subscribe((view) => {
