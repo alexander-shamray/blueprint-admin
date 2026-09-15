@@ -1,10 +1,11 @@
 import { Component, DestroyRef, InjectionToken, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Subscription } from 'rxjs';
+import { EMPTY, Subscription, catchError, exhaustMap, takeUntil, takeWhile, timer } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
-import { ApiCatalogView, ApiOperation, ProxyRequest, ProxyResult, TokenView } from '../../core/host/host-types';
+import { ApiCatalogView, ApiOperation, ProjectionDrain, ProxyRequest, ProxyResult, TokenView } from '../../core/host/host-types';
 import { IdentityChoice, IdentityState } from '../../core/identity/identity-state';
 import { buildUrl, parseHeaders, pretty, withFreshCommandId, withoutCredentialHeaders, withoutCredentialLines, withoutSetCookie } from './request-builder';
+import { DrainedIndicator } from '../../shared/drained-indicator/drained-indicator';
 
 export const UUID = new InjectionToken<() => string>('UUID', { factory: () => () => crypto.randomUUID() });
 
@@ -34,9 +35,18 @@ export type SentAs = { kind: 'anonymous' } | { kind: 'user'; username: string } 
 const MAX_HISTORY = 50;
 const CUSTOM = 'custom';
 
+/**
+ * Catalog's one write, `WithName("PublishProduct")` in the backend's Catalog.Api/Endpoints/ProductEndpoints.cs:
+ * its event is what Ordering's price projection consumes from ordering-catalog-events (run-locally.md).
+ */
+export const PUBLISH_OPERATION = 'PublishProduct';
+export const DRAIN_POLL_MS = 2000;
+/** Each poll is a docker compose exec on the host; a queue that has not drained in two minutes needs the Broker screen. */
+export const DRAIN_WATCH_MS = 120_000;
+
 @Component({
   selector: 'app-api-page',
-  imports: [FormsModule],
+  imports: [FormsModule, DrainedIndicator],
   templateUrl: './api-page.html',
   styleUrl: './api-page.css',
 })
@@ -51,6 +61,7 @@ export class ApiPage {
   private restoredHasCommandId = false;
   private fetchingToken?: Subscription;
   private seq = 0;
+  private watchingProjection?: Subscription;
 
   readonly identity = inject(IdentityState);
   readonly catalog = signal<ApiCatalogView | null>(null);
@@ -71,6 +82,9 @@ export class ApiPage {
   readonly error = signal<string | null>(null);
   readonly customUsername = signal('');
   readonly customPassword = signal('');
+  /** ordering-catalog-events after a successful publish, until it drains; null when not watching. */
+  readonly projection = signal<ProjectionDrain | null>(null);
+  readonly projectionError = signal<string | null>(null);
 
   readonly methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 
@@ -120,6 +134,7 @@ export class ApiPage {
 
   constructor() {
     inject(DestroyRef).onDestroy(() => {
+      this.watchingProjection?.unsubscribe();
       this.sends.forEach((send) => send.unsubscribe());
       this.fetchingToken?.unsubscribe();
       // The choice outlives the screen, a custom password does not: passwords live only on the host.
@@ -151,6 +166,7 @@ export class ApiPage {
 
   select(operation: ApiOperation): void {
     this.editorGeneration++;
+    this.stopWatchingProjection();
     this.pending.set(false);
     this.error.set(null);
     this.result.set(null);
@@ -192,6 +208,7 @@ export class ApiPage {
   send(): void {
     // The last response stays in history; left on screen it would read as this attempt's.
     this.result.set(null);
+    this.stopWatchingProjection();
     if (this.customWithoutUsername()) return;
     const operation = this.operation();
     const headersText = this.headersText();
@@ -234,6 +251,9 @@ export class ApiPage {
           this.result.set(result);
           this.answered.set(`${request.method} ${request.url} as ${identity}`);
           this.pending.set(false);
+          if (operation?.name === PUBLISH_OPERATION && result.outcome === 'responded' && result.status >= 200 && result.status < 300) {
+            this.watchProjection();
+          }
         }
         this.history.update((all) => [{ seq: ++this.seq, at: new Date(), name, operationId, hasCommandId, headersText: withoutCredentialLines(headersText), urlTemplate, pathValues, queryValues, identity, sentAs, request: { ...request, headers: withoutCredentialHeaders(request.headers), identity: null }, result: withoutSetCookie(result) }, ...all].slice(0, MAX_HISTORY));
       },
@@ -257,6 +277,7 @@ export class ApiPage {
    */
   restore(entry: HistoryEntry): void {
     this.editorGeneration++;
+    this.stopWatchingProjection();
     this.pending.set(false);
     this.error.set(null);
     this.result.set(entry.result);
@@ -312,6 +333,35 @@ export class ApiPage {
     this.fetchingToken?.unsubscribe();
     this.fetchingToken = undefined;
     this.token.set(null);
+  }
+
+  /** Polls queues until the projection drains, the watch times out, or the editor moves on. */
+  private watchProjection(): void {
+    this.stopWatchingProjection();
+    this.watchingProjection = timer(0, DRAIN_POLL_MS)
+      .pipe(
+        takeUntil(timer(DRAIN_WATCH_MS)),
+        exhaustMap(() =>
+          this.host.brokerQueues().pipe(
+            catchError((e: unknown) => {
+              this.projectionError.set(this.describe(e));
+              return EMPTY;
+            }),
+          ),
+        ),
+        takeWhile((view) => !(view.reachable && view.projection.drained), true),
+      )
+      .subscribe((view) => {
+        this.projectionError.set(view.reachable ? null : view.error);
+        this.projection.set(view.reachable ? view.projection : null);
+      });
+  }
+
+  private stopWatchingProjection(): void {
+    this.watchingProjection?.unsubscribe();
+    this.watchingProjection = undefined;
+    this.projection.set(null);
+    this.projectionError.set(null);
   }
 
   /** A custom identity with a blank username would go out as anonymous while history says "(custom)". */

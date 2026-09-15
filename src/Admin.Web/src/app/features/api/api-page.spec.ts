@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { Subject, of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
-import { ApiCatalogView, ApiOperation, ProxyResult, TokenView } from '../../core/host/host-types';
+import { ApiCatalogView, ApiOperation, ProxyResult, QueuesView, TokenView } from '../../core/host/host-types';
 import { IdentityState } from '../../core/identity/identity-state';
 import { ApiPage, UUID } from './api-page';
 
@@ -36,6 +36,16 @@ const responded: ProxyResult = {
   body: '{"items":[]}', bodyTruncated: false, bodyError: null, elapsedMs: 12, correlationId: 'corr-1',
 };
 
+const drainedView: QueuesView = {
+  reachable: true, error: null, queues: [],
+  projection: { queue: 'ordering-catalog-events', found: true, messages: 0, drained: true },
+};
+
+const waitingView: QueuesView = {
+  ...drainedView,
+  projection: { queue: 'ordering-catalog-events', found: true, messages: 2, drained: false },
+};
+
 describe('ApiPage', () => {
   let host: {
     operations: ReturnType<typeof vi.fn>;
@@ -43,6 +53,7 @@ describe('ApiPage', () => {
     proxy: ReturnType<typeof vi.fn>;
     token: ReturnType<typeof vi.fn>;
     identityUsers: ReturnType<typeof vi.fn>;
+    brokerQueues: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -52,12 +63,15 @@ describe('ApiPage', () => {
       proxy: vi.fn(() => of(responded)),
       token: vi.fn(() => of({ username: 'demo', accessToken: 'a.b.c', expiresAt: '2026-09-15T08:05:00Z', claims: { permission: ['catalog:write'] } })),
       identityUsers: vi.fn(() => of([{ username: 'demo' }, { username: 'browser' }])),
+      brokerQueues: vi.fn(() => of(drainedView)),
     };
     TestBed.configureTestingModule({
       imports: [ApiPage],
       providers: [{ provide: HostClient, useValue: host }, { provide: UUID, useValue: () => 'fresh-uuid' }],
     });
   });
+
+  afterEach(() => vi.useRealTimers());
 
   function render() {
     const fixture = TestBed.createComponent(ApiPage);
@@ -473,5 +487,96 @@ describe('ApiPage', () => {
     expect(fixture.nativeElement.querySelector('.response .correlation')?.textContent).toContain('second');
     expect(fixture.nativeElement.querySelectorAll('.history li')).toHaveLength(2);
     expect(fixture.nativeElement.querySelector('button.send')?.disabled).toBe(false);
+  });
+
+  it('after a successful PublishProduct it watches ordering-catalog-events until it drains', async () => {
+    vi.useFakeTimers();
+    host.brokerQueues.mockReturnValueOnce(of(waitingView)).mockReturnValue(of(drainedView));
+    const fixture = render();
+    fixture.componentInstance.chooseIdentity('user:demo');
+    fixture.componentInstance.select(catalog.operations[1]);
+
+    fixture.componentInstance.send();
+    await vi.advanceTimersByTimeAsync(0);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.response app-drained-indicator')?.textContent).toContain('[waiting]');
+
+    await vi.advanceTimersByTimeAsync(2000);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.response app-drained-indicator')?.textContent).toContain('[drained]');
+
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(host.brokerQueues).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads no broker after a send that is not PublishProduct', async () => {
+    vi.useFakeTimers();
+    const fixture = render();
+    fixture.componentInstance.select(catalog.operations[0]);
+
+    fixture.componentInstance.send();
+    await vi.advanceTimersByTimeAsync(5000);
+    fixture.detectChanges();
+
+    expect(host.brokerQueues).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('app-drained-indicator')).toBeNull();
+  });
+
+  it('reads no broker after a PublishProduct the platform refused', async () => {
+    vi.useFakeTimers();
+    host.proxy.mockReturnValue(of({ ...responded, status: 403 }));
+    const fixture = render();
+    fixture.componentInstance.select(catalog.operations[1]);
+
+    fixture.componentInstance.send();
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(host.brokerQueues).not.toHaveBeenCalled();
+  });
+
+  it('selecting another operation stops watching and hides the indicator', async () => {
+    vi.useFakeTimers();
+    host.brokerQueues.mockReturnValue(of(waitingView));
+    const fixture = render();
+    fixture.componentInstance.select(catalog.operations[1]);
+    fixture.componentInstance.send();
+    await vi.advanceTimersByTimeAsync(0);
+
+    fixture.componentInstance.select(catalog.operations[0]);
+    host.brokerQueues.mockClear();
+    await vi.advanceTimersByTimeAsync(10000);
+    fixture.detectChanges();
+
+    expect(host.brokerQueues).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.projection()).toBeNull();
+  });
+
+  it('stops watching after two minutes even if the queue never drains', async () => {
+    vi.useFakeTimers();
+    host.brokerQueues.mockReturnValue(of(waitingView));
+    const fixture = render();
+    fixture.componentInstance.select(catalog.operations[1]);
+    fixture.componentInstance.send();
+
+    await vi.advanceTimersByTimeAsync(120_000);
+    host.brokerQueues.mockClear();
+    await vi.advanceTimersByTimeAsync(10000);
+
+    expect(host.brokerQueues).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.projection()?.drained).toBe(false);
+  });
+
+  it('says so when the broker cannot be read after a publish', async () => {
+    vi.useFakeTimers();
+    host.brokerQueues.mockReturnValue(of({ ...drainedView, reachable: false, error: 'service "rabbitmq" is not running' }));
+    const fixture = render();
+    fixture.componentInstance.select(catalog.operations[1]);
+
+    fixture.componentInstance.send();
+    await vi.advanceTimersByTimeAsync(0);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.response')?.textContent).toContain('Could not read the broker to say whether ordering-catalog-events has drained: service "rabbitmq" is not running');
+    expect(fixture.nativeElement.querySelector('app-drained-indicator')).toBeNull();
   });
 });
