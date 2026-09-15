@@ -340,6 +340,52 @@ public sealed class RequestProxyTests
             .ShouldBeOfType<ProxyUnreached>().Error.ShouldStartWith("Keycloak did not answer");
     }
 
+    [Theory]
+    [InlineData("text/plain; charset=iso-8859-1", false)]
+    [InlineData("application/json; charset=utf-16", false)]
+    [InlineData("application/json; charset=UTF-8", true)]
+    [InlineData("application/json; charset=\"utf-8\"", true)]
+    [InlineData("application/json", true)]
+    public void A_request_content_type_naming_a_charset_other_than_utf8_is_refused(string contentType, bool accepted)
+    {
+        Dictionary<string, string> headers = new() { ["Content-Type"] = contentType };
+
+        string? problem = Proxy(new ScriptedHandler(_ => Granted())).Validate(Get(headers: headers));
+
+        if (accepted)
+        {
+            problem.ShouldBeNull();
+        }
+        else
+        {
+            problem.ShouldNotBeNull().ShouldContain("UTF-8");
+        }
+    }
+
+    [Fact]
+    public async Task A_response_body_is_decoded_with_the_charset_it_declares()
+    {
+        ScriptedHandler handler = new(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new ByteArrayContent([0x63, 0x61, 0x66, 0xE9]) { Headers = { { "Content-Type", "text/plain; charset=iso-8859-1" } } },
+        });
+
+        (await Proxy(handler).SendAsync(Get(), Token)).ShouldBeOfType<ProxyResponded>().Body.ShouldBe("café");
+    }
+
+    [Fact]
+    public async Task A_truncation_that_splits_a_multibyte_character_drops_the_partial_character()
+    {
+        byte[] body = [.. Encoding.UTF8.GetBytes(new string('x', RequestProxy.MaxBodyBytes - 1)), .. Encoding.UTF8.GetBytes("é and more")];
+        ScriptedHandler handler = new(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(body) });
+
+        ProxyResponded responded = (await Proxy(handler).SendAsync(Get(), Token)).ShouldBeOfType<ProxyResponded>();
+
+        responded.BodyTruncated.ShouldBeTrue();
+        responded.Body.ShouldNotContain('�');
+        responded.Body.Length.ShouldBe(RequestProxy.MaxBodyBytes - 1);
+    }
+
     [Fact]
     public async Task A_body_over_one_mebibyte_is_truncated_and_flagged()
     {

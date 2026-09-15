@@ -78,9 +78,15 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
 
         foreach (KeyValuePair<string, string> contentType in headers.Where(h => h.Key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase)))
         {
-            if (!MediaTypeHeaderValue.TryParse(contentType.Value, out _))
+            if (!MediaTypeHeaderValue.TryParse(contentType.Value, out MediaTypeHeaderValue? mediaType))
             {
                 return $"Content-Type '{contentType.Value}' is not a media type.";
+            }
+
+            // The body is sent as UTF-8 bytes; another declared charset would make the upstream misread them.
+            if (mediaType.CharSet is { } charset && !charset.Trim('"').Equals("utf-8", StringComparison.OrdinalIgnoreCase))
+            {
+                return $"Content-Type '{contentType.Value}' names charset {charset}; the body is sent as UTF-8.";
             }
         }
 
@@ -221,7 +227,28 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
             error = $"The body did not finish within {SendTimeout.TotalSeconds:0} s.";
         }
 
-        return (Encoding.UTF8.GetString(buffer, 0, Math.Min(read, MaxBodyBytes)), read > MaxBodyBytes, error);
+        bool truncated = read > MaxBodyBytes;
+        int length = Math.Min(read, MaxBodyBytes);
+
+        // Not flushed after a cut: a character whose bytes the cut split is left out rather than shown as U+FFFD.
+        Decoder decoder = EncodingOf(content).GetDecoder();
+        char[] chars = new char[decoder.GetCharCount(buffer, 0, length, flush: !truncated)];
+        decoder.GetChars(buffer, 0, length, chars, 0, flush: !truncated);
+
+        return (new string(chars), truncated, error);
+    }
+
+    /// <summary>The charset the response declares, when .NET knows it; UTF-8 otherwise.</summary>
+    private static Encoding EncodingOf(HttpContent content)
+    {
+        try
+        {
+            return content.Headers.ContentType?.CharSet is { Length: > 0 } charset ? Encoding.GetEncoding(charset.Trim('"')) : Encoding.UTF8;
+        }
+        catch (ArgumentException)
+        {
+            return Encoding.UTF8;
+        }
     }
 
     /// <summary>The message and each inner message it does not already say; HttpClient's outer messages are generic.</summary>
