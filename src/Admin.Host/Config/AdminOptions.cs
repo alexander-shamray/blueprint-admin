@@ -1,3 +1,5 @@
+using Admin.Host.Identity;
+
 namespace Admin.Host.Config;
 
 /// <summary>
@@ -38,6 +40,9 @@ public sealed class AdminOptions
     public string Realm { get; set; } = "commerce";
 
     public string ClientId { get; set; } = "web-app";
+
+    /// <summary>The realm users offered by the identity picker; empty means demo/demo and browser/browser (see <c>Identity/RealmUser.cs</c>).</summary>
+    public List<RealmUser> Users { get; set; } = [];
 
     /// <summary>
     /// Where the built SPA lives, resolved against the repository root (not
