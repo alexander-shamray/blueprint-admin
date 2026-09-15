@@ -29,6 +29,8 @@ test('the api screen lists operations and sends as each identity', async ({ page
   await page.getByLabel('Identity').selectOption('user:demo');
   await page.getByRole('button', { name: 'Send' }).click();
   await expect(page.locator('.response .status')).toHaveText('200');
+  // run-locally.md: wait for ordering-catalog-events to drain before ordering; the fake queue is empty.
+  await expect(page.locator('.response app-drained-indicator')).toContainText('[drained]');
   // Each send replaced the example's zero commandId with a fresh one.
   await expect(page.getByLabel('Body')).not.toHaveValue(/00000000-0000-0000-0000-000000000000/);
 

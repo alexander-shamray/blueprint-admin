@@ -25,6 +25,10 @@ the backend's `deploy/compose/`; the fake platform's recordings are
 owner cited, in `src/Admin.Host/Api/GatewayRoutes.cs`, and the example request
 bodies in `src/Admin.Host/Api/RunLocallyExamples.cs`; change them when the
 backend's route table or `run-locally.md` changes, not otherwise. The
+broker's Compose service and the projection queue name are copied, with their
+owners cited, in `src/Admin.Host/Broker/BrokerService.cs`; the operation that
+starts the API screen's drain watch is `PUBLISH_OPERATION` in
+`src/Admin.Web/src/app/features/api/api-page.ts`. The
 operating system is known in three files only,
 `src/Admin.Host/Jobs/ProcessRunner.cs` (tree kill),
 `src/Admin.Host/Jobs/WindowsJobObject.cs` (the Windows job object that reaches
