@@ -128,6 +128,19 @@ public sealed class TokenServiceTests
     }
 
     [Fact]
+    public async Task A_token_response_with_a_null_access_token_is_unreachable_not_an_exception()
+    {
+        ScriptedHandler handler = new(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""{"access_token":null,"expires_in":300}""", Encoding.UTF8, "application/json"),
+        });
+
+        TokenOutcome outcome = await Service(handler).GetAsync("demo", "demo", Token);
+
+        outcome.ShouldBeOfType<KeycloakUnreachable>().Error.ShouldContain("not a token response");
+    }
+
+    [Fact]
     public async Task A_malformed_keycloak_url_is_unreachable()
     {
         ScriptedHandler handler = new(_ => Granted("demo"));

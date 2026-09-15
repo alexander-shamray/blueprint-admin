@@ -90,7 +90,8 @@ public sealed class TokenService(HttpClient http, IOptions<AdminOptions> options
             }
 
             using JsonDocument document = JsonDocument.Parse(body);
-            string accessToken = document.RootElement.GetProperty("access_token").GetString()!;
+            string accessToken = document.RootElement.GetProperty("access_token").GetString()
+                ?? throw new FormatException("access_token is null.");
             int expiresIn = document.RootElement.GetProperty("expires_in").GetInt32();
             TokenIssued issued = new(username, accessToken, requestedAt.AddSeconds(expiresIn), JwtPayload.Decode(accessToken));
             cache[(username, Digest(password))] = issued;
