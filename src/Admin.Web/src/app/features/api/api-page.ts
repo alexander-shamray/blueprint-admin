@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { ApiCatalogView, ApiOperation, ProxyRequest, ProxyResult, TokenView } from '../../core/host/host-types';
-import { IdentityState } from '../../core/identity/identity-state';
+import { IdentityChoice, IdentityState } from '../../core/identity/identity-state';
 import { buildUrl, parseHeaders, pretty, withFreshCommandId } from './request-builder';
 
 export const UUID = new InjectionToken<() => string>('UUID', { factory: () => () => crypto.randomUUID() });
@@ -16,9 +16,14 @@ export interface HistoryEntry {
   operationId: string | null;
   headersText: string;
   identity: string;
+  /** Who it went out as, without a custom password: history is not a credential store, so a restore asks for it again. */
+  sentAs: SentAs;
+  /** As sent, with the identity left out; `sentAs` carries it. */
   request: ProxyRequest;
   result: ProxyResult;
 }
+
+export type SentAs = { kind: 'anonymous' } | { kind: 'user'; username: string } | { kind: 'custom'; username: string };
 
 const MAX_HISTORY = 50;
 const CUSTOM = 'custom';
@@ -90,8 +95,11 @@ export class ApiPage {
     inject(DestroyRef).onDestroy(() => {
       this.sending?.unsubscribe();
       this.fetchingToken?.unsubscribe();
+      // The choice outlives the screen, a custom password does not: passwords live only on the host.
+      const c = this.identity.choice();
+      if (c.kind === CUSTOM) this.identity.select({ ...c, password: '' });
     });
-    // The choice outlives the screen; the inputs showing a custom one do not.
+    // Refill the inputs from a retained custom choice, so they show what will be sent.
     const chosen = this.identity.choice();
     if (chosen.kind === CUSTOM) {
       this.customUsername.set(chosen.username);
@@ -183,6 +191,7 @@ export class ApiPage {
     const name = operation?.name ?? `${request.method} ${request.url}`;
     const operationId = operation?.id ?? null;
     const identity = this.identity.label();
+    const sentAs = redact(this.identity.choice());
 
     this.error.set(null);
     this.pending.set(true);
@@ -190,7 +199,7 @@ export class ApiPage {
     this.sending = this.host.proxy(request).subscribe({
       next: (result) => {
         this.result.set(result);
-        this.history.update((all) => [{ seq: ++this.seq, at: new Date(), name, operationId, headersText, identity, request, result }, ...all].slice(0, MAX_HISTORY));
+        this.history.update((all) => [{ seq: ++this.seq, at: new Date(), name, operationId, headersText, identity, sentAs, request: { ...request, identity: null }, result }, ...all].slice(0, MAX_HISTORY));
         this.pending.set(false);
       },
       error: (e: unknown) => {
@@ -200,7 +209,10 @@ export class ApiPage {
     });
   }
 
-  /** Puts a past request back as it was sent, identity included; its URL is already filled, so the parameter inputs start empty. */
+  /**
+   * Puts a past request back as it was sent, identity included (a custom one without its password); its URL
+   * is already filled, so the parameter inputs start empty.
+   */
   restore(entry: HistoryEntry): void {
     this.sending?.unsubscribe();
     this.sending = undefined;
@@ -215,13 +227,13 @@ export class ApiPage {
     this.headersText.set(entry.headersText);
     this.body.set(entry.request.body ?? '');
     this.correlationId.set(entry.request.correlationId ?? '');
-    const sentAs = entry.request.identity;
-    if (!sentAs) {
+    const sentAs = entry.sentAs;
+    if (sentAs.kind === 'anonymous') {
       this.chooseIdentity('anonymous');
-    } else if (sentAs.password === null) {
+    } else if (sentAs.kind === 'user') {
       this.chooseIdentity(`user:${sentAs.username}`);
     } else {
-      this.setCustom(sentAs.username ?? '', sentAs.password);
+      this.setCustom(sentAs.username, '');
     }
   }
 
@@ -272,4 +284,8 @@ export class ApiPage {
     const err = e as { error?: { detail?: string; title?: string; error_description?: string }; message?: string } | null;
     return err?.error?.detail ?? err?.error?.error_description ?? err?.error?.title ?? err?.message ?? 'The host did not answer.';
   }
+}
+
+function redact(choice: IdentityChoice): SentAs {
+  return choice.kind === 'custom' ? { kind: 'custom', username: choice.username } : choice;
 }

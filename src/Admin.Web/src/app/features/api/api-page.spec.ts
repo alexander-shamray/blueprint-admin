@@ -194,12 +194,15 @@ describe('ApiPage', () => {
     expect(fixture.nativeElement.querySelector('button.send')?.disabled).toBe(false);
   });
 
-  it('returning to the screen with a custom identity shows the username and password that will be sent', () => {
-    TestBed.inject(IdentityState).select({ kind: 'custom', username: 'alice', password: 's3cret' });
-    const page = render().componentInstance;
+  it('leaving the screen forgets a custom password; returning shows the username and a blank password, as will be sent', () => {
+    const first = render();
+    first.componentInstance.setCustom('alice', 's3cret');
+    first.destroy();
 
+    expect(TestBed.inject(IdentityState).choice()).toEqual({ kind: 'custom', username: 'alice', password: '' });
+    const page = render().componentInstance;
     expect(page.customUsername()).toBe('alice');
-    expect(page.customPassword()).toBe('s3cret');
+    expect(page.customPassword()).toBe('');
   });
 
   it('restoring an entry restores the identity it was sent as', () => {
@@ -218,11 +221,12 @@ describe('ApiPage', () => {
     click(fixture, 'Send');
     expect(host.proxy.mock.calls[2][0].identity).toBeNull();
 
+    expect(JSON.stringify(page.history())).not.toContain('s3cret');
     (fixture.nativeElement.querySelectorAll('.history li button')[1] as HTMLButtonElement).click();
     fixture.detectChanges();
-    expect(page.identity.choice()).toEqual({ kind: 'custom', username: 'alice', password: 's3cret' });
+    expect(page.identity.choice()).toEqual({ kind: 'custom', username: 'alice', password: '' });
     expect(page.customUsername()).toBe('alice');
-    expect(page.customPassword()).toBe('s3cret');
+    expect(page.customPassword()).toBe('');
   });
 
   it('changing identity drops a token still on its way for the previous one', () => {
