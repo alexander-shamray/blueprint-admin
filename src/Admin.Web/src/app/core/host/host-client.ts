@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
-import { ConfigView, JobSummary, JobView, StackView } from './host-types';
+import { ApiCatalogView, ConfigView, Identity, JobSummary, JobView, ProxyRequest, ProxyResult, RealmUserView, StackView, TokenView } from './host-types';
 
 /** Every call the SPA makes; there is no other origin (spec §3, §7). */
 @Injectable({ providedIn: 'root' })
@@ -34,6 +34,26 @@ export class HostClient {
 
   followLogs(services: string[]): Observable<JobSummary> {
     return this.http.post<JobSummary>('/api/logs/follow', { services });
+  }
+
+  identityUsers(): Observable<RealmUserView[]> {
+    return this.http.get<RealmUserView[]>('/api/identity/users');
+  }
+
+  token(identity: Identity): Observable<TokenView> {
+    return this.http.post<TokenView>('/api/identity/token', identity);
+  }
+
+  operations(): Observable<ApiCatalogView> {
+    return this.http.get<ApiCatalogView>('/api/catalog/operations');
+  }
+
+  reloadOperations(): Observable<ApiCatalogView> {
+    return this.http.post<ApiCatalogView>('/api/catalog/reload', null);
+  }
+
+  proxy(request: ProxyRequest): Observable<ProxyResult> {
+    return this.http.post<ProxyResult>('/api/proxy', request);
   }
 
   job(id: string): Observable<JobView> {

@@ -58,4 +58,50 @@ describe('HostClient', () => {
     expect(req.request.method).toBe('POST');
     req.flush({ id: 'fe-1', commandLine: 'npm start', state: 'Exited', exitCode: -1, startedAt: '' });
   });
+
+  it('lists realm users', () => {
+    client.identityUsers().subscribe();
+
+    const req = http.expectOne('/api/identity/users');
+    expect(req.request.method).toBe('GET');
+    req.flush([{ username: 'demo' }]);
+  });
+
+  it('mints a token for an identity', () => {
+    client.token({ username: 'demo', password: null }).subscribe();
+
+    const req = http.expectOne('/api/identity/token');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ username: 'demo', password: null });
+    req.flush({ username: 'demo', accessToken: 'a.b.c', expiresAt: '', claims: {} });
+  });
+
+  it('reads and reloads the operation catalog', () => {
+    client.operations().subscribe();
+    const read = http.expectOne('/api/catalog/operations');
+    expect(read.request.method).toBe('GET');
+    read.flush({ sources: [], operations: [] });
+
+    client.reloadOperations().subscribe();
+    const reload = http.expectOne('/api/catalog/reload');
+    expect(reload.request.method).toBe('POST');
+    reload.flush({ sources: [], operations: [] });
+  });
+
+  it('proxies a request', () => {
+    const request = {
+      method: 'GET',
+      url: 'http://localhost:5000/api/v1/catalog/products/',
+      headers: {},
+      body: null,
+      identity: null,
+      correlationId: null,
+    };
+    client.proxy(request).subscribe();
+
+    const req = http.expectOne('/api/proxy');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual(request);
+    req.flush({ outcome: 'unreached', error: 'refused', elapsedMs: 1, correlationId: 'c' });
+  });
 });

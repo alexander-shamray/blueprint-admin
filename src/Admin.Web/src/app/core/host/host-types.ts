@@ -68,3 +68,77 @@ export interface ConfigView {
     client: string;
   };
 }
+
+/** A realm user the host can mint a token for; the host keeps the password (spec §5.6). */
+export interface RealmUserView {
+  username: string;
+}
+
+/** No username is anonymous; a username alone is a configured realm user; both is a custom identity. */
+export interface Identity {
+  username: string | null;
+  password: string | null;
+}
+
+export interface TokenView {
+  username: string;
+  accessToken: string;
+  expiresAt: string;
+  claims: Record<string, unknown>;
+}
+
+export interface ApiParameter {
+  name: string;
+  required: boolean;
+  type: string | null;
+}
+
+/** One call on the API screen (spec §5.7). `url` is absolute and may hold `{name}` path placeholders. */
+export interface ApiOperation {
+  id: string;
+  source: string;
+  name: string;
+  method: string;
+  url: string;
+  pathParameters: ApiParameter[];
+  queryParameters: ApiParameter[];
+  exampleBody: string | null;
+  hasCommandId: boolean;
+  edgePolicy: string;
+  available: boolean;
+}
+
+export interface ApiSource {
+  name: string;
+  documentUrl: string;
+  available: boolean;
+  error: string | null;
+}
+
+export interface ApiCatalogView {
+  sources: ApiSource[];
+  operations: ApiOperation[];
+}
+
+export interface ProxyRequest {
+  method: string;
+  url: string;
+  headers: Record<string, string>;
+  body: string | null;
+  identity: Identity | null;
+  correlationId: string | null;
+}
+
+/** `responded` is the platform's answer untouched; the other two mean the request got no answer from it (spec §9). */
+export type ProxyResult =
+  | {
+      outcome: 'responded';
+      status: number;
+      headers: Record<string, string[]>;
+      body: string;
+      bodyTruncated: boolean;
+      elapsedMs: number;
+      correlationId: string;
+    }
+  | { outcome: 'unreached'; error: string; elapsedMs: number; correlationId: string }
+  | { outcome: 'tokenRejected'; status: number; body: string; correlationId: string };
