@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json.Serialization;
 using Admin.Host.Api;
+using Admin.Host.Broker;
 using Admin.Host.Compose;
 using Admin.Host.Config;
 using Admin.Host.Fakes;
@@ -63,6 +64,7 @@ builder.Services.AddSingleton<IProcessRunner>(sp =>
 
 builder.Services.AddSingleton<ComposeService>();
 builder.Services.AddSingleton<LogFollower>();
+builder.Services.AddSingleton<BrokerService>();
 
 // In FakePlatform mode the frontend clone may not exist at all, and its npm
 // start is a recording, so the node_modules check would refuse for nothing.
@@ -139,6 +141,7 @@ app.MapStack();
 app.MapFrontend();
 app.MapIdentity();
 app.MapApi();
+app.MapBroker();
 
 // MapFallbackToFile's route has no literal segments, so without this it
 // would also catch an unmatched /api/nope (it has no dot, so it passes the

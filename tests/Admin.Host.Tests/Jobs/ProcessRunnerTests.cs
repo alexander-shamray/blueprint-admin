@@ -36,9 +36,19 @@ public sealed class ProcessRunnerTests
         ProcessRunner runner = Runner;
 
         Job job = runner.Start(spec);
-        await Task.Delay(300, TestContext.Current.CancellationToken);
+
+        // Wait for the first tick rather than a fixed delay: node can take longer than a few
+        // hundred milliseconds to start on a loaded CI runner, and an empty buffer then says
+        // nothing about Stop.
+        using CancellationTokenSource firstLine = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        firstLine.CancelAfter(TimeSpan.FromSeconds(15));
+
+        while (job.Since(-1).Count == 0)
+        {
+            await Task.Delay(50, firstLine.Token);
+        }
+
         job.State.ShouldBe(JobState.Running);
-        job.Since(-1).ShouldNotBeEmpty();
 
         await runner.StopAsync(job, TestContext.Current.CancellationToken);
         await job.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);

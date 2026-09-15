@@ -33,6 +33,9 @@ public sealed class Job
 
     public ProcessSpec Spec { get; }
 
+    /// <summary>The ring's fixed line capacity: how many trailing lines <see cref="Since"/> can ever return.</summary>
+    public int Capacity => ring.Length;
+
     public DateTimeOffset StartedAt { get; }
 
     public JobState State { get; private set; } = JobState.Running;

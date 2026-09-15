@@ -1,0 +1,75 @@
+<section class="actions">
+  <button class="refresh" [disabled]="refreshing()" (click)="refresh()">Refresh</button>
+  <label><input type="checkbox" [ngModel]="autoRefresh()" (ngModelChange)="setAutoRefresh($event)" /> Refresh queues every 5 s</label>
+</section>
+
+<h2>Queues</h2>
+@if (queuesError(); as e) {
+  <p class="error" role="alert">The host did not answer: {{ e }}</p>
+}
+@if (queues(); as q) {
+  @if (q.reachable) {
+    <app-drained-indicator [projection]="q.projection" />
+    <table class="queues">
+      <thead><tr><th>Queue</th><th>Messages</th></tr></thead>
+      <tbody>
+        @for (queue of q.queues; track queue.name) {
+          <tr [class.error-queue]="queue.isErrorQueue">
+            <td>@if (queue.isErrorQueue) {<span class="marker">[error]</span> }{{ queue.name }}</td>
+            <td>{{ queue.messages ?? '—' }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  } @else {
+    <p class="error" role="alert">The broker did not answer: {{ q.error }}</p>
+  }
+} @else if (!queuesError()) {
+  <p>Loading…</p>
+}
+
+<h2>Exchanges</h2>
+@if (exchangesError(); as e) {
+  <p class="error" role="alert">The host did not answer: {{ e }}</p>
+}
+@if (exchanges(); as x) {
+  @if (x.reachable) {
+    <table class="exchanges">
+      <thead><tr><th>Exchange</th><th>Type</th></tr></thead>
+      <tbody>
+        @for (exchange of x.exchanges; track exchange.name) {
+          <tr>
+            <td>{{ exchangeName(exchange.name) }}</td>
+            <td>{{ exchange.type }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  } @else {
+    <p class="error" role="alert">The broker did not answer: {{ x.error }}</p>
+  }
+}
+
+<h2>Permissions</h2>
+@if (permissionsError(); as e) {
+  <p class="error" role="alert">The host did not answer: {{ e }}</p>
+}
+@if (permissions(); as p) {
+  @if (p.reachable) {
+    <table class="permissions">
+      <thead><tr><th>User</th><th>Configure</th><th>Write</th><th>Read</th></tr></thead>
+      <tbody>
+        @for (permission of p.permissions; track permission.user) {
+          <tr>
+            <td>{{ permission.user }}</td>
+            <td><code>{{ permission.configure }}</code></td>
+            <td><code>{{ permission.write }}</code></td>
+            <td><code>{{ permission.read }}</code></td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  } @else {
+    <p class="error" role="alert">The broker did not answer: {{ p.error }}</p>
+  }
+}

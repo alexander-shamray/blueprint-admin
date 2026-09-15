@@ -50,7 +50,7 @@ Playwright smoke; it needs no Docker and no clones.
 
 ## What it does today
 
-Phases 0 to 3 of the spec: the Stack screen (Compose services, reachability,
+Phases 0 to 4 of the spec: the Stack screen (Compose services, reachability,
 up, down, down with a typed `down -v` confirmation, live output; the reference
 client's `npm start` with start, stop and its output), the Logs screen
 (follow, service filter, text filter, correlation-id highlight) and the API
@@ -58,7 +58,10 @@ screen (Catalog's and Ordering's OpenAPI operations through the gateway, the
 BFF quote and every host's readiness; send as anonymous, a realm user or a
 custom username and password, with a correlation id; status, timing, headers
 and body as the platform returned them; a history of this visit's calls).
-Broker inspection and the event trace are the spec's later phases.
+The Broker screen lists queues (error queues marked), exchanges and
+permissions through `rabbitmqctl` in the `rabbitmq` container, and the API
+screen shows whether `ordering-catalog-events` has drained after a publish.
+The event trace is the spec's next phase.
 
 ## Known limits
 
@@ -80,7 +83,9 @@ Broker inspection and the event trace are the spec's later phases.
 - API history is kept only while the screen is open.
 - The identity picker offers demo/demo and browser/browser; configuring any user
   replaces both: `--Admin:Users:0:Username=ops --Admin:Users:0:Password=…`.
-- No broker inspection or event trace yet.
+- No event trace yet.
+- Broker reads are `docker compose exec` jobs, so they appear in
+  `GET /api/jobs`; auto-refresh re-reads queues only.
 
 ## Tests
 

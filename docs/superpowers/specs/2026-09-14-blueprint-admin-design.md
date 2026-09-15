@@ -237,8 +237,12 @@ reports the job and whether port 5173 answers.
 `BrokerService` runs the three `rabbitmqctl` forms from §2.1 with
 `--formatter json` through `ComposeService.Exec` and returns queues,
 exchanges and permissions. It marks queues whose name ends in `_error`, and
-answers `IsDrained("ordering-catalog-events")` for the API screen's
-"wait for the projection" affordance.
+answers `IsDrained(queues, "ordering-catalog-events")` — declared and holding
+no messages — which `GET /broker/queues` carries as `projection` for the
+Broker screen and the API screen's "wait for the projection" affordance. A
+broker that does not answer, or output that is not the formatter's JSON
+array, is `reachable: false` with the error, and each `rabbitmqctl` is
+bounded to 30 s like `ps`.
 
 ### 5.6 Identity
 
@@ -335,7 +339,7 @@ All under `/api`, JSON, loopback only.
 | `GET /jobs`, `GET /jobs/{id}` | summaries; one job with its last lines |
 | `GET /jobs/{id}/stream` | Server-Sent Events, one event per line, `id:` is the sequence number so `Last-Event-ID` resumes from the ring buffer |
 | `POST /logs/follow` | body `{ services }`; starts a follow job and returns it |
-| `GET /broker/queues`, `/broker/exchanges`, `/broker/permissions` | §5.5 |
+| `GET /broker/queues`, `/broker/exchanges`, `/broker/permissions` | §5.5; `queues` also carries `projection`, the drain state of `ordering-catalog-events` |
 | `GET /identity/users`, `POST /identity/token` | §5.6 |
 | `GET /catalog/operations`, `POST /catalog/reload` | §5.7 |
 | `POST /proxy` | §5.7 |

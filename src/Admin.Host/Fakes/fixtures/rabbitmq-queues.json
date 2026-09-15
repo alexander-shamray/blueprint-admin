@@ -1,0 +1,7 @@
+[
+{"name":"ordering-catalog-events","messages":0}
+,{"name":"ordering-catalog-events_error","messages":1}
+,{"name":"ordering-commands","messages":0}
+,{"name":"ordering-fulfilment-saga","messages":0}
+,{"name":"ordering-stock-events","messages":0}
+]

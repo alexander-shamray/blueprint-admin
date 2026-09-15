@@ -39,7 +39,7 @@ describe('App', () => {
     fixture.detectChanges();
 
     const nav = fixture.nativeElement.querySelectorAll('nav a');
-    expect(nav.length).toBe(3);
+    expect(nav.length).toBe(4);
     expect(fixture.nativeElement.querySelector('router-outlet')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.hint')).toBeFalsy();
   });

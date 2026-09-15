@@ -10,7 +10,7 @@ namespace Admin.Host.Compose;
 /// </summary>
 public sealed class ComposeService(IProcessRunner runner, RepoPaths paths, TimeProvider time)
 {
-    private static readonly TimeSpan PsTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan OneShotTimeout = TimeSpan.FromSeconds(30);
 
     public Job Up() => Run("up", "-d", "--wait");
 
@@ -20,27 +20,55 @@ public sealed class ComposeService(IProcessRunner runner, RepoPaths paths, TimeP
 
     public Job Exec(string service, params string[] args) => Run(["exec", "-T", service, .. args]);
 
+    public Task<CommandOutput> ExecAsync(string service, string[] args, CancellationToken cancellationToken) =>
+        CompleteAsync(Exec(service, args), $"docker compose exec {service}", cancellationToken);
+
     public async Task<ComposeStatus> PsAsync(CancellationToken cancellationToken)
     {
-        Job job = Run("ps", "-a", "--format", "json");
+        CommandOutput output = await CompleteAsync(Run("ps", "-a", "--format", "json"), "docker compose ps", cancellationToken);
+
+        if (output.Error is not null)
+        {
+            return ComposeStatus.Unreachable(output.Error);
+        }
+
+        try
+        {
+            return ComposeStatus.Up(ComposePsParser.Parse(output.Stdout));
+        }
+        catch (JsonException ex)
+        {
+            return ComposeStatus.Unreachable($"docker compose ps output could not be parsed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Waits at most 30 seconds for a one-shot command. One that does not answer is stopped and
+    /// reported rather than awaited, so a stuck daemon costs a screen one slow answer, not a hang.
+    /// On a non-zero exit the message is the first stderr line starting with "Error" (rabbitmqctl's
+    /// usage banner otherwise pushes the real cause off the last line), else the last non-blank
+    /// stderr line, else the exit code.
+    /// </summary>
+    private async Task<CommandOutput> CompleteAsync(Job job, string name, CancellationToken cancellationToken)
+    {
         int exitCode;
 
         try
         {
-            exitCode = await job.Completion.WaitAsync(PsTimeout, time, cancellationToken);
+            exitCode = await job.Completion.WaitAsync(OneShotTimeout, time, cancellationToken);
         }
         catch (TimeoutException)
         {
             await runner.StopAsync(job, cancellationToken);
 
-            return ComposeStatus.Unreachable("docker compose ps did not answer within 30 seconds");
+            return CommandOutput.Failed($"{name} did not answer within 30 seconds");
         }
         catch (OperationCanceledException)
         {
             // The caller's own token cancelled the wait, not the timeout: stop the
             // orphaned process with a fresh token so the stop itself is not
             // cancelled, then let the cancellation propagate as cancellation, not
-            // as an Unreachable status.
+            // as a failed command.
             await runner.StopAsync(job, CancellationToken.None);
 
             throw;
@@ -50,19 +78,22 @@ public sealed class ComposeService(IProcessRunner runner, RepoPaths paths, TimeP
 
         if (exitCode != 0)
         {
-            string? lastError = lines.LastOrDefault(l => l.Stream == OutputStream.Stderr)?.Text;
+            IEnumerable<OutputLine> stderr = lines.Where(l => l.Stream == OutputStream.Stderr);
+            string? message = stderr.FirstOrDefault(l => l.Text.Trim().StartsWith("Error", StringComparison.OrdinalIgnoreCase))?.Text
+                ?? stderr.LastOrDefault(l => !string.IsNullOrWhiteSpace(l.Text))?.Text;
 
-            return ComposeStatus.Unreachable(lastError ?? $"docker compose ps exited with {exitCode}");
+            return CommandOutput.Failed(message ?? $"{name} exited with {exitCode}");
         }
 
-        try
+        // The ring keeps only the job's last Capacity lines: when the first retained
+        // line's sequence is not the job's first-ever sequence (0), earlier lines,
+        // including a leading "[", were evicted before this read.
+        if (lines.Count > 0 && lines[0].Sequence != 0)
         {
-            return ComposeStatus.Up(ComposePsParser.Parse(lines.Where(l => l.Stream == OutputStream.Stdout).Select(l => l.Text)));
+            return CommandOutput.Failed($"{name} printed more than {job.Capacity} lines; only the last {job.Capacity} were kept");
         }
-        catch (JsonException ex)
-        {
-            return ComposeStatus.Unreachable($"docker compose ps output could not be parsed: {ex.Message}");
-        }
+
+        return CommandOutput.Answered([.. lines.Where(l => l.Stream == OutputStream.Stdout).Select(l => l.Text)]);
     }
 
     private Job Run(params string[] args) => runner.Start(new ProcessSpec("docker", ["compose", "-f", paths.ComposeFile, .. args], paths.BackendDir));

@@ -1,7 +1,21 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
-import { ApiCatalogView, ConfigView, Identity, JobSummary, JobView, ProxyRequest, ProxyResult, RealmUserView, StackView, TokenView } from './host-types';
+import {
+  ApiCatalogView,
+  ConfigView,
+  ExchangesView,
+  Identity,
+  JobSummary,
+  JobView,
+  PermissionsView,
+  ProxyRequest,
+  ProxyResult,
+  QueuesView,
+  RealmUserView,
+  StackView,
+  TokenView,
+} from './host-types';
 
 /** Every call the SPA makes; there is no other origin (spec §3, §7). */
 @Injectable({ providedIn: 'root' })
@@ -54,6 +68,18 @@ export class HostClient {
 
   proxy(request: ProxyRequest): Observable<ProxyResult> {
     return this.http.post<ProxyResult>('/api/proxy', request);
+  }
+
+  brokerQueues(): Observable<QueuesView> {
+    return this.http.get<QueuesView>('/api/broker/queues');
+  }
+
+  brokerExchanges(): Observable<ExchangesView> {
+    return this.http.get<ExchangesView>('/api/broker/exchanges');
+  }
+
+  brokerPermissions(): Observable<PermissionsView> {
+    return this.http.get<PermissionsView>('/api/broker/permissions');
   }
 
   job(id: string): Observable<JobView> {
