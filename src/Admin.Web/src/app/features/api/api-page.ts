@@ -33,6 +33,7 @@ export class ApiPage {
   private readonly host = inject(HostClient);
   private readonly uuid = inject(UUID);
   private sending?: Subscription;
+  private fetchingToken?: Subscription;
   private seq = 0;
 
   readonly identity = inject(IdentityState);
@@ -85,7 +86,16 @@ export class ApiPage {
   });
 
   constructor() {
-    inject(DestroyRef).onDestroy(() => this.sending?.unsubscribe());
+    inject(DestroyRef).onDestroy(() => {
+      this.sending?.unsubscribe();
+      this.fetchingToken?.unsubscribe();
+    });
+    // The choice outlives the screen; the inputs showing a custom one do not.
+    const chosen = this.identity.choice();
+    if (chosen.kind === CUSTOM) {
+      this.customUsername.set(chosen.username);
+      this.customPassword.set(chosen.password);
+    }
     this.identity.load();
     this.host.operations().subscribe({
       next: (view) => this.catalog.set(view),
@@ -123,7 +133,7 @@ export class ApiPage {
   }
 
   chooseIdentity(value: string): void {
-    this.token.set(null);
+    this.clearToken();
     if (value === 'anonymous') {
       this.identity.select({ kind: 'anonymous' });
     } else if (value === CUSTOM) {
@@ -134,6 +144,7 @@ export class ApiPage {
   }
 
   setCustom(username: string, password: string): void {
+    this.clearToken();
     this.customUsername.set(username);
     this.customPassword.set(password);
     this.identity.select({ kind: 'custom', username, password });
@@ -183,7 +194,7 @@ export class ApiPage {
     });
   }
 
-  /** Puts a past request back as it was sent; its URL is already filled, so the parameter inputs start empty. */
+  /** Puts a past request back as it was sent, identity included; its URL is already filled, so the parameter inputs start empty. */
   restore(entry: HistoryEntry): void {
     this.sending?.unsubscribe();
     this.sending = undefined;
@@ -198,17 +209,25 @@ export class ApiPage {
     this.headersText.set(entry.headersText);
     this.body.set(entry.request.body ?? '');
     this.correlationId.set(entry.request.correlationId ?? '');
+    const sentAs = entry.request.identity;
+    if (!sentAs) {
+      this.chooseIdentity('anonymous');
+    } else if (sentAs.password === null) {
+      this.chooseIdentity(`user:${sentAs.username}`);
+    } else {
+      this.setCustom(sentAs.username ?? '', sentAs.password);
+    }
   }
 
   showToken(): void {
     if (this.customWithoutUsername()) return;
     const request = this.identity.request();
-    this.token.set(null);
+    this.clearToken();
     if (!request) {
       this.error.set('Anonymous has no token.');
       return;
     }
-    this.host.token(request).subscribe({
+    this.fetchingToken = this.host.token(request).subscribe({
       next: (token) => {
         this.error.set(null);
         this.token.set(token);
@@ -225,6 +244,13 @@ export class ApiPage {
     const r = entry.result;
     const outcome = r.outcome === 'responded' ? String(r.status) : r.outcome === 'tokenRejected' ? `token ${r.status}` : 'unreached';
     return `${outcome} ${entry.name} as ${entry.identity}`;
+  }
+
+  /** Hides the shown token and drops one still on its way, which belongs to the identity being left. */
+  private clearToken(): void {
+    this.fetchingToken?.unsubscribe();
+    this.fetchingToken = undefined;
+    this.token.set(null);
   }
 
   /** A custom identity with a blank username would go out as anonymous while history says "(custom)". */

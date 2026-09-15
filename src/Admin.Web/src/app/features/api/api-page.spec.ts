@@ -1,7 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { Subject, of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
-import { ApiCatalogView, ApiOperation, ProxyResult } from '../../core/host/host-types';
+import { ApiCatalogView, ApiOperation, ProxyResult, TokenView } from '../../core/host/host-types';
+import { IdentityState } from '../../core/identity/identity-state';
 import { ApiPage, UUID } from './api-page';
 
 function op(partial: Partial<ApiOperation>): ApiOperation {
@@ -191,6 +192,51 @@ describe('ApiPage', () => {
     expect(fixture.nativeElement.querySelector('.response .correlation')?.textContent).toContain('corr-1');
     expect(fixture.nativeElement.querySelectorAll('.history li')).toHaveLength(1);
     expect(fixture.nativeElement.querySelector('button.send')?.disabled).toBe(false);
+  });
+
+  it('returning to the screen with a custom identity shows the username and password that will be sent', () => {
+    TestBed.inject(IdentityState).select({ kind: 'custom', username: 'alice', password: 's3cret' });
+    const page = render().componentInstance;
+
+    expect(page.customUsername()).toBe('alice');
+    expect(page.customPassword()).toBe('s3cret');
+  });
+
+  it('restoring an entry restores the identity it was sent as', () => {
+    const fixture = render();
+    const page = fixture.componentInstance;
+    page.chooseIdentity('anonymous');
+    click(fixture, 'Send');
+    page.setCustom('alice', 's3cret');
+    click(fixture, 'Send');
+    page.chooseIdentity('user:demo');
+
+    const rows = Array.from(fixture.nativeElement.querySelectorAll('.history li button')) as HTMLButtonElement[];
+    rows[1].click();
+    fixture.detectChanges();
+    expect(page.identityValue()).toBe('anonymous');
+    click(fixture, 'Send');
+    expect(host.proxy.mock.calls[2][0].identity).toBeNull();
+
+    (fixture.nativeElement.querySelectorAll('.history li button')[1] as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(page.identity.choice()).toEqual({ kind: 'custom', username: 'alice', password: 's3cret' });
+    expect(page.customUsername()).toBe('alice');
+    expect(page.customPassword()).toBe('s3cret');
+  });
+
+  it('changing identity drops a token still on its way for the previous one', () => {
+    const pending = new Subject<TokenView>();
+    host.token.mockReturnValue(pending);
+    const fixture = render();
+    click(fixture, 'Show token');
+
+    fixture.componentInstance.chooseIdentity('user:browser');
+    pending.next({ username: 'demo', accessToken: 'a.b.c', expiresAt: '2026-09-15T08:05:00Z', claims: { permission: ['catalog:write'] } });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.token()).toBeNull();
+    expect(fixture.nativeElement.querySelector('.claims')).toBeNull();
   });
 
   it('refuses to send or show a token for a custom identity with no username', () => {
