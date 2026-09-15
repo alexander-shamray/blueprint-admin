@@ -143,4 +143,63 @@ public sealed class ComposeServiceTests : IAsyncDisposable
         status.Reachable.ShouldBeFalse();
         status.Error.ShouldNotBeNull().ShouldContain("could not be parsed");
     }
+
+    [Fact]
+    public async Task ExecAsync_returns_the_stdout_lines_when_the_command_exits_zero()
+    {
+        runner.On("docker", $"compose -f {Paths.ComposeFile} exec -T rabbitmq rabbitmqctl list_queues", 0, "[", "]");
+
+        CommandOutput output = await Service.ExecAsync("rabbitmq", ["rabbitmqctl", "list_queues"], TestContext.Current.CancellationToken);
+
+        output.Error.ShouldBeNull();
+        output.Stdout.ShouldBe(["[", "]"]);
+        runner.Started.Single().Arguments.ShouldBe(["compose", "-f", Paths.ComposeFile, "exec", "-T", "rabbitmq", "rabbitmqctl", "list_queues"]);
+    }
+
+    [Fact]
+    public async Task ExecAsync_fails_with_the_exit_code_when_the_command_wrote_no_stderr()
+    {
+        runner.On("docker", $"compose -f {Paths.ComposeFile} exec -T rabbitmq", 1);
+
+        CommandOutput output = await Service.ExecAsync("rabbitmq", ["rabbitmqctl", "list_queues"], TestContext.Current.CancellationToken);
+
+        output.Error.ShouldBe("docker compose exec rabbitmq exited with 1");
+        output.Stdout.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task ExecAsync_fails_with_the_last_stderr_line_when_the_command_cannot_start()
+    {
+        // No script: the fake exits 127 with a stderr line, the shape of a service that is not running.
+        CommandOutput output = await Service.ExecAsync("rabbitmq", ["rabbitmqctl", "list_queues"], TestContext.Current.CancellationToken);
+
+        output.Error.ShouldNotBeNull().ShouldStartWith("fake: no script for docker compose");
+    }
+
+    [Fact]
+    public async Task ExecAsync_stops_the_job_and_fails_when_it_does_not_answer_within_30_seconds()
+    {
+        runner.OnLongRunning("docker", $"compose -f {Paths.ComposeFile} exec -T rabbitmq");
+
+        Task<CommandOutput> execTask = Service.ExecAsync("rabbitmq", ["rabbitmqctl", "list_queues"], TestContext.Current.CancellationToken);
+
+        time.Advance(TimeSpan.FromSeconds(30));
+        CommandOutput output = await execTask.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        output.Error.ShouldBe("docker compose exec rabbitmq did not answer within 30 seconds");
+        registry.All().Single().State.ShouldBe(JobState.Exited);
+    }
+
+    [Fact]
+    public async Task ExecAsync_stops_the_job_when_the_caller_cancels()
+    {
+        runner.OnLongRunning("docker", $"compose -f {Paths.ComposeFile} exec -T rabbitmq");
+        using CancellationTokenSource cts = new();
+
+        Task<CommandOutput> execTask = Service.ExecAsync("rabbitmq", ["rabbitmqctl", "list_queues"], cts.Token);
+        await cts.CancelAsync();
+
+        await Should.ThrowAsync<OperationCanceledException>(() => execTask);
+        registry.All().Single().State.ShouldBe(JobState.Exited);
+    }
 }
