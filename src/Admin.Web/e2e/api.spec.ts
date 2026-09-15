@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test';
 // listing is anonymous and names "Walnut desk"; publishing is 401 with no token, 403 for browser
 // and 200 for demo, as run-locally.md's "Publish a product" says of the real platform.
 test('the api screen lists operations and sends as each identity', async ({ page }) => {
-  await page.goto('/api');
+  await page.goto('/requests');
 
   await expect(page.locator('button.op')).toHaveCount(9);
 
@@ -37,7 +37,7 @@ test('the api screen lists operations and sends as each identity', async ({ page
 });
 
 test('a wrong password is shown as keycloak refusing, not as a platform response', async ({ page }) => {
-  await page.goto('/api');
+  await page.goto('/requests');
 
   await page.getByLabel('Identity').selectOption('custom');
   await page.getByLabel('Custom username').fill('demo');
@@ -50,7 +50,7 @@ test('a wrong password is shown as keycloak refusing, not as a platform response
 });
 
 test('show token displays the demo permissions', async ({ page }) => {
-  await page.goto('/api');
+  await page.goto('/requests');
 
   await page.getByLabel('Identity').selectOption('user:demo');
   await page.getByRole('button', { name: 'Show token' }).click();
