@@ -1,5 +1,5 @@
 <section class="actions">
-  <button class="refresh" (click)="refresh()">Refresh</button>
+  <button class="refresh" [disabled]="refreshing()" (click)="refresh()">Refresh</button>
   <label><input type="checkbox" [ngModel]="autoRefresh()" (ngModelChange)="setAutoRefresh($event)" /> Refresh queues every 5 s</label>
 </section>
 
@@ -24,7 +24,7 @@
   } @else {
     <p class="error">The broker did not answer: {{ q.error }}</p>
   }
-} @else {
+} @else if (!queuesError()) {
   <p>Loading…</p>
 }
 

@@ -72,6 +72,15 @@ describe('BrokerPage', () => {
     expect(rows(fixture, 'permissions')).toEqual(['catalog-svc ^(MassTransit:) ^(MassTransit:) ^(MassTransit:)']);
   });
 
+  it('does not show Loading behind a first-load error', () => {
+    host.brokerQueues.mockReturnValue(throwError(() => ({ error: { title: 'Server error', detail: 'boom' } })));
+
+    const fixture = render();
+
+    expect(fixture.nativeElement.textContent).not.toContain('Loading');
+    expect(fixture.nativeElement.textContent).toContain('boom');
+  });
+
   it('shows the broker error when rabbitmqctl did not answer, and no indicator', () => {
     host.brokerQueues.mockReturnValue(of({ ...queues, reachable: false, error: 'service "rabbitmq" is not running', queues: [] }));
 
@@ -155,5 +164,41 @@ describe('BrokerPage', () => {
     await vi.advanceTimersByTimeAsync(15000);
 
     expect(host.brokerQueues).not.toHaveBeenCalled();
+  });
+
+  it('refresh is not re-entrant while a read is still out', () => {
+    const slow = new Subject<QueuesView>();
+    host.brokerQueues.mockReturnValueOnce(of(queues)).mockReturnValueOnce(slow.asObservable());
+    const fixture = render();
+
+    (fixture.nativeElement.querySelector('button.refresh') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement.querySelector('button.refresh') as HTMLButtonElement).disabled).toBe(true);
+    (fixture.nativeElement.querySelector('button.refresh') as HTMLButtonElement).click();
+    expect(host.brokerQueues).toHaveBeenCalledTimes(2);
+    expect(host.brokerExchanges).toHaveBeenCalledTimes(2);
+
+    slow.next(queues);
+    slow.complete();
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement.querySelector('button.refresh') as HTMLButtonElement).disabled).toBe(false);
+    (fixture.nativeElement.querySelector('button.refresh') as HTMLButtonElement).click();
+    expect(host.brokerQueues).toHaveBeenCalledTimes(3);
+  });
+
+  it('a failed read still clears refreshing, so Refresh is enabled again', () => {
+    const slow = new Subject<QueuesView>();
+    host.brokerQueues.mockReturnValueOnce(of(queues)).mockReturnValueOnce(slow.asObservable());
+    const fixture = render();
+    (fixture.nativeElement.querySelector('button.refresh') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect((fixture.nativeElement.querySelector('button.refresh') as HTMLButtonElement).disabled).toBe(true);
+
+    slow.error({ error: { detail: 'boom' } });
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement.querySelector('button.refresh') as HTMLButtonElement).disabled).toBe(false);
   });
 });
