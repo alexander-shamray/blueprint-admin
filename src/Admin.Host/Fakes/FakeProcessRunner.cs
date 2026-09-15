@@ -29,7 +29,15 @@ public sealed class FakeProcessRunner(JobRegistry registry) : IProcessRunner, IA
 
     public FakeProcessRunner On(string fileName, string argumentPrefix, int exitCode, params string[] lines)
     {
-        Add(new FakeScript(fileName, argumentPrefix, exitCode, _ => lines));
+        Add(new FakeScript(fileName, argumentPrefix, exitCode, OutputStream.Stdout, _ => lines));
+
+        return this;
+    }
+
+    /// <summary>A non-zero exit whose output is stderr, not stdout, for testing how a failure's error message is chosen.</summary>
+    public FakeProcessRunner OnFailing(string fileName, string argumentPrefix, int exitCode, params string[] stderrLines)
+    {
+        Add(new FakeScript(fileName, argumentPrefix, exitCode, OutputStream.Stderr, _ => stderrLines));
 
         return this;
     }
@@ -40,7 +48,7 @@ public sealed class FakeProcessRunner(JobRegistry registry) : IProcessRunner, IA
     /// <summary>A long-running script whose lines depend on the arguments that follow <paramref name="argumentPrefix"/>.</summary>
     public FakeProcessRunner OnLongRunning(string fileName, string argumentPrefix, Func<IReadOnlyList<string>, IEnumerable<string>> lines)
     {
-        Add(new FakeScript(fileName, argumentPrefix, null, lines));
+        Add(new FakeScript(fileName, argumentPrefix, null, OutputStream.Stdout, lines));
 
         return this;
     }
@@ -69,7 +77,7 @@ public sealed class FakeProcessRunner(JobRegistry registry) : IProcessRunner, IA
 
         foreach (string line in script.Lines(rest))
         {
-            job.Append(OutputStream.Stdout, line);
+            job.Append(script.Stream, line);
         }
 
         if (script.ExitCode is int exitCode)
@@ -121,5 +129,5 @@ public sealed class FakeProcessRunner(JobRegistry registry) : IProcessRunner, IA
         }
     }
 
-    private sealed record FakeScript(string FileName, string ArgumentPrefix, int? ExitCode, Func<IReadOnlyList<string>, IEnumerable<string>> Lines);
+    private sealed record FakeScript(string FileName, string ArgumentPrefix, int? ExitCode, OutputStream Stream, Func<IReadOnlyList<string>, IEnumerable<string>> Lines);
 }

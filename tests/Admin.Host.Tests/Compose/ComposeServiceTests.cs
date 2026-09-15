@@ -202,4 +202,41 @@ public sealed class ComposeServiceTests : IAsyncDisposable
         await Should.ThrowAsync<OperationCanceledException>(() => execTask);
         registry.All().Single().State.ShouldBe(JobState.Exited);
     }
+
+    [Fact]
+    public async Task ExecAsync_fails_with_the_first_stderr_line_that_starts_with_Error_when_one_is_present()
+    {
+        runner.OnFailing("docker", $"compose -f {Paths.ComposeFile} exec -T rabbitmq", 64,
+            "Error: this command requires the 'rabbit' app to be running on the target node. Start it with 'rabbitmqctl start_app'.",
+            "Arguments given:",
+            "\tlist_queues name messages --formatter json",
+            "",
+            "Usage",
+            "",
+            "rabbitmqctl [--node <node>] [--longnames] [--quiet] list_queues [--vhost <vhost>] ... [--timeout <timeout>]");
+
+        CommandOutput output = await Service.ExecAsync("rabbitmq", ["rabbitmqctl", "list_queues", "name", "messages", "--formatter", "json"], TestContext.Current.CancellationToken);
+
+        output.Error.ShouldBe("Error: this command requires the 'rabbit' app to be running on the target node. Start it with 'rabbitmqctl start_app'.");
+    }
+
+    [Fact]
+    public async Task ExecAsync_fails_with_the_last_non_blank_stderr_line_when_none_starts_with_Error()
+    {
+        runner.OnFailing("docker", $"compose -f {Paths.ComposeFile} exec -T rabbitmq", 1, "something failed", "");
+
+        CommandOutput output = await Service.ExecAsync("rabbitmq", ["rabbitmqctl", "list_queues"], TestContext.Current.CancellationToken);
+
+        output.Error.ShouldBe("something failed");
+    }
+
+    [Fact]
+    public async Task ExecAsync_fails_with_the_exit_code_when_every_stderr_line_is_blank()
+    {
+        runner.OnFailing("docker", $"compose -f {Paths.ComposeFile} exec -T rabbitmq", 1, "", "  ");
+
+        CommandOutput output = await Service.ExecAsync("rabbitmq", ["rabbitmqctl", "list_queues"], TestContext.Current.CancellationToken);
+
+        output.Error.ShouldBe("docker compose exec rabbitmq exited with 1");
+    }
 }

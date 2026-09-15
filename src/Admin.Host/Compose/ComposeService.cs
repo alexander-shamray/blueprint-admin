@@ -45,6 +45,9 @@ public sealed class ComposeService(IProcessRunner runner, RepoPaths paths, TimeP
     /// <summary>
     /// Waits at most 30 seconds for a one-shot command. One that does not answer is stopped and
     /// reported rather than awaited, so a stuck daemon costs a screen one slow answer, not a hang.
+    /// On a non-zero exit the message is the first stderr line starting with "Error" (rabbitmqctl's
+    /// usage banner otherwise pushes the real cause off the last line), else the last non-blank
+    /// stderr line, else the exit code.
     /// </summary>
     private async Task<CommandOutput> CompleteAsync(Job job, string name, CancellationToken cancellationToken)
     {
@@ -75,9 +78,11 @@ public sealed class ComposeService(IProcessRunner runner, RepoPaths paths, TimeP
 
         if (exitCode != 0)
         {
-            string? lastError = lines.LastOrDefault(l => l.Stream == OutputStream.Stderr)?.Text;
+            IEnumerable<OutputLine> stderr = lines.Where(l => l.Stream == OutputStream.Stderr);
+            string? message = stderr.FirstOrDefault(l => l.Text.Trim().StartsWith("Error", StringComparison.OrdinalIgnoreCase))?.Text
+                ?? stderr.LastOrDefault(l => !string.IsNullOrWhiteSpace(l.Text))?.Text;
 
-            return CommandOutput.Failed(lastError ?? $"{name} exited with {exitCode}");
+            return CommandOutput.Failed(message ?? $"{name} exited with {exitCode}");
         }
 
         return CommandOutput.Answered([.. lines.Where(l => l.Stream == OutputStream.Stdout).Select(l => l.Text)]);
