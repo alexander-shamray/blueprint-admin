@@ -21,7 +21,11 @@ Owners of facts you will be tempted to restate: ports and URLs are
 `src/Admin.Host/Config/AdminOptions.cs` (defaults) and `src/Admin.Web/angular.json`
 (dev server) and `src/Admin.Web/proxy.conf.json`; the Compose service list is
 the backend's `deploy/compose/`; the fake platform's recordings are
-`src/Admin.Host/Fakes/`. The operating system is known in three files only,
+`src/Admin.Host/Fakes/`. The gateway's edge policies are copied, with their
+owner cited, in `src/Admin.Host/Api/GatewayRoutes.cs`, and the example request
+bodies in `src/Admin.Host/Api/RunLocallyExamples.cs`; change them when the
+backend's route table or `run-locally.md` changes, not otherwise. The
+operating system is known in three files only,
 `src/Admin.Host/Jobs/ProcessRunner.cs` (tree kill),
 `src/Admin.Host/Jobs/WindowsJobObject.cs` (the Windows job object that reaches
 orphaned descendants) and `src/Admin.Host/Jobs/ExecutableResolver.cs` (`npm` is
