@@ -31,6 +31,8 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
     public static bool IsAdoptable(string id) =>
         id.Length is >= 1 and <= MaxCorrelationIdLength && id.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_');
 
+    private static bool IsTokenChar(char c) => char.IsAsciiLetterOrDigit(c) || "!#$%&'*+-.^_`|~".Contains(c);
+
     public string? Validate(ProxyRequest request)
     {
         if (!Methods.Contains(request.Method, StringComparer.Ordinal))
@@ -56,6 +58,12 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
         }
 
         IReadOnlyDictionary<string, string> headers = request.Headers ?? new Dictionary<string, string>();
+
+        // HttpHeaders drops a name that is not an RFC 9110 token without saying so, which would send a different request.
+        if (headers.Keys.FirstOrDefault(k => k.Length == 0 || !k.All(IsTokenChar)) is { } badName)
+        {
+            return $"'{badName}' is not a valid header name: use letters, digits and !#$%&'*+-.^_`|~ only.";
+        }
 
         if (headers.Keys.Any(k => k.Equals(CorrelationHeader, StringComparison.OrdinalIgnoreCase)))
         {

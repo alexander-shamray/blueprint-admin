@@ -116,6 +116,19 @@ public sealed class RequestProxyTests
             .ShouldNotBeNull().ShouldSatisfyAllConditions(p => p.ShouldContain("more than once"), p => p.ShouldContain("content-type", Case.Insensitive));
     }
 
+    [Theory]
+    [InlineData("Bad Header")]
+    [InlineData("X:Colon")]
+    [InlineData("X-Ümlaut")]
+    [InlineData("")]
+    public void A_header_name_that_is_not_an_http_token_is_refused_rather_than_silently_dropped(string name)
+    {
+        Dictionary<string, string> headers = new() { [name] = "value" };
+
+        Proxy(new ScriptedHandler(_ => Granted())).Validate(Get(headers: headers))
+            .ShouldNotBeNull().ShouldContain("is not a valid header name");
+    }
+
     [Fact]
     public void An_unknown_named_user_is_refused_before_sending()
     {
