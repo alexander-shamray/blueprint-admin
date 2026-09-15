@@ -63,6 +63,19 @@ public sealed class SpaFallbackTests : IDisposable
     }
 
     [Fact]
+    public async Task The_bare_api_screen_route_falls_back_to_the_built_index_html()
+    {
+        using WebApplicationFactory<Program> factory = MakeFactory(webRoot);
+        using HttpClient client = factory.CreateClient();
+
+        HttpResponseMessage response = await client.GetAsync("/api", TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        string body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        body.ShouldContain("fake spa shell");
+    }
+
+    [Fact]
     public async Task An_unknown_api_route_stays_a_404_and_never_falls_back()
     {
         using WebApplicationFactory<Program> factory = MakeFactory(webRoot);
