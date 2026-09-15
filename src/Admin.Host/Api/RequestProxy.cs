@@ -31,6 +31,14 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
     public static bool IsAdoptable(string id) =>
         id.Length is >= 1 and <= MaxCorrelationIdLength && id.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_');
 
+    /// <summary>Whether .NET files the name under content headers, which a request message's own headers refuse.</summary>
+    private static bool IsContentHeader(string name)
+    {
+        using HttpRequestMessage probe = new();
+
+        return !probe.Headers.TryAddWithoutValidation(name, "x");
+    }
+
     private static bool IsTokenChar(char c) => char.IsAsciiLetterOrDigit(c) || "!#$%&'*+-.^_`|~".Contains(c);
 
     public string? Validate(ProxyRequest request)
@@ -88,6 +96,12 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
             {
                 return $"Content-Type '{contentType.Value}' names charset {charset}; the body is sent as UTF-8.";
             }
+        }
+
+        // A content header has nowhere to go without a body, and HttpClient drops it without saying so.
+        if (request.Body is not { Length: > 0 } && headers.Keys.FirstOrDefault(k => !Dropped.Contains(k) && IsContentHeader(k)) is { } contentHeader)
+        {
+            return $"Header '{contentHeader}' describes a body and needs a body to be sent with.";
         }
 
         if (request.Identity is { Username: { Length: > 0 } username, Password: null }

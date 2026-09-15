@@ -350,7 +350,7 @@ public sealed class RequestProxyTests
     {
         Dictionary<string, string> headers = new() { ["Content-Type"] = contentType };
 
-        string? problem = Proxy(new ScriptedHandler(_ => Granted())).Validate(Get(headers: headers));
+        string? problem = Proxy(new ScriptedHandler(_ => Granted())).Validate(Get(headers: headers) with { Body = "{}" });
 
         if (accepted)
         {
@@ -360,6 +360,30 @@ public sealed class RequestProxyTests
         {
             problem.ShouldNotBeNull().ShouldContain("UTF-8");
         }
+    }
+
+    [Theory]
+    [InlineData("Content-Language", null)]
+    [InlineData("Content-Type", null)]
+    [InlineData("Content-Language", "")]
+    public void A_content_header_on_a_request_without_a_body_is_refused_rather_than_silently_dropped(string name, string? body)
+    {
+        Dictionary<string, string> headers = new() { [name] = name == "Content-Type" ? "text/plain" : "en" };
+
+        Proxy(new ScriptedHandler(_ => Granted())).Validate(Get(headers: headers) with { Body = body })
+            .ShouldNotBeNull().ShouldContain("needs a body");
+    }
+
+    [Fact]
+    public async Task A_content_header_on_a_request_with_a_body_is_sent()
+    {
+        ScriptedHandler handler = new(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        ProxyRequest request = Get(headers: new Dictionary<string, string> { ["Content-Language"] = "en" }) with { Method = "POST", Body = "{}" };
+
+        Proxy(handler).Validate(request).ShouldBeNull();
+        await Proxy(handler).SendAsync(request, Token);
+
+        handler.Requests.ShouldHaveSingleItem().Request.Content!.Headers.ContentLanguage.ShouldBe(["en"]);
     }
 
     [Fact]
