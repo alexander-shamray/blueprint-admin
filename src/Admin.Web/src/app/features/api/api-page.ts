@@ -98,6 +98,11 @@ export class ApiPage {
   }
 
   select(operation: ApiOperation): void {
+    this.sending?.unsubscribe();
+    this.sending = undefined;
+    this.pending.set(false);
+    this.error.set(null);
+    this.result.set(null);
     this.selectedId.set(operation.id);
     this.method.set(operation.method);
     this.url.set(operation.url);

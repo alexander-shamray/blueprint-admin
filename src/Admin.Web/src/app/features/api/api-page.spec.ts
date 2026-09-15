@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { of, throwError } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { ApiCatalogView, ApiOperation, ProxyResult } from '../../core/host/host-types';
 import { ApiPage, UUID } from './api-page';
@@ -163,5 +163,33 @@ describe('ApiPage', () => {
     click(fixture, 'Reload');
 
     expect(host.reloadOperations).toHaveBeenCalled();
+  });
+
+  it('selecting another operation clears a previous error and response', () => {
+    host.proxy.mockReturnValueOnce(throwError(() => ({ error: { detail: 'boom' } })));
+    const fixture = render();
+    click(fixture, 'Send');
+    expect(fixture.nativeElement.querySelector('.error')).not.toBeNull();
+
+    host.proxy.mockReturnValue(of(responded));
+    click(fixture, 'POST PublishProduct');
+
+    expect(fixture.nativeElement.querySelector('.error')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.response')).toBeNull();
+  });
+
+  it('selecting another operation cancels a pending send: a late response is dropped', () => {
+    const subject = new Subject<ProxyResult>();
+    host.proxy.mockReturnValue(subject);
+    const fixture = render();
+    click(fixture, 'Send');
+    click(fixture, 'POST PublishProduct');
+
+    subject.next(responded);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.response')).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('.history li')).toHaveLength(0);
+    expect(fixture.nativeElement.querySelector('button.send')?.disabled).toBe(false);
   });
 });
