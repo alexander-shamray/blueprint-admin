@@ -41,7 +41,10 @@ const CUSTOM = 'custom';
 export class ApiPage {
   private readonly host = inject(HostClient);
   private readonly uuid = inject(UUID);
-  private sending?: Subscription;
+  /** Sends still in flight. They are not cancelled when the editor moves on: the platform may already have acted on one. */
+  private readonly sends = new Set<Subscription>();
+  /** Bumped when the editor is replaced (select, restore); a send finishing under an older value only reaches history. */
+  private editorGeneration = 0;
   private fetchingToken?: Subscription;
   private seq = 0;
 
@@ -111,7 +114,7 @@ export class ApiPage {
 
   constructor() {
     inject(DestroyRef).onDestroy(() => {
-      this.sending?.unsubscribe();
+      this.sends.forEach((send) => send.unsubscribe());
       this.fetchingToken?.unsubscribe();
       // The choice outlives the screen, a custom password does not: passwords live only on the host.
       const c = this.identity.choice();
@@ -141,8 +144,7 @@ export class ApiPage {
   }
 
   select(operation: ApiOperation): void {
-    this.sending?.unsubscribe();
-    this.sending = undefined;
+    this.editorGeneration++;
     this.pending.set(false);
     this.error.set(null);
     this.result.set(null);
@@ -216,18 +218,28 @@ export class ApiPage {
 
     this.error.set(null);
     this.pending.set(true);
-    this.sending?.unsubscribe();
-    this.sending = this.host.proxy(request).subscribe({
+    const generation = this.editorGeneration;
+    const current = () => generation === this.editorGeneration;
+    const send = this.host.proxy(request).subscribe({
       next: (result) => {
-        this.result.set(result);
+        if (current()) {
+          this.result.set(result);
+          this.pending.set(false);
+        }
         this.history.update((all) => [{ seq: ++this.seq, at: new Date(), name, operationId, headersText: withoutCredentialLines(headersText), urlTemplate, pathValues, queryValues, identity, sentAs, request: { ...request, headers: withoutCredentialHeaders(request.headers), identity: null }, result: withoutSetCookie(result) }, ...all].slice(0, MAX_HISTORY));
-        this.pending.set(false);
       },
       error: (e: unknown) => {
-        this.error.set(this.describe(e));
-        this.pending.set(false);
+        // A refusal belongs to the editor that sent it; one that moved on has nothing to show it against.
+        if (current()) {
+          this.error.set(this.describe(e));
+          this.pending.set(false);
+        }
       },
     });
+    if (!send.closed) {
+      this.sends.add(send);
+      send.add(() => this.sends.delete(send));
+    }
   }
 
   /**
@@ -235,8 +247,7 @@ export class ApiPage {
    * URL template and parameter values so the inputs shown are the ones that build the URL.
    */
   restore(entry: HistoryEntry): void {
-    this.sending?.unsubscribe();
-    this.sending = undefined;
+    this.editorGeneration++;
     this.pending.set(false);
     this.error.set(null);
     this.result.set(entry.result);

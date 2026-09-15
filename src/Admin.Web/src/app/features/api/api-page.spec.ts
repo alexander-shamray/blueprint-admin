@@ -253,7 +253,7 @@ describe('ApiPage', () => {
     expect(host.proxy.mock.calls[3][0].url).toBe('http://localhost:5000/api/v1/catalog/products/?limit=6');
   });
 
-  it('restoring an entry cancels a pending send: a late response is dropped', () => {
+  it('restoring an entry during a send keeps the send: its late response goes to history, not the pane', () => {
     const fixture = render();
     click(fixture, 'Send');
     const subject = new Subject<ProxyResult>();
@@ -262,12 +262,14 @@ describe('ApiPage', () => {
 
     (fixture.nativeElement.querySelector('.history li button') as HTMLButtonElement).click();
     fixture.detectChanges();
+    expect(subject.observed).toBe(true);
+    expect(fixture.nativeElement.querySelector('button.send')?.disabled).toBe(false);
     subject.next({ ...responded, status: 500, correlationId: 'late' });
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('.response .correlation')?.textContent).toContain('corr-1');
-    expect(fixture.nativeElement.querySelectorAll('.history li')).toHaveLength(1);
-    expect(fixture.nativeElement.querySelector('button.send')?.disabled).toBe(false);
+    const rows = Array.from(fixture.nativeElement.querySelectorAll('.history li button')) as HTMLButtonElement[];
+    expect(rows.map((r) => r.textContent)).toEqual([expect.stringContaining('500'), expect.stringContaining('200')]);
   });
 
   it('leaving the screen forgets a custom password; returning shows the username and a blank password, as will be sent', () => {
@@ -407,18 +409,37 @@ describe('ApiPage', () => {
     expect(fixture.nativeElement.querySelector('.response')).toBeNull();
   });
 
-  it('selecting another operation cancels a pending send: a late response is dropped', () => {
+  it('selecting another operation during a send keeps the send: its late response goes to history, not the pane', () => {
     const subject = new Subject<ProxyResult>();
     host.proxy.mockReturnValue(subject);
     const fixture = render();
     click(fixture, 'Send');
     click(fixture, 'POST PublishProduct');
+    expect(subject.observed).toBe(true);
+    expect(fixture.nativeElement.querySelector('button.send')?.disabled).toBe(false);
 
     subject.next(responded);
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('.response')).toBeNull();
-    expect(fixture.nativeElement.querySelectorAll('.history li')).toHaveLength(0);
+    expect(fixture.nativeElement.querySelectorAll('.history li')).toHaveLength(1);
+  });
+
+  it('a send started after the editor moved on still records the earlier one, and only the current one fills the pane', () => {
+    const first = new Subject<ProxyResult>();
+    const second = new Subject<ProxyResult>();
+    host.proxy.mockReturnValueOnce(first).mockReturnValueOnce(second);
+    const fixture = render();
+    click(fixture, 'Send');
+    click(fixture, 'POST PublishProduct');
+    click(fixture, 'Send');
+
+    second.next({ ...responded, correlationId: 'second' });
+    first.next({ ...responded, status: 201, correlationId: 'first' });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.response .correlation')?.textContent).toContain('second');
+    expect(fixture.nativeElement.querySelectorAll('.history li')).toHaveLength(2);
     expect(fixture.nativeElement.querySelector('button.send')?.disabled).toBe(false);
   });
 });
