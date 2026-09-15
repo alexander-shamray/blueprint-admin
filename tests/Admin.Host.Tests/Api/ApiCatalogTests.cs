@@ -83,6 +83,32 @@ public sealed class ApiCatalogTests
     }
 
     [Fact]
+    public async Task Concurrent_first_reads_load_the_documents_once()
+    {
+        TaskCompletionSource answer = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        ScriptedHandler handler = new(async (request, _) =>
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/token", StringComparison.Ordinal))
+            {
+                return Json(HttpStatusCode.OK, $$"""{"access_token":"{{TokenServiceTests.Jwt("{}")}}","expires_in":300}""");
+            }
+
+            await answer.Task;
+
+            return Both(request.RequestUri.ToString());
+        });
+        ApiCatalog catalog = Catalog(handler);
+
+        Task<ApiCatalogView> first = catalog.GetAsync(Token);
+        Task<ApiCatalogView> second = catalog.GetAsync(Token);
+        answer.SetResult();
+        await Task.WhenAll(first, second);
+
+        handler.Requests.Count(r => r.Request.RequestUri!.AbsolutePath == "/openapi/v1.json").ShouldBe(2);
+        (await second).ShouldBeSameAs(await first);
+    }
+
+    [Fact]
     public async Task A_service_that_never_answered_is_listed_as_a_source_with_its_error_and_no_operations()
     {
         ScriptedHandler handler = Platform(url => url.Contains(":5101", StringComparison.Ordinal) ? throw new HttpRequestException("Connection refused") : Both(url));

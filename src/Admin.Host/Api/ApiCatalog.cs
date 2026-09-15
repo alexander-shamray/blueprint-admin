@@ -22,14 +22,22 @@ public sealed class ApiCatalog(HttpClient http, TokenService tokens, IOptions<Ad
     public void Dispose() => gate.Dispose();
 
     public async Task<ApiCatalogView> GetAsync(CancellationToken cancellationToken) =>
-        current ?? await ReloadAsync(cancellationToken);
+        current ?? await LoadCatalogAsync(force: false, cancellationToken);
 
-    public async Task<ApiCatalogView> ReloadAsync(CancellationToken cancellationToken)
+    public Task<ApiCatalogView> ReloadAsync(CancellationToken cancellationToken) => LoadCatalogAsync(force: true, cancellationToken);
+
+    private async Task<ApiCatalogView> LoadCatalogAsync(bool force, CancellationToken cancellationToken)
     {
         await gate.WaitAsync(cancellationToken);
 
         try
         {
+            // First reads that queued behind a load take its result rather than loading again.
+            if (!force && current is not null)
+            {
+                return current;
+            }
+
             AdminOptions o = options.Value;
             (string Name, string BaseUrl)[] services = [("catalog", o.CatalogUrl), ("ordering", o.OrderingUrl)];
 
