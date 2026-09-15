@@ -39,4 +39,12 @@ describe('request-builder', () => {
     expect(pretty('<html>')).toBe('<html>');
     expect(pretty('')).toBe('');
   });
+
+  it('pretty-printing re-indents without rewriting a value: big numbers, escapes and repeated keys stay as sent', () => {
+    expect(pretty('{"id":90071992547409931,"n":1.50,"s":"caf\\u00e9 \\"q\\" {,:}","a":1,"a":2,"e":[],"o":{ },"l":[true,null]}')).toBe(
+      '{\n  "id": 90071992547409931,\n  "n": 1.50,\n  "s": "caf\\u00e9 \\"q\\" {,:}",\n  "a": 1,\n  "a": 2,\n  "e": [],\n  "o": {},\n  "l": [\n    true,\n    null\n  ]\n}',
+    );
+    expect(pretty('"just a string"')).toBe('"just a string"');
+    expect(pretty('{"a":')).toBe('{"a":');
+  });
 });

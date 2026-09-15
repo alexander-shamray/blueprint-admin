@@ -49,8 +49,56 @@ export function withFreshCommandId(body: string, uuid: string): string {
 
 export function pretty(body: string): string {
   try {
-    return body ? JSON.stringify(JSON.parse(body), null, 2) : body;
+    JSON.parse(body);
   } catch {
     return body;
   }
+  return reindent(body);
+}
+
+/**
+ * Two-space indentation laid over the body's own tokens. Only whitespace between tokens changes: a
+ * parse-and-stringify round trip would round large integers, rewrite escapes and drop repeated keys,
+ * and the response pane shows what the platform sent (spec §9).
+ */
+function reindent(json: string): string {
+  let out = '';
+  let depth = 0;
+  let inString = false;
+  const newline = () => '\n' + '  '.repeat(depth);
+  for (let i = 0; i < json.length; i++) {
+    const c = json[i];
+    if (inString) {
+      out += c;
+      if (c === '\\') out += json[++i];
+      else if (c === '"') inString = false;
+      continue;
+    }
+    if (c === ' ' || c === '\t' || c === '\n' || c === '\r') continue;
+    if (c === '"') {
+      inString = true;
+      out += c;
+    } else if (c === '{' || c === '[') {
+      const close = c === '{' ? '}' : ']';
+      let j = i + 1;
+      while (/\s/.test(json[j])) j++;
+      if (json[j] === close) {
+        out += c + close;
+        i = j;
+      } else {
+        depth++;
+        out += c + newline();
+      }
+    } else if (c === '}' || c === ']') {
+      depth--;
+      out += newline() + c;
+    } else if (c === ',') {
+      out += ',' + newline();
+    } else if (c === ':') {
+      out += ': ';
+    } else {
+      out += c;
+    }
+  }
+  return out;
 }
