@@ -15,6 +15,10 @@ export interface HistoryEntry {
   /** The operation selected when sent, so a restored entry resends with that operation's commandId handling. */
   operationId: string | null;
   headersText: string;
+  /** The URL template and parameter values as entered, so a restored entry's inputs still build its URL. */
+  urlTemplate: string;
+  pathValues: Record<string, string>;
+  queryValues: Record<string, string>;
   identity: string;
   /** Who it went out as, without a custom password: history is not a credential store, so a restore asks for it again. */
   sentAs: SentAs;
@@ -192,6 +196,9 @@ export class ApiPage {
     const operationId = operation?.id ?? null;
     const identity = this.identity.label();
     const sentAs = redact(this.identity.choice());
+    const urlTemplate = this.url();
+    const pathValues = this.pathValues();
+    const queryValues = this.queryValues();
 
     this.error.set(null);
     this.pending.set(true);
@@ -199,7 +206,7 @@ export class ApiPage {
     this.sending = this.host.proxy(request).subscribe({
       next: (result) => {
         this.result.set(result);
-        this.history.update((all) => [{ seq: ++this.seq, at: new Date(), name, operationId, headersText, identity, sentAs, request: { ...request, identity: null }, result }, ...all].slice(0, MAX_HISTORY));
+        this.history.update((all) => [{ seq: ++this.seq, at: new Date(), name, operationId, headersText, urlTemplate, pathValues, queryValues, identity, sentAs, request: { ...request, identity: null }, result }, ...all].slice(0, MAX_HISTORY));
         this.pending.set(false);
       },
       error: (e: unknown) => {
@@ -210,8 +217,8 @@ export class ApiPage {
   }
 
   /**
-   * Puts a past request back as it was sent, identity included (a custom one without its password); its URL
-   * is already filled, so the parameter inputs start empty.
+   * Puts a past request back as it was sent, identity included (a custom one without its password), with its
+   * URL template and parameter values so the inputs shown are the ones that build the URL.
    */
   restore(entry: HistoryEntry): void {
     this.sending?.unsubscribe();
@@ -221,9 +228,9 @@ export class ApiPage {
     this.result.set(entry.result);
     this.selectedId.set(entry.operationId);
     this.method.set(entry.request.method);
-    this.url.set(entry.request.url);
-    this.pathValues.set({});
-    this.queryValues.set({});
+    this.url.set(entry.urlTemplate);
+    this.pathValues.set(entry.pathValues);
+    this.queryValues.set(entry.queryValues);
     this.headersText.set(entry.headersText);
     this.body.set(entry.request.body ?? '');
     this.correlationId.set(entry.request.correlationId ?? '');

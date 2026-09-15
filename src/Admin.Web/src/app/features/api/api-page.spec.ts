@@ -177,6 +177,33 @@ describe('ApiPage', () => {
     expect(JSON.parse(resent.body).commandId).toBe('uuid-2');
   });
 
+  it('restoring an entry restores its url template and parameter values, so editing one changes what is sent', () => {
+    const fixture = render();
+    const page = fixture.componentInstance;
+    click(fixture, 'POST CancelOrder');
+    page.setPathValue('id', 'abc');
+    click(fixture, 'Send');
+    click(fixture, 'GET GetProducts');
+    page.setQueryValue('limit', '5');
+    click(fixture, 'Send');
+
+    click(fixture, 'GET GetProducts');
+    (fixture.nativeElement.querySelectorAll('.history li button')[1] as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(page.url()).toBe('http://localhost:5000/api/v1/orders/{id}/cancel');
+    expect(page.pathValues()).toEqual({ id: 'abc' });
+    page.setPathValue('id', 'def');
+    click(fixture, 'Send');
+    expect(host.proxy.mock.calls[2][0].url).toBe('http://localhost:5000/api/v1/orders/def/cancel');
+
+    (fixture.nativeElement.querySelectorAll('.history li button')[1] as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(page.queryValues()).toEqual({ limit: '5' });
+    page.setQueryValue('limit', '6');
+    click(fixture, 'Send');
+    expect(host.proxy.mock.calls[3][0].url).toBe('http://localhost:5000/api/v1/catalog/products/?limit=6');
+  });
+
   it('restoring an entry cancels a pending send: a late response is dropped', () => {
     const fixture = render();
     click(fixture, 'Send');
