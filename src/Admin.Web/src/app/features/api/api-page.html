@@ -101,8 +101,8 @@
             @if (r.bodyTruncated) {<p class="note">Body truncated at 1 MiB.</p>}
             @if (r.bodyError; as bodyError) {<p class="note body-error">Body incomplete: {{ bodyError }}</p>}
             @if (projection(); as p) {<app-drained-indicator [projection]="p" />}
-            @if (projectionError() !== null) {<p class="note">Could not read the broker to say whether ordering-catalog-events has drained: {{ projectionError() }}</p>}
-            @if (projectionWatchExpired()) {<p class="note">Stopped watching after 2 minutes; the Broker screen shows the queue.</p>}
+            @if (projectionError() !== null) {<p class="note" role="alert">Could not read the broker to say whether ordering-catalog-events has drained: {{ projectionError() }}</p>}
+            @if (projectionWatchExpired()) {<p class="note" role="status">Stopped watching after 2 minutes; the Broker screen shows the queue.</p>}
           </section>
         }
         @case ('tokenRejected') {

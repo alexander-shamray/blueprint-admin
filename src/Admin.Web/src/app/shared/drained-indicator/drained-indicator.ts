@@ -10,7 +10,7 @@ import { ProjectionDrain } from '../../core/host/host-types';
   selector: 'app-drained-indicator',
   template: `
     @let p = projection();
-    <p class="drained" [class.ok]="p.drained" [class.waiting]="!p.drained">
+    <p class="drained" role="status" [class.ok]="p.drained" [class.waiting]="!p.drained">
       @if (p.drained) {
         [drained] {{ p.queue }} is empty: Ordering's price projection has caught up.
       } @else if (!p.found) {

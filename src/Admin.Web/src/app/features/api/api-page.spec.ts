@@ -578,6 +578,7 @@ describe('ApiPage', () => {
 
     expect(fixture.nativeElement.querySelector('.response')?.textContent).toContain('Could not read the broker to say whether ordering-catalog-events has drained: service "rabbitmq" is not running');
     expect(fixture.nativeElement.querySelector('app-drained-indicator')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.response .note')?.getAttribute('role')).toBe('alert');
 
     host.brokerQueues.mockClear();
     await vi.advanceTimersByTimeAsync(10_000);
@@ -613,6 +614,7 @@ describe('ApiPage', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('.response')?.textContent).toContain('Stopped watching after 2 minutes; the Broker screen shows the queue.');
+    expect(fixture.nativeElement.querySelector('.response .note')?.getAttribute('role')).toBe('status');
 
     host.brokerQueues.mockClear();
     await vi.advanceTimersByTimeAsync(10_000);
