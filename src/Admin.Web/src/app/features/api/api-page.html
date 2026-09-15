@@ -13,7 +13,7 @@
         <ul>
           @for (o of g.operations; track o.id) {
             <li>
-              <button class="op" [class.selected]="o.id === selectedId()" [class.unavailable]="!o.available" [title]="o.edgePolicy" (click)="select(o)">
+              <button class="op" [class.selected]="o.id === selectedId()" [attr.aria-current]="o.id === selectedId() ? 'true' : null" [class.unavailable]="!o.available" [title]="o.edgePolicy" (click)="select(o)">
                 <span class="method">{{ o.method }}</span> {{ o.name }}
               </button>
             </li>

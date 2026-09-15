@@ -45,6 +45,10 @@ describe('request-builder', () => {
       '{\n  "id": 90071992547409931,\n  "n": 1.50,\n  "s": "caf\\u00e9 \\"q\\" {,:}",\n  "a": 1,\n  "a": 2,\n  "e": [],\n  "o": {},\n  "l": [\n    true,\n    null\n  ]\n}',
     );
     expect(pretty('"just a string"')).toBe('"just a string"');
+    const deep = '['.repeat(3000) + ']'.repeat(3000);
+    expect(pretty(deep)).toBe(deep);
+    const nested = '['.repeat(20) + '1,2' + ']'.repeat(20);
+    expect(pretty(nested)).toContain('\n' + '  '.repeat(20) + '1,');
     expect(pretty('{"a":')).toBe('{"a":');
   });
 });

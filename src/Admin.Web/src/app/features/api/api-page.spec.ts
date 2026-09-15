@@ -81,6 +81,29 @@ describe('ApiPage', () => {
     expect(fixture.nativeElement.querySelector('button.op.unavailable')).not.toBeNull();
   });
 
+  it('history keeps no pasted Authorization header, and a restore leaves it to be entered again', () => {
+    const fixture = render();
+    const page = fixture.componentInstance;
+    page.chooseIdentity('anonymous');
+    page.headersText.set('Accept: application/json\nauthorization: Bearer pasted.jwt.token');
+    click(fixture, 'Send');
+
+    expect(host.proxy.mock.calls[0][0].headers).toEqual({ Accept: 'application/json', authorization: 'Bearer pasted.jwt.token' });
+    expect(JSON.stringify(page.history())).not.toContain('pasted.jwt.token');
+    page.headersText.set('');
+    (fixture.nativeElement.querySelector('.history li button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(page.headersText()).toBe('Accept: application/json');
+  });
+
+  it('marks the selected operation for assistive technology', () => {
+    const fixture = render();
+    click(fixture, 'POST PublishProduct');
+
+    const current = Array.from(fixture.nativeElement.querySelectorAll('button.op[aria-current="true"]')) as HTMLElement[];
+    expect(current.map((b) => b.textContent?.trim())).toEqual([expect.stringContaining('PublishProduct')]);
+  });
+
   it('selecting an operation fills the method, url and example body', () => {
     const fixture = render();
     click(fixture, 'POST PublishProduct');

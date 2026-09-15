@@ -62,6 +62,8 @@ export function pretty(body: string): string {
  * and the response pane shows what the platform sent (spec §9).
  */
 function reindent(json: string): string {
+  // Indentation grows with depth, so deep nesting can multiply the size; past this the body is shown as sent.
+  const budget = Math.max(json.length * 8, 1 << 20);
   let out = '';
   let depth = 0;
   let inString = false;
@@ -99,6 +101,22 @@ function reindent(json: string): string {
     } else {
       out += c;
     }
+    if (out.length > budget) return json;
   }
   return out;
+}
+
+const CREDENTIAL_HEADERS = new Set(['authorization', 'proxy-authorization']);
+
+/** The header lines without credential headers, which history does not keep. */
+export function withoutCredentialLines(text: string): string {
+  return text
+    .split('\n')
+    .filter((line) => !CREDENTIAL_HEADERS.has(line.slice(0, line.indexOf(':')).trim().toLowerCase()))
+    .join('\n');
+}
+
+/** The headers without credential headers, which history does not keep. */
+export function withoutCredentialHeaders(headers: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(headers).filter(([name]) => !CREDENTIAL_HEADERS.has(name.toLowerCase())));
 }

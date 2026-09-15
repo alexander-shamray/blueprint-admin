@@ -4,7 +4,7 @@ import { Subscription } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { ApiCatalogView, ApiOperation, ProxyRequest, ProxyResult, TokenView } from '../../core/host/host-types';
 import { IdentityChoice, IdentityState } from '../../core/identity/identity-state';
-import { buildUrl, parseHeaders, pretty, withFreshCommandId } from './request-builder';
+import { buildUrl, parseHeaders, pretty, withFreshCommandId, withoutCredentialHeaders, withoutCredentialLines } from './request-builder';
 
 export const UUID = new InjectionToken<() => string>('UUID', { factory: () => () => crypto.randomUUID() });
 
@@ -22,7 +22,7 @@ export interface HistoryEntry {
   identity: string;
   /** Who it went out as, without a custom password: history is not a credential store, so a restore asks for it again. */
   sentAs: SentAs;
-  /** As sent, with the identity left out; `sentAs` carries it. */
+  /** As sent, with the identity and any pasted Authorization header left out: neither is kept, so a restore asks again. */
   request: ProxyRequest;
   result: ProxyResult;
 }
@@ -206,7 +206,7 @@ export class ApiPage {
     this.sending = this.host.proxy(request).subscribe({
       next: (result) => {
         this.result.set(result);
-        this.history.update((all) => [{ seq: ++this.seq, at: new Date(), name, operationId, headersText, urlTemplate, pathValues, queryValues, identity, sentAs, request: { ...request, identity: null }, result }, ...all].slice(0, MAX_HISTORY));
+        this.history.update((all) => [{ seq: ++this.seq, at: new Date(), name, operationId, headersText: withoutCredentialLines(headersText), urlTemplate, pathValues, queryValues, identity, sentAs, request: { ...request, headers: withoutCredentialHeaders(request.headers), identity: null }, result }, ...all].slice(0, MAX_HISTORY));
         this.pending.set(false);
       },
       error: (e: unknown) => {
