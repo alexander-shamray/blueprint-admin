@@ -41,4 +41,22 @@ public sealed class RabbitCtlJsonTests
     {
         Should.Throw<JsonException>(() => RabbitCtlJson.Parse<Row>(["Error: unable to perform an operation on node"]));
     }
+
+    [Fact]
+    public void A_row_missing_name_is_a_json_exception()
+    {
+        Should.Throw<JsonException>(() => RabbitCtlJson.Parse<Row>(["[", """{"type":"topic"}""", "]"]));
+    }
+
+    [Fact]
+    public void A_row_with_a_null_name_is_a_json_exception()
+    {
+        Should.Throw<JsonException>(() => RabbitCtlJson.Parse<Row>(["[", """{"name":null,"type":"topic"}""", "]"]));
+    }
+
+    [Fact]
+    public void A_literal_null_row_is_a_json_exception()
+    {
+        Should.Throw<JsonException>(() => RabbitCtlJson.Parse<Row>(["[", "null", "]"]));
+    }
 }

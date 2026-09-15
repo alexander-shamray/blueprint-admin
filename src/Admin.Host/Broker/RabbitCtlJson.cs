@@ -9,7 +9,12 @@ namespace Admin.Host.Broker;
 /// </summary>
 public static class RabbitCtlJson
 {
-    private static readonly JsonSerializerOptions Options = new() { PropertyNameCaseInsensitive = true };
+    private static readonly JsonSerializerOptions Options = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        RespectNullableAnnotations = true,
+        RespectRequiredConstructorParameters = true,
+    };
 
     public static IReadOnlyList<T> Parse<T>(IReadOnlyList<string> stdoutLines)
     {
@@ -29,7 +34,17 @@ public static class RabbitCtlJson
             throw new JsonException("no JSON array in the output");
         }
 
-        return JsonSerializer.Deserialize<List<T>>(string.Join('\n', stdoutLines.Skip(start)), Options)
+        List<T> rows = JsonSerializer.Deserialize<List<T>>(string.Join('\n', stdoutLines.Skip(start)), Options)
             ?? throw new JsonException("the output was null");
+
+        foreach (T row in rows)
+        {
+            if (row is null)
+            {
+                throw new JsonException("a row was null");
+            }
+        }
+
+        return rows;
     }
 }

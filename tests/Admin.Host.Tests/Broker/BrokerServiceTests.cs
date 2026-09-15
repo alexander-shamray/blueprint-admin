@@ -107,6 +107,17 @@ public sealed class BrokerServiceTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task A_queue_row_missing_name_is_unreachable_not_an_exception()
+    {
+        runner.On("docker", Exec + "list_queues", 0, "[", """{"messages":3}""", "]");
+
+        QueuesView view = await Service.QueuesAsync(TestContext.Current.CancellationToken);
+
+        view.Reachable.ShouldBeFalse();
+        view.Error.ShouldNotBeNull().ShouldContain("could not be parsed");
+    }
+
+    [Fact]
     public async Task Exchanges_are_listed_with_their_type_including_the_default_exchange()
     {
         runner.On("docker", Exec + "list_exchanges", 0,
