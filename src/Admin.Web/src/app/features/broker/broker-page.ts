@@ -32,6 +32,8 @@ export class BrokerPage {
   /** True while any read started by refresh() is still out; refresh() is not re-entrant while it is. */
   readonly refreshing = signal(false);
   private pendingReads = 0;
+  /** Set while any queues read, timer-triggered or refresh()-triggered, is out: at most one is ever in flight. */
+  private queuesInFlight = false;
   /**
    * One failed-read signal per endpoint, not a shared one: each is set only by its own read's
    * failure and cleared only by that same read's success, so an exchanges or permissions failure
@@ -47,23 +49,29 @@ export class BrokerPage {
     this.refresh();
   }
 
-  /** While a read from an earlier call is still out, does nothing: the Refresh button is disabled meanwhile. */
+  /**
+   * While a read from an earlier call is still out, does nothing: the Refresh button is disabled meanwhile.
+   * The queues read is skipped when one is already out (started by an earlier refresh() or by auto-refresh);
+   * `refreshing` still clears once the reads this call actually started have finished.
+   */
   refresh(): void {
     if (this.refreshing()) return;
     this.refreshing.set(true);
-    this.pendingReads = 3;
-    this.readForRefresh(this.host.brokerQueues(), this.queuesError).subscribe((view) => this.queues.set(view));
-    this.readForRefresh(this.host.brokerExchanges(), this.exchangesError).subscribe((view) => this.exchanges.set(view));
-    this.readForRefresh(this.host.brokerPermissions(), this.permissionsError).subscribe((view) => this.permissions.set(view));
+
+    const queuesRead = this.queuesRead();
+    this.pendingReads = queuesRead ? 3 : 2;
+    if (queuesRead) this.withPendingCountdown(queuesRead).subscribe((view) => this.queues.set(view));
+    this.withPendingCountdown(this.read(this.host.brokerExchanges(), this.exchangesError)).subscribe((view) => this.exchanges.set(view));
+    this.withPendingCountdown(this.read(this.host.brokerPermissions(), this.permissionsError)).subscribe((view) => this.permissions.set(view));
   }
 
-  /** `exhaustMap` skips a tick while a read is out: a slow rabbitmqctl must not queue reads behind it. */
+  /** A tick starts nothing while a queues read (timer-triggered or refresh()-triggered) is already out. */
   setAutoRefresh(on: boolean): void {
     this.autoRefresh.set(on);
     this.auto?.unsubscribe();
     this.auto = on
       ? timer(AUTO_REFRESH_MS, AUTO_REFRESH_MS)
-          .pipe(exhaustMap(() => this.read(this.host.brokerQueues(), this.queuesError)))
+          .pipe(exhaustMap(() => this.queuesRead() ?? EMPTY))
           .subscribe((view) => this.queues.set(view))
       : undefined;
   }
@@ -72,9 +80,16 @@ export class BrokerPage {
     return name === '' ? '(default)' : name;
   }
 
-  /** A refresh() read: on top of `read`, counts down `pendingReads` on completion or failure, via `finalize` so a failure counts down too. */
-  private readForRefresh<T>(request: Observable<T>, error: WritableSignal<string | null>): Observable<T> {
-    return this.read(request, error).pipe(
+  /** The queues read, guarded so at most one is ever out; null when one already is (skip, start nothing). */
+  private queuesRead(): Observable<QueuesView> | null {
+    if (this.queuesInFlight) return null;
+    this.queuesInFlight = true;
+    return this.read(this.host.brokerQueues(), this.queuesError).pipe(finalize(() => (this.queuesInFlight = false)));
+  }
+
+  /** A refresh() read: counts down `pendingReads` on completion or failure, via `finalize` so a failure counts down too. */
+  private withPendingCountdown<T>(source: Observable<T>): Observable<T> {
+    return source.pipe(
       finalize(() => {
         this.pendingReads--;
         if (this.pendingReads === 0) this.refreshing.set(false);

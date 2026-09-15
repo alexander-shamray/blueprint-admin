@@ -210,6 +210,74 @@ describe('BrokerPage', () => {
     expect(host.brokerQueues).toHaveBeenCalledTimes(3);
   });
 
+  it('auto-refresh does not start while the initial queues read is still out', async () => {
+    vi.useFakeTimers();
+    const slow = new Subject<QueuesView>();
+    host.brokerQueues.mockReturnValue(slow.asObservable());
+    const fixture = render();
+
+    fixture.componentInstance.setAutoRefresh(true);
+    await vi.advanceTimersByTimeAsync(15000);
+
+    expect(host.brokerQueues).toHaveBeenCalledTimes(1);
+  });
+
+  it('refresh does not start a second queues read while an automatic one is out, but still reads exchanges and permissions', async () => {
+    vi.useFakeTimers();
+    const fixture = render();
+    host.brokerQueues.mockClear();
+    host.brokerExchanges.mockClear();
+    host.brokerPermissions.mockClear();
+    const slowQueues = new Subject<QueuesView>();
+    host.brokerQueues.mockReturnValue(slowQueues.asObservable());
+
+    fixture.componentInstance.setAutoRefresh(true);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(host.brokerQueues).toHaveBeenCalledTimes(1);
+
+    const slowExchanges = new Subject<ExchangesView>();
+    const slowPermissions = new Subject<PermissionsView>();
+    host.brokerExchanges.mockReturnValueOnce(slowExchanges.asObservable());
+    host.brokerPermissions.mockReturnValueOnce(slowPermissions.asObservable());
+
+    (fixture.nativeElement.querySelector('button.refresh') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(host.brokerQueues).toHaveBeenCalledTimes(1);
+    expect(host.brokerExchanges).toHaveBeenCalledTimes(1);
+    expect(host.brokerPermissions).toHaveBeenCalledTimes(1);
+    expect((fixture.nativeElement.querySelector('button.refresh') as HTMLButtonElement).disabled).toBe(true);
+
+    slowExchanges.next(exchanges);
+    slowExchanges.complete();
+    slowPermissions.next(permissions);
+    slowPermissions.complete();
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement.querySelector('button.refresh') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('reads queues again on the next tick after a held read completes', async () => {
+    vi.useFakeTimers();
+    const fixture = render();
+    host.brokerQueues.mockClear();
+    const slow = new Subject<QueuesView>();
+    host.brokerQueues.mockReturnValueOnce(slow.asObservable());
+
+    fixture.componentInstance.setAutoRefresh(true);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(host.brokerQueues).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(host.brokerQueues).toHaveBeenCalledTimes(1);
+
+    slow.next(queues);
+    slow.complete();
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(host.brokerQueues).toHaveBeenCalledTimes(2);
+  });
+
   it('a failed read still clears refreshing, so Refresh is enabled again', () => {
     const slow = new Subject<QueuesView>();
     host.brokerQueues.mockReturnValueOnce(of(queues)).mockReturnValueOnce(slow.asObservable());
