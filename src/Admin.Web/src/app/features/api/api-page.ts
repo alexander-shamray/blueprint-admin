@@ -1,6 +1,6 @@
 import { Component, DestroyRef, InjectionToken, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { EMPTY, Subscription, catchError, exhaustMap, takeUntil, takeWhile, timer } from 'rxjs';
+import { EMPTY, Subscription, catchError, exhaustMap, takeUntil, takeWhile, tap, timer } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { ApiCatalogView, ApiOperation, ProjectionDrain, ProxyRequest, ProxyResult, TokenView } from '../../core/host/host-types';
 import { IdentityChoice, IdentityState } from '../../core/identity/identity-state';
@@ -37,7 +37,8 @@ const CUSTOM = 'custom';
 
 /**
  * Catalog's one write, `WithName("PublishProduct")` in the backend's Catalog.Api/Endpoints/ProductEndpoints.cs:
- * its event is what Ordering's price projection consumes from ordering-catalog-events (run-locally.md).
+ * its event is what Ordering's price projection consumes from ordering-catalog-events (run-locally.md). Matched
+ * together with `source === 'catalog'`, since another source could name an operation the same.
  */
 export const PUBLISH_OPERATION = 'PublishProduct';
 export const DRAIN_POLL_MS = 2000;
@@ -85,6 +86,8 @@ export class ApiPage {
   /** ordering-catalog-events after a successful publish, until it drains; null when not watching. */
   readonly projection = signal<ProjectionDrain | null>(null);
   readonly projectionError = signal<string | null>(null);
+  /** Set when the two-minute cap, not the queue draining, ended the watch; reset when a new watch starts or stops. */
+  readonly projectionWatchExpired = signal(false);
 
   readonly methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 
@@ -251,7 +254,7 @@ export class ApiPage {
           this.result.set(result);
           this.answered.set(`${request.method} ${request.url} as ${identity}`);
           this.pending.set(false);
-          if (operation?.name === PUBLISH_OPERATION && result.outcome === 'responded' && result.status >= 200 && result.status < 300) {
+          if (operation?.source === 'catalog' && operation.name === PUBLISH_OPERATION && result.outcome === 'responded' && result.status >= 200 && result.status < 300) {
             this.watchProjection();
           }
         }
@@ -335,21 +338,25 @@ export class ApiPage {
     this.token.set(null);
   }
 
-  /** Polls queues until the projection drains, the watch times out, or the editor moves on. */
+  /**
+   * Polls queues while the last answer was reachable, found and not drained; stops on drain, an
+   * unreachable broker, an undeclared queue, or the two-minute cap, leaving the last view shown.
+   */
   private watchProjection(): void {
     this.stopWatchingProjection();
     this.watchingProjection = timer(0, DRAIN_POLL_MS)
       .pipe(
-        takeUntil(timer(DRAIN_WATCH_MS)),
+        takeUntil(timer(DRAIN_WATCH_MS).pipe(tap(() => this.projectionWatchExpired.set(true)))),
         exhaustMap(() =>
           this.host.brokerQueues().pipe(
             catchError((e: unknown) => {
               this.projectionError.set(this.describe(e));
+              this.projection.set(null);
               return EMPTY;
             }),
           ),
         ),
-        takeWhile((view) => !(view.reachable && view.projection.drained), true),
+        takeWhile((view) => view.reachable && view.projection.found && !view.projection.drained, true),
       )
       .subscribe((view) => {
         this.projectionError.set(view.reachable ? null : view.error);
@@ -362,6 +369,7 @@ export class ApiPage {
     this.watchingProjection = undefined;
     this.projection.set(null);
     this.projectionError.set(null);
+    this.projectionWatchExpired.set(false);
   }
 
   /** A custom identity with a blank username would go out as anonymous while history says "(custom)". */

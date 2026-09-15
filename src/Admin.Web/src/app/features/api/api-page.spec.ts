@@ -566,7 +566,7 @@ describe('ApiPage', () => {
     expect(fixture.componentInstance.projection()?.drained).toBe(false);
   });
 
-  it('says so when the broker cannot be read after a publish', async () => {
+  it('says so when the broker cannot be read after a publish, and polls no more', async () => {
     vi.useFakeTimers();
     host.brokerQueues.mockReturnValue(of({ ...drainedView, reachable: false, error: 'service "rabbitmq" is not running' }));
     const fixture = render();
@@ -577,6 +577,91 @@ describe('ApiPage', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('.response')?.textContent).toContain('Could not read the broker to say whether ordering-catalog-events has drained: service "rabbitmq" is not running');
+    expect(fixture.nativeElement.querySelector('app-drained-indicator')).toBeNull();
+
+    host.brokerQueues.mockClear();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(host.brokerQueues).not.toHaveBeenCalled();
+  });
+
+  it('stops after an undeclared-queue answer, leaving the indicator on screen', async () => {
+    vi.useFakeTimers();
+    const notFoundView: QueuesView = { ...drainedView, projection: { queue: 'ordering-catalog-events', found: false, messages: null, drained: false } };
+    host.brokerQueues.mockReturnValue(of(notFoundView));
+    const fixture = render();
+    fixture.componentInstance.select(catalog.operations[1]);
+
+    fixture.componentInstance.send();
+    await vi.advanceTimersByTimeAsync(0);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('app-drained-indicator')?.textContent).toContain('[not declared]');
+
+    host.brokerQueues.mockClear();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(host.brokerQueues).not.toHaveBeenCalled();
+  });
+
+  it('says when the two-minute cap ended the watch', async () => {
+    vi.useFakeTimers();
+    host.brokerQueues.mockReturnValue(of(waitingView));
+    const fixture = render();
+    fixture.componentInstance.select(catalog.operations[1]);
+    fixture.componentInstance.send();
+
+    await vi.advanceTimersByTimeAsync(120_000);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.response')?.textContent).toContain('Stopped watching after 2 minutes; the Broker screen shows the queue.');
+
+    host.brokerQueues.mockClear();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(host.brokerQueues).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.projection()?.drained).toBe(false);
+  });
+
+  it('does not say the cap ended the watch when the queue drains first', async () => {
+    vi.useFakeTimers();
+    host.brokerQueues.mockReturnValueOnce(of(waitingView)).mockReturnValue(of(drainedView));
+    const fixture = render();
+    fixture.componentInstance.select(catalog.operations[1]);
+    fixture.componentInstance.send();
+    await vi.advanceTimersByTimeAsync(0);
+
+    await vi.advanceTimersByTimeAsync(2000);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.response')?.textContent).not.toContain('Stopped watching after 2 minutes');
+  });
+
+  it('a host error while watching clears the old indicator', async () => {
+    vi.useFakeTimers();
+    host.brokerQueues.mockReturnValueOnce(of(waitingView)).mockReturnValueOnce(throwError(() => ({ error: { detail: 'boom' } })));
+    const fixture = render();
+    fixture.componentInstance.select(catalog.operations[1]);
+    fixture.componentInstance.send();
+    await vi.advanceTimersByTimeAsync(0);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-drained-indicator')).not.toBeNull();
+
+    await vi.advanceTimersByTimeAsync(2000);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.response')?.textContent).toContain('Could not read the broker to say whether ordering-catalog-events has drained: boom');
+    expect(fixture.nativeElement.querySelector('app-drained-indicator')).toBeNull();
+  });
+
+  it('reads no broker after a PublishProduct sent from another source', async () => {
+    vi.useFakeTimers();
+    const otherSource = op({ id: 'ordering:PublishProduct', source: 'ordering', name: 'PublishProduct', method: 'POST' });
+    host.operations.mockReturnValue(of({ ...catalog, operations: [...catalog.operations, otherSource] }));
+    const fixture = render();
+    fixture.componentInstance.selectedId.set(otherSource.id);
+
+    fixture.componentInstance.send();
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(host.brokerQueues).not.toHaveBeenCalled();
     expect(fixture.nativeElement.querySelector('app-drained-indicator')).toBeNull();
   });
 });
