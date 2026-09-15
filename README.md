@@ -50,11 +50,15 @@ Playwright smoke; it needs no Docker and no clones.
 
 ## What it does today
 
-Phases 0 to 2 of the spec: the Stack screen (Compose services, reachability,
+Phases 0 to 3 of the spec: the Stack screen (Compose services, reachability,
 up, down, down with a typed `down -v` confirmation, live output; the reference
-client's `npm start` with start, stop and its output) and the Logs screen
-(follow, service filter, text filter, correlation-id highlight). The API
-console, broker inspection and the event trace are the spec's later phases.
+client's `npm start` with start, stop and its output), the Logs screen
+(follow, service filter, text filter, correlation-id highlight) and the API
+screen (Catalog's and Ordering's OpenAPI operations through the gateway, the
+BFF quote and every host's readiness; send as anonymous, a realm user or a
+custom username and password, with a correlation id; status, timing, headers
+and body as the platform returned them; a history of this visit's calls).
+Broker inspection and the event trace are the spec's later phases.
 
 ## Known limits
 
@@ -68,7 +72,15 @@ console, broker inspection and the event trace are the spec's later phases.
   what `ng serve` did.
 - Stop gives up waiting after 10 s and says so in the output; the process
   may still be running.
-- No API console, broker inspection or event trace yet.
+- The proxy sends only to the gateway, Catalog, Ordering and BFF URLs in
+  `Admin:*Url`, and refuses a correlation id the platform would replace
+  (anything but 1 to 128 ASCII letters, digits, `-` and `_`).
+- Operation examples are the bodies `run-locally.md` sends where there is one,
+  otherwise placeholders built from the schema; the documents carry none.
+- API history is kept only while the screen is open.
+- The identity picker offers demo/demo and browser/browser; configuring any user
+  replaces both: `--Admin:Users:0:Username=ops --Admin:Users:0:Password=…`.
+- No broker inspection or event trace yet.
 
 ## Tests
 

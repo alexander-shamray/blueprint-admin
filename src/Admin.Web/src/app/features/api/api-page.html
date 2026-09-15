@@ -1,0 +1,133 @@
+<div class="layout">
+  <aside class="tree">
+    <div class="tree-head">
+      <strong>Operations</strong>
+      <button (click)="reload()">Reload</button>
+    </div>
+    @for (g of groups(); track g.name) {
+      <section>
+        <h3>{{ g.name }}</h3>
+        @if (g.source && !g.source.available) {
+          <p class="source-error" [title]="g.source.documentUrl">unavailable: {{ g.source.error }}</p>
+        }
+        <ul>
+          @for (o of g.operations; track o.id) {
+            <li>
+              <button class="op" [class.selected]="o.id === selectedId()" [attr.aria-current]="o.id === selectedId() ? 'true' : null" [class.unavailable]="!o.available" [title]="o.edgePolicy" (click)="select(o)">
+                <span class="method">{{ o.method }}</span> {{ o.name }}
+              </button>
+            </li>
+          }
+        </ul>
+      </section>
+    }
+  </aside>
+
+  <section class="editor">
+    <div class="identity">
+      <label>
+        Send as
+        <select aria-label="Identity" [ngModel]="identityValue()" (ngModelChange)="chooseIdentity($event)">
+          <option value="anonymous">anonymous</option>
+          @for (u of identity.users(); track u.username) {
+            <option [value]="'user:' + u.username">{{ u.username }}</option>
+          }
+          <option value="custom">custom…</option>
+        </select>
+      </label>
+      @if (identity.choice().kind === 'custom') {
+        <input aria-label="Custom username" placeholder="username" [ngModel]="customUsername()" (ngModelChange)="setCustom($event, customPassword())" />
+        <input aria-label="Custom password" placeholder="password" type="password" [ngModel]="customPassword()" (ngModelChange)="setCustom(customUsername(), $event)" />
+      }
+      <button (click)="showToken()">Show token</button>
+    </div>
+
+    @if (token(); as t) {
+      <p class="expires">{{ t.username }}'s token, expires {{ t.expiresAt }}</p>
+      <pre class="access-token">{{ t.accessToken }}</pre>
+      <pre class="claims">{{ claims(t) }}</pre>
+    }
+
+    @if (operation(); as o) {
+      <p class="policy">edge policy: {{ o.edgePolicy }}@if (!o.available) { — its service did not answer the last catalog load}</p>
+    }
+
+    <div class="line">
+      <select aria-label="Method" [ngModel]="method()" (ngModelChange)="method.set($event)">
+        @for (m of methods; track m) {
+          <option [value]="m">{{ m }}</option>
+        }
+      </select>
+      <input class="url" aria-label="URL" [ngModel]="url()" (ngModelChange)="url.set($event)" />
+    </div>
+
+    @if (operation(); as o) {
+      @for (p of o.pathParameters; track p.name) {
+        <label class="param">{{ p.name }} <input [attr.aria-label]="'Path ' + p.name" [ngModel]="pathValues()[p.name] ?? ''" (ngModelChange)="setPathValue(p.name, $event)" /></label>
+      }
+      @for (q of o.queryParameters; track q.name) {
+        <label class="param">?{{ q.name }} <input [attr.aria-label]="'Query ' + q.name" [ngModel]="queryValues()[q.name] ?? ''" (ngModelChange)="setQueryValue(q.name, $event)" /></label>
+      }
+    }
+
+    <label class="block">Headers, one per line
+      <textarea aria-label="Headers" rows="2" placeholder="Accept-Language: en" [ngModel]="headersText()" (ngModelChange)="headersText.set($event)"></textarea>
+    </label>
+    <label class="block">Body
+      <textarea aria-label="Body" rows="8" [ngModel]="body()" (ngModelChange)="body.set($event)"></textarea>
+    </label>
+    <div class="line">
+      <input aria-label="Correlation id" placeholder="correlation id (generated if empty)" [ngModel]="correlationId()" (ngModelChange)="correlationId.set($event)" />
+      <button class="send" [disabled]="pending()" (click)="send()">Send</button>
+    </div>
+
+    @if (error(); as e) {
+      <p class="error" role="alert">{{ e }}</p>
+    }
+
+    <p class="visually-hidden" role="status">{{ announcement() }}</p>
+    @if (result(); as r) {
+      @switch (r.outcome) {
+        @case ('responded') {
+          <section class="response">
+            <p class="sent">{{ answered() }}</p>
+            <p>
+              <span class="status" [class.ok]="r.status < 400" [class.bad]="r.status >= 400">{{ r.status }}</span>
+              <span class="elapsed">{{ r.elapsedMs }} ms</span>
+              <span class="correlation">correlation id {{ r.correlationId }}</span>
+            </p>
+            <details><summary>Headers</summary><pre class="headers">{{ headerLines().join('\n') }}</pre></details>
+            <pre class="body">{{ prettyBody() }}</pre>
+            @if (r.bodyTruncated) {<p class="note">Body truncated at 1 MiB.</p>}
+            @if (r.bodyError; as bodyError) {<p class="note body-error">Body incomplete: {{ bodyError }}</p>}
+          </section>
+        }
+        @case ('tokenRejected') {
+          <section class="response rejected">
+            <p class="sent">{{ answered() }}</p>
+            <p><span class="status bad">Keycloak refused the identity: {{ r.status }}</span> <span class="correlation">correlation id {{ r.correlationId }} (not sent)</span></p>
+            <pre class="body">{{ prettyBody() }}</pre>
+          </section>
+        }
+        @case ('unreached') {
+          <section class="response unreached">
+            <p class="sent">{{ answered() }}</p>
+            <p><span class="status bad">No answer from the platform</span> <span class="elapsed">{{ r.elapsedMs }} ms</span> <span class="correlation">correlation id {{ r.correlationId }}</span></p>
+            <p>{{ r.error }}</p>
+          </section>
+        }
+      }
+    }
+
+    @if (history().length > 0) {
+      <section class="history">
+        <h3>History</h3>
+        <ul>
+          @for (h of history(); track h.seq) {
+            <li><button (click)="restore(h)">{{ historyLabel(h) }}</button></li>
+          }
+        </ul>
+      </section>
+    }
+  </section>
+</div>

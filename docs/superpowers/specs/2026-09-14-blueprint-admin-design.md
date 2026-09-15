@@ -247,22 +247,29 @@ answers `IsDrained("ordering-catalog-events")` for the API screen's
 realm user or a custom username and password, caches the token until 30
 seconds before expiry, and returns the access token with its decoded claims
 for display. `Anonymous` is an identity that yields no token. Keycloak's error
-body on a failed grant is returned as-is.
+body on a failed grant is returned as-is. The wire identity is
+`{ username, password }`: no username is anonymous, a username alone is
+looked up in `Users`, both is a custom identity; `GET /identity/users`
+returns usernames only.
 
 ### 5.7 ApiCatalog and RequestProxy
 
 `ApiCatalog.Load()` fetches `/openapi/v1.json` from Catalog and Ordering with
 a `demo` token, rewrites each path onto the gateway (`/v1/catalog/...` becomes
 `/api/v1/catalog/...`), and merges the curated operations from §2.3. Each
-operation carries method, gateway path, path parameters, the request schema
-with an example body, and the edge policy from the gateway's route table. The
-catalog is cached and reloaded on demand; when a service is down its
-operations are listed as unavailable rather than dropped.
+operation carries method, gateway path, path parameters, an example body (the
+one `run-locally.md` sends for that operation where there is one, otherwise
+placeholders built from the request schema, since the documents carry no
+examples), and the edge policy from a cited copy of the gateway's route table
+(`Api/GatewayRoutes.cs`). The catalog is cached and reloaded on demand; when a
+service is down its operations are listed as unavailable rather than dropped.
 
 `RequestProxy.Send(request)` takes method, an absolute URL restricted to the
-configured surfaces, headers, body, an identity and an optional correlation
-id. It attaches the token, sets `X-Correlation-Id` (generated if absent; the
-header's rules are letters, digits, `-`, `_`, up to 128 characters), sends,
+configured surfaces (the gateway, Catalog, Ordering and BFF origins), headers,
+body, an identity and an optional correlation id. It attaches the token, sets
+`X-Correlation-Id` (generated if absent; a supplied id that breaks those rules
+is refused, because the backend would silently replace it; the header's rules
+are letters, digits, `-`, `_`, up to 128 characters), sends,
 and returns status, headers, body, elapsed time and the correlation id used.
 Status and body are never rewritten: a 401, a 403 and the three different 409s
 must read exactly as the reference client sees them.
@@ -394,7 +401,9 @@ cannot be used as an open relay from a tab the developer left open.
 - A failed password grant returns Keycloak's body and status.
 - The proxy returns upstream status, headers and body untouched, and adds its
   own error only when the request never reached the upstream (connection
-  refused, timeout), with a distinct shape the SPA renders differently.
+  refused, timeout), with a distinct shape the SPA renders differently:
+  `outcome` is `responded`, `unreached` (no answer, including Keycloak down)
+  or `tokenRejected` (Keycloak refused the identity; nothing was sent).
 - The host's own errors are RFC 9457 problem details, matching the backend's
   `Common.Web.ResultExtensions` convention.
 
