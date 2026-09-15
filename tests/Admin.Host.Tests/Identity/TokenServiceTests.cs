@@ -1,5 +1,6 @@
 using System.Buffers.Text;
 using System.Net;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using Admin.Host.Config;
@@ -74,6 +75,17 @@ public sealed class TokenServiceTests
         await service.GetAsync("demo", "other", Token);
 
         handler.Requests.Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task A_cached_grant_does_not_keep_the_password_it_was_minted_with()
+    {
+        TokenService service = Service(new ScriptedHandler(_ => Granted("demo")));
+
+        await service.GetAsync("demo", "a-custom-secret", Token);
+
+        object cache = typeof(TokenService).GetField("cache", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(service)!;
+        ((System.Collections.IEnumerable)cache).Cast<object>().ShouldHaveSingleItem().ToString()!.ShouldNotContain("a-custom-secret");
     }
 
     [Fact]

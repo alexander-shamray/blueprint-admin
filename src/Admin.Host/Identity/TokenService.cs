@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Admin.Host.Config;
 using Microsoft.Extensions.Options;
@@ -30,7 +32,10 @@ public sealed class TokenService(HttpClient http, IOptions<AdminOptions> options
 
     private static readonly TimeSpan GrantTimeout = TimeSpan.FromSeconds(10);
 
-    private readonly ConcurrentDictionary<(string Username, string Password), TokenIssued> cache = new();
+    /// <summary>Keys the cache by password without keeping one: the host is no credential store, so a custom password must not outlive its request.</summary>
+    private readonly byte[] passwordKey = RandomNumberGenerator.GetBytes(32);
+
+    private readonly ConcurrentDictionary<(string Username, string PasswordDigest), TokenIssued> cache = new();
 
     public async Task<TokenOutcome?> ForAsync(IdentityRequest? identity, CancellationToken cancellationToken)
     {
@@ -49,7 +54,7 @@ public sealed class TokenService(HttpClient http, IOptions<AdminOptions> options
 
     public async Task<TokenOutcome> GetAsync(string username, string password, CancellationToken cancellationToken)
     {
-        if (cache.TryGetValue((username, password), out TokenIssued? cached) && time.GetUtcNow() < cached.ExpiresAt - ReuseMargin)
+        if (cache.TryGetValue((username, Digest(password)), out TokenIssued? cached) && time.GetUtcNow() < cached.ExpiresAt - ReuseMargin)
         {
             return cached;
         }
@@ -88,7 +93,7 @@ public sealed class TokenService(HttpClient http, IOptions<AdminOptions> options
             string accessToken = document.RootElement.GetProperty("access_token").GetString()!;
             int expiresIn = document.RootElement.GetProperty("expires_in").GetInt32();
             TokenIssued issued = new(username, accessToken, requestedAt.AddSeconds(expiresIn), JwtPayload.Decode(accessToken));
-            cache[(username, password)] = issued;
+            cache[(username, Digest(password))] = issued;
 
             return issued;
         }
@@ -105,4 +110,6 @@ public sealed class TokenService(HttpClient http, IOptions<AdminOptions> options
             return new KeycloakUnreachable($"Keycloak answered with a body that is not a token response: {e.Message}");
         }
     }
+
+    private string Digest(string password) => Convert.ToHexString(HMACSHA256.HashData(passwordKey, Encoding.UTF8.GetBytes(password)));
 }
