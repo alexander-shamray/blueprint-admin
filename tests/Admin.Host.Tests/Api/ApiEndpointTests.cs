@@ -86,6 +86,22 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
     }
 
     [Theory]
+    [InlineData("POST", "http://localhost:5000/api/v1/catalog/products/")]
+    [InlineData("GET", "http://localhost:5102/openapi/v1.json")]
+    public async Task A_pasted_token_with_a_lower_case_bearer_scheme_is_accepted_as_the_platform_would(string method, string url)
+    {
+        JsonElement result = await ProxyAsync(new
+        {
+            method,
+            url,
+            headers = new Dictionary<string, string> { ["authorization"] = $"bearer {Identity.TokenServiceTests.Jwt("""{"permission":["catalog:write"]}""")}" },
+            body = method == "POST" ? """{"commandId":"0199a1b2-0000-7000-8000-00000000abcd","name":"Walnut desk","amount":19.99,"currency":"EUR"}""" : null,
+        });
+
+        result.GetProperty("status").GetInt32().ShouldBe(200);
+    }
+
+    [Theory]
     [InlineData("[1,2]")]
     [InlineData("""{"permission":"catalog:write"}""")]
     [InlineData("""{"permission":[1]}""")]

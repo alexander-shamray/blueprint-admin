@@ -8,7 +8,8 @@ internal static class FakeOpenApi
 {
     public static HttpResponseMessage Document(HttpRequestMessage request, string service)
     {
-        if (request.Headers.Authorization?.Scheme != "Bearer")
+        // Authentication schemes ignore case (RFC 9110 §11.1), as the services' JWT bearer handler does.
+        if (!string.Equals(request.Headers.Authorization?.Scheme, "Bearer", StringComparison.OrdinalIgnoreCase))
         {
             return new HttpResponseMessage(HttpStatusCode.Unauthorized);
         }

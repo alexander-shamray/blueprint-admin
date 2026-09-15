@@ -63,7 +63,9 @@ internal static partial class FakeGateway
     /// </summary>
     private static string[]? Permissions(HttpRequestMessage request)
     {
-        if (request.Headers.Authorization is not { Scheme: "Bearer", Parameter: string token })
+        // Authentication schemes ignore case (RFC 9110 §11.1), as the gateway's JWT bearer handler does.
+        if (request.Headers.Authorization is not { Scheme: string scheme, Parameter: string token }
+            || !scheme.Equals("Bearer", StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }
