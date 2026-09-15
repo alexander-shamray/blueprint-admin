@@ -14,7 +14,7 @@
 .block { display: flex; flex-direction: column; font-size: 0.85rem; }
 .block textarea { font-family: monospace; }
 .param { font-family: monospace; font-size: 0.85rem; }
-.policy { color: #555; font-size: 0.85rem; margin: 0; }
+.policy, .sent { color: #555; font-size: 0.85rem; margin: 0; }
 .claims, .access-token, .body, .headers { background: #111; color: #ddd; padding: 0.5rem; overflow: auto; max-height: 40vh; font-size: 0.8rem; }
 .status { font-weight: 700; margin-right: 0.75rem; }
 .status.ok { color: #080; }

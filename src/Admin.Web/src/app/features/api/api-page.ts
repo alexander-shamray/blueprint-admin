@@ -14,6 +14,8 @@ export interface HistoryEntry {
   name: string;
   /** The operation selected when sent, so a restored entry resends with that operation's commandId handling. */
   operationId: string | null;
+  /** Whether Send mints a fresh commandId, kept so a restore still does after a reload drops the operation. */
+  hasCommandId: boolean;
   headersText: string;
   /** The URL template and parameter values as entered, so a restored entry's inputs still build its URL. */
   urlTemplate: string;
@@ -45,6 +47,8 @@ export class ApiPage {
   private readonly sends = new Set<Subscription>();
   /** Bumped when the editor is replaced (select, restore); a send finishing under an older value only reaches history. */
   private editorGeneration = 0;
+  /** A restored entry's commandId handling, used when its operation is no longer in the catalog. */
+  private restoredHasCommandId = false;
   private fetchingToken?: Subscription;
   private seq = 0;
 
@@ -60,6 +64,8 @@ export class ApiPage {
   readonly correlationId = signal('');
   readonly pending = signal(false);
   readonly result = signal<ProxyResult | null>(null);
+  /** The request the shown result answers (method, URL, identity), since the inputs may have changed since. */
+  readonly answered = signal('');
   readonly history = signal<HistoryEntry[]>([]);
   readonly token = signal<TokenView | null>(null);
   readonly error = signal<string | null>(null);
@@ -149,6 +155,7 @@ export class ApiPage {
     this.error.set(null);
     this.result.set(null);
     this.selectedId.set(operation.id);
+    this.restoredHasCommandId = false;
     this.method.set(operation.method);
     this.url.set(operation.url);
     this.pathValues.set({});
@@ -195,7 +202,8 @@ export class ApiPage {
     }
 
     let body = this.body();
-    if (operation?.hasCommandId && body.trim()) {
+    const hasCommandId = operation?.hasCommandId ?? this.restoredHasCommandId;
+    if (hasCommandId && body.trim()) {
       body = withFreshCommandId(body, this.uuid());
       this.body.set(body);
     }
@@ -224,9 +232,10 @@ export class ApiPage {
       next: (result) => {
         if (current()) {
           this.result.set(result);
+          this.answered.set(`${request.method} ${request.url} as ${identity}`);
           this.pending.set(false);
         }
-        this.history.update((all) => [{ seq: ++this.seq, at: new Date(), name, operationId, headersText: withoutCredentialLines(headersText), urlTemplate, pathValues, queryValues, identity, sentAs, request: { ...request, headers: withoutCredentialHeaders(request.headers), identity: null }, result: withoutSetCookie(result) }, ...all].slice(0, MAX_HISTORY));
+        this.history.update((all) => [{ seq: ++this.seq, at: new Date(), name, operationId, hasCommandId, headersText: withoutCredentialLines(headersText), urlTemplate, pathValues, queryValues, identity, sentAs, request: { ...request, headers: withoutCredentialHeaders(request.headers), identity: null }, result: withoutSetCookie(result) }, ...all].slice(0, MAX_HISTORY));
       },
       error: (e: unknown) => {
         // A refusal belongs to the editor that sent it; one that moved on has nothing to show it against.
@@ -251,6 +260,8 @@ export class ApiPage {
     this.pending.set(false);
     this.error.set(null);
     this.result.set(entry.result);
+    this.answered.set(`${entry.request.method} ${entry.request.url} as ${entry.identity}`);
+    this.restoredHasCommandId = entry.hasCommandId;
     this.selectedId.set(entry.operationId);
     this.method.set(entry.request.method);
     this.url.set(entry.urlTemplate);

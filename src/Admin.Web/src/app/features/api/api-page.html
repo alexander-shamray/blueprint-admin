@@ -90,6 +90,7 @@
       @switch (r.outcome) {
         @case ('responded') {
           <section class="response">
+            <p class="sent">{{ answered() }}</p>
             <p>
               <span class="status" [class.ok]="r.status < 400" [class.bad]="r.status >= 400">{{ r.status }}</span>
               <span class="elapsed">{{ r.elapsedMs }} ms</span>
@@ -103,12 +104,14 @@
         }
         @case ('tokenRejected') {
           <section class="response rejected">
+            <p class="sent">{{ answered() }}</p>
             <p><span class="status bad">Keycloak refused the identity: {{ r.status }}</span> <span class="correlation">correlation id {{ r.correlationId }} (not sent)</span></p>
             <pre class="body">{{ prettyBody() }}</pre>
           </section>
         }
         @case ('unreached') {
           <section class="response unreached">
+            <p class="sent">{{ answered() }}</p>
             <p><span class="status bad">No answer from the platform</span> <span class="elapsed">{{ r.elapsedMs }} ms</span> <span class="correlation">correlation id {{ r.correlationId }}</span></p>
             <p>{{ r.error }}</p>
           </section>

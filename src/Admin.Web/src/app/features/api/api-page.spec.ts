@@ -122,6 +122,38 @@ describe('ApiPage', () => {
     expect(fixture.nativeElement.querySelector('.error')?.getAttribute('role')).toBe('alert');
   });
 
+  it('a restored command gets a fresh commandId even after a reload dropped its operation from the catalog', () => {
+    let n = 0;
+    TestBed.overrideProvider(UUID, { useValue: () => `uuid-${++n}` });
+    host.reloadOperations.mockReturnValue(of({ ...catalog, operations: catalog.operations.filter((o) => o.id !== 'catalog:PublishProduct') }));
+    const fixture = render();
+    const page = fixture.componentInstance;
+    click(fixture, 'POST PublishProduct');
+    click(fixture, 'Send');
+    click(fixture, 'Reload');
+
+    (fixture.nativeElement.querySelector('.history li button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(page.operation()).toBeNull();
+    click(fixture, 'Send');
+
+    expect(JSON.parse(host.proxy.mock.calls[1][0].body).commandId).toBe('uuid-2');
+  });
+
+  it('a response names the request it answers, so inputs edited while it was pending cannot claim it', () => {
+    const pending = new Subject<ProxyResult>();
+    host.proxy.mockReturnValue(pending);
+    const fixture = render();
+    click(fixture, 'Send');
+    fixture.componentInstance.chooseIdentity('user:browser');
+    pending.next(responded);
+    fixture.detectChanges();
+
+    const sent = fixture.nativeElement.querySelector('.response .sent')?.textContent as string;
+    expect(sent).toContain('GET');
+    expect(sent).toContain('as demo');
+  });
+
   it('marks the selected operation for assistive technology', () => {
     const fixture = render();
     click(fixture, 'POST PublishProduct');
