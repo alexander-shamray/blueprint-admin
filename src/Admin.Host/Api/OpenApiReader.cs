@@ -34,7 +34,13 @@ public static class OpenApiReader
                 string? operationId = entry.Value.TryGetProperty("operationId", out JsonElement id) ? id.GetString() : null;
                 string name = operationId ?? $"{method} {path.Name}";
                 string gatewayPath = GatewayPrefix + path.Name;
-                List<(string In, ApiParameter Parameter)> parameters = [.. Parameters(path.Value), .. Parameters(entry.Value)];
+                // An operation's parameter overrides the path item's with the same name and location (OpenAPI 3, Operation Object).
+                List<(string In, ApiParameter Parameter)> own = [.. Parameters(entry.Value)];
+                List<(string In, ApiParameter Parameter)> parameters =
+                [
+                    .. Parameters(path.Value).Where(p => !own.Any(o => o.In == p.In && o.Parameter.Name == p.Parameter.Name)),
+                    .. own,
+                ];
                 string? example = RunLocallyExamples.For(operationId) ?? Example(entry.Value, schemas);
 
                 operations.Add(new ApiOperation(

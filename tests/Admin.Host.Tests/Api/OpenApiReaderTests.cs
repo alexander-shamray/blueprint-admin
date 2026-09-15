@@ -49,6 +49,21 @@ public sealed class OpenApiReaderTests
     }
 
     [Fact]
+    public void An_operation_parameter_overrides_the_path_level_one_with_the_same_name_and_location()
+    {
+        using JsonDocument document = JsonDocument.Parse("""
+            {"paths":{"/v1/orders/{id}":{
+              "parameters":[{"name":"id","in":"path","schema":{"type":"string"}},{"name":"id","in":"query","schema":{"type":"string"}},{"name":"trace","in":"query"}],
+              "get":{"operationId":"GetOrder","parameters":[{"name":"id","in":"path","required":true,"schema":{"type":"integer"}}]}}}}
+            """);
+
+        ApiOperation get = OpenApiReader.Read("ordering", document.RootElement, "http://localhost:5000").ShouldHaveSingleItem();
+
+        get.PathParameters.ShouldBe([new ApiParameter("id", true, "integer")]);
+        get.QueryParameters.Select(p => p.Name).ShouldBe(["id", "trace"]);
+    }
+
+    [Fact]
     public void Run_locally_bodies_replace_the_synthesized_example_where_one_exists()
     {
         ApiOperation publish = Read("catalog", "openapi-catalog.json").Single(o => o.Name == "PublishProduct");
