@@ -49,7 +49,8 @@ export class IdentityState {
           this.selected.set({ kind: 'user', username: demo.username });
         }
       },
-      error: () => this.users.set([]),
+      // Keep the last list: emptying it would hide the chosen user's option while requests still go out as that user.
+      error: () => undefined,
     });
   }
 }

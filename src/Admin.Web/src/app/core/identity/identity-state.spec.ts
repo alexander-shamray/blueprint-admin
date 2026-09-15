@@ -49,4 +49,18 @@ describe('IdentityState', () => {
     expect(state.users()).toEqual([]);
     expect(state.choice()).toEqual({ kind: 'anonymous' });
   });
+
+  it('a users reload that fails keeps the last list, so the chosen user still has its option', () => {
+    let users = of([{ username: 'demo' }, { username: 'browser' }]);
+    TestBed.configureTestingModule({ providers: [{ provide: HostClient, useValue: { identityUsers: () => users } }] });
+    const state = TestBed.inject(IdentityState);
+    state.load();
+    state.select({ kind: 'user', username: 'browser' });
+
+    users = throwError(() => new Error('offline'));
+    state.load();
+
+    expect(state.users().map((u) => u.username)).toEqual(['demo', 'browser']);
+    expect(state.choice()).toEqual({ kind: 'user', username: 'browser' });
+  });
 });
