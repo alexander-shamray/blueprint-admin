@@ -239,4 +239,18 @@ public sealed class ComposeServiceTests : IAsyncDisposable
 
         output.Error.ShouldBe("docker compose exec rabbitmq exited with 1");
     }
+
+    [Fact]
+    public async Task ExecAsync_fails_when_a_successful_command_printed_more_lines_than_the_jobs_ring_holds()
+    {
+        // The ring keeps only the last 2000 lines: a listing this long loses its
+        // opening line before CompleteAsync ever reads it back.
+        string[] lines = [.. Enumerable.Range(0, 2001).Select(i => i.ToString(System.Globalization.CultureInfo.InvariantCulture))];
+        runner.On("docker", $"compose -f {Paths.ComposeFile} exec -T rabbitmq", 0, lines);
+
+        CommandOutput output = await Service.ExecAsync("rabbitmq", ["rabbitmqctl", "list_queues"], TestContext.Current.CancellationToken);
+
+        output.Error.ShouldBe("docker compose exec rabbitmq printed more than 2000 lines; only the last 2000 were kept");
+        output.Stdout.ShouldBeEmpty();
+    }
 }

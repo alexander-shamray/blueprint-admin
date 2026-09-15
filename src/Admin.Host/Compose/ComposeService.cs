@@ -85,6 +85,14 @@ public sealed class ComposeService(IProcessRunner runner, RepoPaths paths, TimeP
             return CommandOutput.Failed(message ?? $"{name} exited with {exitCode}");
         }
 
+        // The ring keeps only the job's last Capacity lines: when the first retained
+        // line's sequence is not the job's first-ever sequence (0), earlier lines,
+        // including a leading "[", were evicted before this read.
+        if (lines.Count > 0 && lines[0].Sequence != 0)
+        {
+            return CommandOutput.Failed($"{name} printed more than {job.Capacity} lines; only the last {job.Capacity} were kept");
+        }
+
         return CommandOutput.Answered([.. lines.Where(l => l.Stream == OutputStream.Stdout).Select(l => l.Text)]);
     }
 
