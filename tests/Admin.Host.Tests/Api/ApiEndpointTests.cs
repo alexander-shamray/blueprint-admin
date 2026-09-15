@@ -85,6 +85,24 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
         result.GetProperty("status").GetInt32().ShouldBe(401);
     }
 
+    [Theory]
+    [InlineData("[1,2]")]
+    [InlineData("""{"permission":"catalog:write"}""")]
+    [InlineData("""{"permission":[1]}""")]
+    public async Task A_pasted_token_with_unexpected_claim_shapes_is_refused_not_a_host_error(string payload)
+    {
+        JsonElement result = await ProxyAsync(new
+        {
+            method = "POST",
+            url = "http://localhost:5000/api/v1/catalog/products/",
+            headers = new Dictionary<string, string> { ["Authorization"] = $"Bearer {Identity.TokenServiceTests.Jwt(payload)}" },
+            body = """{"commandId":"0199a1b2-0000-7000-8000-00000000abcd","name":"Walnut desk","amount":19.99,"currency":"EUR"}""",
+        });
+
+        result.GetProperty("outcome").GetString().ShouldBe("responded");
+        result.GetProperty("status").GetInt32().ShouldBeOneOf(401, 403);
+    }
+
     [Fact]
     public async Task A_url_off_the_surfaces_is_a_problem_and_not_sent()
     {

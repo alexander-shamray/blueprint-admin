@@ -55,7 +55,11 @@ internal static partial class FakeGateway
         : required is not null && !permissions.Contains(required) ? FakeHttp.Problem(HttpStatusCode.Forbidden, "Forbidden")
         : allowed();
 
-    /// <summary>The token's <c>permission</c> claim; null when there is no readable bearer token.</summary>
+    /// <summary>
+    /// The token's <c>permission</c> claim; null when there is no readable bearer token. A pasted token's
+    /// payload may be any JSON: one that is not an object is unreadable, and a claim that is not an array
+    /// of strings grants nothing.
+    /// </summary>
     private static string[]? Permissions(HttpRequestMessage request)
     {
         if (request.Headers.Authorization is not { Scheme: "Bearer", Parameter: string token })
@@ -63,15 +67,24 @@ internal static partial class FakeGateway
             return null;
         }
 
+        JsonElement claims;
+
         try
         {
-            JsonElement claims = JwtPayload.Decode(token);
-
-            return claims.TryGetProperty("permission", out JsonElement granted) ? [.. granted.EnumerateArray().Select(p => p.GetString()!)] : [];
+            claims = JwtPayload.Decode(token);
         }
         catch (FormatException)
         {
             return null;
         }
+
+        if (claims.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        return claims.TryGetProperty("permission", out JsonElement granted) && granted.ValueKind == JsonValueKind.Array
+            ? [.. granted.EnumerateArray().Where(p => p.ValueKind == JsonValueKind.String).Select(p => p.GetString()!)]
+            : [];
     }
 }
