@@ -3,6 +3,7 @@
   <nav>
     <a routerLink="/stack" routerLinkActive="active">Stack</a>
     <a routerLink="/logs" routerLinkActive="active">Logs</a>
+    <a routerLink="/api" routerLinkActive="active">API</a>
   </nav>
   @if (config(); as c) {
     <span class="hint">{{ c.backendDir }} @if (c.fakePlatform) {<em>(fake platform)</em>}</span>
