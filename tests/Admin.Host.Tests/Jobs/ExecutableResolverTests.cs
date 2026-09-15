@@ -57,6 +57,16 @@ public sealed class ExecutableResolverTests
     }
 
     [Fact]
+    public void A_quoted_path_entry_is_searched_without_its_quotes()
+    {
+        // Windows accepts "C:\Program Files\nodejs" in PATH; the quotes are not part of the directory.
+        HashSet<string> files = [Path.Combine(@"C:\Program Files\nodejs", "npm.cmd")];
+
+        ExecutableResolver.Resolve("npm", true, $"{Tools};\"C:\\Program Files\\nodejs\"", PathExt, files.Contains)
+            .ShouldBe(Path.Combine(@"C:\Program Files\nodejs", "npm.cmd"));
+    }
+
+    [Fact]
     public void An_unresolvable_name_is_returned_as_is_so_start_reports_it()
     {
         ExecutableResolver.Resolve("nope", true, $"{Tools};{Node}", PathExt, _ => false).ShouldBe("nope");

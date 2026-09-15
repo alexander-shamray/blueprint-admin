@@ -33,8 +33,17 @@ public static class ExecutableResolver
         string[] extensions = (string.IsNullOrEmpty(pathExt) ? DefaultPathExt : pathExt)
             .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-        foreach (string directory in path.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        foreach (string entry in path.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
+            // Windows accepts a quoted entry such as "C:\Program Files\nodejs";
+            // the quotes are not part of the directory.
+            string directory = entry.Trim('"');
+
+            if (directory.Length == 0)
+            {
+                continue;
+            }
+
             foreach (string extension in extensions)
             {
                 // Real command shims are lowercase (npm.cmd) while PATHEXT is
