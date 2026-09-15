@@ -1,3 +1,5 @@
+import { ProxyResult } from '../../core/host/host-types';
+
 /** Fills `{name}` placeholders (URL-encoded) and appends the query values that are not empty. */
 export function buildUrl(template: string, path: Record<string, string>, query: Record<string, string>): string {
   const filled = template.replace(/\{([^}]+)\}/g, (whole, name: string) =>
@@ -106,7 +108,7 @@ function reindent(json: string): string {
   return out;
 }
 
-const CREDENTIAL_HEADERS = new Set(['authorization', 'proxy-authorization']);
+const CREDENTIAL_HEADERS = new Set(['authorization', 'proxy-authorization', 'cookie']);
 
 /** The header lines without credential headers, which history does not keep. */
 export function withoutCredentialLines(text: string): string {
@@ -119,4 +121,10 @@ export function withoutCredentialLines(text: string): string {
 /** The headers without credential headers, which history does not keep. */
 export function withoutCredentialHeaders(headers: Record<string, string>): Record<string, string> {
   return Object.fromEntries(Object.entries(headers).filter(([name]) => !CREDENTIAL_HEADERS.has(name.toLowerCase())));
+}
+
+/** The result without the cookies it set, for history; the live response pane keeps them. */
+export function withoutSetCookie(result: ProxyResult): ProxyResult {
+  if (result.outcome !== 'responded') return result;
+  return { ...result, headers: Object.fromEntries(Object.entries(result.headers).filter(([name]) => name.toLowerCase() !== 'set-cookie')) };
 }

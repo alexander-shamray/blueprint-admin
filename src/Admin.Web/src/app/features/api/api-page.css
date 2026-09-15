@@ -23,3 +23,4 @@
 .response.unreached, .response.rejected { border-left: 4px solid #b00; padding-left: 0.5rem; }
 .history button { background: none; border: 0; cursor: pointer; font-family: monospace; padding: 0.1rem 0; }
 .access-token { white-space: pre-wrap; word-break: break-all; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

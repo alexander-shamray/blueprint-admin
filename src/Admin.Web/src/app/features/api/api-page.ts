@@ -4,7 +4,7 @@ import { Subscription } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { ApiCatalogView, ApiOperation, ProxyRequest, ProxyResult, TokenView } from '../../core/host/host-types';
 import { IdentityChoice, IdentityState } from '../../core/identity/identity-state';
-import { buildUrl, parseHeaders, pretty, withFreshCommandId, withoutCredentialHeaders, withoutCredentialLines } from './request-builder';
+import { buildUrl, parseHeaders, pretty, withFreshCommandId, withoutCredentialHeaders, withoutCredentialLines, withoutSetCookie } from './request-builder';
 
 export const UUID = new InjectionToken<() => string>('UUID', { factory: () => () => crypto.randomUUID() });
 
@@ -22,7 +22,7 @@ export interface HistoryEntry {
   identity: string;
   /** Who it went out as, without a custom password: history is not a credential store, so a restore asks for it again. */
   sentAs: SentAs;
-  /** As sent, with the identity and any pasted Authorization header left out: neither is kept, so a restore asks again. */
+  /** As sent, with the identity and any credential header (Authorization, Cookie) left out: none is kept, so a restore asks again. */
   request: ProxyRequest;
   result: ProxyResult;
 }
@@ -87,6 +87,20 @@ export class ApiPage {
   readonly prettyBody = computed(() => {
     const r = this.result();
     return r && r.outcome !== 'unreached' ? pretty(r.body) : '';
+  });
+
+  /** A short line for the polite live region, so a screen reader hears that the request finished. */
+  readonly announcement = computed(() => {
+    const r = this.result();
+    if (!r) return '';
+    switch (r.outcome) {
+      case 'responded':
+        return `Response ${r.status} in ${r.elapsedMs} ms`;
+      case 'tokenRejected':
+        return `Keycloak refused the identity: ${r.status}`;
+      case 'unreached':
+        return 'No answer from the platform';
+    }
   });
 
   readonly headerLines = computed(() => {
@@ -206,7 +220,7 @@ export class ApiPage {
     this.sending = this.host.proxy(request).subscribe({
       next: (result) => {
         this.result.set(result);
-        this.history.update((all) => [{ seq: ++this.seq, at: new Date(), name, operationId, headersText: withoutCredentialLines(headersText), urlTemplate, pathValues, queryValues, identity, sentAs, request: { ...request, headers: withoutCredentialHeaders(request.headers), identity: null }, result }, ...all].slice(0, MAX_HISTORY));
+        this.history.update((all) => [{ seq: ++this.seq, at: new Date(), name, operationId, headersText: withoutCredentialLines(headersText), urlTemplate, pathValues, queryValues, identity, sentAs, request: { ...request, headers: withoutCredentialHeaders(request.headers), identity: null }, result: withoutSetCookie(result) }, ...all].slice(0, MAX_HISTORY));
         this.pending.set(false);
       },
       error: (e: unknown) => {

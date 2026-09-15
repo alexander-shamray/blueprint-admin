@@ -82,9 +82,10 @@
     </div>
 
     @if (error(); as e) {
-      <p class="error">{{ e }}</p>
+      <p class="error" role="alert">{{ e }}</p>
     }
 
+    <p class="visually-hidden" role="status">{{ announcement() }}</p>
     @if (result(); as r) {
       @switch (r.outcome) {
         @case ('responded') {

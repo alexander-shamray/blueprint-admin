@@ -96,6 +96,32 @@ describe('ApiPage', () => {
     expect(page.headersText()).toBe('Accept: application/json');
   });
 
+  it('history keeps no Cookie sent or Set-Cookie received, while the live response still shows it', () => {
+    host.proxy.mockReturnValue(of({ ...responded, headers: { 'Set-Cookie': ['sid=received-secret'], 'Content-Type': ['application/json'] } }));
+    const fixture = render();
+    const page = fixture.componentInstance;
+    page.headersText.set('Cookie: session=sent-secret');
+    click(fixture, 'Send');
+
+    expect(page.headerLines()).toContain('Set-Cookie: sid=received-secret');
+    const stored = JSON.stringify(page.history());
+    expect(stored).not.toContain('sent-secret');
+    expect(stored).not.toContain('received-secret');
+    expect(stored).toContain('application/json');
+  });
+
+  it('announces a response politely and an error as an alert', () => {
+    const fixture = render();
+    const status = fixture.nativeElement.querySelector('[role="status"]') as HTMLElement;
+    expect(status).not.toBeNull();
+    click(fixture, 'Send');
+    expect(status.textContent).toContain('200');
+
+    host.proxy.mockReturnValue(throwError(() => ({ error: { detail: 'boom' } })));
+    click(fixture, 'Send');
+    expect(fixture.nativeElement.querySelector('.error')?.getAttribute('role')).toBe('alert');
+  });
+
   it('marks the selected operation for assistive technology', () => {
     const fixture = render();
     click(fixture, 'POST PublishProduct');
