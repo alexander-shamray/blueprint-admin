@@ -62,10 +62,18 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
             return $"Send the correlation id in correlationId, not as an {CorrelationHeader} header.";
         }
 
-        if (headers.FirstOrDefault(h => h.Key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase)) is { Key: not null } contentType
-            && !MediaTypeHeaderValue.TryParse(contentType.Value, out _))
+        // The body binds headers case-sensitively, so Content-Type and content-type can both arrive.
+        if (headers.Keys.GroupBy(k => k, StringComparer.OrdinalIgnoreCase).FirstOrDefault(g => g.Count() > 1) is { } duplicate)
         {
-            return $"Content-Type '{contentType.Value}' is not a media type.";
+            return $"Header '{duplicate.Key}' is given more than once ({string.Join(", ", duplicate)}); header names ignore case.";
+        }
+
+        foreach (KeyValuePair<string, string> contentType in headers.Where(h => h.Key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (!MediaTypeHeaderValue.TryParse(contentType.Value, out _))
+            {
+                return $"Content-Type '{contentType.Value}' is not a media type.";
+            }
         }
 
         if (request.Identity is { Username: { Length: > 0 } username, Password: null }
@@ -80,9 +88,12 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
     public async Task<ProxyResult> SendAsync(ProxyRequest request, CancellationToken cancellationToken)
     {
         string correlationId = request.CorrelationId is { Length: > 0 } given ? given : Guid.NewGuid().ToString("N");
+        TokenOutcome? token = await tokens.ForAsync(request.Identity, cancellationToken);
+
+        // Started after the token: a cold Keycloak grant is not part of the platform's answer time.
         long started = time.GetTimestamp();
 
-        switch (await tokens.ForAsync(request.Identity, cancellationToken))
+        switch (token)
         {
             case TokenRejected rejected:
                 return new ProxyTokenRejected(rejected.Status, rejected.Body, correlationId);
@@ -90,8 +101,8 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
                 return new ProxyTokenRejected(400, $"'{unknown.Username}' is not a configured realm user.", correlationId);
             case KeycloakUnreachable unreachable:
                 return new ProxyUnreached($"Keycloak did not answer: {unreachable.Error}", Elapsed(started), correlationId);
-            case var outcome:
-                using (HttpRequestMessage message = Build(request, outcome as TokenIssued, correlationId))
+            default:
+                using (HttpRequestMessage message = Build(request, token as TokenIssued, correlationId))
                 {
                     return await SendAsync(message, started, correlationId, cancellationToken);
                 }
@@ -130,6 +141,7 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
             }
         }
 
+        // A caller's Authorization header survives only when the identity is anonymous: that is how a pasted token is sent.
         if (token is not null)
         {
             message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.AccessToken);
@@ -142,13 +154,28 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
 
     private async Task<ProxyResult> SendAsync(HttpRequestMessage message, long started, string correlationId, CancellationToken cancellationToken)
     {
-        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(SendTimeout);
+        using CancellationTokenSource deadline = new(SendTimeout, time);
+        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
+        HttpResponseMessage response;
 
+        // Until the headers arrive the upstream has not answered: the proxy's own shape (spec §9).
         try
         {
-            using HttpResponseMessage response = await http.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
-            (string body, bool truncated) = await ReadBodyAsync(response.Content, timeout.Token);
+            response = await http.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+        }
+        catch (HttpRequestException e)
+        {
+            return new ProxyUnreached(Describe(e), Elapsed(started), correlationId);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return new ProxyUnreached($"No answer within {SendTimeout.TotalSeconds:0} s.", Elapsed(started), correlationId);
+        }
+
+        using (response)
+        {
+            // From here the upstream has answered; a body that breaks off is still its answer.
+            (string body, bool truncated, string? bodyError) = await ReadBodyAsync(response.Content, timeout.Token, cancellationToken);
             Dictionary<string, string[]> headers = new(StringComparer.OrdinalIgnoreCase);
 
             foreach ((string name, IEnumerable<string> values) in response.Headers.Concat(response.Content.Headers))
@@ -156,31 +183,53 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
                 headers[name] = [.. values];
             }
 
-            return new ProxyResponded((int)response.StatusCode, headers, body, truncated, Elapsed(started), correlationId);
-        }
-        catch (HttpRequestException e)
-        {
-            return new ProxyUnreached(e.Message, Elapsed(started), correlationId);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            return new ProxyUnreached($"No answer within {SendTimeout.TotalSeconds:0} s.", Elapsed(started), correlationId);
+            return new ProxyResponded((int)response.StatusCode, headers, body, truncated, bodyError, Elapsed(started), correlationId);
         }
     }
 
-    private static async Task<(string Body, bool Truncated)> ReadBodyAsync(HttpContent content, CancellationToken cancellationToken)
+    /// <summary>The body up to <see cref="MaxBodyBytes"/>, whether it was longer, and why it stopped early if it did.</summary>
+    private static async Task<(string Body, bool Truncated, string? Error)> ReadBodyAsync(HttpContent content, CancellationToken timeout, CancellationToken cancellationToken)
     {
-        await using Stream stream = await content.ReadAsStreamAsync(cancellationToken);
         byte[] buffer = new byte[MaxBodyBytes + 1];
         int read = 0;
-        int count;
+        string? error = null;
 
-        while (read < buffer.Length && (count = await stream.ReadAsync(buffer.AsMemory(read), cancellationToken)) > 0)
+        try
         {
-            read += count;
+            await using Stream stream = await content.ReadAsStreamAsync(timeout);
+            int count;
+
+            while (read < buffer.Length && (count = await stream.ReadAsync(buffer.AsMemory(read), timeout)) > 0)
+            {
+                read += count;
+            }
+        }
+        catch (Exception e) when (e is IOException or HttpRequestException)
+        {
+            error = Describe(e);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            error = $"The body did not finish within {SendTimeout.TotalSeconds:0} s.";
         }
 
-        return (Encoding.UTF8.GetString(buffer, 0, Math.Min(read, MaxBodyBytes)), read > MaxBodyBytes);
+        return (Encoding.UTF8.GetString(buffer, 0, Math.Min(read, MaxBodyBytes)), read > MaxBodyBytes, error);
+    }
+
+    /// <summary>The message and each inner message it does not already say; HttpClient's outer messages are generic.</summary>
+    private static string Describe(Exception e)
+    {
+        StringBuilder text = new(e.Message);
+
+        for (Exception? inner = e.InnerException; inner is not null; inner = inner.InnerException)
+        {
+            if (!text.ToString().Contains(inner.Message, StringComparison.Ordinal))
+            {
+                text.Append(' ').Append(inner.Message);
+            }
+        }
+
+        return text.ToString();
     }
 
     private long Elapsed(long started) => (long)time.GetElapsedTime(started).TotalMilliseconds;

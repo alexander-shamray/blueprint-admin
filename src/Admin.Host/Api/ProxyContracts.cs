@@ -22,7 +22,11 @@ public sealed record ProxyRequest(
 [JsonDerivedType(typeof(ProxyTokenRejected), "tokenRejected")]
 public abstract record ProxyResult(string CorrelationId);
 
-public sealed record ProxyResponded(int Status, IReadOnlyDictionary<string, string[]> Headers, string Body, bool BodyTruncated, long ElapsedMs, string CorrelationId)
+/// <summary>
+/// The upstream answered. <c>BodyTruncated</c> means the 1 MiB cap cut the body; <c>BodyError</c>, null when the body
+/// was read to its end, says why the read broke off after the headers had arrived.
+/// </summary>
+public sealed record ProxyResponded(int Status, IReadOnlyDictionary<string, string[]> Headers, string Body, bool BodyTruncated, string? BodyError, long ElapsedMs, string CorrelationId)
     : ProxyResult(CorrelationId);
 
 public sealed record ProxyUnreached(string Error, long ElapsedMs, string CorrelationId) : ProxyResult(CorrelationId);

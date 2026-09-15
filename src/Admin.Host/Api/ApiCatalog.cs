@@ -126,6 +126,11 @@ public sealed class ApiCatalog(HttpClient http, TokenService tokens, IOptions<Ad
         {
             return Unavailable($"{documentUrl} is not JSON: {e.Message}");
         }
+        catch (InvalidOperationException e)
+        {
+            // JSON of the wrong shape (a path item that is a string, parameters that are not an array).
+            return Unavailable($"{documentUrl} is not a readable OpenAPI document: {e.Message}");
+        }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             return Unavailable($"{documentUrl} did not answer within {DocumentTimeout.TotalSeconds:0} s.");

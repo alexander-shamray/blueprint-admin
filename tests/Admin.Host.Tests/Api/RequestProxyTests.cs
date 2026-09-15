@@ -25,13 +25,17 @@ public sealed class RequestProxyTests
         Content = new StringContent($$"""{"access_token":"{{DemoToken}}","expires_in":300}""", Encoding.UTF8, "application/json"),
     };
 
-    private static RequestProxy Proxy(ScriptedHandler handler, AdminOptions? options = null)
+    private static RequestProxy Proxy(ScriptedHandler handler, AdminOptions? options = null, FakeTimeProvider? time = null)
     {
         IOptions<AdminOptions> wrapped = Options.Create(options ?? new AdminOptions());
         HttpClient http = new(handler);
 
-        return new RequestProxy(http, new TokenService(http, wrapped, TimeProvider.System), wrapped, new FakeTimeProvider());
+        return new RequestProxy(http, new TokenService(http, wrapped, TimeProvider.System), wrapped, time ?? new FakeTimeProvider());
     }
+
+    /// <summary>A 200 whose body yields <paramref name="prefix"/>, then runs <paramref name="then"/>, which is expected to throw.</summary>
+    private static HttpResponseMessage BreaksAfter(string prefix, Func<CancellationToken, Task> then) =>
+        new(HttpStatusCode.OK) { Content = new StreamContent(new BreakingStream(Encoding.UTF8.GetBytes(prefix), then)) };
 
     private static ProxyRequest Get(string url = "http://localhost:5000/api/v1/catalog/products", IdentityRequest? identity = null, string? correlationId = null, IReadOnlyDictionary<string, string>? headers = null) =>
         new("GET", url, headers, null, identity, correlationId);
@@ -54,6 +58,9 @@ public sealed class RequestProxyTests
     [InlineData("https://localhost:5000/api/v1/orders", "is not one of the configured API surfaces")]
     [InlineData("/api/v1/orders", "absolute http(s) URL")]
     [InlineData("file:///C:/secrets.txt", "absolute http(s) URL")]
+    [InlineData("http://localhost:5000@example.com/", "is not one of the configured API surfaces")]
+    [InlineData("http://127.0.0.1:5000/api/v1/orders", "is not one of the configured API surfaces")]
+    [InlineData("http://[::1]:5000/api/v1/orders", "is not one of the configured API surfaces")]
     public void Urls_off_the_api_surfaces_are_refused_so_the_proxy_is_not_an_open_relay(string url, string reason)
     {
         Proxy(new ScriptedHandler(_ => Granted())).Validate(Get(url)).ShouldNotBeNull().ShouldContain(reason);
@@ -98,6 +105,15 @@ public sealed class RequestProxyTests
     {
         Proxy(new ScriptedHandler(_ => Granted())).Validate(Get(headers: new Dictionary<string, string> { ["Content-Type"] = "not a media type;;" }))
             .ShouldNotBeNull().ShouldContain("Content-Type");
+    }
+
+    [Fact]
+    public void A_header_given_twice_in_different_case_is_refused_by_name()
+    {
+        Dictionary<string, string> headers = new() { ["Content-Type"] = "text/plain", ["content-type"] = "not a media type;;" };
+
+        Proxy(new ScriptedHandler(_ => Granted())).Validate(Get(headers: headers))
+            .ShouldNotBeNull().ShouldSatisfyAllConditions(p => p.ShouldContain("more than once"), p => p.ShouldContain("content-type", Case.Insensitive));
     }
 
     [Fact]
@@ -174,6 +190,18 @@ public sealed class RequestProxyTests
     }
 
     [Fact]
+    public async Task A_callers_authorization_header_is_replaced_by_the_named_identitys_bearer_token()
+    {
+        ScriptedHandler handler = new(request => IsToken(request) ? Granted() : new HttpResponseMessage(HttpStatusCode.OK));
+        Dictionary<string, string> headers = new() { ["Authorization"] = "Bearer pasted" };
+
+        await Proxy(handler).SendAsync(Get(identity: new IdentityRequest("demo", null), headers: headers), Token);
+
+        HttpRequestMessage sent = handler.Requests.Single(r => !IsToken(r.Request)).Request;
+        sent.Headers.GetValues("Authorization").ShouldBe([$"Bearer {DemoToken}"]);
+    }
+
+    [Fact]
     public async Task A_given_content_type_replaces_the_json_default()
     {
         ScriptedHandler handler = new(_ => new HttpResponseMessage(HttpStatusCode.OK));
@@ -210,6 +238,87 @@ public sealed class RequestProxyTests
     }
 
     [Fact]
+    public async Task An_unreached_error_names_the_inner_reason_behind_a_generic_message()
+    {
+        ScriptedHandler handler = new(_ => throw new HttpRequestException("An error occurred while sending the request.", new IOException("Connection reset by peer")));
+
+        ProxyUnreached unreached = (await Proxy(handler).SendAsync(Get(), Token)).ShouldBeOfType<ProxyUnreached>();
+
+        unreached.Error.ShouldContain("An error occurred while sending the request.");
+        unreached.Error.ShouldContain("Connection reset by peer");
+    }
+
+    [Theory]
+    [InlineData("io")]
+    [InlineData("http")]
+    public async Task A_body_that_breaks_after_the_headers_is_responded_with_what_arrived_and_the_reason(string failure)
+    {
+        ScriptedHandler handler = new(_ => BreaksAfter("""{"items":[""", _ => failure == "io"
+            ? throw new IOException("The response ended prematurely.")
+            : throw new HttpRequestException("Error while copying content to a stream.")));
+
+        ProxyResponded responded = (await Proxy(handler).SendAsync(Get(), Token)).ShouldBeOfType<ProxyResponded>();
+
+        responded.Status.ShouldBe(200);
+        responded.Body.ShouldBe("""{"items":[""");
+        responded.BodyTruncated.ShouldBeFalse();
+        responded.BodyError.ShouldNotBeNull().ShouldContain(failure == "io" ? "ended prematurely" : "copying content");
+    }
+
+    [Fact]
+    public async Task The_timeout_firing_during_the_body_read_is_responded_not_unreached()
+    {
+        FakeTimeProvider time = new();
+        ScriptedHandler handler = new(_ => BreaksAfter("partial", async token =>
+        {
+            time.Advance(TimeSpan.FromSeconds(31));
+            await Task.Delay(Timeout.Infinite, token);
+        }));
+
+        ProxyResponded responded = (await Proxy(handler, time: time).SendAsync(Get(), Token)).ShouldBeOfType<ProxyResponded>();
+
+        responded.Body.ShouldBe("partial");
+        responded.BodyError.ShouldNotBeNull().ShouldContain("30 s");
+    }
+
+    [Fact]
+    public async Task A_body_read_completely_has_no_body_error()
+    {
+        ScriptedHandler handler = new(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("done") });
+
+        (await Proxy(handler).SendAsync(Get(), Token)).ShouldBeOfType<ProxyResponded>().BodyError.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task The_callers_own_cancellation_during_the_body_read_still_throws()
+    {
+        using CancellationTokenSource caller = new();
+        ScriptedHandler handler = new(_ => BreaksAfter("partial", async token =>
+        {
+            await caller.CancelAsync();
+            await Task.Delay(Timeout.Infinite, token);
+        }));
+
+        await Should.ThrowAsync<OperationCanceledException>(() => Proxy(handler).SendAsync(Get(), caller.Token));
+    }
+
+    [Fact]
+    public async Task Elapsed_time_counts_from_after_the_token_grant()
+    {
+        FakeTimeProvider time = new();
+        ScriptedHandler handler = new(request =>
+        {
+            time.Advance(IsToken(request) ? TimeSpan.FromSeconds(5) : TimeSpan.FromMilliseconds(40));
+
+            return IsToken(request) ? Granted() : new HttpResponseMessage(HttpStatusCode.OK);
+        });
+
+        ProxyResult result = await Proxy(handler, time: time).SendAsync(Get(identity: new IdentityRequest("demo", null)), Token);
+
+        result.ShouldBeOfType<ProxyResponded>().ElapsedMs.ShouldBe(40);
+    }
+
+    [Fact]
     public async Task Keycloak_down_is_unreached_too()
     {
         ScriptedHandler handler = new(request => IsToken(request) ? throw new HttpRequestException("refused") : new HttpResponseMessage(HttpStatusCode.OK));
@@ -236,5 +345,50 @@ public sealed class RequestProxyTests
     {
         JsonSerializer.Serialize<ProxyResult>(new ProxyUnreached("refused", 3, "c1"), Web)
             .ShouldBe("""{"outcome":"unreached","error":"refused","elapsedMs":3,"correlationId":"c1"}""");
+    }
+
+    private sealed class BreakingStream(byte[] prefix, Func<CancellationToken, Task> then) : Stream
+    {
+        private bool prefixSent;
+
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (!prefixSent)
+            {
+                prefixSent = true;
+                prefix.CopyTo(buffer);
+
+                return prefix.Length;
+            }
+
+            await then(cancellationToken);
+
+            return 0;
+        }
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override void Flush()
+        {
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 }

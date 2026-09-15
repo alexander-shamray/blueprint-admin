@@ -138,6 +138,19 @@ public sealed class ApiCatalogTests
     }
 
     [Fact]
+    public async Task A_document_whose_shape_is_malformed_is_an_unavailable_source_and_the_other_still_loads()
+    {
+        ScriptedHandler handler = Platform(url => url.Contains(":5102", StringComparison.Ordinal) ? Json(HttpStatusCode.OK, """{"paths":{"/products":"oops"}}""") : Both(url));
+
+        ApiCatalogView view = await Catalog(handler).GetAsync(Token);
+
+        ApiSource catalog = view.Sources.Single(s => s.Name == "catalog");
+        catalog.Available.ShouldBeFalse();
+        catalog.Error.ShouldNotBeNull().ShouldStartWith("http://localhost:5102/openapi/v1.json is not a readable OpenAPI document: ");
+        view.Sources.Single(s => s.Name == "ordering").Available.ShouldBeTrue();
+    }
+
+    [Fact]
     public async Task The_catalog_identity_is_the_first_configured_user_when_there_is_no_demo()
     {
         ScriptedHandler handler = Platform(Both);
