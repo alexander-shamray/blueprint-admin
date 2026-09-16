@@ -248,6 +248,8 @@ public sealed class RequestProxyTests
         ProxyUnreached unreached = (await Proxy(handler).SendAsync(Get(), Token)).ShouldBeOfType<ProxyUnreached>();
 
         unreached.Error.ShouldContain("No connection could be made");
+        // The request did leave the console, so its correlation id can be traced.
+        unreached.Sent.ShouldBeTrue();
     }
 
     [Fact]
@@ -293,6 +295,7 @@ public sealed class RequestProxyTests
         ProxyUnreached unreached = (await Proxy(handler, time: time).SendAsync(Get(), Token)).ShouldBeOfType<ProxyUnreached>();
 
         unreached.Error.ShouldBe("No answer within 30 s.");
+        unreached.Sent.ShouldBeTrue();
     }
 
     [Fact]
@@ -353,8 +356,12 @@ public sealed class RequestProxyTests
     {
         ScriptedHandler handler = new(request => IsToken(request) ? throw new HttpRequestException("refused") : new HttpResponseMessage(HttpStatusCode.OK));
 
-        (await Proxy(handler).SendAsync(Get(identity: new IdentityRequest("demo", null)), Token))
-            .ShouldBeOfType<ProxyUnreached>().Error.ShouldStartWith("Keycloak did not answer");
+        ProxyUnreached unreached = (await Proxy(handler).SendAsync(Get(identity: new IdentityRequest("demo", null)), Token))
+            .ShouldBeOfType<ProxyUnreached>();
+
+        unreached.Error.ShouldStartWith("Keycloak did not answer");
+        // Nothing was sent, so the platform never saw this id and there is no trace to offer.
+        unreached.Sent.ShouldBeFalse();
     }
 
     [Theory]
