@@ -116,7 +116,7 @@
         @case ('unreached') {
           <section class="response unreached">
             <p class="sent">{{ answered() }}</p>
-            <p><span class="status bad">No answer from the platform</span> <span class="elapsed">{{ r.elapsedMs }} ms</span> <span class="correlation">correlation id {{ r.correlationId }}</span> <button class="trace-call" type="button" [attr.aria-label]="'Trace correlation id ' + r.correlationId" (click)="traceThisCall(r.correlationId)">Trace this call</button></p>
+            <p><span class="status bad">No answer from the platform</span> <span class="elapsed">{{ r.elapsedMs }} ms</span> <span class="correlation">correlation id {{ r.correlationId }}</span> @if (r.sent) {<button class="trace-call" type="button" [attr.aria-label]="'Trace correlation id ' + r.correlationId" (click)="traceThisCall(r.correlationId)">Trace this call</button>}</p>
             <p>{{ r.error }}</p>
           </section>
         }

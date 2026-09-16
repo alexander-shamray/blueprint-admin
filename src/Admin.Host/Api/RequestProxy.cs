@@ -124,7 +124,8 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
             case UnknownUser unknown:
                 return new ProxyTokenRejected(400, $"'{unknown.Username}' is not a configured realm user.", correlationId);
             case KeycloakUnreachable unreachable:
-                return new ProxyUnreached($"Keycloak did not answer: {unreachable.Error}", Elapsed(started), correlationId);
+                // Sent: false — the send never happened, so nothing downstream carries this id.
+                return new ProxyUnreached($"Keycloak did not answer: {unreachable.Error}", Elapsed(started), correlationId, false);
             default:
                 using (HttpRequestMessage message = Build(request, token as TokenIssued, correlationId))
                 {
@@ -189,11 +190,11 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
         }
         catch (HttpRequestException e)
         {
-            return new ProxyUnreached(Describe(e), Elapsed(started), correlationId);
+            return new ProxyUnreached(Describe(e), Elapsed(started), correlationId, true);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return new ProxyUnreached($"No answer within {SendTimeout.TotalSeconds:0} s.", Elapsed(started), correlationId);
+            return new ProxyUnreached($"No answer within {SendTimeout.TotalSeconds:0} s.", Elapsed(started), correlationId, true);
         }
 
         using (response)

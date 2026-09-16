@@ -704,7 +704,7 @@ describe('ApiPage', () => {
   });
 
   it('offers Trace this call when the platform never answered, because the request still went out', () => {
-    host.proxy.mockReturnValue(of({ outcome: 'unreached', error: 'Connection refused', elapsedMs: 3, correlationId: 'corr-9' }));
+    host.proxy.mockReturnValue(of({ outcome: 'unreached', error: 'Connection refused', elapsedMs: 3, correlationId: 'corr-9', sent: true }));
     const fixture = render();
     fixture.componentInstance.chooseIdentity('anonymous');
     click(fixture, 'Send');
@@ -719,6 +719,15 @@ describe('ApiPage', () => {
     click(fixture, 'Send');
 
     expect(fixture.nativeElement.textContent).toContain('Keycloak refused the identity');
+    expect(fixture.nativeElement.querySelector('button.trace-call')).toBeNull();
+  });
+  it('offers no Trace this call when Keycloak was unreachable, because the request never went out', () => {
+    host.proxy.mockReturnValue(of({ outcome: 'unreached', error: 'Keycloak did not answer: refused', elapsedMs: 3, correlationId: 'corr-8', sent: false }));
+    const fixture = render();
+    fixture.componentInstance.chooseIdentity('anonymous');
+    click(fixture, 'Send');
+
+    expect(fixture.nativeElement.textContent).toContain('Keycloak did not answer');
     expect(fixture.nativeElement.querySelector('button.trace-call')).toBeNull();
   });
 });

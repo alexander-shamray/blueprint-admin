@@ -443,8 +443,8 @@ public sealed class RequestProxyTests
     [Fact]
     public void The_result_serializes_with_an_outcome_discriminator()
     {
-        JsonSerializer.Serialize<ProxyResult>(new ProxyUnreached("refused", 3, "c1"), Web)
-            .ShouldBe("""{"outcome":"unreached","error":"refused","elapsedMs":3,"correlationId":"c1"}""");
+        JsonSerializer.Serialize<ProxyResult>(new ProxyUnreached("refused", 3, "c1", true), Web)
+            .ShouldBe("""{"outcome":"unreached","error":"refused","elapsedMs":3,"sent":true,"correlationId":"c1"}""");
     }
 
     private sealed class BreakingStream(byte[] prefix, Func<CancellationToken, Task> then) : Stream

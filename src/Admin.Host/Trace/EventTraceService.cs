@@ -39,14 +39,19 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
         DateTimeOffset now = time.GetUtcNow();
         string logQl = LogQl(correlationId);
 
-        LokiResult loki = await grafana.QueryAsync(logQl, now - window, now, MaxLines, cancellationToken);
+        // One over the cap, so the boundary is detectable: at exactly MaxLines there is no way to tell
+        // a timeline that happened to end there from one Loki stopped counting.
+        LokiResult loki = await grafana.QueryAsync(logQl, now - window, now, MaxLines + 1, cancellationToken);
 
         if (!loki.Reachable)
         {
             return new TraceView(correlationId, windowText, false, loki.Error, [], false, null, []);
         }
 
-        string[] allTraceIds = loki.Lines
+        bool linesTruncated = loki.Lines.Count > MaxLines;
+        IReadOnlyList<LokiLine> lines = linesTruncated ? [.. loki.Lines.Take(MaxLines)] : loki.Lines;
+
+        string[] allTraceIds = lines
             .Where(line => !string.IsNullOrEmpty(line.TraceId))
             .OrderByDescending(line => line.At)
             .Select(line => line.TraceId!)
@@ -63,7 +68,7 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
         string grafanaUrl = options.Value.GrafanaUrl;
         List<TraceEvent> events = [];
 
-        foreach (LokiLine line in loki.Lines)
+        foreach (LokiLine line in lines)
         {
             events.Add(new TraceEvent(
                 line.At,
@@ -98,7 +103,7 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
         // Appended after the sort, never sorted into the middle: it is the end of what this id can see.
         ordered.Add(new TraceEvent(snapshotAt, "broker", BrokerService.Service, TraceEventKind.Queued, QueuedSummary(queues), null, null));
 
-        return new TraceView(correlationId, windowText, true, null, traceIds, truncated, TempoWarning(traceIds, traces), ordered);
+        return new TraceView(correlationId, windowText, true, null, traceIds, truncated, Warnings(traceIds, traces, linesTruncated, windowText), ordered);
     }
 
     /// <summary>
@@ -107,6 +112,23 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
     /// reaches here identically, and silently dropping both would present a log-only timeline as
     /// though it were complete.
     /// </summary>
+    private static string? Warnings(string[] traceIds, TempoResult[] traces, bool linesTruncated, string windowText)
+    {
+        string[] both = [.. new[] { LineWarning(linesTruncated, windowText), TempoWarning(traceIds, traces) }.OfType<string>()];
+
+        return both.Length == 0 ? null : string.Join(" ", both);
+    }
+
+    /// <summary>
+    /// Said when Loki had more to give than the cap allows. Without it a noisy or reused correlation
+    /// id reads as a complete timeline, and the trace ids past the cap — and so their spans — are gone
+    /// with no sign that they existed.
+    /// </summary>
+    private static string? LineWarning(bool linesTruncated, string windowText) =>
+        linesTruncated
+            ? $"More than {MaxLines} log lines carry this correlation id in the last {windowText}; only the first {MaxLines} are shown, and traces mentioned only in the rest are missing."
+            : null;
+
     private static string? TempoWarning(string[] traceIds, TempoResult[] traces)
     {
         string[] reasons = [.. traces.Where(t => !t.Reachable).Select(t => t.Error ?? "no reason given").Distinct(StringComparer.Ordinal)];

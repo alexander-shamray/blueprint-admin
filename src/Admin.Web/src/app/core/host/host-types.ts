@@ -142,7 +142,9 @@ export type ProxyResult =
       elapsedMs: number;
       correlationId: string;
     }
-  | { outcome: 'unreached'; error: string; elapsedMs: number; correlationId: string }
+  // `sent` is false when the identity's token could not be minted, which happens before anything
+  // leaves the console: the platform has never seen this correlation id, so there is no trace of it.
+  | { outcome: 'unreached'; error: string; elapsedMs: number; correlationId: string; sent: boolean }
   | { outcome: 'tokenRejected'; status: number; body: string; correlationId: string };
 
 /** A queue and its depth; `messages` is ready plus unacknowledged, as rabbitmqctl reports it (spec §5.5). */

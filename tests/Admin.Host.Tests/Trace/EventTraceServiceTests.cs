@@ -145,7 +145,7 @@ public sealed class EventTraceServiceTests : IAsyncDisposable
             .Single(uri => uri.AbsolutePath.EndsWith("/loki/api/v1/query_range", StringComparison.Ordinal));
 
         Uri.UnescapeDataString(query.Query).ShouldContain(EventTraceService.LogQl("abc-123"));
-        query.Query.ShouldContain($"limit={EventTraceService.MaxLines}");
+        query.Query.ShouldContain($"limit={EventTraceService.MaxLines + 1}");
     }
 
     [Fact]
@@ -387,5 +387,33 @@ public sealed class EventTraceServiceTests : IAsyncDisposable
         TraceView view = await Service(handler).BuildAsync("abc-123", TimeSpan.FromMinutes(15), Token);
 
         view.Warning.ShouldBeNull();
+    }
+    [Fact]
+    public async Task More_log_lines_than_the_cap_are_said_out_loud_rather_than_quietly_dropped()
+    {
+        (string, string?, string?, DateTimeOffset, string)[] lines = [.. Enumerable.Range(1, EventTraceService.MaxLines + 1)
+            .Select(n => ("Catalog.Api", (string?)"Information", (string?)null, Now.AddSeconds(-n), $"line {n}"))];
+
+        ScriptedHandler handler = Grafana(LokiStreams(lines));
+
+        TraceView view = await Service(handler).BuildAsync("abc-123", TimeSpan.FromMinutes(15), Token);
+
+        view.Warning.ShouldNotBeNull();
+        view.Warning.ShouldContain($"More than {EventTraceService.MaxLines} log lines");
+        // The cap is applied, not merely reported: the terminal marker is the only extra row.
+        view.Events.Count.ShouldBe(EventTraceService.MaxLines + 1);
+    }
+
+    [Fact]
+    public async Task Loki_is_asked_for_one_line_past_the_cap_so_the_boundary_can_be_seen()
+    {
+        ScriptedHandler handler = Grafana(LokiStreams());
+
+        await Service(handler).BuildAsync("abc-123", TimeSpan.FromMinutes(15), Token);
+
+        handler.Requests
+            .Select(r => r.Request.RequestUri!)
+            .Single(uri => uri.AbsolutePath.EndsWith("/loki/api/v1/query_range", StringComparison.Ordinal))
+            .Query.ShouldContain($"limit={EventTraceService.MaxLines + 1}");
     }
 }
