@@ -38,6 +38,10 @@
       }
     </p>
 
+    @if (v.warning; as warning) {
+      <p class="warning" role="status">{{ warning }}</p>
+    }
+
     @if (v.events.length <= 1) {
       <p class="empty">
         No log line carries correlation id {{ v.correlationId }} in the last {{ v.window }}. The id may be older than the

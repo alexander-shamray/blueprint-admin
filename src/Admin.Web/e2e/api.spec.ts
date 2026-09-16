@@ -74,6 +74,6 @@ test('trace this call opens the response correlation id on the trace screen', as
   await page.locator('button.trace-call').click();
 
   await expect(page).toHaveURL(/\/trace\/e2e-trace-1$/);
-  await expect(page.locator('[role="status"]')).toContainText('for e2e-trace-1');
+  await expect(page.locator('p.summary')).toContainText('for e2e-trace-1');
   await expect(page.locator('table.timeline tbody tr').last().locator('td.kind')).toHaveText('[queued]');
 });

@@ -43,7 +43,7 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
 
         if (!loki.Reachable)
         {
-            return new TraceView(correlationId, windowText, false, loki.Error, [], false, []);
+            return new TraceView(correlationId, windowText, false, loki.Error, [], false, null, []);
         }
 
         string[] allTraceIds = loki.Lines
@@ -98,7 +98,29 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
         // Appended after the sort, never sorted into the middle: it is the end of what this id can see.
         ordered.Add(new TraceEvent(snapshotAt, "broker", BrokerService.Service, TraceEventKind.Queued, QueuedSummary(queues), null, null));
 
-        return new TraceView(correlationId, windowText, true, null, traceIds, truncated, ordered);
+        return new TraceView(correlationId, windowText, true, null, traceIds, truncated, TempoWarning(traceIds, traces), ordered);
+    }
+
+    /// <summary>
+    /// What to say when some traces did not come back. A 404 is ordinary — Tempo's retention is
+    /// shorter than Loki's, so an older trace is simply gone — but an outage or a missing datasource
+    /// reaches here identically, and silently dropping both would present a log-only timeline as
+    /// though it were complete.
+    /// </summary>
+    private static string? TempoWarning(string[] traceIds, TempoResult[] traces)
+    {
+        string[] reasons = [.. traces.Where(t => !t.Reachable).Select(t => t.Error ?? "no reason given").Distinct(StringComparer.Ordinal)];
+
+        if (reasons.Length == 0)
+        {
+            return null;
+        }
+
+        int failed = traces.Count(t => !t.Reachable);
+
+
+        return $"{failed} of {traceIds.Length} trace{(traceIds.Length == 1 ? "" : "s")} could not be read from Tempo, "
+            + $"so spans for {(failed == 1 ? "it" : "them")} are missing: {string.Join("; ", reasons)}";
     }
 
     /// <summary>Owner of the level spellings: the OTLP <c>severity_text</c> Loki carries as a label (plan M5).</summary>
@@ -121,7 +143,15 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
             : projection.Drained ? "0 messages (drained)"
             : $"{messages} message{(messages == 1 ? "" : "s")} waiting";
 
-        return $"{projection.Queue}: {depth}. The publish runs in a new trace — the outbox carries no "
+        // A drained queue whose error queue holds messages is not a projection that succeeded, and
+        // spec §5.9 step 3 promises a message parked in an _error queue shows here rather than as
+        // silence. Reporting only the main queue would call that case "drained".
+        string parked = queues.Queues
+            .FirstOrDefault(q => q.Name == projection.Queue + BrokerService.ErrorSuffix) is { Messages: > 0 } errorQueue
+            ? $", {errorQueue.Messages} parked in {errorQueue.Name}"
+            : "";
+
+        return $"{projection.Queue}: {depth}{parked}. The publish runs in a new trace — the outbox carries no "
             + "trace context, so the consume side is not joinable by this correlation id.";
     }
 }

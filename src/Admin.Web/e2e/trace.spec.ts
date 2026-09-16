@@ -25,6 +25,9 @@ test('the trace screen renders a correlation id timeline that ends at the outbox
   await expect(last).toContainText('ordering-catalog-events');
   await expect(last).toContainText('the outbox carries no trace context');
 
+  // The failed first attempt's trace 404s, and the screen says so rather than quietly showing fewer spans.
+  await expect(page.locator('p.warning')).toContainText('1 of 2 traces could not be read from Tempo');
+
   await expect(page.locator('table.timeline a.explore').first()).toHaveAttribute(
     'href',
     /^http:\/\/localhost:3000\/explore\?/,
@@ -35,10 +38,10 @@ test('a trace is shareable by URL and the window chosen is the one reported back
   // Arriving directly on the id, as the API screen's "Trace this call" does, loads without a submit.
   await page.goto('/trace/demo-trace-0001?');
 
-  await expect(page.locator('[role="status"]')).toContainText('10 events for demo-trace-0001 over the last 15m');
+  await expect(page.locator('p.summary')).toContainText('10 events for demo-trace-0001 over the last 15m');
 
   await page.getByLabel('Window').selectOption('6h');
   await page.getByRole('button', { name: 'Reload' }).click();
 
-  await expect(page.locator('[role="status"]')).toContainText('over the last 6h');
+  await expect(page.locator('p.summary')).toContainText('over the last 6h');
 });

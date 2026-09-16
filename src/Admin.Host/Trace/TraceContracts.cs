@@ -36,6 +36,11 @@ public sealed record TraceEvent(
 /// (spec §9), so <paramref name="Reachable"/> and <paramref name="Error"/> carry the failure the way
 /// <c>QueuesView</c> does. <paramref name="TracesTruncated"/> says the id appeared in more distinct
 /// traces than <c>EventTraceService.MaxTraces</c> allowed this build to fetch.
+/// <para>
+/// <paramref name="Warning"/> is a partial failure: the timeline is real but incomplete, because one
+/// or more traces would not come back from Tempo. Without it a Tempo outage and a correlation id
+/// whose spans have aged out look the same on screen — a timeline of log lines and nothing else.
+/// </para>
 /// </summary>
 public sealed record TraceView(
     string CorrelationId,
@@ -44,4 +49,5 @@ public sealed record TraceView(
     string? Error,
     IReadOnlyList<string> TraceIds,
     bool TracesTruncated,
+    string? Warning,
     IReadOnlyList<TraceEvent> Events);

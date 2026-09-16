@@ -12,5 +12,6 @@ tr.kind-Queued td { background: #f6f6f6; font-style: italic; }
 tr.kind-Outbox td.kind, tr.kind-Publish td.kind, tr.kind-Consume td.kind { font-weight: 600; }
 a.explore { margin-left: 0.5rem; font-size: 0.85em; }
 .summary .truncated { margin-left: 0.5rem; color: #855; }
+.warning { color: #855; max-width: 48rem; }
 .empty { color: #555; max-width: 48rem; }
 .error { color: #b00; }

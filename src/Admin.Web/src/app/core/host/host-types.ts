@@ -217,5 +217,7 @@ export interface TraceView {
   error: string | null;
   traceIds: string[];
   tracesTruncated: boolean;
+  /** A partial failure: the timeline is real but some traces would not come back from Tempo. */
+  warning: string | null;
   events: TraceEvent[];
 }

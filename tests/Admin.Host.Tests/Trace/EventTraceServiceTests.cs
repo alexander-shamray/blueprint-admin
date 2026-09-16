@@ -345,4 +345,47 @@ public sealed class EventTraceServiceTests : IAsyncDisposable
         last.Kind.ShouldBe(TraceEventKind.Queued);
         last.At.ShouldBeGreaterThan(Now);
     }
+    [Fact]
+    public async Task A_drained_queue_whose_error_queue_holds_messages_is_not_reported_as_simply_drained()
+    {
+        runner.On("docker", Exec + "list_queues", 0,
+            "[",
+            """{"name":"ordering-catalog-events","messages":0}""",
+            """,{"name":"ordering-catalog-events_error","messages":1}""",
+            "]");
+
+        TraceView view = await Service(Grafana(LokiStreams())).BuildAsync("abc-123", TimeSpan.FromMinutes(15), Token);
+
+        view.Events[^1].Summary.ShouldStartWith(
+            "ordering-catalog-events: 0 messages (drained), 1 parked in ordering-catalog-events_error.");
+    }
+
+    [Fact]
+    public async Task A_Tempo_that_will_not_answer_is_a_warning_on_the_view_not_a_silently_shorter_timeline()
+    {
+        string trace = TraceHex(1);
+        ScriptedHandler handler = Grafana(
+            LokiStreams(("Catalog.Api", "Information", trace, Now.AddSeconds(-30), "a line")),
+            _ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable) { Content = new StringContent("Tempo is down") });
+
+        TraceView view = await Service(handler).BuildAsync("abc-123", TimeSpan.FromMinutes(15), Token);
+
+        view.Reachable.ShouldBeTrue();
+        view.Warning.ShouldNotBeNull();
+        view.Warning.ShouldContain("1 of 1 trace could not be read from Tempo");
+        view.Warning.ShouldContain("503");
+    }
+
+    [Fact]
+    public async Task A_timeline_whose_traces_all_came_back_carries_no_warning()
+    {
+        string trace = TraceHex(1);
+        ScriptedHandler handler = Grafana(
+            LokiStreams(("Catalog.Api", "Information", trace, Now.AddSeconds(-30), "a line")),
+            _ => Json(TempoBatch(trace, "Catalog.Api", ("00f067aa0ba902b7", "a span", "SPAN_KIND_INTERNAL", Now.AddSeconds(-25), ""))));
+
+        TraceView view = await Service(handler).BuildAsync("abc-123", TimeSpan.FromMinutes(15), Token);
+
+        view.Warning.ShouldBeNull();
+    }
 }

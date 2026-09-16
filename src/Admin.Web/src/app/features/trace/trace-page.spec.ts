@@ -23,6 +23,7 @@ const view: TraceView = {
   error: null,
   traceIds: ['4bf92f3577b34da6a3ce929d0e0e4736'],
   tracesTruncated: false,
+  warning: null,
   events: [
     {
       at: '2026-09-16T09:43:00.000Z',
@@ -273,5 +274,15 @@ describe('TracePage', () => {
 
     expect(fixture.componentInstance.error()).toBeNull();
     expect(fixture.nativeElement.querySelector('[role="alert"]')).toBeNull();
+  });
+  it('shows a partial Tempo failure as a warning, with the timeline it did get', () => {
+    host.trace = vi.fn(() => of({ ...view, warning: '1 of 2 traces could not be read from Tempo: Tempo answered 404' }));
+    configure('demo-trace-0001');
+    const fixture = render();
+
+    const warning = fixture.nativeElement.querySelector('p.warning') as HTMLElement;
+    expect(warning.getAttribute('role')).toBe('status');
+    expect(warning.textContent).toContain('could not be read from Tempo');
+    expect(rows(fixture).length).toBe(3);
   });
 });

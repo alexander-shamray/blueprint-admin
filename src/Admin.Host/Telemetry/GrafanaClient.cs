@@ -73,11 +73,12 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
 
             DatasourceUids result = new(loki, tempo, prometheus);
 
-            // Only a complete set is cached. Caching as soon as Loki exists would make a startup
-            // where Tempo is not provisioned yet permanent: TraceAsync would keep reading a cached
-            // null Tempo uid and drop every span row until the host restarts. An incomplete answer
-            // costs one more GET /api/datasources per read, which is the cheaper mistake.
-            if (result is { Loki: not null, Tempo: not null, Prometheus: not null })
+            // Cached once both datasources this client reads are resolved. Caching on Loki alone
+            // would make a startup where Tempo is not provisioned yet permanent: every later read
+            // would see a cached null Tempo uid and drop all span rows until the host restarts.
+            // Prometheus is deliberately not required — nothing reads it yet, and demanding it would
+            // make an otherwise working Grafana re-resolve on all twelve calls of one trace build.
+            if (result is { Loki: not null, Tempo: not null })
             {
                 uidsCache = result;
             }
