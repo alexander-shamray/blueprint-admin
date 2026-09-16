@@ -1,6 +1,6 @@
 # blueprint-admin
 
-A local admin console for [`dotnet-ddd-blueprint`](https://github.com/alexander-shamray/dotnet-ddd-blueprint):
+A local admin console for [`blueprint-backend`](https://github.com/alexander-shamray/blueprint-backend):
 one page that runs, stops, observes and exercises the platform, doing verbatim
 what the workspace's `run-locally.md` says a developer does by hand.
 
@@ -13,7 +13,7 @@ realm passwords, so it is never deployed and never shared. The design is
 Docker Desktop, the .NET SDK pinned in `global.json`, the Node version in
 `.nvmrc`, and the two sibling clones beside this one:
 
-    ../blueprint-backend    alexander-shamray/dotnet-ddd-blueprint
+    ../blueprint-backend    alexander-shamray/blueprint-backend
     ../blueprint-frontend   alexander-shamray/blueprint-frontend
 
 Other locations: set `Admin:BackendDir` and `Admin:FrontendDir` (see
