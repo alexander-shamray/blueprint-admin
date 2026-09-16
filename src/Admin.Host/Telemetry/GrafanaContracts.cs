@@ -18,9 +18,6 @@ public sealed record LokiLine(DateTimeOffset At, string Service, string? Level, 
 /// <summary>A Loki query outcome. A Grafana/Loki that does not answer is a state, not an exception (spec §9).</summary>
 public sealed record LokiResult(bool Reachable, string? Error, IReadOnlyList<LokiLine> Lines);
 
-/// <summary>One span attribute, key and value already flattened to a string (plan M6: attribute values are tagged unions).</summary>
-public sealed record SpanAttribute(string Key, string Value);
-
 /// <summary>
 /// One span of a Tempo trace. <paramref name="TraceId"/>, <paramref name="SpanId"/> and
 /// <paramref name="ParentSpanId"/> are already decoded from Tempo's base64 to lowercase hex
