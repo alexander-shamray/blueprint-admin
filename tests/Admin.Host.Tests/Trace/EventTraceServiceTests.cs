@@ -204,7 +204,8 @@ public sealed class EventTraceServiceTests : IAsyncDisposable
         last.Kind.ShouldBe(TraceEventKind.Queued);
         last.Source.ShouldBe("broker");
         last.Summary.ShouldStartWith("ordering-catalog-events: 0 messages (drained).");
-        last.Summary.ShouldContain("the outbox carries no trace context");
+        // A lone internal span is no handover, so the marker reports the queue without claiming one.
+        last.Summary.ShouldContain("No outbox write appears in this timeline");
     }
 
     [Fact]
@@ -316,7 +317,8 @@ public sealed class EventTraceServiceTests : IAsyncDisposable
         TraceEvent last = view.Events[^1];
         last.Kind.ShouldBe(TraceEventKind.Queued);
         last.Summary.ShouldContain("broker not reachable");
-        last.Summary.ShouldContain("the outbox carries no trace context");
+        // No outbox row in this timeline, so the marker must not speak of "the publish".
+        last.Summary.ShouldContain("No outbox write appears in this timeline");
     }
 
     [Fact]
@@ -415,5 +417,38 @@ public sealed class EventTraceServiceTests : IAsyncDisposable
             .Select(r => r.Request.RequestUri!)
             .Single(uri => uri.AbsolutePath.EndsWith("/loki/api/v1/query_range", StringComparison.Ordinal))
             .Query.ShouldContain($"limit={EventTraceService.MaxLines + 1}");
+    }
+    [Fact]
+    public async Task A_timeline_with_an_outbox_write_explains_where_the_trace_is_severed()
+    {
+        TheProjectionQueueIsDrained();
+        string trace = TraceHex(1);
+        ScriptedHandler handler = Grafana(
+            LokiStreams(("Catalog.Api", "Information", trace, Now.AddSeconds(-30), "a line")),
+            _ => Json(TempoBatch(trace, "Catalog.Api",
+                ("00f067aa0ba902b7", "INSERT catalog", "SPAN_KIND_CLIENT", Now.AddSeconds(-25),
+                    "db.system=mssql;db.statement=INSERT INTO dbo.OutboxMessages"))));
+
+        TraceView view = await Service(handler).BuildAsync("abc-123", TimeSpan.FromMinutes(15), Token);
+
+        view.Events.ShouldContain(e => e.Kind == TraceEventKind.Outbox);
+        view.Events[^1].Summary.ShouldContain("The publish runs in a new trace");
+    }
+
+    [Fact]
+    public async Task A_read_only_request_is_not_told_about_a_publish_that_never_happened()
+    {
+        TheProjectionQueueIsDrained();
+        string trace = TraceHex(1);
+        ScriptedHandler handler = Grafana(
+            LokiStreams(("Catalog.Api", "Information", trace, Now.AddSeconds(-30), "GET /api/v1/products")),
+            _ => Json(TempoBatch(trace, "Gateway.Api",
+                ("00f067aa0ba902b7", "GET /api/v1/products", "SPAN_KIND_SERVER", Now.AddSeconds(-25), "http.route=/api/v1/products"))));
+
+        TraceView view = await Service(handler).BuildAsync("abc-123", TimeSpan.FromMinutes(15), Token);
+
+        view.Events.ShouldNotContain(e => e.Kind == TraceEventKind.Outbox);
+        view.Events[^1].Summary.ShouldContain("No outbox write appears in this timeline");
+        view.Events[^1].Summary.ShouldNotContain("The publish runs in a new trace");
     }
 }

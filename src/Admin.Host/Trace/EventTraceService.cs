@@ -101,7 +101,8 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
         DateTimeOffset snapshotAt = time.GetUtcNow();
 
         // Appended after the sort, never sorted into the middle: it is the end of what this id can see.
-        ordered.Add(new TraceEvent(snapshotAt, "broker", BrokerService.Service, TraceEventKind.Queued, QueuedSummary(queues), null, null));
+        bool handedToTheBroker = ordered.Any(e => e.Kind is TraceEventKind.Outbox or TraceEventKind.Publish);
+        ordered.Add(new TraceEvent(snapshotAt, "broker", BrokerService.Service, TraceEventKind.Queued, QueuedSummary(queues, handedToTheBroker), null, null));
 
         return new TraceView(correlationId, windowText, true, null, traceIds, truncated, Warnings(traceIds, traces, linesTruncated, windowText), ordered);
     }
@@ -155,7 +156,7 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
     /// The terminal marker's words. It states the projection queue and its depth, then why the
     /// timeline stops here rather than continuing into the consume side (plan M2).
     /// </summary>
-    private static string QueuedSummary(QueuesView queues)
+    private static string QueuedSummary(QueuesView queues, bool handedToTheBroker)
     {
         ProjectionDrain projection = queues.Projection;
 
@@ -173,7 +174,15 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
             ? $", {errorQueue.Messages} parked in {errorQueue.Name}"
             : "";
 
-        return $"{projection.Queue}: {depth}{parked}. The publish runs in a new trace — the outbox carries no "
-            + "trace context, so the consume side is not joinable by this correlation id.";
+        // Only claimed when the timeline actually shows a handover. A read-only request, or one whose
+        // lines have aged out, never wrote an outbox row, and telling its operator about "the publish"
+        // would invent an event this console has no evidence for.
+        string why = handedToTheBroker
+            ? "The publish runs in a new trace — the outbox carries no trace context, so the consume "
+                + "side is not joinable by this correlation id."
+            : "No outbox write appears in this timeline, so nothing here was handed to the broker; the "
+                + "queue is shown because a handover would not be joinable by this correlation id either.";
+
+        return $"{projection.Queue}: {depth}{parked}. {why}";
     }
 }
