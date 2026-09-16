@@ -48,12 +48,15 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
             return new TraceView(correlationId, windowText, false, loki.Error, [], false, null, []);
         }
 
-        bool linesTruncated = loki.Lines.Count > MaxLines;
-        IReadOnlyList<LokiLine> lines = linesTruncated ? [.. loki.Lines.Take(MaxLines)] : loki.Lines;
+        // Sorted before the cap is applied: Loki answers stream by stream, not in time order, so
+        // taking the head of the flattened list would drop the newest lines from a later stream while
+        // keeping older ones — and with them, the trace ids only they carry.
+        LokiLine[] newestFirst = [.. loki.Lines.OrderByDescending(line => line.At)];
+        bool linesTruncated = newestFirst.Length > MaxLines;
+        IReadOnlyList<LokiLine> lines = linesTruncated ? [.. newestFirst.Take(MaxLines)] : newestFirst;
 
         string[] allTraceIds = lines
             .Where(line => !string.IsNullOrEmpty(line.TraceId))
-            .OrderByDescending(line => line.At)
             .Select(line => line.TraceId!)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
@@ -62,7 +65,14 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
         bool truncated = allTraceIds.Length > MaxTraces;
 
         DatasourceUids uids = await grafana.UidsAsync(cancellationToken);
-        TempoResult[] traces = await Task.WhenAll(traceIds.Select(id => grafana.TraceAsync(id, cancellationToken)));
+
+        // With no Tempo uid every fetch would fail identically — and because an incomplete datasource
+        // list is deliberately not cached, each would re-resolve /api/datasources first, up to ten
+        // times for one screen. The answer is already known here, so it is written out once per trace.
+        TempoResult[] traces = uids.Tempo is null
+            ? [.. traceIds.Select(_ => new TempoResult(false, uids.Error ?? "Grafana has no Tempo datasource.", []))]
+            : await Task.WhenAll(traceIds.Select(id => grafana.TraceAsync(id, cancellationToken)));
+
         QueuesView queues = await broker.QueuesAsync(cancellationToken);
 
         string grafanaUrl = options.Value.GrafanaUrl;
@@ -140,7 +150,6 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
         }
 
         int failed = traces.Count(t => !t.Reachable);
-
 
         return $"{failed} of {traceIds.Length} trace{(traceIds.Length == 1 ? "" : "s")} could not be read from Tempo, "
             + $"so spans for {(failed == 1 ? "it" : "them")} are missing: {string.Join("; ", reasons)}";

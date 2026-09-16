@@ -451,4 +451,40 @@ public sealed class EventTraceServiceTests : IAsyncDisposable
         view.Events[^1].Summary.ShouldContain("No outbox write appears in this timeline");
         view.Events[^1].Summary.ShouldNotContain("The publish runs in a new trace");
     }
+    [Fact]
+    public async Task A_Grafana_without_Tempo_is_said_once_rather_than_re_resolved_for_every_trace()
+    {
+        string first = TraceHex(1);
+        string second = TraceHex(2);
+        ScriptedHandler handler = new(request => request.RequestUri!.AbsolutePath == "/api/datasources"
+            ? Json("""[{"uid":"loki","type":"loki"}]""")
+            : Json(LokiStreams(
+                ("Catalog.Api", "Information", first, Now.AddSeconds(-30), "one"),
+                ("Ordering.Api", "Information", second, Now.AddSeconds(-20), "two"))));
+
+        TraceView view = await Service(handler).BuildAsync("abc-123", TimeSpan.FromMinutes(15), Token);
+
+        view.Reachable.ShouldBeTrue();
+        view.Warning.ShouldNotBeNull();
+        view.Warning.ShouldContain("2 of 2 traces could not be read from Tempo");
+        handler.Requests.Count(r => r.Request.RequestUri!.AbsolutePath.Contains("/api/traces/", StringComparison.Ordinal)).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task The_newest_lines_survive_the_cap_even_when_Loki_groups_them_by_stream()
+    {
+        // Loki answers stream by stream, so the oldest stream can arrive first. Taking the head of the
+        // flattened list would keep those and drop the newest lines entirely.
+        (string, string?, string?, DateTimeOffset, string)[] oldest = [.. Enumerable.Range(1, EventTraceService.MaxLines)
+            .Select(n => ("Catalog.Api", (string?)"Information", (string?)null, Now.AddHours(-1).AddSeconds(-n), $"old {n}"))];
+        (string, string?, string?, DateTimeOffset, string)[] newest =
+            [("Gateway.Api", "Information", null, Now.AddSeconds(-5), "the newest line")];
+
+        ScriptedHandler handler = Grafana(LokiStreams([.. oldest, .. newest]));
+
+        TraceView view = await Service(handler).BuildAsync("abc-123", TimeSpan.FromMinutes(15), Token);
+
+        view.Warning.ShouldNotBeNull();
+        view.Events.Select(e => e.Summary).ShouldContain("the newest line");
+    }
 }
