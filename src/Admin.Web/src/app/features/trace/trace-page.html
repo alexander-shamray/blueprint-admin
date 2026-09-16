@@ -1,0 +1,80 @@
+<section class="actions">
+  <form (ngSubmit)="submit()">
+    <input
+      name="correlationId"
+      aria-label="Correlation id"
+      placeholder="correlation id"
+      [ngModel]="correlationId()"
+      (ngModelChange)="correlationId.set($event)"
+    />
+    <label>
+      Window
+      <select name="window" aria-label="Window" [ngModel]="window()" (ngModelChange)="window.set($event)">
+        @for (w of windows; track w) {
+          <option [value]="w">{{ w }}</option>
+        }
+      </select>
+    </label>
+    <button class="trace" type="submit" [disabled]="loading()">Trace</button>
+    <button class="reload" type="button" [disabled]="loading() || !view()" (click)="reload()">Reload</button>
+  </form>
+</section>
+
+@if (error(); as e) {
+  <p class="error" role="alert">The host did not answer: {{ e }}</p>
+}
+
+@if (view(); as v) {
+  @if (v.reachable) {
+    <p class="summary" role="status">
+      {{ v.events.length }} event{{ v.events.length === 1 ? '' : 's' }} for {{ v.correlationId }} over the last {{ v.window }},
+      across {{ v.traceIds.length }} trace{{ v.traceIds.length === 1 ? '' : 's' }}.
+      @if (v.tracesTruncated) {
+        <span class="truncated">Only the {{ v.traceIds.length }} newest traces were fetched.</span>
+      }
+    </p>
+
+    @if (v.events.length <= 1) {
+      <p class="empty">
+        No log line carries correlation id {{ v.correlationId }} in the last {{ v.window }}. The id may be older than the
+        window, or the request may never have reached the platform.
+      </p>
+    }
+
+    @if (v.events.length > 0) {
+      <table class="timeline">
+        <thead>
+          <tr><th>At</th><th>Service</th><th>Kind</th><th>What happened</th></tr>
+        </thead>
+        <tbody>
+          @for (event of v.events; track $index) {
+            <tr class="kind-{{ event.kind }}">
+              <td class="at">{{ event.at | date: 'HH:mm:ss.SSS' }}</td>
+              <td class="service">{{ event.service }}</td>
+              <td class="kind">{{ kindWord(event.kind) }}</td>
+              <td class="summary">
+                {{ event.summary }}
+                @if (event.link; as link) {
+                  <a
+                    class="explore"
+                    [href]="link"
+                    target="_blank"
+                    rel="noopener"
+                    [attr.aria-label]="'Open this ' + event.source + ' entry in Grafana Explore'"
+                    >Explore</a
+                  >
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  } @else {
+    <p class="error" role="alert">Grafana did not answer: {{ v.error }}</p>
+  }
+} @else if (loading()) {
+  <p>Loading…</p>
+} @else if (!error()) {
+  <p class="empty">Enter a correlation id, or arrive here from the API screen with “Trace this call”.</p>
+}

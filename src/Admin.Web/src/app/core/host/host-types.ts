@@ -190,3 +190,32 @@ export interface PermissionsView {
   error: string | null;
   permissions: BrokerPermission[];
 }
+
+/**
+ * What one row of a timeline is (spec §5.9). `Queued` is the terminal marker: the backend's outbox
+ * carries no trace context, so the publish runs in a trace this correlation id cannot reach, and the
+ * event's summary says so in words.
+ */
+export type TraceEventKind = 'HttpIn' | 'Log' | 'Span' | 'Outbox' | 'Publish' | 'Consume' | 'Queued' | 'Error';
+
+/** One row of a timeline. `source` is `loki`, `tempo` or `broker`; `link` opens Grafana Explore. */
+export interface TraceEvent {
+  at: string;
+  source: string;
+  service: string;
+  kind: TraceEventKind;
+  summary: string;
+  traceId: string | null;
+  link: string | null;
+}
+
+/** One correlation id's timeline. A Grafana that does not answer is a state, as `QueuesView` does it. */
+export interface TraceView {
+  correlationId: string;
+  window: string;
+  reachable: boolean;
+  error: string | null;
+  traceIds: string[];
+  tracesTruncated: boolean;
+  events: TraceEvent[];
+}
