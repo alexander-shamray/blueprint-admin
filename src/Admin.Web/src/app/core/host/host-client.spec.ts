@@ -121,4 +121,18 @@ describe('HostClient', () => {
     expect(permissions.request.method).toBe('GET');
     permissions.flush({ reachable: true, error: null, permissions: [] });
   });
+  it('asks for a trace by correlation id, escaping it, with the window as a query parameter', () => {
+    client.trace('demo trace/0001', '2h').subscribe();
+    const req = http.expectOne((r) => r.url === '/api/trace/demo%20trace%2F0001');
+    expect(req.request.method).toBe('GET');
+    expect(req.request.params.get('window')).toBe('2h');
+    req.flush({ correlationId: 'demo trace/0001', window: '2h', reachable: true, error: null, traceIds: [], tracesTruncated: false, events: [] });
+  });
+
+  it('omits the window parameter entirely when none is asked for, so the host applies its default', () => {
+    client.trace('demo-trace-0001').subscribe();
+    const req = http.expectOne('/api/trace/demo-trace-0001');
+    expect(req.request.params.keys()).toEqual([]);
+    req.flush({ correlationId: 'demo-trace-0001', window: '15m', reachable: true, error: null, traceIds: [], tracesTruncated: false, events: [] });
+  });
 });

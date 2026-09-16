@@ -20,6 +20,7 @@
 .status.ok { color: #080; }
 .status.bad { color: #b00; }
 .elapsed, .correlation { margin-right: 0.75rem; font-family: monospace; }
+button.trace-call { font-size: 0.85em; }
 .response.unreached, .response.rejected { border-left: 4px solid #b00; padding-left: 0.5rem; }
 .history button { background: none; border: 0; cursor: pointer; font-family: monospace; padding: 0.1rem 0; }
 .access-token { white-space: pre-wrap; word-break: break-all; }
