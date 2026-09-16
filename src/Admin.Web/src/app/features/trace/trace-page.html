@@ -16,7 +16,9 @@
       </select>
     </label>
     <button class="trace" type="submit" [disabled]="loading()">Trace</button>
-    <button class="reload" type="button" [disabled]="loading() || !view()" (click)="reload()">Reload</button>
+    <!-- Enabled on a typed id too, not only on a loaded view: after a failed first load, submitting
+         navigates to the route already showing, which the router ignores, so this is the only retry. -->
+    <button class="reload" type="button" [disabled]="loading() || !canReload()" (click)="reload()">Reload</button>
   </form>
 </section>
 

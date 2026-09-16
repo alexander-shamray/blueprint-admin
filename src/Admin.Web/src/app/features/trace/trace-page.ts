@@ -3,7 +3,7 @@ import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { EMPTY, Subject, catchError, defer, finalize, switchMap, tap } from 'rxjs';
+import { EMPTY, Subject, catchError, defer, finalize, switchMap } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { TraceEventKind, TraceView } from '../../core/host/host-types';
 
@@ -65,6 +65,10 @@ export class TracePage {
           defer(() => {
             this.loading.set(true);
 
+            // Cleared at the start of every load, for the same reason the view is: an error left
+            // over from the previous id would otherwise sit under the new URL while its read is out.
+            this.error.set(null);
+
             // Cleared before the read, not after it fails: the template renders the view above the
             // loading branch, so keeping it would show A's timeline for the whole of B's request
             // while the URL and the input both say B. A reload of the id already on screen keeps its
@@ -73,7 +77,6 @@ export class TracePage {
 
             return this.host.trace(id, this.window());
           }).pipe(
-            tap(() => this.error.set(null)),
             catchError((e: unknown) => {
               this.error.set(this.describeError(e));
               return EMPTY;
@@ -99,6 +102,11 @@ export class TracePage {
     const id = this.correlationId().trim();
     if (id === '') return;
     void this.router.navigate(['/trace', id]);
+  }
+
+  /** Whether there is anything to reload: a timeline on screen, or an id typed into the input. */
+  canReload(): boolean {
+    return this.view() !== null || this.correlationId().trim() !== '';
   }
 
   kindWord(kind: TraceEventKind): string {

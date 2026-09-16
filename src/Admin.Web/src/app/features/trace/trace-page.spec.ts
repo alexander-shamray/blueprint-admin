@@ -243,4 +243,35 @@ describe('TracePage', () => {
     expect(fixture.componentInstance.loading()).toBe(true);
     expect(rows(fixture).length).toBe(0);
   });
+  it('keeps Reload available after a first load fails, since submitting the same route retries nothing', () => {
+    host.trace = vi.fn(() => throwError(() => ({ error: { detail: 'the host fell over' } })));
+    configure('demo-trace-0001');
+    const fixture = render();
+
+    expect(fixture.componentInstance.view()).toBeNull();
+    const reload = fixture.nativeElement.querySelector('button.reload') as HTMLButtonElement;
+    expect(reload.disabled).toBe(false);
+
+    host.trace = vi.fn(() => of(view));
+    reload.click();
+    fixture.detectChanges();
+
+    expect(rows(fixture).length).toBe(3);
+    expect(fixture.nativeElement.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('clears the previous error when the next load starts, not when it finishes', () => {
+    const pending = new Subject<TraceView>();
+    host.trace = vi.fn(() => throwError(() => ({ error: { detail: 'first attempt failed' } })));
+    configure('demo-trace-0001');
+    const fixture = render();
+    expect(fixture.componentInstance.error()).toBe('first attempt failed');
+
+    host.trace = vi.fn(() => pending);
+    paramMap.next(convertToParamMap({ correlationId: 'second-id' }));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.error()).toBeNull();
+    expect(fixture.nativeElement.querySelector('[role="alert"]')).toBeNull();
+  });
 });
