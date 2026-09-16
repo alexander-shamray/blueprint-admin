@@ -142,7 +142,9 @@ export type ProxyResult =
       elapsedMs: number;
       correlationId: string;
     }
-  | { outcome: 'unreached'; error: string; elapsedMs: number; correlationId: string }
+  // `sent` is false when the identity's token could not be minted, which happens before anything
+  // leaves the console: the platform has never seen this correlation id, so there is no trace of it.
+  | { outcome: 'unreached'; error: string; elapsedMs: number; correlationId: string; sent: boolean }
   | { outcome: 'tokenRejected'; status: number; body: string; correlationId: string };
 
 /** A queue and its depth; `messages` is ready plus unacknowledged, as rabbitmqctl reports it (spec §5.5). */
@@ -189,4 +191,35 @@ export interface PermissionsView {
   reachable: boolean;
   error: string | null;
   permissions: BrokerPermission[];
+}
+
+/**
+ * What one row of a timeline is (spec §5.9). `Queued` is the terminal marker: the backend's outbox
+ * carries no trace context, so the publish runs in a trace this correlation id cannot reach, and the
+ * event's summary says so in words.
+ */
+export type TraceEventKind = 'HttpIn' | 'Log' | 'Span' | 'Outbox' | 'Publish' | 'Consume' | 'Queued' | 'Error';
+
+/** One row of a timeline. `source` is `loki`, `tempo` or `broker`; `link` opens Grafana Explore. */
+export interface TraceEvent {
+  at: string;
+  source: string;
+  service: string;
+  kind: TraceEventKind;
+  summary: string;
+  traceId: string | null;
+  link: string | null;
+}
+
+/** One correlation id's timeline. A Grafana that does not answer is a state, as `QueuesView` does it. */
+export interface TraceView {
+  correlationId: string;
+  window: string;
+  reachable: boolean;
+  error: string | null;
+  traceIds: string[];
+  tracesTruncated: boolean;
+  /** A partial failure: the timeline is real but some traces would not come back from Tempo. */
+  warning: string | null;
+  events: TraceEvent[];
 }

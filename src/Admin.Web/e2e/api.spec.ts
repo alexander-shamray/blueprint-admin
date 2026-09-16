@@ -59,3 +59,21 @@ test('show token displays the demo permissions', async ({ page }) => {
 
   await expect(page.locator('.claims')).toContainText('orders:cancel');
 });
+
+// Spec §10: "a trace renders a timeline". The button carries the response's own correlation id to
+// the Trace screen, which loads it from the route rather than from anything this screen holds.
+test('trace this call opens the response correlation id on the trace screen', async ({ page }) => {
+  await page.goto('/requests');
+
+  await page.locator('button.op', { hasText: 'GetProducts' }).click();
+  await page.getByLabel('Identity').selectOption('anonymous');
+  await page.getByLabel('Correlation id').fill('e2e-trace-1');
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.locator('.response .status')).toHaveText('200');
+
+  await page.locator('button.trace-call').click();
+
+  await expect(page).toHaveURL(/\/trace\/e2e-trace-1$/);
+  await expect(page.locator('p.summary')).toContainText('for e2e-trace-1');
+  await expect(page.locator('table.timeline tbody tr').last().locator('td.kind')).toHaveText('[queued]');
+});

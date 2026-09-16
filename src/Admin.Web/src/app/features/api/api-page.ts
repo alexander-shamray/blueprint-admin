@@ -1,5 +1,6 @@
 import { Component, DestroyRef, InjectionToken, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { EMPTY, Subscription, catchError, exhaustMap, takeUntil, takeWhile, tap, timer } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { ApiCatalogView, ApiOperation, ProjectionDrain, ProxyRequest, ProxyResult, TokenView } from '../../core/host/host-types';
@@ -54,6 +55,7 @@ export const DRAIN_WATCH_MS = 120_000;
 export class ApiPage {
   private readonly host = inject(HostClient);
   private readonly uuid = inject(UUID);
+  private readonly router = inject(Router);
   /** Sends still in flight. They are not cancelled when the editor moves on: the platform may already have acted on one. */
   private readonly sends = new Set<Subscription>();
   /** Bumped when the editor is replaced (select, restore); a send finishing under an older value only reaches history. */
@@ -272,6 +274,14 @@ export class ApiPage {
       this.sends.add(send);
       send.add(() => this.sends.delete(send));
     }
+  }
+
+  /**
+   * Opens this call's correlation id on the Trace screen. Offered only where something was actually
+   * sent: on `tokenRejected` no request left the console, so there is nothing to trace.
+   */
+  traceThisCall(correlationId: string): void {
+    void this.router.navigate(['/trace', correlationId]);
   }
 
   /**

@@ -95,6 +95,7 @@
               <span class="status" [class.ok]="r.status < 400" [class.bad]="r.status >= 400">{{ r.status }}</span>
               <span class="elapsed">{{ r.elapsedMs }} ms</span>
               <span class="correlation">correlation id {{ r.correlationId }}</span>
+              <button class="trace-call" type="button" [attr.aria-label]="'Trace correlation id ' + r.correlationId" (click)="traceThisCall(r.correlationId)">Trace this call</button>
             </p>
             <details><summary>Headers</summary><pre class="headers">{{ headerLines().join('\n') }}</pre></details>
             <pre class="body">{{ prettyBody() }}</pre>
@@ -115,7 +116,7 @@
         @case ('unreached') {
           <section class="response unreached">
             <p class="sent">{{ answered() }}</p>
-            <p><span class="status bad">No answer from the platform</span> <span class="elapsed">{{ r.elapsedMs }} ms</span> <span class="correlation">correlation id {{ r.correlationId }}</span></p>
+            <p><span class="status bad">No answer from the platform</span> <span class="elapsed">{{ r.elapsedMs }} ms</span> <span class="correlation">correlation id {{ r.correlationId }}</span> @if (r.sent) {<button class="trace-call" type="button" [attr.aria-label]="'Trace correlation id ' + r.correlationId" (click)="traceThisCall(r.correlationId)">Trace this call</button>}</p>
             <p>{{ r.error }}</p>
           </section>
         }

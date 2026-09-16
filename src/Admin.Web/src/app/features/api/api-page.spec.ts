@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { Router, provideRouter } from '@angular/router';
 import { Subject, of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { ApiCatalogView, ApiOperation, ProxyResult, QueuesView, TokenView } from '../../core/host/host-types';
@@ -67,7 +68,7 @@ describe('ApiPage', () => {
     };
     TestBed.configureTestingModule({
       imports: [ApiPage],
-      providers: [{ provide: HostClient, useValue: host }, { provide: UUID, useValue: () => 'fresh-uuid' }],
+      providers: [provideRouter([]), { provide: HostClient, useValue: host }, { provide: UUID, useValue: () => 'fresh-uuid' }],
     });
   });
 
@@ -688,5 +689,45 @@ describe('ApiPage', () => {
 
     expect(host.brokerQueues).not.toHaveBeenCalled();
     expect(fixture.nativeElement.querySelector('app-drained-indicator')).toBeNull();
+  });
+  it('offers Trace this call on a sent request and navigates to the correlation id', () => {
+    const fixture = render();
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    fixture.componentInstance.chooseIdentity('anonymous');
+    click(fixture, 'Send');
+
+    const button = fixture.nativeElement.querySelector('button.trace-call') as HTMLButtonElement;
+    expect(button.getAttribute('aria-label')).toBe('Trace correlation id corr-1');
+    button.click();
+
+    expect(navigate).toHaveBeenCalledWith(['/trace', 'corr-1']);
+  });
+
+  it('offers Trace this call when the platform never answered, because the request still went out', () => {
+    host.proxy.mockReturnValue(of({ outcome: 'unreached', error: 'Connection refused', elapsedMs: 3, correlationId: 'corr-9', sent: true }));
+    const fixture = render();
+    fixture.componentInstance.chooseIdentity('anonymous');
+    click(fixture, 'Send');
+
+    expect(fixture.nativeElement.querySelector('button.trace-call')).not.toBeNull();
+  });
+
+  it('offers no Trace this call when Keycloak refused the identity, because nothing was sent', () => {
+    host.proxy.mockReturnValue(of({ outcome: 'tokenRejected', status: 401, body: 'nope', correlationId: 'corr-2' }));
+    const fixture = render();
+    fixture.componentInstance.chooseIdentity('anonymous');
+    click(fixture, 'Send');
+
+    expect(fixture.nativeElement.textContent).toContain('Keycloak refused the identity');
+    expect(fixture.nativeElement.querySelector('button.trace-call')).toBeNull();
+  });
+  it('offers no Trace this call when Keycloak was unreachable, because the request never went out', () => {
+    host.proxy.mockReturnValue(of({ outcome: 'unreached', error: 'Keycloak did not answer: refused', elapsedMs: 3, correlationId: 'corr-8', sent: false }));
+    const fixture = render();
+    fixture.componentInstance.chooseIdentity('anonymous');
+    click(fixture, 'Send');
+
+    expect(fixture.nativeElement.textContent).toContain('Keycloak did not answer');
+    expect(fixture.nativeElement.querySelector('button.trace-call')).toBeNull();
   });
 });

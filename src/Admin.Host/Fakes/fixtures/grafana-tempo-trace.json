@@ -1,0 +1,80 @@
+{
+  "batches": [
+    {
+      "resource": {
+        "attributes": [{ "key": "service.name", "value": { "stringValue": "Gateway.Api" } }]
+      },
+      "scopeSpans": [
+        {
+          "scope": { "name": "Microsoft.AspNetCore" },
+          "spans": [
+            {
+              "traceId": "S/kvNXezTaajzpKdDg5HNg==",
+              "spanId": "APBnqgupArc=",
+              "name": "POST /api/v1/{**catch-all}",
+              "kind": "SPAN_KIND_SERVER",
+              "startTimeUnixNano": "1789532580000000000",
+              "endTimeUnixNano": "1789532582000000000",
+              "attributes": [
+                { "key": "http.request.method", "value": { "stringValue": "POST" } },
+                { "key": "http.route", "value": { "stringValue": "/api/v1/{**catch-all}" } },
+                { "key": "http.response.status_code", "value": { "intValue": "201" } }
+              ],
+              "status": {}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "resource": {
+        "attributes": [{ "key": "service.name", "value": { "stringValue": "Catalog.Api" } }]
+      },
+      "scopeSpans": [
+        {
+          "scope": { "name": "Microsoft.AspNetCore" },
+          "spans": [
+            {
+              "traceId": "S/kvNXezTaajzpKdDg5HNg==",
+              "spanId": "APBnqgupArg=",
+              "parentSpanId": "APBnqgupArc=",
+              "name": "POST /api/v1/products",
+              "kind": "SPAN_KIND_SERVER",
+              "startTimeUnixNano": "1789532580400000000",
+              "endTimeUnixNano": "1789532581800000000",
+              "attributes": [
+                { "key": "http.request.method", "value": { "stringValue": "POST" } },
+                { "key": "http.route", "value": { "stringValue": "/api/v1/products" } },
+                { "key": "http.response.status_code", "value": { "intValue": "201" } }
+              ],
+              "status": {}
+            }
+          ]
+        },
+        {
+          "scope": { "name": "OpenTelemetry.Instrumentation.SqlClient" },
+          "spans": [
+            {
+              "traceId": "S/kvNXezTaajzpKdDg5HNg==",
+              "spanId": "APBnqgupArk=",
+              "parentSpanId": "APBnqgupArg=",
+              "name": "INSERT catalog",
+              "kind": "SPAN_KIND_CLIENT",
+              "startTimeUnixNano": "1789532581000000000",
+              "endTimeUnixNano": "1789532581120000000",
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "mssql" } },
+                { "key": "db.name", "value": { "stringValue": "catalog" } },
+                {
+                  "key": "db.statement",
+                  "value": { "stringValue": "INSERT INTO dbo.OutboxMessages (Id, MessageType, Payload) VALUES (@p0, @p1, @p2)" }
+                }
+              ],
+              "status": {}
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

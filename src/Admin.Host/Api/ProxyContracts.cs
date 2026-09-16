@@ -29,7 +29,12 @@ public abstract record ProxyResult(string CorrelationId);
 public sealed record ProxyResponded(int Status, IReadOnlyDictionary<string, string[]> Headers, string Body, bool BodyTruncated, string? BodyError, long ElapsedMs, string CorrelationId)
     : ProxyResult(CorrelationId);
 
-public sealed record ProxyUnreached(string Error, long ElapsedMs, string CorrelationId) : ProxyResult(CorrelationId);
+/// <param name="Sent">
+/// Whether the request actually left this console. False when the identity's token could not be
+/// minted at all, which happens before anything is sent: the platform has then never seen this
+/// correlation id, so there is no trace of it to look for.
+/// </param>
+public sealed record ProxyUnreached(string Error, long ElapsedMs, string CorrelationId, bool Sent) : ProxyResult(CorrelationId);
 
 /// <summary>Keycloak refused the identity; its status and body, and the request was not sent.</summary>
 public sealed record ProxyTokenRejected(int Status, string Body, string CorrelationId) : ProxyResult(CorrelationId);

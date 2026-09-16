@@ -1,0 +1,86 @@
+<section class="actions">
+  <form (ngSubmit)="submit()">
+    <input
+      name="correlationId"
+      aria-label="Correlation id"
+      placeholder="correlation id"
+      [ngModel]="correlationId()"
+      (ngModelChange)="correlationId.set($event)"
+    />
+    <label>
+      Window
+      <select name="window" aria-label="Window" [ngModel]="window()" (ngModelChange)="window.set($event)">
+        @for (w of windows; track w) {
+          <option [value]="w">{{ w }}</option>
+        }
+      </select>
+    </label>
+    <button class="trace" type="submit" [disabled]="loading()">Trace</button>
+    <!-- Enabled on a typed id too, not only on a loaded view: after a failed first load, submitting
+         navigates to the route already showing, which the router ignores, so this is the only retry. -->
+    <button class="reload" type="button" [disabled]="loading() || !canReload()" (click)="reload()">Reload</button>
+  </form>
+</section>
+
+@if (error(); as e) {
+  <!-- Rendered as-is: a 400 problem detail is the host answering, so prefixing it with "the host did
+       not answer" would be untrue, and describeError already supplies that sentence when it fits. -->
+  <p class="error" role="alert">{{ e }}</p>
+}
+
+@if (view(); as v) {
+  <!-- Only ever a reachable view: an unreachable answer is surfaced through error() above, leaving
+       the last good timeline in place. -->
+  <p class="summary" role="status">
+    {{ v.events.length }} event{{ v.events.length === 1 ? '' : 's' }} for {{ v.correlationId }} over the last {{ v.window }},
+    across {{ v.traceIds.length }} trace{{ v.traceIds.length === 1 ? '' : 's' }}.
+    @if (v.tracesTruncated) {
+      <span class="truncated">Only the {{ v.traceIds.length }} newest traces were fetched.</span>
+    }
+  </p>
+
+  @if (v.warning; as warning) {
+    <p class="warning" role="status">{{ warning }}</p>
+  }
+
+  @if (v.events.length <= 1) {
+    <p class="empty">
+      No log line carries correlation id {{ v.correlationId }} in the last {{ v.window }}. The id may be older than the
+      window, or the request may never have reached the platform.
+    </p>
+  }
+
+  @if (v.events.length > 0) {
+    <table class="timeline">
+      <thead>
+        <tr><th>At</th><th>Service</th><th>Kind</th><th>What happened</th></tr>
+      </thead>
+      <tbody>
+        @for (event of v.events; track $index) {
+          <tr class="kind-{{ event.kind }}">
+            <td class="at">{{ event.at | date: 'HH:mm:ss.SSS' }}</td>
+            <td class="service">{{ event.service }}</td>
+            <td class="kind">{{ kindWord(event.kind) }}</td>
+            <td class="summary">
+              {{ event.summary }}
+              @if (event.link; as link) {
+                <a
+                  class="explore"
+                  [href]="link"
+                  target="_blank"
+                  rel="noopener"
+                  [attr.aria-label]="'Open this ' + event.source + ' entry in Grafana Explore'"
+                  >Explore</a
+                >
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+} @else if (loading()) {
+  <p>Loading…</p>
+} @else if (!error()) {
+  <p class="empty">Enter a correlation id, or arrive here from the API screen with “Trace this call”.</p>
+}

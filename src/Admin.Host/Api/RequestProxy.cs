@@ -12,13 +12,10 @@ namespace Admin.Host.Api;
 /// </summary>
 public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<AdminOptions> options, TimeProvider time)
 {
-    /// <summary>Owner: blueprint-backend <c>Common.Web.CorrelationIdExtensions.Header</c>.</summary>
-    public const string CorrelationHeader = "X-Correlation-Id";
+    /// <summary>The header itself is owned by <see cref="Api.CorrelationId"/>; this is the proxy's name for it.</summary>
+    public const string CorrelationHeader = CorrelationId.Header;
 
     public const int MaxBodyBytes = 1_048_576;
-
-    /// <summary>Owner: <c>Common.Web.CorrelationIdExtensions.MaxSuppliedLength</c>.</summary>
-    private const int MaxCorrelationIdLength = 128;
 
     private static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(30);
 
@@ -27,9 +24,8 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
     // Set by HttpClient from the URL and the body, never by the caller.
     private static readonly HashSet<string> Dropped = new(["Host", "Content-Length", "Transfer-Encoding", "Connection"], StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>The backend's adoption rule, <c>CorrelationIdExtensions.IsAdoptable</c>: 1-128 ASCII letters, digits, '-' or '_'.</summary>
-    public static bool IsAdoptable(string id) =>
-        id.Length is >= 1 and <= MaxCorrelationIdLength && id.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_');
+    /// <summary>The backend's adoption rule, owned by <see cref="Api.CorrelationId.IsAdoptable"/>.</summary>
+    public static bool IsAdoptable(string id) => CorrelationId.IsAdoptable(id);
 
     /// <summary>Whether .NET files the name under content headers, which a request message's own headers refuse.</summary>
     private static bool IsContentHeader(string name)
@@ -128,7 +124,8 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
             case UnknownUser unknown:
                 return new ProxyTokenRejected(400, $"'{unknown.Username}' is not a configured realm user.", correlationId);
             case KeycloakUnreachable unreachable:
-                return new ProxyUnreached($"Keycloak did not answer: {unreachable.Error}", Elapsed(started), correlationId);
+                // Sent: false — the send never happened, so nothing downstream carries this id.
+                return new ProxyUnreached($"Keycloak did not answer: {unreachable.Error}", Elapsed(started), correlationId, false);
             default:
                 using (HttpRequestMessage message = Build(request, token as TokenIssued, correlationId))
                 {
@@ -193,11 +190,11 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
         }
         catch (HttpRequestException e)
         {
-            return new ProxyUnreached(Describe(e), Elapsed(started), correlationId);
+            return new ProxyUnreached(Describe(e), Elapsed(started), correlationId, true);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return new ProxyUnreached($"No answer within {SendTimeout.TotalSeconds:0} s.", Elapsed(started), correlationId);
+            return new ProxyUnreached($"No answer within {SendTimeout.TotalSeconds:0} s.", Elapsed(started), correlationId, true);
         }
 
         using (response)

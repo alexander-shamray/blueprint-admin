@@ -1,0 +1,6 @@
+[
+  { "id": 1, "uid": "prometheus", "name": "Prometheus", "type": "prometheus" },
+  { "id": 2, "uid": "tempo", "name": "Tempo", "type": "tempo" },
+  { "id": 3, "uid": "loki", "name": "Loki", "type": "loki" },
+  { "id": 4, "uid": "pyroscope", "name": "Pyroscope", "type": "grafana-pyroscope-datasource" }
+]

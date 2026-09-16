@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
@@ -15,6 +15,7 @@ import {
   RealmUserView,
   StackView,
   TokenView,
+  TraceView,
 } from './host-types';
 
 /** Every call the SPA makes; there is no other origin (spec §3, §7). */
@@ -80,6 +81,11 @@ export class HostClient {
 
   brokerPermissions(): Observable<PermissionsView> {
     return this.http.get<PermissionsView>('/api/broker/permissions');
+  }
+
+  trace(correlationId: string, window?: string): Observable<TraceView> {
+    const params = window ? new HttpParams().set('window', window) : undefined;
+    return this.http.get<TraceView>(`/api/trace/${encodeURIComponent(correlationId)}`, { params });
   }
 
   job(id: string): Observable<JobView> {

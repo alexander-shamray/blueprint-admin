@@ -5,6 +5,7 @@
     <a routerLink="/logs" routerLinkActive="active">Logs</a>
     <a routerLink="/broker" routerLinkActive="active">Broker</a>
     <a routerLink="/requests" routerLinkActive="active">API</a>
+    <a routerLink="/trace" routerLinkActive="active">Trace</a>
   </nav>
   @if (config(); as c) {
     <span class="hint">{{ c.backendDir }} @if (c.fakePlatform) {<em>(fake platform)</em>}</span>

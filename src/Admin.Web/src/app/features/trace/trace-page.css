@@ -1,0 +1,17 @@
+.actions { margin-bottom: 1rem; }
+.actions form { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+.actions input { min-width: 22rem; font-family: inherit; }
+table { border-collapse: collapse; margin-bottom: 1rem; width: 100%; }
+td, th { padding: 0.25rem 0.75rem; border-bottom: 1px solid #eee; text-align: left; vertical-align: top; }
+td.at, td.kind { white-space: nowrap; font-variant-numeric: tabular-nums; }
+td.kind { color: #555; }
+td.summary { word-break: break-word; }
+/* Colour repeats what the [kind] column already says in words; it never carries the state alone. */
+tr.kind-Error td { color: #b00; font-weight: 600; }
+tr.kind-Queued td { background: #f6f6f6; font-style: italic; }
+tr.kind-Outbox td.kind, tr.kind-Publish td.kind, tr.kind-Consume td.kind { font-weight: 600; }
+a.explore { margin-left: 0.5rem; font-size: 0.85em; }
+.summary .truncated { margin-left: 0.5rem; color: #855; }
+.warning { color: #855; max-width: 48rem; }
+.empty { color: #555; max-width: 48rem; }
+.error { color: #b00; }

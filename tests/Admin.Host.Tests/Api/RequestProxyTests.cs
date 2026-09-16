@@ -248,6 +248,8 @@ public sealed class RequestProxyTests
         ProxyUnreached unreached = (await Proxy(handler).SendAsync(Get(), Token)).ShouldBeOfType<ProxyUnreached>();
 
         unreached.Error.ShouldContain("No connection could be made");
+        // The request did leave the console, so its correlation id can be traced.
+        unreached.Sent.ShouldBeTrue();
     }
 
     [Fact]
@@ -293,6 +295,7 @@ public sealed class RequestProxyTests
         ProxyUnreached unreached = (await Proxy(handler, time: time).SendAsync(Get(), Token)).ShouldBeOfType<ProxyUnreached>();
 
         unreached.Error.ShouldBe("No answer within 30 s.");
+        unreached.Sent.ShouldBeTrue();
     }
 
     [Fact]
@@ -353,8 +356,12 @@ public sealed class RequestProxyTests
     {
         ScriptedHandler handler = new(request => IsToken(request) ? throw new HttpRequestException("refused") : new HttpResponseMessage(HttpStatusCode.OK));
 
-        (await Proxy(handler).SendAsync(Get(identity: new IdentityRequest("demo", null)), Token))
-            .ShouldBeOfType<ProxyUnreached>().Error.ShouldStartWith("Keycloak did not answer");
+        ProxyUnreached unreached = (await Proxy(handler).SendAsync(Get(identity: new IdentityRequest("demo", null)), Token))
+            .ShouldBeOfType<ProxyUnreached>();
+
+        unreached.Error.ShouldStartWith("Keycloak did not answer");
+        // Nothing was sent, so the platform never saw this id and there is no trace to offer.
+        unreached.Sent.ShouldBeFalse();
     }
 
     [Theory]
@@ -443,8 +450,8 @@ public sealed class RequestProxyTests
     [Fact]
     public void The_result_serializes_with_an_outcome_discriminator()
     {
-        JsonSerializer.Serialize<ProxyResult>(new ProxyUnreached("refused", 3, "c1"), Web)
-            .ShouldBe("""{"outcome":"unreached","error":"refused","elapsedMs":3,"correlationId":"c1"}""");
+        JsonSerializer.Serialize<ProxyResult>(new ProxyUnreached("refused", 3, "c1", true), Web)
+            .ShouldBe("""{"outcome":"unreached","error":"refused","elapsedMs":3,"sent":true,"correlationId":"c1"}""");
     }
 
     private sealed class BreakingStream(byte[] prefix, Func<CancellationToken, Task> then) : Stream
