@@ -62,8 +62,9 @@ The Broker screen lists queues (error queues marked), exchanges and
 permissions through `rabbitmqctl` in the `rabbitmq` container, and the API
 screen shows whether `ordering-catalog-events` has drained after a publish.
 The Trace screen joins a correlation id's Loki lines and Tempo spans into one
-timeline, each row linking into Grafana Explore, and the API screen's "Trace
-this call" opens it on the response's own correlation id.
+timeline, each of those rows linking into Grafana Explore, closing with the
+projection queue's snapshot; the API screen's "Trace this call" opens it on the
+response's own correlation id.
 
 ## Known limits
 

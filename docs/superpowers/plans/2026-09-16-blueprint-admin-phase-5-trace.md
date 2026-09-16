@@ -512,10 +512,14 @@ reader meets the console through them. Record them as one publish of a product:
   `trace_id` `4bf92f3577b34da6a3ce929d0e0e4736` except the error line, which carries a second
   trace id so the truncation and multi-trace paths are exercised.
 - `grafana-tempo-trace.json` — the measured `batches` envelope for that trace: a `Gateway.Api`
-  `SPAN_KIND_SERVER` span with `http.route`, a `Catalog.Api` server span, a `Catalog.Api`
-  `SPAN_KIND_CLIENT` db span naming `OutboxMessages`, and a publish span with
-  `messaging.operation = "publish"` — so the recogniser returns `HttpIn`, `HttpIn`, `Outbox` and
-  `Publish`, and the smoke can assert one of each.
+  `SPAN_KIND_SERVER` span with `http.route`, a `Catalog.Api` server span and a `Catalog.Api`
+  `SPAN_KIND_CLIENT` db span naming `OutboxMessages` — so the recogniser returns `HttpIn`, `HttpIn`
+  and `Outbox`, and the smoke can assert one of each.
+  **Corrected during execution (ruling R11): this bullet originally also asked for a publish span
+  with `messaging.operation = "publish"`. It cannot exist.** M2 measured that the outbox dispatcher
+  publishes in a *new* trace, so no publish span can appear in the HTTP request's trace, and a
+  recording showing one would contradict the terminal event rendered directly beneath it on the same
+  screen. `SpanRecogniser`'s `Publish` and `Consume` rules stay covered by their unit tests.
 
 `FakeGrafana.Loki` should answer the *same* fixture whatever the query, but **echo the requested
 correlation id** into the returned `CorrelationId` metadata so the screen shows the id the user
@@ -531,7 +535,8 @@ Register the three fixtures in `Admin.Host.csproj` beside the existing ones, fla
 on raw `JsonElement` so the wire names are tested:
 
 - `GET /api/trace/demo-trace-0001` ⇒ 200, `reachable` true, `events` non-empty, the last event's
-  `kind` is `Queued`, and at least one event of each of `HttpIn`, `Outbox`, `Publish`;
+  `kind` is `Queued`, and at least one event of each of `HttpIn` and `Outbox` — and **no** `Publish`,
+  per R11 above;
 - `correlationId` of `a"b` (and one of 200 characters) ⇒ 400 problem details;
 - `?window=banana` ⇒ 400; `?window=2h` ⇒ 200;
 - the default window appears in the view as `15m`.
@@ -668,8 +673,8 @@ git commit -m "feat(web): Trace this call opens the response's correlation id on
 `src/Admin.Web/e2e/trace.spec.ts`, with a leading comment citing the fixtures the counts come from
 (`src/Admin.Host/Fakes/fixtures/grafana-*.json`): navigate to `/trace`, type
 `demo-trace-0001`, submit, and assert the URL became `/trace/demo-trace-0001`, that
-`table.timeline tbody tr` has the fixture's row count, that a `[http]`, an `[outbox]` and a
-`[publish]` row are present, that the last row is the `[queued]` projection sentence, and that a
+`table.timeline tbody tr` has the fixture's row count, that `[http]` and `[outbox]` rows are
+present and no `[publish]` row is (R11), that the last row is the `[queued]` projection sentence, and that a
 Grafana Explore link is present with an `http://localhost:3000/explore?` href.
 
 - [ ] **Step 2: The click-through from the API screen**

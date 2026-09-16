@@ -270,4 +270,60 @@ public sealed class GrafanaClientTests
         tempo.Reachable.ShouldBeFalse();
         handler.Requests.Count.ShouldBe(1);
     }
+    [Fact]
+    public async Task A_nanosecond_timestamp_too_large_to_parse_is_unreachable_instead_of_throwing()
+    {
+        // 30 digits: past long, so long.Parse throws OverflowException rather than FormatException.
+        ScriptedHandler handler = new(request => request.RequestUri!.AbsolutePath == "/api/datasources"
+            ? FakeJson(Datasources)
+            : FakeJson("""
+                {"status":"success","data":{"resultType":"streams","result":[
+                  {"stream":{"service_name":"Catalog.Api"},
+                   "values":[["999999999999999999999999999999","too far in the future"]]}
+                ]}}
+                """));
+        GrafanaClient client = Client(handler);
+
+        LokiResult result = await client.QueryAsync("{service_name=~\".+\"}", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, 10, Token);
+
+        result.Reachable.ShouldBeFalse();
+        result.Lines.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_values_entry_missing_its_line_is_unreachable_instead_of_throwing()
+    {
+        ScriptedHandler handler = new(request => request.RequestUri!.AbsolutePath == "/api/datasources"
+            ? FakeJson(Datasources)
+            : FakeJson("""
+                {"status":"success","data":{"resultType":"streams","result":[
+                  {"stream":{"service_name":"Catalog.Api"},"values":[["1789532582000000000"]]}
+                ]}}
+                """));
+        GrafanaClient client = Client(handler);
+
+        LokiResult result = await client.QueryAsync("{service_name=~\".+\"}", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, 10, Token);
+
+        result.Reachable.ShouldBeFalse();
+        result.Lines.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_span_timestamp_too_large_to_parse_is_unreachable_instead_of_throwing()
+    {
+        ScriptedHandler handler = new(request => request.RequestUri!.AbsolutePath == "/api/datasources"
+            ? FakeJson(Datasources)
+            : FakeJson("""
+                {"batches":[{"resource":{"attributes":[]},"scopeSpans":[{"spans":[
+                  {"traceId":"qqqqqqqqqqqqqqqqqqqqoQ==","spanId":"APBnqgupArc=","name":"s","kind":"SPAN_KIND_INTERNAL",
+                   "startTimeUnixNano":"999999999999999999999999999999","endTimeUnixNano":"999999999999999999999999999999","attributes":[]}
+                ]}]}]}
+                """));
+        GrafanaClient client = Client(handler);
+
+        TempoResult result = await client.TraceAsync("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", Token);
+
+        result.Reachable.ShouldBeFalse();
+        result.Spans.ShouldBeEmpty();
+    }
 }

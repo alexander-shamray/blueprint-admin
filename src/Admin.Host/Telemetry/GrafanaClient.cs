@@ -217,10 +217,18 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
     /// the endpoint: the network/timeout set <see cref="Admin.Host.Identity.TokenService"/> uses,
     /// widened for a well-formed-JSON-but-wrong-shape 200 (a Grafana version that renames a field, or
     /// an error body on a success status) the way <c>TokenService.GetAsync</c>'s last catch clause does.
+    /// <para>
+    /// The shape failures are not only missing or mistyped properties: a nanosecond value too large
+    /// for <see cref="long"/> or for <see cref="DateTimeOffset"/> throws <see cref="OverflowException"/>
+    /// or <see cref="ArgumentOutOfRangeException"/>, and a <c>values</c> entry shorter than
+    /// <c>[timestamp, line]</c> throws <see cref="IndexOutOfRangeException"/>. A malformed answer is
+    /// an unreachable Grafana (spec §9), never a 500 from this console.
+    /// </para>
     /// </summary>
     private static bool IsUnreachable(Exception e, CancellationToken cancellationToken) =>
         (e is HttpRequestException or JsonException or OperationCanceledException or KeyNotFoundException
-            or InvalidOperationException or FormatException or ArgumentNullException)
+            or InvalidOperationException or FormatException or ArgumentException or OverflowException
+            or IndexOutOfRangeException)
         && !cancellationToken.IsCancellationRequested;
 
     /// <summary>Converts raw bytes (for example a W3C trace or span id) to lowercase hex.</summary>

@@ -33,8 +33,10 @@ structured-metadata field names and the Explore link form are copied, with the
 measurement that established them cited, in
 `src/Admin.Host/Telemetry/GrafanaClient.cs` and
 `src/Admin.Host/Trace/ExploreLink.cs`; what a Tempo span *is* is decided by
-`SpanRecogniser.Table` in `src/Admin.Host/Trace/SpanRecogniser.cs`, never by
-span name, so a renamed span is a one-line change there. The
+`SpanRecogniser.Table` in `src/Admin.Host/Trace/SpanRecogniser.cs` — from the
+span's attributes, with its name read only as the documented last resort inside
+the outbox rule, where instrumentation that stamps no statement attribute names
+the span after the table it touched. A renamed span is a one-line change there. The
 operating system is known in three files only,
 `src/Admin.Host/Jobs/ProcessRunner.cs` (tree kill),
 `src/Admin.Host/Jobs/WindowsJobObject.cs` (the Windows job object that reaches

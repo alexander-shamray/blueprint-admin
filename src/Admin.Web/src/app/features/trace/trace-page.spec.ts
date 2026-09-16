@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router, convertToParamMap, provideRouter } from '@angular/router';
-import { BehaviorSubject, of, throwError } from 'rxjs';
+import { BehaviorSubject, Subject, of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { TraceView } from '../../core/host/host-types';
 import { TracePage } from './trace-page';
@@ -186,5 +186,25 @@ describe('TracePage', () => {
 
     expect(host.trace).toHaveBeenCalledTimes(2);
     expect(host.trace).toHaveBeenLastCalledWith('another-id', '15m');
+  });
+  it('abandons an in-flight read when the route moves to another id, rather than dropping the new one', () => {
+    const first = new Subject<TraceView>();
+    host.trace = vi.fn((id: string) => (id === 'demo-trace-0001' ? first : of({ ...view, correlationId: 'second-id' })));
+    configure('demo-trace-0001');
+    const fixture = render();
+
+    paramMap.next(convertToParamMap({ correlationId: 'second-id' }));
+    fixture.detectChanges();
+
+    expect(host.trace).toHaveBeenCalledTimes(2);
+    expect(fixture.componentInstance.view()?.correlationId).toBe('second-id');
+
+    // The abandoned read answering late must not overwrite the timeline now on screen.
+    first.next({ ...view, correlationId: 'demo-trace-0001' });
+    first.complete();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.view()?.correlationId).toBe('second-id');
+    expect(fixture.componentInstance.loading()).toBe(false);
   });
 });

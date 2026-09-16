@@ -3,7 +3,7 @@ import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { EMPTY, catchError, finalize, tap } from 'rxjs';
+import { EMPTY, Subject, catchError, defer, finalize, switchMap, tap } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { TraceEventKind, TraceView } from '../../core/host/host-types';
 
@@ -47,17 +47,43 @@ export class TracePage {
   readonly correlationId = signal('');
   readonly window = signal<string>(WINDOWS[0]);
 
+  /** Every load request, from the route or from Reload; the latest wins. */
+  private readonly loads = new Subject<string>();
+
   /**
    * The id in the URL drives the load, and it is watched rather than read once: navigating from one
    * id to another reuses this component, so a constructor that only read the first param would leave
    * the old timeline on screen.
    */
   constructor() {
-    this.route.paramMap.pipe(takeUntilDestroyed()).subscribe((params) => {
+    // switchMap, not a re-entrancy guard: a second id arriving while the first read is out must
+    // abandon that read and load the new one. Dropping it would leave the URL naming an id whose
+    // timeline is never fetched.
+    this.loads
+      .pipe(
+        switchMap((id) =>
+          defer(() => {
+            this.loading.set(true);
+            return this.host.trace(id, this.window());
+          }).pipe(
+            tap(() => this.error.set(null)),
+            catchError((e: unknown) => {
+              this.error.set(this.describeError(e));
+              return EMPTY;
+            }),
+            // Runs on cancellation too, before the next read's defer sets it again.
+            finalize(() => this.loading.set(false)),
+          ),
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((view) => this.view.set(view));
+
+    this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
       const id = params.get('correlationId') ?? '';
       if (id === '') return;
       this.correlationId.set(id);
-      this.load(id);
+      this.loads.next(id);
     });
   }
 
@@ -75,26 +101,7 @@ export class TracePage {
   /** Reloads the id already on screen, for when the window changes or the platform has moved on. */
   reload(): void {
     const id = this.view()?.correlationId ?? this.correlationId().trim();
-    if (id !== '') this.load(id);
-  }
-
-  /** The last good timeline stays on screen behind an error, as the Broker screen keeps its last queues. */
-  private load(correlationId: string): void {
-    if (this.loading()) return;
-    this.loading.set(true);
-
-    this.host
-      .trace(correlationId, this.window())
-      .pipe(
-        takeUntilDestroyed(this.destroyRef),
-        tap(() => this.error.set(null)),
-        catchError((e: unknown) => {
-          this.error.set(this.describeError(e));
-          return EMPTY;
-        }),
-        finalize(() => this.loading.set(false)),
-      )
-      .subscribe((view) => this.view.set(view));
+    if (id !== '') this.loads.next(id);
   }
 
   /** Prefers a problem-detail body's `detail`/`title`, else the HttpErrorResponse's own `message`. */
