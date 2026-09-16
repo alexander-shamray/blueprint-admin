@@ -229,4 +229,18 @@ describe('TracePage', () => {
     expect(rows(fixture).length).toBe(0);
     expect((fixture.nativeElement.querySelector('[role="alert"]') as HTMLElement).textContent).toContain('nope');
   });
+  it('clears the timeline the moment a different id starts loading, not only when it fails', () => {
+    const pending = new Subject<TraceView>();
+    configure('demo-trace-0001');
+    const fixture = render();
+    expect(rows(fixture).length).toBe(3);
+
+    host.trace = vi.fn(() => pending);
+    paramMap.next(convertToParamMap({ correlationId: 'second-id' }));
+    fixture.detectChanges();
+
+    // Still in flight: nothing of demo-trace-0001 may remain under a URL that says second-id.
+    expect(fixture.componentInstance.loading()).toBe(true);
+    expect(rows(fixture).length).toBe(0);
+  });
 });

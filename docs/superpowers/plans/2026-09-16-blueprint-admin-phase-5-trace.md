@@ -523,9 +523,16 @@ reader meets the console through them. Record them as one publish of a product:
 
 `FakeGrafana.Loki` should answer the *same* fixture whatever the query, but **echo the requested
 correlation id** into the returned `CorrelationId` metadata so the screen shows the id the user
-typed; `FakeGrafana.Tempo` answers the trace fixture for any id and rewrites its `traceId` to the
-requested one. Keep both rewrites to a documented `string.Replace` of the fixture's placeholder —
-the fixture is a recording, and the rewrite is what makes it answer any id.
+typed. Keep that rewrite to a documented `string.Replace` of the fixture's placeholder — the fixture
+is a recording, and the rewrite is what makes it answer any id.
+
+**Corrected during execution (ruling R12): this paragraph originally also had `FakeGrafana.Tempo`
+answer the trace fixture for any id, rewriting its `traceId` to the requested one. It does not.**
+Because the Loki recording always answers, the recorded trace id is present whatever correlation id
+is typed, so the rewrite bought nothing — and returning the same spans under two trace ids would put
+each span on screen twice. `FakeGrafana.Tempo` answers the recording for `RecordedTraceId` and a 404
+for anything else, which is what Tempo really does for a trace it does not hold, and which exercises
+the failed-fetch path end to end.
 
 Register the three fixtures in `Admin.Host.csproj` beside the existing ones, flat `LogicalName`.
 

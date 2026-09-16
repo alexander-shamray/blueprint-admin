@@ -64,17 +64,18 @@ export class TracePage {
         switchMap((id) =>
           defer(() => {
             this.loading.set(true);
+
+            // Cleared before the read, not after it fails: the template renders the view above the
+            // loading branch, so keeping it would show A's timeline for the whole of B's request
+            // while the URL and the input both say B. A reload of the id already on screen keeps its
+            // last good timeline, as the Broker screen does.
+            if (this.view()?.correlationId !== id) this.view.set(null);
+
             return this.host.trace(id, this.window());
           }).pipe(
             tap(() => this.error.set(null)),
             catchError((e: unknown) => {
               this.error.set(this.describeError(e));
-
-              // A failed reload of the id on screen keeps its last good timeline, as the Broker
-              // screen does. A failed load of a *different* id must not: leaving A's timeline under
-              // an error about B would put one id's events under another id's name.
-              if (this.view()?.correlationId !== id) this.view.set(null);
-
               return EMPTY;
             }),
             // Runs on cancellation too, before the next read's defer sets it again.
