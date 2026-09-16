@@ -34,6 +34,8 @@ public sealed class GrafanaClientTests
     // Measured 2026-09-16 (plan M6): two batches shaped like GET /api/traces/{id} through the
     // datasource proxy. traceId qqqqqqqqqqqqqqqqqqqqoQ== is the plan's own example, base64 for hex
     // aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1. The span ids' base64 is computed from the hex asserted below.
+    // The root span's attributes carry one of each OTLP tagged-union shape M6 names
+    // (stringValue/intValue/boolValue/doubleValue; intValue is itself a JSON string).
     private const string TempoTrace = """
         {"batches":[
           {"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"Gateway.Api"}}]},
@@ -41,7 +43,10 @@ public sealed class GrafanaClientTests
              {"traceId":"qqqqqqqqqqqqqqqqqqqqoQ==","spanId":"APBnqgupArc=",
               "name":"GET /api/products","kind":"SPAN_KIND_SERVER",
               "startTimeUnixNano":"1700000000000000000","endTimeUnixNano":"1700000000050000000",
-              "attributes":[{"key":"http.method","value":{"stringValue":"GET"}}]}
+              "attributes":[{"key":"http.method","value":{"stringValue":"GET"}},
+                {"key":"http.status_code","value":{"intValue":"200"}},
+                {"key":"http.retry","value":{"boolValue":true}},
+                {"key":"duration_ms","value":{"doubleValue":12.5}}]}
            ]}]},
           {"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"Catalog.Api"}}]},
            "scopeSpans":[{"scope":{"name":"Catalog.Api"},"spans":[
@@ -50,6 +55,24 @@ public sealed class GrafanaClientTests
               "startTimeUnixNano":"1700000000005000000","endTimeUnixNano":"1700000000045000000",
               "attributes":[{"key":"db.statement","value":{"stringValue":"SELECT * FROM products"}}],
               "status":{"code":"STATUS_CODE_ERROR"}}
+           ]}]}
+        ]}
+        """;
+
+    // A companion to TempoTrace with a second, malformed span alongside a good one: neither
+    // traceId nor spanId decodes as base64.
+    private const string TempoTraceWithAMalformedSpan = """
+        {"batches":[
+          {"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"Gateway.Api"}}]},
+           "scopeSpans":[{"scope":{"name":"Gateway.Api"},"spans":[
+             {"traceId":"qqqqqqqqqqqqqqqqqqqqoQ==","spanId":"APBnqgupArc=",
+              "name":"GET /api/products","kind":"SPAN_KIND_SERVER",
+              "startTimeUnixNano":"1700000000000000000","endTimeUnixNano":"1700000000050000000",
+              "attributes":[]},
+             {"traceId":"not-valid-base64!!","spanId":"also-not-valid-base64!!",
+              "name":"bad-span","kind":"SPAN_KIND_INTERNAL",
+              "startTimeUnixNano":"1700000000000000000","endTimeUnixNano":"1700000000050000000",
+              "attributes":[]}
            ]}]}
         ]}
         """;
@@ -150,11 +173,101 @@ public sealed class GrafanaClientTests
         root.ParentSpanId.ShouldBeNull();
         root.Service.ShouldBe("Gateway.Api");
         root.Failed.ShouldBeFalse();
+        root.Attributes["http.method"].ShouldBe("GET");
+        root.Attributes["http.status_code"].ShouldBe("200");
+        root.Attributes["http.retry"].ShouldBe("true");
+        root.Attributes["duration_ms"].ShouldBe("12.5");
 
         child.TraceId.ShouldBe("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1");
         child.SpanId.ShouldBe("aabbccddeeff0011");
         child.ParentSpanId.ShouldBe("00f067aa0ba902b7");
         child.Service.ShouldBe("Catalog.Api");
         child.Failed.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task A_malformed_span_is_skipped_but_a_good_span_in_the_same_trace_still_comes_back()
+    {
+        ScriptedHandler handler = new(request => request.RequestUri!.AbsolutePath == "/api/datasources"
+            ? FakeJson(Datasources)
+            : FakeJson(TempoTraceWithAMalformedSpan));
+        GrafanaClient client = Client(handler);
+
+        TempoResult result = await client.TraceAsync("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", Token);
+
+        result.Reachable.ShouldBeTrue();
+        TempoSpan good = result.Spans.ShouldHaveSingleItem();
+        good.Name.ShouldBe("GET /api/products");
+    }
+
+    [Fact]
+    public async Task A_malformed_200_from_datasources_leaves_uids_unresolved_instead_of_throwing()
+    {
+        ScriptedHandler handler = new(_ => FakeJson("""{"oops":true}"""));
+        GrafanaClient client = Client(handler);
+
+        DatasourceUids uids = await client.UidsAsync(Token);
+
+        uids.Loki.ShouldBeNull();
+        uids.Tempo.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task A_malformed_200_from_loki_is_unreachable_instead_of_throwing()
+    {
+        ScriptedHandler handler = new(request => request.RequestUri!.AbsolutePath == "/api/datasources"
+            ? FakeJson(Datasources)
+            : FakeJson("""{"status":"success"}"""));
+        GrafanaClient client = Client(handler);
+
+        LokiResult result = await client.QueryAsync("{service_name=~\".+\"}", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, 10, Token);
+
+        result.Reachable.ShouldBeFalse();
+        result.Error.ShouldNotBeNull();
+        result.Lines.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_malformed_200_from_tempo_is_unreachable_instead_of_throwing()
+    {
+        ScriptedHandler handler = new(request => request.RequestUri!.AbsolutePath == "/api/datasources"
+            ? FakeJson(Datasources)
+            : FakeJson("""{"oops":true}"""));
+        GrafanaClient client = Client(handler);
+
+        TempoResult result = await client.TraceAsync("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", Token);
+
+        result.Reachable.ShouldBeFalse();
+        result.Error.ShouldNotBeNull();
+        result.Spans.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_malformed_grafana_url_leaves_the_datasource_uids_unresolved()
+    {
+        ScriptedHandler handler = new(_ => FakeJson(Datasources));
+        GrafanaClient client = Client(handler, new AdminOptions { GrafanaUrl = "localhost:3000" });
+
+        DatasourceUids uids = await client.UidsAsync(Token);
+
+        uids.Loki.ShouldBeNull();
+        handler.Requests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_malformed_grafana_url_is_unreachable_for_queries_and_traces_once_uids_are_cached()
+    {
+        AdminOptions options = new();
+        ScriptedHandler handler = new(_ => FakeJson(Datasources));
+        GrafanaClient client = Client(handler, options);
+        await client.UidsAsync(Token);
+        options.GrafanaUrl = "localhost:3000";
+
+        LokiResult loki = await client.QueryAsync("{service_name=~\".+\"}", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, 10, Token);
+        TempoResult tempo = await client.TraceAsync("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", Token);
+
+        loki.Reachable.ShouldBeFalse();
+        tempo.Reachable.ShouldBeFalse();
+        handler.Requests.Count.ShouldBe(1);
     }
 }

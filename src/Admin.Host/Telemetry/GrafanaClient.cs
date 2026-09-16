@@ -80,7 +80,7 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
 
             return result;
         }
-        catch (Exception e) when ((e is HttpRequestException or JsonException or OperationCanceledException) && !cancellationToken.IsCancellationRequested)
+        catch (Exception e) when (IsUnreachable(e, cancellationToken))
         {
             return new DatasourceUids(null, null, null);
         }
@@ -143,7 +143,7 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
 
             return new LokiResult(true, null, lines);
         }
-        catch (Exception e) when ((e is HttpRequestException or JsonException or OperationCanceledException) && !cancellationToken.IsCancellationRequested)
+        catch (Exception e) when (IsUnreachable(e, cancellationToken))
         {
             return new LokiResult(false, e.Message, []);
         }
@@ -163,7 +163,7 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
         }
 
         AdminOptions o = options.Value;
-        string url = $"{o.GrafanaUrl.TrimEnd('/')}/api/datasources/proxy/uid/{uids.Tempo}/api/traces/{traceIdHex}";
+        string url = $"{o.GrafanaUrl.TrimEnd('/')}/api/datasources/proxy/uid/{uids.Tempo}/api/traces/{Uri.EscapeDataString(traceIdHex)}";
 
         if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
         {
@@ -206,11 +206,22 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
 
             return new TempoResult(true, null, spans);
         }
-        catch (Exception e) when ((e is HttpRequestException or JsonException or OperationCanceledException) && !cancellationToken.IsCancellationRequested)
+        catch (Exception e) when (IsUnreachable(e, cancellationToken))
         {
             return new TempoResult(false, e.Message, []);
         }
     }
+
+    /// <summary>
+    /// Every failure this client can turn into a <c>Reachable: false</c> state rather than throw to
+    /// the endpoint: the network/timeout set <see cref="Admin.Host.Identity.TokenService"/> uses,
+    /// widened for a well-formed-JSON-but-wrong-shape 200 (a Grafana version that renames a field, or
+    /// an error body on a success status) the way <c>TokenService.GetAsync</c>'s last catch clause does.
+    /// </summary>
+    private static bool IsUnreachable(Exception e, CancellationToken cancellationToken) =>
+        (e is HttpRequestException or JsonException or OperationCanceledException or KeyNotFoundException
+            or InvalidOperationException or FormatException or ArgumentNullException)
+        && !cancellationToken.IsCancellationRequested;
 
     /// <summary>Converts raw bytes (for example a W3C trace or span id) to lowercase hex.</summary>
     public static string Hex(ReadOnlySpan<byte> bytes) => Convert.ToHexStringLower(bytes);
