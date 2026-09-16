@@ -15,6 +15,9 @@
     <EmbeddedResource Include="Fakes\fixtures\rabbitmq-queues.json" LogicalName="rabbitmq-queues.json" />
     <EmbeddedResource Include="Fakes\fixtures\rabbitmq-exchanges.json" LogicalName="rabbitmq-exchanges.json" />
     <EmbeddedResource Include="Fakes\fixtures\rabbitmq-permissions.json" LogicalName="rabbitmq-permissions.json" />
+    <EmbeddedResource Include="Fakes\fixtures\grafana-datasources.json" LogicalName="grafana-datasources.json" />
+    <EmbeddedResource Include="Fakes\fixtures\grafana-loki-query.json" LogicalName="grafana-loki-query.json" />
+    <EmbeddedResource Include="Fakes\fixtures\grafana-tempo-trace.json" LogicalName="grafana-tempo-trace.json" />
   </ItemGroup>
 
 </Project>

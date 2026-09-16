@@ -10,6 +10,8 @@ using Admin.Host.Identity;
 using Admin.Host.Jobs;
 using Admin.Host.Security;
 using Admin.Host.Stack;
+using Admin.Host.Telemetry;
+using Admin.Host.Trace;
 using Microsoft.AspNetCore.HostFiltering;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
@@ -99,6 +101,10 @@ builder.Services.AddSingleton(sp => new ApiCatalog(
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("platform"),
     sp.GetRequiredService<TokenService>(),
     sp.GetRequiredService<IOptions<AdminOptions>>()));
+builder.Services.AddSingleton(sp => new GrafanaClient(
+    sp.GetRequiredService<IHttpClientFactory>().CreateClient("platform"),
+    sp.GetRequiredService<IOptions<AdminOptions>>()));
+builder.Services.AddSingleton<EventTraceService>();
 builder.Services.AddSingleton(sp => new RequestProxy(
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("platform"),
     sp.GetRequiredService<TokenService>(),
@@ -142,6 +148,7 @@ app.MapFrontend();
 app.MapIdentity();
 app.MapApi();
 app.MapBroker();
+app.MapTrace();
 
 // MapFallbackToFile's route has no literal segments, so without this it
 // would also catch an unmatched /api/nope (it has no dot, so it passes the

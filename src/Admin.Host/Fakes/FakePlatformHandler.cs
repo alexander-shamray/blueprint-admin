@@ -7,8 +7,9 @@ namespace Admin.Host.Fakes;
 
 /// <summary>
 /// Every outbound HTTP call in FakePlatform mode. Readiness and Grafana's health answer 200 on any
-/// host; the realm token endpoint, the two OpenAPI documents and the gateway are recordings
-/// (FakeKeycloak, FakeOpenApi, FakeGateway). Hosts are told apart by the configured URLs.
+/// host; the realm token endpoint, the two OpenAPI documents, the gateway and Grafana's datasource
+/// proxy are recordings (FakeKeycloak, FakeOpenApi, FakeGateway, FakeGrafana). Hosts are told apart
+/// by the configured URLs.
 /// </summary>
 public sealed class FakePlatformHandler(AdminOptions options) : HttpMessageHandler
 {
@@ -23,6 +24,9 @@ public sealed class FakePlatformHandler(AdminOptions options) : HttpMessageHandl
             : Is(uri, options.KeycloakUrl) && path.EndsWith("/protocol/openid-connect/token", StringComparison.Ordinal) ? await FakeKeycloak.TokenAsync(request, cancellationToken)
             : path == "/openapi/v1.json" && Is(uri, options.CatalogUrl) ? FakeOpenApi.Document(request, "catalog")
             : path == "/openapi/v1.json" && Is(uri, options.OrderingUrl) ? FakeOpenApi.Document(request, "ordering")
+            : Is(uri, options.GrafanaUrl) && path == "/api/datasources" ? FakeGrafana.Datasources()
+            : Is(uri, options.GrafanaUrl) && path.Contains("/loki/api/v1/query_range", StringComparison.Ordinal) ? FakeGrafana.Loki(request)
+            : Is(uri, options.GrafanaUrl) && path.Contains("/api/traces/", StringComparison.Ordinal) ? FakeGrafana.Tempo(request)
             : Is(uri, options.GatewayUrl) ? FakeGateway.Send(request)
             : FakeHttp.Json(HttpStatusCode.OK, """{"fake":true}""");
 
