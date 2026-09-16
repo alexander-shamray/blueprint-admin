@@ -29,60 +29,55 @@
 }
 
 @if (view(); as v) {
-  @if (v.reachable) {
-    <p class="summary" role="status">
-      {{ v.events.length }} event{{ v.events.length === 1 ? '' : 's' }} for {{ v.correlationId }} over the last {{ v.window }},
-      across {{ v.traceIds.length }} trace{{ v.traceIds.length === 1 ? '' : 's' }}.
-      @if (v.tracesTruncated) {
-        <span class="truncated">Only the {{ v.traceIds.length }} newest traces were fetched.</span>
-      }
+  <!-- Only ever a reachable view: an unreachable answer is surfaced through error() above, leaving
+       the last good timeline in place. -->
+  <p class="summary" role="status">
+    {{ v.events.length }} event{{ v.events.length === 1 ? '' : 's' }} for {{ v.correlationId }} over the last {{ v.window }},
+    across {{ v.traceIds.length }} trace{{ v.traceIds.length === 1 ? '' : 's' }}.
+    @if (v.tracesTruncated) {
+      <span class="truncated">Only the {{ v.traceIds.length }} newest traces were fetched.</span>
+    }
+  </p>
+
+  @if (v.warning; as warning) {
+    <p class="warning" role="status">{{ warning }}</p>
+  }
+
+  @if (v.events.length <= 1) {
+    <p class="empty">
+      No log line carries correlation id {{ v.correlationId }} in the last {{ v.window }}. The id may be older than the
+      window, or the request may never have reached the platform.
     </p>
+  }
 
-    @if (v.warning; as warning) {
-      <p class="warning" role="status">{{ warning }}</p>
-    }
-
-    @if (v.events.length <= 1) {
-      <p class="empty">
-        No log line carries correlation id {{ v.correlationId }} in the last {{ v.window }}. The id may be older than the
-        window, or the request may never have reached the platform.
-      </p>
-    }
-
-    @if (v.events.length > 0) {
-      <table class="timeline">
-        <thead>
-          <tr><th>At</th><th>Service</th><th>Kind</th><th>What happened</th></tr>
-        </thead>
-        <tbody>
-          @for (event of v.events; track $index) {
-            <tr class="kind-{{ event.kind }}">
-              <td class="at">{{ event.at | date: 'HH:mm:ss.SSS' }}</td>
-              <td class="service">{{ event.service }}</td>
-              <td class="kind">{{ kindWord(event.kind) }}</td>
-              <td class="summary">
-                {{ event.summary }}
-                @if (event.link; as link) {
-                  <a
-                    class="explore"
-                    [href]="link"
-                    target="_blank"
-                    rel="noopener"
-                    [attr.aria-label]="'Open this ' + event.source + ' entry in Grafana Explore'"
-                    >Explore</a
-                  >
-                }
-              </td>
-            </tr>
-          }
-        </tbody>
-      </table>
-    }
-  } @else {
-    <!-- The host's reason is already a sentence, and it is not always an outage: a Grafana that
-         answers but has no Loki datasource is a configuration problem, and saying "did not answer"
-         would send the operator to the wrong place. -->
-    <p class="error" role="alert">Trace unavailable: {{ v.error }}</p>
+  @if (v.events.length > 0) {
+    <table class="timeline">
+      <thead>
+        <tr><th>At</th><th>Service</th><th>Kind</th><th>What happened</th></tr>
+      </thead>
+      <tbody>
+        @for (event of v.events; track $index) {
+          <tr class="kind-{{ event.kind }}">
+            <td class="at">{{ event.at | date: 'HH:mm:ss.SSS' }}</td>
+            <td class="service">{{ event.service }}</td>
+            <td class="kind">{{ kindWord(event.kind) }}</td>
+            <td class="summary">
+              {{ event.summary }}
+              @if (event.link; as link) {
+                <a
+                  class="explore"
+                  [href]="link"
+                  target="_blank"
+                  rel="noopener"
+                  [attr.aria-label]="'Open this ' + event.source + ' entry in Grafana Explore'"
+                  >Explore</a
+                >
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
   }
 } @else if (loading()) {
   <p>Loading…</p>

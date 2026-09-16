@@ -393,4 +393,31 @@ public sealed class GrafanaClientTests
         result.Lines[0].At.ShouldBeLessThan(result.Lines[1].At);
         (result.Lines[1].At - result.Lines[0].At).ShouldBe(TimeSpan.FromTicks(8000));
     }
+    [Fact]
+    public async Task A_response_body_that_breaks_mid_read_is_unreachable_instead_of_throwing()
+    {
+        ScriptedHandler handler = new(request => request.RequestUri!.AbsolutePath == "/api/datasources"
+            ? FakeJson(Datasources)
+            : new HttpResponseMessage(HttpStatusCode.OK) { Content = new BrokenContent() });
+        GrafanaClient client = Client(handler);
+
+        LokiResult result = await client.QueryAsync("{service_name=~\".+\"}", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, 10, Token);
+
+        result.Reachable.ShouldBeFalse();
+        result.Error.ShouldNotBeNull();
+    }
+
+    /// <summary>A body that disconnects part-way through, which surfaces as IOException from ReadAsStringAsync.</summary>
+    private sealed class BrokenContent : HttpContent
+    {
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context) =>
+            throw new IOException("The response ended prematurely.");
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+
+            return false;
+        }
+    }
 }

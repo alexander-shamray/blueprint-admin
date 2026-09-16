@@ -233,7 +233,7 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
     private static bool IsUnreachable(Exception e, CancellationToken cancellationToken) =>
         (e is HttpRequestException or JsonException or OperationCanceledException or KeyNotFoundException
             or InvalidOperationException or FormatException or ArgumentException or OverflowException
-            or IndexOutOfRangeException)
+            or IndexOutOfRangeException or IOException)
         && !cancellationToken.IsCancellationRequested;
 
     /// <summary>

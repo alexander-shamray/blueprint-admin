@@ -141,7 +141,7 @@ describe('TracePage', () => {
     const fixture = render();
 
     const alert = fixture.nativeElement.querySelector('[role="alert"]') as HTMLElement;
-    expect(alert.textContent).toContain('Trace unavailable: Loki answered 503');
+    expect(alert.textContent).toContain('Loki answered 503');
   });
 
   it('keeps the last good timeline on screen behind a failed reload', () => {
@@ -293,5 +293,18 @@ describe('TracePage', () => {
     const alert = (fixture.nativeElement.querySelector('[role="alert"]') as HTMLElement).textContent ?? '';
     expect(alert).toContain('Grafana has no Loki datasource.');
     expect(alert).not.toContain('did not answer');
+  });
+  it('keeps the last good timeline when Grafana goes down during a reload', () => {
+    configure('demo-trace-0001');
+    const fixture = render();
+    expect(rows(fixture).length).toBe(3);
+
+    host.trace = vi.fn(() => of({ ...view, reachable: false, error: 'Loki answered 503', events: [] }));
+    fixture.componentInstance.reload();
+    fixture.detectChanges();
+
+    // The same event, whether it arrives thrown or as reachable:false, is shown the same way.
+    expect((fixture.nativeElement.querySelector('[role="alert"]') as HTMLElement).textContent).toContain('Loki answered 503');
+    expect(rows(fixture).length).toBe(3);
   });
 });

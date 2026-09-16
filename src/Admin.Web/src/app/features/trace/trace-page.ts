@@ -87,7 +87,20 @@ export class TracePage {
         ),
         takeUntilDestroyed(this.destroyRef),
       )
-      .subscribe((view) => this.view.set(view));
+      .subscribe((view) => {
+        // A Grafana that did not answer arrives as a successful response carrying reachable:false.
+        // It is shown the same way a thrown HTTP failure is — through `error`, over whatever timeline
+        // is already on screen — because from the operator's seat they are the same event, and
+        // clearing the timeline for one while keeping it for the other would be incoherent. The view
+        // was already cleared at load start if this is a different id, so nothing of another id's
+        // timeline can survive here.
+        if (!view.reachable) {
+          this.error.set(view.error ?? 'The trace could not be built.');
+          return;
+        }
+
+        this.view.set(view);
+      });
 
     this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
       const id = params.get('correlationId') ?? '';
