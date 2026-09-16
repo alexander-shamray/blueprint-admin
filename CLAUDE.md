@@ -5,7 +5,7 @@ how to act. Facts that move with a PR live elsewhere and are cited from here.
 
 ## What this repo is
 
-`blueprint-admin` is the local admin console for `dotnet-ddd-blueprint`. The
+`blueprint-admin` is the local admin console for `blueprint-backend`. The
 specification is `docs/superpowers/specs/2026-09-14-blueprint-admin-design.md`;
 read its §1 before changing behaviour and its §13 before adding any. The
 implementation plans are under `docs/superpowers/plans/`.

@@ -1,8 +1,8 @@
 root = true
 
 # House style for .NET 10 and C# 14, taken from the backend this console
-# drives, dotnet-ddd-blueprint
-# (https://github.com/alexander-shamray/dotnet-ddd-blueprint), so admin code
+# drives, blueprint-backend
+# (https://github.com/alexander-shamray/blueprint-backend), so admin code
 # reads like the code it operates.
 #
 # Every path and document named in the comments below — docs/style-guide.md,

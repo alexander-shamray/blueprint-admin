@@ -1,13 +1,13 @@
 # Blueprint admin — design
 
-**A local admin console for `dotnet-ddd-blueprint`: one page that runs, stops,
+**A local admin console for `blueprint-backend`: one page that runs, stops,
 observes and exercises the platform, doing verbatim what `run-locally.md` says
 a developer does by hand.**
 
 | | |
 |---|---|
 | **Status** | Approved design, 2026-09-14. Implementation plan follows. |
-| **Backend** | `alexander-shamray/dotnet-ddd-blueprint`, checked out beside this repository at `../blueprint-backend` |
+| **Backend** | `alexander-shamray/blueprint-backend`, checked out beside this repository at `../blueprint-backend` |
 | **Frontend** | `alexander-shamray/blueprint-frontend`, checked out beside this repository at `../blueprint-frontend` |
 | **Toolkit** | .NET 10 / C# 14 minimal API host; Angular 22 standalone SPA; xunit, Vitest, Playwright |
 | **Runs on** | The developer's workstation, loopback only. Never deployed, never multi-user |
