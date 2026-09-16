@@ -30,7 +30,7 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
 
         if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
         {
-            return new DatasourceUids(null, null, null);
+            return new DatasourceUids(null, null, null, $"Admin:GrafanaUrl '{o.GrafanaUrl}' is not an absolute http(s) URL.");
         }
 
         using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -43,7 +43,7 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
 
             if (!response.IsSuccessStatusCode)
             {
-                return new DatasourceUids(null, null, null);
+                return new DatasourceUids(null, null, null, $"Grafana answered {(int)response.StatusCode} for its datasource list.");
             }
 
             using JsonDocument document = JsonDocument.Parse(body);
@@ -86,7 +86,7 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
         }
         catch (Exception e) when (IsUnreachable(e, cancellationToken))
         {
-            return new DatasourceUids(null, null, null);
+            return new DatasourceUids(null, null, null, e.Message);
         }
     }
 
@@ -100,7 +100,7 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
 
         if (uids.Loki is null)
         {
-            return new LokiResult(false, "Grafana has no Loki datasource.", []);
+            return new LokiResult(false, uids.Error ?? "Grafana has no Loki datasource.", []);
         }
 
         AdminOptions o = options.Value;
@@ -141,7 +141,7 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
                 {
                     long ns = long.Parse(value[0].GetString()!, CultureInfo.InvariantCulture);
                     string message = value[1].GetString() ?? "";
-                    lines.Add(new LokiLine(DateTimeOffset.FromUnixTimeMilliseconds(ns / 1_000_000), service, level, message, traceId));
+                    lines.Add(new LokiLine(At(ns), service, level, message, traceId));
                 }
             }
 
@@ -163,7 +163,7 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
 
         if (uids.Tempo is null)
         {
-            return new TempoResult(false, "Grafana has no Tempo datasource.", []);
+            return new TempoResult(false, uids.Error ?? "Grafana has no Tempo datasource.", []);
         }
 
         AdminOptions o = options.Value;
@@ -235,6 +235,14 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
             or IndexOutOfRangeException)
         && !cancellationToken.IsCancellationRequested;
 
+    /// <summary>
+    /// A Unix nanosecond timestamp as a <see cref="DateTimeOffset"/>, keeping the 100-nanosecond tick
+    /// precision the type has. Going through milliseconds would collapse distinct events inside one
+    /// millisecond to the same instant, and the timeline's tie-break is by kind, not by time — so a
+    /// span and the line it scopes could come back in the wrong order.
+    /// </summary>
+    private static DateTimeOffset At(long unixNanoseconds) => DateTimeOffset.UnixEpoch.AddTicks(unixNanoseconds / 100);
+
     /// <summary>Converts raw bytes (for example a W3C trace or span id) to lowercase hex.</summary>
     public static string Hex(ReadOnlySpan<byte> bytes) => Convert.ToHexStringLower(bytes);
 
@@ -294,7 +302,7 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
             service,
             span.GetProperty("name").GetString() ?? "",
             span.GetProperty("kind").GetString() ?? "",
-            DateTimeOffset.FromUnixTimeMilliseconds(startNs / 1_000_000),
+            At(startNs),
             TimeSpan.FromTicks((endNs - startNs) / 100),
             attributes,
             failed);

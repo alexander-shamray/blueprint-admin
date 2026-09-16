@@ -347,4 +347,50 @@ public sealed class GrafanaClientTests
         second.Tempo.ShouldBe("tempo");
         calls.ShouldBe(2);
     }
+    [Fact]
+    public async Task A_Grafana_that_does_not_answer_is_reported_as_an_outage_not_as_a_missing_datasource()
+    {
+        ScriptedHandler handler = new(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+        {
+            Content = new StringContent("down for maintenance"),
+        });
+        GrafanaClient client = Client(handler);
+
+        LokiResult loki = await client.QueryAsync("{service_name=~\".+\"}", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, 10, Token);
+        TempoResult tempo = await client.TraceAsync("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", Token);
+
+        // Sending an operator to check configuration during an outage is the wrong answer.
+        loki.Error.ShouldBe("Grafana answered 503 for its datasource list.");
+        tempo.Error.ShouldBe("Grafana answered 503 for its datasource list.");
+    }
+
+    [Fact]
+    public async Task A_Grafana_that_answers_without_Loki_still_says_the_datasource_is_missing()
+    {
+        ScriptedHandler handler = new(_ => FakeJson("""[{"uid":"tempo","type":"tempo"}]"""));
+        GrafanaClient client = Client(handler);
+
+        LokiResult result = await client.QueryAsync("{service_name=~\".+\"}", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, 10, Token);
+
+        result.Error.ShouldBe("Grafana has no Loki datasource.");
+    }
+
+    [Fact]
+    public async Task Sub_millisecond_timestamps_survive_so_two_lines_in_one_millisecond_stay_ordered()
+    {
+        ScriptedHandler handler = new(request => request.RequestUri!.AbsolutePath == "/api/datasources"
+            ? FakeJson(Datasources)
+            : FakeJson("""
+                {"status":"success","data":{"resultType":"streams","result":[
+                  {"stream":{"service_name":"Catalog.Api"},
+                   "values":[["1789532582000100000","first"],["1789532582000900000","second"]]}
+                ]}}
+                """));
+        GrafanaClient client = Client(handler);
+
+        LokiResult result = await client.QueryAsync("{service_name=~\".+\"}", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, 10, Token);
+
+        result.Lines[0].At.ShouldBeLessThan(result.Lines[1].At);
+        (result.Lines[1].At - result.Lines[0].At).ShouldBe(TimeSpan.FromTicks(8000));
+    }
 }

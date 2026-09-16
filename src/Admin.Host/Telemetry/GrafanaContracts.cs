@@ -6,7 +6,12 @@ namespace Admin.Host.Telemetry;
 /// provisioned by <c>blueprint-backend</c> (measured 2026-09-16, plan M4: it ships no
 /// <c>provisioning/</c> at all), so they are never hard-coded.
 /// </summary>
-public sealed record DatasourceUids(string? Loki, string? Tempo, string? Prometheus);
+/// <param name="Error">
+/// Why the uids could not be resolved, when that is a Grafana that did not answer rather than a
+/// Grafana that answered without the datasource. The two send an operator to different places —
+/// an outage, or a missing datasource — so they are not collapsed into one all-null result.
+/// </param>
+public sealed record DatasourceUids(string? Loki, string? Tempo, string? Prometheus, string? Error = null);
 
 /// <summary>
 /// One log line from a Loki range query. <paramref name="TraceId"/> is read from the
