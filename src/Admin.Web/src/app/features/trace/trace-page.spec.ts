@@ -141,7 +141,7 @@ describe('TracePage', () => {
     const fixture = render();
 
     const alert = fixture.nativeElement.querySelector('[role="alert"]') as HTMLElement;
-    expect(alert.textContent).toContain('Grafana did not answer: Loki answered 503');
+    expect(alert.textContent).toContain('Trace unavailable: Loki answered 503');
   });
 
   it('keeps the last good timeline on screen behind a failed reload', () => {
@@ -284,5 +284,14 @@ describe('TracePage', () => {
     expect(warning.getAttribute('role')).toBe('status');
     expect(warning.textContent).toContain('could not be read from Tempo');
     expect(rows(fixture).length).toBe(3);
+  });
+  it('does not call a missing Loki datasource an outage', () => {
+    host.trace = vi.fn(() => of({ ...view, reachable: false, error: 'Grafana has no Loki datasource.', events: [] }));
+    configure('demo-trace-0001');
+    const fixture = render();
+
+    const alert = (fixture.nativeElement.querySelector('[role="alert"]') as HTMLElement).textContent ?? '';
+    expect(alert).toContain('Grafana has no Loki datasource.');
+    expect(alert).not.toContain('did not answer');
   });
 });

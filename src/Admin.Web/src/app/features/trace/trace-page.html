@@ -79,7 +79,10 @@
       </table>
     }
   } @else {
-    <p class="error" role="alert">Grafana did not answer: {{ v.error }}</p>
+    <!-- The host's reason is already a sentence, and it is not always an outage: a Grafana that
+         answers but has no Loki datasource is a configuration problem, and saying "did not answer"
+         would send the operator to the wrong place. -->
+    <p class="error" role="alert">Trace unavailable: {{ v.error }}</p>
   }
 } @else if (loading()) {
   <p>Loading…</p>
