@@ -1,0 +1,160 @@
+using System.Net;
+using System.Text;
+using Admin.Host.Config;
+using Admin.Host.Telemetry;
+using Admin.Host.Tests.TestSupport;
+using Microsoft.Extensions.Options;
+using Shouldly;
+
+namespace Admin.Host.Tests.Telemetry;
+
+public sealed class GrafanaClientTests
+{
+    private static CancellationToken Token => TestContext.Current.CancellationToken;
+
+    // Measured 2026-09-16: GET /api/datasources on grafana/otel-lgtm, trimmed to the fields read.
+    private const string Datasources = """
+        [{"id":3,"uid":"loki","name":"Loki","type":"loki"},
+         {"id":1,"uid":"prometheus","name":"Prometheus","type":"prometheus"},
+         {"id":2,"uid":"tempo","name":"Tempo","type":"tempo"}]
+        """;
+
+    // Measured 2026-09-16 (plan M5): one stream from a synthetic OTLP log record read back through
+    // query_range, wrapped in the endpoint's status/data envelope.
+    private const string LokiQueryRange = """
+        {"status":"success","data":{"resultType":"streams","result":[
+          {"stream":{"CorrelationId":"probe-corr-12345","RequestType":"GetProductsQuery",
+            "detected_level":"info","scope_name":"Common.Web.CorrelationId","service_name":"Catalog.Api",
+            "severity_number":"9","severity_text":"Information",
+            "span_id":"00f067aa0ba902b7","trace_id":"4bf92f3577b34da6a3ce929d0e0e4736"},
+           "values":[["1789532582000000000","probe: request start"]]}
+        ]}}
+        """;
+
+    // Measured 2026-09-16 (plan M6): two batches shaped like GET /api/traces/{id} through the
+    // datasource proxy. traceId qqqqqqqqqqqqqqqqqqqqoQ== is the plan's own example, base64 for hex
+    // aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1. The span ids' base64 is computed from the hex asserted below.
+    private const string TempoTrace = """
+        {"batches":[
+          {"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"Gateway.Api"}}]},
+           "scopeSpans":[{"scope":{"name":"Gateway.Api"},"spans":[
+             {"traceId":"qqqqqqqqqqqqqqqqqqqqoQ==","spanId":"APBnqgupArc=",
+              "name":"GET /api/products","kind":"SPAN_KIND_SERVER",
+              "startTimeUnixNano":"1700000000000000000","endTimeUnixNano":"1700000000050000000",
+              "attributes":[{"key":"http.method","value":{"stringValue":"GET"}}]}
+           ]}]},
+          {"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"Catalog.Api"}}]},
+           "scopeSpans":[{"scope":{"name":"Catalog.Api"},"spans":[
+             {"traceId":"qqqqqqqqqqqqqqqqqqqqoQ==","spanId":"qrvM3e7/ABE=","parentSpanId":"APBnqgupArc=",
+              "name":"SELECT products","kind":"SPAN_KIND_CLIENT",
+              "startTimeUnixNano":"1700000000005000000","endTimeUnixNano":"1700000000045000000",
+              "attributes":[{"key":"db.statement","value":{"stringValue":"SELECT * FROM products"}}],
+              "status":{"code":"STATUS_CODE_ERROR"}}
+           ]}]}
+        ]}
+        """;
+
+    private static GrafanaClient Client(ScriptedHandler handler, AdminOptions? options = null) =>
+        new(new HttpClient(handler), Options.Create(options ?? new AdminOptions()));
+
+    private static HttpResponseMessage FakeJson(string json) => new(HttpStatusCode.OK)
+    {
+        Content = new StringContent(json, Encoding.UTF8, "application/json"),
+    };
+
+    [Fact]
+    public async Task The_datasource_uids_are_resolved_by_type_and_read_once()
+    {
+        ScriptedHandler handler = new(_ => FakeJson(Datasources));
+        GrafanaClient client = Client(handler);
+
+        DatasourceUids first = await client.UidsAsync(Token);
+        await client.UidsAsync(Token);
+
+        first.Loki.ShouldBe("loki");
+        first.Tempo.ShouldBe("tempo");
+        handler.Requests.Count.ShouldBe(1);
+        handler.Requests[0].Request.RequestUri!.ToString().ShouldBe("http://localhost:3000/api/datasources");
+    }
+
+    [Fact]
+    public async Task A_grafana_that_does_not_answer_is_a_state_and_is_not_cached()
+    {
+        int calls = 0;
+        ScriptedHandler handler = new(_ => ++calls == 1
+            ? throw new HttpRequestException("Connection refused")
+            : FakeJson(Datasources));
+        GrafanaClient client = Client(handler);
+
+        DatasourceUids first = await client.UidsAsync(Token);
+        DatasourceUids second = await client.UidsAsync(Token);
+
+        first.Loki.ShouldBeNull();
+        second.Loki.ShouldBe("loki");
+        handler.Requests.Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task A_loki_range_query_is_sent_through_the_datasource_proxy_with_nanosecond_bounds()
+    {
+        ScriptedHandler handler = new(request => request.RequestUri!.AbsolutePath == "/api/datasources"
+            ? FakeJson(Datasources)
+            : FakeJson("""{"status":"success","data":{"resultType":"streams","result":[]}}"""));
+        GrafanaClient client = Client(handler);
+        DateTimeOffset from = new(2026, 9, 16, 8, 0, 0, TimeSpan.Zero);
+        DateTimeOffset to = new(2026, 9, 16, 9, 0, 0, TimeSpan.Zero);
+        const string LogQl = "{service_name=~\".+\"} | CorrelationId = \"probe-corr-12345\"";
+
+        await client.QueryAsync(LogQl, from, to, 500, Token);
+
+        Uri uri = handler.Requests[1].Request.RequestUri!;
+        uri.GetLeftPart(UriPartial.Path).ShouldBe("http://localhost:3000/api/datasources/proxy/uid/loki/loki/api/v1/query_range");
+        uri.Query.ShouldBe($"?query={Uri.EscapeDataString(LogQl)}&start={from.ToUnixTimeMilliseconds() * 1_000_000L}&end={to.ToUnixTimeMilliseconds() * 1_000_000L}&limit=500");
+    }
+
+    [Fact]
+    public async Task Loki_lines_carry_the_service_level_message_and_trace_id()
+    {
+        ScriptedHandler handler = new(request => request.RequestUri!.AbsolutePath == "/api/datasources"
+            ? FakeJson(Datasources)
+            : FakeJson(LokiQueryRange));
+        GrafanaClient client = Client(handler);
+
+        LokiResult result = await client.QueryAsync("{service_name=~\".+\"}", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, 100, Token);
+
+        result.Reachable.ShouldBeTrue();
+        LokiLine line = result.Lines.ShouldHaveSingleItem();
+        line.Service.ShouldBe("Catalog.Api");
+        line.Level.ShouldBe("Information");
+        line.TraceId.ShouldBe("4bf92f3577b34da6a3ce929d0e0e4736");
+        line.Message.ShouldBe("probe: request start");
+    }
+
+    [Fact]
+    public async Task A_tempo_trace_decodes_base64_ids_to_hex_and_names_each_span_service()
+    {
+        ScriptedHandler handler = new(request => request.RequestUri!.AbsolutePath == "/api/datasources"
+            ? FakeJson(Datasources)
+            : FakeJson(TempoTrace));
+        GrafanaClient client = Client(handler);
+
+        TempoResult result = await client.TraceAsync("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", Token);
+
+        result.Reachable.ShouldBeTrue();
+        result.Spans.Count.ShouldBe(2);
+        TempoSpan root = result.Spans.Single(s => s.Name == "GET /api/products");
+        TempoSpan child = result.Spans.Single(s => s.Name == "SELECT products");
+
+        root.TraceId.ShouldBe("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1");
+        root.SpanId.ShouldBe("00f067aa0ba902b7");
+        root.ParentSpanId.ShouldBeNull();
+        root.Service.ShouldBe("Gateway.Api");
+        root.Failed.ShouldBeFalse();
+
+        child.TraceId.ShouldBe("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1");
+        child.SpanId.ShouldBe("aabbccddeeff0011");
+        child.ParentSpanId.ShouldBe("00f067aa0ba902b7");
+        child.Service.ShouldBe("Catalog.Api");
+        child.Failed.ShouldBeTrue();
+    }
+}
