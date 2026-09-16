@@ -281,11 +281,22 @@ must read exactly as the reference client sees them.
 ### 5.8 Telemetry
 
 `GrafanaClient` resolves the Tempo, Loki and Prometheus datasource uids from
-`GET /api/datasources` at first use and issues `POST /api/ds/query` requests:
+`GET /api/datasources` at first use and reads through Grafana's **datasource
+proxy**, not `POST /api/ds/query`. Measured 2026-09-16: `/api/ds/query` answers
+Grafana's internal data frames, while the proxy returns Loki's and Tempo's own
+documented shapes, and for a trace-by-id fetch there is no frame-free
+alternative at all. The three calls are:
 
-- Loki: `{service_name=~".+"} | json | CorrelationId = "<id>"` over a window,
-  returning each line with its service, level, message and `trace_id`.
-- Tempo: fetch a trace by id.
+- Loki: `GET …/proxy/uid/{loki}/loki/api/v1/query_range` with
+  `{service_name=~".+"} | CorrelationId = "<id>"` over a window (`start`/`end`
+  in nanoseconds), returning each line with its service, level, message and
+  `trace_id`. There is **no `| json` stage**: the backend exports logs over
+  OTLP only, so the line body is the formatted message and `CorrelationId` is
+  structured metadata. Measured 2026-09-16, a `| json` stage stamps
+  `__error__: "JSONParserErr"` on every record.
+- Tempo: `GET …/proxy/uid/{tempo}/api/traces/{traceIdHex}`. Ids in the answer
+  are base64 and are decoded to hex before they are joined against Loki's
+  `trace_id`.
 - Prometheus: the golden-signal queries the backend's
   `deploy/observability/dashboards/golden-signals.json` uses, for the Stack
   screen's health strip.
@@ -296,7 +307,8 @@ named `CorrelationId` on every record of the request, and when the caller
 sent none it uses the current trace id as the correlation id. No span carries
 the id as an attribute. So the console finds spans through logs: the Loki
 lines for a correlation id carry OpenTelemetry's `trace_id`, and those trace
-ids are what Tempo is asked for. The `service_name` label is the
+ids are what Tempo is asked for — but that reaches the request's **own** trace
+only, because the outbox severs the context (§5.9). The `service_name` label is the
 `service.name` resource attribute that `Common.Web`'s telemetry registration
 sets from each host's service name.
 
@@ -306,15 +318,26 @@ sets from each host's service name.
 
 1. Loki: every line scoped to the correlation id, and the set of distinct
    `trace_id` values on those lines.
-2. Tempo: each of those traces. The broker hop is inside them: MassTransit
-   propagates W3C trace context through message headers, so the outbox
-   dispatch, the publish, the consume on the other service and the projection
-   write are spans of the same trace as the HTTP request that caused them.
-   This is why the join key across services is the trace, not the correlation
-   id, which the consuming service never sees.
-3. Broker: the current queue snapshot from §5.5, so a message still waiting
-   in `ordering-catalog-events` or parked in an `_error` queue shows as the
-   last event rather than as silence.
+2. Tempo: each of those traces. **The broker hop is not inside them.** Measured
+   2026-09-16 against the backend's source: `OutboxMessage` has no
+   `traceparent` column, and `OutboxDispatcher` is a `BackgroundService` that
+   publishes without starting an `Activity`, so `Activity.Current` is null at
+   publish time and MassTransit's send span is the root of a **new** trace.
+   (The message-level `Guid CorrelationId` is not the HTTP correlation id
+   either; Catalog sets it to the product id.) The join therefore reaches the
+   request's own spans — inbound HTTP, handlers, the database write that
+   stages the outbox row — and stops at that row.
+3. Broker: the current queue snapshot from §5.5. Because step 2 stops at the
+   outbox, this is not a nicety but the **only bridge across the hop**, and it
+   is rendered as the timeline's terminal event: the projection queue, its
+   depth, and a sentence saying that the publish runs in a trace this
+   correlation id cannot reach. A message still waiting in
+   `ordering-catalog-events` or parked in an `_error` queue shows there rather
+   than as silence.
+
+Restoring the trace across the hop is a `blueprint-backend` change — persist
+`traceparent` on the outbox row when it is staged and restore it into an
+`Activity` at dispatch — and is raised there, not worked around here.
 
 The result is one ordered timeline of `TraceEvent { At, Source, Service,
 Kind, Summary, TraceId, Link }`, where `Kind` is one of `HttpIn`, `Log`,
@@ -343,7 +366,7 @@ All under `/api`, JSON, loopback only.
 | `GET /identity/users`, `POST /identity/token` | §5.6 |
 | `GET /catalog/operations`, `POST /catalog/reload` | §5.7 |
 | `POST /proxy` | §5.7 |
-| `GET /trace/{correlationId}?window=15m` | §5.9 |
+| `GET /trace/{correlationId}?window=15m` | §5.9. `window` is `90s`/`15m`/`2h` bounded to `[1m, 24h]`, default `15m`; a window outside it, and an id outside the backend's adoptable alphabet (the id reaches a LogQL string, so this is the injection boundary), are 400 problem details. |
 | `GET /telemetry/health` | the golden-signal strip |
 
 Streams use Server-Sent Events rather than WebSockets because every stream is

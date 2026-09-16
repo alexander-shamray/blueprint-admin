@@ -50,7 +50,7 @@ Playwright smoke; it needs no Docker and no clones.
 
 ## What it does today
 
-Phases 0 to 4 of the spec: the Stack screen (Compose services, reachability,
+Phases 0 to 5 of the spec: the Stack screen (Compose services, reachability,
 up, down, down with a typed `down -v` confirmation, live output; the reference
 client's `npm start` with start, stop and its output), the Logs screen
 (follow, service filter, text filter, correlation-id highlight) and the API
@@ -61,7 +61,9 @@ and body as the platform returned them; a history of this visit's calls).
 The Broker screen lists queues (error queues marked), exchanges and
 permissions through `rabbitmqctl` in the `rabbitmq` container, and the API
 screen shows whether `ordering-catalog-events` has drained after a publish.
-The event trace is the spec's next phase.
+The Trace screen joins a correlation id's Loki lines and Tempo spans into one
+timeline, each row linking into Grafana Explore, and the API screen's "Trace
+this call" opens it on the response's own correlation id.
 
 ## Known limits
 
@@ -83,7 +85,12 @@ The event trace is the spec's next phase.
 - API history is kept only while the screen is open.
 - The identity picker offers demo/demo and browser/browser; configuring any user
   replaces both: `--Admin:Users:0:Username=ops --Admin:Users:0:Password=…`.
-- No event trace yet.
+- A timeline ends at the outbox. The outbox row carries no trace context, so
+  the dispatcher's publish, the consume on the other service and the projection
+  write run in a trace the correlation id cannot reach; the Trace screen ends
+  with the projection queue's depth and says why it stops there. Raised for
+  `blueprint-backend`, which owns the fix.
+- No Prometheus golden-signal strip (`GET /telemetry/health`) yet.
 - Broker reads are `docker compose exec` jobs, so they appear in
   `GET /api/jobs`; auto-refresh re-reads queues only.
 
