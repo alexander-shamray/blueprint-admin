@@ -207,4 +207,26 @@ describe('TracePage', () => {
     expect(fixture.componentInstance.view()?.correlationId).toBe('second-id');
     expect(fixture.componentInstance.loading()).toBe(false);
   });
+  it('shows a 400 as the host answered it, not as the host failing to answer', () => {
+    host.trace = vi.fn(() => throwError(() => ({ error: { title: 'Invalid window', detail: 'A window is a whole number and a unit.' } })));
+    configure('demo-trace-0001');
+    const fixture = render();
+
+    const alert = (fixture.nativeElement.querySelector('[role="alert"]') as HTMLElement).textContent ?? '';
+    expect(alert).toContain('A window is a whole number and a unit.');
+    expect(alert).not.toContain('did not answer');
+  });
+
+  it('drops the timeline when a different id fails, so one id events never sit under another id name', () => {
+    configure('demo-trace-0001');
+    const fixture = render();
+    expect(rows(fixture).length).toBe(3);
+
+    host.trace = vi.fn(() => throwError(() => ({ error: { detail: 'nope' } })));
+    paramMap.next(convertToParamMap({ correlationId: 'second-id' }));
+    fixture.detectChanges();
+
+    expect(rows(fixture).length).toBe(0);
+    expect((fixture.nativeElement.querySelector('[role="alert"]') as HTMLElement).textContent).toContain('nope');
+  });
 });

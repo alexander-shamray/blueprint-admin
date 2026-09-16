@@ -41,6 +41,8 @@ public sealed class SpanRecogniserTests
         { "catalog.dbo.OutboxMessages", "SPAN_KIND_CLIENT", "db.system=mssql", TraceEventKind.Outbox },
         { "INSERT catalog", "SPAN_KIND_CLIENT", "db.system.name=mssql;db.collection.name=OutboxMessages", TraceEventKind.Outbox },
         { "SELECT catalog", "SPAN_KIND_CLIENT", "db.system=mssql;db.statement=SELECT * FROM dbo.Products", TraceEventKind.Span },
+        // A span that said which table it touched is taken at its word, whatever it happens to be called.
+        { "catalog.dbo.OutboxMessages", "SPAN_KIND_CLIENT", "db.system=mssql;db.statement=SELECT * FROM dbo.Products", TraceEventKind.Span },
         { "GET /health", "SPAN_KIND_SERVER", "http.request.method=GET", TraceEventKind.Span },
         { "something nobody has instrumented yet", "SPAN_KIND_INTERNAL", "", TraceEventKind.Span },
     };

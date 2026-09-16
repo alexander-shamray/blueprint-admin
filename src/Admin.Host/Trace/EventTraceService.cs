@@ -90,8 +90,13 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
 
         List<TraceEvent> ordered = [.. events.OrderBy(e => e.At).ThenBy(e => e.Kind)];
 
+        // Stamped now, not at `now`: the broker read is a `docker compose exec` that can take tens of
+        // seconds, so the snapshot describes the queue as of here, and a timestamp from before the
+        // reads would sit earlier than spans the same request returned.
+        DateTimeOffset snapshotAt = time.GetUtcNow();
+
         // Appended after the sort, never sorted into the middle: it is the end of what this id can see.
-        ordered.Add(new TraceEvent(now, "broker", BrokerService.Service, TraceEventKind.Queued, QueuedSummary(queues), null, null));
+        ordered.Add(new TraceEvent(snapshotAt, "broker", BrokerService.Service, TraceEventKind.Queued, QueuedSummary(queues), null, null));
 
         return new TraceView(correlationId, windowText, true, null, traceIds, truncated, ordered);
     }

@@ -69,6 +69,12 @@ export class TracePage {
             tap(() => this.error.set(null)),
             catchError((e: unknown) => {
               this.error.set(this.describeError(e));
+
+              // A failed reload of the id on screen keeps its last good timeline, as the Broker
+              // screen does. A failed load of a *different* id must not: leaving A's timeline under
+              // an error about B would put one id's events under another id's name.
+              if (this.view()?.correlationId !== id) this.view.set(null);
+
               return EMPTY;
             }),
             // Runs on cancellation too, before the next read's defer sets it again.

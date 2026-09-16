@@ -73,16 +73,27 @@ public static class SpanRecogniser
             return false;
         }
 
+        bool stamped = false;
+
         foreach (string key in DatabaseTargetKeys)
         {
-            if (Attribute(span, key) is { } target && target.Contains(OutboxTable, StringComparison.OrdinalIgnoreCase))
+            if (Attribute(span, key) is not { } target)
+            {
+                continue;
+            }
+
+            stamped = true;
+
+            if (target.Contains(OutboxTable, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
         }
 
-        // Last resort only: the instrumentation names a database span after the table it touches when
-        // it stamps no statement attribute at all.
-        return span.Name.Contains(OutboxTable, StringComparison.OrdinalIgnoreCase);
+        // Last resort, and only when no target attribute was stamped at all: instrumentation that
+        // does not record the statement names a database span after the table it touched. A span
+        // that *did* say which table it touched is taken at its word, so a span named for the outbox
+        // while its statement names another table is not mislabelled.
+        return !stamped && span.Name.Contains(OutboxTable, StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -21,7 +21,9 @@
 </section>
 
 @if (error(); as e) {
-  <p class="error" role="alert">The host did not answer: {{ e }}</p>
+  <!-- Rendered as-is: a 400 problem detail is the host answering, so prefixing it with "the host did
+       not answer" would be untrue, and describeError already supplies that sentence when it fits. -->
+  <p class="error" role="alert">{{ e }}</p>
 }
 
 @if (view(); as v) {

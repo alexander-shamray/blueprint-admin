@@ -326,4 +326,25 @@ public sealed class GrafanaClientTests
         result.Reachable.ShouldBeFalse();
         result.Spans.ShouldBeEmpty();
     }
+    [Fact]
+    public async Task An_incomplete_datasource_list_is_not_cached_so_a_late_provisioned_Tempo_is_found()
+    {
+        int calls = 0;
+        ScriptedHandler handler = new(_ =>
+        {
+            calls++;
+
+            return FakeJson(calls == 1
+                ? """[{"uid":"loki","type":"loki"},{"uid":"prometheus","type":"prometheus"}]"""
+                : Datasources);
+        });
+        GrafanaClient client = Client(handler);
+
+        DatasourceUids first = await client.UidsAsync(Token);
+        DatasourceUids second = await client.UidsAsync(Token);
+
+        first.Tempo.ShouldBeNull();
+        second.Tempo.ShouldBe("tempo");
+        calls.ShouldBe(2);
+    }
 }

@@ -327,4 +327,22 @@ public sealed class EventTraceServiceTests : IAsyncDisposable
         view.CorrelationId.ShouldBe("abc-123");
         view.Window.ShouldBe("2h");
     }
+    [Fact]
+    public async Task The_projection_marker_is_stamped_when_the_snapshot_was_taken_not_before_the_reads()
+    {
+        TheProjectionQueueIsDrained();
+        ScriptedHandler handler = new(request =>
+        {
+            // Every Grafana read costs the clock a second, as a real round trip would.
+            time.Advance(TimeSpan.FromSeconds(1));
+
+            return request.RequestUri!.AbsolutePath == "/api/datasources" ? Json(Datasources) : Json(LokiStreams());
+        });
+
+        TraceView view = await Service(handler).BuildAsync("abc-123", TimeSpan.FromMinutes(15), Token);
+
+        TraceEvent last = view.Events[^1];
+        last.Kind.ShouldBe(TraceEventKind.Queued);
+        last.At.ShouldBeGreaterThan(Now);
+    }
 }
