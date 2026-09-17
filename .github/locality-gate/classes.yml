@@ -56,10 +56,13 @@ D:
   - '.github/**'
   - 'CLAUDE.md'
   - 'README.md'
+  - 'AGENTS.md'
   - '.editorconfig'
   - '.gitattributes'
   - '.gitignore'
   - '.nvmrc'
+  - '.mcp.json'
+  - '.codeindexignore'
 
 # E -- dependency graph. Exact pins on both toolchains, the solution, the
 # SDK, and the SPA lockfile with its manifest.
