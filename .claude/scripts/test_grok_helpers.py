@@ -2796,11 +2796,11 @@ class CopilotFeedHelpersAreTheOnlyIntake(unittest.TestCase):
         # answers the files endpoint with each name JSON-encoded on its own
         # line — the shape `--jq '.[] | .filename, .previous_filename | select(. != null) | @json'` produces, newline
         # in a name and all — and anything else with the body.
-        encoded = "".join(
-            json.dumps(name) + "\n" for name in files.split("\n") if name
-        )
+        names = [name for name in files.split("\n") if name]
+        encoded = "".join(json.dumps(name) + "\n" for name in names)
         return (
-            'case "$*" in *"/files"*) cat <<\'FILES\'\n' + encoded + "FILES\n"
+            'case "$*" in *changedFiles*) echo ' + str(len(names)) + "\n"
+            ";; *\"/files\"*) cat <<'FILES'\n" + encoded + "FILES\n"
             ";; *) cat <<'STUB'\n" + body + "STUB\n;; esac\n"
         )
 
