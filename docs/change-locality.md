@@ -62,7 +62,7 @@ path outside the class map or the declared touch set. `/review-branch`,
 |---|---|---|---|
 | **A — local** | one Host area (Jobs, Broker, Trace), one SPA screen | one tree under `src/Admin.Host/**` or `src/Admin.Web/src/app/features/<name>/**`, and its tests | the other product (Host vs Web) in the same PR unless the touch set names both and the class is not A; `CLAUDE.md`; the harness |
 | **B — shared mechanism** | `AdminOptions`, SSE client, identity state, `LoopbackOriginGuard` | one shared Host or `src/Admin.Web/src/app/core/**` / `shared/**` area, and the one screen spec that proves the wiring | two core areas in one PR; the frozen plan |
-| **C — a rule moved** | FakePlatform becomes required for a new surface; loopback policy tightens | code and tests; the single spec section that section amends | every historical paragraph; the plan; `CLAUDE.md` |
+| **C — a rule moved** | FakePlatform becomes required for a new surface; loopback policy tightens | code and tests; the single spec section the change amends | every historical paragraph; the plan; `CLAUDE.md` |
 | **D — docs or harness** | a new `/command`, this contract, a CI job | only the documents, `.claude/**`, `.github/**`, `CLAUDE.md`, and root config the touch-set row names | `src/**` — that absence is load-bearing |
 | **E — dependency graph** | add a package, raise a pin | `Directory.Packages.props` with the `.csproj`; or `src/Admin.Web/package.json` with the lockfile; `global.json` / `BlueprintAdmin.slnx` when those pins move | the sections that use the package |
 

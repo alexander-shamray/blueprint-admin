@@ -41,7 +41,7 @@ B:
   - 'src/Admin.Web/**'
   - 'tests/**'
 
-# C -- a rule moved. Code and tests, and the spec section that section amends.
+# C -- a rule moved. Code and tests, and the spec section the change amends.
 C:
   - 'src/**'
   - 'tests/**'
