@@ -16,7 +16,7 @@ They run the proxy in-process on a loopback port, stand up a fake upstream on
 another, and drive a client socket at the proxy. The allow-list and the
 upstream port are module globals read at request time, so each case sets them
 for its own scenario and restores them after; nothing here reaches past
-127.0.0.1, which keeps the `review-helpers` job's argument — no Docker, no
+127.0.0.1, which keeps the `harness` job's argument — no Docker, no
 network — true of this module too. Because every socket case patches those
 two values, a class of its own pins what they are when nothing patches them:
 the shipped allow-list, the upstream port and the listening port the reviewer

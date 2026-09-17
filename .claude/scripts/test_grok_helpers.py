@@ -4916,10 +4916,12 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
                        "node_modules")
 
     # /style-pass EDITS .editorconfig, .prettierrc, eslint.config.js and
-    # CLAUDE.md by design — its own sections 3 and 4 require it — so it is
-    # exempt from the toolchain half and not from the machinery half. An
-    # exemption is named here so that adding one is a visible decision.
+    # CLAUDE.md by design — its own sections 3 and 4 require it — so those
+    # four are exempt, not the rest of the toolchain. An exemption is named
+    # here so that adding one is a visible decision.
     TOOLCHAIN_EXEMPT = ("style-pass.md",)
+    STYLE_OWNERS = ("eslint.config.js", "CLAUDE.md")
+    EXECUTABLE_TOOLCHAIN = ("package.json", ".npmrc")
 
     def _editing_commands(self):
         for path in sorted(COMMANDS.glob("*.md")):
@@ -4943,10 +4945,10 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
 
     def test_every_editing_command_denies_the_toolchain(self):
         for name, denied in self._editing_commands():
-            if name in self.TOOLCHAIN_EXEMPT:
-                continue
-            for target in ("package.json", "eslint.config.js", ".npmrc",
-                           "CLAUDE.md"):
+            targets = list(self.EXECUTABLE_TOOLCHAIN)
+            if name not in self.TOOLCHAIN_EXEMPT:
+                targets.extend(self.STYLE_OWNERS)
+            for target in targets:
                 for prefix in ("", "./"):
                     with self.subTest(command=name, target=target,
                                       prefix=prefix):
@@ -4955,10 +4957,22 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
     def test_the_toolchain_exemption_is_real(self):
         # The other side: an exemption nobody needs is one that quietly widens.
         # /style-pass must actually say it edits those files, or the exemption
-        # should go rather than be inherited.
+        # should go rather than be inherited. It must also still deny the
+        # executable inputs it can run through the check helpers: an npm
+        # script, an MSBuild target, a .csproj.
         text = (COMMANDS / "style-pass.md").read_text(encoding="utf-8")
         for named in (".prettierrc", "eslint.config.js", ".editorconfig"):
             self.assertIn(named, text)
+        denied = " ".join(self.disallowed("style-pass.md"))
+        for owner in (".prettierrc", "eslint.config.js", ".editorconfig",
+                      "CLAUDE.md"):
+            self.assertNotIn(f"Edit({owner})", denied)
+            self.assertNotIn(f"Edit(./{owner})", denied)
+        for target in ("package.json", ".npmrc", "Directory.Build.props"):
+            for prefix in ("", "./"):
+                self.assertIn(f"Edit({prefix}{target})", denied)
+        self.assertIn("Edit(**/*.csproj)", denied)
+        self.assertIn("Edit(**/package.json)", denied)
 
     def test_a_command_that_does_not_publish_cannot_push(self):
         for path in sorted(COMMANDS.glob("*.md")):

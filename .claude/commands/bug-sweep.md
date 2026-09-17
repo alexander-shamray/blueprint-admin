@@ -60,11 +60,11 @@ The calibration, so the bar is operable rather than a word:
 
 **A vacuous gate is ranked critical, and that is a claim about this repository
 rather than about defects in general.** The design puts its enforcement in
-gates: the ESLint import boundaries are stated to be the enforcement mechanism
-rather than review, and CI's Android job asserts the emulator relaxations in
-**both** directions — that the documented command enables them, and that a
-release sync does not. Each was observed failing against a deliberately broken
-input before it was trusted. A gate that passes vacuously
+gates: the locality-gate required check, the `harness` job's Python suite, Host
+`dotnet test`, Web `npm run lint` / `test` / `build`, and the `smoke` Playwright
+job against FakePlatform. Each is stated to be the enforcement rather than
+review, and the harness suite was observed failing against a deliberately
+broken input before it was trusted. A gate that passes vacuously
 therefore withdraws a guarantee the rest of the design is spending, and it does
 it silently — which is the same shape as silent wrong data, one level up. The
 history is on the record: a review found an assertion that could not fail in one
