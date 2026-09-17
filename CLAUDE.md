@@ -48,9 +48,9 @@ src/Admin.Web/e2e/         Playwright (FakePlatform)
 ```
 
 **Precedence where two documents disagree**: the code and `README.md` beat the
-spec on a matter of fact. `docs/superpowers/` is a **frozen delivery record**
-— never edited to match the code that followed. `.remember/` is session
-state; never edit it.
+spec on a matter of fact. `docs/superpowers/plans/` is a **frozen delivery
+record** — never edited to match the code that followed. The design spec
+moves when a rule does. `.remember/` is session state; never edit it.
 
 ### Owners of facts you will be tempted to restate
 
@@ -75,7 +75,8 @@ state; never edit it.
 left; it is not this change. A code change that contradicts the spec is not
 done until the spec is amended in the same PR, or the code is changed to
 match — pick one, in the PR. Where the spec is genuinely wrong, say so in
-the commit body and follow the code; do not silently rewrite the frozen spec.
+the commit body and follow the code; do not silently rewrite the spec, and
+do not edit `plans/` to match.
 
 This file is inside the rule too, and **no gate reads it**: a rule stated
 here and argued in `.editorconfig` or `Directory.Build.props` moves in both.
