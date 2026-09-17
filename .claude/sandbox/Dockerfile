@@ -27,7 +27,13 @@
 # credential's own blast radius against x.ai, which no boundary here can
 # shrink, and grok-review.sh's header carries that argument.
 
-FROM debian:trixie-slim
+# The base is pinned by digest, for the same reason the grok binary is. A
+# floating `debian:trixie-slim` tag lets a later rebuild of this image —
+# grok-review.sh rebuilds whenever the trusted sandbox changes — incorporate
+# whatever Debian currently serves under that name, while still being handed
+# the XAI key or OAuth files. The pin is the index digest, so each architecture
+# this image already builds for keeps resolving; moving it is a reviewed diff.
+FROM debian:trixie-slim@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc4017c709b6259bc132
 
 # git, because /review-branch spends its whole life in it. curl and CA certs for
 # the pinned release download below and the model calls afterwards.

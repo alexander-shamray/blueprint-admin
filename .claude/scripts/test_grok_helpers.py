@@ -2231,6 +2231,21 @@ class EveryReviewerRunIsBehindTheProxy(unittest.TestCase):
         self.assertIn("COPY --chmod=755 egress-proxy.py /usr/local/bin/egress-proxy", dockerfile)
         self.assertTrue((SCRIPTS.parent / "sandbox" / "egress-proxy.py").is_file())
 
+    def test_the_debian_base_is_pinned_by_digest(self):
+        # The image is a credential-bearing boundary; a floating tag would let
+        # a later rebuild incorporate unreviewed root-filesystem changes. The
+        # exact digest is the Dockerfile's, not this assertion's — moving the
+        # pin is a reviewed diff, and restating the hash here would go stale
+        # in the same commit that moved it.
+        dockerfile = (SCRIPTS.parent / "sandbox" / "Dockerfile").read_text(
+            encoding="utf-8")
+        from_lines = [line for line in dockerfile.splitlines()
+                      if line.startswith("FROM ")]
+        self.assertEqual(1, len(from_lines), from_lines)
+        self.assertRegex(
+            from_lines[0],
+            r"^FROM debian:trixie-slim@sha256:[0-9a-f]{64}$")
+
 
 class TheReviewerImageIsNotBuiltFromTheBranchItReviews(unittest.TestCase):
     """#15 — the build context was this checkout's own `.claude/sandbox`.
