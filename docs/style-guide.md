@@ -5,7 +5,7 @@ guides.
 
 **C#** is [`.editorconfig`](../.editorconfig), copied from
 `blueprint-backend` so this host reads like the code it operates. The prose
-version of each rule — including the four `var` carve-outs — is that
+version of each rule — including the `var` carve-outs — is that
 repository's `docs/style-guide.md`. Three rules fail the build: IDE0055,
 IDE0065, IDE0161. `.cs` files are CRLF (`.gitattributes`).
 

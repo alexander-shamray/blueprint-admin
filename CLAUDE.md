@@ -92,7 +92,7 @@ dotnet format whitespace BlueprintAdmin.slnx   # after creating .cs files
 
 # in src/Admin.Web
 npm ci                 # from the lockfile — never `npm install`
-npm start              # dev server; open 5301, not 5300
+npm start              # SPA; port in angular.json, not AdminOptions
 npm run build          # lands in Admin.Host/wwwroot
 npm test
 npm run lint
@@ -140,7 +140,7 @@ opens those files:
   spelling** with literal dashes. **Identifiers keep their real spelling**:
   `IHttpClientFactory`, never "corrected" or Americanised.
 - **File-scoped namespaces**, blank line after. **Explicit types for locals**,
-  with the backend's four carve-outs only.
+  with the backend's `var` carve-outs only.
 - **A single statement may omit braces; two or more always take them, and so
   does one that wraps.** **One space before `=`, `=>` and `{`, never a column
   of them** — IDE0055 makes a padded column a failed build.
