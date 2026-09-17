@@ -236,7 +236,7 @@ detached
 
 — so compare the **`worktree `-prefixed lines only**, and strip that prefix
 before anything reads `$work`. Both halves matter and each fails differently.
-Left unstripped, `$work` is `worktree D:/…` and `$work/package.json` cannot
+Left unstripped, `$work` is `worktree D:/…` and `$work/CLAUDE.md` cannot
 resolve, which stops the sweep. Compared over the whole dump, a new detached
 worktree contributes a `worktree ` line **and** a `detached` line — two records,
 not one — so "exactly one appeared" is true of the prefixed lines and false of
@@ -280,7 +280,7 @@ Nor is the basename: `mktemp` guarantees its six characters are unused **in the
 temp directory it chose**, not across every worktree this repository has
 registered, so an abandoned sweep under a different temp root can collide. That
 one is worth spelling out because of where it lands — the stale checkout
-contains `package.json` too, so the readable-root proof below passes against
+contains `CLAUDE.md` too, so the readable-root proof below passes against
 it and the auditors read a commit nobody pinned. A wrong snapshot, silently,
 which is the failure this whole section exists to prevent.
 
@@ -310,8 +310,8 @@ there is no host where this line is skipped, because git always knows how to
 spell its own worktree.
 
 **`$work` is never unset, and that is the half with teeth.** Left unset, the
-readable-root proof below degrades from `$work/package.json` to a
-workspace-relative `package.json` — which this repository has at its root — so
+readable-root proof below degrades from `$work/CLAUDE.md` to a
+workspace-relative `CLAUDE.md` — which this repository has at its root — so
 the check passes against the caller's tree and reports a snapshot it never
 opened. That is the precise fail-open the named-file assertion exists to close,
 reintroduced by an unbound variable, so the proof takes an **absolute** path or
@@ -405,7 +405,7 @@ stdin (the File step), not written to files — so `$work` stays clean and the
 teardown below removes it without `--force`.
 
 **Prove the root is readable before the fan-out, rather than trusting the add.**
-`Glob` a file the pinned commit is known to carry — `$work/package.json`, as an
+`Glob` a file the pinned commit is known to carry — `$work/CLAUDE.md`, as an
 **absolute** path — and require exactly one hit. A path the shell created is not
 necessarily a path the built-in readers resolve, and the failure is not reliably
 loud: `Glob` given a `path=` argument reports a directory that does not exist,
@@ -686,7 +686,7 @@ Each round is the review done once, end to end:
    **A row bounds what an auditor reports, never what it may read**, and
    collapsing those two loses real defects quietly. Reachability is evidence a
    finding has to carry, and the test corpus decides candidates — but a
-   building-block defect's caller lives in `src/Services/**` and its covering
+   Host defect's caller lives in `src/Admin.Web/src/**` and its covering
    test in `tests/**`, both outside that auditor's row. An auditor forbidden to
    look would fail to find a caller, drop the finding to low for want of
    reachability, and hand back a clean scope: the same fail-open one level in,
@@ -696,11 +696,11 @@ Each round is the review done once, end to end:
    finding, not about who may open which file.
 
    **Two rows are written as a remainder rather than a list, and that is what
-   makes the partition survive the repo growing.** "All of `src/**` except
-   `BuildingBlocks`" and "every tracked file at the repository root" cannot be
-   quietly outgrown; `src/app/features/**` and a named list of build files can,
-   and nearly were — a preflight that reads `src` as owned would never notice a
-   new top-level `src/app/widgets/` arriving unswept. Where a row can be phrased as
+   makes the partition survive the repo growing.** "All of `src/Admin.Host/**`"
+   and "non-spec TypeScript under `src/Admin.Web/src/**`" cannot be quietly
+   outgrown; a named list of screens or of build files can, and nearly were —
+   a preflight that reads `src` as owned would never notice a new
+   `src/Admin.Web/src/app/widgets/` arriving unswept. Where a row can be phrased as
    everything-not-already-taken, phrase it that way.
 
    **`.claude/**` includes this command and its agent**, which is intended
