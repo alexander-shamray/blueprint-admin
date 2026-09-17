@@ -18,6 +18,8 @@ owned elsewhere and cited from here by name, never restated.
 | [`Directory.Build.props`](Directory.Build.props) | Target, artefacts path, ADR-019 analysis (the policy lives in blueprint-backend) |
 | [`.editorconfig`](.editorconfig) | C# dialect this host shares with the backend |
 | [`src/Admin.Host/Config/AdminOptions.cs`](src/Admin.Host/Config/AdminOptions.cs) | Ports, sibling paths, Grafana/Keycloak URLs, FakePlatform |
+| [`.claude/skills/`](.claude/skills/) | `codebase-index` (read ranges, not whole files); `admin-invariants` (run-locally, FakePlatform, siblings) |
+| [`.mcp.json`](.mcp.json) | Local index as an MCP server (`--root .`) |
 
 ## What this repo is
 
@@ -186,6 +188,10 @@ opens those files:
 There is no `/validate-blueprint` or `/new-chapter`: this repository has no
 blueprint chapter tree. The locality **gate** is CI, unlike the frontend
 clone where it was helper-only.
+
+Skills (always on, not slash commands): **codebase-index** before a "where is
+X" question; **admin-invariants** before a new endpoint, screen or host
+command.
 
 ### What cuts across them
 

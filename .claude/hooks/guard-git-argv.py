@@ -169,6 +169,7 @@ PROTECTED_TREES = frozenset({
 # the permission rules see the path and judge it.
 PROTECTED_FILES = frozenset({
     ".editorconfig", ".gitattributes", ".gitignore", ".npmrc", ".nvmrc",
+    ".codeindexignore", ".mcp.json",
     "BlueprintAdmin.slnx", "Directory.Build.props", "Directory.Packages.props",
     "global.json",
     ".prettierrc", ".prettierrc.cjs", ".prettierrc.js", ".prettierrc.json",
