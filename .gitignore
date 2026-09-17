@@ -17,3 +17,6 @@
 # Per-developer overrides
 .claude/settings.local.json
 .remember/
+
+# codebase-index cache (machine-local; do not commit)
+.claude/cache/codebase-index/
