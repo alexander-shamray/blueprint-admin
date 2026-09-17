@@ -13,10 +13,20 @@
 /src/Admin.Web/.angular/
 /src/Admin.Web/test-results/
 /src/Admin.Web/playwright-report/
+# ng invoked from the repo root drops cache here, not under Admin.Web.
+.angular/
 
 # Per-developer overrides
 .claude/settings.local.json
 .remember/
 
-# codebase-index cache (machine-local; do not commit)
+# codebase-index is machine-local (pip install + init). Shared Claude config
+# under .claude/ stays tracked; only the indexer install is ignored.
 .claude/cache/codebase-index/
+.claude/skills/codebase-index/
+.codeindexignore
+.mcp.json
+
+# /pr scratch, same names as the other two clones.
+/pr-body.md
+/pr-title.txt
