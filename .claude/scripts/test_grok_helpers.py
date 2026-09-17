@@ -2146,6 +2146,26 @@ class IssueHelperHasNoFreeParameter(unittest.TestCase):
                 seen += 1
         self.assertEqual(2, seen)
 
+    def test_neither_sweep_instructs_a_third_filing_argument(self):
+        # Both files already grant the two-argument wrapper and describe that
+        # invocation. A later paragraph that still said the third argument is
+        # the route is the instruction a reader would follow, and the helper
+        # exits 2 on it, so the confirmed finding is not filed.
+        for name in ("security-sweep.md", "bug-sweep.md"):
+            kind = "security" if name.startswith("security") else "bug"
+            collapsed = " ".join(
+                (COMMANDS / name).read_text(encoding="utf-8").split())
+            with self.subTest(command=name):
+                self.assertIn(
+                    f"gh-sweep-issue-create.sh {kind} <severity>",
+                    collapsed)
+                self.assertNotIn(
+                    f"gh-sweep-issue-create.sh {kind} <severity> sweep",
+                    collapsed)
+                self.assertNotIn(
+                    "The third argument is the route",
+                    collapsed)
+
     def test_each_entry_point_files_one_route_and_cannot_name_the_other(self):
         # Driven end to end through the stub: the hand entry point refuses a
         # body carrying the sweep's trailer and the sweep entry point refuses

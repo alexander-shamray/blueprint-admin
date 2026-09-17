@@ -787,12 +787,15 @@ Each round is the review done once, end to end:
    Filed by an authorised sweep and verified at filing by a second read-only auditor.
    ```
 
-   **The third argument is the route, and `sweep` is the one this command
-   passes.** The line above is the sentence that route requires; the helper
-   refuses it under `hand`, and refuses `hand`'s sentence here. That is
-   #184: the fixed last line is still the detector for a heredoc that closed
-   early, but it is no longer a provenance claim every issue makes whether or
-   not it is true of them.
+   **A third argument is usage, not the route.** The wrapper hard-codes
+   `sweep` when it calls the filing function; the invocation above is kind
+   and severity only. Passing `sweep` as an argument is the old helper's
+   shape, and this one exits 2 on it — so a confirmed finding following
+   that leftover instruction is not filed. The line above is the sentence
+   that route requires; the helper refuses it under `hand`, and refuses
+   `hand`'s sentence here. That is #184: the fixed last line is still the
+   detector for a heredoc that closed early, but it is no longer a
+   provenance claim every issue makes whether or not it is true of them.
 
    **The delimiter is the one thing a quoted heredoc leaves the payload to
    steer, and the rule for it is yours to keep, not the helper's.** The body
