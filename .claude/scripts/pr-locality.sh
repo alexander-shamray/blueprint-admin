@@ -116,8 +116,12 @@ map_patterns=()
 current=""
 while IFS= read -r raw || [ -n "$raw" ]; do
   line="${raw%$'\r'}"
+  # locality_gate.py rstrip()s, then skips blanks and comments whose
+  # first non-space is `#`. A map valid in CI must parse here too.
+  line="${line%"${line##*[![:space:]]}"}"
   [ -n "$line" ] || continue
-  case "$line" in '#'*) continue ;; esac
+  trimmed="${line#"${line%%[![:space:]]*}"}"
+  case "$trimmed" in '#'*) continue ;; esac
   if [[ "$line" =~ ^([A-E]):$ ]]; then
     current="${BASH_REMATCH[1]}"
     continue

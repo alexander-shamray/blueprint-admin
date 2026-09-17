@@ -3236,6 +3236,29 @@ class CopilotFeedHelpersAreTheOnlyIntake(unittest.TestCase):
             r.stdout.splitlines(),
         )
 
+    def test_a_map_ci_accepts_is_not_refused_locally(self):
+        # CI skips whitespace-only lines and comments with leading indent;
+        # the helper used to accept only empty lines and `#` in column 1, so
+        # a map valid in the gate made /review-branch and /ship fail locally
+        # once it became the base map.
+        spaced = (
+            "# column 1\n"
+            "  \n"
+            "  # indented\n"
+            "D:  \n"
+            "  - 'docs/**'  \n"
+            "  - '.claude/**'\n"
+        )
+        body = "| Class | D |\n| Touch set | docs/** |\n"
+        r = self._run_locality_against_maps(
+            base_map=spaced, head_map=spaced + "# still D\n", body=body,
+            files="docs/x.md\n")
+        self.assertEqual(0, r.returncode, r.stderr)
+        self.assertEqual(
+            ["class D", "inside docs/x.md"],
+            r.stdout.splitlines(),
+        )
+
 
 # The one bounded read of the reviewer transcript, spelled out so the
 # allow-list can require it exactly. grok-review.sh writes it across two
@@ -9577,6 +9600,65 @@ class TheHookWiringRunsOnMoreThanOneOperatingSystem(unittest.TestCase):
             input=event, capture_output=True, text=True)
         self.assertEqual(0, out.returncode, out.stderr)
         self.assertIn("permissionDecision", out.stdout)
+
+
+class HarnessChecksFindsAGenericPyLauncher(unittest.TestCase):
+    """Windows `py -3.12` is not the only 3.12+ the helper can use.
+
+    A host with 3.13 registered and no 3.12 fails the exact selector;
+    run-guard.sh already probes `py -3` next. harness-checks.sh did not, so
+    /pr, /review-branch and /ship refused a machine that satisfied the floor.
+    """
+
+    HELPER = SCRIPTS / "harness-checks.sh"
+
+    def test_the_probe_order_matches_the_hook_launcher(self):
+        code = "\n".join(
+            line for line in self.HELPER.read_text(encoding="utf-8").splitlines()
+            if not line.lstrip().startswith("#"))
+        py312 = code.find("py -3.12")
+        py3 = code.find("py -3 ")
+        python3 = code.find("command -v python3")
+        python = code.find("command -v python ")
+        self.assertNotEqual(py312, -1)
+        self.assertNotEqual(py3, -1)
+        self.assertLess(py312, py3)
+        self.assertLess(py3, python3)
+        self.assertLess(python3, python)
+
+    def test_a_py_with_only_3_13_still_runs_the_suite(self):
+        bin_dir = Path(tempfile.mkdtemp(prefix="harness-py-"))
+        self.addCleanup(shutil.rmtree, str(bin_dir), ignore_errors=True)
+        log = bin_dir / "ran"
+        py = bin_dir / "py"
+        py.write_text(
+            "#!/bin/sh\n"
+            'if [ "$1" = -3.12 ]; then exit 1; fi\n'
+            'if [ "$1" = -3 ]; then shift; fi\n'
+            'if [ "$1" = -c ]; then exit 0; fi\n'
+            f'printf "%s\\n" "$*" >> {log.as_posix()!r}\n'
+            "exit 0\n",
+            encoding="utf-8", newline="\n")
+        py.chmod(0o755)
+        tools = {os.path.dirname(shutil.which(t)) for t in
+                 ("dirname", "sh", "git")}
+        path = os.pathsep.join([str(bin_dir), *sorted(p for p in tools if p)])
+        out = subprocess.run(
+            [BASH, str(self.HELPER)],
+            capture_output=True, text=True,
+            env={**os.environ, "PATH": path},
+            cwd=str(SCRIPTS.parent.parent))
+        self.assertEqual(0, out.returncode, out.stderr)
+        ran = log.read_text(encoding="utf-8").splitlines()
+        self.assertTrue(
+            any("-m unittest discover -s .claude/scripts" in line
+                for line in ran),
+            ran)
+        self.assertTrue(
+            any("-m unittest discover -s .github/locality-gate" in line
+                for line in ran),
+            ran)
+
 
 class TestCodebaseIndexSkillGrants(unittest.TestCase):
     """The skill's allowed-tools must not restore graph/cbx write grants."""

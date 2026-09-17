@@ -297,6 +297,10 @@ class MapGrammar(unittest.TestCase):
         with self.assertRaisesRegex(InputRefused, "no entry for class A"):
             read_map("# nothing but a comment\n")
 
+    def test_whitespace_only_lines_and_indented_comments_are_skipped(self) -> None:
+        loaded = read_map("  \n  # indented\n" + MAP)
+        self.assertEqual(loaded["D"], ["docs/**", "CLAUDE.md"])
+
 
 class Verdicts(unittest.TestCase):
     """Both checks, each one on its own, and the case only the second catches."""
