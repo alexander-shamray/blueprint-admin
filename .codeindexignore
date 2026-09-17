@@ -1,0 +1,6 @@
+src/Admin.Web/node_modules/
+src/Admin.Web/test-results/
+artifacts/
+**/bin/
+**/obj/
+.claude/cache/

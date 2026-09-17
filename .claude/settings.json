@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git show:*)",
+      "Bash(git branch)",
+      "Bash(git branch -a)",
+      "Bash(git branch -v)",
+      "Bash(git branch -vv)",
+      "Bash(git branch --list:*)",
+      "Bash(git branch --show-current)",
+      "Bash(git push -u origin:*)",
+      "Bash(git push origin:*)",
+      "Bash(git remote -v)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Grep",
+      "Glob",
+      "Read"
+    ],
+    "deny": [
+      "Edit(.remember/**)",
+      "Edit(./.remember/**)",
+      "Edit(.claude/scripts/**)",
+      "Edit(./.claude/scripts/**)",
+      "Edit(.claude/sandbox/**)",
+      "Edit(./.claude/sandbox/**)",
+      "Edit(.claude/commands/**)",
+      "Edit(./.claude/commands/**)",
+      "Edit(.claude/agents/**)",
+      "Edit(./.claude/agents/**)",
+      "Edit(.claude/hooks/**)",
+      "Edit(./.claude/hooks/**)",
+      "Edit(.claude/skills/**)",
+      "Edit(./.claude/skills/**)",
+      "Edit(.claude/settings.json)",
+      "Edit(./.claude/settings.json)",
+      "Edit(.claude/settings.local.json)",
+      "Edit(./.claude/settings.local.json)",
+      "Edit(Directory.Packages.props)",
+      "Edit(./Directory.Packages.props)",
+      "Edit(global.json)",
+      "Edit(./global.json)",
+      "Edit(BlueprintAdmin.slnx)",
+      "Edit(./BlueprintAdmin.slnx)",
+      "Edit(AGENTS.md)",
+      "Edit(./AGENTS.md)",
+      "Edit(.mcp.json)",
+      "Edit(./.mcp.json)",
+      "Bash(*grok-ledger.sh * reserve*)",
+      "Bash(*grok-ledger.sh * release*)",
+      "Bash(*grok-ledger.sh * complete*)",
+      "Bash(*grok-ledger.sh * converge*)",
+      "Bash(*grok-review.sh*)",
+      "Bash(git push --force:*)",
+      "Bash(git push --force-with-lease:*)",
+      "Bash(git push -f:*)",
+      "Bash(git push origin main:*)",
+      "Bash(git push -u origin main:*)",
+      "Bash(git push origin HEAD:main:*)",
+      "Bash(git push -u origin HEAD:main:*)",
+      "Bash(git push --delete:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean:*)",
+      "Bash(git branch -d:*)",
+      "Bash(git branch -D:*)",
+      "Bash(git branch -m:*)",
+      "Bash(git branch -M:*)",
+      "Bash(git branch --delete:*)",
+      "Bash(git branch --move:*)",
+      "Bash(git branch --force:*)",
+      "Bash(git *--output*)",
+      "Bash(git *--no-index*)",
+      "Bash(git *--upload-pack*)",
+      "Bash(git *--receive-pack*)",
+      "Bash(git *--exec*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/run-guard.sh\" guard-git-argv.py",
+            "statusMessage": "checking git argv"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|NotebookEdit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/run-guard.sh\" guard-edit-target.py",
+            "statusMessage": "checking edit target"
+          }
+        ]
+      }
+    ]
+  }
+}

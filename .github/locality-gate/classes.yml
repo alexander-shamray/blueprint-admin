@@ -1,0 +1,76 @@
+# The class -> tree-set map of docs/change-locality.md section 3, held once.
+#
+# This file is the owner of which paths each change class may touch. The
+# contract's table states each class's rule in words and cites this file for
+# the paths; the locality gate reads this file and nothing else for them, so
+# a set that moves, moves here and in no prose.
+#
+# It is read by locality_gate.py with a parser that accepts exactly this
+# shape and refuses anything else: a comment or blank line; a class line, one
+# capital letter A to E followed by a colon; an item line, two spaces, a
+# dash, a space and one single-quoted path token. Every class must appear
+# once and carry at least one item. There is no stdlib YAML parser, and a
+# gate that needs a `pip install` is a gate that gets skipped, so the file is
+# YAML by construction rather than by library -- the quotes are what keep a
+# token beginning with `*` from reading as a YAML alias.
+#
+# A token is a repository-relative path or glob: `**` crosses directories,
+# `*` and `?` do not, `{a,b}` is an alternation, and a token also covers
+# everything beneath the directory it names. The grammar is the one
+# .claude/scripts/pr-locality.sh reads a PR body's touch-set row with, so a
+# token that is legal in a PR body is legal here.
+#
+# The map is deliberately coarse. It says what a class may reach in this
+# repository; it cannot say "one Host area" or "one Web feature", because
+# that is a property of the change and not of the tree. The PR body's own
+# `| Touch set |` row is the second, sharper check the gate makes, and a
+# Class A change that edits Host and Web is inside this map and outside its
+# own declared set. Both checks have to pass.
+
+# A -- local. One slice of the host or the SPA, and the tests that cover it.
+# The map names both trees; the touch set names which one.
+A:
+  - 'src/Admin.Host/**'
+  - 'src/Admin.Web/**'
+  - 'tests/**'
+
+# B -- shared mechanism. Host composition, SPA core/shared, the one screen
+# spec that proves the wiring.
+B:
+  - 'src/Admin.Host/**'
+  - 'src/Admin.Web/**'
+  - 'tests/**'
+
+# C -- a rule moved. Code and tests, and the spec section the change amends.
+C:
+  - 'src/**'
+  - 'tests/**'
+  - 'docs/superpowers/specs/**'
+  - 'docs/change-locality.md'
+
+# D -- docs or harness. Never src/**: that absence is the load-bearing half
+# of this class, and the gate enforces it by this list having no code entry.
+D:
+  - 'docs/**'
+  - '.claude/**'
+  - '.github/**'
+  - 'CLAUDE.md'
+  - 'README.md'
+  - 'AGENTS.md'
+  - '.editorconfig'
+  - '.gitattributes'
+  - '.gitignore'
+  - '.mcp.json'
+  - '.codeindexignore'
+
+# E -- dependency graph. Exact pins on both toolchains, the solution, the
+# SDK, and the SPA lockfile with its manifest.
+E:
+  - 'Directory.Packages.props'
+  - 'Directory.Build.props'
+  - '**/*.csproj'
+  - 'global.json'
+  - 'BlueprintAdmin.slnx'
+  - 'src/Admin.Web/package.json'
+  - 'src/Admin.Web/package-lock.json'
+  - '.nvmrc'

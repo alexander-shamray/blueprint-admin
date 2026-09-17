@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "codebase-index": {
+      "type": "stdio",
+      "command": "codebase-index",
+      "args": [
+        "mcp",
+        "--root",
+        "."
+      ],
+      "env": {
+        "CBX_NO_SKILL_AUTO_UPDATE": "1"
+      }
+    }
+  }
+}
