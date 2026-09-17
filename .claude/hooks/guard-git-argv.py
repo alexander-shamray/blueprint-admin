@@ -62,11 +62,14 @@ failure directions are not symmetric: not skipping costs a false positive, and
 skipping wrongly costs a bypass.
 
 **The residuals, stated rather than left to be found.** `shlex` resolves
-quoting and command substitution is handled, but not *expansion*: a flag
-assembled at run time — `F=--output=x; git log $F` — arrives as the token `$F`
-and is not seen. Closing that needs the argv after expansion, which no hook is
-given. And the value-flag map trails git's options the way any list does; it is
-load-bearing only for false positives now, never for a bypass.
+quoting and command substitution is handled, but not *expansion of an
+argument*: a flag assembled at run time — `F=--output=x; git log $F` — arrives
+as the token `$F` after a literal `log` and is not seen. Closing that needs
+the argv after expansion, which no hook is given. A subcommand assembled the
+same way is refused: `F=push; git $F origin +HEAD:main` never presents `push`
+to the allow-list, and `Bash(git log:*)` auto-approves the compound that
+builds it. The value-flag map trails git's options the way any list does; it
+is load-bearing only for false positives now, never for a bypass.
 
 Protocol: PreToolUse, matcher `Bash`. Exit 0 and print nothing to allow; print
 the deny JSON to refuse. Exit 2 would also block, but the JSON form carries a
@@ -256,6 +259,10 @@ PUSH_ALLOWED_FLAGS = {
 # separator, nothing that could be a pattern or an option.
 SAFE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
 SAFE_REMOTE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+# A subcommand this guard is willing to key the rest of the grammar off:
+# letters, digits, dots, underscores, hyphens. `$F`, `$(echo push)` and `p?sh`
+# are not that, and the push allow-list never sees the verb bash runs.
+SAFE_SUBCOMMAND = SAFE_REMOTE
 
 # Sources that name no destination of their own. `git push origin HEAD` updates
 # whatever branch you are standing on — `main`, if you are on `main` — and a
@@ -3967,6 +3974,28 @@ def subcommand_of(segment):
     return stripped[0] if stripped else ""
 
 
+def git_subcommand_offence(segment):
+    """The reason to refuse a git subcommand this guard cannot read, or None.
+
+    **The push allow-list and the forbidden-flag scan both key off the
+    subcommand word.** `F=push; git $F origin +HEAD:main` tokenises `$F`, so
+    `push_offence` never sees `push`, and `Bash(git log:*)` auto-approves the
+    compound that builds it. The residual `docs/harness-boundaries.md` names
+    is an argument after a literal verb — `git log $F` — not the verb itself.
+    Raised by Copilot.
+    """
+    subcommand = subcommand_of(segment)
+    if not subcommand or SAFE_SUBCOMMAND.match(subcommand):
+        return None
+    return (
+        f"`git {subcommand}` names its subcommand with an expansion, a "
+        "substitution or a pattern this guard cannot read, so the push "
+        "allow-list never sees the argv bash executes. Prefix grants match "
+        "the typed string; refusing rather than judging the word instead of "
+        "the verb it becomes (docs/harness-boundaries.md)."
+    )
+
+
 def push_offence(segment):
     """The reason to refuse a `git push`, or None — by ALLOW-list.
 
@@ -4315,6 +4344,9 @@ def _offence(command, depth, judged):
         return refusal
 
     for segment in git_segments(tokens):
+        refusal = git_subcommand_offence(segment)
+        if refusal is not None:
+            return refusal
         refusal = push_offence(segment)
         if refusal is not None:
             return refusal

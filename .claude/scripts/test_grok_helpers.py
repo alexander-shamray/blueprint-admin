@@ -7008,10 +7008,34 @@ class TheGitArgvGuard(unittest.TestCase):
         self.assertRefused("git push origin ${N}>&1 main")
         self.assertRefused("git ${N}>&1 push origin +HEAD:main")
 
-        # What actually remains is the run-time half, which no reading here can
-        # reach: a value the shell is TOLD at run time rather than one written
-        # in the source.
+        # What actually remains is the run-time half of an ARGUMENT, which no
+        # reading here can reach: a value the shell is TOLD at run time rather
+        # than one written in the source. A subcommand assembled the same way
+        # is refused — that is not this residual, and the case that pins it
+        # lives next to this one.
         self.assertAdmitted("N=2; git log -${N}")
+
+    def test_a_computed_git_subcommand_is_refused(self):
+        # Prefix grants match the typed string, so
+        # `git log -1; F=push; git $F origin +HEAD:main` is auto-approved as
+        # `Bash(git log:*)`. The hook then tokenises `$F` as the subcommand
+        # and never hands `push` to the allow-list. The residual named for
+        # `--output` is an argument after a literal verb; a verb assembled at
+        # run time is not that residual. Raised by Copilot.
+        for command in (
+            "git log -1; F=push; git $F origin +HEAD:main",
+            "git $F origin +HEAD:main",
+            'git "$F" origin +HEAD:main',
+            "git $(echo push) origin +HEAD:main",
+            "git p?sh origin +HEAD:main",
+        ):
+            with self.subTest(command=command):
+                self.assertRefused(command)
+
+        # The residual that remains is an argument, not a verb.
+        self.assertAdmitted("F=--output=/tmp/x; git log $F")
+        self.assertAdmitted("git log --format=$FORMAT -5")
+        self.assertAdmitted("git checkout $BRANCH")
 
     def test_a_redirection_is_not_an_argument_to_the_program(self):
         # **#183, and the file descriptor is the whole of it.**
@@ -7862,14 +7886,18 @@ class TheGitArgvGuard(unittest.TestCase):
         # does reject braces in the name, but `${x:-${y:-push}}` does not need
         # one pass: the reading rewrites the outer expansion, the result
         # differs from its input, and `offence` recurses onto it — so the
-        # nesting is unwrapped a layer per level. The refusal reason says so
-        # out loud, carrying "with an expansion taken as its default" once per
-        # layer.
+        # nesting is unwrapped a layer per level.
         self.assertRefused("git ${x:-${y:-push}} origin +HEAD:main")
         self.assertRefused("git ${a:-${b:-${c:-push}}} origin +HEAD:main")
         self.assertRefused("git log ${x:-${y:---output=/tmp/probe}}")
 
-        reason = self.judge("git ${x:-${y:-push}} origin +HEAD:main")
+        # Argument position still unwraps a layer per level — `log` is a
+        # literal verb, so the default reading is the one that fires. A
+        # nested default in subcommand position is refused earlier: the
+        # inner expansion is glued, deleting it leaves `${x:-}`, and that
+        # is not a subcommand this guard will key the rest of the grammar
+        # off.
+        reason = self.judge("git log ${x:-${y:---output=/tmp/probe}}")
         self.assertEqual(2, reason.count("taken as its default"))
 
     def test_a_printer_reaches_a_shell_through_the_whole_pipeline(self):
