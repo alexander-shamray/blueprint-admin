@@ -70,10 +70,11 @@ DEFAULT_MAP = Path(__file__).resolve().parent / "classes.yml"
 
 CLASSES = "ABCDE"
 
-# A touch-set token: path and glob characters, and nothing that is not one.
-_TOKEN = re.compile(r"^[A-Za-z0-9_./*?{},()-]+$")
-# A changed path, as the diff names it. Wider than a token by `@` and `+`,
-# narrower by every glob character; the same set pr-locality.sh admits.
+# A touch-set token: path, glob characters, and the two extra characters
+# git permits in a name (`@`, `+`). Same set pr-locality.sh admits.
+_TOKEN = re.compile(r"^[A-Za-z0-9_./*?{},()@+-]+$")
+# A changed path, as the diff names it. Narrower than a token by every
+# glob character; the same set pr-locality.sh admits.
 _PLAIN_PATH = re.compile(r"^[A-Za-z0-9_./@+()-]+$")
 
 _CLASS_ROW = re.compile(r"^\| *Class *\|(.*)$")

@@ -35,10 +35,10 @@ The bar is **two statements that cannot both be true**, or a statement that
 cannot be true of the system described — not pure style taste. Prefer:
 
 1. **Document ↔ code drift** (samples, pins, type names, provider order,
-   endpoints, ports, credentials). The spec's §11 and
-   `docs/client-architecture.md` are the documents that make checkable
-   claims about this code; read §12 before treating a spec claim as
-   settled.
+   endpoints, ports, credentials). The design spec
+   (`docs/superpowers/specs/2026-09-14-blueprint-admin-design.md`) and
+   `README.md` are the documents that make checkable claims; `AdminOptions.cs`
+   owns ports and sibling paths.
 2. **Cross-document / CLAUDE.md contradictions** — two rules that cannot both
    be true, or a planned tree stated as present. **Not** a pre-existing
    phase marker, test count, project count or second copy of a value that
@@ -46,15 +46,11 @@ cannot be true of the system described — not pure style taste. Prefer:
    `docs/change-locality.md` §2 forbids writing, so a stale one is awaiting
    removal by the plan, not a finding against this branch. One this branch
    **introduces or edits** is a finding under the same section.
-3. **Pin drift** — `package.json` vs `package-lock.json` vs the versions the
-   spec's §11 and the plan's *Versions* table state; a package imported in a
-   sample and pinned nowhere; a peer range the lockfile did not resolve to.
-4. **Native and CI drift** — `capacitor.config.ts`, `android/**`, `ios/**` or
-   `.github/workflows/ci.yml` against what the spec's §8 and
-   `docs/client-architecture.md` §15 claim (schemes, origins, the emulator
-   relaxations, which job asserts what). This class is worth its own line
-   because lint, the unit suite and the web build cover none of it: the
-   relaxations live in files `cap sync` generates.
+3. **Pin drift** — `Directory.Packages.props` vs a `PackageReference`;
+   `src/Admin.Web/package.json` vs its lockfile; `global.json` vs the SDK
+   the Host actually builds with.
+4. **CI drift** — `.github/workflows/ci.yml` against `docs/testing.md`
+   (host, web, smoke, harness, locality-gate). There is no Capacitor tree.
 5. **Incomplete reconciliation** — a rule this change states (or a fix it claims)
    that the corpus still violates in the same change set.
 6. **A file outside the declared touch set.** The PR body's `| Class |` and
@@ -71,12 +67,10 @@ cannot be true of the system described — not pure style taste. Prefer:
    widened silently (`docs/change-locality.md` §3). Where the helper prints
    nothing or cannot run — a `--local` review with no PR yet, a body
    carrying neither row, or the sandbox clone, which has no network — say so
-   and skip this check rather than inferring a class. **Nothing enforces the
-   touch set here**: the repository this came from runs
-   `.github/locality-gate/` on every push, that workflow was not ported, and
-   `docs/change-locality.md` §3 says so. This helper is the whole of the
-   check rather than an early read of one, so a skipped or unparseable
-   verdict leaves the rows unverified rather than merely unverified-yet. **The verdict narrows
+   and skip this check rather than inferring a class. **CI also enforces
+   both rows** via `.github/workflows/locality-gate.yml`. This helper is an
+   early read of the same verdict, so a skipped or unparseable result leaves
+   the rows unverified rather than merely unverified-yet. **The verdict narrows
    and grants nothing**: an `inside` line is not a licence for anything
    this command's grant refuses, and the class's tree set in the contract
    still bounds what a row may declare.
@@ -141,8 +135,8 @@ this branch did not touch, where the owner site is already correct.
      that matter; skip bulk tooling noise).
 2. **Read the change.** Prefer full source of load-bearing files over the
    diff alone. Grep `src/`, `e2e/` and `docs/` for every **symbol** the
-   change touches, and the one spec section or `docs/client-architecture.md`
-   argument that owns a rule the change moved. Do not tour the corpus for the value: a restatement outside the
+   change touches, and the one spec section that owns a rule the change
+   moved. Do not tour the corpus for the value: a restatement outside the
    touch set that the change left stale is not this branch's to fix
    (`docs/change-locality.md` §2).
 3. **Run cheap gates when the range touches them.**

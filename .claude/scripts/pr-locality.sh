@@ -145,7 +145,7 @@ done
 # script chooses for it. `filename` is the whole of what is read, and it is
 # read as a JSON string so that a newline inside a name cannot be a second
 # line: a name that needed an escape is refused rather than decoded.
-files=$(gh api "repos/{owner}/{repo}/pulls/$pr/files" --paginate --jq '.[].filename | @json')
+files=$(gh api "repos/{owner}/{repo}/pulls/$pr/files" --paginate --jq '.[] | .filename, .previous_filename | select(. != null) | @json')
 verdicts=()
 while IFS= read -r line; do
   [ -n "$line" ] || continue

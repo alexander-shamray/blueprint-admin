@@ -703,25 +703,17 @@ same argument as never calling a branch clean because asking failed.
    the worktree the run is in, and if it is the main checkout say that too.
 
 2. **Checks**, selected by what the diff actually touched:
-   `bash .claude/scripts/npm-checks.sh all` — lint, unit tests, production
-   build — whenever the change reaches `src/**`, `e2e/**` or any file the
-   toolchain reads (`package.json`, `angular.json`, `tsconfig*.json`,
-   `eslint.config.js`, `.prettierrc`). A docs-only change runs `fast` or
-   nothing and says which.
+   `bash .claude/scripts/host-checks.sh all` whenever the change reaches
+   `src/Admin.Host/**`, `tests/**`, `*.csproj`, `Directory.*.props` or
+   `BlueprintAdmin.slnx`. `bash .claude/scripts/npm-checks.sh all` whenever
+   it reaches `src/Admin.Web/**` or that project's lockfile, eslint or
+   prettier config. A change under `.claude/scripts` or
+   `.github/locality-gate/` also runs that tree's Python suite. A docs-only
+   change runs `fast` or nothing and says which.
 
-   **The Playwright suite is CI's and is not run here.** `npm run e2e` needs
-   the backend's Compose stack and a downloaded browser, neither of which
-   this step can assume and both of which `docs/testing.md` owns; the `e2e`
-   job in `.github/workflows/ci.yml` is where it runs — on pull requests and
-   on pushes to `main`, not on every push. Say plainly that it was not run
-   rather than implying the suite was green.
-
-   **A native change adds one more, and it is the one nothing else covers.**
-   A diff touching `capacitor.config.ts`, `android/**` or `ios/**` is not
-   checked by lint, tests or the web build at all — the emulator relaxations
-   live in files `cap sync` generates, which is exactly why the `android` job
-   asserts them in both directions. Name that job in the PR body as the
-   check, and say it runs in CI and not here.
+   **The Playwright suite is CI's `smoke` job and is not run here.** It needs
+   the Host under FakePlatform; `docs/testing.md` owns the local recipe.
+   Say plainly that it was not run rather than implying the suite was green.
 
    **Before `/commit`, not after.** A defect found after the commit costs a
    second commit or a rewrite; found here it is an edit. This is also the step a
@@ -918,8 +910,8 @@ same argument as never calling a branch clean because asking failed.
       had it: every gate here starts with `npm ci`, which needs
       `registry.npmjs.org` and the egress allow-list above admits two hosts
       neither of which is it. So lint, the tests and the build are the host's
-      gates and not the review's — `npm-checks.sh` runs here, and the reviewer
-      reads.
+      gates and not the review's — `host-checks.sh` and `npm-checks.sh` run
+      here, and the reviewer reads.
 
       Inside the copy, Grok discovers `.claude/commands/review-branch.md`
       itself, and that command owns the `suggestions.md` lifecycle: a full

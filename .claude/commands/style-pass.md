@@ -108,8 +108,8 @@ not the other two".
 
 | | |
 |---|---|
-| `.prettierrc` | Layout Prettier owns outright: print width, quotes, semicolons, trailing commas, and every wrapping decision in `.ts` and `.html` |
-| `eslint.config.js` | Anything expressible as a rule about the *program* rather than its layout — `no-restricted-imports`, selector prefixes, the template accessibility set |
+| `src/Admin.Web/.prettierrc` | Layout Prettier owns outright: print width, quotes, semicolons, trailing commas, and every wrapping decision in `.ts` and `.html` |
+| `src/Admin.Web/eslint.config.js` | Anything expressible as a rule about the *program* rather than its layout — selector prefixes, the template accessibility set |
 | `.editorconfig` | The few keys an editor applies before either runs: indent, charset, final newline, trailing whitespace, and `quote_type` for `.ts` |
 
 Four outcomes, and the last is as important as the others:
@@ -119,12 +119,12 @@ Four outcomes, and the last is as important as the others:
   add an ESLint rule that re-litigates a Prettier decision: the two disagree
   eventually, and the disagreement surfaces as a lint failure on a file
   Prettier just wrote.
-- **A Prettier option expresses it** — set it in `.prettierrc`, and record what
+- **A Prettier option expresses it** — set it in `src/Admin.Web/.prettierrc`, and record what
   it costs in the guide rather than in the JSON, which takes no comments. Then
   reformat the corpus in the same pass: changing an option and not running it
   leaves every unvisited file wrong and the next unrelated edit carrying the
   reformat.
-- **An ESLint rule expresses it** — add it to `eslint.config.js` in the
+- **An ESLint rule expresses it** — add it to `src/Admin.Web/eslint.config.js` in the
   narrowest `files:` block that covers the rule, with a comment saying what it
   cannot catch. The existing `no-restricted-imports` blocks are the model:
   each says in its own comment where it over-fires and where it under-fires,
@@ -150,7 +150,7 @@ this pass.
 Re-scan for the invariants the corpus holds. Every one of these has caught a
 real regression introduced by a previous pass:
 
-- no line over 100 columns inside a code fence — `.prettierrc`'s `printWidth`
+- no line over 100 columns inside a code fence — `src/Admin.Web/.prettierrc`'s `printWidth`
 - single quotes at every `.ts` site, source and sample alike
 - every continuation indent a multiple of two
 - no ragged list — one line, or one element per line
@@ -160,7 +160,7 @@ real regression introduced by a previous pass:
 
 Then run the linters themselves — `bash .claude/scripts/npm-checks.sh lint`,
 which this command is granted — and report what it said rather than what you
-expect it to say. A pass that touched `.prettierrc` also wants
+expect it to say. A pass that touched `src/Admin.Web/.prettierrc` also wants
 `npx prettier --check .`, which this command is **not** granted, for the
 reason §2 gives: run it and take the prompt, one approval, the same cost as
 the throwaway script.
@@ -168,6 +168,6 @@ the throwaway script.
 ## Report
 
 The rule as stated, sites changed per file, the `docs/style-guide.md`,
-`CLAUDE.md`, `.prettierrc`, `eslint.config.js` and `.editorconfig` edits, and
+`CLAUDE.md`, `src/Admin.Web/.prettierrc`, `src/Admin.Web/eslint.config.js` and `.editorconfig` edits, and
 the invariant scan results as numbers. Flag every judgement call where two of
 the rules both applied and one had to win — do not bury it.

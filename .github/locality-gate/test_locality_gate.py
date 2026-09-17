@@ -82,6 +82,10 @@ class TouchSetGrammar(unittest.TestCase):
         _, tokens = read_rows(body("D", "`.claude/commands/{pr,ship}.md`, `docs/testing.md`"))
         self.assertEqual(tokens, [".claude/commands/{pr,ship}.md", "docs/testing.md"])
 
+    def test_at_and_plus_are_legal_in_a_touch_set_token(self) -> None:
+        _, tokens = read_rows(body("A", "`src/app/@types/**`, `docs/a+b.md`"))
+        self.assertEqual(tokens, ["src/app/@types/**", "docs/a+b.md"])
+
     def test_a_crlf_body_reads_the_same(self) -> None:
         klass, tokens = read_rows(body("A", "`src/Services/Catalog/**`").replace("\n", "\r\n"))
         self.assertEqual((klass, tokens), (["A"], ["src/Services/Catalog/**"]))
