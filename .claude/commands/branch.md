@@ -314,12 +314,17 @@ not content.
    **`src/Admin.Web/node_modules` is required before `npm-checks.sh`, on every
    path that created a branch.** A fresh worktree never has it. An in-place
    branch on a fresh clone does not either — dirty `main`, a linked worktree,
-   or an unwritable parent. After the branch exists, if
-   `src/Admin.Web/node_modules` is missing, run `bash .claude/scripts/spa-ci.sh`
-   once. The helper `cd`s there and runs `npm ci`, never `install`. Skip it
-   only when the directory is already present: a dirty-main checkout that has
-   already built the SPA. The first `npm-checks.sh` otherwise fails on a
-   missing `ng`.
+   or an unwritable parent. After the branch exists, run
+   `bash .claude/scripts/spa-ci.sh` once if `src/Admin.Web/node_modules` is
+   missing, or if `src/Admin.Web/package.json` or `package-lock.json` is
+   dirty. The helper `cd`s there and runs `npm ci`, never `install`. An
+   in-place branch that carried dependency edits off `main` still has
+   `node_modules` from the previous lockfile; the directory being present
+   does not mean it matches. Skip only when the directory is present and
+   neither of those files is dirty — a dirty-main checkout that already
+   built the SPA against this lockfile. The first `npm-checks.sh`
+   otherwise fails on a missing `ng`, or runs against the wrong package
+   graph.
 
    **If the parent directory is not writable, `git worktree add` fails and the
    answer is the in-place branch, not a temp path.** A root-level or container
