@@ -28,6 +28,10 @@ argument is how a rule gets "corrected" back.
   file, never by trying what it forbids.
 - **The two hooks use `run-guard.sh`**, which locates a compatible Python
   launcher before invoking the guard.
+- **`.claude/skills/**` is a grant surface.** A skill's `allowed-tools` is
+  auto-approval, so a session that can rewrite `SKILL.md` widens the next
+  invocation. Commands, agents, hooks and settings were already denied;
+  both `Edit(.claude/skills/**)` spellings sit on the same list.
 - **`python -m unittest discover -s .claude/scripts -p 'test_*.py'` is the
   harness's own suite.** It reads `git ls-files`, so a new tracked root file
   or top-level tree fails it until somebody decides which side of the

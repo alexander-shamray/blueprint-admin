@@ -3052,18 +3052,23 @@ class CopilotFeedHelpersAreTheOnlyIntake(unittest.TestCase):
         # `**` crosses directories, `*` does not, a brace is alternation, a
         # directory token covers what is beneath it, and a token is anchored
         # — `docs/x.md` does not admit `docs/x.md.bak` or `notdocs/x.md`.
+        # Class A+D is the union that admits Host/SPA/tests and the harness
+        # trees; the inside/outside split then comes from the touch-set globs,
+        # which is what this case is for. Class C+E does not reach `.claude/**`
+        # or `docs/**` on this map, so the old fixture printed `outside` for
+        # every harness path even when the brace glob matched.
         body = (
-            "| Class | C+E |\n"
-            "| Touch set | `src/Services/Ordering/**`, `tests/Ordering.*`, "
+            "| Class | A+D |\n"
+            "| Touch set | `src/Admin.Host/Jobs/**`, `tests/Admin.Host.*`, "
             "`.claude/commands/{pr,ship}.md`, CLAUDE.md, docs/x.md, "
-            "docs/file?.md, deploy/ |\n"
+            "docs/file?.md, .github/locality-gate/ |\n"
         )
         files = "\n".join((
-            "src/Services/Ordering/Ordering.Domain/Order.cs",
-            "src/Services/Catalog/Catalog.Domain/Product.cs",
-            "tests/Ordering.Domain.Tests/OrderTests.cs",
-            "tests/Catalog.Domain.Tests/ProductTests.cs",
-            "tests/OrderingHelpers.cs",
+            "src/Admin.Host/Jobs/Job.cs",
+            "src/Admin.Web/src/app.ts",
+            "tests/Admin.Host.Tests/JobTests.cs",
+            "tests/Admin.Web.Tests/AppTests.cs",
+            "tests/Admin.HostHelpers.cs",
             ".claude/commands/pr.md",
             ".claude/commands/review-grok.md",
             "CLAUDE.md",
@@ -3072,19 +3077,19 @@ class CopilotFeedHelpersAreTheOnlyIntake(unittest.TestCase):
             "notdocs/x.md",
             "docs/file1.md",
             "docs/file/1.md",
-            "deploy/compose/docker-compose.yml",
-            "deployment.md",
+            ".github/locality-gate/classes.yml",
+            ".github/workflows/ci.yml",
         )) + "\n"
         r = self._run_locality_with_gh(self._gh_printing(body, files))
         self.assertEqual(0, r.returncode, r.stderr)
         self.assertEqual(
             [
-                "class C+E",
-                "inside src/Services/Ordering/Ordering.Domain/Order.cs",
-                "outside src/Services/Catalog/Catalog.Domain/Product.cs",
-                "inside tests/Ordering.Domain.Tests/OrderTests.cs",
-                "outside tests/Catalog.Domain.Tests/ProductTests.cs",
-                "outside tests/OrderingHelpers.cs",
+                "class A+D",
+                "inside src/Admin.Host/Jobs/Job.cs",
+                "outside src/Admin.Web/src/app.ts",
+                "inside tests/Admin.Host.Tests/JobTests.cs",
+                "outside tests/Admin.Web.Tests/AppTests.cs",
+                "outside tests/Admin.HostHelpers.cs",
                 "inside .claude/commands/pr.md",
                 "outside .claude/commands/review-grok.md",
                 "inside CLAUDE.md",
@@ -3093,8 +3098,8 @@ class CopilotFeedHelpersAreTheOnlyIntake(unittest.TestCase):
                 "outside notdocs/x.md",
                 "inside docs/file1.md",
                 "outside docs/file/1.md",
-                "inside deploy/compose/docker-compose.yml",
-                "outside deployment.md",
+                "inside .github/locality-gate/classes.yml",
+                "outside .github/workflows/ci.yml",
             ],
             r.stdout.splitlines(),
         )
@@ -4588,10 +4593,11 @@ class HarnessControlSurfaceIsDenied(unittest.TestCase):
         # which was true and is the kind of exemption that expires silently: a
         # hook RUNS on every Bash call, so a session able to rewrite one could
         # delete its own guard and then act. The exemption's own condition is
-        # what retired it.
+        # what retired it. `skills/**` is the same argument one directory over:
+        # a skill's `allowed-tools` is auto-approval.
         for path in (".claude/scripts/**", ".claude/sandbox/**",
                      ".claude/commands/**", ".claude/agents/**",
-                     ".claude/hooks/**", "AGENTS.md",
+                     ".claude/hooks/**", ".claude/skills/**", "AGENTS.md",
                      ".claude/settings.json", ".claude/settings.local.json",
                      ".mcp.json"):
             for prefix in ("", "./"):
