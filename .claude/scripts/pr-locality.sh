@@ -39,6 +39,12 @@
 # alternatives included, since the edit-target guard judges where an edit
 # inside the checkout lands and not a path naming the outside.
 #
+# **A path is `inside` only when it is in both sets.** The touch-set row is
+# the sharper bound; the class -> tree-set map in
+# `.github/locality-gate/classes.yml` is the coarser one CI's gate reads.
+# Matching the declared set alone would print `inside` for `Class | D |` with
+# `Touch set | src/** |`, which the Python gate rejects. Raised by Copilot.
+#
 # **The verdict narrows and grants nothing.** What holds authority is the
 # caller's own deny list and the class's tree set in the contract; an
 # `outside` line is a finding for the caller, and an `inside` line is not a
@@ -67,6 +73,44 @@ if [ -z "$class_row" ] && [ -z "$touch_row" ]; then exit 0; fi
 class=$(sed -E 's/^\| *Class *\| *//; s/ *\| *$//' <<<"$class_row")
 grep -Eq '^[A-E](\+[A-E])?$' <<<"$class" || refuse "the Class row is not a class"
 [ "${class:0:1}" != "${class:2:1}" ] || refuse "the Class row repeats a class"
+# The class map is the same file CI's gate reads. A `+`-joined class is the
+# union of its members. Tokens compile with the touch-set glob rules below.
+here=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+map="$here/../../.github/locality-gate/classes.yml"
+[ -f "$map" ] || refuse "classes.yml is missing"
+members=("$class")
+[ "${#class}" -eq 1 ] || members=("${class:0:1}" "${class:2:1}")
+compile_glob() {
+  # stdin: one touch-set / map token. stdout: the ERE body (unanchored).
+  sed -e 's/[.()+]/\\&/g' -e 's/\*\*/%%GLOBSTAR%%/g' -e 's/\*/[^\/]*/g' \
+      -e 's/?/[^\/]/g' -e 's/%%GLOBSTAR%%/.*/g' \
+      -e 's/{/(/g' -e 's/}/)/g' -e 's/,/|/g'
+}
+map_patterns=()
+current=""
+while IFS= read -r raw || [ -n "$raw" ]; do
+  line="${raw%$'\r'}"
+  [ -n "$line" ] || continue
+  case "$line" in '#'*) continue ;; esac
+  if [[ "$line" =~ ^([A-E]):$ ]]; then
+    current="${BASH_REMATCH[1]}"
+    continue
+  fi
+  if [[ "$line" =~ ^\ \ -\ \'([^\']+)\'$ ]]; then
+    [ -n "$current" ] || refuse "classes.yml is outside the map's grammar"
+    token="${BASH_REMATCH[1]}"
+    for member in "${members[@]}"; do
+      if [ "$member" = "$current" ]; then
+        token="${token%/}"
+        re=$(printf '%s' "$token" | compile_glob)
+        map_patterns+=("^${re}(/.*)?$")
+      fi
+    done
+    continue
+  fi
+  refuse "classes.yml is outside the map's grammar"
+done < "$map"
+[ "${#map_patterns[@]}" -gt 0 ] || refuse "the Class row has no tree set in classes.yml"
 # The touch-set cell, then each comma-separated token on its own.
 cells=$(sed -E 's/^\| *Touch set *\| *//; s/ *\| *$//' <<<"$touch_row")
 case "$cells" in *'|'*) refuse "the Touch set row is not one cell" ;; esac
@@ -137,10 +181,7 @@ for item in "${items[@]}"; do
   # quantifier, so an unescaped `docs/a+b.md` would match `docs/aab.md` — a
   # false `outside` traded for a silently wrong `inside`, which is the same
   # trade the changed-path side already refuses. `@` needs no escape.
-  re=$(printf '%s' "$t" |
-    sed -e 's/[.()+]/\\&/g' -e 's/\*\*/%%GLOBSTAR%%/g' -e 's/\*/[^\/]*/g' \
-        -e 's/?/[^\/]/g' -e 's/%%GLOBSTAR%%/.*/g' \
-        -e 's/{/(/g' -e 's/}/)/g' -e 's/,/|/g')
+  re=$(printf '%s' "$t" | compile_glob)
   patterns+=("^${re}(/.*)?$")
 done
 # The changed paths are the diff's own, and each gets the one word this
@@ -166,9 +207,17 @@ while IFS= read -r line; do
 done <<<"$files"
 printf 'class %s\n' "$class"
 for path in "${verdicts[@]}"; do
-  verdict=outside
+  in_set=0
+  in_map=0
   for re in "${patterns[@]}"; do
-    if grep -Eq "$re" <<<"$path"; then verdict=inside; break; fi
+    if grep -Eq "$re" <<<"$path"; then in_set=1; break; fi
   done
-  printf '%s %s\n' "$verdict" "$path"
+  for re in "${map_patterns[@]}"; do
+    if grep -Eq "$re" <<<"$path"; then in_map=1; break; fi
+  done
+  if [ "$in_set" -eq 1 ] && [ "$in_map" -eq 1 ]; then
+    printf 'inside %s\n' "$path"
+  else
+    printf 'outside %s\n' "$path"
+  fi
 done
