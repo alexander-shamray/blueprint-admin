@@ -150,13 +150,16 @@ already correct — are also non-findings.
      `bash .claude/scripts/harness-checks.sh`
 
    **In the sandbox none of them is available**, and that is deliberate rather
-   than an oversight: every one starts with `npm ci`, which needs
-   `registry.npmjs.org`, and the reviewer's egress allow-list admits
-   `api.x.ai` and `auth.x.ai` and nothing else. An image that could install its
-   own toolchain could install anything, which is the capability the sandbox
-   exists to remove. So whether lint, the tests and the build are green is the
-   **host's** to verify — report it as unverified rather than asserting it, and
-   never report `command not found` as a finding about the branch.
+   than an oversight: `host-checks.sh` needs the .NET SDK, `npm-checks.sh`
+   runs existing npm scripts and does not run `npm ci`, and
+   `harness-checks.sh` starts Python 3.12 (and needs `jq`). The image has none
+   of those toolchains. The reviewer's egress allow-list admits `api.x.ai` and
+   `auth.x.ai` and nothing else, so it cannot fetch them either. An image that
+   could install its own toolchain could install anything, which is the
+   capability the sandbox exists to remove. So whether lint, the tests and the
+   build are green is the **host's** to verify — report it as unverified rather
+   than asserting it, and never report `command not found` as a finding about
+   the branch.
 
    **The Playwright suite is nobody's gate here.** It needs the Host under
    FakePlatform — `docs/testing.md` owns what — and `npm-checks.sh` has no

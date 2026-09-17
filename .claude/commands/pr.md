@@ -101,7 +101,7 @@ the PR opens, with any file added mid-work and the reason it was:
 | | |
 |---|---|
 | Class | A |
-| Touch set | `src/app/features/cart/**`, `src/app/core/cart/**` |
+| Touch set | `src/Admin.Host/Jobs/**`, `tests/Admin.Host.Tests/Jobs/**` |
 ```
 
 `Class` is one letter from that file's table — A local, B shared mechanism,

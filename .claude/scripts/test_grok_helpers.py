@@ -3659,6 +3659,11 @@ class NoCommandHoldsAPrefixGrantThatAdmitsAForbiddenFlag(unittest.TestCase):
                 self.assertIn("Bash(bash .claude/scripts/gh-pr-create.sh)",
                               frontmatter)
                 self.assertNotIn("gh-pr-create.sh:*", frontmatter)
+        # The reply helper is the same shape: a body on the command line is
+        # parsed by the parent shell before the script starts. Raised by Copilot.
+        copilot = self.frontmatter(COMMANDS / "review-copilot.md")
+        self.assertIn("Bash(bash .claude/scripts/pr-comment-reply.sh)", copilot)
+        self.assertNotIn("pr-comment-reply.sh:*", copilot)
 
     @staticmethod
     def _code(name):
@@ -3830,6 +3835,54 @@ class NoCommandHoldsAPrefixGrantThatAdmitsAForbiddenFlag(unittest.TestCase):
             encoding="utf-8").splitlines()
         self.assertIn("/pr-body.md", ignored)
         self.assertIn("/pr-title.txt", ignored)
+
+    def test_the_reply_helper_takes_no_argument(self):
+        # A body as $3 is parsed by the parent shell, so an apostrophe in it
+        # executes before this script starts. Driven: any argument is refused
+        # before any `gh`. Raised by Copilot.
+        reply = self._code("pr-comment-reply.sh")
+        self.assertIn('[ "$#" -eq 0 ]', reply)
+        self.assertIn("pr-reply.pr", reply)
+        self.assertIn("pr-reply.id", reply)
+        self.assertIn("pr-reply.body", reply)
+        self.assertLess(reply.find("ls-files --error-unmatch"),
+                        reply.find("gh api"))
+        self.assertGreater(reply.find('rm -f -- "$pr_file" "$id_file" "$body_file"'),
+                           reply.find("gh api"))
+        ignored = (SCRIPTS.parent.parent / ".gitignore").read_text(
+            encoding="utf-8").splitlines()
+        self.assertIn("/pr-reply.pr", ignored)
+        self.assertIn("/pr-reply.id", ignored)
+        self.assertIn("/pr-reply.body", ignored)
+
+        repo = Path(tempfile.mkdtemp(prefix="pr-reply-"))
+        self.addCleanup(shutil.rmtree, str(repo), ignore_errors=True)
+        subprocess.run(["git", "init", "-q", "-b", "feat/x", str(repo)],
+                       check=True, capture_output=True)
+        for args in (["9", "1", "done"], ["9"], ["-f"], ["done"]):
+            with self.subTest(args=args):
+                out = subprocess.run(
+                    [BASH, str(SCRIPTS / "pr-comment-reply.sh"), *args],
+                    capture_output=True, text=True, cwd=str(repo))
+                self.assertEqual(2, out.returncode, out.stderr)
+                self.assertIn("pr-reply.pr", out.stderr)
+
+        (repo / "pr-reply.pr").write_text("9\n", encoding="utf-8")
+        (repo / "pr-reply.id").write_text("1\n", encoding="utf-8")
+        # Missing body file is refused by name.
+        out = subprocess.run(
+            [BASH, str(SCRIPTS / "pr-comment-reply.sh")],
+            capture_output=True, text=True, cwd=str(repo))
+        self.assertEqual(2, out.returncode, out.stderr)
+        self.assertIn("pr-reply.body", out.stderr)
+
+        (repo / "pr-reply.body").write_text("done\n", encoding="utf-8")
+        (repo / "pr-reply.pr").write_text("9; rm -rf /\n", encoding="utf-8")
+        out = subprocess.run(
+            [BASH, str(SCRIPTS / "pr-comment-reply.sh")],
+            capture_output=True, text=True, cwd=str(repo))
+        self.assertEqual(2, out.returncode, out.stderr)
+        self.assertIn("ids must be numbers", out.stderr)
 
 
 class TheFourPortedResiduals(unittest.TestCase):

@@ -35,3 +35,7 @@ __pycache__/
 # /pr scratch, same names as the other two clones.
 /pr-body.md
 /pr-title.txt
+# /review-copilot scratch — body must not cross the parent shell.
+/pr-reply.pr
+/pr-reply.id
+/pr-reply.body

@@ -196,14 +196,13 @@ not content.
    | `fix/` | A defect in either |
    | `refactor/` | Shape change, no behaviour change |
 
-   Established names to match: `fix/emulator-cleartext-gate`,
-   `ci/android-selector`. Summarise the change, do not describe the files —
-   `fix/cart-total-rounding`, not `fix/update-cart`.
+   Established names to match: `fix/loopback-origin-guard`,
+   `feat(jobs)/process-runner`. Summarise the change, do not describe the files —
+   `fix/trace-window-bounds`, not `fix/update-jobs`.
 
    **Implementing a task from the plan?** Grep the plan under
    `docs/superpowers/plans/` for the `## Task n:` heading and derive the name
-   from it, so the branch, the commit and the plan all read the same. Task 7's
-   heading is `Cart store and persistence` → `feat(cart)/store-and-persistence`.
+   from it, so the branch, the commit and the plan all read the same.
 4. **Check the name and the directory are both free** — `git branch --list`,
    `git branch -a` and `git worktree list`. A name that already exists locally
    or on the remote means the work may already be underway; say so rather than
@@ -313,10 +312,14 @@ not content.
    `npm-checks.sh` — runs there. The two paragraphs below are what happens when
    either does not.
 
-   **A new worktree has no `node_modules`, and nothing here creates one.**
-   The SPA lockfile lives under `src/Admin.Web/`. After `EnterWorktree` run
-   `bash .claude/scripts/spa-ci.sh` once — that helper `cd`s there and runs
-   `npm ci`, never `install`. The first `npm-checks.sh` otherwise fails on a
+   **`src/Admin.Web/node_modules` is required before `npm-checks.sh`, on every
+   path that created a branch.** A fresh worktree never has it. An in-place
+   branch on a fresh clone does not either — dirty `main`, a linked worktree,
+   or an unwritable parent. After the branch exists, if
+   `src/Admin.Web/node_modules` is missing, run `bash .claude/scripts/spa-ci.sh`
+   once. The helper `cd`s there and runs `npm ci`, never `install`. Skip it
+   only when the directory is already present: a dirty-main checkout that has
+   already built the SPA. The first `npm-checks.sh` otherwise fails on a
    missing `ng`.
 
    **If the parent directory is not writable, `git worktree add` fails and the
