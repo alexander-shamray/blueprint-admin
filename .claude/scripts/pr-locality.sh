@@ -45,6 +45,13 @@
 # Matching the declared set alone would print `inside` for `Class | D |` with
 # `Touch set | src/** |`, which the Python gate rejects. Raised by Copilot.
 #
+# **The map is the PR base's copy, with the workflow's bootstrap.** CI takes
+# gate and map from the base commit so a PR that widens Class D to `src/**`
+# is still judged by the map already on main; HEAD is used only when the
+# base has no `.github/locality-gate/` directory at all. This helper used to
+# read the checkout file, which is HEAD, and `/review-branch` describes it
+# as an early read of the same verdict. Raised by Copilot.
+#
 # **The verdict narrows and grants nothing.** What holds authority is the
 # caller's own deny list and the class's tree set in the contract; an
 # `outside` line is a finding for the caller, and an `inside` line is not a
@@ -73,11 +80,30 @@ if [ -z "$class_row" ] && [ -z "$touch_row" ]; then exit 0; fi
 class=$(sed -E 's/^\| *Class *\| *//; s/ *\| *$//' <<<"$class_row")
 grep -Eq '^[A-E](\+[A-E])?$' <<<"$class" || refuse "the Class row is not a class"
 [ "${class:0:1}" != "${class:2:1}" ] || refuse "the Class row repeats a class"
-# The class map is the same file CI's gate reads. A `+`-joined class is the
-# union of its members. Tokens compile with the touch-set glob rules below.
+# The class map is the same file CI's gate reads, from the same commit. A
+# `+`-joined class is the union of its members. Tokens compile with the
+# touch-set glob rules below.
 here=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
-map="$here/../../.github/locality-gate/classes.yml"
-[ -f "$map" ] || refuse "classes.yml is missing"
+head_map="$here/../../.github/locality-gate/classes.yml"
+gate_dir=".github/locality-gate"
+map_rel="$gate_dir/classes.yml"
+base=$(gh pr view "$pr" --json baseRefOid --jq .baseRefOid)
+grep -Eq '^[0-9a-f]{40}$' <<<"$base" || refuse "the PR base is not a commit"
+if git cat-file -e "$base:$gate_dir" 2>/dev/null; then
+  git cat-file -e "$base:$map_rel" 2>/dev/null ||
+    refuse "the PR base carries the gate directory but no classes.yml"
+  map=$(mktemp)
+  trap 'rm -f -- "$map"' EXIT
+  git show "$base:$map_rel" > "$map"
+  [ -s "$map" ] || refuse "classes.yml at the PR base is empty"
+else
+  # Missing object and missing directory are the same `cat-file` failure.
+  # Only the latter is bootstrap; refuse the former rather than read HEAD.
+  git cat-file -e "$base^{commit}" 2>/dev/null ||
+    refuse "the PR base commit is not in this clone"
+  map="$head_map"
+  [ -f "$map" ] || refuse "classes.yml is missing"
+fi
 members=("$class")
 [ "${#class}" -eq 1 ] || members=("${class:0:1}" "${class:2:1}")
 compile_glob() {

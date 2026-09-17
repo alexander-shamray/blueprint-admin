@@ -2754,6 +2754,7 @@ class CopilotFeedHelpersAreTheOnlyIntake(unittest.TestCase):
             [
                 'expected=$(gh pr view "$pr" --json changedFiles --jq .changedFiles)',
                 'body=$(gh pr view "$pr" --json body --jq .body)',
+                'base=$(gh pr view "$pr" --json baseRefOid --jq .baseRefOid)',
                 'name_count=$(gh api "repos/{owner}/{repo}/pulls/$pr/files" --paginate --jq \'.[].filename\' | grep -c .)',
                 'files=$(gh api "repos/{owner}/{repo}/pulls/$pr/files" '
                 "--paginate --jq '.[] | .filename, .previous_filename | select(. != null) | @json')",
@@ -2789,17 +2790,23 @@ class CopilotFeedHelpersAreTheOnlyIntake(unittest.TestCase):
         )
 
     @staticmethod
-    def _gh_printing(body, files="docs/x.md\n"):
+    def _gh_printing(body, files="docs/x.md\n", base=None):
         # Quoted heredocs, because a body carries backticks and a
         # double-quoted `printf` argument would command-substitute them —
         # which is the stub doing what the helper exists to refuse. The shim
         # answers the files endpoint with each name JSON-encoded on its own
         # line — the shape `--jq '.[] | .filename, .previous_filename | select(. != null) | @json'` produces, newline
-        # in a name and all — and anything else with the body.
+        # in a name and all — and anything else with the body. `baseRefOid`
+        # defaults to this clone's HEAD so existing cases keep the checkout
+        # map (HEAD has the gate directory).
         names = [name for name in files.split("\n") if name]
         encoded = "".join(json.dumps(name) + "\n" for name in names)
+        if base is None:
+            base = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], text=True).strip()
         return (
             'case "$*" in *changedFiles*) echo ' + str(len(names)) + "\n"
+            ";; *baseRefOid*) echo " + base + "\n"
             ";; *\"/files\"*) cat <<'FILES'\n" + encoded + "FILES\n"
             ";; *) cat <<'STUB'\n" + body + "STUB\n;; esac\n"
         )
@@ -3101,6 +3108,96 @@ class CopilotFeedHelpersAreTheOnlyIntake(unittest.TestCase):
                 "inside .github/locality-gate/classes.yml",
                 "outside .github/workflows/ci.yml",
             ],
+            r.stdout.splitlines(),
+        )
+
+    def _run_locality_against_maps(self, *, base_map, head_map, body, files):
+        # A throwaway clone so HEAD can be a *wider* map than the base
+        # without touching this repository's classes.yml. The helper is
+        # copied in so its checkout-relative HEAD path resolves here.
+        root = Path(tempfile.mkdtemp(prefix="locality-map-"))
+        self.addCleanup(shutil.rmtree, str(root), ignore_errors=True)
+        repo = root / "repo"
+        repo.mkdir()
+        gate = repo / ".github" / "locality-gate"
+        gate.mkdir(parents=True)
+        scripts = repo / ".claude" / "scripts"
+        scripts.mkdir(parents=True)
+        shutil.copy(SCRIPTS / "pr-locality.sh", scripts / "pr-locality.sh")
+
+        def git(*args):
+            subprocess.run(["git", "-C", str(repo), *args], check=True,
+                           capture_output=True, text=True)
+
+        git("init", "-q", "-b", "main")
+        if base_map is None:
+            (repo / "README.md").write_text("bootstrap\n", encoding="utf-8")
+            git("add", "README.md")
+        else:
+            (gate / "classes.yml").write_text(base_map, encoding="utf-8")
+            git("add", ".github/locality-gate/classes.yml")
+        git("-c", "user.email=t@example.com", "-c", "user.name=t",
+            "commit", "-q", "-m", "base")
+        base = subprocess.check_output(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+        (gate / "classes.yml").write_text(head_map, encoding="utf-8")
+        git("add", ".github/locality-gate/classes.yml")
+        git("-c", "user.email=t@example.com", "-c", "user.name=t",
+            "commit", "-q", "-m", "head")
+
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        gh = Path(d) / "gh"
+        gh.write_text(
+            "#!/usr/bin/env bash\n" + self._gh_printing(body, files, base=base),
+            encoding="utf-8")
+        gh.chmod(0o755)
+        env = dict(os.environ)
+        env["PATH"] = d + os.pathsep + env["PATH"]
+        return subprocess.run(
+            [BASH, str(scripts / "pr-locality.sh"), "187"],
+            capture_output=True, text=True, env=env, cwd=str(repo),
+        )
+
+    def test_a_widened_head_map_does_not_override_the_base_map(self):
+        # Copilot: the helper read classes.yml from the checkout (HEAD) while
+        # CI enforces the base copy except during bootstrap. After the gate
+        # lands, a PR that widens Class D to src/** would print `inside`
+        # locally and `outside` in CI.
+        narrow = (
+            "D:\n"
+            "  - 'docs/**'\n"
+            "  - '.claude/**'\n"
+        )
+        wide = narrow + "  - 'src/**'\n"
+        body = "| Class | D |\n| Touch set | src/** |\n"
+        r = self._run_locality_against_maps(
+            base_map=narrow, head_map=wide, body=body,
+            files="src/Admin.Host/Jobs/Job.cs\n")
+        self.assertEqual(0, r.returncode, r.stderr)
+        self.assertEqual(
+            ["class D", "outside src/Admin.Host/Jobs/Job.cs"],
+            r.stdout.splitlines(),
+        )
+
+    def test_bootstrap_reads_the_head_map_when_the_base_has_no_gate(self):
+        # The matching workflow branch: the PR that first lands the gate has
+        # no directory on the base, so HEAD is what judges. A wide HEAD map
+        # must then print `inside`, which is also the control that the case
+        # above is not passing because both maps refuse the path.
+        narrow = (
+            "D:\n"
+            "  - 'docs/**'\n"
+            "  - '.claude/**'\n"
+        )
+        wide = narrow + "  - 'src/**'\n"
+        body = "| Class | D |\n| Touch set | src/** |\n"
+        r = self._run_locality_against_maps(
+            base_map=None, head_map=wide, body=body,
+            files="src/Admin.Host/Jobs/Job.cs\n")
+        self.assertEqual(0, r.returncode, r.stderr)
+        self.assertEqual(
+            ["class D", "inside src/Admin.Host/Jobs/Job.cs"],
             r.stdout.splitlines(),
         )
 
