@@ -48,19 +48,12 @@ change quoted from the review is a risk with no benefit.
   names, and if nothing under the root resolves, return `unreadable-root` and
   stop. A record built without reading the code is a record of the review's
   opinions, which is what this step exists to replace.
-- The **settled choices**, by pointer: `docs/style-guide.md` tabulates the
-  house forms an external reviewer flags most often — single quotes,
-  `inject()` over constructor parameters, signals over `BehaviorSubject`,
-  a `private` signal exposed through `asReadonly()`, British prose beside
-  real identifier spellings. Read that table before adjudicating a style
-  finding, and reject those by naming the row.
-
-  **Member visibility is NOT on that table and a finding about it is not a
-  `reject-rule`.** The guide leaves it open on purpose — the corpus does two
-  things and it says so — and an adjudicator that rejected such a finding by
-  citing a settled choice would be enforcing a convention this repository
-  has deliberately not adopted. Return `decision` and let a person settle it.
-  This profile did list it as settled, which Copilot caught against PR #13.
+- The **settled choices**, by pointer: [`docs/style-guide.md`](../../docs/style-guide.md)
+  names the two dialects (C# is `.editorconfig`; Angular is `inject()` at
+  field level, standalone, signals). Read that file and `.editorconfig`
+  before adjudicating a style finding. Do **not** reject a finding by citing
+  a frontend-only form this repository has not adopted (`BehaviorSubject`,
+  `asReadonly()`, Ionic member-visibility tables). Those are `decision`.
 - **The locality contract**, by pointer: `docs/change-locality.md` §2 is
   the owner of what a document may and may not restate, and this profile
   does not copy its list — a copy here had already dropped one of its
@@ -82,7 +75,7 @@ change quoted from the review is a risk with no benefit.
    defect stated".
 2. **Locate each one, owner first.** `Grep` for the identifier, number or
    phrase it names, starting from the owner — the code symbol for a value,
-   the spec section or the `docs/client-architecture.md` argument for a rule.
+   the spec section or `docs/change-locality.md` for a rule.
    Record the owner site
    and **every site the review itself names**, each as its own block: the
    parent fixes those in one pass. Do not search the corpus for further
@@ -102,8 +95,8 @@ change quoted from the review is a risk with no benefit.
    be added or corrected, is `reject-rule` with the reason naming
    `docs/change-locality.md` §2 — provided the owner site says the right
    thing. Locate the owner first: for a number that is the code symbol, for a
-   rule the spec section or the `docs/client-architecture.md` argument that
-   states it. If the owner is
+   rule the spec section or `docs/change-locality.md` that states it. If the
+   owner is
    wrong, the finding is `accept` at the owner site alone and the `change`
    says so. If a stale copy sits beside a correct owner, the finding is
    `reject-rule` and the copy is **not** a row for the final block either:

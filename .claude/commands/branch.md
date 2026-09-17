@@ -1,7 +1,7 @@
 ---
 description: Start a correctly named working branch — in its own sibling worktree from a clean main, in place when the tree is dirty or the parent is not writable
 argument-hint: "[what the change does] — omit to derive it from the uncommitted work"
-allowed-tools: Read, Grep, EnterWorktree, Bash(git status:*), Bash(git diff:*), Bash(git branch --list:*), Bash(git branch --show-current), Bash(git branch -a), Bash(git log:*), Bash(git fetch origin:*), Bash(bash .claude/scripts/git-branch-create.sh:*), Bash(bash .claude/scripts/git-worktree-fork.sh:*), Bash(bash .claude/scripts/git-switch-existing.sh:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(ls:*)
+allowed-tools: Read, Grep, EnterWorktree, Bash(git status:*), Bash(git diff:*), Bash(git branch --list:*), Bash(git branch --show-current), Bash(git branch -a), Bash(git log:*), Bash(git fetch origin:*), Bash(bash .claude/scripts/git-branch-create.sh:*), Bash(bash .claude/scripts/git-worktree-fork.sh:*), Bash(bash .claude/scripts/git-switch-existing.sh:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(ls:*), Bash(bash .claude/scripts/spa-ci.sh)
 disallowed-tools: Bash(git push:*)
 ---
 
@@ -169,9 +169,8 @@ not content.
    | | |
    |---|---|
    | `docs/**` only | `docs/` |
-   | `.editorconfig`, `.prettierrc`, `eslint.config.js`, `CLAUDE.md`, `.claude/**`, CI, `package.json` | `chore/` |
-   | `src/**` or `e2e/**` | `feat(<scope>)/`, `fix/` or `refactor/` — the diff decides which |
-   | `android/**`, `ios/**`, `capacitor.config.ts` | `feat(native)/` or `fix/` — the diff decides which |
+   | `.editorconfig`, `CLAUDE.md`, `AGENTS.md`, `.claude/**`, CI, `.mcp.json`, `.codeindexignore`, `src/Admin.Web/package.json`, `src/Admin.Web/eslint.config.js`, `src/Admin.Web/.prettierrc` | `chore/` |
+   | `src/Admin.Host/**`, `src/Admin.Web/**`, `tests/**` | `feat(<scope>)/`, `fix/` or `refactor/` — the diff decides which |
 
    **A mixed tree takes the type of the change that carries the argument, not
    the one with the most files.** `fix/emulator-cleartext-gate` touched
@@ -315,14 +314,10 @@ not content.
    either does not.
 
    **A new worktree has no `node_modules`, and nothing here creates one.**
-   `node_modules/` is gitignored, so the worktree git just cut carries the
-   lockfile and none of what it pins: the first `npm-checks.sh` in it fails on
-   a missing `ng` binary, which reads like a broken toolchain rather than an
-   uninstalled one. Run `npm ci` once after moving in — `ci`, never `install`,
-   because `install` may rewrite `package-lock.json` and a lockfile edit
-   nobody chose is a diff hunk in somebody's review. It costs a minute and it
-   is the difference between a worktree that can be checked and one that
-   cannot.
+   The SPA lockfile lives under `src/Admin.Web/`. After `EnterWorktree` run
+   `bash .claude/scripts/spa-ci.sh` once — that helper `cd`s there and runs
+   `npm ci`, never `install`. The first `npm-checks.sh` otherwise fails on a
+   missing `ng`.
 
    **If the parent directory is not writable, `git worktree add` fails and the
    answer is the in-place branch, not a temp path.** A root-level or container

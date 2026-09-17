@@ -656,11 +656,11 @@ Each round is the review done once, end to end:
 
    | | |
    |---|---|
-   | Core | `src/app/core/**` — the API clients, the auth flow, the cart store and its persistence, the command-id lifecycle, the problem-details mapper |
-   | Screens and shell | **all of `src/**` except `core` and the specs** — `features/`, `tabs/`, `shared/`, `theme/`, `main.ts` — and `public/**` |
-   | The suites | `src/**/*.spec.ts` and `e2e/**` — where the cannot-fail class lives, and the only area whose defects are all of one kind |
-   | Tooling | `.github/**`, `.claude/**`, `.vscode/**` — Python, shell, YAML, and the command and agent definitions, where this repo's bugs have historically been |
-   | Native and configuration | `android/**`, `ios/**`, and **every tracked file at the repository root** — the build files, the dotfiles, `CLAUDE.md` and `README.md` alike |
+   | Host | `src/Admin.Host/**` — Compose, jobs, proxy, FakePlatform, SSE |
+   | SPA | `src/Admin.Web/src/**` except specs — screens, core, shared |
+   | The suites | `tests/**`, `src/Admin.Web/**/*.spec.ts`, `src/Admin.Web/e2e/**` |
+   | Tooling | `.github/**`, `.claude/**` — Python, shell, YAML, commands |
+   | Configuration | **every tracked file at the repository root** plus `src/Admin.Web/package.json` and the Host `.csproj` / solution |
    | Samples | `docs/**` fenced code, audited as code but excerpt-aware |
 
    **The rows have to partition the repository, not merely sample it.** A row is

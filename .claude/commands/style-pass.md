@@ -28,11 +28,11 @@ whole corpus and it is the user's.
 
 ## 2. Sweep the corpus
 
-The named site is one of many. Find the rest across `src/**` and `e2e/**`, and
-across every fenced block in `docs/` — the spec, the plan and
-`docs/client-architecture.md` all carry code, and one dialect governs all of
-it. A rule applied to the source and not to the samples leaves the samples
-teaching the form the pass just removed.
+The named site is one of many. Find the rest across `src/Admin.Host/**`,
+`src/Admin.Web/**`, `tests/**` and `src/Admin.Web/e2e/**`, and across every
+fenced block in `docs/` — the spec and the plan carry samples, and one
+dialect governs all of it. A rule applied to the source and not to the
+samples leaves the samples teaching the form the pass just removed.
 
 Grep gets you candidates; reading them gets you the shape. Anything structural
 — bracket depth, chain heads, continuation columns, template boundaries — has

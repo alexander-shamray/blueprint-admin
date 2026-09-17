@@ -75,13 +75,14 @@ cannot be true of the system described — not pure style taste. Prefer:
    this command's grant refuses, and the class's tree set in the contract
    still bounds what a row may declare.
 
-Reject as non-findings the house styles `docs/style-guide.md` tabulates on
-purpose (braceless single statements, file-scoped namespaces, explicit
-types, British prose beside real identifier spellings, unpinned Aspire with
-§4.4 carve-outs, spread-over-`.ToArray()` when the corpus is already
-clean), and the stale restatements `docs/change-locality.md` §2 leaves in
-place — a pre-existing count, "since PR-NN" or second copy of a value that
-this branch did not touch, where the owner site is already correct.
+Reject as non-findings only the house styles this repository actually
+settled: British prose beside real identifier spellings (`docs/style-guide.md`),
+and the C# dialect `.editorconfig` enforces (file-scoped namespaces,
+IDE0055 spacing). Do **not** reject Aspire carve-outs, Ionic
+`BehaviorSubject` rows, or other frontend-only forms. Stale restatements
+`docs/change-locality.md` §2 leaves in place — a pre-existing count or
+second copy of a value this branch did not touch, where the owner site is
+already correct — are also non-findings.
 
 ---
 
