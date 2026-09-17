@@ -23,7 +23,8 @@ path. A green unit suite is not a green smoke.
 ## Harness
 
 `python -m unittest discover -s .claude/scripts -p 'test_*.py'` — Python 3.12,
-plus `jq` on the runner. The `harness` job in `ci.yml` is the matrix.
+plus Bash, `grep`, Git and `jq` on PATH. Python plus `jq` alone fails
+before a case runs. The `harness` job in `ci.yml` is the matrix.
 
 ## Locality
 
