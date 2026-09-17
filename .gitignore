@@ -27,6 +27,13 @@
 .codeindexignore
 .mcp.json
 
+# Python — the hooks and their suite under .claude/ are scripts, not a package.
+__pycache__/
+
+# /review-branch's proof that it ran, which grok-review.sh requires before it
+# reads a missing suggestions.md as a clean pass.
+/.grok-review-ran
+
 # /pr scratch, same names as the other two clones.
 /pr-body.md
 /pr-title.txt

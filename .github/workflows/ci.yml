@@ -69,3 +69,25 @@ jobs:
         with:
           name: playwright-report
           path: src/Admin.Web/playwright-report/
+
+  # The harness's own suite. Python 3.12 matches the PreToolUse hooks.
+  # The matrix is the module's own claim: link resolution, case folding and
+  # which primitives exist differ by platform.
+  harness:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - if: runner.os == 'Windows'
+        run: choco install jq --no-progress -y
+      - if: runner.os == 'macOS'
+        run: brew install jq
+      - name: The suite reads `git ls-files`, so the checkout must be a real one
+        run: git rev-parse --is-inside-work-tree
+      - run: python -m unittest discover -s .claude/scripts -p 'test_*.py' -v
