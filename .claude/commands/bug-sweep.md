@@ -115,7 +115,7 @@ input — that is the premise the whole read-only fan-out rests on — and a bui
 grant would hand exactly that input arbitrary code execution on the host, which
 no amount of care in the parent walks back. "A tool the agent does not have
 cannot be turned against it" has to hold for the parent too. Secondarily the
-Playwright suite needs a browser download and the backend's Compose stack —
+Playwright suite needs a browser download and the Host under FakePlatform —
 `docs/testing.md` owns both — so the grant would buy an unreliable
 verification at a large cost as well as a dangerous one. Reading is what this command has, so reading is what it is
 honest about.

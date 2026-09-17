@@ -2754,7 +2754,7 @@ class CopilotFeedHelpersAreTheOnlyIntake(unittest.TestCase):
             [
                 'body=$(gh pr view "$pr" --json body --jq .body)',
                 'files=$(gh api "repos/{owner}/{repo}/pulls/$pr/files" '
-                "--paginate --jq '.[].filename | @json')",
+                "--paginate --jq '.[] | .filename, .previous_filename | select(. != null) | @json')",
             ],
             gh_calls,
         )
@@ -2792,7 +2792,7 @@ class CopilotFeedHelpersAreTheOnlyIntake(unittest.TestCase):
         # double-quoted `printf` argument would command-substitute them —
         # which is the stub doing what the helper exists to refuse. The shim
         # answers the files endpoint with each name JSON-encoded on its own
-        # line — the shape `--jq '.[].filename | @json'` produces, newline
+        # line — the shape `--jq '.[] | .filename, .previous_filename | select(. != null) | @json'` produces, newline
         # in a name and all — and anything else with the body.
         encoded = "".join(
             json.dumps(name) + "\n" for name in files.split("\n") if name
@@ -9317,6 +9317,19 @@ class TheHookWiringRunsOnMoreThanOneOperatingSystem(unittest.TestCase):
             input=event, capture_output=True, text=True)
         self.assertEqual(0, out.returncode, out.stderr)
         self.assertIn("permissionDecision", out.stdout)
+
+class TestCodebaseIndexSkillGrants(unittest.TestCase):
+    """The skill's allowed-tools must not restore graph/cbx write grants."""
+
+    def test_skill_frontmatter_does_not_auto_approve_graph_or_cbx(self):
+        text = (SCRIPTS.parent / "skills" / "codebase-index" / "SKILL.md").read_text(
+            encoding="utf-8")
+        fm = text.split("---")[1]
+        self.assertNotIn("graph:*", fm)
+        self.assertNotIn("graph *", fm)
+        self.assertNotIn("cbx:*", fm)
+        self.assertNotIn("cbx *", fm)
+
 
 if __name__ == "__main__":
     unittest.main()
