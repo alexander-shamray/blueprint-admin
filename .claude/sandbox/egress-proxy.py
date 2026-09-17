@@ -61,6 +61,11 @@ def log(verdict, host):
 
 class Tunnel(socketserver.StreamRequestHandler):
     timeout = CONNECT_TIMEOUT
+    # makefile() defaults to a fully-buffered reader. readline() then
+    # prefetches bytes after the CONNECT blank line, and relay() reads the
+    # socket, so a pipelined ClientHello is lost. Zero keeps those bytes on
+    # the connection.
+    rbufsize = 0
 
     def refuse(self, status, host):
         log("deny", host)

@@ -178,6 +178,26 @@ class AnAllowedTunnelRelays(ProxyCase):
         sock.sendall(b"payload")
         self.assertEqual(b"PAYLOAD", sock.recv(4096))
 
+    def test_a_pipelined_payload_is_not_swallowed_by_header_reads(self):
+        # Default rfile is a fully-buffered makefile. readline() can prefetch
+        # bytes after the blank line; relay() then reads the socket and never
+        # sees them. One sendall of CONNECT plus the first tunnel payload is
+        # how a TLS client that does not wait for 200 starts the tunnel.
+        target = f"127.0.0.1:{self.upstream_port}"
+        sock, head = self.connect(
+            f"CONNECT {target} HTTP/1.1\r\nHost: {target}\r\n\r\n".encode("ascii")
+            + b"early"
+        )
+        self.assertTrue(head.startswith(b"HTTP/1.1 200"), head)
+        _, _, rest = head.partition(b"\r\n\r\n")
+        sock.settimeout(5)
+        while rest != b"EARLY":
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            rest += chunk
+        self.assertEqual(b"EARLY", rest)
+
     def test_the_host_is_matched_case_insensitively_and_without_brackets(self):
         # `localhost` rather than a literal address, so the case fold and the
         # bracket strip are both exercised, and it still resolves to loopback.
