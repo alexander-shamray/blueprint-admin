@@ -246,8 +246,11 @@ SEPARATORS = {"&&", "||", ";", "|", "&", "(", ")", "{", "}", "\n"}
 PUSH_ALLOWED_FLAGS = {
     "-u", "--set-upstream", "-q", "--quiet", "-v", "--verbose",
     "--porcelain", "--progress", "--no-progress", "--atomic", "--no-verify",
-    "--follow-tags", "-n", "--dry-run",
+    "-n", "--dry-run",
 }
+# `--follow-tags` is not in that set. It publishes every annotated tag
+# reachable from the named ref, which is extra destinations this allow-list
+# does not inspect — the same shape as `--all`, arriving as a flag.
 
 # A ref this guard is willing to read: no `*`, no `+`, no `:` beyond the one
 # separator, nothing that could be a pattern or an option.

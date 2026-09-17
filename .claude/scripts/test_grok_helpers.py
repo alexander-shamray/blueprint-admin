@@ -5797,11 +5797,19 @@ class TheGitArgvGuard(unittest.TestCase):
                 self.assertAdmitted(command)
 
     def test_a_legitimate_push_flag_that_merely_looks_similar_is_admitted(self):
-        # `--follow-tags` is what shows the prefix test is the right way round:
-        # `"force".startswith("follow-tags")` is false, so it passes, while
+        # `--set-upstream` is what shows the prefix test is the right way round:
+        # `"force".startswith("set-upstream")` is false, so it passes, while
         # `--fo` is refused exactly as git refuses it for being ambiguous.
-        self.assertAdmitted("git push origin feature --follow-tags")
         self.assertAdmitted("git push origin feature --set-upstream")
+        self.assertAdmitted("git push origin feature --porcelain")
+
+    def test_follow_tags_is_refused(self):
+        # `--follow-tags` publishes every annotated tag reachable from the
+        # named ref, in addition to that one destination. The allow-list
+        # admits one remote and one refspec; extra refs are the same shape as
+        # `--all`. `--tags` is the whole tag namespace, already unrecognised.
+        self.assertRefused("git push origin feature --follow-tags")
+        self.assertRefused("git push origin feature --tags")
 
     def test_an_unknown_global_option_cannot_hide_a_push(self):
         # **The second miss, and why the push check no longer asks where the
