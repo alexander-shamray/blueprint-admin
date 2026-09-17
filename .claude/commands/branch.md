@@ -173,10 +173,9 @@ not content.
    | `src/Admin.Host/**`, `src/Admin.Web/**`, `tests/**` | `feat(<scope>)/`, `fix/` or `refactor/` — the diff decides which |
 
    **A mixed tree takes the type of the change that carries the argument, not
-   the one with the most files.** `fix/emulator-cleartext-gate` touched
-   `capacitor.config.ts`, the README, the plan and a CI job, and is `fix/`
-   because the gate being wrong was the point and the documentation edits
-   followed from it.
+   the one with the most files.** A Host origin-guard change that also
+   edits the README, the spec and a CI job is `fix/`, because the gate
+   being wrong was the point and the documentation edits followed from it.
 
    Two genuinely unrelated changes cannot both be in the name. Say so, name the
    dominant one, and flag that the other may want its own branch — `/commit`
