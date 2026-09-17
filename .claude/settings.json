@@ -46,6 +46,8 @@
       "Edit(./BlueprintAdmin.slnx)",
       "Edit(AGENTS.md)",
       "Edit(./AGENTS.md)",
+      "Edit(.mcp.json)",
+      "Edit(./.mcp.json)",
       "Bash(*grok-ledger.sh * reserve*)",
       "Bash(*grok-ledger.sh * release*)",
       "Bash(*grok-ledger.sh * complete*)",

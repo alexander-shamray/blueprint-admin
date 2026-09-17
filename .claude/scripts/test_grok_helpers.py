@@ -2752,7 +2752,9 @@ class CopilotFeedHelpersAreTheOnlyIntake(unittest.TestCase):
         gh_calls = [line.strip() for line in code if "gh " in line]
         self.assertEqual(
             [
+                'expected=$(gh pr view "$pr" --json changedFiles --jq .changedFiles)',
                 'body=$(gh pr view "$pr" --json body --jq .body)',
+                'name_count=$(gh api "repos/{owner}/{repo}/pulls/$pr/files" --paginate --jq \'.[].filename\' | grep -c .)',
                 'files=$(gh api "repos/{owner}/{repo}/pulls/$pr/files" '
                 "--paginate --jq '.[] | .filename, .previous_filename | select(. != null) | @json')",
             ],
@@ -4521,7 +4523,8 @@ class HarnessControlSurfaceIsDenied(unittest.TestCase):
         for path in (".claude/scripts/**", ".claude/sandbox/**",
                      ".claude/commands/**", ".claude/agents/**",
                      ".claude/hooks/**", "AGENTS.md",
-                     ".claude/settings.json", ".claude/settings.local.json"):
+                     ".claude/settings.json", ".claude/settings.local.json",
+                     ".mcp.json"):
             for prefix in ("", "./"):
                 with self.subTest(path=path, prefix=prefix):
                     self.assertIn(f"Edit({prefix}{path})", deny)

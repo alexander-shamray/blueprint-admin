@@ -60,7 +60,6 @@ D:
   - '.editorconfig'
   - '.gitattributes'
   - '.gitignore'
-  - '.nvmrc'
   - '.mcp.json'
   - '.codeindexignore'
 
@@ -74,3 +73,4 @@ E:
   - 'BlueprintAdmin.slnx'
   - 'src/Admin.Web/package.json'
   - 'src/Admin.Web/package-lock.json'
+  - '.nvmrc'

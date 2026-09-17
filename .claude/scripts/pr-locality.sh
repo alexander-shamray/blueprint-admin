@@ -51,6 +51,8 @@ refuse() { echo "$1" >&2; exit 3; }
 # authentication, no network, no such pull request — is fatal under `set -e`
 # rather than indistinguishable from a body with no rows. Only grep's own
 # no-match status, which is exactly 1, is masked.
+expected=$(gh pr view "$pr" --json changedFiles --jq .changedFiles)
+grep -Eq '^[0-9]+$' <<<"$expected" || refuse "changedFiles is not a count"
 body=$(gh pr view "$pr" --json body --jq .body)
 class_row=$(grep -E '^\| *Class *\|' <<<"$body" || [ $? -eq 1 ])
 touch_row=$(grep -E '^\| *Touch set *\|' <<<"$body" || [ $? -eq 1 ])
@@ -145,6 +147,8 @@ done
 # script chooses for it. `filename` is the whole of what is read, and it is
 # read as a JSON string so that a newline inside a name cannot be a second
 # line: a name that needed an escape is refused rather than decoded.
+name_count=$(gh api "repos/{owner}/{repo}/pulls/$pr/files" --paginate --jq '.[].filename' | grep -c .)
+[ "$name_count" -eq "$expected" ] || refuse "the files endpoint returned $name_count names against changedFiles $expected"
 files=$(gh api "repos/{owner}/{repo}/pulls/$pr/files" --paginate --jq '.[] | .filename, .previous_filename | select(. != null) | @json')
 verdicts=()
 while IFS= read -r line; do
