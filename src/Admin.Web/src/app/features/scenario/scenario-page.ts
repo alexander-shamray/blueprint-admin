@@ -73,10 +73,11 @@ function initialSteps(): StepView[] {
 
 /**
  * run-locally.md's "Call the APIs" as one run (spec §12, phase 6): publish a product, wait for
- * ordering-catalog-events to drain, quote a basket holding it, order it, cancel the order. Every
- * call goes through `POST /api/proxy` as the API screen's calls do, each with its own correlation
- * id so each step has its own trace. The first step that does not succeed ends the run: every
- * later one needs what it would have produced.
+ * ordering-catalog-events to drain, quote a basket holding it, order it, cancel the order. The
+ * four platform calls go through `POST /api/proxy` as the API screen's calls do, each with its own
+ * correlation id so each has its own trace; the drain reads `GET /api/broker/queues` and has none.
+ * The first step that does not succeed ends the run: every later one needs what it would have
+ * produced.
  */
 @Component({
   selector: 'app-scenario-page',
@@ -88,7 +89,10 @@ function initialSteps(): StepView[] {
 export class ScenarioPage {
   private readonly host = inject(HostClient);
   private readonly uuid = inject(UUID);
-  /** Ends a poll or a send still out when the screen goes; the run then stops at its next step. */
+  /**
+   * Ends the drain's poll when the screen goes, and no step after it is sent. A send already out is
+   * left to finish, and a placed order is still cancelled, so leaving never strands a live order.
+   */
   private readonly stopped = new Subject<void>();
   private destroyed = false;
 
@@ -167,6 +171,7 @@ export class ScenarioPage {
     const run = this.uuid().slice(0, 8);
     const identity: Identity = { username, password: null };
     this.runId.set(run);
+    this.error.set(null);
     this.running.set(true);
     this.projection.set(null);
     this.steps.set(initialSteps());
@@ -220,6 +225,9 @@ export class ScenarioPage {
     path: Record<string, string> = {},
     readId = false,
   ): Promise<string | null> {
+    // Once the screen has gone only the cancel still goes out: it undoes an order already placed.
+    if (this.destroyed && key !== 'cancel') return null;
+
     const correlationId = stepCorrelationId(run, key);
     const url = buildUrl(operation.url, path, {});
     this.patch(key, { state: 'running', correlationId, request: `${operation.method} ${url}` });
@@ -227,21 +235,17 @@ export class ScenarioPage {
     let result: ProxyResult;
     try {
       result = await firstValueFrom(
-        this.host
-          .proxy({
-            method: operation.method,
-            url,
-            headers: {},
-            body: body.trim() ? body : null,
-            identity,
-            correlationId,
-          })
-          .pipe(takeUntil(this.stopped)),
+        this.host.proxy({
+          method: operation.method,
+          url,
+          headers: {},
+          body: body.trim() ? body : null,
+          identity,
+          correlationId,
+        }),
       );
     } catch (e: unknown) {
-      if (!this.destroyed) {
-        this.patch(key, { state: 'failed', correlationId: null, detail: describe(e) });
-      }
+      this.patch(key, { state: 'failed', correlationId: null, detail: describe(e) });
       return null;
     }
 

@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { Observable, of, throwError } from 'rxjs';
+import { Observable, Subject, of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import {
   ApiCatalogView,
@@ -294,6 +294,92 @@ describe('ScenarioPage', () => {
     page.reload();
 
     expect(page.canRun()).toBe(true);
+  });
+
+  it('keeps the trace of a call that went out but was not answered', async () => {
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      of({
+        outcome: 'unreached',
+        error: 'timed out',
+        elapsedMs: 5,
+        correlationId: request.correlationId ?? '',
+        sent: true,
+      }),
+    );
+    const page = render().componentInstance;
+
+    await page.run();
+
+    expect(page.steps()[0].state).toBe('failed');
+    expect(page.steps()[0].correlationId).toBe('scenario-abcdef12-publish');
+    expect(page.steps()[1].state).toBe('skipped');
+  });
+
+  it('offers no trace for a call that never went out, since Keycloak was unreachable', async () => {
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      of({
+        outcome: 'unreached',
+        error: 'connection refused',
+        elapsedMs: 5,
+        correlationId: request.correlationId ?? '',
+        sent: false,
+      }),
+    );
+    const page = render().componentInstance;
+
+    await page.run();
+
+    expect(page.steps()[0].state).toBe('failed');
+    expect(page.steps()[0].correlationId).toBeNull();
+    expect(page.steps()[1].state).toBe('skipped');
+  });
+
+  it('still cancels an order placed while the screen was being left', async () => {
+    const fixture = render();
+    const order = new Subject<ProxyResult>();
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      request.url.endsWith('/orders/') ? order : of(platform(request)),
+    );
+
+    const done = fixture.componentInstance.run();
+    await vi.waitFor(() => expect(sent()).toHaveLength(3));
+    fixture.destroy();
+    order.next(responded(200, `"${orderId}"`, 'scenario-abcdef12-order'));
+    await done;
+
+    expect(sent().map((r) => r.correlationId)).toEqual([
+      'scenario-abcdef12-publish',
+      'scenario-abcdef12-quote',
+      'scenario-abcdef12-order',
+      'scenario-abcdef12-cancel',
+    ]);
+  });
+
+  it('places no order once the screen has gone', async () => {
+    const fixture = render();
+    const quote = new Subject<ProxyResult>();
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      request.url.endsWith('/checkout/quote') ? quote : of(platform(request)),
+    );
+
+    const done = fixture.componentInstance.run();
+    await vi.waitFor(() => expect(sent()).toHaveLength(2));
+    fixture.destroy();
+    quote.next(responded(200, '{"total":19.99,"unpriced":[]}', 'scenario-abcdef12-quote'));
+    await done;
+
+    expect(sent()).toHaveLength(2);
+  });
+
+  it('clears an earlier reload failure when a run starts', async () => {
+    host.reloadOperations.mockReturnValue(throwError(() => new Error('host busy')));
+    const page = render().componentInstance;
+    page.reload();
+    expect(page.error()).toBe('host busy');
+
+    await page.run();
+
+    expect(page.error()).toBeNull();
   });
 
   it('runs as the user picked here rather than the default', async () => {
