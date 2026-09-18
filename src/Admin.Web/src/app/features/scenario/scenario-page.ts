@@ -301,6 +301,8 @@ export class ScenarioPage {
    * answers as the platform does. A product-specific signal is a blueprint-backend change.
    */
   private async drain(): Promise<boolean> {
+    // `stopped` does not replay, so a screen that went while the publish was out is checked here.
+    if (this.destroyed) return false;
     this.patch('drain', { state: 'running', detail: 'Polling the broker.' });
 
     let last: QueuesView | undefined;

@@ -355,6 +355,20 @@ describe('ScenarioPage', () => {
     ]);
   });
 
+  it('does not start the drain once the screen has gone', async () => {
+    const fixture = render();
+    const publish = new Subject<ProxyResult>();
+    host.proxy.mockReturnValue(publish);
+
+    const done = fixture.componentInstance.run();
+    await vi.waitFor(() => expect(sent()).toHaveLength(1));
+    fixture.destroy();
+    publish.next(responded(200, `"${productId}"`, 'scenario-abcdef12-publish'));
+    await done;
+
+    expect(host.brokerQueues).not.toHaveBeenCalled();
+  });
+
   it('places no order once the screen has gone', async () => {
     const fixture = render();
     const quote = new Subject<ProxyResult>();
