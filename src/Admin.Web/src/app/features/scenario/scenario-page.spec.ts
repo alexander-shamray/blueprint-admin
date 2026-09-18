@@ -9,7 +9,7 @@ import {
   ProxyResult,
   QueuesView,
 } from '../../core/host/host-types';
-import { DRAIN_WATCH_MS, UUID } from '../api/api-page';
+import { DRAIN_POLL_MS, DRAIN_WATCH_MS, UUID } from '../api/api-page';
 import { ScenarioPage } from './scenario-page';
 
 function op(partial: Partial<ApiOperation> & { id: string }): ApiOperation {
@@ -227,11 +227,19 @@ describe('ScenarioPage', () => {
   });
 
   it('does not leave an earlier snapshot beside a broker that stopped answering', async () => {
-    host.brokerQueues.mockReturnValue(throwError(() => new Error('host gone')));
+    vi.useFakeTimers();
+    const waiting = { ...drained.projection, messages: 3, drained: false };
+    host.brokerQueues
+      .mockReturnValueOnce(of({ ...drained, projection: waiting }))
+      .mockReturnValue(throwError(() => new Error('host gone')));
     const page = render().componentInstance;
-    page.projection.set(drained.projection);
 
-    await page.run();
+    const done = page.run();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(page.projection()).toEqual(waiting);
+    await vi.advanceTimersByTimeAsync(DRAIN_POLL_MS);
+    await done;
+    vi.useRealTimers();
 
     expect(page.steps()[1].state).toBe('failed');
     expect(page.projection()).toBeNull();
@@ -294,6 +302,21 @@ describe('ScenarioPage', () => {
     page.reload();
 
     expect(page.canRun()).toBe(true);
+  });
+
+  it('says when no realm user is known, and a reload asks for them again', () => {
+    host.identityUsers.mockReturnValueOnce(throwError(() => new Error('host busy')));
+    const fixture = render();
+    expect(fixture.componentInstance.canRun()).toBe(false);
+    expect(fixture.nativeElement.querySelector('.no-users')?.textContent).toContain(
+      'No realm user',
+    );
+
+    fixture.componentInstance.reload();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.canRun()).toBe(true);
+    expect(fixture.nativeElement.querySelector('.no-users')).toBeNull();
   });
 
   it('keeps the trace of a call that went out but was not answered', async () => {

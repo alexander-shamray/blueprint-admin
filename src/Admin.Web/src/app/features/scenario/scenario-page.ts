@@ -144,8 +144,12 @@ export class ScenarioPage {
     });
   }
 
-  /** The host caches the catalog, so a service started after it loaded is seen only on a reload. */
+  /**
+   * The host caches the catalog, so a service started after it loaded is seen only on a reload; the
+   * realm users are asked for again too, since a failed first load leaves nobody to run as.
+   */
   reload(): void {
+    this.identity.load();
     this.host.reloadOperations().subscribe({
       next: (view) => {
         this.error.set(null);
