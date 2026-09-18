@@ -1,0 +1,76 @@
+<section class="actions">
+  <label>
+    Run as
+    <select
+      name="runAs"
+      aria-label="Run as"
+      [ngModel]="runAs()"
+      (ngModelChange)="username.set($event)"
+      [disabled]="running()"
+    >
+      @for (user of identity.users(); track user.username) {
+        <option [value]="user.username">{{ user.username }}</option>
+      }
+    </select>
+  </label>
+  <button class="run" type="button" [disabled]="!canRun()" (click)="run()">Run</button>
+  @if (runId(); as id) {
+    <span class="run-id">run {{ id }}</span>
+  }
+</section>
+
+<p class="intro">
+  Publish a product, wait for its event to reach Ordering's price projection, quote a basket holding
+  it, order it and cancel the order, as run-locally.md does by hand. Each call carries its own
+  correlation id, so each has its own trace.
+</p>
+
+@if (error(); as e) {
+  <p class="error" role="alert">{{ e }}</p>
+}
+
+@if (resolved(); as r) {
+  @if (r.missing.length > 0) {
+    <ul class="missing" role="status">
+      @for (reason of r.missing; track reason) {
+        <li>{{ reason }}</li>
+      }
+    </ul>
+  }
+}
+
+<ol class="steps">
+  @for (step of steps(); track step.key) {
+    <li class="step state-{{ step.state }}">
+      <div class="head">
+        <span class="state">{{ stateWord(step.state) }}</span>
+        <strong class="title">{{ step.title }}</strong>
+        @if (step.status !== null) {
+          <span class="status">{{ step.status }}</span>
+        }
+        @if (step.correlationId && step.state !== 'running') {
+          <a class="trace-step" [routerLink]="['/trace', step.correlationId]"
+            >Trace {{ step.correlationId }}</a
+          >
+        }
+      </div>
+      @if (step.request) {
+        <code class="request">{{ step.request }}</code>
+      }
+      @if (step.detail) {
+        <p class="detail">{{ step.detail }}</p>
+      }
+      @if (step.key === 'drain') {
+        @if (projection(); as p) {
+          <app-drained-indicator [projection]="p" />
+        }
+      }
+      @if (step.body) {
+        <details>
+          <summary>Body</summary>
+          <pre class="body">{{ prettyBody(step.body) }}</pre>
+        </details>
+      }
+    </li>
+  }
+</ol>

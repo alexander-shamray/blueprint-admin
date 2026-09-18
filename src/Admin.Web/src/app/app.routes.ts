@@ -7,5 +7,6 @@ export const routes: Routes = [
   { path: 'broker', loadComponent: () => import('./features/broker/broker-page').then((m) => m.BrokerPage) },
   { path: 'requests', loadComponent: () => import('./features/api/api-page').then((m) => m.ApiPage) },
   { path: 'trace', loadComponent: () => import('./features/trace/trace-page').then((m) => m.TracePage) },
+  { path: 'scenario', loadComponent: () => import('./features/scenario/scenario-page').then((m) => m.ScenarioPage) },
   { path: 'trace/:correlationId', loadComponent: () => import('./features/trace/trace-page').then((m) => m.TracePage) },
 ];

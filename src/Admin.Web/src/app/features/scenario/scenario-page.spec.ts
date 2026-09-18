@@ -1,0 +1,245 @@
+import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { of } from 'rxjs';
+import { HostClient } from '../../core/host/host-client';
+import {
+  ApiCatalogView,
+  ApiOperation,
+  ProxyRequest,
+  ProxyResult,
+  QueuesView,
+} from '../../core/host/host-types';
+import { UUID } from '../api/api-page';
+import { ScenarioPage } from './scenario-page';
+
+function op(partial: Partial<ApiOperation> & { id: string }): ApiOperation {
+  const [source, name] = partial.id.split(':');
+  return {
+    source,
+    name,
+    method: 'POST',
+    url: 'http://localhost:5000/x',
+    pathParameters: [],
+    queryParameters: [],
+    exampleBody: null,
+    hasCommandId: false,
+    edgePolicy: 'authenticated',
+    available: true,
+    ...partial,
+  };
+}
+
+const zero = '00000000-0000-0000-0000-000000000000';
+
+const catalog: ApiCatalogView = {
+  sources: [],
+  operations: [
+    op({
+      id: 'catalog:PublishProduct',
+      url: 'http://localhost:5000/api/v1/catalog/products/',
+      exampleBody: `{"commandId":"${zero}","name":"Walnut desk"}`,
+      hasCommandId: true,
+    }),
+    op({
+      id: 'bff:Quote',
+      url: 'http://localhost:5000/bff/v1/checkout/quote',
+      exampleBody: `{"currency":"EUR","lines":[{"productId":"${zero}","quantity":1}]}`,
+    }),
+    op({
+      id: 'ordering:PlaceOrder',
+      url: 'http://localhost:5000/api/v1/orders/',
+      exampleBody: `{"commandId":"${zero}","items":[{"productId":"${zero}","quantity":1}]}`,
+      hasCommandId: true,
+    }),
+    op({
+      id: 'ordering:CancelOrder',
+      url: 'http://localhost:5000/api/v1/orders/{id}/cancel',
+      pathParameters: [{ name: 'id', required: true, type: 'string' }],
+      exampleBody: '{"reason":"customer_request"}',
+    }),
+  ],
+};
+
+function responded(status: number, body: string, correlationId: string): ProxyResult {
+  return {
+    outcome: 'responded',
+    status,
+    headers: {},
+    body,
+    bodyTruncated: false,
+    bodyError: null,
+    elapsedMs: 5,
+    correlationId,
+  };
+}
+
+const drained: QueuesView = {
+  reachable: true,
+  error: null,
+  queues: [],
+  projection: { queue: 'ordering-catalog-events', found: true, messages: 0, drained: true },
+};
+
+/** Answers as the platform does for the demo user: ids for publish and order, a quote, 204 for cancel. */
+function platform(request: ProxyRequest): ProxyResult {
+  const id = request.correlationId ?? '';
+  if (request.url.endsWith('/catalog/products/')) return responded(200, '"product-1"', id);
+  const quote = '{"total":19.99,"unpriced":[]}';
+  if (request.url.endsWith('/checkout/quote')) return responded(200, quote, id);
+  if (request.url.endsWith('/orders/')) return responded(200, '"order-1"', id);
+  return responded(204, '', id);
+}
+
+describe('ScenarioPage', () => {
+  let host: {
+    operations: ReturnType<typeof vi.fn>;
+    identityUsers: ReturnType<typeof vi.fn>;
+    proxy: ReturnType<typeof vi.fn>;
+    brokerQueues: ReturnType<typeof vi.fn>;
+  };
+  let uuids: number;
+
+  beforeEach(() => {
+    uuids = 0;
+    host = {
+      operations: vi.fn(() => of(catalog)),
+      identityUsers: vi.fn(() => of([{ username: 'demo' }, { username: 'browser' }])),
+      proxy: vi.fn((request: ProxyRequest) => of(platform(request))),
+      brokerQueues: vi.fn(() => of(drained)),
+    };
+    TestBed.configureTestingModule({
+      imports: [ScenarioPage],
+      providers: [
+        provideRouter([]),
+        { provide: HostClient, useValue: host },
+        { provide: UUID, useValue: () => `abcdef12-uuid-${++uuids}` },
+      ],
+    });
+  });
+
+  function render() {
+    const fixture = TestBed.createComponent(ScenarioPage);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  function sent(): ProxyRequest[] {
+    return host.proxy.mock.calls.map(([request]) => request as ProxyRequest);
+  }
+
+  it('runs the five steps in order, carrying the published product and the placed order forward', async () => {
+    const page = render().componentInstance;
+
+    await page.run();
+
+    expect(page.steps().map((s) => s.state)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok']);
+    const [publish, quote, order, cancel] = sent();
+    expect(JSON.parse(publish.body!).commandId).not.toBe(zero);
+    expect(JSON.parse(quote.body!).lines[0].productId).toBe('product-1');
+    expect(JSON.parse(order.body!).items[0].productId).toBe('product-1');
+    expect(JSON.parse(order.body!).commandId).not.toBe(zero);
+    expect(cancel.url).toBe('http://localhost:5000/api/v1/orders/order-1/cancel');
+    expect(
+      sent().every((r) => r.identity?.username === 'demo' && r.identity.password === null),
+    ).toBe(true);
+  });
+
+  it('gives each step that sends its own correlation id, and the drain step none', async () => {
+    const page = render().componentInstance;
+
+    await page.run();
+
+    expect(sent().map((r) => r.correlationId)).toEqual([
+      'scenario-abcdef12-publish',
+      'scenario-abcdef12-quote',
+      'scenario-abcdef12-order',
+      'scenario-abcdef12-cancel',
+    ]);
+    expect(page.steps().find((s) => s.key === 'drain')?.correlationId).toBeNull();
+  });
+
+  it('stops at the first step that does not succeed and marks the rest as not run', async () => {
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      of(responded(403, '{"title":"Forbidden"}', request.correlationId ?? '')),
+    );
+    const page = render().componentInstance;
+
+    await page.run();
+
+    expect(page.steps().map((s) => s.state)).toEqual([
+      'failed',
+      'skipped',
+      'skipped',
+      'skipped',
+      'skipped',
+    ]);
+    expect(page.steps()[0].detail).toBe('Answered 403.');
+    expect(host.brokerQueues).not.toHaveBeenCalled();
+  });
+
+  it('does not order when the projection queue is not declared', async () => {
+    host.brokerQueues.mockReturnValue(
+      of({
+        ...drained,
+        projection: { ...drained.projection, found: false, messages: null, drained: false },
+      }),
+    );
+    const page = render().componentInstance;
+
+    await page.run();
+
+    expect(page.steps()[1].state).toBe('failed');
+    expect(page.steps()[1].detail).toContain('is not declared');
+    expect(sent()).toHaveLength(1);
+  });
+
+  it('reads a publish that answers without an id as a failure, since nothing after it can proceed', async () => {
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      of(responded(200, '{}', request.correlationId ?? '')),
+    );
+    const page = render().componentInstance;
+
+    await page.run();
+
+    expect(page.steps()[0].state).toBe('failed');
+    expect(page.steps()[0].detail).toContain('not with the id');
+  });
+
+  it('offers no trace for a step whose token Keycloak refused, since nothing was sent', async () => {
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      of({
+        outcome: 'tokenRejected',
+        status: 401,
+        body: '{"error":"invalid_grant"}',
+        correlationId: request.correlationId ?? '',
+      }),
+    );
+    const page = render().componentInstance;
+
+    await page.run();
+
+    expect(page.steps()[0].state).toBe('failed');
+    expect(page.steps()[0].correlationId).toBeNull();
+  });
+
+  it('runs as the user picked here rather than the default', async () => {
+    const page = render().componentInstance;
+    page.username.set('browser');
+
+    await page.run();
+
+    expect(sent()[0].identity?.username).toBe('browser');
+  });
+
+  it('cannot run while an operation it needs is unavailable, and says which', () => {
+    host.operations.mockReturnValue(
+      of({ ...catalog, operations: catalog.operations.filter((o) => o.id !== 'bff:Quote') }),
+    );
+    const fixture = render();
+
+    expect(fixture.componentInstance.canRun()).toBe(false);
+    expect(fixture.nativeElement.querySelector('.missing').textContent).toContain(
+      'bff:Quote is not in the operation catalog',
+    );
+  });
+});
