@@ -387,7 +387,7 @@ output pane, status pill and JSON viewer.
 | **Broker** | queues with depth, `_error` queues in red, exchanges, permissions; a drained indicator for `ordering-catalog-events` | refresh, auto-refresh |
 | **API** | operation tree on the left; request editor (path params, headers, body pre-filled from the schema example, `commandId` generated per send) and identity picker; response pane with status, timing, headers, body; a history list | Send; "Trace this call" opens the Trace screen with the response's correlation id |
 | **Trace** | the §5.9 timeline for a correlation id, grouped by service, with Grafana deep links | enter an id or arrive from the API screen |
-| **Scenario** | `run-locally.md`'s calls as five steps — publish, wait for the drain, quote, order, cancel — each with its status, body and its own correlation id | Run as a realm user; each step that sent links to its trace; the first step that does not succeed ends the run |
+| **Scenario** | `run-locally.md`'s calls as five steps — publish, wait for the drain, quote, order, cancel — each with its status and body, and each HTTP step with its own correlation id | Run as a realm user; each step that sent links to its trace; the first step that does not succeed ends the run |
 
 The API screen keeps one behaviour from `run-locally.md` explicit: after a
 successful publish it shows the drained indicator and says why an order for
@@ -490,17 +490,21 @@ not adopted at the start; they come when there is a PR flow to govern.
 | 3 API | TokenService, ApiCatalog, RequestProxy, the API screen with identity picker and history |
 | 4 Broker | BrokerService and screen; the drained indicator on the API screen |
 | 5 Trace | GrafanaClient, EventTraceService, the Trace screen and "Trace this call" |
-| 6 Scenario | the Scenario screen: a scripted publish → wait for drain → quote → order → cancel run with a trace per step (below) |
+| 6 Scenario | the Scenario screen: a scripted publish → wait for drain → quote → order → cancel run with a trace per HTTP step (below) |
 
 **Phase 6 is the SPA alone.** Every step is a call the API screen can
 already make — `POST /proxy` with the catalog's own operation and its
 `run-locally.md` example body, and `GET /broker/queues` for the drain — so no
 endpoint is added and FakePlatform answers it as it stands. Each step carries
 the id the previous one produced (the product into the quote and the order,
-the order into the cancel) and its own correlation id, so each links to its
-own trace. The drain is the API screen's watch, with its interval and cap, and
-a projection that is not drained ends the run rather than ordering against a
-price that may not be there.
+the order into the cancel), and each HTTP step its own correlation id, so each
+links to its own trace; the drain asks the broker and has none. The drain is
+the API screen's watch, with its interval and cap, and a projection that is
+not drained ends the run rather than ordering against a price that may not be
+there. Drained is `run-locally.md`'s wait and no more: the outbox publishes
+after the request, so an empty queue can precede the event, and no surface
+says one product has been projected (§5.9 is the same hop). A signal that does
+is a `blueprint-backend` change.
 
 Each phase is one or more PRs; each ends with the CI green on both runners
 and the Playwright smoke covering the new screen.
