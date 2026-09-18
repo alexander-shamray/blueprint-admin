@@ -502,10 +502,11 @@ links to its own trace unless nothing left the console (a token Keycloak
 refused, a call that never went out); the drain asks the broker and has
 none. The drain is the API screen's watch, with its interval and cap, and a
 projection that is not drained ends the run rather than ordering against a
-price that may not be there. Drained is `run-locally.md`'s wait and no more: the outbox publishes
-after the request, so an empty queue can precede the event, and no surface
-says one product has been projected (§5.9 is the same hop). A signal that does
-is a `blueprint-backend` change.
+price that may not be there. Drained is `run-locally.md`'s wait and no
+more: the outbox publishes after the request, so an empty queue can precede
+the event, and no surface says one product has been projected (§5.9 is the
+same hop). A per-product readiness signal, such as a read of Ordering's price
+for one product, is a `blueprint-backend` change.
 
 Each phase is one or more PRs; each ends with the CI green on both runners
 and the Playwright smoke covering the new screen.
