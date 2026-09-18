@@ -65,6 +65,7 @@ moves when a rule does. `.remember/` is session state; never edit it.
 | Broker service / projection queue | `src/Admin.Host/Broker/BrokerService.cs` |
 | Drain watch after publish | `PUBLISH_OPERATION` in `src/Admin.Web/src/app/features/api/api-page.ts` |
 | Grafana / Loki / Explore | `GrafanaClient.cs`, `ExploreLink.cs` |
+| Golden-signal queries (copied, cited) | `GoldenSignals.cs` |
 | What a Tempo span is | `SpanRecogniser.Table` in `SpanRecogniser.cs` |
 | OS (tree kill, job object, `npm.cmd`) | `ProcessRunner.cs`, `WindowsJobObject.cs`, `ExecutableResolver.cs` |
 
