@@ -5731,16 +5731,22 @@ class TheGitArgvGuard(unittest.TestCase):
     def test_every_branch_name_the_naming_table_shows_is_admitted(self):
         # **`/branch` names a feature branch `feat(<scope>)/...`, and this guard
         # refused every such name** — `SAFE_REF` had no room for a parenthesis,
-        # so the chain could create a branch it could not push. The names are
-        # read out of `branch.md` rather than copied here, so the day the table
-        # shows a new shape this case tests that shape too: the subject is what
-        # the naming table says, not a list that agreed with it once.
-        names = re.findall(
-            r"`((?:feat|fix|refactor|docs|chore)(?:\([a-z-]+\))?/[a-z0-9-]+)`",
-            BRANCH_COMMAND.read_text(encoding="utf-8"),
-        )
-        self.assertIn("feat(jobs)/process-runner", names)
-        for name in names:
+        # so the chain could create a branch it could not push. Nothing here is
+        # copied from `branch.md`: the prefixes are the first cells of its naming
+        # table, one name is built from each, and the table's own example names
+        # are found by those prefixes. A type the table gains is pushed the day
+        # it appears, where a copied alternation would have skipped it silently.
+        text = BRANCH_COMMAND.read_text(encoding="utf-8")
+        prefixes = list(dict.fromkeys(re.findall(
+            r"^\s*\| `([a-z]+(?:\(<scope>\))?/)` \|", text, re.MULTILINE)))
+        self.assertIn("feat(<scope>)/", prefixes)
+        self.assertIn("fix/", prefixes)
+        shapes = "|".join(
+            re.escape(p).replace(re.escape("<scope>"), r"[a-z-]+") for p in prefixes)
+        examples = re.findall(rf"`((?:{shapes})[a-z0-9-]+)`", text)
+        self.assertIn("feat(jobs)/process-runner", examples)
+        built = [p.replace("<scope>", "scope") + "some-change" for p in prefixes]
+        for name in dict.fromkeys(built + examples):
             for command in (
                 f"git push -u origin '{name}'",
                 f'git push origin "{name}"',
