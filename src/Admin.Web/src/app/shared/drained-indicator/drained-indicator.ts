@@ -4,7 +4,8 @@ import { ProjectionDrain } from '../../core/host/host-types';
 /**
  * run-locally.md: after publishing a product, wait until ordering-catalog-events drains before placing an
  * order for it, because Ordering prices from its projection, not from Catalog's HTTP API. The state is
- * given in words as well as colour.
+ * given in words as well as colour. Drained says only that the queue is empty: the outbox publishes after
+ * the request, so the queue can be empty before the event arrives (spec §12, Phase 6).
  */
 @Component({
   selector: 'app-drained-indicator',
@@ -12,7 +13,7 @@ import { ProjectionDrain } from '../../core/host/host-types';
     @let p = projection();
     <p class="drained" role="status" [class.ok]="p.drained" [class.waiting]="!p.drained">
       @if (p.drained) {
-        [drained] {{ p.queue }} is empty: Ordering's price projection has caught up.
+        [drained] {{ p.queue }} is empty: what run-locally.md waits for before placing an order.
       } @else if (!p.found) {
         [not declared] {{ p.queue }} does not exist: Ordering has not started, so it cannot price an order.
       } @else {

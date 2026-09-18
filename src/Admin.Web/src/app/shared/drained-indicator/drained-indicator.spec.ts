@@ -10,9 +10,9 @@ function render(projection: ProjectionDrain): string {
 }
 
 describe('DrainedIndicator', () => {
-  it('says the projection has caught up when its queue is empty', () => {
+  it('says only that the queue is empty, not that the projection has caught up', () => {
     expect(render({ queue: 'ordering-catalog-events', found: true, messages: 0, drained: true }))
-      .toBe("[drained] ordering-catalog-events is empty: Ordering's price projection has caught up.");
+      .toBe('[drained] ordering-catalog-events is empty: what run-locally.md waits for before placing an order.');
   });
 
   it('is a polite live region so a screen reader hears the projection change', () => {
