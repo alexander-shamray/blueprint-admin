@@ -20,9 +20,9 @@
 </section>
 
 <p class="intro">
-  Publish a product, wait for its event to reach Ordering's price projection, quote a basket holding
-  it, order it and cancel the order, as run-locally.md does by hand. Each call carries its own
-  correlation id, so each has its own trace.
+  Publish a product, wait for ordering-catalog-events to drain, quote a basket holding it, order it
+  and cancel the order, as run-locally.md does by hand. Each call carries its own correlation id, so
+  each call that leaves the console has its own trace.
 </p>
 
 @if (error(); as e) {

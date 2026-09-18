@@ -74,9 +74,9 @@ function initialSteps(): StepView[] {
 /**
  * run-locally.md's "Call the APIs" as one run (spec §12, phase 6): publish a product, wait for
  * ordering-catalog-events to drain, quote a basket holding it, order it, cancel the order. Every
- * call goes through `POST /api/proxy` as the API screen's do, each with its own correlation id so
- * each step has its own trace. The first step that does not succeed ends the run: every later one
- * needs what it would have produced.
+ * call goes through `POST /api/proxy` as the API screen's calls do, each with its own correlation
+ * id so each step has its own trace. The first step that does not succeed ends the run: every
+ * later one needs what it would have produced.
  */
 @Component({
   selector: 'app-scenario-page',
