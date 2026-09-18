@@ -35,7 +35,7 @@
     }
     @if (health(); as h) {
       @if (!h.reachable) {
-        <p class="error">Prometheus did not answer: {{ h.error }}</p>
+        <p class="error">Golden signals unavailable: {{ h.error }}</p>
       } @else if (h.services.length === 0) {
         <p class="signals-empty">No requests recorded yet.</p>
       } @else {

@@ -34,7 +34,7 @@ const health = {
   ],
 };
 
-const runningJob ={ id: 'fe-1', commandLine: 'npm start', state: 'Running', exitCode: null, startedAt: '' };
+const runningJob = { id: 'fe-1', commandLine: 'npm start', state: 'Running', exitCode: null, startedAt: '' };
 
 function text(el: Element | null): string {
   return el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
@@ -173,11 +173,11 @@ describe('StackPage', () => {
       ]);
     });
 
-    it('says Prometheus did not answer when the host reports it unreachable', async () => {
-      host.telemetryHealth.mockReturnValue(of({ reachable: false, error: 'Grafana has no Prometheus datasource.', services: [] }));
+    it('says the signals are unavailable, with the reason, when the host reports them unreachable', async () => {
+      host.telemetryHealth.mockReturnValue(of({ reachable: false, error: 'Prometheus answered 400: parse error', services: [] }));
       const fixture = await render();
 
-      expect(text(fixture.nativeElement.querySelector('.signals'))).toBe('Prometheus did not answer: Grafana has no Prometheus datasource.');
+      expect(text(fixture.nativeElement.querySelector('.signals'))).toBe('Golden signals unavailable: Prometheus answered 400: parse error');
     });
 
     it('says no requests are recorded rather than showing an empty strip', async () => {
