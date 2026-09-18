@@ -484,6 +484,22 @@ public sealed class GrafanaClientTests
         second.Prometheus.ShouldBe("prometheus");
     }
 
+    [Fact]
+    public async Task A_missing_Prometheus_does_not_make_Loki_and_Tempo_reads_re_resolve_the_datasources()
+    {
+        ScriptedHandler handler = new(request => request.RequestUri!.AbsolutePath == "/api/datasources"
+            ? FakeJson("""[{"uid":"loki","type":"loki"},{"uid":"tempo","type":"tempo"}]""")
+            : request.RequestUri.AbsolutePath.Contains("/api/traces/", StringComparison.Ordinal)
+                ? FakeJson(TempoTrace)
+                : FakeJson(LokiQueryRange));
+        GrafanaClient client = Client(handler);
+
+        await client.QueryAsync("{service_name=~\".+\"}", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, 10, Token);
+        await Task.WhenAll(Enumerable.Range(0, 10).Select(_ => client.TraceAsync("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", Token)));
+
+        handler.Requests.Count(r => r.Request.RequestUri!.AbsolutePath == "/api/datasources").ShouldBe(1);
+    }
+
     /// <summary>A body that disconnects part-way through, which surfaces as IOException from ReadAsStringAsync.</summary>
     private sealed class BrokenContent : HttpContent
     {
