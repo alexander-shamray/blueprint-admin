@@ -52,7 +52,9 @@ Playwright smoke; it needs no Docker and no clones.
 
 Phases 0 to 6 of the spec: the Stack screen (Compose services, reachability,
 up, down, down with a typed `down -v` confirmation, live output; the reference
-client's `npm start` with start, stop and its output), the Logs screen
+client's `npm start` with start, stop and its output; each service's request
+rate, 5xx share and p99 latency from Prometheus, the backend golden-signals
+dashboard's first row), the Logs screen
 (follow, service filter, text filter, correlation-id highlight) and the API
 screen (Catalog's and Ordering's OpenAPI operations through the gateway, the
 BFF quote and every host's readiness; send as anonymous, a realm user or a
@@ -94,7 +96,9 @@ sent step linking to its own trace.
   write run in a trace the correlation id cannot reach; the Trace screen ends
   with the projection queue's depth and says why it stops there. Raised for
   `blueprint-backend`, which owns the fix.
-- No Prometheus golden-signal strip (`GET /telemetry/health`) yet.
+- The golden-signal strip shows the dashboard's rate, errors and duration row
+  only, not its refusals or §13.7 rows. A service with no 5xx shows a dash
+  for its 5xx share, not a zero: the ratio has no series for it.
 - Broker reads are `docker compose exec` jobs, so they appear in
   `GET /api/jobs`; auto-refresh re-reads queues only.
 
