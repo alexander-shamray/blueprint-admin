@@ -156,6 +156,7 @@ SETTINGS = SCRIPTS.parent / "settings.json"
 COMMANDS = SCRIPTS.parent / "commands"
 DROP = SCRIPTS / "git-worktree-drop.sh"
 HOOK = SCRIPTS.parent / "hooks" / "guard-git-argv.py"
+BRANCH_COMMAND = SCRIPTS.parent / "commands" / "branch.md"
 SUPPRESSES = SCRIPTS / "gh-issue-suppresses.sh"
 ISSUE_TEXT = SCRIPTS / "gh-issue-text.sh"
 ISSUE_LIST = SCRIPTS / "gh-issue-list.sh"
@@ -5726,6 +5727,40 @@ class TheGitArgvGuard(unittest.TestCase):
         ):
             with self.subTest(command=command):
                 self.assertAdmitted(command)
+
+    def test_every_branch_name_the_naming_table_shows_is_admitted(self):
+        # **`/branch` names a feature branch `feat(<scope>)/...`, and this guard
+        # refused every such name** — `SAFE_REF` had no room for a parenthesis,
+        # so the chain could create a branch it could not push. The names are
+        # read out of `branch.md` rather than copied here, so the day the table
+        # shows a new shape this case tests that shape too: the subject is what
+        # the naming table says, not a list that agreed with it once.
+        names = re.findall(
+            r"`((?:feat|fix|refactor|docs|chore)(?:\([a-z-]+\))?/[a-z0-9-]+)`",
+            BRANCH_COMMAND.read_text(encoding="utf-8"),
+        )
+        self.assertIn("feat(jobs)/process-runner", names)
+        for name in names:
+            for command in (
+                f"git push -u origin '{name}'",
+                f'git push origin "{name}"',
+            ):
+                with self.subTest(command=command):
+                    self.assertAdmitted(command)
+
+    def test_a_parenthesis_opens_no_way_to_a_protected_or_pattern_destination(self):
+        # The widening admits two characters and nothing they could combine
+        # into: a scoped source still cannot land on `main`, a force is still a
+        # force, a leading parenthesis is still not a branch name, and a glob
+        # is still a glob.
+        for command in (
+            "git push origin 'feat(x)/y:main'",
+            "git push origin '+feat(x)/y'",
+            "git push origin '(main)'",
+            "git push origin 'feat(x)/*'",
+        ):
+            with self.subTest(command=command):
+                self.assertRefused(command)
 
     # ---- scope, and the failure directions ---------------------------------
 
