@@ -407,6 +407,83 @@ public sealed class GrafanaClientTests
         result.Error.ShouldNotBeNull();
     }
 
+    [Fact]
+    public async Task A_prometheus_instant_query_is_sent_through_the_datasource_proxy()
+    {
+        ScriptedHandler handler = new(request => request.RequestUri!.AbsolutePath == "/api/datasources"
+            ? FakeJson(Datasources)
+            : FakeJson("""{"status":"success","data":{"resultType":"vector","result":[]}}"""));
+        GrafanaClient client = Client(handler);
+
+        PrometheusResult result = await client.InstantQueryAsync("up", Token);
+
+        result.Reachable.ShouldBeTrue();
+        Uri sent = handler.Requests[1].Request.RequestUri!;
+        sent.AbsolutePath.ShouldBe("/api/datasources/proxy/uid/prometheus/api/v1/query");
+        sent.Query.ShouldBe("?query=up");
+    }
+
+    [Fact]
+    public async Task Prometheus_samples_carry_the_service_and_a_NaN_is_no_value()
+    {
+        ScriptedHandler handler = new(request => request.RequestUri!.AbsolutePath == "/api/datasources"
+            ? FakeJson(Datasources)
+            : FakeJson("""
+                {"status":"success","data":{"resultType":"vector","result":[
+                  {"metric":{"service_name":"Catalog.Api"},"value":[1789532580,"0.048"]},
+                  {"metric":{"service_name":"Ordering.Api"},"value":[1789532580,"NaN"]}]}}
+                """));
+        GrafanaClient client = Client(handler);
+
+        PrometheusResult result = await client.InstantQueryAsync("up", Token);
+
+        result.Samples.ShouldBe([new PrometheusSample("Catalog.Api", 0.048), new PrometheusSample("Ordering.Api", null)]);
+    }
+
+    [Fact]
+    public async Task A_prometheus_that_refuses_the_query_is_unreachable_with_its_answer()
+    {
+        ScriptedHandler handler = new(request => request.RequestUri!.AbsolutePath == "/api/datasources"
+            ? FakeJson(Datasources)
+            : new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = new StringContent("""{"status":"error","error":"parse error"}""") });
+        GrafanaClient client = Client(handler);
+
+        PrometheusResult result = await client.InstantQueryAsync("up(", Token);
+
+        result.Reachable.ShouldBeFalse();
+        result.Error.ShouldNotBeNull().ShouldContain("parse error");
+    }
+
+    [Fact]
+    public async Task A_malformed_200_from_prometheus_is_unreachable_instead_of_throwing()
+    {
+        ScriptedHandler handler = new(request => request.RequestUri!.AbsolutePath == "/api/datasources"
+            ? FakeJson(Datasources)
+            : FakeJson("""{"status":"success","data":{"resultType":"vector","result":[{"metric":{}}]}}"""));
+        GrafanaClient client = Client(handler);
+
+        PrometheusResult result = await client.InstantQueryAsync("up", Token);
+
+        result.Reachable.ShouldBeFalse();
+        result.Samples.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_datasource_list_without_Prometheus_is_not_cached_so_a_late_provisioned_one_is_found()
+    {
+        int calls = 0;
+        ScriptedHandler handler = new(_ => FakeJson(++calls == 1
+            ? """[{"uid":"loki","type":"loki"},{"uid":"tempo","type":"tempo"}]"""
+            : Datasources));
+        GrafanaClient client = Client(handler);
+
+        DatasourceUids first = await client.UidsAsync(Token);
+        DatasourceUids second = await client.UidsAsync(Token);
+
+        first.Prometheus.ShouldBeNull();
+        second.Prometheus.ShouldBe("prometheus");
+    }
+
     /// <summary>A body that disconnects part-way through, which surfaces as IOException from ReadAsStringAsync.</summary>
     private sealed class BrokenContent : HttpContent
     {

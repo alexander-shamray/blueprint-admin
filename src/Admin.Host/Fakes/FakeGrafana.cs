@@ -4,8 +4,8 @@ using System.Reflection;
 namespace Admin.Host.Fakes;
 
 /// <summary>
-/// Grafana's datasource list and its Loki and Tempo proxies in FakePlatform mode. The three
-/// recordings mirror the shapes measured on <c>grafana/otel-lgtm</c> 13.1.1 (plan M4, M5 and M6):
+/// Grafana's datasource list and its Loki, Tempo and Prometheus proxies in FakePlatform mode. The
+/// three fixture recordings mirror the shapes measured on <c>grafana/otel-lgtm</c> 13.1.1 (plan M4, M5 and M6):
 /// Loki answers a <c>streams</c> envelope whose line body is the formatted message and whose
 /// <c>CorrelationId</c> is structured metadata, and Tempo answers OTLP-JSON with base64 ids.
 /// <para>
@@ -52,6 +52,40 @@ internal static class FakeGrafana
         return traceId.Equals(RecordedTraceId, StringComparison.OrdinalIgnoreCase)
             ? FakeHttp.Json(HttpStatusCode.OK, Fixture("grafana-tempo-trace.json"))
             : FakeHttp.Json(HttpStatusCode.NotFound, """{"error":"trace not found"}""");
+    }
+
+    /// <summary>
+    /// One recording per <see cref="Telemetry.GoldenSignals"/> query, chosen by which query was
+    /// asked. The shape is Prometheus's documented <c>/api/v1/query</c> vector, not a measurement
+    /// through this Grafana. Ordering.Api has no traffic, so its ratio and quantile are <c>NaN</c>,
+    /// and Catalog.Api has no 5xx, so it has no error-ratio series at all.
+    /// </summary>
+    public static HttpResponseMessage Prometheus(HttpRequestMessage request)
+    {
+        string query = Uri.UnescapeDataString(request.RequestUri!.Query);
+
+        // The error ratio's denominator is the request-rate query itself, so it is matched first.
+        string series =
+            query.Contains(Telemetry.GoldenSignals.LatencyP99, StringComparison.Ordinal)
+                ? """
+                  {"metric":{"service_name":"Catalog.Api"},"value":[1789532580,"0.048"]},
+                  {"metric":{"service_name":"Gateway.Api"},"value":[1789532580,"0.09"]},
+                  {"metric":{"service_name":"Ordering.Api"},"value":[1789532580,"NaN"]}
+                  """
+            : query.Contains(Telemetry.GoldenSignals.ErrorRatio, StringComparison.Ordinal)
+                ? """
+                  {"metric":{"service_name":"Gateway.Api"},"value":[1789532580,"0.05"]},
+                  {"metric":{"service_name":"Ordering.Api"},"value":[1789532580,"NaN"]}
+                  """
+            : query.Contains(Telemetry.GoldenSignals.RequestRate, StringComparison.Ordinal)
+                ? """
+                  {"metric":{"service_name":"Catalog.Api"},"value":[1789532580,"1.2"]},
+                  {"metric":{"service_name":"Gateway.Api"},"value":[1789532580,"2.4"]},
+                  {"metric":{"service_name":"Ordering.Api"},"value":[1789532580,"0"]}
+                  """
+            : "";
+
+        return FakeHttp.Json(HttpStatusCode.OK, $$$"""{"status":"success","data":{"resultType":"vector","result":[{{{series}}}]}}""");
     }
 
     /// <summary>

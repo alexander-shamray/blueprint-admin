@@ -43,3 +43,13 @@ public sealed record TempoSpan(
 
 /// <summary>A Tempo trace fetch outcome. A Grafana/Tempo that does not answer is a state, not an exception (spec §9).</summary>
 public sealed record TempoResult(bool Reachable, string? Error, IReadOnlyList<TempoSpan> Spans);
+
+/// <summary>
+/// One series of a Prometheus instant vector grouped by <c>service_name</c>. <paramref name="Value"/>
+/// is null where Prometheus answered a value that is not a finite number: <c>NaN</c> is what a ratio
+/// or a quantile over no requests comes back as.
+/// </summary>
+public sealed record PrometheusSample(string Service, double? Value);
+
+/// <summary>A Prometheus query outcome. A Grafana/Prometheus that does not answer is a state, not an exception (spec §9).</summary>
+public sealed record PrometheusResult(bool Reachable, string? Error, IReadOnlyList<PrometheusSample> Samples);

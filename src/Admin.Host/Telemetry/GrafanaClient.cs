@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 namespace Admin.Host.Telemetry;
 
 /// <summary>
-/// Reads Loki and Tempo through Grafana's datasource proxy (measured 2026-09-16, plan M7:
+/// Reads Loki, Tempo and Prometheus through Grafana's datasource proxy (measured 2026-09-16, plan M7:
 /// <c>POST /api/ds/query</c> answers Grafana data frames instead of Loki's and Tempo's own
 /// documented shapes, so the proxy path is used everywhere here). Every failure is turned into a
 /// <c>Reachable: false</c> state (spec §9); nothing is thrown to the endpoint.
@@ -73,12 +73,10 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
 
             DatasourceUids result = new(loki, tempo, prometheus);
 
-            // Cached once both datasources this client reads are resolved. Caching on Loki alone
-            // would make a startup where Tempo is not provisioned yet permanent: every later read
-            // would see a cached null Tempo uid and drop all span rows until the host restarts.
-            // Prometheus is deliberately not required — nothing reads it yet, and demanding it would
-            // make an otherwise working Grafana re-resolve on all twelve calls of one trace build.
-            if (result is { Loki: not null, Tempo: not null })
+            // Cached once all three datasources this client reads are resolved. Caching on a subset
+            // would make a startup where one is not provisioned yet permanent: every later read of
+            // it would see a cached null uid until the host restarts.
+            if (result is { Loki: not null, Tempo: not null, Prometheus: not null })
             {
                 uidsCache = result;
             }
@@ -214,6 +212,65 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
         catch (Exception e) when (IsUnreachable(e, cancellationToken))
         {
             return new TempoResult(false, e.Message, []);
+        }
+    }
+
+    /// <summary>
+    /// A Prometheus instant query through the datasource proxy, evaluated now. The answer is
+    /// Prometheus's own <c>/api/v1/query</c> envelope; each series is read for its
+    /// <c>service_name</c> label, which is what every <see cref="GoldenSignals"/> query groups by.
+    /// </summary>
+    public async Task<PrometheusResult> InstantQueryAsync(string promQl, CancellationToken cancellationToken)
+    {
+        DatasourceUids uids = await UidsAsync(cancellationToken);
+
+        if (uids.Prometheus is null)
+        {
+            return new PrometheusResult(false, uids.Error ?? "Grafana has no Prometheus datasource.", []);
+        }
+
+        AdminOptions o = options.Value;
+        string url = $"{o.GrafanaUrl.TrimEnd('/')}/api/datasources/proxy/uid/{uids.Prometheus}/api/v1/query" +
+            $"?query={Uri.EscapeDataString(promQl)}";
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            return new PrometheusResult(false, $"Admin:GrafanaUrl '{o.GrafanaUrl}' is not an absolute http(s) URL.", []);
+        }
+
+        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(CallTimeout);
+
+        try
+        {
+            using HttpResponseMessage response = await http.GetAsync(uri, timeout.Token);
+            string body = await response.Content.ReadAsStringAsync(timeout.Token);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return new PrometheusResult(false, $"Prometheus answered {(int)response.StatusCode}: {body}", []);
+            }
+
+            using JsonDocument document = JsonDocument.Parse(body);
+            List<PrometheusSample> samples = [];
+
+            foreach (JsonElement series in document.RootElement.GetProperty("data").GetProperty("result").EnumerateArray())
+            {
+                JsonElement metric = series.GetProperty("metric");
+                string service = metric.TryGetProperty("service_name", out JsonElement serviceElement) ? serviceElement.GetString() ?? "" : "";
+                string? text = series.GetProperty("value")[1].GetString();
+                double? value = double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed) && double.IsFinite(parsed)
+                    ? parsed
+                    : null;
+
+                samples.Add(new PrometheusSample(service, value));
+            }
+
+            return new PrometheusResult(true, null, samples);
+        }
+        catch (Exception e) when (IsUnreachable(e, cancellationToken))
+        {
+            return new PrometheusResult(false, e.Message, []);
         }
     }
 

@@ -105,6 +105,7 @@ builder.Services.AddSingleton(sp => new GrafanaClient(
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("platform"),
     sp.GetRequiredService<IOptions<AdminOptions>>()));
 builder.Services.AddSingleton<EventTraceService>();
+builder.Services.AddSingleton<TelemetryHealthService>();
 builder.Services.AddSingleton(sp => new RequestProxy(
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("platform"),
     sp.GetRequiredService<TokenService>(),
@@ -149,6 +150,7 @@ app.MapIdentity();
 app.MapApi();
 app.MapBroker();
 app.MapTrace();
+app.MapTelemetry();
 
 // MapFallbackToFile's route has no literal segments, so without this it
 // would also catch an unmatched /api/nope (it has no dot, so it passes the
