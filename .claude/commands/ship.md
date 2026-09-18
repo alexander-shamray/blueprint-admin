@@ -93,7 +93,8 @@ row rather than a new one because the outcome is the same: the step did not
 run.** It needs naming because it has no exit code and no hook reason — only
 the harness's "has been denied" text — and because the section above promises
 an unattended push that a user-level `auto` mode has refused on every run
-measured (#33; `docs/harness-boundaries.md` owns the argument). `/pr` owns the
+measured (blueprint-frontend#33; that clone's `docs/harness-boundaries.md`
+owns the argument). `/pr` owns the
 report: the push did not happen, the `! git push -u origin <branch>` line for
 the caller, and the user-level `autoMode.environment` setting that removes the
 need for it. A resumed run after that push lands at the *clean and pushed* row
