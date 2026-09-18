@@ -471,6 +471,27 @@ public sealed class EventTraceServiceTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task A_Grafana_without_Prometheus_resolves_the_datasources_once_across_trace_reads()
+    {
+        string first = TraceHex(1);
+        ScriptedHandler handler = new(request =>
+        {
+            string path = request.RequestUri!.AbsolutePath;
+
+            return path == "/api/datasources" ? Json("""[{"uid":"loki","type":"loki"},{"uid":"tempo","type":"tempo"}]""")
+                : path.EndsWith("/loki/api/v1/query_range", StringComparison.Ordinal)
+                    ? Json(LokiStreams(("Catalog.Api", "Information", first, Now.AddSeconds(-30), "one")))
+                    : Json(TempoBatch(first, "Catalog.Api"));
+        });
+        EventTraceService service = Service(handler);
+
+        await service.BuildAsync("abc-123", TimeSpan.FromMinutes(15), Token);
+        await service.BuildAsync("abc-123", TimeSpan.FromMinutes(15), Token);
+
+        handler.Requests.Count(r => r.Request.RequestUri!.AbsolutePath == "/api/datasources").ShouldBe(1);
+    }
+
+    [Fact]
     public async Task The_newest_lines_survive_the_cap_even_when_Loki_groups_them_by_stream()
     {
         // Loki answers stream by stream, so the oldest stream can arrive first. Taking the head of the

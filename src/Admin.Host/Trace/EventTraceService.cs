@@ -64,13 +64,14 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
         string[] traceIds = [.. allTraceIds.Take(MaxTraces)];
         bool truncated = allTraceIds.Length > MaxTraces;
 
-        DatasourceUids uids = await grafana.UidsAsync(cancellationToken);
+        (string? lokiUid, _) = await grafana.UidAsync(u => u.Loki, cancellationToken);
+        (string? tempoUid, string? tempoError) = await grafana.UidAsync(u => u.Tempo, cancellationToken);
 
-        // With no Tempo uid every fetch would fail identically — and because an incomplete datasource
-        // list is deliberately not cached, each would re-resolve /api/datasources first, up to ten
-        // times for one screen. The answer is already known here, so it is written out once per trace.
-        TempoResult[] traces = uids.Tempo is null
-            ? [.. traceIds.Select(_ => new TempoResult(false, uids.Error ?? "Grafana has no Tempo datasource.", []))]
+        // With no Tempo uid every fetch would fail identically — and because an unresolved datasource
+        // is deliberately not cached, each would re-resolve /api/datasources first, up to ten times for
+        // one screen. The answer is already known here, so it is written out once per trace.
+        TempoResult[] traces = tempoUid is null
+            ? [.. traceIds.Select(_ => new TempoResult(false, tempoError ?? "Grafana has no Tempo datasource.", []))]
             : await Task.WhenAll(traceIds.Select(id => grafana.TraceAsync(id, cancellationToken)));
 
         QueuesView queues = await broker.QueuesAsync(cancellationToken);
@@ -87,7 +88,7 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
                 IsFailure(line.Level) ? TraceEventKind.Error : TraceEventKind.Log,
                 line.Message,
                 line.TraceId,
-                uids.Loki is { } lokiUid ? ExploreLink.Loki(grafanaUrl, lokiUid, logQl, windowText) : null));
+                lokiUid is not null ? ExploreLink.Loki(grafanaUrl, lokiUid, logQl, windowText) : null));
         }
 
         // A trace that failed to fetch contributes nothing; its Loki lines are already above.
@@ -100,7 +101,7 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
                 SpanRecogniser.Kind(span),
                 $"{span.Name} ({span.Duration.TotalMilliseconds.ToString("0.#", CultureInfo.InvariantCulture)} ms)",
                 span.TraceId,
-                uids.Tempo is { } tempoUid ? ExploreLink.Tempo(grafanaUrl, tempoUid, span.TraceId, windowText) : null));
+                tempoUid is not null ? ExploreLink.Tempo(grafanaUrl, tempoUid, span.TraceId, windowText) : null));
         }
 
         List<TraceEvent> ordered = [.. events.OrderBy(e => e.At).ThenBy(e => e.Kind)];

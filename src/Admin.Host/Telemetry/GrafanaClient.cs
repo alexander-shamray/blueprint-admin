@@ -6,10 +6,12 @@ using Microsoft.Extensions.Options;
 namespace Admin.Host.Telemetry;
 
 /// <summary>
-/// Reads Loki, Tempo and Prometheus through Grafana's datasource proxy (measured 2026-09-16, plan M7:
+/// Reads Loki and Tempo through Grafana's datasource proxy (measured 2026-09-16, plan M7:
 /// <c>POST /api/ds/query</c> answers Grafana data frames instead of Loki's and Tempo's own
-/// documented shapes, so the proxy path is used everywhere here). Every failure is turned into a
-/// <c>Reachable: false</c> state (spec §9); nothing is thrown to the endpoint.
+/// documented shapes, so the proxy path is used everywhere here). Prometheus is read the same way,
+/// against its documented <c>/api/v1/query</c> envelope; that path has not been measured through
+/// this Grafana. Every failure is turned into a <c>Reachable: false</c> state (spec §9); nothing is
+/// thrown to the endpoint.
 /// </summary>
 public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> options)
 {
@@ -93,7 +95,7 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
     /// One datasource's uid: the cached one when it has resolved, so a missing sibling costs this
     /// read nothing, otherwise a fresh resolve and the reason it did not answer.
     /// </summary>
-    private async Task<(string? Uid, string? Error)> UidAsync(Func<DatasourceUids, string?> pick, CancellationToken cancellationToken)
+    public async Task<(string? Uid, string? Error)> UidAsync(Func<DatasourceUids, string?> pick, CancellationToken cancellationToken)
     {
         if (pick(Cached(null)) is { } cached)
         {
