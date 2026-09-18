@@ -43,8 +43,9 @@ A push whose destination is not the branch you are on is not this step.
 
 **The allow rules do not guarantee the push runs.** Under a user-level
 `"defaultMode": "auto"` the push has been refused with the harness's "has been
-denied" text and no hook reason, on three branches in a row (#33);
-`docs/harness-boundaries.md` owns what is and is not known about why. A
+denied" text and no hook reason, on three branches in a row
+(blueprint-frontend#33); that clone's `docs/harness-boundaries.md` owns what
+is and is not known about why. A
 refused push is a **stop**, not a retry: report that the push did not happen
 and no PR was opened, give the line for the caller to run —
 `! git push -u origin <branch>`, or the tracking form — and name the remedy
