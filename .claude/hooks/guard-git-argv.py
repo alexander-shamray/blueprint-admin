@@ -256,8 +256,14 @@ PUSH_ALLOWED_FLAGS = {
 # does not inspect — the same shape as `--all`, arriving as a flag.
 
 # A ref this guard is willing to read: no `*`, no `+`, no `:` beyond the one
-# separator, nothing that could be a pattern or an option.
-SAFE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
+# separator, nothing that could be a pattern or an option. **Parentheses are
+# admitted because `/branch` names a feature branch `feat(<scope>)/...`**, and
+# a class without them made the chain's own naming table unpushable. Neither is
+# a pattern to git, whose one refspec wildcard is `*`, nor to bash, where `(`
+# opens an extended glob only after one of `?*+@!` — none of which this class
+# admits — so a destination that matches still names exactly one branch.
+# `PROTECTED_BRANCHES` is judged separately and is unaffected.
+SAFE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/()-]*$")
 SAFE_REMOTE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 # A subcommand this guard is willing to key the rest of the grammar off:
 # letters, digits, dots, underscores, hyphens. `$F`, `$(echo push)` and `p?sh`

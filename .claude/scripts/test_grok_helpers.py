@@ -156,6 +156,7 @@ SETTINGS = SCRIPTS.parent / "settings.json"
 COMMANDS = SCRIPTS.parent / "commands"
 DROP = SCRIPTS / "git-worktree-drop.sh"
 HOOK = SCRIPTS.parent / "hooks" / "guard-git-argv.py"
+BRANCH_COMMAND = SCRIPTS.parent / "commands" / "branch.md"
 SUPPRESSES = SCRIPTS / "gh-issue-suppresses.sh"
 ISSUE_TEXT = SCRIPTS / "gh-issue-text.sh"
 ISSUE_LIST = SCRIPTS / "gh-issue-list.sh"
@@ -5726,6 +5727,46 @@ class TheGitArgvGuard(unittest.TestCase):
         ):
             with self.subTest(command=command):
                 self.assertAdmitted(command)
+
+    def test_every_branch_name_the_naming_table_shows_is_admitted(self):
+        # **`/branch` names a feature branch `feat(<scope>)/...`, and this guard
+        # refused every such name** — `SAFE_REF` had no room for a parenthesis,
+        # so the chain could create a branch it could not push. Nothing here is
+        # copied from `branch.md`: the prefixes are the first cells of its naming
+        # table, one name is built from each, and the table's own example names
+        # are found by those prefixes. A type the table gains is pushed the day
+        # it appears, where a copied alternation would have skipped it silently.
+        text = BRANCH_COMMAND.read_text(encoding="utf-8")
+        prefixes = list(dict.fromkeys(re.findall(
+            r"^\s*\| `([a-z]+(?:\(<scope>\))?/)` \|", text, re.MULTILINE)))
+        self.assertIn("feat(<scope>)/", prefixes)
+        self.assertIn("fix/", prefixes)
+        shapes = "|".join(
+            re.escape(p).replace(re.escape("<scope>"), r"[a-z-]+") for p in prefixes)
+        examples = re.findall(rf"`((?:{shapes})[a-z0-9-]+)`", text)
+        self.assertIn("feat(jobs)/process-runner", examples)
+        built = [p.replace("<scope>", "scope") + "some-change" for p in prefixes]
+        for name in dict.fromkeys(built + examples):
+            for command in (
+                f"git push -u origin '{name}'",
+                f'git push origin "{name}"',
+            ):
+                with self.subTest(command=command):
+                    self.assertAdmitted(command)
+
+    def test_a_parenthesis_opens_no_way_to_a_protected_or_pattern_destination(self):
+        # The widening admits two characters and nothing they could combine
+        # into: a scoped source still cannot land on `main`, a force is still a
+        # force, a leading parenthesis is still not a branch name, and a glob
+        # is still a glob.
+        for command in (
+            "git push origin 'feat(x)/y:main'",
+            "git push origin '+feat(x)/y'",
+            "git push origin '(main)'",
+            "git push origin 'feat(x)/*'",
+        ):
+            with self.subTest(command=command):
+                self.assertRefused(command)
 
     # ---- scope, and the failure directions ---------------------------------
 
