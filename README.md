@@ -50,7 +50,7 @@ Playwright smoke; it needs no Docker and no clones.
 
 ## What it does today
 
-Phases 0 to 5 of the spec: the Stack screen (Compose services, reachability,
+Phases 0 to 6 of the spec: the Stack screen (Compose services, reachability,
 up, down, down with a typed `down -v` confirmation, live output; the reference
 client's `npm start` with start, stop and its output), the Logs screen
 (follow, service filter, text filter, correlation-id highlight) and the API
@@ -64,7 +64,10 @@ screen shows whether `ordering-catalog-events` has drained after a publish.
 The Trace screen joins a correlation id's Loki lines and Tempo spans into one
 timeline, each of those rows linking into Grafana Explore, closing with the
 projection queue's snapshot; the API screen's "Trace this call" opens it on the
-response's own correlation id.
+response's own correlation id. The Scenario screen runs `run-locally.md`'s
+calls end to end as a realm user — publish, wait for the projection to drain,
+quote, order, cancel — stopping at the first step that does not succeed, each
+sent step linking to its own trace.
 
 ## Known limits
 
