@@ -14,6 +14,9 @@
     </select>
   </label>
   <button class="run" type="button" [disabled]="!canRun()" (click)="run()">Run</button>
+  <button class="reload" type="button" [disabled]="running()" (click)="reload()">
+    Reload operations
+  </button>
   @if (runId(); as id) {
     <span class="run-id">run {{ id }}</span>
   }

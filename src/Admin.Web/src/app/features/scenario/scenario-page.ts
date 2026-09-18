@@ -140,6 +140,17 @@ export class ScenarioPage {
     });
   }
 
+  /** The host caches the catalog, so a service started after it loaded is seen only on a reload. */
+  reload(): void {
+    this.host.reloadOperations().subscribe({
+      next: (view) => {
+        this.error.set(null);
+        this.catalog.set(view);
+      },
+      error: (e: unknown) => this.error.set(describe(e)),
+    });
+  }
+
   stateWord(state: StepState): string {
     return STATE_WORDS[state];
   }

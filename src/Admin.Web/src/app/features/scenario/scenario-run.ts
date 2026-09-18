@@ -44,7 +44,9 @@ export function resolveOperations(view: ApiCatalogView): {
     if (!operation) {
       missing.push(`${id} is not in the operation catalog`);
     } else if (!operation.available) {
-      missing.push(`${id} is unavailable: its service's document did not load`);
+      const error = view.sources.find((s) => s.name === operation.source)?.error;
+      const reason = `${id} is unavailable: its service's document did not load`;
+      missing.push(error ? `${reason}: ${error}` : reason);
     } else {
       found[key] = operation;
     }

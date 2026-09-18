@@ -55,6 +55,19 @@ describe('resolveOperations', () => {
       'ordering:CancelOrder is not in the operation catalog',
     ]);
   });
+
+  it("names the source's own error for an unavailable operation", () => {
+    const view: ApiCatalogView = {
+      sources: [
+        { name: 'ordering', documentUrl: 'u', available: false, error: 'connection refused' },
+      ],
+      operations: Object.values(STEP_OPERATIONS).map((id) => op(id, !id.startsWith('ordering'))),
+    };
+
+    expect(resolveOperations(view).missing[0]).toBe(
+      "ordering:PlaceOrder is unavailable: its service's document did not load: connection refused",
+    );
+  });
 });
 
 describe('idFrom', () => {

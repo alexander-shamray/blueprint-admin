@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import {
   ApiCatalogView,
@@ -9,7 +9,7 @@ import {
   ProxyResult,
   QueuesView,
 } from '../../core/host/host-types';
-import { UUID } from '../api/api-page';
+import { DRAIN_WATCH_MS, UUID } from '../api/api-page';
 import { ScenarioPage } from './scenario-page';
 
 function op(partial: Partial<ApiOperation> & { id: string }): ApiOperation {
@@ -95,6 +95,7 @@ function platform(request: ProxyRequest): ProxyResult {
 describe('ScenarioPage', () => {
   let host: {
     operations: ReturnType<typeof vi.fn>;
+    reloadOperations: ReturnType<typeof vi.fn>;
     identityUsers: ReturnType<typeof vi.fn>;
     proxy: ReturnType<typeof vi.fn>;
     brokerQueues: ReturnType<typeof vi.fn>;
@@ -105,6 +106,7 @@ describe('ScenarioPage', () => {
     uuids = 0;
     host = {
       operations: vi.fn(() => of(catalog)),
+      reloadOperations: vi.fn(() => of(catalog)),
       identityUsers: vi.fn(() => of([{ username: 'demo' }, { username: 'browser' }])),
       proxy: vi.fn((request: ProxyRequest) => of(platform(request))),
       brokerQueues: vi.fn(() => of(drained)),
@@ -243,6 +245,55 @@ describe('ScenarioPage', () => {
 
     const live = fixture.nativeElement.querySelector('[aria-live="polite"]');
     expect(live.textContent).toContain('Run complete: every step succeeded.');
+  });
+
+  it('fails the drain and does not order when the queue never drains within the cap', async () => {
+    vi.useFakeTimers();
+    host.brokerQueues.mockReturnValue(
+      of({ ...drained, projection: { ...drained.projection, messages: 3, drained: false } }),
+    );
+    const page = render().componentInstance;
+
+    const done = page.run();
+    await vi.advanceTimersByTimeAsync(DRAIN_WATCH_MS);
+    await done;
+    vi.useRealTimers();
+
+    expect(page.steps()[1].state).toBe('failed');
+    expect(page.steps()[1].detail).toContain('still holds 3 messages');
+    expect(sent()).toHaveLength(1);
+  });
+
+  it('drops a broker read still in flight when the cap runs out', async () => {
+    vi.useFakeTimers();
+    let unsubscribed = false;
+    host.brokerQueues.mockReturnValue(
+      new Observable<QueuesView>(() => () => (unsubscribed = true)),
+    );
+    const page = render().componentInstance;
+
+    const done = page.run();
+    await vi.advanceTimersByTimeAsync(DRAIN_WATCH_MS);
+    await done;
+    vi.useRealTimers();
+
+    expect(unsubscribed).toBe(true);
+    expect(page.steps()[1].detail).toBe('The broker did not answer before the wait ran out.');
+    expect(sent()).toHaveLength(1);
+  });
+
+  it('reloads the catalog, so a service that started later makes the run available', () => {
+    const quoteless = {
+      ...catalog,
+      operations: catalog.operations.filter((o) => o.id !== 'bff:Quote'),
+    };
+    host.operations.mockReturnValue(of(quoteless));
+    const page = render().componentInstance;
+    expect(page.canRun()).toBe(false);
+
+    page.reload();
+
+    expect(page.canRun()).toBe(true);
   });
 
   it('runs as the user picked here rather than the default', async () => {
