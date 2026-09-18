@@ -14,6 +14,7 @@ import {
   QueuesView,
   RealmUserView,
   StackView,
+  TelemetryHealthView,
   TokenView,
   TraceView,
 } from './host-types';
@@ -86,6 +87,10 @@ export class HostClient {
   trace(correlationId: string, window?: string): Observable<TraceView> {
     const params = window ? new HttpParams().set('window', window) : undefined;
     return this.http.get<TraceView>(`/api/trace/${encodeURIComponent(correlationId)}`, { params });
+  }
+
+  telemetryHealth(): Observable<TelemetryHealthView> {
+    return this.http.get<TelemetryHealthView>('/api/telemetry/health');
   }
 
   job(id: string): Observable<JobView> {

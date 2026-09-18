@@ -129,6 +129,13 @@ describe('HostClient', () => {
     req.flush({ correlationId: 'demo trace/0001', window: '2h', reachable: true, error: null, traceIds: [], tracesTruncated: false, warning: null, events: [] });
   });
 
+  it('reads the golden-signal strip', () => {
+    client.telemetryHealth().subscribe();
+    const req = http.expectOne('/api/telemetry/health');
+    expect(req.request.method).toBe('GET');
+    req.flush({ reachable: true, error: null, services: [] });
+  });
+
   it('omits the window parameter entirely when none is asked for, so the host applies its default', () => {
     client.trace('demo-trace-0001').subscribe();
     const req = http.expectOne('/api/trace/demo-trace-0001');

@@ -8,21 +8,27 @@ namespace Admin.Host.Telemetry;
 /// <summary>
 /// Reads Loki and Tempo through Grafana's datasource proxy (measured 2026-09-16, plan M7:
 /// <c>POST /api/ds/query</c> answers Grafana data frames instead of Loki's and Tempo's own
-/// documented shapes, so the proxy path is used everywhere here). Every failure is turned into a
-/// <c>Reachable: false</c> state (spec §9); nothing is thrown to the endpoint.
+/// documented shapes, so the proxy path is used everywhere here). Prometheus is read the same way,
+/// against its documented <c>/api/v1/query</c> envelope; that path has not been measured through
+/// this Grafana. Every failure is turned into a <c>Reachable: false</c> state (spec §9); nothing is
+/// thrown to the endpoint.
 /// </summary>
 public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> options)
 {
     private static readonly TimeSpan CallTimeout = TimeSpan.FromSeconds(10);
 
-    /// <summary>Guarded so a failed resolve is never cached: a Grafana that was down at first use must be retried.</summary>
-    private DatasourceUids? uidsCache;
+    // Cached per datasource, and only once resolved: a Grafana that was down at first use, or one
+    // that has not provisioned a datasource yet, must be asked again for what it did not answer —
+    // without that absence making every read of the datasources it did answer re-resolve too.
+    private string? lokiUid;
+    private string? tempoUid;
+    private string? prometheusUid;
 
     public async Task<DatasourceUids> UidsAsync(CancellationToken cancellationToken)
     {
-        if (uidsCache is { } cached)
+        if (lokiUid is not null && tempoUid is not null && prometheusUid is not null)
         {
-            return cached;
+            return new DatasourceUids(lokiUid, tempoUid, prometheusUid);
         }
 
         AdminOptions o = options.Value;
@@ -30,7 +36,7 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
 
         if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
         {
-            return new DatasourceUids(null, null, null, $"Admin:GrafanaUrl '{o.GrafanaUrl}' is not an absolute http(s) URL.");
+            return Cached($"Admin:GrafanaUrl '{o.GrafanaUrl}' is not an absolute http(s) URL.");
         }
 
         using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -43,7 +49,7 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
 
             if (!response.IsSuccessStatusCode)
             {
-                return new DatasourceUids(null, null, null, $"Grafana answered {(int)response.StatusCode} for its datasource list.");
+                return Cached($"Grafana answered {(int)response.StatusCode} for its datasource list.");
             }
 
             using JsonDocument document = JsonDocument.Parse(body);
@@ -71,24 +77,34 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
                 }
             }
 
-            DatasourceUids result = new(loki, tempo, prometheus);
+            lokiUid ??= loki;
+            tempoUid ??= tempo;
+            prometheusUid ??= prometheus;
 
-            // Cached once both datasources this client reads are resolved. Caching on Loki alone
-            // would make a startup where Tempo is not provisioned yet permanent: every later read
-            // would see a cached null Tempo uid and drop all span rows until the host restarts.
-            // Prometheus is deliberately not required — nothing reads it yet, and demanding it would
-            // make an otherwise working Grafana re-resolve on all twelve calls of one trace build.
-            if (result is { Loki: not null, Tempo: not null })
-            {
-                uidsCache = result;
-            }
-
-            return result;
+            return Cached(null);
         }
         catch (Exception e) when (IsUnreachable(e, cancellationToken))
         {
-            return new DatasourceUids(null, null, null, e.Message);
+            return Cached(e.Message);
         }
+    }
+
+    private DatasourceUids Cached(string? error) => new(lokiUid, tempoUid, prometheusUid, error);
+
+    /// <summary>
+    /// One datasource's uid: the cached one when it has resolved, so a missing sibling costs this
+    /// read nothing, otherwise a fresh resolve and the reason it did not answer.
+    /// </summary>
+    public async Task<(string? Uid, string? Error)> UidAsync(Func<DatasourceUids, string?> pick, CancellationToken cancellationToken)
+    {
+        if (pick(Cached(null)) is { } cached)
+        {
+            return (cached, null);
+        }
+
+        DatasourceUids resolved = await UidsAsync(cancellationToken);
+
+        return (pick(resolved), resolved.Error);
     }
 
     /// <summary>
@@ -97,17 +113,17 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
     /// </summary>
     public async Task<LokiResult> QueryAsync(string logQl, DateTimeOffset from, DateTimeOffset to, int limit, CancellationToken cancellationToken)
     {
-        DatasourceUids uids = await UidsAsync(cancellationToken);
+        (string? loki, string? error) = await UidAsync(u => u.Loki, cancellationToken);
 
-        if (uids.Loki is null)
+        if (loki is null)
         {
-            return new LokiResult(false, uids.Error ?? "Grafana has no Loki datasource.", []);
+            return new LokiResult(false, error ?? "Grafana has no Loki datasource.", []);
         }
 
         AdminOptions o = options.Value;
         long start = from.ToUnixTimeMilliseconds() * 1_000_000L;
         long end = to.ToUnixTimeMilliseconds() * 1_000_000L;
-        string url = $"{o.GrafanaUrl.TrimEnd('/')}/api/datasources/proxy/uid/{uids.Loki}/loki/api/v1/query_range" +
+        string url = $"{o.GrafanaUrl.TrimEnd('/')}/api/datasources/proxy/uid/{loki}/loki/api/v1/query_range" +
             $"?query={Uri.EscapeDataString(logQl)}&start={start}&end={end}&limit={limit}";
 
         if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
@@ -160,15 +176,15 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
     /// </summary>
     public async Task<TempoResult> TraceAsync(string traceIdHex, CancellationToken cancellationToken)
     {
-        DatasourceUids uids = await UidsAsync(cancellationToken);
+        (string? tempo, string? error) = await UidAsync(u => u.Tempo, cancellationToken);
 
-        if (uids.Tempo is null)
+        if (tempo is null)
         {
-            return new TempoResult(false, uids.Error ?? "Grafana has no Tempo datasource.", []);
+            return new TempoResult(false, error ?? "Grafana has no Tempo datasource.", []);
         }
 
         AdminOptions o = options.Value;
-        string url = $"{o.GrafanaUrl.TrimEnd('/')}/api/datasources/proxy/uid/{uids.Tempo}/api/traces/{Uri.EscapeDataString(traceIdHex)}";
+        string url = $"{o.GrafanaUrl.TrimEnd('/')}/api/datasources/proxy/uid/{tempo}/api/traces/{Uri.EscapeDataString(traceIdHex)}";
 
         if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
         {
@@ -214,6 +230,65 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
         catch (Exception e) when (IsUnreachable(e, cancellationToken))
         {
             return new TempoResult(false, e.Message, []);
+        }
+    }
+
+    /// <summary>
+    /// A Prometheus instant query through the datasource proxy, evaluated now. The answer is
+    /// Prometheus's own <c>/api/v1/query</c> envelope; each series is read for its
+    /// <c>service_name</c> label, which is what every <see cref="GoldenSignals"/> query groups by.
+    /// </summary>
+    public async Task<PrometheusResult> InstantQueryAsync(string promQl, CancellationToken cancellationToken)
+    {
+        (string? prometheus, string? error) = await UidAsync(u => u.Prometheus, cancellationToken);
+
+        if (prometheus is null)
+        {
+            return new PrometheusResult(false, error ?? "Grafana has no Prometheus datasource.", []);
+        }
+
+        AdminOptions o = options.Value;
+        string url = $"{o.GrafanaUrl.TrimEnd('/')}/api/datasources/proxy/uid/{prometheus}/api/v1/query" +
+            $"?query={Uri.EscapeDataString(promQl)}";
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            return new PrometheusResult(false, $"Admin:GrafanaUrl '{o.GrafanaUrl}' is not an absolute http(s) URL.", []);
+        }
+
+        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(CallTimeout);
+
+        try
+        {
+            using HttpResponseMessage response = await http.GetAsync(uri, timeout.Token);
+            string body = await response.Content.ReadAsStringAsync(timeout.Token);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return new PrometheusResult(false, $"Prometheus answered {(int)response.StatusCode}: {body}", []);
+            }
+
+            using JsonDocument document = JsonDocument.Parse(body);
+            List<PrometheusSample> samples = [];
+
+            foreach (JsonElement series in document.RootElement.GetProperty("data").GetProperty("result").EnumerateArray())
+            {
+                JsonElement metric = series.GetProperty("metric");
+                string service = metric.TryGetProperty("service_name", out JsonElement serviceElement) ? serviceElement.GetString() ?? "" : "";
+                string? text = series.GetProperty("value")[1].GetString();
+                double? value = double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed) && double.IsFinite(parsed)
+                    ? parsed
+                    : null;
+
+                samples.Add(new PrometheusSample(service, value));
+            }
+
+            return new PrometheusResult(true, null, samples);
+        }
+        catch (Exception e) when (IsUnreachable(e, cancellationToken))
+        {
+            return new PrometheusResult(false, e.Message, []);
         }
     }
 

@@ -46,6 +46,41 @@ export class StackPage {
     ),
   );
 
+  /** Set when the strip's poll fails at the transport, cleared on the next answer; as `pollError` does it for the stack. */
+  readonly healthError = signal<string | null>(null);
+
+  /**
+   * The golden-signal strip (spec §5.8), polled on its own slower timer: every read is three
+   * Prometheus queries through Grafana, over the dashboard's multi-minute rate windows, so a
+   * 3-second tick would ask far more often than the answer can change.
+   */
+  readonly health = toSignal(
+    timer(0, 15000).pipe(
+      exhaustMap(() =>
+        this.host.telemetryHealth().pipe(
+          tap(() => this.healthError.set(null)),
+          catchError((e: unknown) => {
+            this.healthError.set(this.describeError(e));
+            return of();
+          }),
+        ),
+      ),
+    ),
+  );
+
+  /** Requests per second, the 5xx share and p99 latency as the strip prints them; absent is a dash, not a zero. */
+  rate(value: number | null): string {
+    return value === null ? '—' : `${value.toFixed(2)} req/s`;
+  }
+
+  ratio(value: number | null): string {
+    return value === null ? '—' : `${(value * 100).toFixed(1)} % 5xx`;
+  }
+
+  latency(seconds: number | null): string {
+    return seconds === null ? '—' : `p99 ${Math.round(seconds * 1000)} ms`;
+  }
+
   /** On error, fall back to undefined so the config-derived links simply do not render. */
   readonly config = toSignal(this.host.config().pipe(catchError(() => of(undefined))));
 

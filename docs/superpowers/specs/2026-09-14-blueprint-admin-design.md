@@ -297,9 +297,13 @@ alternative at all. The three calls are:
 - Tempo: `GET …/proxy/uid/{tempo}/api/traces/{traceIdHex}`. Ids in the answer
   are base64 and are decoded to hex before they are joined against Loki's
   `trace_id`.
-- Prometheus: the golden-signal queries the backend's
+- Prometheus: `GET …/proxy/uid/{prometheus}/api/v1/query`, an instant query,
+  with the golden-signal queries the backend's
   `deploy/observability/dashboards/golden-signals.json` uses, for the Stack
-  screen's health strip.
+  screen's health strip. The strip is that dashboard's rate, errors and
+  duration row, joined per `service_name`; `GoldenSignals` owns the copied
+  queries. A value that is absent or not finite is shown as absent: a ratio
+  with no 5xx has no series, and one over no requests is `NaN`.
 
 How the correlation id reaches telemetry is a backend fact, and it decides
 the join: `Common.Web.CorrelationIdExtensions` puts the id in a logging scope

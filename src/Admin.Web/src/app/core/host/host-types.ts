@@ -223,3 +223,21 @@ export interface TraceView {
   warning: string | null;
   events: TraceEvent[];
 }
+
+/**
+ * One service's golden signals: requests per second, the 5xx fraction and p99 latency in seconds.
+ * Null where Prometheus had no series for it or no finite value (the host's `ServiceSignals`).
+ */
+export interface ServiceSignals {
+  service: string;
+  requestRate: number | null;
+  errorRatio: number | null;
+  latencyP99Seconds: number | null;
+}
+
+/** The Stack screen's golden-signal strip. A Grafana that does not answer is a state, as `TraceView` does it. */
+export interface TelemetryHealthView {
+  reachable: boolean;
+  error: string | null;
+  services: ServiceSignals[];
+}
