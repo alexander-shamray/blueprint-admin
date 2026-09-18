@@ -29,6 +29,25 @@
     }
   </p>
 
+  <section class="signals" aria-label="Golden signals">
+    @if (healthError(); as he) {
+      <p class="error">The host did not answer for the golden signals: {{ he }}</p>
+    }
+    @if (health(); as h) {
+      @if (!h.reachable) {
+        <p class="error">Prometheus did not answer: {{ h.error }}</p>
+      } @else if (h.services.length === 0) {
+        <p class="signals-empty">No requests recorded yet.</p>
+      } @else {
+        <ul>
+          @for (svc of h.services; track svc.service) {
+            <li>{{ svc.service }} <span>{{ rate(svc.requestRate) }}</span> <span>{{ ratio(svc.errorRatio) }}</span> <span>{{ latency(svc.latencyP99Seconds) }}</span></li>
+          }
+        </ul>
+      }
+    }
+  </section>
+
   @if (!s.backend.reachable) {
     <p class="error">Docker did not answer: {{ s.backend.error }}</p>
   }

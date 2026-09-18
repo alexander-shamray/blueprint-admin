@@ -25,7 +25,16 @@ const config = {
   urls: { gateway: 'http://localhost:5000', catalog: '', ordering: '', bff: '', keycloak: 'http://localhost:8080', grafana: 'http://localhost:3000', client: 'http://localhost:5173' },
 };
 
-const runningJob = { id: 'fe-1', commandLine: 'npm start', state: 'Running', exitCode: null, startedAt: '' };
+const health = {
+  reachable: true,
+  error: null,
+  services: [
+    { service: 'Catalog.Api', requestRate: 1.2, errorRatio: null, latencyP99Seconds: 0.048 },
+    { service: 'Gateway.Api', requestRate: 2.4, errorRatio: 0.05, latencyP99Seconds: 0.09 },
+  ],
+};
+
+const runningJob ={ id: 'fe-1', commandLine: 'npm start', state: 'Running', exitCode: null, startedAt: '' };
 
 function text(el: Element | null): string {
   return el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
@@ -39,6 +48,7 @@ describe('StackPage', () => {
     backendDown: ReturnType<typeof vi.fn>;
     frontendStart: ReturnType<typeof vi.fn>;
     frontendStop: ReturnType<typeof vi.fn>;
+    telemetryHealth: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -56,6 +66,7 @@ describe('StackPage', () => {
       backendDown: vi.fn(() => of({ id: 'down-1', commandLine: 'docker compose down', state: 'Running', exitCode: null, startedAt: '' })),
       frontendStart: vi.fn(() => of({ id: 'fe-1', commandLine: 'npm start', state: 'Running', exitCode: null, startedAt: '' })),
       frontendStop: vi.fn(() => of({ id: 'fe-1', commandLine: 'npm start', state: 'Exited', exitCode: -1, startedAt: '' })),
+      telemetryHealth: vi.fn(() => of(health)),
     };
     TestBed.configureTestingModule({
       imports: [StackPage],
@@ -141,6 +152,57 @@ describe('StackPage', () => {
 
     const confirm = fixture.nativeElement.querySelector('input[placeholder="type: down -v"]') as HTMLInputElement;
     expect(confirm.getAttribute('aria-label')).toBe('Type down -v to confirm wiping volumes');
+  });
+
+  describe('golden signals', () => {
+    async function render() {
+      const fixture = TestBed.createComponent(StackPage);
+      fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(0);
+      fixture.detectChanges();
+      return fixture;
+    }
+
+    it('prints rate, 5xx share and p99 per service, with a dash where Prometheus had no value', async () => {
+      const fixture = await render();
+
+      const items = Array.from(fixture.nativeElement.querySelectorAll('.signals li')) as HTMLElement[];
+      expect(items.map((i) => text(i))).toEqual([
+        'Catalog.Api 1.20 req/s — p99 48 ms',
+        'Gateway.Api 2.40 req/s 5.0 % 5xx p99 90 ms',
+      ]);
+    });
+
+    it('says Prometheus did not answer when the host reports it unreachable', async () => {
+      host.telemetryHealth.mockReturnValue(of({ reachable: false, error: 'Grafana has no Prometheus datasource.', services: [] }));
+      const fixture = await render();
+
+      expect(text(fixture.nativeElement.querySelector('.signals'))).toBe('Prometheus did not answer: Grafana has no Prometheus datasource.');
+    });
+
+    it('says no requests are recorded rather than showing an empty strip', async () => {
+      host.telemetryHealth.mockReturnValue(of({ reachable: true, error: null, services: [] }));
+      const fixture = await render();
+
+      expect(text(fixture.nativeElement.querySelector('.signals'))).toBe('No requests recorded yet.');
+    });
+
+    it('polls on its own slower timer and recovers after a failed read', async () => {
+      host.telemetryHealth.mockReturnValueOnce(throwError(() => new Error('network down')));
+      const fixture = await render();
+
+      expect(text(fixture.nativeElement.querySelector('.signals'))).toContain('network down');
+
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(host.telemetryHealth).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(12000);
+      fixture.detectChanges();
+
+      expect(host.telemetryHealth).toHaveBeenCalledTimes(2);
+      expect(fixture.nativeElement.querySelectorAll('.signals li').length).toBe(2);
+      expect(text(fixture.nativeElement.querySelector('.signals'))).not.toContain('network down');
+    });
   });
 
   it('keeps polling after a failed request', async () => {
