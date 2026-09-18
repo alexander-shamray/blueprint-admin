@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import {
   ApiCatalogView,
@@ -30,6 +30,8 @@ function op(partial: Partial<ApiOperation> & { id: string }): ApiOperation {
 }
 
 const zero = '00000000-0000-0000-0000-000000000000';
+const productId = '0199a1b2-0000-7000-8000-000000000001';
+const orderId = '0199a1b2-0000-7000-8000-000000000002';
 
 const catalog: ApiCatalogView = {
   sources: [],
@@ -83,10 +85,10 @@ const drained: QueuesView = {
 /** Answers as the platform does for the demo user: ids for publish and order, a quote, 204 for cancel. */
 function platform(request: ProxyRequest): ProxyResult {
   const id = request.correlationId ?? '';
-  if (request.url.endsWith('/catalog/products/')) return responded(200, '"product-1"', id);
+  if (request.url.endsWith('/catalog/products/')) return responded(200, `"${productId}"`, id);
   const quote = '{"total":19.99,"unpriced":[]}';
   if (request.url.endsWith('/checkout/quote')) return responded(200, quote, id);
-  if (request.url.endsWith('/orders/')) return responded(200, '"order-1"', id);
+  if (request.url.endsWith('/orders/')) return responded(200, `"${orderId}"`, id);
   return responded(204, '', id);
 }
 
@@ -135,10 +137,10 @@ describe('ScenarioPage', () => {
     expect(page.steps().map((s) => s.state)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok']);
     const [publish, quote, order, cancel] = sent();
     expect(JSON.parse(publish.body!).commandId).not.toBe(zero);
-    expect(JSON.parse(quote.body!).lines[0].productId).toBe('product-1');
-    expect(JSON.parse(order.body!).items[0].productId).toBe('product-1');
+    expect(JSON.parse(quote.body!).lines[0].productId).toBe(productId);
+    expect(JSON.parse(order.body!).items[0].productId).toBe(productId);
     expect(JSON.parse(order.body!).commandId).not.toBe(zero);
-    expect(cancel.url).toBe('http://localhost:5000/api/v1/orders/order-1/cancel');
+    expect(cancel.url).toBe(`http://localhost:5000/api/v1/orders/${orderId}/cancel`);
     expect(
       sent().every((r) => r.identity?.username === 'demo' && r.identity.password === null),
     ).toBe(true);
@@ -220,6 +222,27 @@ describe('ScenarioPage', () => {
 
     expect(page.steps()[0].state).toBe('failed');
     expect(page.steps()[0].correlationId).toBeNull();
+  });
+
+  it('does not leave an earlier snapshot beside a broker that stopped answering', async () => {
+    host.brokerQueues.mockReturnValue(throwError(() => new Error('host gone')));
+    const page = render().componentInstance;
+    page.projection.set(drained.projection);
+
+    await page.run();
+
+    expect(page.steps()[1].state).toBe('failed');
+    expect(page.projection()).toBeNull();
+  });
+
+  it('announces where the run ended for a screen reader', async () => {
+    const fixture = render();
+
+    await fixture.componentInstance.run();
+    fixture.detectChanges();
+
+    const live = fixture.nativeElement.querySelector('[aria-live="polite"]');
+    expect(live.textContent).toContain('Run complete: every step succeeded.');
   });
 
   it('runs as the user picked here rather than the default', async () => {

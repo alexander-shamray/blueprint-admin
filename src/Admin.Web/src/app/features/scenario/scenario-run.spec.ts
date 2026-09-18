@@ -68,6 +68,7 @@ describe('idFrom', () => {
     expect(idFrom('{"id":"x"}')).toBeNull();
     expect(idFrom('""')).toBeNull();
     expect(idFrom('not json')).toBeNull();
+    expect(idFrom('"not-a-guid"')).toBeNull();
   });
 });
 

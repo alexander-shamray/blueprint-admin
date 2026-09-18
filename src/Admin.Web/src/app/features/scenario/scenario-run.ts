@@ -52,14 +52,17 @@ export function resolveOperations(view: ApiCatalogView): {
   return { operations: missing.length === 0 ? (found as ScenarioOperations) : null, missing };
 }
 
+const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * The id a publish or a place-order answered with. Both return `Result<Guid>` through
- * `ToHttpResult`, which the platform writes as a bare JSON string; anything else is not read as one.
+ * `ToHttpResult`, which the platform writes as a bare JSON string holding a Guid; anything else is
+ * not read as one, so a malformed answer stops at the step that produced it.
  */
 export function idFrom(body: string): string | null {
   try {
     const parsed: unknown = JSON.parse(body);
-    return typeof parsed === 'string' && parsed !== '' ? parsed : null;
+    return typeof parsed === 'string' && GUID.test(parsed) ? parsed : null;
   } catch {
     return null;
   }

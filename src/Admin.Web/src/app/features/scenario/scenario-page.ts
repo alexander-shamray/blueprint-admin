@@ -118,6 +118,16 @@ export class ScenarioPage {
     () => !this.running() && this.resolved()?.operations != null && this.runAs() !== '',
   );
 
+  /** One line for the polite live region, so a screen reader hears each step start and the run end. */
+  readonly announcement = computed(() => {
+    const steps = this.steps();
+    const running = steps.find((s) => s.state === 'running');
+    if (running) return `${running.title}: running`;
+    const failed = steps.find((s) => s.state === 'failed');
+    if (failed) return `Run stopped: ${failed.title} failed. ${failed.detail}`;
+    return steps.every((s) => s.state === 'ok') ? 'Run complete: every step succeeded.' : '';
+  });
+
   constructor() {
     inject(DestroyRef).onDestroy(() => {
       this.destroyed = true;
@@ -268,6 +278,12 @@ export class ScenarioPage {
    * waits until ordering-catalog-events drains. Polled as the API screen's drain watch is, with its
    * interval and cap; anything short of drained ends the run rather than ordering against a
    * projection that may not hold the price.
+   *
+   * Drained is necessary, not sufficient: the publish stages an outbox row that the backend's
+   * OutboxDispatcher sends later, so an empty queue can precede the event it is waited for. Nothing
+   * the platform exposes says one product has been projected (the BFF quote prices from Catalog, not
+   * from Ordering), so the wait is run-locally.md's, and a place-order that still finds no price
+   * answers as the platform does. A product-specific signal is a blueprint-backend change.
    */
   private async drain(): Promise<boolean> {
     this.patch('drain', { state: 'running', detail: 'Polling the broker.' });
@@ -288,6 +304,8 @@ export class ScenarioPage {
         { defaultValue: undefined },
       );
     } catch (e: unknown) {
+      // The last snapshot would otherwise sit beside the failure as though it were current.
+      this.projection.set(null);
       if (!this.destroyed) this.patch('drain', { state: 'failed', detail: describe(e) });
       return false;
     }
@@ -326,7 +344,7 @@ export class ScenarioPage {
 
     this.patch('drain', {
       state: 'ok',
-      detail: `${p.queue} is empty: Ordering's price projection has caught up.`,
+      detail: `${p.queue} is empty, which is what run-locally.md waits for before ordering.`,
     });
     return true;
   }

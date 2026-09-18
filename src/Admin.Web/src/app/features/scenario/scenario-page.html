@@ -39,6 +39,8 @@
   }
 }
 
+<p class="visually-hidden" role="status" aria-live="polite">{{ announcement() }}</p>
+
 <ol class="steps">
   @for (step of steps(); track step.key) {
     <li class="step state-{{ step.state }}">
