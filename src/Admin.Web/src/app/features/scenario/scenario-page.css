@@ -1,0 +1,77 @@
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+.run-id {
+  font-family: monospace;
+  color: #555;
+}
+.intro {
+  color: #555;
+  max-width: 48rem;
+}
+.missing,
+.no-users,
+.error {
+  color: #b00;
+}
+.steps {
+  padding-left: 1.5rem;
+}
+.step {
+  margin-bottom: 0.75rem;
+}
+.head {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.state {
+  font-family: monospace;
+  min-width: 6rem;
+}
+.status {
+  font-weight: 700;
+}
+.request {
+  display: block;
+  font-size: 0.85rem;
+  word-break: break-all;
+}
+.detail {
+  margin: 0.25rem 0;
+}
+.trace-step {
+  font-size: 0.85em;
+}
+.body {
+  background: #111;
+  color: #ddd;
+  padding: 0.5rem;
+  overflow: auto;
+  max-height: 30vh;
+  font-size: 0.8rem;
+}
+/* Colour repeats what the [state] word already says; it never carries the state alone. */
+.state-ok .state {
+  color: #080;
+}
+.state-failed .state,
+.state-failed .detail {
+  color: #b00;
+}
+.state-skipped {
+  color: #767676;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
