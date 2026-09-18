@@ -154,7 +154,7 @@ export interface BrokerQueue {
   isErrorQueue: boolean;
 }
 
-/** Whether a queue is drained: declared and empty. `ordering-catalog-events` feeds Ordering's price projection. */
+/** Whether a queue is drained: declared and empty. The queue is `BrokerService.ProjectionQueue`, which owns what it feeds. */
 export interface ProjectionDrain {
   queue: string;
   found: boolean;
