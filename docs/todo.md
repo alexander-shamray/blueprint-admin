@@ -22,4 +22,6 @@ None.
 
 Open issues with no PR yet, highest severity first.
 
-None.
+| Task | Issue | Severity |
+|---|---|---|
+| Measure the `review-grok-triager` profile at runtime before the Grok loop is re-enabled | [#23](https://github.com/alexander-shamray/blueprint-admin/issues/23) | high |
