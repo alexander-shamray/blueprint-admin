@@ -928,16 +928,19 @@ same argument as never calling a branch clean because asking failed.
       minutes. Present → run `bash .claude/scripts/pr-locality.sh <n>`
       and `git diff origin/main...HEAD`, write each output to a scratchpad
       file with `Write`, and run `/review-grok` **inside an `Agent`** with
-      the review's path, the verdict's and the diff's — the triage holds no
-      `Bash` and cannot judge the touch set or read the diff itself; without
-      the verdict it applies every accepted site, which is the widening the
-      contract refuses, and without the diff its adjudicator cannot tell a
-      restatement the branch wrote from one it left alone. `/review-grok`
-      triages and fixes — **its tool grant deliberately stops short of
-      committing**. The agent is what keeps that grant its own: a
-      frontmatter deny lasts the rest of the turn it loads in
-      (`docs/harness-boundaries.md`), so run inline its bare `Bash` deny
-      would refuse every command below, the push included. Then rerun the
+      the review's path, the verdict's and the diff's — its own grant has no
+      `Bash`, so it cannot be relied on to judge the touch set or read the
+      diff itself; without the verdict it applies every accepted site, which
+      is the widening the contract refuses, and without the diff its
+      adjudicator cannot tell a restatement the branch wrote from one it
+      left alone. `/review-grok` triages and fixes — **its tool grant
+      deliberately stops short of committing**. The agent keeps that grant's
+      deny off the push and **not on the triage**: a frontmatter deny lasts
+      the rest of the turn it loads in, so run inline its bare `Bash` deny
+      would refuse every command below, the push included — but inside an
+      agent it is not applied at all (`docs/harness-boundaries.md`). The
+      no-shell boundary therefore rests on the dedicated profile #19 owes,
+      which is why this step stays disabled until it exists. Then rerun the
       step 2 checks that apply to what it
       changed: a review fix is still an edit, and committing it unchecked
       hands the next reviewer a broken branch. Then `/commit` **scoped to

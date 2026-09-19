@@ -5266,10 +5266,11 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
                 self.assertRegex(text, r"`/pr`[^\n]*push|push[^\n]*`/pr`")
 
     def test_the_triage_that_denies_bash_runs_apart_from_the_push(self):
-        # /review-grok cannot join CHAINED_BEFORE_A_PUSH: its bare `Bash`
-        # deny is its boundary. So the exemption is where it runs rather than
-        # what it denies, and both halves are pinned — dropping the deny
-        # widens the triage, and dropping the agent refuses /ship's push.
+        # /review-grok cannot join CHAINED_BEFORE_A_PUSH: run inline, its bare
+        # `Bash` deny would refuse /ship's push, so it runs in an agent, where
+        # the deny is not applied (docs/harness-boundaries.md). Both halves
+        # are pinned — the deny for the inline case, the agent for the push.
+        # The triage's no-shell boundary is #19's profile, not this test.
         text = (COMMANDS / "review-grok.md").read_text(encoding="utf-8")
         denied = " ".join(
             re.findall(r"^disallowed-tools:\s*(.+)$", text, re.MULTILINE))
