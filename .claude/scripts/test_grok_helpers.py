@@ -8658,8 +8658,8 @@ class TheGitArgvGuard(unittest.TestCase):
     def test_a_scan_past_the_budget_is_refused_in_time(self):
         # Every opener `_closing_brace` and `_closing_paren` match, by count
         # and by length, and length alone: the hook's timeout admits whatever
-        # it cuts off. The subprocess timeout is the bound — half the hook's
-        # 60 seconds — so a regression fails here rather than running out the
+        # it cuts off. The subprocess timeout is the bound, well inside the
+        # hook's own, so a regression fails here rather than running out the
         # CI job.
         length = self.budget("LENGTH_BUDGET")
         cases = [("long", "git status # " + "a" * length),
