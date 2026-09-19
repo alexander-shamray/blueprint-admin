@@ -5595,7 +5595,7 @@ class TheGitArgvGuard(unittest.TestCase):
     built-in, so it reaches commands no allow or deny rule is consulted for.
     """
 
-    def judge(self, command, tool="Bash", cwd=None):
+    def judge(self, command, tool="Bash", cwd=None, timeout=None):
         """The hook's verdict on one command: None to allow, or the reason."""
         event = {"tool_name": tool, "tool_input": {"command": command}}
         if cwd is not None:
@@ -5603,6 +5603,7 @@ class TheGitArgvGuard(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, str(HOOK)],
             input=json.dumps(event), capture_output=True, text=True,
+            timeout=timeout,
         )
         self.assertEqual(0, result.returncode, result.stderr)
         if not result.stdout.strip():
@@ -8644,12 +8645,61 @@ class TheGitArgvGuard(unittest.TestCase):
         # ended the scan on a missing closer; this now does too. Found by an
         # adversarial audit.
         #
-        # Asserted as a verdict rather than as a duration, because a timing
-        # assertion on CI is a flake — `judge` fails the test if the hook exits
-        # non-zero, and the case cannot return at all if the scan is quadratic.
-        self.judge("${" * 20000)
-        self.judge('git commit -m "' + "${" * 5000)
+        # `SCAN_BUDGET` refuses the long runs before any matcher reads them;
+        # this one stays under it, so the brace scan itself still decides.
         self.assertRefused("${" * 500 + "; git push origin +HEAD:main")
+
+    def budget(self, name):
+        found = re.findall(rf"^{name} = ([\d_]+)$",
+                           HOOK.read_text(encoding="utf-8"), re.MULTILINE)
+        self.assertEqual(1, len(found), f"{name} is declared once")
+        return int(found[0].replace("_", ""))
+
+    def test_a_scan_past_the_budget_is_refused_in_time(self):
+        # Every opener `_closing_brace` and `_closing_paren` match, by count
+        # and by length, and length alone: the hook's timeout admits whatever
+        # it cuts off. The subprocess timeout is the bound, well inside the
+        # hook's own, so a regression fails here rather than running out the
+        # CI job.
+        length = self.budget("LENGTH_BUDGET")
+        cases = [("long", "git status # " + "a" * length),
+                 ("long", "(" + "a" * length)]
+        for opener in ("${", "$(", "$((", "x("):
+            cases += [(opener, opener * 20000),
+                      (opener, opener * 20000 + "; git push origin +HEAD:main"),
+                      (opener, 'git commit -m "' + opener * 5000),
+                      (opener, opener * 1000 + "a" * 10000)]
+        for label, command in cases:
+            with self.subTest(label=label, length=len(command)):
+                reason = self.judge(command, timeout=30)
+                self.assertIsNotNone(reason, "admitted")
+                self.assertIn("time limit", reason)
+
+    def test_a_command_under_the_budget_is_judged_on_its_merits(self):
+        # The control: the budgets refuse by size and by nothing else.
+        command = "git log --oneline -1 # " + "(" * 1000
+        self.assertLessEqual(1000 * len(command), self.budget("SCAN_BUDGET"))
+        self.assertIsNone(self.judge(command, timeout=30))
+
+    def test_the_worst_command_inside_the_budget_is_judged_in_time(self):
+        # The invariant the budgets exist for: a command just inside both still
+        # finishes before the hook's timeout, so its verdict is the scanners'
+        # own. The two corners of the admitted region are many openers in a
+        # short command and few in one at the length cap; the brackets are
+        # live shell text, so `_closing_brace` and `_closing_paren` read them.
+        scan = self.budget("SCAN_BUDGET")
+        length = self.budget("LENGTH_BUDGET")
+        for opener in ("${", "$(", "$((", "x("):
+            per = opener.count("(") + opener.count("${")
+            for openers in (scan // length, 1000):
+                count = openers // per
+                size = min(length, scan // (count * per))
+                command = opener * count + "a" * (size - len(opener) * count)
+                with self.subTest(opener=opener, openers=count * per):
+                    self.assertLessEqual(len(command), length)
+                    self.assertLessEqual(count * per * len(command), scan)
+                    reason = self.judge(command, timeout=30)
+                    self.assertNotIn("time limit", reason or "")
 
     def test_an_expanding_heredoc_body_removes_its_continuations(self):
         # **A body whose delimiter is unquoted expands, and removes

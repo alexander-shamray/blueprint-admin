@@ -4424,6 +4424,30 @@ def _offence(command, depth, judged):
     return None
 
 
+# **Every scan here must finish inside the hook's timeout, because a hook that
+# times out is non-blocking.** `_closing_brace` and `_closing_paren` each
+# re-read the rest of the command per opener, so their work is openers times
+# length, bounded by `SCAN_BUDGET`; the scanners as a whole grow faster than
+# linearly in length alone, bounded by `LENGTH_BUDGET`. A command past either
+# is refused before any scan runs, which fails closed where the timeout would
+# fail open.
+SCAN_BUDGET = 2_000_000
+LENGTH_BUDGET = 100_000
+
+
+def scan_budget(command):
+    """The refusal for a command the scanners could not finish in time."""
+    openers = command.count("(") + command.count("${")
+    if len(command) <= LENGTH_BUDGET and openers * len(command) <= SCAN_BUDGET:
+        return None
+    return (
+        f"this command's {len(command)} characters and {openers} brackets or "
+        "parameter expansions are more than this guard can judge inside its "
+        "time limit, and a guard that times out admits the command, so it is "
+        "refused instead. Shorten it or split it into separate commands."
+    )
+
+
 def main():
     try:
         event = json.load(sys.stdin)
@@ -4446,7 +4470,7 @@ def main():
     EVENT_CWD = cwd if isinstance(cwd, str) and cwd else None
 
     try:
-        reason = offence(command)
+        reason = scan_budget(command) or offence(command)
     except Exception:  # noqa: BLE001 - the direction is the point
         # **A crash is empty stdout, and `PreToolUse` reads empty stdout as
         # non-blocking**, so every defect in this file has been a fail-open.
