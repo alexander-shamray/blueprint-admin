@@ -45,9 +45,9 @@ argument is how a rule gets "corrected" back.
   again. A terminal, read-only command — the two sweeps — keeps its deny,
   because nothing pushes after it.
 - **`/review-grok` is the one chained command that cannot follow that rule,
-  so `/ship` step 5 runs it inside an `Agent` instead.** Its bare `Bash`
-  deny is its boundary — it reads an untrusted review holding `Edit` — and
-  run inline, under the same turn-wide lifetime, it would refuse every
+  so `/ship` step 5 runs it inside an `Agent` instead.** Run inline, its
+  bare `Bash` deny is its boundary — it reads an untrusted review holding
+  `Edit` — and under the same turn-wide lifetime it would also refuse every
   command step 5 runs after it: the checks, `/commit` and the push. The
   deny stays and the triage moves.
 - **The agent keeps the deny off the push by discarding it, so the agent
