@@ -9,7 +9,7 @@ owned elsewhere and cited from here by name, never restated.
 | | |
 |---|---|
 | [`README.md`](README.md) | How to run it, what the screens do today, known limits |
-| [`docs/todo.md`](docs/todo.md) | Tasks in progress and remaining; every task change edits it |
+| `TODO.md` (gitignored, local) | Open PRs and issues, for the user; every task change edits it |
 | [`docs/change-locality.md`](docs/change-locality.md) | The operating contract: trust order, classes, touch sets; the gate reads `.github/locality-gate/classes.yml` |
 | [`docs/harness-boundaries.md`](docs/harness-boundaries.md) | What the harness grants these commands, and refuses |
 | [`docs/style-guide.md`](docs/style-guide.md) | Pointers to the two dialects; `/style-pass` records a newly settled form here |
@@ -172,22 +172,14 @@ opens those files:
   if it does not belong here, say so and ask rather than decide by deleting.
 - **Do not invent platform behaviour.** 401/403/409/422 pass through as the
   gateway returned them. Inventory 502 is expected until that service exists.
-- **[`docs/todo.md`](docs/todo.md) moves with every task change**, in the
-  same PR. A change that starts, finishes or discovers a task, or opens or
-  closes a PR or issue, edits its row there. Before a PR merges, re-read
-  `gh pr list --limit 1000` and `gh issue list --limit 1000` — the default
-  stops at 30, silently — and reconcile both sections, removing
-  the PR's own row and the rows of the issues it closes — those issues are
-  still open until the merge closes them, so `gh issue list` will not drop
-  them for you. The file is `main`'s view, so each merge is the moment it is
-  brought up to date.
-- **Update it as it happens, not only when asked.** The moment this session
-  files, closes or reopens an issue, or sees a PR merge, it edits the row in
-  the working branch before the next step — a branch that ships without it
-  leaves `main` wrong until somebody notices. `/ship` reconciles once the
-  PR opens, so the reviewers read it, and again before it merges; the
-  sweeps hold no `Edit`, so their report lists
-  what they filed and the next branch carries the rows.
+- **The task list is `TODO.md` at the main checkout's root: gitignored,
+  local, never committed.** It is for the user, and it lists open PRs
+  (with the issues each closes) and open issues with no PR. Update it the
+  moment this session opens, merges or closes a PR, or files, closes or
+  reopens an issue. From a sibling worktree, edit the main checkout's copy,
+  not one in the worktree. When in doubt, rebuild it from
+  `gh pr list --limit 1000` and `gh issue list --limit 1000`, because the
+  default of 30 truncates silently.
 
 ## Available commands
 
