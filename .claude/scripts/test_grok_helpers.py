@@ -9813,9 +9813,9 @@ class TheHookWiringRunsOnMoreThanOneOperatingSystem(unittest.TestCase):
         self.assertEqual(4, len(execs), execs)
 
     def test_the_launcher_takes_a_closed_set_of_hook_names(self):
-        # `settings.json` and the triager profile name the three files it
-        # admits; a launcher taking any path would be a way to run an
-        # arbitrary script through the hook wiring.
+        # The hook wirings name only the files the launcher admits; a
+        # launcher taking any path would be a way to run an arbitrary script
+        # through the hook wiring.
         for bad in ("../scripts/npm-checks.sh", "/etc/passwd", "",
                     "guard-git-argv.py extra"):
             with self.subTest(argument=bad):

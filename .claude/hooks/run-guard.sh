@@ -23,10 +23,10 @@
 # one replaces this shell.
 #
 # **A closed set of hook names, like every helper in `.claude/scripts/`.**
-# `settings.json` names two of them and the `review-grok-triager` profile the
-# third; a launcher taking any path would be a way to run an arbitrary script
-# through the hook wiring, which is the shape the fixed-endpoint rule exists to
-# refuse.
+# Its callers are hook wirings — `settings.json` and an agent profile's
+# `hooks:` — and each names one of the files in the `case` below; a launcher
+# taking any path would be a way to run an arbitrary script through the hook
+# wiring, which is the shape the fixed-endpoint rule exists to refuse.
 set -eu
 
 [ "$#" -eq 1 ] ||
@@ -37,9 +37,9 @@ case "$1" in
   *) echo "run-guard.sh: not a hook this launcher runs: $1" >&2; exit 2 ;;
 esac
 
-# Resolved from this file rather than taken from the caller: the two hooks sit
-# beside it, so the launcher and the module it runs cannot come from different
-# checkouts. `CDPATH=` because a `CDPATH` set in the environment makes `cd`
+# Resolved from this file rather than taken from the caller: every guard it
+# runs sits beside it, so the launcher and the module it runs cannot come from
+# different checkouts. `CDPATH=` because a `CDPATH` set in the environment makes `cd`
 # print the directory it chose and land somewhere else.
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
