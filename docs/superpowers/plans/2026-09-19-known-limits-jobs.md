@@ -1005,16 +1005,23 @@ Replace "a failed exchanges read is not cleared by a later queues
 auto-refresh success" with:
 
 ```ts
-  it('a failed exchanges read is not cleared by a queues read that succeeds', async () => {
+  it('a failed exchanges read is not cleared by a queues read that succeeds after it', async () => {
     vi.useFakeTimers();
-    host.brokerExchanges.mockReturnValue(throwError(() => ({ error: { title: 'Server error', detail: 'exchanges boom' } })));
     const fixture = render();
+    // The tick's two reads answer when told to, exchanges failing first: a synchronous mock would
+    // run the queues success first, and a queues path that cleared exchangesError would still pass.
+    const slowQueues = new Subject<QueuesView>();
+    const slowExchanges = new Subject<ExchangesView>();
+    host.brokerQueues.mockReturnValue(slowQueues.asObservable());
+    host.brokerExchanges.mockReturnValue(slowExchanges.asObservable());
 
     fixture.componentInstance.setAutoRefresh(true);
     await vi.advanceTimersByTimeAsync(5000);
+    slowExchanges.error({ error: { title: 'Server error', detail: 'exchanges boom' } });
+    slowQueues.next(queues);
+    slowQueues.complete();
     fixture.detectChanges();
 
-    expect(host.brokerQueues).toHaveBeenCalledTimes(2);
     expect(fixture.nativeElement.textContent).toContain('exchanges boom');
   });
 ```

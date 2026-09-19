@@ -613,6 +613,29 @@ expectations become `new FrontendStatus(null, true, null)` and
         runner.Started.Count.ShouldBe(1);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_request_cancelled_during_the_port_probe_starts_nothing(bool install)
+    {
+        // The probe is the last await before runner.Start: a caller gone by then wants no process,
+        // and an npm ci has no Stop to take it back.
+        runner.OnLongRunning("npm", "start", "> ng serve");
+        runner.OnLongRunning("npm", "ci", "npm warn deprecated inflight@1.0.6");
+        using CancellationTokenSource aborted = CancellationTokenSource.CreateLinkedTokenSource(Token);
+        using FrontendSupervisor supervisor = new(runner, Paths, _ => true, _ =>
+        {
+            aborted.Cancel();
+
+            return Task.FromResult(false);
+        });
+
+        Func<Task> act = install ? () => supervisor.InstallAsync(aborted.Token) : () => supervisor.StartAsync(aborted.Token);
+
+        await Should.ThrowAsync<OperationCanceledException>(act);
+        runner.Started.ShouldBeEmpty();
+    }
+
     [Fact]
     public async Task Concurrent_installs_start_one_process()
     {
@@ -823,6 +846,9 @@ public sealed class FrontendSupervisor(
                 return new FrontendStartResult(FrontendStartOutcome.ClientAnswering, null);
             }
 
+            // The probe was the last await: a request aborted during it wants no process, as in LogFollower.
+            cancellationToken.ThrowIfCancellationRequested();
+
             Job job = runner.Start(new ProcessSpec("npm", ["start"], paths.FrontendDir));
             current = job;
 
@@ -854,6 +880,9 @@ public sealed class FrontendSupervisor(
             {
                 return new FrontendInstallResult(FrontendInstallOutcome.ClientAnswering, null);
             }
+
+            // As in StartAsync, and dearer here: the console has no way to stop an npm ci once started.
+            cancellationToken.ThrowIfCancellationRequested();
 
             Job job = runner.Start(new ProcessSpec("npm", ["ci"], paths.FrontendDir));
             install = job;
