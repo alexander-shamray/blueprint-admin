@@ -34,7 +34,7 @@ more than one of them.
 | `src/Admin.Web/src/app/core/host/host-types.ts` | frontend, golden-signals |
 | `src/Admin.Web/src/app/features/stack/stack-page.*` | frontend, golden-signals |
 | `src/Admin.Web/e2e/stack.spec.ts` | frontend, golden-signals |
-| `src/Admin.Host/Fakes/FakeProcessRunner.cs` | jobs (`StartedJobs`), frontend (`IsRunning`) |
+| `src/Admin.Host/Fakes/FakeProcessRunner.cs` | jobs (`LastStarted`), frontend (`IsRunning`) |
 | `tests/Admin.Host.Tests/Fakes/FakePlatformTests.cs` | jobs, frontend |
 
 The table is a warning, not the rule: it was read off the plans by hand and

@@ -241,9 +241,11 @@ public sealed class TelemetryHealthService(GrafanaClient grafana)
     /// </summary>
     private static double? ErrorRatioFor(PrometheusResult errors, string service, double? requestRate)
     {
-        if (ValueFor(errors, service) is { } ratio)
+        // Presence, not value: ValueFor is null for a present sample that is not finite too, and a NaN
+        // share is an unknown one, not a zero.
+        if (errors.Samples.FirstOrDefault(s => s.Service == service) is { } sample)
         {
-            return ratio;
+            return sample.Value;
         }
 
         return requestRate > 0 ? 0 : null;
@@ -400,6 +402,21 @@ public sealed class TelemetryHealthTests(AdminHostFactory factory) : IClassFixtu
 
         // Catalog.Api served requests and answered no 5xx; Ordering.Api served none, so its share is undefined.
         view.Services.Select(s => s.ErrorRatio).ShouldBe([0, null]);
+    }
+
+    [Fact]
+    public async Task A_5xx_share_that_is_present_but_not_finite_stays_absent_even_with_traffic()
+    {
+        TelemetryHealthService health = Service(Answering(new()
+        {
+            [GoldenSignals.RequestRate] = Vector(Series("Catalog.Api", "2")),
+            [GoldenSignals.ErrorRatio] = Vector(Series("Catalog.Api", "NaN")),
+        }));
+
+        TelemetryHealthView view = await health.ReadAsync(Token);
+
+        // The zero fill is for a series that is absent; a NaN one is present and unknown.
+        view.Services.ShouldHaveSingleItem().ErrorRatio.ShouldBeNull();
     }
 
     [Fact]
@@ -664,9 +681,11 @@ public sealed class TelemetryHealthService(GrafanaClient grafana)
     /// </summary>
     private static double? ErrorRatioFor(PrometheusResult errors, string service, double? requestRate)
     {
-        if (ValueFor(errors, service) is { } ratio)
+        // Presence, not value: ValueFor is null for a present sample that is not finite too, and a NaN
+        // share is an unknown one, not a zero.
+        if (errors.Samples.FirstOrDefault(s => s.Service == service) is { } sample)
         {
-            return ratio;
+            return sample.Value;
         }
 
         return requestRate > 0 ? 0 : null;

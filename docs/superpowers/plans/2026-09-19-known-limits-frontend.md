@@ -374,7 +374,9 @@ Below `Started`:
     {
         lock (gate)
         {
-            return longRunning.Any(j => j.State == JobState.Running
+            // Status, not State: the runner's lock guards the list, and only Job's own lock orders a read
+            // against MarkExited, so a job a concurrent Stop just ended is not seen still running.
+            return longRunning.Any(j => j.Status.State == JobState.Running
                 && j.Spec.FileName == fileName
                 && string.Join(' ', j.Spec.Arguments).StartsWith(argumentPrefix, StringComparison.Ordinal));
         }

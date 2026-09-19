@@ -224,7 +224,7 @@ spec §5.2/§5.3/§5.10/§6, README.md                         Task 5
 - Modify: `src/Admin.Host/Jobs/ProcessSpec.cs`
 - Modify: `src/Admin.Host/Jobs/JobRegistry.cs:5-26`
 - Modify: `src/Admin.Host/Compose/ComposeService.cs:19-26,103`
-- Modify: `src/Admin.Host/Fakes/FakeProcessRunner.cs` (a `StartedJobs` seam)
+- Modify: `src/Admin.Host/Fakes/FakeProcessRunner.cs` (a `LastStarted` seam)
 - Test: `tests/Admin.Host.Tests/Jobs/JobRegistryTests.cs`
 - Test: `tests/Admin.Host.Tests/Compose/ComposeServiceTests.cs`
 - Test: `tests/Admin.Host.Tests/Fakes/FakePlatformTests.cs`
@@ -401,22 +401,25 @@ and the cases fail for the wrong reason. `runner.Started` is no substitute:
 it records the spec, which says what was asked, not whether the job was
 stopped.
 
-In `FakeProcessRunner`, beside `started`, keep every job it starts:
+In `FakeProcessRunner`, beside `started`, keep the last job it started, and
+only that one:
 
 ```csharp
-    private readonly List<Job> startedJobs = [];
+    private Job? lastStarted;
 
     /// <summary>
-    /// A snapshot of every job started so far, oldest first, listed or not: an unlisted job is out of
-    /// the registry by design, and a test still needs its final state.
+    /// The most recent job started, listed or not: an unlisted job is out of the registry by design, and a
+    /// test still needs its final state. One job, not a list: FakePlatform's runner is a singleton that
+    /// starts a ps every Stack poll, and a list would keep each one, output ring and all, for the host's
+    /// life — the retention the registry change removes.
     /// </summary>
-    public IReadOnlyList<Job> StartedJobs
+    public Job? LastStarted
     {
         get
         {
             lock (gate)
             {
-                return [.. startedJobs];
+                return lastStarted;
             }
         }
     }
@@ -425,19 +428,23 @@ In `FakeProcessRunner`, beside `started`, keep every job it starts:
 and in `Start`, inside the existing `lock (gate)`, after `started.Add(spec);`:
 
 ```csharp
-            startedJobs.Add(job);
+            lastStarted = job;
 ```
 
 In `ComposeServiceTests`, in each of the four cases, replace
 `registry.All().Single().State.ShouldBe(JobState.Exited);` with:
 
 ```csharp
-        runner.StartedJobs.Single().State.ShouldBe(JobState.Exited);
+        runner.Started.Count.ShouldBe(1);
+        runner.LastStarted.ShouldNotBeNull().State.ShouldBe(JobState.Exited);
         registry.All().ShouldBeEmpty();
 ```
 
-The second line is the half the old assertion could not state: the job was
-stopped, and the registry never kept it.
+The first line keeps what `Single()` asserted, that one job was started;
+the last is the half the old assertion could not state: the job was
+stopped, and the registry never kept it. `started` itself still grows by
+one spec per start, as it does today; a spec is a few strings, not a job
+with a 2,000-line ring.
 
 - [ ] **Step 6: Run the host checks**
 
@@ -818,6 +825,37 @@ Add, before the closing `});`:
     expect(fixture.componentInstance.following()).toBe(false);
   });
 
+  it('a stop that fails keeps the job, so Stop stays enabled and tries it again', () => {
+    host.stopFollow.mockReturnValueOnce(throwError(() => new Error('host gone')));
+    const fixture = TestBed.createComponent(LogsPage);
+    fixture.componentInstance.follow();
+    fixture.componentInstance.stop();
+    fixture.detectChanges();
+    const stopButton = fixture.nativeElement.querySelector('button.stop') as HTMLButtonElement;
+
+    expect(stopButton.disabled).toBe(false);
+    expect(fixture.componentInstance.error()).toBe('host gone');
+
+    stopButton.click();
+    fixture.detectChanges();
+
+    expect(host.stopFollow.mock.calls.map((c) => c[0])).toEqual(['logs-1', 'logs-1']);
+    expect(stopButton.disabled).toBe(true);
+  });
+
+  it('a slow stop of the previous job does not forget the next one', () => {
+    const stopA = new Subject<void>();
+    host.stopFollow.mockReturnValueOnce(stopA.asObservable());
+    host.followLogs.mockReturnValueOnce(of(summary('job-a'))).mockReturnValueOnce(of(summary('job-b')));
+    const fixture = TestBed.createComponent(LogsPage);
+    fixture.componentInstance.follow();
+    fixture.componentInstance.follow();
+
+    stopA.complete();
+
+    expect(fixture.componentInstance.hostJob()).toBe('job-b');
+  });
+
   it('a job that has exited is not stopped again', () => {
     const fixture = TestBed.createComponent(LogsPage);
     fixture.componentInstance.follow();
@@ -833,7 +871,7 @@ Add, before the closing `});`:
 
 Run: `bash .claude/scripts/npm-checks.sh all`
 Expected: lint and the build fail on `stopFollow`, which does not exist on
-`HostClient`. Once the method exists, the six new page tests fail on
+`HostClient`. Once the method exists, the eight new page tests fail on
 `stopFollow` never being called or on the Follow button never disabling,
 and so do the four rewritten ones.
 
@@ -856,16 +894,23 @@ In `logs-page.ts`, change the rxjs import:
 import { EMPTY, Subscription, switchMap } from 'rxjs';
 ```
 
-Add two fields after `private subscription?: Subscription;`:
+Add a field after `private subscription?: Subscription;`:
 
 ```ts
-  /** The host's follow job this screen started: Stop, and leaving the screen, end it there (spec §5.10). */
-  private jobId: string | null = null;
   /** Stop came while the follow request was out: end the job the moment the answer names it. */
   private stopOnArrival = false;
 ```
 
-and one signal after `pending`:
+and two signals after `pending`:
+
+```ts
+  /**
+   * The host's follow job this screen started and has not seen end: Stop, and leaving the screen, end
+   * it there (spec §5.10). Held until the host confirms the stop, so a stop that fails leaves Stop
+   * enabled with the id to try again.
+   */
+  readonly hostJob = signal<string | null>(null);
+```
 
 ```ts
   /**
@@ -907,7 +952,7 @@ Replace the constructor, `follow()` and `stop()`:
       .followLogs(this.selected())
       .pipe(
         switchMap((job) => {
-          this.jobId = job.id;
+          this.hostJob.set(job.id);
           this.requestOut.set(false);
           this.pending.set(false);
           if (this.stopOnArrival) {
@@ -923,7 +968,7 @@ Replace the constructor, `follow()` and `stop()`:
           if (event.kind === 'line') {
             this.lines.update((all) => (all.length >= MAX_LINES ? [...all.slice(1), event.line] : [...all, event.line]));
           } else {
-            this.jobId = null;
+            this.hostJob.set(null);
             this.pending.set(false);
             this.following.set(false);
           }
@@ -977,16 +1022,26 @@ Add, before `describeError`:
 
   /**
    * Not tied to this screen's lifetime: it must still reach the host while the screen is being left.
-   * Its own failure does not replace an error already shown, which is the one that explains the state.
+   * The id is let go only when the host confirms, and only if it still names this job: a slow stop of
+   * the previous follow must not forget the next one. A stop that fails keeps it, so Stop stays enabled
+   * to try again, and its failure does not replace an error already shown, which explains the state.
    */
   private stopOnHost(): void {
-    const id = this.jobId;
-    this.jobId = null;
-    if (id) {
-      this.host.stopFollow(id).subscribe({ error: (e: unknown) => this.error.set(this.error() ?? this.describeError(e)) });
+    const id = this.hostJob();
+    if (!id) {
+      return;
     }
+    this.host.stopFollow(id).subscribe({
+      complete: () => this.hostJob.update((held) => (held === id ? null : held)),
+      error: (e: unknown) => this.error.set(this.error() ?? this.describeError(e)),
+    });
   }
 ```
+
+Leaving the screen after a stop that failed has no one left to press Stop
+again, and no retry is attempted: a retry loop outliving its screen is a
+timer running for nobody. That job is the README residual below, ended by
+the next Follow.
 
 In `logs-page.html`, Follow disables while a request is out:
 
@@ -994,9 +1049,16 @@ In `logs-page.html`, Follow disables while a request is out:
     <button class="follow" [disabled]="requestOut()" (click)="follow()">Follow</button>
 ```
 
-Stop's `[disabled]` still reads `!(pending() || following())`, and a Stop
-pressed while the request is out clears `pending`, so Stop disables at once
-while Follow stays disabled until the answer arrives and its job is stopped.
+and Stop stays enabled while a host job is held:
+
+```html
+    <button class="stop" [disabled]="!(pending() || following() || hostJob())" (click)="stop()">Stop</button>
+```
+
+A Stop pressed while the request is out clears `pending` and holds no job
+yet, so Stop disables at once while Follow stays disabled until the answer
+arrives and its job is stopped. After a stream that failed, or a stop that
+failed, `hostJob` is still set and Stop stays pressable.
 
 - [ ] **Step 6: Run the SPA checks**
 
@@ -1286,8 +1348,9 @@ with:
 
 ```
 - The host keeps at most one `logs -f` job, so a Follow in a second browser
-  tab ends the first tab's. A follow whose answer never reached the page
-  runs until the next Follow.
+  tab ends the first tab's. A follow whose answer never reached the page,
+  or whose stop failed as the Logs screen was left, runs until the next
+  Follow.
 ```
 
 Delete:
