@@ -1,38 +1,42 @@
 #!/usr/bin/env python3
 """Refuse the /review-grok triager every edit `/ship` refuses, in every turn.
 
-**`/ship`'s `disallowed-tools` was the triager's editing boundary, and it
-lasts only the turn `/ship` was loaded in (#27).** Measured: a triager spawned
-in that turn was refused `.github/**` and `README.md`; one spawned a user
-message later, `/ship` not re-invoked, wrote into both. Step 5 spawns the
-triager async, so every round after the first starts in exactly such a turn —
-the rounds reading an untrusted review, holding `Edit` over every tree the
-list names.
+**`/ship`'s `disallowed-tools` binds only the turn `/ship` was loaded in**, and
+step 5 spawns the triager async, so every triage round after the first starts
+in a turn where that list no longer holds — the rounds reading an untrusted
+review, holding `Edit`. `docs/harness-boundaries.md` owns the measurement.
 
-**So the boundary moves onto the profile, where a turn cannot end it.** This
-hook sits in `review-grok-triager.md`'s own `hooks:`, like
+**So the boundary sits on the profile, where a turn cannot end it.** This hook
+is wired in `review-grok-triager.md`'s own `hooks:`, like
 `guard-triager-dispatch.py` beside it, so it judges the triager's edits and
 nobody else's.
 
 **It holds no copy of the list.** The trees are read from `/ship`'s
 `disallowed-tools` on every call — the `Edit(...)` entries, from the
 `ship.md` beside this file — so the list has one owner and a path added there
-is refused here with no second edit to forget. `/ship` keeps stating it; this
-file is what makes it hold outside the turn.
+is refused here with no second edit to forget.
 
-**One question, and the other guard answers the rest.** Whether a path is the
+**The triager edits the checkout it was spawned in and nothing else.** The
+root is the checkout holding the event's `cwd`; a target outside it — a
+sibling worktree, another repository, a temp path — is refused, and so is
+any target when `cwd` is in no checkout. Inside it, the target is judged
+relative to that root against the patterns, both as spelled and as resolved.
+
+**Matching ignores case on every host.** Windows and macOS file systems do,
+so `readme.md` there is `README.md`; on a case-sensitive Linux file system
+this deliberately over-refuses a distinct file differing only in case, which
+is the safe direction for a boundary. For the same reason the trailing dots,
+spaces and `:stream` suffixes Windows drops are folded before matching.
+
+**One question, and another guard answers the rest.** Whether a path is the
 file it spells — a link, a junction, an alternate spelling — is
-`guard-edit-target.py`'s subject, wired session-wide in `settings.json` and so
-in force here too. This file asks only whether the target, read relative to
-the checkout that holds it, falls under one of those patterns; it asks it of
-the spelled path and of its resolution alike, and matches without regard to
-case, because the file system this runs on does too. A target in no checkout
-is refused outright: the triager edits the branch and nothing else.
+`guard-edit-target.py`'s subject, wired session-wide in `settings.json` and
+so in force here too.
 
-**It fails closed, like the dispatch guard and unlike the session-wide
-two.** An unreadable event, or a `ship.md` yielding no `Edit(...)` patterns,
-refuses the edit: a guard that cannot find its rules and admits everything is
-#27 again. Exit 2 is the only code that blocks a `PreToolUse` call.
+**It fails closed, like the dispatch guard and unlike the session-wide two.**
+An unreadable event, or a `ship.md` yielding no `Edit(...)` patterns, refuses
+the edit: a guard that cannot find its rules and admits everything is no
+boundary. Exit 2 is the only code that blocks a `PreToolUse` call.
 """
 import json
 import os
@@ -99,7 +103,7 @@ def compile_glob(glob):
 
 def checkout_root(path):
     """The nearest ancestor of `path` holding a `.git` entry, or `None`."""
-    current = path
+    current = os.path.abspath(path)
     while True:
         if os.path.exists(os.path.join(current, ".git")):
             return current
@@ -109,16 +113,16 @@ def checkout_root(path):
         current = parent
 
 
-def relative(path):
-    """`path` relative to its checkout, `/`-separated, or `None`."""
-    root = checkout_root(os.path.dirname(path))
-    if root is None:
+def relative(path, root):
+    """`path` relative to `root`, `/`-separated and folded, or `None`."""
+    try:
+        rel = os.path.relpath(path, root)
+    except ValueError:
+        # Another drive on Windows: no relative path exists.
         return None
-    rel = os.path.relpath(path, root).replace(os.sep, "/")
-    if rel == ".." or rel.startswith("../"):
+    rel = rel.replace(os.sep, "/")
+    if rel == "." or rel == ".." or rel.startswith("../"):
         return None
-    # Trailing dots and spaces are dropped by Windows, so `README.md.` is
-    # `README.md` there; an alternate data stream names the file it is on.
     parts = [part.rstrip(". ").split(":", 1)[0] for part in rel.split("/")]
     return "/".join(parts)
 
@@ -131,7 +135,7 @@ def refusal(reason):
                 "permissionDecision": "deny",
                 "permissionDecisionReason": (
                     f"the /review-grok triager {reason} "
-                    "(.claude/hooks/guard-triager-edit.py, #27)"),
+                    "(.claude/hooks/guard-triager-edit.py)"),
             }
         },
         sys.stdout,
@@ -172,12 +176,17 @@ def main():
     cwd = event.get("cwd")
     if not isinstance(cwd, str) or not cwd:
         cwd = os.getcwd()
+    root = checkout_root(cwd)
+    if root is None:
+        return refusal(f"edits inside its checkout only; cwd {cwd!r} is in "
+                       "no checkout")
     lexical = os.path.abspath(
         spelled if os.path.isabs(spelled) else os.path.join(cwd, spelled))
-    for target in (lexical, os.path.realpath(lexical)):
-        rel = relative(target)
+    for target, base in ((lexical, root),
+                         (os.path.realpath(lexical), os.path.realpath(root))):
+        rel = relative(target, base)
         if rel is None:
-            return refusal(f"edits inside a checkout only; refused {spelled!r}")
+            return refusal(f"edits inside {root!r} only; refused {spelled!r}")
         for glob, pattern in rules:
             if pattern.match(rel):
                 return refusal(

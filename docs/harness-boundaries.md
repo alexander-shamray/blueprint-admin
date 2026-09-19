@@ -101,8 +101,11 @@ argument is how a rule gets "corrected" back.
   every pattern that list holds and pins its wiring on the profile.
   **Unmeasured at runtime:** that this hook fires on `Edit` in a turn after
   `/ship`'s rests on the profile-hook mechanism the dispatch hook was
-  measured under, not on a probe of this one. A triager spawned a user message after `/ship`,
-  asked to edit `README.md`, is the measurement owed before Grok returns.
+  measured under, not on a probe of this one. The measurement owed before
+  Grok returns: spawn the triager in a turn after the one `/ship` was
+  loaded in, have it edit `README.md`, and see the hook refuse it. The
+  guard also refuses any target outside the checkout its event's `cwd`
+  stands in, so a sibling worktree or another repository is out of reach.
 - **`python -m unittest discover -s .claude/scripts -p 'test_*.py'` is the
   harness's own suite.** It reads `git ls-files`, so a new tracked root file
   or top-level tree fails it until somebody decides which side of the

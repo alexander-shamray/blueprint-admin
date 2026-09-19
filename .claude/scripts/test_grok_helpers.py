@@ -9990,15 +9990,13 @@ class TheTriagerDispatchesOnlyTheAdjudicator(unittest.TestCase):
 
 
 class TheTriagerEditsNothingShipDenies(unittest.TestCase):
-    """`/ship`'s `Edit(...)` denies bind the triager in every turn (#27).
+    """`/ship`'s `Edit(...)` denies bind the triager in every turn.
 
-    The frontmatter list lasts only the turn `/ship` was loaded in, and step 5
-    spawns the triager async, so a later round was measured writing into
-    `.github/` and editing `README.md`. The profile's own `PreToolUse` hook is
-    the boundary now; these cases run it through the launcher, as the harness
-    does, and read the patterns from `ship.md` rather than from a copy, so the
-    subject is the list the guard reads and a path added there is covered
-    here with no edit to this class.
+    The frontmatter list lasts only the turn `/ship` was loaded in, so the
+    profile's own `PreToolUse` hook is the boundary; these cases run it
+    through the launcher, as the harness does, and read the patterns from
+    `ship.md` rather than from a copy, so the subject is the list the guard
+    reads and a path added there is covered here with no edit to this class.
     """
 
     LAUNCHER = SCRIPTS.parent / "hooks" / "run-guard.sh"
@@ -10045,8 +10043,8 @@ class TheTriagerEditsNothingShipDenies(unittest.TestCase):
                 .replace("*", "x").replace("?", "x"))
 
     def test_the_list_it_reads_holds_the_two_trees_measured(self):
-        # The subject test for the source: the two targets #27 measured
-        # written must be in the list the guard reads, or every case below
+        # The subject test for the source: the trees the triager must never
+        # write have to be in the list the guard reads, or every case below
         # passes against the wrong file.
         denies = self.ship_denies()
         self.assertIn(".github/**", denies)
@@ -10086,7 +10084,25 @@ class TheTriagerEditsNothingShipDenies(unittest.TestCase):
 
     def test_a_target_in_no_checkout_is_refused(self):
         with tempfile.TemporaryDirectory() as outside:
-            self.assert_refused(self.edit(os.path.join(outside, "x.md"),
+            self.assert_refused(self.edit(os.path.join(outside, "x.md")))
+
+    def test_another_checkout_is_refused(self):
+        # The root is the checkout holding cwd, not the one holding the
+        # target: an ordinary path in a sibling checkout is still refused.
+        with tempfile.TemporaryDirectory() as other:
+            os.makedirs(os.path.join(other, ".git"))
+            for spelled in (os.path.join(other, "src", "x.py"),
+                            os.path.join(other, "docs", "x.md")):
+                with self.subTest(spelled=spelled):
+                    self.assert_refused(self.edit(spelled))
+            # The positive control: the same path from inside that checkout
+            # passes, so the refusal above is the anchor and nothing else.
+            self.assert_admitted(self.edit(
+                os.path.join(other, "docs", "x.md"), cwd=other))
+
+    def test_a_cwd_in_no_checkout_refuses_everything(self):
+        with tempfile.TemporaryDirectory() as outside:
+            self.assert_refused(self.edit(str(self.ROOT / "docs" / "x.md"),
                                           cwd=outside))
 
     def test_an_unreadable_event_blocks(self):
@@ -10098,7 +10114,7 @@ class TheTriagerEditsNothingShipDenies(unittest.TestCase):
 
     def test_a_ship_md_without_edit_denies_blocks(self):
         # Fail closed on the source: a guard that finds no rules and admits
-        # everything is #27 again.
+        # everything is no boundary.
         spec = importlib.util.spec_from_file_location("guard_triager_edit",
                                                       self.GUARD)
         module = importlib.util.module_from_spec(spec)
