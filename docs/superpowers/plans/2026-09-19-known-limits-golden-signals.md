@@ -456,6 +456,26 @@ public sealed class TelemetryHealthTests(AdminHostFactory factory) : IClassFixtu
     }
 
     [Fact]
+    public async Task The_datasource_list_is_asked_once_per_read_not_once_per_query()
+    {
+        // GrafanaClient caches a uid only once resolved and does not gate a resolve in flight, so
+        // seven cold queries fanned out together would each ask for the list; a Grafana with no
+        // Prometheus, which never resolves, would be asked seven times on every poll.
+        ScriptedHandler handler = new(request => request.RequestUri!.AbsolutePath == "/api/datasources"
+            ? FakeJson("""[{"uid":"loki","type":"loki"}]""")
+            : FakeJson(Vector()));
+        TelemetryHealthService health = new(new GrafanaClient(new HttpClient(handler), Options.Create(new AdminOptions())));
+
+        TelemetryHealthView first = await health.ReadAsync(Token);
+        TelemetryHealthView second = await health.ReadAsync(Token);
+
+        first.Reachable.ShouldBeFalse();
+        second.Reachable.ShouldBeFalse();
+        handler.Requests.Count(r => r.Request.RequestUri!.AbsolutePath == "/api/datasources").ShouldBe(2);
+        handler.Requests.Count.ShouldBe(2);
+    }
+
+    [Fact]
     public async Task The_endpoint_answers_the_recordings_in_FakePlatform_mode()
     {
         HttpClient client = factory.CreateClient();
@@ -583,14 +603,24 @@ public sealed class TelemetryHealthService(GrafanaClient grafana)
 {
     public async Task<TelemetryHealthView> ReadAsync(CancellationToken cancellationToken)
     {
-        PrometheusResult[] results = await Task.WhenAll(
-            grafana.InstantQueryAsync(GoldenSignals.RequestRate, cancellationToken),
+        // The first query runs alone: it resolves Prometheus's uid, which GrafanaClient caches once
+        // resolved but does not gate while resolving, so the six fanned out after it read the cache
+        // rather than each asking /api/datasources. A Grafana with no Prometheus stops here, asked once.
+        PrometheusResult first = await grafana.InstantQueryAsync(GoldenSignals.RequestRate, cancellationToken);
+
+        if (!first.Reachable)
+        {
+            return new TelemetryHealthView(false, first.Error, []);
+        }
+
+        PrometheusResult[] rest = await Task.WhenAll(
             grafana.InstantQueryAsync(GoldenSignals.ErrorRatio, cancellationToken),
             grafana.InstantQueryAsync(GoldenSignals.LatencyP99, cancellationToken),
             grafana.InstantQueryAsync(GoldenSignals.DomainRefusalRate, cancellationToken),
             grafana.InstantQueryAsync(GoldenSignals.UnauthorisedRate, cancellationToken),
             grafana.InstantQueryAsync(GoldenSignals.CommandP95, cancellationToken),
             grafana.InstantQueryAsync(GoldenSignals.QueryP95, cancellationToken));
+        PrometheusResult[] results = [first, .. rest];
 
         if (results.FirstOrDefault(r => !r.Reachable) is { } failed)
         {

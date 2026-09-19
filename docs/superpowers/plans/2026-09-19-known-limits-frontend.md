@@ -430,25 +430,19 @@ the only Playwright assertion is `stack.spec.ts`'s count, fixed in Step 9.
 
 - [ ] **Step 9: Update the Playwright stack smoke, then run it**
 
-In `src/Admin.Web/e2e/stack.spec.ts`, add after the import:
-
-```ts
-// The fake host lives for the whole run, and its client answers only while a
-// scripted npm start runs, so every test starts from a stopped frontend.
-test.beforeEach(async ({ request }) => {
-  const stopped = await request.post('/api/stack/frontend/stop');
-  expect([200, 409]).toContain(stopped.status());
-});
-```
-
-and in the first test replace
+In `src/Admin.Web/e2e/stack.spec.ts`, in the first test, replace
 `await expect(page.locator('.reachability span.up')).toHaveCount(7);` with:
 
 ```ts
-  await expect(page.locator('.reachability span.up')).toHaveCount(6);
-  await expect(page.locator('.reachability span.down')).toHaveCount(1);
-  await expect(page.locator('.reachability span.down')).toContainText('client down');
+  // The client chip is left out: it follows the fake's scripted npm start, which
+  // frontend.spec.ts starts and stops. Spec files run in parallel workers against
+  // one fake host, so this file neither asserts that state nor resets it.
+  await expect(page.locator('.reachability span.up', { hasNotText: 'client' })).toHaveCount(6);
 ```
+
+The client chip's two states are asserted in `frontend.spec.ts` (Task 4),
+the file that owns the frontend's state and already resets it before each
+test.
 
 Run (in `src/Admin.Web`): `npm run build; npm run e2e`
 Expected: PASS.
@@ -1188,6 +1182,44 @@ and after `stopFrontend()`:
     }
     <button class="frontend-install" [disabled]="frontendRunning() || installing() || unownedClient()" (click)="installFrontend()">Install (npm ci)</button>
     <button class="frontend-start" [disabled]="frontendRunning() || installing() || unownedClient() || !s.frontend.installed" (click)="startFrontend()">Start frontend</button>
+```
+
+and after the existing `@if (s.frontend.job) { … Show output … }` block,
+the same for the install job, so a failed `npm ci` stays readable after the
+screen is left and reopened, as a failed `npm start` does:
+
+```html
+    @if (s.frontend.install) {
+      <button class="frontend-install-output" (click)="showInstallOutput()">Show npm ci output</button>
+    }
+```
+
+`stack-page.ts` — after `showFrontendOutput()`:
+
+```ts
+  showInstallOutput(): void {
+    const id = this.stack()?.frontend.install?.id;
+    if (id) {
+      this.jobId.set(id);
+    }
+  }
+```
+
+and in `stack-page.spec.ts`, inside `describe('reference client')` after
+"opens the output of the last job on Show output", using the `installJob`
+fixture Step 1 adds:
+
+```ts
+    it('reopens a failed npm ci output from a freshly created screen', async () => {
+      host.stack.mockReturnValue(
+        of({ ...stack, frontend: { job: null, installed: false, install: { ...installJob, state: 'Exited', exitCode: 1 } } }),
+      );
+      const { fixture, q } = await render();
+
+      q('button.frontend-install-output')!.click();
+
+      expect(fixture.componentInstance.jobId()).toBe(installJob.id);
+    });
 ```
 
 - [ ] **Step 5: Run the SPA checks**

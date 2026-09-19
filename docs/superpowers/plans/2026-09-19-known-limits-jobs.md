@@ -756,6 +756,18 @@ Add, before the closing `});`:
     expect(sseFollow).not.toHaveBeenCalled();
   });
 
+  it('a stream that fails ends the host job it was reading, and keeps its own error', () => {
+    host.stopFollow.mockReturnValueOnce(throwError(() => new Error('host gone')));
+    const fixture = TestBed.createComponent(LogsPage);
+    fixture.componentInstance.follow();
+
+    events.error(new Error('stream dropped'));
+
+    expect(host.stopFollow).toHaveBeenCalledWith('logs-1');
+    expect(fixture.componentInstance.error()).toBe('stream dropped');
+    expect(fixture.componentInstance.following()).toBe(false);
+  });
+
   it('a job that has exited is not stopped again', () => {
     const fixture = TestBed.createComponent(LogsPage);
     fixture.componentInstance.follow();
@@ -771,7 +783,7 @@ Add, before the closing `});`:
 
 Run: `bash .claude/scripts/npm-checks.sh all`
 Expected: lint and the build fail on `stopFollow`, which does not exist on
-`HostClient`. Once the method exists, the five new page tests fail on
+`HostClient`. Once the method exists, the six new page tests fail on
 `stopFollow` never being called or on the Follow button never disabling,
 and so do the four rewritten ones.
 
@@ -873,11 +885,15 @@ Replace the constructor, `follow()` and `stop()`:
           this.requestOut.set(false);
           this.pending.set(false);
           this.following.set(false);
+          // A stream that failed leaves a job this screen can neither show nor, with Stop disabled,
+          // end: it is the unread logs -f of leaving the screen, and ends the same way.
+          this.stopOnHost();
         },
         complete: () => {
           this.requestOut.set(false);
           this.pending.set(false);
           this.following.set(false);
+          this.stopOnHost();
         },
       });
   }
@@ -909,12 +925,15 @@ Add, before `describeError`:
     this.following.set(false);
   }
 
-  /** Not tied to this screen's lifetime: it must still reach the host while the screen is being left. */
+  /**
+   * Not tied to this screen's lifetime: it must still reach the host while the screen is being left.
+   * Its own failure does not replace an error already shown, which is the one that explains the state.
+   */
   private stopOnHost(): void {
     const id = this.jobId;
     this.jobId = null;
     if (id) {
-      this.host.stopFollow(id).subscribe({ error: (e: unknown) => this.error.set(this.describeError(e)) });
+      this.host.stopFollow(id).subscribe({ error: (e: unknown) => this.error.set(this.error() ?? this.describeError(e)) });
     }
   }
 ```
