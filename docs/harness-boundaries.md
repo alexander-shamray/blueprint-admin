@@ -26,7 +26,8 @@ argument is how a rule gets "corrected" back.
 - **`.claude/settings.json` self-locks, not instantaneously** — a change to
   it lands complete and goes last, and a restore is verified by reading the
   file, never by trying what it forbids.
-- **The two hooks use `run-guard.sh`**, which locates a compatible Python
+- **Every hook uses `run-guard.sh`** — the two in `settings.json` and the
+  `review-grok-triager` profile's own — which locates a compatible Python
   launcher before invoking the guard.
 - **`.claude/skills/**` is a grant surface.** A skill's `allowed-tools` is
   auto-approval, so a session that can rewrite `SKILL.md` widens the next
@@ -57,18 +58,32 @@ argument is how a rule gets "corrected" back.
   end it — while the same load inside a `general-purpose` agent left `Bash`
   working there, and the parent's `Bash` in the same turn was unaffected
   (#19). So on that path the push is safe and the triage would read an
-  untrusted review holding a shell; no other agent type was measured, and
-  a bare `Agent` may select one. The **proposed** boundary is the agent's
-  own profile: a `.claude/agents/` type whose `tools:` omits `Bash`,
-  granted by exact type with the broad ones denied as `security-sweep.md`
-  does — `allowed-tools` is not a whitelist, and none of this repository's
-  read-only profiles can apply fixes. It is proposed rather than proven:
-  whether a profile's `tools:` holds when its agent loads a skill is still
-  unmeasured. Both the profile and that measurement are **required before
-  Grok is re-enabled** (#19).
-  `test_the_triage_that_denies_bash_runs_apart_from_the_push` pins the deny
-  and the agent dispatch; it pins no runtime behaviour, and no profile
-  exists yet.
+  untrusted review holding a shell.
+- **So the triage runs under a profile of its own, and `/ship` says what a
+  profile cannot.** Step 5 grants exactly `Agent(review-grok-triager)`,
+  whose `tools:` — an allowlist — holds no `Bash` and no `Skill`; it reads
+  `review-grok.md` rather than loading it, so the skill load measured
+  above never happens there. Two rules cannot live in `tools:`. A type
+  list inside a subagent's `Agent` grant is ignored, so the profile's own
+  `PreToolUse` hook, `guard-triager-dispatch.py`, admits `review-adjudicator`
+  and refuses every other dispatch — the triager itself included, which
+  `/ship` grants and so cannot deny. And a path in a profile's
+  `disallowedTools` removes the whole tool, so every `Edit(...)`
+  `/review-grok` states is in `/ship`'s own `disallowed-tools`, beside the
+  broad agent types; that list reaches the agents a command spawns, as
+  `review-grok.md` records of its adjudicator.
+  `CommandsEnforceTheEditingBoundariesTheyState` pins the profile, the
+  grant and both deny lists, and reads `.claude/agents/` on every run, so
+  a new profile fails each exact grant that does not deny it;
+  `TheTriagerDispatchesOnlyTheAdjudicator` runs the hook through the
+  launcher and pins its wiring on the profile. Neither pins runtime
+  behaviour: that the allowlist holds and the hook runs is Claude Code's
+  documented behaviour rather than a measurement here, because profiles
+  register at session start and the session that wrote this one could not
+  spawn it; and that `/ship`'s deny list reaches the triager is carried
+  over from the `/review-grok`→adjudicator pair, not measured for this
+  one. Measuring all three is **required before Grok is re-enabled**
+  (#23).
 - **`python -m unittest discover -s .claude/scripts -p 'test_*.py'` is the
   harness's own suite.** It reads `git ls-files`, so a new tracked root file
   or top-level tree fails it until somebody decides which side of the
