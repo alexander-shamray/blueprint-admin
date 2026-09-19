@@ -26,7 +26,8 @@ argument is how a rule gets "corrected" back.
 - **`.claude/settings.json` self-locks, not instantaneously** — a change to
   it lands complete and goes last, and a restore is verified by reading the
   file, never by trying what it forbids.
-- **The two hooks use `run-guard.sh`**, which locates a compatible Python
+- **Every hook uses `run-guard.sh`** — the two in `settings.json` and the
+  `review-grok-triager` profile's own — which locates a compatible Python
   launcher before invoking the guard.
 - **`.claude/skills/**` is a grant surface.** A skill's `allowed-tools` is
   auto-approval, so a session that can rewrite `SKILL.md` widens the next

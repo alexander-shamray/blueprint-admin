@@ -9,8 +9,7 @@ reaches the agents it spawns and refuses the broad built-in types by name, but
 it cannot refuse `review-grok-triager` itself, because that is the one type
 `/ship` grants. So the triager could spawn another triager: an editing agent
 dispatched by one that has been reading an untrusted review, which is the
-shape the split between adjudication and application exists to refuse. Raised
-by Copilot on PR #22.
+shape the split between adjudication and application exists to refuse.
 
 **So the rule is one comparison, and it is wired only where it applies.** This
 hook sits in the triager profile's own `hooks:`, not in `settings.json`, so it

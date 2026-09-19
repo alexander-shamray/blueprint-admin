@@ -5297,7 +5297,7 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
                 for item in line.split(",") if item.strip()]
 
     def test_the_triage_runs_under_a_profile_that_holds_no_shell(self):
-        # #19. Inside an agent a command's frontmatter is not applied, so the
+        # Inside an agent a command's frontmatter is not applied, so the
         # triage's no-shell boundary on /ship's path is this profile's own
         # `tools:` allowlist. `Skill` is refused beside `Bash` because a
         # skill loaded by the agent is exactly the load that was measured to
@@ -9911,8 +9911,8 @@ class TestCodebaseIndexSkillGrants(unittest.TestCase):
 class TheTriagerDispatchesOnlyTheAdjudicator(unittest.TestCase):
     """`review-grok-triager` holds `Agent`, and the type list is ignored.
 
-    `/ship` grants the triager and so cannot deny it, which left the triager
-    free to spawn another editing triager (PR #22, Copilot). The profile's own
+    `/ship` grants the triager and so cannot deny it, so no deny list stops
+    the triager spawning another editing triager. The profile's own
     `PreToolUse` hook is the rule; these cases run it through the launcher,
     exactly as the harness does, and pin the wiring that makes it the
     profile's rather than the session's.
