@@ -18,7 +18,7 @@ Open pull requests and the branches behind them.
 
 | Task | PR | Branch |
 |---|---|---|
-| Record that an agent discards `/review-grok`'s deny rather than scoping it | [#20](https://github.com/alexander-shamray/blueprint-admin/pull/20) | `docs/agent-deny-measured` |
+| Run the `/review-grok` triage under a profile that holds no shell; closes [#19](https://github.com/alexander-shamray/blueprint-admin/issues/19) | [#22](https://github.com/alexander-shamray/blueprint-admin/pull/22) | `chore/review-grok-agent-profile` |
 
 ## Remaining
 
@@ -26,4 +26,5 @@ Open issues with no PR yet, highest severity first.
 
 | Task | Issue | Severity |
 |---|---|---|
-| A dedicated agent profile for the `/review-grok` triage before the Grok loop is re-enabled | [#19](https://github.com/alexander-shamray/blueprint-admin/issues/19) | high |
+| Measure the `review-grok-triager` profile at runtime before the Grok loop is re-enabled | [#23](https://github.com/alexander-shamray/blueprint-admin/issues/23) | high |
+| File a Claude Code feature request for a configurable terminal tab title | [#24](https://github.com/alexander-shamray/blueprint-admin/issues/24) | low |
