@@ -10,11 +10,12 @@ Work through the review at $1 — a file path. **With no argument, the review is
 verdict**: the output of `bash .claude/scripts/pr-locality.sh <n>` saved to a
 file by the caller — `/ship` writes it beside the review before dispatching
 here — one `class` line and one `inside <path>` or `outside <path>` line per
-changed file. This invocation holds no `Bash` and cannot produce it; it reads
-it, and step 4 applies an accepted site only at a path the verdict marks
-`inside`. With no second argument, or a file the helper left empty because the
-body carried neither row, the bound is unknown, every accepted site is applied
-as before, and the report says the bound was not available. $3, when given, is
+changed file. Run inline, this invocation holds no `Bash` and cannot produce
+it; it reads it, and step 4 applies an accepted site only at a path the
+verdict marks `inside`. With no second argument, or a file the helper left
+empty because the body carried neither row, the bound is unknown, every
+accepted site is applied as before, and the report says the bound was not
+available. $3, when given, is
 the **branch diff** against `main`, written by the caller the same way; the
 adjudicator reads it to tell a restatement the branch wrote — a finding — from
 one it left alone, and without it returns each row that needed it as `decision`
@@ -104,6 +105,14 @@ Save it to a file and name the path.
 > for a flood, and the link check to a property of this repository stated
 > below — and the globally allowed `git diff --no-index` is gone from here
 > with the rest. Nothing this invocation can run takes a redirect.
+>
+> **Every no-`Bash` claim in this file is an inline claim (#19).** Loaded
+> inside a `general-purpose` agent — the one type measured — this
+> frontmatter's `Bash` deny is not applied (`docs/harness-boundaries.md`),
+> so an agent-path run cannot be assumed shell-free. The dedicated profile
+> #19 owes is the proposed boundary there, pending a measurement that a
+> profile's own `tools:` holds when its agent loads a skill; until both
+> exist, `/ship` step 5 stays disabled.
 
 **This command triages a review that already ran; it does not invoke Grok and
 consumes no Grok usage.** So the usage-limit preflight (skip when out of limits)

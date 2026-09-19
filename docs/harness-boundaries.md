@@ -45,20 +45,30 @@ argument is how a rule gets "corrected" back.
   again. A terminal, read-only command — the two sweeps — keeps its deny,
   because nothing pushes after it.
 - **`/review-grok` is the one chained command that cannot follow that rule,
-  so `/ship` step 5 runs it inside an `Agent` instead.** Its bare `Bash`
-  deny is its boundary — it reads an untrusted review holding `Edit` — and
-  run inline, under the same turn-wide lifetime, it would refuse every
+  so `/ship` step 5 runs it inside an `Agent` instead.** Run inline, its
+  bare `Bash` deny is its boundary — it reads an untrusted review holding
+  `Edit` — and under the same turn-wide lifetime it would also refuse every
   command step 5 runs after it: the checks, `/commit` and the push. The
-  deny stays and the triage moves. That an agent's frontmatter deny ends
-  with the agent is **inferred, not measured** — Grok is disabled, so the
-  path has not run; measure it when the loop comes back. **Nor is the
-  agent's type bound yet**: `allowed-tools` is not a whitelist, so a bare
-  `Agent` admits a broad built-in type, and none of this repository's
-  read-only profiles can apply fixes. A dedicated profile, granted by exact
-  type with the broad ones denied as `security-sweep.md` does, is owed before
-  re-enabling (#19).
-  `test_the_triage_that_denies_bash_runs_apart_from_the_push` pins both
-  halves.
+  deny stays and the triage moves.
+- **On the one agent type measured, the agent keeps the deny off the push
+  by discarding it, so the agent alone is not the boundary.** Measured:
+  `/review-grok` loaded through the Skill tool in the main session removed
+  `Bash` until the next user message — background notifications did not
+  end it — while the same load inside a `general-purpose` agent left `Bash`
+  working there, and the parent's `Bash` in the same turn was unaffected
+  (#19). So on that path the push is safe and the triage would read an
+  untrusted review holding a shell; no other agent type was measured, and
+  a bare `Agent` may select one. The **proposed** boundary is the agent's
+  own profile: a `.claude/agents/` type whose `tools:` omits `Bash`,
+  granted by exact type with the broad ones denied as `security-sweep.md`
+  does — `allowed-tools` is not a whitelist, and none of this repository's
+  read-only profiles can apply fixes. It is proposed rather than proven:
+  whether a profile's `tools:` holds when its agent loads a skill is still
+  unmeasured. Both the profile and that measurement are **required before
+  Grok is re-enabled** (#19).
+  `test_the_triage_that_denies_bash_runs_apart_from_the_push` pins the deny
+  and the agent dispatch; it pins no runtime behaviour, and no profile
+  exists yet.
 - **`python -m unittest discover -s .claude/scripts -p 'test_*.py'` is the
   harness's own suite.** It reads `git ls-files`, so a new tracked root file
   or top-level tree fails it until somebody decides which side of the
