@@ -21,11 +21,22 @@
 # holder ran is seen there, and a mark made after it comes from a call that
 # then finds the lock free and takes it itself.
 #
-# **A lock is taken over only when it is older than ten minutes AND its holder
-# is gone** — `kill -0` on the PID the token leads with fails, or no token was
-# ever written. Left, a killed holder's lock would stop every later refresh
-# without a sound; but age alone would also displace a live holder inside a
-# slow `update` and start a second one beside it, so age is only when to ask.
+# **A lock is taken over on one of three conditions, and never on age alone
+# while its holder is working.** Left, a dead holder's lock would stop every
+# later refresh without a sound; taken too eagerly, a second `update` would
+# start beside a live one.
+#
+#   owner published, PID dead           — now, whatever its age: waiting would
+#                                         strand the last edit, whose own call
+#                                         found the lock held and has gone
+#   owner published, lock over an hour  — a lease: a holder makes at most three
+#                                         attempts, so one alive after an hour
+#                                         is hung, and its PID may be a reused
+#                                         one that would otherwise hold for ever
+#   no owner, lock over ten minutes     — its holder died between `mkdir` and
+#                                         publishing the token, a window of two
+#                                         statements
+#
 # `kill -0` was measured across separately launched shells on Git for Windows:
 # alive while the holder runs, dead once it and any orphaned child are gone.
 # The takeover is a rename, which only one caller can win.
@@ -64,13 +75,16 @@ refresh() {
   CBX_NO_SKILL_AUTO_UPDATE=1 codebase-index update
 }
 
-stale=$(find "$lock" -prune -type d -mmin +10 2>/dev/null)
-if [ -n "$stale" ]; then
-  holder=$(cat "$lock/owner" 2>/dev/null)
-  if [ -z "$holder" ] || ! kill -0 "${holder%%.*}" 2>/dev/null; then
-    mv "$lock" "$lock.stale.$token" 2>/dev/null &&
-      rm -rf "$lock.stale.$token"
-  fi
+take=
+holder=$(cat "$lock/owner" 2>/dev/null)
+if [ -n "$holder" ]; then
+  kill -0 "${holder%%.*}" 2>/dev/null || take=dead
+  [ -z "$(find "$lock" -prune -type d -mmin +60 2>/dev/null)" ] || take=expired
+elif [ -n "$(find "$lock" -prune -type d -mmin +10 2>/dev/null)" ]; then
+  take=unowned
+fi
+if [ -n "$take" ] && mv "$lock" "$lock.stale.$token" 2>/dev/null; then
+  rm -rf "$lock.stale.$token"
 fi
 
 : > "$pending"

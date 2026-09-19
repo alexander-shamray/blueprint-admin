@@ -241,11 +241,11 @@ class TheRefresh(unittest.TestCase):
             time.sleep(0.1)
         raise AssertionError("the holder shell never wrote its PID")
 
-    def old_lock(self, token):
+    def old_lock(self, token, minutes=30):
         lock = self.cache / "refresh.lock"
         lock.mkdir()
         (lock / "owner").write_text(token + "\n", encoding="utf-8")
-        old = time.time() - 3600
+        old = time.time() - minutes * 60
         os.utime(lock, (old, old))
         return lock
 
@@ -265,6 +265,23 @@ class TheRefresh(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual([f"{guard_value()} update"], self.calls())
         self.assertEqual([], sorted(p.name for p in self.cache.iterdir()))
+
+    def test_a_young_lock_whose_holder_is_gone_is_taken_back_at_once(self):
+        # Waiting for the lock to age would strand this call's edit: it is the
+        # last one, and nothing else comes back for it.
+        self.old_lock(self.holder_token(alive=False), minutes=0)
+        result = self.run_refresh()
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual([f"{guard_value()} update"], self.calls())
+        self.assertEqual([], sorted(p.name for p in self.cache.iterdir()))
+
+    def test_a_lock_past_its_lease_is_taken_back_even_if_its_pid_is_alive(self):
+        # A live PID on a two-hour-old lock is a hung holder or a reused PID;
+        # either way, honouring it would stop every refresh for good.
+        self.old_lock(self.holder_token(alive=True), minutes=120)
+        result = self.run_refresh()
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual([f"{guard_value()} update"], self.calls())
 
     def test_a_holder_taken_over_as_stale_leaves_its_successors_lock(self):
         # A holder that outlasted the threshold returns to find a successor's
