@@ -51,7 +51,12 @@ argument is how a rule gets "corrected" back.
   command step 5 runs after it: the checks, `/commit` and the push. The
   deny stays and the triage moves. That an agent's frontmatter deny ends
   with the agent is **inferred, not measured** — Grok is disabled, so the
-  path has not run; measure it when the loop comes back.
+  path has not run; measure it when the loop comes back. **Nor is the
+  agent's type bound yet**: `allowed-tools` is not a whitelist, so a bare
+  `Agent` admits a broad built-in type, and none of this repository's
+  read-only profiles can apply fixes. A dedicated profile, granted by exact
+  type with the broad ones denied as `security-sweep.md` does, is owed before
+  re-enabling (#19).
   `test_the_triage_that_denies_bash_runs_apart_from_the_push` pins both
   halves.
 - **`python -m unittest discover -s .claude/scripts -p 'test_*.py'` is the
