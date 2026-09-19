@@ -495,6 +495,38 @@ public sealed class TelemetryHealthTests(AdminHostFactory factory) : IClassFixtu
     }
 
     [Fact]
+    public async Task A_cold_read_that_succeeds_asks_the_datasource_list_once_for_all_seven_queries()
+    {
+        // The case above never reaches the fan-out: with no Prometheus it stops after the first query.
+        // This one does, and the six fanned-out queries must read the uid the first one cached.
+        // Counted in the script rather than through ScriptedHandler.Requests, a plain List that the
+        // fan-out may add to from more than one thread.
+        int listRequests = 0;
+        int queryRequests = 0;
+        TelemetryHealthService health = new(new GrafanaClient(
+            new HttpClient(new ScriptedHandler(request =>
+            {
+                if (request.RequestUri!.AbsolutePath == "/api/datasources")
+                {
+                    Interlocked.Increment(ref listRequests);
+
+                    return FakeJson(Datasources);
+                }
+
+                Interlocked.Increment(ref queryRequests);
+
+                return FakeJson(Vector());
+            })),
+            Options.Create(new AdminOptions())));
+
+        TelemetryHealthView view = await health.ReadAsync(Token);
+
+        view.Reachable.ShouldBeTrue();
+        queryRequests.ShouldBe(7);
+        listRequests.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task The_endpoint_answers_the_recordings_in_FakePlatform_mode()
     {
         HttpClient client = factory.CreateClient();

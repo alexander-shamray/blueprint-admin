@@ -905,6 +905,20 @@ Add, before the closing `});`:
     expect(host.stopFollow.mock.calls.map((c) => c[0])).toEqual(['logs-1', 'logs-1']);
   });
 
+  it('a late failure to stop the previous job is not shown against the next follow', () => {
+    const stopA = new Subject<void>();
+    host.stopFollow.mockReturnValueOnce(stopA.asObservable());
+    host.followLogs.mockReturnValueOnce(of(summary('job-a'))).mockReturnValueOnce(of(summary('job-b')));
+    const fixture = TestBed.createComponent(LogsPage);
+    fixture.componentInstance.follow();
+    fixture.componentInstance.follow();
+
+    stopA.error(new Error('host gone'));
+
+    expect(fixture.componentInstance.error()).toBeNull();
+    expect(fixture.componentInstance.hostJob()).toBe('job-b');
+  });
+
   it('a slow stop of the previous job does not forget the next one', () => {
     const stopA = new Subject<void>();
     host.stopFollow.mockReturnValueOnce(stopA.asObservable());
@@ -933,7 +947,7 @@ Add, before the closing `});`:
 
 Run: `bash .claude/scripts/npm-checks.sh all`
 Expected: lint and the build fail on `stopFollow`, which does not exist on
-`HostClient`. Once the method exists, the eleven new page tests fail on
+`HostClient`. Once the method exists, the twelve new page tests fail on
 `stopFollow` never being called or on the Follow button never disabling,
 and so do the four rewritten ones.
 
@@ -1115,7 +1129,11 @@ Add, before `describeError`:
       },
       error: (e: unknown) => {
         release();
-        this.error.set(this.error() ?? this.describeError(e));
+        // Only while this job is still the one held and no follow has been asked for since: a late
+        // failure to stop the previous job is not news about the follow that replaced it.
+        if (this.hostJob() === id && !this.requestOut()) {
+          this.error.set(this.error() ?? this.describeError(e));
+        }
       },
     });
   }
@@ -1350,6 +1368,28 @@ lines with:
   await expect
     .poll(async () => ((await (await page.request.get(`/api/jobs/${id}`)).json()) as { summary: { state: string } }).summary.state)
     .toBe('Exited');
+```
+
+Then append a second test, for the other promise — leaving the screen ends
+the follow too:
+
+```ts
+test('leaving the logs screen ends the host follow it started', async ({ page }) => {
+  await page.goto('/logs');
+  await page.getByLabel('gateway', { exact: true }).check();
+  const followed = page.waitForResponse((r) => r.url().endsWith('/api/logs/follow') && r.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Follow' }).click();
+  const { id } = (await (await followed).json()) as { id: string };
+  await expect(page.locator('.live')).toBeVisible();
+
+  // The shell's link, not page.goto: a reload would end the page without running its teardown.
+  await page.getByRole('link', { name: 'Stack' }).click();
+  await expect(page).toHaveURL(/\/stack$/);
+
+  await expect
+    .poll(async () => ((await (await page.request.get(`/api/jobs/${id}`)).json()) as { summary: { state: string } }).summary.state)
+    .toBe('Exited');
+});
 ```
 
 - [ ] **Step 2: Extend the Broker smoke**
