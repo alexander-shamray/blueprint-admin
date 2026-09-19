@@ -927,14 +927,18 @@ same argument as never calling a branch clean because asking failed.
       convergence from a lull, and a Grok recheck of nothing costs a few
       minutes. Present → run `bash .claude/scripts/pr-locality.sh <n>`
       and `git diff origin/main...HEAD`, write each output to a scratchpad
-      file with `Write`, and run `/review-grok` with the review's path,
-      the verdict's and the diff's — the triage holds no `Bash` and cannot
-      judge the touch set or read the diff itself; without the verdict it
-      applies every accepted site, which is the widening the contract
-      refuses, and without the diff its adjudicator cannot tell a
+      file with `Write`, and run `/review-grok` **inside an `Agent`** with
+      the review's path, the verdict's and the diff's — the triage holds no
+      `Bash` and cannot judge the touch set or read the diff itself; without
+      the verdict it applies every accepted site, which is the widening the
+      contract refuses, and without the diff its adjudicator cannot tell a
       restatement the branch wrote from one it left alone. `/review-grok`
       triages and fixes — **its tool grant deliberately stops short of
-      committing**. Then rerun the step 2 checks that apply to what it
+      committing**. The agent is what keeps that grant its own: a
+      frontmatter deny lasts the rest of the turn it loads in
+      (`docs/harness-boundaries.md`), so run inline its bare `Bash` deny
+      would refuse every command below, the push included. Then rerun the
+      step 2 checks that apply to what it
       changed: a review fix is still an edit, and committing it unchecked
       hands the next reviewer a broken branch. Then `/commit` **scoped to
       the paths the triage touched** — `suggestions.md` is still on disk
@@ -1279,13 +1283,15 @@ same argument as never calling a branch clean because asking failed.
       `/review-copilot` **paused at its marker step**: let it
       triage and fix, then — because its tool grant cannot commit, and a
       `done` marker claims a committed fix — rerun the applicable step 2
-      checks, `/commit` **scoped to the paths the triage touched**, and only
-      then let it post its markers and resolve the threads. The scope is
-      load-bearing, not habit: after a mid-cycle limits skip,
-      `suggestions.md` is still on disk through this loop, and the unscoped
-      form sweeps untracked files — committing the review record is exactly
-      what the resume table forbids. Push the branch by name so the next
-      request reviews the fixed state, and go back to (1).
+      checks, `/commit` **scoped to the paths the triage touched**, push the
+      branch by name, and only then let it post its markers and resolve the
+      threads. The scope is load-bearing, not habit: after a mid-cycle
+      limits skip, `suggestions.md` is still on disk through this loop, and
+      the unscoped form sweeps untracked files — committing the review record
+      is exactly what the resume table forbids. The push comes before the
+      markers for the reason `/review-copilot` gives: `done` names a commit,
+      and one that is not on the remote is a claim the reviewer cannot check.
+      The same push is what the next request reviews; then go back to (1).
 
    **This loop does not share step 5's stopping condition, and the asymmetry
    is the point rather than an oversight.** It ends on the **first** clean
