@@ -18,9 +18,11 @@ already goes through it: the picker, the token lookup, the proxy's
 validation and the catalog's document fetch. `ApiCatalog.BearerAsync` loses
 the fallback that only a list without demo could reach.
 
-**Tech Stack:** as phase 5: .NET SDK 10.0.302, C# 14, minimal APIs, xunit.v3,
-Shouldly, `Microsoft.AspNetCore.Mvc.Testing`; Angular 22.1.x standalone with
-signals, Vitest via `ng test`, Playwright 1.63. No new packages.
+**Tech Stack:** as phase 5: the .NET SDK `global.json` pins, minimal APIs,
+xunit.v3, Shouldly, `Microsoft.AspNetCore.Mvc.Testing`; Angular standalone
+with signals, Vitest via `ng test`, Playwright. Versions are
+`global.json`'s, `Directory.Packages.props`' and
+`src/Admin.Web/package.json`'s, not this plan's. No new packages.
 
 **Spec:** `docs/superpowers/specs/2026-09-14-blueprint-admin-design.md`:
 §2.4 (identities), §5.1 (the `Users` row), §5.6 (Identity), §6 (the API
@@ -133,7 +135,7 @@ keeps the root injector. `page.goto` would reload and clear it.
 
 ## Global Constraints
 
-- .NET SDK pinned to `10.0.302` with `rollForward: disable`.
+- .NET SDK pinned by `global.json` with `rollForward: disable`.
   `TreatWarningsAsErrors`; IDE0055, IDE0065, IDE0161 fail the build. **No
   column alignment** of `=` or `=>`. No `#pragma`.
 - Every `.cs` file is CRLF. The Write tool emits LF, so after creating or

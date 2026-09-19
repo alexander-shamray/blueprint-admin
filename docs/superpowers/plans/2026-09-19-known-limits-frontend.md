@@ -18,10 +18,12 @@ scripted `npm start` runs, which is what a real `ng serve` does with its port �
 without that, every fake Start would now be refused. The SPA adds an Install
 button, the install job's state, and a warning when an unowned client answers.
 
-**Tech Stack:** as phase 5 — .NET SDK 10.0.302, C# 14, minimal APIs,
+**Tech Stack:** as phase 5 — the .NET SDK `global.json` pins, minimal APIs,
 `System.Text.Json` (no new packages), xunit.v3, Shouldly,
-`Microsoft.AspNetCore.Mvc.Testing`; Angular 22.1.x, Vitest via `ng test`,
-Playwright 1.63.
+`Microsoft.AspNetCore.Mvc.Testing`; Angular standalone, Vitest via
+`ng test`, Playwright. Versions are `global.json`'s,
+`Directory.Packages.props`' and `src/Admin.Web/package.json`'s, not this
+plan's.
 
 **Spec:** `docs/superpowers/specs/2026-09-14-blueprint-admin-design.md` —
 §1 (property 1: the console runs the platform's own commands), §2.1 (the
@@ -112,7 +114,7 @@ in `Program.cs`), so it is transient; `FrontendSupervisor` is a singleton.
 
 ## Global Constraints
 
-- .NET SDK pinned to `10.0.302` with `rollForward: disable`.
+- .NET SDK pinned by `global.json` with `rollForward: disable`.
   `TreatWarningsAsErrors`; IDE0055, IDE0065, IDE0161 fail the build. **No
   column alignment** of `=` or `=>`. No `#pragma`.
 - Every `.cs` file is CRLF. The Write tool emits LF, so after creating or

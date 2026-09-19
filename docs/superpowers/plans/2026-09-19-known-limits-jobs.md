@@ -16,10 +16,12 @@ exposed as `POST /api/logs/follow/{id}/stop`. `ProcessSpec` gains an init-only
 endpoint from Stop and from its destroy hook. The Broker page's auto-refresh
 tick becomes a `refresh()`.
 
-**Tech Stack:** as phase 5: .NET SDK 10.0.302, C# 14, minimal APIs, xunit.v3,
-Shouldly, `Microsoft.AspNetCore.Mvc.Testing`,
-`Microsoft.Extensions.Time.Testing`; Angular 22.1.6, Vitest 4.1.11 via
-`ng test`, Playwright 1.63.0. No new packages.
+**Tech Stack:** as phase 5: the .NET SDK `global.json` pins, minimal APIs,
+xunit.v3, Shouldly, `Microsoft.AspNetCore.Mvc.Testing`,
+`Microsoft.Extensions.Time.Testing`; Angular standalone, Vitest via
+`ng test`, Playwright. Versions are `global.json`'s,
+`Directory.Packages.props`' and `src/Admin.Web/package.json`'s, not this
+plan's. No new packages.
 
 **Spec:** `docs/superpowers/specs/2026-09-14-blueprint-admin-design.md`:
 - §5.2: jobs, the registry and the trim past 50.
@@ -161,7 +163,7 @@ The plan index is `2026-09-19-known-limits-index.md`.
 
 ## Global Constraints
 
-- .NET SDK pinned to `10.0.302` with `rollForward: disable`.
+- .NET SDK pinned by `global.json` with `rollForward: disable`.
   `TreatWarningsAsErrors`; IDE0055, IDE0065 and IDE0161 fail the build.
   **No column alignment** of `=` or `=>`. No `#pragma`.
 - Every `.cs` file is CRLF. The Write tool emits LF, so after creating or
@@ -225,6 +227,7 @@ spec §5.2/§5.3/§5.10/§6, README.md                         Task 5
 - Modify: `src/Admin.Host/Jobs/JobRegistry.cs:5-26`
 - Modify: `src/Admin.Host/Compose/ComposeService.cs:19-26,103`
 - Modify: `src/Admin.Host/Fakes/FakeProcessRunner.cs` (a `LastStarted` seam)
+- Modify: `src/Admin.Host/Jobs/Job.cs:6-12` (the class summary)
 - Test: `tests/Admin.Host.Tests/Jobs/JobRegistryTests.cs`
 - Test: `tests/Admin.Host.Tests/Compose/ComposeServiceTests.cs`
 - Test: `tests/Admin.Host.Tests/Fakes/FakePlatformTests.cs`
@@ -390,6 +393,17 @@ In `src/Admin.Host/Compose/ComposeService.cs`, `Exec` and the `ps` in
     private ProcessSpec Spec(string[] args) => new("docker", ["compose", "-f", paths.ComposeFile, .. args], paths.BackendDir);
 ```
 
+In `Job.cs`, the class summary says one-shot and long-running commands are
+one type "so that every command's output is visible the same way", which
+stops being true of the reads. Replace its second and third lines with:
+
+```csharp
+/// and a channel per live follower. One-shot commands and long-running ones
+/// are the same type, so every listed command's output is visible the same way
+/// by id; a read the registry does not keep (ProcessSpec.Listed) reaches a
+/// screen only as the view its caller parses.
+```
+
 - [ ] **Step 5: Give the tests the jobs the registry no longer keeps**
 
 Four `ComposeServiceTests` cases prove a cancelled or timed-out read was
@@ -457,7 +471,7 @@ starts, listed or not.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/Admin.Host/Jobs/ProcessSpec.cs src/Admin.Host/Jobs/JobRegistry.cs src/Admin.Host/Compose/ComposeService.cs src/Admin.Host/Fakes/FakeProcessRunner.cs tests/Admin.Host.Tests/Jobs/JobRegistryTests.cs tests/Admin.Host.Tests/Compose/ComposeServiceTests.cs tests/Admin.Host.Tests/Fakes/FakePlatformTests.cs
+git add src/Admin.Host/Jobs/ProcessSpec.cs src/Admin.Host/Jobs/Job.cs src/Admin.Host/Jobs/JobRegistry.cs src/Admin.Host/Compose/ComposeService.cs src/Admin.Host/Fakes/FakeProcessRunner.cs tests/Admin.Host.Tests/Jobs/JobRegistryTests.cs tests/Admin.Host.Tests/Compose/ComposeServiceTests.cs tests/Admin.Host.Tests/Fakes/FakePlatformTests.cs
 git commit -m "fix(jobs): keep the ps and exec reads out of the job registry" -m "<body: F2's arithmetic, and why unlisted rather than filtered>"
 ```
 

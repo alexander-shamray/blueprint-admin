@@ -17,10 +17,12 @@ request-rate series, the 5xx share is zero for a service with traffic, and the
 422 panel's per-route series are summed per service. `FakeGrafana` answers
 each query by exact text, and the strip on the Stack screen becomes a table.
 
-**Tech Stack:** as phase 5 — .NET SDK 10.0.302, C# 14, minimal APIs,
+**Tech Stack:** as phase 5 — the .NET SDK `global.json` pins, minimal APIs,
 `System.Text.Json` (no new packages), xunit.v3, Shouldly,
-`Microsoft.AspNetCore.Mvc.Testing`; Angular 22.1.x, Vitest via `ng test`,
-Playwright 1.63.
+`Microsoft.AspNetCore.Mvc.Testing`; Angular standalone, Vitest via
+`ng test`, Playwright. Versions are `global.json`'s,
+`Directory.Packages.props`' and `src/Admin.Web/package.json`'s, not this
+plan's.
 
 **Spec:** `docs/superpowers/specs/2026-09-14-blueprint-admin-design.md` —
 §5.8 (the Prometheus bullet), §5.10 (`GET /telemetry/health`), §9, §10. The
@@ -95,7 +97,7 @@ no requests of that kind to rank, so it stays absent.
 
 ## Global Constraints
 
-- .NET SDK pinned to `10.0.302` with `rollForward: disable`.
+- .NET SDK pinned by `global.json` with `rollForward: disable`.
   `TreatWarningsAsErrors`; IDE0055, IDE0065, IDE0161 fail the build. **No
   column alignment** of `=` or `=>`.
 - Every `.cs` file is CRLF. After creating or editing `.cs` files and before
