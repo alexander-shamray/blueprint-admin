@@ -54,7 +54,7 @@ def patterns():
     try:
         with open(SHIP, encoding="utf-8") as handle:
             text = handle.read().replace("\r\n", "\n")
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return None
     if not text.startswith("---\n"):
         return None
@@ -195,5 +195,19 @@ def main():
     return 0
 
 
+def run():
+    """`main()`, with any unexpected exception refused rather than admitted.
+
+    A crash exits 1, which a `PreToolUse` hook treats as non-blocking, so an
+    uncaught error anywhere below would let the edit through.
+    """
+    try:
+        return main()
+    except Exception as error:
+        print(f"guard-triager-edit: {type(error).__name__}: {error}; "
+              "refusing", file=sys.stderr)
+        return 2
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run())

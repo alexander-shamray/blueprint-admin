@@ -10131,6 +10131,24 @@ class TheTriagerEditsNothingShipDenies(unittest.TestCase):
             with mock.patch.object(module, "SHIP",
                                    os.path.join(tmp, "missing.md")):
                 self.assertIsNone(module.patterns())
+            # Undecodable bytes are a missing list, not a crash: a crash
+            # exits 1, which does not block.
+            ship = os.path.join(tmp, "binary.md")
+            with open(ship, "wb") as handle:
+                handle.write(b"---\ndisallowed-tools: Edit(\xff\xfe)\n---\n")
+            with mock.patch.object(module, "SHIP", ship):
+                self.assertIsNone(module.patterns())
+
+    def test_a_crash_blocks(self):
+        spec = importlib.util.spec_from_file_location("guard_triager_edit",
+                                                      self.GUARD)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with mock.patch.object(module, "main",
+                               side_effect=RuntimeError("boom")):
+            self.assertEqual(2, module.run())
+        self.assertIn("sys.exit(run())",
+                      self.GUARD.read_text(encoding="utf-8"))
 
     def test_other_tools_are_not_judged(self):
         for tool in ("Read", "Grep", "Agent"):
