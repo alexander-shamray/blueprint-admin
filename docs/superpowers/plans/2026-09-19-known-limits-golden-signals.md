@@ -158,7 +158,8 @@ instant vector's `service_name` and ignores other labels, and the fake's
   `PrometheusResult`, `PrometheusSample` (unchanged).
 - Produces: `ServiceSignals.ErrorRatio` is `0` where the service's
   `RequestRate > 0` and the ratio query had no series for it; `null` where
-  the rate is `0` or absent. `private static double? ErrorRatioFor(PrometheusResult errors, string service, double? requestRate)`.
+  the rate is `0` or absent, whatever the ratio query returned.
+  `private static double? ErrorRatioFor(PrometheusResult errors, string service, double? requestRate)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -243,6 +244,14 @@ public sealed class TelemetryHealthService(GrafanaClient grafana)
     /// </summary>
     private static double? ErrorRatioFor(PrometheusResult errors, string service, double? requestRate)
     {
+        // Traffic first: the rows are the union of separate instant queries, not one snapshot, and a
+        // share over no traffic, or over traffic the request-rate query did not report, is undefined
+        // whatever the ratio query returned.
+        if (requestRate is not > 0)
+        {
+            return null;
+        }
+
         // Presence, not value: ValueFor is null for a present sample that is not finite too, and a NaN
         // share is an unknown one, not a zero.
         if (errors.Samples.FirstOrDefault(s => s.Service == service) is { } sample)
@@ -250,7 +259,7 @@ public sealed class TelemetryHealthService(GrafanaClient grafana)
             return sample.Value;
         }
 
-        return requestRate > 0 ? 0 : null;
+        return 0;
     }
 ```
 
@@ -404,6 +413,27 @@ public sealed class TelemetryHealthTests(AdminHostFactory factory) : IClassFixtu
 
         // Catalog.Api served requests and answered no 5xx; Ordering.Api served none, so its share is undefined.
         view.Services.Select(s => s.ErrorRatio).ShouldBe([0, null]);
+    }
+
+    [Fact]
+    public async Task Query_results_that_disagree_on_traffic_show_no_share_and_no_refusal_rate()
+    {
+        // Seven instant queries are seven reads, not one snapshot: the ratio and the 401 panel can name a
+        // service the request-rate read reported idle, or did not report at all.
+        TelemetryHealthService health = Service(Answering(new()
+        {
+            [GoldenSignals.RequestRate] = Vector(Series("Catalog.Api", "0")),
+            [GoldenSignals.ErrorRatio] = Vector(Series("Catalog.Api", "0.5"), Series("Ordering.Api", "0.25")),
+            [GoldenSignals.UnauthorisedRate] = Vector(Series("Ordering.Api", "1")),
+        }));
+
+        TelemetryHealthView view = await health.ReadAsync(Token);
+
+        view.Services.Select(s => (s.Service, s.ErrorRatio, s.UnauthorisedRate)).ShouldBe<(string, double?, double?)>(
+        [
+            ("Catalog.Api", null, 0),
+            ("Ordering.Api", null, null),
+        ]);
     }
 
     [Fact]
@@ -715,6 +745,14 @@ public sealed class TelemetryHealthService(GrafanaClient grafana)
     /// </summary>
     private static double? ErrorRatioFor(PrometheusResult errors, string service, double? requestRate)
     {
+        // Traffic first: the rows are the union of separate instant queries, not one snapshot, and a
+        // share over no traffic, or over traffic the request-rate query did not report, is undefined
+        // whatever the ratio query returned.
+        if (requestRate is not > 0)
+        {
+            return null;
+        }
+
         // Presence, not value: ValueFor is null for a present sample that is not finite too, and a NaN
         // share is an unknown one, not a zero.
         if (errors.Samples.FirstOrDefault(s => s.Service == service) is { } sample)
@@ -722,7 +760,7 @@ public sealed class TelemetryHealthService(GrafanaClient grafana)
             return sample.Value;
         }
 
-        return requestRate > 0 ? 0 : null;
+        return 0;
     }
 
     /// <summary>
@@ -733,14 +771,16 @@ public sealed class TelemetryHealthService(GrafanaClient grafana)
     /// </summary>
     private static double? StatusRateFor(PrometheusResult result, string service, double? requestRate)
     {
-        PrometheusSample[] series = [.. result.Samples.Where(s => s.Service == service)];
-
-        if (series.Length == 0)
+        // Only for a service the request-rate query names: the rows are the union of separate queries,
+        // and a refusal rate for a service with no reported traffic is a row the strip cannot vouch for.
+        if (requestRate is null)
         {
-            return requestRate is null ? null : 0;
+            return null;
         }
 
-        return series.Sum(s => s.Value);
+        PrometheusSample[] series = [.. result.Samples.Where(s => s.Service == service)];
+
+        return series.Length == 0 ? 0 : series.Sum(s => s.Value);
     }
 
     private static double? ValueFor(PrometheusResult result, string service) =>
