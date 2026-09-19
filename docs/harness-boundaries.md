@@ -62,19 +62,25 @@ argument is how a rule gets "corrected" back.
   profile cannot.** Step 5 grants exactly `Agent(review-grok-triager)`,
   whose `tools:` — an allowlist — holds no `Bash` and no `Skill`; it reads
   `review-grok.md` rather than loading it, so the skill load measured
-  above never happens there. Two rules cannot live in a profile: a type
-  list inside a subagent's `Agent` grant is ignored, and a path in a
-  profile's `disallowedTools` removes the whole tool. Both are therefore
-  in `/ship`'s own `disallowed-tools` — the broad agent types, and every
-  `Edit(...)` `/review-grok` states — which reaches the agents a command
-  spawns, as `review-grok.md` records of its adjudicator.
+  above never happens there. Two rules cannot live in `tools:`. A type
+  list inside a subagent's `Agent` grant is ignored, so the profile's own
+  `PreToolUse` hook, `guard-triager-dispatch.py`, admits `review-adjudicator`
+  and refuses every other dispatch — the triager itself included, which
+  `/ship` grants and so cannot deny. And a path in a profile's
+  `disallowedTools` removes the whole tool, so every `Edit(...)`
+  `/review-grok` states is in `/ship`'s own `disallowed-tools`, beside the
+  broad agent types; that list reaches the agents a command spawns, as
+  `review-grok.md` records of its adjudicator.
   `CommandsEnforceTheEditingBoundariesTheyState` pins the profile, the
   grant and both deny lists, and reads `.claude/agents/` on every run, so
-  a new profile fails each exact grant that does not deny it. It pins no
-  runtime behaviour, and that a profile's `tools:` holds is Claude Code's
-  documented allowlist rather than a measurement here: profiles register
-  at session start, so the session that wrote this one could not spawn
-  it. Spawn it and read its tool list when Grok is re-enabled.
+  a new profile fails each exact grant that does not deny it;
+  `TheTriagerDispatchesOnlyTheAdjudicator` runs the hook through the
+  launcher and pins its wiring on the profile. Neither pins runtime
+  behaviour: that the allowlist holds and the hook runs is Claude Code's
+  documented behaviour rather than a measurement here, because profiles
+  register at session start and the session that wrote this one could not
+  spawn it. Measuring both is **required before Grok is re-enabled**
+  (#23).
 - **`python -m unittest discover -s .claude/scripts -p 'test_*.py'` is the
   harness's own suite.** It reads `git ls-files`, so a new tracked root file
   or top-level tree fails it until somebody decides which side of the

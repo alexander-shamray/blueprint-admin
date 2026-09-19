@@ -23,16 +23,17 @@
 # one replaces this shell.
 #
 # **A closed set of hook names, like every helper in `.claude/scripts/`.**
-# `settings.json` is the only caller and it names one of two files; a launcher
-# taking any path would be a way to run an arbitrary script through the hook
-# wiring, which is the shape the fixed-endpoint rule exists to refuse.
+# `settings.json` names two of them and the `review-grok-triager` profile the
+# third; a launcher taking any path would be a way to run an arbitrary script
+# through the hook wiring, which is the shape the fixed-endpoint rule exists to
+# refuse.
 set -eu
 
 [ "$#" -eq 1 ] ||
-  { echo "usage: run-guard.sh <guard-git-argv.py|guard-edit-target.py>" >&2; exit 2; }
+  { echo "usage: run-guard.sh <guard-git-argv.py|guard-edit-target.py|guard-triager-dispatch.py>" >&2; exit 2; }
 
 case "$1" in
-  guard-git-argv.py|guard-edit-target.py) ;;
+  guard-git-argv.py|guard-edit-target.py|guard-triager-dispatch.py) ;;
   *) echo "run-guard.sh: not a hook this launcher runs: $1" >&2; exit 2 ;;
 esac
 

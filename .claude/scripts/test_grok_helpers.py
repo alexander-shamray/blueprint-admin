@@ -9805,9 +9805,9 @@ class TheHookWiringRunsOnMoreThanOneOperatingSystem(unittest.TestCase):
         self.assertEqual(4, len(execs), execs)
 
     def test_the_launcher_takes_a_closed_set_of_hook_names(self):
-        # `settings.json` is the only caller and it names one of two files; a
-        # launcher taking any path would be a way to run an arbitrary script
-        # through the hook wiring.
+        # `settings.json` and the triager profile name the three files it
+        # admits; a launcher taking any path would be a way to run an
+        # arbitrary script through the hook wiring.
         for bad in ("../scripts/npm-checks.sh", "/etc/passwd", "",
                     "guard-git-argv.py extra"):
             with self.subTest(argument=bad):
@@ -9906,6 +9906,79 @@ class TestCodebaseIndexSkillGrants(unittest.TestCase):
         self.assertNotIn("graph *", fm)
         self.assertNotIn("cbx:*", fm)
         self.assertNotIn("cbx *", fm)
+
+
+class TheTriagerDispatchesOnlyTheAdjudicator(unittest.TestCase):
+    """`review-grok-triager` holds `Agent`, and the type list is ignored.
+
+    `/ship` grants the triager and so cannot deny it, which left the triager
+    free to spawn another editing triager (PR #22, Copilot). The profile's own
+    `PreToolUse` hook is the rule; these cases run it through the launcher,
+    exactly as the harness does, and pin the wiring that makes it the
+    profile's rather than the session's.
+    """
+
+    LAUNCHER = SCRIPTS.parent / "hooks" / "run-guard.sh"
+    PROFILE = SCRIPTS.parent / "agents" / "review-grok-triager.md"
+
+    def run_guard(self, event):
+        payload = event if isinstance(event, str) else json.dumps(event)
+        return subprocess.run(
+            [BASH, str(self.LAUNCHER), "guard-triager-dispatch.py"],
+            input=payload, capture_output=True, text=True)
+
+    def dispatch(self, subagent_type, tool="Agent"):
+        tool_input = {"description": "d", "prompt": "p"}
+        if subagent_type is not None:
+            tool_input["subagent_type"] = subagent_type
+        return self.run_guard({"tool_name": tool, "tool_input": tool_input})
+
+    def test_the_adjudicator_passes(self):
+        # The positive control: without it every refusal below passes against
+        # a guard that refuses everything, and the triage could never start.
+        for tool in ("Agent", "Task"):
+            with self.subTest(tool=tool):
+                out = self.dispatch("review-adjudicator", tool)
+                self.assertEqual(0, out.returncode, out.stderr)
+                self.assertEqual("", out.stdout)
+
+    def test_every_other_dispatch_is_refused(self):
+        # The triager itself is the case /ship's deny list cannot reach; a
+        # missing type is the harness's default of general-purpose.
+        for wanted in ("review-grok-triager", "general-purpose", "claude",
+                       "Review-Adjudicator", "review-adjudicator ", "", None):
+            for tool in ("Agent", "Task"):
+                with self.subTest(subagent_type=wanted, tool=tool):
+                    out = self.dispatch(wanted, tool)
+                    self.assertEqual(0, out.returncode, out.stderr)
+                    decision = json.loads(out.stdout)["hookSpecificOutput"]
+                    self.assertEqual("deny", decision["permissionDecision"])
+
+    def test_an_unreadable_event_blocks(self):
+        # Fail closed: exit 2 is the only code that blocks a PreToolUse call.
+        for event in ("not json", "[]", "\"Agent\""):
+            with self.subTest(event=event):
+                self.assertEqual(2, self.run_guard(event).returncode)
+
+    def test_other_tools_are_not_judged(self):
+        out = self.run_guard({"tool_name": "Edit",
+                              "tool_input": {"file_path": "docs/x.md"}})
+        self.assertEqual(0, out.returncode, out.stderr)
+        self.assertEqual("", out.stdout)
+
+    def test_the_profile_wires_the_guard_on_its_dispatches(self):
+        # The subject is the wiring, not the guard: a hook that exists and is
+        # not registered on the profile refuses nothing.
+        text = self.PROFILE.read_text(encoding="utf-8")
+        front = text.split("\n---", 1)[0]
+        self.assertRegex(front, r"(?m)^hooks:\s*$")
+        self.assertRegex(front, r"(?m)^\s+PreToolUse:\s*$")
+        self.assertRegex(front, r'matcher:\s*"Agent\|Task"')
+        self.assertIn('run-guard.sh\\" guard-triager-dispatch.py', front)
+        self.assertIn("${CLAUDE_PROJECT_DIR}", front)
+        # And not session-wide, where it would refuse /ship's own dispatch.
+        settings = SETTINGS.read_text(encoding="utf-8")
+        self.assertNotIn("guard-triager-dispatch", settings)
 
 
 if __name__ == "__main__":
