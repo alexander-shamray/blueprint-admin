@@ -26,9 +26,23 @@ argument is how a rule gets "corrected" back.
 - **`.claude/settings.json` self-locks, not instantaneously** — a change to
   it lands complete and goes last, and a restore is verified by reading the
   file, never by trying what it forbids.
-- **Every hook uses `run-guard.sh`** — the two in `settings.json` and the
-  `review-grok-triager` profile's own — which locates a compatible Python
+- **Every guard hook uses `run-guard.sh`** — the two in `settings.json` and
+  the `review-grok-triager` profile's own — which locates a compatible Python
   launcher before invoking the guard.
+- **The one hook that guards nothing is the index refresh**, a `PostToolUse`
+  entry that runs `refresh-index.sh` after every tool that writes. The entry
+  backgrounds and silences it so it can never block an edit, which also means
+  a broken spelling fails on every call without a sound — the example it
+  replaced passed a `--quiet` the CLI does not have. The script coalesces
+  overlapping calls so an `update` always starts after the last edit, and
+  retries a failed one. `test_index_refresh_hook.py` runs it against a fake
+  CLI, and it pins the matcher and the `CBX_NO_SKILL_AUTO_UPDATE` guard
+  `.mcp.json` sets, in the script and in the skill's
+  `examples/hooks/settings.json` alike. The example stays a self-contained
+  one-liner, because the script is this repository's and not the skill's. Both
+  call the CLI bare, as `.mcp.json` does, rather than through the skill's
+  `cbx` wrapper: a hook shell's `bash` can resolve to WSL's on Windows, which
+  cannot run it.
 - **`.claude/skills/**` is a grant surface.** A skill's `allowed-tools` is
   auto-approval, so a session that can rewrite `SKILL.md` widens the next
   invocation. Commands, agents, hooks and settings were already denied;

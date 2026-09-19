@@ -2,11 +2,11 @@
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "Edit|Write|MultiEdit",
+        "matcher": "Edit|Write|NotebookEdit|MultiEdit",
         "hooks": [
           {
             "type": "command",
-            "command": "codebase-index update --quiet >/dev/null 2>&1 &",
+            "command": "CBX_NO_SKILL_AUTO_UPDATE=1 codebase-index update >/dev/null 2>&1 &",
             "timeout": 5
           }
         ]
