@@ -93,10 +93,26 @@ The plan index is `2026-09-19-known-limits-index.md`.
       the supervisor's back.
     - None of those has a reason to be killed from the Logs screen, and
       the host has no way to tell that caller from another.
-- **The one-follow rule stays.** `LogFollower.StartAsync` still stops the
-  previous follow. So the Logs page's `follow()` no longer calls the stop
-  endpoint first: the host already does it, and a separate request could
-  only race it.
+- **The one-follow rule stays, and the page no longer leans on it alone.**
+  `LogFollower.StartAsync` still stops the previous follow, but only once
+  the next request reaches the host, and three orderings defeat that as the
+  page's only defence:
+  - The replacement request fails before it reaches the host: the previous
+    job runs on, and the page has already let go of it.
+  - A cancelled request still reaches the host after its replacement: it
+    stops the replacement's job and starts one the page never reads.
+  - The response is lost: the host started a job whose id the page never
+    learns.
+
+  So a page has **at most one follow request out**. Follow is disabled
+  while one is out, including after a Stop that is waiting for the answer,
+  and `follow()` refuses rather than cancels. And `follow()` **stops the
+  previous job by name** before it asks for the next one. By name is what
+  makes that stop race-free: arriving after the next Follow has started, it
+  names a job that Follow already stopped, and ends nothing. The first two
+  orderings are closed by those two rules. The third is not: a job whose id
+  never reached the page is ended by the next Follow, from any tab, and
+  README says so.
 - **Stop while the follow request is still out lets it answer, then stops
   the job it names.**
   - Today such a Stop cancels the request (`logs-page.spec.ts`, "clicking it
@@ -106,6 +122,10 @@ The plan index is `2026-09-19-known-limits-index.md`.
     connection changes nothing, and the job runs until the next Follow.
   - The two tests that pinned the cancellation are rewritten, not deleted:
     what they guarded is that no stream opens, and that still holds.
+  - The wait outlives a second `stop()`. Leaving the screen after such a
+    Stop calls `stop()` again, and a second call that detached the request
+    would drop the only id that can end the host's job. The request stays
+    subscribed until it answers, whatever calls `stop()` meanwhile.
 - **Leaving the Logs screen stops the host job too.**
   - Nothing re-attaches to it. The screen's lines and its job id are gone
     with the component, so returning shows an empty screen, and a
@@ -560,6 +580,7 @@ git commit -m "feat(logs): stop the follow job by name" -m "<body: why by name, 
 - Modify: `src/Admin.Web/src/app/core/host/host-client.ts`
 - Test: `src/Admin.Web/src/app/core/host/host-client.spec.ts`
 - Modify: `src/Admin.Web/src/app/features/logs/logs-page.ts`
+- Modify: `src/Admin.Web/src/app/features/logs/logs-page.html:8`
 - Test: `src/Admin.Web/src/app/features/logs/logs-page.spec.ts`
 
 **Interfaces:**
@@ -655,6 +676,33 @@ last line:
     expect(host.stopFollow).toHaveBeenCalledWith('late-2');
 ```
 
+Replace "a second Follow replaces the first even if the first answers late"
+with the rule that replaces it — one request out per page — since a second
+Follow can no longer cancel the first:
+
+```ts
+  it('a Follow while a request is out sends nothing, and the first answer is followed', () => {
+    const post = new Subject<JobSummary>();
+    host.followLogs.mockReturnValueOnce(post.asObservable());
+
+    const fixture = TestBed.createComponent(LogsPage);
+    fixture.detectChanges();
+    const followButton = fixture.nativeElement.querySelector('button.follow') as HTMLButtonElement;
+    followButton.click();
+    fixture.detectChanges();
+
+    expect(followButton.disabled).toBe(true);
+    fixture.componentInstance.follow();
+    expect(host.followLogs).toHaveBeenCalledTimes(1);
+
+    post.next(summary('job-a'));
+    fixture.detectChanges();
+
+    expect(sseFollow.mock.calls.map((c) => c[0])).toEqual(['job-a']);
+    expect(followButton.disabled).toBe(false);
+  });
+```
+
 Add, before the closing `});`:
 
 ```ts
@@ -678,14 +726,34 @@ Add, before the closing `});`:
     expect(host.stopFollow).toHaveBeenCalledWith('logs-1');
   });
 
-  it('a new Follow leaves stopping the previous job to the host', () => {
-    host.followLogs.mockReturnValueOnce(of(summary('job-a'))).mockReturnValueOnce(of(summary('job-b')));
+  it('a new Follow stops the previous job by name before asking for the next', () => {
+    const postB = new Subject<JobSummary>();
+    host.followLogs.mockReturnValueOnce(of(summary('job-a'))).mockReturnValueOnce(postB.asObservable());
 
     const fixture = TestBed.createComponent(LogsPage);
     fixture.componentInstance.follow();
     fixture.componentInstance.follow();
 
-    expect(host.stopFollow).not.toHaveBeenCalled();
+    // Before B answers, and whether or not it ever does: a B that fails leaves no A behind.
+    expect(host.stopFollow).toHaveBeenCalledWith('job-a');
+    postB.error(new Error('refused'));
+    expect(host.stopFollow).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaving the screen after a Stop in flight still stops the job the late answer names', () => {
+    const post = new Subject<JobSummary>();
+    host.followLogs.mockReturnValueOnce(post.asObservable());
+
+    const fixture = TestBed.createComponent(LogsPage);
+    fixture.componentInstance.follow();
+    fixture.componentInstance.stop();
+    fixture.destroy();
+
+    expect(post.observed).toBe(true);
+    post.next(summary('late-4'));
+
+    expect(host.stopFollow).toHaveBeenCalledWith('late-4');
+    expect(sseFollow).not.toHaveBeenCalled();
   });
 
   it('a job that has exited is not stopped again', () => {
@@ -703,8 +771,9 @@ Add, before the closing `});`:
 
 Run: `bash .claude/scripts/npm-checks.sh all`
 Expected: lint and the build fail on `stopFollow`, which does not exist on
-`HostClient`. Once the method exists, the four new page tests and the three
-rewritten ones fail on `stopFollow` never being called.
+`HostClient`. Once the method exists, the five new page tests fail on
+`stopFollow` never being called or on the Follow button never disabling,
+and so do the four rewritten ones.
 
 - [ ] **Step 4: Implement the client call**
 
@@ -734,6 +803,17 @@ Add two fields after `private subscription?: Subscription;`:
   private stopOnArrival = false;
 ```
 
+and one signal after `pending`:
+
+```ts
+  /**
+   * The follow request is out, whether or not Stop has been pressed since. Only one may be out: a
+   * second would cancel the first, and a cancelled request can still reach the host and start a
+   * job that nothing here will ever learn the id of.
+   */
+  readonly requestOut = signal(false);
+```
+
 Replace the constructor, `follow()` and `stop()`:
 
 ```ts
@@ -745,22 +825,28 @@ Replace the constructor, `follow()` and `stop()`:
 ```ts
   /**
    * A single subscription covers both stages: the `POST /api/logs/follow` and the SSE stream it
-   * hands off to, so a new `follow()` or `stop()` unsubscribes whichever stage is live. It does
-   * not ask the host to stop the previous job: the host's LogFollower does that when this follow
-   * starts, and a separate request could only race it.
+   * hands off to. The previous job is stopped by name before the next is asked for, rather than
+   * left to the host's one-follow rule, which acts only once the next request arrives: a request
+   * that fails on the way would otherwise leave it running. By name, a stop that lands after the
+   * next follow has started ends nothing, because that follow already ended it.
    */
   follow(): void {
+    if (this.requestOut()) {
+      return;
+    }
     this.detach();
-    this.jobId = null;
+    this.stopOnHost();
     this.stopOnArrival = false;
     this.error.set(null);
     this.lines.set([]);
     this.pending.set(true);
+    this.requestOut.set(true);
     this.subscription = this.host
       .followLogs(this.selected())
       .pipe(
         switchMap((job) => {
           this.jobId = job.id;
+          this.requestOut.set(false);
           this.pending.set(false);
           if (this.stopOnArrival) {
             this.stopOnHost();
@@ -784,10 +870,12 @@ Replace the constructor, `follow()` and `stop()`:
           // Not yet following means the POST itself failed; already following means the SSE stream did.
           const fallback = this.following() ? undefined : 'The host refused the request.';
           this.error.set(this.describeError(e, fallback));
+          this.requestOut.set(false);
           this.pending.set(false);
           this.following.set(false);
         },
         complete: () => {
+          this.requestOut.set(false);
           this.pending.set(false);
           this.following.set(false);
         },
@@ -797,10 +885,11 @@ Replace the constructor, `follow()` and `stop()`:
   /**
    * Ends the follow here and on the host. A follow request still out is left to answer rather
    * than cancelled: cancelling it cannot stop a job the host may already have started, and the
-   * answer names the job to stop.
+   * answer names the job to stop. That holds for every call until it answers, so leaving the
+   * screen after a Stop does not detach the request and lose the id.
    */
   stop(): void {
-    if (this.pending()) {
+    if (this.requestOut()) {
       this.stopOnArrival = true;
       this.pending.set(false);
       return;
@@ -830,22 +919,25 @@ Add, before `describeError`:
   }
 ```
 
-The template is unchanged. Stop's `[disabled]` still reads
-`!(pending() || following())`, and a Stop pressed while the request is out
-clears `pending`, so the button disables at once.
+In `logs-page.html`, Follow disables while a request is out:
+
+```html
+    <button class="follow" [disabled]="requestOut()" (click)="follow()">Follow</button>
+```
+
+Stop's `[disabled]` still reads `!(pending() || following())`, and a Stop
+pressed while the request is out clears `pending`, so Stop disables at once
+while Follow stays disabled until the answer arrives and its job is stopped.
 
 - [ ] **Step 6: Run the SPA checks**
 
 Run: `bash .claude/scripts/npm-checks.sh all`
-Expected: lint, test and build are green. "a second Follow replaces the first
-even if the first answers late" still passes unchanged: `detach()` cancels
-the first request, and the host's one-follow rule covers a job it had already
-started.
+Expected: lint, test and build are green, the four rewritten tests included.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/Admin.Web/src/app/core/host/host-client.ts src/Admin.Web/src/app/core/host/host-client.spec.ts src/Admin.Web/src/app/features/logs/logs-page.ts src/Admin.Web/src/app/features/logs/logs-page.spec.ts
+git add src/Admin.Web/src/app/core/host/host-client.ts src/Admin.Web/src/app/core/host/host-client.spec.ts src/Admin.Web/src/app/features/logs/logs-page.ts src/Admin.Web/src/app/features/logs/logs-page.html src/Admin.Web/src/app/features/logs/logs-page.spec.ts
 git commit -m "feat(logs): end the host's follow on Stop and when the screen is left" -m "<body: F1; why a Stop in flight waits for the answer>"
 ```
 
@@ -1118,7 +1210,8 @@ with:
 
 ```
 - The host keeps at most one `logs -f` job, so a Follow in a second browser
-  tab ends the first tab's.
+  tab ends the first tab's. A follow whose answer never reached the page
+  runs until the next Follow.
 ```
 
 Delete:
@@ -1162,3 +1255,7 @@ git commit -m "docs: say Stop ends the host's follow and reads are not kept as j
   - A second browser tab's Follow ending the first tab's. The one-follow
     rule is what keeps the host from leaking `logs -f` processes, and
     README keeps the line.
+  - A follow whose response was lost. The page never learns its id, so
+    only the next Follow ends it; closing that needs a host-side reaper
+    for a follow nobody streams, which is a larger change than this
+    limit asks for.

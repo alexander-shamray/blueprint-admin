@@ -599,9 +599,10 @@ In `src/Admin.Web/e2e/api.spec.ts`, add after
 `'the api screen lists operations and sends as each identity'`:
 
 ```ts
-// History is root-scoped (src/app/core/history/api-history.ts): the shell's links change screens without a
-// reload, so leaving and coming back keeps it. page.goto would reload and clear it.
-test('the api history survives leaving the screen and coming back', async ({ page }) => {
+// History is root-scoped and memory-only (src/app/core/history/api-history.ts): the shell's links change
+// screens without a reload, so leaving and coming back keeps it, and a reload clears it. The last assertion
+// is the boundary: a later change that persisted or rehydrated the history would fail here.
+test('the api history survives leaving the screen and coming back, and not a reload', async ({ page }) => {
   await page.goto('/requests');
 
   await page.locator('button.op', { hasText: 'GetProducts' }).click();
@@ -615,6 +616,10 @@ test('the api history survives leaving the screen and coming back', async ({ pag
 
   await expect(page.locator('.history li')).toHaveCount(1);
   await expect(page.locator('.history li').first()).toContainText('200 GetProducts as anonymous');
+
+  await page.reload();
+  await expect(page.locator('button.op', { hasText: 'GetProducts' })).toBeVisible();
+  await expect(page.locator('.history li')).toHaveCount(0);
 });
 ```
 

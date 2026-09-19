@@ -19,13 +19,28 @@ README fact and a rule that moves is a spec fact.
 | [API screen: lasting history and additive users](2026-09-19-known-limits-api.md) | History is kept only while the screen is open; configuring any user replaces demo/demo and browser/browser |
 | [Golden signals: the rest of the row](2026-09-19-known-limits-golden-signals.md) | The strip shows rate, errors and duration only; a service with no 5xx shows a dash instead of a zero |
 
-The plans are independent and may land in any order, with one overlap. The
-frontend and golden-signals plans both change the Stack screen
-(`stack-page.*`, `e2e/stack.spec.ts`), README's Stack description and spec
-§5.10. Whichever lands second rebases onto the first: the golden-signals
-plan renames the Compose table's selector, and the frontend plan changes
-the e2e reachability count, so each must re-read the other's test edits
-rather than replay its own.
+The plans are independent and may land in any order, but not in isolation:
+each was written against `e8e4f57`, and these files are named by more than
+one of them.
+
+| File | Plans |
+|---|---|
+| `README.md` | all four |
+| the design spec | all four; jobs and frontend both amend §5.10 and §6 |
+| `src/Admin.Web/src/app/core/host/host-client.ts` | jobs, frontend |
+| `src/Admin.Web/src/app/core/host/host-types.ts` | frontend, golden-signals |
+| `src/Admin.Web/src/app/features/stack/stack-page.*` | frontend, golden-signals |
+| `src/Admin.Web/e2e/stack.spec.ts` | frontend, golden-signals |
+| `tests/Admin.Host.Tests/Fakes/FakePlatformTests.cs` | jobs, frontend |
+
+**A plan executed after another has landed re-reads each of these files on
+`main` before its first edit**, and applies its change to what is there
+rather than replaying its own code blocks, which quote `e8e4f57`. Two cases
+make replaying lose work rather than merely conflict: the golden-signals
+plan renames the Compose table's selector that the frontend plan's Stack
+tests use, and the frontend plan changes the e2e reachability count that a
+golden-signals rewrite of `stack.spec.ts` would restore. The code blocks are
+the intent; the file on `main` is the base.
 
 ## Kept, and why
 

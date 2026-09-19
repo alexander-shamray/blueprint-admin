@@ -197,8 +197,10 @@ spec §2.1/§5.4/§5.10/§6/§10, README.md, CLAUDE.md             Task 4
 
 **Interfaces:**
 - Produces: `Task<bool> PlatformProbe.ClientAnswersAsync(CancellationToken)`
-  — true on any HTTP status from `Join(ClientUrl, "/")`, false on a refused
-  connection or the 2 s timeout. `bool FakeProcessRunner.IsRunning(string
+  — true on any HTTP status from `Join(ClientUrl, "/")`, redirects included,
+  false on a refused connection or the 2 s timeout.
+  `static HttpMessageHandler PlatformProbe.PrimaryHandler()`, which follows
+  no redirects. `bool FakeProcessRunner.IsRunning(string
   fileName, string argumentPrefix)`. `FakePlatformHandler(AdminOptions
   options, Func<bool> clientServing)`.
 
@@ -215,6 +217,30 @@ and the `Probe(...)` helper):
         PlatformProbe probe = Probe(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
 
         (await probe.ClientAnswersAsync(TestContext.Current.CancellationToken)).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task A_client_that_answers_with_a_redirect_is_answering()
+    {
+        // The redirect's target is not asked: the port that sent the 302 is the one taken.
+        PlatformProbe probe = Probe(_ => new HttpResponseMessage(HttpStatusCode.Found)
+        {
+            Headers = { Location = new Uri("http://localhost:1/nowhere") },
+        });
+
+        (await probe.ClientAnswersAsync(TestContext.Current.CancellationToken)).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void The_real_probe_never_follows_a_redirect()
+    {
+        // The case above holds only if the handler hands the 302 back. A default HttpClientHandler
+        // follows it, and a client answering 302 to a page that is down would then read as a free
+        // port, so Start would launch a second ng serve against a taken one. The subject is the
+        // handler Program.cs registers, not a scripted one.
+        HttpClientHandler handler = PlatformProbe.PrimaryHandler().ShouldBeOfType<HttpClientHandler>();
+
+        handler.AllowAutoRedirect.ShouldBeFalse();
     }
 
     [Fact]
@@ -300,8 +326,8 @@ fixture's host is shared with the first.
 
 Run: `dotnet format whitespace BlueprintAdmin.slnx; dotnet test BlueprintAdmin.slnx --filter "FullyQualifiedName~PlatformProbeTests|FullyQualifiedName~FakeProcessRunnerTests|FullyQualifiedName~FakePlatformTests"`
 Expected: build FAIL — `'PlatformProbe' does not contain a definition for
-'ClientAnswersAsync'` and `'FakeProcessRunner' does not contain a definition
-for 'IsRunning'`.
+'ClientAnswersAsync'` and for `'PrimaryHandler'`, and `'FakeProcessRunner'
+does not contain a definition for 'IsRunning'`.
 
 - [ ] **Step 5: Add `ClientAnswersAsync` to `PlatformProbe`**
 
@@ -317,8 +343,23 @@ In `ProbeAsync`, replace `("client", Join(o.ClientUrl, "/")),` with
     public async Task<bool> ClientAnswersAsync(CancellationToken cancellationToken) =>
         (await ProbeOneAsync("client", ClientTarget(options.Value), cancellationToken)).Status is not null;
 
+    /// <summary>
+    /// The real probe's handler, registered in Program.cs. It does not follow redirects: a 3xx is
+    /// the target's own answer, and following it would report whatever the redirect names instead,
+    /// so a client answering 302 to a page that is down would read as a free port.
+    /// </summary>
+    public static HttpMessageHandler PrimaryHandler() => new HttpClientHandler { AllowAutoRedirect = false };
+
     private static string ClientTarget(AdminOptions o) => Join(o.ClientUrl, "/");
 ```
+
+Not following redirects applies to every chip, not only the client's: a
+target answering 3xx now reads as down with its status, where it used to
+read as whatever the redirect led to. None of the seven does today. The
+readiness checks, the realm document, Grafana's health and `ng serve`'s `/`
+all answer 200, and a readiness check that redirected would be one worth
+seeing. The `"platform"` client already refuses redirects for the same
+reason (spec §5.7).
 
 - [ ] **Step 6: Add `IsRunning` to `FakeProcessRunner`**
 
@@ -373,7 +414,7 @@ argument. The probe's registration becomes:
 builder.Services.AddHttpClient<PlatformProbe>().ConfigurePrimaryHttpMessageHandler(sp =>
     sp.GetRequiredService<IOptions<AdminOptions>>().Value is { FakePlatform: true } fake
         ? new FakePlatformHandler(fake, () => sp.GetRequiredService<FakeProcessRunner>().IsRunning("npm", "start"))
-        : new HttpClientHandler());
+        : PlatformProbe.PrimaryHandler());
 ```
 
 and the `"platform"` client's `new FakePlatformHandler(fake)` becomes
