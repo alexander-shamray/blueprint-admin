@@ -37,6 +37,13 @@
 # of that race is at most one missed refresh, which the skill's per-query
 # `stale: true` check repairs.
 #
+# **A failed `update` is retried, up to three attempts a second apart.** The
+# pending mark is already cleared by then and the hook discards the status, so
+# without a retry a transient failure — the index database's own five-second
+# busy timeout is the likely one — would leave the edit unindexed until the
+# next edit. Three, because a failure that survives them is not transient,
+# and a holder that retried for ever would hold the lock for ever.
+#
 # **`CBX_NO_SKILL_AUTO_UPDATE=1` is the guard `.mcp.json` sets**, and it is not
 # optional: without it the CLI may rewrite the tracked skill, widening its
 # `allowed-tools`, which one unguarded run was measured doing.
@@ -53,6 +60,10 @@ pending="$cache/refresh.pending"
 lock="$cache/refresh.lock"
 token="$$.$(date +%s)"
 
+refresh() {
+  CBX_NO_SKILL_AUTO_UPDATE=1 codebase-index update
+}
+
 stale=$(find "$lock" -prune -type d -mmin +10 2>/dev/null)
 if [ -n "$stale" ]; then
   holder=$(cat "$lock/owner" 2>/dev/null)
@@ -66,7 +77,12 @@ fi
 while mkdir "$lock" 2>/dev/null; do
   printf '%s\n' "$token" > "$lock/owner"
   rm -f "$pending"
-  CBX_NO_SKILL_AUTO_UPDATE=1 codebase-index update
+  tries=0
+  until refresh; do
+    tries=$((tries + 1))
+    [ "$tries" -lt 3 ] || break
+    sleep 1
+  done
   [ "$(cat "$lock/owner" 2>/dev/null)" = "$token" ] || exit 0
   rm -rf "$lock"
   [ -e "$pending" ] || break
