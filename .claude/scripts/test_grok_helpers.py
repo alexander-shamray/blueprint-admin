@@ -8681,6 +8681,26 @@ class TheGitArgvGuard(unittest.TestCase):
         self.assertLessEqual(1000 * len(command), self.budget("SCAN_BUDGET"))
         self.assertIsNone(self.judge(command, timeout=30))
 
+    def test_the_worst_command_inside_the_budget_is_judged_in_time(self):
+        # The invariant the budgets exist for: a command just inside both still
+        # finishes before the hook's timeout, so its verdict is the scanners'
+        # own. The two corners of the admitted region are many openers in a
+        # short command and few in one at the length cap; the brackets are
+        # live shell text, so `_closing_brace` and `_closing_paren` read them.
+        scan = self.budget("SCAN_BUDGET")
+        length = self.budget("LENGTH_BUDGET")
+        for opener in ("${", "$(", "$((", "x("):
+            per = opener.count("(") + opener.count("${")
+            for openers in (scan // length, 1000):
+                count = openers // per
+                size = min(length, scan // (count * per))
+                command = opener * count + "a" * (size - len(opener) * count)
+                with self.subTest(opener=opener, openers=count * per):
+                    self.assertLessEqual(len(command), length)
+                    self.assertLessEqual(count * per * len(command), scan)
+                    reason = self.judge(command, timeout=30)
+                    self.assertNotIn("time limit", reason or "")
+
     def test_an_expanding_heredoc_body_removes_its_continuations(self):
         # **A body whose delimiter is unquoted expands, and removes
         # `\\<newline>` before it does.** The continuation join was applied
