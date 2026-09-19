@@ -927,14 +927,17 @@ same argument as never calling a branch clean because asking failed.
       convergence from a lull, and a Grok recheck of nothing costs a few
       minutes. Present → run `bash .claude/scripts/pr-locality.sh <n>`
       and `git diff origin/main...HEAD`, write each output to a scratchpad
-      file with `Write`, and run `/review-grok` with the review's path,
-      the verdict's and the diff's — the triage holds no `Bash` and cannot
-      judge the touch set or read the diff itself; without the verdict it
-      applies every accepted site, which is the widening the contract
-      refuses, and without the diff its adjudicator cannot tell a
+      file with `Write`, and run `/review-grok` **inside an `Agent`** with
+      the review's path, the verdict's and the diff's — the triage holds no
+      `Bash` and cannot judge the touch set or read the diff itself; without
+      the verdict it applies every accepted site, which is the widening the
+      contract refuses, and without the diff its adjudicator cannot tell a
       restatement the branch wrote from one it left alone. `/review-grok`
       triages and fixes — **its tool grant deliberately stops short of
-      committing**. Then rerun the step 2 checks that apply to what it
+      committing**. The agent is what keeps that grant its own: a
+      frontmatter deny lasts the rest of the turn it loads in
+      (`docs/harness-boundaries.md`), so run inline its bare `Bash` deny
+      would refuse every command below, the push included. Then rerun the step 2 checks that apply to what it
       changed: a review fix is still an edit, and committing it unchecked
       hands the next reviewer a broken branch. Then `/commit` **scoped to
       the paths the triage touched** — `suggestions.md` is still on disk

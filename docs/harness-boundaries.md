@@ -43,6 +43,16 @@ argument is how a rule gets "corrected" back.
   `test_grok_helpers.py` names the three and fails if one denies push
   again. A terminal, read-only command — the two sweeps — keeps its deny,
   because nothing pushes after it.
+- **`/review-grok` is the one chained command that cannot follow that rule,
+  so `/ship` step 5 runs it inside an `Agent` instead.** Its bare `Bash`
+  deny is its boundary — it reads an untrusted review holding `Edit` — and
+  run inline, under the same turn-wide lifetime, it would refuse every
+  command step 5 runs after it: the checks, `/commit` and the push. The
+  deny stays and the triage moves. That an agent's frontmatter deny ends
+  with the agent is **inferred, not measured** — Grok is disabled, so the
+  path has not run; measure it when the loop comes back.
+  `test_the_triage_that_denies_bash_runs_apart_from_the_push` pins both
+  halves.
 - **`python -m unittest discover -s .claude/scripts -p 'test_*.py'` is the
   harness's own suite.** It reads `git ls-files`, so a new tracked root file
   or top-level tree fails it until somebody decides which side of the

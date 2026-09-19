@@ -5265,6 +5265,19 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
                 self.assertIsNone(
                     re.search(r"(^|,\s*)Bash(\s*,|\s*$)", denied))
 
+    def test_the_triage_that_denies_bash_runs_apart_from_the_push(self):
+        # /review-grok cannot join CHAINED_BEFORE_A_PUSH: its bare `Bash`
+        # deny is its boundary. So the exemption is where it runs rather than
+        # what it denies, and both halves are pinned — dropping the deny
+        # widens the triage, and dropping the agent refuses /ship's push.
+        text = (COMMANDS / "review-grok.md").read_text(encoding="utf-8")
+        denied = " ".join(
+            re.findall(r"^disallowed-tools:\s*(.+)$", text, re.MULTILINE))
+        self.assertIsNotNone(
+            re.search(r"(^|,\s*)Bash(\s*,|\s*$)", denied))
+        ship = (COMMANDS / "ship.md").read_text(encoding="utf-8")
+        self.assertIn("run `/review-grok` **inside an `Agent`**", ship)
+
     def test_the_settings_really_do_auto_approve_push(self):
         # The positive control. If the global allow were ever removed, the case
         # above would still pass while protecting nothing, which is the vacuous
