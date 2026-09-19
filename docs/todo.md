@@ -14,7 +14,8 @@ repeated here.
 
 ## In progress
 
-Open pull requests and the branches behind them.
+Open pull requests and the branches behind them. A PR never lists itself:
+its merge is what would remove the row, so its own branch never adds it.
 
 | Task | PR | Branch |
 |---|---|---|

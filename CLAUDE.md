@@ -184,8 +184,9 @@ opens those files:
 - **Update it as it happens, not only when asked.** The moment this session
   files, closes or reopens an issue, or sees a PR merge, it edits the row in
   the working branch before the next step — a branch that ships without it
-  leaves `main` wrong until somebody notices. `/ship` step 7 reconciles
-  before its merge gates; the sweeps hold no `Edit`, so their report lists
+  leaves `main` wrong until somebody notices. `/ship` reconciles once the
+  PR opens, so the reviewers read it, and again before it merges; the
+  sweeps hold no `Edit`, so their report lists
   what they filed and the next branch carries the rows.
 
 ## Available commands

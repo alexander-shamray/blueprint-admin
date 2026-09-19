@@ -5,7 +5,8 @@
 # **A helper rather than `Bash(gh pr list:*)`, because that grant is a feed.**
 # `gh pr list --json reviews,comments` returns full review bodies, which is the
 # bypass `CopilotFeedHelpersAreTheOnlyIntake` in `test_grok_helpers.py` refuses
-# (#56). The reconcile needs a number, a title and a branch; the caller chooses
+# (#56). The reconcile needs a number, a title, a branch and the issues the PR
+# closes, because a title cannot be relied on to name them; the caller chooses
 # nothing else.
 set -euo pipefail
 
@@ -22,7 +23,11 @@ repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner) ||
 # because a truncated one would drop rows from the task list silently.
 LIMIT=1000
 rows=$(gh pr list --repo "$repo" --state open --limit "$LIMIT" \
-         --json number,title,headRefName)
+         --json number,title,headRefName,closingIssuesReferences)
 [ "$(jq 'length' <<<"$rows")" -lt "$LIMIT" ] ||
   { echo "gh pr list returned exactly $LIMIT open PRs, so the listing is truncated" >&2; exit 3; }
-printf '%s\n' "$rows"
+# The references carry node ids, URLs and repository objects the reconcile
+# has no use for, so they are cut to the issue numbers before anything
+# leaves this file.
+jq '[ .[] | {number, title, headRefName,
+             closes: [ .closingIssuesReferences[].number ]} ]' <<<"$rows"

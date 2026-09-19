@@ -160,6 +160,7 @@ BRANCH_COMMAND = SCRIPTS.parent / "commands" / "branch.md"
 SUPPRESSES = SCRIPTS / "gh-issue-suppresses.sh"
 ISSUE_TEXT = SCRIPTS / "gh-issue-text.sh"
 ISSUE_LIST = SCRIPTS / "gh-issue-list.sh"
+PR_LIST_OPEN = SCRIPTS / "gh-pr-list-open.sh"
 
 BASH = shutil.which("bash")
 GREP = shutil.which("grep")
@@ -4249,7 +4250,7 @@ class AFeedHelperReturnsTheWholeAnswer(unittest.TestCase):
 
     # The five, with what bounded each.
     REST_CAPPED = ("pr-for-branch.sh", "gh-issue-list.sh", "gh-label-ensure.sh",
-"gh-pr-list-open.sh")
+                   "gh-pr-list-open.sh")
     GRAPHQL_CONNECTIONS = ("pr-issue-comments.sh", "pr-review-bodies.sh")
 
     def source(self, name):
@@ -5516,6 +5517,30 @@ class WhatSuppressesIsDecidedByCodeNow(unittest.TestCase):
                     [BASH, str(ISSUE_LIST), *args], capture_output=True, text=True
                 )
                 self.assertEqual(2, result.returncode)
+
+    def test_the_open_pr_listing_fixes_its_field_set(self):
+        # The same control as the issue listing, one helper over: the grant
+        # it replaces could ask `gh pr list` for `reviews` and `comments`.
+        code = "\n".join(code_lines(PR_LIST_OPEN.read_text(encoding="utf-8")))
+        self.assertIn("--json number,title,headRefName,closingIssuesReferences",
+                      code)
+        for field in ("reviews", "comments", "body", "author"):
+            with self.subTest(field=field):
+                self.assertNotIn(field, code)
+        self.assertIn('[ "$#" -eq 0 ]', code)
+
+    def test_the_open_pr_listing_takes_no_arguments(self):
+        for args in (("--json", "reviews"), ("--state", "all"), ("1",)):
+            with self.subTest(args=args):
+                result = subprocess.run(
+                    [BASH, str(PR_LIST_OPEN), *args], capture_output=True, text=True
+                )
+                self.assertEqual(2, result.returncode)
+
+    def test_ship_reaches_the_open_pr_set_only_through_the_helper(self):
+        grants = self.granted_bash(COMMANDS / "ship.md")
+        self.assertIn("bash .claude/scripts/gh-pr-list-open.sh", grants)
+        self.assertFalse([g for g in grants if g.startswith("gh pr list")])
 
     def test_both_sweeps_reach_the_issue_set_only_through_the_helper(self):
         for name in ("security-sweep.md", "bug-sweep.md"):
