@@ -4424,29 +4424,27 @@ def _offence(command, depth, judged):
     return None
 
 
-# **A bound on the brackets the scanners will match, checked before any of
-# them runs.** `_closing_brace` and `_closing_paren` each re-read the rest of
-# the command per opener, so an unbalanced run is quadratic — and the `${`
-# rescan that `test_an_unbalanced_brace_ends_the_scan` records was the
-# smaller half of it. Measured: 9000 `${` ahead of `git push origin
-# +HEAD:main` took 75 seconds, past the hook's 60-second default, and a hook
-# that times out is non-blocking; `$(`, `$((` and a bare `(` scale the same
-# way. Refusing on a count fails closed where the timeout failed open, and at
-# the cap the slowest opener measured about a second. A command carrying more
-# than this belongs in a file written with `Write`, not in a Bash argv.
-OPENER_BUDGET = 1000
+# **Every scan here must finish inside the hook's timeout, because a hook that
+# times out is non-blocking.** `_closing_brace` and `_closing_paren` each
+# re-read the rest of the command per opener, so their work is openers times
+# length, bounded by `SCAN_BUDGET`; the scanners as a whole grow faster than
+# linearly in length alone, bounded by `LENGTH_BUDGET`. A command past either
+# is refused before any scan runs, which fails closed where the timeout would
+# fail open.
+SCAN_BUDGET = 2_000_000
+LENGTH_BUDGET = 100_000
 
 
-def opener_budget(command):
-    """The refusal for a command with more openers than the scan can afford."""
-    count = command.count("(") + command.count("${")
-    if count <= OPENER_BUDGET:
+def scan_budget(command):
+    """The refusal for a command the scanners could not finish in time."""
+    openers = command.count("(") + command.count("${")
+    if len(command) <= LENGTH_BUDGET and openers * len(command) <= SCAN_BUDGET:
         return None
     return (
-        f"this command opens {count} brackets or parameter expansions, more "
-        f"than the {OPENER_BUDGET} this guard can match inside its time limit; "
-        "a guard that times out admits the command, so it is refused instead. "
-        "Write long scripts to a file with `Write` and run the file."
+        f"this command's {len(command)} characters and {openers} brackets or "
+        "parameter expansions are more than this guard can judge inside its "
+        "time limit, and a guard that times out admits the command, so it is "
+        "refused instead. Shorten it or split it into separate commands."
     )
 
 
@@ -4472,7 +4470,7 @@ def main():
     EVENT_CWD = cwd if isinstance(cwd, str) and cwd else None
 
     try:
-        reason = opener_budget(command) or offence(command)
+        reason = scan_budget(command) or offence(command)
     except Exception:  # noqa: BLE001 - the direction is the point
         # **A crash is empty stdout, and `PreToolUse` reads empty stdout as
         # non-blocking**, so every defect in this file has been a fail-open.
