@@ -16,7 +16,9 @@ repeated here.
 
 Open pull requests and the branches behind them.
 
-None.
+| Task | PR | Branch |
+|---|---|---|
+| Update the task list as it happens, and bring it up to date | [#25](https://github.com/alexander-shamray/blueprint-admin/pull/25) | `docs/todo-as-it-happens` |
 
 ## Remaining
 
@@ -25,3 +27,4 @@ Open issues with no PR yet, highest severity first.
 | Task | Issue | Severity |
 |---|---|---|
 | Measure the `review-grok-triager` profile at runtime before the Grok loop is re-enabled | [#23](https://github.com/alexander-shamray/blueprint-admin/issues/23) | high |
+| File a Claude Code feature request for a configurable terminal tab title | [#24](https://github.com/alexander-shamray/blueprint-admin/issues/24) | low |
