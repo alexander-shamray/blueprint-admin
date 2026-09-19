@@ -30,18 +30,21 @@ more than one of them.
 |---|---|
 | `README.md` | all four |
 | the design spec | all four; jobs and frontend both amend §5.10 and §6 |
-| `src/Admin.Web/src/app/core/host/host-client.ts` | jobs, frontend |
+| `src/Admin.Web/src/app/core/host/host-client.ts` and its spec | jobs, frontend |
 | `src/Admin.Web/src/app/core/host/host-types.ts` | frontend, golden-signals |
 | `src/Admin.Web/src/app/features/stack/stack-page.*` | frontend, golden-signals |
 | `src/Admin.Web/e2e/stack.spec.ts` | frontend, golden-signals |
+| `src/Admin.Host/Fakes/FakeProcessRunner.cs` | jobs (`StartedJobs`), frontend (`IsRunning`) |
 | `tests/Admin.Host.Tests/Fakes/FakePlatformTests.cs` | jobs, frontend |
 
-**A plan executed after another has landed re-reads each of these files on
-`main` before its first edit**, and applies its change to what is there
-rather than replaying its own code blocks, which quote `e8e4f57`. Two cases
-make replaying lose work rather than merely conflict: the golden-signals
-plan renames the Compose table's selector that the frontend plan's Stack
-tests use, and the frontend plan changes the e2e reachability count that a
+The table is a warning, not the rule: it was read off the plans by hand and
+has already been found short twice. **A plan executed after another has
+landed re-reads every file it edits on `main` before its first edit to that
+file**, listed here or not, and applies its change to what is there rather
+than replaying its own code blocks, which quote `e8e4f57`. Two cases make
+replaying lose work rather than merely conflict: the golden-signals plan
+renames the Compose table's selector that the frontend plan's Stack tests
+use, and the frontend plan rewrites the reachability assertion that a
 golden-signals rewrite of `stack.spec.ts` would restore. The code blocks are
 the intent; the file on `main` is the base.
 
