@@ -4,8 +4,8 @@
 what it does.** The wiring discards its output and runs in the background so
 that it can never block an edit — which also means a hook that fails on every
 call looks exactly like one that works. So the wiring is asserted from the
-files the harness reads,
-and `refresh-index.sh` — the hook command's whole body — is run against a fake
+files the harness reads, and `refresh-index.sh` — the hook command's whole
+body — is run against a fake
 `codebase-index` that records the arguments and the guard it was handed.
 
 **Not a skip where `sh` or `git` is missing.** A skip reports a pass, which is
@@ -172,11 +172,28 @@ class TheRefresh(unittest.TestCase):
             return []
         return self.record.read_text(encoding="utf-8").splitlines()
 
-    def test_it_runs_update_once_with_the_guard_and_leaves_nothing_behind(self):
+    def start_refresh(self):
+        return subprocess.Popen([SH, str(REFRESH)], cwd=str(self.repo),
+                                env=self.env(), stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL)
+
+    def wait_for(self, condition, what, seconds=30):
+        deadline = time.monotonic() + seconds
+        while not condition():
+            if time.monotonic() > deadline:
+                raise AssertionError(f"timed out waiting for {what}")
+            time.sleep(0.05)
+
+    def pending(self):
+        path = self.cache / "refresh.pending"
+        return path.read_text(encoding="utf-8").strip() if path.exists() else ""
+
+    def test_it_runs_update_once_with_the_guard_and_leaves_only_the_mark(self):
         result = self.run_refresh()
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual([f"{guard_value()} update"], self.calls())
-        self.assertEqual([], sorted(p.name for p in self.cache.iterdir()))
+        self.assertEqual(["refresh.pending"],
+                         sorted(p.name for p in self.cache.iterdir()))
 
     def test_the_hook_command_itself_reaches_the_cli(self):
         # The string from settings.json, through the shell that runs it, so an
@@ -186,115 +203,39 @@ class TheRefresh(unittest.TestCase):
                                  env=self.env(), capture_output=True, text=True,
                                  timeout=30)
         self.assertEqual(0, started.returncode, started.stderr)
-        deadline = time.monotonic() + 30
-        while not self.calls() and time.monotonic() < deadline:
-            time.sleep(0.2)
+        self.wait_for(self.calls, "the fake CLI to be called")
         self.assertEqual([f"{guard_value()} update"], self.calls())
+
+    def test_a_burst_of_edits_runs_one_update_and_it_is_the_last_calls(self):
+        # The second call publishes while the first is still waiting, so the
+        # first must stand down and the second — the last — must run.
+        self.fake(extra=f'cat {(self.cache / "refresh.pending").as_posix()!r} '
+                        f'>> {self.record.as_posix()!r}\n')
+        first = self.start_refresh()
+        self.addCleanup(first.wait)
+        self.wait_for(self.pending, "the first call to publish")
+        first_token = self.pending()
+        second = self.start_refresh()
+        self.addCleanup(second.wait)
+        self.wait_for(lambda: self.pending() != first_token,
+                      "the second call to publish")
+        last_token = self.pending()
+        self.assertEqual(0, first.wait(timeout=60))
+        self.assertEqual(0, second.wait(timeout=60))
+        self.assertEqual([f"{guard_value()} update", last_token], self.calls())
 
     def test_an_edit_during_an_update_gets_an_update_after_it(self):
-        # The fake marks the index pending from inside its first run, which is
-        # what a second edit's hook does while the first update is scanning.
-        pending = (self.cache / "refresh.pending").as_posix()
-        self.fake(extra=f'[ -e {self.record.as_posix()!r}.once ] || '
-                        f'{{ : > {self.record.as_posix()!r}.once; '
-                        f': > {pending!r}; }}\n')
-        result = self.run_refresh()
-        self.assertEqual(0, result.returncode, result.stderr)
+        # The first update is slow; an edit landing while it runs is published
+        # after it started, so a second update must follow.
+        self.fake(extra="sleep 3\n")
+        first = self.start_refresh()
+        self.addCleanup(first.wait)
+        self.wait_for(self.calls, "the first update to start")
+        second = self.start_refresh()
+        self.addCleanup(second.wait)
+        self.assertEqual(0, first.wait(timeout=60))
+        self.assertEqual(0, second.wait(timeout=60))
         self.assertEqual(2, len(self.calls()), self.calls())
-
-    def test_a_call_that_finds_the_lock_held_leaves_the_work_to_the_holder(self):
-        (self.cache / "refresh.lock").mkdir()
-        result = self.run_refresh()
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual([], self.calls())
-        self.assertTrue((self.cache / "refresh.pending").exists())
-
-    def test_a_stale_lock_is_taken_back(self):
-        lock = self.cache / "refresh.lock"
-        lock.mkdir()
-        old = time.time() - 3600
-        os.utime(lock, (old, old))
-        result = self.run_refresh()
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual([f"{guard_value()} update"], self.calls())
-        self.assertEqual([], sorted(p.name for p in self.cache.iterdir()))
-
-    def holder_token(self, alive):
-        """A token naming a real shell: running for the test, or already gone.
-
-        A shell's own `$$`, not this process's PID: on Windows the two
-        namespaces differ, and `kill -0` in `sh` reads the shell's.
-        """
-        record = self.tmp / "holder"
-        script = f'echo "$$.0" > {record.as_posix()!r}' + ("; sleep 30" if alive else "")
-        shell = subprocess.Popen([SH, "-c", script])
-        if alive:
-            self.addCleanup(shell.wait)
-            self.addCleanup(shell.kill)
-        else:
-            shell.wait()
-        deadline = time.monotonic() + 10
-        while time.monotonic() < deadline:
-            if record.exists() and record.read_text(encoding="utf-8").strip():
-                return record.read_text(encoding="utf-8").strip()
-            time.sleep(0.1)
-        raise AssertionError("the holder shell never wrote its PID")
-
-    def old_lock(self, token, minutes=30):
-        lock = self.cache / "refresh.lock"
-        lock.mkdir()
-        (lock / "owner").write_text(token + "\n", encoding="utf-8")
-        old = time.time() - minutes * 60
-        os.utime(lock, (old, old))
-        return lock
-
-    def test_an_old_lock_whose_holder_is_alive_is_left_alone(self):
-        # Age alone would displace a holder still inside a slow update and
-        # start a second update beside it.
-        lock = self.old_lock(self.holder_token(alive=True))
-        result = self.run_refresh()
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual([], self.calls())
-        self.assertTrue(lock.is_dir())
-        self.assertTrue((self.cache / "refresh.pending").exists())
-
-    def test_an_old_lock_whose_holder_is_gone_is_taken_back(self):
-        self.old_lock(self.holder_token(alive=False))
-        result = self.run_refresh()
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual([f"{guard_value()} update"], self.calls())
-        self.assertEqual([], sorted(p.name for p in self.cache.iterdir()))
-
-    def test_a_young_lock_whose_holder_is_gone_is_taken_back_at_once(self):
-        # Waiting for the lock to age would strand this call's edit: it is the
-        # last one, and nothing else comes back for it.
-        self.old_lock(self.holder_token(alive=False), minutes=0)
-        result = self.run_refresh()
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual([f"{guard_value()} update"], self.calls())
-        self.assertEqual([], sorted(p.name for p in self.cache.iterdir()))
-
-    def test_a_lock_past_its_lease_is_taken_back_even_if_its_pid_is_alive(self):
-        # A live PID on a two-hour-old lock is a hung holder or a reused PID;
-        # either way, honouring it would stop every refresh for good.
-        self.old_lock(self.holder_token(alive=True), minutes=120)
-        result = self.run_refresh()
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual([f"{guard_value()} update"], self.calls())
-
-    def test_a_holder_taken_over_as_stale_leaves_its_successors_lock(self):
-        # A holder that outlasted the threshold returns to find a successor's
-        # token in the lock. Freeing it would let a third call start an update
-        # beside the successor's, so the holder must leave it and exit.
-        owner = (self.cache / "refresh.lock" / "owner").as_posix()
-        self.fake(extra=f"printf 'successor\\n' > {owner!r}\n")
-        result = self.run_refresh()
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual(1, len(self.calls()), self.calls())
-        self.assertEqual(
-            "successor",
-            (self.cache / "refresh.lock" / "owner").read_text(
-                encoding="utf-8").strip())
 
     def test_a_failed_update_is_retried(self):
         # The fake fails its first call only, as a transient lock timeout would.
@@ -303,14 +244,12 @@ class TheRefresh(unittest.TestCase):
         result = self.run_refresh()
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual(2, len(self.calls()), self.calls())
-        self.assertEqual([], sorted(p.name for p in self.cache.iterdir()))
 
-    def test_a_failure_that_persists_gives_up_and_frees_the_lock(self):
+    def test_a_failure_that_persists_gives_up(self):
         self.fake(extra="exit 1\n")
         result = self.run_refresh()
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual(3, len(self.calls()), self.calls())
-        self.assertFalse((self.cache / "refresh.lock").exists())
 
     def test_no_index_means_no_update(self):
         shutil.rmtree(self.cache)
