@@ -937,7 +937,8 @@ same argument as never calling a branch clean because asking failed.
       committing**. The agent is what keeps that grant its own: a
       frontmatter deny lasts the rest of the turn it loads in
       (`docs/harness-boundaries.md`), so run inline its bare `Bash` deny
-      would refuse every command below, the push included. Then rerun the step 2 checks that apply to what it
+      would refuse every command below, the push included. Then rerun the
+      step 2 checks that apply to what it
       changed: a review fix is still an edit, and committing it unchecked
       hands the next reviewer a broken branch. Then `/commit` **scoped to
       the paths the triage touched** — `suggestions.md` is still on disk
