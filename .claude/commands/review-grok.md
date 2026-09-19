@@ -113,10 +113,12 @@ Save it to a file and name the path.
 > is the boundary on the agent path. Loading the command in an agent instead
 > would not hold it either — inside a `general-purpose` agent its deny was
 > measured not to apply (`docs/harness-boundaries.md`). `/ship`'s own
-> `disallowed-tools` holds the trees and the broad agent types, and the
-> profile's `PreToolUse` hook, `guard-triager-dispatch.py`, refuses every
-> dispatch but `review-adjudicator` — the triager itself included, which
-> `/ship` grants and so cannot deny.
+> `disallowed-tools` states the trees and the broad agent types, in the
+> turn `/ship` was loaded in only (#27); the profile's `PreToolUse` hooks
+> hold in every turn — `guard-triager-edit.py` refuses those trees, read
+> from that list, and `guard-triager-dispatch.py` refuses every dispatch
+> but `review-adjudicator` — the triager itself included, which `/ship`
+> grants and so cannot deny.
 
 **This command triages a review that already ran; it does not invoke Grok and
 consumes no Grok usage.** So the usage-limit preflight (skip when out of limits)

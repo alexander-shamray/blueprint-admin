@@ -9989,5 +9989,151 @@ class TheTriagerDispatchesOnlyTheAdjudicator(unittest.TestCase):
         self.assertNotIn("guard-triager-dispatch", settings)
 
 
+class TheTriagerEditsNothingShipDenies(unittest.TestCase):
+    """`/ship`'s `Edit(...)` denies bind the triager in every turn (#27).
+
+    The frontmatter list lasts only the turn `/ship` was loaded in, and step 5
+    spawns the triager async, so a later round was measured writing into
+    `.github/` and editing `README.md`. The profile's own `PreToolUse` hook is
+    the boundary now; these cases run it through the launcher, as the harness
+    does, and read the patterns from `ship.md` rather than from a copy, so the
+    subject is the list the guard reads and a path added there is covered
+    here with no edit to this class.
+    """
+
+    LAUNCHER = SCRIPTS.parent / "hooks" / "run-guard.sh"
+    GUARD = SCRIPTS.parent / "hooks" / "guard-triager-edit.py"
+    PROFILE = SCRIPTS.parent / "agents" / "review-grok-triager.md"
+    SHIP = SCRIPTS.parent / "commands" / "ship.md"
+    ROOT = SCRIPTS.parent.parent
+
+    def run_guard(self, event):
+        payload = event if isinstance(event, str) else json.dumps(event)
+        return subprocess.run(
+            [BASH, str(self.LAUNCHER), "guard-triager-edit.py"],
+            input=payload, capture_output=True, text=True)
+
+    def edit(self, path, tool="Edit", cwd=None):
+        key = "notebook_path" if tool == "NotebookEdit" else "file_path"
+        return self.run_guard({
+            "tool_name": tool,
+            "tool_input": {key: path},
+            "cwd": str(cwd or self.ROOT),
+        })
+
+    def assert_refused(self, out):
+        self.assertEqual(0, out.returncode, out.stderr)
+        decision = json.loads(out.stdout)["hookSpecificOutput"]
+        self.assertEqual("deny", decision["permissionDecision"])
+
+    def assert_admitted(self, out):
+        self.assertEqual(0, out.returncode, out.stderr)
+        self.assertEqual("", out.stdout)
+
+    def ship_denies(self):
+        front = self.SHIP.read_text(encoding="utf-8").split("\n---", 1)[0]
+        line = next(entry for entry in front.splitlines()
+                    if entry.startswith("disallowed-tools:"))
+        return sorted({glob[2:] if glob.startswith("./") else glob
+                       for glob in re.findall(r"Edit\(([^)]*)\)", line)})
+
+    @staticmethod
+    def instance(glob):
+        # One concrete path each glob must refuse: `**/` becomes a directory,
+        # any other wildcard a name, so a nested pattern is tested nested.
+        return (glob.replace("**/", "nested/dir/").replace("**", "inner/x")
+                .replace("*", "x").replace("?", "x"))
+
+    def test_the_list_it_reads_holds_the_two_trees_measured(self):
+        # The subject test for the source: the two targets #27 measured
+        # written must be in the list the guard reads, or every case below
+        # passes against the wrong file.
+        denies = self.ship_denies()
+        self.assertIn(".github/**", denies)
+        self.assertIn("README.md", denies)
+        self.assertIn(".claude/**", denies)
+
+    def test_ordinary_edits_pass(self):
+        # The positive control: a guard refusing everything passes every
+        # refusal below, and the triage could fix nothing.
+        for path in ("docs/harness-boundaries.md", "src/Admin.Host/Program.cs",
+                     "tests/Admin.Host.Tests/x.cs",
+                     str(self.ROOT / "docs" / "testing.md")):
+            for tool in ("Edit", "Write", "MultiEdit"):
+                with self.subTest(path=path, tool=tool):
+                    self.assert_admitted(self.edit(path, tool))
+
+    def test_every_ship_deny_is_refused(self):
+        denies = self.ship_denies()
+        self.assertTrue(denies)
+        for glob in denies:
+            path = self.instance(glob)
+            for spelled in (path, "./" + path, path.upper(),
+                            str(self.ROOT / path)):
+                with self.subTest(glob=glob, spelled=spelled):
+                    self.assert_refused(self.edit(spelled))
+
+    def test_every_edit_tool_is_judged(self):
+        for tool in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
+            with self.subTest(tool=tool):
+                self.assert_refused(self.edit("README.md", tool))
+
+    def test_spellings_windows_folds_are_refused(self):
+        for spelled in ("README.md.", "README.md ", "README.md:stream",
+                        ".github./workflows/x.yml", "docs/../README.md"):
+            with self.subTest(spelled=spelled):
+                self.assert_refused(self.edit(spelled))
+
+    def test_a_target_in_no_checkout_is_refused(self):
+        with tempfile.TemporaryDirectory() as outside:
+            self.assert_refused(self.edit(os.path.join(outside, "x.md"),
+                                          cwd=outside))
+
+    def test_an_unreadable_event_blocks(self):
+        for event in ("not json", "[]", "\"Edit\"",
+                      json.dumps({"tool_name": "Edit", "tool_input": {}}),
+                      json.dumps({"tool_name": "Write", "tool_input": "x"})):
+            with self.subTest(event=event):
+                self.assertEqual(2, self.run_guard(event).returncode)
+
+    def test_a_ship_md_without_edit_denies_blocks(self):
+        # Fail closed on the source: a guard that finds no rules and admits
+        # everything is #27 again.
+        spec = importlib.util.spec_from_file_location("guard_triager_edit",
+                                                      self.GUARD)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as tmp:
+            for body in ("no frontmatter\n", "---\nname: x\n---\n",
+                         "---\ndisallowed-tools: Agent(claude)\n---\n"):
+                ship = os.path.join(tmp, "ship.md")
+                with open(ship, "w", encoding="utf-8") as handle:
+                    handle.write(body)
+                with self.subTest(body=body), \
+                        mock.patch.object(module, "SHIP", ship):
+                    self.assertIsNone(module.patterns())
+            with mock.patch.object(module, "SHIP",
+                                   os.path.join(tmp, "missing.md")):
+                self.assertIsNone(module.patterns())
+
+    def test_other_tools_are_not_judged(self):
+        for tool in ("Read", "Grep", "Agent"):
+            with self.subTest(tool=tool):
+                self.assert_admitted(self.run_guard({
+                    "tool_name": tool,
+                    "tool_input": {"file_path": "README.md"}}))
+
+    def test_the_profile_wires_the_guard_on_its_edits(self):
+        # The subject is the wiring: a guard not registered on the profile
+        # refuses nothing, and one registered session-wide would refuse the
+        # session's own edits to the trees /ship's commits carry.
+        front = self.PROFILE.read_text(encoding="utf-8").split("\n---", 1)[0]
+        self.assertRegex(front, r'matcher:\s*"Edit\|Write\|MultiEdit\|'
+                                r'NotebookEdit"')
+        self.assertIn('run-guard.sh\\" guard-triager-edit.py', front)
+        settings = SETTINGS.read_text(encoding="utf-8")
+        self.assertNotIn("guard-triager-edit", settings)
+
+
 if __name__ == "__main__":
     unittest.main()

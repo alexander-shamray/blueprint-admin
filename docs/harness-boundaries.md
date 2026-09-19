@@ -71,7 +71,8 @@ argument is how a rule gets "corrected" back.
   `disallowedTools` removes the whole tool, so every `Edit(...)`
   `/review-grok` states is in `/ship`'s own `disallowed-tools`, beside the
   broad agent types; that list reaches the agents a command spawns, as
-  `review-grok.md` records of its adjudicator.
+  `review-grok.md` records of its adjudicator — in the turn it was loaded
+  in, which is why the trees also have a hook (below).
   `CommandsEnforceTheEditingBoundariesTheyState` pins the profile, the
   grant and both deny lists, and reads `.claude/agents/` on every run, so
   a new profile fails each exact grant that does not deny it;
@@ -82,16 +83,26 @@ argument is how a rule gets "corrected" back.
   `Grep`, `Glob`, `Edit`, `Write` and `Agent`, with no shell and no
   `Skill`; and the hook refused `general-purpose` and
   `review-grok-triager` by name and let `review-adjudicator` run.
-- **The third holds only in the turn `/ship` was loaded in, and that is a
-  blocker on Grok, not a residual (#27).** Spawned in that turn, the
-  triager was refused an `Edit` to `.github/**` and `README.md` — *File
-  is in a directory that is denied by your permission settings* — while a
-  `docs/**` control passed. Spawned one user message later, without
-  `/ship` re-invoked, it wrote into `.github/` and edited `README.md`.
-  That is the turn-wide lifetime stated above, reaching the one boundary
-  that rests on it; a triager completion notification was also seen
-  restoring the denied agent types to the parent, and step 5 spawns it
-  async, so every round after the first would start in such a turn.
+- **The third held only in the turn `/ship` was loaded in (#27), so it
+  moved onto the profile.** Spawned in that turn, the triager was refused
+  an `Edit` to `.github/**` and `README.md` — *File is in a directory that
+  is denied by your permission settings* — while a `docs/**` control
+  passed. Spawned one user message later, without `/ship` re-invoked, it
+  wrote into `.github/` and edited `README.md`: the turn-wide lifetime
+  stated above, reaching the one boundary that rested on it. Step 5 spawns
+  the triager async, so every round after the first starts in such a turn.
+  The profile now carries a second `PreToolUse` hook,
+  `guard-triager-edit.py`, on `Edit|Write|MultiEdit|NotebookEdit`: it reads
+  `/ship`'s `Edit(...)` denies from `ship.md` on every call — one list, no
+  copy — and refuses a target under any of them, matched without regard to
+  case, and any target in no checkout. `/ship`'s list still states the
+  trees; the hook is what makes them hold outside that turn.
+  `TheTriagerEditsNothingShipDenies` runs it through the launcher against
+  every pattern that list holds and pins its wiring on the profile.
+  **Unmeasured at runtime:** that this hook fires on `Edit` in a turn after
+  `/ship`'s rests on the profile-hook mechanism the dispatch hook was
+  measured under, not on a probe of this one. A triager spawned a user message after `/ship`,
+  asked to edit `README.md`, is the measurement owed before Grok returns.
 - **`python -m unittest discover -s .claude/scripts -p 'test_*.py'` is the
   harness's own suite.** It reads `git ls-files`, so a new tracked root file
   or top-level tree fails it until somebody decides which side of the
