@@ -16,14 +16,10 @@ repeated here.
 
 Open pull requests and the branches behind them.
 
-| Task | PR | Branch |
-|---|---|---|
-| Record that an agent discards `/review-grok`'s deny rather than scoping it | [#20](https://github.com/alexander-shamray/blueprint-admin/pull/20) | `docs/agent-deny-measured` |
+None.
 
 ## Remaining
 
 Open issues with no PR yet, highest severity first.
 
-| Task | Issue | Severity |
-|---|---|---|
-| A dedicated agent profile for the `/review-grok` triage before the Grok loop is re-enabled | [#19](https://github.com/alexander-shamray/blueprint-admin/issues/19) | high |
+None.
