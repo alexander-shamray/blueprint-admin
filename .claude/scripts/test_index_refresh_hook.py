@@ -206,6 +206,24 @@ class TheRefresh(unittest.TestCase):
         self.wait_for(self.calls, "the fake CLI to be called")
         self.assertEqual([f"{guard_value()} update"], self.calls())
 
+    def test_the_shipped_example_runs_backgrounded_and_silenced(self):
+        # Its tokens alone cannot say this: quoting `&` and the redirections
+        # gives `shlex.split` the same list while handing them to the CLI as
+        # arguments. So the literal command runs, against a fake that prints
+        # and outlasts the shell — a foreground call would be slow and loud.
+        self.fake(extra="echo loud\nsleep 3\n")
+        entries = read_json(EXAMPLE)["hooks"]["PostToolUse"]
+        command = entries[0]["hooks"][0]["command"]
+        began = time.monotonic()
+        shell = subprocess.run([SH, "-c", command], cwd=str(self.repo),
+                               env=self.env(), capture_output=True, text=True,
+                               timeout=30)
+        self.assertLess(time.monotonic() - began, 2, "the example did not background")
+        self.assertEqual(0, shell.returncode, shell.stderr)
+        self.assertEqual("", shell.stdout + shell.stderr)
+        self.wait_for(self.calls, "the fake CLI to be called")
+        self.assertEqual([f"{guard_value()} update"], self.calls())
+
     def test_a_burst_of_edits_runs_one_update_and_it_is_the_last_calls(self):
         # The second call publishes while the first is still waiting, so the
         # first must stand down and the second — the last — must run.
