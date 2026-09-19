@@ -80,7 +80,9 @@ argument is how a rule gets "corrected" back.
   behaviour: that the allowlist holds and the hook runs is Claude Code's
   documented behaviour rather than a measurement here, because profiles
   register at session start and the session that wrote this one could not
-  spawn it. Measuring both is **required before Grok is re-enabled**
+  spawn it; and that `/ship`'s deny list reaches the triager is carried
+  over from the `/review-grok`→adjudicator pair, not measured for this
+  one. Measuring all three is **required before Grok is re-enabled**
   (#23).
 - **`python -m unittest discover -s .claude/scripts -p 'test_*.py'` is the
   harness's own suite.** It reads `git ls-files`, so a new tracked root file
