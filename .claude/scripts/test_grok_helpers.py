@@ -5343,8 +5343,16 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
         # repository's profiles are read from `.claude/agents/` each run, so
         # a profile added tomorrow fails every command that grants a type and
         # does not name it — the line review-grok.md says admits a new agent
-        # "until this line names it".
-        profiles = {p.stem for p in (SCRIPTS.parent / "agents").glob("*.md")}
+        # "until this line names it". A profile is dispatched by its
+        # frontmatter `name`, not its filename, so that is what is read.
+        profiles = set()
+        for path in sorted((SCRIPTS.parent / "agents").glob("*.md")):
+            names = re.findall(r"^name:\s*(\S+)\s*$",
+                               path.read_text(encoding="utf-8").split(
+                                   "\n---", 1)[0], re.MULTILINE)
+            with self.subTest(profile=path.name):
+                self.assertEqual(1, len(names), "exactly one `name:`")
+            profiles.update(names)
         self.assertIn("review-grok-triager", profiles)
         self.assertIn("review-adjudicator", profiles)
         granting = 0
