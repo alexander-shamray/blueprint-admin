@@ -1383,8 +1383,8 @@ started by hand", and add in their place:
 - A client started by hand is seen only once it answers on `Admin:ClientUrl`:
   during its first build the port is still free, so Start can race it, and
   the `ng serve` that loses exits saying the port is in use.
-- An `npm ci` cannot be stopped from the console; Start and Install wait for
-  it to exit.
+- An `npm ci` cannot be stopped from the console, and while it runs Start
+  and Install are refused (409); press them again once it has exited.
 ```
 
 CLAUDE.md — "It does **not** run `npm ci` in the frontend clone." becomes

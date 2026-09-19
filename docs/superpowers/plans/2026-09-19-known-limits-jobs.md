@@ -878,6 +878,20 @@ Add, before the closing `});`:
     expect(fixture.componentInstance.hostJob()).toBeNull();
   });
 
+  it('a stop that fails on a late answer is sent once, and the job stays for Stop', () => {
+    const post = new Subject<JobSummary>();
+    host.followLogs.mockReturnValueOnce(post.asObservable());
+    host.stopFollow.mockReturnValueOnce(throwError(() => new Error('host gone')));
+    const fixture = TestBed.createComponent(LogsPage);
+    fixture.componentInstance.follow();
+    fixture.componentInstance.stop();
+
+    post.next(summary('late-6'));
+
+    expect(host.stopFollow).toHaveBeenCalledTimes(1);
+    expect(fixture.componentInstance.hostJob()).toBe('late-6');
+  });
+
   it('a slow stop of the previous job does not forget the next one', () => {
     const stopA = new Subject<void>();
     host.stopFollow.mockReturnValueOnce(stopA.asObservable());
@@ -906,7 +920,7 @@ Add, before the closing `});`:
 
 Run: `bash .claude/scripts/npm-checks.sh all`
 Expected: lint and the build fail on `stopFollow`, which does not exist on
-`HostClient`. Once the method exists, the nine new page tests fail on
+`HostClient`. Once the method exists, the ten new page tests fail on
 `stopFollow` never being called or on the Follow button never disabling,
 and so do the four rewritten ones.
 
@@ -1025,7 +1039,12 @@ Replace the constructor, `follow()` and `stop()`:
           this.requestOut.set(false);
           this.pending.set(false);
           this.following.set(false);
-          this.stopOnHost();
+          // A stream that ended leaves its job to stop. The stop-on-arrival path has already sent that
+          // stop and completes through EMPTY at once: a second here would follow a first that failed
+          // synchronously, after it released its claim.
+          if (!this.stopOnArrival) {
+            this.stopOnHost();
+          }
         },
       });
   }
@@ -1449,3 +1468,12 @@ git commit -m "docs: say Stop ends the host's follow and reads are not kept as j
     only the next Follow ends it; closing that needs a host-side reaper
     for a follow nobody streams, which is a larger change than this
     limit asks for.
+  - A follow whose stop timed out. `ProcessRunner.StopAsync` marks the job
+    exited -1 after 10 s while a process the kill did not reach may still
+    run, and its summary already says a restart then runs beside it. The
+    next Follow therefore does not end that one: it sees no running follow
+    and starts a second `logs -f`. That is the index's kept 10-second
+    limit (spec §5.2), which every job shares; reconciling it in
+    `LogFollower` alone would fix one caller of a runner-wide behaviour.
+    "Ended by the next Follow", here and in README, is about a job the
+    host still marks running.
