@@ -234,7 +234,7 @@ and the `Probe(...)` helper):
     }
 
     [Fact]
-    public void The_real_probe_never_follows_a_redirect()
+    public void The_real_probe_never_follows_a_redirect_and_keeps_no_cookies()
     {
         // The case above holds only if the handler hands the 302 back. A default HttpClientHandler
         // follows it, and a client answering 302 to a page that is down would then read as a free
@@ -243,6 +243,9 @@ and the `Probe(...)` helper):
         HttpClientHandler handler = PlatformProbe.PrimaryHandler().ShouldBeOfType<HttpClientHandler>();
 
         handler.AllowAutoRedirect.ShouldBeFalse();
+        // The probe asks seven localhost ports, and a cookie is scoped by host, not port: one surface's
+        // Set-Cookie would be sent to the next. The "platform" client refuses cookies for the same reason.
+        handler.UseCookies.ShouldBeFalse();
     }
 
     [Fact]
@@ -348,9 +351,10 @@ In `ProbeAsync`, replace `("client", Join(o.ClientUrl, "/")),` with
     /// <summary>
     /// The real probe's handler, registered in Program.cs. It does not follow redirects: a 3xx is
     /// the target's own answer, and following it would report whatever the redirect names instead,
-    /// so a client answering 302 to a page that is down would read as a free port.
+    /// so a client answering 302 to a page that is down would read as a free port. It keeps no
+    /// cookies: its targets are one host on several ports, and a cookie is scoped by host alone.
     /// </summary>
-    public static HttpMessageHandler PrimaryHandler() => new HttpClientHandler { AllowAutoRedirect = false };
+    public static HttpMessageHandler PrimaryHandler() => new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false };
 
     private static string ClientTarget(AdminOptions o) => Join(o.ClientUrl, "/");
 ```

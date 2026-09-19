@@ -892,6 +892,19 @@ Add, before the closing `});`:
     expect(fixture.componentInstance.hostJob()).toBe('late-6');
   });
 
+  it('leaving the screen after a failed stop makes one last attempt, and no more', () => {
+    host.stopFollow
+      .mockReturnValueOnce(throwError(() => new Error('host gone')))
+      .mockReturnValueOnce(throwError(() => new Error('still gone')));
+    const fixture = TestBed.createComponent(LogsPage);
+    fixture.componentInstance.follow();
+    fixture.componentInstance.stop();
+
+    fixture.destroy();
+
+    expect(host.stopFollow.mock.calls.map((c) => c[0])).toEqual(['logs-1', 'logs-1']);
+  });
+
   it('a slow stop of the previous job does not forget the next one', () => {
     const stopA = new Subject<void>();
     host.stopFollow.mockReturnValueOnce(stopA.asObservable());
@@ -920,7 +933,7 @@ Add, before the closing `});`:
 
 Run: `bash .claude/scripts/npm-checks.sh all`
 Expected: lint and the build fail on `stopFollow`, which does not exist on
-`HostClient`. Once the method exists, the ten new page tests fail on
+`HostClient`. Once the method exists, the eleven new page tests fail on
 `stopFollow` never being called or on the Follow button never disabling,
 and so do the four rewritten ones.
 
@@ -1108,10 +1121,11 @@ Add, before `describeError`:
   }
 ```
 
-Leaving the screen after a stop that failed has no one left to press Stop
-again, and no retry is attempted: a retry loop outliving its screen is a
-timer running for nobody. That job is the README residual below, ended by
-the next Follow.
+Leaving the screen after a stop that failed makes one last attempt: the
+teardown's `stop()` finds the job still held and no stop out for it, and
+sends one. If that fails too, nothing tries again — a retry loop outliving
+its screen is a timer running for nobody — and the job is the README
+residual below, ended by the next Follow.
 
 In `logs-page.html`, Follow disables while a request is out:
 
