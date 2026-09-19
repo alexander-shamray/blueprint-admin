@@ -19,9 +19,12 @@ README fact and a rule that moves is a spec fact.
 | [API screen: lasting history and additive users](2026-09-19-known-limits-api.md) | History is kept only while the screen is open; configuring any user replaces demo/demo and browser/browser |
 | [Golden signals: the rest of the row](2026-09-19-known-limits-golden-signals.md) | The strip shows rate, errors and duration only; a service with no 5xx shows a dash instead of a zero |
 
-The plans are independent and may land in any order, but not in isolation:
-each was written against `e8e4f57`, and these files are named by more than
-one of them.
+**One order is required: jobs before frontend.** The frontend plan's "Show
+npm ci output" reads the job registry by id, and until the jobs plan stops
+recording the Stack poll's `ps` reads, an exited install is evicted from it
+within minutes. The other plans may land in any order, but not in
+isolation: each was written against `e8e4f57`, and these files are named by
+more than one of them.
 
 | File | Plans |
 |---|---|

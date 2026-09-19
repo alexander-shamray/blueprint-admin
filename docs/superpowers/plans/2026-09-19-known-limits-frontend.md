@@ -1118,14 +1118,14 @@ and append inside `describe('reference client', …)`:
       expect(q('button.frontend-install')!.disabled).toBe(true);
     });
 
-    it('says a client the console did not start answers, and disables Start and Install', async () => {
+    it('says something other than its own npm start answers, and disables Start and Install', async () => {
       host.stack.mockReturnValue(
         of({ ...stack, reachability: [{ name: 'client', url: 'http://localhost:5173/', up: true, status: 200 }] }),
       );
       const { fixture, q } = await render();
 
       expect(fixture.nativeElement.textContent).toContain(
-        'Something already answers on http://localhost:5173 that this console did not start. Start and Install are refused until it stops.',
+        'Something already answers on http://localhost:5173, and it is not an npm start this console is running: a client started by hand, or one a Stop that gave up left alive. Start and Install are refused until it stops.',
       );
       expect(q('button.frontend-start')!.disabled).toBe(true);
       expect(q('button.frontend-install')!.disabled).toBe(true);
@@ -1207,7 +1207,7 @@ and after `stopFrontend()`:
       <p class="error">{{ config()?.frontendDir ?? 'The frontend clone' }} has no node_modules. Install runs npm ci there.</p>
     }
     @if (unownedClient()) {
-      <p class="error">Something already answers on {{ config()?.urls.client ?? 'the client URL' }} that this console did not start. Start and Install are refused until it stops.</p>
+      <p class="error">Something already answers on {{ config()?.urls.client ?? 'the client URL' }}, and it is not an npm start this console is running: a client started by hand, or one a Stop that gave up left alive. Start and Install are refused until it stops.</p>
     }
     <button class="frontend-install" [disabled]="frontendRunning() || installing() || unownedClient()" (click)="installFrontend()">Install (npm ci)</button>
     <button class="frontend-start" [disabled]="frontendRunning() || installing() || unownedClient() || !s.frontend.installed" (click)="startFrontend()">Start frontend</button>
@@ -1215,7 +1215,15 @@ and after `stopFrontend()`:
 
 and after the existing `@if (s.frontend.job) { … Show output … }` block,
 the same for the install job, so a failed `npm ci` stays readable after the
-screen is left and reopened, as a failed `npm start` does:
+screen is left and reopened, as a failed `npm start` does.
+
+**That promise depends on the jobs plan, which lands first.** The output is
+read from the job registry by id, and the registry keeps the last 50 exited
+jobs. Until the jobs plan stops recording `ps` and `exec`, the Stack
+screen's 3-second poll evicts an exited `npm ci` within minutes, exactly as
+it evicts `npm start` today, and the button then opens a 404. Executing this
+plan before the jobs plan ships that defect in a new button; the index
+records the order.
 
 ```html
     @if (s.frontend.install) {
@@ -1322,11 +1330,12 @@ rewrite a lockfile the frontend owns.
 ```markdown
 Holds at most one `npm start` job and one `npm ci` job in `FrontendDir`.
 `Install()` runs `npm ci`; it refuses while either job runs, and while
-something the console did not start answers on `ClientUrl`, because `npm ci`
-replaces the `node_modules` a running server reads. `Start()` refuses while
-its job runs, while an install runs, if `node_modules` is absent, and while
-something the console did not start answers on `ClientUrl` — a client started
-by hand, or one a Stop that gave up (§5.2) left alive — because a second
+something that is not its running `npm start` answers on `ClientUrl`, because
+`npm ci` replaces the `node_modules` a running server reads. `Start()` refuses
+while its job runs, while an install runs, if `node_modules` is absent, and
+while something that is not its running `npm start` answers on `ClientUrl` —
+a client started by hand, or one a Stop that gave up (§5.2) left alive; the
+console cannot tell the two apart, and says neither — because a second
 `ng serve` would compete for the port. "Answers" is any HTTP status. The port
 is tested last and under the same lock as the start, so two clicks cannot
 race; a client started by hand that has not finished its first build is not
@@ -1342,22 +1351,23 @@ becomes
 `| `POST /stack/frontend/install`, `POST /stack/frontend/start`, `POST /stack/frontend/stop` | supervisor: `npm ci`, `npm start`, kill the tree; a refusal is a 409 naming what blocks it |`.
 
 §6 — the Stack row's "Shows" cell replaces "the frontend job;" with "the
-frontend job and its last `npm ci`, and a warning when something the console
-did not start answers on the client's port;", and its "Does" cell becomes
+frontend job and its last `npm ci`, and a warning when something that is not
+the console's running `npm start` answers on the client's port;", and its
+"Does" cell becomes
 "Up, Down, Down and wipe (typed confirmation), Install (`npm ci`), Start and
 Stop frontend; opens the job's output pane".
 
 §10 — "and `npm start` output from an in-code recording" becomes "and
 `npm start` and `npm ci` output from in-code recordings", and "`node_modules`
-absent)." becomes "`node_modules` absent, a client the console did not
-start)."
+absent)." becomes "`node_modules` absent, a client answering that is not the
+console's running `npm start`)."
 
 - [ ] **Step 4: Amend README and CLAUDE.md**
 
 README "What it does today": "the reference client's `npm start` with start,
 stop and its output;" becomes "the reference client's `npm ci` and `npm start`
-with install, start, stop and their output, refused while a client the
-console did not start answers;".
+with install, start, stop and their output, refused while something other
+than the console's running `npm start` answers on the client's port;".
 
 README "Known limits": delete the two items beginning "The console runs
 `npm start` but never `npm ci`" and "The console does not track a client

@@ -224,6 +224,7 @@ spec §5.2/§5.3/§5.10/§6, README.md                         Task 5
 - Modify: `src/Admin.Host/Jobs/ProcessSpec.cs`
 - Modify: `src/Admin.Host/Jobs/JobRegistry.cs:5-26`
 - Modify: `src/Admin.Host/Compose/ComposeService.cs:19-26,103`
+- Modify: `src/Admin.Host/Fakes/FakeProcessRunner.cs` (a `StartedJobs` seam)
 - Test: `tests/Admin.Host.Tests/Jobs/JobRegistryTests.cs`
 - Test: `tests/Admin.Host.Tests/Compose/ComposeServiceTests.cs`
 - Test: `tests/Admin.Host.Tests/Fakes/FakePlatformTests.cs`
@@ -389,18 +390,67 @@ In `src/Admin.Host/Compose/ComposeService.cs`, `Exec` and the `ps` in
     private ProcessSpec Spec(string[] args) => new("docker", ["compose", "-f", paths.ComposeFile, .. args], paths.BackendDir);
 ```
 
-- [ ] **Step 5: Run the host checks**
+- [ ] **Step 5: Give the tests the jobs the registry no longer keeps**
+
+Four `ComposeServiceTests` cases prove a cancelled or timed-out read was
+stopped by reading its state back through `registry.All().Single()`: the
+two `Ps_stops_the_job_…` cases and the two `ExecAsync_stops_the_job_…`
+cases, the only tests that read a `ps` or `exec` job back that way. Once
+`ps` and `exec` are unlisted the registry holds nothing, `Single()` throws,
+and the cases fail for the wrong reason. `runner.Started` is no substitute:
+it records the spec, which says what was asked, not whether the job was
+stopped.
+
+In `FakeProcessRunner`, beside `started`, keep every job it starts:
+
+```csharp
+    private readonly List<Job> startedJobs = [];
+
+    /// <summary>
+    /// A snapshot of every job started so far, oldest first, listed or not: an unlisted job is out of
+    /// the registry by design, and a test still needs its final state.
+    /// </summary>
+    public IReadOnlyList<Job> StartedJobs
+    {
+        get
+        {
+            lock (gate)
+            {
+                return [.. startedJobs];
+            }
+        }
+    }
+```
+
+and in `Start`, inside the existing `lock (gate)`, after `started.Add(spec);`:
+
+```csharp
+            startedJobs.Add(job);
+```
+
+In `ComposeServiceTests`, in each of the four cases, replace
+`registry.All().Single().State.ShouldBe(JobState.Exited);` with:
+
+```csharp
+        runner.StartedJobs.Single().State.ShouldBe(JobState.Exited);
+        registry.All().ShouldBeEmpty();
+```
+
+The second line is the half the old assertion could not state: the job was
+stopped, and the registry never kept it.
+
+- [ ] **Step 6: Run the host checks**
 
 Run: `dotnet format whitespace BlueprintAdmin.slnx && bash .claude/scripts/host-checks.sh all`
-Expected: all green, including the three new tests.
-`Exec_runs_inside_the_service_without_a_tty` and the other
-`runner.Started` assertions still pass: the fake records every spec it
+Expected: all green, including the three new tests and the four rewritten
+ones. `Exec_runs_inside_the_service_without_a_tty` and the other
+`runner.Started` assertions pass unchanged: the fake records every spec it
 starts, listed or not.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add src/Admin.Host/Jobs/ProcessSpec.cs src/Admin.Host/Jobs/JobRegistry.cs src/Admin.Host/Compose/ComposeService.cs tests/Admin.Host.Tests/Jobs/JobRegistryTests.cs tests/Admin.Host.Tests/Compose/ComposeServiceTests.cs tests/Admin.Host.Tests/Fakes/FakePlatformTests.cs
+git add src/Admin.Host/Jobs/ProcessSpec.cs src/Admin.Host/Jobs/JobRegistry.cs src/Admin.Host/Compose/ComposeService.cs src/Admin.Host/Fakes/FakeProcessRunner.cs tests/Admin.Host.Tests/Jobs/JobRegistryTests.cs tests/Admin.Host.Tests/Compose/ComposeServiceTests.cs tests/Admin.Host.Tests/Fakes/FakePlatformTests.cs
 git commit -m "fix(jobs): keep the ps and exec reads out of the job registry" -m "<body: F2's arithmetic, and why unlisted rather than filtered>"
 ```
 
