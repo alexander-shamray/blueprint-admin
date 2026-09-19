@@ -137,6 +137,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -8644,12 +8645,45 @@ class TheGitArgvGuard(unittest.TestCase):
         # ended the scan on a missing closer; this now does too. Found by an
         # adversarial audit.
         #
-        # Asserted as a verdict rather than as a duration, because a timing
-        # assertion on CI is a flake — `judge` fails the test if the hook exits
-        # non-zero, and the case cannot return at all if the scan is quadratic.
-        self.judge("${" * 20000)
-        self.judge('git commit -m "' + "${" * 5000)
+        # **That fix was half of it, and this case could not tell.** It judged
+        # `"${" * 20000` for a verdict alone, and a quadratic scan still
+        # returns one — after 291 seconds, the longest case in the suite, where
+        # the hook in use is cut off at 60. `_closing_brace` and
+        # `_closing_paren` still re-read the rest of the command per opener.
+        # `OPENER_BUDGET` now refuses such a command before any scan, and the
+        # case below asserts the duration this one deliberately did not.
         self.assertRefused("${" * 500 + "; git push origin +HEAD:main")
+
+    def opener_budget(self):
+        found = re.findall(r"^OPENER_BUDGET = (\d+)$",
+                           HOOK.read_text(encoding="utf-8"), re.MULTILINE)
+        self.assertEqual(1, len(found), "OPENER_BUDGET is declared once")
+        return int(found[0])
+
+    def test_a_run_of_openers_past_the_budget_is_refused_in_time(self):
+        # Every quadratic opener, not only the one the first fix found: a fix
+        # in one scanner and not its sibling is this file's most-repeated
+        # failure. **A duration, this time, and not a flake at this margin**:
+        # the refusal is a count and returns in milliseconds, where the path it
+        # replaces took minutes. The bound is half the hook's own 60 seconds,
+        # which is the quantity that decides whether a verdict counts at all.
+        budget = self.opener_budget()
+        for opener in ("${", "$(", "$((", "x("):
+            for command in (opener * 20000,
+                            opener * 20000 + "; git push origin +HEAD:main",
+                            'git commit -m "' + opener * 5000):
+                with self.subTest(opener=opener, tail=command[-16:]):
+                    started = time.perf_counter()
+                    reason = self.judge(command)
+                    self.assertLess(time.perf_counter() - started, 30)
+                    self.assertIsNotNone(reason, "admitted")
+                    self.assertIn(str(budget), reason)
+
+    def test_a_command_at_the_budget_is_judged_on_its_merits(self):
+        # The control: the cap refuses by count and by nothing else, so a
+        # command carrying exactly the budget is an ordinary `git log`.
+        budget = self.opener_budget()
+        self.assertIsNone(self.judge("git log --oneline -1 # " + "(" * budget))
 
     def test_an_expanding_heredoc_body_removes_its_continuations(self):
         # **A body whose delimiter is unquoted expands, and removes
