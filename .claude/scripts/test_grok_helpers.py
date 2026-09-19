@@ -5267,10 +5267,10 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
 
     def test_the_triage_that_denies_bash_runs_apart_from_the_push(self):
         # /review-grok cannot join CHAINED_BEFORE_A_PUSH: run inline, its bare
-        # `Bash` deny would refuse /ship's push, so it runs in an agent, where
-        # the deny is not applied (docs/harness-boundaries.md). Both halves
-        # are pinned — the deny for the inline case, the agent for the push.
-        # The triage's no-shell boundary is #19's profile, not this test.
+        # `Bash` deny would refuse /ship's push, so it runs in an agent. This
+        # pins that text only — the deny in the frontmatter and the agent in
+        # the dispatch — and no runtime behaviour, which is measured for one
+        # agent type in docs/harness-boundaries.md and owed for #19's profile.
         text = (COMMANDS / "review-grok.md").read_text(encoding="utf-8")
         denied = " ".join(
             re.findall(r"^disallowed-tools:\s*(.+)$", text, re.MULTILINE))

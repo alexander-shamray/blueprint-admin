@@ -937,10 +937,12 @@ same argument as never calling a branch clean because asking failed.
       deliberately stops short of committing**. The agent keeps that grant's
       deny off the push and **not on the triage**: a frontmatter deny lasts
       the rest of the turn it loads in, so run inline its bare `Bash` deny
-      would refuse every command below, the push included — but inside an
-      agent it is not applied at all (`docs/harness-boundaries.md`). The
-      no-shell boundary therefore rests on the dedicated profile #19 owes,
-      which is why this step stays disabled until it exists. Then rerun the
+      would refuse every command below, the push included — but inside a
+      `general-purpose` agent, the one type measured, it is not applied at
+      all (`docs/harness-boundaries.md`). The proposed no-shell boundary is
+      the dedicated profile #19 owes, pending a measurement that a
+      profile's own `tools:` holds when its agent loads a skill; this step
+      stays disabled until both exist. Then rerun the
       step 2 checks that apply to what it
       changed: a review fix is still an edit, and committing it unchecked
       hands the next reviewer a broken branch. Then `/commit` **scoped to

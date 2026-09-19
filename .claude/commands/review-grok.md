@@ -107,10 +107,12 @@ Save it to a file and name the path.
 > with the rest. Nothing this invocation can run takes a redirect.
 >
 > **Every no-`Bash` claim in this file is an inline claim (#19).** Loaded
-> inside an agent, this frontmatter's `Bash` deny is not applied — measured,
-> `docs/harness-boundaries.md` — so an agent-path run holds a shell unless
-> its own profile omits one. The dedicated profile #19 owes is what makes
-> these claims true there; until it exists, `/ship` step 5 stays disabled.
+> inside a `general-purpose` agent — the one type measured — this
+> frontmatter's `Bash` deny is not applied (`docs/harness-boundaries.md`),
+> so an agent-path run cannot be assumed shell-free. The dedicated profile
+> #19 owes is the proposed boundary there, pending a measurement that a
+> profile's own `tools:` holds when its agent loads a skill; until both
+> exist, `/ship` step 5 stays disabled.
 
 **This command triages a review that already ran; it does not invoke Grok and
 consumes no Grok usage.** So the usage-limit preflight (skip when out of limits)

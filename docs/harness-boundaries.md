@@ -50,22 +50,25 @@ argument is how a rule gets "corrected" back.
   `Edit` — and under the same turn-wide lifetime it would also refuse every
   command step 5 runs after it: the checks, `/commit` and the push. The
   deny stays and the triage moves.
-- **The agent keeps the deny off the push by discarding it, so the agent
-  alone is not the boundary.** Measured: `/review-grok` loaded through the
-  Skill tool in the main session removed `Bash` until the next user message
-  — background notifications did not end it — while the same load inside a
-  `general-purpose` agent left `Bash` working there, and the parent's
-  `Bash` in the same turn was unaffected (#19). So the push is safe, and
-  the triage would read an untrusted review holding a shell. What has to
-  hold the boundary is the agent's own profile: a `.claude/agents/` type
-  whose `tools:` omits `Bash`, granted by exact type with the broad ones
-  denied as `security-sweep.md` does — `allowed-tools` is not a whitelist,
-  and none of this repository's read-only profiles can apply fixes. That
-  profile is **required before Grok is re-enabled** (#19), and whether a
-  profile's `tools:` holds when its agent loads a skill is the one thing
-  still to measure.
+- **On the one agent type measured, the agent keeps the deny off the push
+  by discarding it, so the agent alone is not the boundary.** Measured:
+  `/review-grok` loaded through the Skill tool in the main session removed
+  `Bash` until the next user message — background notifications did not
+  end it — while the same load inside a `general-purpose` agent left `Bash`
+  working there, and the parent's `Bash` in the same turn was unaffected
+  (#19). So on that path the push is safe and the triage would read an
+  untrusted review holding a shell; no other agent type was measured, and
+  a bare `Agent` may select one. The **proposed** boundary is the agent's
+  own profile: a `.claude/agents/` type whose `tools:` omits `Bash`,
+  granted by exact type with the broad ones denied as `security-sweep.md`
+  does — `allowed-tools` is not a whitelist, and none of this repository's
+  read-only profiles can apply fixes. It is proposed rather than proven:
+  whether a profile's `tools:` holds when its agent loads a skill is still
+  unmeasured. Both the profile and that measurement are **required before
+  Grok is re-enabled** (#19).
   `test_the_triage_that_denies_bash_runs_apart_from_the_push` pins the deny
-  and the agent; it does not pin the profile, which does not exist yet.
+  and the agent dispatch; it pins no runtime behaviour, and no profile
+  exists yet.
 - **`python -m unittest discover -s .claude/scripts -p 'test_*.py'` is the
   harness's own suite.** It reads `git ls-files`, so a new tracked root file
   or top-level tree fails it until somebody decides which side of the
