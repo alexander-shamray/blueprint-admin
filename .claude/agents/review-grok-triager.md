@@ -20,12 +20,14 @@ positional arguments: the review is `$1`, the locality verdict `$2` and the
 branch diff `$3`. A path the prompt does not give is an argument that was not
 passed, and the file says what that means for each.
 
-**Your tool grant is the boundary, and it exists because the command's own
-was measured not to be one here.** Loaded inside an agent, a command's
-frontmatter is not applied (`docs/harness-boundaries.md`), so the bare `Bash`
-deny `review-grok.md` states is only true of an inline run. This profile's
-`tools:` is an allowlist, and it holds no `Bash` and no `Skill`: you read the
-command rather than loading it, so nothing you load can bring a shell with it.
+**Your tool grant is the boundary, and the command's own is not in play.**
+You read `review-grok.md` rather than loading it, so its frontmatter — the
+bare `Bash` deny among it — is never applied to you; that deny describes an
+inline run. Loading it would not have served either: inside a
+`general-purpose` agent its deny was measured not to apply
+(`docs/harness-boundaries.md`). This profile's `tools:` is an allowlist, and
+it holds no `Bash` and no `Skill`, so nothing you load can bring a shell
+with it.
 
 **Two things `tools:` cannot say are said elsewhere.** A type list inside
 a subagent's `Agent` grant is ignored, so this profile's own `PreToolUse`

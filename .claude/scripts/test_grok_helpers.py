@@ -5297,12 +5297,12 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
                 for item in line.split(",") if item.strip()]
 
     def test_the_triage_runs_under_a_profile_that_holds_no_shell(self):
-        # Inside an agent a command's frontmatter is not applied, so the
-        # triage's no-shell boundary on /ship's path is this profile's own
-        # `tools:` allowlist. `Skill` is refused beside `Bash` because a
-        # skill loaded by the agent is exactly the load that was measured to
-        # drop its deny, and the profile reads the command rather than
-        # loading it.
+        # The profile reads review-grok.md rather than loading it, so the
+        # command's frontmatter is not in play on /ship's path and the
+        # triage's no-shell boundary there is this profile's own `tools:`
+        # allowlist. `Skill` is refused beside `Bash` because loading the
+        # command is the path measured, in a general-purpose agent, to drop
+        # its deny.
         profile = (SCRIPTS.parent / "agents" / "review-grok-triager.md"
                    ).read_text(encoding="utf-8")
         self.assertRegex(profile, r"(?m)^name:\s*review-grok-triager\s*$")

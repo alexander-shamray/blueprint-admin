@@ -938,10 +938,12 @@ same argument as never calling a branch clean because asking failed.
       committing**. The agent keeps that command's `Bash` deny off the push:
       a frontmatter deny lasts the rest of the turn it loads in, so run
       inline it would refuse every command below. **The profile, not that
-      deny, is the no-shell boundary**, because inside an agent a command's
-      frontmatter is not applied (`docs/harness-boundaries.md`): its
-      `tools:` holds no `Bash` and no `Skill`, and it reads the command
-      rather than loading it. What `tools:` cannot say is said twice
+      deny, is the no-shell boundary**: it reads the command rather than
+      loading it, so that frontmatter is not in play there, and its
+      `tools:` holds no `Bash` and no `Skill`. It reads rather than loads
+      because loading the command inside a `general-purpose` agent was
+      measured to drop the deny (`docs/harness-boundaries.md`). What
+      `tools:` cannot say is said twice
       over: this file's `disallowed-tools` refuses the broad agent types
       and the trees a review has no business in, and reaches the agents
       this command spawns; the profile's own `PreToolUse` hook,

@@ -106,12 +106,13 @@ Save it to a file and name the path.
 > below — and the globally allowed `git diff --no-index` is gone from here
 > with the rest. Nothing this invocation can run takes a redirect.
 >
-> **Every no-`Bash` claim in this file is an inline claim (#19).** Loaded
-> inside an agent this frontmatter is not applied — measured on a
-> `general-purpose` agent (`docs/harness-boundaries.md`) — so `/ship` does
-> not load it there. Its `review-grok-triager` profile reads this file and
-> follows it, and that profile's `tools:`, which holds no `Bash` and no
-> `Skill`, is the boundary on the agent path. `/ship`'s own
+> **The no-`Bash` claims in this file describe an inline run (#19).**
+> `/ship` does not load this command in an agent: its `review-grok-triager`
+> profile reads this file and follows it, so this frontmatter is not in play
+> there, and that profile's `tools:`, which holds no `Bash` and no `Skill`,
+> is the boundary on the agent path. Loading the command in an agent instead
+> would not hold it either — inside a `general-purpose` agent its deny was
+> measured not to apply (`docs/harness-boundaries.md`). `/ship`'s own
 > `disallowed-tools` holds the trees and the broad agent types, and the
 > profile's `PreToolUse` hook, `guard-triager-dispatch.py`, refuses every
 > dispatch but `review-adjudicator` — the triager itself included, which
