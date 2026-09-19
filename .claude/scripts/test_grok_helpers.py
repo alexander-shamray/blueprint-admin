@@ -5281,6 +5281,19 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
         ship = (COMMANDS / "ship.md").read_text(encoding="utf-8")
         self.assertIn("run `/review-grok` **inside an `Agent`**", ship)
 
+    def test_ship_pushes_a_copilot_fix_before_its_marker(self):
+        # review-copilot.md pushes a committed fix before posting `done`, so
+        # the marker names a commit on the remote; ship.md step 6 pushed after
+        # the markers, which made the chain the one path where `done` could
+        # name a local-only commit. Raised in review. The two orders are
+        # pinned together, because each file alone reads correctly.
+        ship = (COMMANDS / "ship.md").read_text(encoding="utf-8")
+        copilot = (COMMANDS / "review-copilot.md").read_text(encoding="utf-8")
+        self.assertRegex(
+            ship, r"push the\s+branch by name, and only then let it post its"
+                  r"\s+markers")
+        self.assertRegex(copilot, r"before posting `done`")
+
     def test_the_settings_really_do_auto_approve_push(self):
         # The positive control. If the global allow were ever removed, the case
         # above would still pass while protecting nothing, which is the vacuous
