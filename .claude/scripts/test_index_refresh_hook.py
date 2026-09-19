@@ -211,6 +211,52 @@ class TheRefresh(unittest.TestCase):
         self.assertEqual([f"{guard_value()} update"], self.calls())
         self.assertEqual([], sorted(p.name for p in self.cache.iterdir()))
 
+    def holder_token(self, alive):
+        """A token naming a real shell: running for the test, or already gone.
+
+        A shell's own `$$`, not this process's PID: on Windows the two
+        namespaces differ, and `kill -0` in `sh` reads the shell's.
+        """
+        record = self.tmp / "holder"
+        script = f'echo "$$.0" > {record.as_posix()!r}' + ("; sleep 30" if alive else "")
+        shell = subprocess.Popen([SH, "-c", script])
+        if alive:
+            self.addCleanup(shell.wait)
+            self.addCleanup(shell.kill)
+        else:
+            shell.wait()
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            if record.exists() and record.read_text(encoding="utf-8").strip():
+                return record.read_text(encoding="utf-8").strip()
+            time.sleep(0.1)
+        raise AssertionError("the holder shell never wrote its PID")
+
+    def old_lock(self, token):
+        lock = self.cache / "refresh.lock"
+        lock.mkdir()
+        (lock / "owner").write_text(token + "\n", encoding="utf-8")
+        old = time.time() - 3600
+        os.utime(lock, (old, old))
+        return lock
+
+    def test_an_old_lock_whose_holder_is_alive_is_left_alone(self):
+        # Age alone would displace a holder still inside a slow update and
+        # start a second update beside it.
+        lock = self.old_lock(self.holder_token(alive=True))
+        result = self.run_refresh()
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual([], self.calls())
+        self.assertTrue(lock.is_dir())
+        self.assertTrue((self.cache / "refresh.pending").exists())
+
+    def test_an_old_lock_whose_holder_is_gone_is_taken_back(self):
+        self.old_lock(self.holder_token(alive=False))
+        result = self.run_refresh()
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual([f"{guard_value()} update"], self.calls())
+        self.assertEqual([], sorted(p.name for p in self.cache.iterdir()))
+
     def test_a_holder_taken_over_as_stale_leaves_its_successors_lock(self):
         # A holder that outlasted the threshold returns to find a successor's
         # token in the lock. Freeing it would let a third call start an update
