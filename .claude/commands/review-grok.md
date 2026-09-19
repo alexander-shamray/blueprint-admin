@@ -111,8 +111,11 @@ Save it to a file and name the path.
 > `general-purpose` agent (`docs/harness-boundaries.md`) — so `/ship` does
 > not load it there. Its `review-grok-triager` profile reads this file and
 > follows it, and that profile's `tools:`, which holds no `Bash` and no
-> `Skill`, is the boundary on the agent path; `/ship`'s own
-> `disallowed-tools` holds the trees and the agent types this list names.
+> `Skill`, is the boundary on the agent path. `/ship`'s own
+> `disallowed-tools` holds the trees and the broad agent types, and the
+> profile's `PreToolUse` hook, `guard-triager-dispatch.py`, refuses every
+> dispatch but `review-adjudicator` — the triager itself included, which
+> `/ship` grants and so cannot deny.
 
 **This command triages a review that already ran; it does not invoke Grok and
 consumes no Grok usage.** So the usage-limit preflight (skip when out of limits)
@@ -146,8 +149,9 @@ pointer becomes a third copy of it.
    **Spawn nothing else**: the frontmatter denies every other registered type
    by name, because the harness has no "only this type" allow, and a new
    agent under `.claude/agents/` is admitted here until this line names it.
-   On `/ship`'s agent path this frontmatter is not applied, and `/ship`'s
-   own deny list is the one that names them.
+   On `/ship`'s agent path this frontmatter is not applied: `/ship`'s own
+   deny list names the broad types, and the triager profile's dispatch hook
+   refuses the rest, the triager itself included.
 2. **Validate the record's shape before reading its content.** The record
    has two schemas, and each block is checked against its own. A numbered
    finding block must carry exactly the seven fields the profile declares,
