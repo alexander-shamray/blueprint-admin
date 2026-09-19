@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "CBX_NO_SKILL_AUTO_UPDATE=1 codebase-index update >/dev/null 2>&1 &",
+            "command": "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/refresh-index.sh\" >/dev/null 2>&1 &",
             "timeout": 5
           }
         ]
