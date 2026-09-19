@@ -38,9 +38,9 @@ argument is how a rule gets "corrected" back.
   `/branch` or `/review-copilot` refuses `/ship`'s own push a step later —
   "has been denied", in under a second, with no hook reason. It reads as
   hardening and is not: `/branch` and `/commit` leave the push to `/pr`,
-  `/review-copilot` pushes only the fix it just committed, by name, and the
-  git-argv hook and `settings.json` refuse `main`, force and delete whoever
-  asks. **Do not put it back.** `CHAINED_BEFORE_A_PUSH` in
+  `/review-copilot` pushes only an already-committed review fix, by name,
+  and the git-argv hook and `settings.json` refuse `main`, force and delete
+  whoever asks. **Do not put it back.** `CHAINED_BEFORE_A_PUSH` in
   `test_grok_helpers.py` names the three and fails if one denies push
   again. A terminal, read-only command — the two sweeps — keeps its deny,
   because nothing pushes after it.

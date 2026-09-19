@@ -303,7 +303,7 @@ design ambiguity is unresolved by definition, and closing it would hide the
 question behind a green tick. Leave it open, with no marker, and put it in the
 report instead.
 
-**It may push, and only the fix it has just committed.** A push sends the
+**It may push, and only an already-committed review fix.** A push sends the
 whole local tip, so first check that `git log origin/<branch>..HEAD` holds
 nothing but the review-fix commits; if it holds anything else, leave the push
 to `/pr` and say so. Otherwise push it by name as `/pr` does —

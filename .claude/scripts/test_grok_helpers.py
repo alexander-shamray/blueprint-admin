@@ -5129,13 +5129,10 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
     PUBLISHING = ("pr.md", "ship.md")
 
     # **A frontmatter deny holds for the rest of the user turn, not for the
-    # command that states it.** Measured: /ship ran /commit and then pushed in
-    # the same turn, and the push came back "has been denied" in under a
-    # second with no hook reason, every time — while the identical push after
-    # a new user message ran. So a command /ship runs BEFORE it pushes cannot
-    # deny push without refusing /ship's own. These three neither grant nor
-    # deny it: their bodies say who pushes and what, and the hook and
-    # `.claude/settings.json` still refuse `main`, force and delete.
+    # command that states it**, so a command /ship runs BEFORE it pushes
+    # cannot deny push without refusing /ship's own. These three neither
+    # grant nor deny it: their bodies say who pushes and what, and the hook
+    # and `.claude/settings.json` still refuse `main`, force and delete.
     # `docs/harness-boundaries.md` owns the rule; an exemption is named here
     # so that adding one is a visible decision.
     CHAINED_BEFORE_A_PUSH = ("branch.md", "commit.md", "review-copilot.md")
@@ -5249,9 +5246,9 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
                     "settings allow reaches it")
 
     def test_nothing_ship_chains_before_a_push_denies_it(self):
-        # The other side, and the one that was missing: restoring the deny
-        # reads as hardening and breaks /ship silently, because the refusal
-        # lands on a later command than the one that carries it.
+        # Restoring the deny reads as hardening and breaks /ship silently,
+        # because the refusal lands on a later command than the one that
+        # carries it.
         ship = (COMMANDS / "ship.md").read_text(encoding="utf-8")
         for name in self.CHAINED_BEFORE_A_PUSH:
             text = (COMMANDS / name).read_text(encoding="utf-8")
@@ -5283,10 +5280,9 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
 
     def test_ship_pushes_a_copilot_fix_before_its_marker(self):
         # review-copilot.md pushes a committed fix before posting `done`, so
-        # the marker names a commit on the remote; ship.md step 6 pushed after
-        # the markers, which made the chain the one path where `done` could
-        # name a local-only commit. Raised in review. The two orders are
-        # pinned together, because each file alone reads correctly.
+        # the marker names a commit on the remote, and ship.md step 6 must
+        # push at the same point or the chain posts `done` for a local-only
+        # commit. Pinned together, because each file alone reads correctly.
         ship = (COMMANDS / "ship.md").read_text(encoding="utf-8")
         copilot = (COMMANDS / "review-copilot.md").read_text(encoding="utf-8")
         self.assertRegex(
