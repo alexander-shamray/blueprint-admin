@@ -945,11 +945,12 @@ same argument as never calling a branch clean because asking failed.
       measured to drop the deny (`docs/harness-boundaries.md`). What
       `tools:` cannot say is said twice
       over: this file's `disallowed-tools` refuses the broad agent types
-      and the trees a review has no business in, and reaches the agents
-      this command spawns; the profile's own `PreToolUse` hook,
-      `guard-triager-dispatch.py`, refuses every dispatch but the
-      adjudicator — the triager included, which this file grants and so
-      cannot deny. Then rerun the
+      and the trees a review has no business in, but only in the turn
+      it was loaded in (#27); the profile's own `PreToolUse` hooks hold
+      in every turn — `guard-triager-edit.py` refuses those trees, read
+      from this list, and `guard-triager-dispatch.py` refuses every
+      dispatch but the adjudicator — the triager included, which this
+      file grants and so cannot deny. Then rerun the
       step 2 checks that apply to what it
       changed: a review fix is still an edit, and committing it unchecked
       hands the next reviewer a broken branch. Then `/commit` **scoped to

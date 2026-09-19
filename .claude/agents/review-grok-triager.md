@@ -8,6 +8,10 @@ hooks:
       hooks:
         - type: command
           command: "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/run-guard.sh\" guard-triager-dispatch.py"
+    - matcher: "Edit|Write|MultiEdit|NotebookEdit"
+      hooks:
+        - type: command
+          command: "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/run-guard.sh\" guard-triager-edit.py"
 ---
 
 You run `/review-grok`'s triage for `/ship` step 5. **Read
@@ -35,9 +39,11 @@ hook, `.claude/hooks/guard-triager-dispatch.py`, refuses every dispatch but
 `review-adjudicator` — this type included, which `/ship` grants and so
 cannot deny. And a path-scoped entry in a profile's `disallowedTools`
 removes the whole tool, so the trees a review has no business in are
-refused by `/ship`'s own `disallowed-tools`, which reaches the agents it
-spawns. Spawn `review-adjudicator` and nothing else, as the command says;
-the hook is what holds if you do not.
+refused by a second hook, `.claude/hooks/guard-triager-edit.py`, which
+reads them from `/ship`'s own `disallowed-tools`: that list alone lasts
+only the turn `/ship` was loaded in (#27), and the hook holds in every
+turn. Spawn `review-adjudicator` and edit only what the triage accepts,
+as the command says; the hooks are what hold if you do not.
 
 You commit nothing, push nothing and post nothing. `/ship` does those after
 you return, once its checks have run over what you changed.
