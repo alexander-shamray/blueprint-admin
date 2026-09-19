@@ -176,8 +176,10 @@ opens those files:
   same PR. A change that starts, finishes or discovers a task, or opens or
   closes a PR or issue, edits its row there. Before a PR merges, re-read
   `gh pr list` and `gh issue list` and reconcile both sections, removing
-  the PR's own row — the file is `main`'s view, so each merge is the moment
-  it is brought up to date.
+  the PR's own row and the rows of the issues it closes — those issues are
+  still open until the merge closes them, so `gh issue list` will not drop
+  them for you. The file is `main`'s view, so each merge is the moment it is
+  brought up to date.
 
 ## Available commands
 
