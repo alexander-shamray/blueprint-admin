@@ -77,13 +77,21 @@ argument is how a rule gets "corrected" back.
   a new profile fails each exact grant that does not deny it;
   `TheTriagerDispatchesOnlyTheAdjudicator` runs the hook through the
   launcher and pins its wiring on the profile. Neither pins runtime
-  behaviour: that the allowlist holds and the hook runs is Claude Code's
-  documented behaviour rather than a measurement here, because profiles
-  register at session start and the session that wrote this one could not
-  spawn it; and that `/ship`'s deny list reaches the triager is carried
-  over from the `/review-grok`→adjudicator pair, not measured for this
-  one. Measuring all three is **required before Grok is re-enabled**
-  (#23).
+  behaviour, so it was measured (#23), by spawning the triager and
+  probing it. **Two properties hold:** its tools were exactly `Read`,
+  `Grep`, `Glob`, `Edit`, `Write` and `Agent`, with no shell and no
+  `Skill`; and the hook refused `general-purpose` and
+  `review-grok-triager` by name and let `review-adjudicator` run.
+- **The third holds only in the turn `/ship` was loaded in, and that is a
+  blocker on Grok, not a residual (#27).** Spawned in that turn, the
+  triager was refused an `Edit` to `.github/**` and `README.md` — *File
+  is in a directory that is denied by your permission settings* — while a
+  `docs/**` control passed. Spawned one user message later, without
+  `/ship` re-invoked, it wrote into `.github/` and edited `README.md`.
+  That is the turn-wide lifetime stated above, reaching the one boundary
+  that rests on it; a triager completion notification was also seen
+  restoring the denied agent types to the parent, and step 5 spawns it
+  async, so every round after the first would start in such a turn.
 - **`python -m unittest discover -s .claude/scripts -p 'test_*.py'` is the
   harness's own suite.** It reads `git ls-files`, so a new tracked root file
   or top-level tree fails it until somebody decides which side of the
