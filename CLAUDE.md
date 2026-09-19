@@ -181,6 +181,12 @@ opens those files:
   still open until the merge closes them, so `gh issue list` will not drop
   them for you. The file is `main`'s view, so each merge is the moment it is
   brought up to date.
+- **Update it as it happens, not only when asked.** The moment this session
+  files, closes or reopens an issue, or sees a PR merge, it edits the row in
+  the working branch before the next step — a branch that ships without it
+  leaves `main` wrong until somebody notices. `/ship` step 7 reconciles
+  before its merge gates; the sweeps hold no `Edit`, so their report lists
+  what they filed and the next branch carries the rows.
 
 ## Available commands
 

@@ -552,6 +552,9 @@ Each round is the review done once, end to end:
 
 5. **Summarise the round.** New issues filed (with numbers), candidates dropped
    at each gate and why, and the lows/infos recorded but not filed.
+   **Name every issue filed as a `docs/todo.md` row owed.** This command
+   holds no `Edit`, so the next branch adds those rows (`CLAUDE.md`,
+   *Working in this repo*).
 
 **Residual — the parent's context still receives the verdict, and a verdict is
 text.** Step 2 no longer opens `$work` in the invocation that files (#75 item

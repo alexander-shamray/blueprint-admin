@@ -1,7 +1,7 @@
 ---
 description: Start from a clean main, fork a worktree where one can be forked, branch, commit, push and open a PR, loop the Copilot review until one clean pass (Grok is disabled pending a trusted launcher) — then merge the PR and tear the workspace down. Decides for itself rather than stopping to ask
 argument-hint: "[what the change does] — omit and each step derives its own"
-allowed-tools: Read, Grep, Glob, Write, Skill, EnterWorktree, ExitWorktree, Bash(git status:*), Bash(git diff:*), Bash(git branch --list:*), Bash(git branch --show-current), Bash(git branch -a), Bash(git log:*), Bash(git fetch origin:*), Bash(bash .claude/scripts/git-branch-create.sh:*), Bash(bash .claude/scripts/git-worktree-fork.sh:*), Bash(bash .claude/scripts/git-switch-existing.sh:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(ls:*), Bash(git add:*), Bash(git commit:*), Bash(bash .claude/scripts/git-unstage.sh:*), Bash(git push -u origin:*), Bash(git push origin:*), Bash(wc:*), Bash(bash .claude/scripts/gh-pr-create.sh), Bash(bash .claude/scripts/pr-state.sh:*), Bash(bash .claude/scripts/pr-for-branch.sh:*), Bash(gh pr checks:*), Bash(bash .claude/scripts/gh-pr-merge.sh:*), Bash(git pull --ff-only), Bash(git merge-base --is-ancestor:*), Bash(bash .claude/scripts/git-worktree-remove.sh:*), Bash(git worktree prune:*), Bash(rm -f suggestions.md), Bash(bash .claude/scripts/grok-ledger.sh:*), Bash(bash .claude/scripts/copilot-request.sh:*), Bash(bash .claude/scripts/copilot-request-count.sh:*), Bash(bash .claude/scripts/pr-review-comments.sh:*), Bash(bash .claude/scripts/pr-review-bodies.sh:*), Bash(bash .claude/scripts/pr-issue-comments.sh:*), Bash(bash .claude/scripts/pr-review-threads.sh:*), Bash(bash .claude/scripts/grok-review.sh:*), Bash(sleep:*), Bash(bash .claude/scripts/pr-locality.sh:*), Bash(bash .claude/scripts/npm-checks.sh:*), Bash(bash .claude/scripts/host-checks.sh:*), Bash(bash .claude/scripts/harness-checks.sh:*), Bash(bash .claude/scripts/spa-ci.sh)
+allowed-tools: Read, Grep, Glob, Write, Skill, EnterWorktree, ExitWorktree, Bash(git status:*), Bash(git diff:*), Bash(git branch --list:*), Bash(git branch --show-current), Bash(git branch -a), Bash(git log:*), Bash(git fetch origin:*), Bash(bash .claude/scripts/git-branch-create.sh:*), Bash(bash .claude/scripts/git-worktree-fork.sh:*), Bash(bash .claude/scripts/git-switch-existing.sh:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(ls:*), Bash(git add:*), Bash(git commit:*), Bash(bash .claude/scripts/git-unstage.sh:*), Bash(git push -u origin:*), Bash(git push origin:*), Bash(wc:*), Bash(bash .claude/scripts/gh-pr-create.sh), Bash(bash .claude/scripts/pr-state.sh:*), Bash(bash .claude/scripts/pr-for-branch.sh:*), Bash(gh pr checks:*), Bash(bash .claude/scripts/gh-pr-merge.sh:*), Bash(git pull --ff-only), Bash(git merge-base --is-ancestor:*), Bash(bash .claude/scripts/git-worktree-remove.sh:*), Bash(git worktree prune:*), Bash(rm -f suggestions.md), Bash(bash .claude/scripts/grok-ledger.sh:*), Bash(bash .claude/scripts/copilot-request.sh:*), Bash(bash .claude/scripts/copilot-request-count.sh:*), Bash(bash .claude/scripts/pr-review-comments.sh:*), Bash(bash .claude/scripts/pr-review-bodies.sh:*), Bash(bash .claude/scripts/pr-issue-comments.sh:*), Bash(bash .claude/scripts/pr-review-threads.sh:*), Bash(bash .claude/scripts/grok-review.sh:*), Bash(sleep:*), Bash(bash .claude/scripts/pr-locality.sh:*), Bash(bash .claude/scripts/gh-issue-list.sh), Bash(bash .claude/scripts/gh-pr-list-open.sh), Bash(bash .claude/scripts/npm-checks.sh:*), Bash(bash .claude/scripts/host-checks.sh:*), Bash(bash .claude/scripts/harness-checks.sh:*), Bash(bash .claude/scripts/spa-ci.sh)
 disallowed-tools: Edit(.claude/**), Edit(./.claude/**), Edit(.github/**), Edit(./.github/**), Edit(.remember/**), Edit(./.remember/**), Edit(android/**), Edit(./android/**), Edit(ios/**), Edit(./ios/**), Edit(.git/**), Edit(./.git/**), Edit(package.json), Edit(./package.json), Edit(package-lock.json), Edit(./package-lock.json), Edit(npm-shrinkwrap.json), Edit(./npm-shrinkwrap.json), Edit(.npmrc), Edit(./.npmrc), Edit(angular.json), Edit(./angular.json), Edit(tsconfig.json), Edit(./tsconfig.json), Edit(tsconfig.app.json), Edit(./tsconfig.app.json), Edit(tsconfig.spec.json), Edit(./tsconfig.spec.json), Edit(eslint.config.js), Edit(./eslint.config.js), Edit(.prettierrc), Edit(./.prettierrc), Edit(capacitor.config.ts), Edit(./capacitor.config.ts), Edit(playwright.config.ts), Edit(./playwright.config.ts), Edit(ionic.config.json), Edit(./ionic.config.json), Edit(.nvmrc), Edit(./.nvmrc), Edit(.editorconfig), Edit(./.editorconfig), Edit(.gitattributes), Edit(./.gitattributes), Edit(.gitignore), Edit(./.gitignore), Edit(CLAUDE.md), Edit(./CLAUDE.md), Edit(README.md), Edit(./README.md), Edit(**/*.config.js), Edit(**/*.config.cjs), Edit(**/*.config.mjs), Edit(**/*.config.ts), Edit(**/*.config.mts), Edit(**/package.json), Edit(**/.npmrc), Edit(**/tsconfig*.json), Edit(**/.prettierrc*), Edit(node_modules/**), Edit(./node_modules/**), Edit(Directory.Packages.props), Edit(./Directory.Packages.props), Edit(Directory.Build.props), Edit(./Directory.Build.props), Edit(global.json), Edit(./global.json), Edit(BlueprintAdmin.slnx), Edit(./BlueprintAdmin.slnx), Edit(**/*.csproj), Edit(AGENTS.md), Edit(./AGENTS.md), Edit(.mcp.json), Edit(./.mcp.json)
 ---
 
@@ -1401,6 +1401,27 @@ same argument as never calling a branch clean because asking failed.
    does, and what is left is untracked scratch whose findings are already
    fixed and committed. Say in the report that it was removed and which loop
    outcome left it.
+
+   **Then bring `docs/todo.md` up to date, because the merge is when
+   `main`'s view of it changes** (`CLAUDE.md`, *Working in this repo*).
+   No other step in this chain edits the file, so a run that skips this
+   merges a list that is already wrong: its own PR row still there, and
+   no row for an issue filed while the branch was open.
+
+   ```bash
+   bash .claude/scripts/gh-issue-list.sh
+   bash .claude/scripts/gh-pr-list-open.sh
+   ```
+
+   Remove this PR's row and the rows of the issues it closes. Those
+   issues still read `OPEN` until the merge closes them, so the listing
+   will not drop them for you. Add a row for every other open PR and
+   every open issue with no PR, and drop any row whose PR or issue is no
+   longer open. **Edit it with `Write`, then commit it scoped as `docs:`
+   and push.** The gates below then read a clean workspace and wait for
+   CI on the new head, the path a non-empty gate already takes. If the
+   file already matches the listings, there is nothing to commit and
+   nothing to say.
 
    Three things genuinely gate it, and none is a judgement:
 

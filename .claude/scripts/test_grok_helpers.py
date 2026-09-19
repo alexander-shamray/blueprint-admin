@@ -4248,7 +4248,8 @@ class AFeedHelperReturnsTheWholeAnswer(unittest.TestCase):
     """
 
     # The five, with what bounded each.
-    REST_CAPPED = ("pr-for-branch.sh", "gh-issue-list.sh", "gh-label-ensure.sh")
+    REST_CAPPED = ("pr-for-branch.sh", "gh-issue-list.sh", "gh-label-ensure.sh",
+"gh-pr-list-open.sh")
     GRAPHQL_CONNECTIONS = ("pr-issue-comments.sh", "pr-review-bodies.sh")
 
     def source(self, name):
