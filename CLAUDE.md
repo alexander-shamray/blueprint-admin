@@ -9,6 +9,7 @@ owned elsewhere and cited from here by name, never restated.
 | | |
 |---|---|
 | [`README.md`](README.md) | How to run it, what the screens do today, known limits |
+| [`docs/todo.md`](docs/todo.md) | Tasks in progress and remaining; every task change edits it |
 | [`docs/change-locality.md`](docs/change-locality.md) | The operating contract: trust order, classes, touch sets; the gate reads `.github/locality-gate/classes.yml` |
 | [`docs/harness-boundaries.md`](docs/harness-boundaries.md) | What the harness grants these commands, and refuses |
 | [`docs/style-guide.md`](docs/style-guide.md) | Pointers to the two dialects; `/style-pass` records a newly settled form here |
@@ -171,6 +172,15 @@ opens those files:
   if it does not belong here, say so and ask rather than decide by deleting.
 - **Do not invent platform behaviour.** 401/403/409/422 pass through as the
   gateway returned them. Inventory 502 is expected until that service exists.
+- **[`docs/todo.md`](docs/todo.md) moves with every task change**, in the
+  same PR. A change that starts, finishes or discovers a task, or opens or
+  closes a PR or issue, edits its row there. Before a PR merges, re-read
+  `gh pr list --limit 1000` and `gh issue list --limit 1000` — the default
+  stops at 30, silently — and reconcile both sections, removing
+  the PR's own row and the rows of the issues it closes — those issues are
+  still open until the merge closes them, so `gh issue list` will not drop
+  them for you. The file is `main`'s view, so each merge is the moment it is
+  brought up to date.
 
 ## Available commands
 
