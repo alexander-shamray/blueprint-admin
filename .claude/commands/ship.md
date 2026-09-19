@@ -1,8 +1,8 @@
 ---
 description: Start from a clean main, fork a worktree where one can be forked, branch, commit, push and open a PR, loop the Copilot review until one clean pass (Grok is disabled pending a trusted launcher) — then merge the PR and tear the workspace down. Decides for itself rather than stopping to ask
 argument-hint: "[what the change does] — omit and each step derives its own"
-allowed-tools: Read, Grep, Glob, Write, Skill, EnterWorktree, ExitWorktree, Bash(git status:*), Bash(git diff:*), Bash(git branch --list:*), Bash(git branch --show-current), Bash(git branch -a), Bash(git log:*), Bash(git fetch origin:*), Bash(bash .claude/scripts/git-branch-create.sh:*), Bash(bash .claude/scripts/git-worktree-fork.sh:*), Bash(bash .claude/scripts/git-switch-existing.sh:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(ls:*), Bash(git add:*), Bash(git commit:*), Bash(bash .claude/scripts/git-unstage.sh:*), Bash(git push -u origin:*), Bash(git push origin:*), Bash(wc:*), Bash(bash .claude/scripts/gh-pr-create.sh), Bash(bash .claude/scripts/pr-state.sh:*), Bash(bash .claude/scripts/pr-for-branch.sh:*), Bash(gh pr checks:*), Bash(bash .claude/scripts/gh-pr-merge.sh:*), Bash(git pull --ff-only), Bash(git merge-base --is-ancestor:*), Bash(bash .claude/scripts/git-worktree-remove.sh:*), Bash(git worktree prune:*), Bash(rm -f suggestions.md), Bash(bash .claude/scripts/grok-ledger.sh:*), Bash(bash .claude/scripts/copilot-request.sh:*), Bash(bash .claude/scripts/copilot-request-count.sh:*), Bash(bash .claude/scripts/pr-review-comments.sh:*), Bash(bash .claude/scripts/pr-review-bodies.sh:*), Bash(bash .claude/scripts/pr-issue-comments.sh:*), Bash(bash .claude/scripts/pr-review-threads.sh:*), Bash(bash .claude/scripts/grok-review.sh:*), Bash(sleep:*), Bash(bash .claude/scripts/pr-locality.sh:*), Bash(bash .claude/scripts/npm-checks.sh:*), Bash(bash .claude/scripts/host-checks.sh:*), Bash(bash .claude/scripts/harness-checks.sh:*), Bash(bash .claude/scripts/spa-ci.sh)
-disallowed-tools: Edit(.claude/**), Edit(./.claude/**), Edit(.github/**), Edit(./.github/**), Edit(.remember/**), Edit(./.remember/**), Edit(android/**), Edit(./android/**), Edit(ios/**), Edit(./ios/**), Edit(.git/**), Edit(./.git/**), Edit(package.json), Edit(./package.json), Edit(package-lock.json), Edit(./package-lock.json), Edit(npm-shrinkwrap.json), Edit(./npm-shrinkwrap.json), Edit(.npmrc), Edit(./.npmrc), Edit(angular.json), Edit(./angular.json), Edit(tsconfig.json), Edit(./tsconfig.json), Edit(tsconfig.app.json), Edit(./tsconfig.app.json), Edit(tsconfig.spec.json), Edit(./tsconfig.spec.json), Edit(eslint.config.js), Edit(./eslint.config.js), Edit(.prettierrc), Edit(./.prettierrc), Edit(capacitor.config.ts), Edit(./capacitor.config.ts), Edit(playwright.config.ts), Edit(./playwright.config.ts), Edit(ionic.config.json), Edit(./ionic.config.json), Edit(.nvmrc), Edit(./.nvmrc), Edit(.editorconfig), Edit(./.editorconfig), Edit(.gitattributes), Edit(./.gitattributes), Edit(.gitignore), Edit(./.gitignore), Edit(CLAUDE.md), Edit(./CLAUDE.md), Edit(README.md), Edit(./README.md), Edit(**/*.config.js), Edit(**/*.config.cjs), Edit(**/*.config.mjs), Edit(**/*.config.ts), Edit(**/*.config.mts), Edit(**/package.json), Edit(**/.npmrc), Edit(**/tsconfig*.json), Edit(**/.prettierrc*), Edit(node_modules/**), Edit(./node_modules/**), Edit(Directory.Packages.props), Edit(./Directory.Packages.props), Edit(Directory.Build.props), Edit(./Directory.Build.props), Edit(global.json), Edit(./global.json), Edit(BlueprintAdmin.slnx), Edit(./BlueprintAdmin.slnx), Edit(**/*.csproj), Edit(AGENTS.md), Edit(./AGENTS.md), Edit(.mcp.json), Edit(./.mcp.json)
+allowed-tools: Read, Grep, Glob, Write, Skill, Agent(review-grok-triager), EnterWorktree, ExitWorktree, Bash(git status:*), Bash(git diff:*), Bash(git branch --list:*), Bash(git branch --show-current), Bash(git branch -a), Bash(git log:*), Bash(git fetch origin:*), Bash(bash .claude/scripts/git-branch-create.sh:*), Bash(bash .claude/scripts/git-worktree-fork.sh:*), Bash(bash .claude/scripts/git-switch-existing.sh:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(ls:*), Bash(git add:*), Bash(git commit:*), Bash(bash .claude/scripts/git-unstage.sh:*), Bash(git push -u origin:*), Bash(git push origin:*), Bash(wc:*), Bash(bash .claude/scripts/gh-pr-create.sh), Bash(bash .claude/scripts/pr-state.sh:*), Bash(bash .claude/scripts/pr-for-branch.sh:*), Bash(gh pr checks:*), Bash(bash .claude/scripts/gh-pr-merge.sh:*), Bash(git pull --ff-only), Bash(git merge-base --is-ancestor:*), Bash(bash .claude/scripts/git-worktree-remove.sh:*), Bash(git worktree prune:*), Bash(rm -f suggestions.md), Bash(bash .claude/scripts/grok-ledger.sh:*), Bash(bash .claude/scripts/copilot-request.sh:*), Bash(bash .claude/scripts/copilot-request-count.sh:*), Bash(bash .claude/scripts/pr-review-comments.sh:*), Bash(bash .claude/scripts/pr-review-bodies.sh:*), Bash(bash .claude/scripts/pr-issue-comments.sh:*), Bash(bash .claude/scripts/pr-review-threads.sh:*), Bash(bash .claude/scripts/grok-review.sh:*), Bash(sleep:*), Bash(bash .claude/scripts/pr-locality.sh:*), Bash(bash .claude/scripts/npm-checks.sh:*), Bash(bash .claude/scripts/host-checks.sh:*), Bash(bash .claude/scripts/harness-checks.sh:*), Bash(bash .claude/scripts/spa-ci.sh)
+disallowed-tools: Edit(.claude/**), Edit(./.claude/**), Edit(.github/**), Edit(./.github/**), Edit(.remember/**), Edit(./.remember/**), Edit(android/**), Edit(./android/**), Edit(ios/**), Edit(./ios/**), Edit(.git/**), Edit(./.git/**), Edit(.git), Edit(./.git), Edit(package.json), Edit(./package.json), Edit(package-lock.json), Edit(./package-lock.json), Edit(npm-shrinkwrap.json), Edit(./npm-shrinkwrap.json), Edit(.npmrc), Edit(./.npmrc), Edit(angular.json), Edit(./angular.json), Edit(tsconfig.json), Edit(./tsconfig.json), Edit(tsconfig.app.json), Edit(./tsconfig.app.json), Edit(tsconfig.spec.json), Edit(./tsconfig.spec.json), Edit(eslint.config.js), Edit(./eslint.config.js), Edit(.prettierrc), Edit(./.prettierrc), Edit(capacitor.config.ts), Edit(./capacitor.config.ts), Edit(playwright.config.ts), Edit(./playwright.config.ts), Edit(ionic.config.json), Edit(./ionic.config.json), Edit(.nvmrc), Edit(./.nvmrc), Edit(.editorconfig), Edit(./.editorconfig), Edit(.gitattributes), Edit(./.gitattributes), Edit(.gitignore), Edit(./.gitignore), Edit(CLAUDE.md), Edit(./CLAUDE.md), Edit(README.md), Edit(./README.md), Edit(**/*.config.js), Edit(**/*.config.cjs), Edit(**/*.config.mjs), Edit(**/*.config.ts), Edit(**/*.config.mts), Edit(**/package.json), Edit(**/.npmrc), Edit(**/tsconfig*.json), Edit(**/.prettierrc*), Edit(node_modules/**), Edit(./node_modules/**), Edit(Directory.Packages.props), Edit(./Directory.Packages.props), Edit(Directory.Build.props), Edit(./Directory.Build.props), Edit(global.json), Edit(./global.json), Edit(BlueprintAdmin.slnx), Edit(./BlueprintAdmin.slnx), Edit(**/*.csproj), Edit(AGENTS.md), Edit(./AGENTS.md), Edit(.mcp.json), Edit(./.mcp.json), Agent(general-purpose), Agent(claude), Agent(Explore), Agent(Plan), Agent(claude-code-guide), Agent(statusline-setup), Agent(security-auditor), Agent(bug-auditor)
 ---
 
 Take the working tree from wherever it is to a merged PR. Description:
@@ -927,22 +927,24 @@ same argument as never calling a branch clean because asking failed.
       convergence from a lull, and a Grok recheck of nothing costs a few
       minutes. Present → run `bash .claude/scripts/pr-locality.sh <n>`
       and `git diff origin/main...HEAD`, write each output to a scratchpad
-      file with `Write`, and run `/review-grok` **inside an `Agent`** with
-      the review's path, the verdict's and the diff's — its own grant has no
-      `Bash`, so it cannot be relied on to judge the touch set or read the
-      diff itself; without the verdict it applies every accepted site, which
-      is the widening the contract refuses, and without the diff its
-      adjudicator cannot tell a restatement the branch wrote from one it
-      left alone. `/review-grok` triages and fixes — **its tool grant
-      deliberately stops short of committing**. The agent keeps that grant's
-      deny off the push and **not on the triage**: a frontmatter deny lasts
-      the rest of the turn it loads in, so run inline its bare `Bash` deny
-      would refuse every command below, the push included — but inside a
-      `general-purpose` agent, the one type measured, it is not applied at
-      all (`docs/harness-boundaries.md`). The proposed no-shell boundary is
-      the dedicated profile #19 owes, pending a measurement that a
-      profile's own `tools:` holds when its agent loads a skill; this step
-      stays disabled until both exist. Then rerun the
+      file with `Write`, and spawn a **`review-grok-triager`** agent
+      (`.claude/agents/review-grok-triager.md`) to run `/review-grok` with
+      the review's path, the verdict's and the diff's — it holds no `Bash`,
+      so it cannot judge the touch set or read the diff itself; without the
+      verdict it applies every accepted site, which is the widening the
+      contract refuses, and without the diff its adjudicator cannot tell a
+      restatement the branch wrote from one it left alone. `/review-grok`
+      triages and fixes — **its tool grant deliberately stops short of
+      committing**. The agent keeps that command's `Bash` deny off the push:
+      a frontmatter deny lasts the rest of the turn it loads in, so run
+      inline it would refuse every command below. **The profile, not that
+      deny, is the no-shell boundary**, because inside an agent a command's
+      frontmatter is not applied (`docs/harness-boundaries.md`): its
+      `tools:` holds no `Bash` and no `Skill`, and it reads the command
+      rather than loading it. What a profile cannot say — the agent types
+      other than the adjudicator, and the trees a review has no business
+      in — this file's `disallowed-tools` says, and it reaches the agents
+      this command spawns. Then rerun the
       step 2 checks that apply to what it
       changed: a review fix is still an edit, and committing it unchecked
       hands the next reviewer a broken branch. Then `/commit` **scoped to

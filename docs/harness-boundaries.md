@@ -57,18 +57,24 @@ argument is how a rule gets "corrected" back.
   end it — while the same load inside a `general-purpose` agent left `Bash`
   working there, and the parent's `Bash` in the same turn was unaffected
   (#19). So on that path the push is safe and the triage would read an
-  untrusted review holding a shell; no other agent type was measured, and
-  a bare `Agent` may select one. The **proposed** boundary is the agent's
-  own profile: a `.claude/agents/` type whose `tools:` omits `Bash`,
-  granted by exact type with the broad ones denied as `security-sweep.md`
-  does — `allowed-tools` is not a whitelist, and none of this repository's
-  read-only profiles can apply fixes. It is proposed rather than proven:
-  whether a profile's `tools:` holds when its agent loads a skill is still
-  unmeasured. Both the profile and that measurement are **required before
-  Grok is re-enabled** (#19).
-  `test_the_triage_that_denies_bash_runs_apart_from_the_push` pins the deny
-  and the agent dispatch; it pins no runtime behaviour, and no profile
-  exists yet.
+  untrusted review holding a shell.
+- **So the triage runs under a profile of its own, and `/ship` says what a
+  profile cannot.** Step 5 grants exactly `Agent(review-grok-triager)`,
+  whose `tools:` — an allowlist — holds no `Bash` and no `Skill`; it reads
+  `review-grok.md` rather than loading it, so the skill load measured
+  above never happens there. Two rules cannot live in a profile: a type
+  list inside a subagent's `Agent` grant is ignored, and a path in a
+  profile's `disallowedTools` removes the whole tool. Both are therefore
+  in `/ship`'s own `disallowed-tools` — the broad agent types, and every
+  `Edit(...)` `/review-grok` states — which reaches the agents a command
+  spawns, as `review-grok.md` records of its adjudicator.
+  `CommandsEnforceTheEditingBoundariesTheyState` pins the profile, the
+  grant and both deny lists, and reads `.claude/agents/` on every run, so
+  a new profile fails each exact grant that does not deny it. It pins no
+  runtime behaviour, and that a profile's `tools:` holds is Claude Code's
+  documented allowlist rather than a measurement here: profiles register
+  at session start, so the session that wrote this one could not spawn
+  it. Spawn it and read its tool list when Grok is re-enabled.
 - **`python -m unittest discover -s .claude/scripts -p 'test_*.py'` is the
   harness's own suite.** It reads `git ls-files`, so a new tracked root file
   or top-level tree fails it until somebody decides which side of the

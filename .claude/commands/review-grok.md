@@ -2,7 +2,7 @@
 description: Triage an external review of the branch into a resolution record
 argument-hint: "[path to the review — defaults to suggestions.md] [path to the locality verdict — omit when there is no PR] [path to the branch diff — omit when the caller cannot write one]"
 allowed-tools: Read, Grep, Glob, Edit, Write, Agent(review-adjudicator)
-disallowed-tools: Bash, Edit(.claude/**), Edit(./.claude/**), Edit(.github/**), Edit(./.github/**), Edit(android/**), Edit(./android/**), Edit(ios/**), Edit(./ios/**), Edit(.git/**), Edit(./.git/**), Edit(.git), Edit(./.git), Edit(package.json), Edit(./package.json), Edit(package-lock.json), Edit(./package-lock.json), Edit(npm-shrinkwrap.json), Edit(./npm-shrinkwrap.json), Edit(.npmrc), Edit(./.npmrc), Edit(angular.json), Edit(./angular.json), Edit(tsconfig.json), Edit(./tsconfig.json), Edit(tsconfig.app.json), Edit(./tsconfig.app.json), Edit(tsconfig.spec.json), Edit(./tsconfig.spec.json), Edit(eslint.config.js), Edit(./eslint.config.js), Edit(.prettierrc), Edit(./.prettierrc), Edit(capacitor.config.ts), Edit(./capacitor.config.ts), Edit(playwright.config.ts), Edit(./playwright.config.ts), Edit(ionic.config.json), Edit(./ionic.config.json), Edit(.nvmrc), Edit(./.nvmrc), Edit(.editorconfig), Edit(./.editorconfig), Edit(.gitattributes), Edit(./.gitattributes), Edit(.gitignore), Edit(./.gitignore), Edit(**/*.config.js), Edit(**/*.config.cjs), Edit(**/*.config.mjs), Edit(**/*.config.ts), Edit(**/*.config.mts), Edit(**/package.json), Edit(**/.npmrc), Edit(**/tsconfig*.json), Edit(**/.prettierrc*), Agent(general-purpose), Agent(claude), Agent(Explore), Agent(Plan), Agent(claude-code-guide), Agent(statusline-setup), Agent(security-auditor), Agent(bug-auditor), Edit(CLAUDE.md), Edit(./CLAUDE.md), Edit(README.md), Edit(./README.md), Edit(node_modules/**), Edit(./node_modules/**)
+disallowed-tools: Bash, Edit(.claude/**), Edit(./.claude/**), Edit(.github/**), Edit(./.github/**), Edit(android/**), Edit(./android/**), Edit(ios/**), Edit(./ios/**), Edit(.git/**), Edit(./.git/**), Edit(.git), Edit(./.git), Edit(package.json), Edit(./package.json), Edit(package-lock.json), Edit(./package-lock.json), Edit(npm-shrinkwrap.json), Edit(./npm-shrinkwrap.json), Edit(.npmrc), Edit(./.npmrc), Edit(angular.json), Edit(./angular.json), Edit(tsconfig.json), Edit(./tsconfig.json), Edit(tsconfig.app.json), Edit(./tsconfig.app.json), Edit(tsconfig.spec.json), Edit(./tsconfig.spec.json), Edit(eslint.config.js), Edit(./eslint.config.js), Edit(.prettierrc), Edit(./.prettierrc), Edit(capacitor.config.ts), Edit(./capacitor.config.ts), Edit(playwright.config.ts), Edit(./playwright.config.ts), Edit(ionic.config.json), Edit(./ionic.config.json), Edit(.nvmrc), Edit(./.nvmrc), Edit(.editorconfig), Edit(./.editorconfig), Edit(.gitattributes), Edit(./.gitattributes), Edit(.gitignore), Edit(./.gitignore), Edit(**/*.config.js), Edit(**/*.config.cjs), Edit(**/*.config.mjs), Edit(**/*.config.ts), Edit(**/*.config.mts), Edit(**/package.json), Edit(**/.npmrc), Edit(**/tsconfig*.json), Edit(**/.prettierrc*), Agent(general-purpose), Agent(claude), Agent(Explore), Agent(Plan), Agent(claude-code-guide), Agent(statusline-setup), Agent(security-auditor), Agent(bug-auditor), Agent(review-grok-triager), Edit(CLAUDE.md), Edit(./CLAUDE.md), Edit(README.md), Edit(./README.md), Edit(node_modules/**), Edit(./node_modules/**)
 ---
 
 Work through the review at $1 — a file path. **With no argument, the review is
@@ -107,12 +107,12 @@ Save it to a file and name the path.
 > with the rest. Nothing this invocation can run takes a redirect.
 >
 > **Every no-`Bash` claim in this file is an inline claim (#19).** Loaded
-> inside a `general-purpose` agent — the one type measured — this
-> frontmatter's `Bash` deny is not applied (`docs/harness-boundaries.md`),
-> so an agent-path run cannot be assumed shell-free. The dedicated profile
-> #19 owes is the proposed boundary there, pending a measurement that a
-> profile's own `tools:` holds when its agent loads a skill; until both
-> exist, `/ship` step 5 stays disabled.
+> inside an agent this frontmatter is not applied — measured on a
+> `general-purpose` agent (`docs/harness-boundaries.md`) — so `/ship` does
+> not load it there. Its `review-grok-triager` profile reads this file and
+> follows it, and that profile's `tools:`, which holds no `Bash` and no
+> `Skill`, is the boundary on the agent path; `/ship`'s own
+> `disallowed-tools` holds the trees and the agent types this list names.
 
 **This command triages a review that already ran; it does not invoke Grok and
 consumes no Grok usage.** So the usage-limit preflight (skip when out of limits)
@@ -146,6 +146,8 @@ pointer becomes a third copy of it.
    **Spawn nothing else**: the frontmatter denies every other registered type
    by name, because the harness has no "only this type" allow, and a new
    agent under `.claude/agents/` is admitted here until this line names it.
+   On `/ship`'s agent path this frontmatter is not applied, and `/ship`'s
+   own deny list is the one that names them.
 2. **Validate the record's shape before reading its content.** The record
    has two schemas, and each block is checked against its own. A numbered
    finding block must carry exactly the seven fields the profile declares,

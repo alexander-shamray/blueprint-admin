@@ -5269,15 +5269,102 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
         # /review-grok cannot join CHAINED_BEFORE_A_PUSH: run inline, its bare
         # `Bash` deny would refuse /ship's push, so it runs in an agent. This
         # pins that text only — the deny in the frontmatter and the agent in
-        # the dispatch — and no runtime behaviour, which is measured for one
-        # agent type in docs/harness-boundaries.md and owed for #19's profile.
+        # the dispatch; the agent path's boundary is the profile, pinned by
+        # the cases below, and neither pins runtime behaviour.
         text = (COMMANDS / "review-grok.md").read_text(encoding="utf-8")
         denied = " ".join(
             re.findall(r"^disallowed-tools:\s*(.+)$", text, re.MULTILINE))
         self.assertIsNotNone(
             re.search(r"(^|,\s*)Bash(\s*,|\s*$)", denied))
         ship = (COMMANDS / "ship.md").read_text(encoding="utf-8")
-        self.assertIn("run `/review-grok` **inside an `Agent`**", ship)
+        self.assertIn("to run `/review-grok` with", ship)
+
+    # The built-in types whose tool list is `*` or reaches a shell, an editor
+    # or the network. None can be excluded by an allow, because
+    # `allowed-tools` auto-approves rather than whitelists, so a command that
+    # grants an exact type denies these by name.
+    BROAD_AGENT_TYPES = ("general-purpose", "claude", "Explore", "Plan",
+                         "claude-code-guide", "statusline-setup")
+    # A repository profile a command must leave admitted although it does not
+    # grant it: the one its granted agent spawns. /ship's deny list reaches
+    # the triager, and the triager's whole job starts with the adjudicator.
+    SPAWNED_BY_A_GRANTED_AGENT = {"ship.md": {"review-adjudicator"}}
+
+    @staticmethod
+    def frontmatter_list(text, key):
+        return [item.strip() for line in
+                re.findall(rf"^{key}:\s*(.+)$", text, re.MULTILINE)
+                for item in line.split(",") if item.strip()]
+
+    def test_the_triage_runs_under_a_profile_that_holds_no_shell(self):
+        # #19. Inside an agent a command's frontmatter is not applied, so the
+        # triage's no-shell boundary on /ship's path is this profile's own
+        # `tools:` allowlist. `Skill` is refused beside `Bash` because a
+        # skill loaded by the agent is exactly the load that was measured to
+        # drop its deny, and the profile reads the command rather than
+        # loading it.
+        profile = (SCRIPTS.parent / "agents" / "review-grok-triager.md"
+                   ).read_text(encoding="utf-8")
+        self.assertRegex(profile, r"(?m)^name:\s*review-grok-triager\s*$")
+        self.assertEqual(
+            {"Read", "Grep", "Glob", "Edit", "Write", "Agent"},
+            set(self.frontmatter_list(profile, "tools")))
+        self.assertNotRegex(profile, r"(?m)^skills:")
+        self.assertIn(".claude/commands/review-grok.md", profile)
+
+    def test_ship_grants_the_triager_by_exact_type_and_nothing_broader(self):
+        ship = (COMMANDS / "ship.md").read_text(encoding="utf-8")
+        allowed = self.frontmatter_list(ship, "allowed-tools")
+        self.assertIn("Agent(review-grok-triager)", allowed)
+        self.assertEqual(
+            ["Agent(review-grok-triager)"],
+            [t for t in allowed if t == "Agent" or t.startswith("Agent(")])
+        self.assertIn("spawn a **`review-grok-triager`** agent", ship)
+
+    def test_ship_carries_every_edit_deny_the_triage_states(self):
+        # A profile's `disallowedTools` cannot scope a path — an entry with a
+        # specifier removes the whole tool — so on the agent path the trees
+        # /review-grok refuses are refused by /ship's deny list, which reaches
+        # the agents /ship spawns. Every path deny the command states has to
+        # be there, or the agent path is wider than the inline one.
+        ship = set(self.frontmatter_list(
+            (COMMANDS / "ship.md").read_text(encoding="utf-8"),
+            "disallowed-tools"))
+        triage = [t for t in self.frontmatter_list(
+            (COMMANDS / "review-grok.md").read_text(encoding="utf-8"),
+            "disallowed-tools") if t.startswith("Edit(")]
+        self.assertTrue(triage, "review-grok.md states no path deny at all")
+        for rule in triage:
+            with self.subTest(rule=rule):
+                self.assertIn(rule, ship)
+
+    def test_every_exact_agent_grant_denies_every_other_type(self):
+        # The subject is what the gate looks at, not what it found: the
+        # repository's profiles are read from `.claude/agents/` each run, so
+        # a profile added tomorrow fails every command that grants a type and
+        # does not name it — the line review-grok.md says admits a new agent
+        # "until this line names it".
+        profiles = {p.stem for p in (SCRIPTS.parent / "agents").glob("*.md")}
+        self.assertIn("review-grok-triager", profiles)
+        self.assertIn("review-adjudicator", profiles)
+        granting = 0
+        for path in sorted(COMMANDS.glob("*.md")):
+            text = path.read_text(encoding="utf-8")
+            granted = {m for t in self.frontmatter_list(text, "allowed-tools")
+                       for m in re.findall(r"^Agent\((.+)\)$", t)}
+            if not granted:
+                continue
+            granting += 1
+            denied = set(self.frontmatter_list(text, "disallowed-tools"))
+            exempt = granted | self.SPAWNED_BY_A_GRANTED_AGENT.get(
+                path.name, set())
+            for name in sorted((profiles | set(self.BROAD_AGENT_TYPES))
+                               - exempt):
+                with self.subTest(command=path.name, agent=name):
+                    self.assertIn(f"Agent({name})", denied)
+        # The two sweeps, the triage and /ship: fewer means the grant pattern
+        # stopped matching, and the loop above passed over nothing.
+        self.assertGreaterEqual(granting, 4)
 
     def test_ship_pushes_a_copilot_fix_before_its_marker(self):
         # review-copilot.md pushes a committed fix before posting `done`, so
