@@ -209,6 +209,21 @@ class TheRefresh(unittest.TestCase):
         result = self.run_refresh()
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual([f"{guard_value()} update"], self.calls())
+        self.assertEqual([], sorted(p.name for p in self.cache.iterdir()))
+
+    def test_a_holder_taken_over_as_stale_leaves_its_successors_lock(self):
+        # A holder that outlasted the threshold returns to find a successor's
+        # token in the lock. Freeing it would let a third call start an update
+        # beside the successor's, so the holder must leave it and exit.
+        owner = (self.cache / "refresh.lock" / "owner").as_posix()
+        self.fake(extra=f"printf 'successor\\n' > {owner!r}\n")
+        result = self.run_refresh()
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(1, len(self.calls()), self.calls())
+        self.assertEqual(
+            "successor",
+            (self.cache / "refresh.lock" / "owner").read_text(
+                encoding="utf-8").strip())
 
     def test_no_index_means_no_update(self):
         shutil.rmtree(self.cache)

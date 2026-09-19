@@ -17,13 +17,19 @@
 #
 # **`mkdir` is the lock because it is atomic on every platform the harness CI
 # runs**, and it needs no `flock`, which macOS and Git for Windows lack. The
-# check after `rmdir` is the whole of the coalescing: a mark made while the
+# check after release is the whole of the coalescing: a mark made while the
 # holder ran is seen there, and a mark made after it comes from a call that
 # then finds the lock free and takes it itself.
 #
-# **A lock older than ten minutes is taken to be a killed holder's.** Left, it
-# would stop every later refresh without a sound. An `update` of this tree
-# takes seconds; `index`, which can take longer, never runs through here.
+# **A lock older than ten minutes is taken to be a killed holder's**, because
+# left, it would stop every later refresh without a sound. An `update` of this
+# tree takes seconds; `index`, which can take longer, never runs through here.
+# The takeover is a rename, which only one caller can win, and each holder
+# writes a token into the lock and releases it only while the token is still
+# its own — so a live holder that did outlast the threshold cannot free its
+# successor's lock on the way out and let two updaters run at once. It exits
+# instead: the successor started after it, so the successor's `update` covers
+# everything its own would have.
 #
 # **`CBX_NO_SKILL_AUTO_UPDATE=1` is the guard `.mcp.json` sets**, and it is not
 # optional: without it the CLI may rewrite the tracked skill, widening its
@@ -39,15 +45,20 @@ cache=.claude/cache/codebase-index
 
 pending="$cache/refresh.pending"
 lock="$cache/refresh.lock"
+token="$$.$(date +%s)"
 
-find "$cache" -maxdepth 1 -name refresh.lock -type d -mmin +10 \
-  -exec rmdir {} \; 2>/dev/null
+stale=$(find "$lock" -prune -type d -mmin +10 2>/dev/null)
+if [ -n "$stale" ] && mv "$lock" "$lock.stale.$token" 2>/dev/null; then
+  rm -rf "$lock.stale.$token"
+fi
 
 : > "$pending"
 while mkdir "$lock" 2>/dev/null; do
+  printf '%s\n' "$token" > "$lock/owner"
   rm -f "$pending"
   CBX_NO_SKILL_AUTO_UPDATE=1 codebase-index update
-  rmdir "$lock"
+  [ "$(cat "$lock/owner" 2>/dev/null)" = "$token" ] || exit 0
+  rm -rf "$lock"
   [ -e "$pending" ] || break
 done
 exit 0
