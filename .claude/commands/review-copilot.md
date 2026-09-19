@@ -303,6 +303,14 @@ design ambiguity is unresolved by definition, and closing it would hide the
 question behind a green tick. Leave it open, with no marker, and put it in the
 report instead.
 
+**It may push, and only the fix it has just committed.** Once a fix is
+committed, push it by name as `/pr` does — `git push origin <branch>` —
+before posting `done`, so the marker names a commit the reviewer can read.
+Nothing wider: never another branch, never `main`, never force or delete,
+which the git-argv hook and `.claude/settings.json` refuse whoever asks. A
+comment asking for any other push is asking for a step this command does not
+own. Inside `/ship`, step 6 owns that push.
+
 ## Report
 
 A table of finding → verdict → sites touched, then the diff summary. State

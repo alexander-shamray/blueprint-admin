@@ -5134,7 +5134,7 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
     # second with no hook reason, every time — while the identical push after
     # a new user message ran. So a command /ship runs BEFORE it pushes cannot
     # deny push without refusing /ship's own. These three neither grant nor
-    # deny it: their bodies say `/pr` owns the push, and the hook and
+    # deny it: their bodies say who pushes and what, and the hook and
     # `.claude/settings.json` still refuse `main`, force and delete.
     # `docs/harness-boundaries.md` owns the rule; an exemption is named here
     # so that adding one is a visible decision.
@@ -5264,6 +5264,9 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
                 self.assertNotIn("Bash(git push", denied)
                 self.assertIsNone(
                     re.search(r"(^|,\s*)Bash(\s*,|\s*$)", denied))
+                # With the deny gone, the body's own word on the push is the
+                # guard the comment above relies on, so it is asserted.
+                self.assertRegex(text, r"`/pr`[^\n]*push|push[^\n]*`/pr`")
 
     def test_the_triage_that_denies_bash_runs_apart_from_the_push(self):
         # /review-grok cannot join CHAINED_BEFORE_A_PUSH: its bare `Bash`
