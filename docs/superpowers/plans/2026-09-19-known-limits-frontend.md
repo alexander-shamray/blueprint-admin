@@ -825,13 +825,15 @@ public sealed class FrontendSupervisor(
 
         try
         {
-            if (current is { State: JobState.Running } running)
+            // Every state check here reads Status: this gate orders callers against each other, but only
+            // Job's own lock orders a read against MarkExited, which a process exiting calls at any time.
+            if (current is { Status.State: JobState.Running } running)
             {
                 return new FrontendStartResult(FrontendStartOutcome.AlreadyRunning, running);
             }
 
             // Before the node_modules check, which flips false and back while npm ci rewrites the tree.
-            if (install is { State: JobState.Running } installing)
+            if (install is { Status.State: JobState.Running } installing)
             {
                 return new FrontendStartResult(FrontendStartOutcome.Installing, installing);
             }
@@ -868,12 +870,12 @@ public sealed class FrontendSupervisor(
 
         try
         {
-            if (current is { State: JobState.Running } running)
+            if (current is { Status.State: JobState.Running } running)
             {
                 return new FrontendInstallResult(FrontendInstallOutcome.ClientRunning, running);
             }
 
-            if (install is { State: JobState.Running } installing)
+            if (install is { Status.State: JobState.Running } installing)
             {
                 return new FrontendInstallResult(FrontendInstallOutcome.AlreadyInstalling, installing);
             }
@@ -903,7 +905,7 @@ public sealed class FrontendSupervisor(
 
         try
         {
-            if (current is not { State: JobState.Running } running)
+            if (current is not { Status.State: JobState.Running } running)
             {
                 return null;
             }

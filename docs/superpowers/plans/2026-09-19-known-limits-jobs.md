@@ -592,7 +592,8 @@ In `src/Admin.Host/Stack/LogFollower.cs`, extend the summary and add
 
         try
         {
-            if (current is { State: JobState.Running } running && running.Id == jobId)
+            // Status, not State: only Job's own lock orders this read against MarkExited.
+            if (current is { Status.State: JobState.Running } running && running.Id == jobId)
             {
                 // Not the request's token, as in StartAsync: an aborted request must not leave the process half-stopped.
                 await runner.StopAsync(running, CancellationToken.None);
@@ -843,6 +844,26 @@ Add, before the closing `});`:
     expect(stopButton.disabled).toBe(true);
   });
 
+  it('a stop still out is not sent again, whoever asks', () => {
+    // An HTTP stop answers later than of(): the stop-on-arrival path, its completion, Stop and
+    // teardown would each send one while the first is out.
+    const post = new Subject<JobSummary>();
+    const stopping = new Subject<void>();
+    host.followLogs.mockReturnValueOnce(post.asObservable());
+    host.stopFollow.mockReturnValueOnce(stopping.asObservable());
+    const fixture = TestBed.createComponent(LogsPage);
+    fixture.componentInstance.follow();
+    fixture.componentInstance.stop();
+
+    post.next(summary('late-5'));
+    fixture.componentInstance.stop();
+    fixture.destroy();
+
+    expect(host.stopFollow).toHaveBeenCalledTimes(1);
+    stopping.complete();
+    expect(fixture.componentInstance.hostJob()).toBeNull();
+  });
+
   it('a slow stop of the previous job does not forget the next one', () => {
     const stopA = new Subject<void>();
     host.stopFollow.mockReturnValueOnce(stopA.asObservable());
@@ -871,7 +892,7 @@ Add, before the closing `});`:
 
 Run: `bash .claude/scripts/npm-checks.sh all`
 Expected: lint and the build fail on `stopFollow`, which does not exist on
-`HostClient`. Once the method exists, the eight new page tests fail on
+`HostClient`. Once the method exists, the nine new page tests fail on
 `stopFollow` never being called or on the Follow button never disabling,
 and so do the four rewritten ones.
 
@@ -899,6 +920,8 @@ Add a field after `private subscription?: Subscription;`:
 ```ts
   /** Stop came while the follow request was out: end the job the moment the answer names it. */
   private stopOnArrival = false;
+  /** The job a stop request is out for: it is not sent twice (see stopOnHost). */
+  private stopping: string | null = null;
 ```
 
 and two signals after `pending`:
@@ -1028,12 +1051,26 @@ Add, before `describeError`:
    */
   private stopOnHost(): void {
     const id = this.hostJob();
-    if (!id) {
+    // Claimed before sending: the stop-on-arrival path, the completion that follows it, Stop and
+    // teardown all reach here, and a stop still out for this id is the answer to each of them.
+    if (!id || this.stopping === id) {
       return;
     }
+    this.stopping = id;
+    const release = (): void => {
+      if (this.stopping === id) {
+        this.stopping = null;
+      }
+    };
     this.host.stopFollow(id).subscribe({
-      complete: () => this.hostJob.update((held) => (held === id ? null : held)),
-      error: (e: unknown) => this.error.set(this.error() ?? this.describeError(e)),
+      complete: () => {
+        release();
+        this.hostJob.update((held) => (held === id ? null : held));
+      },
+      error: (e: unknown) => {
+        release();
+        this.error.set(this.error() ?? this.describeError(e));
+      },
     });
   }
 ```
