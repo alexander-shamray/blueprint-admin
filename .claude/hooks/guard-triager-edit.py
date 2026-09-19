@@ -123,7 +123,7 @@ def relative(path, root):
     rel = rel.replace(os.sep, "/")
     if rel == "." or rel == ".." or rel.startswith("../"):
         return None
-    parts = [part.rstrip(". ").split(":", 1)[0] for part in rel.split("/")]
+    parts = [part.split(":", 1)[0].rstrip(". ") for part in rel.split("/")]
     return "/".join(parts)
 
 

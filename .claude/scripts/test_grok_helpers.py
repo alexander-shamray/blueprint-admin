@@ -10078,6 +10078,7 @@ class TheTriagerEditsNothingShipDenies(unittest.TestCase):
 
     def test_spellings_windows_folds_are_refused(self):
         for spelled in ("README.md.", "README.md ", "README.md:stream",
+                        "README.md.:stream", ".github. :s/workflows/x.yml",
                         ".github./workflows/x.yml", "docs/../README.md"):
             with self.subTest(spelled=spelled):
                 self.assert_refused(self.edit(spelled))
