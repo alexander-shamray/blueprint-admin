@@ -37,8 +37,8 @@
 #                                         publishing the token, a window of two
 #                                         statements
 #
-# `kill -0` was measured across separately launched shells on Git for Windows:
-# alive while the holder runs, dead once it and any orphaned child are gone.
+# `kill -0` sees a separately launched shell on Git for Windows too: alive
+# while the holder runs, dead once it and any orphaned child are gone.
 # The takeover is a rename, which only one caller can win.
 #
 # **Each holder releases the lock only while its token is still in it.** A
@@ -57,7 +57,7 @@
 #
 # **`CBX_NO_SKILL_AUTO_UPDATE=1` is the guard `.mcp.json` sets**, and it is not
 # optional: without it the CLI may rewrite the tracked skill, widening its
-# `allowed-tools`, which one unguarded run was measured doing.
+# `allowed-tools`.
 set -u
 
 root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0

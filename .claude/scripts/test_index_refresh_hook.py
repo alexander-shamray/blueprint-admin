@@ -1,11 +1,10 @@
-"""The `PostToolUse` hook that keeps the local index current (#26).
+"""The `PostToolUse` hook that keeps the local index current.
 
 **The hook's failures are invisible, so this file checks both what it is and
 what it does.** The wiring discards its output and runs in the background so
 that it can never block an edit — which also means a hook that fails on every
-call looks exactly like one that works. The example this repository shipped
-did precisely that: `--quiet` is not an option the CLI has, and nothing would
-ever have said so. So the wiring is asserted from the files the harness reads,
+call looks exactly like one that works. So the wiring is asserted from the
+files the harness reads,
 and `refresh-index.sh` — the hook command's whole body — is run against a fake
 `codebase-index` that records the arguments and the guard it was handed.
 
@@ -36,7 +35,7 @@ REFRESH = CLAUDE / "hooks" / "refresh-index.sh"
 GUARD_ENV = "CBX_NO_SKILL_AUTO_UPDATE"
 
 # The full path, never the bare name: on Windows `subprocess` searches System32
-# before PATH, where `bash` is WSL's — measured while writing this hook.
+# before PATH, where `bash` is WSL's.
 SH = shutil.which("sh")
 GIT = shutil.which("git")
 
@@ -111,7 +110,7 @@ class TheWiring(unittest.TestCase):
         # The example is what a reader copies into another project, where this
         # repository's `refresh-index.sh` does not exist — so it stays a
         # one-liner, and is held to the same guard, verb and matcher as the
-        # wiring. It shipped with a `--quiet` the CLI lacks and no guard.
+        # wiring.
         entries = read_json(EXAMPLE).get("hooks", {}).get("PostToolUse", [])
         hooks = [(e.get("matcher"), h) for e in entries for h in e.get("hooks", [])]
         self.assertEqual(1, len(hooks), hooks)
