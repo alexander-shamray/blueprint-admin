@@ -35,11 +35,14 @@ argument is how a rule gets "corrected" back.
   a broken spelling fails on every call without a sound — the example it
   replaced passed a `--quiet` the CLI does not have. The script coalesces
   overlapping calls so an `update` always starts after the last edit, and
-  `test_index_refresh_hook.py` runs it against a fake CLI as well as pinning
-  the matcher, the `CBX_NO_SKILL_AUTO_UPDATE` guard `.mcp.json` sets, and the
-  skill's `examples/hooks/settings.json` equal to the wiring. It calls the CLI
-  bare, as `.mcp.json` does, rather than through the skill's `cbx` wrapper: a
-  hook shell's `bash` can resolve to WSL's on Windows, which cannot run it.
+  retries a failed one. `test_index_refresh_hook.py` runs it against a fake
+  CLI, and it pins the matcher and the `CBX_NO_SKILL_AUTO_UPDATE` guard
+  `.mcp.json` sets, in the script and in the skill's
+  `examples/hooks/settings.json` alike. The example stays a self-contained
+  one-liner, because the script is this repository's and not the skill's. Both
+  call the CLI bare, as `.mcp.json` does, rather than through the skill's
+  `cbx` wrapper: a hook shell's `bash` can resolve to WSL's on Windows, which
+  cannot run it.
 - **`.claude/skills/**` is a grant surface.** A skill's `allowed-tools` is
   auto-approval, so a session that can rewrite `SKILL.md` widens the next
   invocation. Commands, agents, hooks and settings were already denied;

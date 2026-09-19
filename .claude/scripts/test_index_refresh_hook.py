@@ -107,12 +107,21 @@ class TheWiring(unittest.TestCase):
             [f"{GUARD_ENV}={guard_value()}", "codebase-index", "update"],
             shlex.split(lines[0]))
 
-    def test_the_shipped_example_is_the_wiring(self):
-        # The example is what a reader copies; it drifted from anything that
-        # ran, so it is held equal to the one that does.
+    def test_the_shipped_example_is_a_self_contained_guarded_refresh(self):
+        # The example is what a reader copies into another project, where this
+        # repository's `refresh-index.sh` does not exist — so it stays a
+        # one-liner, and is held to the same guard, verb and matcher as the
+        # wiring. It shipped with a `--quiet` the CLI lacks and no guard.
+        entries = read_json(EXAMPLE).get("hooks", {}).get("PostToolUse", [])
+        hooks = [(e.get("matcher"), h) for e in entries for h in e.get("hooks", [])]
+        self.assertEqual(1, len(hooks), hooks)
+        matcher, hook = hooks[0]
+        self.assertEqual(refresh_hook()[0], matcher)
         self.assertEqual(
-            read_json(SETTINGS).get("hooks", {}).get("PostToolUse"),
-            read_json(EXAMPLE).get("hooks", {}).get("PostToolUse"))
+            [f"{GUARD_ENV}={guard_value()}", "codebase-index", "update",
+             ">/dev/null", "2>&1", "&"],
+            shlex.split(hook["command"]))
+        self.assertNotIn(REFRESH.name, hook["command"])
 
 
 class TheRefresh(unittest.TestCase):
@@ -270,6 +279,22 @@ class TheRefresh(unittest.TestCase):
             "successor",
             (self.cache / "refresh.lock" / "owner").read_text(
                 encoding="utf-8").strip())
+
+    def test_a_failed_update_is_retried(self):
+        # The fake fails its first call only, as a transient lock timeout would.
+        once = self.record.as_posix() + ".failed"
+        self.fake(extra=f'[ -e {once!r} ] || {{ : > {once!r}; exit 1; }}\n')
+        result = self.run_refresh()
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(2, len(self.calls()), self.calls())
+        self.assertEqual([], sorted(p.name for p in self.cache.iterdir()))
+
+    def test_a_failure_that_persists_gives_up_and_frees_the_lock(self):
+        self.fake(extra="exit 1\n")
+        result = self.run_refresh()
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(3, len(self.calls()), self.calls())
+        self.assertFalse((self.cache / "refresh.lock").exists())
 
     def test_no_index_means_no_update(self):
         shutil.rmtree(self.cache)
