@@ -5128,6 +5128,18 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
     # A hard-coded list of the five would have gone stale on the sixth.
     PUBLISHING = ("pr.md", "ship.md")
 
+    # **A frontmatter deny holds for the rest of the user turn, not for the
+    # command that states it.** Measured: /ship ran /commit and then pushed in
+    # the same turn, and the push came back "has been denied" in under a
+    # second with no hook reason, every time — while the identical push after
+    # a new user message ran. So a command /ship runs BEFORE it pushes cannot
+    # deny push without refusing /ship's own. These three neither grant nor
+    # deny it: their bodies say `/pr` owns the push, and the hook and
+    # `.claude/settings.json` still refuse `main`, force and delete.
+    # `docs/harness-boundaries.md` owns the rule; an exemption is named here
+    # so that adding one is a visible decision.
+    CHAINED_BEFORE_A_PUSH = ("branch.md", "commit.md", "review-copilot.md")
+
     # The machinery a command that APPLIES findings has no business in. Held
     # here rather than per-command because the point is the surface: a new
     # command that grants an editing tool is judged against this set, not
@@ -5223,6 +5235,8 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
                 self.assertFalse(
                     grants_push,
                     "only the publishing commands may grant push")
+                if path.name in self.CHAINED_BEFORE_A_PUSH:
+                    continue
                 # `Bash` on its own removes the tool, which covers push and
                 # everything else; /review-grok is admitted by this branch.
                 covered = (
@@ -5233,6 +5247,23 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
                     covered,
                     f"{path.name} neither grants nor denies push, so the global "
                     "settings allow reaches it")
+
+    def test_nothing_ship_chains_before_a_push_denies_it(self):
+        # The other side, and the one that was missing: restoring the deny
+        # reads as hardening and breaks /ship silently, because the refusal
+        # lands on a later command than the one that carries it.
+        ship = (COMMANDS / "ship.md").read_text(encoding="utf-8")
+        for name in self.CHAINED_BEFORE_A_PUSH:
+            text = (COMMANDS / name).read_text(encoding="utf-8")
+            denied = " ".join(
+                re.findall(r"^disallowed-tools:\s*(.+)$", text, re.MULTILINE))
+            with self.subTest(command=name):
+                # An exemption nobody needs is one that quietly widens: the
+                # command has to be one ship.md really names.
+                self.assertIn(f"`/{name.removesuffix('.md')}`", ship)
+                self.assertNotIn("Bash(git push", denied)
+                self.assertIsNone(
+                    re.search(r"(^|,\s*)Bash(\s*,|\s*$)", denied))
 
     def test_the_settings_really_do_auto_approve_push(self):
         # The positive control. If the global allow were ever removed, the case

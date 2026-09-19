@@ -32,6 +32,17 @@ argument is how a rule gets "corrected" back.
   auto-approval, so a session that can rewrite `SKILL.md` widens the next
   invocation. Commands, agents, hooks and settings were already denied;
   both `Edit(.claude/skills/**)` spellings sit on the same list.
+- **A command `/ship` runs before it pushes never denies push.** A
+  frontmatter `disallowed-tools` holds for the rest of the user turn, not
+  for the command that states it, so `Bash(git push:*)` on `/commit`,
+  `/branch` or `/review-copilot` refuses `/ship`'s own push a step later —
+  "has been denied", in under a second, with no hook reason. It reads as
+  hardening and is not: those bodies say `/pr` owns the push, and the
+  git-argv hook and `settings.json` refuse `main`, force and delete whoever
+  asks. **Do not put it back.** `CHAINED_BEFORE_A_PUSH` in
+  `test_grok_helpers.py` names the three and fails if one denies push
+  again. A terminal, read-only command — the two sweeps — keeps its deny,
+  because nothing pushes after it.
 - **`python -m unittest discover -s .claude/scripts -p 'test_*.py'` is the
   harness's own suite.** It reads `git ls-files`, so a new tracked root file
   or top-level tree fails it until somebody decides which side of the
