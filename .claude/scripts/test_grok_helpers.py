@@ -3613,14 +3613,19 @@ class OnlyThisCheckoutsPullRequestsSurvive(unittest.TestCase):
     HELPER = SCRIPTS / "pr-for-branch.sh"
     OWNER = "acme/widgets"
 
+    # The head of the one row that survives the filter. A real 40-character
+    # oid, because the projection is what step 0 compares its tip against and
+    # a fixture without one lets the shape case pass on a `null`.
+    SURVIVING_HEAD = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
+
     ROWS = """[
-      {"number": 1, "state": "OPEN", "url": "u1",
+      {"number": 1, "state": "OPEN", "url": "u1", "headRefOid": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
        "headRepository": {"nameWithOwner": "acme/widgets"}, "baseRefName": "main"},
-      {"number": 2, "state": "OPEN", "url": "u2",
+      {"number": 2, "state": "OPEN", "url": "u2", "headRefOid": "b2c3d4e5f60718293a4b5c6d7e8f90123456789a",
        "headRepository": {"nameWithOwner": "mallory/widgets"}, "baseRefName": "main"},
-      {"number": 3, "state": "MERGED", "url": "u3",
+      {"number": 3, "state": "MERGED", "url": "u3", "headRefOid": "c3d4e5f60718293a4b5c6d7e8f90123456789ab2",
        "headRepository": null, "baseRefName": "main"},
-      {"number": 4, "state": "CLOSED", "url": "u4",
+      {"number": 4, "state": "CLOSED", "url": "u4", "headRefOid": "d4e5f60718293a4b5c6d7e8f90123456789ab2c3",
        "headRepository": {"nameWithOwner": "acme/widgets-fork"}, "baseRefName": "main"}
     ]"""
 
@@ -3682,6 +3687,13 @@ class OnlyThisCheckoutsPullRequestsSurvive(unittest.TestCase):
         # is what says the projection was widened by exactly one.
         got = json.loads(self.run_helper().stdout)
         self.assertEqual({"number", "state", "url", "headRefOid"}, set(got[0]))
+        # **The VALUE, not only the key.** The fixture carried no head until
+        # now, so this case passed on a projected `null`: the key set was
+        # right and the field step 0 compares its tip against was unusable.
+        # The same defect was fixed one fixture class over and missed here,
+        # which is a fix applied at one site and not at its neighbour. Raised
+        # by Copilot.
+        self.assertEqual(self.SURVIVING_HEAD, got[0]["headRefOid"])
 
     def test_an_unresolvable_owner_stops_the_helper(self):
         result = self.run_helper(owner="")
@@ -10365,6 +10377,28 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         for limb in ("git status --short", "git log origin/main..HEAD"):
             with self.subTest(limb=limb):
                 self.assertIn(limb, block)
+
+    @staticmethod
+    def _prose(block):
+        # A block's comment text as one line, so a sentence wrapped across `#`
+        # continuations can be asserted as the sentence it is.
+        words = []
+        for line in block.splitlines():
+            _, _, comment = line.partition("#")
+            words.extend(comment.split())
+        return " ".join(words)
+
+    def test_the_finished_predicate_pins_the_equality_not_just_the_names(self):
+        # **Naming `MERGED` and `headRefOid` in the block is not the contract
+        # — their EQUALITY is.** A block that read both and then treated every
+        # merged row as finished satisfies the limb case above and performs
+        # the destructive teardown this predicate exists to refuse, which is
+        # the same gap one level deeper than the round that added it. Both
+        # directions are pinned, because the negative is the one that keeps a
+        # workspace alive. Raised by Copilot.
+        prose = self._prose(self._finished_predicate_block())
+        self.assertIn("headRefOid equal to that tip", prose)
+        self.assertIn("headRefOid is NOT the tip", prose)
 
     def test_step_zero_compares_the_tip_with_the_merged_head(self):
         blocks = self._fenced(self.ship())
