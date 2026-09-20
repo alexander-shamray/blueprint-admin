@@ -389,10 +389,11 @@ same argument as never calling a branch clean because asking failed.
    **Only on a MERGED row, and only then:**
 
    ```bash
-   git fetch origin <branch> || true          # best-effort: the merged head
-                                              # may be here only, and a replay
-                                              # leaves it unreachable from
-                                              # origin/main
+   git fetch origin refs/pull/<n>/head || true   # best-effort: the merged
+                                                 # head is not reachable from
+                                                 # origin/main after a replay,
+                                                 # and the branch it was on
+                                                 # may be gone
    git merge-base --is-ancestor HEAD <headRefOid>   # 0: the merged head
                                                     # reaches the tip, so this
                                                     # checkout holds nothing
@@ -404,14 +405,28 @@ same argument as never calling a branch clean because asking failed.
    ```
 
    **These two are conditional, and that is not tidiness.** `/branch` creates
-   a local branch before `/pr` first pushes it, and a merged branch's remote
-   ref may since have been deleted — so an unconditional
-   `git fetch origin <branch>` fails on an unpushed branch, on an unused one,
-   and on a tidied-up merged one. A failed fetch would stop step 0 before
-   `pr-for-branch.sh` could answer `[]`, which is precisely the resume path
-   the unused-workspace rows below depend on. So the fetch runs only once a
-   MERGED row has named a head worth looking for, and `|| true` keeps a
+   a local branch before `/pr` first pushes it, so an unconditional fetch
+   fails on an unpushed branch and on an unused one — and a failed fetch would
+   stop step 0 before `pr-for-branch.sh` could answer `[]`, which is precisely
+   the resume path the unused-workspace rows below depend on. So it runs only
+   once a MERGED row has named a head worth looking for, and `|| true` keeps a
    missing ref from ending the run.
+
+   **The pull request's head ref, not the branch's, and that is the whole of
+   whether this works.** A merged branch's `refs/heads/…` is commonly deleted,
+   and measured on this repository it always is: for a merged pull request of
+   this repo, `git ls-remote origin refs/heads/<its branch>` returned nothing
+   while `refs/pull/<n>/head` returned that pull request's `headRefOid`
+   exactly. A replay does not put the pre-replay head on `origin/main` either,
+   so with the branch gone there is no other way to obtain the object. GitHub
+   keeps the pull ref after the branch goes, and under a rebase landing it
+   still names the head the pull request merged. `pr-for-branch.sh` returns
+   the row's `number`, so step 0 already holds what the ref is built from.
+
+   **Fetching the wrong ref fails in the direction that looks like caution.**
+   The ancestor test cannot answer without the object, not-answering is not
+   finished, and the workspace is kept — so a behind checkout accumulates for
+   ever while every read reports itself working.
 
    **`git merge-base --is-ancestor` is the one read here that does not exit 0
    whatever it finds, and it must be read by status rather than by

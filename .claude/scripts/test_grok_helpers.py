@@ -10358,7 +10358,13 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         # unconditionally fetching a branch stops step 0 on every unpushed or
         # tidied-up one, which is the resume path it argues for at length.
         conditional = self._merged_row_block()
-        for limb in ("git fetch origin <branch> || true",
+        # **The PULL ref, not the branch's.** A merged branch's `refs/heads/…`
+        # is deleted on this repository — measured — and a replay leaves the
+        # pre-replay head off `origin/main`, so the branch fetch can never
+        # materialise the object the ancestor test needs. Without it that test
+        # errors, not-answering is not finished, and the behind checkout this
+        # relation exists for is kept for ever.
+        for limb in ("git fetch origin refs/pull/<n>/head || true",
                      "git merge-base --is-ancestor HEAD"):
             with self.subTest(limb=limb):
                 self.assertIn(limb, conditional)
