@@ -10357,6 +10357,9 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         # by live in the conditional block that runs only on a MERGED row —
         # unconditionally fetching a branch stops step 0 on every unpushed or
         # tidied-up one, which is the resume path it argues for at length.
+        # The behind limb's disambiguation, in the block that spells it.
+        self.assertIn("git merge-base --is-ancestor HEAD origin/main",
+                      self.ship())
         conditional = self._merged_row_block()
         # **The PULL ref, not the branch's.** A merged branch's `refs/heads/…`
         # is deleted on this repository — measured — and a replay leaves the
@@ -10395,6 +10398,57 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         self.assertEqual(1, len(blocks),
                          "expected exactly one prune-list-and-pull block")
         return blocks[0]
+
+    def test_a_reused_name_pointed_at_an_old_commit_is_not_finished(self):
+        """The behind limb's ambiguity, driven.
+
+        A branch pointed at a commit predating an old pull request is an
+        ancestor of that pull request's head, exactly as a genuine behind
+        checkout is — and `pr-for-branch.sh` keeps the old MERGED row for it,
+        because the landing commit is absent from the tip. Ancestry against
+        the head cannot tell the two apart; ancestry against `main` can.
+        """
+        repo = Path(tempfile.mkdtemp(prefix="stale-reuse-"))
+        self.addCleanup(shutil.rmtree, str(repo), ignore_errors=True)
+
+        def git(*args):
+            return subprocess.run(
+                ["git", "-C", str(repo), "-c", "user.email=t@example.com",
+                 "-c", "user.name=t", *args],
+                check=True, capture_output=True, text=True).stdout.strip()
+
+        def ancestor(tip, of):
+            done = subprocess.run(
+                ["git", "-C", str(repo), "merge-base", "--is-ancestor",
+                 tip, of], capture_output=True)
+            self.assertIn(done.returncode, (0, 1), done.stderr)
+            return done.returncode == 0
+
+        git("init", "-q", "-b", "main")
+        git("commit", "-q", "--allow-empty", "-m", "root")
+        old = git("rev-parse", "HEAD")
+        git("switch", "-q", "-c", "feat/x")
+        git("commit", "-q", "--allow-empty", "-m", "the work")
+        head_ref_oid = git("rev-parse", "HEAD")
+        # The replay: `main` takes the work under a new sha, so the pull
+        # request's own commit is never reachable from it.
+        git("switch", "-q", "main")
+        git("commit", "-q", "--allow-empty", "-m", "the work, replayed")
+
+        # **The stale reuse.** A tip predating the pull request satisfies the
+        # head relation exactly as a genuine behind tip does...
+        self.assertTrue(ancestor(old, head_ref_oid))
+        # ...and `main` is what says it holds nothing of its own.
+        self.assertTrue(ancestor(old, "main"))
+
+        # **A genuine behind tip is the pull request's own work**, so the
+        # replay leaves it unreachable from `main` and the same pair of reads
+        # separates the two cases.
+        git("switch", "-q", "feat/x")
+        git("commit", "-q", "--allow-empty", "-m", "pushed by another session")
+        behind, pushed = head_ref_oid, git("rev-parse", "HEAD")
+        self.assertTrue(ancestor(behind, pushed))
+        self.assertFalse(ancestor(behind, "main"))
 
     def test_the_pull_ref_fetch_materialises_a_head_the_clone_lacks(self):
         """The prerequisite the whole relation rests on, driven.
