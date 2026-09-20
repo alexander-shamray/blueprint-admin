@@ -23,15 +23,15 @@
 # commit whose checks never ran. A helper that can be called without it is a
 # helper that will be.
 #
-# The method is fixed to `--rebase` (#31). Pull requests here land by rebase,
-# so `main` carries each commit `/commit` split rather than one
-# `Merge pull request #n from …` per branch. `--merge` and `--squash` are not
-# choices this endpoint offers: the first is the shape #31 moved away from, and
-# the second discards what `/commit` and `/pr` spend their effort producing.
+# The method is fixed to `--rebase`, so `main` carries each commit `/commit`
+# split rather than one `Merge pull request #n from …` per branch. Neither
+# `--merge` nor `--squash` is a choice this endpoint offers: the commits are
+# what `/commit` splits for a reviewer and `/pr` writes its body from, and
+# squashing discards them.
 #
-# **A rebase merge replays the branch's commits onto `main` with new shas**, so
-# nothing downstream may judge "landed" by whether the branch's own commits are
-# ancestors of `main`. `ship.md` step 0's finished predicate asks instead
+# **A rebase landing replays the branch's commits onto `main` with new shas**,
+# so nothing downstream may judge "landed" by whether the branch's own commits
+# are ancestors of `main`. `ship.md` step 0's finished predicate asks instead
 # whether the local tip is still the head the pull request merged — an identity
 # no landing method moves.
 set -euo pipefail

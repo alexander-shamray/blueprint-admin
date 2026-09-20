@@ -101,15 +101,6 @@ What is under test, and which issue each half closes:
         holds no copy of any deny list), and a checkout reached through a link
         (admitted, or every edit in a worktree under a linked temp root would
         be refused).
-  #31   pull requests land by rebase now, so every "has this landed" read that
-        asked about ANCESTRY of the branch's own commits answers no for ever —
-        and step 0's finished predicate was exactly that read, failing silently
-        by keeping every worktree. Its replacement asks whether the local tip
-        is still the head the pull request merged, which is the only form of
-        the question no post-PR commit can slip past: the cases drive a real
-        rebase-merged repository and show both content comparisons — the
-        original range read and the `git cherry` that first replaced it —
-        answering wrongly where the identity read answers.
 
 **This inventory is a third copy of a list `ci.yml` and `docs/testing.md` also
 keep, and it went stale exactly as a redundant copy does** — it ended at #57
@@ -3615,7 +3606,7 @@ class OnlyThisCheckoutsPullRequestsSurvive(unittest.TestCase):
 
     # The head of the one row that survives the filter. A real 40-character
     # oid, because the projection is what step 0 compares its tip against and
-    # a fixture without one lets the shape case pass on a `null`.
+    # a fixture without one lets the shape case pass on a projected `null`.
     SURVIVING_HEAD = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
 
     ROWS = """[
@@ -3680,19 +3671,16 @@ class OnlyThisCheckoutsPullRequestsSurvive(unittest.TestCase):
         self.assertNotIn(4, [row["number"] for row in got])
 
     def test_the_shape_is_unchanged_for_callers(self):
-        # **`headRefOid` joined the set in PR #34 and nothing else has.** This
-        # case is the reason that addition could not be made quietly: /ship
-        # step 0 compares the local tip with the head the pull request merged,
-        # so the oid had to reach a caller, and every other field staying put
-        # is what says the projection was widened by exactly one.
+        # **The declared field set, so a projection cannot widen quietly.**
+        # /ship step 0 compares the local tip with the head the pull request
+        # merged, so that oid has to reach a caller; every other field staying
+        # put is what says the projection carries exactly what it should.
         got = json.loads(self.run_helper().stdout)
         self.assertEqual({"number", "state", "url", "headRefOid"}, set(got[0]))
-        # **The VALUE, not only the key.** The fixture carried no head until
-        # now, so this case passed on a projected `null`: the key set was
-        # right and the field step 0 compares its tip against was unusable.
-        # The same defect was fixed one fixture class over and missed here,
-        # which is a fix applied at one site and not at its neighbour. Raised
-        # by Copilot.
+        # **The VALUE, not only the key.** A fixture without a head projects
+        # `null`: the key set reads right while the field step 0 compares its
+        # tip against is unusable, which is a shape check passing over an
+        # unusable answer.
         self.assertEqual(self.SURVIVING_HEAD, got[0]["headRefOid"])
 
     def test_an_unresolvable_owner_stops_the_helper(self):
@@ -3883,10 +3871,10 @@ class NoCommandHoldsAPrefixGrantThatAdmitsAForbiddenFlag(unittest.TestCase):
         self.assertIn('gh pr merge --rebase --repo "$repo" '
                       '--match-head-commit "$oid" "$pr"', merge)
         self.assertNotIn("--admin", merge)
-        # #31 moved the method, and the flag it moved from must not survive
-        # beside it: `gh` refuses two of `--merge`, `--squash` and `--rebase`
-        # together, so a stray `--merge` is a broken endpoint at the last step
-        # of the chain rather than a merge of the wrong shape.
+        # Exactly one method reaches `gh`: it refuses two of `--merge`,
+        # `--squash` and `--rebase` together, so a stray second flag is a
+        # broken endpoint at the last step of the chain rather than a landing
+        # of the wrong shape.
         self.assertNotIn("--merge", merge)
         # `--match-head-commit` is a required ARGUMENT, not an optional flag:
         # ship.md calls it the only guard in step 7 that fails closed and then
@@ -4437,10 +4425,10 @@ class AFeedHelperReturnsTheWholeAnswer(unittest.TestCase):
             "number": number, "state": state,
             "url": f"https://example.invalid/{number}",
             "headRepository": {"nameWithOwner": repo}, "baseRefName": "main",
-            # Published since PR #34, so the fixture carries it: `/ship` step 0
-            # compares this with the local tip, and a row without it would put
-            # a `null` on one side of that comparison. Cases that need a
-            # specific head override it after the spread.
+            # The fixture carries a head because `/ship` step 0 compares this
+            # with the local tip, and a row without it would put a `null` on
+            # one side of that comparison. Cases that need a specific head
+            # override it after the spread.
             "headRefOid": f"{number:040x}",
         }
 
@@ -4506,13 +4494,15 @@ class AFeedHelperReturnsTheWholeAnswer(unittest.TestCase):
         self.assertEqual([4], [r["number"] for r in json.loads(result.stdout)])
 
     def test_the_reuse_drop_still_answers_after_a_rebase_merge(self):
-        # #31: the drop keys on the MERGE COMMIT being an ancestor of the local
-        # tip, and a rebase merge reports its last replayed commit as
-        # `mergeCommit`. That commit is on `main`, so a branch recreated from
-        # `main` carries it and the original branch — whose own shas were left
-        # behind by the replay — does not. The helper is therefore unchanged by
-        # #31, and this case is what establishes that rather than assuming it:
-        # the same two answers, driven against a rebase-merged history.
+        # The drop keys on `mergeCommit` being an ancestor of the local tip.
+        # Under a rebase landing that field names the last REPLAYED ordinary
+        # commit and no merge commit exists, so the neutral name is the only
+        # one true for every landing method. That commit is on `main`, so a
+        # branch recreated from `main` carries it while the original branch —
+        # whose own shas the replay left behind — does not, which is the same
+        # two answers the helper gives under any other method. Driven rather
+        # than reasoned, because the reasoning is short enough to be
+        # convincing and wrong.
         repo = Path(tempfile.mkdtemp(prefix="prlist-rebase-"))
         self.addCleanup(shutil.rmtree, str(repo), ignore_errors=True)
 
@@ -10321,12 +10311,9 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
 
     @staticmethod
     def _fenced(text):
-        # The command blocks alone. The prose NAMES the read it replaced —
-        # this repository argues its changes where it makes them — so a
-        # whole-file search reads the explanation as the defect, which is the
-        # mistake `_code` records one class over and which this case made
-        # before it was written this way. What has to be gone is the READ, and
-        # the reads are the fences.
+        # The command blocks alone. The prose names the reads it rules out, so
+        # a whole-file search reads an explanation as a defect; what has to be
+        # absent is the READ, and the reads are the fences.
         blocks, inside, current = [], False, []
         for line in text.splitlines():
             if line.strip().startswith("```"):
@@ -10356,7 +10343,7 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         # contract.** Asserting that each read exists somewhere in the file
         # leaves a regression that performs both reads and then treats every
         # MERGED row as finished — the teardown of live work this predicate
-        # exists to refuse, behind a green gate. Raised by Copilot.
+        # exists to refuse, behind a green gate.
         block = self._finished_predicate_block()
         for limb in ("git status --short", "git rev-parse HEAD",
                      "pr-for-branch.sh", "MERGED", "headRefOid"):
@@ -10366,9 +10353,8 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
     def _teardown_block(self):
         # **Step 0's teardown, and not step 7's.** Both prune and both pull,
         # so those two together select a pair; `git worktree list` is step 0's
-        # alone. The first spelling of this selector matched both and the
-        # `assertEqual(1, ...)` below is what said so — the positive control
-        # earning its place on the round it was written.
+        # alone. The `assertEqual(1, ...)` below is what keeps an ambiguous
+        # selector from silently taking the first match.
         blocks = [block for block in self._fenced(self.ship())
                   if "git worktree list" in block
                   and "git pull --ff-only" in block]
@@ -10377,15 +10363,13 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         return blocks[0]
 
     def test_the_main_checkout_still_reads_whether_it_is_ahead(self):
-        # **The regression this case exists for shipped, and a reviewer found
-        # it rather than the suite.** Step 0's table guarded the pull on
-        # `main` being clean and not ahead, and took both facts from the
-        # FINISHED predicate one row over — which worked only while that
-        # predicate was a range read. Once it became an identity against a
-        # pull request's head, `main` had nothing to compare: no PR, no oid,
-        # no guard. `git pull --ff-only` then succeeds, step 1 forks from
-        # `origin/main`, and commits on `main` never reach the pull request,
-        # which line 72 of that file calls a stop. Raised by Copilot.
+        # **`main` needs its own ahead read and cannot take one from the
+        # finished predicate.** That predicate is an identity against a pull
+        # request's head, and `main` has no pull request: no oid, nothing to
+        # compare, no guard. Without a read of its own `git pull --ff-only`
+        # succeeds, step 1 forks from `origin/main`, and commits on `main`
+        # never reach the pull request — a state `ship.md`'s stop table
+        # refuses.
         block = self._teardown_block()
         for limb in ("git status --short", "git log origin/main..HEAD"):
             with self.subTest(limb=limb):
@@ -10405,10 +10389,9 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         # **Naming `MERGED` and `headRefOid` in the block is not the contract
         # — their EQUALITY is.** A block that read both and then treated every
         # merged row as finished satisfies the limb case above and performs
-        # the destructive teardown this predicate exists to refuse, which is
-        # the same gap one level deeper than the round that added it. Both
+        # the destructive teardown this predicate exists to refuse. Both
         # directions are pinned, because the negative is the one that keeps a
-        # workspace alive. Raised by Copilot.
+        # workspace alive.
         prose = self._prose(self._finished_predicate_block())
         self.assertIn("headRefOid equal to that tip", prose)
         self.assertIn("headRefOid is NOT the tip", prose)
@@ -10448,32 +10431,32 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
             "jq '[ .[] | {number, state, url, headRefOid} ]'", helper)
         # **And over the REQUEST, because no stub in this suite can see it.**
         # Every `gh pr list` stub returns its fixture whatever `--json` asked
-        # for, so dropping the field from the real request leaves the
+        # for, so a request that stops asking for the field leaves the
         # projection emitting `null`, step 0 with nothing to compare its tip
-        # against, and this suite entirely green. That is the same `null` the
-        # previous round fixed in a fixture, one layer up. Raised by Copilot.
+        # against, and this suite entirely green.
         self.assertIn(
             "--json number,state,url,headRepository,headRefOid,"
             "baseRefName,mergeCommit", helper)
 
     def test_no_command_still_argues_for_the_merge_commit_shape(self):
-        # The claim #31 retired, in the words both files used to carry. A rule
-        # stated in the command and argued in the helper moves in both, and
-        # this is the case that says so.
+        # A rule stated in the command and argued in the helper has to hold
+        # in both, and the merge-commit shape is stated in neither: nothing
+        # here derives the landing method from what `git log --merges` looks
+        # like.
         for path in sorted(COMMANDS.glob("*.md")):
             with self.subTest(command=path.name):
                 self.assertNotIn("git log --merges",
                                  path.read_text(encoding="utf-8"))
 
     def test_neither_content_read_can_see_work_done_after_the_merge(self):
-        """The review finding on PR #34, driven rather than accepted.
+        """Why a patch-id comparison cannot decide that a branch is finished.
 
-        `git cherry` was the first replacement for the range read, and it does
-        answer for a rebase merge. It answers the wrong question: it compares
-        PATCHES, so a commit made after the merge whose patch `main` already
-        carries is reported `-`, and a merge commit is omitted outright. Both
-        leave a branch reading finished while holding work, and step 0's
-        response to finished is to remove the only worktree holding it.
+        `git cherry` answers for a rebase landing, where a range read cannot,
+        and it answers the wrong question: it compares PATCHES, so a commit
+        made after the merge whose patch `main` already carries is reported
+        `-`, and merge commits are omitted outright. Both leave a branch
+        reading finished while holding work, and step 0's response to finished
+        is to remove the only worktree holding it.
 
         The identity read has no such shape, because every commit moves the
         tip whatever its content.
@@ -10519,8 +10502,9 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
             return [line for line in git("cherry", "main", branch).splitlines()
                     if line.startswith("+")]
 
-        # Baseline: nothing since the merge. All three reads agree it landed,
-        # except the range read, which is the defect #31 opened with.
+        # Baseline: nothing since the merge. The identity read and the
+        # patch-id read agree it landed; the range read does not, which is
+        # what a rebase landing does to it.
         self.assertEqual([], plus("feat/x"))
         self.assertEqual(merged_head, git("rev-parse", "HEAD"))
         self.assertNotEqual(
@@ -10634,9 +10618,9 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         git("switch", "-q", "-c", "feat/unused", "main")
         self.assertEqual([], cherry("feat/unused"))
 
-        # And a branch landed by MERGE COMMIT, which is every pull request this
-        # repository landed before #31: its commits are literally in `main`, so
-        # the same read answers for both histories.
+        # And a branch landed by a merge commit, where the branch's own
+        # commits are literally in `main`: the same read answers for that
+        # history too, which is what makes it method-agnostic.
         git("switch", "-q", "-c", "feat/merged", "main")
         write("m.txt", "m\n")
         git("commit", "-q", "-m", "landed by merge commit")

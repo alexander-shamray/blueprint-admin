@@ -391,36 +391,32 @@ same argument as never calling a branch clean because asking failed.
                                                    # unmerged pull request.
    ```
 
-   **The tip against the head the pull request merged, rather than any
-   comparison of content (#31, and PR #34's review).** This read asked
-   `git log origin/main..HEAD` for years, which a rebase merge breaks
-   outright: the replay gives the branch's commits new shas, so that range is
-   never empty afterwards and no landed branch could ever be finished — every
-   worktree kept for ever, silently. The first fix swapped in `git cherry`,
-   which compares by patch-id and does answer for a rebase merge; a reviewer
-   then showed it answers the wrong question, and driving it confirmed both
-   halves. A post-PR commit cherry-picked from `main` produces **no `+`
-   line** while sitting in `main..HEAD` as a real commit, and `git cherry`
-   **omits merge commits** by construction. Either hides work done after the
-   merge, and step 0 removes the only worktree holding it.
+   **The question is identity, not content: is this still the commit the pull
+   request landed?** `pr-for-branch.sh` publishes the row's `headRefOid`, and
+   finished means `git rev-parse HEAD` equals it. Anything committed since
+   moves the tip, whatever its patch looks like and whether or not it is a
+   merge, so there is no shape of post-merge work that survives this read.
 
-   **So the question is identity, not content: is this still the commit the
-   pull request landed?** `pr-for-branch.sh` publishes the row's
-   `headRefOid`, and finished means `git rev-parse HEAD` equals it. Anything
-   committed since moves the tip, whatever its patch looks like and whether or
-   not it is a merge — there is no shape of post-PR work that survives this
-   read, which is what neither content comparison could say.
+   **No comparison of content can answer it, and the two obvious ones fail in
+   opposite directions.** A range — `git log origin/main..HEAD` empty — cannot
+   see a rebase landing at all: the replay gives the branch's commits new
+   shas, so the range is never empty afterwards and no landed branch is ever
+   finished, leaving every worktree standing. Patch-ids — `git cherry` with no
+   `+` lines — miss the other way: a commit made after the merge whose patch
+   `main` already carries is reported `-`, and merge commits are omitted by
+   construction, so work done after the merge is invisible and step 0 removes
+   the only worktree holding it. The second is the dangerous direction.
 
-   **It is also method-agnostic, and that is the deeper reason it is the right
-   read rather than the safer one.** Merge, squash or rebase, the head a pull
-   request merged is the head it merged; this predicate would not have needed
-   touching for #31 at all, and will not need touching if the method moves
-   again. Verified against merged PR #33, whose `headRefOid` still reads
-   `a4d3044` — that branch's last commit, long after the branch landed.
+   **The identity read is method-agnostic, which is why it is the right read
+   rather than the safer one.** Merge, squash or rebase, the head a pull
+   request merged is the head it merged, so nothing here moves when the
+   landing method does. Measured against a merged pull request of this
+   repository, whose `headRefOid` still named that branch's last commit long
+   after it landed.
 
-   **The two content reads are gone rather than kept as a second limb.** Two
-   predicates for one question is the shape this repository keeps recording
-   its failures in, and the weaker one is always the one a reader trusts.
+   **One predicate, not two.** Two predicates for one question is the shape
+   this repository keeps recording its failures in, and the weaker one is
+   always the one a reader trusts.
 
    **Every read exits 0 whatever it finds, and that is deliberate.**
    `pr-state.sh` on a branch with no PR exits non-zero, and
@@ -575,19 +571,16 @@ same argument as never calling a branch clean because asking failed.
                                            # ahead of origin/main — see below
    ```
 
-   **The ahead read is spelled here rather than borrowed from the finished
-   predicate, and the borrowing is what broke.** That predicate used to ask a
-   range question — `git log origin/main..HEAD` empty — so on `main`, where
-   HEAD is `main`, it answered this one too. It asks an identity question now,
-   against a pull request's head, and `main` has no pull request: there is no
-   oid to compare and nothing to read the guard off. The two questions were
-   never the same one, and sharing a predicate worked only while both happened
-   to be ranges.
+   **The ahead read is spelled here rather than cited from the finished
+   predicate, because the two ask different questions.** That predicate asks
+   an identity — is the tip still the head a pull request merged — and `main`
+   has no pull request, so there is no oid to compare and nothing to read a
+   guard off. This one asks a range: does this checkout hold commits
+   `origin/main` lacks.
 
-   **It is a range read here and that is correct here.** Nothing about a
-   rebase merge touches it: the question is whether this checkout holds
-   commits `origin/main` lacks, which is what the range says, and no landing
-   method rewrites `main`'s own history behind it.
+   **A range is the right shape here and no landing method touches it.** The
+   question is about `main`'s own history against its remote, which a rebase
+   landing does not rewrite.
 
    **Both Stay rows leave the session off `main`**, and one of them leaves it
    outside the main checkout entirely. Prune and list are safe from anywhere in
@@ -1579,9 +1572,9 @@ same argument as never calling a branch clean because asking failed.
    stale-artefact trap step 6's `commit` oid exists for. Wait for the run on
    the pushed head rather than reading whichever finished last.
 
-   Then land it by rebase, which is this repository's shape since #31 — the
-   branch's commits are replayed onto `main`, each one of them a commit
-   `/commit` wrote, and no `Merge pull request #n from …` is created:
+   Then land it by rebase, which is this repository's shape — the branch's
+   commits are replayed onto `main`, each one of them a commit `/commit`
+   wrote, and no `Merge pull request #n from …` is created:
 
    ```bash
    bash .claude/scripts/gh-pr-merge.sh <n> <oid>
@@ -1629,9 +1622,9 @@ same argument as never calling a branch clean because asking failed.
    one and reject the next, and `/pr` writes its body from them — and rebase
    is the method that puts every one of them on `main` under its own subject,
    where squashing discards the thing two earlier steps spent their effort
-   producing. `--merge` keeps them too and was this repository's shape until
-   #31; which of the two lands is the owner's choice and not this step's, and
-   it is made in `gh-pr-merge.sh` rather than here.
+   producing. `--merge` keeps them too and is not wrong; which of the two
+   lands is the owner's choice and not this step's, and it is made in
+   `gh-pr-merge.sh` rather than here.
 
    **The merge is `gh`'s, not a push.** `.claude/settings.json` denies every
    push to `main` and that deny is untouched: the branch is merged on the
@@ -1669,13 +1662,12 @@ same argument as never calling a branch clean because asking failed.
    between a pull that silently did nothing and a report that says the merge
    arrived.
 
-   **Under a rebase merge the oid is the last replayed commit rather than a
-   merge commit, and the check is unchanged by that (#31).** GitHub reports it
-   as `mergeCommit` either way, it is on `main` either way, and containment is
+   **Under a rebase landing the oid is the last replayed commit rather than a
+   merge commit, and the check is unchanged by that.** GitHub reports it as
+   `mergeCommit` either way, it is on `main` either way, and containment is
    what this asks either way — the branch's own commits are not in `main` and
-   are not what is being asked about. What moves is the report's wording: name
-   the commit the branch landed as, rather than calling it a merge commit that
-   was never created.
+   are not what is being asked about. The report names the commit the branch
+   landed as, rather than calling it a merge commit that may not exist.
 
    **Verify first.** Removing the worktree is the one step in this chain that
    destroys something, and doing it on an assumed merge is how an unmerged
@@ -1739,8 +1731,8 @@ took decisions and lists none of them has not reported — it has hidden. A run
 that took none says so in one line.
 
 **Then the merge and the workspace.** Whether the PR landed and the oid it
-landed as — under a rebase merge the last replayed commit, not a merge commit
-(#31) —
+landed as — under a rebase landing the last replayed commit, not a merge
+commit —
 the literal `gh-pr-merge.sh` and `git-worktree-remove.sh` lines that ran,
 arguments and all — those two used to be raw grants admitting a flag this file
 forbids, and the report was the only place the forbidding was checkable; the
