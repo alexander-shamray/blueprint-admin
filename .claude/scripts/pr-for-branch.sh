@@ -3,8 +3,10 @@
 # and nothing else. Read-only, fixed field set.
 #
 # **`headRefOid` is published because `ship.md` step 0 decides with it.** That
-# step calls a branch finished when the local tip is still the head the pull
-# request merged, and only the pull request knows that oid.
+# step calls a branch finished when the head the pull request merged reaches
+# the local tip — that head, or a tip behind it, which a checkout another
+# session pushed past will have. A tip it cannot reach carries work done after
+# the merge. Only the pull request knows that oid.
 #
 # **Exists because `gh pr list` reaches the review feeds (#56).** Removing
 # `Bash(gh pr view:*)` from the three commands that held it was not enough:

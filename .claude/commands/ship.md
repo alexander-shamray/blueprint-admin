@@ -378,20 +378,49 @@ same argument as never calling a branch clean because asking failed.
 
    ```bash
    git fetch origin main                      # or the next read is stale
-   git fetch origin <branch>                  # the merged head may be here
-                                              # only, and a replay leaves it
-                                              # unreachable from origin/main
    git status --short                         # empty: nothing uncommitted
    git rev-parse HEAD                         # the tip, for the row below
    bash .claude/scripts/pr-for-branch.sh <branch>   # the one row it returns,
                                                    # with state MERGED: the
                                                    # headRefOid is the head
                                                    # that landed
-   git merge-base --is-ancestor HEAD <headRefOid>   # the tip is that head or
-                                                    # an ancestor of it: this
-                                                    # checkout holds nothing
-                                                    # that did not land
    ```
+
+   **Only on a MERGED row, and only then:**
+
+   ```bash
+   git fetch origin <branch> || true          # best-effort: the merged head
+                                              # may be here only, and a replay
+                                              # leaves it unreachable from
+                                              # origin/main
+   git merge-base --is-ancestor HEAD <headRefOid>   # 0: the merged head
+                                                    # reaches the tip, so this
+                                                    # checkout holds nothing
+                                                    # that did not land.
+                                                    # 1: it does not — work
+                                                    # since the merge, or a
+                                                    # diverged tip. Anything
+                                                    # higher is an error.
+   ```
+
+   **These two are conditional, and that is not tidiness.** `/branch` creates
+   a local branch before `/pr` first pushes it, and a merged branch's remote
+   ref may since have been deleted — so an unconditional
+   `git fetch origin <branch>` fails on an unpushed branch, on an unused one,
+   and on a tidied-up merged one. A failed fetch would stop step 0 before
+   `pr-for-branch.sh` could answer `[]`, which is precisely the resume path
+   the unused-workspace rows below depend on. So the fetch runs only once a
+   MERGED row has named a head worth looking for, and `|| true` keeps a
+   missing ref from ending the run.
+
+   **`git merge-base --is-ancestor` is the one read here that does not exit 0
+   whatever it finds, and it must be read by status rather than by
+   success.** Exit 1 is its ordinary answer for an unfinished branch, not a
+   failure: this chain's first stop rule treats a non-zero exit as a step that
+   did not run, and applying that here would stop every run standing in a
+   workspace that still holds work. **0 is finished, 1 is not finished, and
+   anything above 1 is an error that stops the chain** — including the missing
+   object a best-effort fetch may leave behind, which fails closed onto Stay.
 
    **The question is ancestry against the head that landed, not content: does
    this checkout hold anything the pull request did not take?**
@@ -431,7 +460,7 @@ same argument as never calling a branch clean because asking failed.
    construction, so work done after the merge is invisible and step 0 removes
    the only worktree holding it. The second is the dangerous direction.
 
-   **The identity read is method-agnostic, which is why it is the right read
+   **The ancestry read is method-agnostic, which is why it is the right read
    rather than the safer one.** Merge, squash or rebase, the head a pull
    request merged is the head it merged, so nothing here moves when the
    landing method does. Measured against a merged pull request of this
@@ -442,8 +471,9 @@ same argument as never calling a branch clean because asking failed.
    this repository keeps recording its failures in, and the weaker one is
    always the one a reader trusts.
 
-   **Every read exits 0 whatever it finds, and that is deliberate.**
-   `pr-state.sh` on a branch with no PR exits non-zero, and
+   **Every read in the first block exits 0 whatever it finds, and that is
+   deliberate** — the ancestor test in the second is the exception, read by
+   status above. `pr-state.sh` on a branch with no PR exits non-zero, and
    *forked but never PR'd* is not exotic — it is what step 1 produces on every
    run. Classifying the ordinary case through a failed command, in a chain
    whose first stop rule is that a non-zero exit means the step did not run,
@@ -597,10 +627,10 @@ same argument as never calling a branch clean because asking failed.
 
    **The ahead read is spelled here rather than cited from the finished
    predicate, because the two ask different questions.** That predicate asks
-   an identity — is the tip still the head a pull request merged — and `main`
-   has no pull request, so there is no oid to compare and nothing to read a
-   guard off. This one asks a range: does this checkout hold commits
-   `origin/main` lacks.
+   an ancestry against a pull request's head — can the head that landed reach
+   this tip — and `main` has no pull request, so there is no head to reach
+   from and nothing to read a guard off. This one asks a range: does this
+   checkout hold commits `origin/main` lacks.
 
    **A range is the right shape here and no landing method touches it.** The
    question is about `main`'s own history against its remote, which a rebase
