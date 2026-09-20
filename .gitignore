@@ -20,6 +20,12 @@
 .claude/settings.local.json
 .remember/
 
+# Subagent-driven-development scratch. It carries a nested `*` ignore of
+# its own, which git honours and the index does not read, so the exclusion
+# has to be stated here to reach both. test_root_ignore_coverage.py holds
+# the rule, so that nothing else arrives excluded from the inside only.
+.superpowers/
+
 # Index SQLite is machine-local. The skill, .mcp.json and .codeindexignore
 # are shared so Claude in this clone uses the same map.
 .claude/cache/codebase-index/
