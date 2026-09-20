@@ -10365,7 +10365,13 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         # errors, not-answering is not finished, and the behind checkout this
         # relation exists for is kept for ever.
         for limb in ("git fetch origin refs/pull/<n>/head || true",
-                     "git merge-base --is-ancestor HEAD"):
+                     # **The whole command, operand included.** A prefix
+                     # match binds nothing past it, so
+                     # `... --is-ancestor HEAD origin/main` would satisfy it
+                     # while stranding every rebase-merged branch: a replay
+                     # guarantees `origin/main` cannot reach the tip. The
+                     # operand IS this predicate.
+                     "git merge-base --is-ancestor HEAD <headRefOid>"):
             with self.subTest(limb=limb):
                 self.assertIn(limb, conditional)
         prose = self._prose(conditional)
@@ -10373,7 +10379,7 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
 
     def _merged_row_block(self):
         blocks = [block for block in self._fenced(self.ship())
-                  if "git merge-base --is-ancestor HEAD" in block]
+                  if "git merge-base --is-ancestor HEAD <headRefOid>" in block]
         self.assertEqual(1, len(blocks),
                          "expected exactly one ancestor-test block")
         return blocks[0]
