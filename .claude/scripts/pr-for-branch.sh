@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
-# List the pull requests for one branch — number, state, url — and nothing
-# else. Read-only, fixed field set.
+# List the pull requests for one branch — number, state, url, headRefOid —
+# and nothing else. Read-only, fixed field set.
+#
+# **`headRefOid` is published because `/ship` step 0 cannot decide without it
+# (PR #34).** That step asks whether a branch is finished, and every content
+# comparison it tried was heuristic: `git log origin/main..HEAD` cannot see a
+# rebase merge at all, and `git cherry` reports `-` for a post-PR commit whose
+# patch `main` already carries and omits merge commits outright. The exact
+# question is whether the local tip is still the head this pull request
+# merged, and only the PR knows that oid. It was already being fetched and
+# dropped before stdout.
 #
 # **Exists because `gh pr list` reaches the review feeds (#56).** Removing
 # `Bash(gh pr view:*)` from the three commands that held it was not enough:
@@ -126,4 +135,4 @@ if [ "$state" = MERGED ]; then
     newest='[]'
   fi
 fi
-jq '[ .[] | {number, state, url} ]' <<<"$newest"
+jq '[ .[] | {number, state, url, headRefOid} ]' <<<"$newest"

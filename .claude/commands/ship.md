@@ -1,7 +1,7 @@
 ---
 description: Start from a clean main, fork a worktree where one can be forked, branch, commit, push and open a PR, loop the Copilot review until one clean pass (Grok is disabled pending a trusted launcher) — then merge the PR and tear the workspace down. Decides for itself rather than stopping to ask
 argument-hint: "[what the change does] — omit and each step derives its own"
-allowed-tools: Read, Grep, Glob, Write, Skill, Agent(review-grok-triager), EnterWorktree, ExitWorktree, Bash(git status:*), Bash(git diff:*), Bash(git branch --list:*), Bash(git branch --show-current), Bash(git branch -a), Bash(git log:*), Bash(git cherry:*), Bash(git fetch origin:*), Bash(bash .claude/scripts/git-branch-create.sh:*), Bash(bash .claude/scripts/git-worktree-fork.sh:*), Bash(bash .claude/scripts/git-switch-existing.sh:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(ls:*), Bash(git add:*), Bash(git commit:*), Bash(bash .claude/scripts/git-unstage.sh:*), Bash(git push -u origin:*), Bash(git push origin:*), Bash(wc:*), Bash(bash .claude/scripts/gh-pr-create.sh), Bash(bash .claude/scripts/pr-state.sh:*), Bash(bash .claude/scripts/pr-for-branch.sh:*), Bash(gh pr checks:*), Bash(bash .claude/scripts/gh-pr-merge.sh:*), Bash(git pull --ff-only), Bash(git merge-base --is-ancestor:*), Bash(bash .claude/scripts/git-worktree-remove.sh:*), Bash(git worktree prune:*), Bash(rm -f suggestions.md), Bash(bash .claude/scripts/grok-ledger.sh:*), Bash(bash .claude/scripts/copilot-request.sh:*), Bash(bash .claude/scripts/copilot-request-count.sh:*), Bash(bash .claude/scripts/pr-review-comments.sh:*), Bash(bash .claude/scripts/pr-review-bodies.sh:*), Bash(bash .claude/scripts/pr-issue-comments.sh:*), Bash(bash .claude/scripts/pr-review-threads.sh:*), Bash(bash .claude/scripts/grok-review.sh:*), Bash(sleep:*), Bash(bash .claude/scripts/pr-locality.sh:*), Bash(bash .claude/scripts/npm-checks.sh:*), Bash(bash .claude/scripts/host-checks.sh:*), Bash(bash .claude/scripts/harness-checks.sh:*), Bash(bash .claude/scripts/spa-ci.sh)
+allowed-tools: Read, Grep, Glob, Write, Skill, Agent(review-grok-triager), EnterWorktree, ExitWorktree, Bash(git status:*), Bash(git diff:*), Bash(git branch --list:*), Bash(git branch --show-current), Bash(git branch -a), Bash(git log:*), Bash(git fetch origin:*), Bash(bash .claude/scripts/git-branch-create.sh:*), Bash(bash .claude/scripts/git-worktree-fork.sh:*), Bash(bash .claude/scripts/git-switch-existing.sh:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(ls:*), Bash(git add:*), Bash(git commit:*), Bash(bash .claude/scripts/git-unstage.sh:*), Bash(git push -u origin:*), Bash(git push origin:*), Bash(wc:*), Bash(bash .claude/scripts/gh-pr-create.sh), Bash(bash .claude/scripts/pr-state.sh:*), Bash(bash .claude/scripts/pr-for-branch.sh:*), Bash(gh pr checks:*), Bash(bash .claude/scripts/gh-pr-merge.sh:*), Bash(git pull --ff-only), Bash(git merge-base --is-ancestor:*), Bash(bash .claude/scripts/git-worktree-remove.sh:*), Bash(git worktree prune:*), Bash(rm -f suggestions.md), Bash(bash .claude/scripts/grok-ledger.sh:*), Bash(bash .claude/scripts/copilot-request.sh:*), Bash(bash .claude/scripts/copilot-request-count.sh:*), Bash(bash .claude/scripts/pr-review-comments.sh:*), Bash(bash .claude/scripts/pr-review-bodies.sh:*), Bash(bash .claude/scripts/pr-issue-comments.sh:*), Bash(bash .claude/scripts/pr-review-threads.sh:*), Bash(bash .claude/scripts/grok-review.sh:*), Bash(sleep:*), Bash(bash .claude/scripts/pr-locality.sh:*), Bash(bash .claude/scripts/npm-checks.sh:*), Bash(bash .claude/scripts/host-checks.sh:*), Bash(bash .claude/scripts/harness-checks.sh:*), Bash(bash .claude/scripts/spa-ci.sh)
 disallowed-tools: Edit(.claude/**), Edit(./.claude/**), Edit(.github/**), Edit(./.github/**), Edit(.remember/**), Edit(./.remember/**), Edit(android/**), Edit(./android/**), Edit(ios/**), Edit(./ios/**), Edit(.git/**), Edit(./.git/**), Edit(.git), Edit(./.git), Edit(package.json), Edit(./package.json), Edit(package-lock.json), Edit(./package-lock.json), Edit(npm-shrinkwrap.json), Edit(./npm-shrinkwrap.json), Edit(.npmrc), Edit(./.npmrc), Edit(angular.json), Edit(./angular.json), Edit(tsconfig.json), Edit(./tsconfig.json), Edit(tsconfig.app.json), Edit(./tsconfig.app.json), Edit(tsconfig.spec.json), Edit(./tsconfig.spec.json), Edit(eslint.config.js), Edit(./eslint.config.js), Edit(.prettierrc), Edit(./.prettierrc), Edit(capacitor.config.ts), Edit(./capacitor.config.ts), Edit(playwright.config.ts), Edit(./playwright.config.ts), Edit(ionic.config.json), Edit(./ionic.config.json), Edit(.nvmrc), Edit(./.nvmrc), Edit(.editorconfig), Edit(./.editorconfig), Edit(.gitattributes), Edit(./.gitattributes), Edit(.gitignore), Edit(./.gitignore), Edit(CLAUDE.md), Edit(./CLAUDE.md), Edit(README.md), Edit(./README.md), Edit(**/*.config.js), Edit(**/*.config.cjs), Edit(**/*.config.mjs), Edit(**/*.config.ts), Edit(**/*.config.mts), Edit(**/package.json), Edit(**/.npmrc), Edit(**/tsconfig*.json), Edit(**/.prettierrc*), Edit(node_modules/**), Edit(./node_modules/**), Edit(Directory.Packages.props), Edit(./Directory.Packages.props), Edit(Directory.Build.props), Edit(./Directory.Build.props), Edit(global.json), Edit(./global.json), Edit(BlueprintAdmin.slnx), Edit(./BlueprintAdmin.slnx), Edit(**/*.csproj), Edit(AGENTS.md), Edit(./AGENTS.md), Edit(.mcp.json), Edit(./.mcp.json), Agent(general-purpose), Agent(claude), Agent(Explore), Agent(Plan), Agent(claude-code-guide), Agent(statusline-setup), Agent(security-auditor), Agent(bug-auditor)
 ---
 
@@ -379,32 +379,46 @@ same argument as never calling a branch clean because asking failed.
    ```bash
    git fetch origin main                      # or the next read is stale
    git status --short                         # empty: nothing uncommitted
-   git cherry origin/main HEAD                # no `+` line: main has every patch
+   git rev-parse HEAD                         # the tip, for the row below
    bash .claude/scripts/pr-for-branch.sh <branch>   # the one row it returns,
-                                                   # with state MERGED: it
-                                                   # landed. Any other state
+                                                   # with state MERGED and a
+                                                   # headRefOid equal to that
+                                                   # tip: it landed, and this
+                                                   # checkout holds nothing
+                                                   # since. Any other state
                                                    # is a PR, not a merge.
    ```
 
-   **`git cherry` rather than `git log origin/main..HEAD`, because pull
-   requests here land by rebase (#31).** A rebase merge replays the branch's
-   commits onto `main` with new shas, so the branch's own commits are never
-   ancestors of `main`, that range is never empty, and under the old read no
-   landed branch could be finished — step 0 would keep every worktree for
-   ever, silently, which is the failure the issue names. `git cherry` asks the
-   same question by patch-id: a `-` line is a commit `main` already carries
-   under another sha, a `+` line is one it does not, and **finished means no
-   `+` lines**. Measured on a rebase-merged branch with an unrelated pull
-   request landed in between — the range read returned both commits, and
-   `git cherry` returned both as `-`.
+   **The tip against the head the pull request merged, rather than any
+   comparison of content (#31, and PR #34's review).** This read asked
+   `git log origin/main..HEAD` for years, which a rebase merge breaks
+   outright: the replay gives the branch's commits new shas, so that range is
+   never empty afterwards and no landed branch could ever be finished — every
+   worktree kept for ever, silently. The first fix swapped in `git cherry`,
+   which compares by patch-id and does answer for a rebase merge; a reviewer
+   then showed it answers the wrong question, and driving it confirmed both
+   halves. A post-PR commit cherry-picked from `main` produces **no `+`
+   line** while sitting in `main..HEAD` as a real commit, and `git cherry`
+   **omits merge commits** by construction. Either hides work done after the
+   merge, and step 0 removes the only worktree holding it.
 
-   **It fails in the safe direction, and it still answers for the pull
-   requests that landed before #31.** A rebase that resolved a conflict
-   changes the patch, so that commit comes back `+` and the branch reads
-   unfinished: the workspace is kept, and a kept worktree costs a directory
-   where a removed one costs the work inside it. A branch landed by merge
-   commit has its commits literally in `main`, so every one of them is
-   reported `-` — one read, both histories.
+   **So the question is identity, not content: is this still the commit the
+   pull request landed?** `pr-for-branch.sh` publishes the row's
+   `headRefOid`, and finished means `git rev-parse HEAD` equals it. Anything
+   committed since moves the tip, whatever its patch looks like and whether or
+   not it is a merge — there is no shape of post-PR work that survives this
+   read, which is what neither content comparison could say.
+
+   **It is also method-agnostic, and that is the deeper reason it is the right
+   read rather than the safer one.** Merge, squash or rebase, the head a pull
+   request merged is the head it merged; this predicate would not have needed
+   touching for #31 at all, and will not need touching if the method moves
+   again. Verified against merged PR #33, whose `headRefOid` still reads
+   `a4d3044` — that branch's last commit, long after the branch landed.
+
+   **The two content reads are gone rather than kept as a second limb.** Two
+   predicates for one question is the shape this repository keeps recording
+   its failures in, and the weaker one is always the one a reader trusts.
 
    **Every read exits 0 whatever it finds, and that is deliberate.**
    `pr-state.sh` on a branch with no PR exits non-zero, and
@@ -427,13 +441,13 @@ same argument as never calling a branch clean because asking failed.
    `pr-state.sh` keeps its job one section up, in the resume
    table, where the question is *which* state and there is a PR to ask about.
 
-   **The merge read is not redundant with `git cherry`, and the difference is
-   the whole of the next paragraph.** Landing does clear the `+` lines, so the
-   two agree on a landed branch; where they part is a branch that never
-   carried anything — no commits, so no `+` lines either — which satisfies the
-   first two reads without a PR ever having existed.
+   **The merge read is not a third opinion, it is where the head comes from.**
+   The tip alone says nothing — every branch has one — so the comparison only
+   exists once a MERGED row has supplied an oid to compare against. A branch
+   that never carried anything has no row, nothing to compare, and therefore
+   no way to read as finished, which is the next paragraph.
 
-   **A branch that is clean, level with `origin/main` and never merged is
+   **A branch that is clean, never merged and holding no pull request is
    *unused*, not finished — and the difference is what makes an interrupted
    run resumable.** `/branch` forks a worktree and enters it; a run interrupted
    there leaves a branch with no commits, no PR and a pristine tree. Under a
