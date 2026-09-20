@@ -395,9 +395,10 @@ same argument as never calling a branch clean because asking failed.
                                                  # and the branch it was on
                                                  # may be gone
    git merge-base --is-ancestor HEAD <headRefOid>   # 0: the merged head
-                                                    # reaches the tip, so this
-                                                    # checkout holds nothing
-                                                    # that did not land.
+                                                    # reaches the tip. Equal
+                                                    # is finished outright;
+                                                    # strictly behind takes
+                                                    # the read below.
                                                     # 1: it does not — work
                                                     # since the merge, or a
                                                     # diverged tip. Anything
@@ -427,6 +428,43 @@ same argument as never calling a branch clean because asking failed.
    The ancestor test cannot answer without the object, not-answering is not
    finished, and the workspace is kept — so a behind checkout accumulates for
    ever while every read reports itself working.
+
+   **A tip strictly behind the merged head takes one more read, because
+   ancestry alone cannot say which branch it belongs to:**
+
+   ```bash
+   git merge-base --is-ancestor HEAD origin/main   # 0: the tip is already in
+                                                   # main, so it is an old
+                                                   # commit this branch was
+                                                   # pointed at — unused, not
+                                                   # finished.
+                                                   # 1: the tip is the pull
+                                                   # request's own work —
+                                                   # finished.
+   ```
+
+   **A reused branch name is what makes this necessary.** `pr-for-branch.sh`
+   keeps an old `MERGED` row whenever its landing commit is absent from the
+   tip, which is exactly the case for a branch pointed at a commit that
+   predates that pull request — and such a tip is an ancestor of the old head,
+   so the first read says finished. Step 0 would remove a worktree holding no
+   work, keep the branch name, and leave step 1 to fork a name that already
+   exists and be refused: a stop with no defect behind it, and the adopt path
+   for an unused workspace broken.
+
+   **`main` is what separates them.** A rebase landing replays the pull
+   request's commits with new shas, so its own work is never reachable from
+   `origin/main`; a branch pointed at an old commit is reachable from it by
+   construction. So a behind tip already in `main` holds nothing of its own
+   and is unused, whatever row shares its name.
+
+   **Only the behind limb takes this read, and the asymmetry is the point.**
+   Under a merge-commit landing the pull request's commits *are* in `main`, so
+   asking this of an equal tip would report the ordinary finished case as
+   unfinished for every branch landed that way. The cost falls on the behind
+   limb instead: a branch landed by merge commit, whose checkout is behind,
+   reads unused and keeps its worktree. A kept directory, rather than a
+   removed workspace and a stranded name.
 
    **`git merge-base --is-ancestor` is the one read here that does not exit 0
    whatever it finds, and it must be read by status rather than by
