@@ -10260,12 +10260,20 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
     and the directories accumulate until somebody notices. The issue calls
     that out as the risk in making this change carelessly.
 
+    **The predicate that replaced it is an identity rather than a comparison
+    of content**, and that is the contract these cases pin: a branch is
+    finished when `git rev-parse HEAD` still equals the `headRefOid` of its
+    MERGED row. No landing method moves that oid, and no commit made after the
+    merge satisfies it — which is what neither `git log origin/main..HEAD` nor
+    the `git cherry` that briefly replaced it could say.
+
     **So the subject here is what the gate LOOKS AT**, which is the rule
     `CLAUDE.md` states is the only defence against a gate that quietly stops
     covering the newest surface. The structural cases assert that `ship.md`
-    spells the patch-id read and no longer spells the ancestry one; the driven
-    case builds a real rebase-merged repository and shows the two disagreeing
-    there, with the old read as the negative control.
+    spells all three limbs of that identity in one block, and neither content
+    comparison in any block; the driven cases build real rebase-merged
+    repositories and show both comparisons missing work the identity read
+    sees.
     """
 
     SHIP = COMMANDS / "ship.md"
@@ -10305,6 +10313,30 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
             if inside:
                 current.append(line)
         return blocks
+
+    def _finished_predicate_block(self):
+        # **The block step 0's predicate is actually spelled in, selected by
+        # its own content.** Anchoring on a position would make this case a
+        # record of where the file was rather than of what it says.
+        blocks = [block for block in self._fenced(self.ship())
+                  if "git status --short" in block
+                  and "pr-for-branch.sh" in block]
+        self.assertEqual(
+            1, len(blocks),
+            "expected exactly one block reading the tree and resolving the PR")
+        return blocks[0]
+
+    def test_the_finished_predicate_is_spelled_whole(self):
+        # **The limbs have to appear TOGETHER, in the block that is the
+        # contract.** Asserting that each read exists somewhere in the file
+        # leaves a regression that performs both reads and then treats every
+        # MERGED row as finished — the teardown of live work this predicate
+        # exists to refuse, behind a green gate. Raised by Copilot.
+        block = self._finished_predicate_block()
+        for limb in ("git status --short", "git rev-parse HEAD",
+                     "pr-for-branch.sh", "MERGED", "headRefOid"):
+            with self.subTest(limb=limb):
+                self.assertIn(limb, block)
 
     def test_step_zero_compares_the_tip_with_the_merged_head(self):
         ship = self.ship()

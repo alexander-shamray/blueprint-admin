@@ -31,9 +31,9 @@
 #
 # **A rebase merge replays the branch's commits onto `main` with new shas**, so
 # nothing downstream may judge "landed" by whether the branch's own commits are
-# ancestors of `main`. `ship.md` step 0's finished predicate reads `git cherry`
-# — patch-ids — for that reason, and moving this flag without moving that read
-# leaves every delivered worktree standing for ever.
+# ancestors of `main`. `ship.md` step 0's finished predicate asks instead
+# whether the local tip is still the head the pull request merged — an identity
+# no landing method moves.
 set -euo pipefail
 [ "$#" -eq 2 ] ||
   { echo "usage: gh-pr-merge.sh <pr-number> <head-oid>" >&2; exit 2; }

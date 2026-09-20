@@ -385,8 +385,10 @@ same argument as never calling a branch clean because asking failed.
                                                    # headRefOid equal to that
                                                    # tip: it landed, and this
                                                    # checkout holds nothing
-                                                   # since. Any other state
-                                                   # is a PR, not a merge.
+                                                   # since. A MERGED row whose
+                                                   # headRefOid is NOT the tip
+                                                   # is later work, not an
+                                                   # unmerged pull request.
    ```
 
    **The tip against the head the pull request merged, rather than any
