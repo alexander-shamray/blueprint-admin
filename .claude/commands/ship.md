@@ -1,7 +1,7 @@
 ---
 description: Start from a clean main, fork a worktree where one can be forked, branch, commit, push and open a PR, loop the Copilot review until one clean pass (Grok is disabled pending a trusted launcher) — then merge the PR and tear the workspace down. Decides for itself rather than stopping to ask
 argument-hint: "[what the change does] — omit and each step derives its own"
-allowed-tools: Read, Grep, Glob, Write, Skill, Agent(review-grok-triager), EnterWorktree, ExitWorktree, Bash(git status:*), Bash(git diff:*), Bash(git branch --list:*), Bash(git branch --show-current), Bash(git branch -a), Bash(git log:*), Bash(git fetch origin:*), Bash(bash .claude/scripts/git-branch-create.sh:*), Bash(bash .claude/scripts/git-worktree-fork.sh:*), Bash(bash .claude/scripts/git-switch-existing.sh:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(ls:*), Bash(git add:*), Bash(git commit:*), Bash(bash .claude/scripts/git-unstage.sh:*), Bash(git push -u origin:*), Bash(git push origin:*), Bash(wc:*), Bash(bash .claude/scripts/gh-pr-create.sh), Bash(bash .claude/scripts/pr-state.sh:*), Bash(bash .claude/scripts/pr-for-branch.sh:*), Bash(gh pr checks:*), Bash(bash .claude/scripts/gh-pr-merge.sh:*), Bash(git pull --ff-only), Bash(git merge-base --is-ancestor:*), Bash(bash .claude/scripts/git-worktree-remove.sh:*), Bash(git worktree prune:*), Bash(rm -f suggestions.md), Bash(bash .claude/scripts/grok-ledger.sh:*), Bash(bash .claude/scripts/copilot-request.sh:*), Bash(bash .claude/scripts/copilot-request-count.sh:*), Bash(bash .claude/scripts/pr-review-comments.sh:*), Bash(bash .claude/scripts/pr-review-bodies.sh:*), Bash(bash .claude/scripts/pr-issue-comments.sh:*), Bash(bash .claude/scripts/pr-review-threads.sh:*), Bash(bash .claude/scripts/grok-review.sh:*), Bash(sleep:*), Bash(bash .claude/scripts/pr-locality.sh:*), Bash(bash .claude/scripts/npm-checks.sh:*), Bash(bash .claude/scripts/host-checks.sh:*), Bash(bash .claude/scripts/harness-checks.sh:*), Bash(bash .claude/scripts/spa-ci.sh)
+allowed-tools: Read, Grep, Glob, Write, Skill, Agent(review-grok-triager), EnterWorktree, ExitWorktree, Bash(git status:*), Bash(git diff:*), Bash(git branch --list:*), Bash(git branch --show-current), Bash(git branch -a), Bash(git log:*), Bash(git fetch origin:*), Bash(bash .claude/scripts/git-branch-create.sh:*), Bash(bash .claude/scripts/git-worktree-fork.sh:*), Bash(bash .claude/scripts/git-switch-existing.sh:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(ls:*), Bash(git add:*), Bash(git commit:*), Bash(bash .claude/scripts/git-unstage.sh:*), Bash(git push -u origin:*), Bash(git push origin:*), Bash(wc:*), Bash(bash .claude/scripts/gh-pr-create.sh), Bash(bash .claude/scripts/pr-state.sh:*), Bash(bash .claude/scripts/pr-for-branch.sh:*), Bash(gh pr checks:*), Bash(bash .claude/scripts/gh-pr-merge.sh:*), Bash(git pull --ff-only), Bash(git merge-base:*), Bash(bash .claude/scripts/git-worktree-remove.sh:*), Bash(git worktree prune:*), Bash(rm -f suggestions.md), Bash(bash .claude/scripts/grok-ledger.sh:*), Bash(bash .claude/scripts/copilot-request.sh:*), Bash(bash .claude/scripts/copilot-request-count.sh:*), Bash(bash .claude/scripts/pr-review-comments.sh:*), Bash(bash .claude/scripts/pr-review-bodies.sh:*), Bash(bash .claude/scripts/pr-issue-comments.sh:*), Bash(bash .claude/scripts/pr-review-threads.sh:*), Bash(bash .claude/scripts/grok-review.sh:*), Bash(sleep:*), Bash(bash .claude/scripts/pr-locality.sh:*), Bash(bash .claude/scripts/npm-checks.sh:*), Bash(bash .claude/scripts/host-checks.sh:*), Bash(bash .claude/scripts/harness-checks.sh:*), Bash(bash .claude/scripts/spa-ci.sh)
 disallowed-tools: Edit(.claude/**), Edit(./.claude/**), Edit(.github/**), Edit(./.github/**), Edit(.remember/**), Edit(./.remember/**), Edit(android/**), Edit(./android/**), Edit(ios/**), Edit(./ios/**), Edit(.git/**), Edit(./.git/**), Edit(.git), Edit(./.git), Edit(package.json), Edit(./package.json), Edit(package-lock.json), Edit(./package-lock.json), Edit(npm-shrinkwrap.json), Edit(./npm-shrinkwrap.json), Edit(.npmrc), Edit(./.npmrc), Edit(angular.json), Edit(./angular.json), Edit(tsconfig.json), Edit(./tsconfig.json), Edit(tsconfig.app.json), Edit(./tsconfig.app.json), Edit(tsconfig.spec.json), Edit(./tsconfig.spec.json), Edit(eslint.config.js), Edit(./eslint.config.js), Edit(.prettierrc), Edit(./.prettierrc), Edit(capacitor.config.ts), Edit(./capacitor.config.ts), Edit(playwright.config.ts), Edit(./playwright.config.ts), Edit(ionic.config.json), Edit(./ionic.config.json), Edit(.nvmrc), Edit(./.nvmrc), Edit(.editorconfig), Edit(./.editorconfig), Edit(.gitattributes), Edit(./.gitattributes), Edit(.gitignore), Edit(./.gitignore), Edit(CLAUDE.md), Edit(./CLAUDE.md), Edit(README.md), Edit(./README.md), Edit(**/*.config.js), Edit(**/*.config.cjs), Edit(**/*.config.mjs), Edit(**/*.config.ts), Edit(**/*.config.mts), Edit(**/package.json), Edit(**/.npmrc), Edit(**/tsconfig*.json), Edit(**/.prettierrc*), Edit(node_modules/**), Edit(./node_modules/**), Edit(Directory.Packages.props), Edit(./Directory.Packages.props), Edit(Directory.Build.props), Edit(./Directory.Build.props), Edit(global.json), Edit(./global.json), Edit(BlueprintAdmin.slnx), Edit(./BlueprintAdmin.slnx), Edit(**/*.csproj), Edit(AGENTS.md), Edit(./AGENTS.md), Edit(.mcp.json), Edit(./.mcp.json), Agent(general-purpose), Agent(claude), Agent(Explore), Agent(Plan), Agent(claude-code-guide), Agent(statusline-setup), Agent(security-auditor), Agent(bug-auditor)
 ---
 
@@ -429,18 +429,27 @@ same argument as never calling a branch clean because asking failed.
    finished, and the workspace is kept — so a behind checkout accumulates for
    ever while every read reports itself working.
 
-   **A tip strictly behind the merged head takes one more read, because
+   **A tip strictly behind the merged head takes two more reads, because
    ancestry alone cannot say which branch it belongs to:**
 
    ```bash
-   git merge-base --is-ancestor HEAD origin/main   # 0: the tip is already in
-                                                   # main, so it is an old
-                                                   # commit this branch was
-                                                   # pointed at — unused, not
-                                                   # finished.
-                                                   # 1: the tip is the pull
-                                                   # request's own work —
-                                                   # finished.
+   git merge-base --is-ancestor HEAD origin/main   # 1: the tip is the pull
+                                                   # request's own work, which
+                                                   # a replay keeps out of
+                                                   # main — FINISHED.
+                                                   # 0: the tip is in main, so
+                                                   # it holds nothing of its
+                                                   # own. Which branch it
+                                                   # belongs to is the read
+                                                   # below.
+   git merge-base <headRefOid> origin/main         # the commit the pull
+                                                   # request was cut from. The
+                                                   # tip equal to it is this
+                                                   # branch at its own
+                                                   # beginning — FINISHED.
+                                                   # Anything else is a branch
+                                                   # pointed at some other old
+                                                   # commit — UNUSED, keep it.
    ```
 
    **A reused branch name is what makes this necessary.** `pr-for-branch.sh`
@@ -452,19 +461,37 @@ same argument as never calling a branch clean because asking failed.
    exists and be refused: a stop with no defect behind it, and the adopt path
    for an unused workspace broken.
 
-   **`main` is what separates them.** A rebase landing replays the pull
+   **`main` separates the first pair.** A rebase landing replays the pull
    request's commits with new shas, so its own work is never reachable from
    `origin/main`; a branch pointed at an old commit is reachable from it by
-   construction. So a behind tip already in `main` holds nothing of its own
-   and is unused, whatever row shares its name.
+   construction. A behind tip that is NOT in `main` is therefore the pull
+   request's own work, and finished.
 
-   **Only the behind limb takes this read, and the asymmetry is the point.**
+   **The branch point separates what is left, and without it a landed
+   checkout is kept for ever.** A checkout left where the branch began — while
+   another session pushed every commit of the pull request — has a tip that is
+   in `main`, holds nothing of its own, and belongs to a pull request that
+   landed. It is finished, and the `main` read alone calls it unused.
+   `git merge-base <headRefOid> origin/main` is the commit the branch began
+   at: after a replay `main` carries the replayed copies, so the original
+   head's merge-base with it is still that point. A tip equal to it is this
+   branch at its beginning; a tip anywhere else is a branch pointed at an
+   unrelated old commit, which is the stale reuse.
+
+   **Only the behind limb takes these reads, and the asymmetry is the point.**
    Under a merge-commit landing the pull request's commits *are* in `main`, so
-   asking this of an equal tip would report the ordinary finished case as
-   unfinished for every branch landed that way. The cost falls on the behind
-   limb instead: a branch landed by merge commit, whose checkout is behind,
-   reads unused and keeps its worktree. A kept directory, rather than a
-   removed workspace and a stranded name.
+   routing an equal tip through them would report the ordinary finished case
+   as unfinished for every branch landed that way.
+
+   **What remains unresolved is named rather than left to be met.** A branch
+   landed by merge commit, whose checkout is behind by some but not all of its
+   commits, has a tip that is in `main` and is not the branch point — so it
+   reads unused and keeps its worktree. No read available here separates that
+   from a stale reuse, because under a merge landing the pull request's own
+   commits and `main`'s history are the same commits. The cost is a kept
+   directory; the alternative is removing a workspace and stranding a branch
+   name, which is the worse of the two and the one step 0 already refuses for
+   the abandoned-worktree case.
 
    **`git merge-base --is-ancestor` is the one read here that does not exit 0
    whatever it finds, and it must be read by status rather than by
