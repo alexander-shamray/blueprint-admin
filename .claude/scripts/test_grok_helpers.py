@@ -10357,19 +10357,19 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         # by live in the conditional block that runs only on a MERGED row —
         # unconditionally fetching a branch stops step 0 on every unpushed or
         # tidied-up one, which is the resume path it argues for at length.
-        # The behind limb's two discriminators, asserted against the BLOCK
-        # rather than the file: the prose quotes both reads, so a whole-file
-        # check passes while the command block has lost them. The first
-        # separates the pull request's own work from anything already in
-        # `main`; the second separates this branch at its beginning from a
-        # branch pointed at an unrelated old commit. Without the second, a
-        # checkout left at the branch point while another session pushed the
-        # work reads unused and is kept for ever.
+        # The behind limb's one read, asserted against the BLOCK rather than
+        # the file: the prose quotes it, so a whole-file check passes while
+        # the command block has lost it. It separates the pull request's own
+        # work — which a replay keeps out of `main` — from anything already
+        # there, and everything already there is treated as unused.
         behind = self._behind_limb_block()
-        for read in ("git merge-base --is-ancestor HEAD origin/main",
-                     "git merge-base <headRefOid> origin/main"):
-            with self.subTest(read=read):
-                self.assertIn(read, behind)
+        self.assertIn("git merge-base --is-ancestor HEAD origin/main", behind)
+        # **And no second read, because there is no second answer.** A tip in
+        # `main` that holds nothing of its own is the same commit whether the
+        # checkout is a landed one left at the branch point or a new
+        # incarnation created there. Reintroducing `merge-base <headRefOid>`
+        # as a discriminator would strand a branch name on that second case.
+        self.assertNotIn("git merge-base <headRefOid>", behind)
         conditional = self._merged_row_block()
         # **The PULL ref, not the branch's.** A merged branch's `refs/heads/…`
         # is deleted on this repository — measured — and a replay leaves the
@@ -10418,13 +10418,15 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
                          "expected exactly one prune-list-and-pull block")
         return blocks[0]
 
-    def test_a_checkout_left_at_the_branch_point_is_finished(self):
-        """The case the `main` read alone keeps for ever.
+    def test_the_branch_point_cannot_say_which_incarnation_a_tip_is(self):
+        """Why the behind limb stops at one read.
 
-        Another session pushes every commit of the pull request while this
-        checkout stays where the branch began. Its tip is in `main` and holds
-        nothing of its own, so the `main` read calls it unused — and its pull
-        request landed, so it is finished. The branch point is what says which.
+        A checkout left where the branch began — while another session pushed
+        and landed every commit — and a later incarnation of the name created
+        at that same commit are THE SAME COMMIT in the same repository. The
+        branch point does not separate them, so an ambiguous in-`main` tip is
+        treated as unused and its workspace kept, which is the direction step
+        0 already takes for an abandoned worktree.
         """
         repo = Path(tempfile.mkdtemp(prefix="branch-point-"))
         self.addCleanup(shutil.rmtree, str(repo), ignore_errors=True)
@@ -10462,11 +10464,18 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
                 self.assertTrue(ancestor(tip, head_ref_oid))
                 self.assertTrue(ancestor(tip, "main"))
 
-        # The branch point does. `merge-base <headRefOid> origin/main` is
-        # where the pull request was cut from, which the replay leaves intact.
+        # The branch point does not separate them either, which is the whole
+        # reason the behind limb stops at one read: a later incarnation of the
+        # name, created at that same commit, is indistinguishable from the
+        # checkout that was left there.
         base = git("merge-base", head_ref_oid, "main")
-        self.assertEqual(branch_point, base,
-                         "the replay must leave the branch point readable")
+        self.assertEqual(branch_point, base)
+        git("switch", "-q", "-c", "feat/x-again", branch_point)
+        self.assertEqual(branch_point, git("rev-parse", "HEAD"))
+        self.assertTrue(ancestor(git("rev-parse", "HEAD"), head_ref_oid))
+        self.assertTrue(ancestor(git("rev-parse", "HEAD"), "main"))
+        # Two branches, one commit, opposite answers wanted — so the answer is
+        # chosen rather than read, and it is the one that keeps the workspace.
         self.assertNotEqual(older, base)
 
     def test_a_reused_name_pointed_at_an_old_commit_is_not_finished(self):
