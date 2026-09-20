@@ -10338,25 +10338,52 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
             with self.subTest(limb=limb):
                 self.assertIn(limb, block)
 
+    def _teardown_block(self):
+        # **Step 0's teardown, and not step 7's.** Both prune and both pull,
+        # so those two together select a pair; `git worktree list` is step 0's
+        # alone. The first spelling of this selector matched both and the
+        # `assertEqual(1, ...)` below is what said so — the positive control
+        # earning its place on the round it was written.
+        blocks = [block for block in self._fenced(self.ship())
+                  if "git worktree list" in block
+                  and "git pull --ff-only" in block]
+        self.assertEqual(1, len(blocks),
+                         "expected exactly one prune-list-and-pull block")
+        return blocks[0]
+
+    def test_the_main_checkout_still_reads_whether_it_is_ahead(self):
+        # **The regression this case exists for shipped, and a reviewer found
+        # it rather than the suite.** Step 0's table guarded the pull on
+        # `main` being clean and not ahead, and took both facts from the
+        # FINISHED predicate one row over — which worked only while that
+        # predicate was a range read. Once it became an identity against a
+        # pull request's head, `main` had nothing to compare: no PR, no oid,
+        # no guard. `git pull --ff-only` then succeeds, step 1 forks from
+        # `origin/main`, and commits on `main` never reach the pull request,
+        # which line 72 of that file calls a stop. Raised by Copilot.
+        block = self._teardown_block()
+        for limb in ("git status --short", "git log origin/main..HEAD"):
+            with self.subTest(limb=limb):
+                self.assertIn(limb, block)
+
     def test_step_zero_compares_the_tip_with_the_merged_head(self):
-        ship = self.ship()
-        blocks = self._fenced(ship)
+        blocks = self._fenced(self.ship())
         # The positive control: a fence parser that found nothing would pass
-        # the loop below in silence, which is this repository's most-repeated
+        # the loops below in silence, which is this repository's most-repeated
         # failure arriving in the case written to catch it.
         self.assertGreater(len(blocks), 5, "found almost no command blocks")
-        self.assertTrue(
-            any("git rev-parse HEAD" in block for block in blocks),
-            "step 0's finished predicate must READ the tip, not merely "
-            "discuss it")
-        # **Both content reads are gone from every block, not just step 0's.**
-        # Each was a predicate for the same question and each answered it
-        # wrongly in its own direction — the range read cannot see a rebase
-        # merge, `git cherry` cannot see a duplicate patch or a merge commit.
-        # A second copy left in another block is the one a reader trusts.
+        # **The content reads are refused where the FINISHED predicate is, not
+        # everywhere.** Refusing them everywhere is what removed the ahead
+        # guard `main` needs — a range read is the right answer to a different
+        # question, asked two blocks away, and a rule that cannot tell the two
+        # apart takes the good one with the bad.
+        finished = self._finished_predicate_block()
+        self.assertIn("git rev-parse HEAD", finished)
+        self.assertNotIn("git log origin/main..HEAD", finished)
+        # `git cherry` stays refused in every block: nothing in this chain
+        # wants patch-ids, and it answered neither question correctly.
         for block in blocks:
             with self.subTest(block=block.splitlines()[:1]):
-                self.assertNotIn("git log origin/main..HEAD", block)
                 self.assertNotIn("git cherry", block)
         # The helper has to hand that oid over, or the comparison has one side.
         self.assertIn("headRefOid", self._helper())
