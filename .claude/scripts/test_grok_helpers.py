@@ -10252,26 +10252,26 @@ class TheTriagerEditsNothingShipDenies(unittest.TestCase):
 
 
 class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
-    """#31 — the method moved, and step 0's finished predicate had to move.
+    """Step 0's *finished* predicate, and what it may not be made of.
 
-    A rebase merge replays the branch's commits onto `main` with new shas, so
-    the branch's own commits are never ancestors of `main`. `/ship` step 0's
-    predicate read `git log origin/main..HEAD` and called the branch finished
-    when it was empty — which, after a rebase merge, it never is. Nothing
-    fails: no worktree is ever classified finished, the teardown never runs,
-    and the directories accumulate until somebody notices. The issue calls
-    that out as the risk in making this change carelessly.
+    **A branch is finished when the head its pull request merged can reach the
+    local tip** — `git merge-base --is-ancestor HEAD <headRefOid>`, on a
+    MERGED row, with a clean tree. That takes the tip equal to the merged
+    head, and a tip BEHIND it, which a checkout another session pushed past
+    will have and which holds nothing of its own. A tip the merged head cannot
+    reach carries commits made after the merge and keeps its workspace.
+    `/ship` step 0 owns the rule; these cases pin that it is what the command
+    spells and what the relation actually answers.
 
-    **The predicate that replaced it is an identity rather than a comparison
-    of content**, and that is the contract these cases pin: a branch is
-    finished when the `headRefOid` of its MERGED row reaches `HEAD` —
-    `git merge-base --is-ancestor HEAD <headRefOid>`. That takes the tip equal
-    to the merged head, and a tip BEHIND it, which a checkout another session
-    pushed past will have and which holds nothing of its own. A tip the merged
-    head cannot reach carries commits made after the merge and keeps its
-    workspace. No landing method moves that oid, which is what neither
-    `git log origin/main..HEAD` nor the `git cherry` that briefly replaced it
-    could say.
+    **No comparison of content may stand in for it, and that is the half a
+    gate has to hold.** A range over the branch's own commits cannot see a
+    rebase landing, which replays them onto `main` with new shas: it reports
+    every landed branch unfinished, so no worktree is ever torn down and the
+    directories accumulate in silence. A patch-id comparison fails the other
+    way, reporting a post-merge commit whose patch `main` already carries as
+    landed and omitting merge commits entirely, so work done after the merge
+    becomes invisible and its only checkout is removed. The second direction
+    is the one that loses work.
 
     **So the subject here is what the gate LOOKS AT**, which is the rule
     `CLAUDE.md` states is the only defence against a gate that quietly stops
