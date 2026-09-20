@@ -1,7 +1,7 @@
 ---
 description: Start from a clean main, fork a worktree where one can be forked, branch, commit, push and open a PR, loop the Copilot review until one clean pass (Grok is disabled pending a trusted launcher) — then merge the PR and tear the workspace down. Decides for itself rather than stopping to ask
 argument-hint: "[what the change does] — omit and each step derives its own"
-allowed-tools: Read, Grep, Glob, Write, Skill, Agent(review-grok-triager), EnterWorktree, ExitWorktree, Bash(git status:*), Bash(git diff:*), Bash(git branch --list:*), Bash(git branch --show-current), Bash(git branch -a), Bash(git log:*), Bash(git fetch origin:*), Bash(bash .claude/scripts/git-branch-create.sh:*), Bash(bash .claude/scripts/git-worktree-fork.sh:*), Bash(bash .claude/scripts/git-switch-existing.sh:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(ls:*), Bash(git add:*), Bash(git commit:*), Bash(bash .claude/scripts/git-unstage.sh:*), Bash(git push -u origin:*), Bash(git push origin:*), Bash(wc:*), Bash(bash .claude/scripts/gh-pr-create.sh), Bash(bash .claude/scripts/pr-state.sh:*), Bash(bash .claude/scripts/pr-for-branch.sh:*), Bash(gh pr checks:*), Bash(bash .claude/scripts/gh-pr-merge.sh:*), Bash(git pull --ff-only), Bash(git merge-base --is-ancestor:*), Bash(bash .claude/scripts/git-worktree-remove.sh:*), Bash(git worktree prune:*), Bash(rm -f suggestions.md), Bash(bash .claude/scripts/grok-ledger.sh:*), Bash(bash .claude/scripts/copilot-request.sh:*), Bash(bash .claude/scripts/copilot-request-count.sh:*), Bash(bash .claude/scripts/pr-review-comments.sh:*), Bash(bash .claude/scripts/pr-review-bodies.sh:*), Bash(bash .claude/scripts/pr-issue-comments.sh:*), Bash(bash .claude/scripts/pr-review-threads.sh:*), Bash(bash .claude/scripts/grok-review.sh:*), Bash(sleep:*), Bash(bash .claude/scripts/pr-locality.sh:*), Bash(bash .claude/scripts/npm-checks.sh:*), Bash(bash .claude/scripts/host-checks.sh:*), Bash(bash .claude/scripts/harness-checks.sh:*), Bash(bash .claude/scripts/spa-ci.sh)
+allowed-tools: Read, Grep, Glob, Write, Skill, Agent(review-grok-triager), EnterWorktree, ExitWorktree, Bash(git status:*), Bash(git diff:*), Bash(git branch --list:*), Bash(git branch --show-current), Bash(git branch -a), Bash(git log:*), Bash(git cherry:*), Bash(git fetch origin:*), Bash(bash .claude/scripts/git-branch-create.sh:*), Bash(bash .claude/scripts/git-worktree-fork.sh:*), Bash(bash .claude/scripts/git-switch-existing.sh:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(ls:*), Bash(git add:*), Bash(git commit:*), Bash(bash .claude/scripts/git-unstage.sh:*), Bash(git push -u origin:*), Bash(git push origin:*), Bash(wc:*), Bash(bash .claude/scripts/gh-pr-create.sh), Bash(bash .claude/scripts/pr-state.sh:*), Bash(bash .claude/scripts/pr-for-branch.sh:*), Bash(gh pr checks:*), Bash(bash .claude/scripts/gh-pr-merge.sh:*), Bash(git pull --ff-only), Bash(git merge-base --is-ancestor:*), Bash(bash .claude/scripts/git-worktree-remove.sh:*), Bash(git worktree prune:*), Bash(rm -f suggestions.md), Bash(bash .claude/scripts/grok-ledger.sh:*), Bash(bash .claude/scripts/copilot-request.sh:*), Bash(bash .claude/scripts/copilot-request-count.sh:*), Bash(bash .claude/scripts/pr-review-comments.sh:*), Bash(bash .claude/scripts/pr-review-bodies.sh:*), Bash(bash .claude/scripts/pr-issue-comments.sh:*), Bash(bash .claude/scripts/pr-review-threads.sh:*), Bash(bash .claude/scripts/grok-review.sh:*), Bash(sleep:*), Bash(bash .claude/scripts/pr-locality.sh:*), Bash(bash .claude/scripts/npm-checks.sh:*), Bash(bash .claude/scripts/host-checks.sh:*), Bash(bash .claude/scripts/harness-checks.sh:*), Bash(bash .claude/scripts/spa-ci.sh)
 disallowed-tools: Edit(.claude/**), Edit(./.claude/**), Edit(.github/**), Edit(./.github/**), Edit(.remember/**), Edit(./.remember/**), Edit(android/**), Edit(./android/**), Edit(ios/**), Edit(./ios/**), Edit(.git/**), Edit(./.git/**), Edit(.git), Edit(./.git), Edit(package.json), Edit(./package.json), Edit(package-lock.json), Edit(./package-lock.json), Edit(npm-shrinkwrap.json), Edit(./npm-shrinkwrap.json), Edit(.npmrc), Edit(./.npmrc), Edit(angular.json), Edit(./angular.json), Edit(tsconfig.json), Edit(./tsconfig.json), Edit(tsconfig.app.json), Edit(./tsconfig.app.json), Edit(tsconfig.spec.json), Edit(./tsconfig.spec.json), Edit(eslint.config.js), Edit(./eslint.config.js), Edit(.prettierrc), Edit(./.prettierrc), Edit(capacitor.config.ts), Edit(./capacitor.config.ts), Edit(playwright.config.ts), Edit(./playwright.config.ts), Edit(ionic.config.json), Edit(./ionic.config.json), Edit(.nvmrc), Edit(./.nvmrc), Edit(.editorconfig), Edit(./.editorconfig), Edit(.gitattributes), Edit(./.gitattributes), Edit(.gitignore), Edit(./.gitignore), Edit(CLAUDE.md), Edit(./CLAUDE.md), Edit(README.md), Edit(./README.md), Edit(**/*.config.js), Edit(**/*.config.cjs), Edit(**/*.config.mjs), Edit(**/*.config.ts), Edit(**/*.config.mts), Edit(**/package.json), Edit(**/.npmrc), Edit(**/tsconfig*.json), Edit(**/.prettierrc*), Edit(node_modules/**), Edit(./node_modules/**), Edit(Directory.Packages.props), Edit(./Directory.Packages.props), Edit(Directory.Build.props), Edit(./Directory.Build.props), Edit(global.json), Edit(./global.json), Edit(BlueprintAdmin.slnx), Edit(./BlueprintAdmin.slnx), Edit(**/*.csproj), Edit(AGENTS.md), Edit(./AGENTS.md), Edit(.mcp.json), Edit(./.mcp.json), Agent(general-purpose), Agent(claude), Agent(Explore), Agent(Plan), Agent(claude-code-guide), Agent(statusline-setup), Agent(security-auditor), Agent(bug-auditor)
 ---
 
@@ -379,12 +379,32 @@ same argument as never calling a branch clean because asking failed.
    ```bash
    git fetch origin main                      # or the next read is stale
    git status --short                         # empty: nothing uncommitted
-   git log origin/main..HEAD                  # empty: nothing main lacks
+   git cherry origin/main HEAD                # no `+` line: main has every patch
    bash .claude/scripts/pr-for-branch.sh <branch>   # the one row it returns,
                                                    # with state MERGED: it
                                                    # landed. Any other state
                                                    # is a PR, not a merge.
    ```
+
+   **`git cherry` rather than `git log origin/main..HEAD`, because pull
+   requests here land by rebase (#31).** A rebase merge replays the branch's
+   commits onto `main` with new shas, so the branch's own commits are never
+   ancestors of `main`, that range is never empty, and under the old read no
+   landed branch could be finished — step 0 would keep every worktree for
+   ever, silently, which is the failure the issue names. `git cherry` asks the
+   same question by patch-id: a `-` line is a commit `main` already carries
+   under another sha, a `+` line is one it does not, and **finished means no
+   `+` lines**. Measured on a rebase-merged branch with an unrelated pull
+   request landed in between — the range read returned both commits, and
+   `git cherry` returned both as `-`.
+
+   **It fails in the safe direction, and it still answers for the pull
+   requests that landed before #31.** A rebase that resolved a conflict
+   changes the patch, so that commit comes back `+` and the branch reads
+   unfinished: the workspace is kept, and a kept worktree costs a directory
+   where a removed one costs the work inside it. A branch landed by merge
+   commit has its commits literally in `main`, so every one of them is
+   reported `-` — one read, both histories.
 
    **Every read exits 0 whatever it finds, and that is deliberate.**
    `pr-state.sh` on a branch with no PR exits non-zero, and
@@ -407,11 +427,11 @@ same argument as never calling a branch clean because asking failed.
    `pr-state.sh` keeps its job one section up, in the resume
    table, where the question is *which* state and there is a PR to ask about.
 
-   **The merge read is not redundant with `origin/main..HEAD`, and the
-   difference is the whole of the next paragraph.** Merging does empty that
-   range, so the two agree on a landed branch; where they part is a branch
-   that never carried anything, which satisfies the first two reads without a
-   PR ever having existed.
+   **The merge read is not redundant with `git cherry`, and the difference is
+   the whole of the next paragraph.** Landing does clear the `+` lines, so the
+   two agree on a landed branch; where they part is a branch that never
+   carried anything — no commits, so no `+` lines either — which satisfies the
+   first two reads without a PR ever having existed.
 
    **A branch that is clean, level with `origin/main` and never merged is
    *unused*, not finished — and the difference is what makes an interrupted
@@ -1527,8 +1547,9 @@ same argument as never calling a branch clean because asking failed.
    stale-artefact trap step 6's `commit` oid exists for. Wait for the run on
    the pushed head rather than reading whichever finished last.
 
-   Then merge with a merge commit, which is this repository's shape — every
-   entry in `git log --merges` reads `Merge pull request #n from …`:
+   Then land it by rebase, which is this repository's shape since #31 — the
+   branch's commits are replayed onto `main`, each one of them a commit
+   `/commit` wrote, and no `Merge pull request #n from …` is created:
 
    ```bash
    bash .claude/scripts/gh-pr-merge.sh <n> <oid>
@@ -1571,10 +1592,14 @@ same argument as never calling a branch clean because asking failed.
    `gh pr merge <n> --merge` does not start with it. That grant is gone; the
    helper spells the flags and the caller passes the number and the oid.
 
-   `--squash` and `--rebase` are not alternatives to choose between here. The
+   `--merge` and `--squash` are not alternatives to choose between here. The
    commits are the argument — `/commit` splits them so a reviewer can accept
-   one and reject the next, and `/pr` writes its body from them — so squashing
-   discards the thing two earlier steps spent their effort producing.
+   one and reject the next, and `/pr` writes its body from them — and rebase
+   is the method that puts every one of them on `main` under its own subject,
+   where squashing discards the thing two earlier steps spent their effort
+   producing. `--merge` keeps them too and was this repository's shape until
+   #31; which of the two lands is the owner's choice and not this step's, and
+   it is made in `gh-pr-merge.sh` rather than here.
 
    **The merge is `gh`'s, not a push.** `.claude/settings.json` denies every
    push to `main` and that deny is untouched: the branch is merged on the
@@ -1611,6 +1636,14 @@ same argument as never calling a branch clean because asking failed.
    on, and that the merge is in its history. The check is the only guard
    between a pull that silently did nothing and a report that says the merge
    arrived.
+
+   **Under a rebase merge the oid is the last replayed commit rather than a
+   merge commit, and the check is unchanged by that (#31).** GitHub reports it
+   as `mergeCommit` either way, it is on `main` either way, and containment is
+   what this asks either way — the branch's own commits are not in `main` and
+   are not what is being asked about. What moves is the report's wording: name
+   the commit the branch landed as, rather than calling it a merge commit that
+   was never created.
 
    **Verify first.** Removing the worktree is the one step in this chain that
    destroys something, and doing it on an assumed merge is how an unmerged
@@ -1673,7 +1706,9 @@ posted on it. This is the section that replaces the interruption, so a run that
 took decisions and lists none of them has not reported — it has hidden. A run
 that took none says so in one line.
 
-**Then the merge and the workspace.** Whether the PR merged and its merge oid,
+**Then the merge and the workspace.** Whether the PR landed and the oid it
+landed as — under a rebase merge the last replayed commit, not a merge commit
+(#31) —
 the literal `gh-pr-merge.sh` and `git-worktree-remove.sh` lines that ran,
 arguments and all — those two used to be raw grants admitting a flag this file
 forbids, and the report was the only place the forbidding was checkable; the
