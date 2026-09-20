@@ -378,24 +378,48 @@ same argument as never calling a branch clean because asking failed.
 
    ```bash
    git fetch origin main                      # or the next read is stale
+   git fetch origin <branch>                  # the merged head may be here
+                                              # only, and a replay leaves it
+                                              # unreachable from origin/main
    git status --short                         # empty: nothing uncommitted
    git rev-parse HEAD                         # the tip, for the row below
    bash .claude/scripts/pr-for-branch.sh <branch>   # the one row it returns,
-                                                   # with state MERGED and a
-                                                   # headRefOid equal to that
-                                                   # tip: it landed, and this
-                                                   # checkout holds nothing
-                                                   # since. A MERGED row whose
-                                                   # headRefOid is NOT the tip
-                                                   # is later work, not an
-                                                   # unmerged pull request.
+                                                   # with state MERGED: the
+                                                   # headRefOid is the head
+                                                   # that landed
+   git merge-base --is-ancestor HEAD <headRefOid>   # the tip is that head or
+                                                    # an ancestor of it: this
+                                                    # checkout holds nothing
+                                                    # that did not land
    ```
 
-   **The question is identity, not content: is this still the commit the pull
-   request landed?** `pr-for-branch.sh` publishes the row's `headRefOid`, and
-   finished means `git rev-parse HEAD` equals it. Anything committed since
-   moves the tip, whatever its patch looks like and whether or not it is a
-   merge, so there is no shape of post-merge work that survives this read.
+   **The question is ancestry against the head that landed, not content: does
+   this checkout hold anything the pull request did not take?**
+   `pr-for-branch.sh` publishes the row's `headRefOid`, and finished means the
+   tip is that commit or an ancestor of it. Anything committed since is a tip
+   the merged head cannot reach, whatever its patch looks like and whether or
+   not it is a merge, so there is no shape of post-merge work that survives
+   this read.
+
+   **Both relations are finished and only one of them is obvious.** The tip
+   equal to the merged head is the ordinary case: this session pushed it and
+   the pull request took it. A tip *behind* that head is the case another
+   session creates by pushing the branch — this checkout never saw those
+   commits, they landed without it, and it holds nothing of its own. Reading
+   only equality leaves that worktree standing for ever, which is the
+   accumulation step 0 exists to prevent.
+
+   **Ahead or diverged is unfinished, and that is the half with teeth.** A tip
+   the merged head cannot reach carries commits made after the merge, and
+   `ship.md` stops on exactly that state rather than tearing its workspace
+   down.
+
+   **The ancestor test needs the branch fetched, which is why the fetch above
+   names it.** A replay gives the branch's commits new shas, so the merged
+   head is not reachable from `origin/main` and may be absent from this
+   checkout entirely. `git merge-base --is-ancestor` on an object it does not
+   have fails, and a failed test is not finished — the safe direction, and
+   the one to fail in.
 
    **No comparison of content can answer it, and the two obvious ones fail in
    opposite directions.** A range — `git log origin/main..HEAD` empty — cannot

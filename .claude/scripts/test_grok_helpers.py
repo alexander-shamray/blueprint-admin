@@ -10346,7 +10346,13 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         # exists to refuse, behind a green gate.
         block = self._finished_predicate_block()
         for limb in ("git status --short", "git rev-parse HEAD",
-                     "pr-for-branch.sh", "MERGED", "headRefOid"):
+                     "pr-for-branch.sh", "MERGED", "headRefOid",
+                     # The relation itself, and the fetch it depends on: a
+                     # replay leaves the merged head unreachable from
+                     # `origin/main`, so without the branch fetch the test
+                     # runs against an object this checkout may not hold.
+                     "git merge-base --is-ancestor HEAD",
+                     "git fetch origin <branch>"):
             with self.subTest(limb=limb):
                 self.assertIn(limb, block)
 
@@ -10361,6 +10367,23 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         self.assertEqual(1, len(blocks),
                          "expected exactly one prune-list-and-pull block")
         return blocks[0]
+
+    def test_the_main_checkout_still_reads_whether_it_is_ahead(self):
+        # A tip BEHIND the merged head is finished: another session pushed
+        # the branch, those commits landed without this checkout, and it
+        # holds nothing of its own. Equality alone calls it unfinished and
+        # keeps the worktree for ever, which is the accumulation step 0
+        # exists to prevent; a tip the merged head cannot reach is the
+        # opposite case and keeps its workspace.
+        merged_head = git("rev-parse", "HEAD")
+        git("commit", "-q", "--allow-empty", "-m", "pushed by another session")
+        pushed = git("rev-parse", "HEAD")
+        self.assertNotEqual(pushed, merged_head)
+        behind = subprocess.run(
+            ["git", "-C", str(repo), "merge-base", "--is-ancestor",
+             merged_head, pushed], capture_output=True)
+        self.assertEqual(0, behind.returncode,
+                         "the earlier tip must be an ancestor of the newer one")
 
     def test_the_main_checkout_still_reads_whether_it_is_ahead(self):
         # **`main` needs its own ahead read and cannot take one from the
@@ -10393,8 +10416,9 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         # directions are pinned, because the negative is the one that keeps a
         # workspace alive.
         prose = self._prose(self._finished_predicate_block())
-        self.assertIn("headRefOid equal to that tip", prose)
-        self.assertIn("headRefOid is NOT the tip", prose)
+        self.assertIn("the headRefOid is the head that landed", prose)
+        self.assertIn(
+            "the tip is that head or an ancestor of it", prose)
 
     def test_step_zero_compares_the_tip_with_the_merged_head(self):
         blocks = self._fenced(self.ship())
