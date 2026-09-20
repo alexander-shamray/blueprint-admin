@@ -2,8 +2,8 @@
 
 `.superpowers/sdd/.gitignore` holds a bare `*`. Git honours it, so nothing
 under it is ever committed and it looks excluded. The codebase index reads the
-root ignore files its config names and no nested ones, so it indexed 34 of this
-checkout's 329 files from there, competing with code in every search result. A
+root ignore files its config names and no nested ones, so it indexed that
+directory in full, where scratch competed with code in every search result. A
 nested blanket ignore is therefore not a substitute for a root rule, and this
 is where that is asserted.
 
@@ -70,6 +70,11 @@ def root_covered(repo, paths):
     `-v` is what makes this a question about the *root* rule rather than about
     git's answer, which a nested file is equally able to give: it reports the
     ignore file credited with the match, and only the one at the root counts.
+
+    A negated match needs no handling of its own: check-ignore lists what is
+    ignored, so a path re-included by a `!` rule draws no line at all and
+    never reaches the source comparison. That is a behaviour this helper
+    leans on rather than one it enforces, so a fixture holds it.
 
     `-z` and bytes on both sides, because the text pipe is not transparent
     here: on Windows it writes `\n` out as `\r\n`, and git took the carriage
@@ -173,6 +178,16 @@ class TheScan(unittest.TestCase):
         self.write("outer/.gitignore", "inner/\n")
         self.write("outer/inner/.gitignore", "*\n")
         self.assertEqual(excluded_from_inside_only(self.repo), ["outer/inner/"])
+
+    def test_a_root_negation_does_not_count_as_root_coverage(self):
+        # `scratch-keep/` matches `scratch*` and is then re-included, so it is
+        # not ignored and must not be pruned — a blanket ignore below it is
+        # still this gate's business. The helper never reads the pattern field,
+        # so this case is what says it does not have to.
+        self.write(".gitignore", "scratch*\n!scratch-keep/\n")
+        self.write("scratch-keep/deep/.gitignore", "*\n")
+        self.assertEqual(excluded_from_inside_only(self.repo),
+                         ["scratch-keep/deep/"])
 
 
 class ThisRepository(unittest.TestCase):
