@@ -10264,16 +10264,20 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
 
     **The predicate that replaced it is an identity rather than a comparison
     of content**, and that is the contract these cases pin: a branch is
-    finished when `git rev-parse HEAD` still equals the `headRefOid` of its
-    MERGED row. No landing method moves that oid, and no commit made after the
-    merge satisfies it — which is what neither `git log origin/main..HEAD` nor
-    the `git cherry` that briefly replaced it could say.
+    finished when the `headRefOid` of its MERGED row reaches `HEAD` —
+    `git merge-base --is-ancestor HEAD <headRefOid>`. That takes the tip equal
+    to the merged head, and a tip BEHIND it, which a checkout another session
+    pushed past will have and which holds nothing of its own. A tip the merged
+    head cannot reach carries commits made after the merge and keeps its
+    workspace. No landing method moves that oid, which is what neither
+    `git log origin/main..HEAD` nor the `git cherry` that briefly replaced it
+    could say.
 
     **So the subject here is what the gate LOOKS AT**, which is the rule
     `CLAUDE.md` states is the only defence against a gate that quietly stops
     covering the newest surface. The structural cases assert that `ship.md`
-    spells all three limbs of that identity in one block, and that the block
-    states their EQUALITY rather than merely naming them.
+    spells every limb of that relation in one block, and that the block states
+    the RELATION rather than merely naming its operands.
 
     **What they refuse is narrower than "no content comparison anywhere", and
     the difference is load-bearing.** The range read is refused in the
@@ -10346,15 +10350,27 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         # exists to refuse, behind a green gate.
         block = self._finished_predicate_block()
         for limb in ("git status --short", "git rev-parse HEAD",
-                     "pr-for-branch.sh", "MERGED", "headRefOid",
-                     # The relation itself, and the fetch it depends on: a
-                     # replay leaves the merged head unreachable from
-                     # `origin/main`, so without the branch fetch the test
-                     # runs against an object this checkout may not hold.
-                     "git merge-base --is-ancestor HEAD",
-                     "git fetch origin <branch>"):
+                     "pr-for-branch.sh", "MERGED", "headRefOid"):
             with self.subTest(limb=limb):
                 self.assertIn(limb, block)
+        # The relation, the fetch it depends on and the statuses it is read
+        # by live in the conditional block that runs only on a MERGED row —
+        # unconditionally fetching a branch stops step 0 on every unpushed or
+        # tidied-up one, which is the resume path it argues for at length.
+        conditional = self._merged_row_block()
+        for limb in ("git fetch origin <branch> || true",
+                     "git merge-base --is-ancestor HEAD"):
+            with self.subTest(limb=limb):
+                self.assertIn(limb, conditional)
+        prose = self._prose(conditional)
+        self.assertIn("1: it does not", prose)
+
+    def _merged_row_block(self):
+        blocks = [block for block in self._fenced(self.ship())
+                  if "git merge-base --is-ancestor HEAD" in block]
+        self.assertEqual(1, len(blocks),
+                         "expected exactly one ancestor-test block")
+        return blocks[0]
 
     def _teardown_block(self):
         # **Step 0's teardown, and not step 7's.** Both prune and both pull,
@@ -10368,22 +10384,58 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
                          "expected exactly one prune-list-and-pull block")
         return blocks[0]
 
-    def test_the_main_checkout_still_reads_whether_it_is_ahead(self):
-        # A tip BEHIND the merged head is finished: another session pushed
-        # the branch, those commits landed without this checkout, and it
-        # holds nothing of its own. Equality alone calls it unfinished and
-        # keeps the worktree for ever, which is the accumulation step 0
-        # exists to prevent; a tip the merged head cannot reach is the
-        # opposite case and keeps its workspace.
-        merged_head = git("rev-parse", "HEAD")
+    def test_the_relation_answers_for_equal_behind_and_diverged_tips(self):
+        """The predicate's three answers, driven against real commits.
+
+        The structural cases read what `ship.md` spells; this one runs the
+        relation it spells. Equality alone would satisfy a case that compares
+        shas, which is why the earlier attempt at this coverage proved
+        nothing: it never executed `merge-base --is-ancestor`.
+        """
+        repo = Path(tempfile.mkdtemp(prefix="finished-relation-"))
+        self.addCleanup(shutil.rmtree, str(repo), ignore_errors=True)
+
+        def git(*args):
+            return subprocess.run(
+                ["git", "-C", str(repo), "-c", "user.email=t@example.com",
+                 "-c", "user.name=t", *args],
+                check=True, capture_output=True, text=True).stdout.strip()
+
+        def reaches(head_ref_oid, tip):
+            """Step 0's read: `merge-base --is-ancestor HEAD <headRefOid>`.
+
+            Status, not success — 0 is finished, 1 is the ordinary unfinished
+            answer, and anything above 1 is an error the chain stops on.
+            """
+            done = subprocess.run(
+                ["git", "-C", str(repo), "merge-base", "--is-ancestor",
+                 tip, head_ref_oid], capture_output=True)
+            self.assertIn(done.returncode, (0, 1), done.stderr)
+            return done.returncode == 0
+
+        git("init", "-q", "-b", "main")
+        git("commit", "-q", "--allow-empty", "-m", "root")
+        git("switch", "-q", "-c", "feat/x")
+        git("commit", "-q", "--allow-empty", "-m", "the work")
+        behind = git("rev-parse", "HEAD")
         git("commit", "-q", "--allow-empty", "-m", "pushed by another session")
-        pushed = git("rev-parse", "HEAD")
-        self.assertNotEqual(pushed, merged_head)
-        behind = subprocess.run(
-            ["git", "-C", str(repo), "merge-base", "--is-ancestor",
-             merged_head, pushed], capture_output=True)
-        self.assertEqual(0, behind.returncode,
-                         "the earlier tip must be an ancestor of the newer one")
+        merged_head = git("rev-parse", "HEAD")
+
+        # Equal: this session pushed it and the pull request took it.
+        self.assertTrue(reaches(merged_head, merged_head))
+        # Behind: another session pushed past this checkout, so those commits
+        # landed without it and it holds nothing of its own. Finished — and
+        # the case equality alone gets wrong, stranding the worktree for ever.
+        self.assertNotEqual(behind, merged_head)
+        self.assertTrue(reaches(merged_head, behind))
+        # Ahead: a commit made after the merge. NOT finished, which is the
+        # half with teeth — that workspace holds work nothing else has.
+        git("commit", "-q", "--allow-empty", "-m", "after the merge")
+        self.assertFalse(reaches(merged_head, git("rev-parse", "HEAD")))
+        # Diverged: a tip on another root the merged head cannot reach.
+        git("switch", "-q", "--orphan", "feat/elsewhere")
+        git("commit", "-q", "--allow-empty", "-m", "unrelated history")
+        self.assertFalse(reaches(merged_head, git("rev-parse", "HEAD")))
 
     def test_the_main_checkout_still_reads_whether_it_is_ahead(self):
         # **`main` needs its own ahead read and cannot take one from the
@@ -10408,19 +10460,19 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
             words.extend(comment.split())
         return " ".join(words)
 
-    def test_the_finished_predicate_pins_the_equality_not_just_the_names(self):
+    def test_the_finished_predicate_pins_the_relation_not_just_the_names(self):
         # **Naming `MERGED` and `headRefOid` in the block is not the contract
         # — their EQUALITY is.** A block that read both and then treated every
         # merged row as finished satisfies the limb case above and performs
         # the destructive teardown this predicate exists to refuse. Both
         # directions are pinned, because the negative is the one that keeps a
         # workspace alive.
-        prose = self._prose(self._finished_predicate_block())
-        self.assertIn("the headRefOid is the head that landed", prose)
-        self.assertIn(
-            "the tip is that head or an ancestor of it", prose)
+        self.assertIn("the headRefOid is the head that landed",
+                      self._prose(self._finished_predicate_block()))
+        self.assertIn("the merged head reaches the tip",
+                      self._prose(self._merged_row_block()))
 
-    def test_step_zero_compares_the_tip_with_the_merged_head(self):
+    def test_step_zero_reads_ancestry_against_the_merged_head(self):
         blocks = self._fenced(self.ship())
         # The positive control: a fence parser that found nothing would pass
         # the loops below in silence, which is this repository's most-repeated
@@ -10653,15 +10705,21 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         git("switch", "-q", "feat/merged")
         self.assertEqual([], cherry("feat/merged"))
 
-        # **And the read step 0 actually makes now.** The cases above are
-        # about what the two content comparisons can and cannot see; this is
-        # the identity read that replaced them, and it holds across every
-        # landing method for the same reason — the tip either is the head the
-        # pull request merged or it is not.
+        # **And the read step 0 actually makes, run rather than approximated.**
+        # Comparing shas here would pass against the equality-only predicate
+        # this class exists to refuse, so the relation itself is executed:
+        # `merge-base --is-ancestor <tip> <headRefOid>`, by status.
+        def reaches(tip):
+            done = subprocess.run(
+                ["git", "-C", str(repo), "merge-base", "--is-ancestor",
+                 tip, old_tip], capture_output=True)
+            self.assertIn(done.returncode, (0, 1), done.stderr)
+            return done.returncode == 0
+
         git("switch", "-q", "feat/landed")
-        self.assertEqual(old_tip, git("rev-parse", "HEAD"))
+        self.assertTrue(reaches(git("rev-parse", "HEAD")))
         git("switch", "-q", "feat/unlanded")
-        self.assertNotEqual(old_tip, git("rev-parse", "HEAD"))
+        self.assertFalse(reaches(git("rev-parse", "HEAD")))
 
 
 if __name__ == "__main__":
