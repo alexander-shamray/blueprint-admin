@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Merge one of THIS repository's pull requests with a merge commit, bound to a
-# named head, and nothing else — `/ship` step 7's one merge and no other.
+# Land one of THIS repository's pull requests by rebase, bound to a named head,
+# and nothing else — `/ship` step 7's one merge and no other.
 #
 # **`Bash(gh pr merge --merge:*)` is a PREFIX grant, so a trailing flag is
 # inside it (#16).** `gh pr merge --merge <n> --admin` bypasses the failing-check
@@ -23,10 +23,17 @@
 # commit whose checks never ran. A helper that can be called without it is a
 # helper that will be.
 #
-# The method is fixed to `--merge`, which is this repository's shape — every
-# entry in `git log --merges` reads `Merge pull request #n from …`. `--squash`
-# discards what `/commit` and `/pr` spend their effort producing, and is not a
-# choice this endpoint offers.
+# The method is fixed to `--rebase` (#31). Pull requests here land by rebase,
+# so `main` carries each commit `/commit` split rather than one
+# `Merge pull request #n from …` per branch. `--merge` and `--squash` are not
+# choices this endpoint offers: the first is the shape #31 moved away from, and
+# the second discards what `/commit` and `/pr` spend their effort producing.
+#
+# **A rebase merge replays the branch's commits onto `main` with new shas**, so
+# nothing downstream may judge "landed" by whether the branch's own commits are
+# ancestors of `main`. `ship.md` step 0's finished predicate reads `git cherry`
+# — patch-ids — for that reason, and moving this flag without moving that read
+# leaves every delivered worktree standing for ever.
 set -euo pipefail
 [ "$#" -eq 2 ] ||
   { echo "usage: gh-pr-merge.sh <pr-number> <head-oid>" >&2; exit 2; }
@@ -69,4 +76,4 @@ IFS=$'\t' read -r head_branch head_oid cross base <<<"${head%$'\r'}"
 [ "$head_oid" = "$oid" ] ||
   { echo "pull request #$pr's head is $head_oid, not $oid" >&2; exit 3; }
 
-gh pr merge --merge --repo "$repo" --match-head-commit "$oid" "$pr"
+gh pr merge --rebase --repo "$repo" --match-head-commit "$oid" "$pr"
