@@ -458,12 +458,15 @@ same argument as never calling a branch clean because asking failed.
    `ship.md` stops on exactly that state rather than tearing its workspace
    down.
 
-   **The ancestor test needs the branch fetched, which is why the fetch above
-   names it.** A replay gives the branch's commits new shas, so the merged
-   head is not reachable from `origin/main` and may be absent from this
-   checkout entirely. `git merge-base --is-ancestor` on an object it does not
-   have fails, and a failed test is not finished — the safe direction, and
-   the one to fail in.
+   **The ancestor test needs the merged head present, which is why the fetch
+   above names the pull request's head ref rather than the branch.** A replay
+   gives the branch's commits new shas, so that head is not reachable from
+   `origin/main`; and the branch it was on is commonly deleted once the pull
+   request lands, so `refs/heads/…` may not resolve at all.
+   `refs/pull/<n>/head` outlives it and still names that commit.
+   `git merge-base --is-ancestor` on an object this checkout does not have
+   fails, and a failed test is not finished — the safe direction, and the one
+   to fail in.
 
    **No comparison of content can answer it, and the two obvious ones fail in
    opposite directions.** A range — `git log origin/main..HEAD` empty — cannot

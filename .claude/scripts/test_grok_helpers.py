@@ -10396,6 +10396,88 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
                          "expected exactly one prune-list-and-pull block")
         return blocks[0]
 
+    def test_the_pull_ref_fetch_materialises_a_head_the_clone_lacks(self):
+        """The prerequisite the whole relation rests on, driven.
+
+        Every other case here runs the ancestor test against a head the
+        repository already holds, so all of them pass whether or not the fetch
+        can obtain a missing one — and the structural case only reads Markdown.
+        This one starts from a clone that does NOT have the object, asserts
+        that, fetches `refs/pull/<n>/head`, and only then runs the relation.
+
+        The absence assertion is load-bearing: without it the case would pass
+        on a clone that happened to hold the commit, which is the vacuity it
+        exists to close.
+        """
+        root = Path(tempfile.mkdtemp(prefix="pull-ref-fetch-"))
+        self.addCleanup(shutil.rmtree, str(root), ignore_errors=True)
+        origin, clone = root / "origin", root / "clone"
+
+        def git_in(where, *args):
+            return subprocess.run(
+                ["git", "-C", str(where), "-c", "user.email=t@example.com",
+                 "-c", "user.name=t", *args],
+                check=True, capture_output=True, text=True).stdout.strip()
+
+        # A repository whose merged branch is GONE and whose pull ref remains,
+        # which is what GitHub leaves behind: measured on this repository, a
+        # merged pull request's `refs/heads/…` does not resolve while
+        # `refs/pull/<n>/head` still returns its head.
+        origin.mkdir()
+        git_in(origin, "init", "-q", "-b", "main")
+        git_in(origin, "commit", "-q", "--allow-empty", "-m", "root")
+        git_in(origin, "switch", "-q", "-c", "feat/landed")
+        git_in(origin, "commit", "-q", "--allow-empty", "-m", "the work")
+        head_ref_oid = git_in(origin, "rev-parse", "HEAD")
+        git_in(origin, "update-ref", "refs/pull/7/head", head_ref_oid)
+        git_in(origin, "switch", "-q", "main")
+        # The replay: `main` takes the work under a NEW sha, so the merged
+        # head is unreachable from it.
+        git_in(origin, "commit", "-q", "--allow-empty", "-m", "the work, replayed")
+        git_in(origin, "branch", "-q", "-D", "feat/landed")
+
+        # **`--no-local` is the whole of why this case can prove anything.**
+        # Cloning a local path hardlinks the entire object database, so the
+        # clone would hold the merged head although no ref reaches it, and the
+        # fetch below would be testing nothing. The real transport transfers
+        # only what the advertised refs reach.
+        subprocess.run(["git", "clone", "-q", "--no-local",
+                        str(origin), str(clone)],
+                       check=True, capture_output=True)
+        present = subprocess.run(
+            ["git", "-C", str(clone), "cat-file", "-e", head_ref_oid],
+            capture_output=True)
+        self.assertNotEqual(
+            0, present.returncode,
+            "the clone must NOT already hold the merged head, or this case "
+            "proves nothing")
+
+        fetched = subprocess.run(
+            ["git", "-C", str(clone), "fetch", "origin", "refs/pull/7/head"],
+            capture_output=True, text=True)
+        self.assertEqual(0, fetched.returncode, fetched.stderr)
+        self.assertEqual(
+            0,
+            subprocess.run(["git", "-C", str(clone), "cat-file", "-e",
+                            head_ref_oid], capture_output=True).returncode,
+            "the pull ref fetch must materialise the head the branch no "
+            "longer carries")
+
+        # And only now can the relation be asked at all. A checkout sitting on
+        # that head is finished; one carrying a commit past it is not.
+        git_in(clone, "switch", "-q", "-c", "feat/landed", head_ref_oid)
+        self.assertEqual(
+            0,
+            subprocess.run(["git", "-C", str(clone), "merge-base",
+                            "--is-ancestor", "HEAD", head_ref_oid],
+                           capture_output=True).returncode)
+        git_in(clone, "commit", "-q", "--allow-empty", "-m", "after the merge")
+        self.assertEqual(
+            1,
+            subprocess.run(["git", "-C", str(clone), "merge-base",
+                            "--is-ancestor", "HEAD", head_ref_oid],
+                           capture_output=True).returncode)
+
     def test_the_relation_answers_for_equal_behind_and_diverged_tips(self):
         """The predicate's three answers, driven against real commits.
 
@@ -10689,11 +10771,14 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         self.assertEqual(
             2, len(git("log", "--oneline", "main..feat/landed").splitlines()),
             "the ancestry read is expected to still see the pre-rebase commits")
-        # The new read answers: every patch is in `main` under another sha.
+        # The patch-id control: `git cherry` answers where the range read
+        # cannot, which is why it was tried — every patch is in `main` under
+        # another sha. It is not the predicate; the cases below are what
+        # rejected it.
         self.assertEqual([], cherry("feat/landed"))
 
-        # Work that genuinely has not landed is a `+` line, which is what stops
-        # the new read from being vacuously true.
+        # Work that genuinely has not landed is a `+` line, which is what
+        # stops that control from being vacuously true.
         git("switch", "-q", "-c", "feat/unlanded", "main")
         write("q.txt", "q\n")
         git("commit", "-q", "-m", "not landed")
