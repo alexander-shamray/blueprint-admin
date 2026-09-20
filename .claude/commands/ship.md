@@ -360,7 +360,7 @@ same argument as never calling a branch clean because asking failed.
    | In a worktree whose branch is **not finished** | **Stay.** Unfinished or unused alike, that directory is this run's workspace |
    | In the main checkout on a **finished** branch | `bash .claude/scripts/git-switch-existing.sh main` — the tree is clean by the predicate, so there is no second condition to check here |
    | In the main checkout on a branch that is **not finished** | **Stay.** `/branch` puts a branch here whenever `main` was dirty, so this is an ordinary resumed run |
-   | In the main checkout on `main` | The teardown below — but the pull inside it only when `main` is itself clean and not ahead of `origin/main`, which is the same predicate one branch over |
+   | In the main checkout on `main` | The teardown below — but the pull inside it only when `main` is itself clean and not ahead of `origin/main`, which the two reads above the pull answer and the finished predicate does not |
    | **Detached**, anywhere | **Stay**, and classify nothing. There is no branch name, so the predicate cannot be evaluated at all; step 1 creates a branch from `HEAD` and carries whatever is here |
 
    **The detached row is not a special case of the others, it is the absence
@@ -569,9 +569,25 @@ same argument as never calling a branch clean because asking failed.
    ```bash
    git worktree prune                      # registrations whose directories are gone
    git worktree list                       # what is actually still there
+   git status --short                      # on main: empty, or skip the pull
+   git log origin/main..HEAD               # on main: empty, or STOP — see below
    git pull --ff-only                      # ONLY on a clean main that is not
                                            # ahead of origin/main — see below
    ```
+
+   **The ahead read is spelled here rather than borrowed from the finished
+   predicate, and the borrowing is what broke.** That predicate used to ask a
+   range question — `git log origin/main..HEAD` empty — so on `main`, where
+   HEAD is `main`, it answered this one too. It asks an identity question now,
+   against a pull request's head, and `main` has no pull request: there is no
+   oid to compare and nothing to read the guard off. The two questions were
+   never the same one, and sharing a predicate worked only while both happened
+   to be ranges.
+
+   **It is a range read here and that is correct here.** Nothing about a
+   rebase merge touches it: the question is whether this checkout holds
+   commits `origin/main` lacks, which is what the range says, and no landing
+   method rewrites `main`'s own history behind it.
 
    **Both Stay rows leave the session off `main`**, and one of them leaves it
    outside the main checkout entirely. Prune and list are safe from anywhere in
