@@ -10282,10 +10282,23 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
     **So the subject here is what the gate LOOKS AT**, which is the rule
     `CLAUDE.md` states is the only defence against a gate that quietly stops
     covering the newest surface. The structural cases assert that `ship.md`
-    spells all three limbs of that identity in one block, and neither content
-    comparison in any block; the driven cases build real rebase-merged
-    repositories and show both comparisons missing work the identity read
-    sees.
+    spells all three limbs of that identity in one block, and that the block
+    states their EQUALITY rather than merely naming them.
+
+    **What they refuse is narrower than "no content comparison anywhere", and
+    the difference is load-bearing.** The range read is refused in the
+    finished predicate, where a rebase merge makes it answer no for ever; it
+    is REQUIRED in the main-checkout teardown, where the question is genuinely
+    a range — does this checkout hold commits `origin/main` lacks — and no
+    pull request exists to supply a head. `git cherry` is refused everywhere,
+    because nothing here wants patch-ids. A rule that cannot tell those two
+    questions apart is what removed the teardown's guard once already.
+
+    The driven cases take one failure each:
+    `test_a_rebase_merged_branch_is_finished_under_the_new_read_only` shows
+    the range read's false negative after a replay, and
+    `test_neither_content_read_can_see_work_done_after_the_merge` shows
+    `git cherry` missing a duplicate patch and a merge commit.
     """
 
     SHIP = COMMANDS / "ship.md"
@@ -10433,6 +10446,15 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         helper = self._helper()
         self.assertIn(
             "jq '[ .[] | {number, state, url, headRefOid} ]'", helper)
+        # **And over the REQUEST, because no stub in this suite can see it.**
+        # Every `gh pr list` stub returns its fixture whatever `--json` asked
+        # for, so dropping the field from the real request leaves the
+        # projection emitting `null`, step 0 with nothing to compare its tip
+        # against, and this suite entirely green. That is the same `null` the
+        # previous round fixed in a fixture, one layer up. Raised by Copilot.
+        self.assertIn(
+            "--json number,state,url,headRepository,headRefOid,"
+            "baseRefName,mergeCommit", helper)
 
     def test_no_command_still_argues_for_the_merge_commit_shape(self):
         # The claim #31 retired, in the words both files used to carry. A rule
