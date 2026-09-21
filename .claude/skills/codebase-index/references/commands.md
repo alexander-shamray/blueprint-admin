@@ -79,9 +79,9 @@ Low symbol counts or partial graph coverage can explain weak results.
 ## Query examples
 
 ```bash
-codebase-index search "auth token refresh" --session <tag> --json
-codebase-index search "AuthService class" --mode symbol --session <tag> --json
-codebase-index search "connection reset by peer" --mode fts --session <tag> --json
+codebase-index search "auth token refresh" --limit 5 --session <tag> --json
+codebase-index search "AuthService class" --limit 5 --mode symbol --session <tag> --json
+codebase-index search "connection reset by peer" --limit 5 --mode fts --session <tag> --json
 codebase-index explain "checkout flow" --session <tag> --json
 codebase-index impact "User" --direction up --depth 2 --json
 codebase-index path "ApiController" "Database" --json
