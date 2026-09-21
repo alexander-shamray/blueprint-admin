@@ -142,10 +142,10 @@ argument is how a rule gets "corrected" back.
   every push written as a command; neither can see this one, because the push
   is inside the script rather than in a tool call. That is the design and not
   a gap: a permission pattern matches the text of a command, so it can pin a
-  flag and cannot read a fact about the checkout — that the branch argument is
-  the one checked out, that it is not `main` however that is spelled, that the
-  tree is clean, that the remote carries nothing this checkout did not start
-  from, and that no merge on the branch holds content neither parent has. The
+  flag and cannot read a fact about the checkout, which is what every guard in
+  that script is. They are enumerated in its own header and nowhere else, this
+  bullet included: a second list is how one of them quietly stops being true,
+  and the two copies had already drifted by one guard. The
   guards are in the script and `test_git_rebase_onto_main.py` is what watches
   them: it pins the single leased push and the absence of every unleased
   spelling over the script's executable lines, and runs the rest against real
