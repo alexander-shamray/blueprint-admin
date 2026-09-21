@@ -25,13 +25,29 @@ ROUTE_ROW = re.compile(
     r"^\| Where is X implemented\? \| `(codebase-index search [^`]*)` \|", re.M)
 
 
+def limits_in(line):
+    """Every `--limit` value on a command line, whole rather than by prefix."""
+    tokens = shlex.split(line)
+    return [tokens[index + 1]
+            for index, token in enumerate(tokens)
+            if token == "--limit" and index + 1 < len(tokens)]
+
+
 def owned_limit():
-    """The `--limit` value `SKILL.md`'s route row carries."""
+    """The one whole `--limit` value `SKILL.md`'s route row carries.
+
+    Read by `limits_in`, the same rule the examples are held to. A prefix
+    match would take `5` from both `--limit 5 --limit 50` and `--limit 5oops`
+    and hand it out as the owned value, so the row could contradict itself or
+    name nothing numeric while every example matching five passed — the gate
+    enforcing a contract its own source was exempt from.
+    """
     row = ROUTE_ROW.search(SKILL.read_text(encoding="utf-8"))
     assert row, "SKILL.md has no `Where is X implemented?` route row"
-    found = re.search(r"--limit (\d+)", row.group(1))
-    assert found, f"the route row names no --limit: {row.group(1)}"
-    return found.group(1)
+    found = limits_in(row.group(1))
+    assert len(found) == 1, f"the route row names {len(found)}: {row.group(1)}"
+    assert found[0].isdigit(), f"the route row's limit is not a number: {found[0]}"
+    return found[0]
 
 
 def search_examples():
@@ -48,14 +64,6 @@ def search_examples():
                 yield path, number, line.strip()
 
 
-def limits_in(line):
-    """Every `--limit` value on a command line, whole rather than by prefix."""
-    tokens = shlex.split(line)
-    return [tokens[index + 1]
-            for index, token in enumerate(tokens)
-            if token == "--limit" and index + 1 < len(tokens)]
-
-
 class EverySearchExampleCarriesTheOwnedLimit(unittest.TestCase):
 
     def test_the_skill_owns_a_limit(self):
@@ -67,6 +75,15 @@ class EverySearchExampleCarriesTheOwnedLimit(unittest.TestCase):
         # report the rule enforced by finding nothing to enforce it against.
         found = list(search_examples())
         self.assertGreaterEqual(len(found), 4, found)
+
+    def test_the_owner_is_read_by_the_rule_it_owns(self):
+        # The two spellings a prefix match hands out as five: a row naming two
+        # limits, and one whose value is not a number. Neither is a value to
+        # own, and both used to pass unseen.
+        self.assertEqual(
+            ["5", "50"], limits_in('codebase-index search "X" --limit 5 --limit 50'))
+        self.assertEqual(
+            ["5oops"], limits_in('codebase-index search "X" --limit 5oops'))
 
     def test_a_substring_of_the_value_is_not_the_value(self):
         # The owned value is a prefix of longer ones, so a substring test
