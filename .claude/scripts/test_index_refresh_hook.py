@@ -1,12 +1,17 @@
-"""The `PostToolUse` hook that keeps the local index current.
+"""The two hooks that keep the local index current.
 
-**The hook's failures are invisible, so this file checks both what it is and
-what it does.** The wiring discards its output and runs in the background so
+**Their failures are invisible, so this file checks both what they are and
+what they do.** The wiring discards its output and runs in the background so
 that it can never block an edit — which also means a hook that fails on every
 call looks exactly like one that works. So the wiring is asserted from the
 files the harness reads, and `refresh-index.sh` — the hook command's whole
 body — is run against a fake
 `codebase-index` that records the arguments and the guard it was handed.
+
+**The registration is read across every event, not under the one being
+asserted.** A read naming `PostToolUse` compares two files that agree there
+and leaves them free to disagree under an event nobody has added yet, which is
+how a gate stops covering the newest surface without saying so.
 
 **Not a skip where `sh` or `git` is missing.** A skip reports a pass, which is
 the fail-open `test_grok_helpers.py` refuses for the same tools.
@@ -57,13 +62,25 @@ def guard_value():
     return read_json(MCP)["mcpServers"]["codebase-index"]["env"][GUARD_ENV]
 
 
+def refresh_hooks(settings=None):
+    """The entries running the refresh, keyed by the event that runs them."""
+    document = read_json(settings or SETTINGS)
+    running = {}
+    for event, entries in (document.get("hooks") or {}).items():
+        matched = [
+            (entry.get("matcher") or "", h)
+            for entry in entries
+            for h in (entry.get("hooks") or [])
+            if REFRESH.name in (h.get("command") or "")
+        ]
+        if matched:
+            running[event] = matched
+    return running
+
+
 def refresh_hook():
-    found = [
-        (entry.get("matcher") or "", h)
-        for entry in read_json(SETTINGS).get("hooks", {}).get("PostToolUse", [])
-        for h in (entry.get("hooks") or [])
-        if REFRESH.name in (h.get("command") or "")
-    ]
+    """The `PostToolUse` registration — the one an edit runs."""
+    found = refresh_hooks().get("PostToolUse", [])
     assert len(found) == 1, f"expected one refresh hook: {found}"
     return found[0]
 
@@ -106,21 +123,44 @@ class TheWiring(unittest.TestCase):
             [f"{GUARD_ENV}={guard_value()}", "codebase-index", "update"],
             shlex.split(lines[0]))
 
+    def test_it_also_runs_when_a_session_starts(self):
+        # A merge, a switch or a pull rewrites the tree with no tool event
+        # behind it. The script reads no event payload — it resolves its
+        # repository from the working directory — so the command is the
+        # PostToolUse one unchanged, and a divergence between them would mean
+        # one of the two events had stopped refreshing anything.
+        found = refresh_hooks().get("SessionStart", [])
+        self.assertEqual(1, len(found), found)
+        matcher, hook = found[0]
+        self.assertEqual("", matcher, "SessionStart selects every source")
+        self.assertEqual(refresh_hook()[1]["command"], hook["command"])
+        self.assertLessEqual(hook.get("timeout", 60), 5)
+
+    def test_no_other_event_runs_it(self):
+        # The registration surface is the subject here, not what it holds: a
+        # third event added to either file is a red case rather than a silent
+        # widening of when the index is rebuilt.
+        self.assertEqual({"PostToolUse", "SessionStart"}, set(refresh_hooks()))
+
     def test_the_shipped_example_is_a_self_contained_guarded_refresh(self):
         # The example is what a reader copies into another project, where this
         # repository's `refresh-index.sh` does not exist — so it stays a
-        # one-liner, and is held to the same guard, verb and matcher as the
-        # wiring.
-        entries = read_json(EXAMPLE).get("hooks", {}).get("PostToolUse", [])
-        hooks = [(e.get("matcher"), h) for e in entries for h in e.get("hooks", [])]
-        self.assertEqual(1, len(hooks), hooks)
-        matcher, hook = hooks[0]
-        self.assertEqual(refresh_hook()[0], matcher)
-        self.assertEqual(
-            [f"{GUARD_ENV}={guard_value()}", "codebase-index", "update",
-             ">/dev/null", "2>&1", "&"],
-            shlex.split(hook["command"]))
-        self.assertNotIn(REFRESH.name, hook["command"])
+        # one-liner, and is held to the same guard, verb, events and matchers
+        # as the wiring.
+        events = read_json(EXAMPLE).get("hooks", {})
+        self.assertEqual(set(refresh_hooks()), set(events))
+        for event, entries in events.items():
+            hooks = [(e.get("matcher") or "", h)
+                     for e in entries for h in e.get("hooks", [])]
+            with self.subTest(event=event):
+                self.assertEqual(1, len(hooks), hooks)
+                matcher, hook = hooks[0]
+                self.assertEqual(refresh_hooks()[event][0][0], matcher)
+                self.assertEqual(
+                    [f"{GUARD_ENV}={guard_value()}", "codebase-index", "update",
+                     ">/dev/null", "2>&1", "&"],
+                    shlex.split(hook["command"]))
+                self.assertNotIn(REFRESH.name, hook["command"])
 
 
 class TheRefresh(unittest.TestCase):
