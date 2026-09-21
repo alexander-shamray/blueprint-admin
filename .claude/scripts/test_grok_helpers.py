@@ -10367,9 +10367,17 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         # **And no second read, because there is no second answer.** A tip in
         # `main` that holds nothing of its own is the same commit whether the
         # checkout is a landed one left at the branch point or a new
-        # incarnation created there. Reintroducing `merge-base <headRefOid>`
-        # as a discriminator would strand a branch name on that second case.
-        self.assertNotIn("git merge-base <headRefOid>", behind)
+        # incarnation created there. Reintroducing the merged head as a
+        # discriminator would strand a branch name on that second case.
+        #
+        # **The OPERAND is forbidden, not one spelling of the command.**
+        # `git merge-base --is-ancestor <headRefOid> HEAD` puts the flag
+        # between the two, so a check written against
+        # `git merge-base <headRefOid>` never sees it. This limb has no
+        # business naming the merged head at all — it reads HEAD against
+        # `origin/main` and nothing else — and that is a property no spelling
+        # can dodge.
+        self.assertNotIn("<headRefOid>", behind)
         conditional = self._merged_row_block()
         # **The PULL ref, not the branch's.** A merged branch's `refs/heads/…`
         # is deleted on this repository — measured — and a replay leaves the
