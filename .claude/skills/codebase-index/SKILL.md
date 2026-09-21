@@ -31,6 +31,18 @@ The operating principle is **Find → Trace → Verify → Predict**:
 | Is what I read earlier still true? | `codebase-index verify --session <tag> --json` |
 | Produce a human graph | `codebase-index graph "X" --output <path>` — **not auto-approved**; take the prompt |
 
+**`search` takes `--limit`, and no other subcommand takes it at all.** The
+default is ten, and the results past it arrive whether or not they are read.
+On this corpus five is where the payload halves at no cost: over eight
+"where is X" questions, ten ranks cost roughly 18,300 tokens and five roughly
+9,700, and both find the implementation 8/8 at a mean rank of 2.50. Three does
+not — it loses two of the eight, which sit at ranks four and five.
+
+**That number is this corpus's and not a law.** `blueprint-backend` measured
+the same thing on its own tree and settled on three. A result set that comes
+back empty at five is a reason to ask again wider, never a reason to conclude
+absence.
+
 Use `search --mode symbol` for exact symbol work, `--mode fts` for text and
 error messages, and the default `hybrid` mode for mixed questions. Use pure
 `vector` mode only when embeddings are enabled and exact vocabulary is unknown.
@@ -48,7 +60,9 @@ or routing remain unclear.
    - stale with fewer than 20 changed files → run `codebase-index update`;
    - stale with 20 or more changed files → run `codebase-index index`;
    - fresh → continue.
-4. Start with ranks 1–3. Read only `recommended_reads` line ranges.
+4. Start with ranks 1–3, and read on to the fifth before asking again: a
+   quarter of the answers measured on this corpus sat at rank four or five.
+   Read only `recommended_reads` line ranges.
 5. Trace one additional hop only when the question requires behavior,
    ownership, or impact.
 6. Before answering or editing from evidence gathered earlier in the task, run
@@ -83,9 +97,13 @@ Verdict states and citing evidence in notes: [references/memory.md](references/m
 - **low** or no results — follow `fallback_suggestions`, then use a narrow
   Grep/Glob fallback.
 
-On `refs` and `impact`, inspect `coverage`. If `coverage.partial` is true, an
-empty result is inconclusive; confirm with targeted Grep before saying that
-nothing references the target.
+On `refs` and `impact`, an empty result is inconclusive whatever `coverage`
+reports. The C# graph carries call edges and not every use: a registration
+like `builder.Services.AddSingleton<JobRegistry>()` is recorded against
+neither name, so `impact "JobRegistry" --direction up` answers with no
+dependents and `coverage.partial: false` while twelve other files name the
+class. Confirm with a targeted Grep before saying that nothing references the
+target, and never report an empty graph result as an absence.
 
 Edges carry `confidence`:
 
@@ -104,7 +122,7 @@ Structure repository answers around:
 3. **Confidence** — only when evidence is partial, inferred, stale, or missing.
 4. **Next check** — only when another check would materially reduce uncertainty.
 
-Do not narrate every search step. Do not claim absence from a partial graph.
+Do not narrate every search step. Do not claim absence from the graph.
 Do not replace evidence with a generated HTML graph.
 
 For payload fields and failure handling, read
