@@ -29,17 +29,25 @@ argument is how a rule gets "corrected" back.
 - **Every guard hook uses `run-guard.sh`** — the two in `settings.json` and
   the `review-grok-triager` profile's own — which locates a compatible Python
   launcher before invoking the guard.
-- **The one hook that guards nothing is the index refresh**, a `PostToolUse`
-  entry that runs `refresh-index.sh` after every tool that writes. The entry
+- **The one hook that guards nothing is the index refresh**, which runs
+  `refresh-index.sh` from two events: a `PostToolUse` entry after every tool
+  that writes, and a `SessionStart` entry for the changes no edit makes. A
+  merge, a switch or a pull rewrites the tree with no tool event behind it, so
+  a session opening onto one of those would otherwise read an index describing
+  the tree it replaced. One command serves both, because the script resolves
+  its repository with `git rev-parse` from the working directory and reads no
+  event payload at all — neither entry has anything to pass it. Each
   backgrounds and silences it so it can never block an edit, which also means
   a broken spelling fails on every call without a sound — the example it
   replaced passed a `--quiet` the CLI does not have. The script coalesces
   overlapping calls so an `update` always starts after the last edit, and
   retries a failed one. `test_index_refresh_hook.py` runs it against a fake
-  CLI, and it pins the matcher and the `CBX_NO_SKILL_AUTO_UPDATE` guard
-  `.mcp.json` sets, in the script and in the skill's
-  `examples/hooks/settings.json` alike. The example stays a self-contained
-  one-liner, because the script is this repository's and not the skill's. Both
+  CLI, and it pins the two events, the matcher and the
+  `CBX_NO_SKILL_AUTO_UPDATE` guard `.mcp.json` sets, in the script and in the
+  skill's `examples/hooks/settings.json` alike — the events by their whole
+  set, so a third added to either file without a test of its own is a red case
+  rather than a silent one. The example stays a self-contained one-liner,
+  because the script is this repository's and not the skill's. Both
   call the CLI bare, as `.mcp.json` does, rather than through the skill's
   `cbx` wrapper: a hook shell's `bash` can resolve to WSL's on Windows, which
   cannot run it.
