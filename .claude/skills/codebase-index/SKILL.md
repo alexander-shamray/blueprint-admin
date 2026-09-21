@@ -19,7 +19,7 @@ The operating principle is **Find → Trace → Verify → Predict**:
 
 | Intent | Command |
 |---|---|
-| Where is X implemented? | `codebase-index search "X" --session <tag> --json` |
+| Where is X implemented? | `codebase-index search "X" --limit 5 --session <tag> --json` |
 | How does X work? | `codebase-index explain "X" --session <tag> --json` |
 | What is this codebase? | `codebase-index architecture --json` |
 | Find a named symbol | `codebase-index symbol "X" --json` |
@@ -31,17 +31,21 @@ The operating principle is **Find → Trace → Verify → Predict**:
 | Is what I read earlier still true? | `codebase-index verify --session <tag> --json` |
 | Produce a human graph | `codebase-index graph "X" --output <path>` — **not auto-approved**; take the prompt |
 
-**`search` takes `--limit`, and no other subcommand takes it at all.** The
-default is ten, and the results past it arrive whether or not they are read.
-On this corpus five is where the payload halves at no cost: over eight
-"where is X" questions, ten ranks cost roughly 18,300 tokens and five roughly
-9,700, and both find the implementation 8/8 at a mean rank of 2.50. Three does
-not — it loses two of the eight, which sit at ranks four and five.
+**Pass `--limit 5` to `search`**, which is the only subcommand that takes
+the option at all. The default is ten, so the results past the fifth arrive
+whether or not they are read. On this corpus five is where the payload halves
+at no cost: over eight "where is X" questions, ten ranks cost roughly 18,300
+tokens and five roughly 9,700, and both find the implementation 8/8 at a mean
+rank of 2.50. Three does not — it loses two of the eight, which sit at ranks
+four and five.
 
 **That number is this corpus's and not a law.** `blueprint-backend` measured
-the same thing on its own tree and settled on three. A result set that comes
-back empty at five is a reason to ask again wider, never a reason to conclude
-absence.
+the same thing on its own tree and settled on three. **Ask again with a
+larger `--limit` whenever the five do not answer the question** — not only
+when they come back empty, which is the rarer case and not the one this
+number risks: an answer ranked sixth arrives behind five results that are
+neither empty nor useful, so an emptiness test could never fire for it. A
+short result set is never an absence.
 
 Use `search --mode symbol` for exact symbol work, `--mode fts` for text and
 error messages, and the default `hybrid` mode for mixed questions. Use pure
