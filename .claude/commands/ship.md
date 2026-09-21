@@ -507,13 +507,18 @@ same argument as never calling a branch clean because asking failed.
    not it is a merge, so there is no shape of post-merge work that survives
    this read.
 
-   **Both relations are finished and only one of them is obvious.** The tip
-   equal to the merged head is the ordinary case: this session pushed it and
-   the pull request took it. A tip *behind* that head is the case another
-   session creates by pushing the branch — this checkout never saw those
-   commits, they landed without it, and it holds nothing of its own. Reading
-   only equality leaves that worktree standing for ever, which is the
-   accumulation step 0 exists to prevent.
+   **The tip equal to the merged head is finished outright**: this session
+   pushed it and the pull request took it. Reading only equality would leave
+   every other landed workspace standing for ever, which is the accumulation
+   step 0 exists to prevent.
+
+   **A tip *behind* that head is finished only when it is the pull request's
+   own work**, which the behind limb below decides by asking whether
+   `origin/main` can reach it. A behind tip that `main` already carries holds
+   nothing of its own and is **unused**, because no read separates a checkout
+   left at the branch point from a later incarnation created there. Do not
+   shorten this to "behind is finished": that sentence is what a future edit
+   would trust while removing the guard that keeps such a workspace.
 
    **Ahead or diverged is unfinished, and that is the half with teeth.** A tip
    the merged head cannot reach carries commits made after the merge, and
