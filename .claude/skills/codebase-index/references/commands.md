@@ -13,7 +13,7 @@ Useful search options:
 
 - `--mode hybrid|fts|symbol|vector`
 - `--token-budget <tokens>`
-- `--limit <count>` — ten when unset; `SKILL.md` owns the value to pass
+- `--limit <count>` — `SKILL.md` owns both the value to pass and the default
 - `--offset <pagination offset>`
 - `--raw` to disable snippet skeletonization
 - `--no-fallback` to suppress fallback suggestions

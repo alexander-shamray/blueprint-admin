@@ -78,6 +78,18 @@ def refresh_hooks(settings=None):
     return running
 
 
+def example_command():
+    """The one command the shipped example carries, under every event.
+
+    A string rather than a token list, because the runtime test below says
+    tokens cannot establish backgrounding: quoting `&` or a redirection gives
+    `shlex.split` the same list while handing them to the CLI as arguments.
+    Pinning every event to the literal that `TheRefresh` actually executes is
+    what carries that runtime check to the event it does not run.
+    """
+    return f"{GUARD_ENV}={guard_value()} codebase-index update >/dev/null 2>&1 &"
+
+
 def refresh_hook():
     """The `PostToolUse` registration — the one an edit runs."""
     found = refresh_hooks().get("PostToolUse", [])
@@ -156,10 +168,10 @@ class TheWiring(unittest.TestCase):
                 self.assertEqual(1, len(hooks), hooks)
                 matcher, hook = hooks[0]
                 self.assertEqual(refresh_hooks()[event][0][0], matcher)
-                self.assertEqual(
-                    [f"{GUARD_ENV}={guard_value()}", "codebase-index", "update",
-                     ">/dev/null", "2>&1", "&"],
-                    shlex.split(hook["command"]))
+                # Equality, not tokens: `TheRefresh` runs this exact string
+                # for one event only, and matching it is what holds the other
+                # to a backgrounding no token list can assert.
+                self.assertEqual(example_command(), hook["command"])
                 self.assertNotIn(REFRESH.name, hook["command"])
 
 
@@ -254,6 +266,10 @@ class TheRefresh(unittest.TestCase):
         self.fake(extra="echo loud\nsleep 3\n")
         entries = read_json(EXAMPLE)["hooks"]["PostToolUse"]
         command = entries[0]["hooks"][0]["command"]
+        # The line every event is pinned to, so running it here covers them
+        # all. A divergence makes this test the one that fails, rather than
+        # leaving an unrun event holding a command nothing executed.
+        self.assertEqual(example_command(), command)
         began = time.monotonic()
         shell = subprocess.run([SH, "-c", command], cwd=str(self.repo),
                                env=self.env(), capture_output=True, text=True,

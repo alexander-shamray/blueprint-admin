@@ -1,10 +1,14 @@
 #!/usr/bin/env sh
-# Refresh the local codebase index after an edit, coalescing a burst of edits.
+# Refresh the local codebase index, coalescing a burst of calls.
 #
-# **Run from the `PostToolUse` hook in `.claude/settings.json`, backgrounded
-# and silenced there** so it can never block an edit; that is also why nothing
-# here may fail loudly — nobody would hear it. `test_index_refresh_hook.py`
-# runs this file against a fake CLI for the same reason.
+# **Run from two hooks in `.claude/settings.json` — `PostToolUse` after every
+# tool that writes, and `SessionStart` for the changes no edit makes —
+# backgrounded and silenced in both** so it can never block an edit, and so a
+# session start hears nothing from it; that is also why nothing here may fail
+# loudly — nobody would hear it. It reads no event payload, resolving its
+# repository from the working directory below, which is what lets one command
+# serve both events. `test_index_refresh_hook.py` runs this file against a
+# fake CLI for the same reason.
 #
 # **The rule is that the last call runs, and there is no lock.** Each call
 # publishes a token of its own to `refresh.pending` by an atomic rename, waits,
