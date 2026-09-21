@@ -5,7 +5,7 @@ Load this reference only when the intent table in `SKILL.md` is insufficient.
 ## Retrieval
 
 ```bash
-codebase-index search "<query>" --session <tag> --json
+codebase-index search "<query>" --limit 5 --session <tag> --json
 codebase-index explain "<topic or flow>" --session <tag> --json
 ```
 
@@ -13,7 +13,7 @@ Useful search options:
 
 - `--mode hybrid|fts|symbol|vector`
 - `--token-budget <tokens>`
-- `--limit <count>`
+- `--limit <count>` — ten when unset; `SKILL.md` owns the value to pass
 - `--offset <pagination offset>`
 - `--raw` to disable snippet skeletonization
 - `--no-fallback` to suppress fallback suggestions
