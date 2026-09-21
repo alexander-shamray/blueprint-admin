@@ -135,5 +135,24 @@ argument is how a rule gets "corrected" back.
   3.12 will do — `py -3.12` on Windows, `python` elsewhere — and CI's
   `harness` job runs `python` on three platforms.
 
+- **The only force push in this repository is
+  `.claude/scripts/git-rebase-onto-main.sh`, and `/ship` step 7 grants it by
+  name.** Every `git push --force`, `--force-with-lease` and `-f` deny in
+  `.claude/settings.json` is untouched, and `guard-git-argv.py` still judges
+  every push written as a command; neither can see this one, because the push
+  is inside the script rather than in a tool call. That is the design and not
+  a gap: a permission pattern matches the text of a command, so it can pin a
+  flag and cannot read a fact about the checkout — that the branch argument is
+  the one checked out, that it is not `main` however that is spelled, that the
+  tree is clean, that the remote carries nothing this checkout did not start
+  from, and that no merge on the branch holds content neither parent has. The
+  guards are in the script and `test_git_rebase_onto_main.py` is what watches
+  them: it pins the single leased push and the absence of every unleased
+  spelling over the script's executable lines, and runs the rest against real
+  repositories. Ported from `alexander-shamray/blueprint-backend`, which owns
+  the argument. What differs here is that `/ship` step 0 reads ancestry rather
+  than content, so the helper's merge guard is the only place in this
+  repository that reads it.
+
 A new residual is stated **here**, and `CLAUDE.md` carries the pointer rather
 than a second copy.
