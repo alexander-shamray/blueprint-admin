@@ -142,10 +142,13 @@ argument is how a rule gets "corrected" back.
   every push written as a command; neither can see this one, because the push
   is inside the script rather than in a tool call. That is the design and not
   a gap: a permission pattern matches the text of a command, so it can pin a
-  flag and cannot read a fact about the checkout, which is what every guard in
-  that script is. They are enumerated in its own header and nowhere else, this
-  bullet included: a second list is how one of them quietly stops being true,
-  and the two copies had already drifted by one guard. The
+  flag and cannot read a fact about the checkout, which is what the guards
+  that matter in that script are — not the argument checks, which are text a
+  rule can match and which `.claude/settings.json` already matches for `main`.
+  They are enumerated in that script's header and nowhere else — not this
+  bullet, and not the suite's docstring: three copies had drifted to three
+  different lengths, and the shortest omitted the merge guard this bullet
+  calls the one thing this repository reads differently. The
   guards are in the script and `test_git_rebase_onto_main.py` is what watches
   them: it pins the single leased push and the absence of every unleased
   spelling over the script's executable lines, and runs the rest against real

@@ -1705,23 +1705,30 @@ same argument as never calling a branch clean because asking failed.
    conflicted, and an exception is the rule nobody remembers at the moment it
    matters.
 
-   **Exit 8 is the conflict, and it is the one exit here that does not stop
-   the chain.** The first stop rule reads a helper's non-zero exit as a step
-   that did not run, which is right for every other code this helper
-   returns — and would make the paragraph above unreachable, since a conflict
-   is how a branch update announces the work it needs. So 8 is resolve,
-   `git add`, `continue`; a 9 naming a waiting replay is `publish` on the
-   branch it names; every other exit stops the chain and is reported as what
-   it is. The codes are the helper's own, and a run that cannot tell which it
-   got stops rather than guessing.
+   **Not every exit here stops the chain, and the enumeration below is the
+   rule rather than any sentence summarising it.** The first stop rule reads
+   a helper's non-zero exit as a step that did not run, which is right for
+   most of what this helper returns — and would make the paragraph above
+   unreachable, since a conflict is how a branch update announces the work it
+   needs. So: **8** is resolve, `git add`, `continue`; a **9 naming a waiting
+   replay** is `publish` on the branch it names; a **push that failed after
+   the replay** carries git's own status rather than one of the helper's, and
+   is `publish` too; every other exit stops the chain and is reported as what
+   it is.
+
+   **Read the message, not the code.** Eleven refusals share exit 9 and five
+   share exit 2, so the code alone does not say which guard fired — and a run
+   that cannot tell stops rather than guessing.
 
    **The force push is the helper's, and every force-push deny in
    `.claude/settings.json` is untouched.** A permission pattern matches the
    text of a command, so it can pin a flag and cannot read a fact about the
-   checkout, which is what every guard here is. They are in
-   `git-rebase-onto-main.sh` and enumerated nowhere else — a second list is
-   how one of them quietly stops being true — and
-   `docs/harness-boundaries.md` records the grant.
+   checkout, which is what the guards that matter here are. Not all of them:
+   the argument checks are text, and `.claude/settings.json` already pins
+   `main` by text several ways. The tree being clean and the remote holding
+   nothing new are the ones no rule can reach. They are enumerated in that
+   script's header and nowhere else, because a second list is how one quietly
+   stops being true; `docs/harness-boundaries.md` records the grant.
 
    **It rewrites the branch's SHAs, so every verdict read above describes a
    commit that no longer exists** — and a conflict resolved during the replay
