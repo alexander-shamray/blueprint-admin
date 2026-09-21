@@ -1,16 +1,10 @@
 """Every `search` example carries the limit `SKILL.md` owns.
 
-**The rule and the lines that run it drifted twice on one branch.** The skill
-argued a result limit while its own route table and the reference's examples
-kept the default; fixing the two lines the first review named left three more
-in a section nobody had grepped, and the next review found those. Prose cannot
-hold a rule that only the examples execute.
-
-**So the subject here is the set of examples, not any one of them.** A search
-example written tomorrow without the option is a red case when it lands rather
-than when a reviewer happens to read that block — which is `CLAUDE.md`'s rule
-about a gate whose subject is what it is looking at, applied to the one surface
-on this branch that kept slipping.
+**The subject is the set of examples, not any one of them.** A rule that only
+the examples execute cannot be held by the prose above them, so an example
+written without the option is a red case when it lands rather than when a
+reviewer happens to read that block. `CLAUDE.md` owns the argument: a gate's
+subject is what it is looking at.
 
 **The value is read from `SKILL.md` and never spelled here.** That file owns
 the number; a copy in a test is exactly the restatement the one-owner rule is
@@ -18,6 +12,7 @@ about, and it would go stale in the direction that reports success.
 """
 
 import re
+import shlex
 import unittest
 from pathlib import Path
 
@@ -53,6 +48,14 @@ def search_examples():
                 yield path, number, line.strip()
 
 
+def limits_in(line):
+    """Every `--limit` value on a command line, whole rather than by prefix."""
+    tokens = shlex.split(line)
+    return [tokens[index + 1]
+            for index, token in enumerate(tokens)
+            if token == "--limit" and index + 1 < len(tokens)]
+
+
 class EverySearchExampleCarriesTheOwnedLimit(unittest.TestCase):
 
     def test_the_skill_owns_a_limit(self):
@@ -65,11 +68,21 @@ class EverySearchExampleCarriesTheOwnedLimit(unittest.TestCase):
         found = list(search_examples())
         self.assertGreaterEqual(len(found), 4, found)
 
+    def test_a_substring_of_the_value_is_not_the_value(self):
+        # The owned value is a prefix of longer ones, so a substring test
+        # admits an example that has drifted to `--limit 50` — the fail-open
+        # this whole file is about, one level down.
+        drifted = 'codebase-index search "X" --limit 50 --session <tag> --json'
+        self.assertEqual(["50"], limits_in(drifted))
+        self.assertNotEqual([owned_limit()], limits_in(drifted))
+
     def test_every_example_passes_the_owned_limit(self):
-        expected = f"--limit {owned_limit()}"
+        # Whole values, and exactly one of them: a second `--limit` would let
+        # an example carry the owned value and contradict it in the same line.
         for path, number, line in search_examples():
             with self.subTest(file=path.name, line=number):
-                self.assertIn(expected, line, f"{path.name}:{number}: {line}")
+                self.assertEqual([owned_limit()], limits_in(line),
+                                 f"{path.name}:{number}: {line}")
 
 
 if __name__ == "__main__":
