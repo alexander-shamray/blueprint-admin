@@ -218,7 +218,11 @@ class TheHelperRefusesBeforeItRewrites(unittest.TestCase):
         # from, so the divergence guard is satisfied and the result — which
         # holds none of the branch's work — would be forced over it.
         published = self.at("git rev-parse refs/remotes/origin/feat/x").stdout.strip()
-        self.at('GIT_SEQUENCE_EDITOR="sed -i 1s/^pick/break/" '
+        # `-i` with an attached suffix, which GNU and BSD sed both take; bare
+        # `-i` is GNU-only and CI's harness job runs macos-latest, where the
+        # rebase would never start and this case would assert on the wrong
+        # refusal. The backup lands inside the rebase state and goes with it.
+        self.at('GIT_SEQUENCE_EDITOR="sed -i.bak 1s/^pick/break/" '
                 'git rebase -i refs/remotes/origin/main')
         result = self.helper("feat/x", "continue")
         self.assertEqual(9, result.returncode, result.stderr)
@@ -414,6 +418,64 @@ class TheHelperPublishesWhatItRebased(unittest.TestCase):
         result = self.helper("publish")
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual(rewritten, self.at("git rev-parse refs/remotes/origin/feat/x").stdout.strip())
+
+    def test_publish_refuses_a_record_whose_replay_never_ran(self):
+        # A rebase refused before it starts leaves the same two fields a failed
+        # push does, so the record alone proves only that a run began. Without
+        # the head, `publish` forces whatever HEAD has since become over a
+        # branch this helper never replayed.
+        hooks = 'h="$(git rev-parse --git-path hooks)"; mkdir -p "$h"'
+        self.at(hooks + '; printf "#!/bin/sh\\nexit 1\\n" > "$h/pre-rebase"; chmod +x "$h/pre-rebase"')
+        self.assertEqual(11, self.helper().returncode, "the rebase must not start")
+        published = self.at("git rev-parse refs/remotes/origin/feat/x").stdout.strip()
+        self.at('echo unrelated > later.txt && git add -A && git commit -qm "not a replay"')
+
+        result = self.helper("publish")
+        self.assertEqual(9, result.returncode, result.stderr)
+        self.assertIn("never finished", result.stderr)
+        self.assertEqual(published,
+                         self.at("git rev-parse refs/remotes/origin/feat/x").stdout.strip(),
+                         "the remote still carries what it had")
+
+    def test_publish_refuses_a_head_that_is_not_the_one_replayed(self):
+        # The record survives a push that failed after the replay, and the
+        # retry republishes THAT commit. A tip amended or added to in between
+        # is a different branch, and forcing it is what the record refuses.
+        hooks = 'h="$(git rev-parse --git-path hooks)"; mkdir -p "$h"'
+        self.at(hooks + '; printf "#!/bin/sh\\nexit 1\\n" > "$h/pre-push"; chmod +x "$h/pre-push"')
+        self.assertNotEqual(0, self.helper().returncode, "the push must fail")
+        published = self.at("git rev-parse refs/remotes/origin/feat/x").stdout.strip()
+        self.at('echo extra > extra.txt && git add -A && git commit -qm "after the replay"')
+        self.at(hooks + '; rm -f "$h/pre-push"')
+
+        result = self.helper("publish")
+        self.assertEqual(9, result.returncode, result.stderr)
+        self.assertIn("not the commit this helper replayed", result.stderr)
+        self.assertEqual(published,
+                         self.at("git rev-parse refs/remotes/origin/feat/x").stdout.strip(),
+                         "the commit made after the replay was not forced over it")
+
+    def test_abort_refuses_a_waiting_replay_belonging_to_another_branch(self):
+        # Two ways to reach the wrong record - the name passed and the branch
+        # in hand - and clearing it strands a tip nothing else can publish.
+        hooks = 'h="$(git rev-parse --git-path hooks)"; mkdir -p "$h"'
+        self.at(hooks + '; printf "#!/bin/sh\\nexit 1\\n" > "$h/pre-push"; chmod +x "$h/pre-push"')
+        self.assertNotEqual(0, self.helper().returncode, "the push must fail")
+        self.at("git checkout -qb feat/other")
+
+        named = self.helper("abort", branch="feat/other")
+        self.assertEqual(4, named.returncode, named.stderr)
+        self.assertIn("feat/x", named.stderr)
+
+        elsewhere = self.helper("abort", branch="feat/x")
+        self.assertEqual(4, elsewhere.returncode, elsewhere.stderr)
+        self.assertIn("only ever touches the current branch", elsewhere.stderr)
+
+        # The positive control: the record survived both refusals, so the
+        # replayed tip is still reachable.
+        self.at("git checkout -q feat/x")
+        self.at(hooks + '; rm -f "$h/pre-push"')
+        self.assertEqual(0, self.helper("publish").returncode)
 
     def test_a_second_run_changes_nothing_and_does_not_force(self):
         self.assertEqual(0, self.helper().returncode)

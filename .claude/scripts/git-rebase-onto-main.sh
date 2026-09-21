@@ -125,6 +125,7 @@ publish() {
     echo "already published at $head; nothing to force"
     exit 0
   fi
+  remember_replay "$head"
   git push --force-with-lease="$branch:$lease" origin "$branch"
   rm -f "$pending"
   echo "published $branch at $head"
@@ -133,6 +134,15 @@ publish() {
 # Written before the replay, so it survives a push that fails after it.
 remember_lease() {
   printf '%s %s\n' "$branch" "$approved_lease" > "$pending"
+}
+
+# Rewritten once the replay has finished and before the push, so the record
+# names the commit this helper produced rather than merely the run that began.
+# Without it the two records are identical - a rebase refused before it started
+# leaves the same two fields a failed push does - and `publish` would force
+# whatever HEAD had since become over a branch nothing here ever replayed.
+remember_replay() {
+  printf '%s %s %s\n' "$branch" "$approved_lease" "$1" > "$pending"
 }
 
 # A rebase drops merge commits, and a merge can carry content that is in
@@ -253,9 +263,20 @@ case "$mode" in
       { echo "a rebase is still in progress; finish it with 'continue'" >&2; exit 9; }
     [ -f "$pending" ] ||
       { echo "no replay is waiting to be published" >&2; exit 9; }
-    read -r recorded_branch recorded_lease < "$pending"
+    read -r recorded_branch recorded_lease recorded_head < "$pending"
     [ "$recorded_branch" = "$branch" ] ||
       { echo "the waiting replay is $recorded_branch, not $branch" >&2; exit 4; }
+    # A record with no head is a run that stopped before one existed, which a
+    # refused rebase leaves looking exactly like a failed push.
+    [ -n "$recorded_head" ] ||
+      { echo "the waiting record names no replayed commit, so the rebase never finished: 'abort' and start again" >&2
+        exit 9; }
+    # And the replay is what gets republished, never whatever the branch has
+    # become since. A commit amended or added after the push failed is a
+    # different tip, and forcing it is what this record exists to refuse.
+    [ "$(git rev-parse HEAD)" = "$recorded_head" ] ||
+      { echo "HEAD is not the commit this helper replayed: 'abort' the record and start again" >&2
+        exit 9; }
     require_remote_branch
     # The remote must still be where the guard left it. If it moved, this lease
     # was approved against a tip that no longer exists and re-approving it here
@@ -269,6 +290,18 @@ case "$mode" in
 
   abort)
     if [ "$in_progress" -eq 0 ] && [ -f "$pending" ]; then
+      # The record is the only route left to a replayed branch, so discarding
+      # one that belongs to another branch strands its rewritten tip: `start`
+      # reads that tip as non-ancestral and `continue` finds no rebase. Both
+      # identities are checked, because the name passed and the branch in hand
+      # are different ways to reach the wrong record.
+      read -r recorded_branch recorded_lease recorded_head < "$pending"
+      [ "$recorded_branch" = "$branch" ] ||
+        { echo "the waiting replay is $recorded_branch, not $branch" >&2; exit 4; }
+      current=$(git branch --show-current)
+      [ "$current" = "$branch" ] ||
+        { echo "on ${current:-a detached HEAD}, not $branch: this helper only ever touches the current branch" >&2
+          exit 4; }
       rm -f "$pending"
       echo "cleared the waiting replay; $branch is left where it is and nothing was published"
       exit 0
