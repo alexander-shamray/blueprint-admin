@@ -9,6 +9,7 @@ the rest run the thing.
 """
 
 import os
+import re
 import shutil
 import subprocess
 import unittest
@@ -53,6 +54,26 @@ def run_bash(script, subject="", **env_extra):
         text=True,
         env=env,
     )
+
+
+def git_commands(source):
+    """Every `git …` command in a shell script, however it is introduced.
+
+    A `startswith` scan sees only a command opening a physical line, which
+    this script already defeats: `GIT_EDITOR=true git rebase --continue` is
+    one of its own, and its dominant failure idiom is a same-line brace group.
+    So the text is cut at the separators a command can begin after, and a
+    leading run of `VAR=value` assignments is stripped before the word is
+    read. Wider than the scan it replaces, never narrower.
+    """
+    commands = []
+    for piece in re.split(r"[\n;&|(){}]+", source):
+        piece = piece.strip()
+        while re.match(r"^\w+=\S*\s+", piece):
+            piece = re.sub(r"^\w+=\S*\s+", "", piece, count=1)
+        if piece.startswith("git "):
+            commands.append(piece)
+    return commands
 
 
 def code_lines(text):
@@ -110,7 +131,7 @@ class TheFlagsAreTheScriptsOwn(unittest.TestCase):
     source = "\n".join(code_lines(HELPER.read_text(encoding="utf-8")))
 
     def test_there_is_exactly_one_push_and_it_carries_an_expected_value(self):
-        pushes = [ln.strip() for ln in self.source.splitlines() if ln.strip().startswith("git push")]
+        pushes = [c for c in git_commands(self.source) if c.startswith("git push")]
         self.assertEqual(
             pushes, ['git push --force-with-lease="$branch:$lease" origin "$branch"'],
             "one push, leased against the commit this run read, naming its remote and its refspec")
@@ -119,21 +140,42 @@ class TheFlagsAreTheScriptsOwn(unittest.TestCase):
         # The commands only. Scanning the whole file catches `[ -f "$state/… ]`
         # and every prose mention of the deny this helper exists beside, which
         # is a check that fails on its own documentation.
-        commands = "\n".join(ln.strip() for ln in self.source.splitlines() if ln.strip().startswith("git "))
+        #
+        # The trailing newline is what lets the `--force\n` spelling match a
+        # flag ending the last command.
+        commands = "\n".join(git_commands(self.source)) + "\n"
         for spelling in ("--force ", "--force\n", "--force=", " -f ", "--force-if-includes"):
             self.assertNotIn(spelling, commands, f"{spelling!r} would discard without a lease")
+        # `+<refspec>` is a force push carrying no flag at all, which this
+        # repository's own argv guard already judges as one.
+        for command in commands.splitlines():
+            if command.startswith("git push"):
+                self.assertNotRegex(command, r"\s\+\S+:",
+                                    "a `+` refspec forces without naming a flag")
 
     def test_the_push_leases_against_the_value_the_guard_approved(self):
         # Re-reading the remote ref in `publish` would lease against whatever a
         # fetch had since made of it, with the whole replay in between — the
         # lease would then name the commits the guard refused.
         self.assertIn('lease="$approved_lease"', self.source)
-        self.assertEqual(
-            1, self.source.count('approved_lease=$(git rev-parse "refs/remotes/origin/$branch")'),
-            "one place reads the remote tip into a lease, and it is the guard")
-        for line in self.source.splitlines():
-            self.assertNotRegex(line.strip(), r'^lease=\$\(git rev-parse',
-                                "a lease built from a fresh read names whatever a fetch has since made of it")
+        # A pattern, not a literal. Counting one exact spelling left
+        # `approved_lease=$(git rev-parse refs/remotes/origin/"$branch")` as a
+        # second read the assertion could not see, and the negative below it
+        # was anchored on `lease=`, which `^` keeps from ever matching
+        # `approved_lease=` — so between them they forbade nothing.
+        reads = re.findall(r"\w*lease=\$\(\s*git rev-parse", self.source)
+        self.assertEqual(1, len(reads),
+                         "one place reads the remote tip into a lease, and it is the guard")
+        # And `publish` re-reads no REMOTE ref, which is the property — it
+        # runs after the replay, so a lease built there names whatever a
+        # fetch has since made of the tip. Narrowed to `refs/remotes`
+        # deliberately: `head=$(git rev-parse HEAD)` lives in that function
+        # too and is not a lease, so forbidding `rev-parse` outright fails on
+        # the function doing its job.
+        body = self.source.split("publish() {", 1)[1].split(chr(10) + "}", 1)[0]
+        self.assertNotRegex(body, r'rev-parse\s+"?refs/remotes',
+                            "publish re-reading a remote ref would lease against "
+                            "whatever a fetch has since made of it")
 
 
 class TheHelperRefusesBeforeItRewrites(unittest.TestCase):
@@ -206,7 +248,15 @@ class TheHelperRefusesBeforeItRewrites(unittest.TestCase):
         run_bash('cd "$R/second" && git config user.email t@e.invalid && git config user.name T '
                  '&& git checkout -q feat/x && echo theirs > theirs.txt && git add -A '
                  '&& git commit -qm "another session" && git push -q origin feat/x', R=self.root)
-        self.assertEqual(7, self.helper("feat/x").returncode)
+        before = self.head()
+        result = self.helper("feat/x")
+        self.assertEqual(7, result.returncode)
+        # Exit 7 is reached from three places, so the code alone does not say
+        # this guard fired: moving the call after the replay would reach "no
+        # lease was approved" with the branch already rewritten, and this case
+        # would still pass. The message and the untouched tip are what pin it.
+        self.assertIn("carries commits this checkout did not start from", result.stderr)
+        self.assertEqual(before, self.head(), "the branch was rewritten before the refusal")
 
     def test_continue_and_abort_refuse_when_no_rebase_is_running(self):
         self.assertEqual(9, self.helper("feat/x", "continue").returncode)
@@ -420,22 +470,64 @@ class TheHelperPublishesWhatItRebased(unittest.TestCase):
         self.assertEqual(rewritten, self.at("git rev-parse refs/remotes/origin/feat/x").stdout.strip())
 
     def test_publish_refuses_a_record_whose_replay_never_ran(self):
-        # A rebase refused before it starts leaves the same two fields a failed
-        # push does, so the record alone proves only that a run began. Without
-        # the head, `publish` forces whatever HEAD has since become over a
-        # branch this helper never replayed.
-        hooks = 'h="$(git rev-parse --git-path hooks)"; mkdir -p "$h"'
-        self.at(hooks + '; printf "#!/bin/sh\\nexit 1\\n" > "$h/pre-rebase"; chmod +x "$h/pre-rebase"')
-        self.assertEqual(11, self.helper().returncode, "the rebase must not start")
+        # A two-field record is a run that stopped before a replayed commit
+        # existed, and without the head `publish` would force whatever HEAD
+        # has since become. It is reached when a conflicted rebase is undone
+        # by hand rather than through this helper: git takes the rebase state
+        # with it and knows nothing about the record.
+        self.at(CONFLICT)
+        self.assertEqual(8, self.helper().returncode, "the start must conflict")
+        self.at("git rebase --abort")
         published = self.at("git rev-parse refs/remotes/origin/feat/x").stdout.strip()
         self.at('echo unrelated > later.txt && git add -A && git commit -qm "not a replay"')
 
         result = self.helper("publish")
         self.assertEqual(9, result.returncode, result.stderr)
+        # The message, not the code: eleven refusals share exit 9, and the
+        # "no replay is waiting" one above this guard is a state this case
+        # must not be passing on.
         self.assertIn("never finished", result.stderr)
         self.assertEqual(published,
                          self.at("git rev-parse refs/remotes/origin/feat/x").stdout.strip(),
                          "the remote still carries what it had")
+
+    def test_a_rebase_that_never_started_leaves_no_record(self):
+        # Nothing was replayed, so there is no rewritten tip for a record to
+        # protect — and one left behind refuses every later `start`, on any
+        # branch, until somebody aborts from the branch it names.
+        hooks = 'h="$(git rev-parse --git-path hooks)"; mkdir -p "$h"'
+        self.at(hooks + '; printf "#!/bin/sh\\nexit 1\\n" > "$h/pre-rebase"; chmod +x "$h/pre-rebase"')
+        self.assertEqual(11, self.helper().returncode, "the rebase must not start")
+        self.assertEqual(
+            "", self.at('cat "$(git rev-parse --git-path claude-rebase-pending)" 2>/dev/null').stdout,
+            "a record was left for a replay that never happened")
+
+        # The positive control, and the reason this matters: the next run is
+        # not refused by the leftover.
+        self.at(hooks + '; rm -f "$h/pre-rebase"')
+        self.assertEqual(0, self.helper().returncode, "a stale record refused the next start")
+
+    def test_abort_refuses_a_replay_that_publish_can_still_finish(self):
+        # Clearing a record whose head is still the tip leaves the branch
+        # rewritten with nothing able to reach it: `start` reads that tip as
+        # non-ancestral, `continue` finds no rebase, and an ordinary push is
+        # not a fast-forward. `abort` offering that is how the branch is lost.
+        hooks = 'h="$(git rev-parse --git-path hooks)"; mkdir -p "$h"'
+        self.at(hooks + '; printf "#!/bin/sh\\nexit 1\\n" > "$h/pre-push"; chmod +x "$h/pre-push"')
+        self.assertNotEqual(0, self.helper().returncode, "the push must fail")
+        rewritten = self.at("git rev-parse HEAD").stdout.strip()
+
+        result = self.helper("abort")
+        self.assertEqual(9, result.returncode, result.stderr)
+        self.assertIn("refusing to strand it", result.stderr)
+
+        # The positive control: the record survived the refusal, so the
+        # replay is still publishable.
+        self.at(hooks + '; rm -f "$h/pre-push"')
+        self.assertEqual(0, self.helper("publish").returncode)
+        self.assertEqual(rewritten,
+                         self.at("git rev-parse refs/remotes/origin/feat/x").stdout.strip(),
+                         "publish finished the replay the abort refused to discard")
 
     def test_publish_refuses_a_head_that_is_not_the_one_replayed(self):
         # The record survives a push that failed after the replay, and the

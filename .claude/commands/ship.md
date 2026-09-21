@@ -965,7 +965,9 @@ same argument as never calling a branch clean because asking failed.
    ```
 
    A refused fast-forward is divergence rather than staleness, and it stops
-   the chain: resolving it needs a force-push, which is denied here.
+   the chain. Step 7's branch-update helper refuses this state by design -
+   `require_remote_carries_nothing_new` in `git-rebase-onto-main.sh` — and
+   nothing else here may force.
 
    1. **`/review-branch`, run by Grok, not by you** — the second opinion is
       the point, and a review run by the author's own model is not one:
@@ -1640,8 +1642,11 @@ same argument as never calling a branch clean because asking failed.
 
    **A fast-forward that will not fast-forward is divergence**, which is
    another session's history against this one's, and it stops the chain for
-   the reason an unmergeable PR does — force-pushing is denied here and is the
-   only thing that would resolve it.
+   the reason an unmergeable PR does. The branch-update helper below does not
+   resolve it either, and that is deliberate:
+   `require_remote_carries_nothing_new` in `git-rebase-onto-main.sh` refuses a
+   remote carrying commits this checkout did not start from, which is exactly
+   this state. Nothing else here may force.
 
    **Non-empty is not a stop, because there is an obvious right answer.** The
    run goes back: commit — **scoped**, always — push, and re-enter the review
@@ -1700,13 +1705,22 @@ same argument as never calling a branch clean because asking failed.
    conflicted, and an exception is the rule nobody remembers at the moment it
    matters.
 
+   **Exit 8 is the conflict, and it is the one exit here that does not stop
+   the chain.** The first stop rule reads a helper's non-zero exit as a step
+   that did not run, which is right for every other code this helper
+   returns — and would make the paragraph above unreachable, since a conflict
+   is how a branch update announces the work it needs. So 8 is resolve,
+   `git add`, `continue`; a 9 naming a waiting replay is `publish` on the
+   branch it names; every other exit stops the chain and is reported as what
+   it is. The codes are the helper's own, and a run that cannot tell which it
+   got stops rather than guessing.
+
    **The force push is the helper's, and every force-push deny in
    `.claude/settings.json` is untouched.** A permission pattern matches the
-   text of a command, so it can pin a flag and cannot read the facts that
-   make this safe — the branch is the one checked out, it is not `main`, the
-   tree is clean, and the remote carries nothing this checkout did not start
-   from.
-   Those guards are in `git-rebase-onto-main.sh`, which is where
+   text of a command, so it can pin a flag and cannot read a fact about the
+   checkout, which is what every guard here is. They are in
+   `git-rebase-onto-main.sh` and enumerated nowhere else — a second list is
+   how one of them quietly stops being true — and
    `docs/harness-boundaries.md` records the grant.
 
    **It rewrites the branch's SHAs, so every verdict read above describes a

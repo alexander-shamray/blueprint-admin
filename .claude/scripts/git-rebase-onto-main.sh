@@ -181,7 +181,12 @@ conflicted() {
     fi
   done
   [ -n "$now" ] ||
-    { echo "the rebase did not start, so there is nothing to continue; git's own message is above" >&2; exit 11; }
+    { # Nothing was replayed, so there is no rewritten tip for the record to
+      # protect — and one left here refuses every later `start`, on any
+      # branch, until somebody aborts from the branch it names.
+      rm -f "$pending"
+      echo "the rebase did not start, so there is nothing to continue; git's own message is above" >&2
+      exit 11; }
   : > "$now/started-by-this-helper"
   echo "the rebase onto origin/main conflicts and is left in progress, which is the point:" >&2
   git diff --name-only --diff-filter=U >&2
@@ -193,9 +198,17 @@ case "$mode" in
   start)
     [ "$in_progress" -eq 0 ] ||
       { echo "a rebase is already in progress; finish it with 'continue' or leave it with 'abort'" >&2; exit 9; }
-    [ ! -f "$pending" ] ||
-      { echo "a replay from an earlier run is waiting to be published; run 'publish', or 'abort' to discard it" >&2
-        exit 9; }
+    if [ -f "$pending" ]; then
+      # Named, because the record is one per checkout: the caller may be
+      # standing on a different branch, and both ways out want the branch the
+      # record belongs to. It is not skipped for another branch — `start`
+      # would overwrite the record and strand the branch holding it.
+      waiting_branch=""
+      read -r waiting_branch waiting_rest < "$pending" || true
+      echo "a replay of ${waiting_branch:-an unreadable record} is waiting to be published:" \
+           "run 'publish' on that branch, or 'abort' there to discard it" >&2
+      exit 9
+    fi
     current=$(git branch --show-current)
     [ -n "$current" ] ||
       { echo "detached HEAD: there is no branch to publish" >&2; exit 4; }
@@ -295,13 +308,30 @@ case "$mode" in
       # reads that tip as non-ancestral and `continue` finds no rebase. Both
       # identities are checked, because the name passed and the branch in hand
       # are different ways to reach the wrong record.
-      read -r recorded_branch recorded_lease recorded_head < "$pending"
+      # Assigned first, because `read` returning non-zero on a truncated file
+      # would otherwise kill the run under `set -e` with no message and a
+      # code this script uses nowhere — in the one path that exists to
+      # recover from a failed run.
+      recorded_branch=""
+      recorded_lease=""
+      recorded_head=""
+      read -r recorded_branch recorded_lease recorded_head < "$pending" || true
+      [ -n "$recorded_branch" ] ||
+        { echo "the waiting record is unreadable; remove $pending by hand and start again" >&2; exit 9; }
       [ "$recorded_branch" = "$branch" ] ||
         { echo "the waiting replay is $recorded_branch, not $branch" >&2; exit 4; }
       current=$(git branch --show-current)
       [ "$current" = "$branch" ] ||
         { echo "on ${current:-a detached HEAD}, not $branch: this helper only ever touches the current branch" >&2
           exit 4; }
+      # A record whose head is still the tip is a replay `publish` can finish,
+      # and clearing it leaves the branch rewritten with nothing able to reach
+      # it: `start` reads that tip as non-ancestral, `continue` finds no
+      # rebase, and an ordinary push is not a fast-forward. A stale record -
+      # HEAD has moved since — is what this path is actually for.
+      [ -z "$recorded_head" ] || [ "$(git rev-parse HEAD)" != "$recorded_head" ] ||
+        { echo "the replay of $branch is still at HEAD and 'publish' can finish it; refusing to strand it" >&2
+          exit 9; }
       rm -f "$pending"
       echo "cleared the waiting replay; $branch is left where it is and nothing was published"
       exit 0
