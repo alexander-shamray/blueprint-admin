@@ -1,11 +1,12 @@
 """git-rebase-onto-main.sh: the only force push, and what bounds it.
 
 A permission rule matches the text of a command, so it can pin a flag and
-cannot pin a fact about the checkout. Everything that makes this force push
-safe is the second kind — the branch is the current one, it is not `main`, and
-the remote holds nothing the push would discard — so the script is the
-boundary and this suite is what watches it. The first class reads the flags;
-the rest run the thing.
+cannot pin a fact about the checkout. The guards that make this force push
+safe are mostly the second kind, and `git-rebase-onto-main.sh`'s own header
+enumerates them — not this docstring, which used to carry a shorter list of
+its own and is how two of them stopped being mentioned anywhere. The script
+is the boundary and this suite is what watches it. The first class reads the
+flags; the rest run the thing.
 """
 
 import os
@@ -56,21 +57,40 @@ def run_bash(script, subject="", **env_extra):
     )
 
 
+# What can introduce a command, beyond the `VAR=value` run: a shell keyword, a
+# negation, or one of the wrappers that takes a command as its argument.
+# Stripped in a loop, because they stack — `if ! GIT_DIR=x git push …`.
+COMMAND_LEAD = re.compile(
+    r"^(?:\w+=\S*|then|else|elif|do|done|if|while|until|!|command|exec|time|eval)\s+")
+
+# A command can begin after any of these. `{` and `}` are NOT in the class:
+# they open a brace group, but they also spell `"${branch}"`, and splitting
+# there cuts a command off before its flags — which is how the first version
+# of this scan, written to be wider than the old one, ended up narrower for
+# every command using a braced expansion. A brace group's braces are
+# space-delimited, so those are matched on their own.
+COMMAND_SEPARATOR = re.compile(r"[\n;&|()`]+|(?<=\s)\{(?=\s)|(?<=\s)\}")
+
+
 def git_commands(source):
     """Every `git …` command in a shell script, however it is introduced.
 
     A `startswith` scan sees only a command opening a physical line, which
     this script already defeats: `GIT_EDITOR=true git rebase --continue` is
     one of its own, and its dominant failure idiom is a same-line brace group.
-    So the text is cut at the separators a command can begin after, and a
-    leading run of `VAR=value` assignments is stripped before the word is
-    read. Wider than the scan it replaces, never narrower.
+    So the text is cut at the separators a command can begin after, and the
+    assignments and keywords in front of it are stripped before the word is
+    read.
+
+    It does not claim to parse shell. What it claims is to be wider than the
+    scan it replaces, in every direction — `test_the_scan_sees_what_the_old_
+    one_missed` is where that is established rather than asserted here.
     """
     commands = []
-    for piece in re.split(r"[\n;&|(){}]+", source):
+    for piece in COMMAND_SEPARATOR.split(source):
         piece = piece.strip()
-        while re.match(r"^\w+=\S*\s+", piece):
-            piece = re.sub(r"^\w+=\S*\s+", "", piece, count=1)
+        while COMMAND_LEAD.match(piece):
+            piece = COMMAND_LEAD.sub("", piece, count=1)
         if piece.startswith("git "):
             commands.append(piece)
     return commands
@@ -143,15 +163,57 @@ class TheFlagsAreTheScriptsOwn(unittest.TestCase):
         #
         # The trailing newline is what lets the `--force\n` spelling match a
         # flag ending the last command.
+        # The trailing newline is what lets a flag ENDING a command match, so
+        # every spelling needs both forms: `git push origin "$b" -f` was
+        # uncovered while `--force` was not.
         commands = "\n".join(git_commands(self.source)) + "\n"
-        for spelling in ("--force ", "--force\n", "--force=", " -f ", "--force-if-includes"):
+        for spelling in ("--force ", "--force\n", "--force=", " -f ", " -f\n",
+                         "--force-if-includes"):
             self.assertNotIn(spelling, commands, f"{spelling!r} would discard without a lease")
         # `+<refspec>` is a force push carrying no flag at all, which this
-        # repository's own argv guard already judges as one.
+        # repository's own argv guard already judges as one. Not anchored on a
+        # colon or on bare whitespace: `+$branch` forces branch:branch without
+        # one, and `"+$branch:$branch"` puts a quote where the space was.
         for command in commands.splitlines():
             if command.startswith("git push"):
-                self.assertNotRegex(command, r"\s\+\S+:",
+                self.assertNotRegex(command, r'(?:^|\s)"?\+\S',
                                     "a `+` refspec forces without naming a flag")
+
+    def test_the_scan_sees_what_the_old_one_missed(self):
+        """The scan's subject is the scan, not what it happened to find.
+
+        Every line below is a second, unleased force push. The scan this one
+        replaced saw none of the first four, so both flag cases above stayed
+        green while the only force-pushing script in the repository grew a
+        second one — the failure CLAUDE.md names as the most repeated here.
+        """
+        hidden = (
+            'GIT_SSH_COMMAND=ssh git push --force origin "$branch"',
+            'git rev-parse HEAD || { git push --force origin "$branch"; }',
+            'if [ -n "$x" ]; then git push --force origin "$branch"; fi',
+            'for r in a b; do git push --force origin "$r"; done',
+            '! git push --force origin "$branch"',
+            'eval git push --force origin "$branch"',
+            'git push origin "${branch}" --force',
+            'git push origin +$branch',
+            'git push origin "+$branch:$branch"',
+            'git push origin "$branch" -f',
+        )
+        baseline = git_commands(self.source)
+        for line in hidden:
+            with self.subTest(line=line):
+                seen = git_commands(self.source + chr(10) + line)
+                # Not "exactly one more": a brace-group line is two commands
+                # and the scan rightly returns both. What is being asserted
+                # is that the FORCE push is among what it now sees, with its
+                # flags still attached — a scan that saw the command and cut
+                # it off before `--force` would pass a count and fail here.
+                self.assertGreater(len(seen), len(baseline),
+                                   "the scan does not see this command at all")
+                added = seen[len(baseline):]
+                self.assertTrue(
+                    any("--force" in c or " -f" in c or "+" in c for c in added),
+                    f"the scan truncated the command before its flags: {added!r}")
 
     def test_the_push_leases_against_the_value_the_guard_approved(self):
         # Re-reading the remote ref in `publish` would lease against whatever a

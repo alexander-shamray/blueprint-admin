@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # Bring the current branch up to date with origin/main by rebasing it, and
 # publish the result. This is the only force push in this repository, and its
-# guards live here rather than in a permission rule because each is a fact
-# about the checkout: the branch is the one in hand, it is not main, the tree
-# is clean, and the remote carries nothing the work did not start from.
+# guards live here rather than in a permission rule because the ones that
+# matter are facts about the checkout: the branch is the one in hand, it is
+# not main, the tree is clean, the remote carries nothing the work did not
+# start from, and no merge on the branch holds content neither parent has.
+# **This list is the owner** — the prose cites it and enumerates nothing of
+# its own, so a guard added below is added here too, or it is a guard no
+# reader knows to check.
 # `.claude/settings.json` denies the raw force push, and that deny is untouched.
 
 # Four modes, because a conflict is the case rebase is here for. `start`
@@ -131,6 +135,24 @@ publish() {
   echo "published $branch at $head"
 }
 
+# Read from three modes, so it is one function: a `read` returning non-zero on
+# a truncated record kills the run under `set -e` with a bare exit 1, a code
+# this script assigns to nothing, in the paths that exist to recover from a
+# failed run. The fields are assigned first so `set -u` cannot bite either,
+# and returning 1 for "no record" keeps that case the caller's to word.
+recorded_branch=""
+recorded_lease=""
+recorded_head=""
+read_pending() {
+  recorded_branch=""
+  recorded_lease=""
+  recorded_head=""
+  [ -f "$pending" ] || return 1
+  read -r recorded_branch recorded_lease recorded_head < "$pending" || true
+  [ -n "$recorded_branch" ] ||
+    { echo "the waiting record is unreadable; remove $pending by hand and start again" >&2; exit 9; }
+}
+
 # Written before the replay, so it survives a push that fails after it.
 remember_lease() {
   printf '%s %s\n' "$branch" "$approved_lease" > "$pending"
@@ -198,14 +220,12 @@ case "$mode" in
   start)
     [ "$in_progress" -eq 0 ] ||
       { echo "a rebase is already in progress; finish it with 'continue' or leave it with 'abort'" >&2; exit 9; }
-    if [ -f "$pending" ]; then
+    if read_pending; then
       # Named, because the record is one per checkout: the caller may be
       # standing on a different branch, and both ways out want the branch the
       # record belongs to. It is not skipped for another branch — `start`
       # would overwrite the record and strand the branch holding it.
-      waiting_branch=""
-      read -r waiting_branch waiting_rest < "$pending" || true
-      echo "a replay of ${waiting_branch:-an unreadable record} is waiting to be published:" \
+      echo "a replay of $recorded_branch is waiting to be published:" \
            "run 'publish' on that branch, or 'abort' there to discard it" >&2
       exit 9
     fi
@@ -274,9 +294,8 @@ case "$mode" in
     # the rewritten tip as non-ancestral and `continue` finds no rebase.
     [ "$in_progress" -eq 0 ] ||
       { echo "a rebase is still in progress; finish it with 'continue'" >&2; exit 9; }
-    [ -f "$pending" ] ||
+    read_pending ||
       { echo "no replay is waiting to be published" >&2; exit 9; }
-    read -r recorded_branch recorded_lease recorded_head < "$pending"
     [ "$recorded_branch" = "$branch" ] ||
       { echo "the waiting replay is $recorded_branch, not $branch" >&2; exit 4; }
     # A record with no head is a run that stopped before one existed, which a
@@ -308,30 +327,37 @@ case "$mode" in
       # reads that tip as non-ancestral and `continue` finds no rebase. Both
       # identities are checked, because the name passed and the branch in hand
       # are different ways to reach the wrong record.
-      # Assigned first, because `read` returning non-zero on a truncated file
-      # would otherwise kill the run under `set -e` with no message and a
-      # code this script uses nowhere — in the one path that exists to
-      # recover from a failed run.
-      recorded_branch=""
-      recorded_lease=""
-      recorded_head=""
-      read -r recorded_branch recorded_lease recorded_head < "$pending" || true
-      [ -n "$recorded_branch" ] ||
-        { echo "the waiting record is unreadable; remove $pending by hand and start again" >&2; exit 9; }
+      read_pending || true
       [ "$recorded_branch" = "$branch" ] ||
         { echo "the waiting replay is $recorded_branch, not $branch" >&2; exit 4; }
       current=$(git branch --show-current)
       [ "$current" = "$branch" ] ||
         { echo "on ${current:-a detached HEAD}, not $branch: this helper only ever touches the current branch" >&2
           exit 4; }
-      # A record whose head is still the tip is a replay `publish` can finish,
-      # and clearing it leaves the branch rewritten with nothing able to reach
-      # it: `start` reads that tip as non-ancestral, `continue` finds no
-      # rebase, and an ordinary push is not a fast-forward. A stale record -
-      # HEAD has moved since — is what this path is actually for.
-      [ -z "$recorded_head" ] || [ "$(git rev-parse HEAD)" != "$recorded_head" ] ||
-        { echo "the replay of $branch is still at HEAD and 'publish' can finish it; refusing to strand it" >&2
-          exit 9; }
+      # A record `publish` can still finish must not be cleared: the branch is
+      # rewritten, and afterwards nothing reaches it — `start` reads that tip
+      # as non-ancestral, `continue` finds no rebase, and an ordinary push is
+      # not a fast-forward.
+      #
+      # **Both halves, or this deadlocks.** `publish` refuses when the remote
+      # has moved since the lease was approved and says to abort; if `abort`
+      # refused on the head alone it would answer "run publish", and the
+      # record would be reachable by neither. /ship fetches the branch
+      # immediately before calling this helper, so a remote that moved is the
+      # ordinary case rather than a rare one. When the lease is dead the
+      # replay is unpublishable and clearing the record is exactly right.
+      #
+      # Assigned rather than read inside `[ ]`, where a command substitution
+      # discards the exit status: a failed `git rev-parse` would read as "the
+      # head differs" and clear the record, which is the one outcome this
+      # guard exists to prevent.
+      if [ -n "$recorded_head" ]; then
+        head_now=$(git rev-parse HEAD)
+        remote_now=$(git rev-parse "refs/remotes/origin/$branch" 2>/dev/null || echo "")
+        [ "$head_now" != "$recorded_head" ] || [ "$remote_now" != "$recorded_lease" ] ||
+          { echo "the replay of $branch is still at HEAD and 'publish' can finish it; refusing to strand it" >&2
+            exit 9; }
+      fi
       rm -f "$pending"
       echo "cleared the waiting replay; $branch is left where it is and nothing was published"
       exit 0
