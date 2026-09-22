@@ -240,6 +240,35 @@ class TheRefresh(unittest.TestCase):
         path = self.cache / "refresh.pending"
         return path.read_text(encoding="utf-8").strip() if path.exists() else ""
 
+    def publish(self, token):
+        """Put a later call's token on the mark.
+
+        The mark is the whole of what `refresh-index.sh` reads to decide
+        whether to run, so writing one is how a case establishes "a later call
+        arrived" without racing a second process into a window two seconds
+        wide. Written in place rather than renamed onto: the script's own
+        atomic rename is what keeps two *calls* from tearing each other, and
+        a torn read cannot make a case here pass by accident — the script
+        compares the mark against its own token, and half of this one is not
+        that.
+        """
+        (self.cache / "refresh.pending").write_text(
+            token + "\n", encoding="utf-8", newline="\n")
+
+    def held_until(self, release):
+        """Fake-CLI lines that hold an update open until `release` appears.
+
+        How long an update runs is the thing a concurrency case has to
+        control, and `sleep` does not control it: a sleep long enough on an
+        idle host is a stopwatch on a loaded one, and the stopwatch is what
+        lost. The iteration bound is so a case that never releases fails on
+        its own wait rather than leaving a shell running.
+        """
+        return (f'n=0\n'
+                f'until [ -e {release.as_posix()!r} ] || [ "$n" -ge 300 ]; do\n'
+                f'  n=$((n + 1)); sleep 0.1\n'
+                f'done\n')
+
     def test_it_runs_update_once_with_the_guard_and_leaves_only_the_mark(self):
         result = self.run_refresh()
         self.assertEqual(0, result.returncode, result.stderr)
@@ -280,9 +309,33 @@ class TheRefresh(unittest.TestCase):
         self.wait_for(self.calls, "the fake CLI to be called")
         self.assertEqual([f"{guard_value()} update"], self.calls())
 
+    def test_a_later_call_makes_an_earlier_one_stand_down(self):
+        # The coalescing rule on its own, with no second process in it: a call
+        # runs only if its token is still the published one. The later token is
+        # republished for as long as the first process lives, so whenever that
+        # process reaches its check — after two seconds on an idle host, after
+        # however long on a loaded one — the token it published is certainly
+        # not the pending one. There is no window to lose.
+        first = self.start_refresh()
+        self.addCleanup(first.wait)
+        self.wait_for(self.pending, "the first call to publish")
+        deadline = time.monotonic() + 60
+        while first.poll() is None:
+            self.publish("a-later-call")
+            if time.monotonic() > deadline:
+                raise AssertionError("the first call never exited")
+            time.sleep(0.02)
+        self.assertEqual(0, first.returncode)
+        self.assertEqual([], self.calls())
+
     def test_a_burst_of_edits_runs_one_update_and_it_is_the_last_calls(self):
-        # The second call publishes while the first is still waiting, so the
-        # first must stand down and the second — the last — must run.
+        # Two real calls, and the relation that holds however they interleave:
+        # the update the CLI ends on carries the token published last, and two
+        # callers cannot produce three updates. Whether the first also ran is a
+        # race between one process reaching its check and another reaching its
+        # publish, which nothing here can settle — asserting the coalesced list
+        # outright is what failed under load. The stand-down the list used to
+        # carry is asserted above instead, where it can be made to hold.
         self.fake(extra=f'cat {(self.cache / "refresh.pending").as_posix()!r} '
                         f'>> {self.record.as_posix()!r}\n')
         first = self.start_refresh()
@@ -296,17 +349,27 @@ class TheRefresh(unittest.TestCase):
         last_token = self.pending()
         self.assertEqual(0, first.wait(timeout=60))
         self.assertEqual(0, second.wait(timeout=60))
-        self.assertEqual([f"{guard_value()} update", last_token], self.calls())
+        calls = self.calls()
+        self.assertEqual([f"{guard_value()} update", last_token], calls[-2:], calls)
+        self.assertLessEqual(len(calls), 4, calls)
 
     def test_an_edit_during_an_update_gets_an_update_after_it(self):
-        # The first update is slow; an edit landing while it runs is published
-        # after it started, so a second update must follow.
-        self.fake(extra="sleep 3\n")
+        # The first update is held open until this test releases it, so the
+        # second call provably publishes while the first is still running —
+        # where `sleep 3` only made that likely, and lost. Both observables are
+        # state: the record file gains a line when the update starts, and the
+        # mark changes when the edit publishes.
+        release = self.tmp / "release"
+        self.fake(extra=self.held_until(release))
         first = self.start_refresh()
         self.addCleanup(first.wait)
         self.wait_for(self.calls, "the first update to start")
+        first_token = self.pending()
         second = self.start_refresh()
         self.addCleanup(second.wait)
+        self.wait_for(lambda: self.pending() != first_token,
+                      "the edit to publish while the update runs")
+        release.touch()
         self.assertEqual(0, first.wait(timeout=60))
         self.assertEqual(0, second.wait(timeout=60))
         self.assertEqual(2, len(self.calls()), self.calls())
