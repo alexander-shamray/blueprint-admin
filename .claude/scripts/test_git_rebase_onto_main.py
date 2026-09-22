@@ -613,7 +613,8 @@ class TheHelperPublishesWhatItRebased(unittest.TestCase):
                 '&& git commit -qm "main moved again" && git push -q origin main '
                 '&& git checkout -q feat/x && git merge --no-edit -q main '
                 '&& git push -q -f origin feat/x')
-        self.assertEqual(0, self.helper().returncode)
+        result = self.helper()
+        self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual("", self.at("git log --merges --format=%H origin/main..HEAD").stdout,
                          "rebase.rebaseMerges would have kept the merge")
 
@@ -631,7 +632,8 @@ class TheHelperPublishesWhatItRebased(unittest.TestCase):
         before = self.at("git rev-parse marker").stdout.strip()
         self.assertTrue(before, "the marker branch was not created")
 
-        self.assertEqual(0, self.helper().returncode)
+        result = self.helper()
+        self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual(before, self.at("git rev-parse marker").stdout.strip(),
                          "rebase.updateRefs force-moved a branch this helper does not own")
 
@@ -840,7 +842,8 @@ class TheHelperPublishesWhatItRebased(unittest.TestCase):
         # `test_publish_refuses_a_record_whose_replay_never_ran` covers.
 
     def test_a_second_run_changes_nothing_and_does_not_force(self):
-        self.assertEqual(0, self.helper().returncode)
+        first = self.helper()
+        self.assertEqual(0, first.returncode, first.stderr)
         settled = self.at("git rev-parse HEAD").stdout.strip()
         again = self.helper()
         self.assertEqual(0, again.returncode, again.stderr)
