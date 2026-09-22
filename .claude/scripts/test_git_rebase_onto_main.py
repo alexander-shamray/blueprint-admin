@@ -1110,17 +1110,6 @@ class EveryFixtureSaysItWasBuilt(unittest.TestCase):
     The AST answers both: a comment is not in it, and a call is a call.
     """
 
-    @staticmethod
-    def calls_self(function, name):
-        """Every `self.<name>(…)` call anywhere inside `function`."""
-        for node in ast.walk(function):
-            if (isinstance(node, ast.Call)
-                    and isinstance(node.func, ast.Attribute)
-                    and node.func.attr == name
-                    and isinstance(node.func.value, ast.Name)
-                    and node.func.value.id == "self"):
-                yield node
-
     @classmethod
     def builds_the_fixture(cls, function):
         # Any mention of the name at all, anywhere in the `setUp`. Matching
@@ -1133,21 +1122,35 @@ class EveryFixtureSaysItWasBuilt(unittest.TestCase):
 
     @classmethod
     def asserts_its_root(cls, function):
-        # Top-level statements of the `setUp` only, and the assertion has to
-        # be the statement rather than merely live somewhere inside one.
-        # `ast.walk` descends into `if` bodies and into lambdas, so it called
-        # an assertion that never runs an assertion — which is the same
-        # false-green as the substring scan this replaced, by another route.
+        # The statement's own call, read directly. Restricting to top-level
+        # statements and then walking each one's subtree closed the `if`
+        # route and left the lambda one open:
+        # `self.addCleanup(lambda: self.assertTrue(self.root, ...))` is a
+        # top-level expression statement whose assertion never runs, and that
+        # `addCleanup(lambda: ...)` idiom is in every `setUp` in this file, so
+        # it is a plausible mis-edit rather than a contrived one. Two rounds
+        # of this gate have now claimed to read a call as a call while
+        # reading a subtree; this one reads the call.
+        #
+        # An assertion wrapped in `with` or `try` reads as absent and reddens
+        # the gate. That is the direction to fail in: somebody looks, rather
+        # than the gate approving a `setUp` it did not understand.
         for statement in function.body:
             if not isinstance(statement, ast.Expr):
                 continue
-            for call in cls.calls_self(statement, "assertTrue"):
-                subject = call.args[0] if call.args else None
-                if (isinstance(subject, ast.Attribute)
-                        and subject.attr == "root"
-                        and isinstance(subject.value, ast.Name)
-                        and subject.value.id == "self"):
-                    return True
+            call = statement.value
+            if not (isinstance(call, ast.Call)
+                    and isinstance(call.func, ast.Attribute)
+                    and call.func.attr == "assertTrue"
+                    and isinstance(call.func.value, ast.Name)
+                    and call.func.value.id == "self"):
+                continue
+            subject = call.args[0] if call.args else None
+            if (isinstance(subject, ast.Attribute)
+                    and subject.attr == "root"
+                    and isinstance(subject.value, ast.Name)
+                    and subject.value.id == "self"):
+                return True
         return False
 
     def test_every_class_that_builds_the_fixture_says_it_was_built(self):
@@ -1166,16 +1169,19 @@ class EveryFixtureSaysItWasBuilt(unittest.TestCase):
                     f"{node.name} builds the fixture and never says whether it "
                     "worked: a failed one makes self.work '/work' and every "
                     "assertion under it vacuous")
-        # The gate's own subject, and exact rather than a floor. A floor
-        # watches shrinkage only: a seventh fixture class that this gate
-        # failed to recognise would leave the count at six, unguarded, with
-        # the gate green and its own message claiming it would have caught
-        # exactly that. Bump this number in the same edit that adds a class,
-        # which is the moment to ask whether the new one asserts its root.
+        # The gate's own subject, and exact rather than a floor — but what
+        # that buys is narrow, and the first version of this comment credited
+        # it with more. A seventh class this gate DOES recognise can no
+        # longer arrive unremarked, because the count has to be bumped in the
+        # same edit, which is the moment to ask whether the new one asserts
+        # its root. A seventh class the recogniser MISSES leaves the count at
+        # six and passes here exactly as a floor would; matching the bare
+        # name anywhere in the `setUp` is what narrows that hole, and nothing
+        # in this file closes it.
         self.assertEqual(6, len(watched),
-                         f"this gate is watching {watched}: a fixture class has "
-                         "been added or has stopped being recognised, and either "
-                         "way the gate is no longer about what it says it is")
+                         f"this gate is watching {watched}: a fixture class was "
+                         "added or renamed. Check that each one asserts its root, "
+                         "then bump this number deliberately")
 
 
 if __name__ == "__main__":
