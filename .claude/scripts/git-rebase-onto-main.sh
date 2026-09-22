@@ -6,9 +6,10 @@
 # not main, the tree is clean, the remote carries nothing the work did not
 # start from, no merge on the branch holds content neither parent has, and a
 # replay that stopped with anything staged or unstaged in the tree is
-# reported rather than skipped. That last one is the difference between
-# dropping an empty commit and dropping somebody's work: `git rebase --skip`
-# hard-resets the worktree, and the index alone cannot see what that costs.
+# reported rather than skipped, and no run drops more commits than it set out
+# to replay. The staged-or-unstaged one is the difference between dropping an
+# empty commit and dropping somebody's work: `git rebase --skip` hard-resets
+# the worktree, and the index alone cannot see what that costs.
 # **This list is the owner** — the prose cites it and enumerates nothing of
 # its own, so a guard added below is added here too, or it is a guard no
 # reader knows to check.
@@ -158,11 +159,20 @@ publish() {
   echo "published $branch at $head"
 }
 
-# Read from three modes, so it is one function: a `read` returning non-zero on
-# a truncated record kills the run under `set -e` with a bare exit 1, a code
-# this script assigns to nothing, in the paths that exist to recover from a
-# failed run. The fields are assigned first so `set -u` cannot bite either,
-# and returning 1 for "no record" keeps that case the caller's to word.
+# Read from three modes, so it is one function. `read` returns non-zero on a
+# record with no trailing newline, having already assigned the fields it did
+# manage to read — so the emptiness check below is what decides, never the
+# read's status.
+#
+# `|| true` changes nothing at any call site this script has. All three test
+# this function's status — `if read_pending; then` once and `read_pending ||`
+# twice — which suppresses `set -e` for its whole body, so a failing `read`
+# does not end the run with or without it. Measured by deleting it: the suite
+# stays green, and a case written to claim otherwise could not fail. It is
+# kept against a future call site that does not test the status, where a
+# truncated record would end the run on a bare exit 1 this script assigns to
+# nothing. The fields are assigned first so `set -u` cannot bite, and
+# returning 1 for "no record" keeps that case the caller's to word.
 recorded_branch=""
 recorded_lease=""
 recorded_head=""
@@ -223,20 +233,25 @@ require_no_merge_invented_anything() {
 # it. The replay's own length is the bound: no run can drop more commits than
 # it set out to replay.
 stopped() {
-  local now unmerged left
-  left=$(git rev-list --count "refs/remotes/origin/main..refs/heads/$branch") || left=""
-  [ -n "$left" ] ||
-    { echo "cannot count what $branch is replaying, so a skip cannot be bounded" >&2; exit 14; }
+  # `left` is filled in at the first skip that wants it rather than here.
+  # `continue` reads `refs/remotes/origin/main` nowhere — no guard in that
+  # mode touches it — so computing the bound up front made a checkout whose
+  # remote-tracking main had gone answer "a skip cannot be bounded" in place
+  # of the conflict report it actually owed.
+  #
+  # `seen` is what the message below reads. `in_progress` is a per-mode
+  # constant — `start` refuses unless it is 0 and `continue` unless it is 1 —
+  # so it says which mode this is, not whether a rebase has run, and on the
+  # loop's second pass those are different questions.
+  local now unmerged left="" seen=0
 
   while : ; do
     now=$(current_state) ||
       { # No state, so there is nothing left to continue — but not for the
-        # same reason at both call sites, and this used to say "the rebase
-        # did not start" at each. That is true from `start`; from `continue`
-        # it is false by construction, since that mode refuses unless a
-        # rebase is in progress, so one began and has since ended.
-        # `in_progress` was read before any of this ran and says which,
-        # without `stopped` having to know its caller.
+        # same reason each time it happens, and this said "the rebase did not
+        # start" at all of them. It is true only where no state has been seen:
+        # from `continue`, a rebase was in progress by that mode's own guard,
+        # and on a later pass this loop has been standing in one.
         #
         # Clearing the record is right either way. Only `publish` ever writes
         # a replayed head, so the record here is the two-field one
@@ -244,14 +259,23 @@ stopped() {
         # head; leaving it would refuse every later `start`, on any branch,
         # until somebody aborted from the branch it names.
         rm -f "$pending"
-        if [ "$in_progress" -eq 1 ]; then
+        if [ "$seen" -eq 1 ] || [ "$in_progress" -eq 1 ]; then
           echo "the replay of $branch ended without finishing, so there is nothing to continue;" >&2
         else
           echo "the rebase did not start, so there is nothing to continue;" >&2
         fi
         echo "git's own message is above" >&2
         exit 11; }
-    : > "$now/started-by-this-helper"
+    seen=1
+    # Checked, because `set -e` is suppressed for every line of this function
+    # — it is only ever the right-hand side of `||` — and an unwritten marker
+    # is a wedge rather than a nuisance: `continue` and `abort` both refuse a
+    # rebase that does not carry it, and there is no raw `git rebase` grant
+    # to get out with.
+    : > "$now/started-by-this-helper" ||
+      { echo "cannot mark $now as this helper's, so neither 'continue' nor 'abort'" >&2
+        echo "would accept the rebase afterwards; the replay is left where it is" >&2
+        exit 14; }
 
     unmerged=$(git diff --name-only --diff-filter=U)
     if [ -n "$unmerged" ]; then
@@ -290,9 +314,22 @@ stopped() {
         echo "stage them or set them aside, then 'continue', or 'abort'" >&2
         exit 14; }
 
+    # Counted here rather than before the loop, so a mode that never reads
+    # `origin/main` is not stopped by its absence until it actually wants a
+    # bound. The count is the pre-rebase length of the branch and therefore
+    # an upper bound on what can be replayed, which is all this needs.
+    if [ -z "$left" ]; then
+      left=$(git rev-list --count "refs/remotes/origin/main..refs/heads/$branch") || left=""
+      [ -n "$left" ] ||
+        { echo "cannot count what $branch is replaying, so a skip cannot be bounded" >&2; exit 14; }
+    fi
+    # Spent per attempt rather than per commit dropped, which is what bounds
+    # a skip that fails while changing nothing — so the message says
+    # attempted, not dropped. Claiming the commits had gone would name the
+    # opposite of what happened in the one case this bound exists for.
     [ "$left" -gt 0 ] ||
-      { echo "the replay of $branch has dropped as many commits as it had to replay," >&2
-        echo "so a further skip is not progress: 'abort' and start again" >&2
+      { echo "this run has attempted as many skips as $branch had commits to replay," >&2
+        echo "so a further one is not progress: 'abort' and start again" >&2
         exit 14; }
     left=$((left - 1))
 
