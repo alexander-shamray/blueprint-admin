@@ -11,6 +11,7 @@ repositories.
 """
 
 import ast
+import atexit
 import os
 import re
 import shutil
@@ -163,6 +164,60 @@ git commit -qm "the branch edits a.txt" && git push -q origin feat/x
 '''
 
 
+# The one build of FIXTURE this process pays for, keyed by the script so a
+# second fixture script would get its own rather than silently take this one.
+_TEMPLATES = {}
+
+# `cp -a` of a built fixture, re-pointed at its own remote.
+#
+# **The `git remote set-url` is the whole of what makes a copy a fixture.**
+# `FIXTURE` runs `git remote add origin "$root/remote.git"` with `$root` from
+# `mktemp -d`, so the URL in `work/.git/config` is an absolute path into the
+# TEMPLATE. Measured without this line: two copies shared a remote and a push
+# in one was visible in the other at the same commit.
+FIXTURE_COPY = '''
+set -eu
+root=$(mktemp -d)
+cp -a "$T/." "$root/"
+cd "$root/work"
+git remote set-url origin "$root/remote.git"
+printf %s "$root"
+'''
+
+
+def fixture_template(script):
+    """The built fixture this process copies from, built on first use.
+
+    A failed build is cached as `""` along with a successful one: every caller
+    below turns that into a failed `assertTrue(self.root, ...)`, which is the
+    guard `EveryFixtureSaysItWasBuilt` exists to keep, and re-running a build
+    that does not work once per test would only make the failure slower.
+    """
+    if script not in _TEMPLATES:
+        root = run_bash(script).stdout.strip()
+        _TEMPLATES[script] = root
+        if root:
+            atexit.register(run_bash, 'rm -rf "$R"', R=root)
+    return _TEMPLATES[script]
+
+
+def fixture_copy(script):
+    """A private copy of the fixture, for one test (#46).
+
+    The sixteen `git` commands in `FIXTURE` cost 4.45-5.37 s on the Windows
+    host and a copy costs about 0.6 s, so six classes rebuilding it per test
+    was roughly two minutes of the suite. What stops being repeated is the
+    spawns, not the state: the build is still this script, run for real.
+
+    Returns `""` when the build failed, so the callers' own root assertion
+    still decides — rather than a copy of nothing reading as a working tree.
+    """
+    template = fixture_template(script)
+    if not template:
+        return ""
+    return run_bash(FIXTURE_COPY, T=template).stdout.strip()
+
+
 class TheFlagsAreTheScriptsOwn(unittest.TestCase):
     """The grant buys `bash <this file>`, so the flags are never a caller's to
     choose. A prefix rule cannot exclude a trailing flag, which is why this
@@ -267,7 +322,7 @@ class TheFlagsAreTheScriptsOwn(unittest.TestCase):
 class TheHelperRefusesBeforeItRewrites(unittest.TestCase):
 
     def setUp(self):
-        self.root = run_bash(FIXTURE).stdout.strip()
+        self.root = fixture_copy(FIXTURE)
         self.assertTrue(self.root, "the fixture produced no path")
         self.addCleanup(lambda: run_bash('rm -rf "$R"', R=self.root))
         self.work = self.root + "/work"
@@ -433,7 +488,7 @@ class AConflictIsTheCaseRebaseIsHereFor(unittest.TestCase):
     """
 
     def setUp(self):
-        self.root = run_bash(FIXTURE).stdout.strip()
+        self.root = fixture_copy(FIXTURE)
         self.assertTrue(self.root, "the fixture produced no path")
         self.addCleanup(lambda: run_bash('rm -rf "$R"', R=self.root))
         self.work = self.root + "/work"
@@ -538,7 +593,7 @@ class ALegacyMergeForwardIsNotSilentlyDropped(unittest.TestCase):
     loses it before the push, which no lease can see."""
 
     def setUp(self):
-        self.root = run_bash(FIXTURE).stdout.strip()
+        self.root = fixture_copy(FIXTURE)
         self.assertTrue(self.root, "the fixture produced no path")
         self.addCleanup(lambda: run_bash('rm -rf "$R"', R=self.root))
         self.work = self.root + "/work"
@@ -579,7 +634,7 @@ class ALegacyMergeForwardIsNotSilentlyDropped(unittest.TestCase):
 class TheHelperPublishesWhatItRebased(unittest.TestCase):
 
     def setUp(self):
-        self.root = run_bash(FIXTURE).stdout.strip()
+        self.root = fixture_copy(FIXTURE)
         self.assertTrue(self.root, "the fixture produced no path")
         self.addCleanup(lambda: run_bash('rm -rf "$R"', R=self.root))
         self.work = self.root + "/work"
@@ -921,7 +976,7 @@ class TheApplyBackendIsDrivenToo(unittest.TestCase):
     """
 
     def setUp(self):
-        self.root = run_bash(FIXTURE).stdout.strip()
+        self.root = fixture_copy(FIXTURE)
         self.assertTrue(self.root, "the fixture produced no path")
         self.addCleanup(lambda: run_bash('rm -rf "$R"', R=self.root))
         self.work = self.root + "/work"
@@ -1014,7 +1069,7 @@ class AStoppedReplayIsNotAlwaysAConflict(unittest.TestCase):
     """
 
     def setUp(self):
-        self.root = run_bash(FIXTURE).stdout.strip()
+        self.root = fixture_copy(FIXTURE)
         self.assertTrue(self.root, "the fixture produced no path")
         self.addCleanup(lambda: run_bash('rm -rf "$R"', R=self.root))
         self.work = self.root + "/work"
@@ -1088,6 +1143,81 @@ class AStoppedReplayIsNotAlwaysAConflict(unittest.TestCase):
         self.assertEqual(before,
                          self.at("git rev-parse refs/remotes/origin/feat/x").stdout.strip(),
                          "the branch was published without the work still in the tree")
+
+
+class TheFixtureCopyIsTheFixture(unittest.TestCase):
+    """#46 — the two properties that let the fixture be built once and copied.
+
+    **A copy has to be as private as a build was, and one line stands between
+    the two.** `FIXTURE` writes an absolute remote path into
+    `work/.git/config`, so a copy that is not re-pointed pushes into the
+    template's remote. Measured before the re-point was written: two naive
+    copies shared a remote, and a commit pushed in one arrived in the other's
+    `origin/feat/x` at the same sha.
+
+    **The rest of the file does go red on that — in 31 places across five
+    classes, none of which names the cause.** Measured, by deleting the
+    re-point and running the file. Every one of those assertions is about its
+    own working tree or its own remote ref, so what they report is a lease that
+    failed, a ref that moved, a publish that refused: the symptoms of another
+    test's push, in a suite that runs its classes in parallel. This class is
+    the one that fails with the reason, and it is two tests rather than
+    thirty-one.
+    """
+
+    def setUp(self):
+        self.root = fixture_copy(FIXTURE)
+        self.assertTrue(self.root, "the fixture produced no path")
+        self.addCleanup(lambda: run_bash('rm -rf "$R"', R=self.root))
+        self.work = self.root + "/work"
+
+    def at(self, script, work=None):
+        return run_bash('cd "$W" && ' + script, W=work or self.work)
+
+    def test_the_copy_is_the_state_the_build_produced(self):
+        # A repository rather than a directory of files: the branch is checked
+        # out, the history is the fixture's, and the tree is clean. Without
+        # this the two cases below could both pass against a copy that had
+        # lost the state they are not looking at.
+        self.assertEqual(
+            "feat/x", self.at("git rev-parse --abbrev-ref HEAD").stdout.strip())
+        self.assertEqual("", self.at("git status --short").stdout)
+        self.assertEqual(
+            ["the branch work", "the base"],
+            self.at("git log --format=%s").stdout.split(chr(10))[:2])
+        self.assertEqual(
+            "moved", self.at('git show origin/main:c.txt').stdout.strip(),
+            "the remote's main has moved since the branch, as the fixture says")
+
+    def test_a_copys_remote_is_its_own_and_not_the_templates(self):
+        url = self.at("git remote get-url origin").stdout.strip()
+        # By the root's directory NAME, not by the path. bash hands back
+        # `/d/tmp/...` and git answers `D:/tmp/...` for the same directory, so
+        # comparing the two spellings fails against a correct re-point — which
+        # is what the first draft of this case did.
+        self.assertIn(Path(self.root).name, url)
+
+    def test_a_push_in_one_copy_does_not_reach_another(self):
+        """The property the re-point exists for, asserted without reading it.
+
+        A case that matched the `git remote set-url` line would pass against a
+        fixture whose remote was shared by some other route, and would go red
+        on a re-point spelled differently. This one pushes and looks.
+        """
+        other = fixture_copy(FIXTURE)
+        self.assertTrue(other, "the second copy produced no path")
+        self.addCleanup(lambda: run_bash('rm -rf "$R"', R=other))
+        pushed = self.at('echo x > z.txt && git add -A '
+                         '&& git commit -qm "one copy" '
+                         '&& git push -q origin feat/x && git rev-parse HEAD')
+        self.assertEqual(0, pushed.returncode, pushed.stderr)
+        seen = self.at('git fetch -q origin '
+                       '&& git rev-parse refs/remotes/origin/feat/x',
+                       work=other + "/work")
+        self.assertEqual(0, seen.returncode, seen.stderr)
+        self.assertTrue(pushed.stdout.strip(), "the push produced no head")
+        self.assertNotEqual(pushed.stdout.strip(), seen.stdout.strip(),
+                            "the two copies share a remote")
 
 
 class EveryFixtureSaysItWasBuilt(unittest.TestCase):
@@ -1181,7 +1311,7 @@ class EveryFixtureSaysItWasBuilt(unittest.TestCase):
         # six and passes here exactly as a floor would; matching the bare
         # name anywhere in the `setUp` is what narrows that hole, and nothing
         # in this file closes it.
-        self.assertEqual(6, len(watched),
+        self.assertEqual(7, len(watched),
                          f"this gate is watching {watched}: a fixture class was "
                          "added or renamed. Check that each one asserts its root, "
                          "then bump this number deliberately")
