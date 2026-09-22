@@ -85,19 +85,75 @@ TOGETHER = {
     "test_root_ignore_coverage.ThisRepository": "the checkout",
 }
 
-# Seconds, as profiled on one Windows host on 2026-09-21 and recorded in
-# issue #43. Nothing reads these as a fact about anything; they exist so the
-# two longest classes land on different workers, which is the whole of the
+# Seconds a class costs, every one of them measured on one Windows host on
+# 2026-09-22 (#46). Nothing reads these as a fact about anything; they exist so
+# the long poles land on different workers, which is the whole of the
 # difference between a good packing and a random one.
+#
+# **The lowest of repeated serial passes, and the repeats are not ceremony.**
+# #46 records that this host's variance is a third of a run, and it is right:
+# two passes over identical code differed by 26% overall and by 2.8x on one
+# class. A single pass measures the load as much as the class. The MINIMUM
+# rather than the mean, because a class has a floor — the work it actually
+# does — and everything above it is somebody else's process; the mean of a
+# contended sample estimates the contention. It is also the direction this
+# table wants to be wrong in least, since an inflated weight makes the packer
+# reserve room nothing needs, which is the mistake it was already making.
+#
+# **Refreshed whole rather than entry by entry, and that is the point.** These
+# numbers are read against each other, so a table half old and half new packs
+# worse than either — and the eight this replaces were taken under a loaded
+# sharded run while these were taken one class at a time.
+#
+# **A class is listed when it measured 5 s or more, OR when it holds ten tests
+# or more.** Two arms because there are two ways to steer the packer wrongly
+# and the table this replaces caught only one. Slower than its test count is
+# the obvious one: `ThisRepository` is two tests and 54 s, and five classes
+# above 19 s were not in the old table at all. FASTER is the one that was
+# missed — an unlisted class costs `UNMEASURED` per test, so
+# `TheGitArgvGuard`'s 168 tests would be costed at 168 s against a real 25 s
+# and the packer would hand it a worker of its own. A class under both arms is
+# packed on its test count, and is too small for the difference to reach the
+# wall.
+#
+# SERIAL classes are absent by construction: `plan()` sets them aside before
+# it reads this, so an entry for one would never be consulted.
+#
+# Summing the minima gives 584 s of serial work, against the 1029 s #46
+# records before the spawn cuts. That sum is a floor rather than a wall: no
+# run is ever this fast, because no run is ever uncontended.
 WEIGHT = {
-    "test_grok_helpers.TheGitArgvGuard": 225.6,
-    "test_grok_helpers.CopilotFeedHelpersAreTheOnlyIntake": 222.9,
-    "test_git_rebase_onto_main.TheHelperPublishesWhatItRebased": 131.9,
-    "test_git_rebase_onto_main.AConflictIsTheCaseRebaseIsHereFor": 112.9,
-    "test_grok_helpers.TheTriagerEditsNothingShipDenies": 80.0,
-    "test_grok_helpers.AFeedHelperReturnsTheWholeAnswer": 47.2,
-    "test_root_ignore_coverage.ThisRepository": 40.2,
-    "test_grok_helpers.AnAuthorsFilenameDoesNotSteerTheTriage": 38.9,
+    "test_git_rebase_onto_main.TheHelperPublishesWhatItRebased": 73.9,
+    "test_git_rebase_onto_main.AConflictIsTheCaseRebaseIsHereFor": 57.2,
+    "test_grok_helpers.CopilotFeedHelpersAreTheOnlyIntake": 56.0,
+    "test_git_rebase_onto_main.TheApplyBackendIsDrivenToo": 41.1,
+    "test_root_ignore_coverage.ThisRepository": 33.3,
+    "test_git_rebase_onto_main.AStoppedReplayIsNotAlwaysAConflict": 27.8,
+    "test_git_rebase_onto_main.TheHelperRefusesBeforeItRewrites": 26.5,
+    "test_grok_helpers.TheGitArgvGuard": 23.3,
+    "test_grok_helpers.AnAuthorsFilenameDoesNotSteerTheTriage": 22.3,
+    "test_grok_helpers.AFeedHelperReturnsTheWholeAnswer": 20.8,
+    "test_grok_helpers.IssueHelperHasNoFreeParameter": 19.0,
+    "test_grok_helpers.LandingByRebaseMovedTheReadsThatAssumedAMergeCommit": 17.5,
+    "test_grok_helpers.CopilotFeedFilter": 14.8,
+    "test_grok_helpers.TheCeilingBindsAndTheReadStaysWider": 14.0,
+    "test_grok_helpers.LedgerDoesNotFailOpen": 12.6,
+    "test_git_rebase_onto_main.ALegacyMergeForwardIsNotSilentlyDropped": 12.4,
+    "test_grok_helpers.LabelHelperBehaviour": 11.0,
+    "test_git_rebase_onto_main.TheFixtureCopyIsTheFixture": 7.2,
+    "test_grok_helpers.TheTriagerDispatchesOnlyTheAdjudicator": 6.4,
+    "test_grok_helpers.DidItRunAllowList": 6.4,
+    "test_edit_target_guard.WhatThisGuardIsNotTheSubjectOf": 5.0,
+    "test_grok_helpers.TheFourPortedResiduals": 3.5,
+    "test_grok_helpers.TheTriagerEditsNothingShipDenies": 1.9,
+    "test_grok_helpers.UsageLimitPattern": 1.9,
+    "test_grok_helpers.WhatSuppressesIsDecidedByCodeNow": 1.8,
+    "test_edit_target_guard.TheOrdinaryWriteIsNotDisturbed": 1.2,
+    "test_grok_helpers.CommandsEnforceTheEditingBoundariesTheyState": 0.9,
+    "test_locality_gate.Verdicts": 0.2,
+    "test_locality_gate.Matching": 0.2,
+    "test_locality_gate.TouchSetGrammar": 0.1,
+    "test_locality_gate.MapGrammar": 0.1,
 }
 
 # What an unmeasured class is assumed to cost per test. Deliberately coarse:
