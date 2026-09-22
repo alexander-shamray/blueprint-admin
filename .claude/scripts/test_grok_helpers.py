@@ -5828,23 +5828,77 @@ class TheGitArgvGuard(unittest.TestCase):
     built-in, so it reaches commands no allow or deny rule is consulted for.
     """
 
-    def judge(self, command, tool="Bash", cwd=None, timeout=None):
-        """The hook's verdict on one command: None to allow, or the reason."""
+    _judging = None
+
+    @classmethod
+    def judging_module(cls):
+        """The hook imported once per class, for the in-process verdict path.
+
+        **Deliberately not `guard_module`, which hands back a FRESH import
+        every call.** Two cases there replace a module attribute to instrument
+        it, and one shared with `judge` would carry that replacement into every
+        later verdict in the class. Two imports of one file are two module
+        objects, so the instrumented one cannot reach this one.
+        """
+        if cls._judging is None:
+            spec = importlib.util.spec_from_file_location(
+                "guard_git_argv_judging", HOOK)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            cls._judging = module
+        return cls._judging
+
+    @staticmethod
+    def event(command, tool="Bash", cwd=None):
+        """The `PreToolUse` event the session hands the hook."""
         event = {"tool_name": tool, "tool_input": {"command": command}}
         if cwd is not None:
             event["cwd"] = cwd
+        return event
+
+    def reason_of(self, payload):
+        """The refusal reason out of a hook payload, or None for an allow."""
+        if payload is None:
+            return None
+        decision = payload["hookSpecificOutput"]
+        self.assertEqual("deny", decision["permissionDecision"])
+        return decision["permissionDecisionReason"]
+
+    def judge(self, command, tool="Bash", cwd=None):
+        """The hook's verdict on one command: None to allow, or the reason.
+
+        **In-process since #46.** This spawned an interpreter per verdict â€”
+        1036 of them, 198 s of a 1029 s suite â€” and a verdict is a pure
+        function of the event, so the process bought only the `__main__`
+        wiring. That wiring is asked about by `test_the_spawned_hook_answers
+        _what_the_import_does`, once, rather than a thousand times here.
+
+        `decision` catches every exception and answers with a refusal, so a
+        parser that crashes still returns a reason rather than raising â€” the
+        same fail-CLOSED direction the spawned hook had, where the old
+        `assertEqual(0, result.returncode)` was what said so.
+        """
+        return self.reason_of(
+            self.judging_module().decision(self.event(command, tool, cwd)))
+
+    def spawned_judge(self, command, tool="Bash", cwd=None, timeout=None):
+        """The same verdict through `__main__`, in a process that can be killed.
+
+        **Kept for the one property an import cannot carry: a wall-clock bound
+        somebody else enforces.** The budget cases assert that a command past
+        `LENGTH_BUDGET` is refused *in time*, and in-process a regression there
+        does not fail â€” it hangs the suite, which is the failure mode those
+        cases exist to convert into a red test.
+        """
         result = subprocess.run(
             [sys.executable, str(HOOK)],
-            input=json.dumps(event), capture_output=True, text=True,
-            timeout=timeout,
+            input=json.dumps(self.event(command, tool, cwd)),
+            capture_output=True, text=True, timeout=timeout,
         )
         self.assertEqual(0, result.returncode, result.stderr)
         if not result.stdout.strip():
             return None
-        payload = json.loads(result.stdout)
-        decision = payload["hookSpecificOutput"]
-        self.assertEqual("deny", decision["permissionDecision"])
-        return decision["permissionDecisionReason"]
+        return self.reason_of(json.loads(result.stdout))
 
     def assertRefused(self, command, cwd=None):
         reason = self.judge(command, cwd=cwd)
@@ -8904,7 +8958,7 @@ class TheGitArgvGuard(unittest.TestCase):
                       (opener, opener * 1000 + "a" * 10000)]
         for label, command in cases:
             with self.subTest(label=label, length=len(command)):
-                reason = self.judge(command, timeout=30)
+                reason = self.spawned_judge(command, timeout=30)
                 self.assertIsNotNone(reason, "admitted")
                 self.assertIn("time limit", reason)
 
@@ -8912,7 +8966,7 @@ class TheGitArgvGuard(unittest.TestCase):
         # The control: the budgets refuse by size and by nothing else.
         command = "git log --oneline -1 # " + "(" * 1000
         self.assertLessEqual(1000 * len(command), self.budget("SCAN_BUDGET"))
-        self.assertIsNone(self.judge(command, timeout=30))
+        self.assertIsNone(self.spawned_judge(command, timeout=30))
 
     def test_the_worst_command_inside_the_budget_is_judged_in_time(self):
         # The invariant the budgets exist for: a command just inside both still
@@ -8931,7 +8985,7 @@ class TheGitArgvGuard(unittest.TestCase):
                 with self.subTest(opener=opener, openers=count * per):
                     self.assertLessEqual(len(command), length)
                     self.assertLessEqual(count * per * len(command), scan)
-                    reason = self.judge(command, timeout=30)
+                    reason = self.spawned_judge(command, timeout=30)
                     self.assertNotIn("time limit", reason or "")
 
     def test_an_expanding_heredoc_body_removes_its_continuations(self):
@@ -9047,6 +9101,48 @@ class TheGitArgvGuard(unittest.TestCase):
 
     def test_a_non_bash_tool_is_not_judged(self):
         self.assertIsNone(self.judge("git push origin +HEAD:main", tool="Read"))
+
+    def test_the_spawned_hook_answers_what_the_import_does(self):
+        """#46 â€” the case the in-process `judge` is only safe behind.
+
+        Every other verdict in this class is now taken by importing the module
+        and calling `decision`, which never executes `__main__`. So the half of
+        the contract the session actually depends on â€” read the event on stdin,
+        write the deny on stdout, exit 0 â€” would have no witness at all: delete
+        `main`'s `json.dump` and this file stays green while the hook refuses
+        nothing where it is wired.
+
+        **Both answers, compared as payloads rather than as reasons.** A deny
+        that reached stdout with the wrong key or the wrong decision would pass
+        a reason-only comparison, and the session reads the shape.
+        """
+        admitted = "git status"
+        refused = ("git push origin +HEAD:main", "git log --out''put=/tmp/x")
+        for command in (admitted, *refused):
+            with self.subTest(command=command):
+                imported = self.judging_module().decision(self.event(command))
+                result = subprocess.run(
+                    [sys.executable, str(HOOK)],
+                    input=json.dumps(self.event(command)),
+                    capture_output=True, text=True,
+                )
+                self.assertEqual(0, result.returncode, result.stderr)
+                spawned = (json.loads(result.stdout)
+                           if result.stdout.strip() else None)
+                self.assertEqual(imported, spawned)
+
+        # **The positive control, and this case is worthless without it.**
+        # Agreement is symmetric: a `decision` that answered None for
+        # everything would agree perfectly with a `main` that printed nothing,
+        # and the loop above would pass on two silences. So the corpus is
+        # pinned to contain a real refusal and a real allow, on both paths.
+        for command in refused:
+            with self.subTest(control=command):
+                self.assertIsNotNone(self.judge(command), "admitted")
+                self.assertIsNotNone(
+                    self.spawned_judge(command), "admitted when spawned")
+        self.assertIsNone(self.judge(admitted))
+        self.assertIsNone(self.spawned_judge(admitted))
 
     def test_a_malformed_event_does_not_take_the_session_down(self):
         # The one deliberate fail-OPEN, and it is argued rather than assumed:

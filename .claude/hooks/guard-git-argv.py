@@ -4448,22 +4448,27 @@ def scan_budget(command):
     )
 
 
-def main():
-    try:
-        event = json.load(sys.stdin)
-    except (json.JSONDecodeError, ValueError):
-        # A hook that cannot read its own input has established nothing. Say so
-        # and allow: refusing every Bash call on a malformed event would take
-        # the session down for a defect in this file.
-        print("guard-git-argv: unreadable hook event; not judging", file=sys.stderr)
-        return 0
+def decision(event):
+    """The hook's answer for one event: `None` to allow, or the deny payload.
 
+    **Split out of `main` so a caller can ask for a verdict without paying an
+    interpreter to answer it (#46).** The harness asks about a thousand times a
+    run, and a process per answer was the largest single spawn cost in the
+    suite. What is left in `main` is the stdin/stdout half and nothing else.
+
+    **The split is safe only while the two halves agree, so that is a case
+    rather than a claim.** `TheGitArgvGuard.test_the_spawned_hook_answers_what
+    _the_import_does` drives the same commands down both paths and compares the
+    payloads. Without it the suite would be reading a function no session calls:
+    delete `main`'s `json.dump` and every in-process assertion still passes
+    while the hook refuses nothing where it is actually wired.
+    """
     if event.get("tool_name") != "Bash":
-        return 0
+        return None
 
     command = (event.get("tool_input") or {}).get("command")
     if not isinstance(command, str):
-        return 0
+        return None
 
     global EVENT_CWD
     cwd = event.get("cwd")
@@ -4491,18 +4496,30 @@ def main():
             "could not be read. The traceback is on stderr."
         )
     if reason is None:
+        return None
+
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": reason,
+        }
+    }
+
+
+def main():
+    try:
+        event = json.load(sys.stdin)
+    except (json.JSONDecodeError, ValueError):
+        # A hook that cannot read its own input has established nothing. Say so
+        # and allow: refusing every Bash call on a malformed event would take
+        # the session down for a defect in this file.
+        print("guard-git-argv: unreadable hook event; not judging", file=sys.stderr)
         return 0
 
-    json.dump(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": reason,
-            }
-        },
-        sys.stdout,
-    )
+    payload = decision(event)
+    if payload is not None:
+        json.dump(payload, sys.stdout)
     return 0
 
 
