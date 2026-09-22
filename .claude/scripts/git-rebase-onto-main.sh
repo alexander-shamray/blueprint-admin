@@ -322,6 +322,15 @@ stopped() {
       left=$(git rev-list --count "refs/remotes/origin/main..refs/heads/$branch") || left=""
       [ -n "$left" ] ||
         { echo "cannot count what $branch is replaying, so a skip cannot be bounded" >&2; exit 14; }
+      # Zero here is not the bound running out, and the two must not share a
+      # message: a count of none means the branch holds nothing origin/main
+      # lacks, so there was never a commit for a skip to drop. Said once,
+      # where the count is taken, so the refusal below can speak only about
+      # attempts it actually made.
+      [ "$left" -gt 0 ] ||
+        { echo "$branch holds no commits origin/main lacks, so there is nothing to replay" >&2
+          echo "and nothing a skip could drop: 'abort' and start again" >&2
+          exit 14; }
     fi
     # Spent per attempt rather than per commit dropped, which is what bounds
     # a skip that fails while changing nothing — so the message says
