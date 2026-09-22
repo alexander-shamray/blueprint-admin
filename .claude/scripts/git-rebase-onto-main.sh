@@ -327,7 +327,8 @@ case "$mode" in
       # reads that tip as non-ancestral and `continue` finds no rebase. Both
       # identities are checked, because the name passed and the branch in hand
       # are different ways to reach the wrong record.
-      read_pending || true
+      read_pending ||
+        { echo "no replay is waiting to be abandoned" >&2; exit 9; }
       [ "$recorded_branch" = "$branch" ] ||
         { echo "the waiting replay is $recorded_branch, not $branch" >&2; exit 4; }
       current=$(git branch --show-current)
@@ -353,7 +354,22 @@ case "$mode" in
       # guard exists to prevent.
       if [ -n "$recorded_head" ]; then
         head_now=$(git rev-parse HEAD)
-        remote_now=$(git rev-parse "refs/remotes/origin/$branch" 2>/dev/null || echo "")
+        # Absence and failure are different answers, and folding them together
+        # defeats the paragraph above. `2>/dev/null || echo ""` made the
+        # assignment succeed whatever happened, so a `git rev-parse` failing
+        # on a ref that DOES exist read as "the lease is dead", passed the
+        # guard, and removed the record — the one outcome it exists to
+        # prevent. Asked separately, a ref that is genuinely gone gives "" and
+        # a git that failed takes the run down with the record intact.
+        #
+        # `--verify` also matters: bare `rev-parse` prints an argument it
+        # cannot resolve to stdout before failing, so the old line captured
+        # the ref NAME rather than the empty string it appears to promise.
+        if git show-ref --verify --quiet "refs/remotes/origin/$branch"; then
+          remote_now=$(git rev-parse --verify "refs/remotes/origin/$branch")
+        else
+          remote_now=""
+        fi
         [ "$head_now" != "$recorded_head" ] || [ "$remote_now" != "$recorded_lease" ] ||
           { echo "the replay of $branch is still at HEAD and 'publish' can finish it; refusing to strand it" >&2
             exit 9; }

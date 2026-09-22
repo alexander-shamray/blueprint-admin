@@ -569,6 +569,22 @@ class TheHelperPublishesWhatItRebased(unittest.TestCase):
         self.at(hooks + '; rm -f "$h/pre-rebase"')
         self.assertEqual(0, self.helper().returncode, "a stale record refused the next start")
 
+    def test_abort_clears_a_record_whose_remote_ref_is_gone(self):
+        # A missing remote-tracking ref is a genuinely dead lease — `publish`
+        # refuses at `require_remote_branch` — so clearing is right, and this
+        # is the path the rewritten read has to keep working. What must NOT
+        # reach it is a `git rev-parse` failing for any other reason, which
+        # would strand the replay; that is why absence is now asked as its own
+        # question rather than inferred from a failure.
+        hooks = 'h="$(git rev-parse --git-path hooks)"; mkdir -p "$h"'
+        self.at(hooks + '; printf "#!/bin/sh\\nexit 1\\n" > "$h/pre-push"; chmod +x "$h/pre-push"')
+        self.assertNotEqual(0, self.helper().returncode, "the push must fail")
+        self.at("git update-ref -d refs/remotes/origin/feat/x")
+
+        result = self.helper("abort")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("cleared the waiting replay", result.stdout)
+
     def test_abort_refuses_a_replay_that_publish_can_still_finish(self):
         # Clearing a record whose head is still the tip leaves the branch
         # rewritten with nothing able to reach it: `start` reads that tip as
