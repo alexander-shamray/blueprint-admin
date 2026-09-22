@@ -31,5 +31,8 @@ run_py() {
   exit 2
 }
 
-run_py -m unittest discover -s .claude/scripts -p 'test_*.py'
-run_py -m unittest discover -s .github/locality-gate
+# Both discovery roots live in the runner now, which is what keeps this check
+# and the `harness` CI job from coming to run different suites. It takes no
+# arguments: the worker count is the host's, capped, and a caller who could set
+# it would be a second opinion about what the suite is.
+run_py .claude/scripts/shard-harness-suite.py

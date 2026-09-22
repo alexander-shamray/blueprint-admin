@@ -128,12 +128,27 @@ argument is how a rule gets "corrected" back.
   loaded in, have it edit `README.md`, and see the hook refuse it. The
   guard also refuses any target outside the checkout its event's `cwd`
   stands in, so a sibling worktree or another repository is out of reach.
-- **`python -m unittest discover -s .claude/scripts -p 'test_*.py'` is the
-  harness's own suite.** It reads `git ls-files`, so a new tracked root file
-  or top-level tree fails it until somebody decides which side of the
-  boundary it is on. Run it after any change under `.claude/`. Any Python
-  3.12 will do — `py -3.12` on Windows, `python` elsewhere — and CI's
-  `harness` job runs `python` on three platforms.
+- **`python .claude/scripts/shard-harness-suite.py` is the harness's own
+  suite.** It reads `git ls-files`, so a new tracked root file or top-level
+  tree fails it until somebody decides which side of the boundary it is on.
+  Run it after any change under `.claude/`. Any Python 3.12 will do —
+  `py -3.12` on Windows, `python` elsewhere — and CI's `harness` job runs
+  `python` on three platforms.
+- **That runner owns both discovery roots, and runs their classes as parallel
+  workers.** `harness-checks.sh` and the `harness` job name the runner and no
+  root of their own, because two copies of a root is how a local check and CI
+  come to run different suites. The unit is the class, since a class is what
+  shares a fixture, and the count is the host's cores capped at the measured
+  knee. **What a splitter may never do is stop placing a class** — every
+  worker green and one class never run is this repository's most-repeated
+  failure in its cheapest form — so the placement is compared back against
+  discovery rather than against a list, by `test_harness_shards.py`, and a
+  worker refuses an id discovery does not hold rather than reporting a pass.
+  Two of its three tables are not about speed at all: `SERIAL` holds the
+  classes whose subject is elapsed time or a listening port, `TOGETHER` the
+  ones sharing a `secsweep-*` namespace in the temp root or this checkout's
+  own `.git`, and a name in either that no longer resolves fails a test, so a
+  renamed class loses its pinning loudly.
 
 - **The only force push in this repository is
   `.claude/scripts/git-rebase-onto-main.sh`, and `/ship` step 7 grants it by

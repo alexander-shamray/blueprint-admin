@@ -90,4 +90,10 @@ jobs:
         run: brew install jq
       - name: The suite reads `git ls-files`, so the checkout must be a real one
         run: git rev-parse --is-inside-work-tree
-      - run: python -m unittest discover -s .claude/scripts -p 'test_*.py' -v
+      # Both roots, as parallel class shards: the serial run cost 440 s on
+      # this matrix's Windows leg against 107 s on ubuntu. The runner owns
+      # which roots those are, so this job and harness-checks.sh cannot come
+      # to run different suites. It also reaches .github/locality-gate, whose
+      # own workflow is a different subject — the base copy of the gate judged
+      # against the PR body — rather than a duplicate of this.
+      - run: python .claude/scripts/shard-harness-suite.py
