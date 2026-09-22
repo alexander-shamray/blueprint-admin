@@ -2813,6 +2813,12 @@ class CopilotFeedHelpersAreTheOnlyIntake(unittest.TestCase):
                 )
                 self.assertEqual(out.returncode, 2, out.stderr)
 
+    @staticmethod
+    def head():
+        """This clone's HEAD, which the stubs hand back as a PR base."""
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], text=True).strip()
+
     def _run_locality_with_gh(self, script):
         # A `gh` shim on PATH, the shape every stubbed helper test here uses.
         d = tempfile.mkdtemp()
@@ -2854,7 +2860,8 @@ class CopilotFeedHelpersAreTheOnlyIntake(unittest.TestCase):
         # pipeline, so an authentication or network failure produced the same
         # empty success as a body with no rows, and a caller would skip the
         # touch-set check believing the body had none. The body is captured
-        # first now, and only grep's no-match status is masked.
+        # first, and nothing masks a status: the row filter is a bash loop
+        # that cannot fail.
         r = self._run_locality_with_gh("echo 'gh: not logged in' >&2; exit 1\n")
         self.assertNotEqual(0, r.returncode)
         self.assertEqual("", r.stdout)
@@ -2920,8 +2927,18 @@ class CopilotFeedHelpersAreTheOnlyIntake(unittest.TestCase):
                 # The stub splits on newline to encode, so a name carrying
                 # one is encoded whole here instead.
                 encoded = json.dumps("docs/a.md") + "\n" + json.dumps(name) + "\n"
+                # **The count and base arms are what make this case reach the
+                # guard it names.** Without them the shim answers the body to
+                # `--json changedFiles`, the helper refuses at its first line
+                # with `changedFiles is not a count`, and every assertion below
+                # holds for that reason instead — exit 3, empty stdout, no
+                # prose on stderr — while the whole changed-path grammar goes
+                # unexercised. Measured: deleting the path checks left this
+                # case green.
                 script = (
-                    'case "$*" in *"/files"*) cat <<\'FILES\'\n' + encoded
+                    'case "$*" in *changedFiles*) echo 2\n'
+                    ";; *baseRefOid*) echo " + self.head() + "\n"
+                    ';; *"/files"*) cat <<\'FILES\'\n' + encoded
                     + "FILES\n;; *) cat <<'STUB'\n" + body + "STUB\n;; esac\n"
                 )
                 r = self._run_locality_with_gh(script)
@@ -3063,6 +3080,26 @@ class CopilotFeedHelpersAreTheOnlyIntake(unittest.TestCase):
             with self.subTest(cls=cls):
                 body = f"| Class | {cls} |\n| Touch set | docs/x.md |\n"
                 r = self._run_locality_with_gh(self._gh_printing(body))
+                self.assertEqual(3, r.returncode, r.stderr)
+                self.assertEqual("", r.stdout)
+
+    def test_a_row_carrying_text_after_its_closing_pipe_is_refused(self):
+        """The cell ends where the row does, not at the row's last `|`.
+
+        **Nothing here covered this, and a permissiveness went through 31
+        green tests because of it.** Cutting the cell at the LAST pipe
+        discards whatever follows it, so `| Class | D | note` reads as class
+        `D` and `| Touch set | docs/x.md |x` reads as that one token: the row
+        the author wrote is judged as a row they did not write, and the
+        discarded text appears nowhere. Both are refused when the junk stays
+        in the cell — the class cell fails its grammar, the touch-set cell
+        fails the one-cell check.
+        """
+        for row in ("| Class | D | note\n| Touch set | docs/x.md |",
+                    "| Class | D |\n| Touch set | docs/x.md |x",
+                    "| Class | D |\n| Touch set | docs/x.md | more"):
+            with self.subTest(row=row):
+                r = self._run_locality_with_gh(self._gh_printing(row + "\n"))
                 self.assertEqual(3, r.returncode, r.stderr)
                 self.assertEqual("", r.stdout)
 
@@ -9120,18 +9157,41 @@ class TheGitArgvGuard(unittest.TestCase):
         """
         admitted = "git status"
         refused = ("git push origin +HEAD:main", "git log --out''put=/tmp/x")
-        for command in (admitted, *refused):
-            with self.subTest(command=command):
-                imported = self.judging_module().decision(self.event(command))
+        # **One event carries a `cwd`, and that is not padding.** `decision`
+        # keeps it in a module global, so in-process it is shared state rather
+        # than a fresh process's — and the seven assertions in this class that
+        # pass a `cwd` are now the only readers of it. A `main` that re-keyed
+        # or defaulted that field would leave every one of them green, and a
+        # corpus of three cwd-free commands would agree on both paths while
+        # the hook judged every relative redirection against the wrong root.
+        # A checkout, because the application-tree rule is judged at the root
+        # the target is under — the `.git` is what makes `root` one, exactly
+        # as `test_a_redirection_into_an_application_tree_is_refused` builds
+        # it.
+        root = tempfile.mkdtemp(prefix="argv-agree-")
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        os.makedirs(os.path.join(root, ".git"))
+        os.makedirs(os.path.join(root, "src", "app"))
+        cases = [self.event(command) for command in (admitted, *refused)]
+        cases.append(self.event("ls > src/app/x.ts", cwd=root))
+        for event in cases:
+            with self.subTest(command=event["tool_input"]["command"],
+                              cwd=event.get("cwd") is not None):
+                imported = self.judging_module().decision(event)
                 result = subprocess.run(
                     [sys.executable, str(HOOK)],
-                    input=json.dumps(self.event(command)),
+                    input=json.dumps(event),
                     capture_output=True, text=True,
                 )
                 self.assertEqual(0, result.returncode, result.stderr)
                 spawned = (json.loads(result.stdout)
                            if result.stdout.strip() else None)
                 self.assertEqual(imported, spawned)
+        # And the cwd event is one whose verdict actually turns on the field,
+        # so the comparison above is not two `None`s agreeing.
+        self.assertIsNotNone(
+            self.judging_module().decision(cases[-1]),
+            "the cwd case must be one the guard refuses, or it pins nothing")
 
         # **The positive control, and this case is worthless without it.**
         # Agreement is symmetric: a `decision` that answered None for
@@ -10199,10 +10259,11 @@ class TheTriagerEditsNothingShipDenies(unittest.TestCase):
     def run_guard(self, event):
         """The guard's answer for one event, without launching anything (#46).
 
-        **This was 100.5 s of a 98.6 s class, and the class was the suite's
-        makespan floor.** Every assertion cost a `bash`, up to four interpreter
-        probes inside `run-guard.sh`, and the guard's own interpreter — for a
-        verdict that is a pure function of the event.
+        **The launcher, not the guard, was what this cost.** Every assertion
+        paid for a `bash`, up to four interpreter probes inside `run-guard.sh`
+        and the guard's own — to answer a question that is a pure function of
+        the event. On the pass that sized it, this class was the longest in the
+        suite; `WEIGHT` in `shard-harness-suite.py` owns what it costs now.
 
         **The guard is unchanged and so are the assertions.** It already writes
         its own deny payload to stdout and returns 0, and the launcher only

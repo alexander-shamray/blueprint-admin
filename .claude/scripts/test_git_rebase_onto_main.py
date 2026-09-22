@@ -204,9 +204,9 @@ def fixture_template(script):
 def fixture_copy(script):
     """A private copy of the fixture, for one test (#46).
 
-    The sixteen `git` commands in `FIXTURE` cost 4.45-5.37 s on the Windows
-    host and a copy costs about 0.6 s, so six classes rebuilding it per test
-    was roughly two minutes of the suite. What stops being repeated is the
+    The `git` commands in `FIXTURE` cost 4.45-5.37 s on the Windows host and a
+    copy costs about 0.6 s, so rebuilding it once per test across every class
+    below was roughly two minutes of the suite. What stops being repeated is the
     spawns, not the state: the build is still this script, run for real.
 
     Returns `""` when the build failed, so the callers' own root assertion
@@ -1161,7 +1161,7 @@ class TheFixtureCopyIsTheFixture(unittest.TestCase):
     own working tree or its own remote ref, so what they report is a lease that
     failed, a ref that moved, a publish that refused: the symptoms of another
     test's push, in a suite that runs its classes in parallel. This class is
-    the one that fails with the reason, and it is two tests rather than
+    the one that fails with the reason, and it is three tests rather than
     thirty-one.
     """
 
@@ -1304,11 +1304,11 @@ class EveryFixtureSaysItWasBuilt(unittest.TestCase):
                     "assertion under it vacuous")
         # The gate's own subject, and exact rather than a floor — but what
         # that buys is narrow, and the first version of this comment credited
-        # it with more. A seventh class this gate DOES recognise can no
+        # it with more. A further class this gate DOES recognise can no
         # longer arrive unremarked, because the count has to be bumped in the
         # same edit, which is the moment to ask whether the new one asserts
-        # its root. A seventh class the recogniser MISSES leaves the count at
-        # six and passes here exactly as a floor would; matching the bare
+        # its root. One the recogniser MISSES leaves the count where it is
+        # and passes here exactly as a floor would; matching the bare
         # name anywhere in the `setUp` is what narrows that hole, and nothing
         # in this file closes it.
         self.assertEqual(7, len(watched),
