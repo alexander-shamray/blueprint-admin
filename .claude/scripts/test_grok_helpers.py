@@ -9974,14 +9974,13 @@ class HarnessChecksFindsAGenericPyLauncher(unittest.TestCase):
             cwd=str(SCRIPTS.parent.parent))
         self.assertEqual(0, out.returncode, out.stderr)
         ran = log.read_text(encoding="utf-8").splitlines()
+        # The two discovery roots moved into the shard runner, which holds the
+        # only copy of what they are, and `test_harness_shards.py` is what
+        # checks both are still reached. This case's own subject is narrower:
+        # that a `py` satisfying the floor only as `-3` gets as far as running
+        # the suite at all.
         self.assertTrue(
-            any("-m unittest discover -s .claude/scripts" in line
-                for line in ran),
-            ran)
-        self.assertTrue(
-            any("-m unittest discover -s .github/locality-gate" in line
-                for line in ran),
-            ran)
+            any("shard-harness-suite.py" in line for line in ran), ran)
 
 
 class TestCodebaseIndexSkillGrants(unittest.TestCase):

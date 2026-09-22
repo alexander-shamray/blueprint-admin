@@ -22,9 +22,11 @@ path. A green unit suite is not a green smoke.
 
 ## Harness
 
-`python -m unittest discover -s .claude/scripts -p 'test_*.py'` — Python 3.12,
-plus Bash, `grep`, Git and `jq` on PATH. Python plus `jq` alone fails
-before a case runs. The `harness` job in `ci.yml` is the matrix.
+`python .claude/scripts/shard-harness-suite.py` — Python 3.12, plus Bash,
+`grep`, Git and `jq` on PATH. Python plus `jq` alone fails before a case
+runs. It discovers both `.claude/scripts` and `.github/locality-gate` and
+runs their classes as parallel workers; `docs/harness-boundaries.md` owns what
+that may not do. The `harness` job in `ci.yml` is the matrix.
 
 ## Locality
 
