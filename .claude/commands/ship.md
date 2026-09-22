@@ -1716,9 +1716,12 @@ same argument as never calling a branch clean because asking failed.
    is `publish` too; every other exit stops the chain and is reported as what
    it is.
 
-   **Read the message, not the code.** Eleven refusals share exit 9 and five
-   share exit 2, so the code alone does not say which guard fired — and a run
-   that cannot tell stops rather than guessing.
+   **Read the message, not the code.** Exit 9 is shared by refusals across
+   all four of that helper's modes, and exit 2 by several more — the script
+   owns both counts and this cites them rather than repeating them, because
+   the copy here was four short of the real one for as long as it existed.
+   So the code alone does not say which guard fired, and a run that cannot
+   tell stops rather than guessing.
 
    **The force push is the helper's, and every force-push deny in
    `.claude/settings.json` is untouched.** A permission pattern matches the

@@ -151,8 +151,11 @@ argument is how a rule gets "corrected" back.
   calls the one thing this repository reads differently. The
   guards are in the script and `test_git_rebase_onto_main.py` is what watches
   them: it pins the single leased push and the absence of every unleased
-  spelling over the script's executable lines, and runs the rest against real
-  repositories. Ported from `alexander-shamray/blueprint-backend`, which owns
+  spelling over the script's executable lines, runs most of the rest against
+  real repositories, and keeps one case whose subject is the suite itself —
+  that every class building the fixture also asserts the fixture was built,
+  since a failed one makes those classes' assertions vacuous rather than
+  red. Ported from `alexander-shamray/blueprint-backend`, which owns
   the argument. What differs here is that `/ship` step 0 reads ancestry rather
   than content, so the helper's merge guard is the only place in this
   repository that reads it.

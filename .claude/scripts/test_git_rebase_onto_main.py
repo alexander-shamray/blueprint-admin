@@ -6,7 +6,8 @@ safe are mostly the second kind, and `git-rebase-onto-main.sh`'s own header
 enumerates them — not this docstring, which used to carry a shorter list of
 its own and is how two of them stopped being mentioned anywhere. The script
 is the boundary and this suite is what watches it. The first class reads the
-flags; the rest run the thing.
+flags, the last reads this file, and the rest run the thing against real
+repositories.
 """
 
 import ast
@@ -22,6 +23,13 @@ HELPER = SCRIPTS / "git-rebase-onto-main.sh"
 
 # The full path, never the bare name: on Windows `subprocess` searches System32
 # before PATH, where either of these may be WSL's.
+#
+# They are pinned by different means and both have to be. `bash` is an argv
+# element, so the path is the whole of it. `git` is never run by Python at
+# all — every git call below is made by bash, from inside a fragment — so
+# pinning it means putting its directory first on the PATH that bash gets,
+# which `run_bash` does. Resolving `GIT` and then not using it left the
+# probe in `setUpModule` checking one git while the fixtures ran another.
 BASH = shutil.which("bash")
 GIT = shutil.which("git")
 
@@ -59,6 +67,10 @@ def run_bash(script, subject="", **env_extra):
     env["GIT_CONFIG_GLOBAL"] = "/dev/null"
     env["GIT_CONFIG_SYSTEM"] = "/dev/null"
     env["GIT_CONFIG_NOSYSTEM"] = "1"
+    # The git `setUpModule` probed, not whichever one bash finds first: on a
+    # Windows runner those can differ, and the probe would pass against
+    # Git-for-Windows while every fixture ran WSL's.
+    env["PATH"] = os.pathsep.join([str(Path(GIT).parent), env.get("PATH", "")])
     env.update(env_extra)
     return subprocess.run(
         [BASH, "-c", script],
@@ -333,9 +345,10 @@ class TheHelperRefusesBeforeItRewrites(unittest.TestCase):
         self.assertEqual(before, self.head(), "the branch was rewritten before the refusal")
 
     def test_continue_and_abort_refuse_when_no_rebase_is_running(self):
-        # The code alone proves nothing: exit 9 covers eleven refusals across
-        # four modes, and each of these has same-code neighbours inside its
-        # own mode that it must not be passing on.
+        # The code alone proves nothing: exit 9 is shared by refusals across
+        # all four modes — the script owns the count — and each of these has
+        # same-code neighbours inside its own mode that it must not be
+        # passing on.
         finish = self.helper("feat/x", "continue")
         self.assertEqual(9, finish.returncode, finish.stderr)
         self.assertIn("'continue' has nothing to finish", finish.stderr)
@@ -380,6 +393,13 @@ class TheHelperRefusesBeforeItRewrites(unittest.TestCase):
                     '&& echo yes || echo no').stdout.strip(),
             "the foreign rebase was thrown away")
         self.at("git rebase --abort")
+
+    def test_publish_refuses_when_no_replay_is_waiting(self):
+        # `publish` is the retry path, and with nothing to retry it must not
+        # fall through to a push. Exit 9 again, so the message is the guard.
+        result = self.helper("feat/x", "publish")
+        self.assertEqual(9, result.returncode, result.stderr)
+        self.assertIn("no replay is waiting to be published", result.stderr)
 
     def test_the_second_site_of_exit_six_has_its_own_case(self):
         # Exit 6 is two guards — no `refs/remotes/origin/main` to rebase onto,
@@ -434,7 +454,13 @@ class AConflictIsTheCaseRebaseIsHereFor(unittest.TestCase):
     def test_a_conflict_leaves_the_rebase_in_progress_and_names_the_paths(self):
         result = self.helper("start")
         self.assertEqual(8, result.returncode)
-        self.assertIn("a.txt", result.stderr, "the caller is told what to resolve")
+        # Joined to the helper's own banner, not asserted loose. The fixture's
+        # conflicting commit is titled "the branch edits a.txt", so git puts
+        # that path on stderr before the helper prints anything — a bare
+        # `assertIn("a.txt", …)` passed with the path list deleted from the
+        # script, in the case whose name is `..._and_names_the_paths`.
+        self.assertIn("which is the point:\na.txt", result.stderr,
+                      "the caller is told which files to resolve")
         self.assertEqual("yes", self.rebase_running(), "aborting here would mean a merge instead")
 
     def test_continue_refuses_while_anything_is_still_unmerged(self):
@@ -468,6 +494,32 @@ class AConflictIsTheCaseRebaseIsHereFor(unittest.TestCase):
         result = self.helper("continue")
         self.assertEqual(9, result.returncode, result.stderr)
         self.assertIn("divergence", result.stderr)
+
+    def test_start_refuses_while_a_rebase_is_already_in_progress(self):
+        # Exit 9's `start` arm, and not the waiting-record refusal just below
+        # it in the same mode: that one is reached with no rebase running.
+        self.assertEqual(8, self.helper("start").returncode)
+        again = self.helper("start")
+        self.assertEqual(9, again.returncode, again.stderr)
+        self.assertIn("a rebase is already in progress", again.stderr)
+        self.assertEqual("yes", self.rebase_running(), "the running rebase was disturbed")
+
+    def test_continue_refuses_a_rebase_belonging_to_another_branch(self):
+        # The name passed is not the branch the rebase will restore, so
+        # finishing it would force the result over a branch this run never
+        # replayed.
+        self.assertEqual(8, self.helper("start").returncode)
+        result = self.helper("continue", branch="feat/other")
+        self.assertEqual(4, result.returncode, result.stderr)
+        self.assertIn("the rebase in progress is feat/x, not feat/other", result.stderr)
+        self.assertEqual("yes", self.rebase_running())
+
+    def test_publish_refuses_while_a_rebase_is_still_in_progress(self):
+        self.assertEqual(8, self.helper("start").returncode)
+        result = self.helper("publish")
+        self.assertEqual(9, result.returncode, result.stderr)
+        self.assertIn("a rebase is still in progress", result.stderr)
+        self.assertEqual("yes", self.rebase_running())
 
     def test_abort_puts_the_branch_back_and_publishes_nothing(self):
         before = self.at("git rev-parse HEAD").stdout.strip()
@@ -617,9 +669,9 @@ class TheHelperPublishesWhatItRebased(unittest.TestCase):
 
         result = self.helper("publish")
         self.assertEqual(9, result.returncode, result.stderr)
-        # The message, not the code: eleven refusals share exit 9, and the
-        # "no replay is waiting" one above this guard is a state this case
-        # must not be passing on.
+        # The message, not the code: exit 9 is shared by refusals throughout
+        # the script, and the "no replay is waiting" one above this guard is
+        # a state this case must not be passing on.
         self.assertIn("never finished", result.stderr)
         self.assertEqual(published,
                          self.at("git rev-parse refs/remotes/origin/feat/x").stdout.strip(),
@@ -707,7 +759,11 @@ class TheHelperPublishesWhatItRebased(unittest.TestCase):
 
         named = self.helper("abort", branch="feat/other")
         self.assertEqual(4, named.returncode, named.stderr)
-        self.assertIn("feat/x", named.stderr)
+        # The whole sentence: both exit-4 sites in this block interpolate a
+        # branch name, so `feat/x` alone would pass on the other one — and
+        # reordering the two checks would leave this green while the guard it
+        # was written for was no longer the one reached.
+        self.assertIn("the waiting replay is feat/x, not feat/other", named.stderr)
 
         elsewhere = self.helper("abort", branch="feat/x")
         self.assertEqual(4, elsewhere.returncode, elsewhere.stderr)
@@ -718,6 +774,64 @@ class TheHelperPublishesWhatItRebased(unittest.TestCase):
         self.at("git checkout -q feat/x")
         self.at(hooks + '; rm -f "$h/pre-push"')
         self.assertEqual(0, self.helper("publish").returncode)
+
+    def test_publish_refuses_a_record_naming_another_branch(self):
+        # The record is one per checkout, so the name passed is a way to
+        # reach somebody else's replay.
+        hooks = 'h="$(git rev-parse --git-path hooks)"; mkdir -p "$h"'
+        self.at(hooks + '; printf "#!/bin/sh\\nexit 1\\n" > "$h/pre-push"; chmod +x "$h/pre-push"')
+        self.assertNotEqual(0, self.helper().returncode, "the push must fail")
+
+        result = self.helper("publish", branch="feat/other")
+        self.assertEqual(4, result.returncode, result.stderr)
+        self.assertIn("the waiting replay is feat/x, not feat/other", result.stderr)
+
+    def test_publish_refuses_a_remote_that_moved_since_the_lease(self):
+        # The lease was approved against a tip that no longer exists, and
+        # re-approving it here is the re-read this helper exists to avoid —
+        # the force would then name the very commits the guard refused.
+        hooks = 'h="$(git rev-parse --git-path hooks)"; mkdir -p "$h"'
+        self.at(hooks + '; printf "#!/bin/sh\\nexit 1\\n" > "$h/pre-push"; chmod +x "$h/pre-push"')
+        self.assertNotEqual(0, self.helper().returncode, "the push must fail")
+        self.at("git update-ref refs/remotes/origin/feat/x refs/remotes/origin/main")
+
+        result = self.helper("publish")
+        self.assertEqual(7, result.returncode, result.stderr)
+        self.assertIn("has moved since the replay was approved", result.stderr)
+
+    def test_publish_refuses_a_replay_that_ended_on_no_branch(self):
+        # `publish()`'s own current-branch check, reached past every guard in
+        # the mode above it: the tip is the replayed commit and the remote is
+        # where the lease left it, so only this one is left to refuse.
+        hooks = 'h="$(git rev-parse --git-path hooks)"; mkdir -p "$h"'
+        self.at(hooks + '; printf "#!/bin/sh\\nexit 1\\n" > "$h/pre-push"; chmod +x "$h/pre-push"')
+        self.assertNotEqual(0, self.helper().returncode, "the push must fail")
+        self.at("git checkout -q --detach HEAD")
+
+        result = self.helper("publish")
+        self.assertEqual(4, result.returncode, result.stderr)
+        self.assertIn("the replay ended on a detached HEAD", result.stderr)
+
+        # `publish()`'s other refusal — an empty `approved_lease` — has no
+        # case and cannot be given one from a granted mode. `start` and
+        # `continue` both set it in `require_remote_carries_nothing_new`
+        # before the replay, and `publish` sets it from the record, which
+        # `read_pending` splits on whitespace: a record carrying a head but
+        # no lease cannot be written. It is a belt-and-braces assertion, and
+        # recording that here is honester than a case that fakes reaching it.
+
+    def test_an_unreadable_waiting_record_is_refused(self):
+        # A truncated record used to kill the run bare under `set -e`, which
+        # is a code this script assigns to nothing, in the path that exists
+        # to recover from a failed run.
+        hooks = 'h="$(git rev-parse --git-path hooks)"; mkdir -p "$h"'
+        self.at(hooks + '; printf "#!/bin/sh\\nexit 1\\n" > "$h/pre-push"; chmod +x "$h/pre-push"')
+        self.assertNotEqual(0, self.helper().returncode, "the push must fail")
+        self.at('printf "\\n" > "$(git rev-parse --git-path claude-rebase-pending)"')
+
+        result = self.helper("publish")
+        self.assertEqual(9, result.returncode, result.stderr)
+        self.assertIn("the waiting record is unreadable", result.stderr)
 
     def test_a_second_run_changes_nothing_and_does_not_force(self):
         self.assertEqual(0, self.helper().returncode)
@@ -771,6 +885,19 @@ class TheBranchNameGuardsEachHaveTheirOwnCase(unittest.TestCase):
         self.assertEqual(2, result.returncode, result.stderr)
         self.assertIn("mode must be start, continue, publish or abort", result.stderr)
 
+    def test_it_takes_exactly_two_arguments(self):
+        # The fifth exit-2 condition, and the one the suite asserted by code
+        # alone. Relaxing `[ "$#" -eq 2 ]` to `-ge 2` left every other case
+        # green while the helper silently ignored trailing arguments — which
+        # is the "a prefix rule cannot exclude a trailing flag" case a helper
+        # exists to answer in the first place.
+        for args in ("", '"$B"', '"$B" "$M" --onto'):
+            with self.subTest(args=args or "(none)"):
+                result = run_bash('bash "$H" ' + args,
+                                  H=str(HELPER), B="feat/x", M="start")
+                self.assertEqual(2, result.returncode, result.stderr)
+                self.assertIn("usage: git-rebase-onto-main.sh", result.stderr)
+
 
 class TheApplyBackendIsDrivenToo(unittest.TestCase):
     """`rebase.backend=apply` is the caller's setting and this helper supports
@@ -802,7 +929,8 @@ class TheApplyBackendIsDrivenToo(unittest.TestCase):
     def test_the_state_this_backend_leaves_is_the_one_the_helper_finds(self):
         result = self.helper("start")
         self.assertEqual(8, result.returncode, result.stderr)
-        self.assertIn("a.txt", result.stderr)
+        self.assertIn("which is the point:\na.txt", result.stderr,
+                      "git names the path too, so this joins it to the helper's banner")
         self.assertEqual("yes", self.at('test -d "$(git rev-parse --git-path rebase-apply)" '
                                         '&& echo yes || echo no').stdout.strip(),
                          "this case is not driving the apply backend at all")
@@ -829,6 +957,30 @@ class TheApplyBackendIsDrivenToo(unittest.TestCase):
         self.assertEqual(self.at("git rev-parse HEAD").stdout.strip(),
                          self.at("git rev-parse refs/remotes/origin/feat/x").stdout.strip(),
                          "the remote carries what was replayed")
+
+    def test_a_conflict_after_the_drop_is_reported_rather_than_skipped_too(self):
+        # The loop's second pass. Dropping an empty commit puts the next one
+        # into the replay, and if that conflicts the run is back at the first
+        # of the three states — so the pass that follows a skip has to answer
+        # exactly as the first one did, rather than skipping again.
+        # A second commit touching the same file, so that dropping the first
+        # as empty puts a conflicting one into the replay rather than ending
+        # it. b.txt would not do: main does not carry it, so a commit adding
+        # it there would collide on the branch's first commit instead.
+        self.at('echo theirs-again > a.txt && git add -A '
+                '&& git commit -qm "the branch edits a.txt again" '
+                '&& git push -q -f origin feat/x')
+        self.assertEqual(8, self.helper("start").returncode)
+        self.at("echo mine > a.txt && git add a.txt")
+
+        result = self.helper("continue")
+        self.assertEqual(8, result.returncode, result.stderr)
+        self.assertIn("empty", result.stderr, "the first commit was not dropped")
+        self.assertIn("which is the point:\na.txt", result.stderr,
+                      "the conflict after the drop was skipped instead of reported")
+        self.assertEqual("yes", self.at('test -d "$(git rev-parse --git-path rebase-apply)" '
+                                        '&& echo yes || echo no').stdout.strip(),
+                         "the replay was not left in progress for the caller")
 
     def test_the_empty_commit_is_the_only_thing_the_drop_loses(self):
         # The positive control for the case above: what a skip discards is a
@@ -875,7 +1027,10 @@ class AStoppedReplayIsNotAlwaysAConflict(unittest.TestCase):
 
         result = self.helper("continue")
         self.assertEqual(14, result.returncode, result.stderr)
-        self.assertIn("not a conflict", result.stderr)
+        # The staged half of exit 14, not merely the code and not merely the
+        # word "empty": the unstaged message carries that too, and this case
+        # must not pass on it.
+        self.assertIn("nothing unmerged and a change still staged", result.stderr)
         self.assertNotIn("resolve these", result.stderr,
                          "the caller is sent to resolve files that are named nowhere")
         self.assertEqual("yes", self.at('test -d "$(git rev-parse --git-path rebase-merge)" '
@@ -893,12 +1048,43 @@ class AStoppedReplayIsNotAlwaysAConflict(unittest.TestCase):
         result = self.helper("continue")
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual("mine\n", self.at("cat a.txt").stdout)
+        # Without this the case held whichever way the commit was dropped —
+        # by git, or by the helper's own skip path, which is what the sibling
+        # class establishes for the other backend. The property named in the
+        # comment above is that the skip path did NOT run.
+        self.assertNotIn("empty", result.stderr,
+                         "the helper's skip path ran; this backend drops it itself")
+
+    def test_unstaged_work_is_not_discarded_by_the_drop(self):
+        # Round 1 of #38 lost this, and it is the reason the empty-replay
+        # path takes two reads. `git rebase --continue` refuses when a
+        # tracked file carries an unstaged edit, and that leaves the index
+        # equal to HEAD — so an emptiness test asked of the index alone
+        # passes, and `git rebase --skip` hard-resets the edit away.
+        #
+        # Measured against the one-read version: b.txt came back holding only
+        # "work", and the branch was force-pushed without the rest.
+        self.assertEqual(8, self.helper("start").returncode)
+        self.at("echo mine > a.txt && git add a.txt")
+        self.at("echo precious >> b.txt")
+        before = self.at("git rev-parse refs/remotes/origin/feat/x").stdout.strip()
+        self.assertTrue(before, "the remote tip was not read")
+
+        result = self.helper("continue")
+        self.assertEqual(14, result.returncode, result.stderr)
+        self.assertIn("unstaged changes in the tree", result.stderr)
+        self.assertIn("b.txt", result.stderr, "the caller is told what is in the way")
+        self.assertEqual("work\nprecious\n", self.at("cat b.txt").stdout,
+                         "the unstaged edit was hard-reset away by the skip")
+        self.assertEqual(before,
+                         self.at("git rev-parse refs/remotes/origin/feat/x").stdout.strip(),
+                         "the branch was published without the work still in the tree")
 
 
 class EveryFixtureSaysItWasBuilt(unittest.TestCase):
     """The suite's own gate, and this file's history is why it exists.
 
-    Three of the four classes building FIXTURE had lost the
+    Three of the classes building FIXTURE had lost the
     `assertTrue(self.root)` guard by copying the fixture rather than sharing
     it. With a failed fixture `self.root` is "" and `self.work` is "/work", so
     every `cd` fails and the `assertNotEqual(0, …)` and empty-stdout
@@ -910,31 +1096,73 @@ class EveryFixtureSaysItWasBuilt(unittest.TestCase):
     signatures differ in argument order between these classes, so unifying
     them is a rewrite of every call site rather than a guard. This asserts
     the property instead, and asserts it about what it is looking at.
+
+    **Read structurally, not as text.** A substring scan of the `setUp`
+    source took a commented-out `# self.assertTrue(self.root, …)` for the
+    real thing, and would have gone red on a `setUp` that called the
+    assertion through a helper — a gate wrong in both directions at once.
+    The AST answers both: a comment is not in it, and a call is a call.
     """
 
+    @staticmethod
+    def calls_self(function, name):
+        """Every `self.<name>(…)` call anywhere inside `function`."""
+        for node in ast.walk(function):
+            if (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == name
+                    and isinstance(node.func.value, ast.Name)
+                    and node.func.value.id == "self"):
+                yield node
+
+    @classmethod
+    def builds_the_fixture(cls, function):
+        # Matched on the argument rather than on the call's spelling, so
+        # `run_bash(FIXTURE, X=...)` is still a fixture build.
+        for node in ast.walk(function):
+            if (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name)
+                    and node.func.id == "run_bash"
+                    and node.args
+                    and isinstance(node.args[0], ast.Name)
+                    and node.args[0].id == "FIXTURE"):
+                return True
+        return False
+
+    @classmethod
+    def asserts_its_root(cls, function):
+        for call in cls.calls_self(function, "assertTrue"):
+            subject = call.args[0] if call.args else None
+            if (isinstance(subject, ast.Attribute)
+                    and subject.attr == "root"
+                    and isinstance(subject.value, ast.Name)
+                    and subject.value.id == "self"):
+                return True
+        return False
+
     def test_every_class_that_builds_the_fixture_says_it_was_built(self):
-        source = Path(__file__).read_text(encoding="utf-8")
         watched = []
-        for node in ast.parse(source).body:
+        for node in ast.parse(Path(__file__).read_text(encoding="utf-8")).body:
             if not isinstance(node, ast.ClassDef):
                 continue
             for member in node.body:
                 if not isinstance(member, ast.FunctionDef) or member.name != "setUp":
                     continue
-                body = ast.get_source_segment(source, member) or ""
-                if "run_bash(FIXTURE)" not in body:
+                if not self.builds_the_fixture(member):
                     continue
                 watched.append(node.name)
-                self.assertIn(
-                    "assertTrue(self.root", body,
+                self.assertTrue(
+                    self.asserts_its_root(member),
                     f"{node.name} builds the fixture and never says whether it "
                     "worked: a failed one makes self.work '/work' and every "
                     "assertion under it vacuous")
-        # The gate's own subject. Renaming the fixture or the call would leave
-        # the loop above watching nothing and passing.
-        self.assertGreater(len(watched), 3,
-                           f"this gate found only {watched}: it has stopped "
-                           "covering the classes it was written for")
+        # The gate's own subject, and the floor is the number of fixture
+        # classes there are — not a number safely below it. At `> 3` two of
+        # the six could have dropped out of the loop, unguarded, with this
+        # still green and its own message saying it would have caught that.
+        self.assertGreaterEqual(len(watched), 6,
+                                f"this gate found only {watched}: it has stopped "
+                                "covering the classes it was written for")
 
 
 if __name__ == "__main__":
