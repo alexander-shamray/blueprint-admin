@@ -28,7 +28,18 @@ argument is how a rule gets "corrected" back.
   file, never by trying what it forbids.
 - **Every guard hook uses `run-guard.sh`** — the two in `settings.json` and
   the `review-grok-triager` profile's own — which locates a compatible Python
-  launcher before invoking the guard.
+  launcher before invoking the guard. **It pays that probe once per host
+  rather than once per guarded call**, remembering the winner under
+  `.claude/cache/`, which `.gitignore` covers whole. Every condition that
+  validates the mark is a shell builtin, so the remembered path forks nothing;
+  the mark is checked against the `PATH` it was chosen under and against the
+  interpreter's own executable, because a mark believed wrongly ends in a
+  failed `exec`, and a `PreToolUse` hook that fails any way but exit 2 lets
+  the tool run unguarded. **The mark names one of four spellings and can name
+  nothing else**: no `Edit(...)` deny covers `.claude/cache/`, so without that
+  closed set a file the guarded session may write would be a command run
+  before every guarded call. `TheLauncherPaysTheProbeOncePerHost` drives a
+  copy of the launcher through each of those failures.
 - **The one hook that guards nothing is the index refresh**, which runs
   `refresh-index.sh` from two events: a `PostToolUse` entry after every tool
   that writes, and a `SessionStart` entry for the changes no edit makes. A

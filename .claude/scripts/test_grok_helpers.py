@@ -9783,9 +9783,15 @@ class TheHookWiringRunsOnMoreThanOneOperatingSystem(unittest.TestCase):
         code = "\n".join(
             line for line in self.LAUNCHER.read_text(encoding="utf-8").splitlines()
             if not line.lstrip().startswith("#"))
-        self.assertLess(code.find("command -v py"), code.find("python3"))
+        # The two `command -v` lines, not the first `python3` anywhere: the
+        # closed set the remembered mark is checked against names all four
+        # candidates before either probe runs, and an assertion that a
+        # whitelist moves is an assertion about the wrong thing.
+        self.assertLess(code.find("command -v py"),
+                        code.find("command -v python3"))
         self.assertIn("exec py -3.12", code)
         self.assertIn("exec python3", code)
+        self.assertLess(code.find("exec py -3.12"), code.find("exec python3"))
 
     def test_the_launcher_reaches_a_host_that_only_has_python(self):
         # `docs/testing.md` lets a host expose 3.12 as `python` or `python3`,
@@ -9890,8 +9896,12 @@ class TheHookWiringRunsOnMoreThanOneOperatingSystem(unittest.TestCase):
                 with self.subTest(line=line):
                     self.assertNotIn("||", line)
                     self.assertNotIn("&&", line)
+        # Five: one per candidate, plus the remembered branch, which is a
+        # choice already made rather than a fallback. The rule this case is
+        # for is the one above — no line chains two interpreters — and it is
+        # per-line, so the count is only here to make a new branch deliberate.
         execs = [line for line in code if "exec " in line]
-        self.assertEqual(4, len(execs), execs)
+        self.assertEqual(5, len(execs), execs)
 
     def test_the_launcher_takes_a_closed_set_of_hook_names(self):
         # The hook wirings name only the files the launcher admits; a
@@ -9924,6 +9934,140 @@ class TheHookWiringRunsOnMoreThanOneOperatingSystem(unittest.TestCase):
             input=event, capture_output=True, text=True)
         self.assertEqual(0, out.returncode, out.stderr)
         self.assertIn("permissionDecision", out.stdout)
+
+
+class TheLauncherPaysTheProbeOncePerHost(unittest.TestCase):
+    """The probe's answer is a fact about PATH, and the mark that holds it.
+
+    Driven against a copy of the launcher in a scratch tree, so the mark lands
+    beside that copy rather than in this checkout, and a stand-in that records
+    whether it was probed or run. Every case here is about the mark going
+    stale, because a mark that is trusted when it should not be is the one
+    failure that ends with a tool call running unguarded.
+    """
+
+    LAUNCHER = SCRIPTS.parent / "hooks" / "run-guard.sh"
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="run-guard-cache-"))
+        self.addCleanup(shutil.rmtree, str(self.tmp), ignore_errors=True)
+        hooks = self.tmp / "hooks"
+        hooks.mkdir()
+        self.copy = hooks / "run-guard.sh"
+        self.copy.write_bytes(self.LAUNCHER.read_bytes())
+        self.copy.chmod(0o755)
+        (hooks / "guard-git-argv.py").write_text("", encoding="utf-8")
+        self.mark = self.tmp / "cache" / "run-guard" / "interpreter"
+
+        self.bin = self.tmp / "bin"
+        self.bin.mkdir()
+        self.log = self.tmp / "log"
+        # A real file for the probe to name as its interpreter: the mark is
+        # validated against `sys.executable`, not against the launcher name.
+        self.real = self.bin / "real-python"
+        self.real.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8",
+                             newline="\n")
+        self.real.chmod(0o755)
+        self.stand_in("python3")
+        self.evil = self.bin / "evil"
+        self.evil.write_text(
+            "#!/bin/sh\n"
+            f'echo evil >> {self.log.as_posix()!r}\n'
+            "exit 0\n",
+            encoding="utf-8", newline="\n")
+        self.evil.chmod(0o755)
+
+        tools = {os.path.dirname(shutil.which(t)) for t in ("dirname", "sh")}
+        self.tools = sorted(p for p in tools if p)
+        self.path = os.pathsep.join([str(self.bin), *self.tools])
+
+    def stand_in(self, name, names_an_interpreter=True):
+        script = self.bin / name
+        says = (f'  printf %s {self.real.as_posix()!r}\n'
+                if names_an_interpreter else "")
+        script.write_text(
+            "#!/bin/sh\n"
+            'if [ "$1" = -3.12 ] || [ "$1" = -3 ]; then shift; fi\n'
+            'if [ "$1" = -c ]; then\n'
+            f"{says}"
+            f'  echo probed >> {self.log.as_posix()!r}\n'
+            "  exit 0\n"
+            "fi\n"
+            f'echo "ran $(basename "$1")" >> {self.log.as_posix()!r}\n',
+            encoding="utf-8", newline="\n")
+        script.chmod(0o755)
+
+    def launch(self, path=None):
+        return subprocess.run(
+            [BASH, str(self.copy), "guard-git-argv.py"],
+            capture_output=True, text=True,
+            env={**os.environ, "PATH": path or self.path})
+
+    def lines(self):
+        if not self.log.exists():
+            return []
+        return self.log.read_text(encoding="utf-8").split()
+
+    def test_the_second_call_runs_the_guard_without_probing(self):
+        # The saving, stated as what stops happening rather than as a number:
+        # two calls, one probe.
+        self.assertEqual(0, self.launch().returncode)
+        self.assertTrue(self.mark.exists(), "the first call left no mark")
+        self.assertEqual(0, self.launch().returncode)
+        self.assertEqual(["probed", "ran", "guard-git-argv.py",
+                          "ran", "guard-git-argv.py"], self.lines())
+
+    def test_an_interpreter_rewritten_since_the_mark_is_probed_again(self):
+        # An in-place upgrade, or a 3.12 uninstalled out from under the
+        # launcher: the mark names a file whose mtime has moved past it.
+        self.assertEqual(0, self.launch().returncode)
+        after = self.mark.stat().st_mtime + 2
+        os.utime(self.real, (after, after))
+        self.assertEqual(0, self.launch().returncode)
+        self.assertEqual(2, self.lines().count("probed"), self.lines())
+
+    def test_an_interpreter_that_has_gone_is_probed_again(self):
+        self.assertEqual(0, self.launch().returncode)
+        self.real.unlink()
+        self.assertEqual(0, self.launch().returncode)
+        self.assertEqual(2, self.lines().count("probed"), self.lines())
+
+    def test_another_PATH_is_another_question(self):
+        # Which interpreter wins is a property of PATH and of nothing else,
+        # so a mark from one PATH says nothing about another.
+        self.assertEqual(0, self.launch().returncode)
+        widened = os.pathsep.join([str(self.bin), str(self.tmp), *self.tools])
+        self.assertEqual(0, self.launch(path=widened).returncode)
+        self.assertEqual(2, self.lines().count("probed"), self.lines())
+
+    def test_a_candidate_that_names_no_interpreter_leaves_no_mark(self):
+        # A mark whose interpreter is empty can never validate, so writing one
+        # costs a write per guarded call and buys nothing. Every stand-in in
+        # the suite's other launcher cases is this shape, and each of them was
+        # churning the mark under the real checkout.
+        self.stand_in("python3", names_an_interpreter=False)
+        self.assertEqual(0, self.launch().returncode)
+        self.assertFalse(self.mark.exists(), "an unusable mark was written")
+        self.assertEqual(["probed", "ran", "guard-git-argv.py"], self.lines())
+
+    def test_nothing_is_left_staged_beside_the_mark(self):
+        # `A && B || C` leaves C unrun when something ahead of B fails, and a
+        # rename that loses a race to a concurrent call then leaves its
+        # staging file in the cache directory.
+        self.assertEqual(0, self.launch().returncode)
+        self.assertEqual(["interpreter"],
+                         sorted(p.name for p in self.mark.parent.iterdir()))
+
+    def test_a_mark_naming_anything_else_is_ignored_rather_than_run(self):
+        # `.claude/cache/` is covered by no `Edit(...)` deny, so the mark is
+        # writable by the session this launcher guards. The closed set is what
+        # keeps that from being a command run before every guarded call.
+        self.mark.parent.mkdir(parents=True, exist_ok=True)
+        self.mark.write_text(f"evil\n{self.real.as_posix()}\n{self.path}\n",
+                             encoding="utf-8", newline="\n")
+        self.assertEqual(0, self.launch().returncode)
+        self.assertNotIn("evil", self.lines())
+        self.assertEqual(["probed", "ran", "guard-git-argv.py"], self.lines())
 
 
 class HarnessChecksFindsAGenericPyLauncher(unittest.TestCase):

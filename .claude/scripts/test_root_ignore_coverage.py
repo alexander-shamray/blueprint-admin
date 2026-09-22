@@ -44,11 +44,13 @@ ROOT_IGNORE = ".gitignore"
 # the root has to be making too.
 BLANKET = {"*", "/*", "**", "/**"}
 
-# The two directories this repository's own tooling creates with a blanket
-# ignore inside them. Neither is ever present in a clone, so the scan below
-# cannot see them and they are named instead — `.gitignore` owns the rules, and
-# these are the assertions that the rules are still there.
-TOOLING_SCRATCH = (".remember/", ".superpowers/")
+# The directories this repository's own tooling creates and never commits.
+# The first two carry a blanket ignore inside them; the third is written by a
+# `PreToolUse` hook and holds facts about this host. None is reliably present
+# in a clone, so the scan below cannot see them and they are named instead —
+# `.gitignore` owns the rules, and these are the assertions that the rules are
+# still there.
+TOOLING_SCRATCH = (".remember/", ".superpowers/", ".claude/cache/")
 
 
 def blanket_ignore(path):
