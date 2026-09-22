@@ -128,7 +128,9 @@ and no SDK. `git` because one case drives a real worktree round trip, and
 `jq` because the did-it-run verdict is parsed rather than matched.
 """
 
+import contextlib
 import importlib.util
+import io
 import json
 import os
 import re
@@ -5867,14 +5869,14 @@ class TheGitArgvGuard(unittest.TestCase):
     def judge(self, command, tool="Bash", cwd=None):
         """The hook's verdict on one command: None to allow, or the reason.
 
-        **In-process since #46.** This spawned an interpreter per verdict â€”
-        1036 of them, 198 s of a 1029 s suite â€” and a verdict is a pure
+        **In-process since #46.** This spawned an interpreter per verdict —
+        1036 of them, 198 s of a 1029 s suite — and a verdict is a pure
         function of the event, so the process bought only the `__main__`
         wiring. That wiring is asked about by `test_the_spawned_hook_answers
         _what_the_import_does`, once, rather than a thousand times here.
 
         `decision` catches every exception and answers with a refusal, so a
-        parser that crashes still returns a reason rather than raising â€” the
+        parser that crashes still returns a reason rather than raising — the
         same fail-CLOSED direction the spawned hook had, where the old
         `assertEqual(0, result.returncode)` was what said so.
         """
@@ -5887,7 +5889,7 @@ class TheGitArgvGuard(unittest.TestCase):
         **Kept for the one property an import cannot carry: a wall-clock bound
         somebody else enforces.** The budget cases assert that a command past
         `LENGTH_BUDGET` is refused *in time*, and in-process a regression there
-        does not fail â€” it hangs the suite, which is the failure mode those
+        does not fail — it hangs the suite, which is the failure mode those
         cases exist to convert into a red test.
         """
         result = subprocess.run(
@@ -9103,12 +9105,12 @@ class TheGitArgvGuard(unittest.TestCase):
         self.assertIsNone(self.judge("git push origin +HEAD:main", tool="Read"))
 
     def test_the_spawned_hook_answers_what_the_import_does(self):
-        """#46 â€” the case the in-process `judge` is only safe behind.
+        """#46 — the case the in-process `judge` is only safe behind.
 
         Every other verdict in this class is now taken by importing the module
         and calling `decision`, which never executes `__main__`. So the half of
-        the contract the session actually depends on â€” read the event on stdin,
-        write the deny on stdout, exit 0 â€” would have no witness at all: delete
+        the contract the session actually depends on — read the event on stdin,
+        write the deny on stdout, exit 0 — would have no witness at all: delete
         `main`'s `json.dump` and this file stays green while the hook refuses
         nothing where it is wired.
 
@@ -10181,11 +10183,95 @@ class TheTriagerEditsNothingShipDenies(unittest.TestCase):
     SHIP = SCRIPTS.parent / "commands" / "ship.md"
     ROOT = SCRIPTS.parent.parent
 
+    _guard = None
+
+    @classmethod
+    def guard_module(cls):
+        """`guard-triager-edit.py` imported once, for the in-process path."""
+        if cls._guard is None:
+            spec = importlib.util.spec_from_file_location(
+                "guard_triager_edit_judging", cls.GUARD)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            cls._guard = module
+        return cls._guard
+
     def run_guard(self, event):
+        """The guard's answer for one event, without launching anything (#46).
+
+        **This was 100.5 s of a 98.6 s class, and the class was the suite's
+        makespan floor.** Every assertion cost a `bash`, up to four interpreter
+        probes inside `run-guard.sh`, and the guard's own interpreter — for a
+        verdict that is a pure function of the event.
+
+        **The guard is unchanged and so are the assertions.** It already writes
+        its own deny payload to stdout and returns 0, and the launcher only
+        picks an interpreter, so redirecting the three streams around `run()`
+        reproduces the contract exactly. `run()` is the entry point rather than
+        `main()` deliberately: it is the one that turns an unexpected exception
+        into a refusal, which is the direction a guard must fail in, and
+        calling `main()` here would quietly test a guard without its safety
+        net.
+        """
+        payload = event if isinstance(event, str) else json.dumps(event)
+        out, err = io.StringIO(), io.StringIO()
+        stdin = io.TextIOWrapper(io.BytesIO(payload.encode("utf-8")),
+                                 encoding="utf-8")
+        saved = sys.stdin
+        sys.stdin = stdin
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                code = self.guard_module().run()
+        finally:
+            sys.stdin = saved
+        return subprocess.CompletedProcess(
+            args=[str(self.GUARD)], returncode=code,
+            stdout=out.getvalue(), stderr=err.getvalue())
+
+    def spawned_run_guard(self, event):
+        """The same verdict through `run-guard.sh` and a real interpreter."""
         payload = event if isinstance(event, str) else json.dumps(event)
         return subprocess.run(
             [BASH, str(self.LAUNCHER), "guard-triager-edit.py"],
             input=payload, capture_output=True, text=True)
+
+    def test_the_launcher_answers_what_the_import_does(self):
+        """#46 — the case the in-process `run_guard` is only safe behind.
+
+        Every assertion in this class now imports the module and calls `run()`,
+        so nothing here executes `run-guard.sh` or the guard's `__main__`. That
+        is the half the session depends on: the launcher choosing an
+        interpreter and `exec`ing it. Without this case the launcher could stop
+        working entirely — a bad `case` arm, a probe that never succeeds — and
+        this class would stay green while the triager ran unguarded.
+
+        Compared as code, stdout and stderr rather than as a verdict, because
+        the assertions below read all three and the launcher owns the first.
+        """
+        admitted = {"tool_name": "Edit",
+                    "tool_input": {"file_path": "docs/testing.md"},
+                    "cwd": str(self.ROOT)}
+        refused = {"tool_name": "Edit",
+                   "tool_input": {"file_path": "README.md"},
+                   "cwd": str(self.ROOT)}
+        for label, event in (("admitted", admitted), ("refused", refused)):
+            with self.subTest(event=label):
+                here = self.run_guard(event)
+                there = self.spawned_run_guard(event)
+                self.assertEqual(here.returncode, there.returncode,
+                                 there.stderr)
+                self.assertEqual(here.stdout, there.stdout)
+                self.assertEqual(here.stderr, there.stderr)
+
+        # **The positive control, and the case is worthless without it.**
+        # Agreement is symmetric: a guard that admitted everything would agree
+        # with a launcher that ran nothing, and the loop above would pass on
+        # two silences. So one of the two events must really be refused, on
+        # both paths.
+        self.assert_refused(self.run_guard(refused))
+        self.assert_refused(self.spawned_run_guard(refused))
+        self.assert_admitted(self.run_guard(admitted))
+        self.assert_admitted(self.spawned_run_guard(admitted))
 
     def edit(self, path, tool="Edit", cwd=None):
         key = "notebook_path" if tool == "NotebookEdit" else "file_path"
