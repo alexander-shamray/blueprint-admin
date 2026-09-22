@@ -2009,7 +2009,9 @@ def changes_directory(command):
 
 
 # The directory the session's command runs in, from the hook event. `None`
-# until `main` reads one, and then the process's own directory stands in.
+# until `decision` reads one, and then the process's own directory stands in.
+# `decision` sets it on every event it judges, so a caller that judges many
+# events in one process cannot carry one command's directory into the next.
 EVENT_CWD = None
 
 

@@ -79,15 +79,34 @@ TOKEN_RE='^[A-Za-z0-9_./*?{},()@+-]+$'
 PATH_RE='^[A-Za-z0-9_./@+()-]+$'
 NL='
 '
-# Trim leading and trailing SPACES from $1 into `TRIMMED`, which is what the
-# two `sed` cell extractions did — ` *`, not `[[:space:]]*`. Widening it to
-# all whitespace would admit a tab-padded cell the `sed` refused, and a
-# grammar that quietly grew is the drift this helper is full of arguments
-# against. The idiom is the one the touch-set loop below already uses.
+# Trim leading and trailing SPACES from $1 into `TRIMMED` — ` *`, not
+# `[[:space:]]*`. Widening it to all whitespace would admit a tab-padded cell
+# that is refused today, and a grammar that quietly grew is the drift this
+# helper is full of arguments against. The idiom is the one the touch-set loop
+# below already uses.
 trim() {
   local s="$1"
   s="${s#"${s%%[! ]*}"}"
   TRIMMED="${s%"${s##*[! ]}"}"
+}
+# The value cell of a `| Name | value |` row, into `CELL`.
+#
+# **A trailing pipe is removed only when it ENDS the row, and that is the whole
+# of this function.** The obvious cut — everything from the last `|` — is
+# wrong in the permissive direction: `| Class | D | note` yields `D`, and
+# `| Touch set | docs/a.md |x` yields `docs/a.md`, so a row carrying text after
+# its closing pipe is judged as though that text were not there. Both are rows
+# a pull request author writes, and both are refused when the junk stays in the
+# cell: one fails `CLASS_RE`, the other the one-cell case below.
+#
+# So the closing pipe is taken off the END, after the spaces, or not at all.
+cell() {
+  local s="${1#*|}"
+  s="${s#*|}"
+  s="${s#"${s%%[! ]*}"}"
+  s="${s%"${s##*[! ]}"}"
+  s="${s%|}"
+  CELL="${s%"${s##*[! ]}"}"
 }
 # The body is captured before it is filtered, so a `gh` failure — no
 # authentication, no network, no such pull request — is fatal under `set -e`
@@ -116,12 +135,7 @@ touch_row="${touch_rows[0]:-}"
 if [ -z "$class_row" ] && [ -z "$touch_row" ]; then exit 0; fi
 [ -n "$class_row" ] && [ -n "$touch_row" ] || refuse "one row without the other"
 # The class cell: the text between the second `|` and the closing one.
-# Cut rather than substituted — two `|`s from the left, the last from the
-# right, then the spaces off both ends, which is what the `sed` did.
-class="${class_row#*|}"
-class="${class#*|}"
-class="${class%|*}"
-trim "$class"; class="$TRIMMED"
+cell "$class_row"; class="$CELL"
 [[ "$class" =~ $CLASS_RE ]] || refuse "the Class row is not a class"
 [ "${class:0:1}" != "${class:2:1}" ] || refuse "the Class row repeats a class"
 # The class map is the same file CI's gate reads, from the same commit. A
@@ -228,12 +242,8 @@ compile_into "$map_tokens"
 map_patterns=()
 [ "${#COMPILED[@]}" -eq 0 ] || map_patterns=("${COMPILED[@]}")
 [ "${#map_patterns[@]}" -gt 0 ] || refuse "the Class row has no tree set in classes.yml"
-# The touch-set cell, then each comma-separated token on its own. Cut the same
-# way the class cell was.
-cells="${touch_row#*|}"
-cells="${cells#*|}"
-cells="${cells%|*}"
-trim "$cells"; cells="$TRIMMED"
+# The touch-set cell, then each comma-separated token on its own.
+cell "$touch_row"; cells="$CELL"
 case "$cells" in *'|'*) refuse "the Touch set row is not one cell" ;; esac
 [ -n "$cells" ] || refuse "the Touch set row is empty"
 # Split on commas outside braces, because a brace glob carries its own —

@@ -108,20 +108,25 @@ TOGETHER = {
 # **A class is listed when it measured 5 s or more, OR when it holds ten tests
 # or more.** Two arms because there are two ways to steer the packer wrongly
 # and the table this replaces caught only one. Slower than its test count is
-# the obvious one: `ThisRepository` is two tests and 54 s, and five classes
-# above 19 s were not in the old table at all. FASTER is the one that was
-# missed — an unlisted class costs `UNMEASURED` per test, so
-# `TheGitArgvGuard`'s 168 tests would be costed at 168 s against a real 25 s
-# and the packer would hand it a worker of its own. A class under both arms is
-# packed on its test count, and is too small for the difference to reach the
-# wall.
+# the obvious one: `ThisRepository` is two tests against an entry below that
+# dwarfs them, and five classes were missing from the old table entirely.
+# FASTER is the one that was missed — an unlisted class costs `UNMEASURED` per
+# test, so `TheGitArgvGuard`'s 168 tests would be costed at 168 s against the
+# entry below, and the packer would hand it a worker of its own. A class under
+# both arms is packed on its test count, and is too small for the difference to
+# reach the wall.
+#
+# The seconds are not restated here on purpose: the table owns them, and a
+# comment that carries a second copy is the drift this repository keeps
+# finding.
 #
 # SERIAL classes are absent by construction: `plan()` sets them aside before
 # it reads this, so an entry for one would never be consulted.
 #
-# Summing the minima gives 584 s of serial work, against the 1029 s #46
-# records before the spawn cuts. That sum is a floor rather than a wall: no
-# run is ever this fast, because no run is ever uncontended.
+# Across ALL 65 discovered classes — not just the ones listed below, which
+# sum to far less — the minima come to 584 s of serial work, against the
+# 1029 s #46 records before the spawn cuts. That sum is a floor rather than a
+# wall: no run is ever this fast, because no run is ever uncontended.
 WEIGHT = {
     "test_git_rebase_onto_main.TheHelperPublishesWhatItRebased": 73.9,
     "test_git_rebase_onto_main.AConflictIsTheCaseRebaseIsHereFor": 57.2,
