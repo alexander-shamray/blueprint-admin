@@ -26,9 +26,11 @@
 # the rule, so that nothing else arrives excluded from the inside only.
 .superpowers/
 
-# Index SQLite is machine-local. The skill, .mcp.json and .codeindexignore
-# are shared so Claude in this clone uses the same map.
-.claude/cache/codebase-index/
+# Everything under .claude/cache/ is machine-local by construction: the index
+# SQLite, and the interpreter run-guard.sh remembers, which is a fact about
+# this host's PATH. The skill, .mcp.json and .codeindexignore are shared so
+# Claude in this clone uses the same map.
+.claude/cache/
 .claude/skills/codebase-index/.skill_version
 
 # Python — the hooks and their suite under .claude/ are scripts, not a package.
