@@ -17,6 +17,13 @@
 # `continue` publishes once the caller has resolved and staged. `publish` is
 # the retry when the replay finished and only the push failed, and `abort` is
 # the way back out without a raw `git rebase` grant.
+#
+# There is no `skip` mode, and that is a decision rather than an omission.
+# The one thing it would be for is a resolution that leaves the replayed
+# commit empty, which `stopped` drops by itself: the merge backend already
+# drops such a commit without asking, so a mode would make the two backends
+# disagree about a state neither of them loses anything in — and would want
+# a grant in `/ship`, which has nobody to run it.
 set -euo pipefail
 
 [ "$#" -eq 2 ] ||
@@ -51,15 +58,25 @@ esac
 # Both backends, because which one runs is git's choice and not this file's:
 # the merge backend is the default and the am backend still appears behind
 # `--apply` and in older versions.
+#
+# A function rather than a single read, because the answer moves: a replay
+# that stops leaves state where there was none, and one that finishes takes
+# it away. `stopped` has to ask again for that reason, and asked it with a
+# second copy of this loop until #38 gave the two callers one.
+current_state() {
+  local candidate
+  for candidate in "$(git rev-parse --git-path rebase-merge)" "$(git rev-parse --git-path rebase-apply)"; do
+    if [ -d "$candidate" ]; then
+      printf %s "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
 state=""
-for candidate in "$(git rev-parse --git-path rebase-merge)" "$(git rev-parse --git-path rebase-apply)"; do
-  if [ -d "$candidate" ]; then
-    state="$candidate"
-    break
-  fi
-done
 in_progress=0
-if [ -n "$state" ]; then
+if state=$(current_state); then
   in_progress=1
 fi
 
@@ -186,34 +203,61 @@ require_no_merge_invented_anything() {
       exit 10; }
 }
 
-# Only a rebase that actually stopped is left in progress. Every other way
-# `git rebase` can fail — a pre-rebase hook, a refused argument — leaves no
-# state at all, and saying "resolve these" there names no files and sends the
-# caller to a `continue` that has nothing to finish.
+# A replay stops in one of three states, and this said "conflict" to all
+# three until #38. Only the first of them is one.
 #
-# The marker is what `continue` looks for. git removes this directory when the
-# rebase ends however it ends, so the mark cannot outlive the thing it marks,
-# and a rebase somebody ran by hand does not carry it.
-conflicted() {
-  local now=""
-  for c in "$(git rev-parse --git-path rebase-merge)" "$(git rev-parse --git-path rebase-apply)"; do
-    if [ -d "$c" ]; then
-      now="$c"
-      break
-    fi
-  done
-  [ -n "$now" ] ||
+# The marker is what `continue` and `abort` look for. git removes this
+# directory when the rebase ends however it ends, so the mark cannot outlive
+# the thing it marks, and a rebase somebody ran by hand does not carry it.
+stopped() {
+  local now unmerged
+  now=$(current_state) ||
     { # Nothing was replayed, so there is no rewritten tip for the record to
       # protect — and one left here refuses every later `start`, on any
       # branch, until somebody aborts from the branch it names.
+      #
+      # Only a rebase that actually stopped is left in progress. Every other
+      # way `git rebase` can fail — a pre-rebase hook, a refused argument —
+      # leaves no state at all, and saying "resolve these" there names no
+      # files and sends the caller to a `continue` that has nothing to finish.
       rm -f "$pending"
       echo "the rebase did not start, so there is nothing to continue; git's own message is above" >&2
       exit 11; }
   : > "$now/started-by-this-helper"
-  echo "the rebase onto origin/main conflicts and is left in progress, which is the point:" >&2
-  git diff --name-only --diff-filter=U >&2
-  echo "resolve these, 'git add' them, then run this helper again with 'continue'" >&2
-  exit 8
+
+  unmerged=$(git diff --name-only --diff-filter=U)
+  if [ -n "$unmerged" ]; then
+    echo "the rebase onto origin/main conflicts and is left in progress, which is the point:" >&2
+    printf '%s\n' "$unmerged" >&2
+    echo "resolve these, 'git add' them, then run this helper again with 'continue'" >&2
+    exit 8
+  fi
+
+  # Nothing is unmerged, so "resolve these" names nothing and the caller has
+  # already done everything it asks — the wedge #38 filed, whose only granted
+  # way out was `abort` and the whole branch update with it. Two states are
+  # left, and the index separates them: `git diff --cached --quiet HEAD` is
+  # git's own test for the empty commit it refuses to make. Asked of the
+  # index rather than read off git's message, which is a locale and a version
+  # away from meaning something else, and fails closed — a read that errors
+  # reports rather than drops a commit.
+  git diff --cached --quiet HEAD ||
+    { echo "the replay of $branch stopped with nothing unmerged and a change still staged," >&2
+      echo "so it is not a conflict and this helper will not guess at it:" >&2
+      echo "git's own message is above; answer it and run 'continue', or 'abort'" >&2
+      exit 14; }
+
+  # Taking origin/main's side of a conflict verbatim is the commonest
+  # merge-forward resolution, and it leaves the replayed commit empty.
+  # Dropping it loses nothing the guards protect — its content is in the base
+  # it was being replayed onto — and the merge backend already drops it
+  # without asking, so this is what makes the two backends agree rather than
+  # a liberty taken with the branch. Only the apply backend reaches here.
+  #
+  # It recurses because the next commit can conflict in turn, and that is the
+  # same three states again.
+  echo "the resolution left this commit of $branch empty, so it is dropped and the replay goes on" >&2
+  GIT_EDITOR=true git rebase --skip || stopped
 }
 
 case "$mode" in
@@ -252,7 +296,7 @@ case "$mode" in
     # keep the merge commits this helper exists to be rid of, and
     # `rebase.updateRefs` would force-update other local branches' refs as a
     # side effect — both from configuration this script does not own.
-    git rebase --no-rebase-merges --no-update-refs "refs/remotes/origin/main" || conflicted
+    git rebase --no-rebase-merges --no-update-refs "refs/remotes/origin/main" || stopped
     publish
     ;;
 
@@ -284,7 +328,7 @@ case "$mode" in
 
     # The message is the replayed commit's own. An editor would stop the run on
     # a terminal nothing is attached to, so it is answered rather than opened.
-    GIT_EDITOR=true git rebase --continue || conflicted
+    GIT_EDITOR=true git rebase --continue || stopped
     publish
     ;;
 
