@@ -2,7 +2,7 @@
 """Run the harness suite as parallel class shards, covering what the serial run covered.
 
 **Every caller of this suite ran two `unittest discover` roots serially, and
-paid about twenty minutes for it on Windows.** Half the runtime is in a
+paid about seventeen minutes for it on Windows.** Half the runtime is in a
 handful of classes and almost none of it is approximable: roughly seven tenths
 of the suite is real `bash`, real `git` and real `gh` on purpose, because
 re-implementing a `grep` pattern in Python's `re` would be a second
@@ -10,13 +10,22 @@ specification — `test_grok_helpers.py` says so in its own words. So the lever
 is concurrency rather than rewriting, and the unit is the class, because a
 class is what shares a fixture.
 
-**What has to be true here is coverage, not speed.** A splitter that quietly
-stops placing a class is this repository's most-repeated failure in its
-cheapest form: every worker green and one class never run. So placement is
-derived from discovery and never from a list written by hand — a class nobody
-has heard of is placed on weight alone, `test_harness_shards.py` compares the
-placement back against discovery at several shard counts, and a worker refuses
-to start when it is handed an id discovery does not hold.
+**What has to be true here is coverage, not speed**, and the shape a failure
+takes is always the same: every worker green, and some part of the suite never
+run. So nothing here reports a pass it has not earned.
+
+* Placement is derived from discovery, never from a list written by hand. A
+  class nobody has heard of is placed on weight alone.
+* `plan()` is checked against discovery by `test_harness_shards.py`, and the
+  path from `plan()` to the workers is checked again at runtime, in `main()`,
+  because a plan that covers everything and a run that covers everything are
+  two different claims.
+* A root that discovers nothing refuses the run. An empty suite is what a
+  renamed directory or a pattern that stopped matching looks like, and the
+  case that would have caught it is among the tests that stopped being found,
+  so it cannot be left to report zero tests and exit 0.
+* A worker refuses to start when handed an id discovery does not hold, or no
+  ids at all.
 
 **Three tables, and every one of them is a schedule hint rather than a fact.**
 `SERIAL` names the classes whose subject is elapsed time or a listening port,
@@ -36,6 +45,7 @@ why the count is capped rather than tuned, and why the remaining lever on the
 long poles is inside those classes and not here (issue #43).
 """
 
+import contextlib
 import os
 import shutil
 import subprocess
@@ -100,6 +110,10 @@ UNMEASURED = 1.0
 CAP = 8
 
 
+class NothingDiscovered(RuntimeError):
+    """A root that matches nothing is not an empty suite to report green."""
+
+
 def workers():
     """How many parallel workers this host gets."""
     return max(1, min(CAP, os.cpu_count() or 1))
@@ -119,14 +133,22 @@ def discovered():
 
     Import failures arrive as loader placeholders rather than as an exception,
     which is what keeps a broken module a red test in some worker instead of a
-    module that quietly stops being discovered.
+    module that quietly stops being discovered. A root that yields nothing at
+    all is different in kind and refuses the run: a renamed directory or a
+    pattern that stopped matching looks exactly like an empty suite, and the
+    case that would have caught it is among the tests that stopped being
+    found.
     """
     found = []
     for start, pattern in ROOTS:
         where = str(ROOT / start)
         suite = unittest.TestLoader().discover(where, pattern=pattern,
                                                top_level_dir=where)
-        found.extend(test.id() for test in walk(suite))
+        ids = [test.id() for test in walk(suite)]
+        if not ids:
+            raise NothingDiscovered(
+                f"{start} matching {pattern!r} discovered no tests at all")
+        found.extend(ids)
     return found
 
 
@@ -164,12 +186,29 @@ def plan(found, count):
     return buckets, tail
 
 
+def unplaced(found, phases):
+    """What discovery holds that the runs do not, and the reverse.
+
+    `plan()` covering everything and the runs covering everything are two
+    claims, and only the first has a test that can see it. This is the second,
+    checked where the plan becomes subprocesses.
+    """
+    placed = [test_id for _, ids in phases for test_id in ids]
+    missing = sorted(set(found) - set(placed))
+    extra = sorted(set(placed) - set(found))
+    if not missing and not extra and len(placed) != len(found):
+        # Same set, different multiset: something is placed twice.
+        extra = sorted({i for i in placed if placed.count(i) > 1})
+    return missing, extra
+
+
 def run_listed(wanted):
     """Run exactly these ids, and refuse the run if discovery lost one.
 
     The refusal is the runtime half of the coverage rule: a worker handed a
     name nothing discovers has been told to run something that does not exist,
-    and reporting that as a pass is the failure this file exists to avoid.
+    and reporting that as a pass is the failure this file exists to avoid. A
+    worker handed nothing at all is the same failure with nothing to name.
 
     **The two streams are reconfigured because they are a file rather than a
     console**, which on Windows makes them the ANSI code page, and unittest
@@ -181,6 +220,10 @@ def run_listed(wanted):
     """
     sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
     sys.stderr.reconfigure(encoding="utf-8", errors="backslashreplace")
+    if not wanted:
+        print("shard-harness-suite.py: this worker was given no ids to run",
+              file=sys.stderr)
+        return 2
     outstanding = set(wanted)
     chosen = []
     for start, pattern in ROOTS:
@@ -212,6 +255,24 @@ def spawn(listing, log):
                             stderr=subprocess.STDOUT)
 
 
+def report(phases, work):
+    """Print what each run wrote, whatever ended the run.
+
+    Called from a `finally`, and before the working directory goes: a run
+    interrupted at minute four otherwise showed nothing at all, where the
+    serial command it replaced had been streaming test names the whole time.
+    Bytes straight through — decoding a worker's output here only to encode
+    it again is what once killed the parent printing a run it had finished.
+    """
+    for n, (_, ids) in enumerate(phases):
+        log = work / f"{n}.log"
+        if not log.exists():
+            continue
+        print(f"\n===== run {n}: {len(ids)} tests =====", flush=True)
+        sys.stdout.buffer.write(log.read_bytes())
+        sys.stdout.buffer.flush()
+
+
 def main(argv):
     if len(argv) == 3 and argv[1] == "--ids":
         return run_listed(Path(argv[2]).read_text(encoding="utf-8").split())
@@ -220,53 +281,67 @@ def main(argv):
               file=sys.stderr)
         return 2
 
-    found = discovered()
+    try:
+        found = discovered()
+    except NothingDiscovered as empty:
+        print(f"shard-harness-suite.py: {empty}. Refusing the run rather than "
+              f"reporting a pass over nothing.", file=sys.stderr)
+        return 2
+
     buckets, tail = plan(found, workers())
     phases = [("shard", bucket) for bucket in buckets if bucket]
+    parallel = len(phases)
     if tail:
         phases.append(("serial", tail))
+
+    missing, extra = unplaced(found, phases)
+    if missing or extra:
+        print("shard-harness-suite.py: the runs do not cover discovery — "
+              f"{len(missing)} test(s) would never run {missing[:5]}, "
+              f"{len(extra)} unaccounted for {extra[:5]}", file=sys.stderr)
+        return 2
+
     print(f"shard-harness-suite.py: {len(found)} tests over "
-          f"{len(phases)} runs ({len(buckets)} parallel, "
+          f"{len(phases)} runs ({parallel} parallel, "
           f"{1 if tail else 0} serial)", flush=True)
 
     work = Path(tempfile.mkdtemp(prefix="harness-shards-"))
     began = time.monotonic()
-    codes = []
+    codes, running = [], []
     try:
+        with contextlib.ExitStack() as open_logs:
+            for n, (kind, ids) in enumerate(phases):
+                if kind == "serial":
+                    continue
+                listing = work / f"{n}.ids"
+                listing.write_text("\n".join(ids), encoding="utf-8")
+                log = open_logs.enter_context((work / f"{n}.log").open("wb"))
+                running.append(spawn(listing, log))
+            for proc in running:
+                codes.append(proc.wait())
+
         # The tail goes last and alone, which is what "serial" means here.
-        running = []
-        for n, (kind, ids) in enumerate(phases):
-            if kind == "serial":
-                continue
-            listing = work / f"{n}.ids"
-            listing.write_text("\n".join(ids), encoding="utf-8")
-            handle = (work / f"{n}.log").open("wb")
-            running.append((n, handle, spawn(listing, handle)))
-        for n, handle, proc in running:
-            codes.append(proc.wait())
-            handle.close()
         for n, (kind, ids) in enumerate(phases):
             if kind != "serial":
                 continue
             listing = work / f"{n}.ids"
             listing.write_text("\n".join(ids), encoding="utf-8")
-            with (work / f"{n}.log").open("wb") as handle:
-                codes.append(spawn(listing, handle).wait())
-
-        for n, (_, ids) in enumerate(phases):
-            log = work / f"{n}.log"
-            print(f"\n===== run {n}: {len(ids)} tests =====", flush=True)
-            if log.exists():
-                # Straight through as bytes. Decoding a worker's output here
-                # only to encode it again is what turned one dash into a
-                # parent that died printing a run it had already finished,
-                # with four runs' results and the roll-up still unsaid.
-                sys.stdout.buffer.write(log.read_bytes())
-                sys.stdout.buffer.flush()
+            with (work / f"{n}.log").open("wb") as log:
+                codes.append(spawn(listing, log).wait())
     finally:
+        # A worker still running here is one this process is abandoning, and
+        # several of them drive `git worktree` against this checkout.
+        for proc in running:
+            if proc.poll() is None:
+                proc.terminate()
+        report(phases, work)
         shutil.rmtree(str(work), ignore_errors=True)
 
     bad = [n for n, code in enumerate(codes) if code != 0]
+    if len(codes) != len(phases):
+        print(f"\nshard-harness-suite.py: {len(codes)} of {len(phases)} runs "
+              f"reported at all", file=sys.stderr)
+        return 1
     print(f"\nshard-harness-suite.py: {len(codes)} runs in "
           f"{time.monotonic() - began:.0f}s, "
           f"{'runs ' + str(bad) + ' failed' if bad else 'all green'}")
