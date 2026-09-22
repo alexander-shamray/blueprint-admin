@@ -60,25 +60,69 @@ set -euo pipefail
 pr="${1:?usage: pr-locality.sh <pr-number>}"
 [[ "$pr" =~ ^[0-9]+$ ]] || { echo "pr must be a number" >&2; exit 2; }
 refuse() { echo "$1" >&2; exit 3; }
+# **The expressions the tests below are made with, named rather than inlined.**
+# Each was a `grep -Eq` pattern and is now bash's `=~` right-hand side, which
+# has to be an UNQUOTED variable to be read as a regular expression at all — a
+# quoted literal is matched as a string, silently, and every test would pass.
+# Declaring them here is what keeps the conversion from re-quoting one.
+#
+# **bash anchors the whole string where `grep` anchors each line**, so a value
+# carrying a newline matches under `grep` and does not here. Every value tested
+# with these is one this script is validating, so the stricter reading is the
+# one to have: `changedFiles` of `3<newline>evil` is not a count.
+COUNT_RE='^[0-9]+$'
+CLASS_ROW_RE='^\| *Class *\|'
+TOUCH_ROW_RE='^\| *Touch set *\|'
+CLASS_RE='^[A-E](\+[A-E])?$'
+OID_RE='^[0-9a-f]{40}$'
+TOKEN_RE='^[A-Za-z0-9_./*?{},()@+-]+$'
+PATH_RE='^[A-Za-z0-9_./@+()-]+$'
+NL='
+'
+# Trim leading and trailing SPACES from $1 into `TRIMMED`, which is what the
+# two `sed` cell extractions did — ` *`, not `[[:space:]]*`. Widening it to
+# all whitespace would admit a tab-padded cell the `sed` refused, and a
+# grammar that quietly grew is the drift this helper is full of arguments
+# against. The idiom is the one the touch-set loop below already uses.
+trim() {
+  local s="$1"
+  s="${s#"${s%%[! ]*}"}"
+  TRIMMED="${s%"${s##*[! ]}"}"
+}
 # The body is captured before it is filtered, so a `gh` failure — no
 # authentication, no network, no such pull request — is fatal under `set -e`
-# rather than indistinguishable from a body with no rows. Only grep's own
-# no-match status, which is exactly 1, is masked.
+# rather than indistinguishable from a body with no rows. Nothing masks a
+# status here any more: the filter is the loop below, which cannot fail.
 expected=$(gh pr view "$pr" --json changedFiles --jq .changedFiles)
-grep -Eq '^[0-9]+$' <<<"$expected" || refuse "changedFiles is not a count"
+[[ "$expected" =~ $COUNT_RE ]] || refuse "changedFiles is not a count"
 body=$(gh pr view "$pr" --json body --jq .body)
-class_row=$(grep -E '^\| *Class *\|' <<<"$body" || [ $? -eq 1 ])
-touch_row=$(grep -E '^\| *Touch set *\|' <<<"$body" || [ $? -eq 1 ])
-# Exactly one of each, or none. A second row is where a valid first row
-# would have carried an invalid second past a check that only asked whether
-# any row matched, so two rows is refused before either grammar is consulted.
-[ "$(grep -c . <<<"$class_row")" -le 1 ] || refuse "more than one Class row"
-[ "$(grep -c . <<<"$touch_row")" -le 1 ] || refuse "more than one Touch set row"
+# The rows, collected in one pass of the body rather than by two `grep`s and
+# two `grep -c`s. Arrays rather than captured text because the count is the
+# question: exactly one of each, or none. A second row is where a valid first
+# row would have carried an invalid second past a check that only asked
+# whether any row matched, so two rows is refused before either grammar is
+# consulted.
+class_rows=()
+touch_rows=()
+while IFS= read -r row || [ -n "$row" ]; do
+  [ -n "$row" ] || continue
+  if [[ "$row" =~ $CLASS_ROW_RE ]]; then class_rows+=("$row"); fi
+  if [[ "$row" =~ $TOUCH_ROW_RE ]]; then touch_rows+=("$row"); fi
+done <<<"$body"
+[ "${#class_rows[@]}" -le 1 ] || refuse "more than one Class row"
+[ "${#touch_rows[@]}" -le 1 ] || refuse "more than one Touch set row"
+class_row="${class_rows[0]:-}"
+touch_row="${touch_rows[0]:-}"
 if [ -z "$class_row" ] && [ -z "$touch_row" ]; then exit 0; fi
 [ -n "$class_row" ] && [ -n "$touch_row" ] || refuse "one row without the other"
 # The class cell: the text between the second `|` and the closing one.
-class=$(sed -E 's/^\| *Class *\| *//; s/ *\| *$//' <<<"$class_row")
-grep -Eq '^[A-E](\+[A-E])?$' <<<"$class" || refuse "the Class row is not a class"
+# Cut rather than substituted — two `|`s from the left, the last from the
+# right, then the spaces off both ends, which is what the `sed` did.
+class="${class_row#*|}"
+class="${class#*|}"
+class="${class%|*}"
+trim "$class"; class="$TRIMMED"
+[[ "$class" =~ $CLASS_RE ]] || refuse "the Class row is not a class"
 [ "${class:0:1}" != "${class:2:1}" ] || refuse "the Class row repeats a class"
 # The class map is the same file CI's gate reads, from the same commit. A
 # `+`-joined class is the union of its members. Tokens compile with the
@@ -88,7 +132,7 @@ head_map="$here/../../.github/locality-gate/classes.yml"
 gate_dir=".github/locality-gate"
 map_rel="$gate_dir/classes.yml"
 base=$(gh pr view "$pr" --json baseRefOid --jq .baseRefOid)
-grep -Eq '^[0-9a-f]{40}$' <<<"$base" || refuse "the PR base is not a commit"
+[[ "$base" =~ $OID_RE ]] || refuse "the PR base is not a commit"
 if git cat-file -e "$base:$gate_dir" 2>/dev/null; then
   git cat-file -e "$base:$map_rel" 2>/dev/null ||
     refuse "the PR base carries the gate directory but no classes.yml"
@@ -107,12 +151,52 @@ fi
 members=("$class")
 [ "${#class}" -eq 1 ] || members=("${class:0:1}" "${class:2:1}")
 compile_glob() {
-  # stdin: one touch-set / map token. stdout: the ERE body (unanchored).
+  # stdin: the touch-set / map tokens, one per line. stdout: one ERE body
+  # (unanchored) per line, in the same order.
+  #
+  # **The `sed` program is unchanged and is called ONCE for a whole token
+  # list (#46).** It used to be called per token, which was fourteen process
+  # spawns in a run that made sixty-one; the rest of this script's text tests
+  # became bash's own, and this one deliberately did not. Translating a glob
+  # into an ERE is the step where a silent mistake yields a wrong `inside` or
+  # `outside` rather than a refusal, and this file's header says that is the
+  # worse outcome — so what changed is how often the program runs, never what
+  # it says.
+  #
+  # One token per line is unambiguous because the grammars above admit no
+  # whitespace at all, newline included, so no token can be two lines.
   sed -e 's/[.()+]/\\&/g' -e 's/\*\*/%%GLOBSTAR%%/g' -e 's/\*/[^\/]*/g' \
       -e 's/?/[^\/]/g' -e 's/%%GLOBSTAR%%/.*/g' \
       -e 's/{/(/g' -e 's/}/)/g' -e 's/,/|/g'
 }
-map_patterns=()
+
+# Compile `$1` (a newline-separated token list) into `COMPILED`, each entry
+# anchored and extended to cover everything beneath what it names. One
+# `compile_glob` for the whole list.
+#
+# **The count is checked, and that is not defensive clutter.** `sed` is
+# line-oriented, so a list and its output correspond exactly — which is what
+# makes one call for many tokens safe at all. If they ever stopped
+# corresponding, every token after the lost line would be paired with another
+# token's expression and the helper would print confident, wrong verdicts. So
+# the correspondence is asserted rather than assumed.
+#
+# `COMPILED` is a plain global because `local -n` wants bash 4.3 and this
+# suite runs on a macOS runner, where `/bin/bash` is 3.2.
+compile_into() {
+  tokens="$1"
+  COMPILED=()
+  [ -n "$tokens" ] || return 0
+  compiled=$(printf '%s\n' "$tokens" | compile_glob)
+  while IFS= read -r line; do
+    COMPILED+=("^${line}(/.*)?$")
+  done <<<"$compiled"
+  count=0
+  while IFS= read -r line; do count=$((count + 1)); done <<<"$tokens"
+  [ "${#COMPILED[@]}" -eq "$count" ] ||
+    refuse "the glob compiler returned ${#COMPILED[@]} expressions for $count tokens"
+}
+map_tokens=""
 current=""
 while IFS= read -r raw || [ -n "$raw" ]; do
   line="${raw%$'\r'}"
@@ -132,17 +216,24 @@ while IFS= read -r raw || [ -n "$raw" ]; do
     for member in "${members[@]}"; do
       if [ "$member" = "$current" ]; then
         token="${token%/}"
-        re=$(printf '%s' "$token" | compile_glob)
-        map_patterns+=("^${re}(/.*)?$")
+        # Collected, and compiled once with the rest below.
+        map_tokens+="${map_tokens:+$NL}$token"
       fi
     done
     continue
   fi
   refuse "classes.yml is outside the map's grammar"
 done < "$map"
+compile_into "$map_tokens"
+map_patterns=()
+[ "${#COMPILED[@]}" -eq 0 ] || map_patterns=("${COMPILED[@]}")
 [ "${#map_patterns[@]}" -gt 0 ] || refuse "the Class row has no tree set in classes.yml"
-# The touch-set cell, then each comma-separated token on its own.
-cells=$(sed -E 's/^\| *Touch set *\| *//; s/ *\| *$//' <<<"$touch_row")
+# The touch-set cell, then each comma-separated token on its own. Cut the same
+# way the class cell was.
+cells="${touch_row#*|}"
+cells="${cells#*|}"
+cells="${cells%|*}"
+trim "$cells"; cells="$TRIMMED"
 case "$cells" in *'|'*) refuse "the Touch set row is not one cell" ;; esac
 [ -n "$cells" ] || refuse "the Touch set row is empty"
 # Split on commas outside braces, because a brace glob carries its own —
@@ -159,7 +250,7 @@ for ((i = 0; i < ${#cells}; i++)); do
 done
 items+=("$cur")
 [ "$depth" -eq 0 ] || refuse "the Touch set row has an unbalanced brace"
-patterns=()
+set_tokens=""
 for item in "${items[@]}"; do
   t="${item#"${item%%[! ]*}"}"
   t="${t%"${t##*[! ]}"}"
@@ -176,7 +267,7 @@ for item in "${items[@]}"; do
   # the locality check rather than failing it visibly. This is the changed-path
   # grammar plus the glob characters `*?{},`, which makes it a superset rather
   # than a second list to keep in step.
-  grep -Eq '^[A-Za-z0-9_./*?{},()@+-]+$' <<<"$t" ||
+  [[ "$t" =~ $TOKEN_RE ]] ||
     refuse "the Touch set row is not a path list"
   case "$t" in *[/.]*) ;; *) refuse "the Touch set row is not a path list" ;; esac
   t="${t%/}"
@@ -211,9 +302,11 @@ for item in "${items[@]}"; do
   # quantifier, so an unescaped `docs/a+b.md` would match `docs/aab.md` — a
   # false `outside` traded for a silently wrong `inside`, which is the same
   # trade the changed-path side already refuses. `@` needs no escape.
-  re=$(printf '%s' "$t" | compile_glob)
-  patterns+=("^${re}(/.*)?$")
+  set_tokens+="${set_tokens:+$NL}$t"
 done
+compile_into "$set_tokens"
+patterns=()
+[ "${#COMPILED[@]}" -eq 0 ] || patterns=("${COMPILED[@]}")
 # The changed paths are the diff's own, and each gets the one word this
 # script chooses for it. `filename` is the whole of what is read, and it is
 # read as a JSON string so that a newline inside a name cannot be a second
@@ -230,7 +323,7 @@ while IFS= read -r line; do
   esac
   case "$line" in *\\*) refuse "a changed path is not a plain path" ;; esac
   path="${line:1:${#line}-2}"
-  grep -Eq '^[A-Za-z0-9_./@+()-]+$' <<<"$path" || refuse "a changed path is not a plain path"
+  [[ "$path" =~ $PATH_RE ]] || refuse "a changed path is not a plain path"
   case "$path" in *[/.]*) ;; *) refuse "a changed path is not a plain path" ;; esac
   case "/$path/" in *//*|*/./*|*/../*) refuse "a changed path is not a plain path" ;; esac
   verdicts+=("$path")
@@ -239,11 +332,14 @@ printf 'class %s\n' "$class"
 for path in "${verdicts[@]}"; do
   in_set=0
   in_map=0
+  # **The verdict loop was 34 of the run's 61 spawns**: one `grep` per path
+  # per pattern, until one matched. The expressions are the ones
+  # `compile_glob` produced, unchanged — only the matcher is bash's.
   for re in "${patterns[@]}"; do
-    if grep -Eq "$re" <<<"$path"; then in_set=1; break; fi
+    if [[ "$path" =~ $re ]]; then in_set=1; break; fi
   done
   for re in "${map_patterns[@]}"; do
-    if grep -Eq "$re" <<<"$path"; then in_map=1; break; fi
+    if [[ "$path" =~ $re ]]; then in_map=1; break; fi
   done
   if [ "$in_set" -eq 1 ] && [ "$in_map" -eq 1 ]; then
     printf 'inside %s\n' "$path"
