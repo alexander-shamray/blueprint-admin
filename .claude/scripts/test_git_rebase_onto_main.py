@@ -832,6 +832,12 @@ class TheHelperPublishesWhatItRebased(unittest.TestCase):
         result = self.helper("publish")
         self.assertEqual(9, result.returncode, result.stderr)
         self.assertIn("the waiting record is unreadable", result.stderr)
+        # Named for the guard it reaches. `read` itself succeeds on an empty
+        # line — it is a complete line — so what refuses here is the
+        # emptiness check, not the read. A truncated record is a different
+        # path: `read` fails with the branch already assigned, and `publish`
+        # refuses it at "names no replayed commit", which
+        # `test_publish_refuses_a_record_whose_replay_never_ran` covers.
 
     def test_a_second_run_changes_nothing_and_does_not_force(self):
         self.assertEqual(0, self.helper().returncode)
@@ -1117,27 +1123,31 @@ class EveryFixtureSaysItWasBuilt(unittest.TestCase):
 
     @classmethod
     def builds_the_fixture(cls, function):
-        # Matched on the argument rather than on the call's spelling, so
-        # `run_bash(FIXTURE, X=...)` is still a fixture build.
-        for node in ast.walk(function):
-            if (isinstance(node, ast.Call)
-                    and isinstance(node.func, ast.Name)
-                    and node.func.id == "run_bash"
-                    and node.args
-                    and isinstance(node.args[0], ast.Name)
-                    and node.args[0].id == "FIXTURE"):
-                return True
-        return False
+        # Any mention of the name at all, anywhere in the `setUp`. Matching
+        # the call's shape instead — `run_bash(FIXTURE)` with FIXTURE first
+        # and positional — missed `run_bash(FIXTURE + CONFLICT)`,
+        # `run_bash(script=FIXTURE)` and a build moved into a helper, and a
+        # class it fails to recognise is a class it never asks about.
+        return any(isinstance(node, ast.Name) and node.id == "FIXTURE"
+                   for node in ast.walk(function))
 
     @classmethod
     def asserts_its_root(cls, function):
-        for call in cls.calls_self(function, "assertTrue"):
-            subject = call.args[0] if call.args else None
-            if (isinstance(subject, ast.Attribute)
-                    and subject.attr == "root"
-                    and isinstance(subject.value, ast.Name)
-                    and subject.value.id == "self"):
-                return True
+        # Top-level statements of the `setUp` only, and the assertion has to
+        # be the statement rather than merely live somewhere inside one.
+        # `ast.walk` descends into `if` bodies and into lambdas, so it called
+        # an assertion that never runs an assertion — which is the same
+        # false-green as the substring scan this replaced, by another route.
+        for statement in function.body:
+            if not isinstance(statement, ast.Expr):
+                continue
+            for call in cls.calls_self(statement, "assertTrue"):
+                subject = call.args[0] if call.args else None
+                if (isinstance(subject, ast.Attribute)
+                        and subject.attr == "root"
+                        and isinstance(subject.value, ast.Name)
+                        and subject.value.id == "self"):
+                    return True
         return False
 
     def test_every_class_that_builds_the_fixture_says_it_was_built(self):
@@ -1156,13 +1166,16 @@ class EveryFixtureSaysItWasBuilt(unittest.TestCase):
                     f"{node.name} builds the fixture and never says whether it "
                     "worked: a failed one makes self.work '/work' and every "
                     "assertion under it vacuous")
-        # The gate's own subject, and the floor is the number of fixture
-        # classes there are — not a number safely below it. At `> 3` two of
-        # the six could have dropped out of the loop, unguarded, with this
-        # still green and its own message saying it would have caught that.
-        self.assertGreaterEqual(len(watched), 6,
-                                f"this gate found only {watched}: it has stopped "
-                                "covering the classes it was written for")
+        # The gate's own subject, and exact rather than a floor. A floor
+        # watches shrinkage only: a seventh fixture class that this gate
+        # failed to recognise would leave the count at six, unguarded, with
+        # the gate green and its own message claiming it would have caught
+        # exactly that. Bump this number in the same edit that adds a class,
+        # which is the moment to ask whether the new one asserts its root.
+        self.assertEqual(6, len(watched),
+                         f"this gate is watching {watched}: a fixture class has "
+                         "been added or has stopped being recognised, and either "
+                         "way the gate is no longer about what it says it is")
 
 
 if __name__ == "__main__":
