@@ -27,4 +27,43 @@ public static class RepoRoot
 
         return null;
     }
+
+    /// <summary>
+    /// The main checkout <paramref name="root"/> belongs to when it is a linked
+    /// git worktree, or <paramref name="root"/> itself. The sibling clones sit
+    /// beside the main checkout, and <c>/branch</c> forks its worktrees inside
+    /// it, under <c>.claude/worktrees/</c>, where <c>..</c> is not the
+    /// workspace. A linked worktree's <c>.git</c> is a file naming its private
+    /// git directory, and that directory's <c>commondir</c> names the main
+    /// checkout's <c>.git</c>; anything else found there leaves the root as is.
+    /// </summary>
+    public static string MainCheckout(string root)
+    {
+        const string Prefix = "gitdir:";
+        string dotGit = Path.Combine(root, ".git");
+
+        if (!File.Exists(dotGit))
+        {
+            return root;
+        }
+
+        string pointer = File.ReadAllText(dotGit).Trim();
+
+        if (!pointer.StartsWith(Prefix, StringComparison.Ordinal))
+        {
+            return root;
+        }
+
+        string gitDir = Path.GetFullPath(pointer[Prefix.Length..].Trim(), root);
+        string commonDirFile = Path.Combine(gitDir, "commondir");
+
+        if (!File.Exists(commonDirFile))
+        {
+            return root;
+        }
+
+        DirectoryInfo common = new(Path.GetFullPath(File.ReadAllText(commonDirFile).Trim(), gitDir));
+
+        return common.Name == ".git" && common.Parent is not null ? common.Parent.FullName : root;
+    }
 }
