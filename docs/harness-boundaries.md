@@ -183,6 +183,18 @@ argument is how a rule gets "corrected" back.
   the argument. What differs here is that `/ship` step 0 reads ancestry rather
   than content, so the helper's merge guard is the only place in this
   repository that reads it.
+- **`/branch`'s worktrees sit inside the checkout, under
+  `.claude/worktrees/`, and three residuals follow from it.** Once a session
+  has entered one, `settings.json`'s denies anchor at the worktree and refuse
+  its own `.claude/`; from the main checkout no rule names
+  `.claude/worktrees/<slug>/.claude/`, and `guard-edit-target.py` and Claude
+  Code's own sensitive-file check refuse it there instead — measured in
+  `alexander-shamray/blueprint-backend`. `guard-git-argv.py` refuses a
+  redirect, `cp`, `tee` or `mv` target with a `.claude` component, and every
+  absolute path into a nested worktree has one, so from inside a worktree such
+  a target is spelled relative; it fails closed and no chain step writes one.
+  And `git-worktree-remove.sh` refuses a worktree forked beside the checkout
+  before this layout, so one of those is removed by hand.
 
 A new residual is stated **here**, and `CLAUDE.md` carries the pointer rather
 than a second copy.

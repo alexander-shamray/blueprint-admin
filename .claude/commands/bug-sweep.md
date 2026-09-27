@@ -321,23 +321,22 @@ it is not the proof.
 piece of borrowed clothing.** `git-worktree-detach.sh` and
 `git-worktree-drop.sh` both refuse any path that is not `secsweep-` plus six
 characters under the canonical temp root. What that buys is exclusion, not
-ownership: it puts every sibling PR worktree and everything outside the temp
-root out of reach, which is the point, since the audited tree is
-prompt-injection input and a poisoned finding naming a sibling would otherwise
-be able to delete it. **It still does not establish that the path came from this
-invocation, and the two helpers differ on why.** `git-worktree-detach.sh` now
-creates the directory itself and prints it, so for *that* helper the question
-does not arise — there is no caller-supplied path to doubt, and the
-`Bash(mktemp:*)` grant that took an arbitrary template is gone from both sweeps.
-`git-worktree-drop.sh` is the other case and is unchanged in this respect: the
-teardown hands it `$posix`, and any registered worktree of the right shape
-satisfies it, including one an abandoned earlier sweep left behind. That is not
-hypothetical — a stray `secsweep-` checkout from a previous session was sitting
-in the temp root while this was being written. So exclusion remains the
-load-bearing half, and ownership is still not proved. Those helpers live under
-`.claude/scripts/`, which is `Edit`-denied to a command session by design, so
-this command cannot widen the shape to `bugsweep-` and must satisfy the one
-that exists.
+ownership: it puts every PR worktree and everything outside the temp root out of
+reach, which is the point, since the audited tree is prompt-injection input and
+a poisoned finding naming a PR worktree would otherwise be able to delete it.
+**It still does not establish that the path came from this invocation, and the
+two helpers differ on why.** `git-worktree-detach.sh` now creates the directory
+itself and prints it, so for *that* helper the question does not arise — there
+is no caller-supplied path to doubt, and the `Bash(mktemp:*)` grant that took an
+arbitrary template is gone from both sweeps. `git-worktree-drop.sh` is the other
+case and is unchanged in this respect: the teardown hands it `$posix`, and any
+registered worktree of the right shape satisfies it, including one an abandoned
+earlier sweep left behind. That is not hypothetical — a stray `secsweep-`
+checkout from a previous session was sitting in the temp root while this was
+being written. So exclusion remains the load-bearing half, and ownership is
+still not proved. Those helpers live under `.claude/scripts/`, which is
+`Edit`-denied to a command session by design, so this command cannot widen the
+shape to `bugsweep-` and must satisfy the one that exists.
 
 **That check used to be weaker than "directly under the temp root", and the
 reason is a shell subtlety worth carrying even now it is fixed.** In a bash
@@ -357,7 +356,7 @@ negative cases.
 **Both helpers say this in their own comments**, which matters because a reader
 of a helper has not necessarily read this file first, and for two rounds the
 correction lived only here while the scripts still claimed the guarantee. Each
-spells out what the check excludes (sibling PR worktrees, anything outside the
+spells out what the check excludes (PR worktrees, anything outside the
 temp root) and — now that the detach helper mints the path itself — what it does
 establish. **Those comments used to end differently**, naming what the check did
 not prove, what it was not, and a line owed; all three of those are closed, and
