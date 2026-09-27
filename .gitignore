@@ -33,6 +33,11 @@
 .claude/cache/
 .claude/skills/codebase-index/.skill_version
 
+# /branch's worktrees. They sit inside the checkout because EnterWorktree
+# moves a session there without a confirmation; ignored here so git status,
+# /commit and the code index do not read a second copy of the tree.
+.claude/worktrees/
+
 # Python — the hooks and their suite under .claude/ are scripts, not a package.
 __pycache__/
 

@@ -3954,7 +3954,8 @@ class NoCommandHoldsAPrefixGrantThatAdmitsAForbiddenFlag(unittest.TestCase):
 
     def test_the_worktree_helper_refuses_a_flag_and_a_stranger(self):
         for arg in ("-f", "--force", "../x/../../etc", "/tmp/elsewhere",
-                    "../../sibling"):
+                    "../../sibling", "../sibling", ".claude/worktrees/../x",
+                    ".claude/worktrees/a/b", ".claude/worktrees/-f"):
             with self.subTest(arg=arg):
                 out = subprocess.run(
                     [BASH, str(SCRIPTS / "git-worktree-remove.sh"), arg,
@@ -3964,13 +3965,15 @@ class NoCommandHoldsAPrefixGrantThatAdmitsAForbiddenFlag(unittest.TestCase):
 
     def test_the_worktree_helper_removes_only_the_worktree_it_is_named_for(self):
         # **Registration is not ownership** (Copilot). Driven against a real
-        # repository with two sibling worktrees: naming the other run's path,
-        # or this run's path with a branch it does not hold, is refused and
-        # leaves the directory standing; the matching pair is removed.
+        # repository with two worktrees under `.claude/worktrees/`, where
+        # `/branch` forks them: naming the other run's path, or this run's path
+        # with a branch it does not hold, is refused and leaves the directory
+        # standing; the matching pair is removed.
         base = Path(tempfile.mkdtemp(prefix="wt-remove-"))
         self.addCleanup(shutil.rmtree, str(base), ignore_errors=True)
         repo = base / "repo"
         repo.mkdir()
+        trees = repo / ".claude" / "worktrees"
 
         def git(*args):
             subprocess.run(["git", "-C", str(repo), *args], check=True,
@@ -3979,43 +3982,58 @@ class NoCommandHoldsAPrefixGrantThatAdmitsAForbiddenFlag(unittest.TestCase):
         git("init", "-q", "-b", "main")
         git("-c", "user.email=t@example.com", "-c", "user.name=t",
             "commit", "-q", "--allow-empty", "-m", "root")
-        git("worktree", "add", "-q", "-b", "fix/mine", "../repo-mine")
-        git("worktree", "add", "-q", "-b", "fix/theirs", "../repo-theirs")
+        git("worktree", "add", "-q", "-b", "fix/mine", ".claude/worktrees/mine")
+        git("worktree", "add", "-q", "-b", "fix/theirs",
+            ".claude/worktrees/theirs")
+        # The shape the helper no longer takes: a registered worktree beside
+        # the checkout, holding the branch it is named with.
+        git("worktree", "add", "-q", "-b", "fix/old", "../repo-mine")
 
         def remove(*args):
             return subprocess.run(
                 [BASH, str(SCRIPTS / "git-worktree-remove.sh"), *args],
                 capture_output=True, text=True, cwd=str(repo))
 
-        for args in (("../repo-theirs", "fix/mine"),
-                     ("../repo-mine", "fix/theirs"),
-                     ("../repo-mine", "main"),
-                     ("../repo-mine", "-f")):
+        for args in ((".claude/worktrees/theirs", "fix/mine"),
+                     (".claude/worktrees/mine", "fix/theirs"),
+                     (".claude/worktrees/mine", "main"),
+                     (".claude/worktrees/mine", "-f"),
+                     ("../repo-mine", "fix/old")):
             with self.subTest(args=args):
                 out = remove(*args)
                 self.assertNotEqual(0, out.returncode, out.stderr)
+                self.assertTrue((trees / "mine").is_dir())
+                self.assertTrue((trees / "theirs").is_dir())
                 self.assertTrue((base / "repo-mine").is_dir())
-                self.assertTrue((base / "repo-theirs").is_dir())
+
+        # Refused by its shape, before anything reads the register: the pair
+        # matches, and only the path is wrong.
+        out = remove("../repo-mine", "fix/old")
+        self.assertEqual(2, out.returncode, out.stderr)
+        self.assertIn("path must be .claude/worktrees/<name>", out.stderr)
 
         # The name looks right but the branch is not the one checked out there.
-        git("worktree", "add", "-q", "-b", "feat/mine", "../repo-other-mine")
-        out = remove("../repo-other-mine", "fix/mine")
+        git("worktree", "add", "-q", "-b", "feat/mine",
+            ".claude/worktrees/other-mine")
+        out = remove(".claude/worktrees/other-mine", "fix/mine")
         self.assertEqual(3, out.returncode, out.stderr)
-        self.assertTrue((base / "repo-other-mine").is_dir())
+        self.assertTrue((trees / "other-mine").is_dir())
 
         # **An abbreviated directory name is still this run's worktree.**
         # `/branch` cuts the slug to a word or two, and requiring the full
         # branch basename refused the teardown. Raised by Copilot.
         git("worktree", "add", "-q", "-b",
-            "feat(template)/masstransit-registration", "../repo-masstransit")
-        out = remove("../repo-masstransit", "feat(template)/masstransit-registration")
+            "feat(template)/masstransit-registration",
+            ".claude/worktrees/masstransit")
+        out = remove(".claude/worktrees/masstransit",
+                     "feat(template)/masstransit-registration")
         self.assertEqual(0, out.returncode, out.stderr)
-        self.assertFalse((base / "repo-masstransit").exists())
+        self.assertFalse((trees / "masstransit").exists())
 
-        out = remove("../repo-mine", "fix/mine")
+        out = remove(".claude/worktrees/mine", "fix/mine")
         self.assertEqual(0, out.returncode, out.stderr)
-        self.assertFalse((base / "repo-mine").exists())
-        self.assertTrue((base / "repo-theirs").is_dir())
+        self.assertFalse((trees / "mine").exists())
+        self.assertTrue((trees / "theirs").is_dir())
 
     def test_the_create_helper_refuses_a_body_it_should_not_publish(self):
         # `--body-file` publishes what it reads, including a file the session's
@@ -4898,8 +4916,8 @@ class HarnessControlSurfaceIsDenied(unittest.TestCase):
 
         Not solved by denying `.claude/**` wholesale, which was considered and
         rejected: `.claude/worktrees/` is where /branch puts working
-        checkouts, so that blanket would deny editing the repository itself
-        while a worktree run is live.
+        checkouts, so that blanket would deny a main-checkout session every
+        edit to a live worktree.
         """
         deny = self.deny()
         for name in ("settings.json", "settings.local.json"):
