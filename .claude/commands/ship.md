@@ -124,7 +124,7 @@ that reaches a merge — so the rows below say what is owed *between* them:
 
 | State | What is owed |
 |---|---|
-| On `main` | All of it — step 1 forks the workspace when the tree is clean and the parent is writable, and otherwise branches in place |
+| On `main` | All of it — step 1 forks the workspace when the tree is clean and `.claude/worktrees/` is writable, and otherwise branches in place |
 | On a branch, tree dirty | Checks, `/commit`, push, `/pr` |
 | On a branch, tree clean, unpushed or ahead | Push, `/pr` |
 | On a branch, tree clean and pushed | `/pr`, then the review loops |
@@ -153,7 +153,7 @@ step 0 reads it: `git rev-parse --git-dir --git-common-dir` differing, with no
 is already inside this PR's worktree. Then every row above is owed *there* and
 nothing forks a second directory. A run that starts in the main checkout on
 `main` is the only one that can fork a workspace at all — and only with a clean
-tree and a writable parent, per step 1's two exceptions.
+tree and a writable `.claude/worktrees/`, per step 1's two exceptions.
 
 **The Grok loop's clean state cannot be read from the tree**, so a resumed run
 re-enters step 5 rather than inferring it ran: `suggestions.md` is absent
@@ -788,12 +788,12 @@ same argument as never calling a branch clean because asking failed.
    `ExitWorktree` in row one, the switch in row three — rather than by reading
    this heading.
 
-   **Remove a sibling worktree only when its branch is finished**, in exactly
+   **Remove a forked worktree only when its branch is finished**, in exactly
    the sense the predicate above defines, and let git decide the tree half a
    second time:
 
    ```bash
-   bash .claude/scripts/git-worktree-remove.sh ../<checkout-name>-<slug> <branch>
+   bash .claude/scripts/git-worktree-remove.sh .claude/worktrees/<slug> <branch>
    ```
 
    **One definition, read at both sites, and it is the predicate above rather
@@ -866,14 +866,14 @@ same argument as never calling a branch clean because asking failed.
    `git-worktree-fork.sh` would refuse the name if it tried.
 
    **This step is also where the workspace comes from, and it has two
-   outcomes.** From a clean `main` with a writable parent, `/branch` forks a
-   sibling worktree and moves the session into it: **every step below then runs
-   in the PR's own directory** and this checkout stays on `main`. On either
+   outcomes.** From a clean `main`, `/branch` forks a worktree under
+   `.claude/worktrees/` and moves the session into it: **every step below then
+   runs in the PR's own directory** and this checkout stays on `main`. On either
    exception — a dirty `main`, because uncommitted work cannot follow a fresh
-   checkout without a stash or a patch and both are refused here, or a parent
-   that is not writable, where there is nowhere beside the checkout to put
-   one — it branches in place, and the rest of the run happens in the main
-   checkout on the new branch.
+   checkout without a stash or a patch and both are refused here, or a
+   `.claude/worktrees/` that is not writable, where there is nowhere in the
+   checkout to put one — it branches in place, and the rest of the run happens
+   in the main checkout on the new branch.
 
    `/branch` owns the naming, the placement and both exceptions, so do not
    restate the rules; do report which outcome happened, because it is what
@@ -1862,7 +1862,7 @@ same argument as never calling a branch clean because asking failed.
    bash .claude/scripts/git-switch-existing.sh main     # 3. in-place runs only
    git pull --ff-only                                   # 4. main, now containing the merge
    git merge-base --is-ancestor <merge-oid> HEAD        # 5. and it really does contain it
-   bash .claude/scripts/git-worktree-remove.sh ../<checkout-name>-<slug> <branch>  # 6. forked only
+   bash .claude/scripts/git-worktree-remove.sh .claude/worktrees/<slug> <branch>  # 6. forked only
    git worktree prune                                   # 7.
    ```
 

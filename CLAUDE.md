@@ -176,8 +176,11 @@ opens those files:
   local, never committed.** It is for the user, and it lists open PRs
   (with the issues each closes) and open issues with no PR. Update it the
   moment this session opens, merges or closes a PR, or files, closes or
-  reopens an issue. From a sibling worktree, edit the main checkout's copy,
-  not one in the worktree. When in doubt, rebuild it from
+  reopens an issue. Only the main checkout's copy counts, never one in a
+  worktree — and a session moved into `.claude/worktrees/` with
+  `EnterWorktree` is refused that copy by Claude Code's own isolation, so
+  there the update is carried in the report as owed and made once the
+  session is back in the main checkout. When in doubt, rebuild it from
   `gh pr list --limit 1000` and `gh issue list --limit 1000`, because the
   default of 30 truncates silently.
 
@@ -186,7 +189,7 @@ opens those files:
 | | |
 |---|---|
 | `/ship` | Clean `main` → `/branch` → checks → `/commit` → `/pr` → the Copilot review loop (Grok is disabled) → merge → teardown. **It stops for nothing that is a judgement** |
-| `/branch` | A correctly named branch **in a sibling worktree** the session moves into; in place when the tree is dirty or the parent is not writable |
+| `/branch` | A correctly named branch **in a worktree under `.claude/worktrees/`** the session moves into; in place when the tree is dirty or that directory is not writable |
 | `/commit` | Split the working tree into semantic commits with arguing bodies |
 | `/pr` | Open a PR in the house body form, with `| Class |` and `| Touch set |` |
 | `/review-grok` | Triage an external review into a resolution record |

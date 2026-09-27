@@ -17,10 +17,12 @@ nobody else's.
 is refused here with no second edit to forget.
 
 **The triager edits the checkout it was spawned in and nothing else.** The
-root is the checkout holding the event's `cwd`; a target outside it — a
-sibling worktree, another repository, a temp path — is refused, and so is
-any target when `cwd` is in no checkout. Inside it, the target is judged
-relative to that root against the patterns, both as spelled and as resolved.
+root is the checkout holding the event's `cwd`; a target outside it — the
+main checkout from a forked worktree, another repository, a temp path — is
+refused, and so is any target when `cwd` is in no checkout. Inside it, the
+target is judged relative to that root against the patterns, both as spelled
+and as resolved; a forked worktree seen from the main checkout sits under
+`.claude/`, which `/ship` denies, so it is refused there as a pattern.
 
 **Matching ignores case on every host.** Windows and macOS file systems do,
 so `readme.md` there is `README.md`; on a case-sensitive Linux file system
