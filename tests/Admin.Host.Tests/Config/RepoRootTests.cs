@@ -64,6 +64,36 @@ public sealed class RepoRootTests : IDisposable
     }
 
     [Fact]
+    public void A_pointer_whose_git_directory_has_no_commondir_is_left_as_is()
+    {
+        // A submodule's .git file names the superproject's .git/modules/<name>,
+        // which carries no commondir: it is not a linked worktree.
+        string gitDir = Path.Combine(root, "super", ".git", "modules", "child");
+        string submodule = Path.Combine(root, "super", "child");
+        Directory.CreateDirectory(gitDir);
+        Directory.CreateDirectory(submodule);
+        File.WriteAllText(Path.Combine(submodule, ".git"), $"gitdir: {gitDir.Replace('\\', '/')}\n");
+
+        RepoRoot.MainCheckout(submodule).ShouldBe(submodule);
+    }
+
+    [Fact]
+    public void A_common_directory_not_named_git_is_left_as_is()
+    {
+        // A worktree of a bare repository, or of a submodule, whose common
+        // directory is not a checkout's .git and so has no checkout beside it.
+        string common = Path.Combine(root, "bare.git");
+        string gitDir = Path.Combine(common, "worktrees", "feature");
+        string worktree = Path.Combine(root, "feature");
+        Directory.CreateDirectory(gitDir);
+        Directory.CreateDirectory(worktree);
+        File.WriteAllText(Path.Combine(gitDir, "commondir"), "../..\n");
+        File.WriteAllText(Path.Combine(worktree, ".git"), $"gitdir: {gitDir.Replace('\\', '/')}\n");
+
+        RepoRoot.MainCheckout(worktree).ShouldBe(worktree);
+    }
+
+    [Fact]
     public void A_git_file_that_is_not_a_worktree_pointer_is_left_as_is()
     {
         File.WriteAllText(Path.Combine(root, ".git"), "not a pointer\n");
