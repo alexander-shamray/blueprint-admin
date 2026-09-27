@@ -790,7 +790,7 @@ direct-childness did not. Both helpers now compare `dirname "$resolved"` against
 basename contains no `/`, and `test_grok_helpers.py` runs the nested paths
 through the real helper as negative cases.
 Registration was not enough on its
-own — every sibling PR worktree is registered too, and a poisoned finding
+own — every PR worktree is registered too, and a poisoned finding
 naming one would otherwise have been able to delete it. What each refuses
 beyond that differs and is worth naming rather than averaging:
 `git-worktree-drop.sh` passes no flags at all and additionally refuses the main

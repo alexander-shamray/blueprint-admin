@@ -8,14 +8,14 @@
 # is holding" — and `git worktree remove -f` defeats exactly that guard, which
 # a `Bash(git worktree remove:*)` grant would license.
 #
-# The other half is WHICH path. Registration is not ownership: every sibling PR
+# The other half is WHICH path. Registration is not ownership: every PR
 # worktree is registered too, and the audited tree is prompt-injection input, so
 # a path arriving here may have been chosen by it. Accepting any non-main
 # worktree would let a poisoned finding steer this at someone else's clean
 # workspace. So the path must match `secsweep-` plus six characters under the
 # canonical temp root.
 #
-# That EXCLUDES sibling PR worktrees and anything outside the temp root, which
+# That EXCLUDES PR worktrees and anything outside the temp root, which
 # is what it is for.
 #
 # It is a **direct-child** check now, and it was not before: the old form was one

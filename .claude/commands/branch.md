@@ -301,8 +301,9 @@ not content.
    the whole point of those paths is to carry the state that is already in the
    tree. A base is not what they are short of.
 
-   From a clean `main` in the main checkout, both halves happen in one
-   command:
+   From a clean `main` at the main checkout's root — the path is relative, so
+   the helper refuses a subdirectory and a linked worktree — both halves
+   happen in one command:
 
    ```bash
    bash .claude/scripts/git-worktree-fork.sh .claude/worktrees/<slug> <name>
