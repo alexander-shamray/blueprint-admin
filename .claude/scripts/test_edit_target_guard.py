@@ -824,13 +824,14 @@ class WhatThisGuardIsNotTheSubjectOf(GuardCase):
     def test_a_sibling_worktree_of_this_repository_is_judged_not_refused(self):
         """The false positive the allow-list introduced, found by walking into it.
 
-        `/branch` forks a sibling worktree and the session moves into it, so
-        `cwd` is an anchor and the ordinary path works. A session standing in
-        the PARENT and editing that sibling is the case that broke: the
-        worktree is a checkout, but not one of the three `anchors` knows, so
-        the target resolved outside every anchor and was refused — a real edit
-        refused for being in the wrong checkout rather than for landing
-        somewhere its path does not spell, which is not this guard's subject.
+        `/branch` forks a worktree and the session moves into it, so `cwd` is
+        an anchor and the ordinary path works. A session standing in the main
+        checkout and editing a worktree placed beside it, as this fixture's
+        is, is the case that broke: the worktree is a checkout, but not one of
+        the three `anchors` knows, so the target resolved outside every anchor
+        and was refused — a real edit refused for being in the wrong checkout
+        rather than for landing somewhere its path does not spell, which is
+        not this guard's subject.
 
         The repair is narrow on purpose. Admitting "any checkout" would hand
         the session another repository's machinery with no rule able to name

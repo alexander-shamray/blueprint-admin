@@ -2,7 +2,7 @@
 # Switch the current checkout to an EXISTING local branch, and nothing else.
 #
 # /branch step 5 needs this on one path: `git worktree add -b` creates the
-# branch before the directory, so a fork that fails on an unwritable parent
+# branch before the directory, so a fork that fails on an unwritable directory
 # leaves the branch behind, and the in-place fallback has to get onto it. A
 # plain `Bash(git switch:*)` grant would buy that one operation and also
 # license `--discard-changes` and `-C` — discarding work and force-moving a

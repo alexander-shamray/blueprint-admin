@@ -134,7 +134,9 @@ argument is how a rule gets "corrected" back.
   Grok returns: spawn the triager in a turn after the one `/ship` was
   loaded in, have it edit `README.md`, and see the hook refuse it. The
   guard also refuses any target outside the checkout its event's `cwd`
-  stands in, so a sibling worktree or another repository is out of reach.
+  stands in, so another repository, or the main checkout from a forked
+  worktree, is out of reach; a forked worktree seen from the main checkout
+  sits under `.claude/`, which `/ship`'s list denies.
 - **`python .claude/scripts/shard-harness-suite.py` is the harness's own
   suite.** It reads `git ls-files`, so a new tracked root file or top-level
   tree fails it until somebody decides which side of the boundary it is on.

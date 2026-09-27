@@ -3,10 +3,10 @@
 # nothing else. Two bases, spelled as literals, because step 5's table has
 # exactly two:
 #
-#   origin/main   the clean-`main` rows — already in a linked worktree, or the
-#                 parent is not writable. --no-track travels with it, since the
-#                 start point is a remote-tracking ref and /pr must be the one
-#                 to set the upstream.
+#   origin/main   the clean-`main` rows — already in a linked worktree, or
+#                 .claude/worktrees/ is not writable. --no-track travels with
+#                 it, since the start point is a remote-tracking ref and /pr
+#                 must be the one to set the upstream.
 #   HEAD          the dirty and detached rows, whose whole point is carrying
 #                 what is already in this tree.
 #
