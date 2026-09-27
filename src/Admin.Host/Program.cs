@@ -27,9 +27,14 @@ builder.Services.Configure<AdminOptions>(builder.Configuration.GetSection(AdminO
 // artifacts/ (Directory.Build.props) beneath BlueprintAdmin.slnx.
 string baseDir = RepoRoot.Find(AppContext.BaseDirectory) ?? Environment.CurrentDirectory;
 
+// The sibling clones resolve from the main checkout: from a worktree under
+// .claude/worktrees/, the worktree's own `..` is that directory. The web root
+// below stays the worktree's, since it serves what this checkout built.
+string clonesBase = RepoRoot.MainCheckout(baseDir);
+
 // Options are read lazily, through IOptions, so that a test factory's
 // configuration overrides are honoured wherever they are applied.
-builder.Services.AddSingleton(sp => RepoPaths.From(sp.GetRequiredService<IOptions<AdminOptions>>().Value, baseDir));
+builder.Services.AddSingleton(sp => RepoPaths.From(sp.GetRequiredService<IOptions<AdminOptions>>().Value, clonesBase));
 
 // Loopback by construction: there is no setting that binds anything else,
 // because the host holds realm passwords and can wipe volumes (spec §8). The

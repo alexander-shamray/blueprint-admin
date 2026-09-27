@@ -9,7 +9,8 @@ namespace Admin.Host.Config;
 /// Relative <see cref="BackendDir"/>/<see cref="FrontendDir"/> resolve against
 /// the repository root, located by walking up from the executable to
 /// <c>BlueprintAdmin.slnx</c> (see <c>Config/RepoRoot.cs</c>), independent of
-/// the process's working directory.
+/// the process's working directory — or, when that root is a linked git
+/// worktree, against the main checkout it belongs to.
 /// </summary>
 public sealed class AdminOptions
 {
