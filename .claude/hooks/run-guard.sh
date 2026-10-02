@@ -65,8 +65,8 @@ set -eu
 
 # **From here this shell leaves with 2 unless a guard's verdict says
 # otherwise.** `set -e`, an unset variable and a refused redirection each end
-# a shell with a status that is not reliably 2 — 1 or 127 under `bash`, 2
-# under `dash` — and so does a refusal printed to a stderr nobody is reading,
+# a shell with a status that is not reliably 2 — 1 under `bash`, 2 under
+# `dash` — and so does a refusal printed to a stderr nobody is reading,
 # which arrives as SIGPIPE. A `PreToolUse` hook reads every such status as
 # leave to run the tool. The two ways past these lines are an `exec`, after
 # which the guard's status is the hook's, and a proven verdict below, which
