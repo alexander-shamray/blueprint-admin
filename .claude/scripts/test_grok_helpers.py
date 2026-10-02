@@ -10737,7 +10737,11 @@ class TheLauncherProvesWhatItRemembers(LauncherMarkCases, unittest.TestCase):
                     child.stderr.close()
                     stdout, _ = child.communicate(timeout=120)
                     self.assertEqual(2, child.returncode)
-                    self.assertEqual(b"", stdout)
+                    # Not "and stdout is empty": macOS's bash 3.2 leaves the
+                    # PIPE trap with the refusal still in its stdio buffer
+                    # and flushes it to stdout on the way out. A refusal is
+                    # read from its status, and stdout holds no verdict.
+                    self.assertNotIn(b"permissionDecision", stdout)
 
                     out = subprocess.run(
                         [shell, "-c", '"$0" "$1" "$2" 2>&-', shell,
@@ -10878,8 +10882,10 @@ class ARememberedGuardAnswersAsAProbedOne(LauncherMarkCases, unittest.TestCase):
         self.assertEqual((0, 0), (probed.returncode, remembered.returncode))
         self.assertEqual(probed.stdout, remembered.stdout)
         guard = os.path.normcase(str(box.hooks / "guard-git-argv.py"))
+        # `sys.path[0]` is the interpreter's, resolved: on macOS the temp
+        # root is a link into `/private`, and both paths answer the target.
         self.assertEqual(["__main__", guard, guard, 1, True,
-                          os.path.normcase(str(box.hooks))],
+                          os.path.normcase(os.path.realpath(box.hooks))],
                          json.loads(remembered.stdout))
 
     def test_a_guard_that_fails_falls_the_same_way_on_both_paths(self):
