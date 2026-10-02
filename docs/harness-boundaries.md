@@ -28,14 +28,23 @@ argument is how a rule gets "corrected" back.
   file, never by trying what it forbids.
 - **Every guard hook uses `run-guard.sh`** — the two in `settings.json` and
   the `review-grok-triager` profile's own — which locates a compatible Python
-  launcher before invoking the guard. **It probes each candidate on every
-  call, and a cache of that answer is not a small change**: the launcher's
-  `exec` is what runs the guard, an `exec` that fails exits non-zero and not
-  2, and a `PreToolUse` hook that exits any other way is a non-blocking error
-  — the tool then runs unguarded. So anything that decides which candidate is
-  `exec`ed has to be unwritable by the session being guarded, and no
-  `Edit(...)` deny covers `.claude/cache/`. Reproduced against a scratch copy
-  and recorded in #44.
+  launcher before invoking the guard. **It runs each candidate before
+  choosing one, and remembers only that the first of them passed (#44).** The
+  mark is `.claude/cache/run-guard.mark`. No `Edit(...)` deny covers that
+  directory and none has to: the mark is compared with the candidate the
+  launcher would probe first anyway and is never read for which program to
+  run, so the most a session can write into it is a skipped probe of that
+  same program. **A remembered interpreter is never `exec`ed**, because an
+  `exec` that fails exits non-zero and not 2, and a `PreToolUse` hook that
+  exits any other way is a non-blocking error — the tool then runs unguarded.
+  It runs `run-guard.py` as a child instead, which checks the floor in the
+  interpreter that is about to judge and answers with a status nothing else
+  produces; on any other status the call is refused, the mark is forgotten
+  and the next call probes. **The residual is that one refused call**, where
+  the probe used to move on to the next candidate unnoticed, and a host whose
+  first candidate is not its working one is never remembered at all.
+  `TheLauncherProvesWhatItRemembers` and `ARememberedGuardAnswersAsAProbedOne`
+  in `test_grok_helpers.py` hold the launcher to each of those.
 - **The one hook that guards nothing is the index refresh**, which runs
   `refresh-index.sh` from two events: a `PostToolUse` entry after every tool
   that writes, and a `SessionStart` entry for the changes no edit makes. A
