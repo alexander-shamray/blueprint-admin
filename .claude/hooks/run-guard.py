@@ -6,28 +6,34 @@ this call.** The launcher probes each candidate before it `exec`s one, and it
 remembers when the first candidate passed so that the next call can skip the
 probe (#44). What the probe established was true when it was made. By the next
 call the interpreter may have been uninstalled or repointed below the floor,
-and the mark that says it passed sits where the guarded session can write it —
+and the mark that says it passed sits where the guarded session can make one —
 so on that path nothing is taken on trust, and this file is what replaces it.
 
 **The floor is checked here, in the interpreter that is about to judge**, and
 before anything is read from stdin. An interpreter below it leaves with a
 status that proves nothing and an event nobody has consumed.
 
-**Three statuses mean the guard ran, and nothing else produces them.** A
-`PreToolUse` hook is believed on its exit status alone, and so is this file by
-its launcher — but 0 is also what a stand-in that ran nothing answers, and 2
-is also Python's own answer to a script it could not open. So the guard's
-status is translated: `ALLOWED` for its 0, `REFUSED` for its 2 and `ERRORED`
-for anything else, a crash included. The launcher turns those back into 0, 2
-and 1 and refuses the call on every other status, 0 among them. The Store
+**Three statuses mean this file reached the guard, and they are chosen clear
+of what anything else is known to leave with.** A `PreToolUse` hook is
+believed on its exit status alone, and so is this file by its launcher — but 0
+is also what a stand-in that ran nothing answers, and 2 is also Python's own
+answer to a script it could not open. So the guard's status is translated:
+`ALLOWED` for its 0, `REFUSED` for its 2 and `ERRORED` for anything else — a
+crash, or a guard that does not compile. The launcher turns those back into 0,
+2 and 1 and refuses the call on every other status, 0 among them. The Store
 alias exits 49, the `py` launcher with no matching runtime exits 103, a
 missing command 127; none is one of the three.
 
-**The verdict itself is the guard's and is passed through unchanged**: its
-stdout, its stderr, and which way its own crash falls. `guard-git-argv.py`
-argues that direction for itself, and a launcher that answered differently
-depending on whether a mark existed would be a second opinion nobody asked
-for.
+**The verdict itself is the guard's and is passed through**: its stdout, its
+stderr, and which way its own crash falls. `guard-git-argv.py` argues that
+direction for itself, and a launcher that answered differently depending on
+whether a mark existed would be a second opinion nobody asked for.
+
+**Two things fall closed here that the `exec` lets through, and neither is a
+verdict.** A guard that cannot be opened ran nothing, and a verdict that could
+not be written was not delivered — the interpreter says so itself, leaving with
+120 when its last flush fails. Each is a status that proves nothing, so the
+launcher refuses, where the same 1 or 120 under the `exec` lets the tool run.
 
 **Compiled from source on every call, as `python guard.py` compiles it.** No
 import and so no `__pycache__`: a cached module under `.claude/hooks/` would be
@@ -46,9 +52,10 @@ import sys
 FLOOR = (3, 12)
 
 # What the launcher's `case` reads. Chosen clear of the statuses a candidate
-# that never ran this file leaves with: 0, 1 and 2 are everybody's, 49 is the
-# Store alias, the `py` launcher's own start at 100, 126 and 127 are the
-# shell's, and anything above 128 reads as a signal.
+# that never ran this file is known to leave with: 0, 1 and 2 are everybody's,
+# 49 is the Store alias, the `py` launcher's own start at 100, 120 is the
+# interpreter's for a flush that failed, 126 and 127 are the shell's, and
+# anything above 128 reads as a signal.
 ALLOWED = 91
 REFUSED = 92
 ERRORED = 93
@@ -90,14 +97,12 @@ def judged(name):
         sys.stderr.write("%s\n" % (status,))
         status = 1
 
-    # A verdict the harness never received is not a verdict delivered, and the
-    # interpreter says so itself when its last flush fails.
-    try:
-        sys.stdout.flush()
-        sys.stderr.flush()
-    except Exception:  # noqa: BLE001 - whatever stopped the write
-        status = 1
-
+    # Nothing is flushed here on purpose. The interpreter flushes both streams
+    # as it leaves, and when that fails it leaves with 120 whatever this file
+    # returned — a status that proves nothing, so the launcher refuses. A
+    # flush of this file's own would add nothing to that and would have to
+    # cope with a stream closed before the interpreter started, which is
+    # `None`.
     if status == 0:
         return ALLOWED
     if status == 2:
