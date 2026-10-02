@@ -11067,6 +11067,15 @@ class ARememberedGuardAnswersAsAProbedOne(LauncherMarkCases, unittest.TestCase):
         self.assertEqual(refused, left)
         self.assertIn("3.12", old.stderr)
 
+        # A floor, not a pin: a host above it is remembered like any other,
+        # where a prover that asked for 3.12 exactly would refuse every call
+        # on a host the probe passes.
+        newer = self.run_prover("guard-git-argv.py", event=refused,
+                                version=(3, 14, 0, "final", 0))
+        own, left = self.split(newer)
+        self.assertEqual(prover.ALLOWED, newer.returncode, newer.stderr)
+        self.assertIn("permissionDecision", own)
+
     def test_the_prover_runs_a_bare_name_beside_itself_and_nothing_else(self):
         prover = self.prover()
         proven = {prover.ALLOWED, prover.REFUSED, prover.ERRORED}
