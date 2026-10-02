@@ -9960,7 +9960,11 @@ class TheHookWiringRunsOnMoreThanOneOperatingSystem(unittest.TestCase):
         code = "\n".join(
             line for line in self.LAUNCHER.read_text(encoding="utf-8").splitlines()
             if not line.lstrip().startswith("#"))
-        self.assertLess(code.find("command -v py"), code.find("python3"))
+        # The probe lines themselves, not the first mention of each name:
+        # the launcher also asks `command -v` which candidate it will probe
+        # first, above the probes, and that block is not the order.
+        self.assertLess(code.find('py -3.12 -c "$probe"'),
+                        code.find('python3 -c "$probe"'))
         self.assertIn("exec py -3.12", code)
         self.assertIn("exec python3", code)
 
@@ -9985,6 +9989,14 @@ class TheHookWiringRunsOnMoreThanOneOperatingSystem(unittest.TestCase):
         # says whether it was probed or ran the hook.
         bin_dir = Path(tempfile.mkdtemp(prefix="launcher-"))
         self.addCleanup(shutil.rmtree, str(bin_dir), ignore_errors=True)
+        # A copy of the launcher, because it remembers its first candidate in
+        # its own checkout's `.claude/cache/`, and these stand-ins must meet
+        # neither this checkout's mark nor leave one for it.
+        hooks = bin_dir / ".claude" / "hooks"
+        hooks.mkdir(parents=True)
+        for file in self.LAUNCHER.parent.glob("run-guard.*"):
+            shutil.copy2(file, hooks / file.name)
+        launcher = hooks / "run-guard.sh"
 
         def stand_in(name, probe_ok):
             script = bin_dir / name
@@ -10001,7 +10013,7 @@ class TheHookWiringRunsOnMoreThanOneOperatingSystem(unittest.TestCase):
 
         def launch():
             return subprocess.run(
-                [BASH, str(self.LAUNCHER), "guard-git-argv.py"],
+                [BASH, str(launcher), "guard-git-argv.py"],
                 capture_output=True, text=True,
                 env={**os.environ, "PATH": path})
 
@@ -10108,13 +10120,17 @@ class ALauncherCheckout:
 
     **Its own tree, because the mark is the checkout's.** The launcher finds
     `.claude/cache/` from its own path, so a case run against this
-    repository's copy would read and write the mark every live session and
+    repository's copy would read and leave the mark every live session and
     every other shard is using. **And a PATH of its own**, because the tools'
     directory carries a real `python3` on Linux, which would take over the
     moment a case left a candidate out. Git for Windows' own `bash` puts its
     tool directories back in front of whatever PATH it is handed, so that no
     interpreter is reachable is a case rather than a premise:
     `test_no_interpreter_is_reachable_beside_the_stand_ins`.
+
+    **Run under `sh` by default**, because `sh` is what the hook wirings name
+    and on the Linux leg of the matrix it is `dash`; `bash` is the second
+    shell where a case asks for both.
     """
 
     def __init__(self, case, guards=False):
@@ -10134,15 +10150,14 @@ class ALauncherCheckout:
                          self.root / ".claude" / "commands" / "ship.md")
         self.launcher = self.hooks / "run-guard.sh"
         self.cache = self.root / ".claude" / "cache"
-        self.mark = self.cache / "run-guard.mark"
         self.bin = self.root / "bin"
         self.bin.mkdir()
         self.log = self.root / "log"
         self.gate = self.root / "gate"
-        for tool in ("dirname", "mkdir", "sleep"):
+        for tool in ("dirname", "mkdir", "rmdir", "sleep"):
             self.tool(tool)
         self.env = {**os.environ, "PATH": str(self.bin)}
-        self.paths = {}
+        self.shell = case.shells()[0]
 
     @staticmethod
     def quoted(path):
@@ -10190,15 +10205,16 @@ class ALauncherCheckout:
             f'  *) echo "$said runs ${{1##*/}}" >> "$log"; {leave(runs)} ;;\n'
             "esac\n"))
 
-    def launch(self, guard="guard-git-argv.py", event="{}", shell=None):
+    def launch(self, guard="guard-git-argv.py", event="{}", shell=None,
+               timeout=120):
         return subprocess.run(
-            [shell or BASH, str(self.launcher), guard],
+            [shell or self.shell, str(self.launcher), guard],
             input=event, capture_output=True, encoding="utf-8",
-            errors="replace", env=self.env)
+            errors="replace", env=self.env, timeout=timeout)
 
     def start(self, guard="guard-git-argv.py", event="{}"):
         child = subprocess.Popen(
-            [BASH, str(self.launcher), guard], stdin=subprocess.PIPE,
+            [self.shell, str(self.launcher), guard], stdin=subprocess.PIPE,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=self.env)
         child.stdin.write(event.encode("utf-8"))
         child.stdin.close()
@@ -10215,26 +10231,22 @@ class ALauncherCheckout:
     def since(self, before):
         return self.ran()[len(before):]
 
-    def seen_path(self, shell=None):
-        """`PATH` as the launcher's shell spells it, which is not Python's."""
-        shell = shell or BASH
-        if shell not in self.paths:
-            self.paths[shell] = subprocess.run(
-                [shell, "-c", 'printf %s "$PATH"'], capture_output=True,
-                encoding="utf-8", env=self.env, check=True).stdout
-        return self.paths[shell]
+    def mark(self, spelling="python3"):
+        """Where the launcher's mark for `spelling` goes."""
+        return self.cache / f"run-guard.{spelling.replace(' ', '-')}"
 
-    def whole(self, spelling, shell=None):
-        """The mark a call leaves when `spelling` passed its probe first."""
-        return f"{spelling}\n{self.seen_path(shell)}\n".encode("utf-8")
+    def marks(self):
+        """What the cache holds that is named like a mark, whatever it is."""
+        if not self.cache.is_dir():
+            return []
+        return sorted(p.name for p in self.cache.iterdir()
+                      if p.name.startswith("run-guard."))
 
-    def forge(self, content):
-        """Write the mark the way a `Write` call from the session could."""
-        self.cache.mkdir(exist_ok=True)
-        self.mark.write_bytes(content)
-
-    def marked(self):
-        return self.mark.read_bytes() if self.mark.is_file() else None
+    def forge(self, spelling="python3", inside=None):
+        """Make the mark the way a session could: `mkdir`, or a `Write` into it."""
+        self.mark(spelling).mkdir(parents=True)
+        if inside is not None:
+            (self.mark(spelling) / inside).write_bytes(b"planted\n")
 
 
 class LauncherMarkCases:
@@ -10243,6 +10255,7 @@ class LauncherMarkCases:
     HOOKS = SCRIPTS.parent / "hooks"
     LAUNCHER = HOOKS / "run-guard.sh"
     PROVER = HOOKS / "run-guard.py"
+    SH = shutil.which("sh")
 
     PROBED = ["python3 probe", "python3 runs guard-git-argv.py"]
     PROVED = ["python3 proves guard-git-argv.py"]
@@ -10251,26 +10264,29 @@ class LauncherMarkCases:
         return ALauncherCheckout(self, **options)
 
     def shells(self):
-        """`bash`, and the `sh` the hook wirings actually name.
+        """The `sh` the hook wirings name first, then `bash`.
 
-        Every other launcher case in this file runs it under `bash`, and
-        `settings.json` says `sh` — which is `dash` on the Linux leg of the
-        matrix. A launcher that leaned on a bashism would pass here and fail
-        where it is wired.
+        `settings.json` says `sh`, which is `dash` on the Linux leg of the
+        matrix and `bash` in POSIX mode on the other two; a launcher that
+        leaned on a bashism would pass under `bash` and fail where it is
+        wired. Every case runs under `sh`, and the ones that ask run under
+        both.
         """
-        found = [BASH]
-        sh = shutil.which("sh")
         if os.name == "posix":
             self.assertIsNotNone(
-                sh, "no `sh` on PATH, which is what the hook wirings run")
-        if sh is not None and os.path.realpath(sh) != os.path.realpath(BASH):
-            found.append(sh)
+                self.SH, "no `sh` on PATH, which is what the hook wirings run")
+        found = [self.SH or BASH]
+        if os.path.realpath(found[0]) != os.path.realpath(BASH):
+            found.append(BASH)
         return found
 
     def prover(self):
+        # Without leaving bytecode beside the hooks: the launcher runs this
+        # file as a script, and nothing should look as though it were imported.
         spec = importlib.util.spec_from_file_location("run_guard", self.PROVER)
         module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        with mock.patch.object(sys, "dont_write_bytecode", True):
+            spec.loader.exec_module(module)
         return module
 
     def code(self):
@@ -10296,12 +10312,20 @@ class TheLauncherProvesWhatItRemembers(LauncherMarkCases, unittest.TestCase):
     it validated the mark by the `PATH` string, which does not move when what
     a `PATH` entry contains does.
 
+    **A second attempt kept a mark with content and was found fail-open in
+    review**, and that is a case here too: a file the launcher opens is a
+    file the session can make block — a FIFO, or a file with no newline for
+    `read` to stop at — and a hook that hangs is timed out, which does not
+    block the tool.
+
     **So the subject of this class is what a mark cannot do.** It cannot name
-    a program: a mark that does not name the candidate this call would probe
-    first is not there. It cannot vouch for one: a remembered interpreter is
-    run through `run-guard.py` and believed only on a status that file alone
-    produces, and every other status is the call refused. And it cannot make
-    the launcher try a second candidate in the same call.
+    a program: the mark is an empty directory named for the candidate this
+    call would probe first, and a directory under any other name is not a
+    mark. It cannot vouch for one: a remembered interpreter is run through
+    `run-guard.py` and believed only on a status that file alone produces, and
+    every other status is the call refused. It cannot make the launcher try a
+    second candidate in the same call. And it cannot be opened, because the
+    launcher never opens it.
 
     Driven with stand-ins that log every start, because the claim is about
     how many interpreters start and which. `ARememberedGuardAnswersAsAProbed
@@ -10322,7 +10346,7 @@ class TheLauncherProvesWhatItRemembers(LauncherMarkCases, unittest.TestCase):
                 found = subprocess.run(
                     [shell, "-c", look], capture_output=True,
                     encoding="utf-8", env=box.env, check=True)
-                self.assertEqual("", found.stdout, box.seen_path(shell))
+                self.assertEqual("", found.stdout)
                 # The control: the same question finds a stand-in.
                 box.stand_in("python3")
                 found = subprocess.run(
@@ -10333,7 +10357,7 @@ class TheLauncherProvesWhatItRemembers(LauncherMarkCases, unittest.TestCase):
 
     # ---- the saving, which is the whole reason any of this exists ----------
 
-    def test_the_second_call_under_one_path_starts_one_interpreter(self):
+    def test_the_second_call_starts_one_interpreter(self):
         for shell in self.shells():
             with self.subTest(shell=shell):
                 box = self.checkout()
@@ -10342,12 +10366,14 @@ class TheLauncherProvesWhatItRemembers(LauncherMarkCases, unittest.TestCase):
                 first = box.launch(shell=shell)
                 self.assertEqual(0, first.returncode, first.stderr)
                 self.assertEqual(self.PROBED, box.ran())
+                self.assertEqual(["run-guard.python3"], box.marks())
+                self.assertEqual([], list(box.mark().iterdir()))
 
                 before = box.ran()
                 second = box.launch(shell=shell)
                 self.assertEqual(0, second.returncode, second.stderr)
                 self.assertEqual(self.PROVED, box.since(before))
-                self.assertEqual(box.whole("python3", shell), box.marked())
+                self.assertEqual(["run-guard.python3"], box.marks())
 
     def test_only_the_candidate_probed_first_is_ever_remembered(self):
         # A mark that could name a later candidate would be a mark that
@@ -10359,7 +10385,7 @@ class TheLauncherProvesWhatItRemembers(LauncherMarkCases, unittest.TestCase):
             box.stand_in("py")
             box.stand_in("python3")
             box.launch()
-            self.assertEqual(box.whole("py -3.12"), box.marked())
+            self.assertEqual(["run-guard.py-3.12"], box.marks())
             before = box.ran()
             self.assertEqual(0, box.launch().returncode)
             self.assertEqual(["py -3.12 proves guard-git-argv.py"],
@@ -10369,7 +10395,7 @@ class TheLauncherProvesWhatItRemembers(LauncherMarkCases, unittest.TestCase):
             box = self.checkout()
             box.stand_in("python")
             box.launch()
-            self.assertEqual(box.whole("python"), box.marked())
+            self.assertEqual(["run-guard.python"], box.marks())
             before = box.ran()
             self.assertEqual(0, box.launch().returncode)
             self.assertEqual(["python proves guard-git-argv.py"],
@@ -10384,7 +10410,7 @@ class TheLauncherProvesWhatItRemembers(LauncherMarkCases, unittest.TestCase):
                 self.assertEqual(
                     ["py -3.12 probe", "py -3 probe",
                      "py -3 runs guard-git-argv.py"], box.since(before))
-            self.assertIsNone(box.marked())
+            self.assertEqual([], box.marks())
 
         with self.subTest(chosen="python", first="python3"):
             box = self.checkout()
@@ -10396,7 +10422,7 @@ class TheLauncherProvesWhatItRemembers(LauncherMarkCases, unittest.TestCase):
                 self.assertEqual(
                     ["python3 probe", "python probe",
                      "python runs guard-git-argv.py"], box.since(before))
-            self.assertIsNone(box.marked())
+            self.assertEqual([], box.marks())
 
     # ---- a remembered interpreter that is no longer what was probed --------
 
@@ -10404,30 +10430,29 @@ class TheLauncherProvesWhatItRemembers(LauncherMarkCases, unittest.TestCase):
         # Each status is something a remembered candidate really leaves with
         # once the host has moved under the mark: 127 when it has vanished, 1
         # when `run-guard.py` finds it below the floor, 103 from a `py` whose
-        # 3.12 was unregistered, 49 from the Store alias. **And 0 and 2,
-        # which are the two that matter most**: 0 is what a program that ran
-        # nothing answers, and it is the status the harness reads as
-        # "allowed".
+        # 3.12 was unregistered, 49 from the Store alias, 120 from an
+        # interpreter whose last flush failed, 126, 137 and 255 from the shell
+        # and the kernel. **And 0 and 2, which are the two that matter most**:
+        # 0 is what a program that ran nothing answers, and it is the status
+        # the harness reads as "allowed". 3, 90 and 94 sit beside the three
+        # proven statuses and are not them.
         box = self.checkout()
         box.stand_in("python")
-        for status in (0, 1, 2, 49, 103, 127):
+        for status in (0, 1, 2, 3, 49, 90, 94, 103, 120, 126, 127, 137, 255):
             with self.subTest(status=status):
-                box.stand_in("python3")
-                box.forge(b"")
-                box.launch()
-                self.assertEqual(box.whole("python3"), box.marked())
-
+                box.forge()
                 box.stand_in("python3", probe=1, proves=status)
                 before = box.ran()
                 out = box.launch()
                 self.assertEqual(2, out.returncode, out.stderr)
                 self.assertEqual("", out.stdout)
                 self.assertIn("refusing the call", out.stderr)
+                self.assertIn("forgotten", out.stderr)
                 # One start, and it was the remembered one. `python` is good
                 # and sits right there, and is not tried: the first candidate
                 # may already have read the event.
                 self.assertEqual(self.PROVED, box.since(before))
-                self.assertEqual(b"", box.marked())
+                self.assertEqual([], box.marks())
 
         # Forgotten, so the next call probes — and moves on to the next
         # candidate exactly as the probe always has.
@@ -10441,23 +10466,34 @@ class TheLauncherProvesWhatItRemembers(LauncherMarkCases, unittest.TestCase):
     def test_the_three_proven_statuses_are_the_guards_own_and_keep_the_mark(self):
         prover = self.prover()
         box = self.checkout()
+        box.forge()
         for proved, status in ((prover.ALLOWED, 0), (prover.REFUSED, 2),
                                (prover.ERRORED, 1)):
             with self.subTest(proved=proved):
                 box.stand_in("python3", proves=proved)
-                box.forge(box.whole("python3"))
                 before = box.ran()
                 out = box.launch()
                 self.assertEqual(status, out.returncode, out.stderr)
                 self.assertEqual(self.PROVED, box.since(before))
-                self.assertEqual(box.whole("python3"), box.marked())
+                self.assertEqual(["run-guard.python3"], box.marks())
+
+    def test_the_proven_statuses_are_clear_of_everything_else_known(self):
+        # `run-guard.py` says what the three are chosen clear of. Held here,
+        # so that moving one onto a status some other program leaves with is
+        # a red case rather than a sentence that stopped being true.
+        prover = self.prover()
+        proven = {prover.ALLOWED, prover.REFUSED, prover.ERRORED}
+        self.assertEqual(3, len(proven))
+        foreign = ({0, 1, 2, 49, 120, 126, 127} | set(range(100, 115))
+                   | set(range(128, 256)))
+        self.assertEqual(set(), proven & foreign)
 
     def test_a_remembered_interpreter_that_was_repointed_is_judged_as_it_is_now(self):
         # `update-alternatives --set python3` moves what the name means while
-        # the `PATH` string, and the path and mtime of whatever was probed,
-        # all stay put. Nothing here reads any of the three, so there is
-        # nothing to deceive: a repointed interpreter that still proves
-        # itself judges, and one that does not is the case above.
+        # the path and mtime of whatever was probed stay put. Nothing here
+        # reads either, so there is nothing to deceive: a repointed
+        # interpreter that still proves itself judges, and one that does not
+        # is the case above.
         box = self.checkout()
         box.stand_in("python3")
         box.launch()
@@ -10466,15 +10502,15 @@ class TheLauncherProvesWhatItRemembers(LauncherMarkCases, unittest.TestCase):
         out = box.launch()
         self.assertEqual(2, out.returncode, out.stderr)
         self.assertEqual(self.PROVED, box.since(before))
-        self.assertEqual(box.whole("python3"), box.marked())
+        self.assertEqual(["run-guard.python3"], box.marks())
 
-    # ---- anything the guarded session could write --------------------------
+    # ---- anything the guarded session could leave in the cache -------------
 
     def test_a_forged_mark_naming_the_store_alias_refuses_instead_of_running_unguarded(self):
-        # The withdrawn cache, reproduced: one `Write` to a gitignored file
-        # named `python3`, which on Windows is the Store's execution alias.
-        # It printed its message and exited 49, the guard never ran, and
-        # every `Bash`, `Edit` and `Write` after it went through.
+        # The withdrawn cache, reproduced: a mark for `python3`, which on
+        # Windows is the Store's execution alias. It printed its message and
+        # exited 49, the guard never ran, and every `Bash`, `Edit` and `Write`
+        # after it went through.
         for shell in self.shells():
             with self.subTest(shell=shell):
                 box = self.checkout()
@@ -10484,14 +10520,14 @@ class TheLauncherProvesWhatItRemembers(LauncherMarkCases, unittest.TestCase):
                     "install from the Microsoft Store' >&2\n"
                     "exit 49\n"))
                 box.stand_in("python")
-                box.forge(box.whole("python3", shell))
+                box.forge()
 
                 out = box.launch(shell=shell)
                 self.assertEqual(2, out.returncode, out.stderr)
                 self.assertEqual("", out.stdout)
                 self.assertIn("Python was not found", out.stderr)
                 self.assertEqual(["python3 alias"], box.ran())
-                self.assertEqual(b"", box.marked())
+                self.assertEqual([], box.marks())
 
                 before = box.ran()
                 out = box.launch(shell=shell)
@@ -10500,67 +10536,90 @@ class TheLauncherProvesWhatItRemembers(LauncherMarkCases, unittest.TestCase):
                     ["python3 alias", "python probe",
                      "python runs guard-git-argv.py"], box.since(before))
 
+    def test_a_mark_with_something_inside_cannot_be_forgotten_and_keeps_refusing(self):
+        # A `Write` into `.claude/cache/run-guard.python3/anything` makes the
+        # mark with a file in it. `rmdir` removes an empty directory and
+        # nothing else, so the mark stays, and with it every refusal — which
+        # is the closed direction, and the message says what to remove. The
+        # planted file is still there: nothing here deletes recursively.
+        box = self.checkout()
+        box.stand_in("python3", proves=127)
+        box.stand_in("python")
+        box.forge(inside="planted")
+        for _ in range(2):
+            before = box.ran()
+            out = box.launch()
+            self.assertEqual(2, out.returncode, out.stderr)
+            self.assertIn("could not be removed", out.stderr)
+            self.assertIn(box.mark().name, out.stderr)
+            self.assertEqual(self.PROVED, box.since(before))
+        self.assertEqual(["run-guard.python3"], box.marks())
+        self.assertEqual(b"planted\n", (box.mark() / "planted").read_bytes())
+
     def test_a_mark_cannot_choose_a_candidate_or_a_command(self):
         # `python3` is first here and fails its probe; `python` is good. A
-        # mark naming `python` would skip `python3`'s probe if the mark chose,
-        # and one naming `canary` would run it. Neither is read as a mark.
+        # mark for `python` would skip `python3`'s probe if the mark chose,
+        # and one for `canary` would run it. Neither is a mark, and neither
+        # is touched. Not a differently-cased `python3`: a filesystem that
+        # folds case makes that the mark itself, which names the same
+        # candidate and proves nothing more.
         box = self.checkout()
         box.stand_in("python3", probe=1)
         box.stand_in("python")
         box.script("canary", f"echo 'canary ran' >> {box.quoted(box.log)}\n")
-        for spelling in ("python", "py -3.12", "canary", "sh -c canary",
-                         "python3 ", " python3", "PYTHON3", "python3\r", ""):
+        for spelling in ("python", "py -3.12", "canary", "sh -c canary"):
             with self.subTest(spelling=spelling):
-                forged = box.whole(spelling)
-                box.forge(forged)
+                box.forge(spelling)
                 before = box.ran()
                 out = box.launch()
                 self.assertEqual(0, out.returncode, out.stderr)
                 self.assertEqual(
                     ["python3 probe", "python probe",
                      "python runs guard-git-argv.py"], box.since(before))
-                # Nor rewritten: the candidate chosen was not the first, so
-                # this launcher has nothing to say about it.
-                self.assertEqual(forged, box.marked())
+                self.assertTrue(box.mark(spelling).is_dir())
+        self.assertNotIn("run-guard.python3", box.marks())
 
-    def test_a_torn_or_foreign_mark_is_read_as_no_mark(self):
-        # The mark is written in place and may be met half-written, and it
-        # may be met as whatever the session left there. Each of these is
-        # "no mark": the candidate is probed, the guard runs once, and the
-        # mark is whole afterwards.
+    def test_what_is_not_a_directory_is_not_a_mark_and_is_never_opened(self):
+        # The review of the second attempt put a FIFO at the mark and watched
+        # the launcher block on it until the hook timed out; a file with no
+        # newline did the same to `read`. Each of these is left exactly as it
+        # was found: the candidate is probed, the guard runs once, and the
+        # call is back well inside any hook timeout.
         box = self.checkout()
         box.stand_in("python3")
-        path = box.seen_path().encode("utf-8")
-        torn = {
-            "empty": b"",
-            "the candidate, cut before its newline": b"python3",
-            "the candidate alone": b"python3\n",
-            "PATH cut before its newline": b"python3\n" + path,
-            "PATH cut short": b"python3\n" + path[:-1] + b"\n",
-            "another PATH": b"python3\n/somewhere/else\n",
-            "not text": b"\x00\xff\n\x00\n",
+        box.cache.mkdir()
+        things = {
+            "an empty file": lambda p: p.write_bytes(b""),
+            "a file with no newline, four mebibytes of it":
+                lambda p: p.write_bytes(b"x" * (4 << 20)),
         }
-        for name, content in torn.items():
-            with self.subTest(mark=name):
-                box.forge(content)
+        if hasattr(os, "mkfifo"):
+            things["a FIFO nobody will ever write"] = os.mkfifo
+        try:
+            os.symlink(box.root / "nowhere", box.root / "probe-link")
+        except OSError:
+            self.assertEqual("nt", os.name, "a POSIX host could not make a "
+                                            "symbolic link in its temp root")
+        else:
+            things["a link to nothing"] = (
+                lambda p: os.symlink(box.root / "nowhere", p))
+        for name, make in things.items():
+            with self.subTest(thing=name):
+                if box.mark().exists() or box.mark().is_symlink():
+                    box.mark().unlink()
+                make(box.mark())
+                was = os.lstat(box.mark())
                 before = box.ran()
-                out = box.launch()
+                started = time.monotonic()
+                out = box.launch(timeout=60)
+                self.assertLess(time.monotonic() - started, 30)
                 self.assertEqual(0, out.returncode, out.stderr)
                 self.assertEqual(self.PROBED, box.since(before))
-                self.assertEqual(box.whole("python3"), box.marked())
+                now = os.lstat(box.mark())
+                self.assertEqual((was.st_mode, was.st_size),
+                                 (now.st_mode, now.st_size))
 
     def test_a_mark_that_cannot_be_kept_costs_the_probe_and_nothing_else(self):
-        with self.subTest(obstacle="a directory where the mark goes"):
-            box = self.checkout()
-            box.stand_in("python3")
-            box.mark.mkdir(parents=True)
-            for _ in range(2):
-                before = box.ran()
-                out = box.launch()
-                self.assertEqual(0, out.returncode, out.stderr)
-                self.assertEqual(self.PROBED, box.since(before))
-            self.assertTrue(box.mark.is_dir())
-
         with self.subTest(obstacle="a file where the cache directory goes"):
             box = self.checkout()
             box.stand_in("python3")
@@ -10583,74 +10642,28 @@ class TheLauncherProvesWhatItRemembers(LauncherMarkCases, unittest.TestCase):
                 out = box.launch()
                 self.assertEqual(0, out.returncode, out.stderr)
                 self.assertEqual(self.PROBED, box.since(before))
-            self.assertIsNone(box.marked())
+            self.assertEqual([], box.marks())
 
-    def test_a_mark_that_is_a_link_is_neither_believed_nor_written_through(self):
-        # A link at the mark's path would turn "remember" and "forget" into a
-        # way to write that text, or nothing, over whatever it points at —
-        # `settings.json` among the candidates. Creating one takes a
-        # privilege Windows does not give by default, so this is the POSIX
-        # legs' case, and it says so rather than skipping.
-        box = self.checkout()
-        box.stand_in("python3", proves=127)
-        victim = box.root / "victim"
-        victim.write_bytes(box.whole("python3"))
-        box.cache.mkdir()
-        try:
-            os.symlink(victim, box.mark)
-        except OSError:
-            self.assertEqual("nt", os.name, "a POSIX host could not make a "
-                                            "symbolic link in its temp root")
-            return
+    # ---- six first calls at once ------------------------------------------
 
-        # Not believed, though what it points at is a whole mark: the
-        # candidate is probed, where a believed mark would have been refused.
-        before = box.ran()
-        out = box.launch()
-        self.assertEqual(0, out.returncode, out.stderr)
-        self.assertEqual(self.PROBED, box.since(before))
-
-        # Not remembered through: the probe passed and the candidate is the
-        # first, so a mark is owed, and what the link points at is left alone.
-        victim.write_bytes(b"not this launcher's to write\n")
-        out = box.launch()
-        self.assertEqual(0, out.returncode, out.stderr)
-        self.assertEqual(b"not this launcher's to write\n", victim.read_bytes())
-        self.assertTrue(box.mark.is_symlink())
-
-        # Nor forgotten through, when the link arrives after the mark was
-        # read and before the refusal: the remembered interpreter moves one
-        # into place and then fails to prove itself. Made here and moved
-        # there, because `ln -s` under Git for Windows copies the file.
-        box.tool("mv")
-        box.mark.unlink()
-        box.forge(box.whole("python3"))
-        staged = box.root / "staged"
-        os.symlink(victim, staged)
-        box.script("python3", (
-            f"mv -f {box.quoted(staged)} {box.quoted(box.mark)}\n"
-            "exit 127\n"))
-        out = box.launch()
-        self.assertEqual(2, out.returncode, out.stderr)
-        self.assertEqual(b"not this launcher's to write\n", victim.read_bytes())
-        self.assertTrue(box.mark.is_symlink())
-
-    # ---- the race the withdrawn cache's own case never arranged ------------
-
-    def test_racing_first_calls_leave_one_whole_mark_and_nothing_beside_it(self):
+    def test_racing_first_calls_leave_one_empty_mark_and_nothing_beside_it(self):
         # **Its predecessor passed with its subject deleted**: it asserted
         # that no staging file survived a lost rename and never arranged the
         # rename to be lost. This one holds every launcher inside its probe
         # until all of them are there, then lets them go at once, so each
-        # writes the mark while the others are writing it.
+        # makes the mark while the others are making it.
         #
-        # There is no staging file to lose now — the mark is written in
-        # place — so what is asserted is what replaces that claim: every call
-        # ran its guard exactly once, the cache holds the mark and nothing
-        # else, and the mark is whole.
+        # What that can show is bounded, and it is said rather than implied:
+        # `mkdir` either makes the directory or finds it there, so no
+        # interleaving can leave a different cache, and this case would pass
+        # with the racers run one at a time. What it holds is that every call
+        # ran its guard exactly once, that the cache holds the one mark and
+        # nothing else, that the mark is empty, and that the next call is
+        # remembered — under the concurrency a busy session actually has.
         racers = 6
         box = self.checkout()
         box.stand_in("python3", hold=True)
+        box.cache.mkdir()
         children = [box.start() for _ in range(racers)]
         try:
             for _ in range(1200):
@@ -10659,19 +10672,25 @@ class TheLauncherProvesWhatItRemembers(LauncherMarkCases, unittest.TestCase):
                 time.sleep(0.05)
             self.assertEqual(["python3 probe"] * racers, box.ran(),
                              "not every launcher reached its probe")
-            self.assertIsNone(box.marked())
+            self.assertEqual([], box.marks())
         finally:
             box.gate.write_bytes(b"")
-            outs = [child.communicate(timeout=120) for child in children]
+            outs = []
+            for child in children:
+                try:
+                    outs.append(child.communicate(timeout=120))
+                except subprocess.TimeoutExpired:
+                    child.kill()
+                    outs.append(child.communicate())
         for child, (_, stderr) in zip(children, outs):
             self.assertEqual(0, child.returncode, stderr)
         self.assertEqual(
             sorted(["python3 probe"] * racers
                    + ["python3 runs guard-git-argv.py"] * racers),
             sorted(box.ran()))
-        self.assertEqual(["run-guard.mark"],
+        self.assertEqual(["run-guard.python3"],
                          sorted(p.name for p in box.cache.iterdir()))
-        self.assertEqual(box.whole("python3"), box.marked())
+        self.assertEqual([], list(box.mark().iterdir()))
 
         before = box.ran()
         self.assertEqual(0, box.launch().returncode)
@@ -10698,6 +10717,35 @@ class TheLauncherProvesWhatItRemembers(LauncherMarkCases, unittest.TestCase):
                 self.assertIn("/no/such/directory", out.stderr)
                 self.assertEqual([], box.ran())
 
+    def test_a_refusal_nobody_is_reading_is_still_a_refusal(self):
+        # Both refusals print a line to stderr before their `exit 2`. With
+        # that stderr a pipe nobody reads any more, the write is a SIGPIPE,
+        # which ends a shell with 141; with it closed outright, the write is
+        # an error under `set -e`. Either way the trap makes it 2, where the
+        # launcher on `main` left with 141 from its own last refusal.
+        for shell in self.shells():
+            for remembered in (True, False):
+                with self.subTest(shell=shell, remembered=remembered):
+                    box = self.checkout()
+                    box.stand_in("python3", probe=1, proves=127)
+                    if remembered:
+                        box.forge()
+                    child = subprocess.Popen(
+                        [shell, str(box.launcher), "guard-git-argv.py"],
+                        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE, env=box.env)
+                    child.stderr.close()
+                    stdout, _ = child.communicate(timeout=120)
+                    self.assertEqual(2, child.returncode)
+                    self.assertEqual(b"", stdout)
+
+                    out = subprocess.run(
+                        [shell, "-c", '"$0" "$1" "$2" 2>&-', shell,
+                         str(box.launcher), "guard-git-argv.py"],
+                        input="{}", capture_output=True, encoding="utf-8",
+                        errors="replace", env=box.env)
+                    self.assertEqual(2, out.returncode, out.stdout)
+
     def test_no_exit_in_the_launcher_lets_a_call_through_unproven(self):
         prover = self.prover()
         code = "\n".join(self.code())
@@ -10706,11 +10754,29 @@ class TheLauncherProvesWhatItRemembers(LauncherMarkCases, unittest.TestCase):
         self.assertEqual(
             {str(prover.ALLOWED): "0", str(prover.REFUSED): "2",
              str(prover.ERRORED): "1"}, arms)
-        # Every other `exit` in the file is a 2.
+        # The trap is lifted on those three lines and nowhere else, and it is
+        # set before anything the shell does.
+        self.assertEqual(3, code.count("trap - EXIT"))
+        self.assertIn("set -eu", code)
+        self.assertLess(code.index("trap 'exit 2' EXIT"),
+                        code.index('[ "$#"'))
+        self.assertIn("trap 'exit 2' PIPE", code)
+        # Every `exit` in the file names a literal, and every literal other
+        # than the two proven arms just read is a 2.
+        self.assertEqual([], re.findall(r"\bexit\s+(?![0-9])\S", code))
         exits = re.findall(r"\bexit (\d+)", code)
         self.assertEqual({"0", "1", "2"}, set(exits))
         self.assertEqual(1, exits.count("0"))
         self.assertEqual(1, exits.count("1"))
+
+    def test_the_mark_is_never_opened(self):
+        # Asked of the text as well as of the FIFO above: no redirection
+        # names the mark, and nothing reads anything.
+        code = "\n".join(self.code())
+        self.assertNotRegex(code, r'[<>]\s*"?\$mark')
+        self.assertNotRegex(code, r"\bread\b")
+        self.assertNotRegex(code, r"\bcat\b")
+        self.assertRegex(code, r'\[ -d "\$mark" \]')
 
     def test_the_remembered_interpreter_is_never_execed(self):
         # An `exec` cannot fail closed, which is the whole reason the
@@ -10734,6 +10800,10 @@ class ARememberedGuardAnswersAsAProbedOne(LauncherMarkCases, unittest.TestCase):
     proves nothing about whether those agree, so these cases use the
     interpreter running this suite and the guards themselves: the stand-in
     only logs which path a call took and then hands the call over.
+
+    Two cases are the exceptions, stated in `run-guard.py` and held here: a
+    guard that cannot be opened and a verdict that cannot be written both
+    refuse on the remembered path, where the `exec` lets the tool run.
     """
 
     EVENTS = (
@@ -10749,6 +10819,19 @@ class ARememberedGuardAnswersAsAProbedOne(LauncherMarkCases, unittest.TestCase):
         ("guard-triager-edit.py", "not json"),
     )
 
+    def both(self, box, guard="guard-git-argv.py", event="{}"):
+        """One probed call and one remembered call, with their log lines."""
+        if box.mark().is_dir():
+            box.mark().rmdir()
+        before = box.ran()
+        probed = box.launch(guard, event)
+        self.assertEqual(["python3 probe", f"python3 runs {guard}"],
+                         box.since(before))
+        before = box.ran()
+        remembered = box.launch(guard, event)
+        self.assertEqual([f"python3 proves {guard}"], box.since(before))
+        return probed, remembered
+
     def test_the_remembered_path_answers_as_the_probed_one_does(self):
         # Every guard the closed set admits, through both paths. What is
         # compared is what a session would get: the same stdout, the same
@@ -10760,15 +10843,7 @@ class ARememberedGuardAnswersAsAProbedOne(LauncherMarkCases, unittest.TestCase):
             if isinstance(event, dict):
                 event = json.dumps({**event, "cwd": str(box.root)})
             with self.subTest(guard=guard, event=event):
-                box.forge(b"")
-                before = box.ran()
-                probed = box.launch(guard, event)
-                self.assertEqual(["python3 probe", f"python3 runs {guard}"],
-                                 box.since(before))
-                before = box.ran()
-                remembered = box.launch(guard, event)
-                self.assertEqual([f"python3 proves {guard}"],
-                                 box.since(before))
+                probed, remembered = self.both(box, guard, event)
                 self.assertEqual(
                     (probed.returncode, probed.stdout, probed.stderr),
                     (remembered.returncode, remembered.stdout,
@@ -10778,17 +10853,49 @@ class ARememberedGuardAnswersAsAProbedOne(LauncherMarkCases, unittest.TestCase):
         # The control: the comparison above passes on two paths that both
         # answer nothing. All three shapes of verdict were actually seen.
         self.assertEqual({(0, False), (0, True), (2, False)}, seen)
+        # And the guards were compiled from source, as `python guard.py`
+        # compiles them: nothing imported them, so nothing cached them.
+        self.assertFalse((box.hooks / "__pycache__").exists())
+
+    def test_a_guard_sees_the_same_main_module_on_both_paths(self):
+        # What `python guard.py` gives a guard and what `run-guard.py` gives
+        # it: its own `__main__` under that name in `sys.modules`, its path as
+        # `__file__` and as `sys.argv[0]`, its directory first on `sys.path`.
+        # Spelled by the guard itself.
+        box = self.checkout()
+        box.stand_in("python3", real=sys.executable)
+        (box.hooks / "guard-git-argv.py").write_text(
+            "import json, os, sys\n"
+            "print(json.dumps(["
+            "__name__, "
+            "os.path.normcase(os.path.abspath(__file__)), "
+            "os.path.normcase(os.path.abspath(sys.argv[0])), "
+            "len(sys.argv), "
+            "sys.modules['__main__'].__dict__ is globals(), "
+            "os.path.normcase(os.path.abspath(sys.path[0]))]))\n",
+            encoding="utf-8", newline="\n")
+        probed, remembered = self.both(box)
+        self.assertEqual((0, 0), (probed.returncode, remembered.returncode))
+        self.assertEqual(probed.stdout, remembered.stdout)
+        guard = os.path.normcase(str(box.hooks / "guard-git-argv.py"))
+        self.assertEqual(["__main__", guard, guard, 1, True,
+                          os.path.normcase(str(box.hooks))],
+                         json.loads(remembered.stdout))
 
     def test_a_guard_that_fails_falls_the_same_way_on_both_paths(self):
         # **Which way a guard's own crash falls is the guard's decision**, and
         # `guard-git-argv.py` argues its own. If the remembered path refused
-        # where the probed one does not, deleting a gitignored file would
-        # change a verdict — so the two answer alike, and a guard that ran
-        # and failed is still a guard that ran: the mark is kept.
+        # where the probed one does not, removing a gitignored directory
+        # would change a verdict — so the two answer alike, and a guard that
+        # ran and failed is still a guard that ran: the mark is kept.
         bodies = {
             "raises": ("raise RuntimeError('boom')\n", 1, "RuntimeError: boom"),
+            "raises outside Exception": (
+                "class Stop(BaseException):\n    pass\nraise Stop('halt')\n",
+                1, "Stop: halt"),
             "exits with words": ("import sys\nsys.exit('in words')\n", 1,
                                  "in words"),
+            "exits with nothing": ("import sys\nsys.exit()\n", 0, ""),
             "does not compile": ("def (:\n", 1, "SyntaxError"),
             "exits 3": ("import sys\nsys.exit(3)\n", 3, ""),
             "exits 2": ("import sys\nprint('no', file=sys.stderr)\n"
@@ -10800,11 +10907,7 @@ class ARememberedGuardAnswersAsAProbedOne(LauncherMarkCases, unittest.TestCase):
             with self.subTest(guard=name):
                 (box.hooks / "guard-git-argv.py").write_text(
                     body, encoding="utf-8", newline="\n")
-                box.forge(b"")
-                before = box.ran()
-                probed = box.launch()
-                remembered = box.launch()
-                self.assertEqual(self.PROBED + self.PROVED, box.since(before))
+                probed, remembered = self.both(box)
                 self.assertEqual(status, probed.returncode, probed.stderr)
                 self.assertIn(said, probed.stderr)
                 # Every status but 0 and 2 is the same thing to the harness —
@@ -10813,53 +10916,132 @@ class ARememberedGuardAnswersAsAProbedOne(LauncherMarkCases, unittest.TestCase):
                                  remembered.returncode, remembered.stderr)
                 self.assertIn(said, remembered.stderr)
                 self.assertEqual("", remembered.stdout)
-                self.assertEqual(box.whole("python3"), box.marked())
+                self.assertEqual(["run-guard.python3"], box.marks())
 
     def test_a_guard_that_is_missing_is_refused_on_both_paths(self):
         # `python` answers a script it cannot open with 2, which blocks. The
         # remembered path has no guard to prove it ran, so it refuses too.
         box = self.checkout()
         box.stand_in("python3", real=sys.executable)
-        probed = box.launch()
-        remembered = box.launch()
-        self.assertEqual(self.PROBED + self.PROVED, box.ran())
+        probed, remembered = self.both(box)
         self.assertEqual((2, 2), (probed.returncode, remembered.returncode))
+        self.assertEqual([], box.marks())
+
+    def test_a_verdict_that_cannot_be_written_is_refused_where_the_exec_let_it_through(self):
+        # The guard's stdout will not take a flush. The interpreter under the
+        # `exec` reports that with 120, which a `PreToolUse` hook reads as a
+        # non-blocking error, so the tool ran without the verdict that was
+        # meant for it. Under `run-guard.py` the same 120 is a status that
+        # proves nothing, and the launcher refuses.
+        box = self.checkout()
+        box.stand_in("python3", real=sys.executable)
+        (box.hooks / "guard-git-argv.py").write_text(
+            "import sys\n"
+            "class Full:\n"
+            "    def write(self, text):\n        return len(text)\n"
+            "    def flush(self):\n        raise OSError(28, 'full')\n"
+            "sys.stdout = Full()\n"
+            "sys.exit(0)\n", encoding="utf-8", newline="\n")
+        probed, remembered = self.both(box)
+        self.assertNotIn(probed.returncode, (0, 2), probed.stderr)
+        self.assertEqual(2, remembered.returncode, remembered.stderr)
+        self.assertEqual([], box.marks())
+
+    def test_a_closed_stream_is_not_the_remembered_paths_own_failure(self):
+        # `sys.stdout` or `sys.stderr` is `None` when its descriptor was
+        # closed before the interpreter started; a `.flush()` on it would be
+        # the remembered path's own crash, and a crash of its own is a status
+        # that proves nothing. Both streams, with a real guard that refuses.
+        # The `exec` path hands the harness whatever the interpreter leaves
+        # with: its 2, or the 120 it answers on Windows when the stream it
+        # was handed cannot be flushed at exit. That half is not this
+        # change's; the remembered half refuses either way.
+        box = self.checkout(guards=True)
+        box.stand_in("python3", real=sys.executable)
+        for closed in ("1>&-", "2>&-"):
+            with self.subTest(closed=closed):
+                if box.mark().is_dir():
+                    box.mark().rmdir()
+                statuses = []
+                for _ in range(2):
+                    out = subprocess.run(
+                        [box.shell, "-c", f'"$0" "$1" "$2" {closed}',
+                         box.shell, str(box.launcher),
+                         "guard-triager-dispatch.py"],
+                        input="not json", capture_output=True,
+                        encoding="utf-8", errors="replace", env=box.env)
+                    statuses.append(out.returncode)
+                self.assertIn(statuses[0], (2, 120), statuses)
+                self.assertEqual(2, statuses[1], statuses)
+                self.assertEqual(
+                    ["python3 probe", "python3 runs guard-triager-dispatch.py",
+                     "python3 proves guard-triager-dispatch.py"],
+                    box.ran()[-3:])
+                # Where the interpreter coped, the 2 is the guard's own, proven,
+                # and the mark stays. Where it left with 120, the remembered
+                # path saw a status that proves nothing and forgot the mark:
+                # the next call probes, which is the cost of the closed stream
+                # and not of this change.
+                self.assertEqual(["run-guard.python3"] if statuses[0] == 2
+                                 else [], box.marks())
 
     def run_prover(self, *arguments, version=None, event="{}"):
-        """Run `run-guard.py` here, optionally claiming an older version."""
+        """Run `run-guard.py` here, optionally claiming an older version.
+
+        Through a shell that then runs `cat`, so what the prover left on
+        stdin comes back on stdout after the prover's own output.
+        """
         box = self.checkout(guards=True)
         prover = str(box.hooks / "run-guard.py")
         # Compiled by hand rather than through `runpy`, which imports modules
-        # of its own after the version has been replaced.
-        program = (
+        # of its own after the version has been replaced. In a file, because
+        # a `-c` program passed through Git's `bash` has its backslashes
+        # rewritten on the way to a native interpreter.
+        program = box.root / "claim.py"
+        program.write_text(
             "import sys\n"
             f"path = {prover!r}\n"
             "code = compile(open(path, 'rb').read(), path, 'exec')\n"
             f"sys.version_info = {version!r} or sys.version_info\n"
             f"sys.argv = {[prover, *arguments]!r}\n"
-            "exec(code, {'__name__': '__main__', '__file__': path})\n")
+            "exec(code, {'__name__': '__main__', '__file__': path})\n",
+            encoding="utf-8", newline="\n")
         return subprocess.run(
-            [sys.executable, "-c", program], input=event,
-            capture_output=True, encoding="utf-8", errors="replace")
+            [BASH, "-c", '"$0" "$1"; status=$?; echo; echo "--stdin--"; '
+                         'cat; exit $status',
+             sys.executable, program.as_posix()],
+            input=event, capture_output=True, encoding="utf-8",
+            errors="replace")
+
+    @staticmethod
+    def split(out):
+        """The prover's own stdout, and what it left unread on stdin."""
+        own, _, left = out.stdout.rpartition("\n--stdin--\n")
+        return own, left
 
     def test_an_interpreter_below_the_floor_judges_nothing(self):
         # "Downgraded" cannot be arranged with the interpreter running this
         # suite, so the prover is run by it while claiming to be 3.11. The
         # event is one `guard-git-argv.py` refuses, so a guard that ran
-        # anyway would show as a deny on stdout.
+        # anyway would show as a deny on stdout — and the event is still on
+        # stdin afterwards, whole, for whatever the launcher does next.
         refused = json.dumps({"tool_name": "Bash",
                               "tool_input": {"command": "ls > package.json"}})
         prover = self.prover()
         proven = {prover.ALLOWED, prover.REFUSED, prover.ERRORED}
 
         control = self.run_prover("guard-git-argv.py", event=refused)
+        own, left = self.split(control)
         self.assertEqual(prover.ALLOWED, control.returncode, control.stderr)
-        self.assertIn("permissionDecision", control.stdout)
+        self.assertIn("permissionDecision", own)
+        self.assertEqual("", left)
 
         old = self.run_prover("guard-git-argv.py", event=refused,
                               version=(3, 11, 9, "final", 0))
+        own, left = self.split(old)
         self.assertNotIn(old.returncode, proven | {0, 2})
-        self.assertEqual("", old.stdout)
+        self.assertEqual("", own)
+        self.assertEqual(refused, left)
         self.assertIn("3.12", old.stderr)
 
     def test_the_prover_runs_a_bare_name_beside_itself_and_nothing_else(self):
@@ -10871,8 +11053,9 @@ class ARememberedGuardAnswersAsAProbedOne(LauncherMarkCases, unittest.TestCase):
                           ("no-such-guard.py",)):
             with self.subTest(arguments=arguments):
                 out = self.run_prover(*arguments)
+                own, _ = self.split(out)
                 self.assertNotIn(out.returncode, proven | {0})
-                self.assertEqual("", out.stdout)
+                self.assertEqual("", own)
 
     def test_the_launcher_and_the_prover_state_one_floor(self):
         floors = set(re.findall(r"sys\.version_info < \((\d+), (\d+)\)",
