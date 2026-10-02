@@ -10882,11 +10882,13 @@ class ARememberedGuardAnswersAsAProbedOne(LauncherMarkCases, unittest.TestCase):
         self.assertEqual((0, 0), (probed.returncode, remembered.returncode))
         self.assertEqual(probed.stdout, remembered.stdout)
         guard = os.path.normcase(str(box.hooks / "guard-git-argv.py"))
-        # `sys.path[0]` is the interpreter's, resolved: on macOS the temp
-        # root is a link into `/private`, and both paths answer the target.
-        self.assertEqual(["__main__", guard, guard, 1, True,
-                          os.path.normcase(os.path.realpath(box.hooks))],
-                         json.loads(remembered.stdout))
+        seen = json.loads(remembered.stdout)
+        self.assertEqual(["__main__", guard, guard, 1, True], seen[:5])
+        # `sys.path[0]` is spelled as the interpreter spells it — through the
+        # link on macOS, where the temp root is one into `/private`, and in
+        # the short form on a Windows runner — so it is asked to be the hooks
+        # directory rather than to be spelled like it.
+        self.assertTrue(os.path.samefile(seen[5], box.hooks), seen[5])
 
     def test_a_guard_that_fails_falls_the_same_way_on_both_paths(self):
         # **Which way a guard's own crash falls is the guard's decision**, and
