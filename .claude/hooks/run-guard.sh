@@ -65,12 +65,13 @@ set -eu
 
 # **From here this shell leaves with 2 unless a guard's verdict says
 # otherwise.** `set -e`, an unset variable and a refused redirection each end
-# a shell with a status that is not 2, and so does a refusal printed to a
-# stderr nobody is reading, which arrives as SIGPIPE. A `PreToolUse` hook
-# reads every such status as leave to run the tool. The two ways past these
-# lines are an `exec`, after which the guard's status is the hook's, and a
-# proven verdict below, which lifts the trap itself. A signal sent from
-# outside is not covered: it ends this shell as it would end the guard.
+# a shell with a status that is not reliably 2 — 1 or 127 under `bash`, 2
+# under `dash` — and so does a refusal printed to a stderr nobody is reading,
+# which arrives as SIGPIPE. A `PreToolUse` hook reads every such status as
+# leave to run the tool. The two ways past these lines are an `exec`, after
+# which the guard's status is the hook's, and a proven verdict below, which
+# lifts the trap itself. A signal sent from outside is not covered: it ends
+# this shell as it would end the guard.
 trap 'exit 2' EXIT
 trap 'exit 2' PIPE
 
@@ -143,7 +144,7 @@ if [ -n "$first" ] && [ -d "$mark" ]; then
   else
     next="The mark is forgotten, so the next call probes again"
   fi
-  echo "run-guard.sh: $first passed the probe on an earlier call and has not proved it ran $1 on this one (status $status); refusing the call rather than running it unguarded. $next: $mark" >&2
+  echo "run-guard.sh: a mark for $first was found and $first has not proved it ran $1 on this call (status $status); refusing the call rather than running it unguarded. $next: $mark" >&2
   exit 2
 fi
 
