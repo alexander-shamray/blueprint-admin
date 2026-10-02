@@ -10109,9 +10109,12 @@ class ALauncherCheckout:
     **Its own tree, because the mark is the checkout's.** The launcher finds
     `.claude/cache/` from its own path, so a case run against this
     repository's copy would read and write the mark every live session and
-    every other shard is using. **And a PATH holding nothing else**, because
-    the tools' own directory carries a real `python3` on Linux, which would
-    take over the moment a case removed a stand-in.
+    every other shard is using. **And a PATH of its own**, because the tools'
+    directory carries a real `python3` on Linux, which would take over the
+    moment a case left a candidate out. Git for Windows' own `bash` puts its
+    tool directories back in front of whatever PATH it is handed, so that no
+    interpreter is reachable is a case rather than a premise:
+    `test_no_interpreter_is_reachable_beside_the_stand_ins`.
     """
 
     def __init__(self, case, guards=False):
@@ -10304,6 +10307,29 @@ class TheLauncherProvesWhatItRemembers(LauncherMarkCases, unittest.TestCase):
     how many interpreters start and which. `ARememberedGuardAnswersAsAProbed
     One` below runs a real one.
     """
+
+    # ---- the premise every case below stands on ----------------------------
+
+    def test_no_interpreter_is_reachable_beside_the_stand_ins(self):
+        # Each case says which candidates exist by which stand-ins it writes.
+        # A real `python3` the shell could still find would be probed in a
+        # stand-in's place, and the case would be judging this host's Python.
+        # One name at a time: `dash` stops at the first it cannot find.
+        look = "for name in py python3 python; do command -v $name; done; :"
+        for shell in self.shells():
+            with self.subTest(shell=shell):
+                box = self.checkout()
+                found = subprocess.run(
+                    [shell, "-c", look], capture_output=True,
+                    encoding="utf-8", env=box.env, check=True)
+                self.assertEqual("", found.stdout, box.seen_path(shell))
+                # The control: the same question finds a stand-in.
+                box.stand_in("python3")
+                found = subprocess.run(
+                    [shell, "-c", look], capture_output=True,
+                    encoding="utf-8", env=box.env, check=True)
+                self.assertEqual(1, len(found.stdout.splitlines()),
+                                 found.stdout)
 
     # ---- the saving, which is the whole reason any of this exists ----------
 
@@ -10593,15 +10619,16 @@ class TheLauncherProvesWhatItRemembers(LauncherMarkCases, unittest.TestCase):
         self.assertTrue(box.mark.is_symlink())
 
         # Nor forgotten through, when the link arrives after the mark was
-        # read and before the refusal: the remembered interpreter swaps it in
-        # and then fails to prove itself.
-        for tool in ("rm", "ln"):
-            box.tool(tool)
+        # read and before the refusal: the remembered interpreter moves one
+        # into place and then fails to prove itself. Made here and moved
+        # there, because `ln -s` under Git for Windows copies the file.
+        box.tool("mv")
         box.mark.unlink()
         box.forge(box.whole("python3"))
+        staged = box.root / "staged"
+        os.symlink(victim, staged)
         box.script("python3", (
-            f"rm -f {box.quoted(box.mark)}\n"
-            f"ln -s {box.quoted(victim)} {box.quoted(box.mark)}\n"
+            f"mv -f {box.quoted(staged)} {box.quoted(box.mark)}\n"
             "exit 127\n"))
         out = box.launch()
         self.assertEqual(2, out.returncode, out.stderr)
@@ -10653,17 +10680,22 @@ class TheLauncherProvesWhatItRemembers(LauncherMarkCases, unittest.TestCase):
     # ---- the shell cannot leave any other way ------------------------------
 
     def test_a_shell_that_dies_on_the_way_refuses_the_call(self):
-        # `dirname` answers with a directory that is not there, so the `cd`
-        # fails and `set -e` ends the launcher before it has chosen anything
-        # — with 1, which a `PreToolUse` hook reads as leave to run the tool.
+        # The launcher is read by a shell whose `$0` names a directory that
+        # is not there, so the `cd` that finds the launcher's own directory
+        # fails and `set -e` ends the shell before it has chosen anything —
+        # with 1, which a `PreToolUse` hook reads as leave to run the tool.
         # The trap is what makes that 2.
         for shell in self.shells():
             with self.subTest(shell=shell):
                 box = self.checkout()
-                box.script("dirname", "echo /no/such/directory\n")
                 box.stand_in("python3")
-                out = box.launch(shell=shell)
+                out = subprocess.run(
+                    [shell, "-c", f". {box.quoted(box.launcher)}",
+                     "/no/such/directory/run-guard.sh", "guard-git-argv.py"],
+                    input="{}", capture_output=True, encoding="utf-8",
+                    errors="replace", env=box.env)
                 self.assertEqual(2, out.returncode, out.stderr)
+                self.assertIn("/no/such/directory", out.stderr)
                 self.assertEqual([], box.ran())
 
     def test_no_exit_in_the_launcher_lets_a_call_through_unproven(self):
