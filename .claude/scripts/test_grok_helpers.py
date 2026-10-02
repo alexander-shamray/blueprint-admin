@@ -10154,7 +10154,10 @@ class ALauncherCheckout:
         self.bin.mkdir()
         self.log = self.root / "log"
         self.gate = self.root / "gate"
-        for tool in ("dirname", "mkdir", "rmdir", "sleep"):
+        # `rm` is on the PATH although the launcher never calls it: a launcher
+        # that did, recursively, must be caught by the case about it and not
+        # by the command being missing.
+        for tool in ("dirname", "mkdir", "rmdir", "rm", "sleep"):
             self.tool(tool)
         self.env = {**os.environ, "PATH": str(self.bin)}
         self.shell = case.shells()[0]
@@ -10243,7 +10246,7 @@ class ALauncherCheckout:
                       if p.name.startswith("run-guard."))
 
     def forge(self, spelling="python3", inside=None):
-        """Make the mark the way a session could: `mkdir`, or a `Write` into it."""
+        """Make the mark as a session could: `mkdir`, or a `Write` into it."""
         self.mark(spelling).mkdir(parents=True)
         if inside is not None:
             (self.mark(spelling) / inside).write_bytes(b"planted\n")
@@ -10742,13 +10745,23 @@ class TheLauncherProvesWhatItRemembers(LauncherMarkCases, unittest.TestCase):
                     # and flushes it to stdout on the way out. A refusal is
                     # read from its status, and stdout holds no verdict.
                     self.assertNotIn(b"permissionDecision", stdout)
+                    self.assertEqual(self.PROVED if remembered else
+                                     ["python3 probe"], box.ran())
 
+                    # The refusal above forgot the mark, so it is made again:
+                    # the second half has to reach the same refusal, and the
+                    # log says which one it reached.
+                    if remembered:
+                        box.forge()
+                    before = box.ran()
                     out = subprocess.run(
                         [shell, "-c", '"$0" "$1" "$2" 2>&-', shell,
                          str(box.launcher), "guard-git-argv.py"],
                         input="{}", capture_output=True, encoding="utf-8",
                         errors="replace", env=box.env)
                     self.assertEqual(2, out.returncode, out.stdout)
+                    self.assertEqual(self.PROVED if remembered else
+                                     ["python3 probe"], box.since(before))
 
     def test_no_exit_in_the_launcher_lets_a_call_through_unproven(self):
         prover = self.prover()
@@ -10758,9 +10771,11 @@ class TheLauncherProvesWhatItRemembers(LauncherMarkCases, unittest.TestCase):
         self.assertEqual(
             {str(prover.ALLOWED): "0", str(prover.REFUSED): "2",
              str(prover.ERRORED): "1"}, arms)
-        # The trap is lifted on those three lines and nowhere else, and it is
+        # The trap is lifted on those three lines and nowhere else — five
+        # `trap`s in the file: the two set and the three lifted — and it is
         # set before anything the shell does.
         self.assertEqual(3, code.count("trap - EXIT"))
+        self.assertEqual(5, len(re.findall(r"\btrap\b", code)))
         self.assertIn("set -eu", code)
         self.assertLess(code.index("trap 'exit 2' EXIT"),
                         code.index('[ "$#"'))
@@ -10805,9 +10820,9 @@ class ARememberedGuardAnswersAsAProbedOne(LauncherMarkCases, unittest.TestCase):
     interpreter running this suite and the guards themselves: the stand-in
     only logs which path a call took and then hands the call over.
 
-    Two cases are the exceptions, stated in `run-guard.py` and held here: a
-    guard that cannot be opened and a verdict that cannot be written both
-    refuse on the remembered path, where the `exec` lets the tool run.
+    One case is the exception, stated in `run-guard.py` and held here: a
+    verdict that cannot be written refuses on the remembered path, where the
+    `exec` lets the tool run.
     """
 
     EVENTS = (

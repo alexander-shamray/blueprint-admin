@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run one guard in this interpreter, and prove with the exit status that it ran.
+"""Run one guard in this interpreter, and prove by the exit status that it ran.
 
 **`run-guard.sh` runs this, and only for an interpreter it did not probe on
 this call.** The launcher probes each candidate before it `exec`s one, and it
@@ -29,11 +29,12 @@ stderr, and which way its own crash falls. `guard-git-argv.py` argues that
 direction for itself, and a launcher that answered differently depending on
 whether a mark existed would be a second opinion nobody asked for.
 
-**Two things fall closed here that the `exec` lets through, and neither is a
-verdict.** A guard that cannot be opened ran nothing, and a verdict that could
-not be written was not delivered — the interpreter says so itself, leaving with
-120 when its last flush fails. Each is a status that proves nothing, so the
-launcher refuses, where the same 1 or 120 under the `exec` lets the tool run.
+**One thing falls closed here that the `exec` lets through, and it is not a
+verdict.** A verdict that could not be written was not delivered, and the
+interpreter says so itself, leaving with 120 when its last flush fails. That
+is a status that proves nothing, so the launcher refuses, where the same 120
+under the `exec` lets the tool run. A guard that cannot be opened is refused
+on both paths: `python` answers a script it cannot open with 2.
 
 **Compiled from source on every call, as `python guard.py` compiles it.** No
 import and so no `__pycache__`: a cached module under `.claude/hooks/` would be
@@ -66,9 +67,9 @@ def judged(name):
     here = os.path.dirname(os.path.abspath(__file__))
     path = os.path.join(here, name)
     # Outside the `try` on purpose. A guard that cannot be opened ran nothing,
-    # so this leaves with a traceback and a status that proves nothing, and
-    # the launcher refuses the call — as `python` refuses a script it cannot
-    # open, with 2.
+    # so this leaves with a traceback and a status that proves nothing, and the
+    # launcher refuses the call — as `python` refuses a script it cannot open,
+    # with 2.
     with open(path, "rb") as handle:
         source = handle.read()
 
