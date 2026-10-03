@@ -2,9 +2,8 @@ namespace Admin.Host.Api;
 
 /// <summary>
 /// The gateway's edge policy per route. Owner: blueprint-backend
-/// <c>src/Gateway/Gateway.Api/appsettings.json</c>, <c>ReverseProxy:Routes</c> (catalog-public,
-/// catalog-write, ordering, inventory-admin, payments-admin, web-bff). The drift gate reads that file
-/// against this table (tests/Admin.Host.Tests/Drift/GatewayDriftTests.cs).
+/// <c>src/Gateway/Gateway.Api/appsettings.json</c>, <c>ReverseProxy:Routes</c>. The drift gate reads
+/// that file against this table, both ways (tests/Admin.Host.Tests/Drift/GatewayDriftTests.cs).
 /// </summary>
 public static class GatewayRoutes
 {
@@ -14,7 +13,7 @@ public static class GatewayRoutes
     public const string Direct = "direct, anonymous";
 
     // Method null is "any method". Prefixes end in '/' so /api/v1/catalogue does not match /api/v1/catalog.
-    private static readonly (string? Method, string Prefix, string Policy)[] Routes =
+    internal static readonly (string? Method, string Prefix, string Policy)[] Routes =
     [
         ("GET", "/api/v1/catalog/", "anonymous"),
         ("POST", "/api/v1/catalog/", "authenticated"),

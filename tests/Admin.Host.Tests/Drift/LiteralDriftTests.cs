@@ -24,8 +24,8 @@ public sealed class LiteralDriftTests
     /// </summary>
     private static readonly Dictionary<string, string> GrantsTheFakeLacks = new(StringComparer.Ordinal)
     {
-        ["inventory:admin"] = "#52",
-        ["payments:admin"] = "#52",
+        ["demo inventory:admin"] = "#52",
+        ["demo payments:admin"] = "#52",
     };
 
     [Fact]
@@ -57,6 +57,12 @@ public sealed class LiteralDriftTests
     {
         Backend.Read("src", "Services", "Ordering", "Ordering.Infrastructure", "Messaging", "DependencyInjection.cs")
             .ShouldContain($"public const string CatalogEventsQueue = \"{BrokerService.ProjectionQueue}\";");
+    }
+
+    [Fact]
+    public void The_broker_management_port_the_broker_screen_names_is_the_one_compose_binds()
+    {
+        Backend.Read("deploy", "compose", "infrastructure.yml").ShouldContain("\"127.0.0.1:15672:15672\"");
     }
 
     [Fact]
@@ -97,8 +103,25 @@ public sealed class LiteralDriftTests
             permissions.Where(p => !realm[username].Contains(p)).ShouldBeEmpty($"{username}: a fake grant the realm does not make");
         }
 
-        string[] lacking = [.. realm["demo"].Where(p => !FakeKeycloak.Users["demo"].Permissions.Contains(p))];
+        string[] lacking = [.. FakeKeycloak.Users.SelectMany(u => realm[u.Key].Where(p => !u.Value.Permissions.Contains(p)).Select(p => $"{u.Key} {p}"))];
         lacking.Order(StringComparer.Ordinal).ShouldBe(GrantsTheFakeLacks.Keys.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void Every_realm_user_with_a_password_is_one_the_fake_realm_signs_in()
+    {
+        // A service account has no credentials and is never offered by the identity picker.
+        RealmPasswords().Where(u => u.Value is not null).Select(u => u.Key).Where(u => !FakeKeycloak.Users.ContainsKey(u)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void The_realm_and_client_the_console_signs_in_to_are_the_exports()
+    {
+        AdminOptions options = new();
+        using JsonDocument realm = RealmExport();
+
+        realm.RootElement.GetProperty("realm").GetString().ShouldBe(options.Realm);
+        realm.RootElement.GetProperty("clients").EnumerateArray().Select(c => c.GetProperty("clientId").GetString()).ShouldContain(options.ClientId);
     }
 
     private static Dictionary<string, string?> RealmPasswords()
