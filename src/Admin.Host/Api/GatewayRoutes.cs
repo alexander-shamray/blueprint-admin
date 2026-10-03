@@ -3,7 +3,8 @@ namespace Admin.Host.Api;
 /// <summary>
 /// The gateway's edge policy per route. Owner: blueprint-backend
 /// <c>src/Gateway/Gateway.Api/appsettings.json</c>, <c>ReverseProxy:Routes</c> (catalog-public,
-/// catalog-write, ordering, inventory-admin, web-bff). Update this table when a route changes there.
+/// catalog-write, ordering, inventory-admin, payments-admin, web-bff). The drift gate reads that file
+/// against this table (tests/Admin.Host.Tests/Drift/GatewayDriftTests.cs).
 /// </summary>
 public static class GatewayRoutes
 {
@@ -19,6 +20,7 @@ public static class GatewayRoutes
         ("POST", "/api/v1/catalog/", "authenticated"),
         (null, "/api/v1/orders/", "authenticated"),
         (null, "/api/v1/inventory/", "inventory:admin"),
+        (null, "/api/v1/payments/", "payments:admin"),
         (null, "/bff/", "authenticated"),
     ];
 
