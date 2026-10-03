@@ -76,6 +76,9 @@ console reports its absence (no `node_modules`) rather than running it.
 | Catalog API | `http://localhost:5102` | `/openapi/v1.json` (token required); `/health/ready` |
 | Ordering API | `http://localhost:5101` | `/openapi/v1.json` (token required); `/health/ready` |
 | Web BFF | `http://localhost:5200` | `/health/ready` |
+| Inventory API | `http://localhost:5103` | `/openapi/v1.json` (token required); `/health/ready` |
+| Payments API | `http://localhost:5104` | `/openapi/v1.json` (token required); `/health/ready` |
+| Payment simulator | `http://localhost:5190` | `/__admin/requests`, what Payments asked the provider; a decline is caused by the order's amount |
 | Keycloak | `http://localhost:8080` | password grant on realm `commerce`, client `web-app` |
 | Grafana | `http://localhost:3000` | `GET /api/datasources`, `POST /api/ds/query` for Tempo, Loki and Prometheus |
 | Reference client | `http://localhost:5173` | a link, and the port the gateway's CORS admits |
@@ -93,20 +96,22 @@ login, which is why broker inspection goes through `rabbitmqctl`.
 | `GET /api/v1/catalog/{**}` | Catalog | anonymous, rate limit `anonymous` |
 | `POST /api/v1/catalog/{**}` | Catalog | authenticated |
 | `* /api/v1/orders/{**}` | Ordering | authenticated |
-| `* /api/v1/inventory/{**}` | Inventory (absent; 502) | `inventory:admin` |
+| `* /api/v1/inventory/{**}` | Inventory | `inventory:admin` |
+| `* /api/v1/payments/{**}` | Payments | `payments:admin` |
 | `* /bff/{**}` | Web BFF | authenticated |
 
-The gateway strips `/api` or `/bff` before forwarding. Catalog and Ordering
-publish OpenAPI; the gateway and BFF do not. The console's operation tree is
-therefore the two OpenAPI documents rebased onto the gateway prefix, plus a
-curated list for the BFF's `POST /bff/v1/checkout/quote` and every host's
-`/health/ready`, plus a free-form request form for anything else.
+The gateway strips `/api` or `/bff` before forwarding. Catalog, Ordering,
+Inventory and Payments publish OpenAPI; the gateway and BFF do not. The
+console's operation tree is therefore the four OpenAPI documents rebased onto
+the gateway prefix, plus a curated list for the BFF's
+`POST /bff/v1/checkout/quote`, every host's `/health/ready` and the payment
+simulator's request log, plus a free-form request form for anything else.
 
 ### 2.4 Identities
 
 | User | Password | Holds |
 |---|---|---|
-| `demo` | `demo` | `catalog:write`, `orders:write`, `orders:cancel` |
+| `demo` | `demo` | `catalog:write`, `orders:write`, `orders:cancel`, `inventory:admin`, `payments:admin` |
 | `browser` | `browser` | nothing |
 | anonymous | — | the catalog GET route only |
 
@@ -251,10 +256,13 @@ reports the job and whether port 5173 answers.
 
 `BrokerService` runs the three `rabbitmqctl` forms from §2.1 with
 `--formatter json` through `ComposeService.Exec` and returns queues,
-exchanges and permissions. It marks queues whose name ends in `_error`, and
-answers `IsDrained(queues, "ordering-catalog-events")` — declared and holding
-no messages — which `GET /broker/queues` carries as `projection` for the
-Broker screen and the API screen's "wait for the projection" affordance. A
+exchanges and permissions. It marks queues whose name ends in `_error`, names
+each queue's consumer from `PlatformQueues.Table` (a cited copy of the
+backend's queue constants, which the drift gate reads both ways), and answers
+`IsDrained(queues, PlatformQueues.Projection)` — declared and holding no
+messages — which `GET /broker/queues` carries as `projection` for the Broker
+screen and the API screen's "wait for the projection" affordance. The drain
+names the one queue it read and claims nothing about the others. A
 broker that does not answer, or output that is not the formatter's JSON
 array, is `reachable: false` with the error, and each `rabbitmqctl` is
 bounded to 30 s like `ps`.
@@ -273,7 +281,7 @@ returns usernames only.
 
 ### 5.7 ApiCatalog and RequestProxy
 
-`ApiCatalog.Load()` fetches `/openapi/v1.json` from Catalog and Ordering with
+`ApiCatalog.Load()` fetches `/openapi/v1.json` from Catalog, Ordering, Inventory and Payments with
 a `demo` token, rewrites each path onto the gateway (`/v1/catalog/...` becomes
 `/api/v1/catalog/...`), and merges the curated operations from §2.3. Each
 operation carries method, gateway path, path parameters, an example body (the
@@ -293,7 +301,8 @@ with no new upstream call. FakePlatform keeps its baselines in a directory of
 its own per process.
 
 `RequestProxy.Send(request)` takes method, an absolute URL restricted to the
-configured surfaces (the gateway, Catalog, Ordering and BFF origins), headers,
+configured surfaces (the gateway, Catalog, Ordering, BFF, Inventory, Payments
+and payment simulator origins), headers,
 body, an identity and an optional correlation id. It attaches the token, sets
 `X-Correlation-Id` (generated if absent; a supplied id that breaks those rules
 is refused, because the backend would silently replace it; the header's rules
