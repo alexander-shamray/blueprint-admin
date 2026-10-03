@@ -105,6 +105,14 @@ describe('HostClient', () => {
     reload.flush({ sources: [], operations: [] });
   });
 
+  it('accepts a baseline by the service name', () => {
+    client.acceptBaseline('catalog').subscribe();
+
+    const req = http.expectOne('/api/catalog/baseline/catalog');
+    expect(req.request.method).toBe('POST');
+    req.flush({ sources: [], operations: [] });
+  });
+
   it('proxies a request', () => {
     const request = {
       method: 'GET',

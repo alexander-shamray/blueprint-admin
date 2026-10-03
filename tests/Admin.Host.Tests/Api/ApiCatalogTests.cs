@@ -10,9 +10,13 @@ using Shouldly;
 
 namespace Admin.Host.Tests.Api;
 
-public sealed class ApiCatalogTests
+public sealed class ApiCatalogTests : IDisposable
 {
+    private readonly string dataDir = Directory.CreateTempSubdirectory("admin-openapi-").FullName;
+
     private static CancellationToken Token => TestContext.Current.CancellationToken;
+
+    public void Dispose() => Directory.Delete(dataDir, recursive: true);
 
     private static string FixtureText(string name)
     {
@@ -31,12 +35,12 @@ public sealed class ApiCatalogTests
             ? Json(HttpStatusCode.OK, $$"""{"access_token":"{{TokenServiceTests.Jwt("{}")}}","expires_in":300}""")
             : documents(request.RequestUri.ToString()));
 
-    private static ApiCatalog Catalog(ScriptedHandler handler, AdminOptions? options = null)
+    private ApiCatalog Catalog(ScriptedHandler handler, AdminOptions? options = null)
     {
         IOptions<AdminOptions> wrapped = Options.Create(options ?? new AdminOptions());
         HttpClient http = new(handler);
 
-        return new ApiCatalog(http, new TokenService(http, wrapped, TimeProvider.System), wrapped);
+        return new ApiCatalog(http, new TokenService(http, wrapped, TimeProvider.System), wrapped, new OpenApiBaselines(dataDir, TimeProvider.System));
     }
 
     private static HttpResponseMessage Both(string url) => url switch
@@ -53,11 +57,12 @@ public sealed class ApiCatalogTests
 
         ApiCatalogView view = await Catalog(handler).GetAsync(Token);
 
-        view.Sources.ShouldBe(
+        view.Sources.Select(s => (s.Name, s.DocumentUrl, s.Available, s.Error)).ShouldBe(
         [
-            new ApiSource("catalog", "http://localhost:5102/openapi/v1.json", true, null),
-            new ApiSource("ordering", "http://localhost:5101/openapi/v1.json", true, null),
+            ("catalog", "http://localhost:5102/openapi/v1.json", true, null),
+            ("ordering", "http://localhost:5101/openapi/v1.json", true, null),
         ]);
+        view.Sources.ShouldAllBe(s => s.Changes!.BaselineTaken);
         view.Operations.Select(o => o.Id).ShouldBe(
         [
             "catalog:PublishProduct", "catalog:GetProducts", "ordering:PlaceOrder", "ordering:CancelOrder",
@@ -66,6 +71,28 @@ public sealed class ApiCatalogTests
         handler.Requests.Where(r => r.Request.RequestUri!.AbsolutePath == "/openapi/v1.json")
             .ShouldAllBe(r => r.Request.Headers.Authorization!.Scheme == "Bearer");
         handler.Requests.Single(r => r.Body != null).Body!.ShouldContain("username=demo");
+    }
+
+    [Fact]
+    public async Task A_document_that_moved_since_its_baseline_reports_what_moved_until_it_is_accepted()
+    {
+        string catalogV2 = FixtureText("openapi-catalog.json").Replace("\"productId\":", "\"quantityAvailable\": { \"type\": \"integer\" }, \"productId\":", StringComparison.Ordinal);
+        bool moved = false;
+        ScriptedHandler handler = Platform(url => moved && url.Contains("5102", StringComparison.Ordinal) ? Json(HttpStatusCode.OK, catalogV2) : Both(url));
+        ApiCatalog catalog = Catalog(handler);
+
+        await catalog.GetAsync(Token);
+        moved = true;
+        ApiSource changed = (await catalog.ReloadAsync(Token)).Sources.Single(s => s.Name == "catalog");
+
+        changed.Changes!.BaselineTaken.ShouldBeFalse();
+        changed.Changes.FieldsAdded.ShouldContain(f => f.EndsWith(".quantityAvailable", StringComparison.Ordinal));
+        changed.Changes.OperationsAdded.ShouldBeEmpty();
+
+        ApiSource accepted = (await catalog.AcceptAsync("catalog", Token))!.Sources.Single(s => s.Name == "catalog");
+
+        accepted.Changes!.Any.ShouldBeFalse();
+        (await catalog.AcceptAsync("../../etc", Token)).ShouldBeNull();
     }
 
     [Fact]

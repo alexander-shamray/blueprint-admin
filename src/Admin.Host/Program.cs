@@ -111,10 +111,18 @@ builder.Services.AddSingleton(sp => new TokenService(
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("platform"),
     sp.GetRequiredService<IOptions<AdminOptions>>(),
     sp.GetRequiredService<TimeProvider>()));
+builder.Services.AddSingleton(sp =>
+{
+    AdminOptions o = sp.GetRequiredService<IOptions<AdminOptions>>().Value;
+    string dataDir = o.FakePlatform ? FakeOpenApi.BaselineDirectory : Path.GetFullPath(o.DataDir, clonesBase);
+
+    return new OpenApiBaselines(dataDir, sp.GetRequiredService<TimeProvider>());
+});
 builder.Services.AddSingleton(sp => new ApiCatalog(
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("platform"),
     sp.GetRequiredService<TokenService>(),
-    sp.GetRequiredService<IOptions<AdminOptions>>()));
+    sp.GetRequiredService<IOptions<AdminOptions>>(),
+    sp.GetRequiredService<OpenApiBaselines>()));
 builder.Services.AddSingleton(sp => new GrafanaClient(
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("platform"),
     sp.GetRequiredService<IOptions<AdminOptions>>()));

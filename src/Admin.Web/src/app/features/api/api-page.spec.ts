@@ -16,8 +16,8 @@ function op(partial: Partial<ApiOperation>): ApiOperation {
 
 const catalog: ApiCatalogView = {
   sources: [
-    { name: 'catalog', documentUrl: 'http://localhost:5102/openapi/v1.json', available: true, error: null },
-    { name: 'ordering', documentUrl: 'http://localhost:5101/openapi/v1.json', available: false, error: 'answered 503.' },
+    { name: 'catalog', documentUrl: 'http://localhost:5102/openapi/v1.json', available: true, error: null, changes: null },
+    { name: 'ordering', documentUrl: 'http://localhost:5101/openapi/v1.json', available: false, error: 'answered 503.', changes: null },
   ],
   operations: [
     op({}),
@@ -51,6 +51,7 @@ describe('ApiPage', () => {
   let host: {
     operations: ReturnType<typeof vi.fn>;
     reloadOperations: ReturnType<typeof vi.fn>;
+    acceptBaseline: ReturnType<typeof vi.fn>;
     proxy: ReturnType<typeof vi.fn>;
     token: ReturnType<typeof vi.fn>;
     identityUsers: ReturnType<typeof vi.fn>;
@@ -61,6 +62,7 @@ describe('ApiPage', () => {
     host = {
       operations: vi.fn(() => of(catalog)),
       reloadOperations: vi.fn(() => of(catalog)),
+      acceptBaseline: vi.fn(() => of(catalog)),
       proxy: vi.fn(() => of(responded)),
       token: vi.fn(() => of({ username: 'demo', accessToken: 'a.b.c', expiresAt: '2026-09-15T08:05:00Z', claims: { permission: ['catalog:write'] } })),
       identityUsers: vi.fn(() => of([{ username: 'demo' }, { username: 'browser' }])),
@@ -424,6 +426,47 @@ describe('ApiPage', () => {
     expect(fixture.nativeElement.querySelector('.claims')?.textContent).toContain('catalog:write');
     expect(fixture.nativeElement.querySelector('.access-token')?.textContent).toContain('a.b.c');
     expect(fixture.nativeElement.querySelector('.expires')?.textContent).toContain('2026-09-15T08:05:00Z');
+  });
+
+  describe('document changes since the kept baseline', () => {
+    const none = { operationsAdded: [], operationsRemoved: [], statusesAdded: [], statusesRemoved: [], fieldsAdded: [], fieldsRemoved: [], error: null };
+    const withChanges = (changes: object): ApiCatalogView => ({
+      ...catalog,
+      sources: [{ ...catalog.sources[0], changes: { baselineAt: '2026-10-01T09:30:00Z', baselineTaken: false, ...none, ...changes } }, catalog.sources[1]],
+    });
+    const contract = (fixture: { nativeElement: HTMLElement }) => (fixture.nativeElement.querySelector('.tree section') as HTMLElement).textContent?.replace(/\s+/g, ' ') ?? '';
+
+    it('lists what moved, in words, with an action that accepts the current document', () => {
+      host.operations.mockReturnValue(of(withChanges({ fieldsAdded: ['ProductSummaryDto.quantityAvailable'], operationsRemoved: ['DELETE /v1/catalog/products/'] })));
+      host.acceptBaseline.mockReturnValue(of(withChanges({})));
+      const fixture = render();
+
+      expect(contract(fixture)).toContain('changed since 2026-10-01');
+      const lines = Array.from(fixture.nativeElement.querySelectorAll('.contract-changes li') as NodeListOf<HTMLElement>).map((l) => l.textContent);
+      expect(lines).toEqual(['removed operation DELETE /v1/catalog/products/', 'added field ProductSummaryDto.quantityAvailable']);
+
+      click(fixture, 'Accept as baseline');
+
+      expect(host.acceptBaseline).toHaveBeenCalledWith('catalog');
+      expect(fixture.nativeElement.querySelector('.contract-changes')).toBeNull();
+      expect(contract(fixture)).toContain('unchanged since 2026-10-01');
+    });
+
+    it('says a first sight of the service became its baseline', () => {
+      host.operations.mockReturnValue(of(withChanges({ baselineTaken: true })));
+      const fixture = render();
+
+      expect(contract(fixture)).toContain('document kept as the baseline at 2026-10-01');
+      expect(fixture.nativeElement.querySelector('.contract-changes')).toBeNull();
+    });
+
+    it('shows a baseline it could not read as an error rather than as unchanged', () => {
+      host.operations.mockReturnValue(of(withChanges({ baselineAt: null, error: 'The kept document for catalog could not be read or written: denied' })));
+      const fixture = render();
+
+      expect(fixture.nativeElement.querySelector('.contract-error')?.textContent).toContain('could not be read or written');
+      expect(contract(fixture)).not.toContain('unchanged');
+    });
   });
 
   it('reloads the catalog', () => {

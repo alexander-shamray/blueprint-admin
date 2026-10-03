@@ -77,3 +77,19 @@ test('trace this call opens the response correlation id on the trace screen', as
   await expect(page.locator('p.summary')).toContainText('for e2e-trace-1');
   await expect(page.locator('table.timeline tbody tr').last().locator('td.kind')).toHaveText('[queued]');
 });
+
+// FakeOpenApi: the process's first Catalog fetch took the baseline, and every later fetch has gained
+// ProductSummaryDto.quantityAvailable. Nothing else in the suite accepts a baseline.
+test('a reload names what moved in a document since its baseline, and accepting it clears the change', async ({ page }) => {
+  await page.goto('/requests');
+  await expect(page.locator('button.op')).toHaveCount(9);
+
+  await page.getByRole('button', { name: 'Reload' }).click();
+  const changes = page.locator('.contract-changes');
+  await expect(changes).toContainText('changed since');
+  await expect(changes.locator('li')).toHaveText(['added field ProductSummaryDto.quantityAvailable']);
+
+  await changes.getByRole('button', { name: 'Accept as baseline' }).click();
+  await expect(page.locator('.contract-changes')).toHaveCount(0);
+  await expect(page.locator('.tree section', { hasText: 'catalog' }).locator('.contract')).toContainText('unchanged since');
+});

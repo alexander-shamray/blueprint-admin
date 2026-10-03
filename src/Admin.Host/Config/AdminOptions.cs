@@ -22,6 +22,14 @@ public sealed class AdminOptions
 
     public string ComposeFile { get; set; } = "deploy/compose/docker-compose.yml";
 
+    /// <summary>
+    /// What the console keeps between runs: each service's accepted OpenAPI document. Relative, it resolves
+    /// against the main checkout, as the clones do, so worktrees share it. The default sits under
+    /// <c>/artifacts/</c>, which .gitignore already excludes. FakePlatform keeps its own per-process
+    /// directory instead, so a fake document never becomes a real service's baseline.
+    /// </summary>
+    public string DataDir { get; set; } = "artifacts/admin";
+
     public int Port { get; set; } = 5300;
 
     public string GatewayUrl { get; set; } = "http://localhost:5000";

@@ -59,7 +59,7 @@ describe('resolveOperations', () => {
   it("names the source's own error for an unavailable operation", () => {
     const view: ApiCatalogView = {
       sources: [
-        { name: 'ordering', documentUrl: 'u', available: false, error: 'connection refused' },
+        { name: 'ordering', documentUrl: 'u', available: false, error: 'connection refused', changes: null },
       ],
       operations: Object.values(STEP_OPERATIONS).map((id) => op(id, !id.startsWith('ordering'))),
     };
