@@ -333,10 +333,18 @@ alternative at all. The three calls are:
 - Prometheus: `GET …/proxy/uid/{prometheus}/api/v1/query`, an instant query,
   with the golden-signal queries the backend's
   `deploy/observability/dashboards/golden-signals.json` uses, for the Stack
-  screen's health strip. The strip is that dashboard's rate, errors and
-  duration row, joined per `service_name`; `GoldenSignals` owns the copied
-  queries. A value that is absent or not finite is shown as absent: a ratio
-  with no 5xx has no series, and one over no requests is `NaN`.
+  screen's health strip. The strip is every query panel of that dashboard,
+  one table row per `service_name`; `GoldenSignals` owns the copied queries
+  and the drift gate checks them both ways. The query text stays the
+  dashboard's, so the join (`TelemetryHealthService`) decides what an
+  absence means: a status code with no series is a zero rate for a service
+  the request rate names; a 5xx share with no series is zero for a service
+  with traffic, because the division has no numerator to match; a share over
+  no requests, a quantile with no series and any value that is not finite
+  stay absent. The 422 panel's per-route series are summed, because rates
+  add. One failed query makes the whole strip unavailable, never a partial
+  one. The targets in the §13.7 panel titles are the backend's, and the
+  strip prints measured values only.
 
 How the correlation id reaches telemetry is a backend fact, and it decides
 the join: `Common.Web.CorrelationIdExtensions` puts the id in a logging scope
