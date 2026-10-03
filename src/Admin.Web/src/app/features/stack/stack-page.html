@@ -82,6 +82,7 @@
     }
     <button class="frontend-start" [disabled]="frontendRunning() || !s.frontend.installed" (click)="startFrontend()">Start frontend</button>
     <button class="frontend-stop" [disabled]="!frontendRunning()" (click)="stopFrontend()">Stop frontend</button>
+    <p class="frontend-stop-note">The client's own Playwright run reuses a dev server it finds running, so Stop ends it under that run too.</p>
     @if (s.frontend.job) {
       <button class="frontend-output" (click)="showFrontendOutput()">Show output</button>
     }

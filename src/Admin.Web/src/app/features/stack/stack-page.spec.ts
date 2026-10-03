@@ -308,6 +308,7 @@ describe('StackPage', () => {
       expect(text(q('.frontend-status'))).toBe('npm start running client answers');
       expect(q('button.frontend-start')!.disabled).toBe(true);
       expect(q('button.frontend-stop')!.disabled).toBe(false);
+      expect(text(q('.frontend-stop-note'))).toContain('Playwright run reuses');
 
       q('button.frontend-stop')!.click();
       fixture.detectChanges();
