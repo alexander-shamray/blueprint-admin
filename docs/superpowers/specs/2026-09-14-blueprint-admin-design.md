@@ -207,8 +207,13 @@ Windows (`npm` is `npm.cmd`). The operating system is known only inside
 on Windows.
 
 Jobs are kept in memory for the life of the host, `Exited` jobs are trimmed
-past the last 50. One-shot commands (`up`, `down`, `ps`, `exec`) are jobs too,
-so that their output is visible the same way.
+past the last 50. `up` and `down` are one-shot jobs kept the same way, so that
+their output is visible the same way. `ps` and `exec` are jobs too — bounded,
+stoppable and killed at shutdown like any other — but the registry does not
+keep them (`ProcessSpec.Listed`): their output reaches a screen only as the
+view the caller parses, and kept, the Stack screen's `ps` poll alone would push
+an exited `npm start`, and the output that says why it died, past the last 50
+within minutes.
 
 ### 5.3 Compose
 
@@ -224,7 +229,7 @@ so that their output is visible the same way.
   not an exception.
 - `FollowLogs(services)`: `logs -f --tail 200 [services]`, a long-running job.
 - `Exec(service, args)`: `exec -T service args`, a one-shot job whose stdout
-  the caller parses.
+  the caller parses; like `Ps()`, a job the registry does not keep (§5.2).
 
 ### 5.4 FrontendSupervisor
 
@@ -365,7 +370,8 @@ All under `/api`, JSON, loopback only.
 | `POST /stack/frontend/start`, `POST /stack/frontend/stop` | supervisor |
 | `GET /jobs`, `GET /jobs/{id}` | summaries; one job with its last lines |
 | `GET /jobs/{id}/stream` | Server-Sent Events, one event per line, `id:` is the sequence number so `Last-Event-ID` resumes from the ring buffer |
-| `POST /logs/follow` | body `{ services }`; starts a follow job and returns it |
+| `POST /logs/follow` | body `{ services }`; stops the previous follow job if it is still running, starts one and returns it — the host keeps one |
+| `POST /logs/follow/{id}/stop` | stops that follow job if it is still the current one; 204 either way. Named, so a Stop that reaches the host after the next Follow ends nothing. There is no generic job stop: it would reach `up`, `down -v` and the supervisor's `npm start` |
 | `GET /broker/queues`, `/broker/exchanges`, `/broker/permissions` | §5.5; `queues` also carries `projection`, the drain state of `ordering-catalog-events` |
 | `GET /identity/users`, `POST /identity/token` | §5.6 |
 | `GET /catalog/operations`, `POST /catalog/reload` | §5.7 |
@@ -387,8 +393,8 @@ output pane, status pill and JSON viewer.
 | Screen | Shows | Does |
 |---|---|---|
 | **Stack** | one row per Compose service with state, health and port; the frontend job; a reachability strip; quick links to the client, Grafana, Keycloak | Up, Down, Down and wipe (typed confirmation), Start and Stop frontend; opens the job's output pane |
-| **Logs** | a follow stream with service filter, text search and correlation-id highlight | start, stop, clear |
-| **Broker** | queues with depth, `_error` queues in red, exchanges, permissions; a drained indicator for `ordering-catalog-events` | refresh, auto-refresh |
+| **Logs** | a follow stream with service filter, text search and correlation-id highlight | start, stop (the host's follow job too, as does leaving the screen), clear |
+| **Broker** | queues with depth, `_error` queues in red, exchanges, permissions; a drained indicator for `ordering-catalog-events` | refresh, auto-refresh of all three |
 | **API** | operation tree on the left; request editor (path params, headers, body pre-filled from the schema example, `commandId` generated per send) and identity picker; response pane with status, timing, headers, body; a history list | Send; "Trace this call" opens the Trace screen with the response's correlation id |
 | **Trace** | the §5.9 timeline for a correlation id, grouped by service, with Grafana deep links | enter an id or arrive from the API screen |
 | **Scenario** | `run-locally.md`'s calls as five steps — publish, wait for the drain, quote, order, cancel — each with its status and body, and each HTTP step with its own correlation id | Run as a realm user; each step that sent links to its trace; the first step that does not succeed ends the run |

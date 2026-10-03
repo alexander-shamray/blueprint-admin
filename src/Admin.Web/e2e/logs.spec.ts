@@ -8,7 +8,9 @@ test('following logs streams the selected services and highlights a correlation 
 
   await page.getByLabel('gateway', { exact: true }).check();
   await page.getByLabel('catalog-api', { exact: true }).check();
+  const followed = page.waitForResponse((r) => r.url().endsWith('/api/logs/follow') && r.request().method() === 'POST');
   await page.getByRole('button', { name: 'Follow' }).click();
+  const { id } = (await (await followed).json()) as { id: string };
 
   // gateway 3 + catalog-api 4.
   await expect(page.locator('.log .line')).toHaveCount(7);
@@ -29,4 +31,25 @@ test('following logs streams the selected services and highlights a correlation 
 
   await page.getByRole('button', { name: 'Stop' }).click();
   await expect(page.locator('.live')).toHaveCount(0);
+  // Stop reaches the host: the fake follow is long-running, so only the stop endpoint can end it.
+  await expect
+    .poll(async () => ((await (await page.request.get(`/api/jobs/${id}`)).json()) as { summary: { state: string } }).summary.state)
+    .toBe('Exited');
+});
+
+test('leaving the logs screen ends the host follow it started', async ({ page }) => {
+  await page.goto('/logs');
+  await page.getByLabel('gateway', { exact: true }).check();
+  const followed = page.waitForResponse((r) => r.url().endsWith('/api/logs/follow') && r.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Follow' }).click();
+  const { id } = (await (await followed).json()) as { id: string };
+  await expect(page.locator('.live')).toBeVisible();
+
+  // The shell's link, not page.goto: a reload would end the page without running its teardown.
+  await page.getByRole('link', { name: 'Stack' }).click();
+  await expect(page).toHaveURL(/\/stack$/);
+
+  await expect
+    .poll(async () => ((await (await page.request.get(`/api/jobs/${id}`)).json()) as { summary: { state: string } }).summary.state)
+    .toBe('Exited');
 });
