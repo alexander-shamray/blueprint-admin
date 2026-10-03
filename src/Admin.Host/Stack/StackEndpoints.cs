@@ -32,6 +32,15 @@ public static class StackEndpoints
             return TypedResults.Accepted((string?)null, JobSummary.Of(compose.Down(request.WipeVolumes)));
         });
 
+        // Reset wipes volumes, so it takes the confirmation "Down and wipe" takes (spec §8), spelled the same.
+        app.MapPost("/api/stack/backend/reset", Results<Accepted<JobSummary>, ProblemHttpResult> (ResetRequest request, ResetService reset) =>
+            request.Confirm != "down -v"
+                ? TypedResults.Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Confirmation required",
+                    detail: "Reset wipes volumes, which destroys databases and broker state. Send confirm: \"down -v\".")
+                : TypedResults.Accepted((string?)null, JobSummary.Of(reset.Start())));
+
         app.MapPost("/api/logs/follow", async (FollowRequest request, LogFollower follower, CancellationToken cancellationToken) =>
             TypedResults.Accepted((string?)null, JobSummary.Of(await follower.StartAsync(request.Services ?? [], cancellationToken))));
 
@@ -49,5 +58,7 @@ public static class StackEndpoints
 public sealed record StackView(ComposeStatus Backend, FrontendStatus Frontend, IReadOnlyList<Reachability> Reachability);
 
 public sealed record DownRequest(bool WipeVolumes, string? Confirm);
+
+public sealed record ResetRequest(string? Confirm);
 
 public sealed record FollowRequest(IReadOnlyList<string>? Services);

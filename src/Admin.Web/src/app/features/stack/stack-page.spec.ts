@@ -46,6 +46,7 @@ describe('StackPage', () => {
     config: ReturnType<typeof vi.fn>;
     backendUp: ReturnType<typeof vi.fn>;
     backendDown: ReturnType<typeof vi.fn>;
+    backendReset: ReturnType<typeof vi.fn>;
     frontendStart: ReturnType<typeof vi.fn>;
     frontendStop: ReturnType<typeof vi.fn>;
     telemetryHealth: ReturnType<typeof vi.fn>;
@@ -64,6 +65,7 @@ describe('StackPage', () => {
       config: vi.fn(() => of(config)),
       backendUp: vi.fn(() => of({ id: 'up-1', commandLine: 'docker compose up', state: 'Running', exitCode: null, startedAt: '' })),
       backendDown: vi.fn(() => of({ id: 'down-1', commandLine: 'docker compose down', state: 'Running', exitCode: null, startedAt: '' })),
+      backendReset: vi.fn(() => of({ id: 'reset-1', commandLine: 'reset down -v up -d --wait readiness', state: 'Running', exitCode: null, startedAt: '' })),
       frontendStart: vi.fn(() => of({ id: 'fe-1', commandLine: 'npm start', state: 'Running', exitCode: null, startedAt: '' })),
       frontendStop: vi.fn(() => of({ id: 'fe-1', commandLine: 'npm start', state: 'Exited', exitCode: -1, startedAt: '' })),
       telemetryHealth: vi.fn(() => of(health)),
@@ -142,6 +144,26 @@ describe('StackPage', () => {
 
     wipe.click();
     expect(host.backendDown).toHaveBeenCalledWith(true, 'down -v');
+  });
+
+  it('keeps Reset behind the same typed confirmation and hands its job to the output pane', async () => {
+    const fixture = TestBed.createComponent(StackPage);
+    fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(0);
+    fixture.detectChanges();
+
+    const reset = fixture.nativeElement.querySelector('button.reset') as HTMLButtonElement;
+    expect(reset.disabled).toBe(true);
+
+    fixture.componentInstance.confirmText.set('down -v');
+    fixture.detectChanges();
+    expect(reset.disabled).toBe(false);
+
+    reset.click();
+    fixture.detectChanges();
+    expect(host.backendReset).toHaveBeenCalledWith('down -v');
+    expect(fixture.componentInstance.jobId()).toBe('reset-1');
+    expect(fixture.componentInstance.confirmText()).toBe('');
   });
 
   it('gives the wipe confirmation input an accessible name', async () => {

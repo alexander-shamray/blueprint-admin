@@ -73,6 +73,15 @@ builder.Services.AddSingleton<ComposeService>();
 builder.Services.AddSingleton<LogFollower>();
 builder.Services.AddSingleton<BrokerService>();
 
+// PlatformProbe is a typed client, so each readiness poll resolves a fresh one rather than the
+// singleton holding one HttpClient for the host's life.
+builder.Services.AddSingleton(sp => new ResetService(
+    sp.GetRequiredService<ComposeService>(),
+    cancellationToken => sp.GetRequiredService<PlatformProbe>().ProbeAsync(cancellationToken),
+    sp.GetRequiredService<JobRegistry>(),
+    sp.GetRequiredService<RepoPaths>(),
+    sp.GetRequiredService<TimeProvider>()));
+
 // In FakePlatform mode the frontend clone may not exist at all, and its npm
 // start is a recording, so the node_modules check would refuse for nothing.
 builder.Services.AddSingleton(sp =>

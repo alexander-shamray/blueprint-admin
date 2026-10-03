@@ -4,6 +4,7 @@
   <span class="wipe-box">
     <input aria-label="Type down -v to confirm wiping volumes" placeholder="type: down -v" [ngModel]="confirmText()" (ngModelChange)="confirmText.set($event)" />
     <button class="wipe" [disabled]="!canWipe()" (click)="wipe()">Down and wipe</button>
+    <button class="reset" [disabled]="!canWipe()" (click)="reset()" title="down -v, up, then wait until every surface answers">Reset</button>
   </span>
   @if (config(); as c) {
     <span class="links">

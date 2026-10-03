@@ -34,3 +34,18 @@ test('wiping volumes needs the typed confirmation', async ({ page }) => {
   await wipe.click();
   await expect(page.locator('app-output-pane pre')).toContainText('Volume commerce_sql-data  Removed');
 });
+
+test('reset needs the typed confirmation, then runs down -v, up and the readiness wait as one job', async ({ page }) => {
+  await page.goto('/stack');
+  const reset = page.getByRole('button', { name: 'Reset' });
+
+  await expect(reset).toBeDisabled();
+  await page.getByPlaceholder('type: down -v').fill('down -v');
+  await reset.click();
+
+  const output = page.locator('app-output-pane pre');
+  await expect(output).toContainText('Volume commerce_sql-data  Removed');
+  await expect(output).toContainText('commerce-gateway-1  Healthy');
+  await expect(output).toContainText('ready: gateway, catalog, ordering, bff, keycloak, grafana');
+  await expect(output).toContainText('exited 0');
+});
