@@ -1,5 +1,6 @@
 using System.Net;
 using System.Reflection;
+using System.Text.Json;
 
 namespace Admin.Host.Fakes;
 
@@ -81,38 +82,28 @@ internal static class FakeGrafana
     }
 
     /// <summary>
-    /// One recording per <see cref="Telemetry.GoldenSignals"/> query, chosen by which query was
-    /// asked. The shape is Prometheus's documented <c>/api/v1/query</c> vector, not a measurement
-    /// through this Grafana. Ordering.Api has no traffic, so its ratio and quantile are <c>NaN</c>,
-    /// and Catalog.Api has no 5xx, so it has no error-ratio series at all.
+    /// Each <see cref="Telemetry.GoldenSignals"/> query's answer, recorded through the live Grafana's
+    /// Prometheus proxy on 2026-10-03 under steady traffic and keyed by the field that holds the query.
+    /// A query is matched by its exact text, because the 401 and 422 queries differ from the request-rate
+    /// one only inside the selector; any other query answers the empty vector Prometheus gives for no series.
     /// </summary>
     public static HttpResponseMessage Prometheus(HttpRequestMessage request)
     {
-        string query = Uri.UnescapeDataString(request.RequestUri!.Query);
+        const string prefix = "?query=";
+        string raw = request.RequestUri!.Query;
+        string promQl = raw.StartsWith(prefix, StringComparison.Ordinal) ? Uri.UnescapeDataString(raw[prefix.Length..]) : "";
 
-        // The error ratio's denominator is the request-rate query itself, so it is matched first.
-        string series =
-            query.Contains(Telemetry.GoldenSignals.LatencyP99, StringComparison.Ordinal)
-                ? """
-                  {"metric":{"service_name":"Catalog.Api"},"value":[1789532580,"0.048"]},
-                  {"metric":{"service_name":"Gateway.Api"},"value":[1789532580,"0.09"]},
-                  {"metric":{"service_name":"Ordering.Api"},"value":[1789532580,"NaN"]}
-                  """
-            : query.Contains(Telemetry.GoldenSignals.ErrorRatio, StringComparison.Ordinal)
-                ? """
-                  {"metric":{"service_name":"Gateway.Api"},"value":[1789532580,"0.05"]},
-                  {"metric":{"service_name":"Ordering.Api"},"value":[1789532580,"NaN"]}
-                  """
-            : query.Contains(Telemetry.GoldenSignals.RequestRate, StringComparison.Ordinal)
-                ? """
-                  {"metric":{"service_name":"Catalog.Api"},"value":[1789532580,"1.2"]},
-                  {"metric":{"service_name":"Gateway.Api"},"value":[1789532580,"2.4"]},
-                  {"metric":{"service_name":"Ordering.Api"},"value":[1789532580,"0"]}
-                  """
-            : "";
+        using JsonDocument recording = JsonDocument.Parse(Fixture("grafana-prometheus-golden-signals.json"));
 
-        return FakeHttp.Json(HttpStatusCode.OK, $$$"""{"status":"success","data":{"resultType":"vector","result":[{{{series}}}]}}""");
+        return GoldenSignalFields.TryGetValue(promQl, out string? field)
+            ? FakeHttp.Json(HttpStatusCode.OK, recording.RootElement.GetProperty(field).GetRawText())
+            : FakeHttp.Json(HttpStatusCode.OK, """{"status":"success","data":{"resultType":"vector","result":[]}}""");
     }
+
+    /// <summary>Each query's text to the <see cref="Telemetry.GoldenSignals"/> field the recording is keyed by.</summary>
+    private static readonly Dictionary<string, string> GoldenSignalFields = typeof(Telemetry.GoldenSignals)
+        .GetFields(BindingFlags.Public | BindingFlags.Static)
+        .ToDictionary(f => (string)f.GetRawConstantValue()!, f => f.Name, StringComparer.Ordinal);
 
     /// <summary>
     /// The id inside a LogQL label filter, read back out of the query string. The console builds that
