@@ -7,7 +7,8 @@ namespace Admin.Host.Stack;
 /// The Logs screen's one <c>docker compose logs -f</c>. Each Follow starts a new
 /// long-running job, and nothing else ever ends one, so without this every click
 /// left another docker process behind. Starting a follow stops the previous one
-/// if it is still running; the host keeps at most one follow job.
+/// if it is still running; the host keeps at most one follow job. Stop, and
+/// leaving the Logs screen, end it by name through <see cref="StopAsync"/>.
 /// </summary>
 public sealed class LogFollower(ComposeService compose, IProcessRunner runner) : IDisposable
 {
@@ -33,6 +34,30 @@ public sealed class LogFollower(ComposeService compose, IProcessRunner runner) :
             current = compose.FollowLogs(services);
 
             return current;
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Stops the follow job <paramref name="jobId"/> names, and only while it is still the current one. The name is
+    /// what makes a late Stop harmless: one that reaches the host after the next Follow names the job that Follow
+    /// already stopped. There is deliberately no stop for any other job (spec §5.10).
+    /// </summary>
+    public async Task StopAsync(string jobId, CancellationToken cancellationToken)
+    {
+        await gate.WaitAsync(cancellationToken);
+
+        try
+        {
+            // Status, not State: only Job's own lock orders this read against MarkExited.
+            if (current is { Status.State: JobState.Running } running && running.Id == jobId)
+            {
+                // Not the request's token, as in StartAsync: an aborted request must not leave the process half-stopped.
+                await runner.StopAsync(running, CancellationToken.None);
+            }
         }
         finally
         {
