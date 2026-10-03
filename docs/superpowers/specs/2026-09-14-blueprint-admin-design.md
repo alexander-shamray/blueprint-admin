@@ -212,8 +212,8 @@ their output is visible the same way. `ps` and `exec` are jobs too — bounded,
 stoppable and killed at shutdown like any other — but the registry does not
 keep them (`ProcessSpec.Listed`): their output reaches a screen only as the
 view the caller parses, and kept, the Stack screen's `ps` poll alone would push
-an exited `npm start`, and the output that says why it died, past the last 50
-within minutes.
+an exited `npm start`, and the output that says why it died, past
+`JobRegistry.KeepExited` within minutes.
 
 ### 5.3 Compose
 
