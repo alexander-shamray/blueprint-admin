@@ -78,9 +78,10 @@ test('trace this call opens the response correlation id on the trace screen', as
   await expect(page.locator('table.timeline tbody tr').last().locator('td.kind')).toHaveText('[queued]');
 });
 
-// FakeOpenApi: the process's first Catalog fetch took the baseline, and every later fetch has gained
-// ProductSummaryDto.quantityAvailable. Nothing else in the suite accepts a baseline.
-test('a reload names what moved in a document since its baseline, and accepting it clears the change', async ({ page }) => {
+// FakeOpenApi: Catalog's recorded document is served until it has a baseline, and from then on it has
+// gained ProductSummaryDto.quantityAvailable. Accepting is left to the host and unit specs: an accepted
+// baseline lasts as long as the host does, and a reused host or a CI retry would then have no change to see.
+test('a reload names what moved in a document since its baseline, with the action that accepts it', async ({ page }) => {
   await page.goto('/requests');
   await expect(page.locator('button.op')).toHaveCount(9);
 
@@ -88,8 +89,5 @@ test('a reload names what moved in a document since its baseline, and accepting 
   const changes = page.locator('.contract-changes');
   await expect(changes).toContainText('changed since');
   await expect(changes.locator('li')).toHaveText(['added field ProductSummaryDto.quantityAvailable']);
-
-  await changes.getByRole('button', { name: 'Accept as baseline' }).click();
-  await expect(page.locator('.contract-changes')).toHaveCount(0);
-  await expect(page.locator('.tree section', { hasText: 'catalog' }).locator('.contract')).toContainText('unchanged since');
+  await expect(changes.getByRole('button', { name: 'Accept as baseline' })).toBeEnabled();
 });

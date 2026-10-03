@@ -11,7 +11,47 @@ namespace Admin.Host.Api;
 /// </summary>
 public sealed class OpenApiBaselines(string directory, TimeProvider time)
 {
+    // One read-or-write at a time: a first sight writes the file another call may be reading.
+    private readonly Lock gate = new();
+
+    /// <summary>Whether <paramref name="service"/> has a baseline yet.</summary>
+    public bool Has(string service)
+    {
+        lock (gate)
+        {
+            return File.Exists(PathOf(service));
+        }
+    }
+
     public OpenApiChanges Compare(string service, string document)
+    {
+        lock (gate)
+        {
+            return CompareUnlocked(service, document);
+        }
+    }
+
+    /// <summary>
+    /// Makes <paramref name="document"/> the baseline <paramref name="service"/> is compared with from now on, or
+    /// says why the file could not be written.
+    /// </summary>
+    public string? Accept(string service, string document)
+    {
+        lock (gate)
+        {
+            try
+            {
+                Save(PathOf(service), document);
+                return null;
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                return $"The baseline for {service} could not be written to {PathOf(service)}: {e.Message}";
+            }
+        }
+    }
+
+    private OpenApiChanges CompareUnlocked(string service, string document)
     {
         try
         {
@@ -39,9 +79,6 @@ public sealed class OpenApiBaselines(string directory, TimeProvider time)
             return OpenApiChanges.Failed($"The kept document for {service} could not be read or written: {e.Message}");
         }
     }
-
-    /// <summary>Makes <paramref name="document"/> the baseline <paramref name="service"/> is compared with from now on.</summary>
-    public void Accept(string service, string document) => Save(PathOf(service), document);
 
     private DateTimeOffset Save(string path, string document)
     {

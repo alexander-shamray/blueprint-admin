@@ -23,7 +23,8 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
     [Fact]
     public async Task The_fake_catalog_document_moves_after_its_first_fetch_and_accepting_it_clears_the_change()
     {
-        // FakeOpenApi's first fetch in the process took the baseline, wherever it happened; every later one has moved.
+        // FakeOpenApi serves the recorded document until Catalog has a baseline, and the moved one after; the
+        // baseline is process-wide, so whichever host fetched first, it holds the recorded document.
         await client.GetFromJsonAsync<JsonElement>("/api/catalog/operations", Token);
         JsonElement reloaded = await (await client.PostAsync("/api/catalog/reload", null, Token)).Content.ReadFromJsonAsync<JsonElement>(Token);
         JsonElement changes = Source(reloaded, "catalog").GetProperty("changes");
