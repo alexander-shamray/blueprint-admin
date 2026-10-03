@@ -58,11 +58,13 @@ client's `npm start` with start, stop and its output; each service's request
 rate, 5xx share and p99 latency from Prometheus, the backend golden-signals
 dashboard's first row), the Logs screen
 (follow, service filter, text filter, correlation-id highlight) and the API
-screen (Catalog's and Ordering's OpenAPI operations through the gateway, the
-BFF quote and every host's readiness; send as anonymous, a realm user or a
+screen (Catalog's, Ordering's, Inventory's and Payments' OpenAPI operations
+through the gateway, the BFF quote, every host's readiness and the payment
+simulator's request log; send as anonymous, a realm user or a
 custom username and password, with a correlation id; status, timing, headers
 and body as the platform returned them; a history of this visit's calls).
-The Broker screen lists queues (error queues marked), exchanges and
+The Broker screen lists queues (error queues marked, each named with what
+consumes it), exchanges and
 permissions through `rabbitmqctl` in the `rabbitmq` container, and the API
 screen shows whether `ordering-catalog-events` has drained after a publish.
 The Trace screen joins a correlation id's Loki lines and Tempo spans into one
@@ -98,7 +100,8 @@ changed between the two.
   run. Nothing detects the run, because the host cannot observe one.
 - Stop gives up waiting after 10 s and says so in the output; the process
   may still be running.
-- The proxy sends only to the gateway, Catalog, Ordering and BFF URLs in
+- The proxy sends only to the gateway, Catalog, Ordering, BFF, Inventory,
+  Payments and payment simulator URLs in
   `Admin:*Url`, and refuses a correlation id the platform would replace
   (anything but 1 to 128 ASCII letters, digits, `-` and `_`).
 - Operation examples are the bodies `run-locally.md` sends where there is one,
