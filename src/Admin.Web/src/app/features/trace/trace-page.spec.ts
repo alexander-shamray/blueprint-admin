@@ -341,7 +341,7 @@ describe('TracePage', () => {
       fixture.componentInstance.reload();
       fixture.detectChanges();
 
-      expect(text(fixture, '.changes .changed')).toContain('1 new, 0 no longer in the window');
+      expect(text(fixture, '.changes .changed')).toContain('1 new, 0 no longer in the timeline');
       expect(text(fixture, '.change-list .arrived')).toBe('[new] Ordering.Api [consume] Consumed PriceChanged on ordering-catalog-events');
       const arrivedRows = fixture.nativeElement.querySelectorAll('table.timeline tr.arrived') as NodeListOf<HTMLElement>;
       expect(arrivedRows.length).toBe(1);

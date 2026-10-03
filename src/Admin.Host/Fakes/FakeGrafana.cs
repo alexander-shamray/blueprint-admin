@@ -60,9 +60,13 @@ internal static class FakeGrafana
 
     private const string ResultArray = "\"result\": [";
 
-    /// <summary>The consume that lands after the first fetch: Ordering's projection taking the PriceChanged.</summary>
+    /// <summary>
+    /// What lands after the first fetch: the same publish sent again under the same correlation id, as
+    /// run-locally.md says to reuse a commandId to retry an intent. It is the request's own side of the outbox,
+    /// the only side this correlation id reaches (spec §5.9).
+    /// </summary>
     private const string LaterLine = """
-        {"stream":{"CorrelationId":"demo-trace-0001","detected_level":"info","scope_name":"MassTransit","service_name":"Ordering.Api","severity_number":"9","severity_text":"Information"},"values":[["1789532585000000000","Consumed PriceChanged on ordering-catalog-events"]]},
+        {"stream":{"CorrelationId":"demo-trace-0001","detected_level":"info","scope_name":"Microsoft.AspNetCore.Hosting.Diagnostics","service_name":"Gateway.Api","severity_number":"9","severity_text":"Information"},"values":[["1789532585000000000","Request finished POST /api/v1/products - 201 (the same commandId sent again)"]]},
         """;
 
     /// <summary>The recorded trace, or the 404 Tempo gives for a trace it does not hold.</summary>

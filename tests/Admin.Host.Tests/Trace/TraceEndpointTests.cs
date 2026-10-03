@@ -26,7 +26,7 @@ public sealed class TraceEndpointTests(AdminHostFactory factory) : IClassFixture
     }
 
     [Fact]
-    public async Task A_moving_correlation_id_gains_a_consume_on_its_second_fetch_and_a_recorded_one_does_not()
+    public async Task A_moving_correlation_id_gains_a_later_call_on_its_second_fetch_and_a_recorded_one_does_not()
     {
         // A fresh id per run: the fake counts fetches per id for the life of the process.
         string moving = $"fake-moving-{Guid.NewGuid():N}"[..40];
@@ -38,7 +38,7 @@ public sealed class TraceEndpointTests(AdminHostFactory factory) : IClassFixture
 
         second.GetProperty("events").GetArrayLength().ShouldBe(first.GetProperty("events").GetArrayLength() + 1);
         second.GetProperty("events").EnumerateArray().Select(e => e.GetProperty("summary").GetString())
-            .ShouldContain(s => s!.Contains("Consumed PriceChanged on ordering-catalog-events", StringComparison.Ordinal));
+            .ShouldContain(s => s!.Contains("the same commandId sent again", StringComparison.Ordinal));
         recordedSecond.GetProperty("events").GetArrayLength().ShouldBe(recordedFirst.GetProperty("events").GetArrayLength());
     }
 
