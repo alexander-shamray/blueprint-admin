@@ -306,5 +306,95 @@ describe('TracePage', () => {
     // The same event, whether it arrives thrown or as reachable:false, is shown the same way.
     expect((fixture.nativeElement.querySelector('[role="alert"]') as HTMLElement).textContent).toContain('Loki answered 503');
     expect(rows(fixture).length).toBe(3);
+    // An outage is not history: there is nothing to compare it with, and nothing was recorded.
+    expect(fixture.nativeElement.querySelector('.changes')).toBeNull();
+  });
+
+  describe('what changed since the last fetch', () => {
+    const consume = {
+      at: '2026-09-16T09:43:02.000Z',
+      source: 'loki',
+      service: 'Ordering.Api',
+      kind: 'Consume' as const,
+      summary: 'Consumed PriceChanged on ordering-catalog-events',
+      traceId: null,
+      link: null,
+    };
+    const later: TraceView = { ...view, events: [view.events[0], view.events[1], consume, queued] };
+
+    function text(fixture: { nativeElement: HTMLElement }, selector: string): string {
+      return ((fixture.nativeElement.querySelector(selector) as HTMLElement | null)?.textContent ?? '').replace(/\s+/g, ' ').trim();
+    }
+
+    it('says nothing about changes on the first fetch of an id', () => {
+      configure('demo-trace-0001');
+      const fixture = render();
+
+      expect(fixture.nativeElement.querySelector('.changes')).toBeNull();
+    });
+
+    it('names the events that arrived since the previous fetch and marks their rows in words', () => {
+      configure('demo-trace-0001');
+      const fixture = render();
+
+      host.trace = vi.fn(() => of(later));
+      fixture.componentInstance.reload();
+      fixture.detectChanges();
+
+      expect(text(fixture, '.changes .changed')).toContain('1 new, 0 no longer in the window');
+      expect(text(fixture, '.change-list .arrived')).toBe('[new] Ordering.Api [consume] Consumed PriceChanged on ordering-catalog-events');
+      const arrivedRows = fixture.nativeElement.querySelectorAll('table.timeline tr.arrived') as NodeListOf<HTMLElement>;
+      expect(arrivedRows.length).toBe(1);
+      expect(arrivedRows[0].textContent).toContain('[new] [consume]');
+    });
+
+    it('names an event that left the timeline as gone', () => {
+      host.trace = vi.fn(() => of(later));
+      configure('demo-trace-0001');
+      const fixture = render();
+
+      host.trace = vi.fn(() => of(view));
+      fixture.componentInstance.reload();
+      fixture.detectChanges();
+
+      expect(text(fixture, '.change-list .gone')).toContain('[gone] Ordering.Api [consume]');
+    });
+
+    it('says nothing changed, with both fetch times, when the timeline is the same', () => {
+      configure('demo-trace-0001');
+      const fixture = render();
+
+      fixture.componentInstance.reload();
+      fixture.detectChanges();
+
+      expect(text(fixture, '.changes .unchanged')).toMatch(/^Nothing changed between the fetch at \d\d:\d\d:\d\d and this one at \d\d:\d\d:\d\d\.$/);
+    });
+
+    it('does not compare fetches over different windows', () => {
+      configure('demo-trace-0001');
+      const fixture = render();
+
+      host.trace = vi.fn(() => of({ ...later, window: '1h' }));
+      fixture.componentInstance.window.set('1h');
+      fixture.componentInstance.reload();
+      fixture.detectChanges();
+
+      expect(text(fixture, '.changes .not-compared')).toContain('The window changed from 15m to 1h');
+      expect(fixture.nativeElement.querySelector('tr.arrived')).toBeNull();
+    });
+
+    it('drops the comparison when the screen moves to another id', () => {
+      configure('demo-trace-0001');
+      const fixture = render();
+      fixture.componentInstance.reload();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.changes')).not.toBeNull();
+
+      host.trace = vi.fn(() => of({ ...view, correlationId: 'other-id' }));
+      paramMap.next(convertToParamMap({ correlationId: 'other-id' }));
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelector('.changes')).toBeNull();
+    });
   });
 });

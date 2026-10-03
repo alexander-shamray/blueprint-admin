@@ -5,7 +5,8 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { EMPTY, Subject, catchError, defer, finalize, switchMap } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
-import { TraceEventKind, TraceView } from '../../core/host/host-types';
+import { TraceEvent, TraceEventKind, TraceView } from '../../core/host/host-types';
+import { TraceDiff, TraceHistory, diffTimelines, eventKey } from './trace-history';
 
 /** The windows the select offers. The host accepts anything from 1m to 24h; these are the useful ones. */
 export const WINDOWS = ['15m', '1h', '6h', '24h'] as const;
@@ -39,9 +40,13 @@ export class TracePage {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly history = inject(TraceHistory);
 
   readonly windows = WINDOWS;
   readonly view = signal<TraceView | null>(null);
+  /** What moved since this session's previous fetch of the id on screen; null on its first fetch. */
+  readonly diff = signal<TraceDiff | null>(null);
+  private arrivedKeys = new Set<string>();
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly correlationId = signal('');
@@ -73,7 +78,10 @@ export class TracePage {
             // loading branch, so keeping it would show A's timeline for the whole of B's request
             // while the URL and the input both say B. A reload of the id already on screen keeps its
             // last good timeline, as the Broker screen does.
-            if (this.view()?.correlationId !== id) this.view.set(null);
+            if (this.view()?.correlationId !== id) {
+              this.view.set(null);
+              this.setDiff(null);
+            }
 
             return this.host.trace(id, this.window());
           }).pipe(
@@ -99,6 +107,10 @@ export class TracePage {
           return;
         }
 
+        // Only a reachable answer is history: an outage is not a timeline that lost every event.
+        const current = { fetchedAt: new Date(), view };
+        const previous = this.history.record(view, current.fetchedAt);
+        this.setDiff(previous ? diffTimelines(previous, current) : null);
         this.view.set(view);
       });
 
@@ -124,6 +136,16 @@ export class TracePage {
 
   kindWord(kind: TraceEventKind): string {
     return KIND_WORDS[kind];
+  }
+
+  /** Whether a row arrived since the previous fetch, so the table can say so in words as well as colour. */
+  isArrived(event: TraceEvent): boolean {
+    return this.arrivedKeys.has(eventKey(event));
+  }
+
+  private setDiff(diff: TraceDiff | null): void {
+    this.arrivedKeys = new Set((diff?.arrived ?? []).map(eventKey));
+    this.diff.set(diff);
   }
 
   /** Reloads the id already on screen, for when the window changes or the platform has moved on. */

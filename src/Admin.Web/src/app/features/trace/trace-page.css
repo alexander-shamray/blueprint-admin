@@ -15,3 +15,8 @@ a.explore { margin-left: 0.5rem; font-size: 0.85em; }
 .warning { color: #855; max-width: 48rem; }
 .empty { color: #555; max-width: 48rem; }
 .error { color: #b00; }
+/* The [new] and [gone] words carry the change; the shading only repeats it. */
+.changes { max-width: 60rem; margin-bottom: 1rem; }
+.change-list { margin: 0.25rem 0 0; padding-left: 1.25rem; }
+.change-list .gone { color: #555; }
+tr.arrived td { background: #eef6ee; }
