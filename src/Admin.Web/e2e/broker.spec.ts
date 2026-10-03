@@ -15,4 +15,8 @@ test('the broker screen lists queues, exchanges and permissions', async ({ page 
 
   await page.getByRole('button', { name: 'Refresh' }).click();
   await expect(page.locator('table.queues tbody tr')).toHaveCount(5);
+
+  const reread = page.waitForRequest('**/api/broker/permissions');
+  await page.getByLabel('Refresh every 5 s').check();
+  await reread;
 });

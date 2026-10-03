@@ -73,9 +73,10 @@ sent step linking to its own trace.
 
 ## Known limits
 
-- The host keeps at most one `logs -f` job: Follow stops the previous one
-  before starting the next. Stop on the Logs screen only closes the browser's
-  stream; the job keeps running until the next Follow or until the host exits.
+- The host keeps at most one `logs -f` job, so a Follow in a second browser
+  tab ends the first tab's. A follow whose answer never reached the page,
+  or whose stop failed as the Logs screen was left, runs until the next
+  Follow.
 - The console runs `npm start` but never `npm ci`: with no `node_modules` in
   the frontend clone, Start is refused and the screen says so.
 - The console does not track a client started by hand: Start still runs a
@@ -99,8 +100,6 @@ sent step linking to its own trace.
 - The golden-signal strip shows the dashboard's rate, errors and duration row
   only, not its refusals or §13.7 rows. A service with no 5xx shows a dash
   for its 5xx share, not a zero: the ratio has no series for it.
-- Broker reads are `docker compose exec` jobs, so they appear in
-  `GET /api/jobs`; auto-refresh re-reads queues only.
 
 ## Tests
 
