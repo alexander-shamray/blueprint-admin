@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Admin.Host.Api;
 using Shouldly;
 
@@ -49,12 +50,38 @@ public sealed class GatewayDriftTests
     }
 
     [Fact]
+    public void Every_row_of_GatewayRoutes_is_a_route_the_gateway_still_has()
+    {
+        using JsonDocument settings = JsonDocument.Parse(Backend.Read("src", "Gateway", "Gateway.Api", "appsettings.json"), Jsonc);
+        List<(string? Method, string Prefix, string Policy)> gateway = [];
+
+        foreach (JsonProperty route in settings.RootElement.GetProperty("ReverseProxy").GetProperty("Routes").EnumerateObject())
+        {
+            JsonElement match = route.Value.GetProperty("Match");
+            string path = match.GetProperty("Path").GetString()!;
+            string prefix = path[..path.IndexOf('{', StringComparison.Ordinal)];
+            string policy = route.Value.GetProperty("AuthorizationPolicy").GetString()!;
+
+            if (match.TryGetProperty("Methods", out JsonElement listed))
+            {
+                gateway.AddRange(listed.EnumerateArray().Select(m => ((string?)m.GetString(), prefix, policy)));
+            }
+            else
+            {
+                gateway.Add((null, prefix, policy));
+            }
+        }
+
+        GatewayRoutes.Routes.Where(r => !gateway.Contains(r)).ShouldBeEmpty("a row the gateway no longer routes");
+    }
+
+    [Fact]
     public void The_quote_the_console_curates_is_still_mapped_by_the_bff()
     {
         string endpoints = Backend.Read("src", "BFF", "Web.Bff", "Endpoints", "CheckoutEndpoints.cs");
 
         endpoints.ShouldContain("""MapGroup("/v1/checkout")""");
-        endpoints.ShouldContain("\"/quote\"");
+        Regex.IsMatch(endpoints, """\.MapPost\(\s*"/quote""").ShouldBeTrue("the quote is no longer a POST to /quote");
     }
 
     [Fact]

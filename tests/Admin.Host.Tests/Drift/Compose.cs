@@ -28,12 +28,20 @@ internal static partial class Compose
                 continue;
             }
 
+            if (!inInclude || line.Trim().Length == 0 || line.TrimStart().StartsWith('#'))
+            {
+                continue;
+            }
+
             Match item = IncludeItem().Match(line);
 
-            if (inInclude && item.Success)
+            // Any other include form (`- path: …`, a project directory) would drop units silently.
+            if (!item.Success)
             {
-                includes.Add(item.Groups[1].Value);
+                throw new FormatException($"docker-compose.yml include line this reader does not know: '{line}'");
             }
+
+            includes.Add(item.Groups[1].Value);
         }
 
         return includes;
