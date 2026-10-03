@@ -31,6 +31,48 @@ public sealed class LogFollowerTests
         registry.All().ShouldNotContain(j => j.State == JobState.Running);
     }
 
+    [Fact]
+    public async Task Stop_ends_the_follow_job_it_names()
+    {
+        using LogFollower follower = Follower();
+        Job job = await follower.StartAsync([], TestContext.Current.CancellationToken);
+
+        await follower.StopAsync(job.Id, TestContext.Current.CancellationToken);
+
+        job.State.ShouldBe(JobState.Exited);
+    }
+
+    [Fact]
+    public async Task A_stop_naming_a_superseded_follow_leaves_the_current_one_running()
+    {
+        using LogFollower follower = Follower();
+        Job first = await follower.StartAsync([], TestContext.Current.CancellationToken);
+        Job second = await follower.StartAsync([], TestContext.Current.CancellationToken);
+
+        await follower.StopAsync(first.Id, TestContext.Current.CancellationToken);
+
+        second.State.ShouldBe(JobState.Running);
+    }
+
+    [Fact]
+    public async Task A_stop_naming_no_follow_job_ends_nothing()
+    {
+        using LogFollower follower = Follower();
+        Job job = await follower.StartAsync([], TestContext.Current.CancellationToken);
+
+        await follower.StopAsync("not-a-follow-job", TestContext.Current.CancellationToken);
+
+        job.State.ShouldBe(JobState.Running);
+    }
+
+    private static LogFollower Follower()
+    {
+        FakeProcessRunner runner = new FakeProcessRunner(new JobRegistry(new FakeTimeProvider()))
+            .OnLongRunning("docker", "compose", "gateway | started");
+
+        return new LogFollower(new ComposeService(runner, Paths, TimeProvider.System), runner);
+    }
+
     /// <summary>Cancels the request's token from inside the stop, as a client disconnect would.</summary>
     private sealed class CancellingRunner(IProcessRunner inner, CancellationTokenSource request) : IProcessRunner
     {

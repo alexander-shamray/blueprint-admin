@@ -35,6 +35,13 @@ public static class StackEndpoints
         app.MapPost("/api/logs/follow", async (FollowRequest request, LogFollower follower, CancellationToken cancellationToken) =>
             TypedResults.Accepted((string?)null, JobSummary.Of(await follower.StartAsync(request.Services ?? [], cancellationToken))));
 
+        app.MapPost("/api/logs/follow/{id}/stop", async (string id, LogFollower follower, CancellationToken cancellationToken) =>
+        {
+            await follower.StopAsync(id, cancellationToken);
+
+            return TypedResults.NoContent();
+        });
+
         return app;
     }
 }

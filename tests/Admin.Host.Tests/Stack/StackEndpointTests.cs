@@ -107,4 +107,32 @@ public sealed class StackEndpointTests : IClassFixture<AdminHostFactory>
         JsonElement secondNow = await client.GetFromJsonAsync<JsonElement>($"/api/jobs/{secondJob.GetProperty("id").GetString()}", TestContext.Current.CancellationToken);
         secondNow.GetProperty("summary").GetProperty("state").GetString().ShouldBe("Running");
     }
+
+    [Fact]
+    public async Task Stopping_the_follow_ends_its_job()
+    {
+        HttpResponseMessage started = await client.PostAsJsonAsync("/api/logs/follow", new { services = GatewayOnly }, TestContext.Current.CancellationToken);
+        string id = (await started.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken)).GetProperty("id").GetString()!;
+
+        HttpResponseMessage stopped = await client.PostAsync($"/api/logs/follow/{id}/stop", null, TestContext.Current.CancellationToken);
+
+        stopped.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        JsonElement job = await client.GetFromJsonAsync<JsonElement>($"/api/jobs/{id}", TestContext.Current.CancellationToken);
+        job.GetProperty("summary").GetProperty("state").GetString().ShouldBe("Exited");
+    }
+
+    [Fact]
+    public async Task A_stop_that_reaches_the_host_after_the_next_follow_ends_nothing()
+    {
+        HttpResponseMessage first = await client.PostAsJsonAsync("/api/logs/follow", new { services = GatewayOnly }, TestContext.Current.CancellationToken);
+        string firstId = (await first.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken)).GetProperty("id").GetString()!;
+        HttpResponseMessage second = await client.PostAsJsonAsync("/api/logs/follow", new { services = GatewayOnly }, TestContext.Current.CancellationToken);
+        string secondId = (await second.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken)).GetProperty("id").GetString()!;
+
+        HttpResponseMessage stopped = await client.PostAsync($"/api/logs/follow/{firstId}/stop", null, TestContext.Current.CancellationToken);
+
+        stopped.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        JsonElement secondNow = await client.GetFromJsonAsync<JsonElement>($"/api/jobs/{secondId}", TestContext.Current.CancellationToken);
+        secondNow.GetProperty("summary").GetProperty("state").GetString().ShouldBe("Running");
+    }
 }
