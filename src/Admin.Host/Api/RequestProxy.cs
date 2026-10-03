@@ -286,7 +286,7 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
 
         return
         [
-            .. new[] { o.GatewayUrl, o.CatalogUrl, o.OrderingUrl, o.BffUrl }
+            .. new[] { o.GatewayUrl, o.CatalogUrl, o.OrderingUrl, o.BffUrl, o.InventoryUrl, o.PaymentsUrl, o.PaymentSimulatorUrl }
                 .Select(url => Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) ? uri.GetLeftPart(UriPartial.Authority) : null)
                 .OfType<string>(),
         ];

@@ -6,7 +6,8 @@ using Admin.Host.Api;
 namespace Admin.Host.Fakes;
 
 /// <summary>
-/// Catalog's and Ordering's <c>/openapi/v1.json</c>, which need a bearer token as the real ones do. Once Catalog has
+/// The four services' <c>/openapi/v1.json</c>, which need a bearer token as the real ones do; Inventory's and
+/// Payments' were recorded from the live services on 2026-10-03. Once Catalog has
 /// a baseline, its document has moved: <c>ProductSummaryDto</c> gains <c>quantityAvailable</c>, the field the
 /// reference client's listing gained, so the API screen has a change to report (spec §5.7). Keyed on the
 /// baseline rather than on a fetch count, so two hosts fetching at once can only ever baseline the recorded

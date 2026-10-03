@@ -7,7 +7,7 @@ using Microsoft.Extensions.Options;
 namespace Admin.Host.Api;
 
 /// <summary>
-/// The API screen's operation tree (spec §5.7): Catalog's and Ordering's OpenAPI documents, which
+/// The API screen's operation tree (spec §5.7): Catalog's, Ordering's, Inventory's and Payments' OpenAPI documents, which
 /// need a token (the services' fallback authorization policy), rebased onto the gateway, then the
 /// curated operations. Cached until reloaded; a service that stops answering keeps its last
 /// operations, marked unavailable, rather than vanishing from the tree.
@@ -76,9 +76,10 @@ public sealed class ApiCatalog(HttpClient http, TokenService tokens, IOptions<Ad
             }
 
             AdminOptions o = options.Value;
-            (string Name, string BaseUrl)[] services = [("catalog", o.CatalogUrl), ("ordering", o.OrderingUrl)];
+            (string Name, string BaseUrl)[] services =
+                [("catalog", o.CatalogUrl), ("ordering", o.OrderingUrl), ("inventory", o.InventoryUrl), ("payments", o.PaymentsUrl)];
 
-            // One grant for both documents: two concurrent loads would each miss the empty cache and mint twice.
+            // One grant for every document: concurrent loads would each miss the empty cache and mint once apiece.
             (string? bearer, string? tokenError) = await BearerAsync(o, cancellationToken);
             (ApiSource Source, IReadOnlyList<ApiOperation>? Operations)[] loads =
                 await Task.WhenAll(services.Select(s => LoadAsync(s.Name, s.BaseUrl, o, bearer, tokenError, cancellationToken)));

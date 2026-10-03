@@ -22,11 +22,7 @@ public sealed class LiteralDriftTests
     /// Grants the real realm gives that the fake does not yet, with the issue that adds them. Its row
     /// goes when that issue lands; a grant the fake has and the realm does not is never excused.
     /// </summary>
-    private static readonly Dictionary<string, string> GrantsTheFakeLacks = new(StringComparer.Ordinal)
-    {
-        ["demo inventory:admin"] = "#52",
-        ["demo payments:admin"] = "#52",
-    };
+    private static readonly Dictionary<string, string> GrantsTheFakeLacks = new(StringComparer.Ordinal);
 
     [Fact]
     public void The_correlation_header_is_the_backends()

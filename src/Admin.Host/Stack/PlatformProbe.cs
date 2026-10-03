@@ -25,6 +25,8 @@ public sealed class PlatformProbe(HttpClient http, IOptions<AdminOptions> option
             ("catalog", Join(o.CatalogUrl, "/health/ready")),
             ("ordering", Join(o.OrderingUrl, "/health/ready")),
             ("bff", Join(o.BffUrl, "/health/ready")),
+            ("inventory", Join(o.InventoryUrl, "/health/ready")),
+            ("payments", Join(o.PaymentsUrl, "/health/ready")),
             ("keycloak", Join(o.KeycloakUrl, $"/realms/{o.Realm}")),
             ("grafana", Join(o.GrafanaUrl, "/api/health")),
             ("client", Join(o.ClientUrl, "/")),

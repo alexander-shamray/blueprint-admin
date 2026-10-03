@@ -1,0 +1,43 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Payments.Api | v1",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5104/"
+    }
+  ],
+  "paths": {
+    "/v1/payments/{orderId}": {
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "operationId": "GetPayment",
+        "parameters": [
+          {
+            "name": "orderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Payments"
+    }
+  ]
+}

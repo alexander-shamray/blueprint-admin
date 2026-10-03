@@ -63,6 +63,9 @@ export interface ConfigView {
     catalog: string;
     ordering: string;
     bff: string;
+    inventory: string;
+    payments: string;
+    paymentSimulator: string;
     keycloak: string;
     grafana: string;
     client: string;

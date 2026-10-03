@@ -40,6 +40,16 @@ public sealed class AdminOptions
 
     public string BffUrl { get; set; } = "http://localhost:5200";
 
+    public string InventoryUrl { get; set; } = "http://localhost:5103";
+
+    public string PaymentsUrl { get; set; } = "http://localhost:5104";
+
+    /// <summary>
+    /// The payment provider simulator Payments authorises against. Its request log is the only by-hand view of
+    /// what Payments asked for, and a decline is caused through it by the order's amount (run-locally.md).
+    /// </summary>
+    public string PaymentSimulatorUrl { get; set; } = "http://localhost:5190";
+
     public string KeycloakUrl { get; set; } = "http://localhost:8080";
 
     public string GrafanaUrl { get; set; } = "http://localhost:3000";

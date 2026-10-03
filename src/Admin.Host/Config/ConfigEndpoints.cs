@@ -15,7 +15,9 @@ public static class ConfigEndpoints
                 paths.FrontendDir,
                 paths.ComposeFile,
                 o.FakePlatform,
-                new UrlsView(o.GatewayUrl, o.CatalogUrl, o.OrderingUrl, o.BffUrl, o.KeycloakUrl, o.GrafanaUrl, o.ClientUrl)));
+                new UrlsView(
+                    o.GatewayUrl, o.CatalogUrl, o.OrderingUrl, o.BffUrl, o.InventoryUrl, o.PaymentsUrl, o.PaymentSimulatorUrl,
+                    o.KeycloakUrl, o.GrafanaUrl, o.ClientUrl)));
         });
 
         return app;
@@ -24,4 +26,14 @@ public static class ConfigEndpoints
 
 public sealed record ConfigView(string BackendDir, string FrontendDir, string ComposeFile, bool FakePlatform, UrlsView Urls);
 
-public sealed record UrlsView(string Gateway, string Catalog, string Ordering, string Bff, string Keycloak, string Grafana, string Client);
+public sealed record UrlsView(
+    string Gateway,
+    string Catalog,
+    string Ordering,
+    string Bff,
+    string Inventory,
+    string Payments,
+    string PaymentSimulator,
+    string Keycloak,
+    string Grafana,
+    string Client);

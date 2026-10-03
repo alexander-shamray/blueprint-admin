@@ -5,7 +5,7 @@ test('the stack screen lists the fake services and runs up', async ({ page }) =>
 
   await expect(page.locator('tbody tr')).toHaveCount(13);
   await expect(page.locator('tbody tr', { hasText: 'gateway' })).toContainText('healthy');
-  await expect(page.locator('.reachability span.up')).toHaveCount(7);
+  await expect(page.locator('.reachability span.up')).toHaveCount(9);
 
   await page.getByRole('button', { name: 'Up' }).click();
   await expect(page.locator('app-output-pane pre')).toContainText('commerce-gateway-1  Healthy');
@@ -46,6 +46,6 @@ test('reset needs the typed confirmation, then runs down -v, up and the readines
   const output = page.locator('app-output-pane pre');
   await expect(output).toContainText('Volume commerce_sql-data  Removed');
   await expect(output).toContainText('commerce-gateway-1  Healthy');
-  await expect(output).toContainText('ready: gateway, catalog, ordering, bff, keycloak, grafana');
+  await expect(output).toContainText('ready: gateway, catalog, ordering, bff, inventory, payments, keycloak, grafana');
   await expect(output).toContainText('exited 0');
 });
