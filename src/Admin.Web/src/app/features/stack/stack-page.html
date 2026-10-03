@@ -40,11 +40,28 @@
       } @else if (h.services.length === 0) {
         <p class="signals-empty">No requests recorded yet.</p>
       } @else {
-        <ul>
-          @for (svc of h.services; track svc.service) {
-            <li>{{ svc.service }} <span>{{ rate(svc.requestRate) }}</span> <span>{{ ratio(svc.errorRatio) }}</span> <span>{{ latency(svc.latencyP99Seconds) }}</span></li>
-          }
-        </ul>
+        <table class="signals">
+          <thead>
+            <tr>
+              <th>Service</th><th>Requests (req/s)</th><th>5xx share</th><th>Latency p99</th>
+              <th>422 (req/s)</th><th>401 (req/s)</th><th>Command p95</th><th>Query p95</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (svc of h.services; track svc.service) {
+              <tr>
+                <td>{{ svc.service }}</td>
+                <td>{{ rate(svc.requestRate) }}</td>
+                <td>{{ ratio(svc.errorRatio) }}</td>
+                <td>{{ duration(svc.latencyP99Seconds) }}</td>
+                <td>{{ rate(svc.domainRefusalRate) }}</td>
+                <td>{{ rate(svc.unauthorisedRate) }}</td>
+                <td>{{ duration(svc.commandP95Seconds) }}</td>
+                <td>{{ duration(svc.queryP95Seconds) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
       }
     }
   </section>
@@ -53,7 +70,7 @@
     <p class="error">Docker did not answer: {{ s.backend.error }}</p>
   }
 
-  <table>
+  <table class="services">
     <thead><tr><th>Service</th><th>State</th><th>Health</th><th>Ports</th></tr></thead>
     <tbody>
       @for (svc of s.backend.services; track svc.service) {

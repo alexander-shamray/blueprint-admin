@@ -50,9 +50,9 @@ export class StackPage {
   readonly healthError = signal<string | null>(null);
 
   /**
-   * The golden-signal strip (spec §5.8), polled on its own slower timer: every read is three
-   * Prometheus queries through Grafana, over the dashboard's multi-minute rate windows, so a
-   * 3-second tick would ask far more often than the answer can change.
+   * The golden-signal strip (spec §5.8), polled on its own slower timer: every read is one
+   * Prometheus query per dashboard panel through Grafana, over the dashboard's multi-minute rate
+   * windows, so a 3-second tick would ask far more often than the answer can change.
    */
   readonly health = toSignal(
     timer(0, 15000).pipe(
@@ -68,17 +68,17 @@ export class StackPage {
     ),
   );
 
-  /** Requests per second, the 5xx share and p99 latency as the strip prints them; absent is a dash, not a zero. */
+  /** A rate, a share and a duration as the strip's cells print them; the column header names the unit, and absent is a dash, not a zero. */
   rate(value: number | null): string {
-    return value === null ? '—' : `${value.toFixed(2)} req/s`;
+    return value === null ? '—' : value.toFixed(2);
   }
 
   ratio(value: number | null): string {
-    return value === null ? '—' : `${(value * 100).toFixed(1)} % 5xx`;
+    return value === null ? '—' : `${(value * 100).toFixed(1)} %`;
   }
 
-  latency(seconds: number | null): string {
-    return seconds === null ? '—' : `p99 ${Math.round(seconds * 1000)} ms`;
+  duration(seconds: number | null): string {
+    return seconds === null ? '—' : `${Math.round(seconds * 1000)} ms`;
   }
 
   /** On error, fall back to undefined so the config-derived links simply do not render. */
