@@ -22,6 +22,8 @@ public sealed class GatewayDriftTests
         JsonElement routes = settings.RootElement.GetProperty("ReverseProxy").GetProperty("Routes");
         List<string> drifted = [];
 
+        routes.EnumerateObject().ShouldNotBeEmpty("the gateway declares no routes this test can read");
+
         foreach (JsonProperty route in routes.EnumerateObject())
         {
             JsonElement match = route.Value.GetProperty("Match");

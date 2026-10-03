@@ -43,6 +43,8 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
         HashSet<string> configured = [.. Urls(new AdminOptions()).Select(u => new Uri(u).Authority)];
         List<string> unaccounted = [];
 
+        lines.ShouldContain(l => Command().IsMatch(l), "no fenced command was read; the fence reader no longer fits the document");
+
         foreach (string line in lines)
         {
             if (Command().IsMatch(line))
