@@ -197,6 +197,7 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
 
         using JsonDocument body = JsonDocument.Parse(result.GetProperty("body").GetString()!);
         body.RootElement.GetProperty("intent").GetProperty("status").GetString().ShouldBe("Authorised");
-        body.RootElement.GetProperty("intent").GetProperty("reference").GetString().ShouldStartWith("psp_");
+        body.RootElement.GetProperty("intent").GetProperty("reference").GetString()
+            .ShouldBe("psp_authorise:0199a1b2-0000-7000-8000-000000000002");
     }
 }
