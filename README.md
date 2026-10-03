@@ -54,9 +54,10 @@ Phases 0 to 6 of the spec: the Stack screen (Compose services, reachability,
 up, down, down with a typed `down -v` confirmation, Reset behind the same
 confirmation, which runs `down -v`, up and the readiness wait as one job, live
 output; the reference
-client's `npm start` with start, stop and its output; each service's request
-rate, 5xx share and p99 latency from Prometheus, the backend golden-signals
-dashboard's first row), the Logs screen
+client's `npm start` with start, stop and its output; a table of each
+service's golden signals from Prometheus, one column per panel of the
+backend golden-signals dashboard: request rate, 5xx share, p99 latency, the
+422 and 401 refusals, and §13.7's command and query p95), the Logs screen
 (follow, service filter, text filter, correlation-id highlight) and the API
 screen (Catalog's, Ordering's, Inventory's and Payments' OpenAPI operations
 through the gateway, the BFF quote, every host's readiness and the payment
@@ -118,9 +119,10 @@ changed between the two.
   write run in a trace the correlation id cannot reach; the Trace screen ends
   with the projection queue's depth and says why it stops there. Raised for
   `blueprint-backend`, which owns the fix.
-- The golden-signal strip shows the dashboard's rate, errors and duration row
-  only, not its refusals or §13.7 rows. A service with no 5xx shows a dash
-  for its 5xx share, not a zero: the ratio has no series for it.
+- The golden-signal strip sums the 422 panel's routes into one rate per
+  service; Grafana's panel shows the split. Its command and query p95 are
+  quantiles over the backend's `request.duration` histogram, so they are only
+  as fine as that histogram's bucket boundaries.
 
 ## Tests
 
