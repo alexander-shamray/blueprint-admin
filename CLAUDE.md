@@ -63,7 +63,8 @@ moves when a rule does. `.remember/` is session state; never edit it.
 | Fake recordings | `src/Admin.Host/Fakes/` |
 | Gateway routes (copied, cited) | `src/Admin.Host/Api/GatewayRoutes.cs` |
 | Example request bodies | `src/Admin.Host/Api/RunLocallyExamples.cs` — change when `run-locally.md` does |
-| Broker service / projection queue | `src/Admin.Host/Broker/BrokerService.cs` |
+| Broker service | `src/Admin.Host/Broker/BrokerService.cs` |
+| Platform queues, projection queue (copied, cited) | `PlatformQueues.Table` in `src/Admin.Host/Broker/PlatformQueues.cs` |
 | Drain watch after publish | `PUBLISH_OPERATION` in `src/Admin.Web/src/app/features/api/api-page.ts` |
 | Grafana / Loki / Explore | `GrafanaClient.cs`, `ExploreLink.cs` |
 | Golden-signal queries (copied, cited) | `GoldenSignals.cs` |
@@ -171,7 +172,8 @@ opens those files:
   own commit with a body that argues it. **Never revert it to clean the tree**;
   if it does not belong here, say so and ask rather than decide by deleting.
 - **Do not invent platform behaviour.** 401/403/409/422 pass through as the
-  gateway returned them. Inventory 502 is expected until that service exists.
+  gateway returned them. A fake's answer is recorded from the live service
+  where one can be, and says where it is not.
 - **The task list is `TODO.md` at the main checkout's root: gitignored,
   local, never committed.** It is for the user, and it lists open PRs
   (with the issues each closes) and open issues with no PR. Update it the
