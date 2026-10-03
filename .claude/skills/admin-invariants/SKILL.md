@@ -33,5 +33,5 @@ here. Raise a missing fact there. Ports and sibling paths:
 `src/Admin.Host/Config/AdminOptions.cs`. Gateway copies:
 `src/Admin.Host/Api/GatewayRoutes.cs`. Loopback and no login: spec §8.
 
-401/403/409/422 pass through as the gateway returned them. Inventory 502 is
-expected until that service exists.
+401/403/409/422 pass through as the gateway returned them. A fake's answer is
+recorded from the live service where one can be, and says where it is not.
