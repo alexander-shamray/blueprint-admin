@@ -51,7 +51,9 @@ Playwright smoke; it needs no Docker and no clones.
 ## What it does today
 
 Phases 0 to 6 of the spec: the Stack screen (Compose services, reachability,
-up, down, down with a typed `down -v` confirmation, live output; the reference
+up, down, down with a typed `down -v` confirmation, Reset behind the same
+confirmation, which runs `down -v`, up and the readiness wait as one job, live
+output; the reference
 client's `npm start` with start, stop and its output; each service's request
 rate, 5xx share and p99 latency from Prometheus, the backend golden-signals
 dashboard's first row), the Logs screen
@@ -70,6 +72,15 @@ response's own correlation id. The Scenario screen runs `run-locally.md`'s
 calls end to end as a realm user — publish, wait for the projection to drain,
 quote, order, cancel — stopping at the first step that does not succeed, each
 sent step linking to its own trace.
+
+The API screen also says what each service's OpenAPI document changed since
+the console last kept it: operations, response codes and schema fields added
+or removed, and since when. The first document seen for a service is kept as
+its baseline under `Admin:DataDir`, and "Accept as baseline" keeps the current
+one. It reads only the documents the screen already fetches. The Trace screen
+keeps the last few timelines per correlation id for the browser session, and a
+reload says what arrived or left since the previous fetch, or that nothing
+changed between the two.
 
 ## Known limits
 
@@ -93,6 +104,10 @@ sent step linking to its own trace.
 - Operation examples are the bodies `run-locally.md` sends where there is one,
   otherwise placeholders built from the schema; the documents carry none.
 - API history is kept only while the screen is open.
+- OpenAPI baselines live under `Admin:DataDir`, which defaults to a directory
+  inside `/artifacts/`; deleting it starts every service's baseline again.
+- Trace history lasts as long as the browser tab, and a refetch over a
+  different window is not compared.
 - The identity picker offers demo/demo and browser/browser; configuring any user
   replaces both: `--Admin:Users:0:Username=ops --Admin:Users:0:Password=…`.
 - A timeline ends at the outbox. The outbox row carries no trace context, so
