@@ -114,9 +114,10 @@ builder.Services.AddSingleton(sp => new TokenService(
 builder.Services.AddSingleton(sp =>
 {
     AdminOptions o = sp.GetRequiredService<IOptions<AdminOptions>>().Value;
-    string dataDir = o.FakePlatform ? FakeOpenApi.BaselineDirectory : Path.GetFullPath(o.DataDir, clonesBase);
 
-    return new OpenApiBaselines(dataDir, sp.GetRequiredService<TimeProvider>());
+    return o.FakePlatform
+        ? FakeOpenApi.Baselines
+        : new OpenApiBaselines(Path.GetFullPath(o.DataDir, clonesBase), sp.GetRequiredService<TimeProvider>());
 });
 builder.Services.AddSingleton(sp => new ApiCatalog(
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("platform"),

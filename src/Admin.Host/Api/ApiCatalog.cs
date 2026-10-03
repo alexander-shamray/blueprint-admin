@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Admin.Host.Config;
 using Admin.Host.Identity;
@@ -18,8 +19,11 @@ public sealed class ApiCatalog(HttpClient http, TokenService tokens, IOptions<Ad
     private readonly SemaphoreSlim gate = new(1, 1);
     private readonly Dictionary<string, IReadOnlyList<ApiOperation>> lastGood = [];
 
-    /// <summary>Each service's last fetched document, which is what accepting a baseline keeps.</summary>
-    private readonly Dictionary<string, string> lastDocument = [];
+    /// <summary>
+    /// Each service's last fetched document, which is what accepting a baseline keeps. Concurrent because the two
+    /// document loads write it from parallel continuations inside one catalog load.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, string> lastDocument = new(StringComparer.Ordinal);
     private ApiCatalogView? current;
 
     public void Dispose() => gate.Dispose();
@@ -30,11 +34,12 @@ public sealed class ApiCatalog(HttpClient http, TokenService tokens, IOptions<Ad
     public Task<ApiCatalogView> ReloadAsync(CancellationToken cancellationToken) => LoadCatalogAsync(force: true, cancellationToken);
 
     /// <summary>
-    /// Makes the document last fetched for <paramref name="service"/> its baseline, then reloads, or returns null
-    /// when no document for that name has been fetched. The name is checked against what was fetched, so it never
-    /// reaches a file path unless it is one of this catalog's own services.
+    /// Makes the document last fetched for <paramref name="service"/> its baseline, then reloads. Neither half is
+    /// set when no document for that name has been fetched; <c>Error</c> is a baseline that could not be written.
+    /// The name is checked against what was fetched, so it never reaches a file path unless it is one of this
+    /// catalog's own services.
     /// </summary>
-    public async Task<ApiCatalogView?> AcceptAsync(string service, CancellationToken cancellationToken)
+    public async Task<(ApiCatalogView? View, string? Error)> AcceptAsync(string service, CancellationToken cancellationToken)
     {
         await gate.WaitAsync(cancellationToken);
 
@@ -42,17 +47,20 @@ public sealed class ApiCatalog(HttpClient http, TokenService tokens, IOptions<Ad
         {
             if (!lastDocument.TryGetValue(service, out string? document))
             {
-                return null;
+                return (null, null);
             }
 
-            baselines.Accept(service, document);
+            if (baselines.Accept(service, document) is string error)
+            {
+                return (null, error);
+            }
         }
         finally
         {
             gate.Release();
         }
 
-        return await ReloadAsync(cancellationToken);
+        return (await ReloadAsync(cancellationToken), null);
     }
 
     private async Task<ApiCatalogView> LoadCatalogAsync(bool force, CancellationToken cancellationToken)

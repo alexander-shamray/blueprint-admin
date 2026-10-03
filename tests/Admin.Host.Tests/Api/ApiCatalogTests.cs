@@ -89,10 +89,10 @@ public sealed class ApiCatalogTests : IDisposable
         changed.Changes.FieldsAdded.ShouldContain(f => f.EndsWith(".quantityAvailable", StringComparison.Ordinal));
         changed.Changes.OperationsAdded.ShouldBeEmpty();
 
-        ApiSource accepted = (await catalog.AcceptAsync("catalog", Token))!.Sources.Single(s => s.Name == "catalog");
+        ApiSource accepted = (await catalog.AcceptAsync("catalog", Token)).View!.Sources.Single(s => s.Name == "catalog");
 
         accepted.Changes!.Any.ShouldBeFalse();
-        (await catalog.AcceptAsync("../../etc", Token)).ShouldBeNull();
+        (await catalog.AcceptAsync("../../etc", Token)).ShouldBe((null, null));
     }
 
     [Fact]

@@ -69,9 +69,22 @@ public sealed class OpenApiBaselinesTests : IDisposable
         baselines.Compare("ordering", V2).Any.ShouldBeTrue();
         baselines.Compare("ordering", V2).Any.ShouldBeTrue();
 
-        baselines.Accept("ordering", V2);
+        baselines.Accept("ordering", V2).ShouldBeNull();
 
         baselines.Compare("ordering", V2).Any.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void A_baseline_that_cannot_be_written_says_why_rather_than_throwing()
+    {
+        // A file where the directory should be: creating the directory fails, as a read-only checkout would.
+        string blocked = Path.Combine(directory, "blocked");
+        File.WriteAllText(blocked, "");
+
+        string? error = new OpenApiBaselines(blocked, time).Accept("ordering", V1);
+
+        error.ShouldNotBeNull();
+        error.ShouldContain("could not be written");
     }
 
     [Fact]

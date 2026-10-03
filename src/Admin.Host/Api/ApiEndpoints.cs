@@ -13,9 +13,12 @@ public static class ApiEndpoints
             TypedResults.Ok(await catalog.ReloadAsync(cancellationToken)));
 
         app.MapPost("/api/catalog/baseline/{service}", async Task<Results<Ok<ApiCatalogView>, ProblemHttpResult>> (string service, ApiCatalog catalog, CancellationToken cancellationToken) =>
-            await catalog.AcceptAsync(service, cancellationToken) is ApiCatalogView view
-                ? TypedResults.Ok(view)
-                : TypedResults.Problem(statusCode: StatusCodes.Status404NotFound, title: "No document", detail: $"No OpenAPI document has been fetched for '{service}'."));
+            await catalog.AcceptAsync(service, cancellationToken) switch
+            {
+                (ApiCatalogView view, _) => TypedResults.Ok(view),
+                (_, string error) => TypedResults.Problem(statusCode: StatusCodes.Status500InternalServerError, title: "Baseline not written", detail: error),
+                _ => TypedResults.Problem(statusCode: StatusCodes.Status404NotFound, title: "No document", detail: $"No OpenAPI document has been fetched for '{service}'."),
+            });
 
         app.MapPost("/api/proxy", async Task<Results<Ok<ProxyResult>, ProblemHttpResult>> (ProxyRequest request, RequestProxy proxy, CancellationToken cancellationToken) =>
             proxy.Validate(request) is string problem
