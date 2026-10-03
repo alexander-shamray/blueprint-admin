@@ -55,6 +55,8 @@ public sealed class LiteralDriftTests
 
         simulator.ShouldContain("`/__admin/requests`");
         simulator.ShouldContain("`psp_` followed by the request's `Idempotency-Key`");
+        Backend.Read("src", "Services", "Payments", "Payments.Application", "Provider", "AuthorisationRequest.cs")
+            .ShouldContain("""IdempotencyKey => $"authorise:{OrderId.Value}";""");
     }
 
     [Fact]

@@ -32,16 +32,17 @@ internal static partial class FakeGateway
         """;
 
     /// <summary>
-    /// The placed order's reservation and payment. Neither exists without a running saga, so these follow
-    /// blueprint-backend's ReservationDto and PaymentView (statuses from ReservationStatus and PaymentIntentStatus)
-    /// rather than a recording; the reference is the simulator's <c>psp_</c> plus the idempotency key.
+    /// The placed order's reservation and payment, recorded from the live services on 2026-10-03 after the
+    /// saga ran an order through, with the fake's ids in place of the recorded ones. The reference is the
+    /// simulator's <c>psp_</c> plus blueprint-backend's <c>AuthorisationRequest.IdempotencyKey</c>, which names
+    /// the step and the order; the amount is a SQL decimal, so it keeps its four places.
     /// </summary>
     private const string Reservation = $$"""
-        {"orderId":"{{PlacedOrderId}}","status":"Reserved","lines":[{"productId":"{{StockedProductId}}","quantity":1}],"updatedAt":"2026-10-03T16:40:01+00:00"}
+        {"orderId":"{{PlacedOrderId}}","status":"Reserved","lines":[{"productId":"{{StockedProductId}}","quantity":1}],"updatedAt":"2026-10-03T18:07:47.4619358+00:00"}
         """;
 
     private const string Payment = $$"""
-        {"orderId":"{{PlacedOrderId}}","order":{"placedAt":"2026-10-03T16:40:00+00:00","cancelledAt":null},"intent":{"status":"Authorised","reference":"psp_{{PlacedOrderId}}","amount":19.99,"currency":"EUR","declineReason":null,"createdAt":"2026-10-03T16:40:02+00:00"},"refund":null}
+        {"orderId":"{{PlacedOrderId}}","order":{"placedAt":"2026-10-03T18:07:45.8122024+00:00","cancelledAt":null},"intent":{"status":"Authorised","reference":"psp_authorise:{{PlacedOrderId}}","amount":19.9900,"currency":"EUR","declineReason":null,"createdAt":"2026-10-03T18:07:48.8202263+00:00"},"refund":null}
         """;
 
     private const string StockedProductId = "0199a1b2-0000-7000-8000-00000000000a";
