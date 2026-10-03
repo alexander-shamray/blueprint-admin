@@ -52,6 +52,11 @@ export class HostClient {
     return this.http.post<JobSummary>('/api/logs/follow', { services });
   }
 
+  /** Ends the follow job `jobId`; the host leaves a job that is no longer its current follow alone (spec §5.10). */
+  stopFollow(jobId: string): Observable<void> {
+    return this.http.post<void>(`/api/logs/follow/${encodeURIComponent(jobId)}/stop`, null);
+  }
+
   identityUsers(): Observable<RealmUserView[]> {
     return this.http.get<RealmUserView[]>('/api/identity/users');
   }
