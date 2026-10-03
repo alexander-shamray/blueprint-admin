@@ -82,6 +82,9 @@ sent step linking to its own trace.
 - The console does not track a client started by hand: Start still runs a
   second `npm start`, which competes for port 5173, and its output shows
   what `ng serve` did.
+- A client the console started may be in use by the client's own Playwright
+  run, which reuses a dev server it finds outside CI; Stop ends it under that
+  run. Nothing detects the run, because the host cannot observe one.
 - Stop gives up waiting after 10 s and says so in the output; the process
   may still be running.
 - The proxy sends only to the gateway, Catalog, Ordering and BFF URLs in
