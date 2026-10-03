@@ -1,0 +1,348 @@
+{
+  "RequestRate": {
+    "status": "success",
+    "data": {
+      "resultType": "vector",
+      "result": [
+        {
+          "metric": {
+            "service_name": "Payments.Api"
+          },
+          "value": [
+            1791051634.408,
+            "0"
+          ]
+        },
+        {
+          "metric": {
+            "service_name": "Inventory.Api"
+          },
+          "value": [
+            1791051634.408,
+            "0.025001458418407743"
+          ]
+        },
+        {
+          "metric": {
+            "service_name": "Catalog.Api"
+          },
+          "value": [
+            1791051634.408,
+            "0.21251151104018134"
+          ]
+        },
+        {
+          "metric": {
+            "service_name": "Gateway.Api"
+          },
+          "value": [
+            1791051634.408,
+            "0.22289027786458873"
+          ]
+        },
+        {
+          "metric": {
+            "service_name": "Web.Bff"
+          },
+          "value": [
+            1791051634.408,
+            "0.033335138986695115"
+          ]
+        },
+        {
+          "metric": {
+            "service_name": "Ordering.Api"
+          },
+          "value": [
+            1791051634.408,
+            "0.039620956428740084"
+          ]
+        },
+        {
+          "metric": {
+            "service_name": "Notifications.Worker"
+          },
+          "value": [
+            1791051634.408,
+            "0.3905363247863248"
+          ]
+        }
+      ]
+    }
+  },
+  "ErrorRatio": {
+    "status": "success",
+    "data": {
+      "resultType": "vector",
+      "result": [
+        {
+          "metric": {
+            "service_name": "Payments.Api"
+          },
+          "value": [
+            1791051636.449,
+            "NaN"
+          ]
+        },
+        {
+          "metric": {
+            "service_name": "Inventory.Api"
+          },
+          "value": [
+            1791051636.449,
+            "0"
+          ]
+        },
+        {
+          "metric": {
+            "service_name": "Notifications.Worker"
+          },
+          "value": [
+            1791051636.449,
+            "0.34604597602520887"
+          ]
+        }
+      ]
+    }
+  },
+  "LatencyP99": {
+    "status": "success",
+    "data": {
+      "resultType": "vector",
+      "result": [
+        {
+          "metric": {
+            "service_name": "Notifications.Worker"
+          },
+          "value": [
+            1791051638.522,
+            "10"
+          ]
+        },
+        {
+          "metric": {
+            "service_name": "Payments.Api"
+          },
+          "value": [
+            1791051638.522,
+            "0.028858350951374134"
+          ]
+        },
+        {
+          "metric": {
+            "service_name": "Inventory.Api"
+          },
+          "value": [
+            1791051638.522,
+            "0.07302391068076275"
+          ]
+        },
+        {
+          "metric": {
+            "service_name": "Catalog.Api"
+          },
+          "value": [
+            1791051638.522,
+            "0.041722500000000086"
+          ]
+        },
+        {
+          "metric": {
+            "service_name": "Gateway.Api"
+          },
+          "value": [
+            1791051638.522,
+            "0.5227981689177905"
+          ]
+        },
+        {
+          "metric": {
+            "service_name": "Web.Bff"
+          },
+          "value": [
+            1791051638.522,
+            "0.7160518275432836"
+          ]
+        },
+        {
+          "metric": {
+            "service_name": "Ordering.Api"
+          },
+          "value": [
+            1791051638.522,
+            "0.5810260265541374"
+          ]
+        }
+      ]
+    }
+  },
+  "DomainRefusalRate": {
+    "status": "success",
+    "data": {
+      "resultType": "vector",
+      "result": [
+        {
+          "metric": {
+            "http_route": "/v1/orders/",
+            "service_name": "Ordering.Api"
+          },
+          "value": [
+            1791051640.569,
+            "0.03197185993860855"
+          ]
+        },
+        {
+          "metric": {
+            "http_route": "/api/v1/orders/{**catch-all}",
+            "service_name": "Gateway.Api"
+          },
+          "value": [
+            1791051640.569,
+            "0.0318962296254627"
+          ]
+        }
+      ]
+    }
+  },
+  "UnauthorisedRate": {
+    "status": "success",
+    "data": {
+      "resultType": "vector",
+      "result": [
+        {
+          "metric": {
+            "service_name": "Inventory.Api"
+          },
+          "value": [
+            1791051642.646,
+            "0"
+          ]
+        },
+        {
+          "metric": {
+            "service_name": "Gateway.Api"
+          },
+          "value": [
+            1791051642.646,
+            "0.033335416796883136"
+          ]
+        },
+        {
+          "metric": {
+            "service_name": "Notifications.Worker"
+          },
+          "value": [
+            1791051642.646,
+            "0.006666666666666667"
+          ]
+        }
+      ]
+    }
+  },
+  "CommandP95": {
+    "status": "success",
+    "data": {
+      "resultType": "vector",
+      "result": [
+        {
+          "metric": {
+            "service_name": "Shipping.Worker"
+          },
+          "value": [
+            1791051644.72,
+            "4.75"
+          ]
+        },
+        {
+          "metric": {
+            "service_name": "Payments.Api"
+          },
+          "value": [
+            1791051644.72,
+            "4.749999999999999"
+          ]
+        },
+        {
+          "metric": {
+            "service_name": "Inventory.Api"
+          },
+          "value": [
+            1791051644.72,
+            "4.749999999999999"
+          ]
+        },
+        {
+          "metric": {
+            "service_name": "Catalog.Api"
+          },
+          "value": [
+            1791051644.72,
+            "NaN"
+          ]
+        },
+        {
+          "metric": {
+            "service_name": "Notifications.Worker"
+          },
+          "value": [
+            1791051644.72,
+            "4.749999999999999"
+          ]
+        },
+        {
+          "metric": {
+            "service_name": "Ordering.Api"
+          },
+          "value": [
+            1791051644.72,
+            "4.75"
+          ]
+        }
+      ]
+    }
+  },
+  "QueryP95": {
+    "status": "success",
+    "data": {
+      "resultType": "vector",
+      "result": [
+        {
+          "metric": {
+            "service_name": "Payments.Api"
+          },
+          "value": [
+            1791051646.788,
+            "NaN"
+          ]
+        },
+        {
+          "metric": {
+            "service_name": "Inventory.Api"
+          },
+          "value": [
+            1791051646.788,
+            "4.749999999999999"
+          ]
+        },
+        {
+          "metric": {
+            "service_name": "Catalog.Api"
+          },
+          "value": [
+            1791051646.788,
+            "4.75"
+          ]
+        },
+        {
+          "metric": {
+            "service_name": "Ordering.Api"
+          },
+          "value": [
+            1791051646.788,
+            "4.75"
+          ]
+        }
+      ]
+    }
+  }
+}

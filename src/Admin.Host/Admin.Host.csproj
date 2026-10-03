@@ -20,6 +20,7 @@
     <EmbeddedResource Include="Fakes\fixtures\grafana-datasources.json" LogicalName="grafana-datasources.json" />
     <EmbeddedResource Include="Fakes\fixtures\grafana-loki-query.json" LogicalName="grafana-loki-query.json" />
     <EmbeddedResource Include="Fakes\fixtures\grafana-tempo-trace.json" LogicalName="grafana-tempo-trace.json" />
+    <EmbeddedResource Include="Fakes\fixtures\grafana-prometheus-golden-signals.json" LogicalName="grafana-prometheus-golden-signals.json" />
   </ItemGroup>
 
 </Project>
