@@ -8,8 +8,9 @@ const queues: QueuesView = {
   reachable: true,
   error: null,
   queues: [
-    { name: 'ordering-catalog-events', messages: 2, isErrorQueue: false },
-    { name: 'ordering-catalog-events_error', messages: 1, isErrorQueue: true },
+    { name: 'ordering-catalog-events', messages: 2, isErrorQueue: false, consumer: "Ordering's price projection" },
+    { name: 'ordering-catalog-events_error', messages: 1, isErrorQueue: true, consumer: "Ordering's price projection" },
+    { name: 'something-else', messages: 0, isErrorQueue: false, consumer: null },
   ],
   projection: { queue: 'ordering-catalog-events', found: true, messages: 2, drained: false },
 };
@@ -60,7 +61,11 @@ describe('BrokerPage', () => {
   it('lists queues with depth, marks error queues in text, and shows the drained indicator', () => {
     const fixture = render();
 
-    expect(rows(fixture, 'queues')).toEqual(['ordering-catalog-events 2', '[error] ordering-catalog-events_error 1']);
+    expect(rows(fixture, 'queues')).toEqual([
+      "ordering-catalog-events 2 Ordering's price projection",
+      "[error] ordering-catalog-events_error 1 Ordering's price projection",
+      'something-else 0',
+    ]);
     expect(fixture.nativeElement.querySelector('table.queues tr.error-queue')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('app-drained-indicator')?.textContent).toContain('[waiting]');
   });
@@ -129,7 +134,7 @@ describe('BrokerPage', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('.error')?.textContent).toContain('boom');
-    expect(rows(fixture, 'queues').length).toBe(2);
+    expect(rows(fixture, 'queues').length).toBe(3);
   });
 
   it('a failed exchanges read is not cleared by a queues read that succeeds after it', async () => {

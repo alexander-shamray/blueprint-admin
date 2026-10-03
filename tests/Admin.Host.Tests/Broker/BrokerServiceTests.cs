@@ -36,13 +36,14 @@ public sealed class BrokerServiceTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task Queues_are_listed_by_name_with_error_queues_marked()
+    public async Task Queues_are_listed_by_name_with_error_queues_marked_and_their_consumer_named()
     {
         runner.On("docker", Exec + "list_queues", 0,
             "[",
             """{"name":"ordering-commands","messages":0}""",
             """,{"name":"ordering-catalog-events_error","messages":1}""",
             """,{"name":"ordering-catalog-events","messages":3}""",
+            """,{"name":"something-else","messages":0}""",
             "]");
 
         QueuesView view = await Service.QueuesAsync(TestContext.Current.CancellationToken);
@@ -50,9 +51,10 @@ public sealed class BrokerServiceTests : IAsyncDisposable
         view.Reachable.ShouldBeTrue();
         view.Queues.ShouldBe(
         [
-            new BrokerQueue("ordering-catalog-events", 3, false),
-            new BrokerQueue("ordering-catalog-events_error", 1, true),
-            new BrokerQueue("ordering-commands", 0, false),
+            new BrokerQueue("ordering-catalog-events", 3, false, "Ordering's price projection"),
+            new BrokerQueue("ordering-catalog-events_error", 1, true, "Ordering's price projection"),
+            new BrokerQueue("ordering-commands", 0, false, "Ordering's command consumers"),
+            new BrokerQueue("something-else", 0, false, null),
         ]);
     }
 

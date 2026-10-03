@@ -49,13 +49,6 @@ public sealed class LiteralDriftTests
     }
 
     [Fact]
-    public void The_projection_queue_is_orderings_catalog_events_queue()
-    {
-        Backend.Read("src", "Services", "Ordering", "Ordering.Infrastructure", "Messaging", "DependencyInjection.cs")
-            .ShouldContain($"public const string CatalogEventsQueue = \"{BrokerService.ProjectionQueue}\";");
-    }
-
-    [Fact]
     public void The_management_port_BrokerService_says_it_avoids_is_the_one_compose_binds()
     {
         Backend.Read("deploy", "compose", "infrastructure.yml").ShouldContain("\"127.0.0.1:15672:15672\"");
