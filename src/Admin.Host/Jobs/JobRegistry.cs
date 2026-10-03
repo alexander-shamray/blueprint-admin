@@ -3,8 +3,9 @@ using System.Collections.Concurrent;
 namespace Admin.Host.Jobs;
 
 /// <summary>
-/// Every job the host has started, in memory for the host's lifetime, exited ones trimmed past the last fifty.
-/// The trim runs whenever a job is created or exits, so a host that stops creating jobs still lets go of old ones.
+/// Every listed job the host has started (<see cref="ProcessSpec.Listed"/>), in memory for the host's lifetime,
+/// exited ones trimmed past the last fifty. The trim runs whenever a job is created or exits, so a host that stops
+/// creating jobs still lets go of old ones.
 /// </summary>
 public sealed class JobRegistry(TimeProvider time)
 {
@@ -16,6 +17,14 @@ public sealed class JobRegistry(TimeProvider time)
     public Job Create(ProcessSpec spec)
     {
         Job job = new(Guid.CreateVersion7().ToString("N"), spec, time);
+
+        // Kept, a read would count against KeepExited: the Stack screen's ps poll alone would push an exited
+        // npm start, and the output that says why it died, out of reach within three minutes.
+        if (!spec.Listed)
+        {
+            return job;
+        }
+
         jobs[job.Id] = job;
         _ = job.Completion.ContinueWith(_ => Trim(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
         Trim();

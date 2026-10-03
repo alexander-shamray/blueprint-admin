@@ -85,4 +85,25 @@ public sealed class JobRegistryTests
         registry.Find(jobs[1].Id).ShouldBeNull();
         registry.Find(jobs[2].Id).ShouldNotBeNull();
     }
+
+    [Fact]
+    public void An_unlisted_job_is_not_kept_and_does_not_count_against_the_keep_limit()
+    {
+        FakeTimeProvider time = new();
+        JobRegistry registry = new(time);
+        Job kept = registry.Create(Spec);
+        kept.MarkExited(1);
+
+        for (int i = 0; i < JobRegistry.KeepExited + 1; i++)
+        {
+            time.Advance(TimeSpan.FromSeconds(1));
+            Job read = registry.Create(Spec with { Listed = false });
+            read.MarkExited(0);
+
+            registry.Find(read.Id).ShouldBeNull();
+        }
+
+        registry.Find(kept.Id).ShouldBeSameAs(kept);
+        registry.All().ShouldHaveSingleItem().ShouldBeSameAs(kept);
+    }
 }

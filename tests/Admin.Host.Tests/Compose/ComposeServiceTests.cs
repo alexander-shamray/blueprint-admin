@@ -108,7 +108,9 @@ public sealed class ComposeServiceTests : IAsyncDisposable
         await cts.CancelAsync();
 
         await Should.ThrowAsync<OperationCanceledException>(() => psTask);
-        registry.All().Single().State.ShouldBe(JobState.Exited);
+        runner.Started.Count.ShouldBe(1);
+        runner.LastStarted.ShouldNotBeNull().State.ShouldBe(JobState.Exited);
+        registry.All().ShouldBeEmpty();
     }
 
     [Fact]
@@ -126,7 +128,9 @@ public sealed class ComposeServiceTests : IAsyncDisposable
 
         status.Reachable.ShouldBeFalse();
         status.Error.ShouldNotBeNull().ShouldContain("did not answer within 30 seconds");
-        registry.All().Single().State.ShouldBe(JobState.Exited);
+        runner.Started.Count.ShouldBe(1);
+        runner.LastStarted.ShouldNotBeNull().State.ShouldBe(JobState.Exited);
+        registry.All().ShouldBeEmpty();
     }
 
     [Fact]
@@ -187,7 +191,9 @@ public sealed class ComposeServiceTests : IAsyncDisposable
         CommandOutput output = await execTask.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
         output.Error.ShouldBe("docker compose exec rabbitmq did not answer within 30 seconds");
-        registry.All().Single().State.ShouldBe(JobState.Exited);
+        runner.Started.Count.ShouldBe(1);
+        runner.LastStarted.ShouldNotBeNull().State.ShouldBe(JobState.Exited);
+        registry.All().ShouldBeEmpty();
     }
 
     [Fact]
@@ -200,7 +206,9 @@ public sealed class ComposeServiceTests : IAsyncDisposable
         await cts.CancelAsync();
 
         await Should.ThrowAsync<OperationCanceledException>(() => execTask);
-        registry.All().Single().State.ShouldBe(JobState.Exited);
+        runner.Started.Count.ShouldBe(1);
+        runner.LastStarted.ShouldNotBeNull().State.ShouldBe(JobState.Exited);
+        registry.All().ShouldBeEmpty();
     }
 
     [Fact]
@@ -252,5 +260,22 @@ public sealed class ComposeServiceTests : IAsyncDisposable
 
         output.Error.ShouldBe("docker compose exec rabbitmq printed more than 2000 lines; only the last 2000 were kept");
         output.Stdout.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task However_many_ps_and_exec_reads_run_an_exited_job_stays_findable()
+    {
+        runner.On("docker", $"compose -f {Paths.ComposeFile} ps -a --format json", 0)
+            .On("docker", $"compose -f {Paths.ComposeFile} exec -T rabbitmq", 0, "[", "]");
+        Job down = Service.Down(wipeVolumes: false);
+
+        for (int i = 0; i < JobRegistry.KeepExited + 1; i++)
+        {
+            time.Advance(TimeSpan.FromSeconds(3));
+            await Service.PsAsync(TestContext.Current.CancellationToken);
+            await Service.ExecAsync("rabbitmq", ["rabbitmqctl", "list_queues"], TestContext.Current.CancellationToken);
+        }
+
+        registry.All().ShouldHaveSingleItem().ShouldBeSameAs(down);
     }
 }
