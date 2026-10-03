@@ -6,7 +6,9 @@ namespace Admin.Host.Jobs;
 /// <summary>
 /// One run of a child process: its output as a bounded ring of numbered lines,
 /// and a channel per live follower. One-shot commands and long-running ones
-/// are the same type so that every command's output is visible the same way.
+/// are the same type, so every listed command's output is visible the same way
+/// by id; a read the registry does not keep (ProcessSpec.Listed) reaches a
+/// screen only as the view its caller parses.
 /// A follower's channel holds at most a ring's worth of lines: one that falls
 /// that far behind is ended rather than buffered without bound, and resumes
 /// from the ring by sequence number (an EventSource does this on its own).

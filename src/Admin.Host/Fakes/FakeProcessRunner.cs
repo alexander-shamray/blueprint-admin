@@ -14,6 +14,7 @@ public sealed class FakeProcessRunner(JobRegistry registry) : IProcessRunner, IA
     private readonly List<FakeScript> scripts = [];
     private readonly List<ProcessSpec> started = [];
     private readonly List<Job> longRunning = [];
+    private Job? lastStarted;
 
     /// <summary>A snapshot of every spec started so far, oldest first.</summary>
     public IReadOnlyList<ProcessSpec> Started
@@ -23,6 +24,23 @@ public sealed class FakeProcessRunner(JobRegistry registry) : IProcessRunner, IA
             lock (gate)
             {
                 return [.. started];
+            }
+        }
+    }
+
+    /// <summary>
+    /// The most recent job started, listed or not: an unlisted job is out of the registry by design, and a
+    /// test still needs its final state. One job, not a list: FakePlatform's runner is a singleton that
+    /// starts a ps every Stack poll, and a list would keep each one, output ring and all, for the host's
+    /// life, which is the retention ProcessSpec.Listed removes.
+    /// </summary>
+    public Job? LastStarted
+    {
+        get
+        {
+            lock (gate)
+            {
+                return lastStarted;
             }
         }
     }
@@ -62,6 +80,7 @@ public sealed class FakeProcessRunner(JobRegistry registry) : IProcessRunner, IA
         lock (gate)
         {
             started.Add(spec);
+            lastStarted = job;
             script = scripts.FirstOrDefault(s => s.FileName == spec.FileName && arguments.StartsWith(s.ArgumentPrefix, StringComparison.Ordinal));
         }
 

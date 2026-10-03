@@ -18,14 +18,14 @@ public sealed class ComposeService(IProcessRunner runner, RepoPaths paths, TimeP
 
     public Job FollowLogs(IReadOnlyList<string> services) => Run(["logs", "-f", "--tail", "200", .. services]);
 
-    public Job Exec(string service, params string[] args) => Run(["exec", "-T", service, .. args]);
+    public Job Exec(string service, params string[] args) => Read(["exec", "-T", service, .. args]);
 
     public Task<CommandOutput> ExecAsync(string service, string[] args, CancellationToken cancellationToken) =>
         CompleteAsync(Exec(service, args), $"docker compose exec {service}", cancellationToken);
 
     public async Task<ComposeStatus> PsAsync(CancellationToken cancellationToken)
     {
-        CommandOutput output = await CompleteAsync(Run("ps", "-a", "--format", "json"), "docker compose ps", cancellationToken);
+        CommandOutput output = await CompleteAsync(Read("ps", "-a", "--format", "json"), "docker compose ps", cancellationToken);
 
         if (output.Error is not null)
         {
@@ -96,5 +96,13 @@ public sealed class ComposeService(IProcessRunner runner, RepoPaths paths, TimeP
         return CommandOutput.Answered([.. lines.Where(l => l.Stream == OutputStream.Stdout).Select(l => l.Text)]);
     }
 
-    private Job Run(params string[] args) => runner.Start(new ProcessSpec("docker", ["compose", "-f", paths.ComposeFile, .. args], paths.BackendDir));
+    private Job Run(params string[] args) => runner.Start(Spec(args));
+
+    /// <summary>
+    /// A read: its output reaches a screen only as the view the caller parses, never by job id, so the registry
+    /// does not keep it (<see cref="ProcessSpec.Listed"/>).
+    /// </summary>
+    private Job Read(params string[] args) => runner.Start(Spec(args) with { Listed = false });
+
+    private ProcessSpec Spec(string[] args) => new("docker", ["compose", "-f", paths.ComposeFile, .. args], paths.BackendDir);
 }

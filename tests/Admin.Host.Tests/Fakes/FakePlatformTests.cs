@@ -74,6 +74,18 @@ public sealed class FakePlatformTests : IClassFixture<AdminHostFactory>
         job.GetProperty("lines").EnumerateArray().Select(l => l.GetProperty("text").GetString()!).ShouldContain(t => t.Contains("CorrelationId=fake-corr-0001"));
     }
 
+    [Fact]
+    public async Task Stack_and_broker_reads_are_not_listed_among_the_jobs()
+    {
+        await client.GetFromJsonAsync<JsonElement>("/api/stack", TestContext.Current.CancellationToken);
+        await client.GetFromJsonAsync<JsonElement>("/api/broker/queues", TestContext.Current.CancellationToken);
+
+        JsonElement jobs = await client.GetFromJsonAsync<JsonElement>("/api/jobs", TestContext.Current.CancellationToken);
+
+        jobs.EnumerateArray().Select(j => j.GetProperty("commandLine").GetString()!)
+            .ShouldAllBe(c => !c.Contains(" ps ") && !c.Contains(" exec "));
+    }
+
     private async Task<IReadOnlyList<string>> FollowAsync(string[] services)
     {
         HttpResponseMessage started = await client.PostAsJsonAsync("/api/logs/follow", new { services }, TestContext.Current.CancellationToken);
