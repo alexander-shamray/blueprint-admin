@@ -231,6 +231,16 @@ an exited `npm start`, and the output that says why it died, past
 - `Exec(service, args)`: `exec -T service args`, a one-shot job whose stdout
   the caller parses; like `Ps()`, a job the registry does not keep (§5.2).
 
+`ResetService` is "back to a known state" as one listed job: `Down(true)`,
+then `Up()`, then the reachability probe of §5.10's `GET /stack` until every
+platform surface answers (the reference client is not waited for). It polls
+at `ResetService.ReadinessInterval` up to `ResetService.ReadinessCap`, saying
+on each poll what it is still waiting for, and a step that fails ends it
+there. The reset job owns no process: it carries its steps' output, in order,
+under one id. It wipes volumes, so its endpoint takes the same typed
+confirmation as `down -v`. There is no seed step: the backend has no seed to
+run yet.
+
 ### 5.4 FrontendSupervisor
 
 Holds at most one `npm start` job in `FrontendDir`. `Start()` refuses if one
@@ -272,6 +282,15 @@ placeholders built from the request schema, since the documents carry no
 examples), and the edge policy from a cited copy of the gateway's route table
 (`Api/GatewayRoutes.cs`). The catalog is cached and reloaded on demand; when a
 service is down its operations are listed as unavailable rather than dropped.
+
+Each document read is also compared with the one kept for its service
+(`OpenApiBaselines`, under `Admin:DataDir`), and the source carries the
+difference: operations, response codes and schema fields added or removed.
+The first document seen for a service becomes its baseline. After that the
+baseline stays until it is accepted again, so a change keeps showing until
+someone has read it. This is a read of documents the catalog already fetches,
+with no new upstream call. FakePlatform keeps its baselines in a directory of
+its own per process.
 
 `RequestProxy.Send(request)` takes method, an absolute URL restricted to the
 configured surfaces (the gateway, Catalog, Ordering and BFF origins), headers,
@@ -358,6 +377,15 @@ span is a one-line change and an unrecognised span is still shown as `Span`.
 Each row deep-links to Grafana Explore with the datasource and query
 pre-filled.
 
+The Trace screen keeps the last few timelines per correlation id for the
+browser session (`TraceHistory`, bounded by `KEPT_PER_ID` and `KEPT_IDS`),
+in memory and never in storage. A refetch of the same id, over the same
+window, names what arrived and what left since the previous fetch, or says
+that nothing changed with both fetch times, so a stalled flow reads
+differently from a finished one. The terminal `Queued` row is compared by
+its summary alone, because its time is the snapshot's own. The diff is over
+what the screen already read; it adds no upstream query.
+
 ### 5.10 Endpoints
 
 All under `/api`, JSON, loopback only.
@@ -367,6 +395,7 @@ All under `/api`, JSON, loopback only.
 | `GET /stack` | `ServiceStatus[]`, the frontend job summary, and reachability of gateway, Keycloak, Grafana and the client |
 | `POST /stack/backend/up` | Compose up; returns the job |
 | `POST /stack/backend/down` | body `{ wipeVolumes, confirm }`; returns the job |
+| `POST /stack/backend/reset` | body `{ confirm }`, which must be `down -v`; §5.3's reset, returned as one job, or the one still running |
 | `POST /stack/frontend/start`, `POST /stack/frontend/stop` | supervisor |
 | `GET /jobs`, `GET /jobs/{id}` | summaries; one job with its last lines |
 | `GET /jobs/{id}/stream` | Server-Sent Events, one event per line, `id:` is the sequence number so `Last-Event-ID` resumes from the ring buffer |
@@ -375,6 +404,7 @@ All under `/api`, JSON, loopback only.
 | `GET /broker/queues`, `/broker/exchanges`, `/broker/permissions` | §5.5; `queues` also carries `projection`, the drain state of `ordering-catalog-events` |
 | `GET /identity/users`, `POST /identity/token` | §5.6 |
 | `GET /catalog/operations`, `POST /catalog/reload` | §5.7 |
+| `POST /catalog/baseline/{service}` | makes that service's last fetched document its baseline, then reloads; 404 for a name the catalog has not fetched |
 | `POST /proxy` | §5.7 |
 | `GET /trace/{correlationId}?window=15m` | §5.9. `window` is `90s`/`15m`/`2h` bounded to `[1m, 24h]`, default `15m`; a window outside it, and an id outside the backend's adoptable alphabet (the id reaches a LogQL string, so this is the injection boundary), are 400 problem details. |
 | `GET /telemetry/health` | the golden-signal strip |
@@ -392,11 +422,11 @@ output pane, status pill and JSON viewer.
 
 | Screen | Shows | Does |
 |---|---|---|
-| **Stack** | one row per Compose service with state, health and port; the frontend job; a reachability strip; quick links to the client, Grafana, Keycloak | Up, Down, Down and wipe (typed confirmation), Start and Stop frontend; opens the job's output pane |
+| **Stack** | one row per Compose service with state, health and port; the frontend job; a reachability strip; quick links to the client, Grafana, Keycloak | Up, Down, Down and wipe, Reset (both behind one typed confirmation), Start and Stop frontend; opens the job's output pane |
 | **Logs** | a follow stream with service filter, text search and correlation-id highlight | start, stop (the host's follow job too, as does leaving the screen), clear |
 | **Broker** | queues with depth, `_error` queues in red, exchanges, permissions; a drained indicator for `ordering-catalog-events` | refresh, auto-refresh of all three |
-| **API** | operation tree on the left; request editor (path params, headers, body pre-filled from the schema example, `commandId` generated per send) and identity picker; response pane with status, timing, headers, body; a history list | Send; "Trace this call" opens the Trace screen with the response's correlation id |
-| **Trace** | the §5.9 timeline for a correlation id, grouped by service, with Grafana deep links | enter an id or arrive from the API screen |
+| **API** | operation tree on the left, each source with what its document changed since the kept baseline; request editor (path params, headers, body pre-filled from the schema example, `commandId` generated per send) and identity picker; response pane with status, timing, headers, body; a history list | Send; accept a changed document as the new baseline; "Trace this call" opens the Trace screen with the response's correlation id |
+| **Trace** | the §5.9 timeline for a correlation id, grouped by service, with Grafana deep links, and on a refetch what arrived or left since the last one | enter an id or arrive from the API screen; reload |
 | **Scenario** | `run-locally.md`'s calls as five steps — publish, wait for the drain, quote, order, cancel — each with its status and body, and each HTTP step with its own correlation id | Run as a realm user; each step that sent links to its trace; the first step that does not succeed ends the run |
 
 The API screen keeps one behaviour from `run-locally.md` explicit: after a
