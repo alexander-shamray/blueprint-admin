@@ -89,6 +89,7 @@ public sealed class ResetServiceTests : IAsyncDisposable
     {
         runner.On("docker", Prefix + "down -v", 0).On("docker", Prefix + "up -d --wait", 0);
 
+        DateTimeOffset start = time.GetUtcNow();
         Job reset = Service(_ => Task.FromResult<IReadOnlyList<Reachability>>([new("ordering", "", false, null)])).Start();
 
         int seen = 0;
@@ -108,6 +109,10 @@ public sealed class ResetServiceTests : IAsyncDisposable
 
         reset.Status.ExitCode.ShouldBe(1);
         Texts(reset)[^1].ShouldBe($"not ready after {ResetService.ReadinessCap.TotalSeconds:0} s: ordering");
+
+        // The message names the cap; these say it was reached, one interval at a time, and not before.
+        (time.GetUtcNow() - start).ShouldBe(ResetService.ReadinessCap);
+        Waits(reset).ShouldBe((int)(ResetService.ReadinessCap / ResetService.ReadinessInterval));
     }
 
     [Fact]

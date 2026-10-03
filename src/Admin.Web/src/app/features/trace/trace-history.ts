@@ -12,8 +12,8 @@ export interface TraceFetch {
 }
 
 /**
- * What moved between two fetches of one id. `comparable` is false when the window differs, because an
- * event can leave or enter a timeline only by the window moving and that is not news about the flow.
+ * What moved between two fetches of one id. `comparable` is false when the window differs, because then
+ * events also enter and leave by the window moving, which is not news about the flow.
  */
 export interface TraceDiff {
   previousAt: Date;

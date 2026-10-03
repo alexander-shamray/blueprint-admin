@@ -6,9 +6,10 @@ namespace Admin.Host.Stack;
 
 /// <summary>
 /// "Back to a known state" as one job: <c>down -v</c>, then <c>up -d --wait</c>, then the Stack screen's
-/// readiness probe until every platform surface answers or the cap runs out (spec §5.3). Each step is the
-/// command <see cref="ComposeService"/> already runs, so nothing here is a line run-locally.md lacks; the
-/// reset job owns no process and carries its steps' output, in order, under one id.
+/// readiness probe until every platform surface answers or the cap runs out (spec §5.3). The two Compose
+/// steps are commands <see cref="ComposeService"/> already runs and the wait is the probe GET /api/stack
+/// already makes, so nothing here is a line run-locally.md lacks; the reset job owns no process and carries
+/// its steps' output, in order, under one id.
 /// </summary>
 public sealed class ResetService(
     ComposeService compose,

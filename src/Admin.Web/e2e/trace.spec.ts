@@ -46,7 +46,7 @@ test('a trace is shareable by URL and the window chosen is the one reported back
   await expect(page.locator('p.summary')).toContainText('over the last 6h');
 });
 
-// FakeGrafana.MovingPrefix: an id under it gains Ordering's consume from its second fetch on. A fresh
+// FakeGrafana.MovingPrefix: an id under it gains a later call, the same publish sent again, from its second fetch on. A fresh
 // id per run, because the fake counts fetches per id for the life of the host.
 test('a refetch names what arrived since the last fetch, and says so when nothing did', async ({ page }) => {
   const id = `fake-moving-${Date.now()}`;
@@ -55,8 +55,8 @@ test('a refetch names what arrived since the last fetch, and says so when nothin
   await expect(page.locator('.changes')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Reload' }).click();
-  await expect(page.locator('.changes .changed')).toContainText('1 new, 0 no longer in the window');
-  await expect(page.locator('.change-list .arrived')).toContainText('Consumed PriceChanged on ordering-catalog-events');
+  await expect(page.locator('.changes .changed')).toContainText('1 new, 0 no longer in the timeline');
+  await expect(page.locator('.change-list .arrived')).toContainText('the same commandId sent again');
   await expect(page.locator('table.timeline tbody tr.arrived td.kind')).toContainText('[new]');
 
   await page.getByRole('button', { name: 'Reload' }).click();

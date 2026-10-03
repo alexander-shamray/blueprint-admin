@@ -54,7 +54,7 @@
       } @else {
         <p class="changed" role="status">
           Since the fetch at {{ d.previousAt | date: 'HH:mm:ss' }}: {{ d.arrived.length }} new, {{ d.gone.length }} no
-          longer in the window.
+          longer in the timeline.
         </p>
         <ul class="change-list">
           @for (event of d.arrived; track $index) {
