@@ -6,7 +6,8 @@ namespace Admin.Host.Fakes;
 
 /// <summary>
 /// Grafana's datasource list and its Loki, Tempo and Prometheus proxies in FakePlatform mode. The
-/// three fixture recordings mirror the shapes measured on <c>grafana/otel-lgtm</c> 13.1.1 (plan M4, M5 and M6):
+/// datasource, Loki and Tempo recordings mirror the shapes measured on <c>grafana/otel-lgtm</c> 13.1.1 (plan M4, M5 and M6),
+/// and <see cref="Prometheus"/> says where its own recording comes from:
 /// Loki answers a <c>streams</c> envelope whose line body is the formatted message and whose
 /// <c>CorrelationId</c> is structured metadata, and Tempo answers OTLP-JSON with base64 ids.
 /// <para>

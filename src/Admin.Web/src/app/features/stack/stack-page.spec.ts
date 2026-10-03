@@ -219,8 +219,8 @@ describe('StackPage', () => {
       ]);
       const rows = Array.from(fixture.nativeElement.querySelectorAll('table.signals tbody tr')) as HTMLElement[];
       expect(rows.map((r) => text(r))).toEqual([
-        'Catalog.Api 1.20 0.0 % 48 ms 0.00 0.20 12 ms —',
-        'Gateway.Api 2.40 — 90 ms 0.75 0.00 — —',
+        'Catalog.Api 1.2 0.0 % 48 ms 0 0.2 12 ms —',
+        'Gateway.Api 2.4 — 90 ms 0.75 0 — —',
       ]);
     });
 

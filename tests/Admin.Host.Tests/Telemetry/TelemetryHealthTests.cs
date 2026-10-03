@@ -213,16 +213,19 @@ public sealed class TelemetryHealthTests(AdminHostFactory factory) : IClassFixtu
     public async Task A_cold_read_that_succeeds_asks_the_datasource_list_once_for_all_seven_queries()
     {
         // The case above never reaches the fan-out. This one does, and the six fanned-out queries must
-        // read the uid the first one cached. Counted here rather than through ScriptedHandler.Requests, a
-        // plain List the fan-out may add to from more than one thread.
+        // read the uid the first one cached. The list answers late, so that queries started together would
+        // all be waiting on it and each ask; a synchronous answer would cache before a second one began.
+        // Counted here rather than through ScriptedHandler.Requests, a plain List the fan-out may add to from
+        // more than one thread.
         int listRequests = 0;
         int queryRequests = 0;
         TelemetryHealthService health = new(new GrafanaClient(
-            new HttpClient(new ScriptedHandler(request =>
+            new HttpClient(new ScriptedHandler(async (request, cancellationToken) =>
             {
                 if (request.RequestUri!.AbsolutePath == "/api/datasources")
                 {
                     Interlocked.Increment(ref listRequests);
+                    await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken);
                     return FakeJson(Datasources);
                 }
 
@@ -254,6 +257,9 @@ public sealed class TelemetryHealthTests(AdminHostFactory factory) : IClassFixtu
 
         // Catalog.Api served requests and answered no 5xx: a zero share, where the ratio itself has no series.
         services["Catalog.Api"].GetProperty("errorRatio").GetDouble().ShouldBe(0);
+        // Each query reaches its own recording: a fall-through to the empty vector would null these two.
+        services["Notifications.Worker"].GetProperty("errorRatio").GetDouble().ShouldBeGreaterThan(0);
+        services["Catalog.Api"].GetProperty("queryP95Seconds").GetDouble().ShouldBeGreaterThan(0);
         // Gateway.Api's 401s and 422s were recorded; its counters never recorded a command or a query.
         services["Gateway.Api"].GetProperty("unauthorisedRate").GetDouble().ShouldBeGreaterThan(0);
         services["Gateway.Api"].GetProperty("domainRefusalRate").GetDouble().ShouldBeGreaterThan(0);

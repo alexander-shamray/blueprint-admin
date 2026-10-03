@@ -80,7 +80,7 @@ console reports its absence (no `node_modules`) rather than running it.
 | Payments API | `http://localhost:5104` | `/openapi/v1.json` (token required); `/health/ready` |
 | Payment simulator | `http://localhost:5190` | `/__admin/requests`, what Payments asked the provider; a decline is caused by the order's amount |
 | Keycloak | `http://localhost:8080` | password grant on realm `commerce`, client `web-app` |
-| Grafana | `http://localhost:3000` | `GET /api/datasources`, `POST /api/ds/query` for Tempo, Loki and Prometheus |
+| Grafana | `http://localhost:3000` | `GET /api/datasources`, then the datasource proxy for Tempo, Loki and Prometheus (§5.8) |
 | Reference client | `http://localhost:5173` | a link, and the port the gateway's CORS admits |
 
 The Grafana container is the `grafana/otel-lgtm` bundle, which enables
