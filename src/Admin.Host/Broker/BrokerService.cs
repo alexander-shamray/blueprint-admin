@@ -9,7 +9,7 @@ namespace Admin.Host.Broker;
 /// </summary>
 public sealed class BrokerService(ComposeService compose)
 {
-    /// <summary>The Compose service, owned by the backend's deploy/compose/infrastructure.yml.</summary>
+    /// <summary>The Compose service, owned by blueprint-backend deploy/compose/infrastructure.yml.</summary>
     public const string Service = "rabbitmq";
 
     /// <summary>

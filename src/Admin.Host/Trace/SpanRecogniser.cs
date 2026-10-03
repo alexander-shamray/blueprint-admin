@@ -14,10 +14,10 @@ public sealed record SpanRule(string Why, Func<TempoSpan, bool> Matches, TraceEv
 public static class SpanRecogniser
 {
     /// <summary>
-    /// Owner of the literal: blueprint-backend <c>Common.Infrastructure.Outbox.OutboxMessage</c> and
-    /// the <c>OutboxMessages</c> table its configuration maps to.
+    /// Owner of the literal: blueprint-backend <c>Common.Infrastructure.Outbox.OutboxTable</c>, the
+    /// table <c>OutboxMessage</c> maps to.
     /// </summary>
-    private const string OutboxTable = "OutboxMessages";
+    internal const string OutboxTable = "OutboxMessages";
 
     /// <summary>
     /// The keys a database span can name its statement or its table under. Both the current and the
