@@ -37,7 +37,7 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
         JsonElement after = await accepted.Content.ReadFromJsonAsync<JsonElement>(Token);
         Source(after, "catalog").GetProperty("changes").GetProperty("fieldsAdded").GetArrayLength().ShouldBe(0);
 
-        (await client.PostAsync("/api/catalog/baseline/inventory", null, Token)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await client.PostAsync("/api/catalog/baseline/shipping", null, Token)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     private static JsonElement Source(JsonElement view, string name) =>
@@ -52,7 +52,10 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
         view.GetProperty("operations").EnumerateArray().Select(o => o.GetProperty("id").GetString()).ShouldBe(
         [
             "catalog:PublishProduct", "catalog:GetProducts", "ordering:PlaceOrder", "ordering:CancelOrder",
-            "bff:Quote", "health:gateway", "health:catalog", "health:ordering", "health:bff",
+            "inventory:SetOnHand", "inventory:GetStock", "inventory:GetReservation", "inventory:ReleaseReservation",
+            "inventory:ReinstateReservation", "payments:GetPayment",
+            "bff:Quote", "health:gateway", "health:catalog", "health:ordering", "health:bff", "health:inventory",
+            "health:payments", "simulator:Requests",
         ]);
         JsonElement publish = view.GetProperty("operations")[0];
         publish.GetProperty("url").GetString().ShouldBe("http://localhost:5000/api/v1/catalog/products/");
@@ -66,7 +69,7 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
         HttpResponseMessage response = await client.PostAsync("/api/catalog/reload", null, Token);
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
-        (await response.Content.ReadFromJsonAsync<JsonElement>(Token)).GetProperty("operations").GetArrayLength().ShouldBe(9);
+        (await response.Content.ReadFromJsonAsync<JsonElement>(Token)).GetProperty("operations").GetArrayLength().ShouldBe(18);
     }
 
     [Fact]
@@ -163,25 +166,37 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
     }
 
     [Theory]
-    [InlineData(null, 401)]
-    [InlineData("demo", 403)]
-    [InlineData("browser", 403)]
-    public async Task Inventory_is_refused_by_the_gateway_policy_before_its_absent_upstream(string? username, int status)
+    [InlineData(null, "/api/v1/inventory/stock/0199a1b2-0000-7000-8000-00000000000a", 401)]
+    [InlineData("browser", "/api/v1/inventory/stock/0199a1b2-0000-7000-8000-00000000000a", 403)]
+    [InlineData("demo", "/api/v1/inventory/stock/0199a1b2-0000-7000-8000-00000000000a", 200)]
+    [InlineData("demo", "/api/v1/inventory/stock/0199a1b2-0000-7000-8000-0000000000ff", 404)]
+    [InlineData("demo", "/api/v1/inventory/reservations/0199a1b2-0000-7000-8000-000000000002", 200)]
+    [InlineData(null, "/api/v1/payments/0199a1b2-0000-7000-8000-000000000002", 401)]
+    [InlineData("browser", "/api/v1/payments/0199a1b2-0000-7000-8000-000000000002", 403)]
+    [InlineData("demo", "/api/v1/payments/0199a1b2-0000-7000-8000-000000000002", 200)]
+    [InlineData("demo", "/api/v1/payments/0199a1b2-0000-7000-8000-0000000000ff", 404)]
+    public async Task Inventory_and_payments_answer_behind_their_admin_policies_as_the_live_services_did(string? username, string path, int status)
     {
-        (await ProxyAsync(new { method = "GET", url = "http://localhost:5000/api/v1/inventory/items", identity = new { username } }))
+        (await ProxyAsync(new { method = "GET", url = $"http://localhost:5000{path}", identity = new { username } }))
             .GetProperty("status").GetInt32().ShouldBe(status);
     }
 
     [Fact]
-    public async Task Inventory_with_the_admin_permission_reaches_the_absent_upstream_and_is_a_bad_gateway()
+    public async Task A_stock_set_and_a_reservation_release_answer_no_content_as_the_live_write_did()
     {
-        JsonElement result = await ProxyAsync(new
-        {
-            method = "GET",
-            url = "http://localhost:5000/api/v1/inventory/items",
-            headers = new Dictionary<string, string> { ["Authorization"] = $"Bearer {Identity.TokenServiceTests.Jwt("""{"permission":["inventory:admin"]}""")}" },
-        });
+        (await ProxyAsync(new { method = "PUT", url = "http://localhost:5000/api/v1/inventory/stock/0199a1b2-0000-7000-8000-00000000000a", body = """{"onHand":10}""", identity = new { username = "demo" } }))
+            .GetProperty("status").GetInt32().ShouldBe(204);
+        (await ProxyAsync(new { method = "POST", url = "http://localhost:5000/api/v1/inventory/reservations/0199a1b2-0000-7000-8000-000000000002/release", identity = new { username = "demo" } }))
+            .GetProperty("status").GetInt32().ShouldBe(204);
+    }
 
-        result.GetProperty("status").GetInt32().ShouldBe(502);
+    [Fact]
+    public async Task The_placed_orders_payment_is_authorised_with_the_simulators_reference()
+    {
+        JsonElement result = await ProxyAsync(new { method = "GET", url = "http://localhost:5000/api/v1/payments/0199a1b2-0000-7000-8000-000000000002", identity = new { username = "demo" } });
+
+        using JsonDocument body = JsonDocument.Parse(result.GetProperty("body").GetString()!);
+        body.RootElement.GetProperty("intent").GetProperty("status").GetString().ShouldBe("Authorised");
+        body.RootElement.GetProperty("intent").GetProperty("reference").GetString().ShouldStartWith("psp_");
     }
 }

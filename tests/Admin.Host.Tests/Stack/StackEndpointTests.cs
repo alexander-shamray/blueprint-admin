@@ -31,7 +31,7 @@ public sealed class StackEndpointTests : IClassFixture<AdminHostFactory>
         stack.GetProperty("backend").GetProperty("reachable").GetBoolean().ShouldBeTrue();
         stack.GetProperty("backend").GetProperty("services").EnumerateArray()
             .Select(s => s.GetProperty("service").GetString()).ShouldContain("gateway");
-        stack.GetProperty("reachability").EnumerateArray().Count().ShouldBe(7);
+        stack.GetProperty("reachability").EnumerateArray().Count().ShouldBe(9);
     }
 
     [Fact]

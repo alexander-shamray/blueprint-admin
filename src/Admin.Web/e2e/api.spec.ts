@@ -6,7 +6,7 @@ import { expect, test } from '@playwright/test';
 test('the api screen lists operations and sends as each identity', async ({ page }) => {
   await page.goto('/requests');
 
-  await expect(page.locator('button.op')).toHaveCount(9);
+  await expect(page.locator('button.op')).toHaveCount(18);
 
   await page.locator('button.op', { hasText: 'GetProducts' }).click();
   await page.getByLabel('Identity').selectOption('anonymous');
@@ -78,12 +78,36 @@ test('trace this call opens the response correlation id on the trace screen', as
   await expect(page.locator('table.timeline tbody tr').last().locator('td.kind')).toHaveText('[queued]');
 });
 
+// Inventory and Payments through the gateway (FakeGateway, recorded from the live services on 2026-10-03):
+// both routes need their admin permission, which demo holds and browser does not.
+test('inventory stock and an order payment read as demo, and are refused for browser', async ({ page }) => {
+  await page.goto('/requests');
+
+  await page.locator('button.op', { hasText: 'GetStock' }).click();
+  await page.getByLabel('Path productId').fill('0199a1b2-0000-7000-8000-00000000000a');
+  await page.getByLabel('Identity').selectOption('user:demo');
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.locator('.response .status')).toHaveText('200');
+  await expect(page.locator('.response .body')).toContainText('"available": 10');
+
+  await page.getByLabel('Identity').selectOption('user:browser');
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.locator('.response .status')).toHaveText('403');
+
+  await page.locator('button.op', { hasText: 'GetPayment' }).click();
+  await page.getByLabel('Path orderId').fill('0199a1b2-0000-7000-8000-000000000002');
+  await page.getByLabel('Identity').selectOption('user:demo');
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.locator('.response .status')).toHaveText('200');
+  await expect(page.locator('.response .body')).toContainText('"status": "Authorised"');
+});
+
 // FakeOpenApi: Catalog's recorded document is served until it has a baseline, and from then on it has
 // gained ProductSummaryDto.quantityAvailable. Accepting is left to the host and unit specs: an accepted
 // baseline lasts as long as the host does, and a reused host or a CI retry would then have no change to see.
 test('a reload names what moved in a document since its baseline, with the action that accepts it', async ({ page }) => {
   await page.goto('/requests');
-  await expect(page.locator('button.op')).toHaveCount(9);
+  await expect(page.locator('button.op')).toHaveCount(18);
 
   await page.getByRole('button', { name: 'Reload' }).click();
   const changes = page.locator('.contract-changes');

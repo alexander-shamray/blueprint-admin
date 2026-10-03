@@ -25,6 +25,14 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
     private static readonly Dictionary<string, string> NotRun = new(StringComparer.Ordinal)
     {
         ["npm ci"] = "a prerequisite the console reports rather than runs (FrontendSupervisor, spec §2.1)",
+
+        // The workstation doctor's reads, which #60 builds; each row goes when the host runs its line.
+        ["docker info --format '{{.ServerVersion}}'"] = "#60",
+        ["Get-NetTCPConnection -State Listen -LocalPort 1433,3000,5000,5101,5102,5103,5104,5190,5200,5672,6379,6380,8080,15672 -ErrorAction SilentlyContinue | Select-Object LocalPort, OwningProcess"] = "#60",
+        ["node --version"] = "#60",
+        ["Get-Content blueprint-frontend/.nvmrc"] = "#60",
+        ["git -C blueprint-backend status -sb"] = "#60",
+        ["git -C blueprint-frontend status -sb"] = "#60",
     };
 
     private readonly FakeTimeProvider time = new();
@@ -45,11 +53,11 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
 
         lines.ShouldContain(l => Command().IsMatch(l), "no fenced command was read; the fence reader no longer fits the document");
 
-        foreach (string line in lines)
+        foreach (string line in lines.Where(l => !NotRun.ContainsKey(l)))
         {
             if (Command().IsMatch(line))
             {
-                if (!NotRun.ContainsKey(line) && !host.Any(h => Runs(h, line.Split(' ', StringSplitOptions.RemoveEmptyEntries), services)))
+                if (!host.Any(h => Runs(h, line.Split(' ', StringSplitOptions.RemoveEmptyEntries), services)))
                 {
                     unaccounted.Add($"no host command runs: {line}");
                 }
@@ -166,7 +174,11 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
         return [.. lines];
     }
 
-    private static string[] Urls(AdminOptions o) => [o.GatewayUrl, o.CatalogUrl, o.OrderingUrl, o.BffUrl, o.KeycloakUrl, o.GrafanaUrl, o.ClientUrl];
+    /// <summary>Every configured URL, read off <see cref="AdminOptions"/> so a surface added there needs no line here.</summary>
+    private static string[] Urls(AdminOptions o) =>
+        [.. typeof(AdminOptions).GetProperties()
+            .Where(p => p.PropertyType == typeof(string) && p.Name.EndsWith("Url", StringComparison.Ordinal))
+            .Select(p => (string)p.GetValue(o)!)];
 
     [GeneratedRegex(@"^(docker|npm) ")]
     private static partial Regex Command();

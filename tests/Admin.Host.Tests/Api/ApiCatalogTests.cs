@@ -43,17 +43,22 @@ public sealed class ApiCatalogTests : IDisposable
         return new ApiCatalog(http, new TokenService(http, wrapped, TimeProvider.System), wrapped, new OpenApiBaselines(dataDir, TimeProvider.System));
     }
 
-    private static HttpResponseMessage Both(string url) => url switch
+    private static HttpResponseMessage Every(string url) => url switch
     {
         "http://localhost:5102/openapi/v1.json" => Json(HttpStatusCode.OK, FixtureText("openapi-catalog.json")),
         "http://localhost:5101/openapi/v1.json" => Json(HttpStatusCode.OK, FixtureText("openapi-ordering.json")),
+        "http://localhost:5103/openapi/v1.json" => Json(HttpStatusCode.OK, FixtureText("openapi-inventory.json")),
+        "http://localhost:5104/openapi/v1.json" => Json(HttpStatusCode.OK, FixtureText("openapi-payments.json")),
         _ => new HttpResponseMessage(HttpStatusCode.NotFound),
     };
 
+    /// <summary>Catalog, Ordering, Inventory and Payments: one document each.</summary>
+    private const int Documents = 4;
+
     [Fact]
-    public async Task Both_documents_load_with_a_demo_token_and_curated_operations_follow()
+    public async Task Every_document_loads_with_a_demo_token_and_curated_operations_follow()
     {
-        ScriptedHandler handler = Platform(Both);
+        ScriptedHandler handler = Platform(Every);
 
         ApiCatalogView view = await Catalog(handler).GetAsync(Token);
 
@@ -61,12 +66,17 @@ public sealed class ApiCatalogTests : IDisposable
         [
             ("catalog", "http://localhost:5102/openapi/v1.json", true, null),
             ("ordering", "http://localhost:5101/openapi/v1.json", true, null),
+            ("inventory", "http://localhost:5103/openapi/v1.json", true, null),
+            ("payments", "http://localhost:5104/openapi/v1.json", true, null),
         ]);
         view.Sources.ShouldAllBe(s => s.Changes!.BaselineTaken);
         view.Operations.Select(o => o.Id).ShouldBe(
         [
             "catalog:PublishProduct", "catalog:GetProducts", "ordering:PlaceOrder", "ordering:CancelOrder",
-            "bff:Quote", "health:gateway", "health:catalog", "health:ordering", "health:bff",
+            "inventory:SetOnHand", "inventory:GetStock", "inventory:GetReservation", "inventory:ReleaseReservation",
+            "inventory:ReinstateReservation", "payments:GetPayment",
+            "bff:Quote", "health:gateway", "health:catalog", "health:ordering", "health:bff", "health:inventory",
+            "health:payments", "simulator:Requests",
         ]);
         handler.Requests.Where(r => r.Request.RequestUri!.AbsolutePath == "/openapi/v1.json")
             .ShouldAllBe(r => r.Request.Headers.Authorization!.Scheme == "Bearer");
@@ -78,7 +88,7 @@ public sealed class ApiCatalogTests : IDisposable
     {
         string catalogV2 = FixtureText("openapi-catalog.json").Replace("\"productId\":", "\"quantityAvailable\": { \"type\": \"integer\" }, \"productId\":", StringComparison.Ordinal);
         bool moved = false;
-        ScriptedHandler handler = Platform(url => moved && url.Contains("5102", StringComparison.Ordinal) ? Json(HttpStatusCode.OK, catalogV2) : Both(url));
+        ScriptedHandler handler = Platform(url => moved && url.Contains("5102", StringComparison.Ordinal) ? Json(HttpStatusCode.OK, catalogV2) : Every(url));
         ApiCatalog catalog = Catalog(handler);
 
         await catalog.GetAsync(Token);
@@ -98,15 +108,15 @@ public sealed class ApiCatalogTests : IDisposable
     [Fact]
     public async Task The_catalog_is_cached_until_reloaded()
     {
-        ScriptedHandler handler = Platform(Both);
+        ScriptedHandler handler = Platform(Every);
         ApiCatalog catalog = Catalog(handler);
 
         await catalog.GetAsync(Token);
         await catalog.GetAsync(Token);
-        handler.Requests.Count(r => r.Request.RequestUri!.AbsolutePath == "/openapi/v1.json").ShouldBe(2);
+        handler.Requests.Count(r => r.Request.RequestUri!.AbsolutePath == "/openapi/v1.json").ShouldBe(Documents);
 
         await catalog.ReloadAsync(Token);
-        handler.Requests.Count(r => r.Request.RequestUri!.AbsolutePath == "/openapi/v1.json").ShouldBe(4);
+        handler.Requests.Count(r => r.Request.RequestUri!.AbsolutePath == "/openapi/v1.json").ShouldBe(2 * Documents);
     }
 
     [Fact]
@@ -122,7 +132,7 @@ public sealed class ApiCatalogTests : IDisposable
 
             await answer.Task;
 
-            return Both(request.RequestUri.ToString());
+            return Every(request.RequestUri.ToString());
         });
         ApiCatalog catalog = Catalog(handler);
 
@@ -131,14 +141,14 @@ public sealed class ApiCatalogTests : IDisposable
         answer.SetResult();
         await Task.WhenAll(first, second);
 
-        handler.Requests.Count(r => r.Request.RequestUri!.AbsolutePath == "/openapi/v1.json").ShouldBe(2);
+        handler.Requests.Count(r => r.Request.RequestUri!.AbsolutePath == "/openapi/v1.json").ShouldBe(Documents);
         (await second).ShouldBeSameAs(await first);
     }
 
     [Fact]
     public async Task A_service_that_never_answered_is_listed_as_a_source_with_its_error_and_no_operations()
     {
-        ScriptedHandler handler = Platform(url => url.Contains(":5101", StringComparison.Ordinal) ? throw new HttpRequestException("Connection refused") : Both(url));
+        ScriptedHandler handler = Platform(url => url.Contains(":5101", StringComparison.Ordinal) ? throw new HttpRequestException("Connection refused") : Every(url));
 
         ApiCatalogView view = await Catalog(handler).GetAsync(Token);
 
@@ -153,7 +163,7 @@ public sealed class ApiCatalogTests : IDisposable
     public async Task A_service_that_goes_down_keeps_its_operations_marked_unavailable()
     {
         bool orderingUp = true;
-        ScriptedHandler handler = Platform(url => url.Contains(":5101", StringComparison.Ordinal) && !orderingUp ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable) : Both(url));
+        ScriptedHandler handler = Platform(url => url.Contains(":5101", StringComparison.Ordinal) && !orderingUp ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable) : Every(url));
         ApiCatalog catalog = Catalog(handler);
 
         await catalog.GetAsync(Token);
@@ -168,22 +178,22 @@ public sealed class ApiCatalogTests : IDisposable
     }
 
     [Fact]
-    public async Task A_refused_token_makes_both_sources_unavailable_with_keycloaks_status()
+    public async Task A_refused_token_makes_every_source_unavailable_with_keycloaks_status()
     {
         ScriptedHandler handler = new(request => request.RequestUri!.AbsolutePath.EndsWith("/token", StringComparison.Ordinal)
             ? new HttpResponseMessage(HttpStatusCode.Unauthorized)
-            : Both(request.RequestUri.ToString()));
+            : Every(request.RequestUri.ToString()));
 
         ApiCatalogView view = await Catalog(handler).GetAsync(Token);
 
         view.Sources.ShouldAllBe(s => !s.Available && s.Error == "The token request for demo answered 401.");
-        view.Operations.Select(o => o.Source).Distinct().ShouldBe(["bff", "health"]);
+        view.Operations.Select(o => o.Source).Distinct().ShouldBe(["bff", "health", "simulator"]);
     }
 
     [Fact]
     public async Task A_document_that_is_not_json_is_an_unavailable_source()
     {
-        ScriptedHandler handler = Platform(url => url.Contains(":5102", StringComparison.Ordinal) ? Json(HttpStatusCode.OK, "<html>") : Both(url));
+        ScriptedHandler handler = Platform(url => url.Contains(":5102", StringComparison.Ordinal) ? Json(HttpStatusCode.OK, "<html>") : Every(url));
 
         ApiCatalogView view = await Catalog(handler).GetAsync(Token);
 
@@ -193,7 +203,7 @@ public sealed class ApiCatalogTests : IDisposable
     [Fact]
     public async Task A_document_whose_shape_is_malformed_is_an_unavailable_source_and_the_other_still_loads()
     {
-        ScriptedHandler handler = Platform(url => url.Contains(":5102", StringComparison.Ordinal) ? Json(HttpStatusCode.OK, """{"paths":{"/products":"oops"}}""") : Both(url));
+        ScriptedHandler handler = Platform(url => url.Contains(":5102", StringComparison.Ordinal) ? Json(HttpStatusCode.OK, """{"paths":{"/products":"oops"}}""") : Every(url));
 
         ApiCatalogView view = await Catalog(handler).GetAsync(Token);
 
@@ -206,7 +216,7 @@ public sealed class ApiCatalogTests : IDisposable
     [Fact]
     public async Task The_catalog_identity_is_the_first_configured_user_when_there_is_no_demo()
     {
-        ScriptedHandler handler = Platform(Both);
+        ScriptedHandler handler = Platform(Every);
         AdminOptions options = new() { Users = [new RealmUser { Username = "ops", Password = "pw" }] };
 
         await Catalog(handler, options).GetAsync(Token);

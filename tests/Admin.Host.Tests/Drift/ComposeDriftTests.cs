@@ -18,6 +18,9 @@ public sealed partial class ComposeDriftTests
         ["catalog-api"] = o => o.CatalogUrl,
         ["ordering-api"] = o => o.OrderingUrl,
         ["web-bff"] = o => o.BffUrl,
+        ["inventory-api"] = o => o.InventoryUrl,
+        ["payments-api"] = o => o.PaymentsUrl,
+        ["psp-simulator"] = o => o.PaymentSimulatorUrl,
         ["keycloak"] = o => o.KeycloakUrl,
         ["grafana"] = o => o.GrafanaUrl,
     };
@@ -29,8 +32,6 @@ public sealed partial class ComposeDriftTests
     /// </summary>
     private static readonly Dictionary<string, string> UnitsWithoutSurface = new(StringComparer.Ordinal)
     {
-        ["inventory"] = "#51",
-        ["payments"] = "#51",
         ["shipping"] = "#59",
         ["notifications"] = "#65",
     };

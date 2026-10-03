@@ -15,7 +15,7 @@ describe('App', () => {
 
     TestBed.inject(HttpTestingController).expectOne('/api/config').flush({
       backendDir: 'C:/dev/blueprint-backend', frontendDir: '', composeFile: '', fakePlatform: true,
-      urls: { gateway: '', catalog: '', ordering: '', bff: '', keycloak: '', grafana: '', client: '' },
+      urls: { gateway: '', catalog: '', ordering: '', bff: '', inventory: '', payments: '', paymentSimulator: '', keycloak: '', grafana: '', client: '' },
     });
     await fixture.whenStable();
     fixture.detectChanges();
