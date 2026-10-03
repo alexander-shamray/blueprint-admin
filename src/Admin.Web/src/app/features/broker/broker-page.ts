@@ -1,14 +1,14 @@
 import { Component, DestroyRef, WritableSignal, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { EMPTY, Observable, Subscription, catchError, exhaustMap, finalize, tap, timer } from 'rxjs';
+import { EMPTY, Observable, Subscription, catchError, finalize, tap, timer } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { ExchangesView, PermissionsView, QueuesView } from '../../core/host/host-types';
 import { DrainedIndicator } from '../../shared/drained-indicator/drained-indicator';
 
 /**
- * Queues only: exchanges and permissions change with topology, and every read is a docker compose exec job
- * the host keeps among its last fifty.
+ * Every read, not queues only: each is a `docker compose exec` the host does not keep among its jobs
+ * (spec §5.2), so a tick costs three short processes and nothing that lasts.
  */
 export const AUTO_REFRESH_MS = 5000;
 
@@ -32,12 +32,10 @@ export class BrokerPage {
   /** True while any read started by refresh() is still out; refresh() is not re-entrant while it is. */
   readonly refreshing = signal(false);
   private pendingReads = 0;
-  /** Set while any queues read, timer-triggered or refresh()-triggered, is out: at most one is ever in flight. */
-  private queuesInFlight = false;
   /**
    * One failed-read signal per endpoint, not a shared one: each is set only by its own read's
    * failure and cleared only by that same read's success, so an exchanges or permissions failure
-   * is not silently hidden by the next successful queues auto-refresh tick (only queues auto-refreshes).
+   * is not silently hidden by another read's success.
    * The last good listing stays on screen meanwhile.
    */
   readonly queuesError = signal<string | null>(null);
@@ -49,42 +47,25 @@ export class BrokerPage {
     this.refresh();
   }
 
-  /**
-   * While a read from an earlier call is still out, does nothing: the Refresh button is disabled meanwhile.
-   * The queues read is skipped when one is already out (started by an earlier refresh() or by auto-refresh);
-   * `refreshing` still clears once the reads this call actually started have finished.
-   */
+  /** While a read from an earlier call is still out, does nothing: the Refresh button is disabled meanwhile. */
   refresh(): void {
     if (this.refreshing()) return;
     this.refreshing.set(true);
-
-    const queuesRead = this.queuesRead();
-    this.pendingReads = queuesRead ? 3 : 2;
-    if (queuesRead) this.withPendingCountdown(queuesRead).subscribe((view) => this.queues.set(view));
+    this.pendingReads = 3;
+    this.withPendingCountdown(this.read(this.host.brokerQueues(), this.queuesError)).subscribe((view) => this.queues.set(view));
     this.withPendingCountdown(this.read(this.host.brokerExchanges(), this.exchangesError)).subscribe((view) => this.exchanges.set(view));
     this.withPendingCountdown(this.read(this.host.brokerPermissions(), this.permissionsError)).subscribe((view) => this.permissions.set(view));
   }
 
-  /** A tick starts nothing while a queues read (timer-triggered or refresh()-triggered) is already out. */
+  /** A tick is a refresh(), so it starts nothing while an earlier refresh's reads are still out. */
   setAutoRefresh(on: boolean): void {
     this.autoRefresh.set(on);
     this.auto?.unsubscribe();
-    this.auto = on
-      ? timer(AUTO_REFRESH_MS, AUTO_REFRESH_MS)
-          .pipe(exhaustMap(() => this.queuesRead() ?? EMPTY))
-          .subscribe((view) => this.queues.set(view))
-      : undefined;
+    this.auto = on ? timer(AUTO_REFRESH_MS, AUTO_REFRESH_MS).subscribe(() => this.refresh()) : undefined;
   }
 
   exchangeName(name: string): string {
     return name === '' ? '(default)' : name;
-  }
-
-  /** The queues read, guarded so at most one is ever out; null when one already is (skip, start nothing). */
-  private queuesRead(): Observable<QueuesView> | null {
-    if (this.queuesInFlight) return null;
-    this.queuesInFlight = true;
-    return this.read(this.host.brokerQueues(), this.queuesError).pipe(finalize(() => (this.queuesInFlight = false)));
   }
 
   /** A refresh() read: counts down `pendingReads` on completion or failure, via `finalize` so a failure counts down too. */
