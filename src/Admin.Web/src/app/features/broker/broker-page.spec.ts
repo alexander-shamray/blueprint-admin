@@ -132,35 +132,44 @@ describe('BrokerPage', () => {
     expect(rows(fixture, 'queues').length).toBe(2);
   });
 
-  it('a failed exchanges read is not cleared by a later queues auto-refresh success', async () => {
+  it('a failed exchanges read is not cleared by a queues read that succeeds after it', async () => {
     vi.useFakeTimers();
-    host.brokerExchanges.mockReturnValueOnce(throwError(() => ({ error: { title: 'Server error', detail: 'exchanges boom' } })));
     const fixture = render();
-
-    expect(fixture.nativeElement.textContent).toContain('exchanges boom');
+    // The tick's two reads answer when told to, exchanges failing first: a synchronous mock would
+    // run the queues success first, and a queues path that cleared exchangesError would still pass.
+    const slowQueues = new Subject<QueuesView>();
+    const slowExchanges = new Subject<ExchangesView>();
+    host.brokerQueues.mockReturnValue(slowQueues.asObservable());
+    host.brokerExchanges.mockReturnValue(slowExchanges.asObservable());
 
     fixture.componentInstance.setAutoRefresh(true);
     await vi.advanceTimersByTimeAsync(5000);
+    slowExchanges.error({ error: { title: 'Server error', detail: 'exchanges boom' } });
+    slowQueues.next(queues);
+    slowQueues.complete();
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('exchanges boom');
   });
 
-  it('auto-refresh re-reads queues every 5 seconds, only queues, until turned off', async () => {
+  it('auto-refresh re-reads queues, exchanges and permissions every 5 seconds until turned off', async () => {
     vi.useFakeTimers();
     const fixture = render();
     host.brokerQueues.mockClear();
     host.brokerExchanges.mockClear();
+    host.brokerPermissions.mockClear();
 
     fixture.componentInstance.setAutoRefresh(true);
     await vi.advanceTimersByTimeAsync(5000);
     await vi.advanceTimersByTimeAsync(5000);
     expect(host.brokerQueues).toHaveBeenCalledTimes(2);
-    expect(host.brokerExchanges).not.toHaveBeenCalled();
+    expect(host.brokerExchanges).toHaveBeenCalledTimes(2);
+    expect(host.brokerPermissions).toHaveBeenCalledTimes(2);
 
     fixture.componentInstance.setAutoRefresh(false);
     await vi.advanceTimersByTimeAsync(15000);
     expect(host.brokerQueues).toHaveBeenCalledTimes(2);
+    expect(host.brokerExchanges).toHaveBeenCalledTimes(2);
   });
 
   it('auto-refresh does not stack a read on one still in flight', async () => {
@@ -222,39 +231,28 @@ describe('BrokerPage', () => {
     expect(host.brokerQueues).toHaveBeenCalledTimes(1);
   });
 
-  it('refresh does not start a second queues read while an automatic one is out, but still reads exchanges and permissions', async () => {
+  it('Refresh is disabled while an automatic refresh is out, and starts nothing', async () => {
     vi.useFakeTimers();
     const fixture = render();
     host.brokerQueues.mockClear();
     host.brokerExchanges.mockClear();
-    host.brokerPermissions.mockClear();
     const slowQueues = new Subject<QueuesView>();
     host.brokerQueues.mockReturnValue(slowQueues.asObservable());
 
     fixture.componentInstance.setAutoRefresh(true);
     await vi.advanceTimersByTimeAsync(5000);
-    expect(host.brokerQueues).toHaveBeenCalledTimes(1);
-
-    const slowExchanges = new Subject<ExchangesView>();
-    const slowPermissions = new Subject<PermissionsView>();
-    host.brokerExchanges.mockReturnValueOnce(slowExchanges.asObservable());
-    host.brokerPermissions.mockReturnValueOnce(slowPermissions.asObservable());
-
-    (fixture.nativeElement.querySelector('button.refresh') as HTMLButtonElement).click();
     fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('button.refresh') as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
 
+    button.click();
     expect(host.brokerQueues).toHaveBeenCalledTimes(1);
     expect(host.brokerExchanges).toHaveBeenCalledTimes(1);
-    expect(host.brokerPermissions).toHaveBeenCalledTimes(1);
-    expect((fixture.nativeElement.querySelector('button.refresh') as HTMLButtonElement).disabled).toBe(true);
 
-    slowExchanges.next(exchanges);
-    slowExchanges.complete();
-    slowPermissions.next(permissions);
-    slowPermissions.complete();
+    slowQueues.next(queues);
+    slowQueues.complete();
     fixture.detectChanges();
-
-    expect((fixture.nativeElement.querySelector('button.refresh') as HTMLButtonElement).disabled).toBe(false);
+    expect(button.disabled).toBe(false);
   });
 
   it('reads queues again on the next tick after a held read completes', async () => {
