@@ -49,6 +49,24 @@ public sealed class LiteralDriftTests
     }
 
     [Fact]
+    public void The_simulator_still_serves_its_request_log_where_the_console_reads_it_and_prefixes_references_as_the_fake_does()
+    {
+        string simulator = Backend.Read("deploy", "compose", "psp-simulator", "README.md");
+
+        simulator.ShouldContain("`/__admin/requests`");
+        simulator.ShouldContain("`psp_` followed by the request's `Idempotency-Key`");
+    }
+
+    [Fact]
+    public void The_statuses_the_fake_reservation_and_payment_carry_are_the_backends()
+    {
+        Backend.Read("src", "Services", "Inventory", "Inventory.Domain", "Reservations", "ReservationStatus.cs")
+            .ShouldContain("    Reserved,");
+        Backend.Read("src", "Services", "Payments", "Payments.Domain", "Intents", "PaymentIntentStatus.cs")
+            .ShouldContain("    Authorised,");
+    }
+
+    [Fact]
     public void The_management_port_BrokerService_says_it_avoids_is_the_one_compose_binds()
     {
         Backend.Read("deploy", "compose", "infrastructure.yml").ShouldContain("\"127.0.0.1:15672:15672\"");

@@ -16,7 +16,8 @@ public sealed class DriftCoverageTests
     private static readonly Dictionary<string, Type> Checked = new(StringComparer.Ordinal)
     {
         ["src/Admin.Host/Api/CorrelationId.cs"] = typeof(LiteralDriftTests),
-        ["src/Admin.Host/Api/CuratedOperations.cs"] = typeof(GatewayDriftTests),
+        ["src/Admin.Host/Api/CuratedOperations.cs"] = typeof(LiteralDriftTests),
+        ["src/Admin.Host/Fakes/FakeGateway.cs"] = typeof(LiteralDriftTests),
         ["src/Admin.Host/Api/GatewayRoutes.cs"] = typeof(GatewayDriftTests),
         ["src/Admin.Host/Broker/BrokerService.cs"] = typeof(ComposeDriftTests),
         ["src/Admin.Host/Broker/PlatformQueues.cs"] = typeof(QueueDriftTests),
