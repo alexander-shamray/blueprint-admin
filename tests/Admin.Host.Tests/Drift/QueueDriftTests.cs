@@ -34,8 +34,11 @@ public sealed partial class QueueDriftTests
     {
         HashSet<string> shown = [.. PlatformQueues.Table.Select(q => q.Name)];
 
-        Declared().Values.Where(q => !shown.Contains(q) && !QueuesNotYetShown.ContainsKey(q)).ShouldBeEmpty();
+        Dictionary<string, string> declared = Declared();
+
+        declared.Values.Where(q => !shown.Contains(q) && !QueuesNotYetShown.ContainsKey(q)).ShouldBeEmpty();
         QueuesNotYetShown.Keys.Where(shown.Contains).ShouldBeEmpty("an exception for a queue that now has a row");
+        QueuesNotYetShown.Keys.Where(q => !declared.ContainsValue(q)).ShouldBeEmpty("an exception for a queue the backend no longer declares");
     }
 
     [Fact]

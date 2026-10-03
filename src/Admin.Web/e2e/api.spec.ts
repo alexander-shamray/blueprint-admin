@@ -78,8 +78,9 @@ test('trace this call opens the response correlation id on the trace screen', as
   await expect(page.locator('table.timeline tbody tr').last().locator('td.kind')).toHaveText('[queued]');
 });
 
-// Inventory and Payments through the gateway (FakeGateway, recorded from the live services on 2026-10-03):
-// both routes need their admin permission, which demo holds and browser does not.
+// Inventory and Payments through the gateway (FakeGateway): the stock answer was recorded from the live
+// service on 2026-10-03, and the payment follows the backend's PaymentView, since none exists without a
+// running saga. Both routes need their admin permission, which demo holds and browser does not.
 test('inventory stock and an order payment read as demo, and are refused for browser', async ({ page }) => {
   await page.goto('/requests');
 

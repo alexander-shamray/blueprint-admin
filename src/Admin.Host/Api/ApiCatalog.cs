@@ -20,8 +20,8 @@ public sealed class ApiCatalog(HttpClient http, TokenService tokens, IOptions<Ad
     private readonly Dictionary<string, IReadOnlyList<ApiOperation>> lastGood = [];
 
     /// <summary>
-    /// Each service's last fetched document, which is what accepting a baseline keeps. Concurrent because the two
-    /// document loads write it from parallel continuations inside one catalog load.
+    /// Each service's last fetched document, which is what accepting a baseline keeps. Concurrent because the
+    /// document loads of one catalog load write it from parallel continuations.
     /// </summary>
     private readonly ConcurrentDictionary<string, string> lastDocument = new(StringComparer.Ordinal);
     private ApiCatalogView? current;

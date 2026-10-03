@@ -157,7 +157,7 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
     }
 
     [Fact]
-    public async Task Cancel_and_quote_and_inventory_answer_as_the_gateway_would()
+    public async Task Cancel_and_quote_answer_as_the_gateway_would()
     {
         (await ProxyAsync(new { method = "POST", url = "http://localhost:5000/api/v1/orders/0199a1b2-0000-7000-8000-000000000002/cancel", body = """{"reason":"customer_request"}""", identity = new { username = "demo" } }))
             .GetProperty("status").GetInt32().ShouldBe(204);

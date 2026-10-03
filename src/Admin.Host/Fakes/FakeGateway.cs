@@ -32,9 +32,9 @@ internal static partial class FakeGateway
         """;
 
     /// <summary>
-    /// The placed order's reservation and payment. Neither exists without a running saga, so these follow the
-    /// backend's ReservationDto and PaymentView (statuses from ReservationStatus and PaymentIntentStatus) rather
-    /// than a recording; the reference is the simulator's <c>psp_</c> plus the idempotency key.
+    /// The placed order's reservation and payment. Neither exists without a running saga, so these follow
+    /// blueprint-backend's ReservationDto and PaymentView (statuses from ReservationStatus and PaymentIntentStatus)
+    /// rather than a recording; the reference is the simulator's <c>psp_</c> plus the idempotency key.
     /// </summary>
     private const string Reservation = $$"""
         {"orderId":"{{PlacedOrderId}}","status":"Reserved","lines":[{"productId":"{{StockedProductId}}","quantity":1}],"updatedAt":"2026-10-03T16:40:01+00:00"}
@@ -84,8 +84,9 @@ internal static partial class FakeGateway
     }
 
     /// <summary>
-    /// Inventory behind its route. A write answers 204, as the live PUT did although the document says 200: both
-    /// end in the same ToHttpResult. An id the fake does not hold answers the 404 the live service gave.
+    /// Inventory behind its route. A write answers 204 for any id, as the live PUT did although the document says
+    /// 200: both end in the same ToHttpResult. A read of an id the fake does not hold answers the 404 the live
+    /// service gave.
     /// </summary>
     private static HttpResponseMessage Inventory(string method, string path)
     {
