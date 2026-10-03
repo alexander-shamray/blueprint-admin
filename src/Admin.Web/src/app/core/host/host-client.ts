@@ -40,6 +40,11 @@ export class HostClient {
     return this.http.post<JobSummary>('/api/stack/backend/down', { wipeVolumes, confirm });
   }
 
+  /** Down with volumes, up, and the readiness wait, as one job. Takes the same typed confirmation as a wipe. */
+  backendReset(confirm: string): Observable<JobSummary> {
+    return this.http.post<JobSummary>('/api/stack/backend/reset', { confirm });
+  }
+
   frontendStart(): Observable<JobSummary> {
     return this.http.post<JobSummary>('/api/stack/frontend/start', null);
   }

@@ -109,6 +109,14 @@ export class StackPage {
     this.confirmText.set('');
   }
 
+  reset(): void {
+    if (!this.canWipe()) {
+      return;
+    }
+    this.host.backendReset(this.confirmText()).subscribe(this.started);
+    this.confirmText.set('');
+  }
+
   startFrontend(): void {
     this.host.frontendStart().subscribe(this.started);
   }

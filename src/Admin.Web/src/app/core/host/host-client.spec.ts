@@ -35,6 +35,15 @@ describe('HostClient', () => {
     req.flush({ id: 'j1', commandLine: 'docker compose down -v', state: 'Running', exitCode: null, startedAt: '' });
   });
 
+  it('sends the typed confirmation with a reset', () => {
+    client.backendReset('down -v').subscribe();
+
+    const req = http.expectOne('/api/stack/backend/reset');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ confirm: 'down -v' });
+    req.flush({ id: 'r1', commandLine: 'reset down -v up -d --wait readiness', state: 'Running', exitCode: null, startedAt: '' });
+  });
+
   it('follows logs for the named services', () => {
     client.followLogs(['gateway']).subscribe();
 
