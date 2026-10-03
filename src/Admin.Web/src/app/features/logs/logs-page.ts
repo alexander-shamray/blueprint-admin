@@ -6,8 +6,8 @@ import { OutputLine } from '../../core/host/host-types';
 import { SseClient } from '../../core/host/sse-client';
 
 /**
- * The platform's Compose services, owned by blueprint-backend: every file deploy/compose/docker-compose.yml
- * includes, in its order. The drift gate reads those files against this list
+ * The platform's Compose services, owned by blueprint-backend: every service declared in the files
+ * deploy/compose/docker-compose.yml includes. The drift gate reads those files against this list
  * (tests/Admin.Host.Tests/Drift/ComposeDriftTests.cs).
  */
 export const COMPOSE_SERVICES = [

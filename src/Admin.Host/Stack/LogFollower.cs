@@ -5,10 +5,9 @@ namespace Admin.Host.Stack;
 
 /// <summary>
 /// The Logs screen's one <c>docker compose logs -f</c>. Each Follow starts a new
-/// long-running job, and nothing else ever ends one, so without this every click
-/// left another docker process behind. Starting a follow stops the previous one
-/// if it is still running; the host keeps at most one follow job. Stop, and
-/// leaving the Logs screen, end it by name through <see cref="StopAsync"/>.
+/// long-running job, so starting a follow stops the previous one if it is still
+/// running and the host keeps at most one. Stop, and leaving the Logs screen, end
+/// it by name through <see cref="StopAsync"/>.
 /// </summary>
 public sealed class LogFollower(ComposeService compose, IProcessRunner runner) : IDisposable
 {
