@@ -40,6 +40,7 @@ public sealed partial class ComposeDriftTests
     {
         HashSet<string> surfaced = SurfacedUnits();
 
+        Compose.Units().ShouldNotBeEmpty("the index's include list no longer reads as this parser expects");
         Compose.Units().Where(u => !surfaced.Contains(u) && !UnitsWithoutSurface.ContainsKey(u)).ShouldBeEmpty();
     }
 
