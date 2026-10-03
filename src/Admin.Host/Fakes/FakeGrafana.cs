@@ -37,11 +37,33 @@ internal static class FakeGrafana
     public static HttpResponseMessage Loki(HttpRequestMessage request)
     {
         string requested = CorrelationIdIn(request.RequestUri!.Query) ?? RecordedCorrelationId;
+        string body = Fixture("grafana-loki-query.json").Replace(RecordedCorrelationId, requested, StringComparison.Ordinal);
 
-        return FakeHttp.Json(
-            HttpStatusCode.OK,
-            Fixture("grafana-loki-query.json").Replace(RecordedCorrelationId, requested, StringComparison.Ordinal));
+        if (requested.StartsWith(MovingPrefix, StringComparison.Ordinal) && MovingFetches.AddOrUpdate(requested, 1, (_, n) => n + 1) > 1)
+        {
+            int result = body.IndexOf(ResultArray, StringComparison.Ordinal) + ResultArray.Length;
+            body = body.Insert(result, LaterLine.Replace(RecordedCorrelationId, requested, StringComparison.Ordinal));
+        }
+
+        return FakeHttp.Json(HttpStatusCode.OK, body);
     }
+
+    /// <summary>
+    /// A correlation id with this prefix is a flow still moving: from its second fetch on, Loki also answers
+    /// <see cref="LaterLine"/>, so the Trace screen has a second, different timeline to compare (spec §5.9). Every
+    /// other id answers the recording unchanged, however often it is asked.
+    /// </summary>
+    public const string MovingPrefix = "fake-moving-";
+
+    /// <summary>Fetches per moving id. Process-wide, as the fakes are; only ids under <see cref="MovingPrefix"/> touch it.</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> MovingFetches = new(StringComparer.Ordinal);
+
+    private const string ResultArray = "\"result\": [";
+
+    /// <summary>The consume that lands after the first fetch: Ordering's projection taking the PriceChanged.</summary>
+    private const string LaterLine = """
+        {"stream":{"CorrelationId":"demo-trace-0001","detected_level":"info","scope_name":"MassTransit","service_name":"Ordering.Api","severity_number":"9","severity_text":"Information"},"values":[["1789532585000000000","Consumed PriceChanged on ordering-catalog-events"]]},
+        """;
 
     /// <summary>The recorded trace, or the 404 Tempo gives for a trace it does not hold.</summary>
     public static HttpResponseMessage Tempo(HttpRequestMessage request)

@@ -39,6 +39,35 @@
     }
   </p>
 
+  @if (diff(); as d) {
+    <section class="changes" aria-label="Since the last fetch">
+      @if (!d.comparable) {
+        <p class="not-compared" role="status">
+          The window changed from {{ d.previousWindow }} to {{ v.window }}, so this fetch is not compared with the one at
+          {{ d.previousAt | date: 'HH:mm:ss' }}.
+        </p>
+      } @else if (d.arrived.length === 0 && d.gone.length === 0) {
+        <p class="unchanged" role="status">
+          Nothing changed between the fetch at {{ d.previousAt | date: 'HH:mm:ss' }} and this one at
+          {{ d.currentAt | date: 'HH:mm:ss' }}.
+        </p>
+      } @else {
+        <p class="changed" role="status">
+          Since the fetch at {{ d.previousAt | date: 'HH:mm:ss' }}: {{ d.arrived.length }} new, {{ d.gone.length }} no
+          longer in the window.
+        </p>
+        <ul class="change-list">
+          @for (event of d.arrived; track $index) {
+            <li class="arrived">[new] {{ event.service }} {{ kindWord(event.kind) }} {{ event.summary }}</li>
+          }
+          @for (event of d.gone; track $index) {
+            <li class="gone">[gone] {{ event.service }} {{ kindWord(event.kind) }} {{ event.summary }}</li>
+          }
+        </ul>
+      }
+    </section>
+  }
+
   @if (v.warning; as warning) {
     <p class="warning" role="status">{{ warning }}</p>
   }
@@ -57,10 +86,10 @@
       </thead>
       <tbody>
         @for (event of v.events; track $index) {
-          <tr class="kind-{{ event.kind }}">
+          <tr class="kind-{{ event.kind }}" [class.arrived]="isArrived(event)">
             <td class="at">{{ event.at | date: 'HH:mm:ss.SSS' }}</td>
             <td class="service">{{ event.service }}</td>
-            <td class="kind">{{ kindWord(event.kind) }}</td>
+            <td class="kind">{{ isArrived(event) ? '[new] ' : '' }}{{ kindWord(event.kind) }}</td>
             <td class="summary">
               {{ event.summary }}
               @if (event.link; as link) {

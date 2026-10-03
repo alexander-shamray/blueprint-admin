@@ -26,6 +26,23 @@ public sealed class TraceEndpointTests(AdminHostFactory factory) : IClassFixture
     }
 
     [Fact]
+    public async Task A_moving_correlation_id_gains_a_consume_on_its_second_fetch_and_a_recorded_one_does_not()
+    {
+        // A fresh id per run: the fake counts fetches per id for the life of the process.
+        string moving = $"fake-moving-{Guid.NewGuid():N}"[..40];
+
+        JsonElement first = await client.GetFromJsonAsync<JsonElement>($"/api/trace/{moving}", Token);
+        JsonElement second = await client.GetFromJsonAsync<JsonElement>($"/api/trace/{moving}", Token);
+        JsonElement recordedFirst = await client.GetFromJsonAsync<JsonElement>("/api/trace/demo-trace-0001", Token);
+        JsonElement recordedSecond = await client.GetFromJsonAsync<JsonElement>("/api/trace/demo-trace-0001", Token);
+
+        second.GetProperty("events").GetArrayLength().ShouldBe(first.GetProperty("events").GetArrayLength() + 1);
+        second.GetProperty("events").EnumerateArray().Select(e => e.GetProperty("summary").GetString())
+            .ShouldContain(s => s!.Contains("Consumed PriceChanged on ordering-catalog-events", StringComparison.Ordinal));
+        recordedSecond.GetProperty("events").GetArrayLength().ShouldBe(recordedFirst.GetProperty("events").GetArrayLength());
+    }
+
+    [Fact]
     public async Task The_timeline_ends_at_the_outbox_with_the_projection_snapshot()
     {
         JsonElement view = await client.GetFromJsonAsync<JsonElement>("/api/trace/demo-trace-0001", Token);
