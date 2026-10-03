@@ -43,6 +43,14 @@ describe('HostClient', () => {
     req.flush({ id: 'j2', commandLine: 'docker compose logs -f', state: 'Running', exitCode: null, startedAt: '' });
   });
 
+  it('stops the follow job it names', () => {
+    client.stopFollow('j 2').subscribe();
+
+    const req = http.expectOne('/api/logs/follow/j%202/stop');
+    expect(req.request.method).toBe('POST');
+    req.flush(null, { status: 204, statusText: 'No Content' });
+  });
+
   it('starts the frontend', () => {
     client.frontendStart().subscribe();
 
