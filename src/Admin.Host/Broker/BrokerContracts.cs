@@ -1,7 +1,10 @@
 namespace Admin.Host.Broker;
 
-/// <summary>A queue and its depth. <see cref="Messages"/> is ready plus unacknowledged, as rabbitmqctl reports it.</summary>
-public sealed record BrokerQueue(string Name, long? Messages, bool IsErrorQueue);
+/// <summary>
+/// A queue and its depth. <see cref="Messages"/> is ready plus unacknowledged, as rabbitmqctl reports it;
+/// <see cref="Consumer"/> is what <see cref="PlatformQueues.Table"/> says consumes it, null for a queue it does not name.
+/// </summary>
+public sealed record BrokerQueue(string Name, long? Messages, bool IsErrorQueue, string? Consumer = null);
 
 /// <summary>Whether a queue has caught up: declared and empty. A queue that is not declared is not drained.</summary>
 public sealed record ProjectionDrain(string Queue, bool Found, long? Messages, bool Drained);

@@ -173,9 +173,11 @@ export interface BrokerQueue {
   name: string;
   messages: number | null;
   isErrorQueue: boolean;
+  /** What consumes it, from the host's `PlatformQueues.Table`; null for a queue that table does not name. */
+  consumer: string | null;
 }
 
-/** Whether a queue is drained: declared and empty. The queue is `BrokerService.ProjectionQueue`, which owns what it feeds. */
+/** Whether a queue is drained: declared and empty. The queue is `PlatformQueues.Projection`, which owns what it feeds. */
 export interface ProjectionDrain {
   queue: string;
   found: boolean;

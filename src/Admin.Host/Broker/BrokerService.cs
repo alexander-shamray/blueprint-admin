@@ -12,13 +12,6 @@ public sealed class BrokerService(ComposeService compose)
     /// <summary>The Compose service, owned by blueprint-backend deploy/compose/infrastructure.yml.</summary>
     public const string Service = "rabbitmq";
 
-    /// <summary>
-    /// Ordering's price projection endpoint, the backend's
-    /// Ordering.Infrastructure.Messaging.DependencyInjection.CatalogEventsQueue. run-locally.md says to
-    /// wait for it to drain before ordering a product just published.
-    /// </summary>
-    public const string ProjectionQueue = "ordering-catalog-events";
-
     /// <summary>run-locally.md: error queues are named <c>&lt;endpoint&gt;_error</c>.</summary>
     public const string ErrorSuffix = "_error";
 
@@ -28,14 +21,14 @@ public sealed class BrokerService(ComposeService compose)
 
         if (rows is null)
         {
-            return new QueuesView(false, error, [], new ProjectionDrain(ProjectionQueue, false, null, false));
+            return new QueuesView(false, error, [], new ProjectionDrain(PlatformQueues.Projection, false, null, false));
         }
 
         List<BrokerQueue> queues = [.. rows
             .OrderBy(r => r.Name, StringComparer.Ordinal)
-            .Select(r => new BrokerQueue(r.Name, r.Messages, r.Name.EndsWith(ErrorSuffix, StringComparison.Ordinal)))];
+            .Select(r => new BrokerQueue(r.Name, r.Messages, r.Name.EndsWith(ErrorSuffix, StringComparison.Ordinal), PlatformQueues.ConsumerOf(r.Name)))];
 
-        return new QueuesView(true, null, queues, IsDrained(queues, ProjectionQueue));
+        return new QueuesView(true, null, queues, IsDrained(queues, PlatformQueues.Projection));
     }
 
     public async Task<ExchangesView> ExchangesAsync(CancellationToken cancellationToken)
