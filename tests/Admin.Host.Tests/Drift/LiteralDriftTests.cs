@@ -60,7 +60,7 @@ public sealed class LiteralDriftTests
     }
 
     [Fact]
-    public void The_broker_management_port_the_broker_screen_names_is_the_one_compose_binds()
+    public void The_management_port_BrokerService_says_it_avoids_is_the_one_compose_binds()
     {
         Backend.Read("deploy", "compose", "infrastructure.yml").ShouldContain("\"127.0.0.1:15672:15672\"");
     }

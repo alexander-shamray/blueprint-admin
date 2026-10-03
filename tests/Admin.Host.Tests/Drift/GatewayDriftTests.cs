@@ -81,12 +81,12 @@ public sealed class GatewayDriftTests
         string endpoints = Backend.Read("src", "BFF", "Web.Bff", "Endpoints", "CheckoutEndpoints.cs");
 
         endpoints.ShouldContain("""MapGroup("/v1/checkout")""");
-        Regex.IsMatch(endpoints, """\.MapPost\(\s*"/quote""").ShouldBeTrue("the quote is no longer a POST to /quote");
+        Regex.IsMatch(endpoints, "\\.MapPost\\(\\s*\"/quote\"").ShouldBeTrue("the quote is no longer a POST to /quote");
     }
 
     [Fact]
     public void Every_host_still_maps_the_readiness_path_the_console_calls()
     {
-        Backend.Read("src", "BuildingBlocks", "Common.Web", "HealthCheckExtensions.cs").ShouldContain("""MapHealthChecks("/health/ready""");
+        Backend.Read("src", "BuildingBlocks", "Common.Web", "HealthCheckExtensions.cs").ShouldContain("MapHealthChecks(\"/health/ready\",");
     }
 }
