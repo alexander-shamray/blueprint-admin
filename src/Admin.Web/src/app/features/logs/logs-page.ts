@@ -6,13 +6,16 @@ import { OutputLine } from '../../core/host/host-types';
 import { SseClient } from '../../core/host/sse-client';
 
 /**
- * The platform's Compose services, owned by the backend: infrastructure.yml (sql through grafana) and
- * services/catalog.yml, gateway.yml, ordering.yml and web-bff.yml under deploy/compose/ in blueprint-backend.
- * Update this list when a service is added there or renamed.
+ * The platform's Compose services, owned by blueprint-backend: every file deploy/compose/docker-compose.yml
+ * includes, in its order. The drift gate reads those files against this list
+ * (tests/Admin.Host.Tests/Drift/ComposeDriftTests.cs).
  */
 export const COMPOSE_SERVICES = [
   'sql', 'redis-cache', 'redis-coordination', 'rabbitmq', 'keycloak', 'otel-collector', 'grafana',
   'catalog-migrator', 'catalog-api', 'gateway', 'ordering-migrator', 'ordering-api', 'web-bff',
+  'inventory-migrator', 'inventory-api', 'payments-migrator', 'psp-simulator', 'payments-api',
+  'shipping-migrator', 'carrier-simulator', 'shipping-worker',
+  'notifications-migrator', 'mailpit', 'notifications-worker',
 ];
 
 const MAX_LINES = 5000;
