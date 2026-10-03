@@ -9,6 +9,20 @@ What a checkout needs that `BlueprintAdmin.slnx` and `ci.yml` cannot say.
 Container-spawning tests in the Host use `node` for long-running children
 (`ProcessRunnerTests`); CI installs Node for that reason.
 
+## Drift
+
+`tests/Admin.Host.Tests/Drift/` reads every fact this console copies from
+`blueprint-backend` against the clone beside the main checkout, resolved
+the way the host resolves `Admin:BackendDir` and overridden by the same
+`BLUEPRINT_Admin__BackendDir`. With no clone those tests skip; with
+`ADMIN_DRIFT_REQUIRED=true` they fail instead, which is how CI's `drift`
+job runs them against the backend's `main`. The `run-locally.md` checks
+skip in CI regardless: that file is at the workspace root, in no
+repository. `DriftCoverageTests` needs no clone and always runs. A source
+file that names `blueprint-backend` without a drift check or a listed
+reason fails it. A service unit or a grant the console does not have yet is
+a named exception in its test, citing the issue that removes it.
+
 ## SPA
 
 Commands run in `src/Admin.Web`. `bash .claude/scripts/npm-checks.sh` `cd`s

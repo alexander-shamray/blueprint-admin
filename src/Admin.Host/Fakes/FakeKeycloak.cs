@@ -13,7 +13,7 @@ namespace Admin.Host.Fakes;
 /// </summary>
 internal static class FakeKeycloak
 {
-    private static readonly Dictionary<string, (string Password, string[] Permissions)> Users = new(StringComparer.Ordinal)
+    internal static readonly Dictionary<string, (string Password, string[] Permissions)> Users = new(StringComparer.Ordinal)
     {
         ["demo"] = ("demo", ["catalog:write", "orders:write", "orders:cancel"]),
         ["browser"] = ("browser", []),
