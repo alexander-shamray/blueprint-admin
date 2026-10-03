@@ -248,14 +248,18 @@ export interface TraceView {
 }
 
 /**
- * One service's golden signals: requests per second, the 5xx fraction and p99 latency in seconds.
- * Null where Prometheus had no series for it or no finite value (the host's `ServiceSignals`).
+ * One service's golden signals, a value per query panel of the backend's dashboard: rates per second,
+ * the 5xx fraction and durations in seconds. Null where unknown, by the host's `ServiceSignals` rules.
  */
 export interface ServiceSignals {
   service: string;
   requestRate: number | null;
   errorRatio: number | null;
   latencyP99Seconds: number | null;
+  domainRefusalRate: number | null;
+  unauthorisedRate: number | null;
+  commandP95Seconds: number | null;
+  queryP95Seconds: number | null;
 }
 
 /** The Stack screen's golden-signal strip. A Grafana that does not answer is a state, as `TraceView` does it. */

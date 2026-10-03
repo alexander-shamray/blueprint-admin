@@ -29,8 +29,26 @@ const health = {
   reachable: true,
   error: null,
   services: [
-    { service: 'Catalog.Api', requestRate: 1.2, errorRatio: null, latencyP99Seconds: 0.048 },
-    { service: 'Gateway.Api', requestRate: 2.4, errorRatio: 0.05, latencyP99Seconds: 0.09 },
+    {
+      service: 'Catalog.Api',
+      requestRate: 1.2,
+      errorRatio: 0,
+      latencyP99Seconds: 0.048,
+      domainRefusalRate: 0,
+      unauthorisedRate: 0.2,
+      commandP95Seconds: 0.012,
+      queryP95Seconds: null,
+    },
+    {
+      service: 'Gateway.Api',
+      requestRate: 2.4,
+      errorRatio: null,
+      latencyP99Seconds: 0.09,
+      domainRefusalRate: 0.75,
+      unauthorisedRate: 0,
+      commandP95Seconds: null,
+      queryP95Seconds: null,
+    },
   ],
 };
 
@@ -89,7 +107,7 @@ describe('StackPage', () => {
     await vi.advanceTimersByTimeAsync(0);
     fixture.detectChanges();
 
-    const rows = Array.from(fixture.nativeElement.querySelectorAll('tbody tr')) as HTMLElement[];
+    const rows = Array.from(fixture.nativeElement.querySelectorAll('table.services tbody tr')) as HTMLElement[];
     expect(rows.map((r) => r.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
       'gateway running healthy 5000',
       'catalog-migrator exited — —',
@@ -185,13 +203,24 @@ describe('StackPage', () => {
       return fixture;
     }
 
-    it('prints rate, 5xx share and p99 per service, with a dash where Prometheus had no value', async () => {
+    it('prints every dashboard panel per service under a header naming each, with a dash where the value is unknown', async () => {
       const fixture = await render();
 
-      const items = Array.from(fixture.nativeElement.querySelectorAll('.signals li')) as HTMLElement[];
-      expect(items.map((i) => text(i))).toEqual([
-        'Catalog.Api 1.20 req/s — p99 48 ms',
-        'Gateway.Api 2.40 req/s 5.0 % 5xx p99 90 ms',
+      const headers = Array.from(fixture.nativeElement.querySelectorAll('table.signals th')) as HTMLElement[];
+      expect(headers.map((h) => text(h))).toEqual([
+        'Service',
+        'Requests (req/s)',
+        '5xx share',
+        'Latency p99',
+        '422 (req/s)',
+        '401 (req/s)',
+        'Command p95',
+        'Query p95',
+      ]);
+      const rows = Array.from(fixture.nativeElement.querySelectorAll('table.signals tbody tr')) as HTMLElement[];
+      expect(rows.map((r) => text(r))).toEqual([
+        'Catalog.Api 1.20 0.0 % 48 ms 0.00 0.20 12 ms —',
+        'Gateway.Api 2.40 — 90 ms 0.75 0.00 — —',
       ]);
     });
 
@@ -222,7 +251,7 @@ describe('StackPage', () => {
       fixture.detectChanges();
 
       expect(host.telemetryHealth).toHaveBeenCalledTimes(2);
-      expect(fixture.nativeElement.querySelectorAll('.signals li').length).toBe(2);
+      expect(fixture.nativeElement.querySelectorAll('table.signals tbody tr').length).toBe(2);
       expect(text(fixture.nativeElement.querySelector('.signals'))).not.toContain('network down');
     });
   });
@@ -236,12 +265,12 @@ describe('StackPage', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('The host did not answer: network down');
-    expect(fixture.nativeElement.querySelectorAll('tbody tr').length).toBe(0);
+    expect(fixture.nativeElement.querySelectorAll('table.services tbody tr').length).toBe(0);
 
     await vi.advanceTimersByTimeAsync(3000);
     fixture.detectChanges();
 
-    const rows = Array.from(fixture.nativeElement.querySelectorAll('tbody tr')) as HTMLElement[];
+    const rows = Array.from(fixture.nativeElement.querySelectorAll('table.services tbody tr')) as HTMLElement[];
     expect(rows.length).toBe(2);
     expect(fixture.nativeElement.textContent).not.toContain('The host did not answer');
   });
@@ -257,13 +286,13 @@ describe('StackPage', () => {
     fixture.detectChanges();
 
     expect(host.stack).toHaveBeenCalledTimes(1);
-    expect(fixture.nativeElement.querySelectorAll('tbody tr').length).toBe(0);
+    expect(fixture.nativeElement.querySelectorAll('table.services tbody tr').length).toBe(0);
 
     await vi.advanceTimersByTimeAsync(2000);
     fixture.detectChanges();
 
     expect(host.stack).toHaveBeenCalledTimes(1);
-    expect(fixture.nativeElement.querySelectorAll('tbody tr').length).toBe(2);
+    expect(fixture.nativeElement.querySelectorAll('table.services tbody tr').length).toBe(2);
     expect(fixture.nativeElement.textContent).not.toContain('The host did not answer');
   });
 

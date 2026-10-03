@@ -3,8 +3,8 @@ import { expect, test } from '@playwright/test';
 test('the stack screen lists the fake services and runs up', async ({ page }) => {
   await page.goto('/stack');
 
-  await expect(page.locator('tbody tr')).toHaveCount(13);
-  await expect(page.locator('tbody tr', { hasText: 'gateway' })).toContainText('healthy');
+  await expect(page.locator('table.services tbody tr')).toHaveCount(13);
+  await expect(page.locator('table.services tbody tr', { hasText: 'gateway' })).toContainText('healthy');
   await expect(page.locator('.reachability span.up')).toHaveCount(9);
 
   await page.getByRole('button', { name: 'Up' }).click();
@@ -12,14 +12,16 @@ test('the stack screen lists the fake services and runs up', async ({ page }) =>
   await expect(page.locator('app-output-pane pre')).toContainText('exited 0');
 });
 
-test('the stack screen shows the recorded golden signals per service', async ({ page }) => {
+// FakeGrafana answers each dashboard query with its live recording of 2026-10-03.
+test('the stack screen shows every recorded golden signal per service', async ({ page }) => {
   await page.goto('/stack');
-  const signals = page.getByRole('region', { name: 'Golden signals' }).locator('li');
+  const rows = page.getByRole('region', { name: 'Golden signals' }).locator('table.signals tbody tr');
 
-  await expect(signals).toHaveCount(3);
-  await expect(signals.filter({ hasText: 'Gateway.Api' })).toContainText('2.40 req/s');
-  await expect(signals.filter({ hasText: 'Gateway.Api' })).toContainText('5.0 % 5xx');
-  await expect(signals.filter({ hasText: 'Catalog.Api' })).toContainText('p99 48 ms');
+  await expect(rows).toHaveCount(8);
+  // The gateway answered 401s and 422s and no 5xx, which is a zero share, not a dash; it runs no commands.
+  await expect(rows.filter({ hasText: 'Gateway.Api' }).locator('td')).toHaveText(['Gateway.Api', '0.22', '0.0 %', '523 ms', '0.03', '0.03', '—', '—']);
+  // Payments served no HTTP in the window, so its share is undefined and its refusals are zeros.
+  await expect(rows.filter({ hasText: 'Payments.Api' }).locator('td')).toHaveText(['Payments.Api', '0.00', '—', '29 ms', '0.00', '0.00', '4750 ms', '—']);
 });
 
 test('wiping volumes needs the typed confirmation', async ({ page }) => {
