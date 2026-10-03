@@ -19,9 +19,9 @@ test('the stack screen shows every recorded golden signal per service', async ({
 
   await expect(rows).toHaveCount(8);
   // The gateway answered 401s and 422s and no 5xx, which is a zero share, not a dash; it runs no commands.
-  await expect(rows.filter({ hasText: 'Gateway.Api' }).locator('td')).toHaveText(['Gateway.Api', '0.22', '0.0 %', '523 ms', '0.03', '0.03', '—', '—']);
+  await expect(rows.filter({ hasText: 'Gateway.Api' }).locator('td')).toHaveText(['Gateway.Api', '0.22', '0.0 %', '523 ms', '0.032', '0.033', '—', '—']);
   // Payments served no HTTP in the window, so its share is undefined and its refusals are zeros.
-  await expect(rows.filter({ hasText: 'Payments.Api' }).locator('td')).toHaveText(['Payments.Api', '0.00', '—', '29 ms', '0.00', '0.00', '4750 ms', '—']);
+  await expect(rows.filter({ hasText: 'Payments.Api' }).locator('td')).toHaveText(['Payments.Api', '0', '—', '29 ms', '0', '0', '4750 ms', '—']);
 });
 
 test('wiping volumes needs the typed confirmation', async ({ page }) => {

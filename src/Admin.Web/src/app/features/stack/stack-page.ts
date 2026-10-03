@@ -68,9 +68,14 @@ export class StackPage {
     ),
   );
 
-  /** A rate, a share and a duration as the strip's cells print them; the column header names the unit, and absent is a dash, not a zero. */
+  /**
+   * A rate, a share and a duration as the strip's cells print them; a rate's unit is in its column header,
+   * a share and a duration carry theirs in the cell, and absent is a dash, not a zero. A rate keeps two
+   * significant figures, because one refusal in a 5-minute window is a few thousandths per second and
+   * fixed places would print it as a zero.
+   */
   rate(value: number | null): string {
-    return value === null ? '—' : value.toFixed(2);
+    return value === null ? '—' : String(Number(value.toPrecision(2)));
   }
 
   ratio(value: number | null): string {

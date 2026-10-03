@@ -249,7 +249,7 @@ export interface TraceView {
 
 /**
  * One service's golden signals, a value per query panel of the backend's dashboard: rates per second,
- * the 5xx fraction and durations in seconds. Null where unknown, by the host's `ServiceSignals` rules.
+ * the 5xx fraction and durations in seconds. Null where unknown; `TelemetryHealthService` decides which absences are zeros.
  */
 export interface ServiceSignals {
   service: string;

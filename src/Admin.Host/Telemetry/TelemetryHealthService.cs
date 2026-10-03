@@ -2,8 +2,8 @@ namespace Admin.Host.Telemetry;
 
 /// <summary>
 /// One service's golden signals, a value per query panel of the backend's golden-signals dashboard. Each
-/// value is null where it is unknown: no series for the service, a value that is not a finite number, or
-/// a 5xx share over no requests.
+/// value is null where it is unknown, and which absences are zeros instead is decided by
+/// <see cref="TelemetryHealthService"/>.
 /// </summary>
 public sealed record ServiceSignals(
     string Service,
