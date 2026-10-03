@@ -11,12 +11,15 @@ namespace Admin.Host.Api;
 /// curated operations. Cached until reloaded; a service that stops answering keeps its last
 /// operations, marked unavailable, rather than vanishing from the tree.
 /// </summary>
-public sealed class ApiCatalog(HttpClient http, TokenService tokens, IOptions<AdminOptions> options) : IDisposable
+public sealed class ApiCatalog(HttpClient http, TokenService tokens, IOptions<AdminOptions> options, OpenApiBaselines baselines) : IDisposable
 {
     private static readonly TimeSpan DocumentTimeout = TimeSpan.FromSeconds(10);
 
     private readonly SemaphoreSlim gate = new(1, 1);
     private readonly Dictionary<string, IReadOnlyList<ApiOperation>> lastGood = [];
+
+    /// <summary>Each service's last fetched document, which is what accepting a baseline keeps.</summary>
+    private readonly Dictionary<string, string> lastDocument = [];
     private ApiCatalogView? current;
 
     public void Dispose() => gate.Dispose();
@@ -25,6 +28,32 @@ public sealed class ApiCatalog(HttpClient http, TokenService tokens, IOptions<Ad
         current ?? await LoadCatalogAsync(force: false, cancellationToken);
 
     public Task<ApiCatalogView> ReloadAsync(CancellationToken cancellationToken) => LoadCatalogAsync(force: true, cancellationToken);
+
+    /// <summary>
+    /// Makes the document last fetched for <paramref name="service"/> its baseline, then reloads, or returns null
+    /// when no document for that name has been fetched. The name is checked against what was fetched, so it never
+    /// reaches a file path unless it is one of this catalog's own services.
+    /// </summary>
+    public async Task<ApiCatalogView?> AcceptAsync(string service, CancellationToken cancellationToken)
+    {
+        await gate.WaitAsync(cancellationToken);
+
+        try
+        {
+            if (!lastDocument.TryGetValue(service, out string? document))
+            {
+                return null;
+            }
+
+            baselines.Accept(service, document);
+        }
+        finally
+        {
+            gate.Release();
+        }
+
+        return await ReloadAsync(cancellationToken);
+    }
 
     private async Task<ApiCatalogView> LoadCatalogAsync(bool force, CancellationToken cancellationToken)
     {
@@ -121,10 +150,14 @@ public sealed class ApiCatalog(HttpClient http, TokenService tokens, IOptions<Ad
                 return Unavailable($"{documentUrl} answered {(int)response.StatusCode}.");
             }
 
-            await using Stream body = await response.Content.ReadAsStreamAsync(timeout.Token);
-            using JsonDocument document = await JsonDocument.ParseAsync(body, cancellationToken: timeout.Token);
+            string text = await response.Content.ReadAsStringAsync(timeout.Token);
+            using JsonDocument document = JsonDocument.Parse(text);
+            IReadOnlyList<ApiOperation> operations = OpenApiReader.Read(name, document.RootElement, o.GatewayUrl);
 
-            return (new ApiSource(name, documentUrl, true, null), OpenApiReader.Read(name, document.RootElement, o.GatewayUrl));
+            // Only a document the reader accepted is kept or compared: one it refused is the error above, not a contract.
+            lastDocument[name] = text;
+
+            return (new ApiSource(name, documentUrl, true, null, baselines.Compare(name, text)), operations);
         }
         catch (HttpRequestException e)
         {

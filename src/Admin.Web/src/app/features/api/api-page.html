@@ -10,6 +10,25 @@
         @if (g.source && !g.source.available) {
           <p class="source-error" [title]="g.source.documentUrl">unavailable: {{ g.source.error }}</p>
         }
+        @if (g.source?.changes; as c) {
+          @if (c.error) {
+            <p class="contract-error">{{ c.error }}</p>
+          } @else if (c.baselineTaken) {
+            <p class="contract">document kept as the baseline at {{ c.baselineAt | date: 'yyyy-MM-dd HH:mm' }}; later changes show here</p>
+          } @else if (changeLines(c).length > 0) {
+            <div class="contract-changes" role="status">
+              <p>changed since {{ c.baselineAt | date: 'yyyy-MM-dd HH:mm' }}:</p>
+              <ul>
+                @for (line of changeLines(c); track line) {
+                  <li>{{ line }}</li>
+                }
+              </ul>
+              <button class="accept" (click)="acceptBaseline(g.name)">Accept as baseline</button>
+            </div>
+          } @else {
+            <p class="contract">unchanged since {{ c.baselineAt | date: 'yyyy-MM-dd HH:mm' }}</p>
+          }
+        }
         <ul>
           @for (o of g.operations; track o.id) {
             <li>

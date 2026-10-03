@@ -1,9 +1,10 @@
+import { DatePipe } from '@angular/common';
 import { Component, DestroyRef, InjectionToken, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { EMPTY, Subscription, catchError, exhaustMap, takeUntil, takeWhile, tap, timer } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
-import { ApiCatalogView, ApiOperation, ProjectionDrain, ProxyRequest, ProxyResult, TokenView } from '../../core/host/host-types';
+import { ApiCatalogView, ApiOperation, OpenApiChanges, ProjectionDrain, ProxyRequest, ProxyResult, TokenView } from '../../core/host/host-types';
 import { IdentityChoice, IdentityState } from '../../core/identity/identity-state';
 import { buildUrl, parseHeaders, pretty, withFreshCommandId, withoutCredentialHeaders, withoutCredentialLines, withoutSetCookie } from './request-builder';
 import { DrainedIndicator } from '../../shared/drained-indicator/drained-indicator';
@@ -48,7 +49,7 @@ export const DRAIN_WATCH_MS = 120_000;
 
 @Component({
   selector: 'app-api-page',
-  imports: [FormsModule, DrainedIndicator],
+  imports: [DatePipe, FormsModule, DrainedIndicator],
   templateUrl: './api-page.html',
   styleUrl: './api-page.css',
 })
@@ -155,6 +156,28 @@ export class ApiPage {
     this.identity.load();
     this.host.operations().subscribe({
       next: (view) => this.catalog.set(view),
+      error: (e: unknown) => this.error.set(this.describe(e)),
+    });
+  }
+
+  /** The document's moves as lines an operator reads, operations first; empty when nothing moved. */
+  changeLines(changes: OpenApiChanges): string[] {
+    return [
+      ...changes.operationsAdded.map((o) => `added operation ${o}`),
+      ...changes.operationsRemoved.map((o) => `removed operation ${o}`),
+      ...changes.statusesAdded.map((s) => `added response ${s}`),
+      ...changes.statusesRemoved.map((s) => `removed response ${s}`),
+      ...changes.fieldsAdded.map((f) => `added field ${f}`),
+      ...changes.fieldsRemoved.map((f) => `removed field ${f}`),
+    ];
+  }
+
+  acceptBaseline(service: string): void {
+    this.host.acceptBaseline(service).subscribe({
+      next: (view) => {
+        this.error.set(null);
+        this.catalog.set(view);
+      },
       error: (e: unknown) => this.error.set(this.describe(e)),
     });
   }

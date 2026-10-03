@@ -78,6 +78,11 @@ export class HostClient {
     return this.http.post<ApiCatalogView>('/api/catalog/reload', null);
   }
 
+  /** Makes the service's last fetched document the baseline its changes are read against; answers the reloaded catalog. */
+  acceptBaseline(service: string): Observable<ApiCatalogView> {
+    return this.http.post<ApiCatalogView>(`/api/catalog/baseline/${encodeURIComponent(service)}`, null);
+  }
+
   proxy(request: ProxyRequest): Observable<ProxyResult> {
     return this.http.post<ProxyResult>('/api/proxy', request);
   }

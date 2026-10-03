@@ -21,6 +21,28 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
     }
 
     [Fact]
+    public async Task The_fake_catalog_document_moves_after_its_first_fetch_and_accepting_it_clears_the_change()
+    {
+        // FakeOpenApi's first fetch in the process took the baseline, wherever it happened; every later one has moved.
+        await client.GetFromJsonAsync<JsonElement>("/api/catalog/operations", Token);
+        JsonElement reloaded = await (await client.PostAsync("/api/catalog/reload", null, Token)).Content.ReadFromJsonAsync<JsonElement>(Token);
+        JsonElement changes = Source(reloaded, "catalog").GetProperty("changes");
+
+        changes.GetProperty("fieldsAdded").EnumerateArray().Select(f => f.GetString()).ShouldContain("ProductSummaryDto.quantityAvailable");
+        Source(reloaded, "ordering").GetProperty("changes").GetProperty("fieldsAdded").GetArrayLength().ShouldBe(0);
+
+        HttpResponseMessage accepted = await client.PostAsync("/api/catalog/baseline/catalog", null, Token);
+        accepted.StatusCode.ShouldBe(HttpStatusCode.OK);
+        JsonElement after = await accepted.Content.ReadFromJsonAsync<JsonElement>(Token);
+        Source(after, "catalog").GetProperty("changes").GetProperty("fieldsAdded").GetArrayLength().ShouldBe(0);
+
+        (await client.PostAsync("/api/catalog/baseline/inventory", null, Token)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    private static JsonElement Source(JsonElement view, string name) =>
+        view.GetProperty("sources").EnumerateArray().Single(s => s.GetProperty("name").GetString() == name);
+
+    [Fact]
     public async Task Operations_list_the_fake_documents_rebased_onto_the_gateway_and_the_curated_calls()
     {
         JsonElement view = await client.GetFromJsonAsync<JsonElement>("/api/catalog/operations", Token);

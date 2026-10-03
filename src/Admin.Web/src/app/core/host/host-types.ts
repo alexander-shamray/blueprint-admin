@@ -108,11 +108,29 @@ export interface ApiOperation {
   available: boolean;
 }
 
+/**
+ * One document against the baseline the host keeps for its service (the host's `OpenApiChanges`).
+ * `baselineTaken` is the first sight of the service; `error` is a baseline that could not be read or written.
+ */
+export interface OpenApiChanges {
+  baselineAt: string | null;
+  baselineTaken: boolean;
+  operationsAdded: string[];
+  operationsRemoved: string[];
+  statusesAdded: string[];
+  statusesRemoved: string[];
+  fieldsAdded: string[];
+  fieldsRemoved: string[];
+  error: string | null;
+}
+
 export interface ApiSource {
   name: string;
   documentUrl: string;
   available: boolean;
   error: string | null;
+  /** Null when no document was read on the last load. */
+  changes: OpenApiChanges | null;
 }
 
 export interface ApiCatalogView {

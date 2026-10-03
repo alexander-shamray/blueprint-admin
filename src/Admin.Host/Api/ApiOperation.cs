@@ -19,6 +19,7 @@ public sealed record ApiOperation(
     string EdgePolicy,
     bool Available);
 
-public sealed record ApiSource(string Name, string DocumentUrl, bool Available, string? Error);
+/// <param name="Changes">The document against its kept baseline (spec §5.7); null when no document was read this time.</param>
+public sealed record ApiSource(string Name, string DocumentUrl, bool Available, string? Error, OpenApiChanges? Changes = null);
 
 public sealed record ApiCatalogView(IReadOnlyList<ApiSource> Sources, IReadOnlyList<ApiOperation> Operations);
