@@ -5,6 +5,8 @@ using Admin.Host.Config;
 using Admin.Host.Fakes;
 using Admin.Host.Frontend;
 using Admin.Host.Jobs;
+using Admin.Host.Stack;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 
@@ -18,21 +20,16 @@ namespace Admin.Host.Tests.Drift;
 /// </summary>
 public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
 {
-    /// <summary>The compose file as run-locally.md spells it, so the host's argv and the document's compare token for token.</summary>
-    private static readonly RepoPaths Paths = new("backend", "frontend", new AdminOptions().ComposeFile);
+    /// <summary>
+    /// The clones and the compose file as run-locally.md spells them from the workspace root, so the host's argv and
+    /// the document's compare token for token.
+    /// </summary>
+    private static readonly RepoPaths Paths = new("blueprint-backend", "blueprint-frontend", new AdminOptions().ComposeFile);
 
     /// <summary>Commands in the document the console does not run, and why.</summary>
     private static readonly Dictionary<string, string> NotRun = new(StringComparer.Ordinal)
     {
         ["npm ci"] = "a prerequisite the console reports rather than runs (FrontendSupervisor, spec §2.1)",
-
-        // The workstation doctor's reads, which #60 builds; each row goes when the host runs its line.
-        ["docker info --format '{{.ServerVersion}}'"] = "#60",
-        ["Get-NetTCPConnection -State Listen -LocalPort 1433,3000,5000,5101,5102,5103,5104,5190,5200,5672,6379,6380,8080,15672 -ErrorAction SilentlyContinue | Select-Object LocalPort, OwningProcess"] = "#60",
-        ["node --version"] = "#60",
-        ["Get-Content blueprint-frontend/.nvmrc"] = "#60",
-        ["git -C blueprint-backend status -sb"] = "#60",
-        ["git -C blueprint-frontend status -sb"] = "#60",
     };
 
     private readonly FakeTimeProvider time = new();
@@ -57,7 +54,7 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
         {
             if (Command().IsMatch(line))
             {
-                if (!host.Any(h => Runs(h, line.Split(' ', StringSplitOptions.RemoveEmptyEntries), services)))
+                if (!host.Any(h => h.Contains(line) || Runs(h, Tokens(line), services)))
                 {
                     unaccounted.Add($"no host command runs: {line}");
                 }
@@ -117,9 +114,17 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
         await broker.ExchangesAsync(TestContext.Current.CancellationToken);
         await broker.PermissionsAsync(TestContext.Current.CancellationToken);
         await frontend.StartAsync(TestContext.Current.CancellationToken);
+        await new WorkstationDoctor(runner, compose, Paths, Options.Create(new AdminOptions()), time).ReadAsync(TestContext.Current.CancellationToken);
 
         return [.. runner.Started.Select(s => (string[])[s.FileName, .. s.Arguments])];
     }
+
+    /// <summary>
+    /// A line's tokens as a shell hands them to the program: PowerShell's single quotes are the shell's, not the
+    /// argument's. A line the host runs whole, through PowerShell, matches as one argument instead.
+    /// </summary>
+    private static string[] Tokens(string line) =>
+        [.. line.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(t => t.Length > 1 && t[0] == '\'' && t[^1] == '\'' ? t[1..^1] : t)];
 
     /// <summary>
     /// The host runs the document's line when every token of the line is in the host's argv and the
@@ -180,7 +185,7 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
             .Where(p => p.PropertyType == typeof(string) && p.Name.EndsWith("Url", StringComparison.Ordinal))
             .Select(p => (string)p.GetValue(o)!)];
 
-    [GeneratedRegex(@"^(docker|npm) ")]
+    [GeneratedRegex(@"^(docker|npm|node|git|Get-NetTCPConnection|Get-Content) ")]
     private static partial Regex Command();
 
     [GeneratedRegex(@"https?://[^\s""'/]+[^\s""']*")]

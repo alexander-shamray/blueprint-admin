@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { catchError, exhaustMap, of, tap, timer } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
+import { DoctorView } from '../../core/host/host-types';
 import { OutputPane } from '../../shared/output-pane/output-pane';
 
 @Component({
@@ -84,6 +85,37 @@ export class StackPage {
 
   duration(seconds: number | null): string {
     return seconds === null ? '—' : `${Math.round(seconds * 1000)} ms`;
+  }
+
+  /**
+   * The workstation doctor (spec §5.3): read once when the screen opens and again on request, not polled.
+   * Its reads are the ones a developer makes before Up, and none of them moves while the screen is open.
+   */
+  readonly doctor = signal<DoctorView | null>(null);
+  readonly doctorError = signal<string | null>(null);
+  readonly doctorReading = signal(false);
+
+  constructor() {
+    this.checkWorkstation();
+  }
+
+  checkWorkstation(): void {
+    if (this.doctorReading()) {
+      return;
+    }
+
+    this.doctorReading.set(true);
+    this.host.doctor().subscribe({
+      next: (view) => {
+        this.doctor.set(view);
+        this.doctorError.set(null);
+        this.doctorReading.set(false);
+      },
+      error: (e: unknown) => {
+        this.doctorError.set(this.describeError(e));
+        this.doctorReading.set(false);
+      },
+    });
   }
 
   /** On error, fall back to undefined so the config-derived links simply do not render. */

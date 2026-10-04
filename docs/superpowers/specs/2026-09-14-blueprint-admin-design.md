@@ -235,6 +235,30 @@ an exited `npm start`, and the output that says why it died, past
 - `FollowLogs(services)`: `logs -f --tail 200 [services]`, a long-running job.
 - `Exec(service, args)`: `exec -T service args`, a one-shot job whose stdout
   the caller parses; like `Ps()`, a job the registry does not keep (§5.2).
+- `Config()` and `Images()`: `config --format json` and
+  `images --format json`, read the same way, for the workstation doctor.
+
+`WorkstationDoctor` reads the workstation before Up, so a failure Compose
+would report late is named first. Every read is a line of `run-locally.md`'s
+step 0, run as written and bounded to 30 s like `ps`; none changes anything,
+none leaves the machine, and none fetches, so a clone is judged against its
+last fetch. Each row is ok, a problem, or could-not-tell for a read that did
+not answer, never a guess:
+
+- Docker: `docker info` answers.
+- Ports: the published ports of the resolved Compose model, against every
+  listener and its process (a PowerShell line). A port held by anything but
+  Docker's own process is one Up cannot publish.
+- Gateway CORS: the gateway's resolved `Cors__Origins__*` admit the client
+  origin `ClientUrl` names. Read and reported, never fixed from here.
+- Node: `node --version` against the frontend clone's `.nvmrc`.
+- Each clone: on `main`, and not behind its upstream as last fetched.
+- Images: no image Compose built predates the backend's last commit, since Up
+  does not rebuild an image that exists.
+
+A Compose port override has no row: the Compose files declare no port
+variable, and `-f` keeps Compose from reading an override file. The
+listener read is PowerShell's, so off Windows that row cannot tell.
 
 `ResetService` is "back to a known state" as one listed job: `Down(true)`,
 then `Up()`, then the reachability probe of §5.10's `GET /stack` until every
@@ -418,6 +442,7 @@ All under `/api`, JSON, loopback only.
 | Method and path | Does |
 |---|---|
 | `GET /stack` | `ServiceStatus[]`, the frontend job summary, and reachability of gateway, Keycloak, Grafana and the client |
+| `GET /stack/doctor` | §5.3's workstation checks, one row each with its verdict and what the reads said |
 | `POST /stack/backend/up` | Compose up; returns the job |
 | `POST /stack/backend/down` | body `{ wipeVolumes, confirm }`; returns the job |
 | `POST /stack/backend/reset` | body `{ confirm }`, which must be `down -v`; §5.3's reset, returned as one job, or the one still running |
@@ -447,7 +472,7 @@ output pane, status pill and JSON viewer.
 
 | Screen | Shows | Does |
 |---|---|---|
-| **Stack** | one row per Compose service with state, health and port; the frontend job; a reachability strip; quick links to the client, Grafana, Keycloak | Up, Down, Down and wipe, Reset (both behind one typed confirmation), Start and Stop frontend; opens the job's output pane |
+| **Stack** | the workstation doctor's rows above the buttons, read when the screen opens; one row per Compose service with state, health and port; the frontend job; a reachability strip; quick links to the client, Grafana, Keycloak | Check the workstation again; Up, Down, Down and wipe, Reset (both behind one typed confirmation), Start and Stop frontend; opens the job's output pane |
 | **Logs** | a follow stream with service filter, text search and correlation-id highlight | start, stop (the host's follow job too, as does leaving the screen), clear |
 | **Broker** | queues with depth, `_error` queues in red, exchanges, permissions; a drained indicator for `ordering-catalog-events` | refresh, auto-refresh of all three |
 | **API** | operation tree on the left, each source with what its document changed since the kept baseline; request editor (path params, headers, body pre-filled from the schema example, `commandId` generated per send) and identity picker with its token clock (§5.6); response pane with status, timing, headers, body; a history list | Send; accept a changed document as the new baseline; "Trace this call" opens the Trace screen with the response's correlation id |

@@ -17,6 +17,9 @@ public static class StackEndpoints
             return TypedResults.Ok(new StackView(await backend, frontend.Status(), await reachability));
         });
 
+        app.MapGet("/api/stack/doctor", async (WorkstationDoctor doctor, CancellationToken cancellationToken) =>
+            TypedResults.Ok(await doctor.ReadAsync(cancellationToken)));
+
         app.MapPost("/api/stack/backend/up", (ComposeService compose) => TypedResults.Accepted((string?)null, JobSummary.Of(compose.Up())));
 
         app.MapPost("/api/stack/backend/down", Results<Accepted<JobSummary>, ProblemHttpResult> (DownRequest request, ComposeService compose) =>

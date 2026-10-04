@@ -38,9 +38,14 @@ public static class FakePlatformScripts
         "  Local:   http://localhost:5173/",
     ];
 
-    public static FakeProcessRunner Script(FakeProcessRunner runner, string composeFile)
+    /// <summary>
+    /// Every command FakePlatform answers. The workstation doctor's reads replay what this workstation answered on
+    /// 2026-10-04 with the stack up, except the two ports a host RabbitMQ held the day before, which keep its
+    /// answer so the panel has its red row (fixtures/workstation-listeners.json).
+    /// </summary>
+    public static FakeProcessRunner Script(FakeProcessRunner runner, Config.RepoPaths paths)
     {
-        string prefix = $"compose -f {composeFile} ";
+        string prefix = $"compose -f {paths.ComposeFile} ";
 
         return runner
             .On("docker", prefix + "ps -a --format json", 0, [.. ComposePsLines()])
@@ -67,10 +72,22 @@ public static class FakePlatformScripts
             .On("docker", prefix + "exec -T rabbitmq rabbitmqctl list_exchanges name type --formatter json", 0, [.. FixtureLines("rabbitmq-exchanges.json")])
             .On("docker", prefix + "exec -T rabbitmq rabbitmqctl list_permissions --formatter json", 0, [.. FixtureLines("rabbitmq-permissions.json")])
             .OnLongRunning("docker", prefix + "logs -f --tail 200", services => FollowLogLines.Where(l => services.Count == 0 || services.Contains(ServiceOf(l))))
+            .On("docker", prefix + "config --format json", 0, Lines(WorkstationRecordings.ComposeConfig))
+            .On("docker", prefix + "images --format json", 0, Lines(WorkstationRecordings.ComposeImages))
+            .On("docker", "info --format {{.ServerVersion}}", 0, "29.7.2")
+            .On("powershell", "-NoProfile -Command Get-NetTCPConnection ", 0, Lines(WorkstationRecordings.Listeners))
+            .On("powershell", "-NoProfile -Command Get-Content ", 0, "22.23.2")
+            .On("node", "--version", 0, "v22.23.2")
+            .On("git", $"-C {paths.BackendDir} status -sb", 0, "## main...origin/main")
+            .On("git", $"-C {paths.FrontendDir} status -sb", 0, "## main...origin/main")
+            .On("git", $"-C {paths.BackendDir} log -1 --format=%cI", 0, "2026-10-04T02:19:22+05:00")
             .OnLongRunning("npm", "start", NgServeLines);
     }
 
     public static IReadOnlyList<string> ComposePsLines() => FixtureLines("compose-ps.jsonl");
+
+    private static string[] Lines(string recording) =>
+        recording.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     /// <summary>A recorded output embedded under its logical name, one entry per non-empty line.</summary>
     public static IReadOnlyList<string> FixtureLines(string logicalName)

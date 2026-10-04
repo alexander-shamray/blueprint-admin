@@ -24,6 +24,21 @@ test('the stack screen shows every recorded golden signal per service', async ({
   await expect(rows.filter({ hasText: 'Payments.Api' }).locator('td')).toHaveText(['Payments.Api', '0', '—', '29 ms', '0', '0', '4750 ms', '—']);
 });
 
+// FakePlatformScripts replays this workstation's answers to the doctor's reads, with the host RabbitMQ that
+// held 5672 and 15672 kept in the listener recording (WorkstationRecordings.Listeners).
+test('the workstation panel is read before Up, green where fine and red where a port is held', async ({ page }) => {
+  await page.goto('/stack');
+  const rows = page.getByRole('region', { name: 'Workstation' }).locator('table.doctor tbody tr');
+
+  await expect(rows).toHaveCount(7);
+  await expect(rows.filter({ hasText: 'Docker' })).toHaveClass('state-Ok');
+  await expect(rows.filter({ hasText: 'Docker' }).locator('td.state')).toHaveText('ok');
+  await expect(rows.filter({ hasText: 'Ports' })).toHaveClass('state-Problem');
+  await expect(rows.filter({ hasText: 'Ports' }).locator('td.detail')).toHaveText(
+    'Held by another program, so Up cannot publish them: 5672, 15672 by erl (pid 7376).',
+  );
+});
+
 test('wiping volumes needs the typed confirmation', async ({ page }) => {
   await page.goto('/stack');
   const wipe = page.getByRole('button', { name: 'Down and wipe' });

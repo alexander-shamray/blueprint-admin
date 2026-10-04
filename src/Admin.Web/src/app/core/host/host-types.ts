@@ -280,3 +280,14 @@ export interface TelemetryHealthView {
   error: string | null;
   services: ServiceSignals[];
 }
+
+/** One workstation check, as the host's `WorkstationDoctor` judged it: `Unknown` is a read that did not answer. */
+export interface DoctorCheck {
+  name: string;
+  state: 'Ok' | 'Problem' | 'Unknown';
+  detail: string;
+}
+
+export interface DoctorView {
+  checks: DoctorCheck[];
+}
