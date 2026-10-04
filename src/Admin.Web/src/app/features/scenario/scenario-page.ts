@@ -1,4 +1,4 @@
-import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import {
@@ -23,6 +23,7 @@ import {
 import { IdentityState } from '../../core/identity/identity-state';
 import { DrainedIndicator } from '../../shared/drained-indicator/drained-indicator';
 import { DRAIN_POLL_MS, DRAIN_WATCH_MS, UUID } from '../api/api-page';
+import { ScenarioLauncher } from './scenario-launcher';
 import { buildUrl, pretty, withFreshCommandId } from '../api/request-builder';
 import {
   STEP_KEYS,
@@ -97,6 +98,7 @@ export class ScenarioPage {
   private destroyed = false;
 
   readonly identity = inject(IdentityState);
+  private readonly launcher = inject(ScenarioLauncher);
   readonly catalog = signal<ApiCatalogView | null>(null);
   readonly error = signal<string | null>(null);
   readonly steps = signal<StepView[]>(initialSteps());
@@ -136,11 +138,24 @@ export class ScenarioPage {
     inject(DestroyRef).onDestroy(() => {
       this.destroyed = true;
       this.stopped.next();
+      // A request this screen never acted on would otherwise start a run on the next visit, unasked.
+      this.launcher.take();
     });
     this.identity.load();
     this.host.operations().subscribe({
       next: (view) => this.catalog.set(view),
       error: (e: unknown) => this.error.set(describe(e)),
+    });
+    // The palette's "Run" waits for the catalog and a user, as the button does; one asked for during a run is
+    // dropped rather than queued behind it, so a second keystroke never orders twice.
+    effect(() => {
+      if (!this.launcher.pending()) return;
+      const running = this.running();
+      const canRun = this.canRun();
+      untracked(() => {
+        if (running) this.launcher.take();
+        else if (canRun && this.launcher.take()) void this.run();
+      });
     });
   }
 

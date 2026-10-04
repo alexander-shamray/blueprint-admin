@@ -481,6 +481,17 @@ mirrors the reference client's so a reader of one repo can read the other:
 `src/app/features/` one directory per screen, `src/app/shared/` for the
 output pane, status pill and JSON viewer.
 
+The shell's screens are one list, `SCREENS` in `src/app/screens.ts`, read by
+the bar and by the command palette. `Ctrl+K` (`Cmd+K`) opens the palette from
+any screen: go to a screen, run the Scenario, or open what was typed as a
+correlation id on the Trace screen. The palette does not judge the id; the
+trace endpoint refuses one `CorrelationId.IsAdoptable` would not adopt, so the
+palette is no way round the LogQL boundary of §5.9. A Scenario run is asked
+for through `ScenarioLauncher`, never the URL, so a link or a reload never
+publishes and orders; a request the screen did not act on is dropped when it
+goes. The palette is a keyboard tool: a modal dialog whose input keeps focus
+and names the active option through `aria-activedescendant`.
+
 | Screen | Shows | Does |
 |---|---|---|
 | **Stack** | the workstation doctor's rows above the buttons, read when the screen opens; one row per Compose service with state, health and port; the frontend job; a reachability strip; quick links to the client, Grafana, Keycloak | Check the workstation again; Up, Down, Down and wipe, Reset (both behind one typed confirmation), Start and Stop frontend; opens the job's output pane |
