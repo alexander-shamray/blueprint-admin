@@ -34,13 +34,13 @@ no `node_modules`; the first check fails on a missing `ng`.
 flag, then `npm run e2e` in `src/Admin.Web`. CI's `smoke` job is the same
 path. A green unit suite is not a green smoke.
 
-FakePlatform's fixtures are recordings. To re-record them, bring the stack up,
+Most of FakePlatform's fixtures are recordings; `FixtureRecordings` names
+which, and why each of the rest is written by hand. To re-record, bring the stack up,
 run `dotnet run --project src/Admin.Host -- --Admin:Record=true`, and open
 Stack, Broker and API. Then send some traffic and open the Stack strip and a
 trace, so that the golden signals and Grafana's datasources are read. Review
 the diff under `src/Admin.Host/Fakes/fixtures`, since a test or a spec that
-pinned the old answer moves with it. Spec §10 says what is recorded and what
-is not.
+pinned the old answer moves with it.
 
 ## Harness
 
