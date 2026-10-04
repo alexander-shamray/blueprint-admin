@@ -1,0 +1,35 @@
+<dialog #dialog class="palette" aria-labelledby="palette-title">
+  <h2 id="palette-title">Command palette</h2>
+  <label for="palette-input">Command</label>
+  <p id="palette-help" class="help">Go to a screen, run the Scenario, or paste an id to trace.</p>
+  <input
+    #input
+    id="palette-input"
+    type="text"
+    role="combobox"
+    aria-describedby="palette-help"
+    autocomplete="off"
+    aria-autocomplete="list"
+    aria-controls="palette-list"
+    aria-expanded="true"
+    [attr.aria-activedescendant]="activeId()"
+    [value]="query()"
+    (input)="typed($any($event.target).value)"
+    (keydown)="onInputKey($event)"
+  />
+  <ul id="palette-list" role="listbox" aria-label="Commands">
+    @for (command of commands(); track command.id; let i = $index) {
+      <li
+        role="option"
+        [id]="'palette-' + command.id"
+        [attr.aria-selected]="i === active()"
+        [class.active]="i === active()"
+      >
+        {{ command.label }}
+      </li>
+    } @empty {
+      <li class="none" role="presentation">Type a correlation id, or a word from a command.</li>
+    }
+  </ul>
+  <p class="keys">Up and Down choose, Enter runs, Escape closes.</p>
+</dialog>

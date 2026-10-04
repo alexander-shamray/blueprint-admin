@@ -10,6 +10,7 @@ import {
   QueuesView,
 } from '../../core/host/host-types';
 import { DRAIN_POLL_MS, DRAIN_WATCH_MS, UUID } from '../api/api-page';
+import { ScenarioLauncher } from './scenario-launcher';
 import { ScenarioPage } from './scenario-page';
 
 function op(partial: Partial<ApiOperation> & { id: string }): ApiOperation {
@@ -146,6 +147,30 @@ describe('ScenarioPage', () => {
     expect(
       sent().every((r) => r.identity?.username === 'demo' && r.identity.password === null),
     ).toBe(true);
+  });
+
+  it('runs once when the palette asked for a run, and taking it leaves nothing for a later visit', async () => {
+    const launcher = TestBed.inject(ScenarioLauncher);
+    launcher.request();
+
+    const page = render().componentInstance;
+
+    await vi.waitFor(() => expect(page.steps().every((s) => s.state === 'ok')).toBe(true));
+    expect(sent().filter((r) => r.correlationId?.endsWith('-publish'))).toHaveLength(1);
+    expect(launcher.pending()).toBe(false);
+  });
+
+  it('drops a palette request it never acted on when the screen goes, so the next visit does not run unasked', () => {
+    host.operations.mockReturnValue(new Subject<ApiCatalogView>());
+    const launcher = TestBed.inject(ScenarioLauncher);
+    launcher.request();
+
+    const fixture = render();
+    expect(launcher.pending()).toBe(true);
+    fixture.destroy();
+
+    expect(launcher.pending()).toBe(false);
+    expect(host.proxy).not.toHaveBeenCalled();
   });
 
   it('gives each step that sends its own correlation id, and the drain step none', async () => {
