@@ -50,7 +50,10 @@ Playwright smoke; it needs no Docker and no clones.
 
 ## What it does today
 
-Phases 0 to 6 of the spec: the Stack screen (Compose services, reachability,
+Phases 0 to 6 of the spec: the Stack screen (a workstation doctor read before
+Up: Docker, the published ports and what holds them, the gateway's CORS
+origins, Node against the client's `.nvmrc`, both clones against their last
+fetch, and image age; then Compose services, reachability,
 up, down, down with a typed `down -v` confirmation, Reset behind the same
 confirmation, which runs `down -v`, up and the readiness wait as one job, live
 output; the reference
@@ -61,16 +64,19 @@ backend golden-signals dashboard: request rate, 5xx share, p99 latency, the
 (follow, service filter, text filter, correlation-id highlight) and the API
 screen (Catalog's, Ordering's, Inventory's and Payments' OpenAPI operations
 through the gateway, the BFF quote, every host's readiness and the payment
-simulator's request log; send as anonymous, a realm user or a
-custom username and password, with a correlation id; status, timing, headers
+and carrier simulators' request logs; send as anonymous, a realm user, with
+the held token's time left and grants beside the picker, or a custom username
+and password, with a correlation id; status, timing, headers
 and body as the platform returned them; a history of this visit's calls).
 The Broker screen lists queues (error queues marked, each named with what
 consumes it), exchanges and
 permissions through `rabbitmqctl` in the `rabbitmq` container, and the API
 screen shows whether `ordering-catalog-events` has drained after a publish.
 The Trace screen joins a correlation id's Loki lines and Tempo spans into one
-timeline, each of those rows linking into Grafana Explore, closing with the
-projection queue's snapshot; the API screen's "Trace this call" opens it on the
+timeline, each of those rows linking into Grafana Explore, naming the
+fulfilment saga's steps with the states they moved between, Inventory's
+reservation, Payments' authorisation and Shipping's despatch, and closing with
+a snapshot of the projection queue and every other queue the spans crossed; the API screen's "Trace this call" opens it on the
 response's own correlation id. The Scenario screen runs `run-locally.md`'s
 calls end to end as a realm user — publish, wait for the projection to drain,
 quote, order, cancel — stopping at the first step that does not succeed, each
@@ -84,6 +90,13 @@ one. It reads only the documents the screen already fetches. The Trace screen
 keeps the last few timelines per correlation id for the browser session, and a
 reload says what arrived or left since the previous fetch, or that nothing
 changed between the two.
+
+Ctrl+K (Cmd+K) opens a command palette from any screen: go to a screen, run
+the Scenario, or paste a correlation id to land on its Trace timeline. The
+reference client's error banner prints the id of a failed call (`Correlation
+id: …`), so a failure in the client is one paste from its timeline. Job output
+is a log a screen reader can read on demand; only a job's start and its exit
+are announced.
 
 ## Known limits
 
@@ -112,6 +125,16 @@ changed between the two.
   inside `/artifacts/`; deleting it starts every service's baseline again.
 - Trace history lasts as long as the browser tab, and a refetch over a
   different window is not compared.
+- The workstation doctor makes no network call, so a clone is judged against
+  its last fetch, and it reads listeners through PowerShell, so off Windows the
+  Ports row cannot tell. It judges the web client's origin against the
+  gateway's CORS list; which native origins a device build needs is #82's.
+- The token clock reads only what the host holds: a custom identity's clock
+  shows once that identity has been used, and a token never minted has none.
+- Shipping has no API. What it did is read from the carrier simulator's request
+  log and from the Trace screen's despatch row; no screen reads a shipment, and
+  Scenario does not wait on the saga, because no read shows an order's state
+  (blueprint-backend#425).
 - The identity picker offers demo/demo and browser/browser; configuring any user
   replaces both: `--Admin:Users:0:Username=ops --Admin:Users:0:Password=…`.
 - A timeline ends at the outbox. The outbox row carries no trace context, so
