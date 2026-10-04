@@ -417,9 +417,11 @@ sets from each host's service name.
    table and is left out), each with its depth, and a sentence saying that
    the publish runs in a trace this correlation id cannot reach — or, where
    consume-side spans did reach the timeline through traces their services
-   logged this id in, that a hop which logged nothing is missing. On the live
-   platform no consume-side trace is reached today (below, and #54), so the
-   first form is the one an operator sees. A message
+   logged this id in, that a hop which logged nothing is missing; and a
+   timeline with no outbox write at all says nothing was handed over. On the
+   live platform the saga's consume-side traces are not reached today (below,
+   and #54), so after a write the publish form is the one an operator sees. A
+   message
    still waiting in one of them or parked in its `_error` queue shows there
    rather than as silence.
 
