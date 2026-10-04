@@ -1,7 +1,14 @@
 [
-{"name":"ordering-catalog-events","messages":0}
-,{"name":"ordering-catalog-events_error","messages":1}
+{"name":"ordering-fulfilment-saga","messages":0}
+,{"name":"catalog-inventory-events","messages":0}
+,{"name":"inventory-commands","messages":0}
+,{"name":"shipping-events","messages":0}
+,{"name":"payments-commands","messages":0}
 ,{"name":"ordering-commands","messages":0}
-,{"name":"ordering-fulfilment-saga","messages":0}
 ,{"name":"ordering-stock-events","messages":0}
+,{"name":"payments-events","messages":0}
+,{"name":"inventory-events","messages":0}
+,{"name":"notifications-events","messages":0}
+,{"name":"ordering-catalog-events","messages":0}
+,{"name":"ordering-catalog-events_error","messages":1}
 ]

@@ -28,8 +28,8 @@ public sealed class OpenApiReaderTests
 
         operations.Select(o => (o.Id, o.Method, o.Url, o.EdgePolicy)).ShouldBe(
         [
-            ("catalog:PublishProduct", "POST", "http://localhost:5000/api/v1/catalog/products/", "authenticated"),
-            ("catalog:GetProducts", "GET", "http://localhost:5000/api/v1/catalog/products/", "anonymous"),
+            ("catalog:PublishProduct", "POST", "http://localhost:5000/api/v1/catalog/products", "authenticated"),
+            ("catalog:GetProducts", "GET", "http://localhost:5000/api/v1/catalog/products", "anonymous"),
         ]);
         operations.ShouldAllBe(o => o.Source == "catalog" && o.Available);
     }

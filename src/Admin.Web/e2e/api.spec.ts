@@ -139,7 +139,7 @@ test("the carrier simulator's request log is Shipping's read, sent direct", asyn
 });
 
 // FakeOpenApi: Catalog's recorded document is served until it has a baseline, and from then on it has
-// gained ProductSummaryDto.quantityAvailable. Accepting is left to the host and unit specs: an accepted
+// gained PublishProductCommand.description. Accepting is left to the host and unit specs: an accepted
 // baseline lasts as long as the host does, and a reused host or a CI retry would then have no change to see.
 test('a reload names what moved in a document since its baseline, with the action that accepts it', async ({ page }) => {
   await page.goto('/requests');
@@ -148,6 +148,6 @@ test('a reload names what moved in a document since its baseline, with the actio
   await page.getByRole('button', { name: 'Reload' }).click();
   const changes = page.locator('.contract-changes');
   await expect(changes).toContainText('changed since');
-  await expect(changes.locator('li')).toHaveText(['added field ProductSummaryDto.quantityAvailable']);
+  await expect(changes.locator('li')).toHaveText(['added field PublishProductCommand.description']);
   await expect(changes.getByRole('button', { name: 'Accept as baseline' })).toBeEnabled();
 });

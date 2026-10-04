@@ -21,7 +21,7 @@ public sealed class BrokerEndpointTests : IClassFixture<AdminHostFactory>
 
         view.GetProperty("reachable").GetBoolean().ShouldBeTrue();
         JsonElement[] queues = [.. view.GetProperty("queues").EnumerateArray()];
-        queues.Length.ShouldBe(5);
+        queues.Length.ShouldBe(12);
         JsonElement error = queues.Single(q => q.GetProperty("isErrorQueue").GetBoolean());
         error.GetProperty("name").GetString().ShouldBe("ordering-catalog-events_error");
         error.GetProperty("messages").GetInt64().ShouldBe(1);
@@ -36,15 +36,16 @@ public sealed class BrokerEndpointTests : IClassFixture<AdminHostFactory>
         JsonElement view = await client.GetFromJsonAsync<JsonElement>("/api/broker/exchanges", TestContext.Current.CancellationToken);
 
         JsonElement[] exchanges = [.. view.GetProperty("exchanges").EnumerateArray()];
-        exchanges.Length.ShouldBe(15);
+        exchanges.Length.ShouldBe(47);
         exchanges.ShouldContain(e => e.GetProperty("name").GetString() == "ordering-fulfilment-saga_delay" && e.GetProperty("type").GetString() == "x-delayed-message");
     }
 
     [Fact]
-    public async Task Permissions_lists_the_two_service_users()
+    public async Task Permissions_lists_each_service_user_the_broker_answered()
     {
         JsonElement view = await client.GetFromJsonAsync<JsonElement>("/api/broker/permissions", TestContext.Current.CancellationToken);
 
-        view.GetProperty("permissions").EnumerateArray().Select(p => p.GetProperty("user").GetString()).ShouldBe(["catalog-svc", "ordering-svc"]);
+        view.GetProperty("permissions").EnumerateArray().Select(p => p.GetProperty("user").GetString()).ShouldBe(
+            ["catalog-svc", "inventory-svc", "notifications-svc", "ordering-svc", "payments-svc", "shipping-svc"]);
     }
 }

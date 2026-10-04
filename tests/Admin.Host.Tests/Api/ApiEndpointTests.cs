@@ -29,7 +29,7 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
         JsonElement reloaded = await (await client.PostAsync("/api/catalog/reload", null, Token)).Content.ReadFromJsonAsync<JsonElement>(Token);
         JsonElement changes = Source(reloaded, "catalog").GetProperty("changes");
 
-        changes.GetProperty("fieldsAdded").EnumerateArray().Select(f => f.GetString()).ShouldContain("ProductSummaryDto.quantityAvailable");
+        changes.GetProperty("fieldsAdded").EnumerateArray().Select(f => f.GetString()).ShouldContain("PublishProductCommand.description");
         Source(reloaded, "ordering").GetProperty("changes").GetProperty("fieldsAdded").GetArrayLength().ShouldBe(0);
 
         HttpResponseMessage accepted = await client.PostAsync("/api/catalog/baseline/catalog", null, Token);
@@ -58,7 +58,7 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
             "health:payments", "simulator:Requests", "carrier:Requests",
         ]);
         JsonElement publish = view.GetProperty("operations")[0];
-        publish.GetProperty("url").GetString().ShouldBe("http://localhost:5000/api/v1/catalog/products/");
+        publish.GetProperty("url").GetString().ShouldBe("http://localhost:5000/api/v1/catalog/products");
         publish.GetProperty("edgePolicy").GetString().ShouldBe("authenticated");
         publish.GetProperty("hasCommandId").GetBoolean().ShouldBeTrue();
     }
