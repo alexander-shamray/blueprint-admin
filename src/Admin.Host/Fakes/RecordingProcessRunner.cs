@@ -39,7 +39,15 @@ public sealed class RecordingProcessRunner(IProcessRunner inner, FixtureRecorder
             return;
         }
 
-        IEnumerable<string> stdout = job.Since(-1).Where(l => l.Stream == OutputStream.Stdout).Select(l => l.Text);
+        IReadOnlyList<OutputLine> lines = job.Since(-1);
+
+        // As OneShot reads it: a first kept line past sequence 0 means the ring dropped the start, a leading "[" with it.
+        if (lines.Count > 0 && lines[0].Sequence != 0)
+        {
+            return;
+        }
+
+        IEnumerable<string> stdout = lines.Where(l => l.Stream == OutputStream.Stdout).Select(l => l.Text);
         recorder.Write(fixture, string.Join('\n', stdout) + "\n");
     }
 }

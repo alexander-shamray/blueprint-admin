@@ -56,7 +56,9 @@ public sealed class FixtureGateTests
     public void Every_fixture_is_either_recorded_or_hand_written_with_a_reason()
     {
         string[] recorded = [.. FixtureRecordings.Http.Select(r => r.Fixture), .. FixtureRecordings.Process.Select(r => r.Fixture)];
-        string[] files = [.. Directory.EnumerateFiles(FixturesDir).Select(Path.GetFileName).OfType<string>()];
+        // Every depth, so a fixture tucked into a subdirectory still has to name its source.
+        string[] files = [.. Directory.EnumerateFiles(FixturesDir, "*", SearchOption.AllDirectories)
+            .Select(f => Path.GetRelativePath(FixturesDir, f).Replace('\\', '/'))];
 
         files.Where(f => !recorded.Contains(f) && !FixtureRecordings.HandWritten.ContainsKey(f)).ShouldBeEmpty("a fixture with no source named");
         recorded.Intersect(FixtureRecordings.HandWritten.Keys).ShouldBeEmpty("a fixture both recorded and hand-written");
@@ -68,7 +70,7 @@ public sealed class FixtureGateTests
     [Fact]
     public void Every_fixture_file_is_embedded_and_every_embedded_fixture_is_a_file()
     {
-        string[] files = [.. Directory.EnumerateFiles(FixturesDir).Select(Relative)];
+        string[] files = [.. Directory.EnumerateFiles(FixturesDir, "*", SearchOption.AllDirectories).Select(Relative)];
 
         Embedded().Order(StringComparer.Ordinal).ShouldBe(files.Order(StringComparer.Ordinal));
     }

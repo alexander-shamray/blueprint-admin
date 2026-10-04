@@ -6,13 +6,14 @@ namespace Admin.Host.Fakes;
 
 /// <summary>
 /// Writes what <c>Admin:Record</c> captured into the fixture directory, scrubbed before a byte reaches the disk
-/// (<see cref="FixtureScrubber"/>). Off unless asked for, and then a file is replaced whole, so a recording run
-/// leaves the fixtures as the platform answered and the diff is the review. A write that fails is logged and never
-/// fails the call that produced the answer: recording rides along with the console's own work.
+/// (<see cref="FixtureScrubber"/>). Off unless asked for. A fixture is replaced whole, except one that holds an
+/// answer per question, where a run replaces the answers it asked for; either way the diff is the review. A write
+/// that fails is logged and never fails the call that produced the answer: recording rides along with the
+/// console's own work.
 /// </summary>
 public sealed partial class FixtureRecorder
 {
-    /// <summary>LF whatever the platform, so a recording made on Windows and one made on Linux differ only in content.</summary>
+    /// <summary>LF whatever the platform, so recordings made on Windows and on Linux differ only in content.</summary>
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true, NewLine = "\n" };
 
     private readonly Lock gate = new();
@@ -40,7 +41,8 @@ public sealed partial class FixtureRecorder
         if (options.FakePlatform)
         {
             throw new InvalidOperationException(
-                "Admin:Record and Admin:FakePlatform are both true: the fakes answer from the fixtures, so recording them would write the fixtures back to themselves.");
+                "Admin:Record and Admin:FakePlatform are both true: the fakes answer from the fixtures, "
+                + "so recording them would write the fixtures back to themselves.");
         }
 
         string directory = Path.GetFullPath(options.RecordDir, baseDir);
@@ -71,7 +73,8 @@ public sealed partial class FixtureRecorder
 
     /// <summary>
     /// Sets <paramref name="key"/> in a fixture that holds one JSON answer per key, keeping the others: a run that
-    /// asked only some of the questions leaves the rest as they were recorded before.
+    /// asked only some of the questions leaves the rest as they were recorded before. A held file that is not a
+    /// JSON object is started afresh rather than left to refuse every later write.
     /// </summary>
     public void WriteKeyed(string fixture, string key, string json)
     {
@@ -80,23 +83,55 @@ public sealed partial class FixtureRecorder
             return;
         }
 
+        JsonNode? answer;
+
+        try
+        {
+            answer = JsonNode.Parse(FixtureScrubber.Scrub(json));
+        }
+        catch (JsonException e)
+        {
+            LogNotRecordedUnder(fixture, key, e.Message);
+
+            return;
+        }
+
         lock (gate)
         {
             try
             {
-                string path = Path.Combine(Directory, fixture);
-                JsonObject recording = File.Exists(path) && JsonNode.Parse(File.ReadAllText(path)) is JsonObject held ? held : [];
-                recording[key] = JsonNode.Parse(FixtureScrubber.Scrub(json));
+                JsonObject recording = Held(Path.Combine(Directory, fixture));
+                recording[key] = answer;
                 Save(fixture, recording.ToJsonString(Indented) + "\n");
             }
-            catch (JsonException e)
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
                 LogNotRecordedUnder(fixture, key, e.Message);
             }
         }
     }
 
-    /// <summary>Written beside the target and moved over it, so a reader never sees half a fixture.</summary>
+    private static JsonObject Held(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return [];
+        }
+
+        try
+        {
+            return JsonNode.Parse(File.ReadAllText(path)) as JsonObject ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Written beside the target and moved over it, so a reader never sees half a fixture; a temporary file a
+    /// failure leaves is removed, since the fixture gate refuses any file it cannot account for.
+    /// </summary>
     private void Save(string fixture, string content)
     {
         string path = Path.Combine(Directory!, fixture);
@@ -111,6 +146,19 @@ public sealed partial class FixtureRecorder
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             LogNotRecorded(fixture, e.Message);
+            TryDelete(temporary);
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Nothing more to do: the gate names the file if it stays.
         }
     }
 

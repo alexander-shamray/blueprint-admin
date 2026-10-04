@@ -87,8 +87,8 @@ public sealed class AdminOptions
     public bool FakePlatform { get; set; }
 
     /// <summary>
-    /// Write each upstream answer a fixture file models into <see cref="RecordDir"/> as the real platform gives it,
-    /// scrubbed first (<c>Fakes/FixtureRecordings.cs</c> says which answer feeds which file). A developer's act
+    /// Write the upstream answers <c>Fakes/FixtureRecordings.cs</c> names into <see cref="RecordDir"/> as the real
+    /// platform gives them, scrubbed first. A developer's act
     /// against a loopback stack; refused together with <see cref="FakePlatform"/>, whose answers are the fixtures.
     /// </summary>
     public bool Record { get; set; }
