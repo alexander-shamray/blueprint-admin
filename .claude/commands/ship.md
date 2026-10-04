@@ -175,6 +175,11 @@ longer carries. That pinning is what makes the inference safe here where it was
 a guess for Grok: the artefact says which commit it read, and `suggestions.md`
 never could.
 
+**While Copilot is off none of this is read.** Step 6 is then `bug-auditor`
+rounds, which leave no review on the PR to read back, so a resumed run
+re-enters them; and a request registered before the switch-off is not waited
+on, because no review will ever land for it.
+
 **The newer-request clause is not redundant with the oid**, and leaving it out
 is how a resume ships past a review it never read. A run interrupted between
 requesting a round and its landing leaves the PR in a state where the
@@ -1394,27 +1399,36 @@ same argument as never calling a branch clean because asking failed.
    **While Copilot is off, this step is `bug-auditor` rounds instead
    (#104).** The repository owner has switched Copilot review off, so no
    review is requested — `copilot-request.sh` is not called — and read-only
-   agents take the reviewer's place. Item (1)'s blast radius is still
-   written first; then each round:
+   agents take the reviewer's place. First, once, synchronise the branch as
+   step 5's retained design does — `git fetch origin <branch>`, then
+   `git pull --ff-only`, a refused fast-forward stopping the chain — because
+   the auditors read this checkout where Copilot read the remote. Item (1)'s
+   blast radius is still written first; then each round:
 
    - **Dispatch `bug-auditor` agents in parallel, in one message**, one per
      dimension — implementation correctness, and test rigour (assertions
      that cannot fail, fixtures that never reach the state they claim) —
-     each with this workspace as its root, the branch's diff from the merge
-     base and the blast-radius file as its scope, and the findings earlier
-     rounds decided as known. Say in the brief that a clean scope is a
-     result, so nothing is manufactured to fill one.
+     each with this workspace as its root, and as its scope the branch's
+     changed files and the blast radius's affected files **written into the
+     brief**: the scratchpad file is outside the root the profile confines
+     an auditor to. Name the findings earlier rounds decided as known, and
+     say that a clean scope is a result, so nothing is manufactured to fill
+     one.
    - **Verify every finding against the code before acting on it.** The
      profile reads; it does not decide. Fix what survives, rerun the
      step 2 checks that apply, `/commit` scoped to the paths touched, push
      the branch by name, and dispatch the next round over the new head —
      a later round reads the earlier rounds' fixes, which is where their
      defects go.
-   - **A round that leaves no verified finding is this loop's clean**, and
-     the loop ends there, as the Copilot loop does on its first clean
-     round. The ceiling is the Copilot loop's own, counted in dispatched
-     rounds. A resumed run re-enters rather than reading a verdict back,
-     as step 5 does, because an agent round leaves nothing on the PR.
+   - **A round that leaves no verified finding is this loop's clean, and
+     the loop ends on it only when `pr-review-threads.sh <n>` lists no
+     unresolved thread** — item (3)'s rule, unchanged: an owner's thread,
+     or one left by a Copilot round before the switch-off, is answered and
+     resolved or triaged before the loop may end. The ceiling is the
+     Copilot loop's number, counted in dispatched rounds **per run**:
+     nothing on the PR records an agent round, so a resumed run re-enters
+     and counts afresh, and step 7's argument that the budgets are counted
+     per PR does not hold for this loop.
 
    **The grant is `Agent(bug-auditor)` beside the triager's, and the deny
    list no longer names it.** A frontmatter deny lasts the turn the command
@@ -2014,7 +2028,9 @@ human-readable echo), and how it ended, in that loop's own vocabulary: step 5
 clean, skipped on limits (final — one reviewer, not two), or stopped
 unconverged; step 6
 **all-resolved, naming the review and the `commit` oid it read**, or stopped
-unconverged. Neither list has an ending that means "a finding stopped us" any
+unconverged — or, while Copilot is off, clean after N `bug-auditor` rounds,
+naming no reviewer and no oid because no external review read the branch
+and the PR carries no record of the rounds. Neither list has an ending that means "a finding stopped us" any
 more — a decided row and an answered `Ask` belong in the decisions section
 below, and filing one as a stop is the silent-decision failure this report
 exists to prevent. The oid is not
