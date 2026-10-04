@@ -73,10 +73,9 @@ consumes it), exchanges and
 permissions through `rabbitmqctl` in the `rabbitmq` container, and the API
 screen shows whether `ordering-catalog-events` has drained after a publish.
 The Trace screen joins a correlation id's Loki lines and Tempo spans into one
-timeline, each of those rows linking into Grafana Explore, naming the
-fulfilment saga's steps with the states they moved between, Inventory's
-reservation, Payments' authorisation and Shipping's despatch, and closing with
-a snapshot of the projection queue and every other queue the spans crossed; the API screen's "Trace this call" opens it on the
+timeline, each of those rows linking into Grafana Explore, and closing with a
+snapshot of the projection queue and every other queue the spans crossed; the
+API screen's "Trace this call" opens it on the
 response's own correlation id. The Scenario screen runs `run-locally.md`'s
 calls end to end as a realm user — publish, wait for the projection to drain,
 quote, order, cancel — stopping at the first step that does not succeed, each
@@ -132,7 +131,7 @@ are announced.
 - The token clock reads only what the host holds: a custom identity's clock
   shows once that identity has been used, and a token never minted has none.
 - Shipping has no API. What it did is read from the carrier simulator's request
-  log and from the Trace screen's despatch row; no screen reads a shipment, and
+  log; no screen reads a shipment, and
   Scenario does not wait on the saga, because no read shows an order's state
   (blueprint-backend#425).
 - The identity picker offers demo/demo and browser/browser; configuring any user
@@ -142,6 +141,10 @@ are announced.
   write run in a trace the correlation id cannot reach; the Trace screen ends
   with the projection queue's depth and says why it stops there. Raised for
   `blueprint-backend`, which owns the fix.
+- The Trace screen recognises the fulfilment saga's steps, Inventory's
+  reservation, Payments' authorisation and Shipping's despatch, but on the live
+  platform no timeline reaches them: no saga log line carries a correlation id,
+  so their traces are never fetched. The rows wait on that reach (#54).
 - The golden-signal strip sums the 422 panel's routes into one rate per
   service; Grafana's panel shows the split. Its command and query p95 are
   quantiles over the backend's `request.duration` histogram, so they are only
