@@ -79,7 +79,7 @@ END {
   } else if (p ~ (b "(who calls|what (calls|uses))" b)) {
     emit("references", "`codebase-index refs \\\"X\\\" --json`")
   # A sentence end stops `how does … work`; a dot inside a name does not.
-  } else if (p ~ (b "how does ([^.?!]|[.][^ ])* work(s|ing)?" b)) {
+  } else if (p ~ (b "how does ([^.?!]|[.][^ .?!])* work(s|ing)?" b)) {
     emit("how-it-works", "`codebase-index explain \\\"X\\\" --session <tag> --json`")
   } else if (p ~ (b "find (the )?(class|method|handler)(es|s)?" b)) {
     emit("named-symbol", "`codebase-index symbol \\\"X\\\" --json`")
