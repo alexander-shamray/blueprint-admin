@@ -40,6 +40,16 @@ public static class SpanRecogniser
 
     internal const string AuthorisePaymentUrn = "urn:message:Common.Contracts.Payments.V1:AuthorisePayment";
 
+    /// <summary>Owner: blueprint-backend <c>Common.Contracts.Ordering.V1.OrderConfirmed</c>, which Shipping despatches on.</summary>
+    internal const string OrderConfirmedUrn = "urn:message:Common.Contracts.Ordering.V1:OrderConfirmed";
+
+    /// <summary>
+    /// Shipping's <c>service.name</c>: blueprint-backend's <c>AddCommonWebDefaults</c> names a service after its
+    /// application, and Shipping's host is the <c>Shipping.Worker</c> project. Notifications consumes the same event,
+    /// so the service is what tells the despatch apart.
+    /// </summary>
+    internal const string ShippingService = "Shipping.Worker";
+
     /// <summary>
     /// The MassTransit version whose span tags these rows read: blueprint-backend <c>Directory.Packages.props</c>.
     /// MassTransit 8.5.3's <c>LogContextActivityExtensions</c> tags every send and publish
@@ -73,6 +83,10 @@ public static class SpanRecogniser
             span => Processes(span, AuthorisePaymentUrn),
             TraceEventKind.Consume,
             "Payments authorises the payment"),
+        new("Shipping despatching a confirmed order: Shipping's process span of OrderConfirmed.",
+            span => span.Service == ShippingService && Processes(span, OrderConfirmedUrn),
+            TraceEventKind.Consume,
+            "Shipping despatches the order"),
         new("A broker receive or process on the consuming side.",
             span => Attribute(span, "messaging.operation") is "receive" or "process",
             TraceEventKind.Consume),

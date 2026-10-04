@@ -79,6 +79,7 @@ console reports its absence (no `node_modules`) rather than running it.
 | Inventory API | `http://localhost:5103` | `/openapi/v1.json` (token required); `/health/ready` |
 | Payments API | `http://localhost:5104` | `/openapi/v1.json` (token required); `/health/ready` |
 | Payment simulator | `http://localhost:5190` | `/__admin/requests`, what Payments asked the provider; a decline is caused by the order's amount |
+| Carrier simulator | `http://localhost:5191` | `/__admin/requests`, what Shipping asked the carrier; Shipping is a worker with no API, so this is its only by-hand view |
 | Keycloak | `http://localhost:8080` | password grant on realm `commerce`, client `web-app` |
 | Grafana | `http://localhost:3000` | `GET /api/datasources`, then the datasource proxy for Tempo, Loki and Prometheus (§5.8) |
 | Reference client | `http://localhost:5173` | a link, and the port the gateway's CORS admits |
@@ -105,7 +106,8 @@ Inventory and Payments publish OpenAPI; the gateway and BFF do not. The
 console's operation tree is therefore the four OpenAPI documents rebased onto
 the gateway prefix, plus a curated list for the BFF's
 `POST /bff/v1/checkout/quote`, every host's `/health/ready` and the payment
-simulator's request log, plus a free-form request form for anything else.
+and carrier simulators' request logs, plus a free-form request form for
+anything else.
 
 ### 2.4 Identities
 
@@ -334,7 +336,7 @@ its own per process.
 
 `RequestProxy.Send(request)` takes method, an absolute URL restricted to the
 configured surfaces (the gateway, Catalog, Ordering, BFF, Inventory, Payments
-and payment simulator origins), headers,
+and the payment and carrier simulator origins), headers,
 body, an identity and an optional correlation id. It attaches the token, sets
 `X-Correlation-Id` (generated if absent; a supplied id that breaks those rules
 is refused, because the backend would silently replace it; the header's rules

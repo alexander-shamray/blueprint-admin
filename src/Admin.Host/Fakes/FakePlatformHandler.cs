@@ -28,6 +28,8 @@ public sealed class FakePlatformHandler(AdminOptions options) : HttpMessageHandl
             : path == "/openapi/v1.json" && Is(uri, options.PaymentsUrl) ? FakeOpenApi.Document(request, "payments")
             // WireMock.Net's request log, as the simulator answered it with nothing yet asked of it.
             : Is(uri, options.PaymentSimulatorUrl) && path == "/__admin/requests" ? FakeHttp.Json(HttpStatusCode.OK, "[]")
+            // The carrier simulator is the same WireMock.Net image, answering the same way before Shipping despatches.
+            : Is(uri, options.CarrierSimulatorUrl) && path == "/__admin/requests" ? FakeHttp.Json(HttpStatusCode.OK, "[]")
             : Is(uri, options.GrafanaUrl) && path == "/api/datasources" ? FakeGrafana.Datasources()
             : Is(uri, options.GrafanaUrl) && path.Contains("/loki/api/v1/query_range", StringComparison.Ordinal) ? FakeGrafana.Loki(request)
             : Is(uri, options.GrafanaUrl) && path.Contains("/api/traces/", StringComparison.Ordinal) ? FakeGrafana.Tempo(request)

@@ -43,6 +43,18 @@ public static class CuratedOperations
             false,
             GatewayRoutes.Direct,
             true),
+        new ApiOperation(
+            "carrier:Requests",
+            "carrier",
+            "Requests",
+            "GET",
+            Join(options.CarrierSimulatorUrl, "/__admin/requests"),
+            [],
+            [],
+            null,
+            false,
+            GatewayRoutes.Direct,
+            true),
     ];
 
     private static ApiOperation Health(string host, string baseUrl) =>

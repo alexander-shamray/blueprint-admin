@@ -94,6 +94,26 @@ public sealed class LiteralDriftTests
     }
 
     [Fact]
+    public void The_event_the_trace_reads_as_shippings_despatch_is_declared_under_that_namespace_and_name()
+    {
+        string[] parts = SpanRecogniser.OrderConfirmedUrn.Split(':');
+        string contract = Backend.Read("src", "BuildingBlocks", "Common.Contracts", "Ordering", "V1", $"{parts[3]}.cs");
+
+        contract.ShouldContain($"namespace {parts[2]};");
+        contract.ShouldContain($"public sealed record {parts[3]} ");
+    }
+
+    [Fact]
+    public void Shippings_service_name_is_its_host_projects_since_the_common_defaults_name_a_service_after_its_application()
+    {
+        string service = SpanRecogniser.ShippingService;
+
+        Backend.Read("src", "Services", "Shipping", service, "Program.cs").ShouldContain("builder.AddCommonWebDefaults();");
+        File.Exists(Path.Combine(Backend.Dir, "src", "Services", "Shipping", service, $"{service}.csproj")).ShouldBeTrue();
+        Backend.Read("src", "BuildingBlocks", "Common.Web", "ObservabilityExtensions.cs").ShouldContain("string serviceName = builder.Environment.ApplicationName;");
+    }
+
+    [Fact]
     public void The_messaging_span_tags_the_trace_reads_are_those_of_the_backends_MassTransit()
     {
         Backend.Read("Directory.Packages.props")

@@ -25,6 +25,7 @@ public static class PlatformQueues
         new("payments-commands", "Payments' authorise and void", "Payments.Infrastructure.Messaging.DependencyInjection.CommandsQueue"),
         new("payments-events", "Payments' order events", "Payments.Infrastructure.Messaging.DependencyInjection.EventsQueue"),
         new("catalog-inventory-events", "Catalog's stock levels", "Catalog.Infrastructure.Messaging.StockLevelConsumer.Queue"),
+        new("shipping-events", "Shipping's despatch and cancel", "Shipping.Infrastructure.Messaging.DependencyInjection.EventsQueue"),
     ];
 
     /// <summary>What a queue feeds, its <c>_error</c> twin included, or null for a queue the table does not name.</summary>
