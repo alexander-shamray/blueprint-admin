@@ -126,8 +126,8 @@ are announced.
 - Trace history lasts as long as the browser tab, and a refetch over a
   different window is not compared.
 - The workstation doctor makes no network call, so a clone is judged against
-  its last fetch, and it reads listeners through PowerShell, so off Windows the
-  Ports row cannot tell. It judges the web client's origin against the
+  its last fetch, and it reads listeners and the client's `.nvmrc` through
+  PowerShell, so off Windows the Ports and Node rows cannot tell. It judges the web client's origin against the
   gateway's CORS list; which native origins a device build needs is #82's.
 - The token clock reads only what the host holds: a custom identity's clock
   shows once that identity has been used, and a token never minted has none.
