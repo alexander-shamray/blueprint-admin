@@ -21,6 +21,14 @@ public sealed class ComposeService(IProcessRunner runner, RepoPaths paths, TimeP
     public Task<CommandOutput> ExecAsync(string service, string[] args, CancellationToken cancellationToken) =>
         CompleteAsync(Exec(service, args), $"docker compose exec {service}", cancellationToken);
 
+    /// <summary>The resolved Compose model, which owns every published port and service environment.</summary>
+    public Task<CommandOutput> ConfigAsync(CancellationToken cancellationToken) =>
+        CompleteAsync(Read("config", "--format", "json"), "docker compose config", cancellationToken);
+
+    /// <summary>Each container's image and when it was built.</summary>
+    public Task<CommandOutput> ImagesAsync(CancellationToken cancellationToken) =>
+        CompleteAsync(Read("images", "--format", "json"), "docker compose images", cancellationToken);
+
     public async Task<ComposeStatus> PsAsync(CancellationToken cancellationToken)
     {
         CommandOutput output = await CompleteAsync(Read("ps", "-a", "--format", "json"), "docker compose ps", cancellationToken);

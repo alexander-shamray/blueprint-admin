@@ -52,6 +52,14 @@ const health = {
   ],
 };
 
+const doctor = {
+  checks: [
+    { name: 'Docker', state: 'Ok', detail: 'Docker 29.7.2 is answering.' },
+    { name: 'Ports', state: 'Problem', detail: 'Held by another program, so Up cannot publish them: 5672, 15672 by erl (pid 7376).' },
+    { name: 'Node', state: 'Unknown', detail: 'Node 22.23.2; the frontend clone\'s .nvmrc could not be read: not found' },
+  ],
+};
+
 const runningJob = { id: 'fe-1', commandLine: 'npm start', state: 'Running', exitCode: null, startedAt: '' };
 
 function text(el: Element | null): string {
@@ -68,6 +76,7 @@ describe('StackPage', () => {
     frontendStart: ReturnType<typeof vi.fn>;
     frontendStop: ReturnType<typeof vi.fn>;
     telemetryHealth: ReturnType<typeof vi.fn>;
+    doctor: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -87,6 +96,7 @@ describe('StackPage', () => {
       frontendStart: vi.fn(() => of({ id: 'fe-1', commandLine: 'npm start', state: 'Running', exitCode: null, startedAt: '' })),
       frontendStop: vi.fn(() => of({ id: 'fe-1', commandLine: 'npm start', state: 'Exited', exitCode: -1, startedAt: '' })),
       telemetryHealth: vi.fn(() => of(health)),
+      doctor: vi.fn(() => of(doctor)),
     };
     TestBed.configureTestingModule({
       imports: [StackPage],
@@ -192,6 +202,52 @@ describe('StackPage', () => {
 
     const confirm = fixture.nativeElement.querySelector('input[placeholder="type: down -v"]') as HTMLInputElement;
     expect(confirm.getAttribute('aria-label')).toBe('Type down -v to confirm wiping volumes');
+  });
+
+  describe('workstation doctor', () => {
+    async function render() {
+      const fixture = TestBed.createComponent(StackPage);
+      fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(0);
+      fixture.detectChanges();
+      return fixture;
+    }
+
+    it('reads the workstation once on opening and prints each check with its verdict in words', async () => {
+      const fixture = await render();
+
+      const rows = Array.from(fixture.nativeElement.querySelectorAll('table.doctor tbody tr')) as HTMLElement[];
+      expect(rows.map((r) => text(r))).toEqual([
+        'Docker ok Docker 29.7.2 is answering.',
+        'Ports problem Held by another program, so Up cannot publish them: 5672, 15672 by erl (pid 7376).',
+        "Node could not tell Node 22.23.2; the frontend clone's .nvmrc could not be read: not found",
+      ]);
+      expect(rows.map((r) => r.className)).toEqual(['state-Ok', 'state-Problem', 'state-Unknown']);
+      expect(host.doctor).toHaveBeenCalledTimes(1);
+    });
+
+    it('is not polled: it reads again only when asked', async () => {
+      const fixture = await render();
+
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(host.doctor).toHaveBeenCalledTimes(1);
+
+      (fixture.nativeElement.querySelector('button.check') as HTMLButtonElement).click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(host.doctor).toHaveBeenCalledTimes(2);
+    });
+
+    it('shows the host error and keeps the last checks when a read fails', async () => {
+      const fixture = await render();
+      host.doctor.mockReturnValueOnce(throwError(() => new Error('network down')));
+
+      (fixture.nativeElement.querySelector('button.check') as HTMLButtonElement).click();
+      await vi.advanceTimersByTimeAsync(0);
+      fixture.detectChanges();
+
+      expect(text(fixture.nativeElement.querySelector('section.doctor'))).toContain('The host did not answer for the workstation: network down');
+      expect(fixture.nativeElement.querySelectorAll('table.doctor tbody tr').length).toBe(3);
+    });
   });
 
   describe('golden signals', () => {

@@ -63,13 +63,14 @@ builder.Services.AddSingleton<JobRegistry>();
 builder.Services.AddSingleton<ProcessRunner>();
 builder.Services.AddSingleton(sp => FakePlatformScripts.Script(
     new FakeProcessRunner(sp.GetRequiredService<JobRegistry>()),
-    sp.GetRequiredService<RepoPaths>().ComposeFile));
+    sp.GetRequiredService<RepoPaths>()));
 builder.Services.AddSingleton<IProcessRunner>(sp =>
     sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform
         ? sp.GetRequiredService<FakeProcessRunner>()
         : sp.GetRequiredService<ProcessRunner>());
 
 builder.Services.AddSingleton<ComposeService>();
+builder.Services.AddSingleton<WorkstationDoctor>();
 builder.Services.AddSingleton<LogFollower>();
 builder.Services.AddSingleton<BrokerService>();
 

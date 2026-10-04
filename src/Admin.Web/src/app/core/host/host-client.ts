@@ -7,6 +7,7 @@ import {
   ExchangesView,
   Identity,
   JobSummary,
+  DoctorView,
   JobView,
   PermissionsView,
   ProxyRequest,
@@ -112,6 +113,10 @@ export class HostClient {
 
   telemetryHealth(): Observable<TelemetryHealthView> {
     return this.http.get<TelemetryHealthView>('/api/telemetry/health');
+  }
+
+  doctor(): Observable<DoctorView> {
+    return this.http.get<DoctorView>('/api/stack/doctor');
   }
 
   job(id: string): Observable<JobView> {

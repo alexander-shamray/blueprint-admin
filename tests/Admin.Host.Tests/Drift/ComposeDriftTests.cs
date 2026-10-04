@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Admin.Host.Broker;
 using Admin.Host.Config;
+using Admin.Host.Stack;
 using Shouldly;
 
 namespace Admin.Host.Tests.Drift;
@@ -71,6 +72,14 @@ public sealed partial class ComposeDriftTests
     public void The_broker_service_is_one_the_backend_composes()
     {
         Compose.Services().Select(s => s.Name).ShouldContain(BrokerService.Service);
+    }
+
+    [Fact]
+    public void The_doctors_gateway_is_a_compose_service_whose_unit_sets_the_cors_origins_it_reads()
+    {
+        ComposeUnitService gateway = Compose.Services().Where(s => s.Name == WorkstationDoctor.GatewayService).ShouldHaveSingleItem();
+
+        Backend.Read("deploy", "compose", "services", $"{gateway.Unit}.yml").ShouldContain("Cors__Origins__0:");
     }
 
     [Fact]
