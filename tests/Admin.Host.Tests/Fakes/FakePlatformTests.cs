@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using Admin.Host.Broker;
 using Admin.Host.Fakes;
 using Admin.Host.Tests.TestSupport;
 using Shouldly;
@@ -30,6 +31,19 @@ public sealed class FakePlatformTests : IClassFixture<AdminHostFactory>
             .Order(StringComparer.Ordinal)];
 
         listed.ShouldBe(modelled);
+    }
+
+    /// <summary>
+    /// The queue recording holds every queue the Broker screen gives a row. The table is held to the backend by
+    /// QueueDriftTests, so a queue the backend adds fails here until the fakes are re-recorded.
+    /// </summary>
+    [Fact]
+    public void The_queue_recording_lists_every_platform_queue()
+    {
+        string[] recorded = [.. JsonDocument.Parse(string.Join('\n', FakePlatformScripts.FixtureLines("rabbitmq-queues.json")))
+            .RootElement.EnumerateArray().Select(q => q.GetProperty("name").GetString()!)];
+
+        PlatformQueues.Table.Select(q => q.Name).Where(q => !recorded.Contains(q)).ShouldBeEmpty();
     }
 
     [Fact]
