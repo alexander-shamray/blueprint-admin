@@ -5456,37 +5456,59 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
     # profile left denied is one a run that never pauses cannot dispatch.
     SHIP_READ_ONLY_AGENTS = ("bug-auditor",)
 
+    # `Task` is the dispatch tool's other name — guard-triager-dispatch.py
+    # judges both — so a grant or a deny in either spelling counts.
+    DISPATCH_GRANT = re.compile(r"^(Agent|Task)(\(.+\))?$")
+
     def test_ship_grants_its_agents_by_exact_type_and_nothing_broader(self):
         ship = (COMMANDS / "ship.md").read_text(encoding="utf-8")
         allowed = self.frontmatter_list(ship, "allowed-tools")
         self.assertEqual(
             sorted(["Agent(review-grok-triager)"]
                    + [f"Agent({name})" for name in self.SHIP_READ_ONLY_AGENTS]),
-            sorted(t for t in allowed
-                   if t == "Agent" or t.startswith("Agent(")))
+            sorted(t for t in allowed if self.DISPATCH_GRANT.match(t)))
         self.assertIn("spawn a **`review-grok-triager`** agent", ship)
         self.assertIn("**Dispatch `bug-auditor` agents in parallel", ship)
+
+    # The frontmatter keys a read-only profile may carry. An allowlist, not a
+    # list of the dangerous ones: a key that grants tools of its own, such as
+    # `memory:`, would otherwise pass beside an unchanged `tools:` line.
+    READ_ONLY_PROFILE_KEYS = {"name", "description", "tools", "model"}
 
     def test_every_agent_ship_grants_beside_the_triager_reads_only(self):
         # The grant is safe because the profile reads and does nothing
         # else: no shell, no editor and no `Agent`, so it is none of the
         # broad types /ship's deny list keeps from what it spawns. The
-        # subject is the granted profile, read each run, so a tool added
-        # to it later fails here rather than widening /ship silently.
+        # subject is the profile the harness would dispatch — found by its
+        # declared `name:`, read from its frontmatter alone — so a tool
+        # added to it later fails here rather than widening /ship silently.
         ship = (COMMANDS / "ship.md").read_text(encoding="utf-8")
         denied = set(self.frontmatter_list(ship, "disallowed-tools"))
+        declared = {}
+        for path in sorted((SCRIPTS.parent / "agents").glob("*.md")):
+            head = path.read_text(encoding="utf-8").split("\n---", 1)[0]
+            for name in re.findall(r"^name:\s*(\S+)\s*$", head, re.MULTILINE):
+                declared.setdefault(name, []).append(head)
         for name in self.SHIP_READ_ONLY_AGENTS:
-            profile = (SCRIPTS.parent / "agents" / f"{name}.md"
-                       ).read_text(encoding="utf-8")
             with self.subTest(agent=name):
-                self.assertRegex(
-                    profile, rf"(?m)^name:\s*{re.escape(name)}\s*$")
+                self.assertEqual(1, len(declared.get(name, [])),
+                                 "exactly one profile declares the name")
+                lines = [line.rstrip() for line in
+                         declared[name][0].splitlines()[1:] if line.strip()]
+                # Every line is a key at column 0: an indented continuation
+                # would carry `tools:` past what a line read can see.
+                keys = set()
+                for line in lines:
+                    key = re.match(r"([A-Za-z][\w-]*):(\s|$)", line)
+                    self.assertIsNotNone(key, f"not a key line: {line!r}")
+                    keys.add(key.group(1))
+                self.assertLessEqual(keys, self.READ_ONLY_PROFILE_KEYS)
                 self.assertEqual(
-                    {"Read", "Grep", "Glob"},
-                    set(self.frontmatter_list(profile, "tools")))
-                self.assertNotRegex(
-                    profile, r"(?m)^(skills|hooks|mcpServers):")
-                self.assertNotIn(f"Agent({name})", denied)
+                    ["tools: Read, Grep, Glob"],
+                    [line for line in lines if line.startswith("tools:")])
+                self.assertFalse(
+                    denied & {"Agent", "Task", f"Agent({name})",
+                              f"Task({name})"})
 
     def test_ship_carries_every_edit_deny_the_triage_states(self):
         # A profile's `disallowedTools` cannot scope a path — an entry with a
