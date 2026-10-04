@@ -124,6 +124,17 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/index-query-hint.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }
