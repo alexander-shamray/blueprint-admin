@@ -262,6 +262,20 @@ class TheRefresh(unittest.TestCase):
                 time.sleep(0.02)
         raise AssertionError(f"{path} stayed locked")
 
+    def mark_id(self):
+        """The mark's file identity, read without opening it for data.
+
+        A wait on a second publish polls this rather than `pending()`: on
+        Windows a read open shares no delete access, so a read that lands on
+        the script's `mv -f` refuses it the replace, and the script stands
+        down unpublished. A stat takes no part in sharing, and a rename
+        installs a new file, so this changes exactly when a call publishes.
+        """
+        try:
+            return (self.cache / "refresh.pending").stat().st_ino
+        except FileNotFoundError:
+            return None
+
     def publish(self, token):
         """Put a later call's token on the mark.
 
@@ -363,10 +377,10 @@ class TheRefresh(unittest.TestCase):
         first = self.start_refresh()
         self.addCleanup(first.wait)
         self.wait_for(self.pending, "the first call to publish")
-        first_token = self.pending()
+        first_mark = self.mark_id()
         second = self.start_refresh()
         self.addCleanup(second.wait)
-        self.wait_for(lambda: self.pending() != first_token,
+        self.wait_for(lambda: self.mark_id() != first_mark,
                       "the second call to publish")
         last_token = self.pending()
         self.assertEqual(0, first.wait(timeout=60))
@@ -386,10 +400,10 @@ class TheRefresh(unittest.TestCase):
         first = self.start_refresh()
         self.addCleanup(first.wait)
         self.wait_for(self.calls, "the first update to start")
-        first_token = self.pending()
+        first_mark = self.mark_id()
         second = self.start_refresh()
         self.addCleanup(second.wait)
-        self.wait_for(lambda: self.pending() != first_token,
+        self.wait_for(lambda: self.mark_id() != first_mark,
                       "the edit to publish while the update runs")
         release.touch()
         self.assertEqual(0, first.wait(timeout=60))
