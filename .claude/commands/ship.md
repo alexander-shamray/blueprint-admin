@@ -1425,10 +1425,14 @@ same argument as never calling a branch clean because asking failed.
      affected files, and every file that still names a path the diff
      deletes or renames away. The run finds those itself before
      dispatching — `git diff --name-status` from the merge base, then a
-     `Grep` for each such path and the names it declared — because the
-     blast radius names no absence, and a deleted path in a brief is a
+     `Grep` for each such path, its basename and the names it declared,
+     since this repository cites hooks and scripts by basename — because
+     the blast radius names no absence, and a deleted path in a brief is a
      scope nothing can open. The deleted names go in as context, not as
-     scope, and the whole scope is **written into the brief**: the
+     scope, and the brief says that in those files a reference to a
+     removed path or name is a defect — a step that can no longer be
+     carried out — and not the documentation drift the profile otherwise
+     leaves alone. The whole scope is **written into the brief**: the
      scratchpad file is outside the root the profile confines an auditor
      to. A scope that still comes out empty — a branch that only deletes
      what nothing names, or no diff left at all — has nothing to read:
@@ -1441,7 +1445,11 @@ same argument as never calling a branch clean because asking failed.
      step 2 checks that apply, `/commit` scoped to the paths touched, push
      the branch by name, and dispatch the next round over the new head —
      a later round reads the earlier rounds' fixes, which is where their
-     defects go.
+     defects go. A fix the harness refuses — an edit to a denied path,
+     which most of `.claude/**` is — is the first stop row's refusal:
+     stop with the finding verified and unfixed, and report it with a
+     patch the caller applies. It is never filed as known, and never
+     lets a round count as clean.
    - **A round is clean only when every auditor completed its audit and no
      finding survives verification.** An agent that died or errored, or
      that reported `unreadable-root` or `empty-scope`, read nothing, and a
