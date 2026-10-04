@@ -135,6 +135,28 @@ argument is how a rule gets "corrected" back.
   set `CBX_NO_SKILL_AUTO_UPDATE=1` for their own calls; an agent's Bash call,
   which the hint and `/ship` now ask for, is covered by `env` and nothing
   else. `test_index_query_hint.py` pins it.
+- **The MCP startup timeout is raised in the same `env`, as `MCP_TIMEOUT`
+  (#107).** The plugin servers — `playwright` and `chrome-devtools`, both
+  started through `npx` — failed their first start after an idle machine:
+  34 of 323 logged starts on this workstation from July to 2026-10-04 hit
+  the 30 s default, a third of all starts that came more than two hours
+  after the last one against under 4% of the rest, and only two of the 34
+  had a second session starting in the same minute. Concurrency was the
+  issue's guess and is not the cause. The successful starts reach 29.7 s,
+  so the tail runs into the old limit rather than stopping short of it; a
+  warm start measured 2–3 s, a cold `npx` cache 8 s, and three sessions at
+  once at most 10 s, every server connected. **The cost of a timeout is
+  not one session**: Claude Code caches a plugin stdio server's failure
+  for 15 minutes in the user-level `~/.claude/mcp-needs-auth-cache.json`,
+  keyed by server name, so every session on the machine starts without
+  it, in any repository. `.mcp.json`'s `codebase-index` is not a plugin
+  and is never cached, which is why it never dropped out. The value is
+  set high because a long limit only delays the report on a server that
+  is truly broken, and the session does not wait on it; it covers only
+  sessions started here, so a cold start in another repository can still
+  set the cache — the same key in the user's own `settings.json` `env`
+  closes that. The failures were all connection timeouts, never tool
+  calls, so `MCP_TOOL_TIMEOUT` is left at its default.
 - **`.claude/skills/**` is a grant surface.** A skill's `allowed-tools` is
   auto-approval, so a session that can rewrite `SKILL.md` widens the next
   invocation. Commands, agents, hooks and settings were already denied;
