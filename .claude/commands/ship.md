@@ -1406,9 +1406,11 @@ same argument as never calling a branch clean because asking failed.
    once, clear what Copilot left before the switch-off: a landed review's
    suppressed block, which no thread shows (`pr-review-bodies.sh <n>`), and
    its unresolved threads (`pr-review-threads.sh <n>`). Triage both through
-   `/review-copilot` as item (3) does — paused at its marker step, then the
-   checks, `/commit` scoped to the triage's paths and a push, and only then
-   markers and resolves — **except that item (3)'s last instruction, back to
+   `/review-copilot` as item (3) does — paused at its marker step, then, if
+   the triage edited anything, the checks, `/commit` scoped to the paths it
+   touched and a push — an empty path list is never handed to `/commit`,
+   whose empty scope is everything — and only then markers and resolves —
+   **except that item (3)'s last instruction, back to
    (1), is not taken**: no review is requested, and the rounds below read the
    pushed head instead. Then each round:
 
@@ -1436,9 +1438,11 @@ same argument as never calling a branch clean because asking failed.
      round holding one did not run: dispatch that dimension once more, and
      if it fails again stop the chain on the first stop row rather than
      mint a clean round from silence — `/bug-sweep`'s *never fail open*.
-     A scope with nothing left to read — a branch that only deletes, with an
-     empty blast radius — dispatches no auditor: report the round as having
-     nothing to read, which is not a verdict about code, and end the loop.
+     A branch that only deletes still has a scope, because an empty blast
+     radius names no absence: give the auditors the deleted paths and the
+     names they declared, and ask what still references them. Only a branch
+     with no diff left has nothing to read — report it so, which is not a
+     verdict about code, and end the loop.
    - **The loop ends on a clean round only when no thread is owed.** Read
      `pr-review-threads.sh <n>` again: a triageable thread that appeared
      since entry is triaged the same way, and a triage that pushed a commit
@@ -1667,7 +1671,8 @@ same argument as never calling a branch clean because asking failed.
    one that ran shorter.
 
 7. **Merge, then tear the workspace down.** Both loops have finished — clean,
-   all-resolved, skipped on limits, or unconverged at a ceiling — and the goal
+   all-resolved, skipped on limits, unconverged at a ceiling, or with nothing
+   to read — and the goal
    of this chain is a merged PR, so it merges.
 
    **Unconverged is not a reason to hold the PR.** A ceiling is a budget
@@ -2051,7 +2056,8 @@ clean, skipped on limits (final — one reviewer, not two), or stopped
 unconverged; step 6
 **all-resolved, naming the review and the `commit` oid it read**, or stopped
 unconverged — or, while Copilot is off, clean after N `bug-auditor` rounds
-or unconverged at the per-run ceiling, naming no reviewer and no oid because
+or unconverged at the per-run ceiling, or nothing to read when no diff is
+left, naming no reviewer and no oid because
 no external review read the branch and the PR carries no record of the
 rounds. Neither list has an ending that
 means "a finding stopped us" any more — a decided row and an answered `Ask`
