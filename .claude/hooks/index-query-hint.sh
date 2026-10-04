@@ -8,13 +8,17 @@
 # enough on its own. So a prompt that reads as one of those five questions gets
 # one line of `additionalContext`: load the `codebase-index` skill, the
 # subcommand its route table gives that question, and its session-tag rule.
-# Every other prompt gets nothing, slash commands included, so `/ship`,
-# `/commit` and a plain edit request pay one `awk` and hear nothing.
+# Every other prompt gets nothing, and so does every slash command but two:
+# `/ship` and `/branch` carry a task in their arguments, and are how work here
+# starts, so their arguments are read as a prompt would be. `/commit`, `/clear`
+# and a plain edit request pay one `awk` and hear nothing.
 #
 # **The hint asks for the skill, not only the command**, because the skill's
-# `allowed-tools` is what approves `codebase-index …` and it approves only
-# while the skill is loaded; `settings.json` allows no such command. The CLI
-# is named bare, as the route table and `allowed-tools` spell it, never through
+# `allowed-tools` is what approves `codebase-index …` wherever no command
+# grants it — `/ship` and `/review-branch` grant the subcommands they name —
+# and it approves only while the skill is loaded; `settings.json` allows no
+# such command. The CLI is named bare, as the route table and `allowed-tools`
+# spell it, never through
 # the `cbx` wrapper, which neither of them approves.
 #
 # **Not through `run-guard.sh`, although that is the launcher the guards use.**
@@ -69,7 +73,12 @@ function prompt_of(doc,    at, i, c, n, out, cap) {
 END {
   p = tolower(prompt_of(doc))
   sub(/^[ \t\r\n]+/, "", p)
-  if (p == "" || substr(p, 1, 1) == "/") exit 0
+  if (p == "") exit 0
+  # Of the slash commands, only the two that take a task have it read.
+  if (substr(p, 1, 1) == "/") {
+    if (p !~ /^\/(ship|branch)([ \t]|$)/) exit 0
+    sub(/^\/(ship|branch)/, "", p)
+  }
   # A space at each end stands in for the word boundary awk has no escape for,
   # so "somewhere is" is not "where is" and a question may end on its verb.
   p = " " p " "

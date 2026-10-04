@@ -85,10 +85,12 @@ argument is how a rule gets "corrected" back.
   it read. A prompt that reads as a locate, explain,
   references, impact or named-symbol question gets one line of
   `additionalContext`: load the skill, the subcommand its route table gives
-  that question, and the session-tag rule; every other prompt, and every
-  slash command, gets nothing. **It asks for the skill and not only the
-  command** because the skill's `allowed-tools` is the only grant for
-  `codebase-index …`, and it holds only while the skill is loaded. **It runs
+  that question, and the session-tag rule; every other prompt gets nothing,
+  and so does every slash command but `/ship` and `/branch`, whose arguments
+  are read as the task they carry (#97). **It asks for the skill and not only
+  the command** because outside the two commands below the skill's
+  `allowed-tools` is the only grant for `codebase-index …`, and it holds only
+  while the skill is loaded. **It runs
   under plain `sh` and not through `run-guard.sh`**, whose every failure is 2 —
   under this event 2 blocks the prompt and erases it, so the hint leaves with
   0 whatever happened. It matches only the decoded `prompt` string, never the
@@ -98,6 +100,31 @@ argument is how a rule gets "corrected" back.
   fails, and holds every command it emits to a row of the skill's route
   table and a subcommand its `allowed-tools` approves. Hooks are read when a
   session starts: the hint reaches a session opened after it lands.
+- **`/ship` and `/review-branch` grant the index commands they name (#97)**,
+  in their own `allowed-tools`: `/ship` locates a change with `search`,
+  `refs` and `impact`, and starts every Copilot round from `diff-impact`
+  against the merge base, read through an exact
+  `Bash(git merge-base origin/main HEAD)`; a full `/review-branch` starts from
+  `diff-impact` too. All four are read-only. **Loading the skill widens that,
+  and it is a residual rather than an oversight:** the skill's grant also
+  approves `update` and `index`, which its evidence protocol runs on a stale
+  or missing index, and both write only the ignored cache. Step 5's triager
+  takes three paths and no blast radius, so a restored Grok round goes
+  without one until that profile takes a fourth. A hint cannot carry this
+  for `/ship`, whose arguments are usually an issue number, so the command
+  says it itself.
+  `test_index_query_hint.py` holds every subcommand either names to its own
+  grant and to the skill's.
+- **The CLI's skill rewrite is off for every session, in
+  `.claude/settings.json`'s `env` (#97).** `codebase-index` re-materialises
+  its packaged skill over the tracked one whenever the skill's ignored
+  `.skill_version` stamp differs from the installed package. A `/branch`
+  worktree has no stamp, so the first bare call there replaced the tracked
+  `SKILL.md`, its `allowed-tools` widened to `Bash(cbx *)` and `graph` among
+  them — measured on #97's own worktree. `.mcp.json` and `refresh-index.sh`
+  set `CBX_NO_SKILL_AUTO_UPDATE=1` for their own calls; an agent's Bash call,
+  which the hint and `/ship` now ask for, is covered by `env` and nothing
+  else. `test_index_query_hint.py` pins it.
 - **`.claude/skills/**` is a grant surface.** A skill's `allowed-tools` is
   auto-approval, so a session that can rewrite `SKILL.md` widens the next
   invocation. Commands, agents, hooks and settings were already denied;

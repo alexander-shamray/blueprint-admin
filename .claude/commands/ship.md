@@ -1,7 +1,7 @@
 ---
 description: Start from a clean main, fork a worktree where one can be forked, branch, commit, push and open a PR, loop the Copilot review until one clean pass (Grok is disabled pending a trusted launcher) — then merge the PR and tear the workspace down. Decides for itself rather than stopping to ask
 argument-hint: "[what the change does] — omit and each step derives its own"
-allowed-tools: Read, Grep, Glob, Write, Skill, Agent(review-grok-triager), EnterWorktree, ExitWorktree, Bash(git status:*), Bash(git diff:*), Bash(git branch --list:*), Bash(git branch --show-current), Bash(git branch -a), Bash(git log:*), Bash(git fetch origin:*), Bash(bash .claude/scripts/git-branch-create.sh:*), Bash(bash .claude/scripts/git-worktree-fork.sh:*), Bash(bash .claude/scripts/git-switch-existing.sh:*), Bash(bash .claude/scripts/git-rebase-onto-main.sh:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(ls:*), Bash(git add:*), Bash(git commit:*), Bash(bash .claude/scripts/git-unstage.sh:*), Bash(git push -u origin:*), Bash(git push origin:*), Bash(wc:*), Bash(bash .claude/scripts/gh-pr-create.sh), Bash(bash .claude/scripts/pr-state.sh:*), Bash(bash .claude/scripts/pr-for-branch.sh:*), Bash(gh pr checks:*), Bash(bash .claude/scripts/gh-pr-merge.sh:*), Bash(git pull --ff-only), Bash(git merge-base --is-ancestor:*), Bash(bash .claude/scripts/git-worktree-remove.sh:*), Bash(git worktree prune:*), Bash(rm -f suggestions.md), Bash(bash .claude/scripts/grok-ledger.sh:*), Bash(bash .claude/scripts/copilot-request.sh:*), Bash(bash .claude/scripts/copilot-request-count.sh:*), Bash(bash .claude/scripts/pr-review-comments.sh:*), Bash(bash .claude/scripts/pr-review-bodies.sh:*), Bash(bash .claude/scripts/pr-issue-comments.sh:*), Bash(bash .claude/scripts/pr-review-threads.sh:*), Bash(bash .claude/scripts/grok-review.sh:*), Bash(sleep:*), Bash(bash .claude/scripts/pr-locality.sh:*), Bash(bash .claude/scripts/npm-checks.sh:*), Bash(bash .claude/scripts/host-checks.sh:*), Bash(bash .claude/scripts/harness-checks.sh:*), Bash(bash .claude/scripts/spa-ci.sh)
+allowed-tools: Read, Grep, Glob, Write, Skill, Agent(review-grok-triager), EnterWorktree, ExitWorktree, Bash(git status:*), Bash(git diff:*), Bash(git branch --list:*), Bash(git branch --show-current), Bash(git branch -a), Bash(git log:*), Bash(git fetch origin:*), Bash(bash .claude/scripts/git-branch-create.sh:*), Bash(bash .claude/scripts/git-worktree-fork.sh:*), Bash(bash .claude/scripts/git-switch-existing.sh:*), Bash(bash .claude/scripts/git-rebase-onto-main.sh:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(ls:*), Bash(git add:*), Bash(git commit:*), Bash(bash .claude/scripts/git-unstage.sh:*), Bash(git push -u origin:*), Bash(git push origin:*), Bash(wc:*), Bash(bash .claude/scripts/gh-pr-create.sh), Bash(bash .claude/scripts/pr-state.sh:*), Bash(bash .claude/scripts/pr-for-branch.sh:*), Bash(gh pr checks:*), Bash(bash .claude/scripts/gh-pr-merge.sh:*), Bash(git pull --ff-only), Bash(git merge-base --is-ancestor:*), Bash(git merge-base origin/main HEAD), Bash(bash .claude/scripts/git-worktree-remove.sh:*), Bash(git worktree prune:*), Bash(rm -f suggestions.md), Bash(bash .claude/scripts/grok-ledger.sh:*), Bash(bash .claude/scripts/copilot-request.sh:*), Bash(bash .claude/scripts/copilot-request-count.sh:*), Bash(bash .claude/scripts/pr-review-comments.sh:*), Bash(bash .claude/scripts/pr-review-bodies.sh:*), Bash(bash .claude/scripts/pr-issue-comments.sh:*), Bash(bash .claude/scripts/pr-review-threads.sh:*), Bash(bash .claude/scripts/grok-review.sh:*), Bash(sleep:*), Bash(bash .claude/scripts/pr-locality.sh:*), Bash(bash .claude/scripts/npm-checks.sh:*), Bash(bash .claude/scripts/host-checks.sh:*), Bash(bash .claude/scripts/harness-checks.sh:*), Bash(bash .claude/scripts/spa-ci.sh), Bash(codebase-index search:*), Bash(codebase-index refs:*), Bash(codebase-index impact:*), Bash(codebase-index diff-impact:*)
 disallowed-tools: Edit(.claude/**), Edit(./.claude/**), Edit(.github/**), Edit(./.github/**), Edit(.remember/**), Edit(./.remember/**), Edit(android/**), Edit(./android/**), Edit(ios/**), Edit(./ios/**), Edit(.git/**), Edit(./.git/**), Edit(.git), Edit(./.git), Edit(package.json), Edit(./package.json), Edit(package-lock.json), Edit(./package-lock.json), Edit(npm-shrinkwrap.json), Edit(./npm-shrinkwrap.json), Edit(.npmrc), Edit(./.npmrc), Edit(angular.json), Edit(./angular.json), Edit(tsconfig.json), Edit(./tsconfig.json), Edit(tsconfig.app.json), Edit(./tsconfig.app.json), Edit(tsconfig.spec.json), Edit(./tsconfig.spec.json), Edit(eslint.config.js), Edit(./eslint.config.js), Edit(.prettierrc), Edit(./.prettierrc), Edit(capacitor.config.ts), Edit(./capacitor.config.ts), Edit(playwright.config.ts), Edit(./playwright.config.ts), Edit(ionic.config.json), Edit(./ionic.config.json), Edit(.nvmrc), Edit(./.nvmrc), Edit(.editorconfig), Edit(./.editorconfig), Edit(.gitattributes), Edit(./.gitattributes), Edit(.gitignore), Edit(./.gitignore), Edit(CLAUDE.md), Edit(./CLAUDE.md), Edit(README.md), Edit(./README.md), Edit(**/*.config.js), Edit(**/*.config.cjs), Edit(**/*.config.mjs), Edit(**/*.config.ts), Edit(**/*.config.mts), Edit(**/package.json), Edit(**/.npmrc), Edit(**/tsconfig*.json), Edit(**/.prettierrc*), Edit(node_modules/**), Edit(./node_modules/**), Edit(Directory.Packages.props), Edit(./Directory.Packages.props), Edit(Directory.Build.props), Edit(./Directory.Build.props), Edit(global.json), Edit(./global.json), Edit(BlueprintAdmin.slnx), Edit(./BlueprintAdmin.slnx), Edit(**/*.csproj), Edit(AGENTS.md), Edit(./AGENTS.md), Edit(.mcp.json), Edit(./.mcp.json), Agent(general-purpose), Agent(claude), Agent(Explore), Agent(Plan), Agent(claude-code-guide), Agent(statusline-setup), Agent(security-auditor), Agent(bug-auditor)
 ---
 
@@ -192,7 +192,9 @@ and each lands exactly one review — so **a request is outstanding when that
 count exceeds the number of landed Copilot reviews**, and both numbers are
 readable with what is already granted (`pr-review-bodies.sh <n>` supplies
 the second). When one is outstanding, wait for its review rather than
-inheriting the verdict of the one before it. A request that never produces a
+inheriting the verdict of the one before it, and before triaging it run step
+6 item (1)'s blast-radius read: a scratchpad does not outlive the session
+that wrote it, so the resumed run holds none. A request that never produces a
 review is the timeout case this step already covers, reported as the loop not
 having finished rather than clean — so the comparison fails closed, which is
 the direction it must fail in.
@@ -887,6 +889,28 @@ same argument as never calling a branch clean because asking failed.
    before anything is committed to it. The same goes for the directory: name
    the worktree the run is in, and if it is the main checkout say that too.
 
+   **Then the change itself, and its code is found through the index before
+   it is read.** Load the `codebase-index` skill and locate what the
+   description names with `codebase-index search`, `codebase-index refs` for
+   a caller and `codebase-index impact` for what moves with it — spelled as
+   the skill's route table spells them, with one session tag for the run —
+   and read only the ranges each recommends. Grep and whole-file reads of
+   `src/` come after, for what the index cannot see: the skill's confidence
+   contract says when, and an empty `refs` or `impact` is never an absence.
+
+   **The prompt-time hint cannot do this for a run**, because `/ship`'s
+   arguments are usually an issue number, and an issue number reads as no
+   question at all. So the step says it here, and grants the four read-only
+   subcommands this file names in its own `allowed-tools`, where a test holds
+   each name to its grant. **Loading the skill widens that, and it is taken
+   as a residual:** the skill's own grant also approves `update` and `index`,
+   which its evidence protocol runs on a stale or missing index. Both write
+   only the ignored cache, and refusing them would leave a stale index
+   answering. The CLI runs with its skill auto-update off for every session
+   — `.claude/settings.json`'s `env` — because a worktree carries no
+   `.skill_version` stamp, and without the guard the first call there
+   rewrites the tracked skill.
+
 2. **Checks**, selected by what the diff actually touched:
    `bash .claude/scripts/host-checks.sh all` whenever the change reaches
    `src/Admin.Host/**`, `tests/**`, `*.csproj`, `Directory.*.props` or
@@ -1367,7 +1391,29 @@ same argument as never calling a branch clean because asking failed.
    verdict, and that argument applies here first: a branch Grok had more to
    say about is the last one to skip a second reviewer over.
 
-   1. **Request GitHub's Copilot review** on the PR:
+   1. **Start from the blast radius, then request GitHub's Copilot review**
+      on the PR. Every round does, the ones step (3) sends back here as much
+      as the first, so the blast radius describes the head being reviewed:
+
+      ```bash
+      git merge-base origin/main HEAD
+      codebase-index diff-impact --base <that sha> --json
+      ```
+
+      Write the second's output to a scratchpad file with `Write`: the
+      symbols and files the branch's diff reaches through the graph, beyond
+      the lines a reviewer quotes. The merge base rather than `origin/main`,
+      because step 0's fetch can carry `main` past the branch's fork point,
+      and the graph would then count `main`'s own changes as this branch's.
+      That file is the first thing the round's triage reads, and its path
+      goes to any agent the round dispatches. Like `refs` and `impact` it
+      names no absences: a file it omits may still depend on the change, for
+      the reason the skill's confidence contract gives. Step 5's triager
+      takes three paths and this is not one of them, so restoring Grok
+      leaves its rounds without a blast radius until that profile takes a
+      fourth.
+
+      Then request the review:
 
       ```bash
       bash .claude/scripts/copilot-request.sh <n>
