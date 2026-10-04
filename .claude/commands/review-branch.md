@@ -140,10 +140,12 @@ already correct — are also non-findings.
 2. **Read the change, starting from its blast radius.** Where the
    `codebase-index` CLI answers, run
    `codebase-index diff-impact --base <merge-base> --json` before anything
-   else: the symbols and files the diff reaches through the graph are where
-   a contradiction outside the changed lines lives. Grok's container holds no
-   index, so there the diff is the start. Prefer full source of load-bearing
-   files over the diff alone. Grep `src/`, `e2e/` and `docs/` for every
+   else, or `--base HEAD` under `--local`, whose range is the working tree
+   against `HEAD` and so has no merge base to carry: the symbols and files
+   the diff reaches through the graph are where a contradiction outside the
+   changed lines lives. Grok's container holds no index, so there the diff
+   is the start. Prefer full source of load-bearing files over the diff
+   alone. Grep `src/`, `e2e/` and `docs/` for every
    **symbol** the change touches — `diff-impact` names no absences, so its
    list is where the Grep starts, not where it stops — and the one spec
    section that owns a rule the change moved. Do not tour the corpus for the
