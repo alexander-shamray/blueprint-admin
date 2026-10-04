@@ -29,9 +29,12 @@
 # never built.** `.claude/cache/` is ignored, so `/branch`'s worktree starts
 # with none, and a full `index` is minutes inside an agent's turn where a copy
 # and an `update` are seconds. Only `index.sqlite` crosses — the main
-# checkout's other cache files are its own state — and it crosses inside the
-# winning call, so a burst seeds once. A main checkout with no index leaves the
-# worktree with none rather than building one here.
+# checkout's other cache files are its own state, a customised `config.json`
+# included — and it crosses inside the winning call, so a burst seeds once. A
+# main checkout with no index leaves the worktree with none, and `update`
+# refuses to run without one, so nothing here builds from scratch.
+# `git-worktree-fork.sh` also runs this once in each new worktree, because
+# `/branch` enters one mid-session, where no `SessionStart` fires.
 #
 # **`CBX_NO_SKILL_AUTO_UPDATE=1` is the guard `.mcp.json` sets**, and it is not
 # optional: without it the CLI may rewrite the tracked skill, widening its
@@ -46,9 +49,10 @@ index="$cache/index.sqlite"
 
 # A linked worktree with no index takes its main checkout's or nothing: the
 # git dir differs from the common one, and the common one is a checkout's
-# `.git` rather than a bare repository's. Even a cache directory left without
-# an index stays unrefreshed, because `update` there would be the full build.
+# `.git` rather than a bare repository's. A cache directory left without an
+# index gets nothing either, since `update` would only refuse it three times.
 seed=
+seeded=
 if [ ! -f "$index" ]; then
   git_dir=$(git rev-parse --path-format=absolute --git-dir 2>/dev/null) || exit 0
   common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 0
@@ -77,16 +81,24 @@ sleep 2
 [ "$(cat "$pending" 2>/dev/null)" = "$token" ] || exit 0
 
 # Copied beside it and renamed in, so `update` never opens a partial file, and
-# skipped when an earlier winner seeded during the wait.
+# skipped when an earlier winner seeded during the wait. A WAL or shared-memory
+# file left from an earlier seed would be replayed into this one, so they go.
 if [ -n "$seed" ] && [ ! -e "$index" ]; then
+  rm -f "$index-wal" "$index-shm"
   cp "$seed" "$index.seed.$token" && mv -f "$index.seed.$token" "$index" ||
     { rm -f "$index.seed.$token"; exit 0; }
+  seeded=1
 fi
 
 tries=0
 until refresh; do
   tries=$((tries + 1))
-  [ "$tries" -lt 3 ] || break
+  if [ "$tries" -ge 3 ]; then
+    # A seed `update` cannot open — torn by a copy taken mid-checkpoint — goes,
+    # so the next call copies again instead of every call failing on it.
+    [ -z "$seeded" ] || rm -f "$index" "$index-wal" "$index-shm"
+    break
+  fi
   sleep 2
 done
 exit 0
