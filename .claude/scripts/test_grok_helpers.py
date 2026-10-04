@@ -5466,7 +5466,14 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
     # (`: `); a quoted one must close. Anything else — an indented
     # continuation, a block or flow value, a quote left open — can carry a
     # key past where a line read stops, or swallow one, in either direction.
-    PLAIN_VALUE = re.compile(r"^(?![\"'\[{|>&*!#%@`])(?:(?!\s#|:\s).)+$")
+    PLAIN_VALUE = re.compile(
+        r"^(?![\"'\[\]{}|>&*!#%@`,])(?![-?:](?:\s|$))(?!.*:$)"
+        r"(?:(?!\s#|:\s).)+$")
+    # Outside YAML's printable set, or a line break to Python that YAML
+    # keeps inside a value: either makes the parser and this read differ.
+    NOT_YAML_TEXT = re.compile(
+        "[^\t\x20-\x7e\xa0-\ud7ff\ue000-\ufffd\U00010000-\U0010ffff]"
+        "|[\u2028\u2029]")
     QUOTED_VALUE = re.compile(r"""^(?:"(?:[^"\\]|\\.)*"|'(?:[^']|'')*')$""")
     # A rule in a command's tool list: a name, and a specifier holding no
     # bracket and no `#`, so two rules run together, or a comment inside
@@ -5474,11 +5481,16 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
     TOOL_RULE = re.compile(r"^[A-Za-z]+(\([^()#]*\))?$")
 
     def frontmatter_fields(self, text):
-        head = text.split("\n---", 1)[0].splitlines()
-        self.assertEqual("---", head[0].lstrip("﻿").rstrip(),
+        # Split at LF alone, as YAML breaks lines: splitlines() also breaks
+        # at U+0085 and its kin, which YAML keeps inside a value.
+        head = [line.rstrip("\r")
+                for line in text.split("\n---", 1)[0].split("\n")]
+        self.assertEqual("---", head[0].lstrip("\ufeff").rstrip(),
                          "the frontmatter opens with `---`")
         fields = {}
         for line in head[1:]:
+            self.assertNotRegex(line, self.NOT_YAML_TEXT,
+                                f"not YAML text: {line!r}")
             if not line.strip():
                 continue
             field = re.match(r"([A-Za-z][\w-]*):[ \t]+(.*?)[ \t]*$", line)
