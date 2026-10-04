@@ -114,7 +114,8 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
         // Appended after the sort, never sorted into the middle: it is the end of what this id can see.
         bool handedToTheBroker = ordered.Any(e => e.Kind is TraceEventKind.Outbox or TraceEventKind.Publish);
         string[] crossed = Crossed(traces.Where(trace => trace.Reachable).SelectMany(trace => trace.Spans));
-        ordered.Add(new TraceEvent(snapshotAt, "broker", BrokerService.Service, TraceEventKind.Queued, QueuedSummary(queues, crossed, handedToTheBroker), null, null));
+        bool consumed = ordered.Any(e => e.Source == "tempo" && e.Kind is TraceEventKind.Consume or TraceEventKind.Saga);
+        ordered.Add(new TraceEvent(snapshotAt, "broker", BrokerService.Service, TraceEventKind.Queued, QueuedSummary(queues, crossed, handedToTheBroker, consumed), null, null));
 
         return new TraceView(correlationId, windowText, true, null, traceIds, truncated, Warnings(traceIds, traces, linesTruncated, windowText), ordered);
     }
@@ -165,8 +166,8 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
 
     /// <summary>
     /// The platform queues the timeline's spans name, in <see cref="PlatformQueues.Table"/>'s order. A span's
-    /// destination may be an exchange, and only a name the table holds is a queue this console knows; the projection
-    /// queue is not among them unless a span named it, because it is always shown first.
+    /// destination may be an exchange, and only a name the table holds is a queue this console knows. The projection
+    /// queue is left out even when a span named it, because the snapshot always shows it first.
     /// </summary>
     internal static string[] Crossed(IEnumerable<TempoSpan> spans)
     {
@@ -180,7 +181,7 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
     /// crossed, each with its depth and anything parked in its <c>_error</c> twin, then why the timeline stops here
     /// rather than continuing into the consume side (plan M2).
     /// </summary>
-    private static string QueuedSummary(QueuesView queues, string[] crossed, bool handedToTheBroker)
+    private static string QueuedSummary(QueuesView queues, string[] crossed, bool handedToTheBroker, bool consumed)
     {
         ProjectionDrain projection = queues.Projection;
 
@@ -199,11 +200,17 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
         // Only claimed when the timeline actually shows a handover. A read-only request, or one whose
         // lines have aged out, never wrote an outbox row, and telling its operator about "the publish"
         // would invent an event this console has no evidence for.
-        string why = handedToTheBroker
-            ? "The publish runs in a new trace — the outbox carries no trace context, so the consume "
-                + "side is not joinable by this correlation id."
-            : "No outbox write appears in this timeline, so nothing here was handed to the broker; the "
-                + "queue is shown because a handover would not be joinable by this correlation id either.";
+        // And once consume-side spans are on the timeline, saying the consume side cannot be joined would contradict
+        // the rows above: they arrived through traces whose services logged this id, and only a hop that logged
+        // nothing is missing.
+        string why = !handedToTheBroker
+            ? "No outbox write appears in this timeline, so nothing here was handed to the broker; the "
+                + "queue is shown because a handover would not be joinable by this correlation id either."
+            : consumed
+                ? "The outbox carries no trace context, so each consume above was found only because its service "
+                    + "logged this correlation id; a hop that logged nothing is missing from this timeline."
+                : "The publish runs in a new trace — the outbox carries no trace context, so the consume "
+                    + "side is not joinable by this correlation id.";
 
         return $"{projection.Queue}: {depth}{Parked(queues, projection.Queue)}{others}. {why}";
     }

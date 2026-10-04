@@ -80,6 +80,29 @@ public sealed class SpanRecogniserTests
         Should.NotThrow(() => SpanRecogniser.Kind(unknown)).ShouldBe(TraceEventKind.Span);
     }
 
+    /// <summary>
+    /// The kind alone cannot tell these rows from the plain consume row, which also says Consume; the label is what
+    /// each row adds, so the label is what is asserted.
+    /// </summary>
+    [Theory]
+    [InlineData(SpanRecogniser.ReserveStockUrn, "Inventory reserves stock: Step process (5 ms)")]
+    [InlineData(SpanRecogniser.AuthorisePaymentUrn, "Payments authorises the payment: Step process (5 ms)")]
+    [InlineData("urn:message:Common.Contracts.Inventory.V1:ReleaseStock", "Step process (5 ms)")]
+    public void Each_command_row_names_its_step_by_the_contract_it_processes(string urn, string expected)
+    {
+        TempoSpan span = Span("Step process", "SPAN_KIND_CONSUMER", $"messaging.operation=process;messaging.masstransit.message_types={urn}");
+
+        SpanRecogniser.Describe(span).ShouldBe(expected);
+    }
+
+    [Fact]
+    public void A_saga_step_without_its_states_is_still_named_and_says_no_transition_it_did_not_read()
+    {
+        TempoSpan span = Span("OrderFulfilmentSaga process", "SPAN_KIND_CONSUMER", "messaging.operation=process;messaging.masstransit.saga_id=1b2c");
+
+        SpanRecogniser.Describe(span).ShouldBe("Ordering's fulfilment saga: OrderFulfilmentSaga process (5 ms)");
+    }
+
     [Fact]
     public void Shippings_consume_of_an_order_confirmed_is_the_despatch_and_another_services_is_a_plain_consume()
     {
