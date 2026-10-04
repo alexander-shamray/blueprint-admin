@@ -1,7 +1,7 @@
 ---
 description: Review branch vs main for contradictions; recheck suggestions.md when it already exists
 argument-hint: "[recheck | full | --local]"
-allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git merge-base:*), Bash(git branch --list:*), Bash(git branch --show-current), Bash(git branch -a), Bash(bash .claude/scripts/npm-checks.sh:*), Bash(bash .claude/scripts/host-checks.sh:*), Bash(bash .claude/scripts/harness-checks.sh:*), Bash(bash .claude/scripts/pr-for-branch.sh:*), Bash(bash .claude/scripts/pr-locality.sh:*), Bash(rm suggestions.md)
+allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git merge-base:*), Bash(codebase-index diff-impact:*), Bash(git branch --list:*), Bash(git branch --show-current), Bash(git branch -a), Bash(bash .claude/scripts/npm-checks.sh:*), Bash(bash .claude/scripts/host-checks.sh:*), Bash(bash .claude/scripts/harness-checks.sh:*), Bash(bash .claude/scripts/pr-for-branch.sh:*), Bash(bash .claude/scripts/pr-locality.sh:*), Bash(rm suggestions.md)
 disallowed-tools: Edit(.git/**), Edit(./.git/**), Edit(.git), Edit(./.git), Edit(.claude/**), Edit(./.claude/**), Edit(.remember/**), Edit(./.remember/**), Edit(.github/**), Edit(./.github/**), Edit(.vscode/**), Edit(./.vscode/**), Edit(android/**), Edit(./android/**), Edit(docs/**), Edit(./docs/**), Edit(e2e/**), Edit(./e2e/**), Edit(ios/**), Edit(./ios/**), Edit(public/**), Edit(./public/**), Edit(src/**), Edit(./src/**), Edit(tests/**), Edit(./tests/**), Edit(.editorconfig), Edit(./.editorconfig), Edit(.gitattributes), Edit(./.gitattributes), Edit(.gitignore), Edit(./.gitignore), Edit(.nvmrc), Edit(./.nvmrc), Edit(.prettierrc), Edit(./.prettierrc), Edit(AGENTS.md), Edit(./AGENTS.md), Edit(CLAUDE.md), Edit(./CLAUDE.md), Edit(README.md), Edit(./README.md), Edit(angular.json), Edit(./angular.json), Edit(capacitor.config.ts), Edit(./capacitor.config.ts), Edit(eslint.config.js), Edit(./eslint.config.js), Edit(ionic.config.json), Edit(./ionic.config.json), Edit(package-lock.json), Edit(./package-lock.json), Edit(package.json), Edit(./package.json), Edit(playwright.config.ts), Edit(./playwright.config.ts), Edit(tsconfig.app.json), Edit(./tsconfig.app.json), Edit(tsconfig.json), Edit(./tsconfig.json), Edit(tsconfig.spec.json), Edit(./tsconfig.spec.json), Edit(.npmrc), Edit(./.npmrc), Edit(npm-shrinkwrap.json), Edit(./npm-shrinkwrap.json), Edit(vitest.config.ts), Edit(./vitest.config.ts), Edit(vitest.config.js), Edit(./vitest.config.js), Edit(vitest.config.mts), Edit(./vitest.config.mts), Edit(vite.config.ts), Edit(./vite.config.ts), Edit(vite.config.js), Edit(./vite.config.js), Edit(vite.config.mts), Edit(./vite.config.mts), Edit(eslint.config.mjs), Edit(./eslint.config.mjs), Edit(eslint.config.cjs), Edit(./eslint.config.cjs), Edit(prettier.config.js), Edit(./prettier.config.js), Edit(prettier.config.cjs), Edit(./prettier.config.cjs), Edit(prettier.config.mjs), Edit(./prettier.config.mjs), Edit(.prettierrc.js), Edit(./.prettierrc.js), Edit(.prettierrc.cjs), Edit(./.prettierrc.cjs), Edit(.prettierrc.json), Edit(./.prettierrc.json), Edit(karma.conf.js), Edit(./karma.conf.js), Edit(jest.config.js), Edit(./jest.config.js), Edit(**/*.config.js), Edit(**/*.config.cjs), Edit(**/*.config.mjs), Edit(**/*.config.ts), Edit(**/*.config.mts), Edit(**/package.json), Edit(**/.npmrc), Edit(**/tsconfig*.json), Edit(**/.prettierrc*), Bash(git push:*), Edit(node_modules/**), Edit(./node_modules/**), Edit(Directory.Build.props), Edit(./Directory.Build.props), Edit(Directory.Packages.props), Edit(./Directory.Packages.props), Edit(global.json), Edit(./global.json), Edit(BlueprintAdmin.slnx), Edit(./BlueprintAdmin.slnx), Edit(.mcp.json), Edit(./.mcp.json), Edit(.codeindexignore), Edit(./.codeindexignore)
 ---
 
@@ -129,17 +129,26 @@ already correct — are also non-findings.
 **Trigger:** no `suggestions.md`, or user passed `full` / `full --local`.
 
 1. **Establish the range.**
-   - Branch (default): `MERGE_BASE=$(git merge-base origin/main HEAD)` (fall
-     back to `main`), then `git diff --stat` / `--name-only` / full diff
-     `"$MERGE_BASE..HEAD"`, plus `git log --oneline "$MERGE_BASE..HEAD"`.
+   - Branch (default): run `git merge-base origin/main HEAD` on its own
+     (fall back to `main`) and carry the sha it prints into every later
+     command — a shell variable does not outlive the call that set it, and an
+     empty one turns `<merge-base>..HEAD` into `..HEAD`, an empty range that
+     reads as a clean review. Then `git diff --stat` / `--name-only` / full
+     diff `<merge-base>..HEAD`, plus `git log --oneline <merge-base>..HEAD`.
    - `--local`: `git status --short` and `git diff HEAD` (include untracked
      that matter; skip bulk tooling noise).
-2. **Read the change.** Prefer full source of load-bearing files over the
-   diff alone. Grep `src/`, `e2e/` and `docs/` for every **symbol** the
-   change touches, and the one spec section that owns a rule the change
-   moved. Do not tour the corpus for the value: a restatement outside the
-   touch set that the change left stale is not this branch's to fix
-   (`docs/change-locality.md` §2).
+2. **Read the change, starting from its blast radius.** Where the
+   `codebase-index` CLI answers, run
+   `codebase-index diff-impact --base <merge-base> --json` before anything
+   else: the symbols and files the diff reaches through the graph are where
+   a contradiction outside the changed lines lives. Grok's container holds no
+   index, so there the diff is the start. Prefer full source of load-bearing
+   files over the diff alone. Grep `src/`, `e2e/` and `docs/` for every
+   **symbol** the change touches — `diff-impact` names no absences, so its
+   list is where the Grep starts, not where it stops — and the one spec
+   section that owns a rule the change moved. Do not tour the corpus for the
+   value: a restatement outside the touch set that the change left stale is
+   not this branch's to fix (`docs/change-locality.md` §2).
 3. **Run cheap gates when the range touches them.**
    - Lint and the unit suite, when the range touches `src/` or any file the
      toolchain reads:
