@@ -66,6 +66,8 @@ argument is how a rule gets "corrected" back.
   the main checkout's `index.sqlite` in, and only that file, so a `/branch`
   workspace is indexed in seconds rather than by a full build inside the
   agent's turn; a main checkout with no index leaves it with none.
+  `git-worktree-fork.sh` starts it once in each new worktree, because
+  `/branch` enters one mid-session, where no `SessionStart` fires.
   `test_index_refresh_hook.py` runs it against a fake
   CLI, and it pins the two events, the matcher and the
   `CBX_NO_SKILL_AUTO_UPDATE` guard `.mcp.json` sets, in the script and in the
