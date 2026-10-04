@@ -17,17 +17,31 @@
 # command, which would miss every helper and script. A commit changes no file,
 # and that same `update` is what moves the index's recorded HEAD.
 #
-# **The event's `cwd` names the checkout; the working directory is the
-# fallback.** `${CLAUDE_PROJECT_DIR}` stays where the session started, and the
-# hooks reference documents the event's `cwd` as the field that follows a
-# worktree the session entered and a Bash `cd`. So the hook's half reads the
-# payload — compact JSON, whose first `"cwd":"` is the key, since a copy
-# inside a tool's output is escaped — and hands that directory to a detached
-# half: the hook returns in the time one read takes, never in the time an
-# `update` does. That read is why the hook commands carry no `&`, because an
-# asynchronous list's stdin is `/dev/null`. A Windows path arrives with its
-# backslashes doubled, and `cd` takes it as it is. With no payload, a key it
-# cannot find or a directory that has gone, the working directory decides.
+# **The edited file names the checkout; the event's `cwd` is the fallback,
+# and the working directory after it.** A session in the main checkout can
+# edit a linked worktree's files by absolute path, and refreshing the checkout
+# its `cwd` names would update an index the edit never touched while the
+# worktree's kept serving the pre-edit content (#101). So an edit tool's
+# `file_path` — `notebook_path` for a notebook — decides: the detached half
+# enters `cwd`, then the file's directory, so a relative path resolves against
+# the event, and `git rev-parse` from there finds the checkout that holds the
+# file, a `..` through a worktree into the main checkout already resolved by
+# `cd`. A file whose directory has gone leaves `cwd` deciding rather than its
+# nearest surviving ancestor, which for a removed worktree is the main
+# checkout's `.claude/worktrees/`. Bash and a session start name no file, and
+# `cwd` decides: `${CLAUDE_PROJECT_DIR}` stays where the session started, and
+# the hooks reference documents `cwd` as the field that follows a worktree the
+# session entered and a Bash `cd`.
+#
+# The hook's half reads the payload — compact JSON, whose first `"cwd":"` and
+# first `"file_path":"` are the keys, since a copy inside a written file or a
+# tool's output is escaped — and hands both to a detached half: the hook
+# returns in the time one read takes, never in the time an `update` does.
+# That read is why the hook commands carry no `&`, because an asynchronous
+# list's stdin is `/dev/null`. A Windows path arrives with its backslashes
+# doubled; `cd` takes a directory as it is, and a file's are halved into `/`
+# so its own name can be cut off. With no payload, a key it cannot find or a
+# directory that has gone, the next source down decides.
 #
 # **The rule is that the last call runs, and there is no lock.** Each call
 # publishes a token of its own to `refresh.pending` by an atomic rename, waits,
@@ -66,10 +80,19 @@ if [ "${1-}" != --detached ]; then
   dir=
   rest=${payload#*\"cwd\":\"}
   [ "$rest" = "$payload" ] || dir=${rest%%\"*}
-  sh "$0" --detached "$dir" </dev/null >/dev/null 2>&1 &
+  file=
+  for key in file_path notebook_path; do
+    rest=${payload#*\"$key\":\"}
+    [ "$rest" = "$payload" ] || { file=${rest%%\"*}; break; }
+  done
+  sh "$0" --detached "$dir" "$file" </dev/null >/dev/null 2>&1 &
   exit 0
 fi
 [ -z "${2-}" ] || cd "$2" 2>/dev/null || :
+if [ -n "${3-}" ]; then
+  file=$(printf '%s\n' "$3" | sed 's/\\\\/\//g')
+  case $file in */*) cd "${file%/*}/" 2>/dev/null || : ;; esac
+fi
 
 root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 cd "$root" || exit 0

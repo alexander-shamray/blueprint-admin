@@ -648,7 +648,8 @@ class TheEvent(unittest.TestCase):
         self.fake()
 
     def payload(self, cwd, **fields):
-        """A Bash event, compact as the harness sends it, `cwd` last.
+        """A Bash event unless `fields` say otherwise, compact as the harness
+        sends it, `cwd` last.
 
         Last, so any field passed here precedes the key in the text, which is
         the order a copy inside a tool's output would have to win in.
@@ -656,6 +657,11 @@ class TheEvent(unittest.TestCase):
         return json.dumps({"session_id": "s", "hook_event_name": "PostToolUse",
                            "tool_name": SHELL_TOOL, **fields, "cwd": str(cwd)},
                           separators=(",", ":"))
+
+    def edit(self, cwd, path, key="file_path", **fields):
+        """An edit tool's event naming `path`, from a session in `cwd`."""
+        return self.payload(cwd, tool_name="Edit", **fields,
+                            tool_input={key: str(path)})
 
     def hook(self, stdin, cwd=None, timeout=30):
         return subprocess.run([SH, "-c", refresh_hook()[1]["command"]],
@@ -695,6 +701,56 @@ class TheEvent(unittest.TestCase):
         printed = json.dumps({"cwd": str(self.main)}, separators=(",", ":"))
         payload = self.payload(self.worktree, tool_response={"stdout": printed})
         self.assertLess(payload.index('\\"cwd\\":'), payload.index('"cwd":'),
+                        "the copy must come first to be a case")
+        result = self.hook(payload)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(["worktree"], self.refreshed())
+
+    def test_an_edit_refreshes_the_checkout_of_the_file_it_names(self):
+        # A session in the main checkout editing a worktree's file by
+        # absolute path (#101): the worktree's index is refreshed, and the
+        # main checkout's, which the edit never touched, is not.
+        result = self.hook(self.edit(self.main, self.worktree / "a.txt"))
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(["worktree"], self.refreshed())
+
+    def test_a_notebook_edit_names_its_file_the_same_way(self):
+        result = self.hook(self.edit(self.main, self.worktree / "a.ipynb",
+                                     key="notebook_path"))
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(["worktree"], self.refreshed())
+
+    def test_a_relative_path_resolves_against_the_events_cwd(self):
+        # Run from the worktree, where the same relative path names nothing:
+        # resolved there it would fall back to `cwd`, the main checkout.
+        relative = os.path.join(".claude", "worktrees", "slug", "a.txt")
+        result = self.hook(self.edit(self.main, relative), cwd=self.worktree)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(["worktree"], self.refreshed())
+
+    def test_a_path_through_a_worktree_into_main_refreshes_main(self):
+        # The `..` is resolved before git looks for a checkout, so the file's
+        # home decides and not the directory the path is spelled through.
+        through = os.path.join(str(self.worktree), "..", "..", "..", "a.txt")
+        result = self.hook(self.edit(self.worktree, through))
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(["main"], self.refreshed())
+
+    def test_a_file_whose_directory_has_gone_falls_back_to_the_events_cwd(self):
+        # A removed worktree's file: its nearest surviving ancestor is in the
+        # main checkout, which is not where the session is working.
+        gone = self.main / ".claude" / "worktrees" / "gone" / "a.txt"
+        result = self.hook(self.edit(self.worktree, gone))
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(["worktree"], self.refreshed())
+
+    def test_a_file_path_inside_a_tool_output_is_not_the_key(self):
+        printed = json.dumps({"file_path": str(self.main / "a.txt")},
+                             separators=(",", ":"))
+        payload = self.edit(self.main, self.worktree / "a.txt",
+                            tool_response={"stdout": printed})
+        self.assertLess(payload.index('\\"file_path\\":'),
+                        payload.index('"file_path":'),
                         "the copy must come first to be a case")
         result = self.hook(payload)
         self.assertEqual(0, result.returncode, result.stderr)
