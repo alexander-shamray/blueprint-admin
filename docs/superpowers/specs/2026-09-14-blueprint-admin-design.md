@@ -580,7 +580,7 @@ cannot be used as an open relay from a tab the developer left open.
   `ComposeService`, `BrokerService` and `FrontendSupervisor` are tested
   against it, including the failure shapes (`docker` absent, daemon down,
   `node_modules` absent).
-- Fake `HttpMessageHandler`s for Keycloak, the two OpenAPI documents, Grafana
+- Fake `HttpMessageHandler`s for Keycloak, the OpenAPI documents, Grafana
   and the gateway; `TokenService`, `ApiCatalog`, `RequestProxy`,
   `GrafanaClient` and `EventTraceService` are tested against them, including
   status passthrough and the correlation-id rules.
@@ -601,23 +601,18 @@ cannot be used as an open relay from a tab the developer left open.
 developed without the platform running, and how a reader of this repo sees
 the console in a minute.
 
-**The fixtures are recordings.** `Fakes/fixtures` holds what the live
-platform answered, written by the host itself under `Admin:Record=true`
-against a loopback stack. `FixtureRecordings` names the upstream answer each
-file comes from: the four OpenAPI documents, Grafana's datasource list and
-golden-signal answers, `ps`, and the exchange and permission reads. Only a
-successful answer is recorded. The files a recording run cannot produce are
-listed there as hand-written, each with its reason: the Loki and Tempo
-answers for one publish that failed and was retried, and the queue list,
-which carries an `_error` queue holding a message so that the Broker screen
-has one to mark. The recordings kept in
-code (`WorkstationRecordings`, the gateway's, Keycloak's and the scripted
-outputs in `FakePlatformScripts`) are outside the switch and say so where
-they are. A re-recording is reviewed as its diff.
+**The fixtures are recordings where a recording can be made.** Under
+`Admin:Record=true` against a loopback stack, the host itself writes
+`Fakes/fixtures` from what the live platform answered. Only a successful
+answer is recorded. `FixtureRecordings` owns the list: the upstream answer
+each recorded file comes from, and each file written by hand with the
+reason a recording run cannot produce it. The answers kept in code
+(`WorkstationRecordings`, `FakeGateway`, `FakeKeycloak` and
+`FakePlatformScripts`) are outside the switch. A re-recording is reviewed as
+its diff.
 
-Every recorded byte passes through `FixtureScrubber` before it is written:
-JWTs, bearer credentials, `Authorization` values, a token response's tokens,
-and passwords and client secrets, in JSON or in a form. The gate
+Every recorded byte passes through `FixtureScrubber`, which owns what is
+taken out, before it is written. The gate
 (`FixtureGateTests`) reads every file under `Fakes/` from the directory,
 rather than from a list, and fails on anything the scrubber would still
 change, on a fixture with no source named, and on a fixture the host does not
