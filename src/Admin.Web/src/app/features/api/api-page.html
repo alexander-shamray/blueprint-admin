@@ -60,6 +60,9 @@
       }
       <button (click)="showToken()">Show token</button>
     </div>
+    @if (clockText(); as ct) {
+      <p class="token-clock">{{ ct }}</p>
+    }
 
     @if (token(); as t) {
       <p class="expires">{{ t.username }}'s token, expires {{ t.expiresAt }}</p>

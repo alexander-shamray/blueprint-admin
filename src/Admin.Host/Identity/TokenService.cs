@@ -52,6 +52,30 @@ public sealed class TokenService(HttpClient http, IOptions<AdminOptions> options
             : await GetAsync(identity.Username, password, cancellationToken);
     }
 
+    /// <summary>
+    /// The unexpired token this host holds for the identity, without minting one: what the token clock reads. Null
+    /// for anonymous, an unknown user, a token never minted or one already expired.
+    /// </summary>
+    public TokenIssued? Held(IdentityRequest? identity)
+    {
+        if (string.IsNullOrEmpty(identity?.Username))
+        {
+            return null;
+        }
+
+        string? password = identity.Password
+            ?? RealmUsers.Of(options.Value).FirstOrDefault(u => u.Username == identity.Username)?.Password;
+
+        return password is not null
+            && cache.TryGetValue((identity.Username, Digest(password)), out TokenIssued? held)
+            && time.GetUtcNow() < held.ExpiresAt
+                ? held
+                : null;
+    }
+
+    /// <summary>When a held token stops being reused and the next call mints another: the one "near expiry" there is.</summary>
+    public static DateTimeOffset RenewsAt(TokenIssued token) => token.ExpiresAt - ReuseMargin;
+
     public async Task<TokenOutcome> GetAsync(string username, string password, CancellationToken cancellationToken)
     {
         if (cache.TryGetValue((username, Digest(password)), out TokenIssued? cached) && time.GetUtcNow() < cached.ExpiresAt - ReuseMargin)

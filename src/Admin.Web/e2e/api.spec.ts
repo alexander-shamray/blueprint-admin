@@ -78,6 +78,28 @@ test('trace this call opens the response correlation id on the trace screen', as
   await expect(page.locator('table.timeline tbody tr').last().locator('td.kind')).toHaveText('[queued]');
 });
 
+// The token clock reads what FakeKeycloak issued (300 s, its user's grants): a 403 for browser is explained by
+// the grants it lists, and the token itself is never what the line shows.
+test("the token clock shows the held token's time left and its grants, which explain a 403", async ({ page }) => {
+  await page.goto('/requests');
+
+  await page.locator('button.op', { hasText: 'GetStock' }).click();
+  await page.getByLabel('Path productId').fill('0199a1b2-0000-7000-8000-00000000000a');
+  await page.getByLabel('Identity').selectOption('user:browser');
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.locator('.response .status')).toHaveText('403');
+
+  const clock = page.locator('.token-clock');
+  await expect(clock).toContainText("browser's token:");
+  await expect(clock).toContainText('Grants no permission.');
+
+  await page.getByLabel('Identity').selectOption('user:demo');
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.locator('.response .status')).toHaveText('200');
+  await expect(clock).toContainText('Grants catalog:write, orders:write, orders:cancel, inventory:admin, payments:admin.');
+  await expect(clock).not.toContainText('.ey');
+});
+
 // Inventory and Payments through the gateway (FakeGateway): the stock answer was recorded from the live
 // service on 2026-10-03, and the payment follows the backend's PaymentView, since none exists without a
 // running saga. Both routes need their admin permission, which demo holds and browser does not.
