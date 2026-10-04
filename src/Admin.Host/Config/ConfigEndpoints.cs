@@ -17,7 +17,7 @@ public static class ConfigEndpoints
                 o.FakePlatform,
                 new UrlsView(
                     o.GatewayUrl, o.CatalogUrl, o.OrderingUrl, o.BffUrl, o.InventoryUrl, o.PaymentsUrl, o.PaymentSimulatorUrl,
-                    o.KeycloakUrl, o.GrafanaUrl, o.ClientUrl)));
+                    o.CarrierSimulatorUrl, o.KeycloakUrl, o.GrafanaUrl, o.ClientUrl)));
         });
 
         return app;
@@ -34,6 +34,7 @@ public sealed record UrlsView(
     string Inventory,
     string Payments,
     string PaymentSimulator,
+    string CarrierSimulator,
     string Keycloak,
     string Grafana,
     string Client);

@@ -66,6 +66,7 @@ export interface ConfigView {
     inventory: string;
     payments: string;
     paymentSimulator: string;
+    carrierSimulator: string;
     keycloak: string;
     grafana: string;
     client: string;

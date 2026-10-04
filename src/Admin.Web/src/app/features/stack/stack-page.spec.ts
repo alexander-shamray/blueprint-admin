@@ -22,7 +22,7 @@ const stack = {
 
 const config = {
   backendDir: '', frontendDir: '/work/blueprint-frontend', composeFile: '', fakePlatform: true,
-  urls: { gateway: 'http://localhost:5000', catalog: '', ordering: '', bff: '', inventory: '', payments: '', paymentSimulator: '', keycloak: 'http://localhost:8080', grafana: 'http://localhost:3000', client: 'http://localhost:5173' },
+  urls: { gateway: 'http://localhost:5000', catalog: '', ordering: '', bff: '', inventory: '', payments: '', paymentSimulator: '', carrierSimulator: '', keycloak: 'http://localhost:8080', grafana: 'http://localhost:3000', client: 'http://localhost:5173' },
 };
 
 const health = {
