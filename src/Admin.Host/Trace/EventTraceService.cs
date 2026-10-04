@@ -99,7 +99,7 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
                 "tempo",
                 span.Service,
                 SpanRecogniser.Kind(span),
-                $"{span.Name} ({span.Duration.TotalMilliseconds.ToString("0.#", CultureInfo.InvariantCulture)} ms)",
+                SpanRecogniser.Describe(span),
                 span.TraceId,
                 tempoUid is not null ? ExploreLink.Tempo(grafanaUrl, tempoUid, span.TraceId, windowText) : null));
         }
@@ -113,7 +113,8 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
 
         // Appended after the sort, never sorted into the middle: it is the end of what this id can see.
         bool handedToTheBroker = ordered.Any(e => e.Kind is TraceEventKind.Outbox or TraceEventKind.Publish);
-        ordered.Add(new TraceEvent(snapshotAt, "broker", BrokerService.Service, TraceEventKind.Queued, QueuedSummary(queues, handedToTheBroker), null, null));
+        string[] crossed = Crossed(traces.Where(trace => trace.Reachable).SelectMany(trace => trace.Spans));
+        ordered.Add(new TraceEvent(snapshotAt, "broker", BrokerService.Service, TraceEventKind.Queued, QueuedSummary(queues, crossed, handedToTheBroker), null, null));
 
         return new TraceView(correlationId, windowText, true, null, traceIds, truncated, Warnings(traceIds, traces, linesTruncated, windowText), ordered);
     }
@@ -163,10 +164,23 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
             || level.Equals("Fatal", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
-    /// The terminal marker's words. It states the projection queue and its depth, then why the
-    /// timeline stops here rather than continuing into the consume side (plan M2).
+    /// The platform queues the timeline's spans name, in <see cref="PlatformQueues.Table"/>'s order. A span's
+    /// destination may be an exchange, and only a name the table holds is a queue this console knows; the projection
+    /// queue is not among them unless a span named it, because it is always shown first.
     /// </summary>
-    private static string QueuedSummary(QueuesView queues, bool handedToTheBroker)
+    internal static string[] Crossed(IEnumerable<TempoSpan> spans)
+    {
+        HashSet<string> named = [.. spans.Select(SpanRecogniser.Queue).OfType<string>()];
+
+        return [.. PlatformQueues.Table.Select(q => q.Name).Where(q => q != PlatformQueues.Projection && named.Contains(q))];
+    }
+
+    /// <summary>
+    /// The terminal marker's words. It states the projection queue and every other queue the timeline's spans
+    /// crossed, each with its depth and anything parked in its <c>_error</c> twin, then why the timeline stops here
+    /// rather than continuing into the consume side (plan M2).
+    /// </summary>
+    private static string QueuedSummary(QueuesView queues, string[] crossed, bool handedToTheBroker)
     {
         ProjectionDrain projection = queues.Projection;
 
@@ -174,14 +188,12 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
             : !projection.Found ? "queue not declared"
             : projection.Messages is not { } messages ? "depth unknown"
             : projection.Drained ? "0 messages (drained)"
-            : $"{messages} message{(messages == 1 ? "" : "s")} waiting";
+            : Waiting(messages);
 
-        // A drained queue whose error queue holds messages is not a projection that succeeded, and
-        // spec §5.9 step 3 promises a message parked in an _error queue shows here rather than as
-        // silence. Reporting only the main queue would call that case "drained".
-        string parked = queues.Queues
-            .FirstOrDefault(q => q.Name == projection.Queue + BrokerService.ErrorSuffix) is { Messages: > 0 } errorQueue
-            ? $", {errorQueue.Messages} parked in {errorQueue.Name}"
+        // Each queue a span named, read from the same listing: a reachable broker answers for all of them, and an
+        // unreachable one has already said so on the projection's line.
+        string others = queues.Reachable
+            ? string.Concat(crossed.Select(name => $"; {name}: {CrossedDepth(queues, name)}{Parked(queues, name)}"))
             : "";
 
         // Only claimed when the timeline actually shows a handover. A read-only request, or one whose
@@ -193,6 +205,23 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
             : "No outbox write appears in this timeline, so nothing here was handed to the broker; the "
                 + "queue is shown because a handover would not be joinable by this correlation id either.";
 
-        return $"{projection.Queue}: {depth}{parked}. {why}";
+        return $"{projection.Queue}: {depth}{Parked(queues, projection.Queue)}{others}. {why}";
     }
+
+    private static string CrossedDepth(QueuesView queues, string name) =>
+        queues.Queues.FirstOrDefault(q => q.Name == name) is not { } queue ? "queue not declared"
+        : queue.Messages is not { } messages ? "depth unknown"
+        : messages == 0 ? "0 messages"
+        : Waiting(messages);
+
+    private static string Waiting(long messages) => $"{messages} message{(messages == 1 ? "" : "s")} waiting";
+
+    /// <summary>
+    /// A drained queue whose error queue holds messages is not a step that succeeded, and spec §5.9 step 3 promises
+    /// a message parked in an _error queue shows here rather than as silence.
+    /// </summary>
+    private static string Parked(QueuesView queues, string name) =>
+        queues.Queues.FirstOrDefault(q => q.Name == name + BrokerService.ErrorSuffix) is { Messages: > 0 } errorQueue
+            ? $", {errorQueue.Messages} parked in {errorQueue.Name}"
+            : "";
 }

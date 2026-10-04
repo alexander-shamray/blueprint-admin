@@ -233,7 +233,7 @@ export interface PermissionsView {
  * carries no trace context, so the publish runs in a trace this correlation id cannot reach, and the
  * event's summary says so in words.
  */
-export type TraceEventKind = 'HttpIn' | 'Log' | 'Span' | 'Outbox' | 'Publish' | 'Consume' | 'Queued' | 'Error';
+export type TraceEventKind = 'HttpIn' | 'Log' | 'Span' | 'Outbox' | 'Publish' | 'Consume' | 'Saga' | 'Queued' | 'Error';
 
 /** One row of a timeline. `source` is `loki`, `tempo` or `broker`; `link` opens Grafana Explore. */
 export interface TraceEvent {
