@@ -6,8 +6,8 @@
 dispatching `review-adjudicator`, and a type list inside a subagent's `Agent`
 grant is ignored — so the profile admits every type. `/ship`'s deny list
 reaches the agents it spawns and refuses the broad built-in types by name, but
-it cannot refuse `review-grok-triager` itself, because that is the one type
-`/ship` grants. So the triager could spawn another triager: an editing agent
+it cannot refuse `review-grok-triager` itself, because `/ship` grants that
+type. So the triager could spawn another triager: an editing agent
 dispatched by one that has been reading an untrusted review, which is the
 shape the split between adjudication and application exists to refuse.
 
