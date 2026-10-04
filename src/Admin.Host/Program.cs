@@ -58,6 +58,13 @@ builder.Services.ConfigureHttpJsonOptions(json => json.SerializerOptions.Convert
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<JobRegistry>();
 
+// Off unless Admin:Record asks; the fixture directory resolves against this
+// checkout, as the web root does, since its recordings are this checkout's.
+builder.Services.AddSingleton(sp => FixtureRecorder.From(
+    sp.GetRequiredService<IOptions<AdminOptions>>().Value,
+    baseDir,
+    sp.GetRequiredService<ILoggerFactory>().CreateLogger<FixtureRecorder>()));
+
 // Both runners are registered; which one IProcessRunner resolves to is
 // decided from options at resolve time, for the same reason RepoPaths is.
 builder.Services.AddSingleton<ProcessRunner>();
@@ -65,9 +72,10 @@ builder.Services.AddSingleton(sp => FakePlatformScripts.Script(
     new FakeProcessRunner(sp.GetRequiredService<JobRegistry>()),
     sp.GetRequiredService<RepoPaths>()));
 builder.Services.AddSingleton<IProcessRunner>(sp =>
-    sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform
-        ? sp.GetRequiredService<FakeProcessRunner>()
-        : sp.GetRequiredService<ProcessRunner>());
+    sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform ? sp.GetRequiredService<FakeProcessRunner>()
+    : sp.GetRequiredService<FixtureRecorder>().On ? new RecordingProcessRunner(
+        sp.GetRequiredService<ProcessRunner>(), sp.GetRequiredService<FixtureRecorder>(), sp.GetRequiredService<RepoPaths>())
+    : sp.GetRequiredService<ProcessRunner>());
 
 builder.Services.AddSingleton<ComposeService>();
 builder.Services.AddSingleton<WorkstationDoctor>();
@@ -103,10 +111,13 @@ builder.Services.AddHttpClient<PlatformProbe>().ConfigurePrimaryHttpMessageHandl
 // 302 or a Set-Cookie from the platform is part of the answer the proxy shows, not something to
 // act on (spec §5.7). The token cache and the catalog cache live in singletons, so the client is
 // created once for them rather than injected as a typed client.
-builder.Services.AddHttpClient("platform").ConfigurePrimaryHttpMessageHandler(sp =>
-    sp.GetRequiredService<IOptions<AdminOptions>>().Value is { FakePlatform: true } fake
-        ? new FakePlatformHandler(fake)
-        : new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
+builder.Services.AddHttpClient("platform")
+    .ConfigurePrimaryHttpMessageHandler(sp =>
+        sp.GetRequiredService<IOptions<AdminOptions>>().Value is { FakePlatform: true } fake
+            ? new FakePlatformHandler(fake)
+            : new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false })
+    .AddHttpMessageHandler(sp => new RecordingHandler(
+        sp.GetRequiredService<FixtureRecorder>(), sp.GetRequiredService<IOptions<AdminOptions>>()));
 
 builder.Services.AddSingleton(sp => new TokenService(
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("platform"),
@@ -138,8 +149,10 @@ builder.Services.AddSingleton(sp => new RequestProxy(
 
 WebApplication app = builder.Build();
 
-// Resolve once so a wrong directory fails startup with the key to fix.
+// Resolve once so a wrong directory, or a recording of the fakes, fails
+// startup with the key to fix.
 _ = app.Services.GetRequiredService<RepoPaths>();
+_ = app.Services.GetRequiredService<FixtureRecorder>();
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();

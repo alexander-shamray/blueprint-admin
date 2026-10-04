@@ -85,4 +85,14 @@ public sealed class AdminOptions
     /// the SPA is developed and how CI runs the Playwright smoke.
     /// </summary>
     public bool FakePlatform { get; set; }
+
+    /// <summary>
+    /// Write each upstream answer a fixture file models into <see cref="RecordDir"/> as the real platform gives it,
+    /// scrubbed first (<c>Fakes/FixtureRecordings.cs</c> says which answer feeds which file). A developer's act
+    /// against a loopback stack; refused together with <see cref="FakePlatform"/>, whose answers are the fixtures.
+    /// </summary>
+    public bool Record { get; set; }
+
+    /// <summary>Where <see cref="Record"/> writes, resolved against the repository root as <see cref="WebRoot"/> is.</summary>
+    public string RecordDir { get; set; } = "src/Admin.Host/Fakes/fixtures";
 }
