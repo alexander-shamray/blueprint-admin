@@ -1421,11 +1421,21 @@ same argument as never calling a branch clean because asking failed.
      dimension — implementation correctness, and test rigour (assertions
      that cannot fail, fixtures that never reach the state they claim) —
      each with this workspace as its root, and as its scope the branch's
-     changed files that still exist at the head and the blast radius's
-     affected files, **written into the brief**: the scratchpad file is outside the root the profile confines
-     an auditor to. Name the findings earlier rounds decided as known, and
-     say that a clean scope is a result, so nothing is manufactured to fill
-     one.
+     changed files that still exist at the head, the blast radius's
+     affected files, and every file that still names a path the diff
+     deletes or renames away. The run finds those itself before
+     dispatching — `git diff --name-status` from the merge base, then a
+     `Grep` for each such path and the names it declared — because the
+     blast radius names no absence, and a deleted path in a brief is a
+     scope nothing can open. The deleted names go in as context, not as
+     scope, and the whole scope is **written into the brief**: the
+     scratchpad file is outside the root the profile confines an auditor
+     to. A scope that still comes out empty — a branch that only deletes
+     what nothing names, or no diff left at all — has nothing to read:
+     dispatch no auditor, report it so, which is not a verdict about
+     code, and end the loop. Otherwise name the findings earlier rounds
+     decided as known, and say that a clean scope is a result, so nothing
+     is manufactured to fill one.
    - **Verify every finding against the code before acting on it.** The
      profile reads; it does not decide. Fix what survives, rerun the
      step 2 checks that apply, `/commit` scoped to the paths touched, push
@@ -1438,11 +1448,6 @@ same argument as never calling a branch clean because asking failed.
      round holding one did not run: dispatch that dimension once more, and
      if it fails again stop the chain on the first stop row rather than
      mint a clean round from silence — `/bug-sweep`'s *never fail open*.
-     A branch that only deletes still has a scope, because an empty blast
-     radius names no absence: give the auditors the deleted paths and the
-     names they declared, and ask what still references them. Only a branch
-     with no diff left has nothing to read — report it so, which is not a
-     verdict about code, and end the loop.
    - **The loop ends on a clean round only when no thread is owed.** Read
      `pr-review-threads.sh <n>` again: a triageable thread that appeared
      since entry is triaged the same way, and a triage that pushed a commit
@@ -2056,8 +2061,8 @@ clean, skipped on limits (final — one reviewer, not two), or stopped
 unconverged; step 6
 **all-resolved, naming the review and the `commit` oid it read**, or stopped
 unconverged — or, while Copilot is off, clean after N `bug-auditor` rounds
-or unconverged at the per-run ceiling, or nothing to read when no diff is
-left, naming no reviewer and no oid because
+or unconverged at the per-run ceiling, or nothing to read when the scope
+comes out empty, naming no reviewer and no oid because
 no external review read the branch and the PR carries no record of the
 rounds. Neither list has an ending that
 means "a finding stopped us" any more — a decided row and an answered `Ask`
