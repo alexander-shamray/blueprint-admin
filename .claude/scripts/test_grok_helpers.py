@@ -5460,26 +5460,46 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
     # judges both — so a grant or a deny in either spelling counts.
     DISPATCH_GRANT = re.compile(r"^(Agent|Task)(\(.+\))?$")
 
-    # A rule in a command's tool list: a name, and its specifier in brackets.
-    # A quoted line or a flow sequence leaves a quote or a bracket on the
-    # items at either end, which then miss every exact comparison.
-    TOOL_RULE = re.compile(r"^[A-Za-z]+(\(.*\))?$")
-    # First characters that open a YAML value other than a plain scalar —
-    # quoted, flow, block, anchor, alias, tag or comment. Such a value can
-    # run past its line, so a line read cannot see where it ends.
-    NOT_PLAIN = "\"'[{|>&*!#"
+    # A frontmatter line the harness's YAML parser and a line read agree on:
+    # a key at column 0 and a value that ends on its line. A plain value may
+    # not open as anything else or hold a comment (` #`) or a mapping
+    # (`: `); a quoted one must close. Anything else — an indented
+    # continuation, a block or flow value, a quote left open — can carry a
+    # key past where a line read stops, or swallow one, in either direction.
+    PLAIN_VALUE = re.compile(r"^(?![\"'\[{|>&*!#%@`])(?:(?!\s#|:\s).)+$")
+    QUOTED_VALUE = re.compile(r"""^(?:"(?:[^"\\]|\\.)*"|'(?:[^']|'')*')$""")
+    # A rule in a command's tool list: a name, and a specifier holding no
+    # bracket and no `#`, so two rules run together, or a comment inside
+    # one, cannot pass as a single item.
+    TOOL_RULE = re.compile(r"^[A-Za-z]+(\([^()#]*\))?$")
+
+    def frontmatter_fields(self, text):
+        head = text.split("\n---", 1)[0].splitlines()
+        self.assertEqual("---", head[0].lstrip("﻿").rstrip(),
+                         "the frontmatter opens with `---`")
+        fields = {}
+        for line in head[1:]:
+            if not line.strip():
+                continue
+            field = re.match(r"([A-Za-z][\w-]*):[ \t]+(.*?)[ \t]*$", line)
+            self.assertIsNotNone(field, f"not a key at column 0: {line!r}")
+            key, value = field.groups()
+            self.assertTrue(
+                self.PLAIN_VALUE.match(value) or self.QUOTED_VALUE.match(value),
+                f"a value that does not end on its line: {line!r}")
+            self.assertNotIn(key, fields, f"`{key}:` is repeated")
+            fields[key] = value
+        return fields
 
     def ship_tool_rules(self, key):
-        # Read from the frontmatter alone: a body line beginning with the key
-        # would otherwise stand in for one deleted from the frontmatter.
-        head = (COMMANDS / "ship.md").read_text(encoding="utf-8").split(
-            "\n---", 1)[0]
-        values = re.findall(rf"^{key}:[ \t]*(.*)$", head, re.MULTILINE)
-        self.assertEqual(1, len(values), f"exactly one `{key}:` line")
-        self.assertTrue(values[0].strip(), f"`{key}:` is empty")
-        self.assertNotIn(values[0][0], self.NOT_PLAIN,
-                         f"`{key}:` is not a plain scalar")
-        rules = [item.strip() for item in values[0].split(",")]
+        # Read from ship.md's frontmatter as a whole, every line held to one
+        # form: a body line, a continuation or another field's open quote
+        # would otherwise change what the harness reads while this list
+        # reads the same.
+        fields = self.frontmatter_fields(
+            (COMMANDS / "ship.md").read_text(encoding="utf-8"))
+        self.assertIn(key, fields)
+        rules = [item.strip() for item in fields[key].split(",")]
         for rule in rules:
             self.assertRegex(rule, self.TOOL_RULE)
         return rules
@@ -5509,30 +5529,19 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
         denied = set(self.ship_tool_rules("disallowed-tools"))
         declared = {}
         for path in sorted((SCRIPTS.parent / "agents").glob("*.md")):
-            head = path.read_text(encoding="utf-8").split("\n---", 1)[0]
+            text = path.read_text(encoding="utf-8")
+            head = text.split("\n---", 1)[0]
             for name in re.findall(r"^name:\s*(\S+)\s*$", head, re.MULTILINE):
-                declared.setdefault(name, []).append(head)
+                declared.setdefault(name, []).append(text)
         for name in self.SHIP_READ_ONLY_AGENTS:
             with self.subTest(agent=name):
                 count = len(declared.get(name, []))
                 self.assertEqual(
                     1, count, f"{count} profiles declare the name; one must")
-                lines = [line.rstrip() for line in
-                         declared[name][0].splitlines()[1:] if line.strip()]
-                # Every line is a key at column 0 with a plain value: an
-                # indented continuation, or a quoted or block value, would
-                # carry `tools:` past what a line read can see.
-                keys = set()
-                for line in lines:
-                    key = re.match(r"([A-Za-z][\w-]*):[ \t]+(\S.*)$", line)
-                    self.assertIsNotNone(key, f"not a key line: {line!r}")
-                    self.assertNotIn(key.group(2)[0], self.NOT_PLAIN,
-                                     f"not a plain value: {line!r}")
-                    keys.add(key.group(1))
-                self.assertLessEqual(keys, self.READ_ONLY_PROFILE_KEYS)
-                self.assertEqual(
-                    ["tools: Read, Grep, Glob"],
-                    [line for line in lines if line.startswith("tools:")])
+                fields = self.frontmatter_fields(declared[name][0])
+                self.assertLessEqual(set(fields), self.READ_ONLY_PROFILE_KEYS)
+                self.assertEqual(name, fields.get("name"))
+                self.assertEqual("Read, Grep, Glob", fields.get("tools"))
                 self.assertFalse(
                     denied & {"Agent", "Task", f"Agent({name})",
                               f"Task({name})"})
