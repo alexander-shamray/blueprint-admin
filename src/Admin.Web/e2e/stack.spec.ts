@@ -39,6 +39,23 @@ test('the workstation panel is read before Up, green where fine and red where a 
   );
 });
 
+// #81's audit: the panel's heading is a heading, its table names its columns and rows, and the job output is a log
+// a keyboard can reach that is not announced line by line, beside a status that says how the job ended.
+test('the workstation panel and the job output read correctly to assistive technology', async ({ page }) => {
+  await page.goto('/stack');
+  const workstation = page.getByRole('region', { name: 'Workstation' });
+
+  await expect(workstation.getByRole('heading', { name: 'Workstation', level: 2 })).toBeVisible();
+  await expect(workstation.getByRole('columnheader')).toHaveText(['Check', 'Verdict', 'What the reads said']);
+  await expect(workstation.getByRole('rowheader', { name: 'Ports' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Up' }).click();
+  const log = page.getByRole('log', { name: 'Job output' });
+  await expect(log).toHaveAttribute('aria-live', 'off');
+  await expect(log).toContainText('exited 0');
+  await expect(page.locator('app-output-pane').getByRole('status')).toHaveText('The job exited 0.');
+});
+
 test('wiping volumes needs the typed confirmation', async ({ page }) => {
   await page.goto('/stack');
   const wipe = page.getByRole('button', { name: 'Down and wipe' });
