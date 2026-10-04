@@ -34,6 +34,9 @@ public sealed class SpanRecogniserTests
     {
         { "GET /api/v1/products", "SPAN_KIND_SERVER", "http.route=/api/v1/products", TraceEventKind.HttpIn },
         { "catalog-events send", "SPAN_KIND_PRODUCER", "messaging.system=rabbitmq;messaging.operation=publish", TraceEventKind.Publish },
+        { "inventory-commands send", "SPAN_KIND_PRODUCER", "messaging.system=rabbitmq;messaging.operation=send", TraceEventKind.Publish },
+        { "OrderFulfilmentSaga process", "SPAN_KIND_CONSUMER", "messaging.operation=process;messaging.masstransit.saga_id=1b2c", TraceEventKind.Saga },
+        { "ReserveStock process", "SPAN_KIND_CONSUMER", $"messaging.operation=process;messaging.masstransit.message_types={SpanRecogniser.ReserveStockUrn}", TraceEventKind.Consume },
         { "ordering-catalog-events receive", "SPAN_KIND_CONSUMER", "messaging.operation=receive", TraceEventKind.Consume },
         { "ProductCreated process", "SPAN_KIND_CONSUMER", "messaging.operation=process", TraceEventKind.Consume },
         { "ordering-catalog-events", "SPAN_KIND_CONSUMER", "messaging.system=rabbitmq", TraceEventKind.Consume },
@@ -81,6 +84,6 @@ public sealed class SpanRecogniserTests
     public void Every_rule_says_why_it_exists_so_a_renamed_span_is_a_one_line_change()
     {
         SpanRecogniser.Table.ShouldAllBe(rule => rule.Why.Length > 20);
-        SpanRecogniser.Table.Length.ShouldBe(6);
+        SpanRecogniser.Table.Length.ShouldBe(9);
     }
 }

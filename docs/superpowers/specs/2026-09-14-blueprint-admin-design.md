@@ -406,11 +406,13 @@ sets from each host's service name.
    stages the outbox row — and stops at that row.
 3. Broker: the current queue snapshot from §5.5. Because step 2 stops at the
    outbox, this is not a nicety but the **only bridge across the hop**, and it
-   is rendered as the timeline's terminal event: the projection queue, its
-   depth, and a sentence saying that the publish runs in a trace this
-   correlation id cannot reach. A message still waiting in
-   `ordering-catalog-events` or parked in an `_error` queue shows there rather
-   than as silence.
+   is rendered as the timeline's terminal event: the projection queue, then
+   every other queue of `PlatformQueues.Table` a span of the timeline named
+   (a receive's endpoint or a send's destination; an exchange is not in the
+   table and is left out), each with its depth, and a sentence saying that
+   the publish runs in a trace this correlation id cannot reach. A message
+   still waiting in one of them or parked in its `_error` queue shows there
+   rather than as silence.
 
 Restoring the trace across the hop is a `blueprint-backend` change — persist
 `traceparent` on the outbox row when it is staged and restore it into an
@@ -418,11 +420,18 @@ Restoring the trace across the hop is a `blueprint-backend` change — persist
 
 The result is one ordered timeline of `TraceEvent { At, Source, Service,
 Kind, Summary, TraceId, Link }`, where `Kind` is one of `HttpIn`, `Log`,
-`Span`, `Outbox`, `Publish`, `Consume`, `Queued`, `Error`. `Outbox`,
-`Publish` and `Consume` are recognised from span names and attributes that
-MassTransit's instrumentation and `Common.Infrastructure`'s
+`Span`, `Outbox`, `Publish`, `Consume`, `Saga`, `Queued`, `Error`. `Outbox`,
+`Publish`, `Consume` and `Saga` are recognised from span names and attributes
+that MassTransit's instrumentation and `Common.Infrastructure`'s
 `OutboxDispatcher` own; the recogniser is a table of patterns, so a renamed
 span is a one-line change and an unrecognised span is still shown as `Span`.
+MassTransit tags a publish and a command send alike `send`, and both are a
+handover (`Publish`). A row may name a step of the platform as well as a kind
+of span: the fulfilment saga's step (`Saga`, with the states it moved
+between), Inventory's reservation and Payments' authorisation (`Consume`,
+matched on the contract's message URN). The tag values are those of the
+MassTransit version `SpanRecogniser.MassTransitVersion` names, and the drift
+gate holds that version to the backend's pin.
 Each row deep-links to Grafana Explore with the datasource and query
 pre-filled.
 

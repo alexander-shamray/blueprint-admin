@@ -81,6 +81,25 @@ public sealed class LiteralDriftTests
         Backend.Read("deploy", "compose", "infrastructure.yml").ShouldContain("\"127.0.0.1:15672:15672\"");
     }
 
+    [Theory]
+    [InlineData(SpanRecogniser.ReserveStockUrn, "Inventory")]
+    [InlineData(SpanRecogniser.AuthorisePaymentUrn, "Payments")]
+    public void Each_contract_the_trace_recognises_by_urn_is_declared_under_that_namespace_and_name(string urn, string service)
+    {
+        string[] parts = urn.Split(':');
+        string commands = Backend.Read("src", "BuildingBlocks", "Common.Contracts", service, "V1", "Commands.cs");
+
+        commands.ShouldContain($"namespace {parts[2]};");
+        commands.ShouldContain($"public sealed record {parts[3]}(");
+    }
+
+    [Fact]
+    public void The_messaging_span_tags_the_trace_reads_are_those_of_the_backends_MassTransit()
+    {
+        Backend.Read("Directory.Packages.props")
+            .ShouldContain($"<PackageVersion Include=\"MassTransit\" Version=\"{SpanRecogniser.MassTransitVersion}\" />");
+    }
+
     [Fact]
     public void The_outbox_table_the_trace_recognises_is_the_backends()
     {

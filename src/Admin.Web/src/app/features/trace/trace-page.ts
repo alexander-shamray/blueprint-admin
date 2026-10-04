@@ -19,6 +19,7 @@ const KIND_WORDS: Record<TraceEventKind, string> = {
   Outbox: '[outbox]',
   Publish: '[publish]',
   Consume: '[consume]',
+  Saga: '[saga]',
   Queued: '[queued]',
   Error: '[error]',
 };

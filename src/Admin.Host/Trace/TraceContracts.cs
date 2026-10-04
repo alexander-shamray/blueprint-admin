@@ -13,6 +13,7 @@ public enum TraceEventKind
     Outbox,
     Publish,
     Consume,
+    Saga,
     Queued,
     Error,
 }

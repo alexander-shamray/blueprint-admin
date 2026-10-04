@@ -189,6 +189,59 @@ public sealed class EventTraceServiceTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task A_saga_step_is_named_with_the_states_it_moved_between_and_its_commands_are_read_as_handovers()
+    {
+        string trace = TraceHex(1);
+        ScriptedHandler handler = Grafana(
+            LokiStreams(("Ordering.Api", "Information", trace, Now.AddSeconds(-30), "order placed")),
+            _ => Json(TempoBatch(trace, "Ordering.Api",
+                ("00f067aa0ba902b7", "OrderFulfilmentSaga process", "SPAN_KIND_CONSUMER", Now.AddSeconds(-25),
+                    "messaging.operation=process;messaging.masstransit.saga_id=1b2c;messaging.masstransit.begin_state=Initial;messaging.masstransit.end_state=AwaitingStock"),
+                ("00f067aa0ba902b8", "inventory-commands send", "SPAN_KIND_PRODUCER", Now.AddSeconds(-24),
+                    "messaging.system=rabbitmq;messaging.operation=send;messaging.destination.name=inventory-commands"),
+                ("00f067aa0ba902b9", "ReserveStock process", "SPAN_KIND_CONSUMER", Now.AddSeconds(-20),
+                    $"messaging.operation=process;messaging.masstransit.message_types={SpanRecogniser.ReserveStockUrn}"))));
+        TheProjectionQueueIsDrained();
+
+        TraceView view = await Service(handler).BuildAsync("abc-123", TimeSpan.FromMinutes(15), Token);
+
+        view.Events.Where(e => e.Source == "tempo").Select(e => (e.Kind, e.Summary)).ShouldBe(
+        [
+            (TraceEventKind.Saga, "Ordering's fulfilment saga, from Initial to AwaitingStock: OrderFulfilmentSaga process (5 ms)"),
+            (TraceEventKind.Publish, "inventory-commands send (5 ms)"),
+            (TraceEventKind.Consume, "Inventory reserves stock: ReserveStock process (5 ms)"),
+        ]);
+    }
+
+    [Fact]
+    public async Task The_closing_snapshot_lists_every_platform_queue_the_spans_crossed_and_no_exchange()
+    {
+        string trace = TraceHex(1);
+        ScriptedHandler handler = Grafana(
+            LokiStreams(("Ordering.Api", "Information", trace, Now.AddSeconds(-30), "order placed")),
+            _ => Json(TempoBatch(trace, "Ordering.Api",
+                ("00f067aa0ba902b7", "inventory-commands send", "SPAN_KIND_PRODUCER", Now.AddSeconds(-25),
+                    "messaging.system=rabbitmq;messaging.operation=send;messaging.destination.name=inventory-commands"),
+                ("00f067aa0ba902b8", "ordering-fulfilment-saga receive", "SPAN_KIND_CONSUMER", Now.AddSeconds(-24),
+                    "messaging.system=rabbitmq;messaging.operation=receive;messaging.destination.name=ordering-fulfilment-saga"),
+                ("00f067aa0ba902b9", "Common.Contracts.Ordering.V1:OrderPlaced send", "SPAN_KIND_PRODUCER", Now.AddSeconds(-23),
+                    "messaging.system=rabbitmq;messaging.operation=send;messaging.destination.name=Common.Contracts.Ordering.V1:OrderPlaced"))));
+        runner.On("docker", Exec + "list_queues", 0,
+            "[",
+            """{"name":"ordering-catalog-events","messages":0}""",
+            """,{"name":"ordering-fulfilment-saga","messages":0}""",
+            """,{"name":"inventory-commands","messages":2}""",
+            """,{"name":"inventory-commands_error","messages":1}""",
+            "]");
+
+        TraceView view = await Service(handler).BuildAsync("abc-123", TimeSpan.FromMinutes(15), Token);
+
+        view.Events[^1].Summary.ShouldStartWith(
+            "ordering-catalog-events: 0 messages (drained); ordering-fulfilment-saga: 0 messages; "
+            + "inventory-commands: 2 messages waiting, 1 parked in inventory-commands_error. The publish runs in a new trace");
+    }
+
+    [Fact]
     public async Task The_timeline_ends_with_the_projection_snapshot_even_when_a_span_is_later()
     {
         TheProjectionQueueIsDrained();
