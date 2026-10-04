@@ -5451,14 +5451,42 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
         self.assertNotRegex(profile, r"(?m)^skills:")
         self.assertIn(".claude/commands/review-grok.md", profile)
 
-    def test_ship_grants_the_triager_by_exact_type_and_nothing_broader(self):
+    # The profiles /ship grants beside the triager: step 6's review while
+    # Copilot is off (#104). A frontmatter deny lasts the turn, so a
+    # profile left denied is one a run that never pauses cannot dispatch.
+    SHIP_READ_ONLY_AGENTS = ("bug-auditor",)
+
+    def test_ship_grants_its_agents_by_exact_type_and_nothing_broader(self):
         ship = (COMMANDS / "ship.md").read_text(encoding="utf-8")
         allowed = self.frontmatter_list(ship, "allowed-tools")
-        self.assertIn("Agent(review-grok-triager)", allowed)
         self.assertEqual(
-            ["Agent(review-grok-triager)"],
-            [t for t in allowed if t == "Agent" or t.startswith("Agent(")])
+            sorted(["Agent(review-grok-triager)"]
+                   + [f"Agent({name})" for name in self.SHIP_READ_ONLY_AGENTS]),
+            sorted(t for t in allowed
+                   if t == "Agent" or t.startswith("Agent(")))
         self.assertIn("spawn a **`review-grok-triager`** agent", ship)
+        self.assertIn("**Dispatch `bug-auditor` agents in parallel", ship)
+
+    def test_every_agent_ship_grants_beside_the_triager_reads_only(self):
+        # The grant is safe because the profile reads and does nothing
+        # else: no shell, no editor and no `Agent`, so it is none of the
+        # broad types /ship's deny list keeps from what it spawns. The
+        # subject is the granted profile, read each run, so a tool added
+        # to it later fails here rather than widening /ship silently.
+        ship = (COMMANDS / "ship.md").read_text(encoding="utf-8")
+        denied = set(self.frontmatter_list(ship, "disallowed-tools"))
+        for name in self.SHIP_READ_ONLY_AGENTS:
+            profile = (SCRIPTS.parent / "agents" / f"{name}.md"
+                       ).read_text(encoding="utf-8")
+            with self.subTest(agent=name):
+                self.assertRegex(
+                    profile, rf"(?m)^name:\s*{re.escape(name)}\s*$")
+                self.assertEqual(
+                    {"Read", "Grep", "Glob"},
+                    set(self.frontmatter_list(profile, "tools")))
+                self.assertNotRegex(
+                    profile, r"(?m)^(skills|hooks|mcpServers):")
+                self.assertNotIn(f"Agent({name})", denied)
 
     def test_ship_carries_every_edit_deny_the_triage_states(self):
         # A profile's `disallowedTools` cannot scope a path — an entry with a

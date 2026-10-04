@@ -214,6 +214,14 @@ argument is how a rule gets "corrected" back.
   stands in, so another repository, or the main checkout from a forked
   worktree, is out of reach; a forked worktree seen from the main checkout
   sits under `.claude/`, which `/ship`'s list denies.
+- **`/ship` also grants `Agent(bug-auditor)`, for step 6's review while
+  Copilot is off (#104).** Denied, it was dispatchable only in a turn after
+  the one `/ship` loaded in, so a run that never paused had no reviewer at
+  all. The profile's `tools:` is `Read`, `Grep` and `Glob` — none of the
+  broad types the deny list is there to keep from what `/ship` spawns —
+  and `guard-triager-dispatch.py` still refuses it to the triager.
+  `CommandsEnforceTheEditingBoundariesTheyState` reads the granted profile
+  each run and fails if it gains a tool beyond those three.
 - **`python .claude/scripts/shard-harness-suite.py` is the harness's own
   suite.** It reads `git ls-files`, so a new tracked root file or top-level
   tree fails it until somebody decides which side of the boundary it is on.
