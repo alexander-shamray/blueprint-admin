@@ -5460,9 +5460,33 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
     # judges both — so a grant or a deny in either spelling counts.
     DISPATCH_GRANT = re.compile(r"^(Agent|Task)(\(.+\))?$")
 
+    # A rule in a command's tool list: a name, and its specifier in brackets.
+    # A quoted line or a flow sequence leaves a quote or a bracket on the
+    # items at either end, which then miss every exact comparison.
+    TOOL_RULE = re.compile(r"^[A-Za-z]+(\(.*\))?$")
+    # First characters that open a YAML value other than a plain scalar —
+    # quoted, flow, block, anchor, alias, tag or comment. Such a value can
+    # run past its line, so a line read cannot see where it ends.
+    NOT_PLAIN = "\"'[{|>&*!#"
+
+    def ship_tool_rules(self, key):
+        # Read from the frontmatter alone: a body line beginning with the key
+        # would otherwise stand in for one deleted from the frontmatter.
+        head = (COMMANDS / "ship.md").read_text(encoding="utf-8").split(
+            "\n---", 1)[0]
+        values = re.findall(rf"^{key}:[ \t]*(.*)$", head, re.MULTILINE)
+        self.assertEqual(1, len(values), f"exactly one `{key}:` line")
+        self.assertTrue(values[0].strip(), f"`{key}:` is empty")
+        self.assertNotIn(values[0][0], self.NOT_PLAIN,
+                         f"`{key}:` is not a plain scalar")
+        rules = [item.strip() for item in values[0].split(",")]
+        for rule in rules:
+            self.assertRegex(rule, self.TOOL_RULE)
+        return rules
+
     def test_ship_grants_its_agents_by_exact_type_and_nothing_broader(self):
         ship = (COMMANDS / "ship.md").read_text(encoding="utf-8")
-        allowed = self.frontmatter_list(ship, "allowed-tools")
+        allowed = self.ship_tool_rules("allowed-tools")
         self.assertEqual(
             sorted(["Agent(review-grok-triager)"]
                    + [f"Agent({name})" for name in self.SHIP_READ_ONLY_AGENTS]),
@@ -5482,8 +5506,7 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
         # subject is the profile the harness would dispatch — found by its
         # declared `name:`, read from its frontmatter alone — so a tool
         # added to it later fails here rather than widening /ship silently.
-        ship = (COMMANDS / "ship.md").read_text(encoding="utf-8")
-        denied = set(self.frontmatter_list(ship, "disallowed-tools"))
+        denied = set(self.ship_tool_rules("disallowed-tools"))
         declared = {}
         for path in sorted((SCRIPTS.parent / "agents").glob("*.md")):
             head = path.read_text(encoding="utf-8").split("\n---", 1)[0]
@@ -5491,16 +5514,20 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
                 declared.setdefault(name, []).append(head)
         for name in self.SHIP_READ_ONLY_AGENTS:
             with self.subTest(agent=name):
-                self.assertEqual(1, len(declared.get(name, [])),
-                                 "exactly one profile declares the name")
+                count = len(declared.get(name, []))
+                self.assertEqual(
+                    1, count, f"{count} profiles declare the name; one must")
                 lines = [line.rstrip() for line in
                          declared[name][0].splitlines()[1:] if line.strip()]
-                # Every line is a key at column 0: an indented continuation
-                # would carry `tools:` past what a line read can see.
+                # Every line is a key at column 0 with a plain value: an
+                # indented continuation, or a quoted or block value, would
+                # carry `tools:` past what a line read can see.
                 keys = set()
                 for line in lines:
-                    key = re.match(r"([A-Za-z][\w-]*):(\s|$)", line)
+                    key = re.match(r"([A-Za-z][\w-]*):[ \t]+(\S.*)$", line)
                     self.assertIsNotNone(key, f"not a key line: {line!r}")
+                    self.assertNotIn(key.group(2)[0], self.NOT_PLAIN,
+                                     f"not a plain value: {line!r}")
                     keys.add(key.group(1))
                 self.assertLessEqual(keys, self.READ_ONLY_PROFILE_KEYS)
                 self.assertEqual(
