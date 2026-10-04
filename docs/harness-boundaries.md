@@ -59,10 +59,13 @@ argument is how a rule gets "corrected" back.
   the tree it replaced while reporting itself fresh (#100); a call that wrote
   nothing costs one `update` that changes nothing, in the background. One
   command serves both events, because the script resolves its repository with
-  `git rev-parse` from the directory the event names as `cwd`, which follows
-  a worktree the session entered and a Bash `cd` where
-  `${CLAUDE_PROJECT_DIR}` stays at the start folder, and from its working
-  directory when no event names one. Reading that payload is why neither
+  `git rev-parse` from the edited file's directory when the event names a
+  `file_path` or `notebook_path` — so a worktree's file edited from the main
+  checkout refreshes the worktree's index (#101) — and otherwise from the
+  directory the event names as `cwd`, which follows a worktree the session
+  entered and a Bash `cd` where `${CLAUDE_PROJECT_DIR}` stays at the start
+  folder, and from its working directory when no event names one. Reading
+  that payload is why neither
   entry ends in `&` — an asynchronous list's stdin is `/dev/null` — so the
   script detaches its own refresh, and both entries silence it. It can never
   block a tool call, which also means a broken spelling fails on every call
