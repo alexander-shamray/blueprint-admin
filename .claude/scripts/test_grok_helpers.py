@@ -5458,7 +5458,9 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
 
     # `Task` is the dispatch tool's other name — guard-triager-dispatch.py
     # judges both — so a grant or a deny in either spelling counts.
-    DISPATCH_GRANT = re.compile(r"^(Agent|Task)(\(.+\))?$")
+    # `.*` rather than `.+`, to agree with TOOL_RULE: an empty `Agent()`
+    # is a rule that list admits, so it must count as a dispatch grant.
+    DISPATCH_GRANT = re.compile(r"^(Agent|Task)(\(.*\))?$")
 
     # A frontmatter line the harness's YAML parser and a line read agree on:
     # a key at column 0 and a value that ends on its line. A plain value may
