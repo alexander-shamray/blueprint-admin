@@ -324,7 +324,11 @@ class TheShipChainReadsTheIndex(unittest.TestCase):
         # A shell variable set in one call is empty in the next, and an
         # empty base reads as an empty range: the sha is carried instead.
         self.assertNotIn("$MERGE_BASE", body)
-        self.assertIn("--base <merge-base>", body)
+        # `--local` computes no merge base, so step 2 names its own: every
+        # mode the review runs diff-impact in has a base spelled where it runs.
+        step = body[impact:body.index("Grep `src/`", full)]
+        self.assertIn("--base <merge-base>", step)
+        self.assertIn("`--base HEAD` under `--local`", step)
 
     def test_every_subcommand_a_command_names_is_granted_there_and_by_the_skill(self):
         skill = granted(SKILL)
