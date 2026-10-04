@@ -15,10 +15,21 @@ public sealed class FakePlatformTests : IClassFixture<AdminHostFactory>
         client = factory.CreateClient();
     }
 
+    /// <summary>
+    /// The ps fixture and the recorded Compose model describe one stack, or the doctor would read a port Docker holds
+    /// for this stack as a stranger's.
+    /// </summary>
     [Fact]
-    public void The_fixture_lists_thirteen_services()
+    public void The_ps_fixture_lists_every_service_of_the_recorded_compose_model_and_no_other()
     {
-        FakePlatformScripts.ComposePsLines().Count.ShouldBe(13);
+        using JsonDocument model = JsonDocument.Parse(WorkstationRecordings.ComposeConfig);
+        string[] modelled = [.. model.RootElement.GetProperty("services").EnumerateObject().Select(s => s.Name).Order(StringComparer.Ordinal)];
+
+        string[] listed = [.. FakePlatformScripts.ComposePsLines()
+            .Select(l => JsonDocument.Parse(l).RootElement.GetProperty("Service").GetString()!)
+            .Order(StringComparer.Ordinal)];
+
+        listed.ShouldBe(modelled);
     }
 
     [Fact]
@@ -27,7 +38,7 @@ public sealed class FakePlatformTests : IClassFixture<AdminHostFactory>
         JsonElement stack = await client.GetFromJsonAsync<JsonElement>("/api/stack", TestContext.Current.CancellationToken);
 
         stack.GetProperty("reachability").EnumerateArray().ShouldAllBe(r => r.GetProperty("up").GetBoolean());
-        stack.GetProperty("backend").GetProperty("services").EnumerateArray().Count().ShouldBe(13);
+        stack.GetProperty("backend").GetProperty("services").EnumerateArray().Count().ShouldBe(FakePlatformScripts.ComposePsLines().Count);
     }
 
     [Fact]

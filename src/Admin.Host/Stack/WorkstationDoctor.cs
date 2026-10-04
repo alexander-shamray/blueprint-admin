@@ -24,8 +24,9 @@ public sealed record DoctorView(IReadOnlyList<DoctorCheck> Checks);
 /// <summary>
 /// The workstation checks a developer makes by hand after Up has failed, read before it (spec §5.3). Every
 /// read is a line of run-locally.md's step 0, run as written; none changes anything, none leaves the
-/// machine, and none fetches, so a clone is judged against its last fetch. A read that does not answer is
-/// <see cref="DoctorState.Unknown"/>, never a guess either way.
+/// machine, and none fetches, so a clone is judged against its last fetch. A row that cannot be judged — a read
+/// that did not answer, or nothing yet to compare — is <see cref="DoctorState.Unknown"/>, never a guess either way.
+/// Docker or Node not answering is the exception, because there the silence is itself the problem Up will meet.
 /// </summary>
 public sealed partial class WorkstationDoctor(
     IProcessRunner runner, ComposeService compose, RepoPaths paths, IOptions<AdminOptions> options, TimeProvider time)
@@ -43,6 +44,12 @@ public sealed partial class WorkstationDoctor(
     /// <summary>Owner: blueprint-backend <c>deploy/compose/services/gateway.yml</c>, whose environment carries the CORS list.</summary>
     internal const string GatewayService = "gateway";
 
+    /// <summary>
+    /// Owner: blueprint-backend Gateway.Api <c>Program.cs</c>, which reads <c>Cors:Enabled</c> and defaults it off; the
+    /// gateway's Compose unit sets it under this environment name.
+    /// </summary>
+    internal const string CorsSwitch = "Cors__Enabled";
+
     public async Task<DoctorView> ReadAsync(CancellationToken cancellationToken)
     {
         Task<CommandOutput> docker = RunAsync("docker", ["info", "--format", "{{.ServerVersion}}"], cancellationToken);
@@ -53,9 +60,10 @@ public sealed partial class WorkstationDoctor(
         Task<CommandOutput> nvmrc = PowerShellAsync($"Get-Content '{Quoted($"{paths.FrontendDir}/.nvmrc")}'", cancellationToken);
         Task<CommandOutput> backend = RunAsync("git", ["-C", paths.BackendDir, "status", "-sb"], cancellationToken);
         Task<CommandOutput> frontend = RunAsync("git", ["-C", paths.FrontendDir, "status", "-sb"], cancellationToken);
-        Task<CommandOutput> lastCommit = RunAsync("git", ["-C", paths.BackendDir, "log", "-1", "--format=%cI"], cancellationToken);
+        Task<CommandOutput> headMoved = RunAsync("git", ["-C", paths.BackendDir, "reflog", "-1", "--date=iso-strict", "--format=%gd"], cancellationToken);
+        Task<ComposeStatus> stack = compose.PsAsync(cancellationToken);
 
-        await Task.WhenAll(docker, config, images, listeners, node, nvmrc, backend, frontend, lastCommit);
+        await Task.WhenAll(docker, config, images, listeners, node, nvmrc, backend, frontend, headMoved, stack);
 
         JsonDocument? model = Parse(config.Result);
 
@@ -64,12 +72,12 @@ public sealed partial class WorkstationDoctor(
             return new DoctorView(
             [
                 Docker(docker.Result),
-                Ports(model, config.Result, listeners.Result),
+                Ports(model, config.Result, listeners.Result, stack.Result),
                 Cors(model, config.Result, options.Value.ClientUrl),
                 Node(node.Result, nvmrc.Result),
                 Clone("Backend clone", backend.Result),
                 Clone("Frontend clone", frontend.Result),
-                Images(images.Result, lastCommit.Result),
+                Images(images.Result, headMoved.Result),
             ]);
         }
         finally
@@ -83,8 +91,12 @@ public sealed partial class WorkstationDoctor(
             ? new("Docker", DoctorState.Problem, $"Docker did not answer: {error}")
             : new("Docker", DoctorState.Ok, $"Docker {Joined(info)} is answering.");
 
-    /// <summary>A published port held by anything but Docker is one Up cannot publish, so Compose fails late.</summary>
-    internal static DoctorCheck Ports(JsonDocument? model, CommandOutput config, CommandOutput listeners)
+    /// <summary>
+    /// A published port held by anything but Docker is one Up cannot publish, so Compose fails late. So is one Docker
+    /// holds for a container outside this stack: Docker's own process is every container's listener, so only the
+    /// stack's running containers say which of Docker's ports are this stack's.
+    /// </summary>
+    internal static DoctorCheck Ports(JsonDocument? model, CommandOutput config, CommandOutput listeners, ComposeStatus stack)
     {
         const string name = "Ports";
 
@@ -111,6 +123,10 @@ public sealed partial class WorkstationDoctor(
         }
 
         Listener[] others = [.. held.Where(l => l.Process != DockerProcess).DistinctBy(l => l.Port).OrderBy(l => l.Port)];
+        int[] dockerHeld = [.. held.Where(l => l.Process == DockerProcess).Select(l => l.Port).Distinct().Order()];
+        HashSet<int> ours = [.. stack.Services.Where(s => s.State == "running").SelectMany(s => s.PublishedPorts)];
+        int[] strangers = stack.Reachable ? [.. dockerHeld.Where(p => !ours.Contains(p))] : [];
+        List<string> problems = [];
 
         if (others.Length > 0)
         {
@@ -118,14 +134,30 @@ public sealed partial class WorkstationDoctor(
                 .GroupBy(l => (l.Process, l.Pid))
                 .Select(g => $"{string.Join(", ", g.Select(l => l.Port))} by {g.Key.Process ?? "an unnamed process"} (pid {g.Key.Pid})"));
 
-            return new(name, DoctorState.Problem, $"Held by another program, so Up cannot publish them: {owners}.");
+            problems.Add($"Held by another program, so Up cannot publish them: {owners}.");
         }
 
-        int docker = held.Select(l => l.Port).Distinct().Count();
+        if (strangers.Length > 0)
+        {
+            problems.Add($"Held by Docker for a container outside this stack, so Up cannot publish them: {string.Join(", ", strangers)}.");
+        }
+
+        if (problems.Count > 0)
+        {
+            return new(name, DoctorState.Problem, string.Join(" ", problems));
+        }
+
+        if (!stack.Reachable && dockerHeld.Length > 0)
+        {
+            return new(name, DoctorState.Unknown,
+                $"Docker holds {dockerHeld.Length} published ports, and the stack's containers could not be listed ({stack.Error}), so whether they are this stack's cannot be told.");
+        }
+
+        int docker = dockerHeld.Length;
 
         return new(name, DoctorState.Ok, docker == 0 ? $"All {published.Count} published ports are free."
-            : docker == published.Count ? $"All {published.Count} published ports are held by Docker, as they are while the stack runs."
-            : $"{docker} of {published.Count} published ports are held by Docker, the rest are free.");
+            : docker == published.Count ? $"All {published.Count} published ports are held by this stack's running containers."
+            : $"{docker} of {published.Count} published ports are held by this stack's running containers, the rest are free.");
     }
 
     /// <summary>Read and reported, never fixed from here: the CORS list is the backend's.</summary>
@@ -143,6 +175,17 @@ public sealed partial class WorkstationDoctor(
             || !gateway.TryGetProperty("environment", out JsonElement environment))
         {
             return new(name, DoctorState.Unknown, $"The Compose model has no {GatewayService} service environment.");
+        }
+
+        // Off unless the switch reads true, as the gateway's GetValue<bool> takes it: an origin list behind a switch
+        // that is off admits nothing.
+        if (!environment.TryGetProperty(CorsSwitch, out JsonElement enabled)
+            || !bool.TryParse(enabled.GetString(), out bool on)
+            || !on)
+        {
+            string value = enabled.ValueKind == JsonValueKind.String ? enabled.GetString()! : "unset";
+
+            return new(name, DoctorState.Problem, $"The gateway's CORS is off ({CorsSwitch} is {value}), so it admits no browser origin, the client's {client} included.");
         }
 
         string[] origins = [.. environment.EnumerateObject()
@@ -216,11 +259,13 @@ public sealed partial class WorkstationDoctor(
     }
 
     /// <summary>
-    /// An image built before the backend's last commit may not hold it, and Up does not rebuild an image that exists.
-    /// Only the images Compose built are compared: Compose names those after their container without its replica
-    /// number, and a pulled image keeps its own name.
+    /// An image tagged before the backend's checkout last moved may not hold what it moved to, and Up does not rebuild
+    /// an image that exists. The moment is the reflog's, when HEAD last changed here, not a commit's date: a commit
+    /// pulled today can carry yesterday's date. The image's time is when it was last tagged, which a fully cached
+    /// rebuild refreshes and its creation time does not. Only the images Compose built are compared: Compose names
+    /// those after their container without its replica number, and a pulled image keeps its own name.
     /// </summary>
-    internal static DoctorCheck Images(CommandOutput images, CommandOutput lastCommit)
+    internal static DoctorCheck Images(CommandOutput images, CommandOutput headMoved)
     {
         const string name = "Images";
 
@@ -229,13 +274,16 @@ public sealed partial class WorkstationDoctor(
             return new(name, DoctorState.Unknown, $"docker compose images did not answer: {error}");
         }
 
-        if (lastCommit.Error is { } noCommit
-            || !DateTimeOffset.TryParse(Joined(lastCommit), CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTimeOffset committed))
+        Match moved = ReflogEntry().Match(Joined(headMoved));
+
+        if (headMoved.Error is not null
+            || !moved.Success
+            || !DateTimeOffset.TryParse(moved.Groups[1].Value, CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTimeOffset checkedOut))
         {
-            return new(name, DoctorState.Unknown, $"The backend's last commit time could not be read: {lastCommit.Error ?? Joined(lastCommit)}");
+            return new(name, DoctorState.Unknown, $"When the backend's checkout last moved could not be read: {headMoved.Error ?? Joined(headMoved)}");
         }
 
-        List<(string Repository, DateTimeOffset Created)> built = [];
+        List<(string Repository, DateTimeOffset Tagged)> built = [];
 
         try
         {
@@ -246,9 +294,10 @@ public sealed partial class WorkstationDoctor(
                 string repository = image.GetProperty("Repository").GetString() ?? "";
                 string container = image.GetProperty("ContainerName").GetString() ?? "";
 
-                if (ReplicaSuffix().Replace(container, "") == repository && image.TryGetProperty("Created", out JsonElement created))
+                if (ReplicaSuffix().Replace(container, "") == repository
+                    && (image.TryGetProperty("LastTagTime", out JsonElement tagged) || image.TryGetProperty("Created", out tagged)))
                 {
-                    built.Add((repository, created.GetDateTimeOffset()));
+                    built.Add((repository, tagged.GetDateTimeOffset()));
                 }
             }
         }
@@ -257,19 +306,19 @@ public sealed partial class WorkstationDoctor(
             return new(name, DoctorState.Unknown, $"docker compose images printed something other than its JSON: {e.Message}");
         }
 
-        string at = committed.ToString("yyyy-MM-dd HH:mm zzz", CultureInfo.InvariantCulture);
+        string at = checkedOut.ToString("yyyy-MM-dd HH:mm zzz", CultureInfo.InvariantCulture);
 
         if (built.Count == 0)
         {
             return new(name, DoctorState.Unknown, "No container runs an image Compose built, so there is nothing to compare yet.");
         }
 
-        string[] stale = [.. built.Where(b => b.Created < committed).Select(b => b.Repository).Distinct().Order(StringComparer.Ordinal)];
+        string[] stale = [.. built.Where(b => b.Tagged < checkedOut).Select(b => b.Repository).Distinct().Order(StringComparer.Ordinal)];
 
         return stale.Length == 0
-            ? new(name, DoctorState.Ok, $"All {built.Count} built images are newer than the backend's last commit ({at}).")
+            ? new(name, DoctorState.Ok, $"All {built.Count} built images were tagged after the backend's checkout last moved ({at}).")
             : new(name, DoctorState.Problem,
-                $"{stale.Length} of {built.Count} built images predate the backend's last commit ({at}), and Up does not rebuild them: {string.Join(", ", stale)}.");
+                $"{stale.Length} of {built.Count} built images were tagged before the backend's checkout last moved ({at}), and Up does not rebuild them: {string.Join(", ", stale)}.");
     }
 
     internal static IEnumerable<int> PublishedPorts(JsonDocument model)
@@ -363,4 +412,8 @@ public sealed partial class WorkstationDoctor(
 
     [GeneratedRegex(@"-\d+$")]
     private static partial Regex ReplicaSuffix();
+
+    /// <summary><c>git reflog -1 --date=iso-strict --format=%gd</c> prints <c>HEAD@{2026-10-04T06:36:23+05:00}</c>.</summary>
+    [GeneratedRegex(@"^HEAD@\{(.+)\}$")]
+    private static partial Regex ReflogEntry();
 }

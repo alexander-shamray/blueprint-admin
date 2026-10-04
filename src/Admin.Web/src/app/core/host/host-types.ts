@@ -282,7 +282,7 @@ export interface TelemetryHealthView {
   services: ServiceSignals[];
 }
 
-/** One workstation check, as the host's `WorkstationDoctor` judged it: `Unknown` is a read that did not answer. */
+/** One workstation check, as the host's `WorkstationDoctor` judged it; that class says when a row is `Unknown`. */
 export interface DoctorCheck {
   name: string;
   state: 'Ok' | 'Problem' | 'Unknown';

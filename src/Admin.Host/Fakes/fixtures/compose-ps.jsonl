@@ -11,3 +11,14 @@
 {"Name":"commerce-ordering-api-1","Service":"ordering-api","State":"running","Health":"healthy","ExitCode":0,"Publishers":[{"URL":"127.0.0.1","TargetPort":8080,"PublishedPort":5101,"Protocol":"tcp"}]}
 {"Name":"commerce-gateway-1","Service":"gateway","State":"running","Health":"healthy","ExitCode":0,"Publishers":[{"URL":"127.0.0.1","TargetPort":8080,"PublishedPort":5000,"Protocol":"tcp"}]}
 {"Name":"commerce-web-bff-1","Service":"web-bff","State":"running","Health":"healthy","ExitCode":0,"Publishers":[{"URL":"127.0.0.1","TargetPort":8080,"PublishedPort":5200,"Protocol":"tcp"}]}
+{"Name":"commerce-payments-api-1","Service":"payments-api","State":"running","Health":"","ExitCode":0,"Publishers":[{"URL":"127.0.0.1","TargetPort":8080,"PublishedPort":5104,"Protocol":"tcp"}]}
+{"Name":"commerce-notifications-worker-1","Service":"notifications-worker","State":"running","Health":"","ExitCode":0,"Publishers":[]}
+{"Name":"commerce-inventory-api-1","Service":"inventory-api","State":"running","Health":"","ExitCode":0,"Publishers":[{"URL":"127.0.0.1","TargetPort":8080,"PublishedPort":5103,"Protocol":"tcp"}]}
+{"Name":"commerce-shipping-migrator-1","Service":"shipping-migrator","State":"exited","Health":"","ExitCode":0,"Publishers":[]}
+{"Name":"commerce-shipping-worker-1","Service":"shipping-worker","State":"running","Health":"","ExitCode":0,"Publishers":[]}
+{"Name":"commerce-mailpit-1","Service":"mailpit","State":"running","Health":"","ExitCode":0,"Publishers":[{"URL":"127.0.0.1","TargetPort":1025,"PublishedPort":1025,"Protocol":"tcp"},{"URL":"127.0.0.1","TargetPort":8025,"PublishedPort":8025,"Protocol":"tcp"}]}
+{"Name":"commerce-carrier-simulator-1","Service":"carrier-simulator","State":"running","Health":"","ExitCode":0,"Publishers":[{"URL":"127.0.0.1","TargetPort":80,"PublishedPort":5191,"Protocol":"tcp"}]}
+{"Name":"commerce-notifications-migrator-1","Service":"notifications-migrator","State":"exited","Health":"","ExitCode":0,"Publishers":[]}
+{"Name":"commerce-inventory-migrator-1","Service":"inventory-migrator","State":"exited","Health":"","ExitCode":0,"Publishers":[]}
+{"Name":"commerce-payments-migrator-1","Service":"payments-migrator","State":"exited","Health":"","ExitCode":0,"Publishers":[]}
+{"Name":"commerce-psp-simulator-1","Service":"psp-simulator","State":"running","Health":"","ExitCode":0,"Publishers":[{"URL":"127.0.0.1","TargetPort":80,"PublishedPort":5190,"Protocol":"tcp"}]}
