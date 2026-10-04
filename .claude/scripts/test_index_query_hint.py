@@ -17,7 +17,6 @@ fail-open `test_index_refresh_hook.py` refuses for the same tool.
 """
 
 import json
-import os
 import re
 import shutil
 import subprocess
@@ -66,6 +65,7 @@ NOT_QUESTIONS = (
     "what callsign is it",             # what calls: trailing
     "How does that sound? Then work on the fix",
     "how does that end. Then work on the fix",
+    "how does that end.. Then work on the fix",
     "how does /branch name the worktree",
     "find the classification bug in the parser",
     "rename the field and fix the test",
@@ -102,16 +102,22 @@ def named_subcommands():
     return {command.split()[1] for command in emitted_commands()}
 
 
-def run(payload, cwd=None, path=None):
-    """The hook's stdout, stderr and status for one payload."""
+def run(payload, cwd=None, awk_status=None):
+    """The hook's stdout, stderr and status for one payload.
+
+    With `awk_status`, the hook is sourced in a shell where `awk` is a function
+    that fails with that status. A fake on PATH cannot stand in: Git for
+    Windows' `bin\\sh.exe` puts `/usr/bin` first, so the real `awk` wins there.
+    """
     if SH is None:
         raise AssertionError("no `sh` on PATH; the hook cannot run here")
     stdin = payload if isinstance(payload, str) else json.dumps(payload)
-    env = dict(os.environ)
-    if path is not None:
-        env["PATH"] = path
-    done = subprocess.run([SH, str(HINT)], input=stdin.encode("utf-8"),
-                          capture_output=True, cwd=cwd, env=env, timeout=30)
+    argv = [SH, str(HINT)]
+    if awk_status is not None:
+        prelude = f'awk() {{ echo "awk: fatal" >&2; return {awk_status}; }}'
+        argv = [SH, "-c", prelude + '; . "$0"', HINT.as_posix()]
+    done = subprocess.run(argv, input=stdin.encode("utf-8"),
+                          capture_output=True, cwd=cwd, timeout=30)
     return (done.stdout.decode("utf-8"), done.stderr.decode("utf-8"),
             done.returncode)
 
@@ -159,8 +165,8 @@ class TheHint(unittest.TestCase):
         self.assertIn("session tag", context)
         return context
 
-    def assertSilent(self, payload, path=None):
-        self.assertEqual(("", "", 0), run(payload, path=path))
+    def assertSilent(self, payload, awk_status=None):
+        self.assertEqual(("", "", 0), run(payload, awk_status=awk_status))
 
     def test_each_kind_of_question_names_its_own_subcommand(self):
         for text, subcommand in CASES.items():
@@ -209,17 +215,12 @@ class TheHint(unittest.TestCase):
     def test_an_awk_that_fails_leaves_the_prompt_alone(self):
         # The guarantee the header rests on: 2 under this event erases the
         # prompt, and an `awk` that dies says 2 itself unless the hook does not.
-        with tempfile.TemporaryDirectory() as scratch:
-            fake = Path(scratch) / "awk"
-            for status in (2, 127):
-                with self.subTest(status=status):
-                    fake.write_text(
-                        f"#!/bin/sh\necho 'awk: fatal' >&2\nexit {status}\n",
-                        encoding="utf-8", newline="\n")
-                    fake.chmod(0o755)
-                    self.assertSilent(
-                        prompt("where is the broker service"),
-                        path=scratch + os.pathsep + os.environ["PATH"])
+        # The prompt is one the real `awk` answers, so a shadow that failed to
+        # take would print a hint and turn this red rather than pass it.
+        for status in (2, 127):
+            with self.subTest(status=status):
+                self.assertSilent(prompt("where is the broker service"),
+                                  awk_status=status)
 
     def test_it_writes_nothing(self):
         with tempfile.TemporaryDirectory() as scratch:
