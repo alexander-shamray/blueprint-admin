@@ -34,9 +34,34 @@ public static class IdentityEndpoints
                 _ => throw new UnreachableException(),
             });
 
+        // The clock reads the token the host already holds and never sends it: the page sees when it renews and
+        // what it grants, which is what explains a 403, and not the bearer.
+        app.MapPost("/api/identity/clock", (IdentityRequest identity, TokenService tokens) =>
+            TypedResults.Ok(tokens.Held(identity) is { } held
+                ? new TokenClockView(held.Username, true, held.ExpiresAt, TokenService.RenewsAt(held), Permissions(held.Claims))
+                : new TokenClockView(identity.Username, false, null, null, [])));
+
         return app;
     }
+
+    /// <summary>
+    /// Owner of the claim type: blueprint-backend <c>Common.Web.PermissionClaim.Type</c>. The realm's mapper writes it
+    /// multivalued, so one grant may arrive as a bare string.
+    /// </summary>
+    internal const string PermissionClaim = "permission";
+
+    private static string[] Permissions(JsonElement claims) =>
+        !claims.TryGetProperty(PermissionClaim, out JsonElement permission) ? []
+        : permission.ValueKind == JsonValueKind.Array ? [.. permission.EnumerateArray().Select(p => p.GetString() ?? "")]
+        : permission.ValueKind == JsonValueKind.String ? [permission.GetString()!]
+        : [];
 }
+
+/// <summary>
+/// The token clock for one identity (spec §5.6): whether the host holds a token for it, when that token expires
+/// and when it stops being reused, and the permissions it carries. Never the token itself.
+/// </summary>
+public sealed record TokenClockView(string? Username, bool Held, DateTimeOffset? ExpiresAt, DateTimeOffset? RenewsAt, IReadOnlyList<string> Permissions);
 
 public sealed record RealmUserView(string Username);
 

@@ -1,10 +1,11 @@
 import { DatePipe } from '@angular/common';
-import { Component, DestroyRef, InjectionToken, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, InjectionToken, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { EMPTY, Subscription, catchError, exhaustMap, takeUntil, takeWhile, tap, timer } from 'rxjs';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { EMPTY, Subscription, catchError, exhaustMap, map, takeUntil, takeWhile, tap, timer } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
-import { ApiCatalogView, ApiOperation, OpenApiChanges, ProjectionDrain, ProxyRequest, ProxyResult, TokenView } from '../../core/host/host-types';
+import { ApiCatalogView, ApiOperation, OpenApiChanges, ProjectionDrain, ProxyRequest, ProxyResult, TokenClockView, TokenView } from '../../core/host/host-types';
 import { IdentityChoice, IdentityState } from '../../core/identity/identity-state';
 import { buildUrl, parseHeaders, pretty, withFreshCommandId, withoutCredentialHeaders, withoutCredentialLines, withoutSetCookie } from './request-builder';
 import { DrainedIndicator } from '../../shared/drained-indicator/drained-indicator';
@@ -83,6 +84,12 @@ export class ApiPage {
   readonly answered = signal('');
   readonly history = signal<HistoryEntry[]>([]);
   readonly token = signal<TokenView | null>(null);
+  /** The selected identity's token as the host holds it, read without minting (spec §5.6); null for anonymous. */
+  readonly clock = signal<TokenClockView | null>(null);
+  /** Ticks the clock's remaining time; the times themselves come from the host. */
+  private readonly now = toSignal(timer(0, 1000).pipe(map(() => Date.now())), { initialValue: Date.now() });
+  readonly clockText = computed(() => clockText(this.clock(), this.now()));
+  private readingClock?: Subscription;
   readonly error = signal<string | null>(null);
   readonly customUsername = signal('');
   readonly customPassword = signal('');
@@ -143,6 +150,7 @@ export class ApiPage {
       this.watchingProjection?.unsubscribe();
       this.sends.forEach((send) => send.unsubscribe());
       this.fetchingToken?.unsubscribe();
+      this.readingClock?.unsubscribe();
       // The choice outlives the screen, a custom password does not: passwords live only on the host.
       const c = this.identity.choice();
       if (c.kind === CUSTOM) this.identity.select({ ...c, password: '' });
@@ -154,6 +162,19 @@ export class ApiPage {
       this.customPassword.set(chosen.password);
     }
     this.identity.load();
+    // The clock follows the selected identity, including the default the user list picks once it loads. A custom
+    // identity's is read after it is used, not on every keystroke of its password.
+    effect(() => {
+      const custom = this.identity.choice().kind === CUSTOM;
+      untracked(() => {
+        if (custom) {
+          this.readingClock?.unsubscribe();
+          this.clock.set(null);
+        } else {
+          this.readClock();
+        }
+      });
+    });
     this.host.operations().subscribe({
       next: (view) => this.catalog.set(view),
       error: (e: unknown) => this.error.set(this.describe(e)),
@@ -233,6 +254,20 @@ export class ApiPage {
     this.identity.select({ kind: 'custom', username, password });
   }
 
+  /** Reads the selected identity's clock from the host; anonymous has none. */
+  readClock(): void {
+    this.readingClock?.unsubscribe();
+    const request = this.identity.request();
+    if (!request) {
+      this.clock.set(null);
+      return;
+    }
+    this.readingClock = this.host.tokenClock(request).subscribe({
+      next: (clock) => this.clock.set(clock),
+      error: () => this.clock.set(null),
+    });
+  }
+
   send(): void {
     // The last response stays in history; left on screen it would read as this attempt's.
     this.result.set(null);
@@ -279,6 +314,8 @@ export class ApiPage {
           this.result.set(result);
           this.answered.set(`${request.method} ${request.url} as ${identity}`);
           this.pending.set(false);
+          // The send may have minted or renewed the token, so the clock is read again.
+          this.readClock();
           if (operation?.source === 'catalog' && operation.name === PUBLISH_OPERATION && result.outcome === 'responded' && result.status >= 200 && result.status < 300) {
             this.watchProjection();
           }
@@ -349,6 +386,7 @@ export class ApiPage {
       next: (token) => {
         this.error.set(null);
         this.token.set(token);
+        this.readClock();
       },
       error: (e: unknown) => this.error.set(this.describe(e)),
     });
@@ -420,6 +458,26 @@ export class ApiPage {
     const err = e as { error?: { detail?: string; title?: string; error_description?: string }; message?: string } | null;
     return err?.error?.detail ?? err?.error?.error_description ?? err?.error?.title ?? err?.message ?? 'The host did not answer.';
   }
+}
+
+/**
+ * The clock as the picker prints it, at `now`: how long the held token has left, when the next call stops reusing
+ * it (the host's renewal time, not a threshold of the page's), and what it grants, which is what explains a 403.
+ */
+export function clockText(clock: TokenClockView | null, now: number): string | null {
+  if (!clock?.username) return null;
+  if (!clock.held || !clock.expiresAt || !clock.renewsAt) return `No token held for ${clock.username}; the next call mints one.`;
+  const left = Date.parse(clock.expiresAt) - now;
+  const renews = Date.parse(clock.renewsAt) - now;
+  const grants = clock.permissions.length ? `Grants ${clock.permissions.join(', ')}.` : 'Grants no permission.';
+  if (left <= 0) return `${clock.username}'s token has expired; the next call mints one. ${grants}`;
+  const when = renews > 0 ? `the next call reuses it for ${duration(renews)} more` : 'the next call mints a new one';
+  return `${clock.username}'s token: ${duration(left)} left, and ${when}. ${grants}`;
+}
+
+function duration(ms: number): string {
+  const seconds = Math.ceil(ms / 1000);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
 function redact(choice: IdentityChoice): SentAs {

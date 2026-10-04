@@ -279,6 +279,14 @@ body on a failed grant is returned as-is. The wire identity is
 looked up in `Users`, both is a custom identity; `GET /identity/users`
 returns usernames only.
 
+The token clock (`POST /identity/clock`) reads the token the host already
+holds for an identity without minting one, and never returns the token: its
+expiry, `RenewsAt` (expiry less the reuse margin, after which the next call
+mints a new one), and the permissions in its `permission` claim. The API
+screen's identity picker shows it, so a 403 is explained by the grant it
+lacks. The margin has one owner, `TokenService`, and the page holds no
+threshold of its own.
+
 ### 5.7 ApiCatalog and RequestProxy
 
 `ApiCatalog.Load()` fetches `/openapi/v1.json` from Catalog, Ordering, Inventory and Payments with
@@ -419,7 +427,7 @@ All under `/api`, JSON, loopback only.
 | `POST /logs/follow` | body `{ services }`; stops the previous follow job if it is still running, starts one and returns it — the host keeps one |
 | `POST /logs/follow/{id}/stop` | stops that follow job if it is still the current one; 204 either way. Named, so a Stop that reaches the host after the next Follow ends nothing. There is no generic job stop: it would reach `up`, `down -v` and the supervisor's `npm start` |
 | `GET /broker/queues`, `/broker/exchanges`, `/broker/permissions` | §5.5; `queues` also carries `projection`, the drain state of `ordering-catalog-events` |
-| `GET /identity/users`, `POST /identity/token` | §5.6 |
+| `GET /identity/users`, `POST /identity/token`, `POST /identity/clock` | §5.6 |
 | `GET /catalog/operations`, `POST /catalog/reload` | §5.7 |
 | `POST /catalog/baseline/{service}` | makes that service's last fetched document its baseline, then reloads; 404 for a name the catalog has not fetched |
 | `POST /proxy` | §5.7 |
@@ -442,7 +450,7 @@ output pane, status pill and JSON viewer.
 | **Stack** | one row per Compose service with state, health and port; the frontend job; a reachability strip; quick links to the client, Grafana, Keycloak | Up, Down, Down and wipe, Reset (both behind one typed confirmation), Start and Stop frontend; opens the job's output pane |
 | **Logs** | a follow stream with service filter, text search and correlation-id highlight | start, stop (the host's follow job too, as does leaving the screen), clear |
 | **Broker** | queues with depth, `_error` queues in red, exchanges, permissions; a drained indicator for `ordering-catalog-events` | refresh, auto-refresh of all three |
-| **API** | operation tree on the left, each source with what its document changed since the kept baseline; request editor (path params, headers, body pre-filled from the schema example, `commandId` generated per send) and identity picker; response pane with status, timing, headers, body; a history list | Send; accept a changed document as the new baseline; "Trace this call" opens the Trace screen with the response's correlation id |
+| **API** | operation tree on the left, each source with what its document changed since the kept baseline; request editor (path params, headers, body pre-filled from the schema example, `commandId` generated per send) and identity picker with its token clock (§5.6); response pane with status, timing, headers, body; a history list | Send; accept a changed document as the new baseline; "Trace this call" opens the Trace screen with the response's correlation id |
 | **Trace** | the §5.9 timeline for a correlation id, grouped by service, with Grafana deep links, and on a refetch what arrived or left since the last one | enter an id or arrive from the API screen; reload |
 | **Scenario** | `run-locally.md`'s calls as five steps — publish, wait for the drain, quote, order, cancel — each with its status and body, and each HTTP step with its own correlation id | Run as a realm user; each step that sent links to its trace; the first step that does not succeed ends the run |
 

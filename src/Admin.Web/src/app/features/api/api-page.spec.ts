@@ -4,7 +4,7 @@ import { Subject, of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { ApiCatalogView, ApiOperation, ProxyResult, QueuesView, TokenView } from '../../core/host/host-types';
 import { IdentityState } from '../../core/identity/identity-state';
-import { ApiPage, UUID } from './api-page';
+import { ApiPage, UUID, clockText } from './api-page';
 
 function op(partial: Partial<ApiOperation>): ApiOperation {
   return {
@@ -54,6 +54,7 @@ describe('ApiPage', () => {
     acceptBaseline: ReturnType<typeof vi.fn>;
     proxy: ReturnType<typeof vi.fn>;
     token: ReturnType<typeof vi.fn>;
+    tokenClock: ReturnType<typeof vi.fn>;
     identityUsers: ReturnType<typeof vi.fn>;
     brokerQueues: ReturnType<typeof vi.fn>;
   };
@@ -65,6 +66,7 @@ describe('ApiPage', () => {
       acceptBaseline: vi.fn(() => of(catalog)),
       proxy: vi.fn(() => of(responded)),
       token: vi.fn(() => of({ username: 'demo', accessToken: 'a.b.c', expiresAt: '2026-09-15T08:05:00Z', claims: { permission: ['catalog:write'] } })),
+      tokenClock: vi.fn((identity: { username: string }) => of({ username: identity.username, held: false, expiresAt: null, renewsAt: null, permissions: [] })),
       identityUsers: vi.fn(() => of([{ username: 'demo' }, { username: 'browser' }])),
       brokerQueues: vi.fn(() => of(drainedView)),
     };
@@ -87,6 +89,54 @@ describe('ApiPage', () => {
     button!.click();
     fixture.detectChanges();
   }
+
+  describe('token clock', () => {
+    const now = Date.parse('2026-10-04T08:00:00Z');
+    const held = { username: 'demo', held: true, expiresAt: '2026-10-04T08:04:32Z', renewsAt: '2026-10-04T08:04:02Z', permissions: ['catalog:write', 'orders:write'] };
+
+    it('says how long the held token has left, how long it is reused for, and what it grants', () => {
+      expect(clockText(held, now)).toBe("demo's token: 4:32 left, and the next call reuses it for 4:02 more. Grants catalog:write, orders:write.");
+    });
+
+    it('says the next call mints a new one once the host stops reusing it, before it expires', () => {
+      expect(clockText(held, Date.parse('2026-10-04T08:04:10Z'))).toBe(
+        "demo's token: 0:22 left, and the next call mints a new one. Grants catalog:write, orders:write.",
+      );
+    });
+
+    it('says an expired token, a token never minted and a token with no grants plainly', () => {
+      expect(clockText(held, Date.parse('2026-10-04T08:05:00Z'))).toBe("demo's token has expired; the next call mints one. Grants catalog:write, orders:write.");
+      expect(clockText({ ...held, held: false, expiresAt: null, renewsAt: null, permissions: [] }, now)).toBe('No token held for demo; the next call mints one.');
+      expect(clockText({ ...held, username: 'browser', permissions: [] }, now)).toContain('Grants no permission.');
+      expect(clockText(null, now)).toBeNull();
+    });
+
+    it("reads the selected user's clock, again after a send, and shows it under the picker", () => {
+      host.tokenClock.mockReturnValue(of(held));
+      const fixture = render();
+      expect(host.tokenClock).toHaveBeenLastCalledWith({ username: 'demo', password: null });
+      expect(fixture.nativeElement.querySelector('.token-clock')?.textContent).toContain('Grants catalog:write, orders:write.');
+      const reads = host.tokenClock.mock.calls.length;
+
+      click(fixture, 'Send');
+
+      expect(host.tokenClock.mock.calls.length).toBe(reads + 1);
+    });
+
+    it('reads no clock for anonymous, and none for a custom identity until it is used', () => {
+      const fixture = render();
+      const page = fixture.componentInstance;
+      page.chooseIdentity('anonymous');
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.token-clock')).toBeNull();
+
+      const reads = host.tokenClock.mock.calls.length;
+      page.setCustom('someone', 'pass');
+      page.setCustom('someone', 'passw');
+      fixture.detectChanges();
+      expect(host.tokenClock.mock.calls.length).toBe(reads);
+    });
+  });
 
   it('lists operations by source and shows an unavailable source with its error', () => {
     const fixture = render();

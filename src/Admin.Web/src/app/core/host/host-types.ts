@@ -90,6 +90,18 @@ export interface TokenView {
   claims: Record<string, unknown>;
 }
 
+/**
+ * The host's `TokenClockView`: whether it holds a token for the identity, when that token expires and when it
+ * stops being reused (the host's `TokenService.ReuseMargin` decides that, not the page), and what it grants.
+ */
+export interface TokenClockView {
+  username: string | null;
+  held: boolean;
+  expiresAt: string | null;
+  renewsAt: string | null;
+  permissions: string[];
+}
+
 export interface ApiParameter {
   name: string;
   required: boolean;

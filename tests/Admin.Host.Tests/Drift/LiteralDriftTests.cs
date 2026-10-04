@@ -49,6 +49,13 @@ public sealed class LiteralDriftTests
     }
 
     [Fact]
+    public void The_token_clock_reads_the_claim_type_permissions_travel_in()
+    {
+        Backend.Read("src", "BuildingBlocks", "Common.Web", "PermissionClaim.cs")
+            .ShouldContain($"public const string Type = \"{IdentityEndpoints.PermissionClaim}\";");
+    }
+
+    [Fact]
     public void The_simulator_still_serves_its_request_log_where_the_console_reads_it_and_prefixes_references_as_the_fake_does()
     {
         string simulator = Backend.Read("deploy", "compose", "psp-simulator", "README.md");

@@ -15,6 +15,7 @@ import {
   RealmUserView,
   StackView,
   TelemetryHealthView,
+  TokenClockView,
   TokenView,
   TraceView,
 } from './host-types';
@@ -64,6 +65,11 @@ export class HostClient {
 
   identityUsers(): Observable<RealmUserView[]> {
     return this.http.get<RealmUserView[]>('/api/identity/users');
+  }
+
+  /** Reads the token the host holds for the identity without minting one, and never the token itself. */
+  tokenClock(identity: Identity): Observable<TokenClockView> {
+    return this.http.post<TokenClockView>('/api/identity/clock', identity);
   }
 
   token(identity: Identity): Observable<TokenView> {
