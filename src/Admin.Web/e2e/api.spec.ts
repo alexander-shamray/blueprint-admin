@@ -78,7 +78,7 @@ test('trace this call opens the response correlation id on the trace screen', as
   await expect(page.locator('table.timeline tbody tr').last().locator('td.kind')).toHaveText('[queued]');
 });
 
-// The token clock reads what FakeKeycloak issued (300 s, its user's grants): a 403 for browser is explained by
+// The token clock reads what FakeKeycloak issued (its lifetime and its user's grants): a 403 for browser is explained by
 // the grants it lists, and the token itself is never what the line shows.
 test("the token clock shows the held token's time left and its grants, which explain a 403", async ({ page }) => {
   await page.goto('/requests');

@@ -50,7 +50,7 @@ public static class IdentityEndpoints
     /// </summary>
     internal const string PermissionClaim = "permission";
 
-    private static string[] Permissions(JsonElement claims) =>
+    internal static string[] Permissions(JsonElement claims) =>
         !claims.TryGetProperty(PermissionClaim, out JsonElement permission) ? []
         : permission.ValueKind == JsonValueKind.Array ? [.. permission.EnumerateArray().Select(p => p.GetString() ?? "")]
         : permission.ValueKind == JsonValueKind.String ? [permission.GetString()!]
