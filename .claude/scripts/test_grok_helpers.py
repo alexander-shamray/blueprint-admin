@@ -5480,7 +5480,7 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
     # A rule in a command's tool list: a name, and a specifier holding no
     # bracket and no `#`, so two rules run together, or a comment inside
     # one, cannot pass as a single item.
-    TOOL_RULE = re.compile(r"^[A-Za-z]+(\([^()#]*\))?$")
+    TOOL_RULE = re.compile(r"^[A-Za-z][\w-]*(\([^()#]*\))?$")
 
     def frontmatter_fields(self, text):
         # Split at LF alone, as YAML breaks lines: splitlines() also breaks
@@ -5572,11 +5572,10 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
         # /review-grok refuses are refused by /ship's deny list, which reaches
         # the agents /ship spawns. Every path deny the command states has to
         # be there, or the agent path is wider than the inline one.
-        ship = set(self.frontmatter_list(
-            (COMMANDS / "ship.md").read_text(encoding="utf-8"),
-            "disallowed-tools"))
+        ship = set(self.ship_tool_rules("disallowed-tools"))
         triage = [t for t in self.frontmatter_list(
-            (COMMANDS / "review-grok.md").read_text(encoding="utf-8"),
+            (COMMANDS / "review-grok.md").read_text(encoding="utf-8").split(
+                "\n---", 1)[0],
             "disallowed-tools") if t.startswith("Edit(")]
         self.assertTrue(triage, "review-grok.md states no path deny at all")
         for rule in triage:
@@ -5602,7 +5601,9 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
         self.assertIn("review-adjudicator", profiles)
         granting = 0
         for path in sorted(COMMANDS.glob("*.md")):
-            text = path.read_text(encoding="utf-8")
+            # The frontmatter alone: a body line beginning with either key
+            # would otherwise stand in for a deny deleted from it.
+            text = path.read_text(encoding="utf-8").split("\n---", 1)[0]
             granted = {m for t in self.frontmatter_list(text, "allowed-tools")
                        for m in re.findall(r"^Agent\((.+)\)$", t)}
             if not granted:
