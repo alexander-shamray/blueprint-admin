@@ -25,6 +25,30 @@ describe('OutputPane', () => {
     expect(fixture.nativeElement.textContent).toContain('exited 3');
   });
 
+  it('is a log that is read on demand and never announced line by line, with a status that says only start and end', () => {
+    const events = new Subject<JobEvent>();
+    const sse = { follow: vi.fn(() => events.asObservable()) };
+    TestBed.configureTestingModule({ imports: [OutputPane], providers: [{ provide: SseClient, useValue: sse }] });
+    const fixture = TestBed.createComponent(OutputPane);
+    fixture.componentRef.setInput('jobId', 'j1');
+    fixture.detectChanges();
+
+    const pre = fixture.nativeElement.querySelector('pre') as HTMLElement;
+    const status = fixture.nativeElement.querySelector('[role="status"]') as HTMLElement;
+    expect(pre.getAttribute('role')).toBe('log');
+    expect(pre.getAttribute('aria-live')).toBe('off');
+    expect(pre.getAttribute('tabindex')).toBe('0');
+    expect(status.textContent).toContain('A job is running');
+
+    events.next({ kind: 'line', line: { sequence: 0, at: '', stream: 'Stdout', text: 'Container sql Started' } });
+    fixture.detectChanges();
+    expect(status.textContent).not.toContain('Container sql');
+
+    events.next({ kind: 'exited', exitCode: 0 });
+    fixture.detectChanges();
+    expect(status.textContent?.trim()).toBe('The job exited 0.');
+  });
+
   it('shows the stream error and keeps the lines already received', () => {
     const events = new Subject<JobEvent>();
     const sse = { follow: vi.fn(() => events.asObservable()) };

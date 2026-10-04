@@ -1,14 +1,20 @@
 <section class="doctor" aria-label="Workstation">
-  <h2>Workstation <button class="check" type="button" [disabled]="doctorReading()" (click)="checkWorkstation()">Check again</button></h2>
+  <div class="doctor-head">
+    <h2>Workstation</h2>
+    <button class="check" type="button" [disabled]="doctorReading()" (click)="checkWorkstation()">Check again</button>
+  </div>
   @if (doctorError(); as de) {
     <p class="error">The host did not answer for the workstation: {{ de }}</p>
   }
   @if (doctor(); as d) {
     <table class="doctor">
+      <thead>
+        <tr><th scope="col">Check</th><th scope="col">Verdict</th><th scope="col">What the reads said</th></tr>
+      </thead>
       <tbody>
         @for (c of d.checks; track c.name) {
           <tr [class]="'state-' + c.state">
-            <td class="name">{{ c.name }}</td>
+            <th class="name" scope="row">{{ c.name }}</th>
             <td class="state">{{ c.state === 'Ok' ? 'ok' : c.state === 'Problem' ? 'problem' : 'could not tell' }}</td>
             <td class="detail">{{ c.detail }}</td>
           </tr>

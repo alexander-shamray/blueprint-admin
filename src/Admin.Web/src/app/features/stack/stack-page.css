@@ -9,7 +9,10 @@ table { border-collapse: collapse; margin-bottom: 1rem; }
 td, th { padding: 0.25rem 0.75rem; border-bottom: 1px solid #eee; text-align: left; }
 tr.exited td { color: #666; }
 .error { color: #b00; }
-.doctor h2 { font-size: 1rem; margin: 0 0 0.5rem; display: flex; gap: 0.75rem; align-items: center; }
+.doctor-head { display: flex; gap: 0.75rem; align-items: center; margin: 0 0 0.5rem; }
+.doctor h2 { font-size: 1rem; margin: 0; }
+table.doctor th { text-align: left; }
+table.doctor th.name { font-weight: normal; }
 table.doctor td.state { font-weight: 600; white-space: nowrap; }
 table.doctor tr.state-Ok td.state { color: #070; }
 table.doctor tr.state-Problem td.state { color: #b00; }
