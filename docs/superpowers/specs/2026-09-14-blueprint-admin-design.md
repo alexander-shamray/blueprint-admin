@@ -417,7 +417,9 @@ sets from each host's service name.
    table and is left out), each with its depth, and a sentence saying that
    the publish runs in a trace this correlation id cannot reach — or, where
    consume-side spans did reach the timeline through traces their services
-   logged this id in, that a hop which logged nothing is missing. A message
+   logged this id in, that a hop which logged nothing is missing. On the live
+   platform no consume-side trace is reached today (below, and #54), so the
+   first form is the one an operator sees. A message
    still waiting in one of them or parked in its `_error` queue shows there
    rather than as silence.
 
@@ -441,6 +443,17 @@ matched on the URN and Shipping's service name, since Notifications consumes
 the same event). The tag values are those of the
 MassTransit version `SpanRecogniser.MassTransitVersion` names, and the drift
 gate holds that version to the backend's pin.
+
+**None of those step rows is fed on the live platform yet.** Measured
+2026-10-03 and recorded on #54: the saga's spans live in traces rooted at
+outbox sends, and no saga log line carries a correlation id, so step 1 never
+names those traces and step 2 never fetches them. The rows recognise the spans
+the day a timeline reaches them — the backend carrying the correlation id onto
+the saga's log scope or trace context through the outbox, or a search here by
+order id, which would be a change to this section — and until then the
+timeline ends at the outbox as step 2 says. FakePlatform records no saga trace
+for the same reason: a fake that reached one would invent a reach the platform
+lacks.
 Each row deep-links to Grafana Explore with the datasource and query
 pre-filled.
 
