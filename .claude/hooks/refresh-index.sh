@@ -33,8 +33,9 @@
 # the hooks reference documents `cwd` as the field that follows a worktree the
 # session entered and a Bash `cd`.
 #
-# The hook's half reads the payload — compact JSON, whose first `"cwd":"` and
-# first `"file_path":"` are the keys, since a copy inside a written file or a
+# The hook's half reads the payload — compact JSON, whose first `"cwd":"` is
+# one key and whose first `"file_path":"` is the other, or `"notebook_path":"`
+# when no `file_path` appears at all, since a copy inside a written file or a
 # tool's output is escaped — and hands both to a detached half: the hook
 # returns in the time one read takes, never in the time an `update` does.
 # That read is why the hook commands carry no `&`, because an asynchronous

@@ -721,10 +721,10 @@ class TheEvent(unittest.TestCase):
         self.assertEqual(["worktree"], self.refreshed())
 
     def test_a_relative_path_resolves_against_the_events_cwd(self):
-        # Run from the worktree, where the same relative path names nothing:
-        # resolved there it would fall back to `cwd`, the main checkout.
+        # Run from outside every checkout, so only the event's `cwd` gives the
+        # path a home: resolved anywhere else it refreshes nothing at all.
         relative = os.path.join(".claude", "worktrees", "slug", "a.txt")
-        result = self.hook(self.edit(self.main, relative), cwd=self.worktree)
+        result = self.hook(self.edit(self.main, relative), cwd=self.tmp)
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual(["worktree"], self.refreshed())
 
