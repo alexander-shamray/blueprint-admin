@@ -48,6 +48,14 @@ Every process and every HTTP surface is replayed from recordings in
 `src/Admin.Host/Fakes/`. This is how the SPA is developed and how CI runs the
 Playwright smoke; it needs no Docker and no clones.
 
+The fixture files are what the live platform answered, scrubbed of tokens and
+passwords before they were written. To re-record them against a running stack:
+
+    dotnet run --project src/Admin.Host -- --Admin:Record=true
+
+then open the screens that read them and review the diff;
+[`docs/testing.md`](docs/testing.md) has the walk.
+
 ## What it does today
 
 Phases 0 to 6 of the spec: the Stack screen (a workstation doctor read before
