@@ -10,5 +10,6 @@
 ,{"name":"inventory-events","messages":0}
 ,{"name":"notifications-events","messages":0}
 ,{"name":"ordering-catalog-events","messages":0}
+,{"name":"bff-order-events","messages":0}
 ,{"name":"ordering-catalog-events_error","messages":1}
 ]

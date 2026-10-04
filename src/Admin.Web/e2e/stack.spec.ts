@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 test('the stack screen lists the fake services and runs up', async ({ page }) => {
   await page.goto('/stack');
 
-  await expect(page.locator('table.services tbody tr')).toHaveCount(24);
+  await expect(page.locator('table.services tbody tr')).toHaveCount(25);
   // As recorded: SQL Server has a healthcheck and the gateway has none, so ps gives it a state and no health.
   const service = (name: string) =>
     page.locator('table.services tbody tr').filter({ has: page.locator('td:first-child', { hasText: new RegExp(`^${name}$`) }) });

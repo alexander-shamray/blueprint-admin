@@ -21,7 +21,7 @@ public sealed class BrokerEndpointTests : IClassFixture<AdminHostFactory>
 
         view.GetProperty("reachable").GetBoolean().ShouldBeTrue();
         JsonElement[] queues = [.. view.GetProperty("queues").EnumerateArray()];
-        queues.Length.ShouldBe(12);
+        queues.Length.ShouldBe(13);
         JsonElement error = queues.Single(q => q.GetProperty("isErrorQueue").GetBoolean());
         error.GetProperty("name").GetString().ShouldBe("ordering-catalog-events_error");
         error.GetProperty("messages").GetInt64().ShouldBe(1);
@@ -46,6 +46,6 @@ public sealed class BrokerEndpointTests : IClassFixture<AdminHostFactory>
         JsonElement view = await client.GetFromJsonAsync<JsonElement>("/api/broker/permissions", TestContext.Current.CancellationToken);
 
         view.GetProperty("permissions").EnumerateArray().Select(p => p.GetProperty("user").GetString()).ShouldBe(
-            ["catalog-svc", "inventory-svc", "notifications-svc", "ordering-svc", "payments-svc", "shipping-svc"]);
+            ["bff-svc", "catalog-svc", "inventory-svc", "notifications-svc", "ordering-svc", "payments-svc", "shipping-svc"]);
     }
 }
