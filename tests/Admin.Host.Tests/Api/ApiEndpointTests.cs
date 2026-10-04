@@ -55,7 +55,7 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
             "inventory:SetOnHand", "inventory:GetStock", "inventory:GetReservation", "inventory:ReleaseReservation",
             "inventory:ReinstateReservation", "payments:GetPayment",
             "bff:Quote", "health:gateway", "health:catalog", "health:ordering", "health:bff", "health:inventory",
-            "health:payments", "simulator:Requests",
+            "health:payments", "simulator:Requests", "carrier:Requests",
         ]);
         JsonElement publish = view.GetProperty("operations")[0];
         publish.GetProperty("url").GetString().ShouldBe("http://localhost:5000/api/v1/catalog/products/");
@@ -69,7 +69,7 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
         HttpResponseMessage response = await client.PostAsync("/api/catalog/reload", null, Token);
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
-        (await response.Content.ReadFromJsonAsync<JsonElement>(Token)).GetProperty("operations").GetArrayLength().ShouldBe(18);
+        (await response.Content.ReadFromJsonAsync<JsonElement>(Token)).GetProperty("operations").GetArrayLength().ShouldBe(19);
     }
 
     [Fact]

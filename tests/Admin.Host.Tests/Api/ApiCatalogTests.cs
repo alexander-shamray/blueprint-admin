@@ -76,7 +76,7 @@ public sealed class ApiCatalogTests : IDisposable
             "inventory:SetOnHand", "inventory:GetStock", "inventory:GetReservation", "inventory:ReleaseReservation",
             "inventory:ReinstateReservation", "payments:GetPayment",
             "bff:Quote", "health:gateway", "health:catalog", "health:ordering", "health:bff", "health:inventory",
-            "health:payments", "simulator:Requests",
+            "health:payments", "simulator:Requests", "carrier:Requests",
         ]);
         handler.Requests.Where(r => r.Request.RequestUri!.AbsolutePath == "/openapi/v1.json")
             .ShouldAllBe(r => r.Request.Headers.Authorization!.Scheme == "Bearer");
@@ -187,7 +187,7 @@ public sealed class ApiCatalogTests : IDisposable
         ApiCatalogView view = await Catalog(handler).GetAsync(Token);
 
         view.Sources.ShouldAllBe(s => !s.Available && s.Error == "The token request for demo answered 401.");
-        view.Operations.Select(o => o.Source).Distinct().ShouldBe(["bff", "health", "simulator"]);
+        view.Operations.Select(o => o.Source).Distinct().ShouldBe(["bff", "health", "simulator", "carrier"]);
     }
 
     [Fact]

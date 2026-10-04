@@ -13,7 +13,6 @@ public sealed partial class QueueDriftTests
     /// <summary>Queues the console does not show yet, each with the issue that adds it.</summary>
     private static readonly Dictionary<string, string> QueuesNotYetShown = new(StringComparer.Ordinal)
     {
-        ["shipping-events"] = "#59",
         ["notifications-events"] = "#65",
     };
 

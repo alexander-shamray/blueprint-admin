@@ -50,6 +50,12 @@ public sealed class AdminOptions
     /// </summary>
     public string PaymentSimulatorUrl { get; set; } = "http://localhost:5190";
 
+    /// <summary>
+    /// The carrier simulator Shipping despatches through. Shipping is a worker with no API of its own, so this
+    /// request log is the only by-hand view of what Shipping asked a carrier for (run-locally.md).
+    /// </summary>
+    public string CarrierSimulatorUrl { get; set; } = "http://localhost:5191";
+
     public string KeycloakUrl { get; set; } = "http://localhost:8080";
 
     public string GrafanaUrl { get; set; } = "http://localhost:3000";

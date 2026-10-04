@@ -81,9 +81,21 @@ public sealed class SpanRecogniserTests
     }
 
     [Fact]
+    public void Shippings_consume_of_an_order_confirmed_is_the_despatch_and_another_services_is_a_plain_consume()
+    {
+        TempoSpan confirmed = Span("OrderConfirmed process", "SPAN_KIND_CONSUMER",
+            $"messaging.operation=process;messaging.masstransit.message_types={SpanRecogniser.OrderConfirmedUrn}");
+        TempoSpan Confirmed(string service) => confirmed with { Service = service };
+
+        SpanRecogniser.Describe(Confirmed(SpanRecogniser.ShippingService)).ShouldBe("Shipping despatches the order: OrderConfirmed process (5 ms)");
+        SpanRecogniser.Describe(Confirmed("Notifications.Worker")).ShouldBe("OrderConfirmed process (5 ms)");
+        SpanRecogniser.Kind(Confirmed("Notifications.Worker")).ShouldBe(TraceEventKind.Consume);
+    }
+
+    [Fact]
     public void Every_rule_says_why_it_exists_so_a_renamed_span_is_a_one_line_change()
     {
         SpanRecogniser.Table.ShouldAllBe(rule => rule.Why.Length > 20);
-        SpanRecogniser.Table.Length.ShouldBe(9);
+        SpanRecogniser.Table.Length.ShouldBe(10);
     }
 }
