@@ -124,7 +124,8 @@ public sealed partial class WorkstationDoctor(
 
         Listener[] others = [.. held.Where(l => l.Process != DockerProcess).DistinctBy(l => l.Port).OrderBy(l => l.Port)];
         int[] dockerHeld = [.. held.Where(l => l.Process == DockerProcess).Select(l => l.Port).Distinct().Order()];
-        HashSet<int> ours = [.. stack.Services.Where(s => s.State == "running").SelectMany(s => s.PublishedPorts)];
+        // Any state: a paused or restarting container of this stack still holds its ports, and an exited one lists none.
+        HashSet<int> ours = [.. stack.Services.SelectMany(s => s.PublishedPorts)];
         int[] strangers = stack.Reachable ? [.. dockerHeld.Where(p => !ours.Contains(p))] : [];
         List<string> problems = [];
 
@@ -280,7 +281,7 @@ public sealed partial class WorkstationDoctor(
             || !moved.Success
             || !DateTimeOffset.TryParse(moved.Groups[1].Value, CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTimeOffset checkedOut))
         {
-            return new(name, DoctorState.Unknown, $"When the backend's checkout last moved could not be read: {headMoved.Error ?? Joined(headMoved)}");
+            return new(name, DoctorState.Unknown, $"When the backend's checkout last moved could not be read: {headMoved.Error ?? (Joined(headMoved) is { Length: > 0 } said ? said : "the reflog printed nothing")}");
         }
 
         List<(string Repository, DateTimeOffset Tagged)> built = [];
@@ -294,10 +295,9 @@ public sealed partial class WorkstationDoctor(
                 string repository = image.GetProperty("Repository").GetString() ?? "";
                 string container = image.GetProperty("ContainerName").GetString() ?? "";
 
-                if (ReplicaSuffix().Replace(container, "") == repository
-                    && (image.TryGetProperty("LastTagTime", out JsonElement tagged) || image.TryGetProperty("Created", out tagged)))
+                if (ReplicaSuffix().Replace(container, "") == repository && TaggedAt(image) is { } tagged)
                 {
-                    built.Add((repository, tagged.GetDateTimeOffset()));
+                    built.Add((repository, tagged));
                 }
             }
         }
@@ -319,6 +319,30 @@ public sealed partial class WorkstationDoctor(
             ? new(name, DoctorState.Ok, $"All {built.Count} built images were tagged after the backend's checkout last moved ({at}).")
             : new(name, DoctorState.Problem,
                 $"{stale.Length} of {built.Count} built images were tagged before the backend's checkout last moved ({at}), and Up does not rebuild them: {string.Join(", ", stale)}.");
+    }
+
+    /// <summary>
+    /// The last tag time, or the creation time where the store recorded no tag: Docker prints a never-tagged image's
+    /// LastTagTime as the zero date, which is no time at all and would read every such image as stale.
+    /// </summary>
+    private static DateTimeOffset? TaggedAt(JsonElement image)
+    {
+        foreach (string key in (string[])["LastTagTime", "Created"])
+        {
+            if (!image.TryGetProperty(key, out JsonElement value))
+            {
+                continue;
+            }
+
+            DateTimeOffset at = value.GetDateTimeOffset();
+
+            if (at > DateTimeOffset.UnixEpoch)
+            {
+                return at;
+            }
+        }
+
+        return null;
     }
 
     internal static IEnumerable<int> PublishedPorts(JsonDocument model)
