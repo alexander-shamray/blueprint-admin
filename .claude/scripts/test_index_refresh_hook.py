@@ -250,8 +250,17 @@ class TheRefresh(unittest.TestCase):
             time.sleep(0.05)
 
     def pending(self):
+        # On Windows an open that meets the script's `mv -f` mid-rename is
+        # refused with a sharing violation instead of reading either token, so
+        # it is retried; a mark that stays locked is still a failure.
         path = self.cache / "refresh.pending"
-        return path.read_text(encoding="utf-8").strip() if path.exists() else ""
+        for _ in range(100):
+            try:
+                return (path.read_text(encoding="utf-8").strip()
+                        if path.exists() else "")
+            except PermissionError:
+                time.sleep(0.02)
+        raise AssertionError(f"{path} stayed locked")
 
     def publish(self, token):
         """Put a later call's token on the mark.
