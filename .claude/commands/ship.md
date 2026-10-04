@@ -66,7 +66,7 @@ could have made differently:
 
 | | |
 |---|---|
-| A helper or a guarded git command exits non-zero, or the harness refuses it | The step did not run; a report that says otherwise is false. `git pull --ff-only` refusing a diverged branch is the commonest exit; a refused push is the commonest refusal, and has its own paragraph below |
+| A helper or a guarded git command exits non-zero, or the harness refuses it — a fix's edit to a denied path included | The step did not run; a report that says otherwise is false. `git pull --ff-only` refusing a diverged branch is the commonest exit; a refused push is the commonest refusal, and has its own paragraph below |
 | This branch's PR was closed unmerged | Reopening a deliberate closure is not a recommended option |
 | A requested review never registers | Same shape: the round did not happen, so no verdict may be minted from it |
 | `main` is ahead of `origin/main` at step 0 | Local commits on `main` need a decision this chain has no way to take |
@@ -2070,12 +2070,13 @@ unconverged; step 6
 **all-resolved, naming the review and the `commit` oid it read**, or stopped
 unconverged — or, while Copilot is off, clean after N `bug-auditor` rounds
 or unconverged at the per-run ceiling, or nothing to read when the scope
-comes out empty, naming no reviewer and no oid because
-no external review read the branch and the PR carries no record of the
-rounds. Neither list has an ending that
-means "a finding stopped us" any more — a decided row and an answered `Ask`
-belong in the decisions section below, and filing one as a stop is the
-silent-decision failure this report exists to prevent. The oid is not
+comes out empty, naming no reviewer and no oid because no external review
+read the branch and the PR carries no record of the rounds — or stopped on
+a verified finding whose fix the harness refused, with the finding and the
+patch the caller applies given in full here. That stop is the only ending
+a finding produces: a decided row and an answered `Ask` belong in the
+decisions section below, and filing one as a stop is the silent-decision
+failure this report exists to prevent. The oid is not
 decoration — while Copilot reviews, it is the whole of step 6's marker, and a
 later `/ship` compares it against the pushed head to decide whether that loop
 is owed at all; the auditor rounds leave no marker, which is why a resumed
