@@ -532,6 +532,35 @@ class TheSeed(unittest.TestCase):
         self.assertEqual(["refresh.pending"],
                          sorted(p.name for p in self.cache.iterdir()))
 
+    def test_a_failed_seed_stays_while_a_later_call_may_be_using_it(self):
+        # The fake publishes a later token as it fails, as a call started by an
+        # edit during a long first update would; that call may hold the file.
+        self.main_index()
+        pending = self.cache / "refresh.pending"
+        self.fake(extra=self.probe()
+                  + f"printf 'later\\n' > {pending.as_posix()!r}\n"
+                  + "exit 1\n")
+        result = self.run_refresh()
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(3, self.calls().count(f"{guard_value()} update"))
+        self.assertEqual("main's index", (self.cache / "index.sqlite")
+                         .read_text(encoding="utf-8"))
+        self.assertTrue((self.cache / "index.sqlite.seeded").exists(),
+                        "the later caller needs the marker to know")
+
+    def test_a_later_caller_that_fails_on_a_seed_removes_it(self):
+        # The seeding call stood down for this one, so the marker is all that
+        # says the index is a seed no `update` has opened.
+        self.main_index()
+        self.fake(extra=self.probe() + "exit 1\n")
+        self.cache.mkdir(parents=True)
+        (self.cache / "index.sqlite").write_text("torn", encoding="utf-8")
+        (self.cache / "index.sqlite.seeded").write_text("", encoding="utf-8")
+        result = self.run_refresh()
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(["refresh.pending"],
+                         sorted(p.name for p in self.cache.iterdir()))
+
     def test_its_own_index_survives_a_failed_update(self):
         # Only a seed this call made is suspect; an index the worktree already
         # had is kept through what may be a transient failure.

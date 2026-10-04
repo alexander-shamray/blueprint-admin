@@ -46,13 +46,14 @@ cd "$root" || exit 0
 
 cache=.claude/cache/codebase-index
 index="$cache/index.sqlite"
+# A seed no `update` has opened yet, which is suspect until one does.
+suspect="$index.seeded"
 
 # A linked worktree with no index takes its main checkout's or nothing: the
 # git dir differs from the common one, and the common one is a checkout's
 # `.git` rather than a bare repository's. A cache directory left without an
 # index gets nothing either, since `update` would only refuse it three times.
 seed=
-seeded=
 if [ ! -f "$index" ]; then
   git_dir=$(git rev-parse --path-format=absolute --git-dir 2>/dev/null) || exit 0
   common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 0
@@ -83,22 +84,29 @@ sleep 2
 # Copied beside it and renamed in, so `update` never opens a partial file, and
 # skipped when an earlier winner seeded during the wait. A WAL or shared-memory
 # file left from an earlier seed would be replayed into this one, so they go.
+# The marker is laid first, so no seed is ever in place without it.
 if [ -n "$seed" ] && [ ! -e "$index" ]; then
   rm -f "$index-wal" "$index-shm"
-  cp "$seed" "$index.seed.$token" && mv -f "$index.seed.$token" "$index" ||
-    { rm -f "$index.seed.$token"; exit 0; }
-  seeded=1
+  cp "$seed" "$index.seed.$token" && : > "$suspect" &&
+    mv -f "$index.seed.$token" "$index" ||
+    { rm -f "$index.seed.$token" "$suspect"; exit 0; }
 fi
 
 tries=0
 until refresh; do
   tries=$((tries + 1))
   if [ "$tries" -ge 3 ]; then
-    # A seed `update` cannot open — torn by a copy taken mid-checkpoint — goes,
-    # so the next call copies again instead of every call failing on it.
-    [ -z "$seeded" ] || rm -f "$index" "$index-wal" "$index-shm"
-    break
+    # A seed no `update` has opened — torn by a copy taken mid-checkpoint —
+    # goes, so the next call copies again instead of every call failing on it.
+    # The marker says it is a seed, whichever call made it; only the published
+    # caller acts on it, because a superseded one may be failing on contention
+    # with the call now updating this very file.
+    [ ! -e "$suspect" ] || [ "$(cat "$pending" 2>/dev/null)" != "$token" ] ||
+      rm -f "$index" "$index-wal" "$index-shm" "$suspect"
+    exit 0
   fi
   sleep 2
 done
+# An `update` that ran over the seed vouches for it.
+rm -f "$suspect"
 exit 0
