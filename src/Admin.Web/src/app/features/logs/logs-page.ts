@@ -12,7 +12,8 @@ import { SseClient } from '../../core/host/sse-client';
  */
 export const COMPOSE_SERVICES = [
   'sql', 'redis-cache', 'redis-coordination', 'rabbitmq', 'keycloak', 'otel-collector', 'grafana',
-  'catalog-migrator', 'catalog-api', 'gateway', 'ordering-migrator', 'ordering-api', 'web-bff',
+  'catalog-migrator', 'catalog-api', 'gateway', 'ordering-migrator', 'ordering-api',
+  'bff-migrator', 'web-bff',
   'inventory-migrator', 'inventory-api', 'payments-migrator', 'psp-simulator', 'payments-api',
   'shipping-migrator', 'carrier-simulator', 'shipping-worker',
   'notifications-migrator', 'mailpit', 'notifications-worker',
