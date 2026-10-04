@@ -38,17 +38,20 @@ public static partial class FixtureScrubber
     [GeneratedRegex(@"\b(Bearer)\s+(?!<scrubbed>)[A-Za-z0-9._~+/=-]{16,}", RegexOptions.IgnoreCase)]
     private static partial Regex Bearer();
 
+    // A JSON string value is matched escape by escape, so a value holding \" is taken whole rather than cut short
+    // with its tail left behind.
+
     /// <summary>A JSON key, alone or holding an array as WireMock.Net's request log writes headers.</summary>
-    [GeneratedRegex(@"(""authorization""\s*:\s*\[?\s*)""(?!<scrubbed>"")[^""]*""", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"(""authorization""\s*:\s*\[?\s*)""(?!<scrubbed>"")(?:\\.|[^""\\])*""", RegexOptions.IgnoreCase)]
     private static partial Regex AuthorizationHeader();
 
-    [GeneratedRegex(@"(""(?:access_token|refresh_token|id_token)""\s*:\s*)""(?!<scrubbed>"")[^""]*""")]
+    [GeneratedRegex(@"(""(?:access_token|refresh_token|id_token)""\s*:\s*)""(?!<scrubbed>"")(?:\\.|[^""\\])*""")]
     private static partial Regex TokenField();
 
-    [GeneratedRegex(@"(""(?:password|client_secret)""\s*:\s*)""(?!<scrubbed>"")[^""]*""", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"(""(?:password|client_?secret)""\s*:\s*)""(?!<scrubbed>"")(?:\\.|[^""\\])*""", RegexOptions.IgnoreCase)]
     private static partial Regex SecretField();
 
     /// <summary>The password grant's own form, as a request log would hold it.</summary>
-    [GeneratedRegex(@"\b((?:password|client_secret)=)(?!<scrubbed>)[^&\s""]+", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\b((?:password|client_?secret)=)(?!<scrubbed>)[^&\s""]+", RegexOptions.IgnoreCase)]
     private static partial Regex SecretForm();
 }

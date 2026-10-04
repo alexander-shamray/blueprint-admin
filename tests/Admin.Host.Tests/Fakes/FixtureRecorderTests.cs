@@ -1,15 +1,21 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Admin.Host.Api;
 using Admin.Host.Broker;
 using Admin.Host.Compose;
 using Admin.Host.Config;
 using Admin.Host.Fakes;
+using Admin.Host.Identity;
 using Admin.Host.Jobs;
 using Admin.Host.Telemetry;
 using Admin.Host.Tests.TestSupport;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Shouldly;
 
 namespace Admin.Host.Tests.Fakes;
@@ -187,6 +193,102 @@ public sealed class FixtureRecorderTests : IDisposable
         await runner.Settled();
 
         Exists("compose-ps.jsonl").ShouldBeFalse();
+    }
+
+    /// <summary>
+    /// Through the clients that make these reads, as the process side is: each document lands in its own service's
+    /// fixture and the datasource list in its own, so a table row pointing at the wrong host cannot pass.
+    /// </summary>
+    [Fact]
+    public async Task Each_document_the_catalog_fetches_and_the_datasource_list_land_in_their_own_fixture()
+    {
+        CancellationToken token = TestContext.Current.CancellationToken;
+        IOptions<AdminOptions> options = Microsoft.Extensions.Options.Options.Create(Options);
+        using HttpClient http = Client(Recorder(), request =>
+            request.RequestUri!.AbsolutePath.EndsWith("/token", StringComparison.Ordinal)
+                ? Answer(HttpStatusCode.OK, $$"""{"access_token":"{{Identity.TokenServiceTests.Jwt("{}")}}","expires_in":300}""")
+                : Answer(HttpStatusCode.OK, $$"""{"answered":"{{request.RequestUri}}"}"""));
+        ApiCatalog catalog = new(
+            http,
+            new TokenService(http, options, TimeProvider.System),
+            options,
+            new OpenApiBaselines(Path.Combine(root.FullName, "baselines"), TimeProvider.System));
+
+        await catalog.GetAsync(token);
+        await new GrafanaClient(http, options).UidsAsync(token);
+
+        Recorded("openapi-catalog.json").ShouldContain(Options.CatalogUrl + "/openapi/v1.json");
+        Recorded("openapi-ordering.json").ShouldContain(Options.OrderingUrl + "/openapi/v1.json");
+        Recorded("openapi-inventory.json").ShouldContain(Options.InventoryUrl + "/openapi/v1.json");
+        Recorded("openapi-payments.json").ShouldContain(Options.PaymentsUrl + "/openapi/v1.json");
+        Recorded("grafana-datasources.json").ShouldContain(Options.GrafanaUrl + "/api/datasources");
+        Directory.EnumerateFiles(Fixtures).Count().ShouldBe(5, "the token answer is never a fixture");
+    }
+
+    /// <summary>The seams are Program.cs's: deleting either would leave a recording run that records nothing.</summary>
+    [Fact]
+    public void A_host_asked_to_record_wraps_its_process_runner_and_its_platform_client()
+    {
+        string backend = Directory.CreateDirectory(Path.Combine(root.FullName, "backend", "deploy", "compose")).FullName;
+        File.WriteAllText(Path.Combine(backend, "docker-compose.yml"), "name: commerce\n");
+        string frontend = Directory.CreateDirectory(Path.Combine(root.FullName, "frontend")).FullName;
+        File.WriteAllText(Path.Combine(frontend, "package.json"), "{}");
+        using AdminHostFactory factory = new();
+        using WebApplicationFactory<Program> recording = factory.WithWebHostBuilder(b => b.ConfigureAppConfiguration(c =>
+            c.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Admin:FakePlatform"] = "false",
+                ["Admin:Record"] = "true",
+                ["Admin:RecordDir"] = Fixtures,
+                ["Admin:BackendDir"] = Path.Combine(root.FullName, "backend"),
+                ["Admin:FrontendDir"] = frontend,
+            })));
+
+        recording.Services.GetRequiredService<IProcessRunner>().ShouldBeOfType<RecordingProcessRunner>();
+
+        HttpMessageHandler? handler = recording.Services.GetRequiredService<IHttpMessageHandlerFactory>().CreateHandler("platform");
+        List<HttpMessageHandler> chain = [];
+        while (handler is not null)
+        {
+            chain.Add(handler);
+            handler = (handler as DelegatingHandler)?.InnerHandler;
+        }
+
+        chain.ShouldContain(h => h is RecordingHandler);
+    }
+
+    [Fact]
+    public void A_held_keyed_fixture_that_is_not_an_object_is_started_afresh()
+    {
+        File.WriteAllText(Path.Combine(Fixtures, "signals.json"), "[]");
+
+        Recorder().WriteKeyed("signals.json", "RequestRate", """{"status":"success"}""");
+
+        using JsonDocument written = JsonDocument.Parse(Recorded("signals.json"));
+        written.RootElement.EnumerateObject().Select(p => p.Name).ShouldBe(["RequestRate"]);
+    }
+
+    [Fact]
+    public async Task An_answer_that_is_not_json_is_not_recorded_under_its_key_and_its_caller_still_reads_it()
+    {
+        using HttpClient client = Client(Recorder(), _ => Answer(HttpStatusCode.OK, "not json"));
+        string query = Options.GrafanaUrl + "/api/datasources/proxy/uid/prometheus/api/v1/query?query="
+            + Uri.EscapeDataString(GoldenSignals.RequestRate);
+
+        (await client.GetStringAsync(new Uri(query), TestContext.Current.CancellationToken)).ShouldBe("not json");
+
+        Exists("grafana-prometheus-golden-signals.json").ShouldBeFalse();
+    }
+
+    [Fact]
+    public void A_write_that_cannot_land_is_dropped_and_leaves_no_temporary_file()
+    {
+        // A directory where the fixture should be: the move over it fails, as a locked file would.
+        Directory.CreateDirectory(Path.Combine(Fixtures, "openapi-catalog.json"));
+
+        Should.NotThrow(() => Recorder().Write("openapi-catalog.json", "{}"));
+
+        Exists("openapi-catalog.json.recording").ShouldBeFalse();
     }
 
     private static HttpClient Client(FixtureRecorder recorder, Func<HttpRequestMessage, HttpResponseMessage> respond) =>

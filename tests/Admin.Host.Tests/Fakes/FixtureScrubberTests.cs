@@ -59,13 +59,37 @@ public sealed class FixtureScrubberTests
         FixtureScrubber.Scrub(schema).ShouldBe(schema);
     }
 
+    /// <summary>
+    /// Every rule breaks the input before and none after: a rule whose skip of an already scrubbed value broke would
+    /// keep finding its own replacement, and the gate would then fail every recording it wrote.
+    /// </summary>
     [Fact]
-    public void Scrubbing_twice_changes_nothing_and_what_was_scrubbed_has_no_findings()
+    public void Every_rule_finds_its_input_and_nothing_in_what_it_wrote()
     {
-        string once = FixtureScrubber.Scrub($$"""{"access_token":"{{Jwt}}","password":"demo","h":"Bearer 0123456789abcdef0123"}""");
+        string raw = $$"""
+            {"access_token":"{{Jwt}}","password":"demo","h":"Bearer 0123456789abcdef0123",
+             "Authorization":["Basic ZGVtbzpkZW1v"],"body":"username=demo&password=demo"}
+            """;
 
-        FixtureScrubber.Scrub(once).ShouldBe(once);
+        FixtureScrubber.Findings(raw).Count.ShouldBe(6);
+
+        string once = FixtureScrubber.Scrub(raw);
+
         FixtureScrubber.Findings(once).ShouldBeEmpty();
+        FixtureScrubber.Scrub(once).ShouldBe(once);
+    }
+
+    [Fact]
+    public void A_value_holding_an_escaped_quote_is_scrubbed_whole()
+    {
+        FixtureScrubber.Scrub("""{"password":"pa\"ss","next":1}""").ShouldBe("""{"password":"<scrubbed>","next":1}""");
+    }
+
+    [Fact]
+    public void A_client_secret_is_scrubbed_in_either_spelling()
+    {
+        FixtureScrubber.Scrub("""{"clientSecret":"s"}""").ShouldBe("""{"clientSecret":"<scrubbed>"}""");
+        FixtureScrubber.Scrub("clientSecret=s&x=1").ShouldBe("clientSecret=<scrubbed>&x=1");
     }
 
     [Fact]
