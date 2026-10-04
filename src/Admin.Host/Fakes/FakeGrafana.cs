@@ -90,15 +90,24 @@ internal static class FakeGrafana
     /// </summary>
     public static HttpResponseMessage Prometheus(HttpRequestMessage request)
     {
-        const string prefix = "?query=";
-        string raw = request.RequestUri!.Query;
-        string promQl = raw.StartsWith(prefix, StringComparison.Ordinal) ? Uri.UnescapeDataString(raw[prefix.Length..]) : "";
-
         using JsonDocument recording = JsonDocument.Parse(Fixture("grafana-prometheus-golden-signals.json"));
 
-        return GoldenSignalFields.TryGetValue(promQl, out string? field)
+        return GoldenSignalOf(request.RequestUri!) is { } field
             ? FakeHttp.Json(HttpStatusCode.OK, recording.RootElement.GetProperty(field).GetRawText())
             : FakeHttp.Json(HttpStatusCode.OK, """{"status":"success","data":{"resultType":"vector","result":[]}}""");
+    }
+
+    /// <summary>
+    /// The <see cref="Telemetry.GoldenSignals"/> field a Prometheus query's URL asks for, which is the key its answer
+    /// has in the recording, or null for any other query. The recorder writes under the same key.
+    /// </summary>
+    public static string? GoldenSignalOf(Uri query)
+    {
+        const string prefix = "?query=";
+        string raw = query.Query;
+        string promQl = raw.StartsWith(prefix, StringComparison.Ordinal) ? Uri.UnescapeDataString(raw[prefix.Length..]) : "";
+
+        return GoldenSignalFields.GetValueOrDefault(promQl);
     }
 
     /// <summary>Each query's text to the <see cref="Telemetry.GoldenSignals"/> field the recording is keyed by.</summary>

@@ -42,7 +42,8 @@ public sealed class FakePlatformHandler(AdminOptions options) : HttpMessageHandl
         return response;
     }
 
-    private static bool Is(Uri uri, string configured) =>
+    /// <summary>Whether <paramref name="uri"/> is on the host a configured URL names; the recorder tells hosts apart the same way.</summary>
+    internal static bool Is(Uri uri, string configured) =>
         Uri.TryCreate(configured, UriKind.Absolute, out Uri? baseUri)
         && string.Equals(uri.GetLeftPart(UriPartial.Authority), baseUri.GetLeftPart(UriPartial.Authority), StringComparison.OrdinalIgnoreCase);
 }
