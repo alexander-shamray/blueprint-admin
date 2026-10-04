@@ -190,7 +190,7 @@ opens those files:
 
 | | |
 |---|---|
-| `/ship` | Clean `main` → `/branch` → checks → `/commit` → `/pr` → the Copilot review loop (Grok is disabled) → merge → teardown. **It stops for nothing that is a judgement** |
+| `/ship` | Clean `main` → `/branch` → checks → `/commit` → `/pr` → the Copilot review loop, `bug-auditor` rounds while Copilot is off (Grok is disabled) → merge → teardown. **It stops for nothing that is a judgement** |
 | `/branch` | A correctly named branch **in a worktree under `.claude/worktrees/`** the session moves into; in place when the tree is dirty or that directory is not writable |
 | `/commit` | Split the working tree into semantic commits with arguing bodies |
 | `/pr` | Open a PR in the house body form, with `| Class |` and `| Touch set |` |
