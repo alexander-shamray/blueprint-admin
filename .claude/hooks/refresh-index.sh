@@ -84,12 +84,13 @@ sleep 2
 # Copied beside it and renamed in, so `update` never opens a partial file, and
 # skipped when an earlier winner seeded during the wait. A WAL or shared-memory
 # file left from an earlier seed would be replayed into this one, so they go.
-# The marker is laid first, so no seed is ever in place without it.
+# The marker is laid first, so no seed is ever in place without it, and on a
+# failure it goes only if no index arrived: another seeder's may have.
 if [ -n "$seed" ] && [ ! -e "$index" ]; then
   rm -f "$index-wal" "$index-shm"
   cp "$seed" "$index.seed.$token" && : > "$suspect" &&
     mv -f "$index.seed.$token" "$index" ||
-    { rm -f "$index.seed.$token" "$suspect"; exit 0; }
+    { rm -f "$index.seed.$token"; [ -e "$index" ] || rm -f "$suspect"; exit 0; }
 fi
 
 tries=0
@@ -100,9 +101,11 @@ until refresh; do
     # goes, so the next call copies again instead of every call failing on it.
     # The marker says it is a seed, whichever call made it; only the published
     # caller acts on it, because a superseded one may be failing on contention
-    # with the call now updating this very file.
+    # with the call now updating this very file. The marker goes last, and only
+    # once the files are gone: an index another process holds open survives the
+    # `rm` on Windows, and must not survive it unmarked.
     [ ! -e "$suspect" ] || [ "$(cat "$pending" 2>/dev/null)" != "$token" ] ||
-      rm -f "$index" "$index-wal" "$index-shm" "$suspect"
+      { rm -f "$index" "$index-wal" "$index-shm" && rm -f "$suspect"; }
     exit 0
   fi
   sleep 2
