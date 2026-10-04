@@ -50,7 +50,8 @@ argument is how a rule gets "corrected" back.
   remembered at all. `TheLauncherProvesWhatItRemembers` and
   `ARememberedGuardAnswersAsAProbedOne` in `test_grok_helpers.py` hold the
   launcher to each of those.
-- **The one hook that guards nothing is the index refresh**, which runs
+- **Two hooks guard nothing, and both serve the index.** The first is the
+  refresh, which runs
   `refresh-index.sh` from two events: a `PostToolUse` entry after every tool
   that writes, and a `SessionStart` entry for the changes no edit makes. A
   merge, a switch or a pull rewrites the tree with no tool event behind it, so
@@ -78,6 +79,25 @@ argument is how a rule gets "corrected" back.
   call the CLI bare, as `.mcp.json` does, rather than through the skill's
   `cbx` wrapper: a hook shell's `bash` can resolve to WSL's on Windows, which
   cannot run it.
+- **The second is the query hint (#91)**: `index-query-hint.sh` on
+  `UserPromptSubmit`, because keeping the index current and telling sessions
+  to use it — `CLAUDE.md` and the skill's `description` both do — did not get
+  it read. A prompt that reads as a locate, explain,
+  references, impact or named-symbol question gets one line of
+  `additionalContext`: load the skill, the subcommand its route table gives
+  that question, and the session-tag rule; every other prompt, and every
+  slash command, gets nothing. **It asks for the skill and not only the
+  command** because the skill's `allowed-tools` is the only grant for
+  `codebase-index …`, and it holds only while the skill is loaded. **It runs
+  under plain `sh` and not through `run-guard.sh`**, whose every failure is 2 —
+  under this event 2 blocks the prompt and erases it, so the hint leaves with
+  0 whatever happened. It matches only the decoded `prompt` string, never the
+  payload's paths, writes nothing and spawns one `awk`.
+  `test_index_query_hint.py` runs it on every pattern, on phrases that are
+  not the question, on slash commands, unreadable input and an `awk` that
+  fails, and holds every command it emits to a row of the skill's route
+  table and a subcommand its `allowed-tools` approves. Hooks are read when a
+  session starts: the hint reaches a session opened after it lands.
 - **`.claude/skills/**` is a grant surface.** A skill's `allowed-tools` is
   auto-approval, so a session that can rewrite `SKILL.md` widens the next
   invocation. Commands, agents, hooks and settings were already denied;
