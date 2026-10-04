@@ -415,7 +415,9 @@ sets from each host's service name.
    every other queue of `PlatformQueues.Table` a span of the timeline named
    (a receive's endpoint or a send's destination; an exchange is not in the
    table and is left out), each with its depth, and a sentence saying that
-   the publish runs in a trace this correlation id cannot reach. A message
+   the publish runs in a trace this correlation id cannot reach — or, where
+   consume-side spans did reach the timeline through traces their services
+   logged this id in, that a hop which logged nothing is missing. A message
    still waiting in one of them or parked in its `_error` queue shows there
    rather than as silence.
 
@@ -434,7 +436,9 @@ MassTransit tags a publish and a command send alike `send`, and both are a
 handover (`Publish`). A row may name a step of the platform as well as a kind
 of span: the fulfilment saga's step (`Saga`, with the states it moved
 between), Inventory's reservation and Payments' authorisation (`Consume`,
-matched on the contract's message URN). The tag values are those of the
+matched on the contract's message URN), and Shipping's despatch (`Consume`,
+matched on the URN and Shipping's service name, since Notifications consumes
+the same event). The tag values are those of the
 MassTransit version `SpanRecogniser.MassTransitVersion` names, and the drift
 gate holds that version to the backend's pin.
 Each row deep-links to Grafana Explore with the datasource and query

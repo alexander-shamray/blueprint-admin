@@ -238,7 +238,8 @@ public sealed class EventTraceServiceTests : IAsyncDisposable
 
         view.Events[^1].Summary.ShouldStartWith(
             "ordering-catalog-events: 0 messages (drained); ordering-fulfilment-saga: 0 messages; "
-            + "inventory-commands: 2 messages waiting, 1 parked in inventory-commands_error. The publish runs in a new trace");
+            + "inventory-commands: 2 messages waiting, 1 parked in inventory-commands_error. The outbox carries no trace context, "
+            + "so each consume above was found only because its service logged this correlation id");
     }
 
     [Fact]
