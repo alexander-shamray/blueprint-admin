@@ -1,6 +1,8 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Admin.Host.Broker;
 using Admin.Host.Config;
+using Admin.Host.Fakes;
 using Admin.Host.Stack;
 using Shouldly;
 
@@ -8,7 +10,8 @@ namespace Admin.Host.Tests.Drift;
 
 /// <summary>
 /// The backend's Compose tree against what this console configures: a URL per surface in
-/// <see cref="AdminOptions"/>, the broker's service name, and the Logs screen's service list.
+/// <see cref="AdminOptions"/>, the broker's service name, the Logs screen's service list and the fakes' recorded
+/// Compose model.
 /// </summary>
 public sealed partial class ComposeDriftTests
 {
@@ -96,6 +99,19 @@ public sealed partial class ComposeDriftTests
         string[] listed = [.. QuotedName().Matches(list.Groups[1].Value).Select(m => m.Groups[1].Value)];
 
         listed.Order(StringComparer.Ordinal).ShouldBe(Compose.Services().Select(s => s.Name).Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// The fakes' recorded Compose model names the services the backend composes, so a service it adds fails here
+    /// until the fakes are re-recorded. FakePlatformTests holds the ps recording to this model.
+    /// </summary>
+    [Fact]
+    public void The_recorded_compose_model_lists_every_compose_service_and_no_other()
+    {
+        using JsonDocument model = JsonDocument.Parse(WorkstationRecordings.ComposeConfig);
+        string[] recorded = [.. model.RootElement.GetProperty("services").EnumerateObject().Select(s => s.Name)];
+
+        recorded.Order(StringComparer.Ordinal).ShouldBe(Compose.Services().Select(s => s.Name).Order(StringComparer.Ordinal));
     }
 
     private static HashSet<string> SurfacedUnits() =>
