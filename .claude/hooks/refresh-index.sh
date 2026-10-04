@@ -2,13 +2,32 @@
 # Refresh the local codebase index, coalescing a burst of calls.
 #
 # **Run from two hooks in `.claude/settings.json` — `PostToolUse` after every
-# tool that writes, and `SessionStart` for the changes no edit makes —
-# backgrounded and silenced in both** so it can never block an edit, and so a
-# session start hears nothing from it; that is also why nothing here may fail
-# loudly — nobody would hear it. It reads no event payload, resolving its
-# repository from the working directory below, which is what lets one command
-# serve both events. `test_index_refresh_hook.py` runs this file against a
-# fake CLI for the same reason.
+# tool that writes, Bash included, and `SessionStart` for the changes no tool
+# makes — silenced in both, and detaching itself** so it can never block a
+# tool call, and so a session start hears nothing from it; that is also why
+# nothing here may fail loudly — nobody would hear it.
+# `test_index_refresh_hook.py` runs this file against a fake CLI for the same
+# reason.
+#
+# **Bash is in the matcher because agents write through it more than through
+# any edit tool** — a commit, a pull, a formatter, an edit script — and each
+# left the index describing the tree it replaced while reporting itself fresh
+# (#100). A Bash call that wrote nothing costs one `update` that changes
+# nothing, about half a second in the background; it is not gated on the
+# command, which would miss every helper and script. A commit changes no file,
+# and that same `update` is what moves the index's recorded HEAD.
+#
+# **The event's `cwd` names the checkout; the working directory is the
+# fallback.** `${CLAUDE_PROJECT_DIR}` stays where the session started, and the
+# hooks reference documents the event's `cwd` as the field that follows a
+# worktree the session entered and a Bash `cd`. So the hook's half reads the
+# payload — compact JSON, whose first `"cwd":"` is the key, since a copy
+# inside a tool's output is escaped — and hands that directory to a detached
+# half: the hook returns in the time one read takes, never in the time an
+# `update` does. That read is why the hook commands carry no `&`, because an
+# asynchronous list's stdin is `/dev/null`. A Windows path arrives with its
+# backslashes doubled, and `cd` takes it as it is. With no payload, a key it
+# cannot find or a directory that has gone, the working directory decides.
 #
 # **The rule is that the last call runs, and there is no lock.** Each call
 # publishes a token of its own to `refresh.pending` by an atomic rename, waits,
@@ -40,6 +59,17 @@
 # optional: without it the CLI may rewrite the tracked skill, widening its
 # `allowed-tools`.
 set -u
+
+if [ "${1-}" != --detached ]; then
+  payload=
+  [ -t 0 ] || payload=$(cat)
+  dir=
+  rest=${payload#*\"cwd\":\"}
+  [ "$rest" = "$payload" ] || dir=${rest%%\"*}
+  sh "$0" --detached "$dir" </dev/null >/dev/null 2>&1 &
+  exit 0
+fi
+[ -z "${2-}" ] || cd "$2" 2>/dev/null || :
 
 root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 cd "$root" || exit 0

@@ -1,9 +1,9 @@
 """The two hooks that keep the local index current.
 
 **Their failures are invisible, so this file checks both what they are and
-what they do.** The wiring discards its output and runs in the background so
-that it can never block an edit — which also means a hook that fails on every
-call looks exactly like one that works. So the wiring is asserted from the
+what they do.** The wiring discards its output, and the script detaches its
+own refresh so that it can never block a tool call — which also means a hook
+that fails on every call looks exactly like one that works. So the wiring is asserted from the
 files the harness reads, and `refresh-index.sh` — the hook command's whole
 body — is run against a fake
 `codebase-index` that records the arguments and the guard it was handed.
@@ -15,6 +15,12 @@ how a gate stops covering the newest surface without saying so.
 
 **Not a skip where `sh` or `git` is missing.** A skip reports a pass, which is
 the fail-open `test_grok_helpers.py` refuses for the same tools.
+
+**What `update` itself does after a Bash call is not tested here.** A commit
+moving the recorded HEAD, a rewritten file becoming searchable and a call that
+wrote nothing changing nothing are the CLI's behaviour, and no CI job installs
+the CLI; what this file holds is that a Bash call reaches `update`, in the
+checkout the event names.
 """
 
 import importlib.util
@@ -36,6 +42,9 @@ SETTINGS = CLAUDE / "settings.json"
 EXAMPLE = CLAUDE / "skills" / "codebase-index" / "examples" / "hooks" / "settings.json"
 MCP = ROOT / ".mcp.json"
 EDIT_GUARD = CLAUDE / "hooks" / "guard-edit-target.py"
+# The tool that writes through commands — a commit, a formatter, an edit
+# script — which the edit guard does not list, because it names no target.
+SHELL_TOOL = "Bash"
 REFRESH = CLAUDE / "hooks" / "refresh-index.sh"
 GUARD_ENV = "CBX_NO_SKILL_AUTO_UPDATE"
 
@@ -101,10 +110,12 @@ class TheWiring(unittest.TestCase):
 
     def test_it_runs_after_every_tool_that_writes(self):
         # Derived from the edit guard's own list, so a tool added there is a red
-        # case here rather than a file the index silently stops following.
+        # case here rather than a file the index silently stops following. Bash
+        # joins it, because a commit or a formatter writes as surely as an edit.
         matcher, _ = refresh_hook()
         tools = editing_tools()
         self.assertGreaterEqual(len(tools), 4, f"EDITING_TOOLS shrank: {tools}")
+        tools = (*tools, SHELL_TOOL)
         for tool in tools:
             with self.subTest(tool=tool):
                 self.assertTrue(re.fullmatch(matcher, tool),
@@ -113,14 +124,16 @@ class TheWiring(unittest.TestCase):
             with self.subTest(alternative=alternative):
                 self.assertIn(alternative, tools)
 
-    def test_it_can_never_block_an_edit(self):
-        # Backgrounded and silenced, whole: a dropped `&` holds every edit for
-        # the length of an `update`, and anything the script prints would be
-        # the hook's output.
+    def test_it_is_silenced_and_reads_its_event(self):
+        # Silenced, whole, since anything the script prints would be the hook's
+        # output. No `&`: an asynchronous list's stdin is `/dev/null`, so a
+        # backgrounded hook would never see the event's `cwd`. The script
+        # detaches its own refresh, and `TheEvent` runs this command to hold it
+        # to returning before the `update` starts.
         _, hook = refresh_hook()
         self.assertEqual(
             'sh "${CLAUDE_PROJECT_DIR}/.claude/hooks/refresh-index.sh"'
-            " >/dev/null 2>&1 &",
+            " >/dev/null 2>&1",
             hook["command"])
         self.assertLessEqual(hook.get("timeout", 60), 5)
 
@@ -137,10 +150,9 @@ class TheWiring(unittest.TestCase):
 
     def test_it_also_runs_when_a_session_starts(self):
         # A merge, a switch or a pull rewrites the tree with no tool event
-        # behind it. The script reads no event payload — it resolves its
-        # repository from the working directory — so the command is the
-        # PostToolUse one unchanged, and a divergence between them would mean
-        # one of the two events had stopped refreshing anything.
+        # behind it. Both events carry the `cwd` the script reads, so the
+        # command is the PostToolUse one unchanged, and a divergence between
+        # them would mean one of the two events had stopped refreshing anything.
         found = refresh_hooks().get("SessionStart", [])
         self.assertEqual(1, len(found), found)
         matcher, hook = found[0]
@@ -158,7 +170,8 @@ class TheWiring(unittest.TestCase):
         # The example is what a reader copies into another project, where this
         # repository's `refresh-index.sh` does not exist — so it stays a
         # one-liner, and is held to the same guard, verb, events and matchers
-        # as the wiring.
+        # as the wiring. Being one, it reads no event, and refreshes the
+        # working directory's checkout.
         events = read_json(EXAMPLE).get("hooks", {})
         self.assertEqual(set(refresh_hooks()), set(events))
         for event, entries in events.items():
@@ -215,7 +228,7 @@ class TheRefresh(unittest.TestCase):
                 "CLAUDE_PROJECT_DIR": str(ROOT)}
 
     def run_refresh(self):
-        return subprocess.run([SH, str(REFRESH)], cwd=str(self.repo),
+        return subprocess.run([SH, str(REFRESH), "--detached"], cwd=str(self.repo),
                               env=self.env(), capture_output=True, text=True,
                               timeout=60)
 
@@ -225,7 +238,7 @@ class TheRefresh(unittest.TestCase):
         return self.record.read_text(encoding="utf-8").splitlines()
 
     def start_refresh(self):
-        return subprocess.Popen([SH, str(REFRESH)], cwd=str(self.repo),
+        return subprocess.Popen([SH, str(REFRESH), "--detached"], cwd=str(self.repo),
                                 env=self.env(), stdout=subprocess.DEVNULL,
                                 stderr=subprocess.DEVNULL)
 
@@ -282,7 +295,7 @@ class TheRefresh(unittest.TestCase):
         _, hook = refresh_hook()
         started = subprocess.run([SH, "-c", hook["command"]], cwd=str(self.repo),
                                  env=self.env(), capture_output=True, text=True,
-                                 timeout=30)
+                                 input="", timeout=30)
         self.assertEqual(0, started.returncode, started.stderr)
         self.wait_for(self.calls, "the fake CLI to be called")
         self.assertEqual([f"{guard_value()} update"], self.calls())
@@ -442,7 +455,7 @@ class TheSeed(unittest.TestCase):
             (self.main_cache / other).write_text(other, encoding="utf-8")
 
     def run_refresh(self):
-        return subprocess.run([SH, str(REFRESH)], cwd=str(self.worktree),
+        return subprocess.run([SH, str(REFRESH), "--detached"], cwd=str(self.worktree),
                               env=self.env(), capture_output=True, text=True,
                               timeout=60)
 
@@ -486,7 +499,7 @@ class TheSeed(unittest.TestCase):
         # `update` there, as it always has. Without that guard it would read
         # its own missing index as nothing to seed from, and stop.
         self.main_cache.mkdir(parents=True)
-        result = subprocess.run([SH, str(REFRESH)], cwd=str(self.main),
+        result = subprocess.run([SH, str(REFRESH), "--detached"], cwd=str(self.main),
                                 env=self.env(), capture_output=True, text=True,
                                 timeout=60)
         self.assertEqual(0, result.returncode, result.stderr)
@@ -506,7 +519,7 @@ class TheSeed(unittest.TestCase):
         planted = self.tmp / ".claude" / "cache" / "codebase-index"
         planted.mkdir(parents=True)
         (planted / "index.sqlite").write_text("no checkout's", encoding="utf-8")
-        result = subprocess.run([SH, str(REFRESH)], cwd=str(worktree),
+        result = subprocess.run([SH, str(REFRESH), "--detached"], cwd=str(worktree),
                                 env=self.env(), capture_output=True, text=True,
                                 timeout=60)
         self.assertEqual(0, result.returncode, result.stderr)
@@ -572,6 +585,115 @@ class TheSeed(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual("its own", (self.cache / "index.sqlite")
                          .read_text(encoding="utf-8"))
+
+
+class TheEvent(unittest.TestCase):
+    """The hook's own half: which checkout an event refreshes, and how fast.
+
+    Run as the harness runs it — the command from `settings.json` through
+    `sh -c`, the payload on stdin — from the main checkout, because that is
+    where `${CLAUDE_PROJECT_DIR}` leaves a session that has entered a worktree.
+    Both checkouts hold an index, so no seed is involved, and the one refreshed
+    is the one whose cache gained the mark.
+    """
+
+    setUpClass = TheRefresh.setUpClass
+    fake = TheRefresh.fake
+    env = TheRefresh.env
+    calls = TheRefresh.calls
+    wait_for = TheRefresh.wait_for
+    held_until = TheRefresh.held_until
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="index-event-"))
+        self.addCleanup(shutil.rmtree, str(self.tmp), ignore_errors=True)
+        self.main = self.tmp / "main"
+        git = [GIT, "-c", "user.name=t", "-c", "user.email=t@example.invalid"]
+        subprocess.run([GIT, "init", "-q", str(self.main)], check=True)
+        subprocess.run([*git, "-C", str(self.main), "commit", "-q",
+                        "--allow-empty", "-m", "init"], check=True)
+        self.worktree = self.main / ".claude" / "worktrees" / "slug"
+        subprocess.run([GIT, "-C", str(self.main), "worktree", "add", "-q",
+                        "-b", "slug", str(self.worktree)], check=True)
+        for checkout in (self.main, self.worktree):
+            cache = checkout / ".claude" / "cache" / "codebase-index"
+            cache.mkdir(parents=True)
+            (cache / "index.sqlite").write_text("its own", encoding="utf-8")
+        self.bin = self.tmp / "bin"
+        self.bin.mkdir()
+        self.record = self.tmp / "calls"
+        self.fake()
+
+    def payload(self, cwd, **fields):
+        """A Bash event, compact as the harness sends it, `cwd` last.
+
+        Last, so any field passed here precedes the key in the text, which is
+        the order a copy inside a tool's output would have to win in.
+        """
+        return json.dumps({"session_id": "s", "hook_event_name": "PostToolUse",
+                           "tool_name": SHELL_TOOL, **fields, "cwd": str(cwd)},
+                          separators=(",", ":"))
+
+    def hook(self, stdin, cwd=None, timeout=30):
+        return subprocess.run([SH, "-c", refresh_hook()[1]["command"]],
+                              cwd=str(cwd or self.main), env=self.env(),
+                              capture_output=True, text=True, input=stdin,
+                              timeout=timeout)
+
+    def refreshed(self):
+        self.wait_for(self.calls, "the fake CLI to be called")
+        self.assertEqual([f"{guard_value()} update"], self.calls())
+        return [name for name, checkout in (("main", self.main),
+                                            ("worktree", self.worktree))
+                if (checkout / ".claude" / "cache" / "codebase-index"
+                    / "refresh.pending").exists()]
+
+    def test_an_event_refreshes_the_checkout_it_names(self):
+        # The issue's case: a Bash call in a worktree, from a session whose
+        # project directory is the main checkout.
+        result = self.hook(self.payload(self.worktree))
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(["worktree"], self.refreshed())
+
+    def test_without_an_event_the_working_directory_decides(self):
+        # `git-worktree-fork.sh` runs it with no payload, from the worktree.
+        result = self.hook("", cwd=self.worktree)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(["worktree"], self.refreshed())
+
+    def test_a_directory_that_has_gone_falls_back_to_the_working_directory(self):
+        result = self.hook(self.payload(self.tmp / "gone"), cwd=self.worktree)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(["worktree"], self.refreshed())
+
+    def test_a_cwd_inside_a_tool_output_is_not_the_key(self):
+        # A Bash call that printed an event of its own: the copy is escaped
+        # inside the output's string, and comes first in the text.
+        printed = json.dumps({"cwd": str(self.main)}, separators=(",", ":"))
+        payload = self.payload(self.worktree, tool_response={"stdout": printed})
+        self.assertLess(payload.index('\\"cwd\\":'), payload.index('"cwd":'),
+                        "the copy must come first to be a case")
+        result = self.hook(payload)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(["worktree"], self.refreshed())
+
+    def test_the_hook_returns_while_the_update_is_held(self):
+        # The update is held open until this test releases it, so a hook that
+        # waited on it cannot return at all, and `run`'s timeout — well inside
+        # the fake's own bound — is what fails. Nothing is timed: this class
+        # shares a box with seven workers, where a stopwatch is what lost. An
+        # `&` restored to the command fails below instead, on the checkout,
+        # because it takes the payload with it.
+        release = self.tmp / "release"
+        self.fake(extra=self.held_until(release))
+        try:
+            result = self.hook(self.payload(self.worktree), timeout=15)
+        finally:
+            release.touch()
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("", result.stdout + result.stderr)
+        self.assertEqual(["worktree"], self.refreshed())
+
 
 if __name__ == "__main__":
     unittest.main()

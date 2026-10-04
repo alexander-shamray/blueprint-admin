@@ -64,5 +64,6 @@ git worktree add --no-track -b "$branch" "$path" origin/main
 # Seed the new worktree's code index now rather than at its first edit: /branch
 # enters it mid-session, where no `SessionStart` fires, and a query there before
 # any edit would build from scratch. The worktree's own hook does the work,
-# backgrounded and silenced as its hook entries are.
+# silenced as its hook entries are; with no event on stdin it refreshes this
+# directory, and it detaches its own refresh, so the `&` only spares a wait.
 (cd "$path" && sh .claude/hooks/refresh-index.sh) </dev/null >/dev/null 2>&1 &
