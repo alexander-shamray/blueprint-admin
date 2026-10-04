@@ -25,6 +25,14 @@
 # the caller discards the status, so without a retry a transient failure would
 # leave the last edit unindexed.
 #
+# **A linked worktree with no index is seeded from its main checkout's, and
+# never built.** `.claude/cache/` is ignored, so `/branch`'s worktree starts
+# with none, and a full `index` is minutes inside an agent's turn where a copy
+# and an `update` are seconds. Only `index.sqlite` crosses — the main
+# checkout's other cache files are its own state — and it crosses inside the
+# winning call, so a burst seeds once. A main checkout with no index leaves the
+# worktree with none rather than building one here.
+#
 # **`CBX_NO_SKILL_AUTO_UPDATE=1` is the guard `.mcp.json` sets**, and it is not
 # optional: without it the CLI may rewrite the tracked skill, widening its
 # `allowed-tools`.
@@ -33,8 +41,25 @@ set -u
 root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 cd "$root" || exit 0
 
-# No index yet — a fresh worktree — means nothing to refresh; `index` builds it.
 cache=.claude/cache/codebase-index
+index="$cache/index.sqlite"
+
+# A linked worktree with no index takes its main checkout's or nothing: the
+# git dir differs from the common one, and the common one is a checkout's
+# `.git` rather than a bare repository's. Even a cache directory left without
+# an index stays unrefreshed, because `update` there would be the full build.
+seed=
+if [ ! -f "$index" ]; then
+  git_dir=$(git rev-parse --path-format=absolute --git-dir 2>/dev/null) || exit 0
+  common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 0
+  if [ "$git_dir" != "$common" ]; then
+    [ "${common##*/}" = .git ] && [ -f "${common%/*}/$index" ] || exit 0
+    seed="${common%/*}/$index"
+    mkdir -p "$cache" || exit 0
+  fi
+fi
+
+# No cache in a checkout means nothing to refresh; `index` builds it.
 [ -d "$cache" ] || exit 0
 
 pending="$cache/refresh.pending"
@@ -50,6 +75,13 @@ printf '%s\n' "$token" > "$pending.$token" &&
 
 sleep 2
 [ "$(cat "$pending" 2>/dev/null)" = "$token" ] || exit 0
+
+# Copied beside it and renamed in, so `update` never opens a partial file, and
+# skipped when an earlier winner seeded during the wait.
+if [ -n "$seed" ] && [ ! -e "$index" ]; then
+  cp "$seed" "$index.seed.$token" && mv -f "$index.seed.$token" "$index" ||
+    { rm -f "$index.seed.$token"; exit 0; }
+fi
 
 tries=0
 until refresh; do

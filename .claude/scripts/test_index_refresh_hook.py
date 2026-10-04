@@ -395,5 +395,97 @@ class TheRefresh(unittest.TestCase):
         self.assertEqual([], self.calls())
 
 
+class TheSeed(unittest.TestCase):
+    """A linked worktree's index, taken from its main checkout's, never built.
+
+    The worktree is a real `git worktree add` of a scratch repository, because
+    the script tells a worktree from a checkout by what `git rev-parse` says
+    and a hand-made `.git` file would be a claim about git rather than git.
+    The fake CLI records whether the seed was in place when `update` ran: an
+    update over no index is the full build this exists to avoid, and a call
+    count alone cannot tell the two apart.
+    """
+
+    setUpClass = TheRefresh.setUpClass
+    fake = TheRefresh.fake
+    env = TheRefresh.env
+    calls = TheRefresh.calls
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="index-seed-"))
+        self.addCleanup(shutil.rmtree, str(self.tmp), ignore_errors=True)
+        self.main = self.tmp / "main"
+        git = [GIT, "-c", "user.name=t", "-c", "user.email=t@example.invalid"]
+        subprocess.run([GIT, "init", "-q", str(self.main)], check=True)
+        subprocess.run([*git, "-C", str(self.main), "commit", "-q",
+                        "--allow-empty", "-m", "init"], check=True)
+        self.worktree = self.main / ".claude" / "worktrees" / "slug"
+        subprocess.run([GIT, "-C", str(self.main), "worktree", "add", "-q",
+                        "-b", "slug", str(self.worktree)], check=True)
+        self.main_cache = self.main / ".claude" / "cache" / "codebase-index"
+        self.cache = self.worktree / ".claude" / "cache" / "codebase-index"
+        self.bin = self.tmp / "bin"
+        self.bin.mkdir()
+        self.record = self.tmp / "calls"
+        self.fake(extra='[ -f .claude/cache/codebase-index/index.sqlite ] '
+                        f'&& echo seeded >> {self.record.as_posix()!r}\n')
+
+    def main_index(self, content="main's index"):
+        self.main_cache.mkdir(parents=True)
+        (self.main_cache / "index.sqlite").write_text(content, encoding="utf-8")
+        # The main checkout's own state, which must stay where it is.
+        for other in ("memory.sqlite", "index.sqlite-wal", "refresh.pending"):
+            (self.main_cache / other).write_text(other, encoding="utf-8")
+
+    def run_refresh(self):
+        return subprocess.run([SH, str(REFRESH)], cwd=str(self.worktree),
+                              env=self.env(), capture_output=True, text=True,
+                              timeout=60)
+
+    def test_a_worktree_with_no_index_is_seeded_from_main_then_updated(self):
+        self.main_index()
+        result = self.run_refresh()
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual([f"{guard_value()} update", "seeded"], self.calls())
+        self.assertEqual("main's index", (self.cache / "index.sqlite")
+                         .read_text(encoding="utf-8"))
+        self.assertEqual(["index.sqlite", "refresh.pending"],
+                         sorted(p.name for p in self.cache.iterdir()))
+
+    def test_a_worktree_whose_main_has_no_index_gets_nothing(self):
+        result = self.run_refresh()
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual([], self.calls())
+        self.assertFalse(self.cache.exists())
+
+    def test_a_cache_without_an_index_is_not_a_full_build(self):
+        # A directory left behind by anything else would otherwise pass the
+        # checkout's guard and hand `update` an empty cache to fill.
+        self.cache.mkdir(parents=True)
+        result = self.run_refresh()
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual([], self.calls())
+        self.assertEqual([], list(self.cache.iterdir()))
+
+    def test_an_existing_worktree_index_is_left_alone(self):
+        self.main_index()
+        self.cache.mkdir(parents=True)
+        (self.cache / "index.sqlite").write_text("its own", encoding="utf-8")
+        result = self.run_refresh()
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual([f"{guard_value()} update", "seeded"], self.calls())
+        self.assertEqual("its own", (self.cache / "index.sqlite")
+                         .read_text(encoding="utf-8"))
+
+    def test_the_main_checkout_is_never_seeded_from_itself(self):
+        # Its git dir is its common dir, so it keeps the checkout's rule: no
+        # cache, nothing to do.
+        result = subprocess.run([SH, str(REFRESH)], cwd=str(self.main),
+                                env=self.env(), capture_output=True, text=True,
+                                timeout=60)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual([], self.calls())
+        self.assertFalse(self.main_cache.exists())
+
 if __name__ == "__main__":
     unittest.main()

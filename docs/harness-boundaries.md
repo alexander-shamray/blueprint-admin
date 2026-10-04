@@ -62,7 +62,11 @@ argument is how a rule gets "corrected" back.
   a broken spelling fails on every call without a sound — the example it
   replaced passed a `--quiet` the CLI does not have. The script coalesces
   overlapping calls so an `update` always starts after the last edit, and
-  retries a failed one. `test_index_refresh_hook.py` runs it against a fake
+  retries a failed one. In a linked worktree with no index it first copies
+  the main checkout's `index.sqlite` in, and only that file, so a `/branch`
+  workspace is indexed in seconds rather than by a full build inside the
+  agent's turn; a main checkout with no index leaves it with none.
+  `test_index_refresh_hook.py` runs it against a fake
   CLI, and it pins the two events, the matcher and the
   `CBX_NO_SKILL_AUTO_UPDATE` guard `.mcp.json` sets, in the script and in the
   skill's `examples/hooks/settings.json` alike — the events by their whole
