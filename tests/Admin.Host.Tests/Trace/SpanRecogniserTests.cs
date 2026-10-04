@@ -95,6 +95,22 @@ public sealed class SpanRecogniserTests
         SpanRecogniser.Describe(span).ShouldBe(expected);
     }
 
+    /// <summary>
+    /// The closing sentence asks whether the timeline reached a consume, and a consume that threw is shown as an error:
+    /// it is the case people trace most, so the question is asked of the span, not of its row.
+    /// </summary>
+    [Fact]
+    public void A_failed_consume_is_shown_as_an_error_and_is_still_the_consuming_side()
+    {
+        TempoSpan failed = Span("ReserveStock process", "SPAN_KIND_CONSUMER",
+            $"messaging.operation=process;messaging.masstransit.message_types={SpanRecogniser.ReserveStockUrn}", failed: true);
+        TempoSpan send = Span("inventory-commands send", "SPAN_KIND_PRODUCER", "messaging.system=rabbitmq;messaging.operation=send");
+
+        SpanRecogniser.Kind(failed).ShouldBe(TraceEventKind.Error);
+        SpanRecogniser.IsConsumeSide(failed).ShouldBeTrue();
+        SpanRecogniser.IsConsumeSide(send).ShouldBeFalse();
+    }
+
     [Fact]
     public void A_saga_step_without_its_states_is_still_named_and_says_no_transition_it_did_not_read()
     {

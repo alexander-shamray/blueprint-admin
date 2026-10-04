@@ -132,6 +132,14 @@ public static class SpanRecogniser
             ? Attribute(span, "messaging.destination.name")
             : null;
 
+    /// <summary>
+    /// Whether a span is the consuming side of a message, judged from the span and not from the row it is shown as: a
+    /// consume that failed is shown as an error, and is a consume all the same.
+    /// </summary>
+    public static bool IsConsumeSide(TempoSpan span) =>
+        Attribute(span, "messaging.operation") is "receive" or "process"
+        || (span.Kind == "SPAN_KIND_CONSUMER" && span.Attributes.ContainsKey("messaging.system"));
+
     private static string? Attribute(TempoSpan span, string key) =>
         span.Attributes.TryGetValue(key, out string? value) ? value : null;
 

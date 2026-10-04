@@ -114,7 +114,7 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
         // Appended after the sort, never sorted into the middle: it is the end of what this id can see.
         bool handedToTheBroker = ordered.Any(e => e.Kind is TraceEventKind.Outbox or TraceEventKind.Publish);
         string[] crossed = Crossed(traces.Where(trace => trace.Reachable).SelectMany(trace => trace.Spans));
-        bool consumed = ordered.Any(e => e.Source == "tempo" && e.Kind is TraceEventKind.Consume or TraceEventKind.Saga);
+        bool consumed = traces.Where(trace => trace.Reachable).SelectMany(trace => trace.Spans).Any(SpanRecogniser.IsConsumeSide);
         ordered.Add(new TraceEvent(snapshotAt, "broker", BrokerService.Service, TraceEventKind.Queued, QueuedSummary(queues, crossed, handedToTheBroker, consumed), null, null));
 
         return new TraceView(correlationId, windowText, true, null, traceIds, truncated, Warnings(traceIds, traces, linesTruncated, windowText), ordered);

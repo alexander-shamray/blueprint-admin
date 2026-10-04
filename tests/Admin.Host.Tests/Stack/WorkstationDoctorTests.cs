@@ -218,6 +218,38 @@ public sealed class WorkstationDoctorTests(AdminHostFactory factory) : IClassFix
         check.Detail.ShouldBe("Held by Docker for a container outside this stack, so Up cannot publish them: 5000.");
     }
 
+    [Theory]
+    [InlineData("paused")]
+    [InlineData("restarting")]
+    public void A_port_held_for_this_stacks_container_is_ours_whatever_state_that_container_is_in(string state)
+    {
+        using JsonDocument model = JsonDocument.Parse(Model);
+        ComposeStatus stack = new(true, null, [new ServiceStatus("gateway", state, null, null, [5000])]);
+
+        DoctorCheck check = WorkstationDoctor.Ports(model, Said(Model), Said($"[{Listener(5000, 36668, "com.docker.backend")}]"), stack);
+
+        check.State.ShouldBe(DoctorState.Ok);
+    }
+
+    [Fact]
+    public void A_zero_last_tag_time_is_no_time_and_the_creation_time_is_read_instead()
+    {
+        CommandOutput images = Said("""
+            [{"ContainerName":"commerce-web-bff-1","Repository":"commerce-web-bff","Created":"2026-10-04T09:00:00Z","LastTagTime":"0001-01-01T00:00:00Z"}]
+            """);
+
+        WorkstationDoctor.Images(images, Said("HEAD@{2026-10-04T02:19:22+05:00}")).State.ShouldBe(DoctorState.Ok);
+    }
+
+    [Fact]
+    public void An_empty_reflog_is_unknown_and_says_it_printed_nothing()
+    {
+        DoctorCheck check = WorkstationDoctor.Images(Said("[]"), Said());
+
+        check.State.ShouldBe(DoctorState.Unknown);
+        check.Detail.ShouldEndWith("the reflog printed nothing");
+    }
+
     [Fact]
     public void Ports_docker_holds_while_the_stacks_containers_cannot_be_listed_are_unknown_not_fine()
     {

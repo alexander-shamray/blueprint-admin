@@ -486,7 +486,7 @@ public sealed class EventTraceServiceTests : IAsyncDisposable
         TraceView view = await Service(handler).BuildAsync("abc-123", TimeSpan.FromMinutes(15), Token);
 
         view.Events.ShouldContain(e => e.Kind == TraceEventKind.Outbox);
-        view.Events[^1].Summary.ShouldContain("The publish runs in a new trace");
+        view.Events[^1].Summary.ShouldContain("The publish runs in a new trace — the outbox carries no trace context, so the consume side is not joinable by this correlation id.");
     }
 
     [Fact]
