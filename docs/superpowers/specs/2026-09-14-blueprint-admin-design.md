@@ -190,10 +190,12 @@ the `BLUEPRINT_` prefix:
 | `Realm`, `ClientId` | `commerce`, `web-app` | the password-grant target |
 | `Users` | `demo`/`demo`, `browser`/`browser` | the realm user table shown in the identity picker |
 | `FakePlatform` | `false` | swap every process and HTTP dependency for recorded fakes (§9) |
+| `Record`, `RecordDir` | `false`, `src/Admin.Host/Fakes/fixtures` | write the fixtures from the live platform's answers, scrubbed (§10); the directory resolves against this checkout |
 
 Startup validates that both directories exist and contain what they should
 (the Compose file; `package.json`) and refuses to start otherwise, naming the
-key to fix.
+key to fix. It refuses `Record` together with `FakePlatform`, whose answers
+are the fixtures, and a `RecordDir` that does not exist.
 
 ### 5.2 ProcessRunner and Jobs
 
@@ -598,6 +600,29 @@ cannot be used as an open relay from a tab the developer left open.
 **FakePlatform** is a first-class mode, not a test hook: it is how the SPA is
 developed without the platform running, and how a reader of this repo sees
 the console in a minute.
+
+**The fixtures are recordings.** `Fakes/fixtures` holds what the live
+platform answered, written by the host itself under `Admin:Record=true`
+against a loopback stack. `FixtureRecordings` names the upstream answer each
+file comes from: the four OpenAPI documents, Grafana's datasource list and
+golden-signal answers, `ps`, and the exchange and permission reads. Only a
+successful answer is recorded. The files a recording run cannot produce are
+listed there as hand-written, each with its reason: the Loki and Tempo
+answers for one publish that failed and was retried, and the queue list,
+which carries an `_error` queue holding a message so that the Broker screen
+has one to mark. The recordings kept in
+code (`WorkstationRecordings`, the gateway's, Keycloak's and the scripted
+outputs in `FakePlatformScripts`) are outside the switch and say so where
+they are. A re-recording is reviewed as its diff.
+
+Every recorded byte passes through `FixtureScrubber` before it is written:
+JWTs, bearer credentials, `Authorization` values, a token response's tokens,
+and passwords and client secrets, in JSON or in a form. The gate
+(`FixtureGateTests`) reads every file under `Fakes/` from the directory,
+rather than from a list, and fails on anything the scrubber would still
+change, on a fixture with no source named, and on a fixture the host does not
+embed. Recording adds no listener and stores no credential (§8): what it
+writes is the platform's answer with its credentials taken out.
 
 ## 11. CI and conventions
 

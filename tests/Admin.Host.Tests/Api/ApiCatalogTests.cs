@@ -86,7 +86,7 @@ public sealed class ApiCatalogTests : IDisposable
     [Fact]
     public async Task A_document_that_moved_since_its_baseline_reports_what_moved_until_it_is_accepted()
     {
-        string catalogV2 = FixtureText("openapi-catalog.json").Replace("\"productId\":", "\"quantityAvailable\": { \"type\": \"integer\" }, \"productId\":", StringComparison.Ordinal);
+        string catalogV2 = FixtureText("openapi-catalog.json").Replace("\"commandId\": {", "\"description\": { \"type\": \"string\" }, \"commandId\": {", StringComparison.Ordinal);
         bool moved = false;
         ScriptedHandler handler = Platform(url => moved && url.Contains("5102", StringComparison.Ordinal) ? Json(HttpStatusCode.OK, catalogV2) : Every(url));
         ApiCatalog catalog = Catalog(handler);
@@ -96,7 +96,7 @@ public sealed class ApiCatalogTests : IDisposable
         ApiSource changed = (await catalog.ReloadAsync(Token)).Sources.Single(s => s.Name == "catalog");
 
         changed.Changes!.BaselineTaken.ShouldBeFalse();
-        changed.Changes.FieldsAdded.ShouldContain(f => f.EndsWith(".quantityAvailable", StringComparison.Ordinal));
+        changed.Changes.FieldsAdded.ShouldContain(f => f.EndsWith(".description", StringComparison.Ordinal));
         changed.Changes.OperationsAdded.ShouldBeEmpty();
 
         ApiSource accepted = (await catalog.AcceptAsync("catalog", Token)).View!.Sources.Single(s => s.Name == "catalog");

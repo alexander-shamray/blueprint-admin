@@ -41,10 +41,9 @@ public static class FakePlatformScripts
     /// <summary>
     /// Every command FakePlatform answers. The workstation doctor's reads replay what this workstation answered on
     /// 2026-10-04 with the stack up, except the two ports a host RabbitMQ held the day before, which keep its
-    /// answer so the panel has its red row (<see cref="WorkstationRecordings.Listeners"/>). compose-ps.jsonl's first
-    /// thirteen rows are the original recording; the rest are the containers that day's recordings hold and it did
-    /// not, written from their Compose model and image list rather than recorded by <c>ps</c>, so the doctor finds
-    /// every port Docker holds published by a container of this stack.
+    /// answer so the panel has its red row (<see cref="WorkstationRecordings.Listeners"/>). compose-ps.jsonl is
+    /// <c>ps</c> as <c>Admin:Record</c> wrote it from the whole stack (<see cref="FixtureRecordings"/>), so the doctor
+    /// finds every port Docker holds published by a container of this stack.
     /// </summary>
     public static FakeProcessRunner Script(FakeProcessRunner runner, Config.RepoPaths paths)
     {

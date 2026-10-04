@@ -6,12 +6,11 @@ using Admin.Host.Api;
 namespace Admin.Host.Fakes;
 
 /// <summary>
-/// The four services' <c>/openapi/v1.json</c>, which need a bearer token as the real ones do; Inventory's and
-/// Payments' were recorded from the live services on 2026-10-03. Once Catalog has
-/// a baseline, its document has moved: <c>ProductSummaryDto</c> gains <c>quantityAvailable</c>, the field the
-/// reference client's listing gained, so the API screen has a change to report (spec §5.7). Keyed on the
-/// baseline rather than on a fetch count, so two hosts fetching at once can only ever baseline the recorded
-/// document.
+/// The four services' <c>/openapi/v1.json</c>, which need a bearer token as the real ones do, each a recording
+/// (<see cref="FixtureRecordings"/>). Once Catalog has a baseline, its document has moved:
+/// <c>PublishProductCommand</c> gains <c>description</c>, a field the fake adds and the platform does not have,
+/// so the API screen has a change to report (spec §5.7). Keyed on the baseline rather than on a fetch count, so
+/// two hosts fetching at once can only ever baseline the recorded document.
 /// </summary>
 internal static class FakeOpenApi
 {
@@ -37,8 +36,8 @@ internal static class FakeOpenApi
         if (service == "catalog" && Baselines.Has(service))
         {
             JsonNode moved = JsonNode.Parse(document)!;
-            moved["components"]!["schemas"]!["ProductSummaryDto"]!["properties"]!.AsObject()["quantityAvailable"] =
-                new JsonObject { ["type"] = "integer", ["format"] = "int32" };
+            moved["components"]!["schemas"]!["PublishProductCommand"]!["properties"]!.AsObject()["description"] =
+                new JsonObject { ["type"] = "string" };
             document = moved.ToJsonString();
         }
 
