@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Admin.Host.Identity;
 using Admin.Host.Tests.TestSupport;
 using Shouldly;
 
@@ -50,6 +51,17 @@ public sealed class IdentityEndpointTests(AdminHostFactory factory) : IClassFixt
         DateTimeOffset expiresAt = clock.GetProperty("expiresAt").GetDateTimeOffset();
         (expiresAt - clock.GetProperty("renewsAt").GetDateTimeOffset()).ShouldBe(TimeSpan.FromSeconds(30));
         clock.GetProperty("permissions").GetArrayLength().ShouldBe(0);
+    }
+
+    /// <summary>The realm's mapper writes the claim multivalued, so a single grant may arrive as a bare string.</summary>
+    [Theory]
+    [InlineData("""{"permission":["orders:write","orders:cancel"]}""", new[] { "orders:write", "orders:cancel" })]
+    [InlineData("""{"permission":"orders:write"}""", new[] { "orders:write" })]
+    [InlineData("""{"preferred_username":"browser"}""", new string[0])]
+    [InlineData("""{"permission":7}""", new string[0])]
+    public void The_clock_reads_the_permission_claim_as_an_array_or_a_bare_string(string claims, string[] expected)
+    {
+        IdentityEndpoints.Permissions(JsonDocument.Parse(claims).RootElement).ShouldBe(expected);
     }
 
     [Fact]

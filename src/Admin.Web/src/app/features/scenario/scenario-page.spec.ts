@@ -160,6 +160,29 @@ describe('ScenarioPage', () => {
     expect(launcher.pending()).toBe(false);
   });
 
+  it('drops a palette request made during a run rather than ordering again once the run ends', async () => {
+    const publish = new Subject<ProxyResult>();
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      request.url.endsWith('/catalog/products/') ? publish.asObservable() : of(platform(request)),
+    );
+    const launcher = TestBed.inject(ScenarioLauncher);
+    const fixture = render();
+    const page = fixture.componentInstance;
+
+    const running = page.run();
+    launcher.request();
+    fixture.detectChanges();
+    expect(launcher.pending()).toBe(false);
+
+    publish.next(responded(200, `"${productId}"`, 'scenario-abcdef12-publish'));
+    publish.complete();
+    await running;
+    fixture.detectChanges();
+
+    expect(page.steps().every((s) => s.state === 'ok')).toBe(true);
+    expect(sent().filter((r) => r.url.endsWith('/catalog/products/'))).toHaveLength(1);
+  });
+
   it('drops a palette request it never acted on when the screen goes, so the next visit does not run unasked', () => {
     host.operations.mockReturnValue(new Subject<ApiCatalogView>());
     const launcher = TestBed.inject(ScenarioLauncher);

@@ -77,6 +77,27 @@ public sealed class TokenServiceTests
         handler.Requests.Count.ShouldBe(2);
     }
 
+    /// <summary>The token clock's read: it answers from the cache and never asks Keycloak, whatever it is asked for.</summary>
+    [Fact]
+    public async Task Held_mints_nothing_and_answers_only_a_token_already_held_and_unexpired()
+    {
+        ScriptedHandler handler = new(_ => Granted("demo"));
+        TokenService service = Service(handler);
+
+        service.Held(new IdentityRequest("demo", null)).ShouldBeNull();
+        service.Held(new IdentityRequest("demo", "a-custom-secret")).ShouldBeNull();
+        service.Held(new IdentityRequest(null, null)).ShouldBeNull();
+        handler.Requests.ShouldBeEmpty();
+
+        await service.GetAsync("demo", "demo", Token);
+        TokenIssued held = service.Held(new IdentityRequest("demo", null)).ShouldNotBeNull();
+        TokenService.RenewsAt(held).ShouldBe(held.ExpiresAt - TokenService.ReuseMargin);
+
+        time.Advance(TimeSpan.FromSeconds(300));
+        service.Held(new IdentityRequest("demo", null)).ShouldBeNull();
+        handler.Requests.Count.ShouldBe(1);
+    }
+
     [Fact]
     public async Task A_cached_grant_does_not_keep_the_password_it_was_minted_with()
     {
