@@ -53,15 +53,21 @@ argument is how a rule gets "corrected" back.
 - **Two hooks guard nothing, and both serve the index.** The first is the
   refresh, which runs
   `refresh-index.sh` from two events: a `PostToolUse` entry after every tool
-  that writes, and a `SessionStart` entry for the changes no edit makes. A
-  merge, a switch or a pull rewrites the tree with no tool event behind it, so
-  a session opening onto one of those would otherwise read an index describing
-  the tree it replaced. One command serves both, because the script resolves
-  its repository with `git rev-parse` from the working directory and reads no
-  event payload at all — neither entry has anything to pass it. Each
-  backgrounds and silences it so it can never block an edit, which also means
-  a broken spelling fails on every call without a sound — the example it
-  replaced passed a `--quiet` the CLI does not have. The script coalesces
+  that writes, Bash included, and a `SessionStart` entry for the changes no
+  tool makes. Bash is there because agents write through it most — a commit,
+  a pull, a formatter, an edit script — and each left the index describing
+  the tree it replaced while reporting itself fresh (#100); a call that wrote
+  nothing costs one `update` that changes nothing, in the background. One
+  command serves both events, because the script resolves its repository with
+  `git rev-parse` from the directory the event names as `cwd`, which follows
+  a worktree the session entered and a Bash `cd` where
+  `${CLAUDE_PROJECT_DIR}` stays at the start folder, and from its working
+  directory when no event names one. Reading that payload is why neither
+  entry ends in `&` — an asynchronous list's stdin is `/dev/null` — so the
+  script detaches its own refresh, and both entries silence it. It can never
+  block a tool call, which also means a broken spelling fails on every call
+  without a sound — the example it replaced passed a `--quiet` the CLI does
+  not have. The script coalesces
   overlapping calls so an `update` always starts after the last edit, and
   retries a failed one. In a linked worktree with no index it first copies
   the main checkout's `index.sqlite` in, and only that file, so a `/branch`
@@ -75,7 +81,8 @@ argument is how a rule gets "corrected" back.
   skill's `examples/hooks/settings.json` alike — the events by their whole
   set, so a third added to either file without a test of its own is a red case
   rather than a silent one. The example stays a self-contained one-liner,
-  because the script is this repository's and not the skill's. Both
+  because the script is this repository's and not the skill's, and so it
+  reads no event and refreshes the working directory's checkout. Both
   call the CLI bare, as `.mcp.json` does, rather than through the skill's
   `cbx` wrapper: a hook shell's `bash` can resolve to WSL's on Windows, which
   cannot run it.

@@ -107,11 +107,11 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Edit|Write|NotebookEdit|MultiEdit",
+        "matcher": "Edit|Write|NotebookEdit|MultiEdit|Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/refresh-index.sh\" >/dev/null 2>&1 &",
+            "command": "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/refresh-index.sh\" >/dev/null 2>&1",
             "timeout": 5
           }
         ]
@@ -122,7 +122,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/refresh-index.sh\" >/dev/null 2>&1 &",
+            "command": "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/refresh-index.sh\" >/dev/null 2>&1",
             "timeout": 5
           }
         ]
