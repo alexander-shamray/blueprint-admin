@@ -5482,16 +5482,22 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
 
     def frontmatter_fields(self, text):
         # Split at LF alone, as YAML breaks lines: splitlines() also breaks
-        # at U+0085 and its kin, which YAML keeps inside a value.
-        head = [line.rstrip("\r")
-                for line in text.split("\n---", 1)[0].split("\n")]
-        self.assertEqual("---", head[0].lstrip("\ufeff").rstrip(),
+        # at U+0085 and its kin, which YAML keeps inside a value. The fences
+        # are exact `---` lines, as a document marker is; a line that only
+        # begins with `---` is a key to YAML, so it must not end this read.
+        lines = [line.rstrip("\r") for line in text.split("\n")]
+        self.assertNotRegex(lines[0], self.NOT_YAML_TEXT,
+                            f"not YAML text: {lines[0]!r}")
+        self.assertEqual("---", lines[0].lstrip("\ufeff").rstrip(" \t"),
                          "the frontmatter opens with `---`")
+        self.assertIn("---", lines[1:], "the frontmatter closes with `---`")
         fields = {}
-        for line in head[1:]:
+        for line in lines[1:lines.index("---", 1)]:
             self.assertNotRegex(line, self.NOT_YAML_TEXT,
                                 f"not YAML text: {line!r}")
-            if not line.strip():
+            self.assertFalse(line.startswith("---"),
+                             f"a key YAML reads past this fence: {line!r}")
+            if not line.strip(" \t"):
                 continue
             field = re.match(r"([A-Za-z][\w-]*):[ \t]+(.*?)[ \t]*$", line)
             self.assertIsNotNone(field, f"not a key at column 0: {line!r}")
