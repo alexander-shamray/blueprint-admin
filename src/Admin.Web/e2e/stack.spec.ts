@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 test('the stack screen lists the fake services and runs up', async ({ page }) => {
   await page.goto('/stack');
 
-  await expect(page.locator('table.services tbody tr')).toHaveCount(13);
+  await expect(page.locator('table.services tbody tr')).toHaveCount(24);
   await expect(page.locator('table.services tbody tr', { hasText: 'gateway' })).toContainText('healthy');
   await expect(page.locator('.reachability span.up')).toHaveCount(9);
 

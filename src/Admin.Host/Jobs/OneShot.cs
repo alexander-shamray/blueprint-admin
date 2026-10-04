@@ -27,7 +27,7 @@ public static class OneShot
         {
             await runner.StopAsync(job, cancellationToken);
 
-            return CommandOutput.Failed($"{name} did not answer within 30 seconds");
+            return CommandOutput.Failed($"{name} did not answer within {Timeout.TotalSeconds:0} seconds");
         }
         catch (OperationCanceledException)
         {

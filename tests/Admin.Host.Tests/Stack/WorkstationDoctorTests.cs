@@ -19,6 +19,15 @@ public sealed class WorkstationDoctorTests(AdminHostFactory factory) : IClassFix
 
     private static CommandOutput Said(params string[] lines) => CommandOutput.Answered(lines);
 
+    /// <summary>The stack of <see cref="Model"/> running: the gateway and RabbitMQ publish every port it declares.</summary>
+    private static readonly ComposeStatus Running = new(true, null,
+    [
+        new ServiceStatus("gateway", "running", "healthy", 0, [5000]),
+        new ServiceStatus("rabbitmq", "running", "healthy", 0, [5672, 15672]),
+    ]);
+
+    private static readonly ComposeStatus Down = new(true, null, [new ServiceStatus("gateway", "exited", null, 0, [])]);
+
     private static CommandOutput Failed(string error) => CommandOutput.Failed(error);
 
     private static string Listener(int port, int pid, string? process) =>
@@ -28,7 +37,7 @@ public sealed class WorkstationDoctorTests(AdminHostFactory factory) : IClassFix
     {
         using JsonDocument model = JsonDocument.Parse(Model);
 
-        return WorkstationDoctor.Ports(model, Said(Model), Said($"[{string.Join(',', listeners)}]"));
+        return WorkstationDoctor.Ports(model, Said(Model), Said($"[{string.Join(',', listeners)}]"), Running);
     }
 
     [Fact]
@@ -46,7 +55,7 @@ public sealed class WorkstationDoctorTests(AdminHostFactory factory) : IClassFix
         DoctorCheck check = Ports(Listener(5000, 36668, "com.docker.backend"), Listener(61065, 24320, "sqlservr"));
 
         check.State.ShouldBe(DoctorState.Ok);
-        check.Detail.ShouldBe("1 of 3 published ports are held by Docker, the rest are free.");
+        check.Detail.ShouldBe("1 of 3 published ports are held by this stack's running containers, the rest are free.");
     }
 
     [Fact]
@@ -55,7 +64,7 @@ public sealed class WorkstationDoctorTests(AdminHostFactory factory) : IClassFix
         DoctorCheck check = Ports(Listener(5000, 36668, "com.docker.backend"), Listener(5672, 36668, "com.docker.backend"), Listener(15672, 36668, "com.docker.backend"));
 
         check.State.ShouldBe(DoctorState.Ok);
-        check.Detail.ShouldBe("All 3 published ports are held by Docker, as they are while the stack runs.");
+        check.Detail.ShouldBe("All 3 published ports are held by this stack's running containers.");
     }
 
     [Fact]
@@ -63,7 +72,7 @@ public sealed class WorkstationDoctorTests(AdminHostFactory factory) : IClassFix
     {
         using JsonDocument model = JsonDocument.Parse(Model);
 
-        DoctorCheck check = WorkstationDoctor.Ports(model, Said(Model), Said(Listener(5672, 7376, null)));
+        DoctorCheck check = WorkstationDoctor.Ports(model, Said(Model), Said(Listener(5672, 7376, null)), Running);
 
         check.State.ShouldBe(DoctorState.Problem);
         check.Detail.ShouldContain("5672 by an unnamed process (pid 7376)");
@@ -74,7 +83,7 @@ public sealed class WorkstationDoctorTests(AdminHostFactory factory) : IClassFix
     {
         using JsonDocument model = JsonDocument.Parse(Model);
 
-        WorkstationDoctor.Ports(model, Said(Model), Said()).Detail.ShouldBe("All 3 published ports are free.");
+        WorkstationDoctor.Ports(model, Said(Model), Said(), Down).Detail.ShouldBe("All 3 published ports are free.");
     }
 
     [Fact]
@@ -82,7 +91,7 @@ public sealed class WorkstationDoctorTests(AdminHostFactory factory) : IClassFix
     {
         using JsonDocument model = JsonDocument.Parse(Model);
 
-        DoctorCheck check = WorkstationDoctor.Ports(model, Said(Model), Failed("powershell: not found"));
+        DoctorCheck check = WorkstationDoctor.Ports(model, Said(Model), Failed("powershell: not found"), Running);
 
         check.State.ShouldBe(DoctorState.Unknown);
         check.Detail.ShouldContain("powershell: not found");
@@ -91,7 +100,7 @@ public sealed class WorkstationDoctorTests(AdminHostFactory factory) : IClassFix
     [Fact]
     public void Without_the_compose_model_neither_ports_nor_cors_can_be_judged()
     {
-        WorkstationDoctor.Ports(null, Failed("no such file"), Said()).State.ShouldBe(DoctorState.Unknown);
+        WorkstationDoctor.Ports(null, Failed("no such file"), Said(), Running).State.ShouldBe(DoctorState.Unknown);
         WorkstationDoctor.Cors(null, Failed("no such file"), "http://localhost:5173").State.ShouldBe(DoctorState.Unknown);
     }
 
@@ -155,16 +164,101 @@ public sealed class WorkstationDoctorTests(AdminHostFactory factory) : IClassFix
              {"ContainerName":"commerce-rabbitmq-1","Repository":"rabbitmq","Created":"2025-01-01T00:00:00Z"}]
             """);
 
-        DoctorCheck check = WorkstationDoctor.Images(images, Said("2026-10-04T02:19:22+05:00"));
+        DoctorCheck check = WorkstationDoctor.Images(images, Said("HEAD@{2026-10-04T02:19:22+05:00}"));
 
         check.State.ShouldBe(DoctorState.Problem);
-        check.Detail.ShouldBe("1 of 2 built images predate the backend's last commit (2026-10-04 02:19 +05:00), and Up does not rebuild them: commerce-web-bff.");
+        check.Detail.ShouldBe("1 of 2 built images were tagged before the backend's checkout last moved (2026-10-04 02:19 +05:00), and Up does not rebuild them: commerce-web-bff.");
     }
 
     [Fact]
     public void No_built_image_running_is_nothing_to_compare_rather_than_fine()
     {
+        WorkstationDoctor.Images(Said("[]"), Said("HEAD@{2026-10-04T02:19:22+05:00}")).State.ShouldBe(DoctorState.Unknown);
+    }
+
+    [Fact]
+    public void An_image_read_that_does_not_answer_or_cannot_be_read_is_unknown_never_fine()
+    {
+        const string commit = "HEAD@{2026-10-04T02:19:22+05:00}";
+
+        WorkstationDoctor.Images(Failed("compose: not found"), Said(commit)).State.ShouldBe(DoctorState.Unknown);
+        WorkstationDoctor.Images(Said("""[{"Repository":"commerce-web-bff"}]"""), Said(commit)).State.ShouldBe(DoctorState.Unknown);
+        WorkstationDoctor.Images(Said("not json"), Said(commit)).State.ShouldBe(DoctorState.Unknown);
+        WorkstationDoctor.Images(Said("[]"), Failed("git: not a repository")).State.ShouldBe(DoctorState.Unknown);
+        WorkstationDoctor.Images(Said("[]"), Said("yesterday")).State.ShouldBe(DoctorState.Unknown);
         WorkstationDoctor.Images(Said("[]"), Said("2026-10-04T02:19:22+05:00")).State.ShouldBe(DoctorState.Unknown);
+    }
+
+    [Fact]
+    public void A_clone_whose_status_does_not_answer_or_prints_no_branch_line_is_unknown()
+    {
+        WorkstationDoctor.Clone("Backend clone", Failed("git: not a repository")).State.ShouldBe(DoctorState.Unknown);
+        WorkstationDoctor.Clone("Backend clone", Said(" M README.md")).State.ShouldBe(DoctorState.Unknown);
+        WorkstationDoctor.Clone("Backend clone", Said()).State.ShouldBe(DoctorState.Unknown);
+    }
+
+    [Fact]
+    public void A_cached_rebuild_counts_by_when_it_was_tagged_not_when_its_layers_were_first_created()
+    {
+        CommandOutput images = Said("""
+            [{"ContainerName":"commerce-web-bff-1","Repository":"commerce-web-bff","Created":"2026-10-03T07:18:50Z","LastTagTime":"2026-10-04T09:00:00Z"}]
+            """);
+
+        WorkstationDoctor.Images(images, Said("HEAD@{2026-10-04T02:19:22+05:00}")).State.ShouldBe(DoctorState.Ok);
+    }
+
+    [Fact]
+    public void A_port_docker_holds_for_a_container_outside_this_stack_is_a_problem_that_names_it()
+    {
+        using JsonDocument model = JsonDocument.Parse(Model);
+
+        DoctorCheck check = WorkstationDoctor.Ports(model, Said(Model), Said($"[{Listener(5000, 36668, "com.docker.backend")}]"), Down);
+
+        check.State.ShouldBe(DoctorState.Problem);
+        check.Detail.ShouldBe("Held by Docker for a container outside this stack, so Up cannot publish them: 5000.");
+    }
+
+    [Fact]
+    public void Ports_docker_holds_while_the_stacks_containers_cannot_be_listed_are_unknown_not_fine()
+    {
+        using JsonDocument model = JsonDocument.Parse(Model);
+        ComposeStatus unlisted = new(false, "docker compose ps did not answer within 30 s", []);
+
+        DoctorCheck check = WorkstationDoctor.Ports(model, Said(Model), Said($"[{Listener(5000, 36668, "com.docker.backend")}]"), unlisted);
+
+        check.State.ShouldBe(DoctorState.Unknown);
+        check.Detail.ShouldContain("could not be listed");
+    }
+
+    [Fact]
+    public void Listeners_that_are_not_the_json_the_line_prints_are_unknown()
+    {
+        using JsonDocument model = JsonDocument.Parse(Model);
+
+        WorkstationDoctor.Ports(model, Said(Model), Said("LocalPort OwningProcess"), Running).State.ShouldBe(DoctorState.Unknown);
+    }
+
+    [Fact]
+    public void A_model_with_no_gateway_environment_cannot_judge_cors()
+    {
+        const string bare = """{"services":{"gateway":{"ports":[]}}}""";
+        using JsonDocument model = JsonDocument.Parse(bare);
+
+        WorkstationDoctor.Cors(model, Said(bare), "http://localhost:5173").State.ShouldBe(DoctorState.Unknown);
+    }
+
+    [Theory]
+    [InlineData("""{"Cors__Origins__0":"http://localhost:5173"}""", "unset")]
+    [InlineData("""{"Cors__Enabled":"false","Cors__Origins__0":"http://localhost:5173"}""", "false")]
+    public void Cors_switched_off_admits_no_origin_whatever_the_list_says(string environment, string value)
+    {
+        string config = """{"services":{"gateway":{"environment":""" + environment + "}}}";
+        using JsonDocument model = JsonDocument.Parse(config);
+
+        DoctorCheck check = WorkstationDoctor.Cors(model, Said(config), "http://localhost:5173");
+
+        check.State.ShouldBe(DoctorState.Problem);
+        check.Detail.ShouldContain($"{WorkstationDoctor.CorsSwitch} is {value}");
     }
 
     [Fact]

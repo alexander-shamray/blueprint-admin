@@ -79,7 +79,11 @@ public sealed partial class ComposeDriftTests
     {
         ComposeUnitService gateway = Compose.Services().Where(s => s.Name == WorkstationDoctor.GatewayService).ShouldHaveSingleItem();
 
-        Backend.Read("deploy", "compose", "services", $"{gateway.Unit}.yml").ShouldContain("Cors__Origins__0:");
+        string unit = Backend.Read("deploy", "compose", "services", $"{gateway.Unit}.yml");
+        unit.ShouldContain("Cors__Origins__0:");
+        unit.ShouldContain($"{WorkstationDoctor.CorsSwitch}:");
+        Backend.Read("src", "Gateway", "Gateway.Api", "Program.cs")
+            .ShouldContain($"GetValue<bool>(\"{WorkstationDoctor.CorsSwitch.Replace("__", ":", StringComparison.Ordinal)}\")");
     }
 
     [Fact]

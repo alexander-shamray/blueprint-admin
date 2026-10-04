@@ -41,7 +41,10 @@ public static class FakePlatformScripts
     /// <summary>
     /// Every command FakePlatform answers. The workstation doctor's reads replay what this workstation answered on
     /// 2026-10-04 with the stack up, except the two ports a host RabbitMQ held the day before, which keep its
-    /// answer so the panel has its red row (fixtures/workstation-listeners.json).
+    /// answer so the panel has its red row (<see cref="WorkstationRecordings.Listeners"/>). compose-ps.jsonl's first
+    /// thirteen rows are the original recording; the rest are the containers that day's recordings hold and it did
+    /// not, written from their Compose model and image list rather than recorded by <c>ps</c>, so the doctor finds
+    /// every port Docker holds published by a container of this stack.
     /// </summary>
     public static FakeProcessRunner Script(FakeProcessRunner runner, Config.RepoPaths paths)
     {
@@ -80,7 +83,7 @@ public static class FakePlatformScripts
             .On("node", "--version", 0, "v22.23.2")
             .On("git", $"-C {paths.BackendDir} status -sb", 0, "## main...origin/main")
             .On("git", $"-C {paths.FrontendDir} status -sb", 0, "## main...origin/main")
-            .On("git", $"-C {paths.BackendDir} log -1 --format=%cI", 0, "2026-10-04T02:19:22+05:00")
+            .On("git", $"-C {paths.BackendDir} reflog -1 --date=iso-strict --format=%gd", 0, "HEAD@{2026-10-04T06:36:23+05:00}")
             .OnLongRunning("npm", "start", NgServeLines);
     }
 

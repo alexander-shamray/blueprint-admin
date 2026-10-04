@@ -244,8 +244,10 @@ an exited `npm start`, and the output that says why it died, past
 would report late is named first. Every read is a line of `run-locally.md`'s
 step 0, run as written and bounded to 30 s like `ps`; none changes anything,
 none leaves the machine, and none fetches, so a clone is judged against its
-last fetch. Each row is ok, a problem, or could-not-tell for a read that did
-not answer, never a guess:
+last fetch. Each row is ok, a problem, or could-not-tell where the row cannot
+be judged — a read that did not answer, or nothing yet to compare — never a
+guess. Docker or Node not answering is a problem rather than could-not-tell,
+because that silence is itself what Up will meet:
 
 - Docker: `docker info` answers.
 - Ports: the published ports of the resolved Compose model, against every
@@ -260,7 +262,8 @@ not answer, never a guess:
 
 A Compose port override has no row: the Compose files declare no port
 variable, and `-f` keeps Compose from reading an override file. The
-listener read is PowerShell's, so off Windows that row cannot tell.
+listener and `.nvmrc` reads are PowerShell's, so off Windows the Ports and
+Node rows cannot tell.
 
 `ResetService` is "back to a known state" as one listed job: `Down(true)`,
 then `Up()`, then the reachability probe of §5.10's `GET /stack` until every
