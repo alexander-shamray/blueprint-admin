@@ -458,7 +458,14 @@ export class ScenarioPage {
         }),
       );
     } catch (e: unknown) {
-      this.patch(key, { state: 'failed', correlationId: traced, detail: describe(e) });
+      // A watch's earlier read left its status and body on the step; this call has neither.
+      this.patch(key, {
+        state: 'failed',
+        correlationId: traced,
+        status: null,
+        body: null,
+        detail: describe(e),
+      });
       return null;
     }
 
@@ -479,6 +486,8 @@ export class ScenarioPage {
         this.patch(key, {
           state: 'failed',
           correlationId: result.sent ? result.correlationId : traced,
+          status: null,
+          body: null,
           detail: `No answer from the platform: ${result.error}`,
           ...(result.sent && regrant ? { regrant } : {}),
         });
