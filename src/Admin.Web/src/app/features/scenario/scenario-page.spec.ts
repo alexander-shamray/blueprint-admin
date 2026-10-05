@@ -420,6 +420,63 @@ describe('ScenarioPage', () => {
     expect(page.steps()[3].regrant).toBeNull();
   });
 
+  it('says nothing was minted when the grant the clock foresaw then failed', async () => {
+    host.tokenClock.mockImplementation(() =>
+      sent().some((r) => r.url.endsWith('/orders/'))
+        ? of({ ...heldClock, renewsAt: '2026-01-01T00:00:00Z' })
+        : of(heldClock),
+    );
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      isRead(request)
+        ? of({
+            outcome: 'unreached',
+            error: 'Keycloak did not answer: connection refused',
+            elapsedMs: 5,
+            correlationId: request.correlationId ?? '',
+            sent: false,
+          })
+        : of(platform(request)),
+    );
+    const page = render().componentInstance;
+
+    await page.run();
+
+    expect(page.steps()[4].state).toBe('failed');
+    expect(page.steps()[4].regrant).toBeNull();
+  });
+
+  it('fails a later watch on a 404 at once, since an earlier watch already read the order', async () => {
+    const answers = [
+      responded(200, order('confirmed', { confirmed: '2026-10-05T12:00:01Z' }), ''),
+      responded(404, '{"code":"order.not_found"}', ''),
+    ];
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      isRead(request) && answers.length > 0 ? of(answers.shift()!) : of(platform(request)),
+    );
+    const page = render().componentInstance;
+
+    await page.run();
+
+    expect(page.steps()[4].state).toBe('ok');
+    expect(page.steps()[5].state).toBe('failed');
+    expect(page.steps()[5].detail).toBe('Answered 404.');
+    expect(sent().filter(isRead)).toHaveLength(2);
+  });
+
+  it('starts each run afresh, so a user never minted before is not reported as expired', async () => {
+    const page = render().componentInstance;
+    await page.run();
+
+    page.username.set('browser');
+    host.tokenClock.mockReturnValue(of({ ...heldClock, username: 'browser', held: false }));
+    await page.run();
+
+    expect(page.steps()[0].regrant).toBeNull();
+    expect(page.steps()[2].regrant).toBe(
+      'The token for browser had expired, so the host minted a new one for this call.',
+    );
+  });
+
   it('sends regardless when the token clock does not answer', async () => {
     host.tokenClock.mockReturnValue(throwError(() => new Error('host busy')));
     const page = render().componentInstance;

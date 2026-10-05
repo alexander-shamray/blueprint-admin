@@ -132,11 +132,17 @@ public sealed partial class LiteralDriftTests
     public void The_order_reads_the_catalog_lists_are_the_bffs_routes()
     {
         string endpoints = Backend.Read("src", "BFF", "Web.Bff", "Endpoints", "OrderEndpoints.cs");
+        IReadOnlyList<ApiOperation> curated = CuratedOperations.All(new AdminOptions());
+        ApiOperation list = curated.Single(o => o.Id == "bff:ListOrders");
+        ApiOperation get = curated.Single(o => o.Id == "bff:GetOrder");
 
+        list.Url.ShouldEndWith("/bff/v1/orders");
+        get.Url.ShouldEndWith("/bff/v1/orders/{id}");
         endpoints.ShouldContain(".MapGroup(\"/v1/orders\")");
-        endpoints.ShouldContain(".WithName(\"ListOrders\")");
-        endpoints.ShouldContain("\"/{id:guid}\"");
-        endpoints.ShouldContain(".WithName(\"GetOrder\")");
+        endpoints.ShouldContain($".WithName(\"{list.Name}\")");
+        endpoints.ShouldContain($".WithName(\"{get.Name}\")");
+        endpoints.ShouldContain($"\"/{{{get.PathParameters.Single().Name}:guid}}\"");
+        list.QueryParameters.Select(p => p.Name).ShouldBe(["cursor", "limit"]);
         endpoints.ShouldContain("string? cursor,");
         endpoints.ShouldContain("int limit = OrderPage.DefaultLimit");
     }
@@ -145,10 +151,10 @@ public sealed partial class LiteralDriftTests
     public void The_cancellations_the_scenario_stops_on_are_the_bffs_cancel_outcomes()
     {
         string outcomes = Backend.Read("src", "BFF", "Web.Bff.Persistence", "CancelOutcomes.cs");
-        string[] read = ArrayLiteral(ScenarioRun(), "CANCELLATIONS");
+        string[] declared = [.. ConstantValue().Matches(outcomes).Select(m => m.Groups["value"].Value)];
 
-        read.Length.ShouldBe(3);
-        read.Where(o => !outcomes.Contains($" = \"{o}\";", StringComparison.Ordinal)).ShouldBeEmpty();
+        declared.ShouldNotBeEmpty("CancelOutcomes no longer declares string constants this test can read");
+        ArrayLiteral(ScenarioRun(), "CANCELLATIONS").ShouldBe(declared, ignoreOrder: true);
     }
 
     [Fact]
@@ -293,4 +299,7 @@ public sealed partial class LiteralDriftTests
 
     [GeneratedRegex("\"(placed|confirmed|dispatched|delivered|cancelled|out_of_stock|declined)\"")]
     private static partial Regex QuotedStatus();
+
+    [GeneratedRegex("public const string \\w+ = \"(?<value>[^\"]*)\";")]
+    private static partial Regex ConstantValue();
 }

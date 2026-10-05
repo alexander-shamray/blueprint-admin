@@ -172,8 +172,9 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
         const string reads = "http://localhost:5000/bff/v1/orders/";
 
         (await ProxyAsync(new { method = "GET", url = reads + "0199a1b2-0000-7000-8000-0000000000ff" })).GetProperty("status").GetInt32().ShouldBe(401);
-        (await ProxyAsync(new { method = "GET", url = reads + "0199a1b2-0000-7000-8000-0000000000ff", identity = new { username = "browser" } }))
-            .GetProperty("body").GetString()!.ShouldContain("\"order.not_found\"");
+        JsonElement unknown = await ProxyAsync(new { method = "GET", url = reads + "0199a1b2-0000-7000-8000-0000000000ff", identity = new { username = "browser" } });
+        unknown.GetProperty("status").GetInt32().ShouldBe(404);
+        unknown.GetProperty("body").GetString()!.ShouldContain("\"order.not_found\"");
 
         JsonElement placed = await ProxyAsync(new { method = "POST", url = "http://localhost:5000/api/v1/orders", body = RunLocallyExamples.For("PlaceOrder"), identity = new { username = "demo" } });
         placed.GetProperty("status").GetInt32().ShouldBe(200);
@@ -184,6 +185,23 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
         using JsonDocument order = JsonDocument.Parse(detail.GetProperty("body").GetString()!);
         order.RootElement.GetProperty("orderId").GetString().ShouldBe(orderId);
         order.RootElement.GetProperty("timeline").GetProperty("placed").ValueKind.ShouldBe(JsonValueKind.String);
+    }
+
+    [Fact]
+    public async Task The_bff_order_list_needs_a_token_and_lists_an_order_the_fake_placed()
+    {
+        const string list = "http://localhost:5000/bff/v1/orders";
+
+        (await ProxyAsync(new { method = "GET", url = list })).GetProperty("status").GetInt32().ShouldBe(401);
+
+        JsonElement placed = await ProxyAsync(new { method = "POST", url = "http://localhost:5000/api/v1/orders", body = RunLocallyExamples.For("PlaceOrder"), identity = new { username = "demo" } });
+        string orderId = JsonSerializer.Deserialize<string>(placed.GetProperty("body").GetString()!)!;
+        JsonElement page = await ProxyAsync(new { method = "GET", url = list, identity = new { username = "demo" } });
+
+        page.GetProperty("status").GetInt32().ShouldBe(200);
+        using JsonDocument orders = JsonDocument.Parse(page.GetProperty("body").GetString()!);
+        orders.RootElement.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("orderId").GetString()).ShouldContain(orderId);
+        orders.RootElement.GetProperty("nextCursor").ValueKind.ShouldBe(JsonValueKind.Null);
     }
 
     [Theory]

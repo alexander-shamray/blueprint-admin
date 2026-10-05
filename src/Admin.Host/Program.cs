@@ -106,7 +106,7 @@ builder.Services.AddSingleton(sp =>
     return new FrontendSupervisor(sp.GetRequiredService<IProcessRunner>(), sp.GetRequiredService<RepoPaths>(), installed);
 });
 
-// The fake gateway's one order outlives the handlers the client factory rotates, so it advances across them.
+// The fake gateway's orders outlive the handlers the client factory rotates, so they advance across them.
 builder.Services.AddSingleton(sp => new FakeOrders(sp.GetRequiredService<TimeProvider>()));
 
 builder.Services.AddHttpClient<PlatformProbe>().ConfigurePrimaryHttpMessageHandler(sp =>
