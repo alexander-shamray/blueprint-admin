@@ -15,7 +15,7 @@ test('the transcript keeps what the operator did, and the copied script carries 
   await expect(requests.first()).toBeVisible();
   await expect(requests.first().locator('.identity')).toHaveText('as demo');
   await expect(requests.first().locator('.command')).toContainText("-H 'Authorization: Bearer <scrubbed>'");
-  // The entries as the page shows them, which the host does not scrub again as a whole the way it does the script.
+  // The entries as the page shows them, which are what the script is built from.
   await expect(page.locator('li.entry .command', { hasText: /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/ })).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Copy as shell script' }).click();

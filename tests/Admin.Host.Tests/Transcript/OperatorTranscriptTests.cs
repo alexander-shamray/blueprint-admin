@@ -142,9 +142,8 @@ public sealed class OperatorTranscriptTests
 
     /// <summary>
     /// The subject is each entry as kept, which is what the screen shows, read by the rules the fixture gate reads
-    /// with: a transcript holding a bearer token is a failed build, the same as a fixture holding one. The entries
-    /// and not the script, because Script() scrubs its whole text once more, so a gate over the script would pass
-    /// whatever the entries held.
+    /// with: a transcript holding a bearer token is a failed build, the same as a fixture holding one. The script is
+    /// built from these lines and the endpoint test holds it to the same gate.
     /// </summary>
     [Fact]
     public void Every_entry_is_clean_by_the_fixture_gates_rules_whatever_went_into_it()
@@ -198,6 +197,15 @@ public sealed class OperatorTranscriptTests
         curl.ShouldBe("curl -i -X GET 'http://localhost:5000/api/v1/orders?password=' --data-raw 'username=a&password='");
         transcript.Script().ShouldContain("\n" + curl + "\n");
         transcript.Script().ShouldContain("\n(cd '/work/front end' && npm start)\n");
+    }
+
+    [Fact]
+    public void A_working_directory_is_scrubbed_when_it_is_kept_so_the_screen_and_the_script_agree()
+    {
+        new TranscribingProcessRunner(new StubRunner(), transcript).Start(new ProcessSpec("npm", ["start"], "/work/password=x"));
+
+        transcript.Read().Entries.ShouldHaveSingleItem().WorkingDirectory.ShouldBe("/work/password=<scrubbed>");
+        transcript.Script().ShouldContain("\n(cd '/work/password=<scrubbed>' && npm start)\n");
     }
 
     [Fact]
