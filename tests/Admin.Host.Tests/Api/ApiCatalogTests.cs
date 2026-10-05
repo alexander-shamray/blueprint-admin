@@ -75,7 +75,7 @@ public sealed class ApiCatalogTests : IDisposable
             "catalog:PublishProduct", "catalog:GetProducts", "ordering:PlaceOrder", "ordering:CancelOrder",
             "inventory:SetOnHand", "inventory:GetStock", "inventory:GetReservation", "inventory:ReleaseReservation",
             "inventory:ReinstateReservation", "payments:GetPayment",
-            "bff:Quote", "health:gateway", "health:catalog", "health:ordering", "health:bff", "health:inventory",
+            "bff:Quote", "bff:ListOrders", "bff:GetOrder", "health:gateway", "health:catalog", "health:ordering", "health:bff", "health:inventory",
             "health:payments", "simulator:Requests", "carrier:Requests",
         ]);
         handler.Requests.Where(r => r.Request.RequestUri!.AbsolutePath == "/openapi/v1.json")

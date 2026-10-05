@@ -45,7 +45,7 @@ test('the palette runs the Scenario, which is asked for and never put in the URL
   await page.keyboard.press('Enter');
 
   await expect(page).toHaveURL(/\/scenario$/);
-  await expect(page.locator('ol.steps li.step .state', { hasText: '[ok]' })).toHaveCount(5);
+  await expect(page.locator('ol.steps li.step .state', { hasText: '[ok]' })).toHaveCount(7, { timeout: 20_000 });
 });
 
 test('Escape closes the palette and leaves the screen as it was', async ({ page }) => {

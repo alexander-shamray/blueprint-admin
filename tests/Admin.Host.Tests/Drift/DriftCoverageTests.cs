@@ -23,6 +23,7 @@ public sealed class DriftCoverageTests
         ["src/Admin.Host/Broker/PlatformQueues.cs"] = typeof(QueueDriftTests),
         ["src/Admin.Host/Config/AdminOptions.cs"] = typeof(ComposeDriftTests),
         ["src/Admin.Host/Fakes/FakeKeycloak.cs"] = typeof(LiteralDriftTests),
+        ["src/Admin.Host/Fakes/FakeOrders.cs"] = typeof(LiteralDriftTests),
         ["src/Admin.Host/Identity/IdentityEndpoints.cs"] = typeof(LiteralDriftTests),
         ["src/Admin.Host/Identity/RealmUser.cs"] = typeof(LiteralDriftTests),
         ["src/Admin.Host/Stack/WorkstationDoctor.cs"] = typeof(ComposeDriftTests),
@@ -31,6 +32,7 @@ public sealed class DriftCoverageTests
         ["src/Admin.Host/Trace/EventTraceService.cs"] = typeof(LiteralDriftTests),
         ["src/Admin.Host/Trace/SpanRecogniser.cs"] = typeof(LiteralDriftTests),
         ["src/Admin.Web/src/app/features/logs/logs-page.ts"] = typeof(ComposeDriftTests),
+        ["src/Admin.Web/src/app/features/scenario/scenario-run.ts"] = typeof(LiteralDriftTests),
     };
 
     /// <summary>Files that name the backend without copying anything from it.</summary>

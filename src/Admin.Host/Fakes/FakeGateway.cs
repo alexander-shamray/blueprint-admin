@@ -45,10 +45,21 @@ internal static partial class FakeGateway
         {"orderId":"{{PlacedOrderId}}","order":{"placedAt":"2026-10-03T18:07:45.8122024+00:00","cancelledAt":null},"intent":{"status":"Authorised","reference":"psp_authorise:{{PlacedOrderId}}","amount":19.9900,"currency":"EUR","declineReason":null,"createdAt":"2026-10-03T18:07:48.8202263+00:00"},"refund":null}
         """;
 
-    private const string StockedProductId = "0199a1b2-0000-7000-8000-00000000000a";
+    internal const string StockedProductId = "0199a1b2-0000-7000-8000-00000000000a";
 
-    [GeneratedRegex("^/api/v1/orders/[0-9a-fA-F-]{36}/cancel$")]
+    /// <summary>
+    /// The BFF's answer to an order it holds no row for, as blueprint-backend <c>OrderReadErrors.NotFound</c> words it
+    /// and <c>tests/Web.Bff.Tests/OrderEndpointTests.cs</c> reads it: status, code and detail.
+    /// </summary>
+    private const string OrderNotFound = """
+        {"type":"https://tools.ietf.org/html/rfc9110#section-15.5.5","title":"Not Found","status":404,"code":"order.not_found","detail":"No order with that id."}
+        """;
+
+    [GeneratedRegex("^/api/v1/orders/(?<id>[0-9a-fA-F-]{36})/cancel$")]
     private static partial Regex CancelPath();
+
+    [GeneratedRegex("^/bff/v1/orders/(?<id>[^/]+)$")]
+    private static partial Regex OrderReadPath();
 
     [GeneratedRegex("^/api/v1/inventory/stock/(?<id>[0-9a-fA-F-]{36})$")]
     private static partial Regex StockPath();
@@ -59,18 +70,23 @@ internal static partial class FakeGateway
     [GeneratedRegex("^/api/v1/payments/(?<id>[0-9a-fA-F-]{36})$")]
     private static partial Regex PaymentPath();
 
-    public static HttpResponseMessage Send(HttpRequestMessage request)
+    public static HttpResponseMessage Send(HttpRequestMessage request, FakeOrders orders)
     {
         string path = request.RequestUri!.AbsolutePath.TrimEnd('/');
         string[]? permissions = Permissions(request);
+        Match orderRead = OrderReadPath().Match(path);
 
         HttpResponseMessage response = (request.Method.Method, path) switch
         {
             ("GET", "/api/v1/catalog/products") => FakeHttp.Json(HttpStatusCode.OK, Products),
             ("POST", "/api/v1/catalog/products") => Authorize(permissions, "catalog:write", () => FakeHttp.Json(HttpStatusCode.OK, $"\"{PublishedProductId}\"")),
-            ("POST", "/api/v1/orders") => Authorize(permissions, "orders:write", () => FakeHttp.Json(HttpStatusCode.OK, $"\"{PlacedOrderId}\"")),
-            ("POST", var p) when CancelPath().IsMatch(p) => Authorize(permissions, "orders:cancel", () => new HttpResponseMessage(HttpStatusCode.NoContent)),
+            ("POST", "/api/v1/orders") => Authorize(permissions, "orders:write", () => Placed(orders)),
+            ("POST", var p) when CancelPath().Match(p) is { Success: true } cancel => Authorize(permissions, "orders:cancel", () => Cancelled(orders, cancel.Groups["id"].Value)),
             ("POST", "/bff/v1/checkout/quote") => Authorize(permissions, null, () => FakeHttp.Json(HttpStatusCode.OK, Quote)),
+            ("GET", "/bff/v1/orders") => Authorize(permissions, null, () => FakeHttp.Json(HttpStatusCode.OK, orders.Page())),
+            ("GET", _) when orderRead.Success => Authorize(permissions, null, () => orders.Detail(orderRead.Groups["id"].Value) is { } detail
+                ? FakeHttp.Json(HttpStatusCode.OK, detail)
+                : FakeHttp.Json(HttpStatusCode.NotFound, OrderNotFound)),
             (_, var p) when p.StartsWith("/api/v1/inventory/", StringComparison.Ordinal) => Authorize(permissions, "inventory:admin", () => Inventory(request.Method.Method, p)),
             (_, var p) when p.StartsWith("/api/v1/payments/", StringComparison.Ordinal) => Authorize(permissions, "payments:admin", () => Payments(request.Method.Method, p)),
             _ => FakeHttp.Problem(HttpStatusCode.NotFound, "Not Found"),
@@ -111,6 +127,15 @@ internal static partial class FakeGateway
         return method == "GET" && payment.Success && payment.Groups["id"].Value == PlacedOrderId
             ? FakeHttp.Json(HttpStatusCode.OK, Payment)
             : FakeHttp.Problem(HttpStatusCode.NotFound, "Not Found");
+    }
+
+    private static HttpResponseMessage Placed(FakeOrders orders) => FakeHttp.Json(HttpStatusCode.OK, $"\"{orders.Place()}\"");
+
+    private static HttpResponseMessage Cancelled(FakeOrders orders, string orderId)
+    {
+        orders.Cancel(orderId);
+
+        return new HttpResponseMessage(HttpStatusCode.NoContent);
     }
 
     private static HttpResponseMessage Authorize(string[]? permissions, string? required, Func<HttpResponseMessage> allowed) =>

@@ -106,9 +106,12 @@ builder.Services.AddSingleton(sp =>
     return new FrontendSupervisor(sp.GetRequiredService<IProcessRunner>(), sp.GetRequiredService<RepoPaths>(), installed);
 });
 
+// The fake gateway's one order outlives the handlers the client factory rotates, so it advances across them.
+builder.Services.AddSingleton(sp => new FakeOrders(sp.GetRequiredService<TimeProvider>()));
+
 builder.Services.AddHttpClient<PlatformProbe>().ConfigurePrimaryHttpMessageHandler(sp =>
     sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform
-        ? new FakePlatformHandler(sp.GetRequiredService<IOptions<AdminOptions>>().Value)
+        ? new FakePlatformHandler(sp.GetRequiredService<IOptions<AdminOptions>>().Value, sp.GetRequiredService<FakeOrders>())
         : new HttpClientHandler());
 
 // One client for Keycloak, the OpenAPI documents and the proxy. No redirects and no cookies: a
@@ -118,7 +121,7 @@ builder.Services.AddHttpClient<PlatformProbe>().ConfigurePrimaryHttpMessageHandl
 builder.Services.AddHttpClient("platform")
     .ConfigurePrimaryHttpMessageHandler(sp =>
         sp.GetRequiredService<IOptions<AdminOptions>>().Value is { FakePlatform: true } fake
-            ? new FakePlatformHandler(fake)
+            ? new FakePlatformHandler(fake, sp.GetRequiredService<FakeOrders>())
             : new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false })
     .AddHttpMessageHandler(sp => new RecordingHandler(
         sp.GetRequiredService<FixtureRecorder>(), sp.GetRequiredService<IOptions<AdminOptions>>()));

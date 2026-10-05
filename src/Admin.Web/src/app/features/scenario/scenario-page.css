@@ -75,3 +75,7 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+.regrant {
+  color: #555;
+  font-style: italic;
+}

@@ -8,6 +8,7 @@ import {
   ProxyRequest,
   ProxyResult,
   QueuesView,
+  TokenClockView,
 } from '../../core/host/host-types';
 import { DRAIN_POLL_MS, DRAIN_WATCH_MS, UUID } from '../api/api-page';
 import { ScenarioLauncher } from './scenario-launcher';
@@ -60,6 +61,12 @@ const catalog: ApiCatalogView = {
       pathParameters: [{ name: 'id', required: true, type: 'string' }],
       exampleBody: '{"reason":"customer_request"}',
     }),
+    op({
+      id: 'bff:GetOrder',
+      method: 'GET',
+      url: 'http://localhost:5000/bff/v1/orders/{id}',
+      pathParameters: [{ name: 'id', required: true, type: 'string' }],
+    }),
   ],
 };
 
@@ -83,15 +90,56 @@ const drained: QueuesView = {
   projection: { queue: 'ordering-catalog-events', found: true, messages: 0, drained: true },
 };
 
-/** Answers as the platform does for the demo user: ids for publish and order, a quote, 204 for cancel. */
+const placedAt = '2026-10-05T12:00:00Z';
+
+/** The BFF's order detail as far as a watch reads it, at a status with the timeline that goes with it. */
+function order(status: string, steps: Record<string, string | null> = {}): string {
+  return JSON.stringify({
+    orderId,
+    status,
+    timeline: { placed: placedAt, confirmed: null, dispatched: null, delivered: null, cancelled: null, ...steps },
+    asOf: '2026-10-05T12:00:09Z',
+  });
+}
+
+const delivered = order('delivered', {
+  confirmed: '2026-10-05T12:00:01Z',
+  dispatched: '2026-10-05T12:00:06Z',
+  delivered: '2026-10-05T12:00:40Z',
+});
+
+let cancelSent = false;
+
+/**
+ * Answers as the platform does for the demo user: ids for publish and order, a quote, 204 for cancel, and an
+ * order read that shows the order delivered, or cancelled once a cancel has gone out.
+ */
 function platform(request: ProxyRequest): ProxyResult {
   const id = request.correlationId ?? '';
   if (request.url.endsWith('/catalog/products/')) return responded(200, `"${productId}"`, id);
   const quote = '{"total":19.99,"unpriced":[]}';
   if (request.url.endsWith('/checkout/quote')) return responded(200, quote, id);
   if (request.url.endsWith('/orders/')) return responded(200, `"${orderId}"`, id);
+  if (request.url.endsWith(`/bff/v1/orders/${orderId}`)) {
+    const cancelled = order('cancelled', { cancelled: '2026-10-05T12:00:02Z' });
+    return responded(200, cancelSent ? cancelled : delivered, id);
+  }
+  cancelSent = true;
   return responded(204, '', id);
 }
+
+function isRead(request: ProxyRequest): boolean {
+  return request.url.endsWith(`/bff/v1/orders/${orderId}`);
+}
+
+const farOff = '2099-01-01T00:00:00Z';
+const heldClock: TokenClockView = {
+  username: 'demo',
+  held: true,
+  expiresAt: farOff,
+  renewsAt: farOff,
+  permissions: [],
+};
 
 describe('ScenarioPage', () => {
   let host: {
@@ -100,17 +148,20 @@ describe('ScenarioPage', () => {
     identityUsers: ReturnType<typeof vi.fn>;
     proxy: ReturnType<typeof vi.fn>;
     brokerQueues: ReturnType<typeof vi.fn>;
+    tokenClock: ReturnType<typeof vi.fn>;
   };
   let uuids: number;
 
   beforeEach(() => {
     uuids = 0;
+    cancelSent = false;
     host = {
       operations: vi.fn(() => of(catalog)),
       reloadOperations: vi.fn(() => of(catalog)),
       identityUsers: vi.fn(() => of([{ username: 'demo' }, { username: 'browser' }])),
       proxy: vi.fn((request: ProxyRequest) => of(platform(request))),
       brokerQueues: vi.fn(() => of(drained)),
+      tokenClock: vi.fn(() => of(heldClock)),
     };
     TestBed.configureTestingModule({
       imports: [ScenarioPage],
@@ -132,21 +183,250 @@ describe('ScenarioPage', () => {
     return host.proxy.mock.calls.map(([request]) => request as ProxyRequest);
   }
 
-  it('runs the five steps in order, carrying the published product and the placed order forward', async () => {
+  it('runs the deliver script in order, carrying the published product and the placed order forward', async () => {
     const page = render().componentInstance;
 
     await page.run();
 
-    expect(page.steps().map((s) => s.state)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok']);
-    const [publish, quote, order, cancel] = sent();
+    expect(page.steps().map((s) => s.key)).toEqual([
+      'publish',
+      'drain',
+      'quote',
+      'order',
+      'confirmed',
+      'dispatched',
+      'delivered',
+    ]);
+    expect(page.steps().map((s) => s.state)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok']);
+    const [publish, quote, placed, ...reads] = sent();
     expect(JSON.parse(publish.body!).commandId).not.toBe(zero);
     expect(JSON.parse(quote.body!).lines[0].productId).toBe(productId);
-    expect(JSON.parse(order.body!).items[0].productId).toBe(productId);
-    expect(JSON.parse(order.body!).commandId).not.toBe(zero);
-    expect(cancel.url).toBe(`http://localhost:5000/api/v1/orders/${orderId}/cancel`);
+    expect(JSON.parse(placed.body!).items[0].productId).toBe(productId);
+    expect(JSON.parse(placed.body!).commandId).not.toBe(zero);
+    expect(reads.map((r) => `${r.method} ${r.url}`)).toEqual(
+      Array(3).fill(`GET http://localhost:5000/bff/v1/orders/${orderId}`),
+    );
+    expect(reads.every((r) => r.body === null)).toBe(true);
+    expect(page.steps()[6].detail).toBe(
+      'The order read shows delivered at 2026-10-05T12:00:40Z, 40 s after it was placed.',
+    );
     expect(
       sent().every((r) => r.identity?.username === 'demo' && r.identity.password === null),
     ).toBe(true);
+  });
+
+  it('runs the cancel script: the cancel goes to the placed order and the watch reads it cancelled', async () => {
+    const page = render().componentInstance;
+    page.pick('cancel');
+
+    await page.run();
+
+    expect(page.steps().map((s) => [s.key, s.state])).toEqual([
+      ['publish', 'ok'],
+      ['drain', 'ok'],
+      ['quote', 'ok'],
+      ['order', 'ok'],
+      ['cancel', 'ok'],
+      ['cancelled', 'ok'],
+    ]);
+    expect(sent()[3].url).toBe(`http://localhost:5000/api/v1/orders/${orderId}/cancel`);
+    expect(page.steps()[5].detail).toContain('cancelled at 2026-10-05T12:00:02Z, 2 s after');
+  });
+
+  it('shows a picked script as its own steps, and keeps the script it is running', async () => {
+    const publish = new Subject<ProxyResult>();
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      request.url.endsWith('/catalog/products/') ? publish.asObservable() : of(platform(request)),
+    );
+    const page = render().componentInstance;
+    page.pick('cancel');
+    expect(page.steps().map((s) => s.key)).toContain('cancel');
+
+    const running = page.run();
+    page.pick('deliver');
+    expect(page.script()).toBe('cancel');
+
+    await vi.waitFor(() => expect(sent()).toHaveLength(1));
+    publish.next(responded(200, `"${productId}"`, 'scenario-abcdef12-publish'));
+    publish.complete();
+    await running;
+    expect(page.steps().map((s) => s.state)).toEqual(Array(6).fill('ok'));
+    page.pick('deliver');
+
+    expect(page.steps().map((s) => s.state)).toEqual(Array(7).fill('pending'));
+    expect(page.runId()).toBeNull();
+  });
+
+  it('waits through a 404 and an order still placed, saying what it waits for, then reaches the step', async () => {
+    vi.useFakeTimers();
+    const answers = [
+      responded(404, '{"code":"order.not_found"}', ''),
+      responded(200, order('placed'), ''),
+      responded(200, order('confirmed', { confirmed: '2026-10-05T12:00:03Z' }), ''),
+    ];
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      isRead(request) && answers.length > 0 ? of(answers.shift()!) : of(platform(request)),
+    );
+    const page = render().componentInstance;
+
+    const done = page.run();
+    await vi.advanceTimersByTimeAsync(0);
+    const confirmed = () => page.steps().find((s) => s.key === 'confirmed')!;
+    expect(confirmed().state).toBe('running');
+    expect(confirmed().detail).toContain('Waiting for the fulfilment saga');
+    expect(confirmed().detail).toContain('it has not learned of the order yet');
+
+    await vi.advanceTimersByTimeAsync(DRAIN_POLL_MS);
+    expect(confirmed().detail).toContain('Last read: placed, as the BFF knew it at 2026-10-05T12:00:09Z.');
+
+    await vi.advanceTimersByTimeAsync(DRAIN_POLL_MS);
+    await done;
+    vi.useRealTimers();
+
+    expect(confirmed().state).toBe('ok');
+    expect(confirmed().detail).toContain('3 s after it was placed');
+    expect(page.steps().map((s) => s.state)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok']);
+  });
+
+  it('fails a watch on a status it was not waiting for and never retries it, a 401 included', async () => {
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      isRead(request)
+        ? of(responded(401, '{"title":"Unauthorized"}', request.correlationId ?? ''))
+        : of(platform(request)),
+    );
+    const page = render().componentInstance;
+
+    await page.run();
+
+    expect(page.steps()[4].state).toBe('failed');
+    expect(page.steps()[4].status).toBe(401);
+    expect(page.steps()[4].detail).toBe('Answered 401.');
+    expect(sent().filter(isRead)).toHaveLength(1);
+    expect(page.steps().slice(5).map((s) => s.state)).toEqual(['skipped', 'skipped']);
+  });
+
+  it('fails a 404 that follows an answer, since the BFF had already learned of the order', async () => {
+    vi.useFakeTimers();
+    const answers = [responded(200, order('placed'), ''), responded(404, '{}', '')];
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      isRead(request) && answers.length > 0 ? of(answers.shift()!) : of(platform(request)),
+    );
+    const page = render().componentInstance;
+
+    const done = page.run();
+    await vi.advanceTimersByTimeAsync(DRAIN_POLL_MS);
+    await done;
+    vi.useRealTimers();
+
+    expect(page.steps()[4].state).toBe('failed');
+    expect(page.steps()[4].detail).toBe('Answered 404.');
+  });
+
+  it('stops a watch at once when the order ends in a cancellation, rather than waiting out the cap', async () => {
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      isRead(request)
+        ? of(responded(200, order('declined', { cancelled: '2026-10-05T12:00:02Z' }), ''))
+        : of(platform(request)),
+    );
+    const page = render().componentInstance;
+
+    await page.run();
+
+    expect(page.steps()[4].state).toBe('failed');
+    expect(page.steps()[4].detail).toBe('The order ended declined before it was confirmed.');
+    expect(sent().filter(isRead)).toHaveLength(1);
+  });
+
+  it('fails a watch whose 200 is not an order read, rather than waiting on it', async () => {
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      isRead(request) ? of(responded(200, '{"items":[]}', '')) : of(platform(request)),
+    );
+    const page = render().componentInstance;
+
+    await page.run();
+
+    expect(page.steps()[4].state).toBe('failed');
+    expect(page.steps()[4].detail).toContain('not with an order read');
+  });
+
+  it('gives up a watch at the cap and says what it last read', async () => {
+    vi.useFakeTimers();
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      isRead(request) ? of(responded(200, order('placed'), '')) : of(platform(request)),
+    );
+    const page = render().componentInstance;
+
+    const done = page.run();
+    await vi.advanceTimersByTimeAsync(DRAIN_WATCH_MS + DRAIN_POLL_MS);
+    await done;
+    vi.useRealTimers();
+
+    expect(page.steps()[4].state).toBe('failed');
+    expect(page.steps()[4].detail).toBe(
+      `Not confirmed after ${DRAIN_WATCH_MS / 1000} s. Last read: placed, as the BFF knew it at 2026-10-05T12:00:09Z.`,
+    );
+    const reads = sent().filter(isRead).length;
+    expect(reads).toBeGreaterThan(1);
+    expect(reads).toBeLessThanOrEqual(DRAIN_WATCH_MS / DRAIN_POLL_MS + 1);
+  });
+
+  it('stops polling the order when the screen goes', async () => {
+    vi.useFakeTimers();
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      isRead(request) ? of(responded(200, order('placed'), '')) : of(platform(request)),
+    );
+    const fixture = render();
+
+    const done = fixture.componentInstance.run();
+    await vi.advanceTimersByTimeAsync(0);
+    const before = sent().filter(isRead).length;
+    fixture.destroy();
+    await vi.advanceTimersByTimeAsync(DRAIN_POLL_MS * 3);
+    await done;
+    vi.useRealTimers();
+
+    expect(sent().filter(isRead)).toHaveLength(before);
+  });
+
+  it('says so when the host is past renewing the token, and says nothing when it reuses one', async () => {
+    host.tokenClock.mockImplementation(() =>
+      sent().some((r) => r.url.endsWith('/orders/'))
+        ? of({ ...heldClock, renewsAt: '2026-01-01T00:00:00Z' })
+        : of(heldClock),
+    );
+    const page = render().componentInstance;
+
+    await page.run();
+
+    expect(page.steps().slice(0, 4).map((s) => s.regrant)).toEqual([null, null, null, null]);
+    expect(page.steps()[4].regrant).toBe(
+      'The token held for demo was due to renew at 2026-01-01T00:00:00Z, so the host minted a new one for this call.',
+    );
+  });
+
+  it('says so when the token expired after the run sent, but not before its first call', async () => {
+    host.tokenClock.mockImplementation(() =>
+      // Nothing held before the first call, which mints; then nothing held again before the quote.
+      of({ ...heldClock, held: sent().length !== 0 && sent().length !== 1 }),
+    );
+    const page = render().componentInstance;
+
+    await page.run();
+
+    expect(page.steps()[0].regrant).toBeNull();
+    expect(page.steps()[2].regrant).toBe(
+      'The token for demo had expired, so the host minted a new one for this call.',
+    );
+    expect(page.steps()[3].regrant).toBeNull();
+  });
+
+  it('sends regardless when the token clock does not answer', async () => {
+    host.tokenClock.mockReturnValue(throwError(() => new Error('host busy')));
+    const page = render().componentInstance;
+
+    await page.run();
+
+    expect(page.steps().every((s) => s.state === 'ok' && s.regrant === null)).toBe(true);
   });
 
   it('runs once when the palette asked for a run, and taking it leaves nothing for a later visit', async () => {
@@ -174,6 +454,8 @@ describe('ScenarioPage', () => {
     fixture.detectChanges();
     expect(launcher.pending()).toBe(false);
 
+    // The run reads the token clock before it sends, so the publish is subscribed a turn later.
+    await vi.waitFor(() => expect(sent()).toHaveLength(1));
     publish.next(responded(200, `"${productId}"`, 'scenario-abcdef12-publish'));
     publish.complete();
     await running;
@@ -205,7 +487,9 @@ describe('ScenarioPage', () => {
       'scenario-abcdef12-publish',
       'scenario-abcdef12-quote',
       'scenario-abcdef12-order',
-      'scenario-abcdef12-cancel',
+      'scenario-abcdef12-confirmed',
+      'scenario-abcdef12-dispatched',
+      'scenario-abcdef12-delivered',
     ]);
     expect(page.steps().find((s) => s.key === 'drain')?.correlationId).toBeNull();
   });
@@ -218,13 +502,7 @@ describe('ScenarioPage', () => {
 
     await page.run();
 
-    expect(page.steps().map((s) => s.state)).toEqual([
-      'failed',
-      'skipped',
-      'skipped',
-      'skipped',
-      'skipped',
-    ]);
+    expect(page.steps().map((s) => s.state)).toEqual(['failed', ...Array(6).fill('skipped')]);
     expect(page.steps()[0].detail).toBe('Answered 403.');
     expect(host.brokerQueues).not.toHaveBeenCalled();
   });
@@ -405,17 +683,18 @@ describe('ScenarioPage', () => {
     expect(page.steps()[1].state).toBe('skipped');
   });
 
-  it('still cancels an order placed while the screen was being left', async () => {
+  it('still cancels an order the cancel script placed while the screen was being left, and reads it no more', async () => {
     const fixture = render();
-    const order = new Subject<ProxyResult>();
+    fixture.componentInstance.pick('cancel');
+    const placing = new Subject<ProxyResult>();
     host.proxy.mockImplementation((request: ProxyRequest) =>
-      request.url.endsWith('/orders/') ? order : of(platform(request)),
+      request.url.endsWith('/orders/') ? placing : of(platform(request)),
     );
 
     const done = fixture.componentInstance.run();
     await vi.waitFor(() => expect(sent()).toHaveLength(3));
     fixture.destroy();
-    order.next(responded(200, `"${orderId}"`, 'scenario-abcdef12-order'));
+    placing.next(responded(200, `"${orderId}"`, 'scenario-abcdef12-order'));
     await done;
 
     expect(sent().map((r) => r.correlationId)).toEqual([
