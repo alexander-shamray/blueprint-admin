@@ -113,6 +113,11 @@ export class ScenarioPage {
   private destroyed = false;
   /** Whether this run has sent as its user yet: a token missing after that has expired, not never been minted. */
   private sentThisRun = false;
+  /**
+   * Whether the BFF has answered for this run's order yet, across its watches: once it has, a 404 is the BFF
+   * losing an order it held, not one it has still to learn of, and ends the step.
+   */
+  private orderAnswered = false;
 
   readonly identity = inject(IdentityState);
   private readonly launcher = inject(ScenarioLauncher);
@@ -223,6 +228,7 @@ export class ScenarioPage {
     this.error.set(null);
     this.running.set(true);
     this.sentThisRun = false;
+    this.orderAnswered = false;
     this.projection.set(null);
     this.steps.set(initialSteps(script));
 
@@ -351,14 +357,13 @@ export class ScenarioPage {
     this.patch(key, { state: 'running', correlationId, request: `${read.method} ${url}`, detail: waiting });
 
     const deadline = Date.now() + DRAIN_WATCH_MS;
-    let answered = false;
     let last: string;
 
     for (;;) {
       const result = await this.exchange(key, read.method, url, '', identity, correlationId);
       if (result === null) return false;
 
-      if (result.status === 404 && !answered) {
+      if (result.status === 404 && !this.orderAnswered) {
         last = 'The BFF answered 404: it has not learned of the order yet.';
       } else if (result.status !== 200) {
         this.patch(key, {
@@ -369,7 +374,7 @@ export class ScenarioPage {
         });
         return false;
       } else {
-        answered = true;
+        this.orderAnswered = true;
         const order = orderRead(result.body);
         if (order === null) {
           this.patch(key, {
@@ -431,8 +436,8 @@ export class ScenarioPage {
     identity: Identity,
     correlationId: string,
   ): Promise<Responded | null> {
+    // Said only once the call has gone out: a grant Keycloak refused or never answered minted nothing.
     const regrant = await this.regrant(identity);
-    if (regrant) this.patch(key, { regrant });
 
     let result: ProxyResult;
     try {
@@ -472,6 +477,7 @@ export class ScenarioPage {
     }
 
     this.sentThisRun = true;
+    if (regrant) this.patch(key, { regrant });
     return result;
   }
 

@@ -70,6 +70,43 @@ public sealed class FakeOrdersTests
     }
 
     [Fact]
+    public void A_cancel_a_tick_before_the_confirmation_turns_into_a_cancellation_just_before_despatch()
+    {
+        FakeOrders orders = new(time);
+        DateTimeOffset placed = time.GetUtcNow();
+        string id = orders.Place();
+        time.Advance(FakeOrders.Step - TimeSpan.FromTicks(1));
+        orders.Cancel(id);
+        time.Advance(FakeOrders.Step * 4);
+
+        using JsonDocument read = JsonDocument.Parse(orders.Detail(id)!);
+        JsonElement timeline = read.RootElement.GetProperty("timeline");
+
+        read.RootElement.GetProperty("status").GetString().ShouldBe("cancelled");
+        timeline.GetProperty("confirmed").GetDateTimeOffset().ShouldBe(placed + FakeOrders.Step);
+        timeline.GetProperty("cancelled").GetDateTimeOffset().ShouldBe(placed + (FakeOrders.Step * 2) - TimeSpan.FromTicks(1));
+        timeline.GetProperty("dispatched").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(1.5)]
+    public void A_cancel_that_would_take_effect_at_or_after_despatch_never_does(double stepsAfterPlace)
+    {
+        FakeOrders orders = new(time);
+        string id = orders.Place();
+        time.Advance(FakeOrders.Step * stepsAfterPlace);
+        orders.Cancel(id);
+
+        string[] seen = [.. Enumerable.Range(0, 4).Select(_ => Advance(orders, id))];
+
+        seen.ShouldNotContain("cancelled");
+        seen[^1].ShouldBe("delivered");
+        using JsonDocument read = JsonDocument.Parse(orders.Detail(id)!);
+        read.RootElement.GetProperty("timeline").GetProperty("cancelled").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    [Fact]
     public void The_first_order_is_the_recorded_id_and_each_later_one_its_own_watched_apart()
     {
         FakeOrders orders = new(time);
