@@ -493,9 +493,30 @@ All under `/api`, JSON, loopback only.
 | `POST /proxy` | §5.7 |
 | `GET /trace/{correlationId}?window=15m` | §5.9. `window` is `90s`/`15m`/`2h` bounded to `[1m, 24h]`, default `15m`; a window outside it, and an id outside the backend's adoptable alphabet (the id reaches a LogQL string, so this is the injection boundary), are 400 problem details. |
 | `GET /telemetry/health` | the golden-signal strip |
+| `GET /transcript`, `GET /transcript/script` | §5.11; the entries, and the same as one bash script in `text/plain` |
 
 Streams use Server-Sent Events rather than WebSockets because every stream is
 server-to-client and line-oriented, and SSE reconnects for free.
+
+### 5.11 OperatorTranscript
+
+§1 says the console runs the platform's own commands, which only shows if a
+person can take them away. `OperatorTranscript` keeps, for the host's life and
+in memory only (§8), each child process the operator caused — the argv as given,
+the working directory, the exit code once there is one — and each request
+`RequestProxy` sent, rendered as the `curl` that sends it from the message as
+built, with the identity it went as and the status that came back.
+
+What the screens poll is left out by the line `/jobs` already draws:
+`TranscribingProcessRunner` keeps a process only when `ProcessSpec.Listed`
+says the registry would (§5.2), so `ps` and `exec` never appear. A token the
+proxy attached, and any Authorization a caller pasted, keep their scheme and
+lose their value; every line, and the script as a whole, then passes through
+`FixtureScrubber`, so a transcript and a fixture are held to one definition of
+a secret. The token grant itself is `TokenService`'s and not a proxied
+request, so it is not in the transcript; the script's header says to mint a
+token as `run-locally.md` does. The entries kept are bounded by
+`OperatorTranscript.Capacity`, and the oldest go first and are counted.
 
 ## 6. The SPA
 
@@ -524,6 +545,7 @@ and names the active option through `aria-activedescendant`.
 | **API** | operation tree on the left, each source with what its document changed since the kept baseline; request editor (path params, headers, body pre-filled from the schema example, `commandId` generated per send) and identity picker with its token clock (§5.6); response pane with status, timing, headers, body; a history list | Send; accept a changed document as the new baseline; "Trace this call" opens the Trace screen with the response's correlation id |
 | **Trace** | the §5.9 timeline for a correlation id, grouped by service, with Grafana deep links, and on a refetch what arrived or left since the last one | enter an id or arrive from the API screen; reload |
 | **Scenario** | `run-locally.md`'s calls as five steps — publish, wait for the drain, quote, order, cancel — each with its status and body, and each HTTP step with its own correlation id | Run as a realm user; each step that sent links to its trace; the first step that does not succeed ends the run |
+| **Transcript** | §5.11's entries in order: each process with its directory and exit code, each request as its `curl` with the identity and status, polled | Copy as shell script, which copies the host's rendered script rather than one built in the page, so the scrubber has the last word |
 
 The API screen keeps one behaviour from `run-locally.md` explicit: after a
 successful publish it shows the drained indicator and says why an order for

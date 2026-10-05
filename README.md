@@ -89,6 +89,14 @@ calls end to end as a realm user — publish, wait for the projection to drain,
 quote, order, cancel — stopping at the first step that does not succeed, each
 sent step linking to its own trace.
 
+The Transcript screen shows what the operator did this session as a person
+would type it: each command the host ran, with its directory and exit code, and
+each request the proxy sent, as the `curl` that sends it with the identity it
+went as and the status that came back. The `ps` and `exec` reads the screens
+poll are left out. "Copy as shell script" copies it as one bash script. Tokens,
+passwords and Authorization values pass through the scrubber the fixtures are
+held to and read `<scrubbed>`.
+
 The API screen also says what each service's OpenAPI document changed since
 the console last kept it: operations, response codes and schema fields added
 or removed, and since when. The first document seen for a service is kept as
@@ -153,6 +161,10 @@ are announced.
   reservation, Payments' authorisation and Shipping's despatch, but on the live
   platform no timeline reaches them: no saga log line carries a correlation id,
   so their traces are never fetched. The rows wait on that reach (#54).
+- The transcript lives in the host's memory and ends with it, keeping the
+  newest `OperatorTranscript.Capacity` entries. It holds what the host ran and
+  the proxy sent, so a Keycloak token grant is not in it: its curl lines carry
+  `<scrubbed>` where a token goes, to be minted as `run-locally.md` does.
 - The golden-signal strip sums the 422 panel's routes into one rate per
   service; Grafana's panel shows the split. Its command and query p95 are
   quantiles over the backend's `request.duration` histogram, so they are only
