@@ -195,6 +195,25 @@ describe('verdict', () => {
     expect(verdict('dispatched', delivered)).toEqual({ kind: 'reached', at: '2026-10-05T12:00:02Z' });
   });
 
+  it('reaches a step the timeline shows even when the order was cancelled after it', () => {
+    const cancelledLater = read('cancelled', {
+      confirmed: '2026-10-05T12:00:01Z',
+      cancelled: '2026-10-05T12:00:02Z',
+    });
+
+    expect(verdict('confirmed', cancelledLater)).toEqual({ kind: 'reached', at: '2026-10-05T12:00:01Z' });
+    expect(verdict('dispatched', cancelledLater)).toEqual({
+      kind: 'failed',
+      reason: 'The order ended cancelled before it was dispatched.',
+    });
+  });
+
+  it('fails the cancellation watch on a saga cancellation that carries its own cancel time', () => {
+    for (const status of ['declined', 'out_of_stock']) {
+      expect(verdict('cancelled', read(status, { cancelled: '2026-10-05T12:00:02Z' })).kind).toBe('failed');
+    }
+  });
+
   it('stops a forward watch on a cancellation, which will never show the step', () => {
     for (const status of ['cancelled', 'out_of_stock', 'declined']) {
       expect(verdict('confirmed', read(status, { cancelled: '2026-10-05T12:00:02Z' }))).toEqual({
