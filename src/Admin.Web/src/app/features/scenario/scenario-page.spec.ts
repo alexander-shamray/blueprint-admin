@@ -210,6 +210,8 @@ describe('ScenarioPage', () => {
     expect(page.steps()[6].detail).toBe(
       'The order read shows delivered at 2026-10-05T12:00:40Z, 40 s after it was placed.',
     );
+    // Each watch keeps the read that reached its step.
+    expect(page.steps().slice(4).map((s) => [s.status, s.body])).toEqual(Array(3).fill([200, delivered]));
     expect(
       sent().every((r) => r.identity?.username === 'demo' && r.identity.password === null),
     ).toBe(true);
@@ -564,7 +566,10 @@ describe('ScenarioPage', () => {
   });
 
   describe('a later read that never leaves the console', () => {
-    /** Runs the deliver script with these as the confirmed watch's reads, one poll apart. */
+    /**
+     * Runs the deliver script with these as the confirmed watch's reads, one poll apart, and returns
+     * the step as the first read left it and as the run ended it.
+     */
     async function watchWith(...reads: (() => Observable<ProxyResult>)[]) {
       vi.useFakeTimers();
       host.proxy.mockImplementation((request: ProxyRequest) =>
@@ -572,14 +577,16 @@ describe('ScenarioPage', () => {
       );
       const page = render().componentInstance;
       const done = page.run();
+      await vi.advanceTimersByTimeAsync(0);
+      const first = page.steps()[4];
       await vi.advanceTimersByTimeAsync(DRAIN_POLL_MS * 2);
       await done;
       vi.useRealTimers();
-      return page.steps()[4];
+      return { first, confirmed: page.steps()[4] };
     }
 
     it('keeps the trace of the 404 that went before it', async () => {
-      const confirmed = await watchWith(
+      const { confirmed } = await watchWith(
         () => of(responded(404, '{"code":"order.not_found"}', '')),
         () => of({ outcome: 'tokenRejected', status: 401, body: '{}', correlationId: '' }),
       );
@@ -594,7 +601,7 @@ describe('ScenarioPage', () => {
           ? of({ ...heldClock, renewsAt: '2026-01-01T00:00:00Z' })
           : of(heldClock),
       );
-      const confirmed = await watchWith(
+      const { first, confirmed } = await watchWith(
         () => of(responded(200, order('placed'), '')),
         () =>
           of({
@@ -606,6 +613,9 @@ describe('ScenarioPage', () => {
           }),
       );
 
+      // The waiting read is recorded on the step, so there is something for the failure to clear.
+      expect(first.status).toBe(200);
+      expect(first.body).toBe(order('placed'));
       expect(confirmed.state).toBe('failed');
       expect(confirmed.correlationId).toBe('scenario-abcdef12-confirmed');
       expect(confirmed.regrant).toBeNull();
@@ -637,7 +647,10 @@ describe('ScenarioPage', () => {
           ],
         });
         host.proxy.mockClear();
-        const confirmed = await watchWith(() => of(responded(200, order('placed'), '')), failure);
+        const { confirmed } = await watchWith(
+          () => of(responded(200, order('placed'), '')),
+          failure,
+        );
 
         expect(confirmed.state).toBe('failed');
         expect(confirmed.regrant).toBeNull();
@@ -645,11 +658,13 @@ describe('ScenarioPage', () => {
     });
 
     it('keeps the trace when the host itself did not answer', async () => {
-      const confirmed = await watchWith(
+      const { first, confirmed } = await watchWith(
         () => of(responded(200, order('placed'), '')),
         () => throwError(() => new Error('host gone')),
       );
 
+      expect(first.status).toBe(200);
+      expect(first.body).toBe(order('placed'));
       expect(confirmed.state).toBe('failed');
       expect(confirmed.correlationId).toBe('scenario-abcdef12-confirmed');
       expect(confirmed.detail).toBe('host gone');
@@ -696,6 +711,9 @@ describe('ScenarioPage', () => {
     expect(confirmed.state).toBe('failed');
     expect(confirmed.correlationId).toBe('scenario-abcdef12-confirmed');
     expect(confirmed.detail).toBe('Keycloak refused demo: 401. This read was not sent.');
+    // Keycloak's answer, not the placed read's 200 and order.
+    expect(confirmed.status).toBe(401);
+    expect(confirmed.body).toBe('{"error":"invalid_grant"}');
   });
 
   it('says the token was minted for a call that went out and got no answer', async () => {
@@ -885,6 +903,8 @@ describe('ScenarioPage', () => {
 
     expect(page.steps()[0].state).toBe('failed');
     expect(page.steps()[0].correlationId).toBeNull();
+    expect(page.steps()[0].status).toBe(401);
+    expect(page.steps()[0].body).toBe('{"error":"invalid_grant"}');
   });
 
   it('does not leave an earlier snapshot beside a broker that stopped answering', async () => {
