@@ -217,6 +217,13 @@ describe('verdict', () => {
     });
   });
 
+  it('times a cancellation by asOf when the timeline has not caught up with the status', () => {
+    expect(verdict('cancelled', read('cancelled'))).toEqual({
+      kind: 'reached',
+      at: '2026-10-05T12:00:09Z',
+    });
+  });
+
   it('keeps waiting for the cancellation while the order is merely dispatched', () => {
     expect(verdict('cancelled', read('dispatched', { dispatched: '2026-10-05T12:00:02Z' }))).toEqual({
       kind: 'waiting',
