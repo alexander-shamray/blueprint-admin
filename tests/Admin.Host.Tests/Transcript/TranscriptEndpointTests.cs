@@ -46,9 +46,9 @@ public sealed class TranscriptEndpointTests(AdminHostFactory factory) : IClassFi
         string script = await response.Content.ReadAsStringAsync(Token);
         script.ShouldStartWith("#!/usr/bin/env bash\n");
         script.ShouldContain("curl -i http://localhost:5000/api/v1/orders");
+        FixtureScrubber.Findings(script).ShouldBeEmpty();
 
-        // The entries, not the script: Script() scrubs its whole text once more, so a gate over it passes whatever
-        // the proxy's curl held, while /api/transcript serves each line as the proxy kept it.
+        // The entries as well as the script: /api/transcript serves each line as the proxy kept it, to the screen.
         JsonElement view = await client.GetFromJsonAsync<JsonElement>("/api/transcript", Token);
         string[] commands = [.. view.GetProperty("entries").EnumerateArray().Select(e => e.GetProperty("command").GetString()!)];
         commands.ShouldContain(c => c.Contains("Authorization: Bearer <scrubbed>", StringComparison.Ordinal));

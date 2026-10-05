@@ -186,6 +186,32 @@ public sealed class OperatorTranscriptTests
         ShellLine.Curl(message, null).ShouldBe("curl -i 'http://localhost:5000/api/v1/orders?client_secret=<scrubbed>'");
     }
 
+    /// <summary>The form rule's value may be a quote, so a second scrub over the quoted line would take this one.</summary>
+    [Fact]
+    public void An_empty_password_keeps_its_closing_quote_in_the_line_and_the_script()
+    {
+        using HttpRequestMessage message = new(HttpMethod.Get, "http://localhost:5000/api/v1/orders?password=");
+        string curl = ShellLine.Curl(message, "username=a&password=");
+        transcript.Request(curl, null)(400);
+        new TranscribingProcessRunner(new StubRunner(), transcript).Start(new ProcessSpec("npm", ["start"], "/work/front end"));
+
+        curl.ShouldBe("curl -i -X GET 'http://localhost:5000/api/v1/orders?password=' --data-raw 'username=a&password='");
+        transcript.Script().ShouldContain("\n" + curl + "\n");
+        transcript.Script().ShouldContain("\n(cd '/work/front end' && npm start)\n");
+    }
+
+    [Fact]
+    public void A_cookie_with_no_name_keeps_nothing()
+    {
+        using HttpRequestMessage message = new(HttpMethod.Get, "http://localhost:5200/bff/v1/checkout");
+        message.Headers.TryAddWithoutValidation("Cookie", "s3cr3tSessionValue; theme=dark");
+
+        string curl = ShellLine.Curl(message, null);
+
+        curl.ShouldContain("-H 'Cookie: <scrubbed>; theme=<scrubbed>'");
+        curl.ShouldNotContain("s3cr3tSessionValue");
+    }
+
     [Fact]
     public void A_cookie_keeps_its_names_and_loses_its_values()
     {
@@ -227,15 +253,23 @@ public sealed class OperatorTranscriptTests
         settled.Status.ShouldBe(201);
     }
 
+    /// <summary>
+    /// Nothing reads the transcript until the job is gone: the Transcript screen may never be opened, so the release
+    /// has to come from the job's own completion and not from a read. The continuation runs on the pool, so the
+    /// collection is retried for a bounded time rather than once.
+    /// </summary>
     [Fact]
-    public void An_exited_process_keeps_its_exit_code_and_lets_its_job_go()
+    public async Task An_exited_process_lets_its_job_go_unread_and_keeps_its_exit_code()
     {
         WeakReference job = StartAndExit(3);
 
-        transcript.Read().Entries.ShouldHaveSingleItem().ExitCode.ShouldBe(3);
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
+        for (int attempt = 0; attempt < 100 && job.IsAlive; attempt++)
+        {
+            await Task.Delay(20, TestContext.Current.CancellationToken);
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+        }
 
         job.IsAlive.ShouldBeFalse();
         TranscriptEntry entry = transcript.Read().Entries.ShouldHaveSingleItem();
