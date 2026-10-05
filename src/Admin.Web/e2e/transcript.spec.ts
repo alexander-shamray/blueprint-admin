@@ -19,7 +19,8 @@ test('the transcript keeps what the operator did, and the copied script carries 
   await page.getByRole('button', { name: 'Copy as shell script' }).click();
   await expect(page.getByRole('status')).toHaveText('Copied.');
 
-  const script = await page.evaluate(() => navigator.clipboard.readText());
+  // The Windows clipboard hands LF text back as CRLF; the line endings are the OS's, not what is under test.
+  const script = (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, '\n');
   expect(script.startsWith('#!/usr/bin/env bash\n')).toBe(true);
   expect(script).toContain('curl -i -X POST http://localhost:5000/api/v1/orders');
   expect(script).toContain('Authorization: Bearer <scrubbed>');
