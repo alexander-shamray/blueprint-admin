@@ -49,9 +49,31 @@ public sealed class OperatorTranscriptTests
     {
         using HttpRequestMessage message = new(HttpMethod.Get, "http://localhost:5000/api/v1/orders");
         message.Headers.TryAddWithoutValidation("User-Agent", "smoke/1.0 (blueprint)");
+        message.Headers.TryAddWithoutValidation("Accept", "text/plain;q=0.5");
 
-        ShellLine.Curl(message, null).ShouldContain("-H 'User-Agent: smoke/1.0 (blueprint)'");
-        message.Headers.NonValidated["User-Agent"].ToString().ShouldBe("smoke/1.0 (blueprint)");
+        string curl = ShellLine.Curl(message, null);
+
+        curl.ShouldContain("-H 'User-Agent: smoke/1.0 (blueprint)'");
+        curl.ShouldContain("-H 'Accept: text/plain;q=0.5'");
+        message.Headers.NonValidated["Accept"].ToString().ShouldBe("text/plain;q=0.5");
+
+        // The control: a validated enumeration does store its parse, so the assertion above can fail.
+        using HttpRequestMessage parsed = new(HttpMethod.Get, "http://localhost:5000/api/v1/orders");
+        parsed.Headers.TryAddWithoutValidation("Accept", "text/plain;q=0.5");
+        _ = parsed.Headers.ToList();
+        parsed.Headers.NonValidated["Accept"].ToString().ShouldNotBe("text/plain;q=0.5");
+    }
+
+    [Fact]
+    public void An_empty_header_renders_in_the_form_curl_sends_rather_than_the_one_it_removes()
+    {
+        using HttpRequestMessage message = new(HttpMethod.Get, "http://localhost:5000/api/v1/orders");
+        message.Headers.TryAddWithoutValidation("X-Debug", "");
+
+        string curl = ShellLine.Curl(message, null);
+
+        curl.ShouldContain("-H 'X-Debug;'");
+        curl.ShouldNotContain("X-Debug:");
     }
 
     [Fact]
