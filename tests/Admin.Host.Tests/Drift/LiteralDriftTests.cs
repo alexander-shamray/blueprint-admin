@@ -169,6 +169,24 @@ public sealed partial class LiteralDriftTests
         ArrayLiteral(ScenarioRun(), "TIMELINE_STEPS").ShouldBe(members);
     }
 
+    /// <summary>
+    /// The three members a watch reads from the detail, under the camelCase names the web defaults write: a rename
+    /// there would fail every live watch while the fake, written to the same shape, kept every test green.
+    /// </summary>
+    [Fact]
+    public void The_members_the_scenario_reads_from_the_order_detail_are_the_bffs()
+    {
+        string responses = Backend.Read("src", "BFF", "Web.Bff", "Orders", "OrderResponses.cs");
+        Match detail = OrderDetailRecord().Match(responses);
+        detail.Success.ShouldBeTrue("OrderDetail is no longer a positional record this test can read");
+
+        detail.Groups["members"].Value.ShouldContain("string Status,");
+        detail.Groups["members"].Value.ShouldContain("OrderTimeline Timeline,");
+        detail.Groups["members"].Value.ShouldContain("DateTimeOffset AsOf,");
+        ScenarioRun().ShouldContain("typeof o['status'] !== 'string' || typeof o['asOf'] !== 'string'");
+        ScenarioRun().ShouldContain("const t = o['timeline'];");
+    }
+
     [Fact]
     public void The_statuses_the_fake_order_gives_are_the_bffs()
     {
@@ -293,6 +311,9 @@ public sealed partial class LiteralDriftTests
 
     [GeneratedRegex(@"public sealed record OrderTimeline\((?<members>[^)]*)\);")]
     private static partial Regex OrderTimelineRecord();
+
+    [GeneratedRegex(@"public sealed record OrderDetail\((?<members>[^;]*)\);")]
+    private static partial Regex OrderDetailRecord();
 
     [GeneratedRegex(@"DateTimeOffset\? (\w+)")]
     private static partial Regex TimelineMember();
