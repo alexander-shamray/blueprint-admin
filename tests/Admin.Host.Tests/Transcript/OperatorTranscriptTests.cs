@@ -65,12 +65,13 @@ public sealed class OperatorTranscriptTests
     }
 
     [Theory]
-    [InlineData("X-Debug")]
-    [InlineData("Authorization")]
-    public void An_empty_header_renders_in_the_form_curl_sends_rather_than_the_one_it_removes(string name)
+    [InlineData("X-Debug", "")]
+    [InlineData("Authorization", "")]
+    [InlineData("Cookie", " ; ")]
+    public void An_empty_header_renders_in_the_form_curl_sends_rather_than_the_one_it_removes(string name, string value)
     {
         using HttpRequestMessage message = new(HttpMethod.Get, "http://localhost:5000/api/v1/orders");
-        message.Headers.TryAddWithoutValidation(name, "");
+        message.Headers.TryAddWithoutValidation(name, value);
 
         string curl = ShellLine.Curl(message, null);
 
