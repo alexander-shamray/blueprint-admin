@@ -64,16 +64,18 @@ public sealed class OperatorTranscriptTests
         parsed.Headers.NonValidated["Accept"].ToString().ShouldNotBe("text/plain;q=0.5");
     }
 
-    [Fact]
-    public void An_empty_header_renders_in_the_form_curl_sends_rather_than_the_one_it_removes()
+    [Theory]
+    [InlineData("X-Debug")]
+    [InlineData("Authorization")]
+    public void An_empty_header_renders_in_the_form_curl_sends_rather_than_the_one_it_removes(string name)
     {
         using HttpRequestMessage message = new(HttpMethod.Get, "http://localhost:5000/api/v1/orders");
-        message.Headers.TryAddWithoutValidation("X-Debug", "");
+        message.Headers.TryAddWithoutValidation(name, "");
 
         string curl = ShellLine.Curl(message, null);
 
-        curl.ShouldContain("-H 'X-Debug;'");
-        curl.ShouldNotContain("X-Debug:");
+        curl.ShouldContain($"-H '{name};'");
+        curl.ShouldNotContain($"{name}:");
     }
 
     [Fact]
