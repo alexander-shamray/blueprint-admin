@@ -181,6 +181,9 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
         unrouted.GetProperty("status").GetInt32().ShouldBe(404);
         unrouted.GetProperty("body").GetString()!.ShouldNotContain("order.not_found");
 
+        // The gateway's policy comes before the BFF's route, so with no token even that is a 401.
+        (await ProxyAsync(new { method = "GET", url = reads + "not-an-order" })).GetProperty("status").GetInt32().ShouldBe(401);
+
         JsonElement placed = await ProxyAsync(new { method = "POST", url = "http://localhost:5000/api/v1/orders", body = RunLocallyExamples.For("PlaceOrder"), identity = new { username = "demo" } });
         placed.GetProperty("status").GetInt32().ShouldBe(200);
         string orderId = JsonSerializer.Deserialize<string>(placed.GetProperty("body").GetString()!)!;
