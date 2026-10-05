@@ -172,6 +172,8 @@ describe('orderRead', () => {
     expect(orderRead('[]')).toBeNull();
     expect(orderRead('{"status":"placed","asOf":"x"}')).toBeNull();
     expect(orderRead(JSON.stringify({ status: 1, timeline, asOf: 'x' }))).toBeNull();
+    // Without asOf a waiting read would say "as the BFF knew it at undefined" for the whole cap.
+    expect(orderRead(JSON.stringify({ status: 'placed', timeline }))).toBeNull();
     expect(
       orderRead(JSON.stringify({ status: 'placed', timeline: { ...timeline, placed: 5 }, asOf: 'x' })),
     ).toBeNull();
