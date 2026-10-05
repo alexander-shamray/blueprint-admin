@@ -10,6 +10,7 @@ using Admin.Host.Identity;
 using Admin.Host.Jobs;
 using Admin.Host.Telemetry;
 using Admin.Host.Tests.TestSupport;
+using Admin.Host.Transcript;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -244,7 +245,8 @@ public sealed class FixtureRecorderTests : IDisposable
                 ["Admin:FrontendDir"] = frontend,
             })));
 
-        recording.Services.GetRequiredService<IProcessRunner>().ShouldBeOfType<RecordingProcessRunner>();
+        recording.Services.GetRequiredService<IProcessRunner>().ShouldBeOfType<TranscribingProcessRunner>().Inner
+            .ShouldBeOfType<RecordingProcessRunner>();
 
         HttpMessageHandler? handler = recording.Services.GetRequiredService<IHttpMessageHandlerFactory>().CreateHandler("platform");
         List<HttpMessageHandler> chain = [];

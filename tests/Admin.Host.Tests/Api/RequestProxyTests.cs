@@ -6,6 +6,7 @@ using Admin.Host.Config;
 using Admin.Host.Identity;
 using Admin.Host.Tests.Identity;
 using Admin.Host.Tests.TestSupport;
+using Admin.Host.Transcript;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -25,12 +26,13 @@ public sealed class RequestProxyTests
         Content = new StringContent($$"""{"access_token":"{{DemoToken}}","expires_in":300}""", Encoding.UTF8, "application/json"),
     };
 
-    private static RequestProxy Proxy(ScriptedHandler handler, AdminOptions? options = null, FakeTimeProvider? time = null)
+    private static RequestProxy Proxy(ScriptedHandler handler, AdminOptions? options = null, FakeTimeProvider? time = null, OperatorTranscript? transcript = null)
     {
         IOptions<AdminOptions> wrapped = Options.Create(options ?? new AdminOptions());
         HttpClient http = new(handler);
 
-        return new RequestProxy(http, new TokenService(http, wrapped, TimeProvider.System), wrapped, time ?? new FakeTimeProvider());
+        return new RequestProxy(
+            http, new TokenService(http, wrapped, TimeProvider.System), wrapped, time ?? new FakeTimeProvider(), transcript ?? new OperatorTranscript(TimeProvider.System));
     }
 
     /// <summary>A 200 whose body yields <paramref name="prefix"/>, then runs <paramref name="then"/>, which is expected to throw.</summary>
@@ -238,6 +240,35 @@ public sealed class RequestProxyTests
         rejected.Status.ShouldBe(401);
         rejected.Body.ShouldBe("""{"error":"invalid_grant"}""");
         handler.Requests.ShouldAllBe(r => IsToken(r.Request));
+    }
+
+    [Fact]
+    public async Task A_sent_request_is_kept_in_the_transcript_as_its_curl_and_a_refused_identity_is_not()
+    {
+        ScriptedHandler handler = new(request => IsToken(request) ? Granted() : new HttpResponseMessage(HttpStatusCode.Created));
+        OperatorTranscript transcript = new(TimeProvider.System);
+        RequestProxy proxy = Proxy(handler, transcript: transcript);
+        ProxyRequest request = new("POST", "http://localhost:5000/api/v1/orders", null, """{"basketId":"b-1"}""", new IdentityRequest("demo", null), "c-1");
+
+        await proxy.SendAsync(request, Token);
+
+        TranscriptEntry entry = transcript.Read().Entries.ShouldHaveSingleItem();
+        entry.Kind.ShouldBe(TranscriptKind.Request);
+        entry.Identity.ShouldBe("demo");
+        entry.Status.ShouldBe(201);
+        entry.Command.ShouldStartWith("curl -i -X POST http://localhost:5000/api/v1/orders ");
+        entry.Command.ShouldContain("-H 'Authorization: Bearer <scrubbed>'");
+        entry.Command.ShouldContain("-H 'X-Correlation-Id: c-1'");
+        entry.Command.ShouldNotContain(DemoToken);
+
+        ScriptedHandler refusing = new(r => IsToken(r)
+            ? new HttpResponseMessage(HttpStatusCode.Unauthorized) { Content = new StringContent("""{"error":"invalid_grant"}""") }
+            : new HttpResponseMessage(HttpStatusCode.OK));
+        OperatorTranscript untouched = new(TimeProvider.System);
+
+        await Proxy(refusing, transcript: untouched).SendAsync(Get(identity: new IdentityRequest("demo", "wrong")), Token);
+
+        untouched.Read().Entries.ShouldBeEmpty();
     }
 
     [Fact]
