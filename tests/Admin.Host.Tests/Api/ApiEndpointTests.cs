@@ -176,6 +176,11 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
         unknown.GetProperty("status").GetInt32().ShouldBe(404);
         unknown.GetProperty("body").GetString()!.ShouldContain("\"order.not_found\"");
 
+        // Not a Guid: the BFF's route constraint matches nothing, so the answer is no route's, not the order read's.
+        JsonElement unrouted = await ProxyAsync(new { method = "GET", url = reads + "not-an-order", identity = new { username = "demo" } });
+        unrouted.GetProperty("status").GetInt32().ShouldBe(404);
+        unrouted.GetProperty("body").GetString()!.ShouldNotContain("order.not_found");
+
         JsonElement placed = await ProxyAsync(new { method = "POST", url = "http://localhost:5000/api/v1/orders", body = RunLocallyExamples.For("PlaceOrder"), identity = new { username = "demo" } });
         placed.GetProperty("status").GetInt32().ShouldBe(200);
         string orderId = JsonSerializer.Deserialize<string>(placed.GetProperty("body").GetString()!)!;

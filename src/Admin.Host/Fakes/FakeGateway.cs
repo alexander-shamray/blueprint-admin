@@ -58,7 +58,8 @@ internal static partial class FakeGateway
     [GeneratedRegex("^/api/v1/orders/(?<id>[0-9a-fA-F-]{36})/cancel$")]
     private static partial Regex CancelPath();
 
-    [GeneratedRegex("^/bff/v1/orders/(?<id>[^/]+)$")]
+    // The BFF maps `/{id:guid}`, so any other path under it matches no route and gets the bare 404 below.
+    [GeneratedRegex("^/bff/v1/orders/(?<id>[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$")]
     private static partial Regex OrderReadPath();
 
     [GeneratedRegex("^/api/v1/inventory/stock/(?<id>[0-9a-fA-F-]{36})$")]
