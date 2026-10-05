@@ -16,23 +16,29 @@ public static partial class ShellLine
     /// more after, for a secret that spans two words.
     /// </summary>
     public static string Command(ProcessSpec spec) =>
-        FixtureScrubber.Scrub(string.Join(' ', new[] { spec.FileName }.Concat(spec.Arguments).Select(w => Quote(FixtureScrubber.Scrub(w)))));
+        FixtureScrubber.Scrub(string.Join(' ', new[] { spec.FileName }.Concat(spec.Arguments).Select(Word)));
 
     /// <summary>
-    /// The curl for the message the proxy built, headers as it sends them: the token it attached and any
-    /// Authorization a caller pasted keep their scheme and lose their value. Content-Length is curl's to set.
+    /// The curl for the message the proxy built, headers as it sends them. The token it attached and any
+    /// Authorization a caller pasted keep their scheme and lose their value, and a Cookie keeps its names and loses
+    /// its values: the credential headers the API screen's history drops (<c>CREDENTIAL_HEADERS</c> in
+    /// request-builder.ts), which the scrubber's patterns cannot recognise in an opaque value. Each word is scrubbed
+    /// before it is quoted, as <see cref="Command"/> does, so no placeholder breaks the quoting. A GET or HEAD
+    /// carrying a body names its method, since curl would otherwise send the body as a POST. Content-Length is
+    /// curl's to set.
     /// </summary>
     public static string Curl(HttpRequestMessage message, string? body)
     {
+        bool hasBody = body is { Length: > 0 };
         List<string> words = ["curl", "-i"];
 
         words.AddRange(message.Method.Method switch
         {
-            "GET" => [],
-            "HEAD" => ["--head"],
+            "GET" when !hasBody => [],
+            "HEAD" when !hasBody => ["--head"],
             string method => ["-X", method],
         });
-        words.Add(Quote(message.RequestUri!.AbsoluteUri));
+        words.Add(Word(message.RequestUri!.AbsoluteUri));
 
         IEnumerable<KeyValuePair<string, IEnumerable<string>>> content = message.Content is null ? [] : message.Content.Headers;
 
@@ -45,13 +51,13 @@ public static partial class ShellLine
 
             string value = string.Join(", ", values);
             words.Add("-H");
-            words.Add(Quote($"{name}: {(name.EndsWith("Authorization", StringComparison.OrdinalIgnoreCase) ? Elided(value) : value)}"));
+            words.Add(Word($"{name}: {Elided(name, value)}"));
         }
 
-        if (body is { Length: > 0 })
+        if (hasBody)
         {
             words.Add("--data-raw");
-            words.Add(Quote(body));
+            words.Add(Word(body!));
         }
 
         return FixtureScrubber.Scrub(string.Join(' ', words));
@@ -61,8 +67,23 @@ public static partial class ShellLine
     public static string Quote(string word) =>
         word.Length > 0 && Plain().IsMatch(word) ? word : $"'{word.Replace("'", @"'\''", StringComparison.Ordinal)}'";
 
-    private static string Elided(string value) =>
-        value.Split(' ', 2) is [string scheme, _] ? $"{scheme} {FixtureScrubber.Scrubbed}" : FixtureScrubber.Scrubbed;
+    private static string Word(string word) => Quote(FixtureScrubber.Scrub(word));
+
+    private static string Elided(string name, string value)
+    {
+        if (name.EndsWith("Authorization", StringComparison.OrdinalIgnoreCase))
+        {
+            return value.Split(' ', 2) is [string scheme, _] ? $"{scheme} {FixtureScrubber.Scrubbed}" : FixtureScrubber.Scrubbed;
+        }
+
+        if (name.Equals("Cookie", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Join("; ", value.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Select(pair => $"{pair.Split('=', 2)[0]}={FixtureScrubber.Scrubbed}"));
+        }
+
+        return value;
+    }
 
     [GeneratedRegex(@"^[A-Za-z0-9_@%+=:,./-]+$")]
     private static partial Regex Plain();

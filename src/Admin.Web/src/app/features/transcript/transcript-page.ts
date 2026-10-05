@@ -56,7 +56,8 @@ export class TranscriptPage {
   }
 
   outcome(entry: TranscriptEntry): string {
-    if (entry.kind === 'Process') return entry.exitCode === null ? 'running' : `exit ${entry.exitCode}`;
+    if (entry.kind === 'Process') return entry.settled ? `exit ${entry.exitCode}` : 'running';
+    if (!entry.settled) return 'waiting';
     return entry.status === null ? 'no answer' : `HTTP ${entry.status}`;
   }
 

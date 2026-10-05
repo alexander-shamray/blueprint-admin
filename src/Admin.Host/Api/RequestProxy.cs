@@ -131,12 +131,22 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
             default:
                 using (HttpRequestMessage message = Build(request, token as TokenIssued, correlationId))
                 {
-                    // Rendered before the send, from the message as built: what is kept is what was sent.
-                    string curl = ShellLine.Curl(message, request.Body);
-                    ProxyResult result = await SendAsync(message, started, correlationId, cancellationToken);
-                    transcript.Request(curl, request.Identity?.Username is { Length: > 0 } user ? user : null, (result as ProxyResponded)?.Status);
+                    // Kept before the send, from the message as built: what is kept is what was sent, in the order it
+                    // was sent. Settled whatever became of it, a caller who went away mid-send included.
+                    Action<int?> answered = transcript.Request(
+                        ShellLine.Curl(message, request.Body), request.Identity?.Username is { Length: > 0 } user ? user : null);
+                    ProxyResult? result = null;
 
-                    return result;
+                    try
+                    {
+                        result = await SendAsync(message, started, correlationId, cancellationToken);
+
+                        return result;
+                    }
+                    finally
+                    {
+                        answered((result as ProxyResponded)?.Status);
+                    }
                 }
         }
     }

@@ -99,7 +99,7 @@ public sealed class OperatorTranscriptTests
     public void A_secret_in_a_body_or_an_argument_is_scrubbed_before_it_is_kept()
     {
         using HttpRequestMessage message = new(HttpMethod.Post, "http://localhost:5000/api/v1/orders");
-        transcript.Request(ShellLine.Curl(message, """{"password":"hunter2","note":"ok"}"""), "demo", 201);
+        transcript.Request(ShellLine.Curl(message, """{"password":"hunter2","note":"ok"}"""), "demo")(201);
         new TranscribingProcessRunner(new StubRunner(), transcript).Start(new ProcessSpec("tool", ["--token", Token], "/work"));
 
         TranscriptView view = transcript.Read();
@@ -113,7 +113,7 @@ public sealed class OperatorTranscriptTests
     {
         for (int i = 0; i < OperatorTranscript.Capacity + 3; i++)
         {
-            transcript.Request($"curl -i http://localhost:5000/{i}", null, 200);
+            transcript.Request($"curl -i http://localhost:5000/{i}", null)(200);
         }
 
         TranscriptView view = transcript.Read();
@@ -129,8 +129,8 @@ public sealed class OperatorTranscriptTests
     {
         TranscribingProcessRunner runner = new(new StubRunner(), transcript);
         runner.Start(new ProcessSpec("npm", ["start"], "C:\\dev\\blueprint-frontend")).MarkExited(1);
-        transcript.Request("curl -i http://localhost:5000/api/v1/orders", "demo", 403);
-        transcript.Request("curl -i http://localhost:5000/api/v1/catalog/products", null, null);
+        transcript.Request("curl -i http://localhost:5000/api/v1/orders", "demo")(403);
+        transcript.Request("curl -i http://localhost:5000/api/v1/catalog/products", null)(null);
 
         string script = transcript.Script();
 
@@ -141,25 +141,115 @@ public sealed class OperatorTranscriptTests
     }
 
     /// <summary>
-    /// The subject is what the copy button hands over, read by the rules the fixture gate reads with: a
-    /// transcript holding a bearer token is a failed build, the same as a fixture holding one.
+    /// The subject is each entry as kept, which is what the screen shows, read by the rules the fixture gate reads
+    /// with: a transcript holding a bearer token is a failed build, the same as a fixture holding one. The entries
+    /// and not the script, because Script() scrubs its whole text once more, so a gate over the script would pass
+    /// whatever the entries held.
     /// </summary>
     [Fact]
-    public void The_script_is_clean_by_the_fixture_gates_rules_whatever_went_into_it()
+    public void Every_entry_is_clean_by_the_fixture_gates_rules_whatever_went_into_it()
     {
         using HttpRequestMessage message = new(HttpMethod.Post, "http://localhost:8080/realms/commerce/protocol/openid-connect/token")
         {
             Content = new StringContent("grant_type=password&username=demo&password=demo&client_secret=s3cret", Encoding.UTF8, "application/x-www-form-urlencoded"),
         };
         message.Headers.Authorization = new("Bearer", Token);
-        transcript.Request(ShellLine.Curl(message, "grant_type=password&username=demo&password=demo&client_secret=s3cret"), "demo", 200);
+        transcript.Request(ShellLine.Curl(message, "grant_type=password&username=demo&password=demo&client_secret=s3cret"), "demo")(200);
         new TranscribingProcessRunner(new StubRunner(), transcript).Start(new ProcessSpec("curl", ["-H", $"Authorization: Bearer {Token}"], "/work"));
 
-        string script = transcript.Script();
+        IReadOnlyList<TranscriptEntry> entries = transcript.Read().Entries;
 
-        FixtureScrubber.Findings(script).ShouldBeEmpty();
-        script.ShouldNotContain(Token);
-        script.ShouldNotContain("s3cret");
-        script.ShouldNotContain("password=demo");
+        entries.Count.ShouldBe(2);
+        entries.ShouldAllBe(e => FixtureScrubber.Findings(e.Command).Count == 0);
+        entries.ShouldAllBe(e => !e.Command.Contains(Token) && !e.Command.Contains("s3cret") && !e.Command.Contains("password=demo"));
+    }
+
+    /// <summary>
+    /// The scrubber's form rule would take a closing quote with the value it replaces, and a bare placeholder is a
+    /// redirection to bash, so each word is scrubbed before it is quoted and every quote here still closes.
+    /// </summary>
+    [Theory]
+    [InlineData("username=demo&password=demo", "--data-raw 'username=demo&password=<scrubbed>'")]
+    [InlineData("password=demo", "--data-raw 'password=<scrubbed>'")]
+    public void A_scrubbed_body_stays_inside_its_quotes(string body, string rendered)
+    {
+        using HttpRequestMessage message = new(HttpMethod.Post, "http://localhost:5000/api/v1/orders");
+
+        ShellLine.Curl(message, body).ShouldEndWith(rendered);
+    }
+
+    [Fact]
+    public void A_scrubbed_query_stays_inside_its_quotes()
+    {
+        using HttpRequestMessage message = new(HttpMethod.Get, "http://localhost:5000/api/v1/orders?client_secret=s3cret");
+
+        ShellLine.Curl(message, null).ShouldBe("curl -i 'http://localhost:5000/api/v1/orders?client_secret=<scrubbed>'");
+    }
+
+    [Fact]
+    public void A_cookie_keeps_its_names_and_loses_its_values()
+    {
+        using HttpRequestMessage message = new(HttpMethod.Get, "http://localhost:5200/bff/v1/checkout");
+        message.Headers.TryAddWithoutValidation("Cookie", ".AspNetCore.Cookies=CfDJ8abc; theme=dark");
+
+        string curl = ShellLine.Curl(message, null);
+
+        curl.ShouldContain("-H 'Cookie: .AspNetCore.Cookies=<scrubbed>; theme=<scrubbed>'");
+        curl.ShouldNotContain("CfDJ8abc");
+    }
+
+    [Theory]
+    [InlineData("GET")]
+    [InlineData("HEAD")]
+    public void A_get_or_head_carrying_a_body_names_its_method_so_curl_does_not_send_a_post(string method)
+    {
+        using HttpRequestMessage message = new(new HttpMethod(method), "http://localhost:5000/api/v1/catalog/products");
+
+        ShellLine.Curl(message, """{"q":1}""").ShouldStartWith($"curl -i -X {method} http://localhost:5000/api/v1/catalog/products");
+    }
+
+    [Fact]
+    public void A_request_takes_its_place_when_sent_and_awaits_its_answer()
+    {
+        Action<int?> answered = transcript.Request("curl -i -X POST http://localhost:5000/api/v1/orders", "demo");
+        new TranscribingProcessRunner(new StubRunner(), transcript).Start(new ProcessSpec("docker", ["compose", "down"], "/work"));
+
+        TranscriptEntry waiting = transcript.Read().Entries[0];
+        waiting.Kind.ShouldBe(TranscriptKind.Request);
+        waiting.Sequence.ShouldBe(1);
+        waiting.Settled.ShouldBeFalse();
+        transcript.Script().ShouldContain("· as demo · awaiting an answer\n");
+
+        answered(201);
+
+        TranscriptEntry settled = transcript.Read().Entries[0];
+        settled.Settled.ShouldBeTrue();
+        settled.Status.ShouldBe(201);
+    }
+
+    [Fact]
+    public void An_exited_process_keeps_its_exit_code_and_lets_its_job_go()
+    {
+        WeakReference job = StartAndExit(3);
+
+        transcript.Read().Entries.ShouldHaveSingleItem().ExitCode.ShouldBe(3);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        job.IsAlive.ShouldBeFalse();
+        TranscriptEntry entry = transcript.Read().Entries.ShouldHaveSingleItem();
+        entry.ExitCode.ShouldBe(3);
+        entry.Settled.ShouldBeTrue();
+    }
+
+    /// <summary>Not inlined, so that no local of the test's own frame keeps the job alive.</summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private WeakReference StartAndExit(int exitCode)
+    {
+        Job job = new TranscribingProcessRunner(new StubRunner(), transcript).Start(new ProcessSpec("docker", ["compose", "logs", "-f"], "/work"));
+        job.MarkExited(exitCode);
+
+        return new WeakReference(job);
     }
 }

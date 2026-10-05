@@ -509,11 +509,17 @@ built, with the identity it went as and the status that came back.
 
 What the screens poll is left out by the line `/jobs` already draws:
 `TranscribingProcessRunner` keeps a process only when `ProcessSpec.Listed`
-says the registry would (§5.2), so `ps` and `exec` never appear. A token the
-proxy attached, and any Authorization a caller pasted, keep their scheme and
-lose their value; every line, and the script as a whole, then passes through
-`FixtureScrubber`, so a transcript and a fixture are held to one definition of
-a secret. The token grant itself is `TokenService`'s and not a proxied
+says the registry would (§5.2), so `ps` and `exec` never appear. A process is
+let go once it exits and only its exit code kept, so the transcript never holds
+an output ring the registry has trimmed. A request takes its place when it is
+sent, not when it is answered, and is settled whatever became of it, so the
+order is the order things began and a send abandoned mid-flight is still on the
+record. A token the proxy attached, and any Authorization a caller pasted, keep
+their scheme and lose their value, and a Cookie keeps its names and loses its
+values: the headers the API screen's history drops, which no pattern can
+recognise by value. Every word is then scrubbed before it is quoted, and every
+line and the script as a whole pass through `FixtureScrubber`, so a transcript
+and a fixture are held to one definition of a secret. The token grant itself is `TokenService`'s and not a proxied
 request, so it is not in the transcript; the script's header says to mint a
 token as `run-locally.md` does. The entries kept are bounded by
 `OperatorTranscript.Capacity`, and the oldest go first and are counted.

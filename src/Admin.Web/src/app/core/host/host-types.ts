@@ -296,6 +296,8 @@ export interface DoctorView {
 /**
  * One thing the operator did, as the host's `OperatorTranscript` kept it: a process with its directory and exit
  * code, or a request as its curl with the identity it went as and the status that came back. Already scrubbed.
+ * `settled` is false while the process runs or the request awaits its answer; a settled request with no status
+ * got no answer.
  */
 export interface TranscriptEntry {
   sequence: number;
@@ -306,6 +308,7 @@ export interface TranscriptEntry {
   identity: string | null;
   exitCode: number | null;
   status: number | null;
+  settled: boolean;
 }
 
 export interface TranscriptView {

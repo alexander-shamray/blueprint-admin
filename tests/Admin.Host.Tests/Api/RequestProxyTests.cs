@@ -272,6 +272,32 @@ public sealed class RequestProxyTests
     }
 
     [Fact]
+    public async Task A_send_the_caller_abandons_is_still_kept_and_settled_with_no_answer()
+    {
+        using CancellationTokenSource caller = new();
+        ScriptedHandler handler = new(request =>
+        {
+            if (IsToken(request))
+            {
+                return Granted();
+            }
+
+            // The page went away mid-send: the request has left, and the caller's token is what ends it.
+            caller.Cancel();
+            throw new OperationCanceledException(caller.Token);
+        });
+        OperatorTranscript transcript = new(TimeProvider.System);
+
+        await Should.ThrowAsync<OperationCanceledException>(() =>
+            Proxy(handler, transcript: transcript).SendAsync(new("POST", "http://localhost:5000/api/v1/orders", null, "{}", new IdentityRequest("demo", null), "c-2"), caller.Token));
+
+        TranscriptEntry entry = transcript.Read().Entries.ShouldHaveSingleItem();
+        entry.Settled.ShouldBeTrue();
+        entry.Status.ShouldBeNull();
+        entry.Command.ShouldContain("-H 'X-Correlation-Id: c-2'");
+    }
+
+    [Fact]
     public async Task A_refused_connection_is_unreached_with_the_reason()
     {
         ScriptedHandler handler = new(_ => throw new HttpRequestException("No connection could be made"));

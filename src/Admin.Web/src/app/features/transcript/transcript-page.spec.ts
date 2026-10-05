@@ -16,6 +16,7 @@ const view: TranscriptView = {
       identity: null,
       exitCode: 0,
       status: null,
+      settled: true,
     },
     {
       sequence: 2,
@@ -26,6 +27,7 @@ const view: TranscriptView = {
       identity: 'demo',
       exitCode: null,
       status: 403,
+      settled: true,
     },
     {
       sequence: 3,
@@ -36,6 +38,7 @@ const view: TranscriptView = {
       identity: null,
       exitCode: null,
       status: null,
+      settled: true,
     },
   ],
 };
@@ -85,6 +88,22 @@ describe('TranscriptPage', () => {
     expect(text(entries[1].querySelector('.identity'))).toBe('as demo');
     expect(text(entries[2].querySelector('.outcome'))).toBe('no answer');
     expect(text(entries[2].querySelector('.identity'))).toBe('anonymous');
+  });
+
+  it('says a process is running and a request is waiting until each is settled', async () => {
+    host.transcript.mockReturnValue(
+      of({
+        dropped: 0,
+        entries: [
+          { ...view.entries[0], exitCode: null, settled: false },
+          { ...view.entries[1], status: null, settled: false },
+        ],
+      }),
+    );
+    const fixture = await render();
+
+    const outcomes = Array.from(fixture.nativeElement.querySelectorAll('li.entry .outcome')) as HTMLElement[];
+    expect(outcomes.map((o) => text(o))).toEqual(['running', 'waiting']);
   });
 
   it('polls the host again on its interval', async () => {
