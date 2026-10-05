@@ -44,8 +44,8 @@ public static partial class ShellLine
         });
         words.Add(Word(message.RequestUri!.AbsoluteUri));
 
-        // NonValidated, because enumerating the headers themselves parses each raw value and stores the parse back
-        // into the message before it is sent: User-Agent's "a/1 (b)" would come out as "a/1, (b)" on both sides.
+        // NonValidated, because enumerating the headers themselves parses each raw value, hands back the parts, and
+        // stores the parse into the message before it is sent: Accept's "a/b;q=0.5" goes out as "a/b; q=0.5".
         IEnumerable<KeyValuePair<string, HeaderStringValues>> content = message.Content is null ? [] : message.Content.Headers.NonValidated;
 
         foreach ((string name, HeaderStringValues values) in message.Headers.NonValidated.Concat(content))
@@ -55,9 +55,10 @@ public static partial class ShellLine
                 continue;
             }
 
-            string value = values.ToString();
+            // curl reads "Name:" with nothing after it as "remove this header"; "Name;" is how it sends one empty.
+            string value = Elided(name, values.ToString());
             words.Add("-H");
-            words.Add(Word($"{name}: {Elided(name, value)}"));
+            words.Add(Word(string.IsNullOrWhiteSpace(value) ? $"{name};" : $"{name}: {value}"));
         }
 
         if (hasBody)
