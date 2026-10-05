@@ -458,12 +458,13 @@ export class ScenarioPage {
         }),
       );
     } catch (e: unknown) {
-      // A watch's earlier read left its status and body on the step; this call has neither.
+      // A watch's earlier read left its status, body and any mint on the step; this call has none of them.
       this.patch(key, {
         state: 'failed',
         correlationId: traced,
         status: null,
         body: null,
+        regrant: null,
         detail: describe(e),
       });
       return null;
@@ -477,6 +478,7 @@ export class ScenarioPage {
           correlationId: traced,
           status: result.status,
           body: result.body,
+          regrant: null,
           detail: sentBefore
             ? `Keycloak refused ${identity.username}: ${result.status}. This read was not sent.`
             : `Keycloak refused ${identity.username}: ${result.status}. Nothing was sent.`,
@@ -489,7 +491,7 @@ export class ScenarioPage {
           status: null,
           body: null,
           detail: `No answer from the platform: ${result.error}`,
-          ...(result.sent && regrant ? { regrant } : {}),
+          regrant: result.sent ? regrant : null,
         });
         return null;
     }

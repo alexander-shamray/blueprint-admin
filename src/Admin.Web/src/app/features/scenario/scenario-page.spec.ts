@@ -464,6 +464,31 @@ describe('ScenarioPage', () => {
     expect(page.steps()[4].detail).toBe('Keycloak refused demo: 401. Nothing was sent.');
   });
 
+  it('offers no trace for a first send the host itself did not answer, since no service logged it', async () => {
+    host.proxy.mockReturnValue(throwError(() => new Error('host gone')));
+    const page = render().componentInstance;
+
+    await page.run();
+
+    expect(page.steps()[0].state).toBe('failed');
+    expect(page.steps()[0].correlationId).toBeNull();
+    expect(page.steps()[0].detail).toBe('host gone');
+  });
+
+  it('says when a step was reached without timing it, where the read has no placed time', async () => {
+    const answers = [
+      responded(200, order('confirmed', { placed: null, confirmed: '2026-10-05T12:00:01Z' }), ''),
+    ];
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      isRead(request) && answers.length > 0 ? of(answers.shift()!) : of(platform(request)),
+    );
+    const page = render().componentInstance;
+
+    await page.run();
+
+    expect(page.steps()[4].detail).toBe('The order read shows confirmed at 2026-10-05T12:00:01Z.');
+  });
+
   describe('a later read that never leaves the console', () => {
     /** Runs the deliver script with these as the confirmed watch's reads, one poll apart. */
     async function watchWith(...reads: (() => Observable<ProxyResult>)[]) {
@@ -513,6 +538,36 @@ describe('ScenarioPage', () => {
       // The placed read's 200 and body are not this failure's.
       expect(confirmed.status).toBeNull();
       expect(confirmed.body).toBeNull();
+    });
+
+    it("does not leave an earlier read's mint on the step beside a read that got no answer", async () => {
+      host.tokenClock.mockImplementation(() =>
+        sent().filter(isRead).length === 0
+          ? of({ ...heldClock, renewsAt: '2026-01-01T00:00:00Z' })
+          : of(heldClock),
+      );
+      const failures: (() => Observable<ProxyResult>)[] = [
+        () => throwError(() => new Error('host gone')),
+        () => of({ outcome: 'tokenRejected', status: 401, body: '{}', correlationId: '' }),
+        () =>
+          of({ outcome: 'unreached', error: 'refused', elapsedMs: 5, correlationId: '', sent: false }),
+      ];
+      for (const failure of failures) {
+        TestBed.resetTestingModule();
+        TestBed.configureTestingModule({
+          imports: [ScenarioPage],
+          providers: [
+            provideRouter([]),
+            { provide: HostClient, useValue: host },
+            { provide: UUID, useValue: () => `abcdef12-uuid-${++uuids}` },
+          ],
+        });
+        host.proxy.mockClear();
+        const confirmed = await watchWith(() => of(responded(200, order('placed'), '')), failure);
+
+        expect(confirmed.state).toBe('failed');
+        expect(confirmed.regrant).toBeNull();
+      }
     });
 
     it('keeps the trace when the host itself did not answer', async () => {
