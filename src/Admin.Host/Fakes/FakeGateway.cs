@@ -58,8 +58,8 @@ internal static partial class FakeGateway
     [GeneratedRegex("^/api/v1/orders/(?<id>[0-9a-fA-F-]{36})/cancel$")]
     private static partial Regex CancelPath();
 
-    // The BFF maps `/{id:guid}`, so any other path under it matches no route and gets the bare 404 below.
-    [GeneratedRegex("^/bff/v1/orders/(?<id>[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$")]
+    // The BFF maps `/{id:guid}`, which takes any form Guid.TryParse reads; a segment that is not one matches no route.
+    [GeneratedRegex("^/bff/v1/orders/(?<id>[^/]+)$")]
     private static partial Regex OrderReadPath();
 
     [GeneratedRegex("^/api/v1/inventory/stock/(?<id>[0-9a-fA-F-]{36})$")]
@@ -85,9 +85,7 @@ internal static partial class FakeGateway
             ("POST", var p) when CancelPath().Match(p) is { Success: true } cancel => Authorize(permissions, "orders:cancel", () => Cancelled(orders, cancel.Groups["id"].Value)),
             ("POST", "/bff/v1/checkout/quote") => Authorize(permissions, null, () => FakeHttp.Json(HttpStatusCode.OK, Quote)),
             ("GET", "/bff/v1/orders") => Authorize(permissions, null, () => FakeHttp.Json(HttpStatusCode.OK, orders.Page())),
-            ("GET", _) when orderRead.Success => Authorize(permissions, null, () => orders.Detail(orderRead.Groups["id"].Value) is { } detail
-                ? FakeHttp.Json(HttpStatusCode.OK, detail)
-                : FakeHttp.Json(HttpStatusCode.NotFound, OrderNotFound)),
+            ("GET", _) when orderRead.Success => Authorize(permissions, null, () => OrderRead(orders, orderRead.Groups["id"].Value)),
             (_, var p) when p.StartsWith("/api/v1/inventory/", StringComparison.Ordinal) => Authorize(permissions, "inventory:admin", () => Inventory(request.Method.Method, p)),
             (_, var p) when p.StartsWith("/api/v1/payments/", StringComparison.Ordinal) => Authorize(permissions, "payments:admin", () => Payments(request.Method.Method, p)),
             _ => FakeHttp.Problem(HttpStatusCode.NotFound, "Not Found"),
@@ -129,6 +127,15 @@ internal static partial class FakeGateway
             ? FakeHttp.Json(HttpStatusCode.OK, Payment)
             : FakeHttp.Problem(HttpStatusCode.NotFound, "Not Found");
     }
+
+    /// <summary>
+    /// The gateway's policy is passed first, so the route is the BFF's to match: a segment that is no Guid gets the
+    /// bare 404 of a path with no route, and one that is gets the order as the BFF writes its id, in lower case.
+    /// </summary>
+    private static HttpResponseMessage OrderRead(FakeOrders orders, string segment) =>
+        !Guid.TryParse(Uri.UnescapeDataString(segment), out Guid id) ? FakeHttp.Problem(HttpStatusCode.NotFound, "Not Found")
+        : orders.Detail(id.ToString("D")) is { } detail ? FakeHttp.Json(HttpStatusCode.OK, detail)
+        : FakeHttp.Json(HttpStatusCode.NotFound, OrderNotFound);
 
     private static HttpResponseMessage Placed(FakeOrders orders) => FakeHttp.Json(HttpStatusCode.OK, $"\"{orders.Place()}\"");
 
