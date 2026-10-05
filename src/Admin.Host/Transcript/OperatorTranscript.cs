@@ -26,7 +26,7 @@ public sealed class OperatorTranscript(TimeProvider time)
     /// </summary>
     public void Process(Job job)
     {
-        Kept entry = Keep(TranscriptKind.Process, ShellLine.Command(job.Spec), job.Spec.WorkingDirectory, null);
+        Kept entry = Keep(TranscriptKind.Process, ShellLine.Command(job.Spec), FixtureScrubber.Scrub(job.Spec.WorkingDirectory), null);
 
         lock (gate)
         {
@@ -65,8 +65,8 @@ public sealed class OperatorTranscript(TimeProvider time)
 
     /// <summary>
     /// The transcript as a bash script, one command per entry with its outcome above it, in LF whatever the host's
-    /// platform. Each entry's command was scrubbed word by word when it was kept, and the directory is scrubbed the
-    /// same way here; the script is not scrubbed again as a whole, for the reason <see cref="ShellLine"/> gives.
+    /// platform. Each entry's command and directory were scrubbed when they were kept; the script is not scrubbed
+    /// again as a whole, for the reason <see cref="ShellLine"/> gives.
     /// </summary>
     public string Script()
     {
@@ -89,7 +89,7 @@ public sealed class OperatorTranscript(TimeProvider time)
             lines.Add("");
             lines.Add(string.Create(CultureInfo.InvariantCulture, $"# {entry.Sequence} · {entry.At:u} · {Outcome(entry)}"));
             lines.Add(entry.WorkingDirectory is { } directory
-                ? $"(cd {ShellLine.Quote(FixtureScrubber.Scrub(directory))} && {entry.Command})"
+                ? $"(cd {ShellLine.Quote(directory)} && {entry.Command})"
                 : entry.Command);
         }
 
@@ -98,7 +98,7 @@ public sealed class OperatorTranscript(TimeProvider time)
 
     private static string Outcome(TranscriptEntry entry) => entry.Kind switch
     {
-        TranscriptKind.Process => entry.Settled ? $"exit {entry.ExitCode}" : "still running",
+        TranscriptKind.Process => entry.Settled ? string.Create(CultureInfo.InvariantCulture, $"exit {entry.ExitCode}") : "still running",
         _ => $"{(entry.Identity is { } user ? $"as {user}" : "anonymous")} · "
             + (!entry.Settled ? "awaiting an answer" : entry.Status is { } status ? $"HTTP {status}" : "no answer"),
     };
