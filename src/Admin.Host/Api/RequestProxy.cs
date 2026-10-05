@@ -2,15 +2,17 @@ using System.Net.Http.Headers;
 using System.Text;
 using Admin.Host.Config;
 using Admin.Host.Identity;
+using Admin.Host.Transcript;
 using Microsoft.Extensions.Options;
 
 namespace Admin.Host.Api;
 
 /// <summary>
 /// Sends one request to the gateway, Catalog, Ordering or the BFF as a chosen identity with a
-/// correlation id, and returns the answer without rewriting status or body (spec §5.7, §8).
+/// correlation id, and returns the answer without rewriting status or body (spec §5.7, §8). A request that leaves
+/// is kept in the <see cref="OperatorTranscript"/> as the curl that would send it (spec §5.11).
 /// </summary>
-public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<AdminOptions> options, TimeProvider time)
+public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<AdminOptions> options, TimeProvider time, OperatorTranscript transcript)
 {
     /// <summary>The header itself is owned by <see cref="Api.CorrelationId"/>; this is the proxy's name for it.</summary>
     public const string CorrelationHeader = CorrelationId.Header;
@@ -129,7 +131,12 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
             default:
                 using (HttpRequestMessage message = Build(request, token as TokenIssued, correlationId))
                 {
-                    return await SendAsync(message, started, correlationId, cancellationToken);
+                    // Rendered before the send, from the message as built: what is kept is what was sent.
+                    string curl = ShellLine.Curl(message, request.Body);
+                    ProxyResult result = await SendAsync(message, started, correlationId, cancellationToken);
+                    transcript.Request(curl, request.Identity?.Username is { Length: > 0 } user ? user : null, (result as ProxyResponded)?.Status);
+
+                    return result;
                 }
         }
     }

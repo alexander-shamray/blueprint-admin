@@ -12,6 +12,7 @@ using Admin.Host.Security;
 using Admin.Host.Stack;
 using Admin.Host.Telemetry;
 using Admin.Host.Trace;
+using Admin.Host.Transcript;
 using Microsoft.AspNetCore.HostFiltering;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
@@ -67,15 +68,18 @@ builder.Services.AddSingleton(sp => FixtureRecorder.From(
 
 // Both runners are registered; which one IProcessRunner resolves to is
 // decided from options at resolve time, for the same reason RepoPaths is.
+// Whichever it is, the transcript wraps it, so a fake run is transcribed too.
+builder.Services.AddSingleton<OperatorTranscript>();
 builder.Services.AddSingleton<ProcessRunner>();
 builder.Services.AddSingleton(sp => FakePlatformScripts.Script(
     new FakeProcessRunner(sp.GetRequiredService<JobRegistry>()),
     sp.GetRequiredService<RepoPaths>()));
-builder.Services.AddSingleton<IProcessRunner>(sp =>
+builder.Services.AddSingleton<IProcessRunner>(sp => new TranscribingProcessRunner(
     sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform ? sp.GetRequiredService<FakeProcessRunner>()
     : sp.GetRequiredService<FixtureRecorder>().On ? new RecordingProcessRunner(
         sp.GetRequiredService<ProcessRunner>(), sp.GetRequiredService<FixtureRecorder>(), sp.GetRequiredService<RepoPaths>())
-    : sp.GetRequiredService<ProcessRunner>());
+    : sp.GetRequiredService<ProcessRunner>(),
+    sp.GetRequiredService<OperatorTranscript>()));
 
 builder.Services.AddSingleton<ComposeService>();
 builder.Services.AddSingleton<WorkstationDoctor>();
@@ -145,7 +149,8 @@ builder.Services.AddSingleton(sp => new RequestProxy(
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("platform"),
     sp.GetRequiredService<TokenService>(),
     sp.GetRequiredService<IOptions<AdminOptions>>(),
-    sp.GetRequiredService<TimeProvider>()));
+    sp.GetRequiredService<TimeProvider>(),
+    sp.GetRequiredService<OperatorTranscript>()));
 
 WebApplication app = builder.Build();
 
@@ -188,6 +193,7 @@ app.MapApi();
 app.MapBroker();
 app.MapTrace();
 app.MapTelemetry();
+app.MapTranscript();
 
 // MapFallbackToFile's route has no literal segments, so without this it
 // would also catch an unmatched /api/nope (it has no dot, so it passes the
