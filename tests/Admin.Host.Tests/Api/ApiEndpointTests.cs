@@ -190,6 +190,20 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
         using JsonDocument order = JsonDocument.Parse(detail.GetProperty("body").GetString()!);
         order.RootElement.GetProperty("orderId").GetString().ShouldBe(orderId);
         order.RootElement.GetProperty("timeline").GetProperty("placed").ValueKind.ShouldBe(JsonValueKind.String);
+
+        // The route takes any form Guid.TryParse reads, and the BFF writes the id back in its own form.
+        foreach (string written in new[] { orderId.Replace("-", "", StringComparison.Ordinal), orderId.ToUpperInvariant(), $"%7B{orderId}%7D" })
+        {
+            JsonElement other = await ProxyAsync(new { method = "GET", url = reads + written, identity = new { username = "demo" } });
+            other.GetProperty("status").GetInt32().ShouldBe(200, written);
+            using JsonDocument same = JsonDocument.Parse(other.GetProperty("body").GetString()!);
+            same.RootElement.GetProperty("orderId").GetString().ShouldBe(orderId, written);
+        }
+
+        // Thirty-six characters of hex and hyphens that are no Guid are no route either.
+        JsonElement shaped = await ProxyAsync(new { method = "GET", url = reads + "0199a1b2000070008000000000000002----", identity = new { username = "demo" } });
+        shaped.GetProperty("status").GetInt32().ShouldBe(404);
+        shaped.GetProperty("body").GetString()!.ShouldNotContain("order.not_found");
     }
 
     [Fact]
