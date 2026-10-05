@@ -35,7 +35,7 @@ public sealed class TranscriptEndpointTests(AdminHostFactory factory) : IClassFi
     }
 
     [Fact]
-    public async Task The_script_is_plain_text_that_the_fixture_gates_rules_find_clean()
+    public async Task The_script_is_plain_text_and_every_entry_is_clean_by_the_fixture_gates_rules()
     {
         await client.PostAsJsonAsync("/api/proxy", new { method = "GET", url = "http://localhost:5000/api/v1/orders", identity = new { username = "demo", password = "demo" } }, Token);
 
@@ -46,6 +46,12 @@ public sealed class TranscriptEndpointTests(AdminHostFactory factory) : IClassFi
         string script = await response.Content.ReadAsStringAsync(Token);
         script.ShouldStartWith("#!/usr/bin/env bash\n");
         script.ShouldContain("curl -i http://localhost:5000/api/v1/orders");
-        FixtureScrubber.Findings(script).ShouldBeEmpty();
+
+        // The entries, not the script: Script() scrubs its whole text once more, so a gate over it passes whatever
+        // the proxy's curl held, while /api/transcript serves each line as the proxy kept it.
+        JsonElement view = await client.GetFromJsonAsync<JsonElement>("/api/transcript", Token);
+        string[] commands = [.. view.GetProperty("entries").EnumerateArray().Select(e => e.GetProperty("command").GetString()!)];
+        commands.ShouldContain(c => c.Contains("Authorization: Bearer <scrubbed>", StringComparison.Ordinal));
+        commands.ShouldAllBe(c => FixtureScrubber.Findings(c).Count == 0);
     }
 }
