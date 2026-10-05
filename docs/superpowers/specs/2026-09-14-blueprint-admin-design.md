@@ -677,12 +677,13 @@ not adopted at the start; they come when there is a PR flow to govern.
 | 3 API | TokenService, ApiCatalog, RequestProxy, the API screen with identity picker and history |
 | 4 Broker | BrokerService and screen; the drained indicator on the API screen |
 | 5 Trace | GrafanaClient, EventTraceService, the Trace screen and "Trace this call" |
-| 6 Scenario | the Scenario screen: a scripted publish → wait for drain → quote → order → cancel run with a trace per HTTP step (below) |
+| 6 Scenario | the Scenario screen: publish → wait for drain → quote → order, then watch the order to delivered, or cancel it and watch it to cancelled, with a trace per HTTP step (below) |
 
-**Phase 6 is the SPA alone.** Every step is a call the API screen can
+**Phase 6 adds no host endpoint.** Every step is a call the API screen can
 already make — `POST /proxy` with the catalog's own operation and its
-`run-locally.md` example body, and `GET /broker/queues` for the drain — so no
-endpoint is added. Each step carries the id the previous one produced (the
+`run-locally.md` example body, and `GET /broker/queues` for the drain. The
+BFF order reads the watches send are curated operations (§2.3), and
+FakePlatform answers them with `FakeOrders` (below). Each step carries the id the previous one produced (the
 product into the quote and the order, the order into the cancel and the
 watches), and each HTTP step its own correlation id, so each
 links to its own trace unless nothing left the console (a token Keycloak

@@ -463,6 +463,71 @@ describe('ScenarioPage', () => {
     expect(sent().filter(isRead)).toHaveLength(2);
   });
 
+  it("keeps a watch's trace when a later read never leaves the console, and says only that read was not sent", async () => {
+    vi.useFakeTimers();
+    const answers: ProxyResult[] = [
+      responded(200, order('placed'), ''),
+      { outcome: 'tokenRejected', status: 401, body: '{"error":"invalid_grant"}', correlationId: '' },
+    ];
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      isRead(request) && answers.length > 0 ? of(answers.shift()!) : of(platform(request)),
+    );
+    const page = render().componentInstance;
+
+    const done = page.run();
+    await vi.advanceTimersByTimeAsync(DRAIN_POLL_MS);
+    await done;
+    vi.useRealTimers();
+
+    const confirmed = page.steps()[4];
+    expect(confirmed.state).toBe('failed');
+    expect(confirmed.correlationId).toBe('scenario-abcdef12-confirmed');
+    expect(confirmed.detail).toBe('Keycloak refused demo: 401. This read was not sent.');
+  });
+
+  it('says the token was minted for a call that went out and got no answer', async () => {
+    host.tokenClock.mockImplementation(() =>
+      sent().some((r) => r.url.endsWith('/orders/'))
+        ? of({ ...heldClock, renewsAt: '2026-01-01T00:00:00Z' })
+        : of(heldClock),
+    );
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      isRead(request)
+        ? of({
+            outcome: 'unreached',
+            error: 'timed out',
+            elapsedMs: 5,
+            correlationId: request.correlationId ?? '',
+            sent: true,
+          })
+        : of(platform(request)),
+    );
+    const page = render().componentInstance;
+
+    await page.run();
+
+    expect(page.steps()[4].state).toBe('failed');
+    expect(page.steps()[4].regrant).toContain('so the host minted a new one for this call');
+  });
+
+  it("waits out a new run's first 404, since the last run's answer was for another order", async () => {
+    const page = render().componentInstance;
+    await page.run();
+
+    const answers = [responded(404, '{"code":"order.not_found"}', '')];
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      isRead(request) && answers.length > 0 ? of(answers.shift()!) : of(platform(request)),
+    );
+    vi.useFakeTimers();
+    const done = page.run();
+    await vi.advanceTimersByTimeAsync(DRAIN_POLL_MS);
+    await done;
+    vi.useRealTimers();
+
+    expect(answers).toHaveLength(0);
+    expect(page.steps().map((s) => s.state)).toEqual(Array(7).fill('ok'));
+  });
+
   it('starts each run afresh, so a user never minted before is not reported as expired', async () => {
     const page = render().componentInstance;
     await page.run();

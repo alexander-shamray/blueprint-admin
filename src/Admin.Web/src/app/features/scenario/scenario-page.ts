@@ -358,10 +358,12 @@ export class ScenarioPage {
 
     const deadline = Date.now() + DRAIN_WATCH_MS;
     let last: string;
+    let sentUnderId = false;
 
     for (;;) {
-      const result = await this.exchange(key, read.method, url, '', identity, correlationId);
+      const result = await this.exchange(key, read.method, url, '', identity, correlationId, sentUnderId);
       if (result === null) return false;
+      sentUnderId = true;
 
       if (result.status === 404 && !this.orderAnswered) {
         last = 'The BFF answered 404: it has not learned of the order yet.';
@@ -426,7 +428,9 @@ export class ScenarioPage {
 
   /**
    * One request through the proxy, after reading the token clock. Resolves to the platform's answer,
-   * or to null once a failure that left no answer has been recorded on the step.
+   * or to null once a failure that left no answer has been recorded on the step. `sentBefore` is a
+   * watch that has already read under this correlation id, whose trace a later unsent read does not
+   * take away.
    */
   private async exchange(
     key: StepKey,
@@ -435,9 +439,11 @@ export class ScenarioPage {
     body: string,
     identity: Identity,
     correlationId: string,
+    sentBefore = false,
   ): Promise<Responded | null> {
     // Said only once the call has gone out: a grant Keycloak refused or never answered minted nothing.
     const regrant = await this.regrant(identity);
+    const traced = sentBefore ? correlationId : null;
 
     let result: ProxyResult;
     try {
@@ -452,26 +458,29 @@ export class ScenarioPage {
         }),
       );
     } catch (e: unknown) {
-      this.patch(key, { state: 'failed', correlationId: null, detail: describe(e) });
+      this.patch(key, { state: 'failed', correlationId: traced, detail: describe(e) });
       return null;
     }
 
     switch (result.outcome) {
       case 'tokenRejected':
-        // Nothing left the console, so there is nothing to trace.
+        // This call never left the console, so only reads already sent under the id are traceable.
         this.patch(key, {
           state: 'failed',
-          correlationId: null,
+          correlationId: traced,
           status: result.status,
           body: result.body,
-          detail: `Keycloak refused ${identity.username}: ${result.status}. Nothing was sent.`,
+          detail: sentBefore
+            ? `Keycloak refused ${identity.username}: ${result.status}. This read was not sent.`
+            : `Keycloak refused ${identity.username}: ${result.status}. Nothing was sent.`,
         });
         return null;
       case 'unreached':
         this.patch(key, {
           state: 'failed',
-          correlationId: result.sent ? result.correlationId : null,
+          correlationId: result.sent ? result.correlationId : traced,
           detail: `No answer from the platform: ${result.error}`,
+          ...(result.sent && regrant ? { regrant } : {}),
         });
         return null;
     }
