@@ -292,3 +292,23 @@ export interface DoctorCheck {
 export interface DoctorView {
   checks: DoctorCheck[];
 }
+
+/**
+ * One thing the operator did, as the host's `OperatorTranscript` kept it: a process with its directory and exit
+ * code, or a request as its curl with the identity it went as and the status that came back. Already scrubbed.
+ */
+export interface TranscriptEntry {
+  sequence: number;
+  at: string;
+  kind: 'Process' | 'Request';
+  command: string;
+  workingDirectory: string | null;
+  identity: string | null;
+  exitCode: number | null;
+  status: number | null;
+}
+
+export interface TranscriptView {
+  entries: TranscriptEntry[];
+  dropped: number;
+}

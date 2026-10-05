@@ -3,6 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { App } from './app';
+import { SCREENS } from './screens';
 
 describe('App', () => {
   it('shows the backend directory from the host config', async () => {
@@ -39,7 +40,7 @@ describe('App', () => {
     fixture.detectChanges();
 
     const nav = fixture.nativeElement.querySelectorAll('nav a');
-    expect(nav.length).toBe(6);
+    expect(nav.length).toBe(SCREENS.length);
     expect(fixture.nativeElement.querySelector('router-outlet')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.hint')).toBeFalsy();
   });
