@@ -56,10 +56,12 @@ public static partial class ShellLine
             }
 
             // curl reads "Name:" with nothing after it as "remove this header"; "Name;" is how it sends one empty.
-            // Judged before elision, so an empty credential reads as empty and not as a value that was withheld.
+            // Judged on the raw value, so an empty credential reads as empty and not as a value that was withheld,
+            // and on the elided one, since a Cookie of separators alone elides to nothing.
             string value = values.ToString();
+            string shown = string.IsNullOrWhiteSpace(value) ? "" : Elided(name, value);
             words.Add("-H");
-            words.Add(Word(string.IsNullOrWhiteSpace(value) ? $"{name};" : $"{name}: {Elided(name, value)}"));
+            words.Add(Word(shown.Length == 0 ? $"{name};" : $"{name}: {shown}"));
         }
 
         if (hasBody)
