@@ -443,6 +443,90 @@ describe('ScenarioPage', () => {
 
     expect(page.steps()[4].state).toBe('failed');
     expect(page.steps()[4].regrant).toBeNull();
+    // Its first read never left the console, so no service logged the id and there is no trace to offer.
+    expect(page.steps()[4].correlationId).toBeNull();
+    expect(page.steps()[4].detail).toBe(
+      'No answer from the platform: Keycloak did not answer: connection refused',
+    );
+  });
+
+  it('offers no trace for a watch whose first read Keycloak refused, and says nothing was sent', async () => {
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      isRead(request)
+        ? of({ outcome: 'tokenRejected', status: 401, body: '{}', correlationId: request.correlationId ?? '' })
+        : of(platform(request)),
+    );
+    const page = render().componentInstance;
+
+    await page.run();
+
+    expect(page.steps()[4].correlationId).toBeNull();
+    expect(page.steps()[4].detail).toBe('Keycloak refused demo: 401. Nothing was sent.');
+  });
+
+  describe('a later read that never leaves the console', () => {
+    /** Runs the deliver script with these as the confirmed watch's reads, one poll apart. */
+    async function watchWith(...reads: (() => Observable<ProxyResult>)[]) {
+      vi.useFakeTimers();
+      host.proxy.mockImplementation((request: ProxyRequest) =>
+        isRead(request) && reads.length > 0 ? reads.shift()!() : of(platform(request)),
+      );
+      const page = render().componentInstance;
+      const done = page.run();
+      await vi.advanceTimersByTimeAsync(DRAIN_POLL_MS * 2);
+      await done;
+      vi.useRealTimers();
+      return page.steps()[4];
+    }
+
+    it('keeps the trace of the 404 that went before it', async () => {
+      const confirmed = await watchWith(
+        () => of(responded(404, '{"code":"order.not_found"}', '')),
+        () => of({ outcome: 'tokenRejected', status: 401, body: '{}', correlationId: '' }),
+      );
+
+      expect(confirmed.state).toBe('failed');
+      expect(confirmed.correlationId).toBe('scenario-abcdef12-confirmed');
+    });
+
+    it('keeps the trace when Keycloak did not answer, and says no token was minted', async () => {
+      host.tokenClock.mockImplementation(() =>
+        sent().filter(isRead).length > 0
+          ? of({ ...heldClock, renewsAt: '2026-01-01T00:00:00Z' })
+          : of(heldClock),
+      );
+      const confirmed = await watchWith(
+        () => of(responded(200, order('placed'), '')),
+        () =>
+          of({
+            outcome: 'unreached',
+            error: 'Keycloak did not answer: connection refused',
+            elapsedMs: 5,
+            correlationId: '',
+            sent: false,
+          }),
+      );
+
+      expect(confirmed.state).toBe('failed');
+      expect(confirmed.correlationId).toBe('scenario-abcdef12-confirmed');
+      expect(confirmed.regrant).toBeNull();
+      // The placed read's 200 and body are not this failure's.
+      expect(confirmed.status).toBeNull();
+      expect(confirmed.body).toBeNull();
+    });
+
+    it('keeps the trace when the host itself did not answer', async () => {
+      const confirmed = await watchWith(
+        () => of(responded(200, order('placed'), '')),
+        () => throwError(() => new Error('host gone')),
+      );
+
+      expect(confirmed.state).toBe('failed');
+      expect(confirmed.correlationId).toBe('scenario-abcdef12-confirmed');
+      expect(confirmed.detail).toBe('host gone');
+      expect(confirmed.status).toBeNull();
+      expect(confirmed.body).toBeNull();
+    });
   });
 
   it('fails a later watch on a 404 at once, since an earlier watch already read the order', async () => {
