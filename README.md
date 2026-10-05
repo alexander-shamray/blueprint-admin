@@ -85,9 +85,13 @@ timeline, each of those rows linking into Grafana Explore, and closing with a
 snapshot of the projection queue and every other queue the spans crossed; the
 API screen's "Trace this call" opens it on the
 response's own correlation id. The Scenario screen runs `run-locally.md`'s
-calls end to end as a realm user — publish, wait for the projection to drain,
-quote, order, cancel — stopping at the first step that does not succeed, each
-sent step linking to its own trace.
+calls end to end as a realm user, in one of two scripts: publish, wait for
+the projection to drain, quote, order, and then either read the order back
+through the BFF until it is confirmed, despatched and delivered, or cancel it
+and read it back until it is cancelled. Each watch says what it is waiting
+for and what it last read; the run stops at the first step that does not
+succeed, and each sent step links to its own trace. A step for which the host
+mints a new token, because the one it held was due to renew, says so.
 
 The Transcript screen shows what the operator did this session as a person
 would type it: each command the host ran, with its directory and exit code, and
@@ -147,9 +151,10 @@ are announced.
 - The token clock reads only what the host holds: a custom identity's clock
   shows once that identity has been used, and a token never minted has none.
 - Shipping has no API. What it did is read from the carrier simulator's request
-  log; no screen reads a shipment, and
-  Scenario does not wait on the saga, because no read shows an order's state
-  (blueprint-backend#425).
+  log, and an order's despatch and delivery from the BFF's buyer order read.
+  That read is the buyer's view: the Scenario watches the steps the BFF
+  projected, never the saga's own state, and every read a watch makes is a
+  request the Transcript keeps.
 - The identity picker offers demo/demo and browser/browser; configuring any user
   replaces both: `--Admin:Users:0:Username=ops --Admin:Users:0:Password=…`.
 - A timeline ends at the outbox. The outbox row carries no trace context, so
