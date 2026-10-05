@@ -394,14 +394,88 @@ describe('ScenarioPage', () => {
         ? of({ ...heldClock, renewsAt: '2026-01-01T00:00:00Z' })
         : of(heldClock),
     );
-    const page = render().componentInstance;
+    const fixture = render();
+    const page = fixture.componentInstance;
 
     await page.run();
+    fixture.detectChanges();
 
+    const note =
+      'The token held for demo was due to renew at 2026-01-01T00:00:00Z, so the host minted a new one for this call.';
     expect(page.steps().slice(0, 4).map((s) => s.regrant)).toEqual([null, null, null, null]);
-    expect(page.steps()[4].regrant).toBe(
-      'The token held for demo was due to renew at 2026-01-01T00:00:00Z, so the host minted a new one for this call.',
+    expect(page.steps()[4].regrant).toBe(note);
+    // The note is for the operator, so it is on the page and not only in the step's state.
+    const items = fixture.nativeElement.querySelectorAll('ol.steps li.step');
+    expect(items[4].querySelector('.regrant')?.textContent.trim()).toBe(note);
+    expect(items[3].querySelector('.regrant')).toBeNull();
+  });
+
+  it("clears a watch's note when a later read is answered without a mint, so it names the last call", async () => {
+    vi.useFakeTimers();
+    host.tokenClock.mockImplementation(() =>
+      sent().filter(isRead).length === 0
+        ? of({ ...heldClock, renewsAt: '2026-01-01T00:00:00Z' })
+        : of(heldClock),
     );
+    const answers = [
+      responded(200, order('placed'), ''),
+      responded(200, order('confirmed', { confirmed: '2026-10-05T12:00:01Z' }), ''),
+    ];
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      isRead(request) && answers.length > 0 ? of(answers.shift()!) : of(platform(request)),
+    );
+    const page = render().componentInstance;
+
+    const done = page.run();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(page.steps()[4].regrant).toContain('minted a new one for this call');
+    await vi.advanceTimersByTimeAsync(DRAIN_POLL_MS);
+    await done;
+    vi.useRealTimers();
+
+    expect(page.steps()[4].state).toBe('ok');
+    expect(page.steps()[4].regrant).toBeNull();
+  });
+
+  it('waits out every 404 before the first answer, not only the first', async () => {
+    vi.useFakeTimers();
+    const notYet = () => responded(404, '{"code":"order.not_found"}', '');
+    const answers = [notYet(), notYet(), notYet(), responded(200, order('placed'), '')];
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      isRead(request) && answers.length > 0 ? of(answers.shift()!) : of(platform(request)),
+    );
+    const page = render().componentInstance;
+
+    const done = page.run();
+    await vi.advanceTimersByTimeAsync(DRAIN_POLL_MS * 4);
+    await done;
+    vi.useRealTimers();
+
+    expect(answers).toHaveLength(0);
+    expect(page.steps().map((s) => s.state)).toEqual(Array(7).fill('ok'));
+  });
+
+  it('says nothing was minted when the grant the clock foresaw was refused, or the host did not answer', async () => {
+    const failures: (() => Observable<ProxyResult>)[] = [
+      () => of({ outcome: 'tokenRejected', status: 401, body: '{}', correlationId: '' }),
+      () => throwError(() => new Error('host gone')),
+    ];
+    for (const failure of failures) {
+      host.tokenClock.mockImplementation(() =>
+        of({ ...heldClock, renewsAt: '2026-01-01T00:00:00Z' }),
+      );
+      host.proxy.mockImplementation((request: ProxyRequest) =>
+        isRead(request) ? failure() : of(platform(request)),
+      );
+      const page = render().componentInstance;
+
+      await page.run();
+
+      expect(page.steps()[4].state).toBe('failed');
+      expect(page.steps()[4].regrant).toBeNull();
+      // The order step, whose call did go out under a renewed token, still says so.
+      expect(page.steps()[3].regrant).toContain('minted a new one for this call');
+    }
   });
 
   it('says so when the token expired after the run sent, but not before its first call', async () => {

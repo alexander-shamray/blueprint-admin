@@ -497,7 +497,8 @@ export class ScenarioPage {
     }
 
     this.sentThisRun = true;
-    if (regrant) this.patch(key, { regrant });
+    // The note is about the call the step last made, so a call that minted nothing clears an earlier one's.
+    this.patch(key, { regrant });
     return result;
   }
 
