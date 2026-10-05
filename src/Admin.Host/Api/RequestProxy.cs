@@ -132,20 +132,19 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
                 using (HttpRequestMessage message = Build(request, token as TokenIssued, correlationId))
                 {
                     // Kept before the send, from the message as built: what is kept is what was sent, in the order it
-                    // was sent. Settled whatever became of it, a caller who went away mid-send included.
+                    // was sent. Settled whatever became of it, a caller who went away mid-send included, with the
+                    // status as soon as the headers carried one, since a body cut off later does not unsay it.
                     Action<int?> answered = transcript.Request(
                         ShellLine.Curl(message, request.Body), request.Identity?.Username is { Length: > 0 } user ? user : null);
-                    ProxyResult? result = null;
+                    int? status = null;
 
                     try
                     {
-                        result = await SendAsync(message, started, correlationId, cancellationToken);
-
-                        return result;
+                        return await SendAsync(message, started, correlationId, s => status = s, cancellationToken);
                     }
                     finally
                     {
-                        answered((result as ProxyResponded)?.Status);
+                        answered(status);
                     }
                 }
         }
@@ -194,7 +193,9 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
         return message;
     }
 
-    private async Task<ProxyResult> SendAsync(HttpRequestMessage message, long started, string correlationId, CancellationToken cancellationToken)
+    /// <param name="answered">Told the status the moment the headers arrive, before the body is read.</param>
+    private async Task<ProxyResult> SendAsync(
+        HttpRequestMessage message, long started, string correlationId, Action<int> answered, CancellationToken cancellationToken)
     {
         using CancellationTokenSource deadline = new(SendTimeout, time);
         using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
@@ -216,6 +217,8 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
 
         using (response)
         {
+            answered((int)response.StatusCode);
+
             // From here the upstream has answered; a body that breaks off is still its answer.
             (string body, bool truncated, string? bodyError) = await ReadBodyAsync(response.Content, timeout.Token, cancellationToken);
             Dictionary<string, string[]> headers = new(StringComparer.OrdinalIgnoreCase);

@@ -517,9 +517,10 @@ order is the order things began and a send abandoned mid-flight is still on the
 record. A token the proxy attached, and any Authorization a caller pasted, keep
 their scheme and lose their value, and a Cookie keeps its names and loses its
 values: the headers the API screen's history drops, which no pattern can
-recognise by value. Every word is then scrubbed before it is quoted, and every
-line and the script as a whole pass through `FixtureScrubber`, so a transcript
-and a fixture are held to one definition of a secret. The token grant itself is `TokenService`'s and not a proxied
+recognise by value. Every word then passes through `FixtureScrubber` before it
+is quoted, so a transcript and a fixture are held to one definition of a
+secret. The quoted line is not scrubbed again: the form rule's value may be a
+quote, and a second pass would take a closing one. The token grant itself is `TokenService`'s and not a proxied
 request, so it is not in the transcript; the script's header says to mint a
 token as `run-locally.md` does. The entries kept are bounded by
 `OperatorTranscript.Capacity`, and the oldest go first and are counted.

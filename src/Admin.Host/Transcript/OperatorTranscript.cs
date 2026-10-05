@@ -7,8 +7,8 @@ namespace Admin.Host.Transcript;
 /// <summary>
 /// What the operator did this session, as a person would type it: each child process the host started and each
 /// request the proxy sent, in the order they began (spec §5.11). It lives in memory for the host's life and is
-/// written nowhere (spec §8). Every line is kept only after <see cref="FixtureScrubber.Scrub"/>, the rules a fixture
-/// is held to, so a transcript and a recording cannot disagree about what a secret is.
+/// written nowhere (spec §8). Every word of every line is kept only after <see cref="FixtureScrubber.Scrub"/>, the
+/// rules a fixture is held to, so a transcript and a recording cannot disagree about what a secret is.
 /// </summary>
 public sealed class OperatorTranscript(TimeProvider time)
 {
@@ -65,8 +65,8 @@ public sealed class OperatorTranscript(TimeProvider time)
 
     /// <summary>
     /// The transcript as a bash script, one command per entry with its outcome above it, in LF whatever the host's
-    /// platform. Scrubbed once more as a whole, so that what the copy button hands over is held to the scrubber and
-    /// not only each line.
+    /// platform. Each entry's command was scrubbed word by word when it was kept, and the directory is scrubbed the
+    /// same way here; the script is not scrubbed again as a whole, for the reason <see cref="ShellLine"/> gives.
     /// </summary>
     public string Script()
     {
@@ -88,10 +88,12 @@ public sealed class OperatorTranscript(TimeProvider time)
         {
             lines.Add("");
             lines.Add(string.Create(CultureInfo.InvariantCulture, $"# {entry.Sequence} · {entry.At:u} · {Outcome(entry)}"));
-            lines.Add(entry.WorkingDirectory is { } directory ? $"(cd {ShellLine.Quote(directory)} && {entry.Command})" : entry.Command);
+            lines.Add(entry.WorkingDirectory is { } directory
+                ? $"(cd {ShellLine.Quote(FixtureScrubber.Scrub(directory))} && {entry.Command})"
+                : entry.Command);
         }
 
-        return FixtureScrubber.Scrub(string.Join('\n', lines) + "\n");
+        return string.Join('\n', lines) + "\n";
     }
 
     private static string Outcome(TranscriptEntry entry) => entry.Kind switch

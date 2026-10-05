@@ -5,18 +5,21 @@ using Admin.Host.Jobs;
 namespace Admin.Host.Transcript;
 
 /// <summary>
-/// A command or a request as a person would type it in bash. Each word is single-quoted unless it is made only of
-/// characters no shell treats specially, and every line leaves through <see cref="FixtureScrubber.Scrub"/>.
+/// A command or a request as a person would type it in bash. Each word passes through
+/// <see cref="FixtureScrubber.Scrub"/> and is then single-quoted unless it is made only of characters no shell treats
+/// specially. The quoted line is never scrubbed again: the form rule's value may be a quote, so a second pass over
+/// <c>'…?password='</c> takes the closing quote and every line after it in a script reads inverted.
 /// </summary>
 public static partial class ShellLine
 {
     /// <summary>
-    /// The argv as given, never joined into a shell string by the host (<see cref="ProcessSpec"/>). Each word is
-    /// scrubbed before it is quoted, so a placeholder is quoted rather than read as a redirection, and the line once
-    /// more after, for a secret that spans two words.
+    /// The argv as given, never joined into a shell string by the host (<see cref="ProcessSpec"/>), each word scrubbed
+    /// and then quoted, so a placeholder is quoted rather than read as a redirection. A secret is caught within its
+    /// word; one the argv splits across two, as a bare <c>Bearer</c> beside an opaque token, is not, and no command
+    /// the host runs passes one.
     /// </summary>
     public static string Command(ProcessSpec spec) =>
-        FixtureScrubber.Scrub(string.Join(' ', new[] { spec.FileName }.Concat(spec.Arguments).Select(Word)));
+        string.Join(' ', new[] { spec.FileName }.Concat(spec.Arguments).Select(Word));
 
     /// <summary>
     /// The curl for the message the proxy built, headers as it sends them. The token it attached and any
@@ -60,7 +63,7 @@ public static partial class ShellLine
             words.Add(Word(body!));
         }
 
-        return FixtureScrubber.Scrub(string.Join(' ', words));
+        return string.Join(' ', words);
     }
 
     /// <summary>POSIX single quotes, with an embedded quote closed, escaped and reopened.</summary>
@@ -78,8 +81,9 @@ public static partial class ShellLine
 
         if (name.Equals("Cookie", StringComparison.OrdinalIgnoreCase))
         {
+            // A cookie with no name is a bare value, and keeps nothing.
             return string.Join("; ", value.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-                .Select(pair => $"{pair.Split('=', 2)[0]}={FixtureScrubber.Scrubbed}"));
+                .Select(pair => pair.Contains('=') ? $"{pair.Split('=', 2)[0]}={FixtureScrubber.Scrubbed}" : FixtureScrubber.Scrubbed));
         }
 
         return value;

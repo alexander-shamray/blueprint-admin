@@ -93,7 +93,7 @@ describe('CommandPalette', () => {
     palette.open();
     const input = type(fixture, 'go to');
 
-    // Six screens match, and the typed text is offered last as a correlation id.
+    // Every screen matches, and the typed text is offered last as a correlation id.
     key(input, { key: 'ArrowUp' });
     fixture.detectChanges();
     expect(palette.active()).toBe(SCREENS.length);

@@ -272,6 +272,51 @@ public sealed class RequestProxyTests
     }
 
     [Fact]
+    public async Task A_request_is_in_the_transcript_awaiting_its_answer_while_it_is_being_sent()
+    {
+        OperatorTranscript transcript = new(TimeProvider.System);
+        TranscriptEntry? midSend = null;
+        ScriptedHandler handler = new(request =>
+        {
+            if (IsToken(request))
+            {
+                return Granted();
+            }
+
+            midSend = transcript.Read().Entries.ShouldHaveSingleItem();
+
+            return new HttpResponseMessage(HttpStatusCode.Accepted);
+        });
+
+        await Proxy(handler, transcript: transcript).SendAsync(Get(identity: new IdentityRequest("demo", null)), Token);
+
+        midSend.ShouldNotBeNull().Settled.ShouldBeFalse();
+        midSend.Status.ShouldBeNull();
+        transcript.Read().Entries.ShouldHaveSingleItem().Status.ShouldBe(202);
+    }
+
+    [Fact]
+    public async Task A_status_that_arrived_is_kept_when_the_caller_leaves_while_the_body_is_read()
+    {
+        using CancellationTokenSource caller = new();
+        ScriptedHandler handler = new(request => IsToken(request)
+            ? Granted()
+            : BreaksAfter("""{"orderId":""", _ =>
+            {
+                caller.Cancel();
+                throw new OperationCanceledException(caller.Token);
+            }));
+        OperatorTranscript transcript = new(TimeProvider.System);
+
+        await Should.ThrowAsync<OperationCanceledException>(() =>
+            Proxy(handler, transcript: transcript).SendAsync(Get(identity: new IdentityRequest("demo", null)), caller.Token));
+
+        TranscriptEntry entry = transcript.Read().Entries.ShouldHaveSingleItem();
+        entry.Settled.ShouldBeTrue();
+        entry.Status.ShouldBe(200);
+    }
+
+    [Fact]
     public async Task A_send_the_caller_abandons_is_still_kept_and_settled_with_no_answer()
     {
         using CancellationTokenSource caller = new();
