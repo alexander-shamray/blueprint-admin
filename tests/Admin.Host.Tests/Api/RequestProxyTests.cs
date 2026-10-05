@@ -272,6 +272,18 @@ public sealed class RequestProxyTests
     }
 
     [Fact]
+    public async Task A_request_with_an_empty_username_is_kept_as_anonymous()
+    {
+        OperatorTranscript transcript = new(TimeProvider.System);
+
+        await Proxy(new ScriptedHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)), transcript: transcript)
+            .SendAsync(Get(identity: new IdentityRequest("", null)), Token);
+
+        transcript.Read().Entries.ShouldHaveSingleItem().Identity.ShouldBeNull();
+        transcript.Script().ShouldContain("· anonymous · HTTP 200\n");
+    }
+
+    [Fact]
     public async Task A_request_is_in_the_transcript_awaiting_its_answer_while_it_is_being_sent()
     {
         OperatorTranscript transcript = new(TimeProvider.System);

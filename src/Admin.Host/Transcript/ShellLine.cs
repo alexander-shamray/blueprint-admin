@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using System.Text.RegularExpressions;
 using Admin.Host.Fakes;
 using Admin.Host.Jobs;
@@ -43,16 +44,18 @@ public static partial class ShellLine
         });
         words.Add(Word(message.RequestUri!.AbsoluteUri));
 
-        IEnumerable<KeyValuePair<string, IEnumerable<string>>> content = message.Content is null ? [] : message.Content.Headers;
+        // NonValidated, because enumerating the headers themselves parses each raw value and stores the parse back
+        // into the message before it is sent: User-Agent's "a/1 (b)" would come out as "a/1, (b)" on both sides.
+        IEnumerable<KeyValuePair<string, HeaderStringValues>> content = message.Content is null ? [] : message.Content.Headers.NonValidated;
 
-        foreach ((string name, IEnumerable<string> values) in message.Headers.Concat(content))
+        foreach ((string name, HeaderStringValues values) in message.Headers.NonValidated.Concat(content))
         {
             if (name.Equals("Content-Length", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
-            string value = string.Join(", ", values);
+            string value = values.ToString();
             words.Add("-H");
             words.Add(Word($"{name}: {Elided(name, value)}"));
         }

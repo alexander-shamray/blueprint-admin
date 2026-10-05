@@ -45,6 +45,16 @@ public sealed class OperatorTranscriptTests
     }
 
     [Fact]
+    public void A_header_renders_as_it_was_given_and_the_message_is_not_rewritten_by_rendering_it()
+    {
+        using HttpRequestMessage message = new(HttpMethod.Get, "http://localhost:5000/api/v1/orders");
+        message.Headers.TryAddWithoutValidation("User-Agent", "smoke/1.0 (blueprint)");
+
+        ShellLine.Curl(message, null).ShouldContain("-H 'User-Agent: smoke/1.0 (blueprint)'");
+        message.Headers.NonValidated["User-Agent"].ToString().ShouldBe("smoke/1.0 (blueprint)");
+    }
+
+    [Fact]
     public void An_authorization_with_no_scheme_keeps_nothing_of_its_value()
     {
         using HttpRequestMessage message = new(HttpMethod.Get, "http://localhost:5000/api/v1/orders");
