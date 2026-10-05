@@ -19,6 +19,7 @@ import {
   TokenClockView,
   TokenView,
   TraceView,
+  TranscriptView,
 } from './host-types';
 
 /** Every call the SPA makes; there is no other origin (spec §3, §7). */
@@ -117,6 +118,16 @@ export class HostClient {
 
   doctor(): Observable<DoctorView> {
     return this.http.get<DoctorView>('/api/stack/doctor');
+  }
+
+  /** What the operator did this session; the host keeps it in memory and scrubs it (spec §5.11). */
+  transcript(): Observable<TranscriptView> {
+    return this.http.get<TranscriptView>('/api/transcript');
+  }
+
+  /** The same transcript as a bash script, rendered and scrubbed by the host rather than here. */
+  transcriptScript(): Observable<string> {
+    return this.http.get('/api/transcript/script', { responseType: 'text' });
   }
 
   job(id: string): Observable<JobView> {

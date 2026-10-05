@@ -1,0 +1,47 @@
+<section class="actions">
+  <button class="copy" [disabled]="!transcript()?.entries?.length" (click)="copy()">Copy as shell script</button>
+  @if (copied()) {
+    <span class="copied" role="status">Copied.</span>
+  }
+  @if (copyError(); as e) {
+    <span class="error" role="alert">Not copied: {{ e }}</span>
+  }
+</section>
+
+<p class="note">
+  Each command the console ran and each request it sent, in order. Polls are left out, and tokens, passwords and
+  Authorization values read <code>&lt;scrubbed&gt;</code>. Kept in memory until the host stops.
+</p>
+
+@if (pollError(); as e) {
+  <p class="error" role="alert">The host did not answer: {{ e }}</p>
+}
+@if (transcript(); as t) {
+  @if (t.dropped > 0) {
+    <p class="dropped">{{ t.dropped }} earlier entries were dropped.</p>
+  }
+  @if (t.entries.length) {
+    <ol class="entries">
+      @for (entry of t.entries; track entry.sequence) {
+        <li class="entry" [class.process]="entry.kind === 'Process'" [class.request]="entry.kind === 'Request'">
+          <div class="meta">
+            <span class="sequence">{{ entry.sequence }}</span>
+            <span class="at">{{ entry.at }}</span>
+            <span class="outcome">{{ outcome(entry) }}</span>
+            @if (entry.kind === 'Request') {
+              <span class="identity">{{ entry.identity ? 'as ' + entry.identity : 'anonymous' }}</span>
+            }
+            @if (entry.workingDirectory) {
+              <span class="directory">in <code>{{ entry.workingDirectory }}</code></span>
+            }
+          </div>
+          <pre class="command">{{ entry.command }}</pre>
+        </li>
+      }
+    </ol>
+  } @else {
+    <p class="empty">Nothing yet: start the backend, send a request or run the Scenario.</p>
+  }
+} @else if (!pollError()) {
+  <p>Loading…</p>
+}

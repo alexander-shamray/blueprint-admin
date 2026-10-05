@@ -8,5 +8,9 @@ export const routes: Routes = [
   { path: 'requests', loadComponent: () => import('./features/api/api-page').then((m) => m.ApiPage) },
   { path: 'trace', loadComponent: () => import('./features/trace/trace-page').then((m) => m.TracePage) },
   { path: 'scenario', loadComponent: () => import('./features/scenario/scenario-page').then((m) => m.ScenarioPage) },
+  {
+    path: 'transcript',
+    loadComponent: () => import('./features/transcript/transcript-page').then((m) => m.TranscriptPage),
+  },
   { path: 'trace/:correlationId', loadComponent: () => import('./features/trace/trace-page').then((m) => m.TracePage) },
 ];
