@@ -33,10 +33,27 @@ public sealed class OperatorTranscriptTests
         running.Command.ShouldBe("docker compose -f deploy/compose/docker-compose.yml up -d --wait");
         running.WorkingDirectory.ShouldBe("/work/backend");
         running.ExitCode.ShouldBeNull();
+        running.Settled.ShouldBeFalse();
+        transcript.Script().ShouldContain("· still running\n");
 
         job.MarkExited(0);
 
-        transcript.Read().Entries.ShouldHaveSingleItem().ExitCode.ShouldBe(0);
+        TranscriptEntry exited = transcript.Read().Entries.ShouldHaveSingleItem();
+        exited.ExitCode.ShouldBe(0);
+        exited.Settled.ShouldBeTrue();
+        transcript.Script().ShouldContain("· exit 0\n");
+    }
+
+    [Fact]
+    public void An_authorization_with_no_scheme_keeps_nothing_of_its_value()
+    {
+        using HttpRequestMessage message = new(HttpMethod.Get, "http://localhost:5000/api/v1/orders");
+        message.Headers.TryAddWithoutValidation("Authorization", "3f9a1c0e7b2d44aa");
+
+        string curl = ShellLine.Curl(message, null);
+
+        curl.ShouldContain("-H 'Authorization: <scrubbed>'");
+        curl.ShouldNotContain("3f9a1c0e7b2d44aa");
     }
 
     [Fact]

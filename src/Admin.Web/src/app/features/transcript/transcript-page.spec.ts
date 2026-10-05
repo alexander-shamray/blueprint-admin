@@ -145,7 +145,7 @@ describe('TranscriptPage', () => {
     expect(text(fixture.nativeElement.querySelector('.dropped'))).toBe('4 earlier entries were dropped.');
   });
 
-  it('keeps the last transcript and says so when a poll fails', async () => {
+  it('keeps the last transcript and says so when a poll fails, until the next answer', async () => {
     const fixture = await render();
     host.transcript.mockReturnValue(throwError(() => ({ message: 'connection refused' })));
 
@@ -154,5 +154,11 @@ describe('TranscriptPage', () => {
 
     expect(text(fixture.nativeElement.querySelector('.error'))).toBe('The host did not answer: connection refused');
     expect(fixture.nativeElement.querySelectorAll('li.entry')).toHaveLength(3);
+
+    host.transcript.mockReturnValue(of(view));
+    await vi.advanceTimersByTimeAsync(TRANSCRIPT_POLL_MS);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.error')).toBeNull();
   });
 });
