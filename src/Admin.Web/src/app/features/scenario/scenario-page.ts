@@ -367,6 +367,7 @@ export class ScenarioPage {
 
       if (result.status === 404 && !this.orderAnswered) {
         last = 'The BFF answered 404: it has not learned of the order yet.';
+        this.patch(key, { status: result.status, body: result.body });
       } else if (result.status !== 200) {
         this.patch(key, {
           state: 'failed',

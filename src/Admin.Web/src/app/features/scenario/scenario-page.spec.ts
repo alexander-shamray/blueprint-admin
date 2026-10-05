@@ -302,6 +302,7 @@ describe('ScenarioPage', () => {
 
     expect(page.steps()[4].state).toBe('failed');
     expect(page.steps()[4].status).toBe(401);
+    expect(page.steps()[4].body).toBe('{"title":"Unauthorized"}');
     expect(page.steps()[4].detail).toBe('Answered 401.');
     expect(sent().filter(isRead)).toHaveLength(1);
     expect(page.steps().slice(5).map((s) => s.state)).toEqual(['skipped', 'skipped']);
@@ -309,19 +310,47 @@ describe('ScenarioPage', () => {
 
   it('fails a 404 that follows an answer, since the BFF had already learned of the order', async () => {
     vi.useFakeTimers();
-    const answers = [responded(200, order('placed'), ''), responded(404, '{}', '')];
+    const answers = [
+      responded(200, order('placed'), ''),
+      responded(404, '{"code":"order.not_found"}', ''),
+    ];
     host.proxy.mockImplementation((request: ProxyRequest) =>
       isRead(request) && answers.length > 0 ? of(answers.shift()!) : of(platform(request)),
     );
     const page = render().componentInstance;
 
     const done = page.run();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(page.steps()[4].body).toBe(order('placed'));
     await vi.advanceTimersByTimeAsync(DRAIN_POLL_MS);
     await done;
     vi.useRealTimers();
 
     expect(page.steps()[4].state).toBe('failed');
     expect(page.steps()[4].detail).toBe('Answered 404.');
+    // The 404 replaces the placed read's answer, so what is shown is what failed.
+    expect(page.steps()[4].status).toBe(404);
+    expect(page.steps()[4].body).toBe('{"code":"order.not_found"}');
+  });
+
+  it('keeps the last 404 on a watch that saw nothing else before the cap', async () => {
+    vi.useFakeTimers();
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      isRead(request) ? of(responded(404, '{"code":"order.not_found"}', '')) : of(platform(request)),
+    );
+    const page = render().componentInstance;
+
+    const done = page.run();
+    await vi.advanceTimersByTimeAsync(DRAIN_WATCH_MS + DRAIN_POLL_MS);
+    await done;
+    vi.useRealTimers();
+
+    expect(page.steps()[4].state).toBe('failed');
+    expect(page.steps()[4].detail).toBe(
+      `Not confirmed after ${DRAIN_WATCH_MS / 1000} s. The BFF answered 404: it has not learned of the order yet.`,
+    );
+    expect(page.steps()[4].status).toBe(404);
+    expect(page.steps()[4].body).toBe('{"code":"order.not_found"}');
   });
 
   it('stops a watch at once when the order ends in a cancellation, rather than waiting out the cap', async () => {
@@ -336,6 +365,8 @@ describe('ScenarioPage', () => {
 
     expect(page.steps()[4].state).toBe('failed');
     expect(page.steps()[4].detail).toBe('The order ended declined before it was confirmed.');
+    expect(page.steps()[4].status).toBe(200);
+    expect(page.steps()[4].body).toBe(order('declined', { cancelled: '2026-10-05T12:00:02Z' }));
     expect(sent().filter(isRead)).toHaveLength(1);
   });
 
@@ -349,6 +380,8 @@ describe('ScenarioPage', () => {
 
     expect(page.steps()[4].state).toBe('failed');
     expect(page.steps()[4].detail).toContain('not with an order read');
+    expect(page.steps()[4].status).toBe(200);
+    expect(page.steps()[4].body).toBe('{"items":[]}');
   });
 
   it('gives up a watch at the cap and says what it last read', async () => {
