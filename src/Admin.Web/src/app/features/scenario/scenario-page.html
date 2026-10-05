@@ -1,5 +1,19 @@
 <section class="actions">
   <label>
+    Script
+    <select
+      name="script"
+      aria-label="Script"
+      [ngModel]="script()"
+      (ngModelChange)="pick($event)"
+      [disabled]="running()"
+    >
+      @for (s of scripts; track s.key) {
+        <option [value]="s.key">{{ s.title }}</option>
+      }
+    </select>
+  </label>
+  <label>
     Run as
     <select
       name="runAs"
@@ -21,9 +35,8 @@
 </section>
 
 <p class="intro">
-  Publish a product, wait for ordering-catalog-events to drain, quote a basket holding it, order it
-  and cancel the order, as run-locally.md does by hand. Each call carries its own correlation id, so
-  each call that leaves the console has its own trace.
+  {{ intro() }} As run-locally.md does it by hand: each step carries its own correlation id, so each
+  call that leaves the console has its own trace.
 </p>
 
 @if (error(); as e) {
@@ -68,6 +81,9 @@
       }
       @if (step.detail) {
         <p class="detail">{{ step.detail }}</p>
+      }
+      @if (step.regrant) {
+        <p class="regrant">{{ step.regrant }}</p>
       }
       @if (step.key === 'drain') {
         @if (projection(); as p) {

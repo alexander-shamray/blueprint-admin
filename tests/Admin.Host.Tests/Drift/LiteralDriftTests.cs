@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Admin.Host.Api;
 using Admin.Host.Broker;
 using Admin.Host.Config;
@@ -14,7 +15,7 @@ namespace Admin.Host.Tests.Drift;
 /// A source match rather than a build reference, because the backend is a clone beside this one
 /// and never a dependency of it.
 /// </summary>
-public sealed class LiteralDriftTests
+public sealed partial class LiteralDriftTests
 {
     private static readonly string[] CorrelationIdExtensions = ["src", "BuildingBlocks", "Common.Web", "CorrelationIdExtensions.cs"];
 
@@ -128,6 +129,73 @@ public sealed class LiteralDriftTests
     }
 
     [Fact]
+    public void The_order_reads_the_catalog_lists_are_the_bffs_routes()
+    {
+        string endpoints = Backend.Read("src", "BFF", "Web.Bff", "Endpoints", "OrderEndpoints.cs");
+
+        endpoints.ShouldContain(".MapGroup(\"/v1/orders\")");
+        endpoints.ShouldContain(".WithName(\"ListOrders\")");
+        endpoints.ShouldContain("\"/{id:guid}\"");
+        endpoints.ShouldContain(".WithName(\"GetOrder\")");
+        endpoints.ShouldContain("string? cursor,");
+        endpoints.ShouldContain("int limit = OrderPage.DefaultLimit");
+    }
+
+    [Fact]
+    public void The_cancellations_the_scenario_stops_on_are_the_bffs_cancel_outcomes()
+    {
+        string outcomes = Backend.Read("src", "BFF", "Web.Bff.Persistence", "CancelOutcomes.cs");
+        string[] read = ArrayLiteral(ScenarioRun(), "CANCELLATIONS");
+
+        read.Length.ShouldBe(3);
+        read.Where(o => !outcomes.Contains($" = \"{o}\";", StringComparison.Ordinal)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void The_timeline_the_scenario_reads_is_the_bffs_order_timeline()
+    {
+        string responses = Backend.Read("src", "BFF", "Web.Bff", "Orders", "OrderResponses.cs");
+        Match record = OrderTimelineRecord().Match(responses);
+        record.Success.ShouldBeTrue("OrderTimeline is no longer a positional record this test can read");
+
+        string[] members = [.. TimelineMember().Matches(record.Groups["members"].Value).Select(m => m.Groups[1].Value.ToLowerInvariant())];
+
+        ArrayLiteral(ScenarioRun(), "TIMELINE_STEPS").ShouldBe(members);
+    }
+
+    [Fact]
+    public void The_statuses_the_fake_order_gives_are_the_bffs()
+    {
+        string statuses = Backend.Read("src", "BFF", "Web.Bff", "Orders", "BuyerStatuses.cs") + Backend.Read("src", "BFF", "Web.Bff.Persistence", "CancelOutcomes.cs");
+        string fake = File.ReadAllText(Path.Combine(Backend.AdminRoot, "src", "Admin.Host", "Fakes", "FakeOrders.cs"));
+
+        string[] given = [.. QuotedStatus().Matches(fake).Select(m => m.Groups[1].Value).Distinct()];
+
+        given.ShouldBe(["delivered", "cancelled", "dispatched", "confirmed", "placed"], ignoreOrder: true);
+        given.Where(s => !statuses.Contains($" = \"{s}\";", StringComparison.Ordinal)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void The_fake_bffs_404_is_worded_as_the_bffs()
+    {
+        string errors = Backend.Read("src", "BFF", "Web.Bff", "Orders", "OrderReadErrors.cs");
+
+        errors.ShouldContain("Error.NotFound(\"order.not_found\", \"No order with that id.\")");
+        File.ReadAllText(Path.Combine(Backend.AdminRoot, "src", "Admin.Host", "Fakes", "FakeGateway.cs"))
+            .ShouldContain("\"code\":\"order.not_found\",\"detail\":\"No order with that id.\"");
+    }
+
+    [Fact]
+    public void The_shipping_timers_the_scenario_says_it_waits_on_still_exist()
+    {
+        string hop = Backend.Read("src", "Services", "Shipping", "Shipping.Infrastructure", "Carrier", "CarrierHop.cs");
+
+        hop.ShouldContain("public static readonly TimeSpan FulfilmentTick");
+        hop.ShouldContain("public static readonly TimeSpan TrackingPollInterval");
+        ScenarioRun().ShouldContain("`CarrierHop.FulfilmentTick`, `CarrierHop.TrackingPollInterval`");
+    }
+
+    [Fact]
     public void The_backend_still_provisions_no_grafana_datasources()
     {
         Directory.EnumerateDirectories(Path.Combine(Backend.Dir, "deploy"), "provisioning", SearchOption.AllDirectories)
@@ -204,4 +272,25 @@ public sealed class LiteralDriftTests
     }
 
     private static JsonDocument RealmExport() => JsonDocument.Parse(Backend.Read("deploy", "compose", "keycloak", "realm-export.json"));
+
+    private static string ScenarioRun() =>
+        File.ReadAllText(Path.Combine(Backend.AdminRoot, "src", "Admin.Web", "src", "app", "features", "scenario", "scenario-run.ts"));
+
+    /// <summary>The single-quoted strings of a TypeScript <c>const NAME … = [ … ];</c>, in order.</summary>
+    private static string[] ArrayLiteral(string source, string name)
+    {
+        Match literal = Regex.Match(source, $@"const {name}\b[^=]*=\s*\[(?<items>[^\]]*)\]");
+        literal.Success.ShouldBeTrue($"{name} is no longer an array literal this test can read");
+
+        return [.. Regex.Matches(literal.Groups["items"].Value, "'([^']*)'").Select(m => m.Groups[1].Value)];
+    }
+
+    [GeneratedRegex(@"public sealed record OrderTimeline\((?<members>[^)]*)\);")]
+    private static partial Regex OrderTimelineRecord();
+
+    [GeneratedRegex(@"DateTimeOffset\? (\w+)")]
+    private static partial Regex TimelineMember();
+
+    [GeneratedRegex("\"(placed|confirmed|dispatched|delivered|cancelled|out_of_stock|declined)\"")]
+    private static partial Regex QuotedStatus();
 }

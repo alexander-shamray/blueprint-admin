@@ -103,13 +103,15 @@ public sealed class OpenApiReaderTests
     }
 
     [Fact]
-    public void Curated_operations_are_the_bff_quote_and_every_hosts_readiness()
+    public void Curated_operations_are_the_bff_quote_and_order_reads_and_every_hosts_readiness()
     {
         IReadOnlyList<ApiOperation> curated = CuratedOperations.All(new AdminOptions());
 
         curated.Select(o => (o.Id, o.Method, o.Url, o.EdgePolicy)).ShouldBe(
         [
             ("bff:Quote", "POST", "http://localhost:5000/bff/v1/checkout/quote", "authenticated"),
+            ("bff:ListOrders", "GET", "http://localhost:5000/bff/v1/orders", "authenticated"),
+            ("bff:GetOrder", "GET", "http://localhost:5000/bff/v1/orders/{id}", "authenticated"),
             ("health:gateway", "GET", "http://localhost:5000/health/ready", GatewayRoutes.Direct),
             ("health:catalog", "GET", "http://localhost:5102/health/ready", GatewayRoutes.Direct),
             ("health:ordering", "GET", "http://localhost:5101/health/ready", GatewayRoutes.Direct),

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Admin.Host.Api;
 using Admin.Host.Tests.TestSupport;
 using Shouldly;
 
@@ -54,7 +55,7 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
             "catalog:PublishProduct", "catalog:GetProducts", "ordering:PlaceOrder", "ordering:CancelOrder",
             "inventory:SetOnHand", "inventory:GetStock", "inventory:GetReservation", "inventory:ReleaseReservation",
             "inventory:ReinstateReservation", "payments:GetPayment",
-            "bff:Quote", "health:gateway", "health:catalog", "health:ordering", "health:bff", "health:inventory",
+            "bff:Quote", "bff:ListOrders", "bff:GetOrder", "health:gateway", "health:catalog", "health:ordering", "health:bff", "health:inventory",
             "health:payments", "simulator:Requests", "carrier:Requests",
         ]);
         JsonElement publish = view.GetProperty("operations")[0];
@@ -69,7 +70,7 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
         HttpResponseMessage response = await client.PostAsync("/api/catalog/reload", null, Token);
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
-        (await response.Content.ReadFromJsonAsync<JsonElement>(Token)).GetProperty("operations").GetArrayLength().ShouldBe(19);
+        (await response.Content.ReadFromJsonAsync<JsonElement>(Token)).GetProperty("operations").GetArrayLength().ShouldBe(21);
     }
 
     [Fact]
@@ -163,6 +164,26 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
             .GetProperty("status").GetInt32().ShouldBe(204);
         (await ProxyAsync(new { method = "POST", url = "http://localhost:5000/bff/v1/checkout/quote", body = "{}", identity = new { username = "browser" } }))
             .GetProperty("body").GetString()!.ShouldContain("\"total\"");
+    }
+
+    [Fact]
+    public async Task The_bff_order_read_needs_a_token_and_follows_the_order_the_fake_placed()
+    {
+        const string reads = "http://localhost:5000/bff/v1/orders/";
+
+        (await ProxyAsync(new { method = "GET", url = reads + "0199a1b2-0000-7000-8000-0000000000ff" })).GetProperty("status").GetInt32().ShouldBe(401);
+        (await ProxyAsync(new { method = "GET", url = reads + "0199a1b2-0000-7000-8000-0000000000ff", identity = new { username = "browser" } }))
+            .GetProperty("body").GetString()!.ShouldContain("\"order.not_found\"");
+
+        JsonElement placed = await ProxyAsync(new { method = "POST", url = "http://localhost:5000/api/v1/orders", body = RunLocallyExamples.For("PlaceOrder"), identity = new { username = "demo" } });
+        placed.GetProperty("status").GetInt32().ShouldBe(200);
+        string orderId = JsonSerializer.Deserialize<string>(placed.GetProperty("body").GetString()!)!;
+        JsonElement detail = await ProxyAsync(new { method = "GET", url = reads + orderId, identity = new { username = "demo" } });
+
+        detail.GetProperty("status").GetInt32().ShouldBe(200);
+        using JsonDocument order = JsonDocument.Parse(detail.GetProperty("body").GetString()!);
+        order.RootElement.GetProperty("orderId").GetString().ShouldBe(orderId);
+        order.RootElement.GetProperty("timeline").GetProperty("placed").ValueKind.ShouldBe(JsonValueKind.String);
     }
 
     [Theory]

@@ -9,9 +9,9 @@ namespace Admin.Host.Fakes;
 /// Every outbound HTTP call in FakePlatform mode. Readiness and Grafana's health answer 200 on any
 /// host; the realm token endpoint, the four OpenAPI documents, the gateway, the payment simulator's
 /// request log and Grafana's datasource proxies are recordings (FakeKeycloak, FakeOpenApi, FakeGateway,
-/// FakeGrafana). Hosts are told apart by the configured URLs.
+/// FakeGrafana), and the BFF's order read is <see cref="FakeOrders"/>. Hosts are told apart by the configured URLs.
 /// </summary>
-public sealed class FakePlatformHandler(AdminOptions options) : HttpMessageHandler
+public sealed class FakePlatformHandler(AdminOptions options, FakeOrders orders) : HttpMessageHandler
 {
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
@@ -34,7 +34,7 @@ public sealed class FakePlatformHandler(AdminOptions options) : HttpMessageHandl
             : Is(uri, options.GrafanaUrl) && path.Contains("/loki/api/v1/query_range", StringComparison.Ordinal) ? FakeGrafana.Loki(request)
             : Is(uri, options.GrafanaUrl) && path.Contains("/api/traces/", StringComparison.Ordinal) ? FakeGrafana.Tempo(request)
             : Is(uri, options.GrafanaUrl) && path.EndsWith("/api/v1/query", StringComparison.Ordinal) ? FakeGrafana.Prometheus(request)
-            : Is(uri, options.GatewayUrl) ? FakeGateway.Send(request)
+            : Is(uri, options.GatewayUrl) ? FakeGateway.Send(request, orders)
             : FakeHttp.Json(HttpStatusCode.OK, """{"fake":true}""");
 
         response.RequestMessage = request;

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 using Admin.Host.Api;
+using Admin.Host.Config;
 using Shouldly;
 
 namespace Admin.Host.Tests.Drift;
@@ -37,6 +38,19 @@ public sealed class RunLocallyDriftTests
         JsonNode sent = JsonNode.Parse(new HashtableReader(document, body + "-Body (".Length).ReadValue())!;
 
         JsonNode.DeepEquals(sent, JsonNode.Parse(example)).ShouldBeTrue($"{heading}\nrun-locally.md: {sent.ToJsonString()}\nexample: {JsonNode.Parse(example)!.ToJsonString()}");
+    }
+
+    /// <summary>
+    /// The Scenario's watches read the order back through the BFF, so that read is one run-locally.md makes by hand,
+    /// at the gateway path the curated operation sends to, with the order id as the one path parameter.
+    /// </summary>
+    [Fact]
+    public void The_order_read_the_scenario_watches_is_one_run_locally_makes()
+    {
+        string document = File.ReadAllText(Backend.RunLocally);
+        ApiOperation read = CuratedOperations.All(new AdminOptions()).Single(o => o.Id == "bff:GetOrder");
+
+        document.ShouldContain($"Invoke-RestMethod \"{read.Url.Replace("{id}", "$orderId", StringComparison.Ordinal)}\" -Headers $auth");
     }
 
     [Fact]
