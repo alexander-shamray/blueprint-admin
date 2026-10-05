@@ -105,9 +105,10 @@ The gateway strips `/api` or `/bff` before forwarding. Catalog, Ordering,
 Inventory and Payments publish OpenAPI; the gateway and BFF do not. The
 console's operation tree is therefore the four OpenAPI documents rebased onto
 the gateway prefix, plus a curated list for the BFF's
-`POST /bff/v1/checkout/quote`, every host's `/health/ready` and the payment
-and carrier simulators' request logs, plus a free-form request form for
-anything else.
+`POST /bff/v1/checkout/quote` and its buyer order reads
+(`GET /bff/v1/orders`, `GET /bff/v1/orders/{id}`), every host's
+`/health/ready` and the payment and carrier simulators' request logs, plus a
+free-form request form for anything else.
 
 ### 2.4 Identities
 
@@ -316,7 +317,10 @@ expiry, `RenewsAt` (expiry less the reuse margin, after which the next call
 mints a new one), and the permissions in its `permission` claim. The API
 screen's identity picker shows it, so a 403 is explained by the grant it
 lacks. The margin has one owner, `TokenService`, and the page holds no
-threshold of its own.
+threshold of its own. The Scenario reads the same clock before each call it
+sends: past `RenewsAt`, or with no token held once the run has sent, that
+call mints a new one, and the step says so. Nothing is retried on the page's
+behalf; a 401 ends the step as the gateway returned it.
 
 ### 5.7 ApiCatalog and RequestProxy
 
@@ -551,7 +555,7 @@ and names the active option through `aria-activedescendant`.
 | **Broker** | queues with depth, `_error` queues in red, exchanges, permissions; a drained indicator for `ordering-catalog-events` | refresh, auto-refresh of all three |
 | **API** | operation tree on the left, each source with what its document changed since the kept baseline; request editor (path params, headers, body pre-filled from the schema example, `commandId` generated per send) and identity picker with its token clock (§5.6); response pane with status, timing, headers, body; a history list | Send; accept a changed document as the new baseline; "Trace this call" opens the Trace screen with the response's correlation id |
 | **Trace** | the §5.9 timeline for a correlation id, grouped by service, with Grafana deep links, and on a refetch what arrived or left since the last one | enter an id or arrive from the API screen; reload |
-| **Scenario** | `run-locally.md`'s calls as five steps — publish, wait for the drain, quote, order, cancel — each with its status and body, and each HTTP step with its own correlation id | Run as a realm user; each step that sent links to its trace; the first step that does not succeed ends the run |
+| **Scenario** | `run-locally.md`'s calls as one of two scripts — publish, wait for the drain, quote, order, then either watch the order to confirmed, despatched and delivered, or cancel it and watch it to cancelled — each step with its status, body and own correlation id, each watch saying what it waits for and what it last read | Pick the script; run as a realm user; each step that sent links to its trace; the first step that does not succeed ends the run |
 | **Transcript** | §5.11's entries in order: each process with its directory and exit code, each request as its `curl` with the identity and status, polled | Copy as shell script, which copies the host's rendered script rather than one built in the page, so the scrubber has the last word |
 
 The API screen keeps one behaviour from `run-locally.md` explicit: after a
@@ -678,9 +682,9 @@ not adopted at the start; they come when there is a PR flow to govern.
 **Phase 6 is the SPA alone.** Every step is a call the API screen can
 already make — `POST /proxy` with the catalog's own operation and its
 `run-locally.md` example body, and `GET /broker/queues` for the drain — so no
-endpoint is added and FakePlatform answers it as it stands. Each step carries
-the id the previous one produced (the product into the quote and the order,
-the order into the cancel), and each HTTP step its own correlation id, so each
+endpoint is added. Each step carries the id the previous one produced (the
+product into the quote and the order, the order into the cancel and the
+watches), and each HTTP step its own correlation id, so each
 links to its own trace unless nothing left the console (a token Keycloak
 refused, a call that never went out); the drain asks the broker and has
 none. The drain is the API screen's watch, with its interval and cap, and a
@@ -690,6 +694,17 @@ more: the outbox publishes after the request, so an empty queue can precede
 the event, and no surface says one product has been projected (§5.9 is the
 same hop). A per-product readiness signal, such as a read of Ordering's price
 for one product, is a `blueprint-backend` change.
+
+A watch reads the BFF's buyer order read, the one `run-locally.md` makes by
+hand, with the drain's interval and cap, until its timeline shows the step
+waited for. The BFF learns from the broker, so a 404 before its first answer
+is waited out; any other status ends the step, and so does an order that
+ended in a cancellation the watch was not waiting for. The order's state is
+the buyer's view, not the saga's: confirmed, despatched and delivered are what
+the BFF projected, and the reservation and payment between them are on the
+Trace screen. FakePlatform's `FakeOrders` moves each order it placed a step a
+second, so the watches have something to watch; it is written by hand, since a
+recording holds one instant of an order.
 
 Each phase is one or more PRs; each ends with the CI green on both runners
 and the Playwright smoke covering the new screen.
