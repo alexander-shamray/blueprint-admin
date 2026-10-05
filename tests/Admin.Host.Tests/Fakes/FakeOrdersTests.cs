@@ -107,6 +107,23 @@ public sealed class FakeOrdersTests
     }
 
     [Fact]
+    public void A_second_cancel_does_not_move_the_first_so_a_cancelled_order_stays_cancelled()
+    {
+        FakeOrders orders = new(time);
+        DateTimeOffset placed = time.GetUtcNow();
+        string id = orders.Place();
+        orders.Cancel(id);
+        time.Advance(FakeOrders.Step * 1.5);
+        orders.Cancel(id);
+        time.Advance(FakeOrders.Step * 4);
+
+        using JsonDocument read = JsonDocument.Parse(orders.Detail(id)!);
+
+        read.RootElement.GetProperty("status").GetString().ShouldBe("cancelled");
+        read.RootElement.GetProperty("timeline").GetProperty("cancelled").GetDateTimeOffset().ShouldBe(placed + FakeOrders.Step);
+    }
+
+    [Fact]
     public void The_first_order_is_the_recorded_id_and_each_later_one_its_own_watched_apart()
     {
         FakeOrders orders = new(time);
