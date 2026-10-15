@@ -186,15 +186,16 @@ opens those files:
   |---|---|
   | Open issue, nothing built for it | **Remaining**, in its wave |
   | Open issue labelled `paused` | **Paused**, whatever else is true of it |
-  | Open issue with a branch, a worktree or an open PR | **In progress**, with the branch or PR |
-  | Open PR | **In progress**, one row naming the issues it closes that are still open, or `—` when there are none |
+  | Open issue with a branch or a worktree and no open PR | **In progress**, with the branch |
+  | Open PR | **In progress**, one row for the PR naming the open, unpaused issues it closes, or `—` when there are none; an issue so named has no row of its own |
   | Closed issue; merged or closed PR | no row, and no note of what landed, which git and the closed issues already keep |
 
-  Two things follow. A PR closed unmerged, or merged without closing its
-  issue, leaves the issue open, so the issue's row goes back to its wave; and
-  whatever the work found and filed has its own row at once, by the same
-  table. The *before* matters too: the move from **Remaining** to **In
-  progress** is made before the session enters the worktree.
+  Three things follow. A PR closed unmerged, or merged without closing its
+  issue, leaves the issue open, so the issue's row goes back to its wave.
+  Whatever the work found and filed has its own row by the same table, made
+  in the main checkout or owed as the paragraph below says. And the move from
+  **Remaining** to **In progress** is made before the session enters the
+  worktree.
 
   Only the main checkout's copy counts, never one in a worktree — and a
   session inside `.claude/worktrees/` is refused that copy by Claude Code's
