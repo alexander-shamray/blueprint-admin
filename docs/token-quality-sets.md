@@ -99,4 +99,33 @@ Read it with these limits, which the next run should remove:
 - **`bug-auditor` was not run**, and the sweep set stays empty.
 
 The reviewer also raised findings that match no row (PR #10 one, #140 one
-nit, #146 four, #149 one more, #139 two). Nothing here verifies them.
+nit, #146 four, #149 one more, #139 two). Nothing here verifies them; the
+next section does.
+
+## 2026-10-15 — the nine unmatched findings, checked (#168)
+
+Each of the nine findings above was traced to its file on `main` at 8ae20e9.
+**Eight hold and one does not.** That is nine findings read by one checker,
+all `low`: it is a first read of the reviewer's precision and not a figure
+for it.
+
+| PR | Finding | Verdict | Where it went |
+|---|---|---|---|
+| #10 | a scenario step clears its correlation id when the proxy call errors | **false positive**: `exchange` in `scenario-page.ts` clears it only when the call to the host itself throws, and the host answers a platform failure as an outcome that says whether it sent (`unreached` carries `sent`), so a throw is a request the host never made | none |
+| #140 | `BrokerQueue` carries both `IsErrorQueue` and `Parked` | holds: the first is `Parked == "error"` | #173 |
+| #146 | the `/broker/projection` row omits the 409 | holds: `BrokerEndpoints.Answer` returns it | fixed with this section, in the design's endpoint table |
+| #146 | a rebuild can run during a Stack reset, down or up job | holds: the gates are separate fields, and Compose jobs have none | #171 |
+| #146 | the depth line is not refreshed when the job ends | holds: `projectionStarted` refreshes once, at the start | #172 |
+| #146 | a misplaced header comment in `broker.spec.ts` | holds | #176 |
+| #149 | bare `token` / `api_key` JSON keys are not named by the scrubber | holds: `TokenField` and `SecretField` name neither, and `SecretForm` covers them only as `key=value` | #174 |
+| #139 | no test pins the `tools` redirection refusal in `guard-git-argv.py` | holds, and `tests` is unpinned too | #175 |
+| #139 | "ported unchanged" is uncited | holds as a citation, not as a claim: `token_usage.py` and its README are identical to `blueprint-backend`'s today, modulo line endings, but `token-usage.md` names no source commit, and a worktree session cannot read the sibling's history | none; a nit |
+
+None of the eight real findings is one of the twelve rows, so the set is not
+the reviewer's whole yield, and a miss on a row does not mean the reviewer
+found nothing in that PR.
+
+**Still owed under #168**, which stays open for it: `bug-auditor` over the
+set (the sweep set is still empty), and a repeated run in a detached worktree
+at each PR's head, which removes the *main, not the PR's head*, *one run, no
+spread* and *PR #115 read in part* limits above.
