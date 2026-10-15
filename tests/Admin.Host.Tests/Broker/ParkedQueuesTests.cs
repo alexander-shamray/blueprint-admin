@@ -12,7 +12,9 @@ public sealed class ParkedQueuesTests
     [InlineData("ordering-fulfilment-saga_delay", null)]
     public void A_queue_is_parked_by_its_suffix_and_by_nothing_else(string queue, string? kind)
     {
-        ParkedQueues.KindOf(queue)?.Name.ShouldBe(kind);
+        string? found = ParkedQueues.KindOf(queue)?.Name;
+
+        found.ShouldBe(kind);
     }
 
     [Theory]
