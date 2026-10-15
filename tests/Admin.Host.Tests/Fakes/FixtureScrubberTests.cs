@@ -147,9 +147,22 @@ public sealed class FixtureScrubberTests
     [InlineData("POSTGRES_PASSWORD=s3cret", "POSTGRES_PASSWORD=<scrubbed>")]
     [InlineData("Keycloak__ClientSecret=abc", "Keycloak__ClientSecret=<scrubbed>")]
     [InlineData("Redis__Password=hunter2", "Redis__Password=<scrubbed>")]
+    [InlineData("Keycloak__AdminPassword=hunter2", "Keycloak__AdminPassword=<scrubbed>")]
+    [InlineData("NewPassword=abc&ConfirmPassword=abc", "NewPassword=<scrubbed>&ConfirmPassword=<scrubbed>")]
+    [InlineData("GET /orders?page_token=abc123&limit=10", "GET /orders?page_token=<scrubbed>&limit=10")]
     public void Every_key_the_form_rule_names_is_scrubbed(string text, string expected)
     {
         FixtureScrubber.Scrub(text).ShouldBe(expected);
+    }
+
+    [Theory]
+    [InlineData("""{"body":"username=demo&password=","method":"POST"}""")]
+    [InlineData("""{"a":["password="],"b":1}""")]
+    [InlineData("""{"body":"password="}""")]
+    public void An_empty_value_before_a_json_strings_closing_quote_is_left_as_it_is(string json)
+    {
+        FixtureScrubber.Scrub(json).ShouldBe(json);
+        FixtureScrubber.Findings(json).ShouldBeEmpty();
     }
 
     [Fact]
