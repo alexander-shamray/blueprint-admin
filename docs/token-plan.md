@@ -22,8 +22,8 @@ From the 2026-10-15 baseline in [`token-usage.md`](token-usage.md):
   and 45% of all history's input equivalent comes after a wake, when a
   session resumes into a context the cache may have dropped.
 - **What is resident is large and mostly unread.** `ship.md` alone is
-  about 34k tokens and the ten commands together 93k; `CLAUDE.md` is 3.1k in
-  every turn and `docs/harness-boundaries.md` 5.8k when read whole.
+  a third of the commands' total, and `CLAUDE.md` is in every turn; the
+  sizes are in the baseline's table of what every turn carries.
 
 ## 2. The sequence
 
@@ -81,8 +81,8 @@ clean sweep. **Exit** on the sweep quality set.
 ### Step 6 — the commands
 
 Each command splits into a runbook and its argument, the argument read only
-when the command is disputed. `ship.md` is the target: 134,904 bytes on
-2026-10-15. **Exit.** A `/ship` run reaches the same end state with a
+when the command is disputed. `ship.md` is the target; its size
+is in the baseline. **Exit.** A `/ship` run reaches the same end state with a
 smaller resident prompt, measured by the step 1 report.
 
 ## 3. What each step may not do
