@@ -67,6 +67,8 @@ export class BrokerPage {
   readonly inspecting = signal(false);
   readonly deadLetterError = signal<string | null>(null);
   readonly deadLetterJobId = signal<string | null>(null);
+  /** True once a real run is sent: what was listed may have moved, so the listing is dropped until it is read again. */
+  readonly moved = signal(false);
   /** The last dry run: the real run is offered only for that message and verb, so it is always a dry run first. */
   readonly dryRun = signal<{ messageId: string; verb: DeadLetterVerb } | null>(null);
   readonly executeText = signal('');
@@ -100,6 +102,8 @@ export class BrokerPage {
     this.dryRun.set(null);
     this.executeText.set('');
     this.deadLetterError.set(null);
+    this.deadLetterJobId.set(null);
+    this.moved.set(false);
     this.inspecting.set(true);
     this.host
       .deadLetters(queue)
@@ -118,6 +122,8 @@ export class BrokerPage {
     this.inspection.set(null);
     this.dryRun.set(null);
     this.executeText.set('');
+    this.deadLetterJobId.set(null);
+    this.moved.set(false);
   }
 
   /** The tool without `--execute`: says what would move and moves nothing. Arms the real run for this message and verb. */
@@ -145,6 +151,8 @@ export class BrokerPage {
         this.deadLetterError.set(null);
         this.deadLetterJobId.set(job.id);
         this.dryRun.set(null);
+        this.inspection.set(null);
+        this.moved.set(true);
         this.refresh();
       },
       error: (e: unknown) => this.deadLetterError.set(this.describeError(e)),
