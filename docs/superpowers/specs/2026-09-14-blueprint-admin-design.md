@@ -81,6 +81,7 @@ console reports its absence (no `node_modules`) rather than running it.
 | Web BFF | `http://localhost:5200` | `/health/ready` |
 | Inventory API | `http://localhost:5103` | `/openapi/v1.json` (token required); `/health/ready` |
 | Payments API | `http://localhost:5104` | `/openapi/v1.json` (token required); `/health/ready` |
+| Privacy API | `http://localhost:5105` | `/openapi/v1.json` (token required); `/health/ready`; its erasure requests are reached through the gateway (§2.3) |
 | Payment simulator | `http://localhost:5190` | `/__admin/requests`, what Payments asked the provider; a decline is caused by the order's amount |
 | Carrier simulator | `http://localhost:5191` | `/__admin/requests`, what Shipping asked the carrier; Shipping is a worker with no API, so this is its only by-hand view |
 | Object store | `http://127.0.0.1:8333` | `GET /status`, the readiness the Compose healthcheck asks; the one pre-signed `PUT` of a product image, which the host sends (§5.7) and the proxy cannot (ADR-106) |
@@ -104,11 +105,12 @@ login, which is why broker inspection goes through `rabbitmqctl`.
 | `* /api/v1/orders/{**}` | Ordering | authenticated |
 | `* /api/v1/inventory/{**}` | Inventory | `inventory:admin` |
 | `* /api/v1/payments/{**}` | Payments | `payments:admin` |
+| `* /api/v1/privacy/{**}` | Privacy | `privacy:erase` |
 | `* /bff/{**}` | Web BFF | authenticated |
 
 The gateway strips `/api` or `/bff` before forwarding. Catalog, Ordering,
-Inventory and Payments publish OpenAPI; the gateway and BFF do not. The
-console's operation tree is therefore the four OpenAPI documents rebased onto
+Inventory, Payments and Privacy publish OpenAPI; the gateway and BFF do not. The
+console's operation tree is therefore the five OpenAPI documents rebased onto
 the gateway prefix, plus a curated list for the BFF's
 `POST /bff/v1/checkout/quote` and its buyer order reads
 (`GET /bff/v1/orders`, `GET /bff/v1/orders/{id}`), its product-image upload
@@ -123,6 +125,7 @@ free-form request form for anything else.
 |---|---|---|
 | `demo` | `demo` | `catalog:write`, `orders:write`, `orders:cancel`, `inventory:admin`, `payments:admin` |
 | `browser` | `browser` | nothing |
+| `privacy` | `privacy` | `privacy:erase` and nothing else; a login of its own because the role destroys a customer's records and `demo` stays without it. The Erasure screen sends as it |
 | anonymous | — | the catalog GET route only |
 
 Access tokens live 300 seconds (`accessTokenLifespan` in the realm export).
@@ -356,7 +359,7 @@ behalf; a 401 ends the step as the gateway returned it.
 
 ### 5.7 ApiCatalog and RequestProxy
 
-`ApiCatalog.Load()` fetches `/openapi/v1.json` from Catalog, Ordering, Inventory and Payments with
+`ApiCatalog.Load()` fetches `/openapi/v1.json` from Catalog, Ordering, Inventory, Payments and Privacy with
 a `demo` token, rewrites each path onto the gateway (`/v1/catalog/...` becomes
 `/api/v1/catalog/...`), and merges the curated operations from §2.3. Each
 operation carries method, gateway path, path parameters, an example body (the
@@ -376,7 +379,7 @@ with no new upstream call. FakePlatform keeps its baselines in a directory of
 its own per process.
 
 `RequestProxy.Send(request)` takes method, an absolute URL restricted to the
-configured surfaces (the gateway, Catalog, Ordering, BFF, Inventory, Payments,
+configured surfaces (the gateway, Catalog, Ordering, BFF, Inventory, Payments, Privacy,
 the payment and carrier simulator origins and the image edge), headers,
 body, an identity and an optional correlation id. It attaches the token, sets
 `X-Correlation-Id` (generated if absent; a supplied id that breaks those rules
@@ -533,6 +536,7 @@ All under `/api`, JSON, loopback only.
 | `POST /logs/follow/{id}/stop` | stops that follow job if it is still the current one; 204 either way. Named, so a Stop that reaches the host after the next Follow ends nothing. There is no generic job stop: it would reach `up`, `down -v` and the supervisor's `npm start` |
 | `GET /broker/queues`, `/broker/exchanges`, `/broker/permissions` | §5.5; `queues` also carries `projection`, the drain state of `ordering-catalog-events` |
 | `GET /broker/projection`, `POST /broker/projection/repair`, `POST /broker/projection/rebuild` | §5.5; the plan (queue, typed confirmation, the tool's limits), then a listed job; the rebuild is refused with 400 unless `confirm` is `bff-replay --reset` |
+| `GET /erasure/holders` | §6's Erasure screen: the holders Privacy asks (`ErasureHolders.Table`, drift-checked against the backend's `Privacy__Responders__n`), each with the depth of its `*-privacy` queue, `privacy-completions`' depth and the overdue runbook's URL. The request itself is raised, read and reissued through `POST /proxy`, as the gateway answers it |
 | `GET /identity/users`, `POST /identity/token`, `POST /identity/clock` | §5.6 |
 | `GET /catalog/operations`, `POST /catalog/reload` | §5.7 |
 | `POST /catalog/baseline/{service}` | makes that service's last fetched document its baseline, then reloads; 404 for a name the catalog has not fetched |
@@ -596,6 +600,7 @@ and names the active option through `aria-activedescendant`.
 | **Stack** | the workstation doctor's rows above the buttons, read when the screen opens; one row per Compose service with state, health and port; the frontend job; a reachability strip; quick links to the client, Grafana, Keycloak | Check the workstation again; Up, Down, Down and wipe, Reset (both behind one typed confirmation), Start and Stop frontend; opens the job's output pane |
 | **Logs** | a follow stream with service filter, text search and correlation-id highlight | start, stop (the host's follow job too, as does leaving the screen), clear |
 | **Broker** | queues with depth, `_error` and `_skipped` queues marked with the runbook of one that holds a message, a BFF projection panel (what the rebuild tool cannot restore, the depth of `bff-order-events`), exchanges, permissions; a drained indicator for `ordering-catalog-events` | refresh, auto-refresh of all three; Repair, and Rebuild behind a typed confirmation, each opening the job's output pane |
+| **Erasure** | one row per holder of an erasure request (the backend's `Privacy__Responders__n`), each answered, waiting or overdue as the request reads, with its `*-privacy` queue's depth and `privacy-completions`' beside them; the request's status, dates and reissue count; an answer from outside the request's set marked not counted; the overdue runbook's link | Raise a request for a subject id, as the `privacy` login; read one by id, or every 3 s until it closes; Reissue an overdue one. Nothing here grants the role: the realm's owner does (§13) |
 | **API** | operation tree on the left, each source with what its document changed since the kept baseline; request editor (path params, headers, body pre-filled from the schema example, `commandId` generated per send) and identity picker with its token clock (§5.6); response pane with status, timing, headers, body; a history list | Send; accept a changed document as the new baseline; "Trace this call" opens the Trace screen with the response's correlation id |
 | **Trace** | the §5.9 timeline for a correlation id, grouped by service, with Grafana deep links, and on a refetch what arrived or left since the last one | enter an id or arrive from the API screen; reload |
 | **Scenario** | `run-locally.md`'s calls as one script of a library (`SCRIPTS` in `scenario-run.ts` owns the list; `docs/superpowers/specs/2026-10-15-scenario-scripts.md` the causes and the fakes' rules) — publish, wait for the drain, quote, order, then either watch the order to confirmed, despatched and delivered, cancel it and watch it to cancelled, or apply a cause `run-locally.md` names (a price ending `.01`, stock set to 0) and watch the saga refuse the order — each step with its status, body and own correlation id, each watch saying what it waits for and what it last read | Pick the script; run as a realm user; each step that sent links to its trace; the first step that does not succeed ends the run |
