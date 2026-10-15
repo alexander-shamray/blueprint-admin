@@ -134,6 +134,26 @@ public sealed class WorkstationDoctorTests(AdminHostFactory factory) : IClassFix
     }
 
     [Theory]
+    [InlineData("Python 3.12.7", DoctorState.Ok)]
+    [InlineData("Python 3.12.0", DoctorState.Ok)]
+    [InlineData("Python 3.13.1", DoctorState.Problem)]
+    [InlineData("Python 3.120.1", DoctorState.Problem)]
+    [InlineData("Python 2.7.18", DoctorState.Problem)]
+    [InlineData("", DoctorState.Problem)]
+    public void Python_is_ok_only_for_a_3_12_answer(string answer, DoctorState expected) =>
+        WorkstationDoctor.Python(Said(answer)).State.ShouldBe(expected);
+
+    [Fact]
+    public void A_py_that_does_not_start_is_a_problem_naming_what_needs_it()
+    {
+        DoctorCheck check = WorkstationDoctor.Python(Failed("No suitable Python runtime found"));
+
+        check.State.ShouldBe(DoctorState.Problem);
+        check.Detail.ShouldContain("No suitable Python runtime found");
+        check.Detail.ShouldContain("dead-letter");
+    }
+
+    [Theory]
     [InlineData("## main...origin/main", DoctorState.Ok, "On main, level with origin/main as last fetched.")]
     [InlineData("## main...origin/main [ahead 1]", DoctorState.Ok, "On main, level with origin/main as last fetched (ahead 1).")]
     [InlineData("## main...origin/main [behind 3]", DoctorState.Problem, "main is 3 behind its upstream as last fetched.")]
@@ -311,11 +331,12 @@ public sealed class WorkstationDoctorTests(AdminHostFactory factory) : IClassFix
 
         Dictionary<string, (string State, string Detail)> rows = view.GetProperty("checks").EnumerateArray()
             .ToDictionary(c => c.GetProperty("name").GetString()!, c => (c.GetProperty("state").GetString()!, c.GetProperty("detail").GetString()!));
-        rows.Keys.ShouldBe(["Docker", "Ports", "Gateway CORS", "Node", "Backend clone", "Frontend clone", "Images", "Object store"]);
+        rows.Keys.ShouldBe(["Docker", "Ports", "Gateway CORS", "Node", "Python", "Backend clone", "Frontend clone", "Images", "Object store"]);
         rows["Docker"].ShouldBe(("Ok", "Docker 29.7.2 is answering."));
         rows["Ports"].ShouldBe(("Problem", "Held by another program, so Up cannot publish them: 5672, 15672 by erl (pid 7376)."));
         rows["Gateway CORS"].State.ShouldBe("Ok");
         rows["Node"].ShouldBe(("Ok", "Node 22.23.2, as the frontend clone's .nvmrc pins."));
+        rows["Python"].ShouldBe(("Ok", "Python 3.12.7, which the dead-letter workbench runs under."));
         rows["Backend clone"].State.ShouldBe("Ok");
         rows["Images"].State.ShouldBe("Problem");
         rows["Object store"].State.ShouldBe("Ok");

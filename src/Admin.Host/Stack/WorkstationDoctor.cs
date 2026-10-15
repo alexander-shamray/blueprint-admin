@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Admin.Host.Broker;
 using Admin.Host.Compose;
 using Admin.Host.Config;
 using Admin.Host.Jobs;
@@ -26,7 +27,8 @@ public sealed record DoctorView(IReadOnlyList<DoctorCheck> Checks);
 /// read is a line of run-locally.md's step 0, run as written; none changes anything, none leaves the
 /// machine, and none fetches, so a clone is judged against its last fetch. A row that cannot be judged — a read
 /// that did not answer, or nothing yet to compare — is <see cref="DoctorState.Unknown"/>, never a guess either way.
-/// Docker or Node not answering is the exception, because there the silence is itself the problem Up will meet.
+/// Docker, Node or Python not answering is the exception, because there the silence is itself the problem Up (or the
+/// dead-letter workbench) will meet.
 /// </summary>
 public sealed partial class WorkstationDoctor(
     IProcessRunner runner, ComposeService compose, RepoPaths paths, IOptions<AdminOptions> options, TimeProvider time)
@@ -58,12 +60,13 @@ public sealed partial class WorkstationDoctor(
         Task<CommandOutput> listeners = PowerShellAsync(ListenersLine, cancellationToken);
         Task<CommandOutput> node = RunAsync("node", ["--version"], cancellationToken);
         Task<CommandOutput> nvmrc = PowerShellAsync($"Get-Content '{Quoted($"{paths.FrontendDir}/.nvmrc")}'", cancellationToken);
+        Task<CommandOutput> python = RunAsync(DeadLetterService.Python[0], [.. DeadLetterService.Python[1..], "--version"], cancellationToken);
         Task<CommandOutput> backend = RunAsync("git", ["-C", paths.BackendDir, "status", "-sb"], cancellationToken);
         Task<CommandOutput> frontend = RunAsync("git", ["-C", paths.FrontendDir, "status", "-sb"], cancellationToken);
         Task<CommandOutput> headMoved = RunAsync("git", ["-C", paths.BackendDir, "reflog", "-1", "--date=iso-strict", "--format=%gd"], cancellationToken);
         Task<ComposeStatus> stack = compose.PsAsync(cancellationToken);
 
-        await Task.WhenAll(docker, config, images, listeners, node, nvmrc, backend, frontend, headMoved, stack);
+        await Task.WhenAll(docker, config, images, listeners, node, nvmrc, python, backend, frontend, headMoved, stack);
 
         JsonDocument? model = Parse(config.Result);
 
@@ -75,6 +78,7 @@ public sealed partial class WorkstationDoctor(
                 Ports(model, config.Result, listeners.Result, stack.Result),
                 Cors(model, config.Result, options.Value.ClientUrl),
                 Node(node.Result, nvmrc.Result),
+                Python(python.Result),
                 Clone("Backend clone", backend.Result),
                 Clone("Frontend clone", frontend.Result),
                 Images(images.Result, headMoved.Result),
@@ -298,6 +302,28 @@ public sealed partial class WorkstationDoctor(
             : new(name, DoctorState.Problem, $"Node {running}; the frontend clone's .nvmrc pins {pinned}.");
     }
 
+    /// <summary>
+    /// The stack runs without Python; the Broker screen's dead-letter workbench does not, because the tool runs under
+    /// <see cref="DeadLetterService.Python"/>. Ok only for a 3.12 answer: another version answering through the launcher
+    /// is still a runtime the workbench will not use.
+    /// </summary>
+    internal static DoctorCheck Python(CommandOutput version)
+    {
+        const string name = "Python";
+        const string needs = "the dead-letter workbench runs under py -3.12";
+
+        if (version.Error is { } error)
+        {
+            return new(name, DoctorState.Problem, $"py -3.12 did not answer: {error}; {needs}.");
+        }
+
+        string said = Joined(version);
+
+        return PythonVersion().Match(said) is { Success: true } match
+            ? new(name, DoctorState.Ok, $"Python {match.Groups[1].Value}, which the dead-letter workbench runs under.")
+            : new(name, DoctorState.Problem, $"py -3.12 answered {(said.Length > 0 ? $"\"{said}\"" : "nothing")}, not Python 3.12; {needs}.");
+    }
+
     /// <summary>Judged against the last fetch: the doctor makes no network call, so a clone behind an unfetched origin reads level.</summary>
     internal static DoctorCheck Clone(string name, CommandOutput status)
     {
@@ -505,6 +531,10 @@ public sealed partial class WorkstationDoctor(
     /// <summary><c>## main...origin/main [behind 2]</c>; a detached head reads <c>## HEAD (no branch)</c>.</summary>
     [GeneratedRegex(@"^## (?<branch>\S+?)(?:\.\.\.(?<upstream>\S+))?(?: \[(?<tracking>[^\]]+)\])?(?: .*)?$")]
     private static partial Regex StatusLine();
+
+    /// <summary><c>py -3.12 --version</c> prints <c>Python 3.12.7</c>.</summary>
+    [GeneratedRegex(@"^Python (3\.12\.\d+)$")]
+    private static partial Regex PythonVersion();
 
     [GeneratedRegex(@"behind (\d+)")]
     private static partial Regex Behind();

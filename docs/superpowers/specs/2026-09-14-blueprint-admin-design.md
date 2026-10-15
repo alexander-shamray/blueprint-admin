@@ -264,8 +264,9 @@ step 0, run as written and bounded to 30 s like `ps`; none changes anything,
 none leaves the machine, and none fetches, so a clone is judged against its
 last fetch. Each row is ok, a problem, or could-not-tell where the row cannot
 be judged — a read that did not answer, or nothing yet to compare — never a
-guess. Docker or Node not answering is a problem rather than could-not-tell,
-because that silence is itself what Up will meet:
+guess. Docker, Node or Python not answering is a problem rather than
+could-not-tell, because that silence is itself what Up (or the dead-letter
+workbench, for Python) will meet:
 
 - Docker: `docker info` answers.
 - Ports: the published ports of the resolved Compose model, against every
@@ -274,6 +275,10 @@ because that silence is itself what Up will meet:
 - Gateway CORS: the gateway's resolved `Cors__Origins__*` admit the client
   origin `ClientUrl` names. Read and reported, never fixed from here.
 - Node: `node --version` against the frontend clone's `.nvmrc`.
+- Python: `py -3.12 --version` answers `Python 3.12.x`. The stack runs without
+  it; the Broker screen's dead-letter workbench (§5.5) runs its tool under
+  that same `py -3.12`, so a `py` that does not start, or answers another
+  version, is a problem before the first Open on a parked queue meets it.
 - Each clone: on `main`, and not behind its upstream as last fetched.
 - Images: no image Compose built predates the backend's last commit, since Up
   does not rebuild an image that exists.
