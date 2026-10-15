@@ -17,6 +17,7 @@ internal static class FakeKeycloak
     {
         ["demo"] = ("demo", ["catalog:write", "orders:write", "orders:cancel", "inventory:admin", "payments:admin"]),
         ["browser"] = ("browser", []),
+        ["privacy"] = ("privacy", ["privacy:erase"]),
     };
 
     public static async Task<HttpResponseMessage> TokenAsync(HttpRequestMessage request, CancellationToken cancellationToken)
