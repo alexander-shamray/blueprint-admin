@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Admin.Host.Api;
 using Admin.Host.Identity;
 
 namespace Admin.Host.Fakes;
@@ -73,11 +74,12 @@ internal static partial class FakeGateway
 
     public static HttpResponseMessage Send(HttpRequestMessage request, FakeOrders orders)
     {
-        string path = request.RequestUri!.AbsolutePath.TrimEnd('/');
+        // YARP and ASP.NET routing ignore case; every id is read as a Guid, so lower case is its canonical form.
+        string path = request.RequestUri!.AbsolutePath.TrimEnd('/').ToLowerInvariant();
         string[]? permissions = Permissions(request);
         Match orderRead = OrderReadPath().Match(path);
 
-        HttpResponseMessage response = (request.Method.Method, path) switch
+        HttpResponseMessage response = EdgePolicy(GatewayRoutes.PolicyFor(request.Method.Method, path), permissions) ?? (request.Method.Method, path) switch
         {
             ("GET", "/api/v1/catalog/products") => FakeHttp.Json(HttpStatusCode.OK, Products),
             ("POST", "/api/v1/catalog/products") => Authorize(permissions, "catalog:write", () => FakeHttp.Json(HttpStatusCode.OK, $"\"{PublishedProductId}\"")),
@@ -145,6 +147,13 @@ internal static partial class FakeGateway
 
         return new HttpResponseMessage(HttpStatusCode.NoContent);
     }
+
+    // The route policy comes first on the platform, whatever the destination goes on to serve (GatewayRoutes owns the
+    // table), so a path the fake does not model still answers 401 with no token. Null admits the call.
+    private static HttpResponseMessage? EdgePolicy(string policy, string[]? permissions) =>
+        permissions is null && policy != "anonymous" && policy != GatewayRoutes.NoRoute ? FakeHttp.Problem(HttpStatusCode.Unauthorized, "Unauthorized")
+        : permissions is not null && policy.Contains(':', StringComparison.Ordinal) && !permissions.Contains(policy) ? FakeHttp.Problem(HttpStatusCode.Forbidden, "Forbidden")
+        : null;
 
     private static HttpResponseMessage Authorize(string[]? permissions, string? required, Func<HttpResponseMessage> allowed) =>
         permissions is null ? FakeHttp.Problem(HttpStatusCode.Unauthorized, "Unauthorized")
