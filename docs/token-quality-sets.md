@@ -60,7 +60,8 @@ beside the set, not in it.
 
 One full pass of `branch-reviewer` per source PR, eight in all, each given
 only the PR's diff (`gh pr diff <n>`) and no hint of what the set expects.
-**Four of twelve rows were found, a recall of 33%.**
+**Four of twelve rows were found, a recall of 33%.** This supersedes item 4
+of *How to use it* above, which was true on the morning it was written.
 
 | Row | PR | Found | The reviewer's finding |
 |---|---|---|---|
@@ -90,8 +91,10 @@ Read it with these limits, which the next run should remove:
   and 1450–2908, so #116 and #118 may lie in the gap; both rows are counted
   missed all the same, because a gap that size is what a real review of it
   would have had.
-- **Three of the four found rows are `low` in a single file**, the scrubber
-  or a harness helper; the misses include one-line prose and README claims
+- **Every row is `low`**, so the figure says nothing about a reviewer's recall
+  of a graver defect. Two of the four found rows are in the scrubber
+  (`FixtureScrubber.cs`: #147, #153), one on the Trace screen (#141) and one
+  a CI gap (#144); the misses include one-line prose and README claims
   (#40, #118, #145), which a diff-only reader has no reason to check.
 - **`bug-auditor` was not run**, and the sweep set stays empty.
 
