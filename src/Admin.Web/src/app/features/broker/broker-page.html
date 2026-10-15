@@ -47,10 +47,10 @@
     @if (deadLetterError(); as e) {
       <p class="error" role="alert">{{ e }}</p>
     }
-    @if (moved()) {
+    @if (moved(); as id) {
       <p class="moved" role="status">
-        The messages above have been sent to the real run, so they are no longer listed. Read the queue again once its
-        output says it has ended.
+        <code>{{ id }}</code> went to the real run, so the listing is dropped; any other message read is still on the
+        queue. Read the queue again once the run's output says it has ended.
         <button class="reread" [disabled]="inspecting()" (click)="openDeadLetters(queue)">Read again</button>
       </p>
     }

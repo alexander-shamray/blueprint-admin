@@ -572,7 +572,7 @@ describe('BrokerPage', () => {
       click(fixture, 'button.execute');
 
       expect(fixture.nativeElement.querySelectorAll('article.dead-letter').length).toBe(0);
-      expect(fixture.nativeElement.querySelector('.moved')?.textContent).toContain('no longer listed');
+      expect(fixture.nativeElement.querySelector('.moved')?.textContent).toContain('m-1 went to the real run');
       click(fixture, 'button.reread');
       expect(host.deadLetters).toHaveBeenCalledTimes(2);
       expect(fixture.nativeElement.querySelectorAll('article.dead-letter').length).toBe(2);
