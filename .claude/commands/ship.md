@@ -872,6 +872,16 @@ same argument as never calling a branch clean because asking failed.
    exists and has a worktree, so there is nothing for this step to create and
    `git-worktree-fork.sh` would refuse the name if it tried.
 
+   **Before `/branch`, the task list.** When this run is for an issue, its
+   row leaves **Remaining** for **In progress** in `TODO.md` at the main
+   checkout's root now, while the session is still in that checkout: once
+   `/branch` has moved it into the worktree, Claude Code's isolation refuses
+   it that file. The branch is not named yet, so it is added to the row when
+   the session is next in the main checkout. Which section a row belongs in
+   is `docs/working-rules.md`'s table and is not restated here. Work no
+   issue started has no row until its PR opens, and the run that opens it
+   owes that row from inside the worktree.
+
    **This step is also where the workspace comes from, and it has two
    outcomes.** From a clean `main`, `/branch` forks a worktree under
    `.claude/worktrees/` and moves the session into it: **every step below then
@@ -2048,6 +2058,15 @@ same argument as never calling a branch clean because asking failed.
    The merged branch itself stays. `git branch -d` is denied, deliberately, and
    a merged branch costs a line in `git branch` — name it in the report.
 
+   **Then the task list, now that the session is back in the main
+   checkout.** Re-derive every row this run touched by
+   `docs/working-rules.md`'s table: a merged PR whose issue closed leaves no
+   row, a PR merged without closing its issue sends that issue back to its
+   wave, and whatever the run filed gets its own row. Make every update the
+   run owed from inside the worktree as well (the PR it opened, the issues it
+   filed). A run that stopped before the merge does the same for the state it
+   stopped in.
+
 ## Report
 
 **Open with the workspace**: the worktree this run happened in and the branch
@@ -2101,6 +2120,11 @@ now at, and that that HEAD contains the merge oid — containment rather than
 equality, because a PR merging in between leaves `main` at a later descendant
 and nothing is wrong; the worktree removed, or the one left behind and why git
 refused it; and the merged branch still sitting in `git branch`.
+
+**The task list gets its own line.** Each row moved, added or deleted, and
+the move made before `/branch` ran; or an update that is still owed and why
+it could not be made. A run that reports the work landed and says nothing
+of the list has left the list wrong.
 
 A step skipped on an assumption gets its assumption restated here rather than
 left in the middle of the run, and a check that did not run is named. The whole
