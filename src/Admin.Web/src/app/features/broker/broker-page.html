@@ -123,7 +123,7 @@
       <p class="error" role="alert">The host did not answer: {{ e }}</p>
     }
     @if (jobId(); as id) {
-      <app-output-pane [jobId]="id" />
+      <app-output-pane [jobId]="id" (exited)="projectionEnded()" />
     }
   </section>
 }
