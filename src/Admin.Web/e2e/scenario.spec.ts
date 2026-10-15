@@ -86,3 +86,38 @@ test('a user without the permissions stops the run at the publish', async ({ pag
   await expect(steps.nth(0).locator('.status')).toHaveText('403');
   await expect(steps.locator('.state', { hasText: '[not run]' })).toHaveCount(6);
 });
+
+// The fake store and edge (src/Admin.Host/Fakes/FakeObjectStore.cs) follow the platform's rules: the BFF signs a PUT, the
+// store keeps what is signed, the publish attaches it, and the edge serves what was published, with nosniff.
+test('the image script uploads, publishes with the key and reads the thumbnail back through the edge', async ({ page }) => {
+  await page.goto('/scenario');
+
+  await page.getByLabel('Script').selectOption('image');
+  await page.getByRole('button', { name: 'Run' }).click();
+
+  const steps = page.locator('ol.steps li.step');
+  await expect(steps).toHaveCount(3);
+  await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(3, WATCH);
+  await expect(steps.nth(0).locator('.request')).toHaveText(
+    /^PUT http:\/\/127\.0\.0\.1:8333\/product-images\/uploads\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.png$/,
+  );
+  await expect(steps.nth(0).locator('.detail')).toContainText('the store answered 200 to the PUT');
+  await expect(steps.nth(1).locator('.detail')).toContainText(/Answered 200 with id [0-9a-f-]{36}\./);
+  await expect(steps.nth(2).locator('.request')).toHaveText(
+    /^HEAD http:\/\/127\.0\.0\.1:9000\/products\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.png$/,
+  );
+  await expect(steps.nth(2).locator('.detail')).toContainText('The edge answered 200 with an image and nosniff.');
+});
+
+test('the image script stops at the signing for a user who may not publish', async ({ page }) => {
+  await page.goto('/scenario');
+
+  await page.getByLabel('Script').selectOption('image');
+  await page.getByLabel('Run as').selectOption('browser');
+  await page.getByRole('button', { name: 'Run' }).click();
+
+  const steps = page.locator('ol.steps li.step');
+  await expect(steps.nth(0).locator('.state')).toHaveText('[failed]');
+  await expect(steps.nth(0).locator('.status')).toHaveText('403');
+  await expect(steps.locator('.state', { hasText: '[not run]' })).toHaveCount(2);
+});

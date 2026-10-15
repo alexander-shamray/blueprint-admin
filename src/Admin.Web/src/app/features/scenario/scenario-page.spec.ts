@@ -39,6 +39,18 @@ const catalog: ApiCatalogView = {
   sources: [],
   operations: [
     op({
+      id: 'bff:IssueProductImageUpload',
+      url: 'http://localhost:5000/bff/v1/product-images',
+      exampleBody: '{"contentType":"image/png","sizeBytes":69}',
+    }),
+    op({
+      id: 'catalog:GetProduct',
+      method: 'GET',
+      url: 'http://localhost:5000/api/v1/catalog/products/{id}',
+      pathParameters: [{ name: 'id', required: true, type: 'string' }],
+      edgePolicy: 'anonymous',
+    }),
+    op({
       id: 'catalog:PublishProduct',
       url: 'http://localhost:5000/api/v1/catalog/products/',
       exampleBody: `{"commandId":"${zero}","name":"Walnut desk","amount":19.99}`,
@@ -77,11 +89,16 @@ const catalog: ApiCatalogView = {
   ],
 };
 
-function responded(status: number, body: string, correlationId: string): ProxyResult {
+function responded(
+  status: number,
+  body: string,
+  correlationId: string,
+  headers: Record<string, string[]> = {},
+): ProxyResult {
   return {
     outcome: 'responded',
     status,
-    headers: {},
+    headers,
     body,
     bodyTruncated: false,
     bodyError: null,
@@ -89,6 +106,19 @@ function responded(status: number, body: string, correlationId: string): ProxyRe
     correlationId,
   };
 }
+
+const uploadKey = 'uploads/0199a1b2-0000-7000-8000-0000000000aa/0199a1b2-0000-7000-8000-0000000000bb.png';
+const uploadUrl = `http://127.0.0.1:8333/product-images/${uploadKey}?X-Amz-Signature=sig`;
+const thumbnailUrl =
+  'http://127.0.0.1:9000/products/0199a1b2-0000-7000-8000-0000000000aa/0199a1b2-0000-7000-8000-0000000000bb.png';
+const issued = JSON.stringify({
+  uploadUrl,
+  headers: { 'Content-Type': 'image/png', 'Content-Length': '69' },
+  key: uploadKey,
+  expiresAt: '2026-10-15T12:05:00Z',
+});
+const product = JSON.stringify({ productId, name: 'Walnut desk', thumbnailUrl });
+const imageHeaders = { 'Content-Type': ['image/png'], 'X-Content-Type-Options': ['nosniff'] };
 
 const drained: QueuesView = {
   reachable: true,
@@ -123,6 +153,9 @@ let cancelSent = false;
  */
 function platform(request: ProxyRequest): ProxyResult {
   const id = request.correlationId ?? '';
+  if (request.url.endsWith('/bff/v1/product-images')) return responded(200, issued, id);
+  if (request.url === thumbnailUrl) return responded(200, '', id, imageHeaders);
+  if (request.url.endsWith(`/catalog/products/${productId}`)) return responded(200, product, id);
   if (request.url.endsWith('/catalog/products/')) return responded(200, `"${productId}"`, id);
   if (request.url.includes('/inventory/stock/')) return responded(204, '', id);
   const quote = '{"total":19.99,"unpriced":[]}';
@@ -155,6 +188,7 @@ describe('ScenarioPage', () => {
     reloadOperations: ReturnType<typeof vi.fn>;
     identityUsers: ReturnType<typeof vi.fn>;
     proxy: ReturnType<typeof vi.fn>;
+    uploadProductImage: ReturnType<typeof vi.fn>;
     brokerQueues: ReturnType<typeof vi.fn>;
     tokenClock: ReturnType<typeof vi.fn>;
   };
@@ -168,6 +202,7 @@ describe('ScenarioPage', () => {
       reloadOperations: vi.fn(() => of(catalog)),
       identityUsers: vi.fn(() => of([{ username: 'demo' }, { username: 'browser' }])),
       proxy: vi.fn((request: ProxyRequest) => of(platform(request))),
+      uploadProductImage: vi.fn(() => of(responded(200, '', 'store'))),
       brokerQueues: vi.fn(() => of(drained)),
       tokenClock: vi.fn(() => of(heldClock)),
     };
@@ -1229,5 +1264,146 @@ describe('ScenarioPage', () => {
     expect(fixture.nativeElement.querySelector('.missing').textContent).toContain(
       'bff:Quote is not in the operation catalog',
     );
+  });
+
+  describe('the image script', () => {
+    /** The platform as it answers for the image script, with one answer replaced by `override` where it returns a result. */
+    function answering(override: (request: ProxyRequest) => ProxyResult | undefined): void {
+      host.proxy.mockImplementation((request: ProxyRequest) =>
+        of(override(request) ?? platform(request)),
+      );
+    }
+
+    function image() {
+      const page = render().componentInstance;
+      page.pick('image');
+      return page;
+    }
+
+    it('asks for a signed upload, puts the image to the store, publishes with the key and reads the thumbnail from the edge', async () => {
+      const page = image();
+
+      await page.run();
+
+      expect(page.steps().map((s) => [s.key, s.state])).toEqual([
+        ['upload', 'ok'],
+        ['publish', 'ok'],
+        ['thumbnail', 'ok'],
+      ]);
+      expect(sent().map((r) => [r.method, r.url])).toEqual([
+        ['POST', 'http://localhost:5000/bff/v1/product-images'],
+        ['POST', 'http://localhost:5000/api/v1/catalog/products/'],
+        ['GET', `http://localhost:5000/api/v1/catalog/products/${productId}`],
+        ['HEAD', thumbnailUrl],
+      ]);
+      // The key the BFF returned is what the publish carries, never a URL.
+      expect(JSON.parse(sent()[1].body!).imageKey).toBe(uploadKey);
+      expect(host.uploadProductImage).toHaveBeenCalledWith({
+        uploadUrl,
+        headers: { 'Content-Type': 'image/png', 'Content-Length': '69' },
+      });
+      // The signature is in the query: the step names the object and not the secret.
+      expect(page.steps()[0].request).toBe(`PUT http://127.0.0.1:8333/product-images/${uploadKey}`);
+      expect(page.steps()[0].detail).toBe(`Signed ${uploadKey}, and the store answered 200 to the PUT.`);
+      expect(page.steps()[2].detail).toBe('The edge answered 200 with an image and nosniff.');
+      // The buyer's read is anonymous.
+      expect(sent()[3].identity).toBeNull();
+    });
+
+    it('stops at the store when it refuses the PUT, and publishes nothing', async () => {
+      host.uploadProductImage.mockReturnValue(of(responded(403, '<Error><Code>AccessDenied</Code></Error>', 'store')));
+      const page = image();
+
+      await page.run();
+
+      expect(page.steps().map((s) => s.state)).toEqual(['failed', 'skipped', 'skipped']);
+      expect(page.steps()[0].detail).toBe('The store answered 403 to the PUT.');
+      expect(page.steps()[0].status).toBe(403);
+      expect(sent()).toHaveLength(1);
+    });
+
+    it('says so when the store did not answer, or the host refused to send', async () => {
+      host.uploadProductImage.mockReturnValue(
+        of({ outcome: 'unreached', error: 'connection refused', elapsedMs: 3, correlationId: 'x', sent: true } as ProxyResult),
+      );
+      const page = image();
+      await page.run();
+      expect(page.steps()[0].detail).toBe('No answer from the object store: connection refused');
+
+      host.uploadProductImage.mockReturnValue(throwError(() => new Error('host busy')));
+      await page.run();
+      expect(page.steps()[0].state).toBe('failed');
+      expect(page.steps()[0].detail).toContain('host busy');
+    });
+
+    it('stops when the BFF refuses the signing, or answers with no upload to send', async () => {
+      answering((r) => (r.url.endsWith('/product-images') ? responded(403, '', r.correlationId ?? '') : undefined));
+      const page = image();
+      await page.run();
+      expect(page.steps()[0].detail).toBe('Answered 403.');
+      expect(host.uploadProductImage).not.toHaveBeenCalled();
+
+      answering((r) => (r.url.endsWith('/product-images') ? responded(200, '{"key":"k"}', r.correlationId ?? '') : undefined));
+      await page.run();
+      expect(page.steps()[0].detail).toBe('Answered 200, but not with the upload URL and key the next steps need.');
+      expect(host.uploadProductImage).not.toHaveBeenCalled();
+    });
+
+    it('fails the thumbnail when the product carries none, since the publish dropped the image', async () => {
+      answering((r) =>
+        r.url.endsWith(`/catalog/products/${productId}`) ? responded(200, '{"thumbnailUrl":null}', r.correlationId ?? '') : undefined,
+      );
+      const page = image();
+
+      await page.run();
+
+      expect(page.steps().map((s) => s.state)).toEqual(['ok', 'ok', 'failed']);
+      expect(page.steps()[2].detail).toBe('The product has no thumbnailUrl, so the image did not attach.');
+    });
+
+    it.each([
+      [404, { 'Content-Type': ['image/png'], 'X-Content-Type-Options': ['nosniff'] }, 'The edge answered 404, not the image.'],
+      [200, { 'x-content-type-options': ['nosniff'] }, 'The edge served no content type, not an image.'],
+      [200, { 'Content-Type': ['text/html'], 'X-Content-Type-Options': ['nosniff'] }, 'The edge served text/html, not an image.'],
+      [200, { 'Content-Type': ['image/png'] }, 'The edge did not set X-Content-Type-Options: nosniff.'],
+    ])('fails the thumbnail when the edge answers %s with %o', async (status, headers, detail) => {
+      answering((r) => (r.url === thumbnailUrl ? responded(status, '', r.correlationId ?? '', headers) : undefined));
+      const page = image();
+
+      await page.run();
+
+      expect(page.steps()[2].state).toBe('failed');
+      expect(page.steps()[2].detail).toBe(detail);
+      expect(page.steps()[2].status).toBe(status);
+    });
+
+    it('fails the thumbnail when the edge does not answer', async () => {
+      answering((r) =>
+        r.url === thumbnailUrl
+          ? ({ outcome: 'unreached', error: 'timed out', elapsedMs: 1, correlationId: 'x', sent: true } as ProxyResult)
+          : undefined,
+      );
+      const page = image();
+
+      await page.run();
+
+      expect(page.steps()[2].detail).toBe('No answer from the edge: timed out');
+    });
+
+    it('cannot run while the signing or the product read is missing from the catalog, and says which', () => {
+      host.operations.mockReturnValue(
+        of({
+          ...catalog,
+          operations: catalog.operations.filter((o) => o.id !== 'bff:IssueProductImageUpload' && o.id !== 'catalog:GetProduct'),
+        }),
+      );
+      const page = image();
+
+      expect(page.canRun()).toBe(false);
+      expect(page.resolved()?.missing).toEqual([
+        'bff:IssueProductImageUpload is not in the operation catalog',
+        'catalog:GetProduct is not in the operation catalog',
+      ]);
+    });
   });
 });

@@ -154,6 +154,12 @@ export interface ApiCatalogView {
   operations: ApiOperation[];
 }
 
+/** The pre-signed URL and the headers the BFF signed with it; the host sends its own sample image there and nowhere else. */
+export interface ProductImageUploadRequest {
+  uploadUrl: string;
+  headers: Record<string, string>;
+}
+
 export interface ProxyRequest {
   method: string;
   url: string;

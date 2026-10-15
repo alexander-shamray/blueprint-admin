@@ -11,6 +11,7 @@ import {
   JobView,
   PermissionsView,
   ProjectionPlan,
+  ProductImageUploadRequest,
   ProxyRequest,
   ProxyResult,
   QueuesView,
@@ -94,6 +95,11 @@ export class HostClient {
 
   proxy(request: ProxyRequest): Observable<ProxyResult> {
     return this.http.post<ProxyResult>('/api/proxy', request);
+  }
+
+  /** The image's bytes to the pre-signed URL the BFF issued: the one call the proxy cannot carry, because its body is text. */
+  uploadProductImage(request: ProductImageUploadRequest): Observable<ProxyResult> {
+    return this.http.post<ProxyResult>('/api/product-images/upload', request);
   }
 
   brokerQueues(): Observable<QueuesView> {

@@ -3,11 +3,16 @@ import {
   OrderRead,
   SCENARIO_OPERATIONS,
   SCRIPTS,
+  headerOf,
   idFrom,
+  imageFault,
   orderRead,
   resolveOperations,
+  roleOf,
   secondsBetween,
   stepCorrelationId,
+  thumbnailFrom,
+  uploadFrom,
   verdict,
   withField,
   withProductId,
@@ -308,6 +313,53 @@ describe('the unhappy scripts', () => {
 
     expect(resolveOperations(view, SCRIPTS.declined).operations?.stock?.id).toBe('inventory:SetOnHand');
     expect(resolveOperations(view, SCRIPTS.deliver).operations?.stock).toBeUndefined();
+  });
+});
+
+describe('the image steps', () => {
+  it('send as the signing and the product read, and sit in a script of their own', () => {
+    expect(roleOf('upload')).toBe('image');
+    expect(roleOf('thumbnail')).toBe('product');
+    expect(SCRIPTS.image.steps).toEqual(['upload', 'publish', 'thumbnail']);
+    expect(SCRIPTS.deliver.steps).not.toContain('upload');
+    expect(SCENARIO_OPERATIONS.image).toBe('bff:IssueProductImageUpload');
+    expect(SCENARIO_OPERATIONS.product).toBe('catalog:GetProduct');
+  });
+
+  it('reads the upload the BFF issued, and nothing that is not one', () => {
+    const body = '{"uploadUrl":"http://127.0.0.1:8333/b/k?X-Amz-Signature=s","headers":{"Content-Type":"image/png","n":1},"key":"uploads/a/b.png","expiresAt":"x"}';
+
+    expect(uploadFrom(body)).toEqual({
+      uploadUrl: 'http://127.0.0.1:8333/b/k?X-Amz-Signature=s',
+      headers: { 'Content-Type': 'image/png' },
+      key: 'uploads/a/b.png',
+    });
+    for (const bad of ['', 'nope', '[]', '"x"', '{}', '{"uploadUrl":"u"}', '{"key":"k"}', '{"uploadUrl":"","key":"k"}']) {
+      expect(uploadFrom(bad), bad).toBeNull();
+    }
+    expect(uploadFrom('{"uploadUrl":"u","key":"k"}')?.headers).toEqual({});
+  });
+
+  it('reads a thumbnail only where the product has one', () => {
+    expect(thumbnailFrom('{"thumbnailUrl":"http://e/p.png"}')).toBe('http://e/p.png');
+    for (const none of ['', 'nope', '[]', '{}', '{"thumbnailUrl":null}', '{"thumbnailUrl":""}', '{"thumbnailUrl":3}']) {
+      expect(thumbnailFrom(none), none).toBeNull();
+    }
+  });
+
+  it('finds a header without regard to case, and judges an image by status, type and nosniff', () => {
+    const ok = { 'content-type': ['image/webp'], 'X-CONTENT-TYPE-OPTIONS': ['NoSniff'] };
+
+    expect(headerOf(ok, 'Content-Type')).toBe('image/webp');
+    expect(headerOf(ok, 'ETag')).toBeNull();
+    expect(imageFault(200, ok)).toBeNull();
+    expect(imageFault(204, ok)).toBeNull();
+    expect(imageFault(301, ok)).toBe('The edge answered 301, not the image.');
+    expect(imageFault(200, { 'Content-Type': ['image/png'] })).toBe('The edge did not set X-Content-Type-Options: nosniff.');
+  });
+
+  it('puts a string into a body as it puts a number', () => {
+    expect(JSON.parse(withField('{"name":"x"}', 'imageKey', 'uploads/a/b.png'))).toEqual({ name: 'x', imageKey: 'uploads/a/b.png' });
   });
 });
 
