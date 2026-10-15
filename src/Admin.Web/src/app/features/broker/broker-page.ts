@@ -179,14 +179,10 @@ export class BrokerPage {
 
   /**
    * The run has ended, so read the queues again: without it the depth line keeps the queue as the run found it while
-   * the job's own log says it drained. A refresh still out may have read before the end, so this one waits for it.
+   * the job's own log says it drained.
    */
   projectionEnded(): void {
-    if (this.refreshing()) {
-      this.refreshOwed = true;
-      return;
-    }
-    this.refresh();
+    this.refreshAfter();
   }
 
   /** A tick is a refresh(), so it starts nothing while an earlier refresh's reads are still out. */
@@ -201,10 +197,22 @@ export class BrokerPage {
     next: (job: JobSummary) => {
       this.projectionError.set(null);
       this.jobId.set(job.id);
-      this.refresh();
+      this.refreshAfter();
     },
     error: (e: unknown) => this.projectionError.set(this.describeError(e)),
   };
+
+  /**
+   * A read for something that just happened. A refresh still out may have read before it, and refresh() is not
+   * re-entrant, so the read is owed rather than dropped and runs when that refresh lands.
+   */
+  private refreshAfter(): void {
+    if (this.refreshing()) {
+      this.refreshOwed = true;
+      return;
+    }
+    this.refresh();
+  }
 
   exchangeName(name: string): string {
     return name === '' ? '(default)' : name;

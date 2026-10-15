@@ -248,6 +248,21 @@ describe('BrokerPage', () => {
     expect(host.brokerQueues).toHaveBeenCalledTimes(2);
   });
 
+  it('a start while a refresh is still out reads again once that refresh lands, since it may have read before the start', () => {
+    const fixture = render();
+    const inFlight = new Subject<QueuesView>();
+    host.brokerQueues.mockClear();
+    host.brokerQueues.mockReturnValueOnce(inFlight);
+    (fixture.nativeElement.querySelector('button.refresh') as HTMLButtonElement).click();
+
+    (fixture.nativeElement.querySelector('button.repair') as HTMLButtonElement).click();
+    expect(host.brokerQueues).toHaveBeenCalledTimes(1);
+    inFlight.next(queues);
+    inFlight.complete();
+
+    expect(host.brokerQueues).toHaveBeenCalledTimes(2);
+  });
+
   it('rebuild is disabled until the confirmation is typed exactly, then sends it and clears the box', async () => {
     const fixture = render();
     const button = fixture.nativeElement.querySelector('button.rebuild') as HTMLButtonElement;
