@@ -30,6 +30,22 @@ public sealed class ProcessRunnerTests
     }
 
     [Fact]
+    public async Task A_variable_in_the_spec_reaches_the_child_and_stays_out_of_the_command_line()
+    {
+        ProcessSpec spec = new("node", ["-e", "console.log('seen=' + process.env.ADMIN_TEST_VARIABLE)"], Environment.CurrentDirectory)
+        {
+            Environment = new Dictionary<string, string> { ["ADMIN_TEST_VARIABLE"] = "a-value" },
+        };
+
+        Job job = Runner.Start(spec);
+        int exit = await job.Completion.WaitAsync(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken);
+
+        exit.ShouldBe(0);
+        job.Since(-1).Select(l => l.Text).ShouldBe(["seen=a-value"]);
+        spec.CommandLine.ShouldNotContain("a-value");
+    }
+
+    [Fact]
     public async Task Stop_kills_a_long_running_process()
     {
         ProcessSpec spec = new("node", ["-e", "setInterval(() => console.log('tick'), 50)"], Environment.CurrentDirectory);

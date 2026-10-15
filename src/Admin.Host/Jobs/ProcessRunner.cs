@@ -74,6 +74,11 @@ public sealed partial class ProcessRunner : IProcessRunner, IAsyncDisposable
             info.ArgumentList.Add(argument);
         }
 
+        foreach ((string name, string value) in spec.Environment ?? new Dictionary<string, string>())
+        {
+            info.Environment[name] = value;
+        }
+
         Process process = new() { StartInfo = info };
 
         process.OutputDataReceived += (_, e) =>

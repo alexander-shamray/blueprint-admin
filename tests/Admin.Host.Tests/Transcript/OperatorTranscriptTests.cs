@@ -161,6 +161,26 @@ public sealed class OperatorTranscriptTests
     }
 
     [Fact]
+    public void A_process_given_variables_is_kept_with_them_ahead_of_it_and_their_passwords_scrubbed()
+    {
+        Dictionary<string, string> environment = new()
+        {
+            ["ConnectionStrings__Bff"] = "Server=127.0.0.1,1433;Database=Bff;User Id=sa;Password=hunter2;TrustServerCertificate=True",
+            ["ConnectionStrings__Plain"] = "x",
+        };
+
+        new TranscribingProcessRunner(new StubRunner(), transcript)
+            .Start(new ProcessSpec("dotnet", ["run", "--project", "tools/bff-replay"], "/work/backend") { Environment = environment });
+
+        string command = transcript.Read().Entries[0].Command;
+
+        command.ShouldBe(
+            "ConnectionStrings__Bff='Server=127.0.0.1,1433;Database=Bff;User Id=sa;Password=<scrubbed>' "
+            + "ConnectionStrings__Plain=x dotnet run --project tools/bff-replay");
+        command.ShouldNotContain("hunter2");
+    }
+
+    [Fact]
     public void Past_its_capacity_the_oldest_entry_goes_and_is_counted()
     {
         for (int i = 0; i < OperatorTranscript.Capacity + 3; i++)

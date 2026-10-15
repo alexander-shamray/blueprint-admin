@@ -70,6 +70,10 @@ public static class FakePlatformScripts
                 " Container commerce-catalog-api-1  Removed",
                 " Container commerce-sql-1  Removed",
                 " Network commerce_default  Removed")
+            .On("docker", prefix + "stop web-bff", 0, Lines(ReplayRecordings.StopBff))
+            .On("docker", prefix + "start web-bff", 0, Lines(ReplayRecordings.StartBff))
+            .On("dotnet", "run --project tools/bff-replay -- --reset", 0, Lines(ReplayRecordings.Rebuild))
+            .On("dotnet", "run --project tools/bff-replay", 0, Lines(ReplayRecordings.Repair))
             .On("docker", prefix + "exec -T rabbitmq rabbitmqctl list_queues name messages --formatter json", 0, [.. FixtureLines("rabbitmq-queues.json")])
             .On("docker", prefix + "exec -T rabbitmq rabbitmqctl list_exchanges name type --formatter json", 0, [.. FixtureLines("rabbitmq-exchanges.json")])
             .On("docker", prefix + "exec -T rabbitmq rabbitmqctl list_permissions --formatter json", 0, [.. FixtureLines("rabbitmq-permissions.json")])

@@ -85,6 +85,7 @@ builder.Services.AddSingleton<ComposeService>();
 builder.Services.AddSingleton<WorkstationDoctor>();
 builder.Services.AddSingleton<LogFollower>();
 builder.Services.AddSingleton<BrokerService>();
+builder.Services.AddSingleton<ProjectionRebuildService>();
 
 // PlatformProbe is a typed client, so each readiness poll resolves a fresh one rather than the
 // singleton holding one HttpClient for the host's life.
