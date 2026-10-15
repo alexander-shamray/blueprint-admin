@@ -129,3 +129,86 @@ found nothing in that PR.
 set (the sweep set is still empty), and a repeated run in a detached worktree
 at each PR's head, which removes the *main, not the PR's head*, *one run, no
 spread* and *PR #115 read in part* limits above.
+
+## 2026-10-15 — the rerun at each PR's head, and `bug-auditor` (#168)
+
+Each of the eight source PRs was checked out detached at its head
+(`refs/pull/<n>/head`) outside the repository, its diff written beside it, and
+reviewed **twice** by `branch-reviewer` (a full pass, the diff read whole in
+consecutive chunks, no impact or locality file) and **once** by `bug-auditor`
+(scoped to the files the diff touches, told of no known defect). Sixteen
+reports, none shown a row. This removes the three limits above and leaves two
+of its own, below.
+
+| Row | PR | Baseline (on `main`) | Reviewer, run 1 | Reviewer, run 2 | `bug-auditor` |
+|---|---|---|---|---|---|
+| #11 | #10 | no | no | no | no |
+| #40 | #39 | no | no (near) | no | no |
+| #41 | #39 | no | no | no | no |
+| #116 | #115 | no | no | no | no |
+| #118 | #115 | no | no | no | no |
+| #141 | #140 | **yes** | no | no | no |
+| #144 | #139 | **yes** | no | **yes** | no |
+| #145 | #142 | no | no | no | no |
+| #147 | #146 | **yes** | no | no | **yes** |
+| #151 | #149 | no | no | no | no |
+| #152 | #149 | no | no | no | no |
+| #153 | #149 | **yes** | **yes** | **yes** | no |
+| **Found** | | **4 of 12** | **1** | **2** | **1** |
+
+**Three rows found by some run at the head (#144, #147, #153), four by some run
+anywhere (#141 as well, in the baseline), eight by none of the four runs.** Read it
+with the spread in view, which is the new fact:
+
+- **The baseline's 33% does not repeat.** The same reviewer at the PR's head
+  found one row, then two. Only #153 was found by both reviewer runs; #144
+  flipped between them; #147 and #141, found in the baseline, were found by
+  neither, and #147 was found by `bug-auditor` instead. A recall figure for
+  this reviewer is somewhere between 8% and 33% on twelve `low` rows, and a
+  step that claims "no fewer found than the baseline" must say which run it
+  means.
+- **#40 is a near miss, not counted.** Run 1 flagged `ship.md` claiming the
+  script owns the exit counts when the script states none, which is the same
+  family as #40 (a restated exit count) and not the same fault (the number
+  being wrong).
+- **`bug-auditor` found 1 of 12**, on a scope of the touched files with no
+  hint. It is the only run at the head to find #147, and the only one to miss
+  #153, so its rows and the reviewer's differ. One auditor run per PR is the
+  same one-run-no-spread as before.
+- **The sweep set is still empty.** `bug-auditor` here ran as a read-only
+  auditor on a pinned tree, not under `/bug-sweep`, so nothing was filed by a
+  sweep and step 5 still has no sweep recall to hold anything against.
+
+Limits left: the heads include the fixes the PRs' own review rounds made, so a
+row's defect may not be present at the head the way it was when the round found
+it (#141 is the likely case: the PR's own change marks `_skipped`); and the
+reviewer was given no impact or locality file, as in the baseline, so it read
+less than the live loop gives it.
+
+### What the sixteen runs raised that matches no row
+
+Traced to `main` at 059b8c4, nits not filed:
+
+| Source | Finding | Verdict | Where it went |
+|---|---|---|---|
+| #142, both reviewer runs | class D of the locality map admits `tools/**` while `change-locality.md` names only documents and harness | **stale**: the doc's D row names `tools/**` today | none |
+| #140, both reviewer runs | spec §5.5 and the Broker row mention only `_error` queues | **stale**: the spec covers `_skipped` and the runbook today | none |
+| #149, run 1 | bare `token` / `api_key` JSON keys are not named | holds | #174, already filed |
+| #149, run 1 and 2 | a quoted password that opens with `, `, `: ` or `} ` leaks | the row #153 | #153 |
+| #149, run 2 | the class summary under-states what the scrubber covers | nit | none |
+| #146, run 2 | the Broker e2e header comment sits above the wrong test | holds | #176, already filed |
+| #146, `bug-auditor` | a password holding `;` or `@` is scrubbed in part | the row #147 | #147 |
+| #146, `bug-auditor` | a rebuild test registers the repair script ahead of the reset script | holds | #185 |
+| #146, `bug-auditor` | the rebuild confirmation is cleared even when the host refuses | holds, perhaps deliberate | #186 |
+| #139, run 1 | `style-pass.md` sends the command to a *Style* section `CLAUDE.md` no longer has | holds | #182 |
+| #139, `bug-auditor` | `default_projects()` reads any directory sharing the checkout's name prefix | holds | #183 |
+| #39, runs 1 and 2 | the rebase helper's test restates "five" exit-2 conditions | holds | #184 |
+| #39, run 1 | the helper may skip a commit that carries content when the apply backend stops for another reason | **unverified**: another run traced the reads and found nothing; needs a reproduction | #187 |
+
+Of the thirteen lines, seven are findings that hold on `main` (two already
+filed, five filed now), one is unverified, two are stale, two are rows, and one
+is a nit; none of the new ones is one of the twelve rows.
+
+**Still owed under #168**: the sweep set. `bug-auditor` has now been run, but no
+`/bug-sweep` has filed here, and a sweep checked against a seeded defect is
+what gives step 5 a recall to hold. #168 stays open for that alone.
