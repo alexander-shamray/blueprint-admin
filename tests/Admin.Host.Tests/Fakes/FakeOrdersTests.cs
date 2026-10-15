@@ -177,6 +177,25 @@ public sealed class FakeOrdersTests
         read.RootElement.GetProperty("cancellable").GetBoolean().ShouldBeFalse();
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData(1)]
+    public void A_declined_amount_ends_the_order_declined_whether_the_stock_is_unreported_or_exactly_one(int? onHand)
+    {
+        FakeOrders orders = new(time);
+        string product = orders.Publish(10.01m);
+
+        if (onHand is { } count)
+        {
+            orders.Stock(product, count);
+        }
+
+        string id = orders.Place(product);
+        time.Advance(FakeOrders.Step);
+
+        Status(orders.Detail(id)!).ShouldBe("declined");
+    }
+
     [Fact]
     public void A_product_with_no_stock_ends_its_order_out_of_stock_even_at_a_declined_amount()
     {
@@ -207,6 +226,7 @@ public sealed class FakeOrdersTests
     [Theory]
     [InlineData(19.99, 10)]
     [InlineData(19.99, null)]
+    [InlineData(19.99, 1)]
     [InlineData(10.02, 10)]
     public void A_product_the_script_does_not_name_takes_the_happy_path(double amount, int? onHand)
     {

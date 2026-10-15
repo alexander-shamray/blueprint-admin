@@ -53,6 +53,24 @@ public sealed class FakeGatewayPolicyTests
         Send("POST", "/API/V1/ORDERS", Jwt("""["orders:write"]""")).ShouldBe(HttpStatusCode.OK);
     }
 
+    [Theory]
+    [InlineData("""{"items":[{"productId":123,"quantity":1}]}""")]
+    [InlineData("""{"items":[{"productId":{},"quantity":1}]}""")]
+    [InlineData("""{"items":"x"}""")]
+    [InlineData("not json")]
+    public void An_order_body_the_script_cannot_read_still_places_an_unscripted_order(string body)
+    {
+        using HttpRequestMessage request = new(HttpMethod.Post, Origin + "/api/v1/orders")
+        {
+            Content = new StringContent(body),
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Jwt("""["orders:write"]"""));
+
+        using HttpResponseMessage response = FakeGateway.Send(request, orders);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
     private static string Jwt(string permissions) => TokenServiceTests.Jwt($$"""{"permission":{{permissions}}}""");
 
     private HttpStatusCode Send(string method, string path, string? token)

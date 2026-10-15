@@ -164,7 +164,7 @@ internal static partial class FakeGateway
 
         if (Body(request)?.Get("items") is { ValueKind: JsonValueKind.Array } items && items.GetArrayLength() > 0)
         {
-            product = items[0].Get("productId")?.GetString();
+            product = items[0].Get("productId") is { ValueKind: JsonValueKind.String } id ? id.GetString() : null;
         }
 
         return FakeHttp.Json(HttpStatusCode.OK, $"\"{orders.Place(product)}\"");

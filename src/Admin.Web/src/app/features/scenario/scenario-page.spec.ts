@@ -41,7 +41,7 @@ const catalog: ApiCatalogView = {
     op({
       id: 'catalog:PublishProduct',
       url: 'http://localhost:5000/api/v1/catalog/products/',
-      exampleBody: `{"commandId":"${zero}","name":"Walnut desk"}`,
+      exampleBody: `{"commandId":"${zero}","name":"Walnut desk","amount":19.99}`,
       hasCommandId: true,
     }),
     op({
@@ -49,7 +49,7 @@ const catalog: ApiCatalogView = {
       method: 'PUT',
       url: 'http://localhost:5000/api/v1/inventory/stock/{productId}',
       pathParameters: [{ name: 'productId', required: true, type: 'string' }],
-      exampleBody: '{"onHand":10}',
+      exampleBody: '{"onHand":7}',
     }),
     op({
       id: 'bff:Quote',
@@ -245,7 +245,7 @@ describe('ScenarioPage', () => {
 
   it.each([
     ['declined', 'declined', 10.01, 10],
-    ['out-of-stock', 'out_of_stock', undefined, 0],
+    ['out-of-stock', 'out_of_stock', 19.99, 0],
   ] as const)(
     'runs the %s script: its cause is set before the order and the watch reads the refusal',
     async (script, status, amount, onHand) => {
@@ -277,6 +277,29 @@ describe('ScenarioPage', () => {
       expect(page.steps()[5].detail).toContain(`shows ${status} at 2026-10-05T12:00:01Z`);
     },
   );
+
+  it('stops before quoting or ordering when the stock write is refused', async () => {
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      request.url.includes('/inventory/stock/')
+        ? of(responded(403, '', request.correlationId ?? ''))
+        : of(platform(request)),
+    );
+    const page = render().componentInstance;
+    page.pick('out-of-stock');
+
+    await page.run();
+
+    expect(page.steps().map((s) => s.state)).toEqual([
+      'ok',
+      'ok',
+      'failed',
+      'skipped',
+      'skipped',
+      'skipped',
+    ]);
+    expect(page.steps()[2].status).toBe(403);
+    expect(sent().map((r) => r.method)).toEqual(['POST', 'PUT']);
+  });
 
   it('stops the refusal script when the order ends some other way, saying how', async () => {
     const page = render().componentInstance;
