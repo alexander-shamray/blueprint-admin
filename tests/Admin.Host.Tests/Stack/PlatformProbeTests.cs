@@ -52,6 +52,8 @@ public sealed class PlatformProbeTests
             BffUrl = "http://localhost:5200/",
             InventoryUrl = "http://localhost:5103/",
             PaymentsUrl = "http://localhost:5104/",
+            ObjectStoreUrl = "http://127.0.0.1:8333/",
+            ImageEdgeUrl = "http://127.0.0.1:9000/",
             KeycloakUrl = "http://localhost:8080/",
             GrafanaUrl = "http://localhost:3000/",
             ClientUrl = "http://localhost:5173/",
