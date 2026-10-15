@@ -1,23 +1,24 @@
 # CLAUDE.md
 
-Guidance for Claude Code when working in this repository. This file is a
-primer: what the repo is, where things are, and how to act here. Anything that
-moves when a PR lands — what has been built, a count of anything, a port — is
-owned elsewhere and cited from here by name, never restated.
-**Read the file that covers what you are about to touch, before you touch it.**
+A locator and the hard rules. Anything that moves when a PR lands — what has
+been built, a count of anything, a port — is owned elsewhere and cited by
+name, never restated. **Read the file that covers what you are about to
+touch, before you touch it**, and read a long one by its index or a grep, not
+whole.
 
 | | |
 |---|---|
 | [`README.md`](README.md) | How to run it, what the screens do today, known limits |
 | `TODO.md` (gitignored, local) | Open PRs and issues, for the user; every task change edits it |
+| [`docs/working-rules.md`](docs/working-rules.md) | Build policy, style, working rules, precedence, commands |
 | [`docs/change-locality.md`](docs/change-locality.md) | The operating contract: trust order, classes, touch sets; the gate reads `.github/locality-gate/classes.yml` |
-| [`docs/harness-boundaries.md`](docs/harness-boundaries.md) | What the harness grants these commands, and refuses |
+| [`docs/harness-boundaries.md`](docs/harness-boundaries.md) | What the harness grants these commands, and refuses; start at its index |
 | [`docs/style-guide.md`](docs/style-guide.md) | Pointers to the two dialects; `/style-pass` records a newly settled form here |
 | [`docs/testing.md`](docs/testing.md) | Host vs SPA vs smoke vs harness; FakePlatform for e2e |
+| [`docs/token-plan.md`](docs/token-plan.md), [`docs/token-usage.md`](docs/token-usage.md) | Where a session's tokens go, and the plan to cut them |
 | [`docs/superpowers/specs/2026-09-14-blueprint-admin-design.md`](docs/superpowers/specs/2026-09-14-blueprint-admin-design.md) | The design. §1 before changing behaviour; §13 before adding any |
-| [`docs/superpowers/plans/`](docs/superpowers/plans/) | Delivery record, phases 0–5 — complete; cited for a phase's title, never as current truth |
-| [`Directory.Build.props`](Directory.Build.props) | Target, artefacts path, ADR-019 analysis (the policy lives in blueprint-backend) |
-| [`.editorconfig`](.editorconfig) | C# dialect this host shares with the backend |
+| [`docs/superpowers/plans/`](docs/superpowers/plans/) | Frozen delivery record, phases 0–5; grep it, never read it whole |
+| [`Directory.Build.props`](Directory.Build.props), [`.editorconfig`](.editorconfig) | ADR-019 analysis and the C# dialect shared with the backend |
 | [`src/Admin.Host/Config/AdminOptions.cs`](src/Admin.Host/Config/AdminOptions.cs) | Ports, sibling paths, Grafana/Keycloak URLs, FakePlatform |
 | [`.claude/skills/`](.claude/skills/) | `codebase-index` (read ranges, not whole files); `admin-invariants` (run-locally, FakePlatform, siblings) |
 | [`.mcp.json`](.mcp.json) | Local index as an MCP server (`--root .`) |
@@ -37,21 +38,15 @@ platform fact that is not observable is raised there. Every command the host
 runs is a line from `run-locally.md`; if the console needs something that
 document does not do, change that document's owner first.
 
-Two projects, mirroring the siblings:
-
 ```
 src/Admin.Host/            .NET 10 minimal API: Compose, npm as children, HTTP
                            proxy, SSE. Composition root: Program.cs
 src/Admin.Web/             Angular 22 standalone SPA, built into Host/wwwroot
 tests/Admin.Host.Tests/    xunit
 src/Admin.Web/e2e/         Playwright (FakePlatform)
+tools/token-usage/         Transcript report for the token plan
 .github/workflows/         host, web, smoke
 ```
-
-**Precedence where two documents disagree**: the code and `README.md` beat the
-spec on a matter of fact. `docs/superpowers/plans/` is a **frozen delivery
-record** — never edited to match the code that followed. The design spec
-moves when a rule does. `.remember/` is session state; never edit it.
 
 ### Owners of facts you will be tempted to restate
 
@@ -70,6 +65,7 @@ moves when a rule does. `.remember/` is session state; never edit it.
 | Golden-signal queries (copied, cited) | `GoldenSignals.cs` |
 | What a Tempo span is | `SpanRecogniser.Table` in `SpanRecogniser.cs` |
 | OS (tree kill, job object, `npm.cmd`) | `ProcessRunner.cs`, `WindowsJobObject.cs`, `ExecutableResolver.cs` |
+| Token figures | `docs/token-usage.md` |
 
 ## The one rule that matters
 
@@ -77,16 +73,11 @@ moves when a rule does. `.remember/` is session state; never edit it.
 — by symbol or file, never by value. A stale restatement met in passing is
 left; it is not this change. A code change that contradicts the spec is not
 done until the spec is amended in the same PR, or the code is changed to
-match — pick one, in the PR. Where the spec is genuinely wrong, say so in
-the commit body and follow the code; do not silently rewrite the spec, and
-do not edit `plans/` to match.
-
-This file is inside the rule too, and **no gate reads it**: a rule stated
-here and argued in `.editorconfig` or `Directory.Build.props` moves in both.
+match. This file is inside the rule too, and **no gate reads it**.
 
 ## The commands
 
-From the repository root unless noted. `README.md` owns the long form.
+From the repository root unless noted.
 
 ```bash
 dotnet run --project src/Admin.Host
@@ -103,115 +94,31 @@ npm run lint
 npm run e2e            # Playwright against FakePlatform; needs the host
 ```
 
-Three things hold first: **`npm ci`, never `npm install`**, because `install`
-may rewrite the lockfile; **a `.cs` written with LF fails IDE0055 on every
-line** — `.gitattributes` checks C# out CRLF; and **FakePlatform is
-first-class**: a new endpoint is not done until it works against the fakes
-and the Playwright smoke covers its screen.
+Checks are `bash .claude/scripts/host-checks.sh` and
+`bash .claude/scripts/npm-checks.sh`. The host refuses to start if
+`Admin:BackendDir` / `Admin:FrontendDir` are wrong, naming the key.
 
-The host refuses to start if `Admin:BackendDir` / `Admin:FrontendDir` are
-wrong, naming the key. It does **not** run `npm ci` in the frontend clone.
+## Hard rules
 
-## Build policy
+Each is argued in [`docs/working-rules.md`](docs/working-rules.md).
 
-.NET SDK is `global.json` with `rollForward: disable`. Package versions live
-in `Directory.Packages.props` with **exact** pins — never add `Version=` on a
-`PackageReference`. `Directory.Build.props` carries the backend's **ADR-019**
-policy: `TreatWarningsAsErrors`, `EnforceCodeStyleInBuild`. Three
-`.editorconfig` rules are at `warning` — **IDE0055**, **IDE0065**,
-**IDE0161** — and a warning stops the build. `#pragma` is not the way out.
-
-SPA versions live in `src/Admin.Web/package.json` with **exact** pins — no
-`^`, no `~` — and `package-lock.json` moves in the same commit. `.nvmrc`
-pins Node.
-
-One lesson stays here, because its subject is every other rule: **a gate that
-silently stops covering the newest surface is the most-repeated failure in
-these repositories**, and the only defence is a test whose subject is *what
-the gate is looking at*, not what it found.
-
-## Style
-
-C# follows [`.editorconfig`](.editorconfig), copied from the backend so this
-host reads like the code it operates. The prose version of each rule is
-**blueprint-backend's** `docs/style-guide.md` — it is not in this tree.
-Angular follows the sibling client: standalone, `inject()` at field level,
-signals for state. These stay here because they have to be true before anyone
-opens those files:
-
-- **Prose wraps at 80 columns** (tables, links and code may exceed it),
-  **C# at 120**, **TypeScript at the SPA formatter's width**, in **British
-  spelling** with literal dashes. **Identifiers keep their real spelling**:
-  `IHttpClientFactory`, never "corrected" or Americanised.
-- **File-scoped namespaces**, blank line after. **Explicit types for locals**,
-  with the backend's `var` carve-outs only.
-- **A single statement may omit braces; two or more always take them, and so
-  does one that wraps.** **One space before `=`, `=>` and `{`, never a column
-  of them** — IDE0055 makes a padded column a failed build.
-- **`inject()` at field level**, never a constructor parameter. **Standalone
-  components** with an explicit `imports` array.
-- **No `#pragma` suppressions and no real credentials.** Spec §8's loopback
-  and the realm passwords in `AdminOptions` are the stated local exception.
-- **A comment says why and cites the owner** — no history, no inventory, no
-  PR named. A finding against a comment is closed by cutting it.
-- **Test names are sentences with underscores** (CA1707 is suppressed on
-  `*Tests` projects for that reason).
-
-## Working in this repo
-
-- **Read before you edit**: the claim you are about to change is usually
-  stated more than once. `Program.cs` is the host composition root.
-- **Commit messages** are semantic and present-tense — `docs:`,
-  `feat(<scope>):`, `fix:`, `chore:`, `refactor:`, `test:` — and the body
-  argues the change. A `Closes #n` in a commit body fires on merge whatever
-  the description says, so the description is reconciled to the commits and
-  never the reverse.
-- **A reply is not a resolution.** Resolve a review thread in the same act as
-  the reply, and leave an `Ask` open on purpose.
-- **Uncommitted work in the tree belongs in the PR being worked on**, in its
-  own commit with a body that argues it. **Never revert it to clean the tree**;
-  if it does not belong here, say so and ask rather than decide by deleting.
+- **`npm ci`, never `npm install`**: `install` may rewrite the lockfile.
+- **A `.cs` written with LF fails IDE0055 on every line**; `.gitattributes`
+  checks C# out CRLF. Run `dotnet format whitespace` after creating one.
+- **FakePlatform is first-class**: a new endpoint is not done until it works
+  against the fakes and the Playwright smoke covers its screen.
+- **Exact pins only**: `Directory.Packages.props` and `package.json`; never
+  `Version=` on a `PackageReference`, never `^` or `~`. The lockfile moves in
+  the same commit.
+- **A warning stops the build** (`TreatWarningsAsErrors`; IDE0055, IDE0065,
+  IDE0161). No `#pragma`, and no real credentials.
 - **Do not invent platform behaviour.** 401/403/409/422 pass through as the
-  gateway returned them. A fake's answer is recorded from the live service
-  where one can be, and says where it is not.
-- **The task list is `TODO.md` at the main checkout's root: gitignored,
-  local, never committed.** It is for the user, and it lists open PRs
-  (with the issues each closes) and open issues with no PR. Update it the
-  moment this session opens, merges or closes a PR, or files, closes or
-  reopens an issue. Only the main checkout's copy counts, never one in a
-  worktree — and a session moved into `.claude/worktrees/` with
-  `EnterWorktree` is refused that copy by Claude Code's own isolation, so
-  there the update is carried in the report as owed and made once the
-  session is back in the main checkout. When in doubt, rebuild it from
-  `gh pr list --limit 1000` and `gh issue list --limit 1000`, because the
-  default of 30 truncates silently.
-
-## Available commands
-
-| | |
-|---|---|
-| `/ship` | Clean `main` → `/branch` → checks → `/commit` → `/pr` → the Copilot review loop, `bug-auditor` rounds while Copilot is off (Grok is disabled) → merge → teardown. **It stops for nothing that is a judgement** |
-| `/branch` | A correctly named branch **in a worktree under `.claude/worktrees/`** the session moves into; in place when the tree is dirty or that directory is not writable |
-| `/commit` | Split the working tree into semantic commits with arguing bodies |
-| `/pr` | Open a PR in the house body form, with `| Class |` and `| Touch set |` |
-| `/review-grok` | Triage an external review into a resolution record |
-| `/review-copilot` | Triage Copilot's PR comments — verify each before acting |
-| `/review-branch` | Review the branch against `main` for contradictions; writes `suggestions.md` |
-| `/style-pass` | Apply one corrected form corpus-wide, then record it in the guide and the linters |
-| `/security-sweep` | Loop a defensive security audit in a throwaway worktree, filing an issue per confirmed medium-or-above finding |
-| `/bug-sweep` | The same loop aimed at defects, filed at **critical or high** |
-
-There is no `/validate-blueprint` or `/new-chapter`: this repository has no
-blueprint chapter tree. The locality **gate** is CI, unlike the frontend
-clone where it was helper-only.
-
-Skills (always on, not slash commands): **codebase-index** before a "where is
-X" question; **admin-invariants** before a new endpoint, screen or host
-command.
-
-### What cuts across them
-
-[`docs/harness-boundaries.md`](docs/harness-boundaries.md) is the inventory.
-**Read it before touching anything under `.claude/`**. Checks are
-`bash .claude/scripts/host-checks.sh` and
-`bash .claude/scripts/npm-checks.sh` (the latter `cd`s into `src/Admin.Web`).
+  gateway returned them.
+- **Never revert uncommitted work to clean the tree**; it belongs in the PR
+  being worked on, or ask.
+- **Commit messages** are semantic and present-tense, and the body argues.
+  Resolve a review thread in the same act as the reply.
+- **`TODO.md`** is gitignored and local; update it when a PR or issue opens,
+  merges or closes.
+- **Read `docs/harness-boundaries.md` by its index** before touching
+  anything under `.claude/`.
