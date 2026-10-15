@@ -963,11 +963,13 @@ class TheBranchNameGuardsEachHaveTheirOwnCase(unittest.TestCase):
                 self.assertEqual(2, result.returncode, result.stderr)
                 self.assertIn("not a branch name this helper will take", result.stderr)
 
-    def test_it_takes_every_name_the_branch_creating_helper_makes(self):
-        # One class, read from both files: a name `git-branch-create.sh` can
-        # make and this helper refuses is a branch with no way through a
-        # conflict, which is how every `feat(<scope>)/` branch went
-        # unrebasable (#181). Read from the files rather than run, because
+    def test_it_takes_every_name_the_branch_creating_helpers_make(self):
+        # One class, read from each file: a name `/branch` can make and this
+        # helper refuses is a branch with no way through a conflict, which is
+        # how every `feat(<scope>)/` branch went unrebasable (#181). `/branch`
+        # makes one through `git-worktree-fork.sh` from a clean `main` and
+        # through `git-branch-create.sh` otherwise, so both are held here.
+        # Read from the files rather than run, because
         # this class has no fixture and a name that passed every guard would
         # go on to read whichever checkout the suite runs in.
         def admitted(path):
@@ -975,7 +977,9 @@ class TheBranchNameGuardsEachHaveTheirOwnCase(unittest.TestCase):
                                path.read_text(encoding="utf-8"))
             self.assertEqual(1, len(found), f"{path.name}: one branch-name pattern")
             return found[0]
-        self.assertEqual(admitted(SCRIPTS / "git-branch-create.sh"), admitted(HELPER))
+        for maker in ("git-branch-create.sh", "git-worktree-fork.sh"):
+            with self.subTest(maker=maker):
+                self.assertEqual(admitted(SCRIPTS / maker), admitted(HELPER))
 
     def test_an_unknown_mode_is_refused_by_its_own_message(self):
         result = self.refuse("feat/x", "skip")
