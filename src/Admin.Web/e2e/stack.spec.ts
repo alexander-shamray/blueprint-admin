@@ -40,7 +40,8 @@ test('the workstation panel is read before Up, green where fine and red where a 
   await page.goto('/stack');
   const rows = page.getByRole('region', { name: 'Workstation' }).locator('table.doctor tbody tr');
 
-  await expect(rows).toHaveCount(8);
+  await expect(rows).toHaveCount(9);
+  await expect(rows.filter({ hasText: 'Python' })).toHaveClass('state-Ok');
   await expect(rows.filter({ hasText: 'Object store' })).toHaveClass('state-Ok');
   await expect(rows.filter({ hasText: 'Docker' })).toHaveClass('state-Ok');
   await expect(rows.filter({ hasText: 'Docker' }).locator('td.state')).toHaveText('ok');

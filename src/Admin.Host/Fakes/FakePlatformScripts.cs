@@ -89,6 +89,7 @@ public static class FakePlatformScripts
             .On("powershell", "-NoProfile -Command Get-NetTCPConnection ", 0, Lines(WorkstationRecordings.Listeners))
             .On("powershell", "-NoProfile -Command Get-Content ", 0, "22.23.2")
             .On("node", "--version", 0, "v22.23.2")
+            .On("py", "-3.12 --version", 0, "Python 3.12.7")
             .On("git", $"-C {paths.BackendDir} status -sb", 0, "## main...origin/main")
             .On("git", $"-C {paths.FrontendDir} status -sb", 0, "## main...origin/main")
             .On("git", $"-C {paths.BackendDir} reflog -1 --date=iso-strict --format=%gd", 0, "HEAD@{2026-10-04T06:36:23+05:00}")

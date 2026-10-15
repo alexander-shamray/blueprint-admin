@@ -60,7 +60,8 @@ then open the screens that read them and review the diff;
 
 Phases 0 to 6 of the spec: the Stack screen (a workstation doctor read before
 Up: Docker, the published ports and what holds them, the gateway's CORS
-origins, Node against the client's `.nvmrc`, both clones against their last
+origins, Node against the client's `.nvmrc`, `py -3.12` for the dead-letter
+workbench, both clones against their last
 fetch, image age, and whether the image store was provisioned (`object-store`
 and `image-edge` healthy, `object-store-init` exited 0); then Compose services, reachability,
 up, down, down with a typed `down -v` confirmation, Reset behind the same
