@@ -1,0 +1,77 @@
+<p class="lede">
+  Raises an erasure request through the gateway as the <code>privacy</code> login, which holds <code>privacy:erase</code> and nothing else,
+  then shows each holder answering it. Erasing replaces the subject's id with its hash in every holder; there is no undo.
+</p>
+
+<section class="raise" aria-labelledby="raise-heading">
+  <h2 id="raise-heading">Raise a request</h2>
+  <div class="row">
+    <label>Subject id <input class="subject" [ngModel]="subject()" (ngModelChange)="subject.set($event)" placeholder="a GUID" /></label>
+    <button class="new-subject" (click)="newSubject()">New subject</button>
+    <button class="raise-button" [disabled]="!canRaise()" (click)="raise()">Raise</button>
+  </div>
+  <div class="row">
+    <label>Request id <input class="request-id" [ngModel]="requestId()" (ngModelChange)="requestId.set($event)" placeholder="a request raised earlier" /></label>
+    <button class="read" [disabled]="!canRead()" (click)="read()">Read</button>
+    <label><input type="checkbox" [ngModel]="watch()" (ngModelChange)="setWatch($event)" /> Read every 3 s</label>
+  </div>
+  @if (error(); as e) {
+    <p class="error" role="alert">{{ e }}</p>
+  }
+</section>
+
+@if (request(); as r) {
+  <section class="request" aria-labelledby="request-heading">
+    <h2 id="request-heading">Request <code>{{ r.requestId }}</code></h2>
+    <p class="status" role="status" [class.closed]="r.status === 'Closed'" [class.overdue]="r.status === 'Overdue'">
+      [{{ r.status.toLowerCase() }}]
+      @switch (r.status) {
+        @case ('Closed') {Every holder answered; the subject's id has been replaced by its hash.}
+        @case ('Overdue') {Open past its due time. Nothing closes it by itself: reissue it once the holder is back.}
+        @default {Waiting on {{ r.missing.length }} of {{ r.responders.length }} holders.}
+      }
+    </p>
+    <p class="facts">
+      Raised {{ r.raisedAt }} · due {{ r.dueAt }}
+      @if (r.closedAt) {· closed {{ r.closedAt }}}
+      · reissued {{ r.reissues }} {{ r.reissues === 1 ? 'time' : 'times' }}
+      @if (raisedUnder(); as c) {· <a [routerLink]="['/trace', c]">trace the raise</a>}
+    </p>
+    @if (overdue()) {
+      <p class="overdue-actions">
+        <button class="reissue" [disabled]="busy()" (click)="reissue()" title="Ask the holders again under the same request">Reissue</button>
+        @if (holders(); as h) {<a [href]="h.runbookUrl" target="_blank" rel="noopener noreferrer">erasure-overdue runbook</a>}
+      </p>
+    }
+  </section>
+}
+
+<h2>Holders</h2>
+@if (holders(); as h) {
+  @if (!h.reachable) {
+    <p class="error" role="alert">The broker did not answer, so no queue depths: {{ h.error }}</p>
+  }
+}
+@if (rows().length > 0) {
+  <table class="holders">
+    <thead><tr><th>Holder</th><th>State</th><th>Answered</th><th>Queue</th><th>Pending</th></tr></thead>
+    <tbody>
+      @for (row of rows(); track row.name) {
+        <tr [class]="'holder-' + row.state">
+          <td>{{ row.name }}</td>
+          <td>[{{ row.state }}]@if (!row.counted) { not counted}</td>
+          <td>@if (row.count !== null) {{{ row.count }} · {{ row.receivedAt }}}</td>
+          <td class="queue">{{ row.queue ?? '' }}</td>
+          <td>{{ row.pending ?? '—' }}</td>
+        </tr>
+      }
+    </tbody>
+  </table>
+  @if (holders(); as h) {
+    <p class="completions">
+      Answers not yet read by Privacy, on <code>privacy-completions</code>: {{ h.completionsPending ?? '—' }}
+    </p>
+  }
+} @else {
+  <p>Loading…</p>
+}

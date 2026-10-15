@@ -33,7 +33,7 @@ public sealed class PlatformProbeTests
 
         IReadOnlyList<Reachability> result = await probe.ProbeAsync(TestContext.Current.CancellationToken);
 
-        result.Select(r => r.Name).ShouldBe(["gateway", "catalog", "ordering", "bff", "inventory", "payments", "object-store", "image-edge", "keycloak", "grafana", "client"]);
+        result.Select(r => r.Name).ShouldBe(["gateway", "catalog", "ordering", "bff", "inventory", "payments", "privacy", "object-store", "image-edge", "keycloak", "grafana", "client"]);
         result.Single(r => r.Name == "gateway").Url.ShouldBe("http://localhost:5000/health/ready");
         result.Single(r => r.Name == "keycloak").ShouldBe(new Reachability("keycloak", "http://localhost:8080/realms/commerce", true, 200));
         result.Single(r => r.Name == "grafana").ShouldBe(new Reachability("grafana", "http://localhost:3000/api/health", false, null));
@@ -52,6 +52,7 @@ public sealed class PlatformProbeTests
             BffUrl = "http://localhost:5200/",
             InventoryUrl = "http://localhost:5103/",
             PaymentsUrl = "http://localhost:5104/",
+            PrivacyUrl = "http://localhost:5105/",
             ObjectStoreUrl = "http://127.0.0.1:8333/",
             ImageEdgeUrl = "http://127.0.0.1:9000/",
             KeycloakUrl = "http://localhost:8080/",
@@ -70,6 +71,7 @@ public sealed class PlatformProbeTests
             "http://localhost:5200/health/ready",
             "http://localhost:5103/health/ready",
             "http://localhost:5104/health/ready",
+            "http://localhost:5105/health/ready",
             "http://127.0.0.1:8333/status",
             "http://127.0.0.1:9000/healthz",
             "http://localhost:8080/realms/commerce",

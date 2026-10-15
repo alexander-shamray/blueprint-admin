@@ -49,11 +49,12 @@ public sealed class ApiCatalogTests : IDisposable
         "http://localhost:5101/openapi/v1.json" => Json(HttpStatusCode.OK, FixtureText("openapi-ordering.json")),
         "http://localhost:5103/openapi/v1.json" => Json(HttpStatusCode.OK, FixtureText("openapi-inventory.json")),
         "http://localhost:5104/openapi/v1.json" => Json(HttpStatusCode.OK, FixtureText("openapi-payments.json")),
+        "http://localhost:5105/openapi/v1.json" => Json(HttpStatusCode.OK, FixtureText("openapi-privacy.json")),
         _ => new HttpResponseMessage(HttpStatusCode.NotFound),
     };
 
-    /// <summary>Catalog, Ordering, Inventory and Payments: one document each.</summary>
-    private const int Documents = 4;
+    /// <summary>Catalog, Ordering, Inventory, Payments and Privacy: one document each.</summary>
+    private const int Documents = 5;
 
     [Fact]
     public async Task Every_document_loads_with_a_demo_token_and_curated_operations_follow()
@@ -68,6 +69,7 @@ public sealed class ApiCatalogTests : IDisposable
             ("ordering", "http://localhost:5101/openapi/v1.json", true, null),
             ("inventory", "http://localhost:5103/openapi/v1.json", true, null),
             ("payments", "http://localhost:5104/openapi/v1.json", true, null),
+            ("privacy", "http://localhost:5105/openapi/v1.json", true, null),
         ]);
         view.Sources.ShouldAllBe(s => s.Changes!.BaselineTaken);
         view.Operations.Select(o => o.Id).ShouldBe(
@@ -75,9 +77,10 @@ public sealed class ApiCatalogTests : IDisposable
             "catalog:PublishProduct", "catalog:GetProducts", "catalog:GetProduct", "ordering:PlaceOrder", "ordering:CancelOrder",
             "inventory:SetOnHand", "inventory:GetStock", "inventory:GetReservation", "inventory:ReleaseReservation",
             "inventory:ReinstateReservation", "payments:GetPayment",
+            "privacy:RaiseErasureRequest", "privacy:ReissueErasureRequest", "privacy:GetErasureRequest",
             "bff:Quote", "bff:ListOrders", "bff:GetOrder", "bff:IssueProductImageUpload", "bff:GetSavedAddress", "bff:PutSavedAddress",
             "edge:GetProductImage", "health:gateway", "health:catalog", "health:ordering", "health:bff", "health:inventory",
-            "health:payments", "simulator:Requests", "carrier:Requests",
+            "health:payments", "health:privacy", "simulator:Requests", "carrier:Requests",
         ]);
         handler.Requests.Where(r => r.Request.RequestUri!.AbsolutePath == "/openapi/v1.json")
             .ShouldAllBe(r => r.Request.Headers.Authorization!.Scheme == "Bearer");

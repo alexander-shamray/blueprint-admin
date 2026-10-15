@@ -32,6 +32,8 @@ public static class FixtureRecordings
         new("openapi-ordering.json", (o, uri) => FakePlatformHandler.Is(uri, o.OrderingUrl) && uri.AbsolutePath == OpenApi),
         new("openapi-inventory.json", (o, uri) => FakePlatformHandler.Is(uri, o.InventoryUrl) && uri.AbsolutePath == OpenApi),
         new("openapi-payments.json", (o, uri) => FakePlatformHandler.Is(uri, o.PaymentsUrl) && uri.AbsolutePath == OpenApi),
+        // Derived, not recorded: written from the backend's ErasureRequestEndpoints.cs with no stack up. Re-record with Admin:Record=true (#133).
+        new("openapi-privacy.json", (o, uri) => FakePlatformHandler.Is(uri, o.PrivacyUrl) && uri.AbsolutePath == OpenApi),
         new("grafana-datasources.json", (o, uri) => FakePlatformHandler.Is(uri, o.GrafanaUrl) && uri.AbsolutePath == "/api/datasources"),
         new(
             "grafana-prometheus-golden-signals.json",

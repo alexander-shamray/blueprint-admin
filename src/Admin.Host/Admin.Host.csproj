@@ -14,6 +14,7 @@
     <EmbeddedResource Include="Fakes\fixtures\openapi-ordering.json" LogicalName="openapi-ordering.json" />
     <EmbeddedResource Include="Fakes\fixtures\openapi-inventory.json" LogicalName="openapi-inventory.json" />
     <EmbeddedResource Include="Fakes\fixtures\openapi-payments.json" LogicalName="openapi-payments.json" />
+    <EmbeddedResource Include="Fakes\fixtures\openapi-privacy.json" LogicalName="openapi-privacy.json" />
     <EmbeddedResource Include="Fakes\fixtures\rabbitmq-queues.json" LogicalName="rabbitmq-queues.json" />
     <EmbeddedResource Include="Fakes\fixtures\rabbitmq-exchanges.json" LogicalName="rabbitmq-exchanges.json" />
     <EmbeddedResource Include="Fakes\fixtures\rabbitmq-permissions.json" LogicalName="rabbitmq-permissions.json" />

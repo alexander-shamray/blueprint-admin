@@ -24,6 +24,7 @@ public sealed partial class ComposeDriftTests
         ["web-bff"] = o => o.BffUrl,
         ["inventory-api"] = o => o.InventoryUrl,
         ["payments-api"] = o => o.PaymentsUrl,
+        ["privacy-api"] = o => o.PrivacyUrl,
         ["psp-simulator"] = o => o.PaymentSimulatorUrl,
         ["carrier-simulator"] = o => o.CarrierSimulatorUrl,
         ["object-store"] = o => o.ObjectStoreUrl,
@@ -40,7 +41,6 @@ public sealed partial class ComposeDriftTests
     private static readonly Dictionary<string, string> UnitsWithoutSurface = new(StringComparer.Ordinal)
     {
         ["notifications"] = "#65",
-        ["privacy"] = "#128",
     };
 
     [Fact]

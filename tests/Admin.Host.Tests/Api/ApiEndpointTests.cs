@@ -55,9 +55,10 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
             "catalog:PublishProduct", "catalog:GetProducts", "catalog:GetProduct", "ordering:PlaceOrder", "ordering:CancelOrder",
             "inventory:SetOnHand", "inventory:GetStock", "inventory:GetReservation", "inventory:ReleaseReservation",
             "inventory:ReinstateReservation", "payments:GetPayment",
+            "privacy:RaiseErasureRequest", "privacy:ReissueErasureRequest", "privacy:GetErasureRequest",
             "bff:Quote", "bff:ListOrders", "bff:GetOrder", "bff:IssueProductImageUpload", "bff:GetSavedAddress", "bff:PutSavedAddress",
             "edge:GetProductImage", "health:gateway", "health:catalog", "health:ordering", "health:bff", "health:inventory",
-            "health:payments", "simulator:Requests", "carrier:Requests",
+            "health:payments", "health:privacy", "simulator:Requests", "carrier:Requests",
         ]);
         JsonElement publish = view.GetProperty("operations")[0];
         publish.GetProperty("url").GetString().ShouldBe("http://localhost:5000/api/v1/catalog/products");
@@ -71,7 +72,7 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
         HttpResponseMessage response = await client.PostAsync("/api/catalog/reload", null, Token);
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
-        (await response.Content.ReadFromJsonAsync<JsonElement>(Token)).GetProperty("operations").GetArrayLength().ShouldBe(26);
+        (await response.Content.ReadFromJsonAsync<JsonElement>(Token)).GetProperty("operations").GetArrayLength().ShouldBe(30);
     }
 
     [Fact]

@@ -262,6 +262,17 @@ public sealed partial class LiteralDriftTests
     }
 
     [Fact]
+    public void The_erasure_screen_sends_as_the_realm_login_that_holds_privacy_erase_and_nothing_else()
+    {
+        string page = File.ReadAllText(Path.Combine(Backend.AdminRoot, "src", "Admin.Web", "src", "app", "features", "erasure", "erasure-page.ts"));
+        Match identity = Regex.Match(page, @"PRIVACY_IDENTITY: Identity = \{ username: '(?<user>[^']+)'");
+        identity.Success.ShouldBeTrue("PRIVACY_IDENTITY is no longer a literal this test can read");
+
+        RealmGrants()[identity.Groups["user"].Value].ShouldBe(["privacy:erase"]);
+        RealmUsers.Of(new AdminOptions()).Select(u => u.Username).ShouldContain(identity.Groups["user"].Value);
+    }
+
+    [Fact]
     public void The_realm_and_client_the_console_signs_in_to_are_the_exports()
     {
         AdminOptions options = new();

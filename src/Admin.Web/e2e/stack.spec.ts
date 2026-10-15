@@ -10,7 +10,7 @@ test('the stack screen lists the fake services and runs up', async ({ page }) =>
   await expect(service('sql')).toContainText('healthy');
   await expect(service('gateway')).toContainText('running');
   await expect(service('gateway')).not.toContainText('healthy');
-  await expect(page.locator('.reachability span.up')).toHaveCount(11);
+  await expect(page.locator('.reachability span.up')).toHaveCount(12);
   // The store and the edge are surfaces of their own: an Up that leaves the image store unprovisioned looks green otherwise.
   await expect(page.locator('.reachability span.up', { hasText: 'object-store' })).toHaveCount(1);
   await expect(page.locator('.reachability span.up', { hasText: 'image-edge' })).toHaveCount(1);
@@ -91,6 +91,6 @@ test('reset needs the typed confirmation, then runs down -v, up and the readines
   const output = page.locator('app-output-pane pre');
   await expect(output).toContainText('Volume commerce_sql-data  Removed');
   await expect(output).toContainText('commerce-gateway-1  Healthy');
-  await expect(output).toContainText('ready: gateway, catalog, ordering, bff, inventory, payments, object-store, image-edge, keycloak, grafana');
+  await expect(output).toContainText('ready: gateway, catalog, ordering, bff, inventory, payments, privacy, object-store, image-edge, keycloak, grafana');
   await expect(output).toContainText('exited 0');
 });
