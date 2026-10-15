@@ -13,6 +13,23 @@ git-argv hook and the edit-target hook live in those two
 `docs/harness-boundaries.md` files and are not restated here; a summary of an
 argument is how a rule gets "corrected" back.
 
+**Index — grep this file for the bold lead-in, never read it whole.** Each
+line names one residual below by the words it opens with.
+
+| Touching | Grep for |
+|---|---|
+| The check helpers, e2e | `Two toolchains` |
+| `settings.json` or a permission rule | `File permission rules take`, `self-locks` |
+| A guard hook or its launcher | `Every guard hook uses` |
+| The index: refresh, query or search hints, MCP approval, timeout | `Two hooks guard nothing`, `The second is the query hint`, `The search hint asks`, `A session started in a worktree`, `The CLI's skill rewrite`, `The MCP startup timeout` |
+| A command's `allowed-tools` or `disallowed-tools` | `grant the index commands`, `runs before it pushes never denies push`, `is a grant surface` |
+| The review triage, its profile or the auditor grant | `is the one chained command`, `On the one agent type measured`, `So the triage runs under a profile`, `The third held only`, `Agent(bug-auditor)` |
+| The harness suite and its shards | `shard-harness-suite.py`, `That runner owns both discovery roots` |
+| Rebasing or force-pushing | `The only force push` |
+| `/branch` worktrees under `.claude/worktrees/` | `worktrees sit inside the checkout` |
+
+A new residual is stated **here** and gets a row above.
+
 **What this repository adds, and is therefore the only residual stated here:**
 
 - Two toolchains. `/ship` and `/review-branch` run
