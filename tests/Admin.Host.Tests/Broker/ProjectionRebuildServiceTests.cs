@@ -198,8 +198,8 @@ public sealed class ProjectionRebuildServiceTests : IAsyncDisposable
     [Fact]
     public async Task A_run_after_the_last_one_ended_starts_a_new_job_of_whatever_kind()
     {
-        runner.On("dotnet", Tool, 0).On("docker", ListQueues, 0, Queues(0))
-            .On("docker", Prefix + "stop web-bff", 0).On("dotnet", Tool + " -- --reset", 0).On("docker", Prefix + "start web-bff", 0);
+        runner.On("dotnet", Tool + " -- --reset", 0).On("dotnet", Tool, 0).On("docker", ListQueues, 0, Queues(0))
+            .On("docker", Prefix + "stop web-bff", 0).On("docker", Prefix + "start web-bff", 0);
         ProjectionRebuildService service = Service();
 
         Started first = service.Start(RebuildMode.Repair);
@@ -209,6 +209,7 @@ public sealed class ProjectionRebuildServiceTests : IAsyncDisposable
         second.Job.ShouldNotBeSameAs(first.Job);
         second.Mode.ShouldBe(RebuildMode.Rebuild);
         await second.Job.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        runner.Started.Select(s => s.Arguments[^1]).ShouldContain("--reset", "the rebuild must run the tool with --reset");
     }
 
     [Fact]
