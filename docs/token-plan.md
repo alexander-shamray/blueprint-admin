@@ -36,11 +36,12 @@ one at a time.
 - `tools/token-usage/` ported from the backend, with its suite. **Landed.**
 - `token-usage.md` records an all-history total, a window and one named
   `/ship` run. **Landed**, with the gap in the window noted there.
-- **Owed:** the quality sets — the issues earlier sweeps filed with the
-  commits they were found on, and the findings earlier review rounds raised
-  on merged PRs. Steps 4–6 hold recall against them, and no step that
-  shortens a prompt or changes a reviewer may claim its exit before they
-  exist.
+- The quality sets are recorded in [`token-quality-sets.md`](token-quality-sets.md):
+  a review set of deferred findings, and an empty sweep set, since no sweep
+  has filed here. **Landed.** Steps 4–6 hold recall against them.
+- **Owed:** a baseline run of a reviewer over the review set, so a recall
+  figure exists; no step that shortens a prompt or changes a reviewer may
+  claim its exit before it does.
 
 **Exit.** Attribution holds on a known session. **Passed** on the `/ship`
 run `token-usage.md` names: its 88 calls are counted under `/ship` and its
@@ -65,7 +66,10 @@ than 35% of its input equivalent after a wake.
 
 **Exit.** `CLAUDE.md` at least 40% under its 2026-10-15 size, and the lower
 per-turn resident size shown by the step 1 report. **Landed** with this
-file; the measurement of the effect waits on sessions run since.
+file. The measurement is in [`token-usage.md`](token-usage.md) under
+2026-10-15, *Since #139*: the report's `--since` takes a date, so the day
+#139 merged cannot be split and the effect is not yet separable. **Owed:**
+the same view with `--since` a later date, once sessions have run.
 
 ### Step 4 — local review
 
