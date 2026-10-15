@@ -86,6 +86,10 @@ public sealed class ProductImageUploader(HttpClient http, IOptions<AdminOptions>
                 {
                     bodyError = e.Message;
                 }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    bodyError = $"The body did not finish within {SendTimeout.TotalSeconds:0} s.";
+                }
 
                 bool truncated = body.Length > RequestProxy.MaxBodyBytes;
 
