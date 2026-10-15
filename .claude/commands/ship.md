@@ -2064,7 +2064,9 @@ same argument as never calling a branch clean because asking failed.
    row, a PR merged without closing its issue sends that issue back to its
    wave, and whatever the run filed gets its own row. Make every update the
    run owed from inside the worktree as well (the PR it opened, the issues it
-   filed). A run that stopped before the merge does the same for the state it
+   filed). A run that stopped before the merge is still inside the worktree
+   unless it had already left, and from there it cannot reach the file: it
+   makes none of these updates and reports each as owed, for the state it
    stopped in.
 
 ## Report
