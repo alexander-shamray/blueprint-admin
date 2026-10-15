@@ -26,7 +26,7 @@ public static class FixtureRecordings
     public static readonly HttpRecording[] Http =
     [
         // Edited by hand since its recording: GetProduct (GET /v1/catalog/products/{id}) was added, and PublishProductCommand's
-        // thumbnailUrl became imageKey, as blueprint-backend's ProductEndpoints.cs and PublishProductCommand.cs have them,
+        // thumbnailUrl became imageKey, as the backend's ProductEndpoints.cs and PublishProductCommand.cs have them,
         // so the Scenario's image script can read a product back. Re-record with Admin:Record=true to replace them (#133).
         new("openapi-catalog.json", (o, uri) => FakePlatformHandler.Is(uri, o.CatalogUrl) && uri.AbsolutePath == OpenApi),
         new("openapi-ordering.json", (o, uri) => FakePlatformHandler.Is(uri, o.OrderingUrl) && uri.AbsolutePath == OpenApi),

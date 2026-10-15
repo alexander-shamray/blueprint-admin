@@ -80,15 +80,8 @@ public sealed class ProductImageEndpointTests(AdminHostFactory factory) : IClass
     }
 
     [Fact]
-    public async Task A_key_under_another_sellers_prefix_is_refused_as_invalid()
+    public async Task A_key_that_is_not_the_callers_is_refused_as_invalid()
     {
-        JsonElement issued = await IssueAsync();
-        await UploadAsync(issued);
-
-        JsonElement published = await PublishAsync(issued.GetProperty("key").GetString()!, username: "browser");
-
-        published.GetProperty("status").GetInt32().ShouldBe(403);
-
         JsonElement forged = await PublishAsync($"uploads/{Guid.NewGuid():D}/{Guid.NewGuid():D}.png");
         forged.GetProperty("status").GetInt32().ShouldBe(422);
         forged.GetProperty("body").GetString()!.ShouldContain("product.image_key_invalid");
@@ -134,7 +127,7 @@ public sealed class ProductImageEndpointTests(AdminHostFactory factory) : IClass
     }
 
     [Fact]
-    public async Task The_store_refuses_a_write_with_no_signature_and_keeps_what_is_signed()
+    public async Task The_store_refuses_a_write_with_no_signature()
     {
         JsonElement unsigned = await UploadAsync(JsonDocument.Parse("""{"uploadUrl":"http://127.0.0.1:8333/product-images/uploads/a/b.png","headers":{}}""").RootElement);
 

@@ -67,7 +67,6 @@ public sealed class ProductImageUploader(HttpClient http, IOptions<AdminOptions>
             {
                 using HttpResponseMessage response = await http.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
                 status = (int)response.StatusCode;
-                string body = await response.Content.ReadAsStringAsync(timeout.Token);
                 Dictionary<string, string[]> headers = new(StringComparer.OrdinalIgnoreCase);
 
                 foreach ((string name, IEnumerable<string> values) in response.Headers.Concat(response.Content.Headers))
@@ -75,8 +74,23 @@ public sealed class ProductImageUploader(HttpClient http, IOptions<AdminOptions>
                     headers[name] = [.. values];
                 }
 
-                return new ProxyResponded(status.Value, headers, body.Length > RequestProxy.MaxBodyBytes ? body[..RequestProxy.MaxBodyBytes] : body,
-                    body.Length > RequestProxy.MaxBodyBytes, null, Elapsed(started), correlationId);
+                // From here the store has answered; a body that breaks off is still its answer, as the proxy treats one.
+                string body = "";
+                string? bodyError = null;
+
+                try
+                {
+                    body = await response.Content.ReadAsStringAsync(timeout.Token);
+                }
+                catch (Exception e) when (e is IOException or HttpRequestException)
+                {
+                    bodyError = e.Message;
+                }
+
+                bool truncated = body.Length > RequestProxy.MaxBodyBytes;
+
+                return new ProxyResponded(status.Value, headers, truncated ? body[..RequestProxy.MaxBodyBytes] : body,
+                    truncated, bodyError, Elapsed(started), correlationId);
             }
             catch (HttpRequestException e)
             {

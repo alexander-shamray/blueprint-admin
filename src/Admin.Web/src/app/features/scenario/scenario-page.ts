@@ -407,7 +407,7 @@ export class ScenarioPage {
 
     this.patch(key, {
       state: 'ok',
-      status: put.status,
+      status: issued.status,
       body: issued.body,
       detail: `Signed ${signed.key}, and the store answered ${put.status} to the PUT.`,
     });
@@ -470,7 +470,13 @@ export class ScenarioPage {
         }),
       );
     } catch (e: unknown) {
-      this.patch(key, { state: 'failed', status: null, body: null, detail: describe(e) });
+      // The proxy sends only to the configured surfaces, so a thumbnail on another origin than Admin:ImageEdgeUrl is refused.
+      this.patch(key, {
+        state: 'failed',
+        status: null,
+        body: read.body,
+        detail: `${describe(e)} (the thumbnail's origin must be the one Admin:ImageEdgeUrl names)`,
+      });
       return false;
     }
     if (head.outcome !== 'responded') {
