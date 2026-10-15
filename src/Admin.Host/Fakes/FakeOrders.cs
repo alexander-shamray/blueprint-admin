@@ -14,6 +14,13 @@ namespace Admin.Host.Fakes;
 /// <remarks>
 /// The first order is <see cref="FakeGateway.PlacedOrderId"/>, the id the reservation and payment recordings carry;
 /// each later one gets an id of its own, so two runs at once each watch their own order.
+/// <para>
+/// Scripted state (docs/superpowers/specs/2026-10-15-scenario-scripts.md): the fake remembers what each publish priced and what each stock write set,
+/// and an order for such a product ends as the platform ends it when run-locally.md's cause is applied by hand. Stock
+/// set below one ends it <c>out_of_stock</c>; a price whose minor units are <see cref="DeclinedMinorUnits"/> ends it
+/// <c>declined</c> (the payment simulator's <c>card_declined</c>). Either lands one <see cref="Step"/> after the place,
+/// with nothing confirmed, despatched or delivered. A product the fake was never told about takes the happy path.
+/// </para>
 /// </remarks>
 public sealed class FakeOrders(TimeProvider time)
 {
@@ -22,21 +29,76 @@ public sealed class FakeOrders(TimeProvider time)
     /// <summary>Later ids count up from here, clear of the fakes' fixed product and order ids.</summary>
     private const long FirstLaterId = 0x100;
 
+    /// <summary>Later product ids count up from here, clear of the orders' and of the fakes' fixed ids.</summary>
+    private const long FirstLaterProductId = 0x200;
+
+    /// <summary>
+    /// The minor units run-locally.md ("A declined payment is caused by the amount") scripts the payment simulator
+    /// to decline: <c>.01</c> is <c>card_declined</c>. The simulator's other scripted amounts are not modelled here.
+    /// </summary>
+    internal const int DeclinedMinorUnits = 1;
+
     private readonly Lock gate = new();
     private readonly Dictionary<string, Placed> placed = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Product> products = new(StringComparer.OrdinalIgnoreCase);
     private long next = FirstLaterId;
+    private long nextProduct = FirstLaterProductId;
 
-    /// <summary>Places an order and answers with its id.</summary>
-    public string Place()
+    /// <summary>
+    /// Publishes a product at <paramref name="amount"/> and answers with its id: <see cref="FakeGateway.PublishedProductId"/>
+    /// the first time, a fresh one after, so two runs at once each hold a product of their own.
+    /// </summary>
+    public string Publish(decimal amount)
+    {
+        lock (gate)
+        {
+            string id = products.Count == 0
+                ? FakeGateway.PublishedProductId
+                : "0199a1b2-0000-7000-8000-" + (nextProduct++).ToString("x12", CultureInfo.InvariantCulture);
+            products[id] = new Product(amount, null);
+            return id;
+        }
+    }
+
+    /// <summary>Sets what Inventory holds on hand for a product this fake published; any other id changes nothing, as the fake's write answers 204 for any.</summary>
+    public void Stock(string productId, int onHand)
+    {
+        lock (gate)
+        {
+            if (products.TryGetValue(productId, out Product? product))
+            {
+                products[productId] = product with { OnHand = onHand };
+            }
+        }
+    }
+
+    /// <summary>Places an order for <paramref name="productId"/> (null for none the fake knows) and answers with its id.</summary>
+    public string Place(string? productId = null)
     {
         lock (gate)
         {
             string id = placed.Count == 0
                 ? FakeGateway.PlacedOrderId
                 : "0199a1b2-0000-7000-8000-" + (next++).ToString("x12", CultureInfo.InvariantCulture);
-            placed[id] = new Placed(time.GetUtcNow(), null);
+            placed[id] = new Placed(time.GetUtcNow(), null, EndOf(productId));
             return id;
         }
+    }
+
+    /// <summary>Reservation comes before payment in the saga, so a product with no stock ends out of stock whatever it costs.</summary>
+    private string? EndOf(string? productId)
+    {
+        if (productId is null || !products.TryGetValue(productId, out Product? product))
+        {
+            return null;
+        }
+
+        if (product.OnHand is < 1)
+        {
+            return "out_of_stock";
+        }
+
+        return (int)(Math.Abs(product.Amount) * 100m % 100m) == DeclinedMinorUnits ? "declined" : null;
     }
 
     /// <summary>A cancel for an order never placed changes nothing; the fake's cancel answers 204 for any id, as before.</summary>
@@ -82,13 +144,15 @@ public sealed class FakeOrders(TimeProvider time)
     {
         DateTimeOffset p = order.At;
         DateTimeOffset now = time.GetUtcNow();
-        DateTimeOffset? cancelled = order.CancelAskedAt is { } c && c + Step < p + (2 * Step) && c + Step <= now ? c + Step : null;
-        DateTimeOffset? confirmed = Reached(p + Step, now, cancelled);
-        DateTimeOffset? dispatched = Reached(p + (2 * Step), now, cancelled);
-        DateTimeOffset? delivered = Reached(p + (3 * Step), now, cancelled);
+        bool scripted = order.Ended is not null;
+        DateTimeOffset? cancelled = scripted ? (p + Step <= now ? p + Step : null)
+            : order.CancelAskedAt is { } c && c + Step < p + (2 * Step) && c + Step <= now ? c + Step : null;
+        DateTimeOffset? confirmed = scripted ? null : Reached(p + Step, now, cancelled);
+        DateTimeOffset? dispatched = scripted ? null : Reached(p + (2 * Step), now, cancelled);
+        DateTimeOffset? delivered = scripted ? null : Reached(p + (3 * Step), now, cancelled);
 
         string status = delivered is not null ? "delivered"
-            : cancelled is not null ? "cancelled"
+            : cancelled is not null ? order.Ended ?? "cancelled"
             : dispatched is not null ? "dispatched"
             : confirmed is not null ? "confirmed"
             : "placed";
@@ -96,7 +160,7 @@ public sealed class FakeOrders(TimeProvider time)
         DateTimeOffset asOf = new[] { p, confirmed, dispatched, delivered, cancelled }.Max()!.Value;
         var money = new { amount = 19.99m, currency = "EUR" };
         var timeline = new { placed = p, confirmed, dispatched, delivered, cancelled };
-        bool cancellable = status is "placed" or "confirmed";
+        bool cancellable = !scripted && status is "placed" or "confirmed";
 
         if (!detail)
         {
@@ -138,5 +202,7 @@ public sealed class FakeOrders(TimeProvider time)
     private static DateTimeOffset? Reached(DateTimeOffset at, DateTimeOffset now, DateTimeOffset? cancelled) =>
         at <= now && (cancelled is null || at < cancelled) ? at : null;
 
-    private sealed record Placed(DateTimeOffset At, DateTimeOffset? CancelAskedAt);
+    private sealed record Placed(DateTimeOffset At, DateTimeOffset? CancelAskedAt, string? Ended);
+
+    private sealed record Product(decimal Amount, int? OnHand);
 }

@@ -82,13 +82,13 @@ internal static partial class FakeGateway
         HttpResponseMessage response = EdgePolicy(GatewayRoutes.PolicyFor(request.Method.Method, path), permissions) ?? (request.Method.Method, path) switch
         {
             ("GET", "/api/v1/catalog/products") => FakeHttp.Json(HttpStatusCode.OK, Products),
-            ("POST", "/api/v1/catalog/products") => Authorize(permissions, "catalog:write", () => FakeHttp.Json(HttpStatusCode.OK, $"\"{PublishedProductId}\"")),
-            ("POST", "/api/v1/orders") => Authorize(permissions, "orders:write", () => Placed(orders)),
+            ("POST", "/api/v1/catalog/products") => Authorize(permissions, "catalog:write", () => Published(orders, request)),
+            ("POST", "/api/v1/orders") => Authorize(permissions, "orders:write", () => Placed(orders, request)),
             ("POST", var p) when CancelPath().Match(p) is { Success: true } cancel => Authorize(permissions, "orders:cancel", () => Cancelled(orders, cancel.Groups["id"].Value)),
             ("POST", "/bff/v1/checkout/quote") => Authorize(permissions, null, () => FakeHttp.Json(HttpStatusCode.OK, Quote)),
             ("GET", "/bff/v1/orders") => Authorize(permissions, null, () => FakeHttp.Json(HttpStatusCode.OK, orders.Page())),
             ("GET", _) when orderRead.Success => Authorize(permissions, null, () => OrderRead(orders, orderRead.Groups["id"].Value)),
-            (_, var p) when p.StartsWith("/api/v1/inventory/", StringComparison.Ordinal) => Authorize(permissions, "inventory:admin", () => Inventory(request.Method.Method, p)),
+            (_, var p) when p.StartsWith("/api/v1/inventory/", StringComparison.Ordinal) => Authorize(permissions, "inventory:admin", () => Inventory(orders, request, p)),
             (_, var p) when p.StartsWith("/api/v1/payments/", StringComparison.Ordinal) => Authorize(permissions, "payments:admin", () => Payments(request.Method.Method, p)),
             _ => FakeHttp.Problem(HttpStatusCode.NotFound, "Not Found"),
         };
@@ -106,14 +106,15 @@ internal static partial class FakeGateway
     /// 200: both end in the same ToHttpResult. A read of an id the fake does not hold answers the 404 the live
     /// service gave.
     /// </summary>
-    private static HttpResponseMessage Inventory(string method, string path)
+    private static HttpResponseMessage Inventory(FakeOrders orders, HttpRequestMessage request, string path)
     {
+        string method = request.Method.Method;
         Match stock = StockPath().Match(path);
         Match reservation = ReservationPath().Match(path);
 
         return (method, stock.Success, reservation.Success) switch
         {
-            ("PUT", true, _) => new HttpResponseMessage(HttpStatusCode.NoContent),
+            ("PUT", true, _) => Stocked(orders, stock.Groups["id"].Value, request),
             ("GET", true, _) when stock.Groups["id"].Value == StockedProductId => FakeHttp.Json(HttpStatusCode.OK, Stock),
             ("GET", _, true) when reservation.Groups["action"].Value == "" && reservation.Groups["id"].Value == PlacedOrderId => FakeHttp.Json(HttpStatusCode.OK, Reservation),
             ("POST", _, true) when reservation.Groups["action"].Value != "" => new HttpResponseMessage(HttpStatusCode.NoContent),
@@ -139,7 +140,61 @@ internal static partial class FakeGateway
         : orders.Detail(id.ToString("D")) is { } detail ? FakeHttp.Json(HttpStatusCode.OK, detail)
         : FakeHttp.Json(HttpStatusCode.NotFound, OrderNotFound);
 
-    private static HttpResponseMessage Placed(FakeOrders orders) => FakeHttp.Json(HttpStatusCode.OK, $"\"{orders.Place()}\"");
+    /// <summary>The amount the body publishes at, which the fake keeps so an order for it can end as the amount scripts (<see cref="FakeOrders.DeclinedMinorUnits"/>).</summary>
+    private static HttpResponseMessage Published(FakeOrders orders, HttpRequestMessage request)
+    {
+        decimal amount = Body(request)?.Get("amount") is { ValueKind: JsonValueKind.Number } n && n.TryGetDecimal(out decimal read) ? read : 0m;
+
+        return FakeHttp.Json(HttpStatusCode.OK, $"\"{orders.Publish(amount)}\"");
+    }
+
+    private static HttpResponseMessage Stocked(FakeOrders orders, string productId, HttpRequestMessage request)
+    {
+        if (Body(request)?.Get("onHand") is { ValueKind: JsonValueKind.Number } onHand && onHand.TryGetInt32(out int count))
+        {
+            orders.Stock(productId, count);
+        }
+
+        return new HttpResponseMessage(HttpStatusCode.NoContent);
+    }
+
+    private static HttpResponseMessage Placed(FakeOrders orders, HttpRequestMessage request)
+    {
+        string? product = null;
+
+        if (Body(request)?.Get("items") is { ValueKind: JsonValueKind.Array } items && items.GetArrayLength() > 0)
+        {
+            product = items[0].Get("productId")?.GetString();
+        }
+
+        return FakeHttp.Json(HttpStatusCode.OK, $"\"{orders.Place(product)}\"");
+    }
+
+    /// <summary>
+    /// The request's JSON object, or null where there is none or it is not one. The body is a string already in memory
+    /// on this path, so the read does not wait on anything.
+    /// </summary>
+    private static JsonElement? Body(HttpRequestMessage request)
+    {
+        if (request.Content is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(request.Content.ReadAsStringAsync().GetAwaiter().GetResult());
+
+            return document.RootElement.ValueKind == JsonValueKind.Object ? document.RootElement.Clone() : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static JsonElement? Get(this JsonElement element, string name) =>
+        element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out JsonElement value) ? value : null;
 
     private static HttpResponseMessage Cancelled(FakeOrders orders, string orderId)
     {

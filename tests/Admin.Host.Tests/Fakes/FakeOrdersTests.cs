@@ -157,6 +157,97 @@ public sealed class FakeOrdersTests
         items[0].GetProperty("lines")[0].TryGetProperty("quantity", out _).ShouldBeFalse();
     }
 
+    [Fact]
+    public void A_product_published_at_a_declined_amount_ends_its_order_declined_with_nothing_confirmed()
+    {
+        FakeOrders orders = new(time);
+        string product = orders.Publish(10.01m);
+        orders.Stock(product, 10);
+        DateTimeOffset placed = time.GetUtcNow();
+        string id = orders.Place(product);
+
+        string[] seen = [.. Enumerable.Range(0, 4).Select(_ => Advance(orders, id))];
+
+        seen.ShouldBe(["placed", "declined", "declined", "declined"]);
+        using JsonDocument read = JsonDocument.Parse(orders.Detail(id)!);
+        JsonElement timeline = read.RootElement.GetProperty("timeline");
+        timeline.GetProperty("cancelled").GetDateTimeOffset().ShouldBe(placed + FakeOrders.Step);
+        timeline.GetProperty("confirmed").ValueKind.ShouldBe(JsonValueKind.Null);
+        read.RootElement.GetProperty("payment").ValueKind.ShouldBe(JsonValueKind.Null);
+        read.RootElement.GetProperty("cancellable").GetBoolean().ShouldBeFalse();
+    }
+
+    [Fact]
+    public void A_product_with_no_stock_ends_its_order_out_of_stock_even_at_a_declined_amount()
+    {
+        FakeOrders orders = new(time);
+        string product = orders.Publish(10.01m);
+        orders.Stock(product, 0);
+        string id = orders.Place(product);
+
+        string[] seen = [.. Enumerable.Range(0, 3).Select(_ => Advance(orders, id))];
+
+        seen.ShouldBe(["placed", "out_of_stock", "out_of_stock"]);
+    }
+
+    [Fact]
+    public void A_cancel_asked_of_a_scripted_order_changes_nothing()
+    {
+        FakeOrders orders = new(time);
+        string product = orders.Publish(19.99m);
+        orders.Stock(product, 0);
+        string id = orders.Place(product);
+        orders.Cancel(id);
+
+        string[] seen = [.. Enumerable.Range(0, 3).Select(_ => Advance(orders, id))];
+
+        seen.ShouldBe(["placed", "out_of_stock", "out_of_stock"]);
+    }
+
+    [Theory]
+    [InlineData(19.99, 10)]
+    [InlineData(19.99, null)]
+    [InlineData(10.02, 10)]
+    public void A_product_the_script_does_not_name_takes_the_happy_path(double amount, int? onHand)
+    {
+        FakeOrders orders = new(time);
+        string product = orders.Publish((decimal)amount);
+
+        if (onHand is { } count)
+        {
+            orders.Stock(product, count);
+        }
+
+        string id = orders.Place(product);
+        time.Advance(FakeOrders.Step * 3);
+
+        Status(orders.Detail(id)!).ShouldBe("delivered");
+    }
+
+    [Fact]
+    public void A_product_the_fake_never_published_is_not_scripted_and_its_stock_write_is_ignored()
+    {
+        FakeOrders orders = new(time);
+        orders.Stock(FakeGateway.StockedProductId, 0);
+        string id = orders.Place(FakeGateway.StockedProductId);
+        time.Advance(FakeOrders.Step * 3);
+
+        Status(orders.Detail(id)!).ShouldBe("delivered");
+    }
+
+    [Fact]
+    public void The_first_product_is_the_recorded_id_and_each_later_one_its_own()
+    {
+        FakeOrders orders = new(time);
+
+        string first = orders.Publish(19.99m);
+        string second = orders.Publish(10.01m);
+
+        first.ShouldBe(FakeGateway.PublishedProductId);
+        second.ShouldNotBe(first);
+        Guid.TryParse(second, out _).ShouldBeTrue();
+    }
+
     /// <summary>The status now, then one step on.</summary>
     private string Advance(FakeOrders orders, string id)
     {

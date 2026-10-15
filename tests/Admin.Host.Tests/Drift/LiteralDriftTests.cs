@@ -195,7 +195,7 @@ public sealed partial class LiteralDriftTests
 
         string[] given = [.. QuotedStatus().Matches(fake).Select(m => m.Groups[1].Value).Distinct()];
 
-        given.ShouldBe(["delivered", "cancelled", "dispatched", "confirmed", "placed"], ignoreOrder: true);
+        given.ShouldBe(["delivered", "cancelled", "dispatched", "confirmed", "placed", "out_of_stock", "declined"], ignoreOrder: true);
         given.Where(s => !statuses.Contains($" = \"{s}\";", StringComparison.Ordinal)).ShouldBeEmpty();
     }
 

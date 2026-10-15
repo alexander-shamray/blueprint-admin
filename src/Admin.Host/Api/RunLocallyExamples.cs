@@ -37,6 +37,13 @@ public static class RunLocallyExamples
             }
             """,
 
+        // "Stock for a product, and setting it".
+        ["SetOnHand"] = """
+            {
+              "onHand": 10
+            }
+            """,
+
         // "Cancel".
         ["CancelOrder"] = """
             {
