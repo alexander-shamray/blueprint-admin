@@ -1,7 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { Subject, of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
-import { ExchangesView, PermissionsView, QueuesView } from '../../core/host/host-types';
+import { ExchangesView, JobSummary, PermissionsView, ProjectionPlan, QueuesView } from '../../core/host/host-types';
+import { SseClient } from '../../core/host/sse-client';
 import { BrokerPage } from './broker-page';
 
 const queues: QueuesView = {
@@ -34,9 +35,18 @@ const queues: QueuesView = {
       runbook: 'https://example.test/runbooks/skipped-queue.md',
     },
     { name: 'something-else', messages: 0, isErrorQueue: false, consumer: null, parked: null, runbook: null },
+    { name: 'bff-order-events', messages: 0, isErrorQueue: false, consumer: "the BFF's order projection", parked: null, runbook: null },
   ],
   projection: { queue: 'ordering-catalog-events', found: true, messages: 2, drained: false },
 };
+
+const plan: ProjectionPlan = {
+  queue: 'bff-order-events',
+  rebuildConfirm: 'bff-replay --reset',
+  limits: ['A replay reaches back one outbox window and no further.', 'A rebuild deletes the projection first.'],
+};
+
+const job: JobSummary = { id: 'job-7', commandLine: 'bff-replay', state: 'Running', exitCode: null, startedAt: '2026-10-15T00:00:00Z' };
 
 const exchanges: ExchangesView = {
   reachable: true,
@@ -60,6 +70,9 @@ describe('BrokerPage', () => {
     brokerQueues: ReturnType<typeof vi.fn>;
     brokerExchanges: ReturnType<typeof vi.fn>;
     brokerPermissions: ReturnType<typeof vi.fn>;
+    projectionPlan: ReturnType<typeof vi.fn>;
+    projectionRepair: ReturnType<typeof vi.fn>;
+    projectionRebuild: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -67,8 +80,17 @@ describe('BrokerPage', () => {
       brokerQueues: vi.fn(() => of(queues)),
       brokerExchanges: vi.fn(() => of(exchanges)),
       brokerPermissions: vi.fn(() => of(permissions)),
+      projectionPlan: vi.fn(() => of(plan)),
+      projectionRepair: vi.fn(() => of(job)),
+      projectionRebuild: vi.fn(() => of(job)),
     };
-    TestBed.configureTestingModule({ imports: [BrokerPage], providers: [{ provide: HostClient, useValue: host }] });
+    TestBed.configureTestingModule({
+      imports: [BrokerPage],
+      providers: [
+        { provide: HostClient, useValue: host },
+        { provide: SseClient, useValue: { follow: () => of() } },
+      ],
+    });
   });
 
   afterEach(() => {
@@ -90,6 +112,7 @@ describe('BrokerPage', () => {
       "[skipped] bff-order-events_skipped 1 the BFF's order projection skipped-queue runbook",
       "[skipped] payments-events_skipped 0 Payments' order events",
       'something-else 0',
+      "bff-order-events 0 the BFF's order projection",
     ]);
     expect(fixture.nativeElement.querySelector('table.queues tr.error-queue')).not.toBeNull();
     expect(fixture.nativeElement.querySelectorAll('table.queues tr.skipped-queue').length).toBe(2);
@@ -105,6 +128,86 @@ describe('BrokerPage', () => {
       'https://example.test/runbooks/skipped-queue.md',
     ]);
     expect(links.every((a) => a.target === '_blank' && a.rel === 'noopener noreferrer')).toBe(true);
+  });
+
+  it("states the projection tool's limits and the queue's depth before anything runs", () => {
+    const fixture = render();
+    const panel = fixture.nativeElement.querySelector('section.projection') as HTMLElement;
+
+    expect(panel.querySelector('h2')?.textContent).toBe('BFF order projection');
+    expect(Array.from(panel.querySelectorAll('ul.limits li')).map((li) => li.textContent?.trim())).toEqual(plan.limits);
+    expect(panel.querySelector('.depth')?.textContent?.trim()).toBe('[drained] bff-order-events is empty.');
+    expect(fixture.nativeElement.querySelector('app-output-pane')).toBeNull();
+  });
+
+  it('says how many messages the projection queue holds while it is not empty', () => {
+    host.brokerQueues.mockReturnValue(
+      of({ ...queues, queues: queues.queues.map((q) => (q.name === 'bff-order-events' ? { ...q, messages: 3 } : q)) }),
+    );
+    const fixture = render();
+
+    expect(fixture.nativeElement.querySelector('section.projection .depth')?.textContent?.trim()).toBe('[waiting] bff-order-events holds 3 messages.');
+  });
+
+  it('repair starts the job without a confirmation, shows its output and reads the queues again', () => {
+    const fixture = render();
+    host.brokerQueues.mockClear();
+
+    (fixture.nativeElement.querySelector('button.repair') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(host.projectionRepair).toHaveBeenCalledTimes(1);
+    expect(host.projectionRebuild).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('app-output-pane')).not.toBeNull();
+    expect(host.brokerQueues).toHaveBeenCalledTimes(1);
+  });
+
+  it('rebuild is disabled until the confirmation is typed exactly, then sends it and clears the box', async () => {
+    const fixture = render();
+    const button = fixture.nativeElement.querySelector('button.rebuild') as HTMLButtonElement;
+    const input = fixture.nativeElement.querySelector('.rebuild-box input') as HTMLInputElement;
+
+    expect(button.disabled).toBe(true);
+
+    input.value = 'bff-replay --rese';
+    input.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(button.disabled).toBe(true);
+
+    input.value = 'bff-replay --reset';
+    input.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(button.disabled).toBe(false);
+
+    button.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(host.projectionRebuild).toHaveBeenCalledWith('bff-replay --reset');
+    expect(fixture.nativeElement.querySelector('app-output-pane')).not.toBeNull();
+    expect(button.disabled).toBe(true);
+  });
+
+  it("a refused start shows the host's reason and no output pane", () => {
+    host.projectionRepair.mockReturnValue(throwError(() => ({ error: { detail: 'Confirmation required' } })));
+    const fixture = render();
+
+    (fixture.nativeElement.querySelector('button.repair') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('section.projection p.error')?.textContent).toContain('Confirmation required');
+    expect(fixture.nativeElement.querySelector('app-output-pane')).toBeNull();
+  });
+
+  it('draws no projection panel when the host does not answer the plan', () => {
+    host.projectionPlan.mockReturnValue(throwError(() => new Error('down')));
+    const fixture = render();
+
+    expect(fixture.nativeElement.querySelector('section.projection')).toBeNull();
+    expect(rows(fixture, 'queues').length).toBe(queues.queues.length);
   });
 
   it('lists exchanges, naming the default exchange, and permissions per user', () => {
@@ -171,7 +274,7 @@ describe('BrokerPage', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('.error')?.textContent).toContain('boom');
-    expect(rows(fixture, 'queues').length).toBe(5);
+    expect(rows(fixture, 'queues').length).toBe(queues.queues.length);
   });
 
   it('a failed exchanges read is not cleared by a queues read that succeeds after it', async () => {

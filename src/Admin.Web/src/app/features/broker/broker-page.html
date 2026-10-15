@@ -30,6 +30,38 @@
   <p>Loading…</p>
 }
 
+@if (plan(); as p) {
+  <section class="projection" aria-labelledby="projection-heading">
+    <h2 id="projection-heading">BFF order projection</h2>
+    <p>
+      The buyer's order list is built from the events on <code>{{ p.queue }}</code>.
+      @if (projectionQueue(); as depth) {
+        <span class="depth" role="status" [class.drained]="depth.messages === 0">
+          @if (depth.messages === 0) {[drained] {{ p.queue }} is empty.} @else {[waiting] {{ p.queue }} holds {{ depth.messages ?? 'some' }} {{ depth.messages === 1 ? 'message' : 'messages' }}.}
+        </span>
+      }
+    </p>
+    <ul class="limits">
+      @for (limit of p.limits; track limit) {
+        <li>{{ limit }}</li>
+      }
+    </ul>
+    <div class="projection-actions">
+      <button class="repair" (click)="repair()" title="Send what the BFF's inbox has not recorded; nothing is deleted">Repair</button>
+      <span class="rebuild-box">
+        <input [attr.aria-label]="'Type ' + p.rebuildConfirm + ' to confirm a rebuild'" [placeholder]="'type: ' + p.rebuildConfirm" [ngModel]="confirmText()" (ngModelChange)="confirmText.set($event)" />
+        <button class="rebuild" [disabled]="!canRebuild()" (click)="rebuild()" title="Stop the BFF, delete its order projection, replay the outbox window, start the BFF again">Rebuild</button>
+      </span>
+    </div>
+    @if (projectionError(); as e) {
+      <p class="error" role="alert">The host did not answer: {{ e }}</p>
+    }
+    @if (jobId(); as id) {
+      <app-output-pane [jobId]="id" />
+    }
+  </section>
+}
+
 <h2>Exchanges</h2>
 @if (exchangesError(); as e) {
   <p class="error" role="alert">The host did not answer: {{ e }}</p>
