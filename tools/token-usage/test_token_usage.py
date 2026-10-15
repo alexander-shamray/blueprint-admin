@@ -345,11 +345,11 @@ class DocsTests(unittest.TestCase):
         self.assertEqual(read("Bash", {"command": "sed -n 1p docs/a.md"}), ["docs/a.md"])
         self.assertEqual(read("Bash", {"command": "cat docs/a.md > docs/b.md; cat > docs/c.md <<EOF"}), ["docs/a.md"])
 
-    def test_a_read_is_placed_in_the_checkout_its_worktrees_and_forks_and_nowhere_else(self):
+    def test_a_read_is_placed_in_the_checkout_its_worktrees_and_nowhere_else(self):
         inside = token_usage.repo_relative
         self.assertEqual(inside("/r/repo/docs/a.md", "/r/repo"), "docs/a.md")
         self.assertEqual(inside("/r/repo/.claude/worktrees/feature/docs/a.md", "/r/repo"), "docs/a.md")
-        self.assertEqual(inside("/r/repo-fork/docs/a.md", "/r/repo"), "docs/a.md")
+        self.assertIsNone(inside("/r/repo-tools/docs/a.md", "/r/repo"))
         self.assertIsNone(inside("/r/other/docs/a.md", "/r/repo"))
         self.assertEqual(inside(token_usage.absolute("Docs\\A.md", "c:\\Dev\\Repo"), "C:\\dev\\repo"), "Docs/A.md")
         self.assertEqual(token_usage.absolute("../docs/a.md", "/r/repo/src"), "/r/repo/docs/a.md")
@@ -428,7 +428,7 @@ class CommandLineTests(unittest.TestCase):
         self.assertEqual(token_usage.default_project(root),
                          Path.home() / ".claude" / "projects" / token_usage.project_name(str(root)))
 
-    def test_the_default_reads_every_worktree_and_sibling_fork_from_the_checkout_or_a_worktree(self):
+    def test_the_default_reads_every_worktree_from_the_checkout_or_a_worktree_and_no_unrelated_sibling(self):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory).resolve()
             checkout = base / "repo"
@@ -436,8 +436,9 @@ class CommandLineTests(unittest.TestCase):
             worktree.mkdir(parents=True)
             projects = base / "home" / ".claude" / "projects"
             main = projects / token_usage.project_name(str(checkout))
-            beside = [projects / (main.name + suffix) for suffix in ("--claude-worktrees-feature", "-fork")]
-            for directory in (main, *beside, projects / "unrelated"):
+            beside = [projects / (main.name + suffix) for suffix in ("--claude-worktrees-feature", "--claude-worktrees-other")]
+            unrelated = [projects / "unrelated", projects / (main.name + "-tools"), projects / (main.name + "-fork")]
+            for directory in (main, *beside, *unrelated):
                 directory.mkdir(parents=True)
             with mock.patch.object(token_usage.Path, "home", return_value=base / "home"):
                 expected = [main, *beside]
