@@ -417,6 +417,40 @@ public sealed class EventTraceServiceTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task A_drained_queue_whose_skipped_queue_holds_messages_is_not_reported_as_simply_drained()
+    {
+        runner.On("docker", Exec + "list_queues", 0,
+            "[",
+            """{"name":"ordering-catalog-events","messages":0}""",
+            """,{"name":"ordering-catalog-events_skipped","messages":2}""",
+            "]");
+
+        TraceView view = await Service(Grafana(LokiStreams())).BuildAsync("abc-123", TimeSpan.FromMinutes(15), Token);
+
+        view.Events[^1].Summary.ShouldStartWith(
+            "ordering-catalog-events: 0 messages (drained), 2 parked in ordering-catalog-events_skipped.");
+    }
+
+    [Fact]
+    public async Task A_queue_with_both_parked_twins_names_each_and_an_empty_twin_is_left_out()
+    {
+        runner.On("docker", Exec + "list_queues", 0,
+            "[",
+            """{"name":"ordering-catalog-events","messages":0}""",
+            """,{"name":"ordering-catalog-events_error","messages":1}""",
+            """,{"name":"ordering-catalog-events_skipped","messages":3}""",
+            """,{"name":"ordering-commands","messages":0}""",
+            """,{"name":"ordering-commands_skipped","messages":0}""",
+            "]");
+
+        TraceView view = await Service(Grafana(LokiStreams())).BuildAsync("abc-123", TimeSpan.FromMinutes(15), Token);
+
+        view.Events[^1].Summary.ShouldStartWith(
+            "ordering-catalog-events: 0 messages (drained), 1 parked in ordering-catalog-events_error, "
+            + "3 parked in ordering-catalog-events_skipped.");
+    }
+
+    [Fact]
     public async Task A_Tempo_that_will_not_answer_is_a_warning_on_the_view_not_a_silently_shorter_timeline()
     {
         string trace = TraceHex(1);

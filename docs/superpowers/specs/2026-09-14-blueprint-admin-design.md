@@ -428,8 +428,8 @@ sets from each host's service name.
    live platform the saga's consume-side traces are not reached today (below,
    and #54), so after a write the publish form is the one an operator sees. A
    message
-   still waiting in one of them or parked in its `_error` queue shows there
-   rather than as silence.
+   still waiting in one of them or parked in its `_error` or `_skipped` queue
+   shows there rather than as silence.
 
 Restoring the trace across the hop is a `blueprint-backend` change — persist
 `traceparent` on the outbox row when it is staged and restore it into an
