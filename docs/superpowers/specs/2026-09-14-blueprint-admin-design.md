@@ -231,12 +231,14 @@ on Windows.
 
 Jobs are kept in memory for the life of the host, `Exited` jobs are trimmed
 past the last 50. `up` and `down` are one-shot jobs kept the same way, so that
-their output is visible the same way. `ps` and `exec` are jobs too — bounded,
-stoppable and killed at shutdown like any other — but the registry does not
-keep them (`ProcessSpec.Listed`): their output reaches a screen only as the
-view the caller parses, and kept, the Stack screen's `ps` poll alone would push
-an exited `npm start`, and the output that says why it died, past
-`JobRegistry.KeepExited` within minutes.
+their output is visible the same way. `ps` and the `exec` reads are jobs too —
+bounded, stoppable and killed at shutdown like any other — but the registry
+does not keep them (`ProcessSpec.Listed`): their output reaches a screen only
+as the view the caller parses, and kept, the Stack screen's `ps` poll alone
+would push an exited `npm start`, and the output that says why it died, past
+`JobRegistry.KeepExited` within minutes. An `exec` the operator caused rather
+than a screen polled, the dead-letter operator's password set and clear (§5.5),
+is kept (`ComposeService.ExecListedAsync`).
 
 ### 5.3 Compose
 
