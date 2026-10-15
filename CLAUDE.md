@@ -118,7 +118,9 @@ Each is argued in [`docs/working-rules.md`](docs/working-rules.md).
   being worked on, or ask.
 - **Commit messages** are semantic and present-tense, and the body argues.
   Resolve a review thread in the same act as the reply.
-- **`TODO.md`** is gitignored and local; update it when a PR or issue opens,
-  merges or closes.
+- **`TODO.md`** is gitignored and local, and every agent keeps it true: at
+  each event re-derive a row's section from the state table in
+  `docs/working-rules.md`, and move an issue from Remaining to In progress
+  *before* entering its worktree.
 - **Read `docs/harness-boundaries.md` by its index** before touching
   anything under `.claude/`.

@@ -73,15 +73,40 @@ dialects.
   where one can be, and says where it is not.
 - **The task list is `TODO.md` at the main checkout's root: gitignored,
   local, never committed.** It is for the user, and it lists open PRs
-  (with the issues each closes) and open issues with no PR. Update it the
-  moment this session opens, merges or closes a PR, or files, closes or
-  reopens an issue. Only the main checkout's copy counts, never one in a
-  worktree — and a session moved into `.claude/worktrees/` with
-  `EnterWorktree` is refused that copy by Claude Code's own isolation, so
-  there the update is carried in the report as owed and made once the
-  session is back in the main checkout. When in doubt, rebuild it from
-  `gh pr list --limit 1000` and `gh issue list --limit 1000`, because the
-  default of 30 truncates silently.
+  (with the unpaused issues each closes) and every other open issue.
+  **Where a row sits is a function of state, so every agent that works here
+  re-derives it at each event** (work starts on an issue, a PR opens, merges
+  or closes, an issue is filed, closed, reopened, paused or unpaused, work
+  is abandoned) **and writes the result in the same act**:
+
+  | State | Where |
+  |---|---|
+  | Open issue, nothing built for it | **Remaining**, in its wave |
+  | Open issue labelled `paused` | **Paused**, whatever else is true of it |
+  | Open issue a session has taken up (about to be branched, or with a branch or a worktree) and no open PR | **In progress**, with the branch once it is named |
+  | Open PR | **In progress**, one row for the PR naming the open, unpaused issues it closes, or `—` when there are none; an issue so named has no row of its own |
+  | Closed issue; merged or closed PR | no row, and no note of what landed, which git and the closed issues already keep |
+
+  Three things follow. Work that stops without landing (a claim abandoned,
+  a PR closed unmerged, or one merged without closing its issue) leaves the
+  issue open and ends its claim, so its row is re-derived by the table:
+  **In progress** with the branch if one remains, otherwise back to its wave.
+  Whatever the work found and filed has its own row by the same table, made
+  in the main checkout or owed as the paragraph below says. And the move from
+  **Remaining** to **In progress** is made before the session enters the
+  worktree.
+
+  Only the main checkout's copy counts, never one in a worktree — and a
+  session inside `.claude/worktrees/` is refused that copy by Claude Code's
+  own isolation. So the move in is made in the main checkout before
+  `EnterWorktree` and the re-derivation after `ExitWorktree` (which removes
+  the row when the issue has closed and otherwise moves it as the paragraph
+  above says); every event that happens inside the worktree (a PR opens, a
+  filing, work stops) is carried in the report as owed and made once the
+  session is back. The file's own note, topmost, holds the section and
+  column rules. When in doubt, rebuild it from `gh pr list --limit 1000` and
+  `gh issue list --limit 1000`, because the default of 30 truncates
+  silently.
 
 ## One owner per fact
 
