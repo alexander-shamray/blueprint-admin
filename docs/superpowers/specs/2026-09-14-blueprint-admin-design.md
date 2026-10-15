@@ -62,6 +62,9 @@ routes are `Gateway.Api/appsettings.json`; health endpoints are mapped by
 | Backend status | `... ps --format json`, backend |
 | Backend logs | `... logs -f [service...]`, backend |
 | Broker inspection | `... exec rabbitmq rabbitmqctl list_queues name messages --formatter json` and the `list_exchanges name type`, `list_permissions` forms, backend |
+| Stop and start the BFF | `... stop web-bff` and `... start web-bff`, backend; only around a projection rebuild |
+| Repair the BFF projection | `dotnet run --project tools/bff-replay`, backend, with the six connections `run-locally.md` sets as `$env:` lines |
+| Rebuild the BFF projection | `dotnet run --project tools/bff-replay -- --reset`, backend, between the stop and the start above. Deletes the projection |
 | Start frontend | `npm start` (`ng serve`, port 5173), frontend |
 | Stop frontend | kill the `npm start` process tree |
 
@@ -288,9 +291,12 @@ reports the job and whether port 5173 answers.
 
 `BrokerService` runs the three `rabbitmqctl` forms from §2.1 with
 `--formatter json` through `ComposeService.Exec` and returns queues,
-exchanges and permissions. It marks queues whose name ends in `_error`, names
-each queue's consumer from `PlatformQueues.Table` (a cited copy of the
-backend's queue constants, which the drift gate reads both ways), and answers
+exchanges and permissions. It marks queues whose name ends in `_error` or
+`_skipped` (`ParkedQueues`, a cited copy of the dead-letter tool's suffixes
+and the runbook that owns each kind), links the runbook of one that holds a
+message, names each queue's consumer from `PlatformQueues.Table` (a cited
+copy of the backend's queue constants, which the drift gate reads both ways;
+a parked queue is named by its endpoint's consumer), and answers
 `IsDrained(queues, PlatformQueues.Projection)` — declared and holding no
 messages — which `GET /broker/queues` carries as `projection` for the Broker
 screen and the API screen's "wait for the projection" affordance. The drain
@@ -298,6 +304,23 @@ names the one queue it read and claims nothing about the others. A
 broker that does not answer, or output that is not the formatter's JSON
 array, is `reachable: false` with the error, and each `rabbitmqctl` is
 bounded to 30 s like `ps`.
+
+`ProjectionRebuildService` puts the BFF's order projection right as one job,
+the way `ResetService` resets the stack: a repair is the backend's
+`tools/bff-replay` with no argument, and a rebuild stops `web-bff`, runs the
+tool with `--reset` and starts `web-bff` again, because the tool's README says
+a reset needs the BFF's consumption stopped. The BFF is started again even
+when the tool fails, since leaving it down would turn a partial projection
+into an outage. The six connections the tool reads are handed to the child as
+environment variables (`ProcessSpec.Environment`, never part of the command
+line), built from `AdminOptions` and held by the drift gate to the Compose
+model and to `run-locally.md`; the transcript prints them scrubbed. A run ends
+by watching `bff-order-events` until it is empty or two minutes pass, and says
+which; neither fails a run whose tool succeeded. The screen states, before
+either button, what the tool cannot restore, in sentences the drift gate holds
+to the tool's README. A rebuild deletes the projection, so it takes a typed
+confirmation (`bff-replay --reset`) as a wipe does (§8); a repair deletes
+nothing and takes none.
 
 ### 5.6 Identity
 
@@ -491,6 +514,7 @@ All under `/api`, JSON, loopback only.
 | `POST /logs/follow` | body `{ services }`; stops the previous follow job if it is still running, starts one and returns it — the host keeps one |
 | `POST /logs/follow/{id}/stop` | stops that follow job if it is still the current one; 204 either way. Named, so a Stop that reaches the host after the next Follow ends nothing. There is no generic job stop: it would reach `up`, `down -v` and the supervisor's `npm start` |
 | `GET /broker/queues`, `/broker/exchanges`, `/broker/permissions` | §5.5; `queues` also carries `projection`, the drain state of `ordering-catalog-events` |
+| `GET /broker/projection`, `POST /broker/projection/repair`, `POST /broker/projection/rebuild` | §5.5; the plan (queue, typed confirmation, the tool's limits), then a listed job; the rebuild is refused with 400 unless `confirm` is `bff-replay --reset` |
 | `GET /identity/users`, `POST /identity/token`, `POST /identity/clock` | §5.6 |
 | `GET /catalog/operations`, `POST /catalog/reload` | §5.7 |
 | `POST /catalog/baseline/{service}` | makes that service's last fetched document its baseline, then reloads; 404 for a name the catalog has not fetched |
@@ -552,7 +576,7 @@ and names the active option through `aria-activedescendant`.
 |---|---|---|
 | **Stack** | the workstation doctor's rows above the buttons, read when the screen opens; one row per Compose service with state, health and port; the frontend job; a reachability strip; quick links to the client, Grafana, Keycloak | Check the workstation again; Up, Down, Down and wipe, Reset (both behind one typed confirmation), Start and Stop frontend; opens the job's output pane |
 | **Logs** | a follow stream with service filter, text search and correlation-id highlight | start, stop (the host's follow job too, as does leaving the screen), clear |
-| **Broker** | queues with depth, `_error` queues in red, exchanges, permissions; a drained indicator for `ordering-catalog-events` | refresh, auto-refresh of all three |
+| **Broker** | queues with depth, `_error` and `_skipped` queues marked with the runbook of one that holds a message, a BFF projection panel (what the rebuild tool cannot restore, the depth of `bff-order-events`), exchanges, permissions; a drained indicator for `ordering-catalog-events` | refresh, auto-refresh of all three; Repair, and Rebuild behind a typed confirmation, each opening the job's output pane |
 | **API** | operation tree on the left, each source with what its document changed since the kept baseline; request editor (path params, headers, body pre-filled from the schema example, `commandId` generated per send) and identity picker with its token clock (§5.6); response pane with status, timing, headers, body; a history list | Send; accept a changed document as the new baseline; "Trace this call" opens the Trace screen with the response's correlation id |
 | **Trace** | the §5.9 timeline for a correlation id, grouped by service, with Grafana deep links, and on a refetch what arrived or left since the last one | enter an id or arrive from the API screen; reload |
 | **Scenario** | `run-locally.md`'s calls as one of two scripts — publish, wait for the drain, quote, order, then either watch the order to confirmed, despatched and delivered, or cancel it and watch it to cancelled — each step with its status, body and own correlation id, each watch saying what it waits for and what it last read | Pick the script; run as a realm user; each step that sent links to its trace; the first step that does not succeed ends the run |

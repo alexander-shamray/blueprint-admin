@@ -79,7 +79,11 @@ and body as the platform returned them; a history of this visit's calls).
 The Broker screen lists queues (`_error` and `_skipped` queues marked, each named
 with what consumes it, and a non-empty one linking the backend runbook that owns
 it), exchanges and
-permissions through `rabbitmqctl` in the `rabbitmq` container, and the API
+permissions through `rabbitmqctl` in the `rabbitmq` container; below the queues
+a BFF projection panel says what `tools/bff-replay` cannot restore and runs it
+as a repair, or as a rebuild behind a typed confirmation that stops the BFF,
+deletes its order projection, replays the outbox window and starts it again
+(the commands are `run-locally.md`'s); and the API
 screen shows whether `ordering-catalog-events` has drained after a publish.
 The Trace screen joins a correlation id's Loki lines and Tempo spans into one
 timeline, each of those rows linking into Grafana Explore, and closing with a
