@@ -176,15 +176,29 @@ opens those files:
   where one can be, and says where it is not.
 - **The task list is `TODO.md` at the main checkout's root: gitignored,
   local, never committed.** It is for the user, and it lists open PRs
-  (with the issues each closes) and open issues with no PR. Update it the
-  moment this session opens, merges or closes a PR, or files, closes or
-  reopens an issue. Only the main checkout's copy counts, never one in a
-  worktree — and a session moved into `.claude/worktrees/` with
-  `EnterWorktree` is refused that copy by Claude Code's own isolation, so
-  there the update is carried in the report as owed and made once the
-  session is back in the main checkout. When in doubt, rebuild it from
-  `gh pr list --limit 1000` and `gh issue list --limit 1000`, because the
-  default of 30 truncates silently.
+  (with the issues each closes) and open issues with no PR. Every agent
+  that works here keeps it true **at each of these moments, in the same
+  act**, and a row never sits in two sections:
+  - **Work starts on an issue** (a branch or worktree is created for it):
+    its row leaves **Remaining** and enters **In progress** with its
+    branch, *before* the session enters the worktree.
+  - **A PR opens**: the **In progress** row names the PR and the issues it
+    closes.
+  - **A PR merges or closes, or an issue closes**: the row is deleted, with
+    no note of what landed, which git and the closed issues already keep.
+    Whatever the work found and filed gets its row in its wave.
+  - **An issue is filed, reopened or labelled `paused`**: it gets a row in
+    its wave, or in **Paused**. Work that stops without landing sends its
+    row back to its wave.
+
+  Only the main checkout's copy counts, never one in a worktree — and a
+  session inside `.claude/worktrees/` is refused that copy by Claude Code's
+  own isolation. So the first move is made in the main checkout before
+  `EnterWorktree` and the deletion after `ExitWorktree`; a session that
+  cannot reach it carries the update in the report as owed. The file's own
+  note, topmost, holds the section and column rules. When in doubt, rebuild
+  it from `gh pr list --limit 1000` and `gh issue list --limit 1000`,
+  because the default of 30 truncates silently.
 
 ## Available commands
 
