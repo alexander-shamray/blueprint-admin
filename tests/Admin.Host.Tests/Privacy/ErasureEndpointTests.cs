@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using Admin.Host.Broker;
 using Admin.Host.Privacy;
 using Admin.Host.Tests.TestSupport;
 using Shouldly;
@@ -27,6 +28,42 @@ public sealed class ErasureEndpointTests : IClassFixture<AdminHostFactory>
         holders.ShouldAllBe(h => h.GetProperty("pending").GetInt64() == 0);
         view.GetProperty("completionsPending").GetInt64().ShouldBe(0);
         view.GetProperty("runbookUrl").GetString().ShouldEndWith("/docs/runbooks/erasure-overdue.md");
+    }
+
+    [Fact]
+    public void Each_holder_carries_the_depth_of_its_own_queue_and_the_completions_queue_its_own()
+    {
+        QueuesView queues = new(
+            true,
+            null,
+            [
+                new BrokerQueue("ordering-privacy", 4, false),
+                new BrokerQueue("payments-privacy", 0, false),
+                new BrokerQueue("privacy-completions", 7, false),
+            ],
+            new ProjectionDrain(PlatformQueues.Projection, false, null, false));
+
+        HoldersView view = ErasureEndpoints.View(queues, "https://example.test/runbooks/");
+
+        view.Holders.Single(h => h.Name == "ordering").Pending.ShouldBe(4);
+        view.Holders.Single(h => h.Name == "payments").Pending.ShouldBe(0);
+        view.Holders.Single(h => h.Name == "bff").Pending.ShouldBeNull("a queue the broker did not list has no depth");
+        view.CompletionsPending.ShouldBe(7);
+        view.RunbookUrl.ShouldBe("https://example.test/runbooks/erasure-overdue.md");
+    }
+
+    [Fact]
+    public void A_broker_that_does_not_answer_leaves_the_holders_listed_with_no_depths()
+    {
+        QueuesView down = new(false, "rabbitmq is not running", [], new ProjectionDrain(PlatformQueues.Projection, false, null, false));
+
+        HoldersView view = ErasureEndpoints.View(down, "https://example.test/runbooks");
+
+        view.Reachable.ShouldBeFalse();
+        view.Error.ShouldBe("rabbitmq is not running");
+        view.Holders.Select(h => h.Name).ShouldBe([.. ErasureHolders.Table.Select(h => h.Name)]);
+        view.Holders.ShouldAllBe(h => h.Pending == null);
+        view.CompletionsPending.ShouldBeNull();
     }
 
     [Fact]

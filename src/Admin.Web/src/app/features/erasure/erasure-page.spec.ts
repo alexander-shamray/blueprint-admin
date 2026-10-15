@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { Subject, of } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { ErasureRequestView, HoldersView, ProxyResult } from '../../core/host/host-types';
 import { ErasurePage, PRIVACY_IDENTITY } from './erasure-page';
@@ -90,6 +90,24 @@ describe('ErasurePage', () => {
     expect(text(fixture, 'table.holders tbody tr')).toEqual(['ordering [answered] 1 · 2026-10-15T12:00:01Z ordering-privacy 0', 'payments [waiting] payments-privacy 2']);
     expect(fixture.nativeElement.querySelector('.status').textContent).toContain('[open]');
     expect(fixture.nativeElement.querySelector('button.reissue')).toBeNull();
+  });
+
+  it('stays busy until the read a raise makes has answered, so Raise cannot be pressed twice in between', () => {
+    const read = new Subject<ProxyResult>();
+    const fixture = render([]);
+    proxy.mockReturnValueOnce(of(responded(200, JSON.stringify(REQUEST_ID)))).mockReturnValueOnce(read);
+    fixture.componentInstance.subject.set(SUBJECT);
+    fixture.componentInstance.raise();
+
+    expect(proxy).toHaveBeenCalledTimes(2);
+    expect(fixture.componentInstance.busy()).toBe(true);
+    expect(fixture.componentInstance.canRaise()).toBe(false);
+
+    read.next(responded(200, JSON.stringify(view({}))));
+    read.complete();
+
+    expect(fixture.componentInstance.busy()).toBe(false);
+    expect(fixture.componentInstance.canRaise()).toBe(true);
   });
 
   it('refuses a subject that is not a GUID before anything is sent', () => {
