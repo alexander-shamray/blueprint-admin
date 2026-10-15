@@ -1,8 +1,5 @@
 import { expect, test } from '@playwright/test';
 
-// Against the fake platform's recorded rabbitmqctl output (src/Admin.Host/Fakes/fixtures/rabbitmq-*.json):
-// twenty queues, an _error queue and a _skipped queue each holding a message, ordering-catalog-events empty; 56 exchanges;
-// a permission row per service user.
 // The BFF projection panel against the fake platform's recordings of run-locally.md's lines: the repair finds every
 // row already in the BFF's inbox, and the rebuild stops the BFF, replays the 24 events, starts it, and sees the queue empty.
 test('the projection panel states its limits, then runs a repair and a confirmed rebuild', async ({ page }) => {
@@ -68,6 +65,9 @@ test('an error queue opens into its message, dry-runs a replay, then replays it 
   await expect(log).not.toContainText('would-replay');
 });
 
+// Against the fake platform's recorded rabbitmqctl output (src/Admin.Host/Fakes/fixtures/rabbitmq-*.json):
+// twenty queues, an _error queue and a _skipped queue each holding a message, ordering-catalog-events empty; 56 exchanges;
+// a permission row per service user.
 test('the broker screen lists queues, exchanges and permissions', async ({ page }) => {
   await page.goto('/broker');
 
