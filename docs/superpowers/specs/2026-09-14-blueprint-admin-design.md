@@ -303,13 +303,15 @@ under one id. It wipes volumes, so its endpoint takes the same typed
 confirmation as `down -v`. There is no seed step: the backend has no seed to
 run yet.
 
-`ComposeGate` lets one job at a time stop or start the stack's services: Up,
-Down, the reset and §5.5's projection rebuild each claim it, and a Compose read
-claims nothing. While one of them runs, a request of the same kind is answered
-with the running job and any other kind is refused with 409 naming the kind and
-the job id, so a rebuild's `stop web-bff` and `start web-bff` never land inside
-a reset's `down -v` and `up`. A repair stops and starts nothing and does not
-claim it.
+`ComposeGate` lets one job at a time stop or start the stack's services. Five
+kinds claim it: Up, Down, Down and wipe, the reset and §5.5's projection
+rebuild. A Compose read claims nothing. While one of them runs, a request of
+the same kind is answered with the running job and any other kind is refused
+with 409 naming the kind and the job id, so a rebuild's `stop web-bff` and
+`start web-bff` never land inside a reset's `down -v` and `up`. Down and Down
+and wipe are two kinds because a plain Down answered with a running wipe would
+show a volume wipe under a request that did not ask for one. A repair stops and
+starts nothing and does not claim it.
 
 ### 5.4 FrontendSupervisor
 
@@ -570,7 +572,7 @@ All under `/api`, JSON, loopback only.
 | `GET /stack` | `ServiceStatus[]`, the frontend job summary, and reachability of every HTTP surface of §2.2 that answers a readiness route, the object store and image edge among them |
 | `GET /stack/doctor` | §5.3's workstation checks, one row each with its verdict and what the reads said |
 | `POST /stack/backend/up` | Compose up; returns the job, or the Up still running; 409 while another `ComposeGate` job (§5.3) runs |
-| `POST /stack/backend/down` | body `{ wipeVolumes, confirm }`; returns the job, or the same Down still running; 409 while another `ComposeGate` job (§5.3) runs |
+| `POST /stack/backend/down` | body `{ wipeVolumes, confirm }`; returns the job, or a Down with the same `wipeVolumes` still running; 409 while another `ComposeGate` job (§5.3) runs, a Down with the other `wipeVolumes` included |
 | `POST /stack/backend/reset` | body `{ confirm }`, which must be `down -v`; §5.3's reset, returned as one job, or the one still running; 409 while another `ComposeGate` job runs |
 | `POST /stack/frontend/start`, `POST /stack/frontend/stop` | supervisor |
 | `GET /jobs`, `GET /jobs/{id}` | summaries; one job with its last lines |
