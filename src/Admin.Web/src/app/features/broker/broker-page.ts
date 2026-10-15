@@ -1,9 +1,10 @@
 import { Component, DestroyRef, WritableSignal, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { EMPTY, Observable, Subscription, catchError, finalize, of, tap, timer } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
-import { ExchangesView, JobSummary, PermissionsView, QueuesView } from '../../core/host/host-types';
+import { DeadLetterInspection, DeadLetterVerb, ExchangesView, JobSummary, PermissionsView, QueuesView } from '../../core/host/host-types';
 import { DrainedIndicator } from '../../shared/drained-indicator/drained-indicator';
 import { OutputPane } from '../../shared/output-pane/output-pane';
 
@@ -15,7 +16,7 @@ export const AUTO_REFRESH_MS = 5000;
 
 @Component({
   selector: 'app-broker-page',
-  imports: [FormsModule, DrainedIndicator, OutputPane],
+  imports: [FormsModule, RouterLink, DrainedIndicator, OutputPane],
   templateUrl: './broker-page.html',
   styleUrl: './broker-page.css',
   // Keep the whitespace between adjacent <td>s so row text reads as separate cells, as the Stack screen does.
@@ -58,6 +59,22 @@ export class BrokerPage {
     return queue ? (this.queues()?.queues.find((q) => q.name === queue) ?? null) : null;
   });
 
+  /** On error, undefined, so no queue offers to open: the host did not answer, and the queues say so. */
+  readonly deadLetterPlan = toSignal(this.host.deadLetterPlan().pipe(catchError(() => of(undefined))));
+  /** The parked queue whose messages are open, and what the tool read from it; null while nothing is open. */
+  readonly openQueue = signal<string | null>(null);
+  readonly inspection = signal<DeadLetterInspection | null>(null);
+  readonly inspecting = signal(false);
+  readonly deadLetterError = signal<string | null>(null);
+  readonly deadLetterJobId = signal<string | null>(null);
+  /** The last dry run: the real run is offered only for that message and verb, so it is always a dry run first. */
+  readonly dryRun = signal<{ messageId: string; verb: DeadLetterVerb } | null>(null);
+  readonly executeText = signal('');
+  readonly canExecute = computed(() => {
+    const confirm = this.deadLetterPlan()?.executeConfirm;
+    return this.dryRun() !== null && confirm !== undefined && this.executeText() === confirm;
+  });
+
   constructor() {
     this.destroyRef.onDestroy(() => this.auto?.unsubscribe());
     this.refresh();
@@ -73,6 +90,66 @@ export class BrokerPage {
     if (!this.canRebuild()) return;
     this.host.projectionRebuild(this.confirmText()).subscribe(this.projectionStarted);
     this.confirmText.set('');
+  }
+
+  /** Reads a parked queue's messages with the backend's tool, which puts each back flagged redelivered. */
+  openDeadLetters(queue: string): void {
+    if (this.inspecting()) return;
+    this.openQueue.set(queue);
+    this.inspection.set(null);
+    this.dryRun.set(null);
+    this.executeText.set('');
+    this.deadLetterError.set(null);
+    this.inspecting.set(true);
+    this.host
+      .deadLetters(queue)
+      .pipe(
+        takeUntilDestroyed(this.destroyRef),
+        finalize(() => this.inspecting.set(false)),
+      )
+      .subscribe({
+        next: (view) => this.inspection.set(view),
+        error: (e: unknown) => this.deadLetterError.set(this.describeError(e)),
+      });
+  }
+
+  closeDeadLetters(): void {
+    this.openQueue.set(null);
+    this.inspection.set(null);
+    this.dryRun.set(null);
+    this.executeText.set('');
+  }
+
+  /** The tool without `--execute`: says what would move and moves nothing. Arms the real run for this message and verb. */
+  dryRunMove(messageId: string, verb: DeadLetterVerb): void {
+    const queue = this.openQueue();
+    if (!queue) return;
+    this.executeText.set('');
+    this.host.deadLetterMove(queue, verb, [messageId], null).subscribe({
+      next: (job) => {
+        this.deadLetterError.set(null);
+        this.deadLetterJobId.set(job.id);
+        this.dryRun.set({ messageId, verb });
+      },
+      error: (e: unknown) => this.deadLetterError.set(this.describeError(e)),
+    });
+  }
+
+  /** The dry run's message and verb for real, with `--execute` and a record file; only with the typed confirmation. */
+  executeMove(): void {
+    const queue = this.openQueue();
+    const armed = this.dryRun();
+    if (!queue || !armed || !this.canExecute()) return;
+    this.host.deadLetterMove(queue, armed.verb, [armed.messageId], this.executeText()).subscribe({
+      next: (job) => {
+        this.deadLetterError.set(null);
+        this.deadLetterJobId.set(job.id);
+        this.dryRun.set(null);
+        this.refresh();
+      },
+      error: (e: unknown) => this.deadLetterError.set(this.describeError(e)),
+    });
+    this.executeText.set('');
   }
 
   /** While a read from an earlier call is still out, does nothing: the Refresh button is disabled meanwhile. */

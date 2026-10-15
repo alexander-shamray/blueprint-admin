@@ -11,7 +11,7 @@
   @if (q.reachable) {
     <app-drained-indicator [projection]="q.projection" />
     <table class="queues">
-      <thead><tr><th>Queue</th><th>Messages</th><th>Consumed by</th><th>Runbook</th></tr></thead>
+      <thead><tr><th>Queue</th><th>Messages</th><th>Consumed by</th><th>Runbook</th><th>Dead letters</th></tr></thead>
       <tbody>
         @for (queue of q.queues; track queue.name) {
           <tr [class.error-queue]="queue.parked === 'error'" [class.skipped-queue]="queue.parked === 'skipped'">
@@ -19,6 +19,7 @@
             <td>{{ queue.messages ?? '—' }}</td>
             <td class="consumer">{{ queue.consumer ?? '' }}</td>
             <td class="runbook">@if (queue.runbook && (queue.messages ?? 0) > 0) {<a [href]="queue.runbook" target="_blank" rel="noopener noreferrer">{{ queue.parked }}-queue runbook</a>}</td>
+            <td class="open">@if (queue.parked && deadLetterPlan() && (queue.messages ?? 0) > 0) {<button class="open-dead-letters" [disabled]="inspecting()" (click)="openDeadLetters(queue.name)" [attr.aria-label]="'Open the messages on ' + queue.name">Open</button>}</td>
           </tr>
         }
       </tbody>
@@ -28,6 +29,63 @@
   }
 } @else if (!queuesError()) {
   <p>Loading…</p>
+}
+
+@if (openQueue(); as queue) {
+  <section class="dead-letters" aria-labelledby="dead-letters-heading">
+    <h2 id="dead-letters-heading">Dead letters on <code>{{ queue }}</code></h2>
+    <p>
+      Read with the backend's <code>tools/dead-letters</code>, which puts each message back, flagged redelivered. Each
+      replay or discard is a dry run first; the real run writes every message it takes to a record file under
+      <code>{{ deadLetterPlan()?.recordDir }}</code> before it moves it. The runbook says when to do either.
+      <button class="close-dead-letters" (click)="closeDeadLetters()">Close</button>
+    </p>
+    @if (inspecting()) {
+      <p>Reading…</p>
+    }
+    @if (deadLetterError(); as e) {
+      <p class="error" role="alert">{{ e }}</p>
+    }
+    @if (inspection(); as view) {
+      @if (view.error) {
+        <p class="error" role="alert">{{ view.error }}</p>
+      }
+      @if (view.messages.length === 0 && !view.error) {
+        <p>No message is waiting on {{ queue }}.</p>
+      }
+      @for (message of view.messages; track $index) {
+        <article class="dead-letter">
+          <dl>
+            <dt>Message</dt><dd><code>{{ message.messageId ?? '(no message id)' }}</code></dd>
+            @if (message.correlationId; as c) {
+              <dt>Correlation</dt><dd><a [routerLink]="['/trace', c]">{{ c }}</a></dd>
+            }
+            @if (message.messageType; as t) {<dt>Type</dt><dd><code>{{ t }}</code></dd>}
+            @if (message.faultExceptionType; as f) {<dt>Fault</dt><dd><code>{{ f }}</code>@if (message.faultMessage; as m) {: {{ m }}}</dd>}
+            @if (message.reason; as r) {<dt>Reason</dt><dd>{{ r }}</dd>}
+            <dt>Body</dt><dd><code class="body">{{ message.body ?? '(binary)' }}</code></dd>
+          </dl>
+          @if (message.messageId; as id) {
+            <div class="dead-letter-actions">
+              <button class="dry-replay" (click)="dryRunMove(id, 'replay')" [title]="'Say what a replay of ' + id + ' would do; nothing moves'">Dry-run replay</button>
+              <button class="dry-discard" (click)="dryRunMove(id, 'discard')" [title]="'Say what a discard of ' + id + ' would do; nothing moves'">Dry-run discard</button>
+              @if (dryRun(); as armed) {
+                @if (armed.messageId === id) {
+                  <span class="execute-box">
+                    <input [attr.aria-label]="'Type ' + deadLetterPlan()?.executeConfirm + ' to ' + armed.verb + ' for real'" [placeholder]="'type: ' + deadLetterPlan()?.executeConfirm" [ngModel]="executeText()" (ngModelChange)="executeText.set($event)" />
+                    <button class="execute" [disabled]="!canExecute()" (click)="executeMove()">{{ armed.verb === 'replay' ? 'Replay' : 'Discard' }} for real</button>
+                  </span>
+                }
+              }
+            </div>
+          }
+        </article>
+      }
+    }
+    @if (deadLetterJobId(); as id) {
+      <app-output-pane [jobId]="id" />
+    }
+  </section>
 }
 
 @if (plan(); as p) {

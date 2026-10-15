@@ -4,6 +4,9 @@ import { Observable } from 'rxjs';
 import {
   ApiCatalogView,
   ConfigView,
+  DeadLetterInspection,
+  DeadLetterPlan,
+  DeadLetterVerb,
   ExchangesView,
   HoldersView,
   Identity,
@@ -133,6 +136,25 @@ export class HostClient {
   /** The BFF projection rebuilt: stop the BFF, the tool with `--reset`, start it again. Takes the typed confirmation. */
   projectionRebuild(confirm: string): Observable<JobSummary> {
     return this.http.post<JobSummary>('/api/broker/projection/rebuild', { confirm });
+  }
+
+  /** What to say before a dead letter is read or moved: the typed confirmation, the read's limit, the record directory. */
+  deadLetterPlan(): Observable<DeadLetterPlan> {
+    return this.http.get<DeadLetterPlan>('/api/broker/dead-letters');
+  }
+
+  /** A parked queue's messages, read by the backend's tool and put back, flagged redelivered. */
+  deadLetters(queue: string): Observable<DeadLetterInspection> {
+    return this.http.get<DeadLetterInspection>(`/api/broker/dead-letters/${encodeURIComponent(queue)}`);
+  }
+
+  /** A replay or discard of the named messages: a dry run, or with `confirm` the real run, as one job. */
+  deadLetterMove(queue: string, verb: DeadLetterVerb, messageIds: string[], confirm: string | null): Observable<JobSummary> {
+    return this.http.post<JobSummary>(`/api/broker/dead-letters/${encodeURIComponent(queue)}/${verb}`, {
+      messageIds,
+      execute: confirm !== null,
+      confirm,
+    });
   }
 
   trace(correlationId: string, window?: string): Observable<TraceView> {

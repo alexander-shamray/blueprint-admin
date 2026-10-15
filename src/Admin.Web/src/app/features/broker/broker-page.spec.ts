@@ -1,7 +1,16 @@
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { Subject, of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
-import { ExchangesView, JobSummary, PermissionsView, ProjectionPlan, QueuesView } from '../../core/host/host-types';
+import {
+  DeadLetterInspection,
+  DeadLetterPlan,
+  ExchangesView,
+  JobSummary,
+  PermissionsView,
+  ProjectionPlan,
+  QueuesView,
+} from '../../core/host/host-types';
 import { SseClient } from '../../core/host/sse-client';
 import { BrokerPage } from './broker-page';
 
@@ -46,6 +55,39 @@ const plan: ProjectionPlan = {
   limits: ['A replay reaches back one outbox window and no further.', 'A rebuild deletes the projection first.'],
 };
 
+const deadLetterPlan: DeadLetterPlan = { executeConfirm: '--execute', inspectLimit: 20, recordDir: '/data/dead-letters' };
+
+const inspection: DeadLetterInspection = {
+  queue: 'ordering-catalog-events_error',
+  endpoint: 'ordering-catalog-events',
+  kind: 'error',
+  error: null,
+  messages: [
+    {
+      messageId: 'm-1',
+      correlationId: 'corr-1',
+      messageType: 'urn:message:Common.Contracts.Catalog.V1:PriceChanged',
+      faultMessage: 'no row in the price projection',
+      faultExceptionType: 'System.InvalidOperationException',
+      inputAddress: 'rabbitmq://rabbitmq/ordering-catalog-events',
+      reason: 'fault',
+      redelivered: true,
+      body: '{"message":{}}',
+    },
+    {
+      messageId: null,
+      correlationId: null,
+      messageType: null,
+      faultMessage: null,
+      faultExceptionType: null,
+      inputAddress: null,
+      reason: null,
+      redelivered: false,
+      body: null,
+    },
+  ],
+};
+
 const job: JobSummary = { id: 'job-7', commandLine: 'bff-replay', state: 'Running', exitCode: null, startedAt: '2026-10-15T00:00:00Z' };
 
 const exchanges: ExchangesView = {
@@ -73,6 +115,9 @@ describe('BrokerPage', () => {
     projectionPlan: ReturnType<typeof vi.fn>;
     projectionRepair: ReturnType<typeof vi.fn>;
     projectionRebuild: ReturnType<typeof vi.fn>;
+    deadLetterPlan: ReturnType<typeof vi.fn>;
+    deadLetters: ReturnType<typeof vi.fn>;
+    deadLetterMove: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -83,10 +128,14 @@ describe('BrokerPage', () => {
       projectionPlan: vi.fn(() => of(plan)),
       projectionRepair: vi.fn(() => of(job)),
       projectionRebuild: vi.fn(() => of(job)),
+      deadLetterPlan: vi.fn(() => of(deadLetterPlan)),
+      deadLetters: vi.fn(() => of(inspection)),
+      deadLetterMove: vi.fn(() => of(job)),
     };
     TestBed.configureTestingModule({
       imports: [BrokerPage],
       providers: [
+        provideRouter([]),
         { provide: HostClient, useValue: host },
         { provide: SseClient, useValue: { follow: () => of() } },
       ],
@@ -108,8 +157,8 @@ describe('BrokerPage', () => {
 
     expect(rows(fixture, 'queues')).toEqual([
       "ordering-catalog-events 2 Ordering's price projection",
-      "[error] ordering-catalog-events_error 1 Ordering's price projection error-queue runbook",
-      "[skipped] bff-order-events_skipped 1 the BFF's order projection skipped-queue runbook",
+      "[error] ordering-catalog-events_error 1 Ordering's price projection error-queue runbook Open",
+      "[skipped] bff-order-events_skipped 1 the BFF's order projection skipped-queue runbook Open",
       "[skipped] payments-events_skipped 0 Payments' order events",
       'something-else 0',
       "bff-order-events 0 the BFF's order projection",
@@ -433,5 +482,98 @@ describe('BrokerPage', () => {
     fixture.detectChanges();
 
     expect((fixture.nativeElement.querySelector('button.refresh') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  describe('dead letters', () => {
+    function click(fixture: { nativeElement: HTMLElement; detectChanges: () => void }, selector: string): void {
+      (fixture.nativeElement.querySelector(selector) as HTMLButtonElement).click();
+      fixture.detectChanges();
+    }
+
+    function type(fixture: { nativeElement: HTMLElement; detectChanges: () => void }, value: string): void {
+      const input = fixture.nativeElement.querySelector('.execute-box input') as HTMLInputElement;
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+    }
+
+    it('offers to open only a parked queue that holds a message', () => {
+      const fixture = render();
+      const buttons = Array.from(fixture.nativeElement.querySelectorAll('button.open-dead-letters')) as HTMLButtonElement[];
+
+      expect(buttons.map((b) => b.getAttribute('aria-label'))).toEqual([
+        'Open the messages on ordering-catalog-events_error',
+        'Open the messages on bff-order-events_skipped',
+      ]);
+    });
+
+    it('offers no queue to open when the host did not give the plan', () => {
+      host.deadLetterPlan.mockReturnValue(throwError(() => new Error('down')));
+      const fixture = render();
+
+      expect(fixture.nativeElement.querySelector('button.open-dead-letters')).toBeNull();
+    });
+
+    it('opens a queue into its messages, the correlation id a link into Trace', () => {
+      const fixture = render();
+      click(fixture, 'button.open-dead-letters');
+
+      expect(host.deadLetters).toHaveBeenCalledWith('ordering-catalog-events_error');
+      const articles = Array.from(fixture.nativeElement.querySelectorAll('article.dead-letter')) as HTMLElement[];
+      expect(articles.length).toBe(2);
+      expect(articles[0].textContent).toContain('System.InvalidOperationException: no row in the price projection');
+      expect(articles[0].querySelector('a')?.getAttribute('href')).toBe('/trace/corr-1');
+      expect(articles[1].textContent).toContain('(no message id)');
+      expect(articles[1].querySelector('button.dry-replay')).toBeNull();
+    });
+
+    it('says the reason the tool gave when it read nothing', () => {
+      host.deadLetters.mockReturnValue(of({ ...inspection, messages: [], error: 'dead_letters: the broker refused the credential' }));
+      const fixture = render();
+      click(fixture, 'button.open-dead-letters');
+
+      expect(fixture.nativeElement.querySelector('.dead-letters .error')?.textContent).toContain('the broker refused the credential');
+    });
+
+    it('offers the real run only after a dry run, and only with the typed confirmation', () => {
+      const fixture = render();
+      click(fixture, 'button.open-dead-letters');
+
+      expect(fixture.nativeElement.querySelector('button.execute')).toBeNull();
+      click(fixture, 'button.dry-replay');
+      expect(host.deadLetterMove).toHaveBeenCalledWith('ordering-catalog-events_error', 'replay', ['m-1'], null);
+      expect(fixture.nativeElement.querySelector('app-output-pane')).not.toBeNull();
+
+      const execute = () => fixture.nativeElement.querySelector('button.execute') as HTMLButtonElement;
+      expect(execute().textContent?.trim()).toBe('Replay for real');
+      expect(execute().disabled).toBe(true);
+      type(fixture, '--execut');
+      expect(execute().disabled).toBe(true);
+      type(fixture, '--execute');
+      expect(execute().disabled).toBe(false);
+
+      click(fixture, 'button.execute');
+      expect(host.deadLetterMove).toHaveBeenLastCalledWith('ordering-catalog-events_error', 'replay', ['m-1'], '--execute');
+      expect(fixture.nativeElement.querySelector('button.execute')).toBeNull();
+    });
+
+    it('a dry run of the other verb re-arms the real run for that verb', () => {
+      const fixture = render();
+      click(fixture, 'button.open-dead-letters');
+      click(fixture, 'button.dry-replay');
+      click(fixture, 'button.dry-discard');
+
+      expect((fixture.nativeElement.querySelector('button.execute') as HTMLButtonElement).textContent?.trim()).toBe('Discard for real');
+    });
+
+    it('says why the host refused a move, and arms nothing', () => {
+      host.deadLetterMove.mockReturnValue(throwError(() => ({ error: { detail: 'The operator\'s password is set for one run at a time.' } })));
+      const fixture = render();
+      click(fixture, 'button.open-dead-letters');
+      click(fixture, 'button.dry-replay');
+
+      expect(fixture.nativeElement.querySelector('.dead-letters .error')?.textContent).toContain('one run at a time');
+      expect(fixture.nativeElement.querySelector('button.execute')).toBeNull();
+    });
   });
 });
