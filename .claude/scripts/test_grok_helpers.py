@@ -10057,13 +10057,16 @@ class TheHookWiringRunsOnMoreThanOneOperatingSystem(unittest.TestCase):
     # open, and that launcher leaves with 2 on every failure, which blocks the
     # tool call (#119). The list is closed, and `test_index_search_hint.py`
     # holds the hint's own launcher to its contract.
-    HINT_LAUNCHERS = ("index-hint-run.sh",)
+    HINT_LAUNCHERS = (
+        'bash "${CLAUDE_PROJECT_DIR}/.claude/hooks/index-hint-run.sh" '
+        "PreToolUse index-search-hint.py",
+    )
 
     def test_every_hook_goes_through_the_launcher(self):
         for command in self.commands():
             with self.subTest(command=command):
                 self.assertIn("${CLAUDE_PROJECT_DIR}", command)
-                if not any(name in command for name in self.HINT_LAUNCHERS):
+                if command not in self.HINT_LAUNCHERS:
                     self.assertIn("run-guard.sh", command)
 
     def test_the_launcher_probes_py_before_python3(self):

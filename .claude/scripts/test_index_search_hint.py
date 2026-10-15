@@ -177,7 +177,11 @@ class WhatItNeverTouches(unittest.TestCase):
 
     def test_a_single_file_is_a_read(self):
         self.silent("Grep", pattern="RetentionMapRule", path="src/Program.cs")
-        self.silent("Bash", command='grep -n "RetentionMapRule" src/Program.cs')
+        # Each recurses, so only the file test can save it: a plain `grep -n`
+        # has no recursion and returns before that test is reached.
+        self.silent("Bash", command='grep -rn "RetentionMapRule" src/Program.cs')
+        self.silent("Bash", command="rg RetentionMapRule src/Program.cs")
+        self.silent("Bash", command="cd src && rg RetentionMapRule Program.cs")
 
     def test_a_grep_with_no_recursion_reads_a_pipe(self):
         self.silent("Bash", command='cat src/Program.cs | grep RetentionMapRule')
