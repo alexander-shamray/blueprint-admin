@@ -61,7 +61,8 @@ then open the screens that read them and review the diff;
 Phases 0 to 6 of the spec: the Stack screen (a workstation doctor read before
 Up: Docker, the published ports and what holds them, the gateway's CORS
 origins, Node against the client's `.nvmrc`, both clones against their last
-fetch, and image age; then Compose services, reachability,
+fetch, image age, and whether the image store was provisioned (`object-store`
+and `image-edge` healthy, `object-store-init` exited 0); then Compose services, reachability,
 up, down, down with a typed `down -v` confirmation, Reset behind the same
 confirmation, which runs `down -v`, up and the readiness wait as one job, live
 output; the reference
@@ -71,7 +72,8 @@ backend golden-signals dashboard: request rate, 5xx share, p99 latency, the
 422 and 401 refusals, and §13.7's command and query p95), the Logs screen
 (follow, service filter, text filter, correlation-id highlight) and the API
 screen (Catalog's, Ordering's, Inventory's and Payments' OpenAPI operations
-through the gateway, the BFF quote, every host's readiness and the payment
+through the gateway, the BFF quote, its product-image upload and saved address,
+a stored image read back through the image edge, every host's readiness and the payment
 and carrier simulators' request logs; send as anonymous, a realm user, with
 the held token's time left and grants beside the picker, or a custom username
 and password, with a correlation id; status, timing, headers
@@ -98,7 +100,11 @@ and read it back until it is cancelled, or apply a cause `run-locally.md` names
 it or found it out of stock. Each watch says what it is waiting
 for and what it last read; the run stops at the first step that does not
 succeed, and each sent step links to its own trace. A step for which the host
-mints a new token, because the one it held was due to renew, says so.
+mints a new token, because the one it held was due to renew, says so. The
+`image` script walks `run-locally.md`'s "Attach a product image by hand": the BFF
+signs an upload, the host PUTs a sample PNG to the object store, the product is
+published with the key it returned, and the thumbnail is fetched from the image
+edge and must be an image served with `nosniff`.
 
 The Transcript screen shows what the operator did this session as a person
 would type it: each command the host ran, with its directory and exit code, and
