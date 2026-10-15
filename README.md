@@ -90,10 +90,12 @@ timeline, each of those rows linking into Grafana Explore, and closing with a
 snapshot of the projection queue and every other queue the spans crossed; the
 API screen's "Trace this call" opens it on the
 response's own correlation id. The Scenario screen runs `run-locally.md`'s
-calls end to end as a realm user, in one of two scripts: publish, wait for
+calls end to end as a realm user, in one of a library of scripts: publish, wait for
 the projection to drain, quote, order, and then either read the order back
-through the BFF until it is confirmed, despatched and delivered, or cancel it
-and read it back until it is cancelled. Each watch says what it is waiting
+through the BFF until it is confirmed, despatched and delivered, cancel it
+and read it back until it is cancelled, or apply a cause `run-locally.md` names
+(a price ending `.01`, stock set to 0) and read it back until the saga has declined
+it or found it out of stock. Each watch says what it is waiting
 for and what it last read; the run stops at the first step that does not
 succeed, and each sent step links to its own trace. A step for which the host
 mints a new token, because the one it held was due to renew, says so.
