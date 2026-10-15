@@ -21,6 +21,7 @@ public static partial class FixtureScrubber
         ("a token response's token", TokenField(), $"$1\"{Scrubbed}\""),
         ("a password or client secret", SecretField(), $"$1\"{Scrubbed}\""),
         ("a password or client secret in a form", SecretForm(), $"$1{Scrubbed}"),
+        ("a password in a connection URL", UrlPassword(), $"$1{Scrubbed}$2"),
     ];
 
     public static string Scrub(string text) =>
@@ -54,4 +55,12 @@ public static partial class FixtureScrubber
     /// <summary>The password grant's own form, as a request log would hold it.</summary>
     [GeneratedRegex(@"\b((?:password|client_?secret)=)(?!<scrubbed>)[^&\s""]+", RegexOptions.IgnoreCase)]
     private static partial Regex SecretForm();
+
+    /// <summary>
+    /// The password in a URL's userinfo, the part between the second colon and the <c>@</c>, as an AMQP connection string
+    /// carries it. A URL with a port and no <c>@</c> after it, such as <c>http://localhost:5000/api</c>, has no userinfo
+    /// and is left alone.
+    /// </summary>
+    [GeneratedRegex(@"(\b[a-z][a-z0-9+.-]*://[^:/\s@""']+:)(?!<scrubbed>@)[^@\s/""']+(@)", RegexOptions.IgnoreCase)]
+    private static partial Regex UrlPassword();
 }

@@ -93,6 +93,24 @@ public sealed class FixtureScrubberTests
     }
 
     [Fact]
+    public void A_password_in_a_connection_url_is_scrubbed_and_its_user_and_host_kept()
+    {
+        FixtureScrubber.Scrub("ConnectionStrings__RabbitMq=amqp://bff-svc:local-dev-bff@127.0.0.1:5672")
+            .ShouldBe("ConnectionStrings__RabbitMq=amqp://bff-svc:<scrubbed>@127.0.0.1:5672");
+        FixtureScrubber.Scrub("amqp://bff-svc:<scrubbed>@127.0.0.1:5672").ShouldBe("amqp://bff-svc:<scrubbed>@127.0.0.1:5672");
+    }
+
+    [Theory]
+    [InlineData("http://localhost:5000/api/v1/orders")]
+    [InlineData("https://github.com/alexander-shamray/blueprint-backend/blob/main/docs/runbooks/error-queue.md")]
+    [InlineData("see amqp://127.0.0.1:5672 and http://user@host/x")]
+    public void A_url_with_no_password_in_it_is_left_alone(string text)
+    {
+        FixtureScrubber.Scrub(text).ShouldBe(text);
+        FixtureScrubber.Findings(text).ShouldBeEmpty();
+    }
+
+    [Fact]
     public void Findings_name_each_rule_the_text_still_breaks()
     {
         FixtureScrubber.Findings($$"""{"password":"demo","t":"{{Jwt}}"}""").ShouldBe(["a JWT", "a password or client secret"]);
