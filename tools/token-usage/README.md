@@ -71,7 +71,7 @@ and who names it: an `entry point` is a command, an agent or a skill's
 is one only `CLAUDE.md` names; `none` is the rest. A name is a path from
 the root or from the citing file, a base name no other tracked file has, or
 a template with a directory such as `docs/commands/<name>.md`. A read in a
-worktree or a sibling fork counts for the checkout's file. Each group's
+worktree counts for the checkout's file. Each group's
 size, mean reads and never-read count go to stderr. It answers which
 documents a run never reaches, not which it needs: a file opened by `grep`
 or found through a link is not counted, and an unread file a person reads
@@ -80,11 +80,10 @@ is not dead.
 The default directory is `~/.claude/projects/` plus the checkout's absolute
 path with every character that is not a letter or digit made a dash, which
 is how Claude Code names it — and, beside it, every directory whose name
-is that one followed by a dash: the worktrees `/branch` makes under
-`.claude/worktrees/` and the sibling forks it makes when that directory is
-not writable. A different checkout whose path only extends this one's is
-read too, so name such a directory explicitly when it matters. Run from a
-worktree, it reads the same set. The directories read go to stderr.
+is that one followed by `--claude-worktrees-`: the worktrees `/branch` makes
+under `.claude/worktrees/`. A different checkout whose path only extends
+this one's is not read, so name such a directory explicitly when it matters.
+Run from a worktree, it reads the same set. The directories read go to stderr.
 Transcripts are local to the machine that ran the sessions, so a baseline
 is measured there.
 

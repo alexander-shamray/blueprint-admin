@@ -292,10 +292,10 @@ def absolute(path: str, cwd: str) -> str:
 
 
 def repo_relative(path: str, root: str) -> str | None:
-    """A read's path inside the checkout, a worktree under .claude/worktrees or a sibling fork, else None."""
+    """A read's path inside the checkout, or a worktree under .claude/worktrees, else None."""
     root = posixpath.normpath(slashed(root))
     windows = re.match(r"[A-Za-z]:/", root) is not None
-    inside = re.match(re.escape(root.lower() if windows else root) + r"(?:-[^/]+|/\.claude/worktrees/[^/]+)?/(.+)$",
+    inside = re.match(re.escape(root.lower() if windows else root) + r"(?:/\.claude/worktrees/[^/]+)?/(.+)$",
                       path.lower() if windows else path)
     return path[len(path) - len(inside.group(1)):] if inside else None
 
@@ -448,9 +448,12 @@ def default_project(root: Path) -> Path:
 
 
 def default_projects(cwd: Path) -> list[Path]:
-    """The main checkout's transcript directory, then each worktree's: under .claude/worktrees or a sibling fork."""
+    """The main checkout's transcript directory, then each worktree's: `<main>--claude-worktrees-<slug>`.
+
+    A bare `<main>-*` would also take an unrelated repository whose name merely starts with the checkout's.
+    """
     main = default_project(Path(WORKTREE.sub("", str(cwd.resolve()))))
-    return [main, *sorted(main.parent.glob(main.name + "-*"))]
+    return [main, *sorted(main.parent.glob(main.name + "--claude-worktrees-*"))]
 
 
 MODEL_ROWS = ("command", "agent", "model", "contexts", "calls", "mean_context", "input", "cache_write", "cache_read",
