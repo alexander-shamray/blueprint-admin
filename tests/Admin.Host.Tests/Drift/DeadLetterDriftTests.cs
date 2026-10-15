@@ -67,6 +67,19 @@ public sealed partial class DeadLetterDriftTests
         Backend.Read(DeadLetterService.Tool).ShouldContain("dry run: nothing left {queue}. Pass --execute --record FILE to {verb}; the read ");
     }
 
+    /// <summary>The words and the layout of the action lines the fake prints and the e2e and endpoint specs read.</summary>
+    [Fact]
+    public void The_fakes_action_lines_are_laid_out_and_worded_as_the_tool_prints_them()
+    {
+        string tool = Backend.Read(DeadLetterService.Tool);
+
+        tool.ShouldContain("lines.append(f\"{a['action']:<14} {a['message_id']}{target}{note}\")");
+        tool.ShouldContain("target = f\" -> {a['destination']}\"");
+        tool.ShouldContain("f\"would-{verb}\"");
+        tool.ShouldContain("f\"not found      {identity}\"");
+        Readme.ShouldContain("`replayed`, `discarded`");
+    }
+
     [GeneratedRegex(@"^\| `inspect` \|.*$", RegexOptions.Multiline)]
     private static partial Regex InspectRow();
 
