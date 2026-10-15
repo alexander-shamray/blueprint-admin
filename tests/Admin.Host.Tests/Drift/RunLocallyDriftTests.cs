@@ -21,6 +21,7 @@ public sealed class RunLocallyDriftTests
         { "Publish a product", RunLocallyExamples.For("PublishProduct")! },
         { "Quote a basket", RunLocallyExamples.Quote },
         { "Place an order", RunLocallyExamples.For("PlaceOrder")! },
+        { "Stock for a product", RunLocallyExamples.For("SetOnHand")! },
         { "Cancel (", RunLocallyExamples.For("CancelOrder")! },
     };
 
