@@ -1953,7 +1953,7 @@ def expanded_target(literal, command):
 # Matched as the FIRST component under the checkout containing the target,
 # not at any depth like the trees above: `src` and `docs` are ordinary names,
 # and refusing `/tmp/x/docs/out` would take scratch writes with them.
-APPLICATION_TREES = frozenset({"docs", "e2e", "public", "src", "tests"})
+APPLICATION_TREES = frozenset({"docs", "e2e", "public", "src", "tests", "tools"})
 
 
 def application_tree(literal):
