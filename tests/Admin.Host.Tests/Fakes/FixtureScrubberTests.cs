@@ -165,10 +165,24 @@ public sealed class FixtureScrubberTests
         FixtureScrubber.Findings(json).ShouldBeEmpty();
     }
 
-    [Fact]
-    public void A_json_pwd_is_scrubbed()
+    [Theory]
+    [InlineData("""{"pwd":"x"}""", """{"pwd":"<scrubbed>"}""")]
+    [InlineData("""{"AdminPassword":"hunter2","n":1}""", """{"AdminPassword":"<scrubbed>","n":1}""")]
+    [InlineData("""{"secret":"x"}""", """{"secret":"<scrubbed>"}""")]
+    [InlineData("""{"my_refresh_token":"r"}""", """{"my_refresh_token":"<scrubbed>"}""")]
+    public void A_json_key_is_scrubbed_whatever_prefixes_its_name(string json, string expected)
     {
-        FixtureScrubber.Scrub("""{"pwd":"x"}""").ShouldBe("""{"pwd":"<scrubbed>"}""");
+        FixtureScrubber.Scrub(json).ShouldBe(expected);
+        FixtureScrubber.Findings(expected).ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("""{"body":"password=ab\\","x":1}""", """{"body":"password=<scrubbed>","x":1}""")]
+    [InlineData("""{"body":"password=ab\\\\","x":1}""", """{"body":"password=<scrubbed>","x":1}""")]
+    [InlineData("""{"body":"password=a\b","x":1}""", """{"body":"password=<scrubbed>","x":1}""")]
+    public void A_bare_value_ending_in_escaped_backslashes_leaves_the_json_string_closed(string json, string expected)
+    {
+        FixtureScrubber.Scrub(json).ShouldBe(expected);
     }
 
     [Theory]
