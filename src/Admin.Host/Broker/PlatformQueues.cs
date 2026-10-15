@@ -14,6 +14,9 @@ public static class PlatformQueues
     /// <summary>The queue run-locally.md says to let drain before ordering a product just published.</summary>
     public const string Projection = "ordering-catalog-events";
 
+    /// <summary>The queue the BFF's order projection reads, whose depth a rebuild watches fall to zero (run-locally.md).</summary>
+    public const string BffProjection = "bff-order-events";
+
     public static readonly PlatformQueue[] Table =
     [
         new(Projection, "Ordering's price projection", "Ordering.Infrastructure.Messaging.DependencyInjection.CatalogEventsQueue"),
@@ -26,7 +29,7 @@ public static class PlatformQueues
         new("payments-events", "Payments' order events", "Payments.Infrastructure.Messaging.DependencyInjection.EventsQueue"),
         new("catalog-inventory-events", "Catalog's stock levels", "Catalog.Infrastructure.Messaging.StockLevelConsumer.Queue"),
         new("shipping-events", "Shipping's despatch and cancel", "Shipping.Infrastructure.Messaging.DependencyInjection.EventsQueue"),
-        new("bff-order-events", "the BFF's order projection", "Web.Bff.Messaging.DependencyInjection.EventsQueue"),
+        new(BffProjection, "the BFF's order projection", "Web.Bff.Messaging.DependencyInjection.EventsQueue"),
         new("notifications-events", "Notifications' order and shipment events", "Notifications.Infrastructure.Messaging.DependencyInjection.EventsQueue"),
         new("privacy-completions", "Privacy's completions from every holder", "Privacy.Infrastructure.Messaging.DependencyInjection.CompletionsQueue"),
         new("ordering-privacy", "Ordering's erasure request", "Ordering.Infrastructure.Messaging.DependencyInjection.PrivacyQueue"),

@@ -108,6 +108,10 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
         compose.Up();
         compose.Down(wipeVolumes: false);
         compose.Down(wipeVolumes: true);
+        compose.Stop(ProjectionRebuildService.BffService);
+        compose.Start(ProjectionRebuildService.BffService);
+        runner.Start(ProjectionRebuildService.ReplaySpec(reset: false, Paths, new AdminOptions()));
+        runner.Start(ProjectionRebuildService.ReplaySpec(reset: true, Paths, new AdminOptions()));
         compose.FollowLogs([.. Compose.Services().Select(s => s.Name)]);
         await compose.PsAsync(TestContext.Current.CancellationToken);
         await broker.QueuesAsync(TestContext.Current.CancellationToken);
@@ -185,13 +189,16 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
             .Where(p => p.PropertyType == typeof(string) && p.Name.EndsWith("Url", StringComparison.Ordinal))
             .Select(p => (string)p.GetValue(o)!)];
 
-    [GeneratedRegex(@"^(docker|npm|node|git|Get-NetTCPConnection|Get-Content) ")]
+    [GeneratedRegex(@"^(docker|dotnet|npm|node|git|Get-NetTCPConnection|Get-Content) ")]
     private static partial Regex Command();
 
     [GeneratedRegex(@"https?://[^\s""'/]+[^\s""']*")]
     private static partial Regex Url();
 
-    /// <summary>PowerShell that builds a value: a hashtable assignment, a member line inside one, or its close.</summary>
-    [GeneratedRegex(@"^(\$\w+ = @\{.*|\w+ = .+|\}.*|\).*)$")]
+    /// <summary>
+    /// PowerShell that builds a value: a hashtable assignment, a member line inside one, its close, or an environment
+    /// variable the next command reads. The environment lines are held to the host's own by ReplayDriftTests.
+    /// </summary>
+    [GeneratedRegex(@"^(\$\w+ = @\{.*|\$env:\w+ = '.*'|\w+ = .+|\}.*|\).*)$")]
     private static partial Regex BuildsAValue();
 }

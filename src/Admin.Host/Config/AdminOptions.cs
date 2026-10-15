@@ -62,6 +62,18 @@ public sealed class AdminOptions
     /// </summary>
     public string BackendRunbooksUrl { get; set; } = "https://github.com/alexander-shamray/blueprint-backend/blob/main/docs/runbooks";
 
+    /// <summary>
+    /// The <c>sa</c> password the Compose model defaults (<c>SQL_PASSWORD</c> in blueprint-backend's
+    /// <c>deploy/compose/infrastructure.yml</c>), used for the connections the BFF projection rebuild hands
+    /// <c>tools/bff-replay</c> (run-locally.md). A development default of the local stack, the stated local
+    /// exception to holding no credential beside the realm passwords; a stack started with another
+    /// <c>SQL_PASSWORD</c> sets this to match.
+    /// </summary>
+    public string SqlPassword { get; set; } = "Local_Dev_Pa55w0rd!";
+
+    /// <summary>The BFF's own broker account, as <c>deploy/compose/services/web-bff.yml</c> gives it, reached on the published port by its literal loopback address.</summary>
+    public string BffBrokerConnection { get; set; } = "amqp://bff-svc:local-dev-bff@127.0.0.1:5672";
+
     public string KeycloakUrl { get; set; } = "http://localhost:8080";
 
     public string GrafanaUrl { get; set; } = "http://localhost:3000";

@@ -11,4 +11,10 @@ public sealed record ProcessSpec(string FileName, IReadOnlyList<string> Argument
     /// <c>ps</c> and <c>exec</c> that <c>ComposeService</c> runs (spec §5.2).
     /// </summary>
     public bool Listed { get; init; } = true;
+
+    /// <summary>
+    /// Variables set for the child on top of the host's own, each a line run-locally.md gives as <c>$env:Name = …</c>.
+    /// Never part of <see cref="CommandLine"/>: a value may be a connection string.
+    /// </summary>
+    public IReadOnlyDictionary<string, string>? Environment { get; init; }
 }

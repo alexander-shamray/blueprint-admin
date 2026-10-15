@@ -14,6 +14,11 @@ public sealed class ComposeService(IProcessRunner runner, RepoPaths paths, TimeP
 
     public Job Down(bool wipeVolumes) => wipeVolumes ? Run("down", "-v") : Run("down");
 
+    /// <summary>One service stopped, as the projection rebuild needs the BFF's consumption stopped (run-locally.md).</summary>
+    public Job Stop(string service) => Run("stop", service);
+
+    public Job Start(string service) => Run("start", service);
+
     public Job FollowLogs(IReadOnlyList<string> services) => Run(["logs", "-f", "--tail", "200", .. services]);
 
     public Job Exec(string service, params string[] args) => Read(["exec", "-T", service, .. args]);

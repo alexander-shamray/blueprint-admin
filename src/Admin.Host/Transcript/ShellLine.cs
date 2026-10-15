@@ -17,10 +17,12 @@ public static partial class ShellLine
     /// The argv as given, never joined into a shell string by the host (<see cref="ProcessSpec"/>), each word scrubbed
     /// and then quoted, so a placeholder is quoted rather than read as a redirection. A secret is caught within its
     /// word; one the argv splits across two, as a bare <c>Bearer</c> beside an opaque token, is not, and no command
-    /// the host runs passes one.
+    /// the host runs passes one. The variables the child is given come first, as bash takes them, each value
+    /// scrubbed and quoted like a word: the line a person types to do by hand what the host did.
     /// </summary>
     public static string Command(ProcessSpec spec) =>
-        string.Join(' ', new[] { spec.FileName }.Concat(spec.Arguments).Select(Word));
+        string.Join(' ', (spec.Environment ?? new Dictionary<string, string>()).Select(v => $"{v.Key}={Word(v.Value)}")
+            .Concat(new[] { spec.FileName }.Concat(spec.Arguments).Select(Word)));
 
     /// <summary>
     /// The curl for the message the proxy built, headers as it sends them. The token it attached and any

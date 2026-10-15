@@ -19,6 +19,7 @@ public sealed class DriftCoverageTests
         ["src/Admin.Host/Api/CuratedOperations.cs"] = typeof(LiteralDriftTests),
         ["src/Admin.Host/Fakes/FakeGateway.cs"] = typeof(LiteralDriftTests),
         ["src/Admin.Host/Api/GatewayRoutes.cs"] = typeof(GatewayDriftTests),
+        ["src/Admin.Host/Broker/BffReplayConnections.cs"] = typeof(ReplayDriftTests),
         ["src/Admin.Host/Broker/BrokerService.cs"] = typeof(ComposeDriftTests),
         ["src/Admin.Host/Broker/ParkedQueues.cs"] = typeof(QueueDriftTests),
         ["src/Admin.Host/Broker/PlatformQueues.cs"] = typeof(QueueDriftTests),
