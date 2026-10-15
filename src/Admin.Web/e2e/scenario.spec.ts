@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test';
 // with an id, the quote with a priced basket and cancel with 204; the recorded projection queue is empty, so the
 // drain step passes on its first poll. The BFF's order read follows each order the fake placed, a step a second:
 // confirmed, dispatched, delivered, or cancelled a second after a cancel. Other specs run the Scenario at the same
-// time, so each run's order has an id of its own.
+// time, so each run's order and product have an id of its own.
 const WATCH = { timeout: 20_000 };
 
 test('the deliver script orders and reads the order back until it is delivered, with a trace per call', async ({
@@ -19,7 +19,8 @@ test('the deliver script orders and reads the order back until it is delivered, 
   const steps = page.locator('ol.steps li.step');
   await expect(steps).toHaveCount(7);
   await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(7, WATCH);
-  await expect(steps.nth(0)).toContainText('0199a1b2-0000-7000-8000-000000000001');
+  // The fake numbers each published product apart, as it does orders, so only the first is the recorded id.
+  await expect(steps.nth(0).locator('.detail')).toContainText(/Answered 200 with id [0-9a-f-]{36}\./);
   await expect(steps.nth(1).locator('app-drained-indicator')).toContainText('[drained]');
   // The order the run placed, which the fake numbers apart from any other run's.
   const placed = (await steps.nth(3).locator('.detail').textContent())!.match(/with id ([0-9a-f-]{36})/)![1];
