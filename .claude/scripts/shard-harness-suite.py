@@ -66,8 +66,7 @@ ROOTS = ((".claude/scripts", "test_*.py"),
 
 # Whose subject is time or a port, and so cannot share a box with seven
 # workers. `TheRefresh` asserts that a hook command returns inside two seconds
-# — that is the claim, not an incidental bound — and `WhatTheProxyRefuses`
-# dials an ephemeral port it has just released, which a neighbour can take.
+# — that is the claim, not an incidental bound.
 SERIAL = frozenset({
     "test_index_refresh_hook.TheRefresh",
 })

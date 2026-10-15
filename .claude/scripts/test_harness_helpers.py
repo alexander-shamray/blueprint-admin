@@ -1820,7 +1820,7 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
                     self.assertIn(f"Edit({target})", rules)
 
     def test_the_repository_tracks_no_symbolic_link(self):
-        # `/review-grok`'s site contract holds its path denies by spelling, and
+        # A path deny is held by spelling, and
         # a tracked symbolic link inside an allowed tree is a spelling the deny
         # never sees while its target can be anywhere. The command states the
         # premise that no such link is tracked and that an invocation whose
@@ -1872,7 +1872,7 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
 
     # **A frontmatter deny holds for the rest of the user turn, not for the
     # command that states it**, so a command /ship runs BEFORE it pushes
-    # cannot deny push without refusing /ship's own. These three neither
+    # cannot deny push without refusing /ship's own. These two neither
     # grant nor deny it: their bodies say who pushes and what, and the hook
     # and `.claude/settings.json` still refuse `main`, force and delete.
     # `docs/harness-boundaries.md` owns the rule; an exemption is named here
@@ -1885,7 +1885,7 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
     # against whatever the last one happened to list.
     #
     # Raised by Copilot against PR #13 round 4, and the reason it was a real
-    # gap is worth keeping: /review-grok had argued the whole case — "a
+    # gap is worth keeping: the retired /review-grok had argued the whole case — "a
     # redirection on any granted Bash command writes what Edit(...) refuses" —
     # and answered it by denying Bash whole, and four other Edit-or-Write
     # holders inherited neither the argument nor the denies.
@@ -2272,9 +2272,8 @@ class WhatSuppressesIsDecidedByCodeNow(unittest.TestCase):
     def granted_bash(path):
         """The `Bash(...)` grants on one command's allowed-tools line.
 
-        The same reader `CopilotFeedHelpersAreTheOnlyIntake` uses, because the
-        subject here is the same: what a command may run, not what its prose
-        tells a reader to run.
+        Read from the frontmatter alone, because the subject is what a
+        command may run, not what its prose tells a reader to run.
         """
         frontmatter = path.read_text(encoding="utf-8").split("---")[1]
         line = next(
@@ -7629,7 +7628,7 @@ class ARememberedGuardAnswersAsAProbedOne(LauncherMarkCases, unittest.TestCase):
         box = self.checkout(guards=True)
         box.stand_in("python3", real=sys.executable)
         (box.hooks / "guard-git-argv.py").write_text(
-            "import sys\nsys.stderr.write('refused\\n')\nsys.exit(2)\n",
+            "import sys\nsys.exit(2)\n",
             encoding="utf-8", newline="\n")
         for closed in ("1>&-", "2>&-"):
             with self.subTest(closed=closed):
