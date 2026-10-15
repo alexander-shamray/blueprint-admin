@@ -178,7 +178,7 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
 
     /// <summary>
     /// The terminal marker's words. It states the projection queue and every other queue the timeline's spans
-    /// crossed, each with its depth and anything parked in its <c>_error</c> twin, then why the timeline stops here
+    /// crossed, each with its depth and anything parked in its <c>_error</c> or <c>_skipped</c> twin, then why the timeline stops here
     /// rather than continuing into the consume side (plan M2).
     /// </summary>
     private static string QueuedSummary(QueuesView queues, string[] crossed, bool handedToTheBroker, bool consumed)
@@ -224,11 +224,13 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
     private static string Waiting(long messages) => $"{messages} message{(messages == 1 ? "" : "s")} waiting";
 
     /// <summary>
-    /// A drained queue whose error queue holds messages is not a step that succeeded, and spec §5.9 step 3 promises
-    /// a message parked in an _error queue shows here rather than as silence.
+    /// A drained queue whose parked twins hold messages is not a step that succeeded, and spec §5.9 step 3 promises
+    /// a message parked in an _error or _skipped queue (<see cref="ParkedQueues"/>) shows here rather than as silence.
     /// </summary>
     private static string Parked(QueuesView queues, string name) =>
-        queues.Queues.FirstOrDefault(q => q.Name == name + BrokerService.ErrorSuffix) is { Messages: > 0 } errorQueue
-            ? $", {errorQueue.Messages} parked in {errorQueue.Name}"
-            : "";
+        string.Concat(ParkedQueues.All
+            .Select(kind => queues.Queues.FirstOrDefault(q => q.Name == name + kind.Suffix))
+            .OfType<BrokerQueue>()
+            .Where(queue => queue.Messages > 0)
+            .Select(queue => $", {queue.Messages} parked in {queue.Name}"));
 }
