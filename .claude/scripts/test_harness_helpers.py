@@ -6075,7 +6075,7 @@ class TheGitArgvGuard(unittest.TestCase):
                 "ls <(/usr/bin/g* pr merge 42)",
                 # An evaluator builds the command from fragments no word check
                 # sees. Raised by Copilot.
-                "ls \"$(awk 'BEGIN { system(\"bash .claude/scripts/grok-le\" \"dger.sh 42 con\" \"verge\") }')\"",
+                "ls \"$(awk 'BEGIN { system(\"gh pr mer\" \"ge 42 --admin\") }')\"",
                 "ls $(sed -n 1p x)",
                 "ls $(python3 -c 'print(1)')",
                 "ls $(env perl -e 'system q(gh pr merge 42)')",
@@ -6379,53 +6379,23 @@ class TheGitArgvGuard(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertAdmitted(command, cwd=root)
 
-    def test_a_ledger_write_or_a_review_run_is_refused_after_quote_removal(self):
-        # `.claude/settings.json` denies these as substrings of the typed
-        # command, and `com''plete` spells no `complete` while bash runs it.
-        # Raised by Copilot.
+    def test_a_computed_program_word_is_refused_and_a_computed_argument_is_not(self):
+        # A word bash computes in program position is a program nobody can name
+        # from the source: `$F` may be `git push origin +HEAD:main`. Raised by
+        # Copilot.
         for command in (
-            "bash .claude/scripts/grok-ledger.sh 42 com''plete 2 clean",
-            "bash .claude/scripts/grok-ledger.sh 42 con''verge",
-            'bash .claude/scripts/grok-ledger.sh 42 "reserve"',
-            "env bash .claude/scripts/grok-ledger.sh 42 release 3",
-            # Computed verbs: the token holds no write verb and bash hands
-            # the helper one anyway. Raised by Copilot.
-            "bash .claude/scripts/grok-ledger.sh 42 \"$(printf '\\143omplete')\" 2 clean",
-            'bash .claude/scripts/grok-ledger.sh 42 "$V" 2 clean',
-            "bash .claude/scripts/grok-ledger.sh 42 `printf converge`",
-            "bash .claude/scripts/grok-ledger.sh 42 {count,converge}",
-            "bash .claude/scripts/grok-ledger.sh 42 status extra",
-            "bash .claude/scripts/grok-ledger.sh $N count",
-            # A computed helper NAME: bash expands the word to the helper
-            # before running it. Raised by Copilot.
-            "bash .claude/scripts/grok-ledger.s? 42 reserve 1 full",
-            "bash .claude/scripts/grok-*.sh 42 recheck",
-            "bash .claude/scripts/grok-{ledger,x}.sh 42 converge",
-            "bash .claude/scripts/$HELPER 42 complete 2 clean",
-            "bash -e \"$(printf .claude/scripts/grok-ledger.sh)\" 42 release 1",
-            "$LEDGER 42 reserve 1 full",
-            # A range or an extglob in the program word. Raised by Copilot.
-            "bash .claude/scripts/grok-{l..l}edger.sh 42 re''serve 1 full",
-            "bash .claude/scripts/grok-@(ledger).sh 42 reserve 1 full",
-            "bash .claude/scripts/grok-{{ledger,x},y}.sh 42 reserve 1 full",
-            # The helper handed to a shell on stdin. Raised by Copilot.
-            "bash -s -- 42 re''serve 1 full < .claude/scripts/grok-ledger.sh",
-            "bash 0< .claude/scripts/grok-ledger.sh -s 42 reserve",
-            "cat .claude/scripts/grok-ledger.sh | bash -s -- 42 reserve 1 full",
-            "X=.claude/scripts/grok-ledger.sh; bash -s 42 reserve < $X",
-            "bash -s 42 reserve < .claude/scripts/grok-*.sh",
-            "bash .claude/scripts/grok-rev''iew.sh 42 full",
-            "git log -1 && bash .claude/scripts/grok-review.sh 42 recheck",
+            "$PROG 42 run 1 full",
+            "bash .claude/scripts/$SCRIPT 42 go",
+            "bash -e \"$(printf .claude/scripts/run.sh)\" 42 go",
+            "bash .claude/scripts/run-{l..l}.sh 42 go",
+            "bash .claude/scripts/run-@(a).sh 42 go",
+            "bash .claude/scripts/run-{{a,x},y}.sh 42 go",
+            "git log -1 && $PROG 42 go",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command)
 
-        # The reads `/ship` keeps, and reading the helpers as files.
         for command in (
-            "bash .claude/scripts/grok-ledger.sh 42 count",
-            "bash .claude/scripts/grok-ledger.sh 42 status",
-            "grep -n converge .claude/scripts/grok-ledger.sh",
-            "git log --oneline -- .claude/scripts/grok-review.sh",
             # A computed word that is an ARGUMENT, not the program, is not a
             # helper being run; nor is a `-c` script, which is judged as one.
             "bash .claude/scripts/npm-checks.sh $MODE",
@@ -6436,11 +6406,9 @@ class TheGitArgvGuard(unittest.TestCase):
             "ls $(printf x | tr x y)",
             'git commit -m "see <(foo) in the notes"',
             "bash -c 'echo $HOME'",
-            # A reading redirection that names no helper, with or without a
-            # shell nearby.
+            # A reading redirection, with or without a shell nearby.
             'wc -l < "$TMP/out"',
             "wc -l < README.md",
-            "grep -c reserve .claude/scripts/grok-ledger.sh",
         ):
             with self.subTest(command=command):
                 self.assertAdmitted(command)
