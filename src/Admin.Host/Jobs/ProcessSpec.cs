@@ -9,7 +9,8 @@ public sealed record ProcessSpec(string FileName, IReadOnlyList<string> Argument
     /// <summary>
     /// Whether <see cref="JobRegistry"/> keeps the job, so that <c>/api/jobs</c> lists it and a screen can reopen
     /// its output by id. False for a read whose output reaches a screen only as the view its caller parses: the
-    /// <c>ps</c> and <c>exec</c> that <c>ComposeService</c> runs (spec §5.2).
+    /// <c>ps</c> and the <c>exec</c> reads that <c>ComposeService</c> runs (spec §5.2). An <c>exec</c> the operator caused
+    /// is kept (<c>ComposeService.ExecListedAsync</c>).
     /// </summary>
     public bool Listed { get; init; } = true;
 
