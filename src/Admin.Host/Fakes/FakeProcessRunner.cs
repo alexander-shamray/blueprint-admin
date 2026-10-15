@@ -52,6 +52,14 @@ public sealed class FakeProcessRunner(JobRegistry registry) : IProcessRunner, IA
         return this;
     }
 
+    /// <summary>A script that exits, whose lines depend on the arguments that follow <paramref name="argumentPrefix"/>.</summary>
+    public FakeProcessRunner On(string fileName, string argumentPrefix, int exitCode, Func<IReadOnlyList<string>, IEnumerable<string>> lines)
+    {
+        Add(new FakeScript(fileName, argumentPrefix, exitCode, OutputStream.Stdout, lines));
+
+        return this;
+    }
+
     /// <summary>A non-zero exit whose output is stderr, not stdout, for testing how a failure's error message is chosen.</summary>
     public FakeProcessRunner OnFailing(string fileName, string argumentPrefix, int exitCode, params string[] stderrLines)
     {

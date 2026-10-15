@@ -88,6 +88,24 @@ builder.Services.AddSingleton<LogFollower>();
 builder.Services.AddSingleton<BrokerService>();
 builder.Services.AddSingleton<ProjectionRebuildService>();
 
+// A record file is the last copy of a message the tool took, so it lives under Admin:DataDir beside the baselines.
+// FakePlatform writes nothing a real incident could need, so its runs go under the temp directory instead.
+builder.Services.AddSingleton(sp =>
+{
+    AdminOptions o = sp.GetRequiredService<IOptions<AdminOptions>>().Value;
+    string recordDir = o.FakePlatform
+        ? Path.Combine(Path.GetTempPath(), "blueprint-admin-fake", "dead-letters")
+        : Path.Combine(Path.GetFullPath(o.DataDir, clonesBase), "dead-letters");
+
+    return new DeadLetterService(
+        sp.GetRequiredService<ComposeService>(),
+        sp.GetRequiredService<IProcessRunner>(),
+        sp.GetRequiredService<JobRegistry>(),
+        sp.GetRequiredService<RepoPaths>(),
+        recordDir,
+        sp.GetRequiredService<TimeProvider>());
+});
+
 // PlatformProbe is a typed client, so each readiness poll resolves a fresh one rather than the
 // singleton holding one HttpClient for the host's life.
 builder.Services.AddSingleton(sp => new ResetService(

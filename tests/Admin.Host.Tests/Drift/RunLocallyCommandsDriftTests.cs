@@ -31,6 +31,8 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
     private static readonly Dictionary<string, string> NotRun = new(StringComparer.Ordinal)
     {
         ["npm ci"] = "a prerequisite the console reports rather than runs (FrontendSupervisor, spec §2.1)",
+        ["py -3.12 tools/dead-letters/dead_letters.py list"] =
+            "the Broker screen's queue listing already gives each parked queue and its depth (BrokerService, ParkedQueues)",
     };
 
     /// <summary>
@@ -48,6 +50,10 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
         [@"Invoke-RestMethod $up.uploadUrl -Method Put -InFile .\desk.png -ContentType $up.headers.'Content-Type'"] = "ProductImageUploader",
         ["-ContentType 'application/json' -Body (@{"] = "the publish body the Scenario sends with imageKey, held by RunLocallyDriftTests",
         ["Invoke-WebRequest $p.thumbnailUrl -Method Head"] = "the Scenario's thumbnail step, a HEAD through the proxy",
+        ["$env:DEAD_LETTERS_PASSWORD = [guid]::NewGuid().ToString('N')"] =
+            "DeadLetterService mints a random password for each run and hands it to the tool as this variable",
+        ["Remove-Item Env:DEAD_LETTERS_PASSWORD"] =
+            "the variable is set on the tool's own process only (ProcessSpec.Environment), so it ends with that process",
     };
 
     private readonly FakeTimeProvider time = new();
@@ -130,6 +136,20 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
         compose.Start(ProjectionRebuildService.BffService);
         runner.Start(ProjectionRebuildService.ReplaySpec(reset: false, Paths, new AdminOptions()));
         runner.Start(ProjectionRebuildService.ReplaySpec(reset: true, Paths, new AdminOptions()));
+
+        // The dead-letter lines with the document's own placeholders, the variable for the password, the queue it
+        // names, <id> and its two file names, so each argv the host builds is compared token for token with its line.
+        const string Variable = "$env:DEAD_LETTERS_PASSWORD";
+        const string Queue = "ordering-catalog-events_error";
+        compose.Exec("rabbitmq", DeadLetterService.SetPasswordArguments(Variable));
+        compose.Exec("rabbitmq", DeadLetterService.ClearPasswordArguments);
+        runner.Start(DeadLetterService.InspectSpec(Queue, 5, Paths, Variable));
+
+        foreach (DeadLetterVerb verb in Enum.GetValues<DeadLetterVerb>())
+        {
+            runner.Start(DeadLetterService.MoveSpec(verb, Queue, ["<id>"], null, Paths, Variable));
+            runner.Start(DeadLetterService.MoveSpec(verb, Queue, ["<id>"], ("incident.jsonl", "audit.jsonl"), Paths, Variable));
+        }
         compose.FollowLogs([.. Compose.Services().Select(s => s.Name)]);
         await compose.PsAsync(TestContext.Current.CancellationToken);
         await broker.QueuesAsync(TestContext.Current.CancellationToken);
@@ -207,7 +227,7 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
             .Where(p => p.PropertyType == typeof(string) && p.Name.EndsWith("Url", StringComparison.Ordinal))
             .Select(p => (string)p.GetValue(o)!)];
 
-    [GeneratedRegex(@"^(docker|dotnet|npm|node|git|Get-NetTCPConnection|Get-Content) ")]
+    [GeneratedRegex(@"^(docker|dotnet|npm|node|git|py|Get-NetTCPConnection|Get-Content) ")]
     private static partial Regex Command();
 
     [GeneratedRegex(@"https?://[^\s""'/]+[^\s""']*")]
