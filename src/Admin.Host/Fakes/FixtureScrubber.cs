@@ -66,7 +66,7 @@ public static partial class FixtureScrubber
     /// unterminated quote takes the rest of the run. A bare value may hold <c>'</c> but not <c>"</c>, because in a
     /// JSON body that is where the string ends, so a bare value holding a double quote keeps the part after it.
     /// </summary>
-    [GeneratedRegex(@"((?:password|pwd|client_?secret|secret|(?:access_|refresh_|id_)?token|api_?key)=)(?!\\?""?<scrubbed>)(?!""(?:[,}\]:](?:[\s""{}\[\],:]|$)|[\r\n]|$))(?:\\""(?:(?!\\"").)*\\""|""(?:""""|\\.|[^""\\])*""|'(?:''|\\.|[^'\\])*'|(?:[^&;\s""'\\]|\\\\|\\(?!""))(?:[^&;\s""\\]|\\\\|\\(?!""))*|\\?[""'][^&;\s]*)", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"((?:password|pwd|client_?secret|secret|(?:access_|refresh_|id_)?token|api_?key)=)(?!\\?""?<scrubbed>)(?!\\?""(?:[,}\]:](?:[\s""{}\[\],:\\]|$)|[\r\n]|$))(?:\\""(?:(?!\\"").)*\\""|""(?:""""|\\.|[^""\\])*""|'(?:''|\\.|[^'\\])*'|(?:[^&;\s""'\\]|\\\\|\\(?!""))(?:[^&;\s""\\]|\\\\|\\(?!""))*|\\?[""'][^&;\s]*)", RegexOptions.IgnoreCase)]
     private static partial Regex SecretForm();
 
     /// <summary>

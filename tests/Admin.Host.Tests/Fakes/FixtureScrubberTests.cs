@@ -131,6 +131,7 @@ public sealed class FixtureScrubberTests
     [InlineData("""Server=s;Password=",hunter2";X=1""", "Server=s;Password=<scrubbed>;X=1")]
     [InlineData("""pwd="}Zk9";X=1""", "pwd=<scrubbed>;X=1")]
     [InlineData("""Password=":abc";X=1""", "Password=<scrubbed>;X=1")]
+    [InlineData("""{"b":"{\"c\":\"Password=\"s3cret;x\",\"d\":1}"}""", """{"b":"{\"c\":\"Password=<scrubbed>,\"d\":1}"}""")]
     [InlineData("Server=s;Password='a''b';X=1", "Server=s;Password=<scrubbed>;X=1")]
     [InlineData("Password='abc;X=1", "Password=<scrubbed>;X=1")]
     [InlineData("""{"cs":"{\"ConnectionString\":\"Server=s;Password=pw\"}"}""", """{"cs":"{\"ConnectionString\":\"Server=s;Password=<scrubbed>\"}"}""")]
@@ -164,6 +165,8 @@ public sealed class FixtureScrubberTests
     [InlineData("""{"body":"password="}""")]
     [InlineData("{\"cmd\": \"x password=\"\n}")]
     [InlineData("password=\"")]
+    [InlineData("""{"body":"{\"c\":\"Password=\",\"x\":\"y\"}"}""")]
+    [InlineData("""{"body":"{\"a\":[\"password=\"],\"b\":1}"}""")]
     public void An_empty_value_before_a_json_strings_closing_quote_is_left_as_it_is(string json)
     {
         FixtureScrubber.Scrub(json).ShouldBe(json);
