@@ -83,6 +83,8 @@ console reports its absence (no `node_modules`) rather than running it.
 | Payments API | `http://localhost:5104` | `/openapi/v1.json` (token required); `/health/ready` |
 | Payment simulator | `http://localhost:5190` | `/__admin/requests`, what Payments asked the provider; a decline is caused by the order's amount |
 | Carrier simulator | `http://localhost:5191` | `/__admin/requests`, what Shipping asked the carrier; Shipping is a worker with no API, so this is its only by-hand view |
+| Object store | `http://127.0.0.1:8333` | `GET /status`, the readiness the Compose healthcheck asks; the one pre-signed `PUT` of a product image, which the host sends (§5.7) and the proxy cannot (ADR-106) |
+| Image edge | `http://127.0.0.1:9000` | `GET /healthz`; a published image read back at `/products/{seller}/{file}`, anonymous, `GET` and `HEAD` only, served with `nosniff` (§10.8) |
 | Keycloak | `http://localhost:8080` | password grant on realm `commerce`, client `web-app` |
 | Grafana | `http://localhost:3000` | `GET /api/datasources`, then the datasource proxy for Tempo, Loki and Prometheus (§5.8) |
 | Reference client | `http://localhost:5173` | a link, and the port the gateway's CORS admits |
@@ -109,7 +111,9 @@ Inventory and Payments publish OpenAPI; the gateway and BFF do not. The
 console's operation tree is therefore the four OpenAPI documents rebased onto
 the gateway prefix, plus a curated list for the BFF's
 `POST /bff/v1/checkout/quote` and its buyer order reads
-(`GET /bff/v1/orders`, `GET /bff/v1/orders/{id}`), every host's
+(`GET /bff/v1/orders`, `GET /bff/v1/orders/{id}`), its product-image upload
+(`POST /bff/v1/product-images`) and saved address (`GET` and `PUT
+/bff/v1/saved-address`), a stored image read through the edge, every host's
 `/health/ready` and the payment and carrier simulators' request logs, plus a
 free-form request form for anything else.
 
@@ -265,6 +269,11 @@ because that silence is itself what Up will meet:
 - Each clone: on `main`, and not behind its upstream as last fetched.
 - Images: no image Compose built predates the backend's last commit, since Up
   does not rebuild an image that exists.
+- Object store: `object-store` and `image-edge` are running and healthy and
+  `object-store-init`, the one-shot that makes the bucket and its policies,
+  exited 0. An Up that leaves the store unprovisioned reads green on every
+  other row, and the failure arrives later as a publish with an image. A
+  service still starting, or a stack with none of the three, is could-not-tell.
 
 A Compose port override has no row: the Compose files declare no port
 variable, and `-f` keeps Compose from reading an override file. The
@@ -367,8 +376,8 @@ with no new upstream call. FakePlatform keeps its baselines in a directory of
 its own per process.
 
 `RequestProxy.Send(request)` takes method, an absolute URL restricted to the
-configured surfaces (the gateway, Catalog, Ordering, BFF, Inventory, Payments
-and the payment and carrier simulator origins), headers,
+configured surfaces (the gateway, Catalog, Ordering, BFF, Inventory, Payments,
+the payment and carrier simulator origins and the image edge), headers,
 body, an identity and an optional correlation id. It attaches the token, sets
 `X-Correlation-Id` (generated if absent; a supplied id that breaks those rules
 is refused, because the backend would silently replace it; the header's rules
@@ -376,6 +385,15 @@ are letters, digits, `-`, `_`, up to 128 characters), sends,
 and returns status, headers, body, elapsed time and the correlation id used.
 Status and body are never rewritten: a 401, a 403 and the three different 409s
 must read exactly as the reference client sees them.
+
+The proxy's body is text, so it cannot carry an image. `ProductImageUploader`
+is the one other outbound call: it `PUT`s the console's sample image (a real
+one-pixel PNG, `SampleImage`, because the store's consumer sniffs the bytes and
+refuses anything else) to a pre-signed URL the BFF returned, and only where
+that URL names the configured object store. It signs nothing and holds no
+credential; the signature is in the URL and the store judges it. Its answer is
+returned in the proxy's shape and the request is kept in the transcript (§5.11)
+as the curl that would send it, naming the file as `run-locally.md` does.
 
 ### 5.8 Telemetry
 
@@ -503,7 +521,7 @@ All under `/api`, JSON, loopback only.
 
 | Method and path | Does |
 |---|---|
-| `GET /stack` | `ServiceStatus[]`, the frontend job summary, and reachability of gateway, Keycloak, Grafana and the client |
+| `GET /stack` | `ServiceStatus[]`, the frontend job summary, and reachability of every HTTP surface of §2.2 that answers a readiness route, the object store and image edge among them |
 | `GET /stack/doctor` | §5.3's workstation checks, one row each with its verdict and what the reads said |
 | `POST /stack/backend/up` | Compose up; returns the job |
 | `POST /stack/backend/down` | body `{ wipeVolumes, confirm }`; returns the job |
@@ -519,6 +537,7 @@ All under `/api`, JSON, loopback only.
 | `GET /catalog/operations`, `POST /catalog/reload` | §5.7 |
 | `POST /catalog/baseline/{service}` | makes that service's last fetched document its baseline, then reloads; 404 for a name the catalog has not fetched |
 | `POST /proxy` | §5.7 |
+| `POST /product-images/upload` | body `{ uploadUrl, headers }`; §5.7's `PUT` of the sample image, in the proxy's result shape; 400 for a URL that is not the configured object store |
 | `GET /trace/{correlationId}?window=15m` | §5.9. `window` is `90s`/`15m`/`2h` bounded to `[1m, 24h]`, default `15m`; a window outside it, and an id outside the backend's adoptable alphabet (the id reaches a LogQL string, so this is the injection boundary), are 400 problem details. |
 | `GET /telemetry/health` | the golden-signal strip |
 | `GET /transcript`, `GET /transcript/script` | §5.11; the entries, and the same as one bash script in `text/plain` |
