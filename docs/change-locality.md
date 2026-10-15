@@ -55,8 +55,8 @@ Name the class and the touch set before editing. A change that needs two
 classes names both (`C+E`, `A+D`) and its touch set is the union.
 
 **CI reads both rows.** `.github/workflows/locality-gate.yml` fails a PR on a
-path outside the class map or the declared touch set. `/review-branch`,
-`/review-copilot` and `/ship` also run `bash .claude/scripts/pr-locality.sh`.
+path outside the class map or the declared touch set. `/review-branch`
+and `/ship` also run `bash .claude/scripts/pr-locality.sh`.
 
 | Class | Examples | May touch | Never touches |
 |---|---|---|---|

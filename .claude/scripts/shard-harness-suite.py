@@ -6,7 +6,7 @@ paid about seventeen minutes for it on Windows.** Half the runtime is in a
 handful of classes and almost none of it is approximable: roughly seven tenths
 of the suite is real `bash`, real `git` and real `gh` on purpose, because
 re-implementing a `grep` pattern in Python's `re` would be a second
-specification — `test_grok_helpers.py` says so in its own words. So the lever
+specification — `test_harness_helpers.py` says so in its own words. So the lever
 is concurrency rather than rewriting, and the unit is the class, because a
 class is what shares a fixture.
 
@@ -70,7 +70,6 @@ ROOTS = ((".claude/scripts", "test_*.py"),
 # dials an ephemeral port it has just released, which a neighbour can take.
 SERIAL = frozenset({
     "test_index_refresh_hook.TheRefresh",
-    "test_egress_proxy.WhatTheProxyRefuses",
 })
 
 # Who shares state outside their own fixture, and therefore shares a worker.
@@ -79,9 +78,9 @@ SERIAL = frozenset({
 # fourth reads the whole working tree and asserts a finding list is empty, so
 # a concurrent worktree round trip is exactly what could disturb it.
 TOGETHER = {
-    "test_grok_helpers.SweepWorktreeShape": "the checkout",
-    "test_grok_helpers.NoCommandHoldsAPrefixGrantThatAdmitsAForbiddenFlag": "the checkout",
-    "test_grok_helpers.TheFourPortedResiduals": "the checkout",
+    "test_harness_helpers.SweepWorktreeShape": "the checkout",
+    "test_harness_helpers.NoCommandHoldsAPrefixGrantThatAdmitsAForbiddenFlag": "the checkout",
+    "test_harness_helpers.TheFourPortedResiduals": "the checkout",
     "test_root_ignore_coverage.ThisRepository": "the checkout",
 }
 
@@ -123,38 +122,27 @@ TOGETHER = {
 # SERIAL classes are absent by construction: `plan()` sets them aside before
 # it reads this, so an entry for one would never be consulted.
 #
-# Across ALL 65 discovered classes — not just the ones listed below, which
-# sum to far less — the minima come to 584 s of serial work, against the
-# 1029 s #46 records before the spawn cuts. That sum is a floor rather than a
-# wall: no run is ever this fast, because no run is ever uncontended.
+# Across ALL discovered classes — not just the ones listed below, which sum
+# to far less — the minima are a floor rather than a wall: no run is ever
+# this fast, because no run is ever uncontended.
 WEIGHT = {
     "test_git_rebase_onto_main.TheHelperPublishesWhatItRebased": 73.9,
     "test_git_rebase_onto_main.AConflictIsTheCaseRebaseIsHereFor": 57.2,
-    "test_grok_helpers.CopilotFeedHelpersAreTheOnlyIntake": 56.0,
     "test_git_rebase_onto_main.TheApplyBackendIsDrivenToo": 41.1,
     "test_root_ignore_coverage.ThisRepository": 33.3,
     "test_git_rebase_onto_main.AStoppedReplayIsNotAlwaysAConflict": 27.8,
     "test_git_rebase_onto_main.TheHelperRefusesBeforeItRewrites": 26.5,
-    "test_grok_helpers.TheGitArgvGuard": 23.3,
-    "test_grok_helpers.AnAuthorsFilenameDoesNotSteerTheTriage": 22.3,
-    "test_grok_helpers.AFeedHelperReturnsTheWholeAnswer": 20.8,
-    "test_grok_helpers.IssueHelperHasNoFreeParameter": 19.0,
-    "test_grok_helpers.LandingByRebaseMovedTheReadsThatAssumedAMergeCommit": 17.5,
-    "test_grok_helpers.CopilotFeedFilter": 14.8,
-    "test_grok_helpers.TheCeilingBindsAndTheReadStaysWider": 14.0,
-    "test_grok_helpers.LedgerDoesNotFailOpen": 12.6,
+    "test_harness_helpers.TheGitArgvGuard": 23.3,
+    "test_harness_helpers.IssueHelperHasNoFreeParameter": 19.0,
+    "test_harness_helpers.LandingByRebaseMovedTheReadsThatAssumedAMergeCommit": 17.5,
     "test_git_rebase_onto_main.ALegacyMergeForwardIsNotSilentlyDropped": 12.4,
-    "test_grok_helpers.LabelHelperBehaviour": 11.0,
+    "test_harness_helpers.LabelHelperBehaviour": 11.0,
     "test_git_rebase_onto_main.TheFixtureCopyIsTheFixture": 7.2,
-    "test_grok_helpers.TheTriagerDispatchesOnlyTheAdjudicator": 6.4,
-    "test_grok_helpers.DidItRunAllowList": 6.4,
     "test_edit_target_guard.WhatThisGuardIsNotTheSubjectOf": 5.0,
-    "test_grok_helpers.TheFourPortedResiduals": 3.5,
-    "test_grok_helpers.TheTriagerEditsNothingShipDenies": 1.9,
-    "test_grok_helpers.UsageLimitPattern": 1.9,
-    "test_grok_helpers.WhatSuppressesIsDecidedByCodeNow": 1.8,
+    "test_harness_helpers.TheFourPortedResiduals": 3.5,
+    "test_harness_helpers.WhatSuppressesIsDecidedByCodeNow": 1.8,
     "test_edit_target_guard.TheOrdinaryWriteIsNotDisturbed": 1.2,
-    "test_grok_helpers.CommandsEnforceTheEditingBoundariesTheyState": 0.9,
+    "test_harness_helpers.CommandsEnforceTheEditingBoundariesTheyState": 0.9,
     "test_locality_gate.Verdicts": 0.2,
     "test_locality_gate.Matching": 0.2,
     "test_locality_gate.TouchSetGrammar": 0.1,

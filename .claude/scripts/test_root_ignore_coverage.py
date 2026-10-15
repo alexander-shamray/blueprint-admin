@@ -17,7 +17,7 @@ actually creates is asked of `git check-ignore`, which answers for a path
 whether or not it is on disk.
 
 **Not a skip where `git` is missing.** A skip reports a pass, which is the
-fail-open `test_grok_helpers.py` refuses for the same tool.
+fail-open `test_harness_helpers.py` refuses for the same tool.
 """
 
 import os

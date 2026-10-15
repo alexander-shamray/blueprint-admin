@@ -130,7 +130,7 @@ and do not edit `plans/` to match.
 
 Each command's frontmatter `description` says what it is for; the list is
 not restated here. The ones a session meets most are `/ship`, `/branch`,
-`/commit`, `/pr`, `/review-copilot` and `/review-branch`; the sweeps are
+`/commit`, `/pr` and `/review-branch`; the sweeps are
 `/security-sweep` and `/bug-sweep`, and `/style-pass` applies one corrected
 form corpus-wide. There is no `/validate-blueprint` or `/new-chapter`: this
 repository has no blueprint chapter tree. The locality **gate** is CI, unlike

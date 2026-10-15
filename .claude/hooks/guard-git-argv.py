@@ -140,7 +140,7 @@ FORBIDDEN_SUBSTRINGS = ("ext::",)
 # rather than the tool beside it.
 #
 # **A hook is handed a command, never the frontmatter that granted it**, so the
-# set cannot be derived at run time the way `test_grok_helpers.py` derives the
+# set cannot be derived at run time the way `test_harness_helpers.py` derives the
 # frontmatter denies from the frontmatter. What stands instead is a test whose
 # subject is this list: the suite asserts it covers `MACHINERY_TREES` and every
 # tracked root file, so a new tree or a new root file fails the suite until

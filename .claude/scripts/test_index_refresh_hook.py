@@ -14,7 +14,7 @@ and leaves them free to disagree under an event nobody has added yet, which is
 how a gate stops covering the newest surface without saying so.
 
 **Not a skip where `sh` or `git` is missing.** A skip reports a pass, which is
-the fail-open `test_grok_helpers.py` refuses for the same tools.
+the fail-open `test_harness_helpers.py` refuses for the same tools.
 
 **What `update` itself does after a Bash call is not tested here.** A commit
 moving the recorded HEAD, a rewritten file becoming searchable and a call that

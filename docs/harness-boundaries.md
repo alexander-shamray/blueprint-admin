@@ -23,7 +23,7 @@ line names one residual below by the words it opens with.
 | A guard hook or its launcher | `Every guard hook uses` |
 | The index: refresh, query or search hints, MCP approval, timeout | `Two hooks guard nothing`, `The second is the query hint`, `The search hint asks`, `A session started in a worktree`, `The CLI's skill rewrite`, `The MCP startup timeout` |
 | A command's `allowed-tools` or `disallowed-tools` | `grant the index commands`, `runs before it pushes never denies push`, `is a grant surface` |
-| The review triage, its profile or the auditor grant | `is the one chained command`, `On the one agent type measured`, `So the triage runs under a profile`, `The third held only`, `Agent(bug-auditor)` |
+| The review agent grant, or restoring an external reviewer | `grants exactly`, `archive/external-reviewers` |
 | The harness suite and its shards | `shard-harness-suite.py`, `That runner owns both discovery roots` |
 | Rebasing or force-pushing | `The only force push` |
 | `/branch` worktrees under `.claude/worktrees/` | `worktrees sit inside the checkout` |
@@ -43,8 +43,7 @@ A new residual is stated **here** and gets a row above.
 - **`.claude/settings.json` self-locks, not instantaneously** — a change to
   it lands complete and goes last, and a restore is verified by reading the
   file, never by trying what it forbids.
-- **Every guard hook uses `run-guard.sh`** — the two in `settings.json` and
-  the `review-grok-triager` profile's own — which locates a compatible Python
+- **Every guard hook uses `run-guard.sh`** — the two in `settings.json` — which locates a compatible Python
   launcher before invoking the guard. **It runs each candidate before
   choosing one, and remembers only that the first of them passed (#44).** The
   mark is an empty directory under `.claude/cache/`, named for that
@@ -65,7 +64,7 @@ A new residual is stated **here** and gets a row above.
   call**, where the probe used to move on to the next candidate unnoticed,
   and a host whose first candidate is not its working one is never
   remembered at all. `TheLauncherProvesWhatItRemembers` and
-  `ARememberedGuardAnswersAsAProbedOne` in `test_grok_helpers.py` hold the
+  `ARememberedGuardAnswersAsAProbedOne` in `test_harness_helpers.py` hold the
   launcher to each of those.
 - **Two hooks guard nothing, and both serve the index.** The first is the
   refresh, which runs
@@ -159,15 +158,13 @@ A new residual is stated **here** and gets a row above.
   fork done. `test_git_worktree_fork.py` runs each case.
 - **`/ship` and `/review-branch` grant the index commands they name (#97)**,
   in their own `allowed-tools`: `/ship` locates a change with `search`,
-  `refs` and `impact`, and starts every Copilot round from `diff-impact`
+  `refs` and `impact`, and starts every review round from `diff-impact`
   against the merge base, read through an exact
   `Bash(git merge-base origin/main HEAD)`; a full `/review-branch` starts from
   `diff-impact` too. All four are read-only. **Loading the skill widens that,
   and it is a residual rather than an oversight:** the skill's grant also
   approves `update` and `index`, which its evidence protocol runs on a stale
-  or missing index, and both write only the ignored cache. Step 5's triager
-  takes three paths and no blast radius, so a restored Grok round goes
-  without one until that profile takes a fourth. A hint cannot carry this
+  or missing index, and both write only the ignored cache. A hint cannot carry this
   for `/ship`, whose arguments are usually an issue number, so the command
   says it itself.
   `test_index_query_hint.py` holds every subcommand either names to its own
@@ -210,87 +207,35 @@ A new residual is stated **here** and gets a row above.
   both `Edit(.claude/skills/**)` spellings sit on the same list.
 - **A command `/ship` runs before it pushes never denies push.** A
   frontmatter `disallowed-tools` holds for the rest of the user turn, not
-  for the command that states it, so `Bash(git push:*)` on `/commit`,
-  `/branch` or `/review-copilot` refuses `/ship`'s own push a step later —
-  "has been denied", in under a second, with no hook reason. It reads as
-  hardening and is not: `/branch` and `/commit` leave the push to `/pr`,
-  `/review-copilot` pushes only an already-committed review fix, by name,
-  and the git-argv hook and `settings.json` refuse `main`, force and delete
-  whoever asks. **Do not put it back.** `CHAINED_BEFORE_A_PUSH` in
-  `test_grok_helpers.py` names the three and fails if one denies push
-  again. A terminal, read-only command — the two sweeps — keeps its deny,
-  because nothing pushes after it.
-- **`/review-grok` is the one chained command that cannot follow that rule,
-  so `/ship` step 5 runs it inside an `Agent` instead.** Run inline, its
-  bare `Bash` deny is its boundary — it reads an untrusted review holding
-  `Edit` — and under the same turn-wide lifetime it would also refuse every
-  command step 5 runs after it: the checks, `/commit` and the push. The
-  deny stays and the triage moves.
-- **On the one agent type measured, the agent keeps the deny off the push
-  by discarding it, so the agent alone is not the boundary.** Measured:
-  `/review-grok` loaded through the Skill tool in the main session removed
-  `Bash` until the next user message — background notifications did not
-  end it — while the same load inside a `general-purpose` agent left `Bash`
-  working there, and the parent's `Bash` in the same turn was unaffected
-  (#19). So on that path the push is safe and the triage would read an
-  untrusted review holding a shell.
-- **So the triage runs under a profile of its own, and `/ship` says what a
-  profile cannot.** Step 5 grants exactly `Agent(review-grok-triager)`,
-  whose `tools:` — an allowlist — holds no `Bash` and no `Skill`; it reads
-  `review-grok.md` rather than loading it, so the skill load measured
-  above never happens there. Two rules cannot live in `tools:`. A type
-  list inside a subagent's `Agent` grant is ignored, so the profile's own
-  `PreToolUse` hook, `guard-triager-dispatch.py`, admits `review-adjudicator`
-  and refuses every other dispatch — the triager itself included, which
-  `/ship` grants and so cannot deny. And a path in a profile's
-  `disallowedTools` removes the whole tool, so every `Edit(...)`
-  `/review-grok` states is in `/ship`'s own `disallowed-tools`, beside the
-  broad agent types; that list reaches the agents a command spawns, as
-  `review-grok.md` records of its adjudicator — in the turn it was loaded
-  in, which is why the trees also have a hook (below).
-  `CommandsEnforceTheEditingBoundariesTheyState` pins the profile, the
-  grant and both deny lists, and reads `.claude/agents/` on every run, so
-  a new profile fails each exact grant that does not deny it;
-  `TheTriagerDispatchesOnlyTheAdjudicator` runs the hook through the
-  launcher and pins its wiring on the profile. Neither pins runtime
-  behaviour, so it was measured (#23), by spawning the triager and
-  probing it. **Two properties hold:** its tools were exactly `Read`,
-  `Grep`, `Glob`, `Edit`, `Write` and `Agent`, with no shell and no
-  `Skill`; and the hook refused `general-purpose` and
-  `review-grok-triager` by name and let `review-adjudicator` run.
-- **The third held only in the turn `/ship` was loaded in (#27), so it
-  moved onto the profile.** Spawned in that turn, the triager was refused
-  an `Edit` to `.github/**` and `README.md` — *File is in a directory that
-  is denied by your permission settings* — while a `docs/**` control
-  passed. Spawned one user message later, without `/ship` re-invoked, it
-  wrote into `.github/` and edited `README.md`: the turn-wide lifetime
-  stated above, reaching the one boundary that rested on it. Step 5 spawns
-  the triager async, so every round after the first starts in such a turn.
-  The profile now carries a second `PreToolUse` hook,
-  `guard-triager-edit.py`, on `Edit|Write|MultiEdit|NotebookEdit`: it reads
-  `/ship`'s `Edit(...)` denies from `ship.md` on every call — one list, no
-  copy — and refuses a target under any of them, matched without regard to
-  case, and any target in no checkout. `/ship`'s list still states the
-  trees; the hook is what makes them hold outside that turn.
-  `TheTriagerEditsNothingShipDenies` runs it through the launcher against
-  every pattern that list holds and pins its wiring on the profile.
-  **Unmeasured at runtime:** that this hook fires on `Edit` in a turn after
-  `/ship`'s rests on the profile-hook mechanism the dispatch hook was
-  measured under, not on a probe of this one. The measurement owed before
-  Grok returns: spawn the triager in a turn after the one `/ship` was
-  loaded in, have it edit `README.md`, and see the hook refuse it. The
-  guard also refuses any target outside the checkout its event's `cwd`
-  stands in, so another repository, or the main checkout from a forked
-  worktree, is out of reach; a forked worktree seen from the main checkout
-  sits under `.claude/`, which `/ship`'s list denies.
-- **`/ship` also grants `Agent(bug-auditor)`, for step 6's review while
-  Copilot is off (#104).** Denied, it was dispatchable only in a turn after
-  the one `/ship` loaded in, so a run that never paused had no reviewer at
-  all. The profile's `tools:` is `Read`, `Grep` and `Glob` — none of the
-  broad types the deny list is there to keep from what `/ship` spawns —
-  and `guard-triager-dispatch.py` still refuses it to the triager.
-  `CommandsEnforceTheEditingBoundariesTheyState` reads the granted profile
-  each run and fails if it gains a tool beyond those three.
+  for the command that states it, so `Bash(git push:*)` on `/commit` or
+  `/branch` refuses `/ship`'s own push a step later — "has been denied", in
+  under a second, with no hook reason. It reads as hardening and is not:
+  `/branch` and `/commit` leave the push to `/pr`, and the git-argv hook and
+  `settings.json` refuse `main`, force and delete whoever asks. **Do not put
+  it back.** `CHAINED_BEFORE_A_PUSH` in `test_harness_helpers.py` names the
+  two and fails if one denies push again. A terminal, read-only command — the
+  two sweeps — keeps its deny, because nothing pushes after it.
+- **`/ship` grants exactly `Agent(branch-reviewer)`, for step 5's local review
+  (#124).** The profile's `tools:` is `Read`, `Grep` and `Glob` — none of the
+  broad types `/ship`'s `disallowed-tools` keeps from what it spawns — so the
+  grant needs no hook, and the diff it reads sits under `artifacts/review/`,
+  inside the checkout the profile is confined to. Because `allowed-tools`
+  approves rather than whitelists, `/ship` and both sweeps deny every other
+  profile by name; `CommandsEnforceTheEditingBoundariesTheyState` reads
+  `.claude/agents/` on every run, so a new profile fails each exact grant that
+  does not deny it, and fails if the granted one gains a tool beyond those three.
+- **The external reviewers are archived, not deleted (#124).** The Grok and
+  Copilot loops, `review-grok.md` and `review-copilot.md`, the adjudicator and
+  triager profiles with their two `PreToolUse` hooks, the helpers and their
+  suites, and `.claude/sandbox/` are at the tag `archive/external-reviewers`,
+  taken from `main` before they were removed. `git checkout
+  archive/external-reviewers -- <paths>` restores any of them, and the
+  measurements that argued the triage's profile (#19, #23, #27) stand in this
+  file at that tag. Restoring Grok needs a launcher outside the branch it
+  reviews (#86 asked whether to build one); restoring either needs the grants
+  and the deny list rebuilt with it, which is what that history is for.
+  `guard-git-argv.py` still refuses the Grok ledger's write verbs by name; the
+  rule has no subject while the helpers are archived.
 - **`python .claude/scripts/shard-harness-suite.py` is the harness's own
   suite.** It reads `git ls-files`, so a new tracked root file or top-level
   tree fails it until somebody decides which side of the boundary it is on.
