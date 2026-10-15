@@ -27,6 +27,13 @@ public static class PlatformQueues
         new("catalog-inventory-events", "Catalog's stock levels", "Catalog.Infrastructure.Messaging.StockLevelConsumer.Queue"),
         new("shipping-events", "Shipping's despatch and cancel", "Shipping.Infrastructure.Messaging.DependencyInjection.EventsQueue"),
         new("bff-order-events", "the BFF's order projection", "Web.Bff.Messaging.DependencyInjection.EventsQueue"),
+        new("notifications-events", "Notifications' order and shipment events", "Notifications.Infrastructure.Messaging.DependencyInjection.EventsQueue"),
+        new("privacy-completions", "Privacy's completions from every holder", "Privacy.Infrastructure.Messaging.DependencyInjection.CompletionsQueue"),
+        new("ordering-privacy", "Ordering's erasure request", "Ordering.Infrastructure.Messaging.DependencyInjection.PrivacyQueue"),
+        new("payments-privacy", "Payments' erasure request", "Payments.Infrastructure.Messaging.DependencyInjection.PrivacyQueue"),
+        new("shipping-privacy", "Shipping's erasure request", "Shipping.Infrastructure.Messaging.DependencyInjection.PrivacyQueue"),
+        new("notifications-privacy", "Notifications' erasure request", "Notifications.Infrastructure.Messaging.DependencyInjection.PrivacyQueue"),
+        new("bff-privacy", "the BFF's erasure request", "Web.Bff.Messaging.DependencyInjection.PrivacyQueue"),
     ];
 
     /// <summary>What a queue feeds, its <c>_error</c> twin included, or null for a queue the table does not name.</summary>

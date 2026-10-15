@@ -11,5 +11,11 @@
 ,{"name":"notifications-events","messages":0}
 ,{"name":"ordering-catalog-events","messages":0}
 ,{"name":"bff-order-events","messages":0}
+,{"name":"privacy-completions","messages":0}
+,{"name":"ordering-privacy","messages":0}
+,{"name":"payments-privacy","messages":0}
+,{"name":"shipping-privacy","messages":0}
+,{"name":"notifications-privacy","messages":0}
+,{"name":"bff-privacy","messages":0}
 ,{"name":"ordering-catalog-events_error","messages":1}
 ]

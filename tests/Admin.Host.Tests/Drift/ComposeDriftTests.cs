@@ -38,6 +38,7 @@ public sealed partial class ComposeDriftTests
     private static readonly Dictionary<string, string> UnitsWithoutSurface = new(StringComparer.Ordinal)
     {
         ["notifications"] = "#65",
+        ["privacy"] = "#128",
     };
 
     [Fact]

@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using Admin.Host.Broker;
 using Admin.Host.Tests.TestSupport;
 using Shouldly;
 
@@ -21,7 +22,7 @@ public sealed class BrokerEndpointTests : IClassFixture<AdminHostFactory>
 
         view.GetProperty("reachable").GetBoolean().ShouldBeTrue();
         JsonElement[] queues = [.. view.GetProperty("queues").EnumerateArray()];
-        queues.Length.ShouldBe(13);
+        queues.Length.ShouldBe(PlatformQueues.Table.Length + 1);
         JsonElement error = queues.Single(q => q.GetProperty("isErrorQueue").GetBoolean());
         error.GetProperty("name").GetString().ShouldBe("ordering-catalog-events_error");
         error.GetProperty("messages").GetInt64().ShouldBe(1);

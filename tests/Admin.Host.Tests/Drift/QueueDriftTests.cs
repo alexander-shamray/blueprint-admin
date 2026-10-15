@@ -11,10 +11,7 @@ namespace Admin.Host.Tests.Drift;
 public sealed partial class QueueDriftTests
 {
     /// <summary>Queues the console does not show yet, each with the issue that adds it.</summary>
-    private static readonly Dictionary<string, string> QueuesNotYetShown = new(StringComparer.Ordinal)
-    {
-        ["notifications-events"] = "#65",
-    };
+    private static readonly Dictionary<string, string> QueuesNotYetShown = new(StringComparer.Ordinal);
 
     [Fact]
     public void Every_row_names_a_backend_constant_that_still_holds_its_queue()
