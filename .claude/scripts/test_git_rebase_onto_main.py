@@ -907,13 +907,13 @@ class TheHelperPublishesWhatItRebased(unittest.TestCase):
 
 
 class TheBranchNameGuardsEachHaveTheirOwnCase(unittest.TestCase):
-    """Exit 2 covers five conditions and three of them had no case at all.
+    """Exit 2 has more than the mode check, and three of its conditions had no case at all.
 
     Asserting the code alone is what let that stand: an unknown mode already
     returns 2, so weakening any of the three name guards failed nothing while
     `--onto` or `-D` as a branch name reached `git push --force-with-lease`.
     Each case here pins the message too, because the message is the only
-    thing that says which of the five fired.
+    thing that says which exit-2 condition fired.
 
     No fixture, and that is the property rather than a convenience: these
     refuse before anything reads the checkout, so a guard that needed a
@@ -950,7 +950,7 @@ class TheBranchNameGuardsEachHaveTheirOwnCase(unittest.TestCase):
         self.assertIn("mode must be start, continue, publish or abort", result.stderr)
 
     def test_it_takes_exactly_two_arguments(self):
-        # The fifth exit-2 condition, and the one the suite asserted by code
+        # The argument-count exit-2 condition, and the one the suite asserted by code
         # alone. Relaxing `[ "$#" -eq 2 ]` to `-ge 2` left every other case
         # green while the helper silently ignored trailing arguments — which
         # is the "a prefix rule cannot exclude a trailing flag" case a helper
