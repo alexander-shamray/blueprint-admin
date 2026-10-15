@@ -87,6 +87,16 @@ as a repair, or as a rebuild behind a typed confirmation that stops the BFF,
 deletes its order projection, replays the outbox window and starts it again
 (the commands are `run-locally.md`'s); and the API
 screen shows whether `ordering-catalog-events` has drained after a publish.
+The Broker screen's dead-letter workbench opens on a parked queue that holds a
+message and lists each message with its fault, type, body and a link on its
+correlation id. Replay or Discard runs dry first, its output in the job pane
+below the messages, and the real run is offered only for the message and verb
+that dry run was started for, behind the typed `--execute`. Each run mints a
+password for the broker's dead-letter account, uses it and clears it, so the
+account has none between runs; the record and audit files land under
+`Admin:DataDir`'s `dead-letters/` (the temp directory against FakePlatform).
+The tool is the backend's; spec §5.5 and `run-locally.md`'s "Replay or discard
+a dead letter" say how it is run.
 The Erasure screen raises an erasure request for a subject id as the realm's
 `privacy` login (the one that holds `privacy:erase`; `demo` does not, and a stack
 whose realm was imported before that login needs `docker compose down -v`), then
