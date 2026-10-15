@@ -234,8 +234,9 @@ A new residual is stated **here** and gets a row above.
   file at that tag. Restoring Grok needs a launcher outside the branch it
   reviews (#86 asked whether to build one); restoring either needs the grants
   and the deny list rebuilt with it, which is what that history is for.
-  `guard-git-argv.py` still refuses the Grok ledger's write verbs by name; the
-  rule has no subject while the helpers are archived.
+  `guard-git-argv.py` dropped its rule for the Grok ledger and review runner
+  with them (#160); restoring the helpers restores that rule in the same
+  change.
 - **`python .claude/scripts/shard-harness-suite.py` is the harness's own
   suite.** It reads `git ls-files`, so a new tracked root file or top-level
   tree fails it until somebody decides which side of the boundary it is on.
