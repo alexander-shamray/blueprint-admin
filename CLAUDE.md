@@ -176,11 +176,11 @@ opens those files:
   where one can be, and says where it is not.
 - **The task list is `TODO.md` at the main checkout's root: gitignored,
   local, never committed.** It is for the user, and it lists open PRs
-  (with the issues each closes) and open issues with no PR. **Where a row
-  sits is a function of state, so every agent that works here re-derives it
-  at each event** (work starts on an issue, a PR opens, merges or closes,
-  an issue is filed, closed, reopened, paused or unpaused, work is
-  abandoned) **and writes the result in the same act**:
+  (with the unpaused issues each closes) and every other open issue.
+  **Where a row sits is a function of state, so every agent that works here
+  re-derives it at each event** (work starts on an issue, a PR opens, merges
+  or closes, an issue is filed, closed, reopened, paused or unpaused, work
+  is abandoned) **and writes the result in the same act**:
 
   | State | Where |
   |---|---|
@@ -191,7 +191,8 @@ opens those files:
   | Closed issue; merged or closed PR | no row, and no note of what landed, which git and the closed issues already keep |
 
   Three things follow. A PR closed unmerged, or merged without closing its
-  issue, leaves the issue open, so the issue's row goes back to its wave.
+  issue, leaves the issue open, so its row is re-derived by the table: **In
+  progress** with the branch if one remains, otherwise back to its wave.
   Whatever the work found and filed has its own row by the same table, made
   in the main checkout or owed as the paragraph below says. And the move from
   **Remaining** to **In progress** is made before the session enters the
