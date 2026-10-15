@@ -31,6 +31,7 @@ import {
   SCRIPT_KEYS,
   STEP_TITLES,
   ScenarioOperations,
+  Script,
   ScriptKey,
   StepKey,
   WATCHING_FOR,
@@ -41,6 +42,7 @@ import {
   secondsBetween,
   stepCorrelationId,
   verdict,
+  withField,
   withProductId,
 } from './scenario-run';
 
@@ -87,8 +89,9 @@ function initialSteps(script: ScriptKey): StepView[] {
 }
 
 /**
- * run-locally.md's "Call the APIs" as a run (spec §12, phase 6), in one of two scripts: an order
- * watched to delivered, or an order cancelled and watched to cancelled. The platform calls go
+ * run-locally.md's "Call the APIs" as a run (spec §12, phase 6), in one of the scripts `SCRIPTS`
+ * holds: an order watched to delivered, to cancelled, or to the saga's refusal of it for a cause
+ * run-locally.md names (a declined amount, no stock). The platform calls go
  * through `POST /api/proxy` as the API screen's calls do, each step with its own correlation id so
  * each has its own trace; the drain reads `GET /api/broker/queues` and has none. A watch reads the
  * BFF's order read with the drain's interval and cap. The first step that does not succeed ends the
@@ -233,7 +236,7 @@ export class ScenarioPage {
     this.steps.set(initialSteps(script));
 
     try {
-      await this.runSteps(SCRIPTS[script].steps, operations, run, identity);
+      await this.runSteps(SCRIPTS[script], operations, run, identity);
     } finally {
       this.steps.update((all) =>
         all.map((s) =>
@@ -248,7 +251,7 @@ export class ScenarioPage {
 
   /** The script's steps in order, each carrying forward what it produced; the first that fails ends it. */
   private async runSteps(
-    steps: readonly StepKey[],
+    script: Script,
     operations: ScenarioOperations,
     run: string,
     identity: Identity,
@@ -256,10 +259,13 @@ export class ScenarioPage {
     let productId = '';
     let orderId = '';
 
-    for (const key of steps) {
+    for (const key of script.steps) {
       switch (key) {
         case 'publish': {
-          const body = withFreshCommandId(operations.publish!.exampleBody ?? '', this.uuid());
+          const fresh = withFreshCommandId(operations.publish!.exampleBody ?? '', this.uuid());
+          // An unhappy branch's cause that is a price is set here and nowhere else.
+          const body =
+            script.amount === undefined ? fresh : withField(fresh, 'amount', script.amount);
           const id = await this.send(key, operations.publish!, run, identity, body, {}, true);
           if (id === null) return;
           productId = id;
@@ -268,6 +274,15 @@ export class ScenarioPage {
         case 'drain':
           if (!(await this.drain())) return;
           break;
+        case 'stock': {
+          const stock = operations.stock!;
+          const onHand = script.onHand ?? 0;
+          const path = { [stock.pathParameters[0]?.name ?? 'productId']: productId };
+          const body = withField(stock.exampleBody ?? '', 'onHand', onHand);
+          if ((await this.send(key, stock, run, identity, body, path)) === null) return;
+          this.patch(key, { detail: `Answered with the stock on hand set to ${onHand}.` });
+          break;
+        }
         case 'quote': {
           const body = withProductId(operations.quote!.exampleBody ?? '', productId);
           if ((await this.send(key, operations.quote!, run, identity, body)) === null) return;

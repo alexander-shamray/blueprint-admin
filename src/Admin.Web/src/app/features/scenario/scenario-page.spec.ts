@@ -45,6 +45,13 @@ const catalog: ApiCatalogView = {
       hasCommandId: true,
     }),
     op({
+      id: 'inventory:SetOnHand',
+      method: 'PUT',
+      url: 'http://localhost:5000/api/v1/inventory/stock/{productId}',
+      pathParameters: [{ name: 'productId', required: true, type: 'string' }],
+      exampleBody: '{"onHand":10}',
+    }),
+    op({
       id: 'bff:Quote',
       url: 'http://localhost:5000/bff/v1/checkout/quote',
       exampleBody: `{"currency":"EUR","lines":[{"productId":"${zero}","quantity":1}]}`,
@@ -117,6 +124,7 @@ let cancelSent = false;
 function platform(request: ProxyRequest): ProxyResult {
   const id = request.correlationId ?? '';
   if (request.url.endsWith('/catalog/products/')) return responded(200, `"${productId}"`, id);
+  if (request.url.includes('/inventory/stock/')) return responded(204, '', id);
   const quote = '{"total":19.99,"unpriced":[]}';
   if (request.url.endsWith('/checkout/quote')) return responded(200, quote, id);
   if (request.url.endsWith('/orders/')) return responded(200, `"${orderId}"`, id);
@@ -233,6 +241,51 @@ describe('ScenarioPage', () => {
     ]);
     expect(sent()[3].url).toBe(`http://localhost:5000/api/v1/orders/${orderId}/cancel`);
     expect(page.steps()[5].detail).toContain('cancelled at 2026-10-05T12:00:02Z, 2 s after');
+  });
+
+  it.each([
+    ['declined', 'declined', 10.01, 10],
+    ['out-of-stock', 'out_of_stock', undefined, 0],
+  ] as const)(
+    'runs the %s script: its cause is set before the order and the watch reads the refusal',
+    async (script, status, amount, onHand) => {
+      host.proxy.mockImplementation((request: ProxyRequest) =>
+        isRead(request)
+          ? of(responded(200, order(status, { cancelled: '2026-10-05T12:00:01Z' }), ''))
+          : of(platform(request)),
+      );
+      const page = render().componentInstance;
+      page.pick(script);
+
+      await page.run();
+
+      expect(page.steps().map((s) => [s.key, s.state])).toEqual([
+        ['publish', 'ok'],
+        ['drain', 'ok'],
+        ['stock', 'ok'],
+        ['quote', 'ok'],
+        ['order', 'ok'],
+        [status, 'ok'],
+      ]);
+      const [publish, stock, , placed] = sent();
+      expect(JSON.parse(publish.body!).amount).toBe(amount);
+      expect(stock.method).toBe('PUT');
+      expect(stock.url).toBe(`http://localhost:5000/api/v1/inventory/stock/${productId}`);
+      expect(JSON.parse(stock.body!)).toEqual({ onHand });
+      expect(JSON.parse(placed.body!).items[0].productId).toBe(productId);
+      expect(page.steps()[2].detail).toBe(`Answered with the stock on hand set to ${onHand}.`);
+      expect(page.steps()[5].detail).toContain(`shows ${status} at 2026-10-05T12:00:01Z`);
+    },
+  );
+
+  it('stops the refusal script when the order ends some other way, saying how', async () => {
+    const page = render().componentInstance;
+    page.pick('declined');
+
+    await page.run();
+
+    expect(page.steps()[5].state).toBe('failed');
+    expect(page.steps()[5].detail).toBe('The order ended delivered, not declined.');
   });
 
   it('shows a picked script as its own steps, and keeps the script it is running', async () => {

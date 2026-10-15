@@ -9,30 +9,57 @@ export type StepKey =
   | 'publish'
   | 'drain'
   | 'quote'
+  | 'stock'
   | 'order'
   | 'cancel'
   | 'confirmed'
   | 'dispatched'
   | 'delivered'
-  | 'cancelled';
+  | 'cancelled'
+  | 'declined'
+  | 'out_of_stock';
 
 /** The steps that wait on the order read rather than send once. */
-export type WatchKey = Extract<StepKey, 'confirmed' | 'dispatched' | 'delivered' | 'cancelled'>;
+export type WatchKey = Extract<
+  StepKey,
+  'confirmed' | 'dispatched' | 'delivered' | 'cancelled' | 'declined' | 'out_of_stock'
+>;
+
+const WATCHES: readonly StepKey[] = [
+  'confirmed',
+  'dispatched',
+  'delivered',
+  'cancelled',
+  'declined',
+  'out_of_stock',
+];
 
 export function isWatch(key: StepKey): key is WatchKey {
-  return key === 'confirmed' || key === 'dispatched' || key === 'delivered' || key === 'cancelled';
+  return WATCHES.includes(key);
 }
 
-export type ScriptKey = 'deliver' | 'cancel';
+export type ScriptKey = 'deliver' | 'cancel' | 'declined' | 'out-of-stock';
 
 export interface Script {
   title: string;
   /** One sentence for the page, saying what the run does as run-locally.md does it by hand. */
   intro: string;
   steps: readonly StepKey[];
+  /**
+   * The cause of an unhappy branch, each one a paragraph of run-locally.md: the amount the product
+   * is published at, and the stock set on hand before the order.
+   */
+  amount?: number;
+  onHand?: number;
 }
 
-export const SCRIPT_KEYS: readonly ScriptKey[] = ['deliver', 'cancel'];
+export const SCRIPT_KEYS: readonly ScriptKey[] = ['deliver', 'cancel', 'declined', 'out-of-stock'];
+
+/** run-locally.md, "A declined payment is caused by the amount": a price ending `.01` is `card_declined`. */
+const DECLINED_AMOUNT = 10.01;
+
+/** run-locally.md's stock example, "Stock for a product, and setting it": enough for the order to reserve. */
+const STOCKED = 10;
 
 export const SCRIPTS: Record<ScriptKey, Script> = {
   deliver: {
@@ -47,18 +74,36 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
       'Publish a product, wait for ordering-catalog-events to drain, quote a basket holding it, order it, cancel the order, and read it back until the platform says it is cancelled.',
     steps: ['publish', 'drain', 'quote', 'order', 'cancel', 'cancelled'],
   },
+  declined: {
+    title: 'Payment declined',
+    intro:
+      'Publish a product at 10.01, because the payment simulator declines an amount whose minor units are .01, stock it, order it, and read the order back until the saga says it was declined.',
+    steps: ['publish', 'drain', 'stock', 'quote', 'order', 'declined'],
+    amount: DECLINED_AMOUNT,
+    onHand: STOCKED,
+  },
+  'out-of-stock': {
+    title: 'Reservation failed',
+    intro:
+      'Publish a product, set its stock on hand to 0, order it, and read the order back until the saga says it is out of stock.',
+    steps: ['publish', 'drain', 'stock', 'quote', 'order', 'out_of_stock'],
+    onHand: 0,
+  },
 };
 
 export const STEP_TITLES: Record<StepKey, string> = {
   publish: 'Publish a product',
   drain: 'Wait for the projection',
   quote: 'Quote a basket',
+  stock: 'Set the stock on hand',
   order: 'Place an order',
   cancel: 'Cancel it',
   confirmed: 'Wait for confirmed',
   dispatched: 'Wait for despatch',
   delivered: 'Wait for delivery',
   cancelled: 'Wait for the cancellation',
+  declined: 'Wait for the decline',
+  out_of_stock: 'Wait for the stock refusal',
 };
 
 /**
@@ -72,10 +117,12 @@ export const WATCHING_FOR: Record<WatchKey, string> = {
   dispatched: 'Shipping to book the carrier for the confirmed order, which it does on a timer of its own',
   delivered: "Shipping's tracking to read the carrier's delivered event, which it polls on a timer",
   cancelled: 'the saga to act on the cancel',
+  declined: 'the saga to ask the payment provider to authorise the order and be refused',
+  out_of_stock: 'the saga to ask Inventory to reserve the stock and be refused',
 };
 
 /** The calls the steps make, each by its role. */
-export type OperationRole = 'publish' | 'quote' | 'order' | 'cancel' | 'read';
+export type OperationRole = 'publish' | 'stock' | 'quote' | 'order' | 'cancel' | 'read';
 
 /**
  * The catalog operation each role sends, by the id the host gives it: `<source>:<operationId>` for
@@ -85,6 +132,7 @@ export type OperationRole = 'publish' | 'quote' | 'order' | 'cancel' | 'read';
  */
 export const SCENARIO_OPERATIONS: Record<OperationRole, string> = {
   publish: `catalog:${PUBLISH_OPERATION}`,
+  stock: 'inventory:SetOnHand',
   quote: 'bff:Quote',
   order: 'ordering:PlaceOrder',
   cancel: 'ordering:CancelOrder',
@@ -140,6 +188,22 @@ export function idFrom(body: string): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * A JSON object body with `name` set to `value`; a body that is not a JSON object is returned as it
+ * was. The scripts set only what run-locally.md names as the cause: the publish's `amount`, the
+ * stock write's `onHand`.
+ */
+export function withField(body: string, name: string, value: number): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return body;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return body;
+  return JSON.stringify({ ...(parsed as Record<string, unknown>), [name]: value }, null, 2);
 }
 
 /**
@@ -238,6 +302,17 @@ export type WatchVerdict =
  * a reason of its own, and a delivery means the cancel came too late.
  */
 export function verdict(key: WatchKey, read: OrderRead): WatchVerdict {
+  if (key === 'declined' || key === 'out_of_stock') {
+    // The saga's own refusals: the status the BFF gives the cause is the only one that will do.
+    if (read.status === key) {
+      return { kind: 'reached', at: read.timeline.cancelled ?? read.asOf };
+    }
+    if (read.status === 'delivered' || CANCELLATIONS.includes(read.status)) {
+      return { kind: 'failed', reason: `The order ended ${read.status}, not ${key}.` };
+    }
+    return { kind: 'waiting' };
+  }
+
   if (key === 'cancelled') {
     if (read.status === 'cancelled') {
       return { kind: 'reached', at: read.timeline.cancelled ?? read.asOf };
