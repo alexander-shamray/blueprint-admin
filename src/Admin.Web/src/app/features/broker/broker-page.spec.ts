@@ -240,6 +240,25 @@ describe('BrokerPage', () => {
     expect(button.disabled).toBe(true);
   });
 
+  it('a refused rebuild keeps the typed confirmation, so a retry is not retyped', async () => {
+    host.projectionRebuild.mockReturnValue(throwError(() => ({ error: { detail: 'A repair is running' } })));
+    const fixture = render();
+    const button = fixture.nativeElement.querySelector('button.rebuild') as HTMLButtonElement;
+    const input = fixture.nativeElement.querySelector('.rebuild-box input') as HTMLInputElement;
+    input.value = 'bff-replay --reset';
+    input.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    button.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('section.projection p.error')?.textContent).toContain('A repair is running');
+    expect(button.disabled).toBe(false);
+  });
+
   it("a refused start shows the host's reason and no output pane", () => {
     host.projectionRepair.mockReturnValue(throwError(() => ({ error: { detail: 'Confirmation required' } })));
     const fixture = render();
