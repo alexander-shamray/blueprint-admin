@@ -110,6 +110,36 @@ argument is how a rule gets "corrected" back.
   fails, and holds every command it emits to a row of the skill's route
   table and a subcommand its `allowed-tools` approves. Hooks are read when a
   session starts: the hint reaches a session opened after it lands.
+- **The search hint asks before the first symbol search, once (#119, #120).**
+  `index-search-hint.py` runs under `PreToolUse` on `Grep` and `Bash` through
+  `index-hint-run.sh`. The first form of this fix, a note attached to a grep's
+  result, was shipped in `blueprint-backend` and the agent read it and grepped
+  on: it arrived after the answer, so asking the index meant redoing a search
+  that had succeeded. So the call itself is refused, once per session, with
+  the lookup that answers it as the reason, and the same search rerun passes —
+  the one soft block the agent cannot read past. **It refuses only a search
+  for a name**: an identifier, or an alternation of identifiers, over the tree.
+  Text, a message, a pattern, one file, prose under `docs/` and a path outside
+  the checkout are grep's and are never touched; a session whose transcript
+  records a lookup that ran is never asked, and a subagent never is. **One
+  route, the one that answers from this tree:** the MCP server reads the folder
+  the session started in, so from that checkout the reason names the MCP
+  tools, and from another, a `/branch` worktree entered mid-session, it names
+  the CLI alone (#119 item 4; the server does not follow the move). The
+  launcher exits 0 on every path, because 2 blocks the tool call; past its
+  bound or on a failed start it prints a line saying the hint did not run, so
+  a silent hook is not read as a clean search. `index-query-hint.sh` names the
+  MCP tool beside the CLI command from a map `test_index_search_hint.py` holds
+  equal to the hook's. Hooks are read when a session starts.
+- **A session started in a worktree has the index's MCP tools (#117).**
+  Approval of `.mcp.json` servers lives in the main checkout's untracked
+  `settings.local.json`, which a fresh worktree lacks, so its session reported
+  `Pending approval` and searched with grep. `git-worktree-fork.sh` writes the
+  worktree's own file holding `enabledMcpjsonServers` and nothing else: an
+  approve-all crosses as the names `.mcp.json` defines at the fork, a
+  `disabledMcpjsonServers` name is dropped, and the main checkout's
+  `permissions` rows never cross. A shape it cannot copy warns and leaves the
+  fork done. `test_git_worktree_fork.py` runs each case.
 - **`/ship` and `/review-branch` grant the index commands they name (#97)**,
   in their own `allowed-tools`: `/ship` locates a change with `search`,
   `refs` and `impact`, and starts every Copilot round from `diff-impact`
