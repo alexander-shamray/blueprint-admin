@@ -156,6 +156,12 @@ builder.Services.AddSingleton(sp => new RequestProxy(
     sp.GetRequiredService<TimeProvider>(),
     sp.GetRequiredService<OperatorTranscript>()));
 
+builder.Services.AddSingleton(sp => new ProductImageUploader(
+    sp.GetRequiredService<IHttpClientFactory>().CreateClient("platform"),
+    sp.GetRequiredService<IOptions<AdminOptions>>(),
+    sp.GetRequiredService<TimeProvider>(),
+    sp.GetRequiredService<OperatorTranscript>()));
+
 WebApplication app = builder.Build();
 
 // Resolve once so a wrong directory, or a recording of the fakes, fails

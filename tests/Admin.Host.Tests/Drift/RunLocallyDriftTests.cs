@@ -54,6 +54,49 @@ public sealed class RunLocallyDriftTests
         document.ShouldContain($"Invoke-RestMethod \"{read.Url.Replace("{id}", "$orderId", StringComparison.Ordinal)}\" -Headers $auth");
     }
 
+    /// <summary>
+    /// "Attach a product image by hand": the upload call names the image's type and its own length, and the length is the
+    /// image the console sends (<see cref="SampleImage.SizeBytes"/>). <c>$size</c> reads as the zero Guid, so the type is
+    /// compared by the document's literal and the size by the line that computes it.
+    /// </summary>
+    [Fact]
+    public void The_upload_example_names_the_type_run_locally_sends_and_the_length_of_the_image_the_console_uploads()
+    {
+        string document = File.ReadAllText(Backend.RunLocally);
+        int at = document.IndexOf("\nAttach a product image by hand", StringComparison.Ordinal);
+        at.ShouldBeGreaterThanOrEqualTo(0);
+
+        int body = document.IndexOf("-Body (@{", at, StringComparison.Ordinal);
+        JsonNode sent = JsonNode.Parse(new HashtableReader(document, body + "-Body (".Length).ReadValue())!;
+        JsonNode example = JsonNode.Parse(RunLocallyExamples.ProductImageUpload)!;
+
+        sent["contentType"]!.GetValue<string>().ShouldBe(example["contentType"]!.GetValue<string>());
+        example["sizeBytes"]!.GetValue<long>().ShouldBe(SampleImage.SizeBytes);
+        document.ShouldContain("$size = (Get-Item .\\desk.png).Length");
+        document.ShouldContain("sizeBytes = $size");
+    }
+
+    [Fact]
+    public void The_saved_address_example_is_the_one_run_locally_puts()
+    {
+        string document = File.ReadAllText(Backend.RunLocally);
+        int at = document.IndexOf("$addr = @{", StringComparison.Ordinal);
+        at.ShouldBeGreaterThanOrEqualTo(0, "run-locally.md no longer builds $addr");
+
+        JsonNode sent = JsonNode.Parse(new HashtableReader(document, at + "$addr = ".Length).ReadValue())!;
+
+        JsonNode.DeepEquals(sent, JsonNode.Parse(RunLocallyExamples.SavedAddress)).ShouldBeTrue($"run-locally.md: {sent.ToJsonString()}");
+        document.ShouldContain("/bff/v1/saved-address -Method Put");
+    }
+
+    [Fact]
+    public void The_publish_with_an_image_sends_the_key_the_upload_returned()
+    {
+        string document = File.ReadAllText(Backend.RunLocally);
+
+        document.ShouldContain("imageKey = $up.key");
+    }
+
     [Fact]
     public void The_reader_turns_a_nested_hashtable_into_json()
     {
@@ -90,6 +133,11 @@ public sealed class RunLocallyDriftTests
             if (Take("[guid]::NewGuid()"))
             {
                 return $"\"{ZeroGuid}\"";
+            }
+
+            if (Take("$null"))
+            {
+                return "null";
             }
 
             char c = source[at];

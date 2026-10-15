@@ -311,12 +311,66 @@ public sealed class WorkstationDoctorTests(AdminHostFactory factory) : IClassFix
 
         Dictionary<string, (string State, string Detail)> rows = view.GetProperty("checks").EnumerateArray()
             .ToDictionary(c => c.GetProperty("name").GetString()!, c => (c.GetProperty("state").GetString()!, c.GetProperty("detail").GetString()!));
-        rows.Keys.ShouldBe(["Docker", "Ports", "Gateway CORS", "Node", "Backend clone", "Frontend clone", "Images"]);
+        rows.Keys.ShouldBe(["Docker", "Ports", "Gateway CORS", "Node", "Backend clone", "Frontend clone", "Images", "Object store"]);
         rows["Docker"].ShouldBe(("Ok", "Docker 29.7.2 is answering."));
         rows["Ports"].ShouldBe(("Problem", "Held by another program, so Up cannot publish them: 5672, 15672 by erl (pid 7376)."));
         rows["Gateway CORS"].State.ShouldBe("Ok");
         rows["Node"].ShouldBe(("Ok", "Node 22.23.2, as the frontend clone's .nvmrc pins."));
         rows["Backend clone"].State.ShouldBe("Ok");
         rows["Images"].State.ShouldBe("Problem");
+        rows["Object store"].State.ShouldBe("Ok");
+    }
+
+    private static ComposeStatus Store(string storeState = "running", string? storeHealth = "healthy", string initState = "exited", int initExit = 0, string? edgeHealth = "healthy") =>
+        new(true, null,
+        [
+            new ServiceStatus("object-store", storeState, storeHealth, 0, [8333]),
+            new ServiceStatus("object-store-init", initState, null, initExit, []),
+            new ServiceStatus("image-edge", "running", edgeHealth, 0, [9000]),
+        ]);
+
+    [Fact]
+    public void A_healthy_store_and_edge_with_a_one_shot_that_exited_clean_is_fine()
+    {
+        DoctorCheck check = WorkstationDoctor.ObjectStore(Store());
+
+        check.State.ShouldBe(DoctorState.Ok);
+        check.Detail.ShouldBe("object-store and image-edge are healthy and object-store-init exited 0.");
+    }
+
+    [Fact]
+    public void A_one_shot_that_exited_non_zero_is_a_problem_however_green_the_rest_reads()
+    {
+        DoctorCheck check = WorkstationDoctor.ObjectStore(Store(initExit: 1));
+
+        check.State.ShouldBe(DoctorState.Problem);
+        check.Detail.ShouldBe("object-store-init exited 1, so the bucket and its policies may not exist.");
+    }
+
+    [Theory]
+    [InlineData("exited", null, "object-store is exited.")]
+    [InlineData("running", "unhealthy", "object-store is running but unhealthy.")]
+    [InlineData("running", null, "object-store is running but has no health.")]
+    public void A_store_that_is_not_running_healthy_is_a_problem(string state, string? health, string detail)
+    {
+        DoctorCheck check = WorkstationDoctor.ObjectStore(Store(storeState: state, storeHealth: health));
+
+        check.State.ShouldBe(DoctorState.Problem);
+        check.Detail.ShouldBe(detail);
+    }
+
+    [Fact]
+    public void An_edge_or_store_still_starting_and_a_one_shot_still_running_are_unknown_not_a_verdict()
+    {
+        WorkstationDoctor.ObjectStore(Store(edgeHealth: "starting")).State.ShouldBe(DoctorState.Unknown);
+        WorkstationDoctor.ObjectStore(Store(initState: "running")).Detail.ShouldBe("object-store-init is running and has not finished.");
+    }
+
+    [Fact]
+    public void A_stack_without_the_store_or_that_could_not_be_listed_is_unknown()
+    {
+        WorkstationDoctor.ObjectStore(Down).State.ShouldBe(DoctorState.Unknown);
+        WorkstationDoctor.ObjectStore(new ComposeStatus(true, null, [])).State.ShouldBe(DoctorState.Unknown);
+        WorkstationDoctor.ObjectStore(ComposeStatus.Unreachable("docker: not found")).State.ShouldBe(DoctorState.Unknown);
     }
 }

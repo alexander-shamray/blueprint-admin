@@ -21,6 +21,8 @@ public sealed class FakePlatformHandler(AdminOptions options, FakeOrders orders)
         HttpResponseMessage response =
             path == "/health/ready" ? FakeHttp.Json(HttpStatusCode.OK, """{"status":"Healthy"}""")
             : path == "/api/health" ? FakeHttp.Json(HttpStatusCode.OK, """{"database":"ok","version":"fake"}""")
+            : Is(uri, options.ObjectStoreUrl) ? await FakeObjectStore.SendAsync(request, orders, cancellationToken)
+            : Is(uri, options.ImageEdgeUrl) ? FakeObjectStore.Edge(request, orders)
             : Is(uri, options.KeycloakUrl) && path.EndsWith("/protocol/openid-connect/token", StringComparison.Ordinal) ? await FakeKeycloak.TokenAsync(request, cancellationToken)
             : path == "/openapi/v1.json" && Is(uri, options.CatalogUrl) ? FakeOpenApi.Document(request, "catalog")
             : path == "/openapi/v1.json" && Is(uri, options.OrderingUrl) ? FakeOpenApi.Document(request, "ordering")
@@ -34,7 +36,7 @@ public sealed class FakePlatformHandler(AdminOptions options, FakeOrders orders)
             : Is(uri, options.GrafanaUrl) && path.Contains("/loki/api/v1/query_range", StringComparison.Ordinal) ? FakeGrafana.Loki(request)
             : Is(uri, options.GrafanaUrl) && path.Contains("/api/traces/", StringComparison.Ordinal) ? FakeGrafana.Tempo(request)
             : Is(uri, options.GrafanaUrl) && path.EndsWith("/api/v1/query", StringComparison.Ordinal) ? FakeGrafana.Prometheus(request)
-            : Is(uri, options.GatewayUrl) ? FakeGateway.Send(request, orders)
+            : Is(uri, options.GatewayUrl) ? FakeGateway.Send(request, orders, options)
             : FakeHttp.Json(HttpStatusCode.OK, """{"fake":true}""");
 
         response.RequestMessage = request;

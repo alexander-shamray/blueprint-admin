@@ -15,6 +15,28 @@ public static class RunLocallyExamples
         }
         """;
 
+    /// <summary>
+    /// run-locally.md, "Attach a product image by hand": the content type and the file's own length. The length is
+    /// <see cref="SampleImage.SizeBytes"/>, the image the console sends where the document sends <c>.\desk.png</c>.
+    /// </summary>
+    public static string ProductImageUpload => $$"""
+        {
+          "contentType": "{{SampleImage.ContentType}}",
+          "sizeBytes": {{SampleImage.SizeBytes}}
+        }
+        """;
+
+    /// <summary>run-locally.md, "Saved delivery address".</summary>
+    public const string SavedAddress = """
+        {
+          "line1": "1 High Street",
+          "line2": null,
+          "city": "Leeds",
+          "postalCode": "LS1 1AA",
+          "country": "GB"
+        }
+        """;
+
     private static readonly Dictionary<string, string> Bodies = new(StringComparer.Ordinal)
     {
         // "Publish a product".

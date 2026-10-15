@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Admin.Host.Api;
 using Admin.Host.Broker;
 using Admin.Host.Compose;
 using Admin.Host.Config;
@@ -32,6 +33,23 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
         ["npm ci"] = "a prerequisite the console reports rather than runs (FrontendSupervisor, spec §2.1)",
     };
 
+    /// <summary>
+    /// Lines of "Attach a product image by hand" that the host performs in code, not as a command it starts or a request the
+    /// proxy forwards, each with the code that does and the test that holds it to the document: the length of the file
+    /// (<see cref="SampleImage.SizeBytes"/>), the upload of its bytes (<see cref="ProductImageUploader"/>, which the proxy cannot
+    /// do with a string body), the read of the thumbnail from the edge (the Scenario's <c>thumbnail</c> step, a HEAD through
+    /// the proxy to a URL the product returned), and the two lines of the signing and publishing calls whose hashtables
+    /// <c>RunLocallyDriftTests</c> reads.
+    /// </summary>
+    private static readonly Dictionary<string, string> Accounted = new(StringComparer.Ordinal)
+    {
+        [@"$size = (Get-Item .\desk.png).Length"] = "SampleImage.SizeBytes",
+        ["-ContentType 'application/json' -Body (@{ contentType = 'image/png'; sizeBytes = $size } | ConvertTo-Json)"] = "RunLocallyExamples.ProductImageUpload, held by RunLocallyDriftTests",
+        [@"Invoke-RestMethod $up.uploadUrl -Method Put -InFile .\desk.png -ContentType $up.headers.'Content-Type'"] = "ProductImageUploader",
+        ["-ContentType 'application/json' -Body (@{"] = "the publish body the Scenario sends with imageKey, held by RunLocallyDriftTests",
+        ["Invoke-WebRequest $p.thumbnailUrl -Method Head"] = "the Scenario's thumbnail step, a HEAD through the proxy",
+    };
+
     private readonly FakeTimeProvider time = new();
     private readonly FakeProcessRunner runner;
 
@@ -50,7 +68,7 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
 
         lines.ShouldContain(l => Command().IsMatch(l), "no fenced command was read; the fence reader no longer fits the document");
 
-        foreach (string line in lines.Where(l => !NotRun.ContainsKey(l)))
+        foreach (string line in lines.Where(l => !NotRun.ContainsKey(l) && !Accounted.ContainsKey(l)))
         {
             if (Command().IsMatch(line))
             {
@@ -82,7 +100,7 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
     {
         string[] lines = FencedLines(File.ReadAllText(Backend.RunLocally));
 
-        NotRun.Keys.Where(c => !lines.Contains(c)).ShouldBeEmpty();
+        NotRun.Keys.Concat(Accounted.Keys).Where(c => !lines.Contains(c)).ShouldBeEmpty();
     }
 
     [Fact]

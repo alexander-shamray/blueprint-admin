@@ -6,7 +6,7 @@ import { expect, test } from '@playwright/test';
 test('the api screen lists operations and sends as each identity', async ({ page }) => {
   await page.goto('/requests');
 
-  await expect(page.locator('button.op')).toHaveCount(21);
+  await expect(page.locator('button.op')).toHaveCount(26);
 
   await page.locator('button.op', { hasText: 'GetProducts' }).click();
   await page.getByLabel('Identity').selectOption('anonymous');
@@ -36,6 +36,29 @@ test('the api screen lists operations and sends as each identity', async ({ page
 
   await expect(page.locator('.history li')).toHaveCount(4);
   await expect(page.locator('.history li').first()).toContainText('200 PublishProduct as demo');
+});
+
+// run-locally.md's "Attach a product image by hand" and "Saved delivery address", first calls: the BFF signs an upload
+// for demo (catalog:write) and refuses browser, and the saved address is the caller's own (FakeGateway).
+test('the api screen asks the BFF for an upload and saves an address', async ({ page }) => {
+  await page.goto('/requests');
+
+  await page.locator('button.op', { hasText: 'IssueProductImageUpload' }).click();
+  await expect(page.getByLabel('Body')).toHaveValue(/"contentType": "image\/png"/);
+  await page.getByLabel('Identity').selectOption('user:browser');
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.locator('.response .status')).toHaveText('403');
+
+  await page.getByLabel('Identity').selectOption('user:demo');
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.locator('.response .status')).toHaveText('200');
+  await expect(page.locator('.response pre.body')).toContainText('/product-images/uploads/');
+
+  await page.locator('button.op', { hasText: 'PutSavedAddress' }).click();
+  await page.getByLabel('Identity').selectOption('user:browser');
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.locator('.response .status')).toHaveText('200');
+  await expect(page.locator('.response pre.body')).toContainText('"country": "GB"');
 });
 
 test('a wrong password is shown as keycloak refusing, not as a platform response', async ({ page }) => {
@@ -143,7 +166,7 @@ test("the carrier simulator's request log is Shipping's read, sent direct", asyn
 // baseline lasts as long as the host does, and a reused host or a CI retry would then have no change to see.
 test('a reload names what moved in a document since its baseline, with the action that accepts it', async ({ page }) => {
   await page.goto('/requests');
-  await expect(page.locator('button.op')).toHaveCount(21);
+  await expect(page.locator('button.op')).toHaveCount(26);
 
   await page.getByRole('button', { name: 'Reload' }).click();
   const changes = page.locator('.contract-changes');

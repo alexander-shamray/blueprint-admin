@@ -30,6 +30,7 @@ public sealed class OpenApiReaderTests
         [
             ("catalog:PublishProduct", "POST", "http://localhost:5000/api/v1/catalog/products", "authenticated"),
             ("catalog:GetProducts", "GET", "http://localhost:5000/api/v1/catalog/products", "anonymous"),
+            ("catalog:GetProduct", "GET", "http://localhost:5000/api/v1/catalog/products/{id}", "anonymous"),
         ]);
         operations.ShouldAllBe(o => o.Source == "catalog" && o.Available);
     }
@@ -112,6 +113,10 @@ public sealed class OpenApiReaderTests
             ("bff:Quote", "POST", "http://localhost:5000/bff/v1/checkout/quote", "authenticated"),
             ("bff:ListOrders", "GET", "http://localhost:5000/bff/v1/orders", "authenticated"),
             ("bff:GetOrder", "GET", "http://localhost:5000/bff/v1/orders/{id}", "authenticated"),
+            ("bff:IssueProductImageUpload", "POST", "http://localhost:5000/bff/v1/product-images", "authenticated"),
+            ("bff:GetSavedAddress", "GET", "http://localhost:5000/bff/v1/saved-address", "authenticated"),
+            ("bff:PutSavedAddress", "PUT", "http://localhost:5000/bff/v1/saved-address", "authenticated"),
+            ("edge:GetProductImage", "GET", "http://127.0.0.1:9000/products/{seller}/{file}", GatewayRoutes.Direct),
             ("health:gateway", "GET", "http://localhost:5000/health/ready", GatewayRoutes.Direct),
             ("health:catalog", "GET", "http://localhost:5102/health/ready", GatewayRoutes.Direct),
             ("health:ordering", "GET", "http://localhost:5101/health/ready", GatewayRoutes.Direct),

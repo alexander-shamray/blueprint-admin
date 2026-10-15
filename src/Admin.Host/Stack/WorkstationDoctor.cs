@@ -78,6 +78,7 @@ public sealed partial class WorkstationDoctor(
                 Clone("Backend clone", backend.Result),
                 Clone("Frontend clone", frontend.Result),
                 Images(images.Result, headMoved.Result),
+                ObjectStore(stack.Result),
             ]);
         }
         finally
@@ -159,6 +160,80 @@ public sealed partial class WorkstationDoctor(
         return new(name, DoctorState.Ok, docker == 0 ? $"All {published.Count} published ports are free."
             : docker == published.Count ? $"All {published.Count} published ports are held by this stack's running containers."
             : $"{docker} of {published.Count} published ports are held by this stack's running containers, the rest are free.");
+    }
+
+    /// <summary>Owner: blueprint-backend <c>deploy/compose/infrastructure.yml</c>: the store, its one-shot and the edge in front of it.</summary>
+    internal const string ObjectStoreService = "object-store";
+
+    internal const string ObjectStoreInitService = "object-store-init";
+
+    internal const string ImageEdgeService = "image-edge";
+
+    /// <summary>
+    /// What an Up that failed to provision the image store looks like from Compose: the one-shot that makes the bucket and its
+    /// policies exited non-zero, or the store or the edge never became healthy. Every other service reads green in that
+    /// state, and a publish with an image then fails where a buyer would see it. A stack that is not up has nothing to judge.
+    /// </summary>
+    internal static DoctorCheck ObjectStore(ComposeStatus stack)
+    {
+        const string name = "Object store";
+
+        if (!stack.Reachable)
+        {
+            return new(name, DoctorState.Unknown, $"The stack's containers could not be listed: {stack.Error}");
+        }
+
+        ServiceStatus? store = stack.Services.FirstOrDefault(s => s.Service == ObjectStoreService);
+        ServiceStatus? init = stack.Services.FirstOrDefault(s => s.Service == ObjectStoreInitService);
+        ServiceStatus? edge = stack.Services.FirstOrDefault(s => s.Service == ImageEdgeService);
+
+        if (store is null && init is null && edge is null)
+        {
+            return new(name, DoctorState.Unknown, "The stack has no object store, its one-shot or its edge yet, so there is nothing to judge.");
+        }
+
+        List<string> problems = [];
+        List<string> pending = [];
+
+        foreach ((string service, ServiceStatus? status) in new (string, ServiceStatus?)[] { (ObjectStoreService, store), (ImageEdgeService, edge) })
+        {
+            if (status is null)
+            {
+                problems.Add($"{service} is not in the stack.");
+            }
+            else if (status.State != "running")
+            {
+                problems.Add($"{service} is {status.State}.");
+            }
+            else if (status.Health == "starting")
+            {
+                pending.Add($"{service} is still starting.");
+            }
+            else if (status.Health != "healthy")
+            {
+                problems.Add($"{service} is running but {status.Health ?? "has no health"}.");
+            }
+        }
+
+        if (init is null)
+        {
+            problems.Add($"{ObjectStoreInitService} is not in the stack, so the bucket and its policies were never made.");
+        }
+        else if (init.State == "exited")
+        {
+            if (init.ExitCode != 0)
+            {
+                problems.Add($"{ObjectStoreInitService} exited {init.ExitCode}, so the bucket and its policies may not exist.");
+            }
+        }
+        else
+        {
+            pending.Add($"{ObjectStoreInitService} is {init.State} and has not finished.");
+        }
+
+        return problems.Count > 0 ? new(name, DoctorState.Problem, string.Join(" ", problems))
+            : pending.Count > 0 ? new(name, DoctorState.Unknown, string.Join(" ", pending))
+            : new(name, DoctorState.Ok, $"{ObjectStoreService} and {ImageEdgeService} are healthy and {ObjectStoreInitService} exited 0.");
     }
 
     /// <summary>Read and reported, never fixed from here: the CORS list is the backend's.</summary>
