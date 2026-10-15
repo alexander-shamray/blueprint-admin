@@ -76,8 +76,9 @@ and carrier simulators' request logs; send as anonymous, a realm user, with
 the held token's time left and grants beside the picker, or a custom username
 and password, with a correlation id; status, timing, headers
 and body as the platform returned them; a history of this visit's calls).
-The Broker screen lists queues (error queues marked, each named with what
-consumes it), exchanges and
+The Broker screen lists queues (`_error` and `_skipped` queues marked, each named
+with what consumes it, and a non-empty one linking the backend runbook that owns
+it), exchanges and
 permissions through `rabbitmqctl` in the `rabbitmq` container, and the API
 screen shows whether `ordering-catalog-events` has drained after a publish.
 The Trace screen joins a correlation id's Loki lines and Tempo spans into one
