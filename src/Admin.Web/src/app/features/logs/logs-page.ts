@@ -16,7 +16,8 @@ export const COMPOSE_SERVICES = [
   'bff-migrator', 'web-bff',
   'inventory-migrator', 'inventory-api', 'payments-migrator', 'psp-simulator', 'payments-api',
   'shipping-migrator', 'carrier-simulator', 'shipping-worker',
-  'notifications-migrator', 'mailpit', 'notifications-worker',
+  'notifications-migrator', 'mailpit', 'notifications-worker', 'notifications-api', 'push-simulator',
+  'privacy-migrator', 'privacy-api', 'object-store', 'object-store-init', 'image-edge',
 ];
 
 const MAX_LINES = 5000;

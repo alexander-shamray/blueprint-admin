@@ -59,6 +59,15 @@ internal static class WorkstationRecordings
                 }
               ]
             },
+            "image-edge": {
+              "ports": [
+                {
+                  "target": 8080,
+                  "published": "9000",
+                  "host_ip": "127.0.0.1"
+                }
+              ]
+            },
             "inventory-api": {
               "ports": [
                 {
@@ -92,8 +101,19 @@ internal static class WorkstationRecordings
                 }
               ]
             },
+            "notifications-api": {},
             "notifications-migrator": {},
             "notifications-worker": {},
+            "object-store": {
+              "ports": [
+                {
+                  "target": 8333,
+                  "published": "8333",
+                  "host_ip": "127.0.0.1"
+                }
+              ]
+            },
+            "object-store-init": {},
             "ordering-api": {
               "ports": [
                 {
@@ -128,11 +148,30 @@ internal static class WorkstationRecordings
               ]
             },
             "payments-migrator": {},
+            "privacy-api": {
+              "ports": [
+                {
+                  "target": 8080,
+                  "published": "5105",
+                  "host_ip": "127.0.0.1"
+                }
+              ]
+            },
+            "privacy-migrator": {},
             "psp-simulator": {
               "ports": [
                 {
                   "target": 80,
                   "published": "5190",
+                  "host_ip": "127.0.0.1"
+                }
+              ]
+            },
+            "push-simulator": {
+              "ports": [
+                {
+                  "target": 80,
+                  "published": "5192",
                   "host_ip": "127.0.0.1"
                 }
               ]

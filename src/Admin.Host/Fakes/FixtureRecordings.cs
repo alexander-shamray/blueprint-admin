@@ -36,7 +36,12 @@ public static class FixtureRecordings
             FakeGrafana.GoldenSignalOf),
     ];
 
-    /// <summary>The reads ComposeService and BrokerService make, each in the form run-locally.md gives it.</summary>
+    /// <summary>
+    /// The reads ComposeService and BrokerService make, each in the form run-locally.md gives it. The last seven
+    /// rows of compose-ps.jsonl (the services the backend's Compose model gained since the last recording) were
+    /// written without a stack up: their names, images and ports come from <c>docker compose config</c> and the
+    /// rest copies a recorded row of the same kind. Re-record with <c>Admin:Record=true</c> to replace them.
+    /// </summary>
     public static readonly ProcessRecording[] Process =
     [
         new("compose-ps.jsonl", ["ps", "-a", "--format", "json"]),
@@ -53,8 +58,9 @@ public static class FixtureRecordings
         ["grafana-tempo-trace.json"] =
             "the trace of that same publish, under the trace id FakeGrafana.RecordedTraceId names",
         ["rabbitmq-queues.json"] =
-            "the list_queues answer recorded on 2026-10-04, plus an ordering-catalog-events_error queue holding one "
-            + "message, so the Broker screen has an error queue to mark: a state a clean stack is not in",
+            "the list_queues answer recorded on 2026-10-04, plus the privacy queues PlatformQueues.Table gained since "
+            + "(empty, written without a stack to read them from), plus an ordering-catalog-events_error queue holding "
+            + "one message, so the Broker screen has an error queue to mark: a state a clean stack is not in",
     };
 
     public static HttpRecording? For(AdminOptions options, Uri uri) => Http.FirstOrDefault(r => r.Answers(options, uri));
