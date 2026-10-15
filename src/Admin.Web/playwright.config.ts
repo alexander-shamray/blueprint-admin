@@ -8,6 +8,9 @@ export default defineConfig({
   globalSetup: './e2e/global-setup.ts',
   timeout: 30_000,
   fullyParallel: false,
+  // One worker: every spec file drives one FakePlatform host, and its ComposeGate refuses a second Compose-changing job
+  // (Stack's Up, Down and Reset; Broker's Rebuild) with 409, so two files on two workers could fail each other.
+  workers: 1,
   retries: process.env['CI'] ? 1 : 0,
   reporter: process.env['CI'] ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: { baseURL: url, trace: 'retain-on-failure' },
