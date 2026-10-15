@@ -344,7 +344,8 @@ itself. The tool runs as the broker account `dead-letter-operator`, which ships
 with no password. Each run mints a random one, sets it with `rabbitmqctl
 change_password`, hands it to the tool as `DEAD_LETTERS_PASSWORD`
 (`ProcessSpec.Environment`, never argv), and clears it when the run ends,
-whether the tool succeeded or not; so between runs the account has none, and
+whether the tool succeeded or not, and whenever the set was attempted, since a
+set that timed out may still have landed; so between runs the account has none, and
 runs are one at a time, since one run's clear would end another's login. A
 read is `inspect --json`, the contract the tool's README fixes for this
 console (schema 1), and puts every message back, flagged redelivered, so it
@@ -584,7 +585,9 @@ built, with the identity it went as and the status that came back.
 
 What the screens poll is left out by the line `/jobs` already draws:
 `TranscribingProcessRunner` keeps a process only when `ProcessSpec.Listed`
-says the registry would (§5.2), so `ps` and `exec` never appear. A process is
+says the registry would (§5.2), so `ps` and the `exec` reads never appear; the
+dead-letter operator's password set and clear are `exec`s the operator caused,
+and are listed (`ComposeService.ExecListedAsync`). A process is
 let go once it exits and only its exit code kept, so the transcript never holds
 an output ring the registry has trimmed. A request takes its place when it is
 sent, not when it is answered, and is settled whatever became of it, so the
@@ -592,9 +595,11 @@ order is the order things began and a send abandoned mid-flight is still on the
 record. A token the proxy attached, and any Authorization a caller pasted, keep
 their scheme and lose their value, and a Cookie keeps its names and loses its
 values: the headers the API screen's history drops, which no pattern can
-recognise by value. A variable a spec names in `ProcessSpec.SecretEnvironment`,
-the dead-letter operator's per-run password, keeps its name and loses its value
-for the same reason. Every word then passes through `FixtureScrubber` before it
+recognise by value. A value a spec names in `ProcessSpec.Secrets`, the
+dead-letter operator's per-run password, is scrubbed outright for the same
+reason, whether it is an argument or a variable's value, and so is it in the
+spec's `CommandLine`, which the job list and the host's log print. Every word
+then passes through `FixtureScrubber` before it
 is quoted, so a transcript and a fixture are held to one definition of a
 secret. The quoted line is not scrubbed again: the form rule's value may be a
 quote, and a second pass would take a closing one. The token grant itself is `TokenService`'s and not a proxied

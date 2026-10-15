@@ -65,11 +65,29 @@ public sealed class DeadLetterServiceTests : IAsyncDisposable
         started[1].Arguments.ShouldBe(["-3.12", DeadLetterService.Tool, "inspect", Queue, "--limit", "20", "--json"]);
         started[1].WorkingDirectory.ShouldBe(Paths.BackendDir);
         started[1].Environment!["DEAD_LETTERS_PASSWORD"].ShouldBe(password);
-        started[1].SecretEnvironment.ShouldContain("DEAD_LETTERS_PASSWORD");
+        started[1].Secrets.ShouldContain(password);
         started[1].Arguments.ShouldNotContain(password);
         string.Join(' ', started[2].Arguments).ShouldEndWith("clear_password dead-letter-operator");
-        started[0].Listed.ShouldBeFalse();
-        started[2].Listed.ShouldBeFalse();
+
+        // The operator caused all three, so each is listed for the job list and the transcript, the password scrubbed.
+        started.ShouldAllBe(s => s.Listed);
+        started[0].CommandLine.ShouldEndWith("change_password dead-letter-operator <scrubbed>");
+        started[0].CommandLine.ShouldNotContain(password);
+    }
+
+    [Fact]
+    public async Task A_set_cancelled_while_it_waits_is_still_followed_by_a_clear()
+    {
+        runner.OnLongRunning("docker", SetPassword).On("docker", ClearPassword, 0, "Clearing password");
+        using CancellationTokenSource cancel = new();
+
+        Task<DeadLetterInspection?> inspecting = service.InspectAsync(Queue, cancel.Token);
+        await WaitForAsync(() => runner.Started.Any(s => s.Arguments.Contains("change_password")));
+        await cancel.CancelAsync();
+
+        await Should.ThrowAsync<OperationCanceledException>(inspecting);
+        runner.Started[^1].Arguments.ShouldContain("clear_password");
+        runner.Started.ShouldNotContain(s => s.FileName == "py");
     }
 
     [Fact]
@@ -98,14 +116,15 @@ public sealed class DeadLetterServiceTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task A_password_that_cannot_be_set_runs_no_tool()
+    public async Task A_password_that_cannot_be_set_runs_no_tool_and_is_still_cleared_in_case_it_landed()
     {
-        runner.OnFailing("docker", SetPassword, 1, "Error: user dead-letter-operator does not exist");
+        runner.OnFailing("docker", SetPassword, 1, "Error: user dead-letter-operator does not exist").On("docker", ClearPassword, 0, "Clearing password");
 
         DeadLetterInspection inspection = (await service.InspectAsync(Queue, TestContext.Current.CancellationToken))!;
 
         inspection.Error!.ShouldStartWith("The operator's password could not be set: Error: user dead-letter-operator does not exist");
         runner.Started.ShouldNotContain(s => s.FileName == "py");
+        runner.Started[^1].Arguments.ShouldContain("clear_password");
     }
 
     [Fact]
@@ -119,7 +138,7 @@ public sealed class DeadLetterServiceTests : IAsyncDisposable
 
         inspection.Messages.ShouldHaveSingleItem();
         string error = inspection.Error.ShouldNotBeNull();
-        error.ShouldContain("The operator still has a password (Error: the broker went away)");
+        error.ShouldContain("The operator's password could not be cleared (Error: the broker went away); if it was set, it still is");
         error.ShouldContain("rabbitmqctl clear_password dead-letter-operator");
     }
 
@@ -178,6 +197,25 @@ public sealed class DeadLetterServiceTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task An_unrecorded_line_that_cannot_be_kept_is_said_and_the_tool_is_followed_to_its_end()
+    {
+        const string Unrecorded = """unrecorded {"queue": "ordering-catalog-events_error", "message": {}}""";
+        Password().OnFailing("py", DeadLetterRecordings.Prefix + "replay ", 1, Unrecorded, "replayed       later-line");
+
+        // A directory where the file would go makes the append fail.
+        string kept = Path.Combine(recordDir, $"20261015-120000-{Queue}-replay.unrecorded.jsonl");
+        Directory.CreateDirectory(kept);
+
+        Job job = service.Start(DeadLetterVerb.Replay, Queue, [DeadLetterRecordings.FaultedId], execute: true)!;
+        (await job.Completion).ShouldBe(1);
+
+        string[] output = [.. job.Since(-1).Select(l => l.Text)];
+        output.ShouldContain(l => l.Contains($"{kept} could not be written") && l.EndsWith("copy the line now.", StringComparison.Ordinal));
+        output.ShouldContain("replayed       later-line");
+        output[^1].ShouldEndWith("clear_password dead-letter-operator");
+    }
+
+    [Fact]
     public async Task One_run_at_a_time_holds_the_operator_and_the_next_waits_for_it_to_end()
     {
         Password().OnLongRunning("py", DeadLetterRecordings.Prefix + "replay ");
@@ -201,6 +239,7 @@ public sealed class DeadLetterServiceTests : IAsyncDisposable
     [InlineData("_error", false)]
     [InlineData("Ordering_error", false)]
     [InlineData("ordering-catalog-events_error --all", false)]
+    [InlineData("ordering-catalog-events_error\n", false)]
     public void Only_an_endpoints_parked_queue_is_handed_to_the_tool(string queue, bool parked) =>
         DeadLetterService.IsParkedQueue(queue).ShouldBe(parked);
 
@@ -210,6 +249,7 @@ public sealed class DeadLetterServiceTests : IAsyncDisposable
     [InlineData("-x", false)]
     [InlineData("", false)]
     [InlineData("a b", false)]
+    [InlineData("abc\n", false)]
     public void A_message_id_never_reads_as_a_flag(string id, bool accepted) => DeadLetterService.IsMessageId(id).ShouldBe(accepted);
 
     [Fact]

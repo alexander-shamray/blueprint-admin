@@ -26,6 +26,13 @@ public sealed class ComposeService(IProcessRunner runner, RepoPaths paths, TimeP
     public Task<CommandOutput> ExecAsync(string service, string[] args, CancellationToken cancellationToken) =>
         CompleteAsync(Exec(service, args), $"docker compose exec {service}", cancellationToken);
 
+    /// <summary>
+    /// An exec the operator caused, not a read a screen polls: listed, so the job list and the transcript keep it, with
+    /// each of <paramref name="secrets"/> shown scrubbed (<see cref="ProcessSpec.Secrets"/>).
+    /// </summary>
+    public Task<CommandOutput> ExecListedAsync(string service, string[] args, IReadOnlySet<string> secrets, CancellationToken cancellationToken) =>
+        CompleteAsync(runner.Start(Spec(["exec", "-T", service, .. args]) with { Secrets = secrets }), $"docker compose exec {service}", cancellationToken);
+
     /// <summary>The resolved Compose model, which owns every published port and service environment.</summary>
     public Task<CommandOutput> ConfigAsync(CancellationToken cancellationToken) =>
         CompleteAsync(Read("config", "--format", "json"), "docker compose config", cancellationToken);

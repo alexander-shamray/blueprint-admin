@@ -181,20 +181,24 @@ public sealed class OperatorTranscriptTests
     }
 
     [Fact]
-    public void A_variable_the_spec_names_secret_keeps_its_name_and_loses_a_value_no_pattern_would_catch()
+    public void A_secret_value_is_scrubbed_in_a_variable_and_in_an_argument_where_no_pattern_would_catch_it()
     {
         Dictionary<string, string> environment = new() { ["DEAD_LETTERS_PASSWORD"] = "0f3c9a2be41d", ["DEAD_LETTERS_USER"] = "dead-letter-operator" };
+        HashSet<string> secrets = ["0f3c9a2be41d"];
+        TranscribingProcessRunner runner = new(new StubRunner(), transcript);
 
-        new TranscribingProcessRunner(new StubRunner(), transcript).Start(new ProcessSpec("py", ["-3.12", "dead_letters.py", "list"], "/work/backend")
+        runner.Start(new ProcessSpec("py", ["-3.12", "dead_letters.py", "list"], "/work/backend") { Environment = environment, Secrets = secrets });
+        ProcessSpec set = new("docker", ["exec", "rabbitmq", "rabbitmqctl", "change_password", "dead-letter-operator", "0f3c9a2be41d"], "/work/backend")
         {
-            Environment = environment,
-            SecretEnvironment = new HashSet<string> { "DEAD_LETTERS_PASSWORD" },
-        });
+            Secrets = secrets,
+        };
+        runner.Start(set);
 
-        string command = transcript.Read().Entries[0].Command;
-
-        command.ShouldBe("DEAD_LETTERS_PASSWORD='<scrubbed>' DEAD_LETTERS_USER=dead-letter-operator py -3.12 dead_letters.py list");
-        command.ShouldNotContain("0f3c9a2be41d");
+        TranscriptEntry[] entries = [.. transcript.Read().Entries];
+        entries[0].Command.ShouldBe("DEAD_LETTERS_PASSWORD='<scrubbed>' DEAD_LETTERS_USER=dead-letter-operator py -3.12 dead_letters.py list");
+        entries[1].Command.ShouldBe("docker exec rabbitmq rabbitmqctl change_password dead-letter-operator '<scrubbed>'");
+        set.CommandLine.ShouldBe("docker exec rabbitmq rabbitmqctl change_password dead-letter-operator <scrubbed>");
+        entries.ShouldAllBe(e => !e.Command.Contains("0f3c9a2be41d"));
     }
 
     [Fact]
