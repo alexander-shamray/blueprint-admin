@@ -6,7 +6,7 @@ public sealed record ParkedKind(string Name, string Suffix, string Runbook);
 /// <summary>
 /// The two kinds of parked queue, each suffix copied from <c>SUFFIXES</c> in blueprint-backend's
 /// <c>tools/dead-letters/dead_letters.py</c> and each runbook a file under its <c>docs/runbooks/</c>; the drift gate
-/// reads both (tests/Admin.Host.Tests/Drift/ParkedQueueDriftTests.cs). The console shows which kind a queue is and
+/// reads both (tests/Admin.Host.Tests/Drift/QueueDriftTests.cs). The console shows which kind a queue is and
 /// where its runbook is, and decides nothing.
 /// </summary>
 public static class ParkedQueues
