@@ -106,6 +106,8 @@ exit is not measured: it waits on sessions run since (#123).
 ## 3. What each step may not do
 
 A cut that loses a finding is not a saving. Steps 4–6 each hold recall
-against the step 1 quality sets, and none claims its exit by finding fewer
-rows than the baseline run recorded there.
+against the step 1 quality sets. Steps 4 and 6 do not claim their exit by
+finding fewer rows than the `branch-reviewer` baseline recorded there; step 5
+still waits on a sweep baseline, since the sweep set is empty and
+`bug-auditor` has not been run.
 Steps 2 and 3 move no behaviour and need no set.
