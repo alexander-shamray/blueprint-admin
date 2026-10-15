@@ -52,6 +52,7 @@ C:
 # of this class, and the gate enforces it by this list having no code entry.
 D:
   - 'docs/**'
+  - 'tools/**'
   - '.claude/**'
   - '.github/**'
   - 'CLAUDE.md'
