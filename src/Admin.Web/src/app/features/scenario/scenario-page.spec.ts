@@ -1390,6 +1390,21 @@ describe('ScenarioPage', () => {
       expect(page.steps()[2].detail).toBe('No answer from the edge: timed out');
     });
 
+    it.each([
+      [400, true],
+      [503, false],
+    ])('hints at the configured edge only when the proxy refuses the thumbnail with %s', async (status, hinted) => {
+      host.proxy.mockImplementation((r: ProxyRequest) =>
+        r.url === thumbnailUrl ? throwError(() => ({ status, message: `HTTP ${status}` })) : of(platform(r)),
+      );
+      const page = image();
+
+      await page.run();
+
+      expect(page.steps()[2].state).toBe('failed');
+      expect(page.steps()[2].detail.includes('Admin:ImageEdgeUrl')).toBe(hinted);
+    });
+
     it('cannot run while the signing or the product read is missing from the catalog, and says which', () => {
       host.operations.mockReturnValue(
         of({

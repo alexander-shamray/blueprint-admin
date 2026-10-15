@@ -470,12 +470,16 @@ export class ScenarioPage {
         }),
       );
     } catch (e: unknown) {
-      // The proxy sends only to the configured surfaces, so a thumbnail on another origin than Admin:ImageEdgeUrl is refused.
+      // The proxy sends only to the configured surfaces and answers 400 for any other, so a thumbnail on another
+      // origin than Admin:ImageEdgeUrl is refused; any other failure is not that, and gets no such hint.
+      const refused = (e as { status?: number } | null)?.status === 400;
       this.patch(key, {
         state: 'failed',
         status: null,
         body: read.body,
-        detail: `${describe(e)} (the thumbnail's origin must be the one Admin:ImageEdgeUrl names)`,
+        detail: refused
+          ? `${describe(e)} (the thumbnail's origin must be the one Admin:ImageEdgeUrl names)`
+          : describe(e),
       });
       return false;
     }
