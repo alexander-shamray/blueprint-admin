@@ -11,7 +11,7 @@ import {
   ProjectionPlan,
   QueuesView,
 } from '../../core/host/host-types';
-import { SseClient } from '../../core/host/sse-client';
+import { JobEvent, SseClient } from '../../core/host/sse-client';
 import { BrokerPage } from './broker-page';
 
 const queues: QueuesView = {
@@ -206,6 +206,46 @@ describe('BrokerPage', () => {
     expect(host.projectionRebuild).not.toHaveBeenCalled();
     expect(fixture.nativeElement.querySelector('app-output-pane')).not.toBeNull();
     expect(host.brokerQueues).toHaveBeenCalledTimes(1);
+  });
+
+  function withBffDepth(messages: number): QueuesView {
+    return { ...queues, queues: queues.queues.map((q) => (q.name === 'bff-order-events' ? { ...q, messages } : q)) };
+  }
+
+  it("reads the depth line again when the run's job exits, so it does not keep the queue as the run found it", () => {
+    const events = new Subject<JobEvent>();
+    TestBed.overrideProvider(SseClient, { useValue: { follow: () => events } });
+    host.brokerQueues.mockReturnValue(of(withBffDepth(3)));
+    const fixture = render();
+    (fixture.nativeElement.querySelector('button.repair') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    host.brokerQueues.mockClear();
+    host.brokerQueues.mockReturnValue(of(withBffDepth(0)));
+
+    events.next({ kind: 'exited', exitCode: 0 });
+    fixture.detectChanges();
+
+    expect(host.brokerQueues).toHaveBeenCalledTimes(1);
+    expect(fixture.nativeElement.querySelector('section.projection .depth')?.textContent?.trim()).toBe('[drained] bff-order-events is empty.');
+  });
+
+  it('an exit while a refresh is still out reads again once that refresh lands, since it may have read before the exit', () => {
+    const events = new Subject<JobEvent>();
+    TestBed.overrideProvider(SseClient, { useValue: { follow: () => events } });
+    const fixture = render();
+    (fixture.nativeElement.querySelector('button.repair') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const inFlight = new Subject<QueuesView>();
+    host.brokerQueues.mockClear();
+    host.brokerQueues.mockReturnValueOnce(inFlight);
+    (fixture.nativeElement.querySelector('button.refresh') as HTMLButtonElement).click();
+
+    events.next({ kind: 'exited', exitCode: 0 });
+    expect(host.brokerQueues).toHaveBeenCalledTimes(1);
+    inFlight.next(queues);
+    inFlight.complete();
+
+    expect(host.brokerQueues).toHaveBeenCalledTimes(2);
   });
 
   it('rebuild is disabled until the confirmation is typed exactly, then sends it and clears the box', async () => {

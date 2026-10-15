@@ -34,6 +34,8 @@ export class BrokerPage {
   /** True while any read started by refresh() is still out; refresh() is not re-entrant while it is. */
   readonly refreshing = signal(false);
   private pendingReads = 0;
+  /** A refresh asked for while one was out, run when that one lands: its reads may predate what was asked about. */
+  private refreshOwed = false;
   /**
    * One failed-read signal per endpoint, not a shared one: each is set only by its own read's
    * failure and cleared only by that same read's success, so an exchanges or permissions failure
@@ -175,6 +177,18 @@ export class BrokerPage {
     this.withPendingCountdown(this.read(this.host.brokerPermissions(), this.permissionsError)).subscribe((view) => this.permissions.set(view));
   }
 
+  /**
+   * The run has ended, so read the queues again: without it the depth line keeps the queue as the run found it while
+   * the job's own log says it drained. A refresh still out may have read before the end, so this one waits for it.
+   */
+  projectionEnded(): void {
+    if (this.refreshing()) {
+      this.refreshOwed = true;
+      return;
+    }
+    this.refresh();
+  }
+
   /** A tick is a refresh(), so it starts nothing while an earlier refresh's reads are still out. */
   setAutoRefresh(on: boolean): void {
     this.autoRefresh.set(on);
@@ -201,7 +215,13 @@ export class BrokerPage {
     return source.pipe(
       finalize(() => {
         this.pendingReads--;
-        if (this.pendingReads === 0) this.refreshing.set(false);
+        if (this.pendingReads === 0) {
+          this.refreshing.set(false);
+          if (this.refreshOwed) {
+            this.refreshOwed = false;
+            this.refresh();
+          }
+        }
       }),
     );
   }

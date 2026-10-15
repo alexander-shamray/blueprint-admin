@@ -1,4 +1,4 @@
-import { Component, ElementRef, computed, effect, inject, input, signal, viewChild, DestroyRef } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, input, output, signal, viewChild, DestroyRef } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { OutputLine } from '../../core/host/host-types';
 import { SseClient } from '../../core/host/sse-client';
@@ -29,6 +29,8 @@ export class OutputPane {
   readonly jobId = input<string | null>(null);
   readonly lines = signal<OutputLine[]>([]);
   readonly exitCode = signal<number | null>(null);
+  /** The followed job's exit code, once, when the stream reports it: what a screen re-reads state on. */
+  readonly exited = output<number>();
   readonly error = signal<string | null>(null);
   readonly announcement = computed(() => {
     if (!this.jobId()) return '';
@@ -58,6 +60,7 @@ export class OutputPane {
             this.lines.update((all) => [...all, event.line]);
           } else {
             this.exitCode.set(event.exitCode);
+            this.exited.emit(event.exitCode);
           }
           queueMicrotask(() => {
             const el = this.pane()?.nativeElement;
