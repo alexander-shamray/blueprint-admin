@@ -27,6 +27,10 @@ public sealed class PlatformProbe(HttpClient http, IOptions<AdminOptions> option
             ("bff", Join(o.BffUrl, "/health/ready")),
             ("inventory", Join(o.InventoryUrl, "/health/ready")),
             ("payments", Join(o.PaymentsUrl, "/health/ready")),
+            // The store's own status route and the edge's health route are the ones their Compose healthchecks call
+            // (blueprint-backend deploy/compose/infrastructure.yml), so Up that leaves either unready reads down here too.
+            ("object-store", Join(o.ObjectStoreUrl, "/status")),
+            ("image-edge", Join(o.ImageEdgeUrl, "/healthz")),
             ("keycloak", Join(o.KeycloakUrl, $"/realms/{o.Realm}")),
             ("grafana", Join(o.GrafanaUrl, "/api/health")),
             ("client", Join(o.ClientUrl, "/")),

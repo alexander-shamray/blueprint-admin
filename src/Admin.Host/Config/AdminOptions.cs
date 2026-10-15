@@ -74,6 +74,20 @@ public sealed class AdminOptions
     /// <summary>The BFF's own broker account, as <c>deploy/compose/services/web-bff.yml</c> gives it, reached on the published port by its literal loopback address.</summary>
     public string BffBrokerConnection { get; set; } = "amqp://bff-svc:local-dev-bff@127.0.0.1:5672";
 
+    /// <summary>
+    /// The S3 endpoint of the local object store (SeaweedFS, <c>object-store</c> in blueprint-backend's
+    /// <c>deploy/compose/infrastructure.yml</c>), which a pre-signed product-image <c>PUT</c> addresses. The console probes it and
+    /// sends the one upload run-locally.md makes by hand; it reads nothing else from it (ADR-106).
+    /// </summary>
+    public string ObjectStoreUrl { get; set; } = "http://127.0.0.1:8333";
+
+    /// <summary>
+    /// The public layer in front of the store (<c>image-edge</c>, nginx), which serves <c>products/</c> to a read alone and
+    /// sets <c>nosniff</c> (§10.8). A product's <c>thumbnailUrl</c> points here, so the API screen and the Scenario read the
+    /// stored image back through it, as a buyer's browser does.
+    /// </summary>
+    public string ImageEdgeUrl { get; set; } = "http://127.0.0.1:9000";
+
     public string KeycloakUrl { get; set; } = "http://localhost:8080";
 
     public string GrafanaUrl { get; set; } = "http://localhost:3000";

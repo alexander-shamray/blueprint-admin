@@ -33,7 +33,7 @@ public sealed class PlatformProbeTests
 
         IReadOnlyList<Reachability> result = await probe.ProbeAsync(TestContext.Current.CancellationToken);
 
-        result.Select(r => r.Name).ShouldBe(["gateway", "catalog", "ordering", "bff", "inventory", "payments", "keycloak", "grafana", "client"]);
+        result.Select(r => r.Name).ShouldBe(["gateway", "catalog", "ordering", "bff", "inventory", "payments", "object-store", "image-edge", "keycloak", "grafana", "client"]);
         result.Single(r => r.Name == "gateway").Url.ShouldBe("http://localhost:5000/health/ready");
         result.Single(r => r.Name == "keycloak").ShouldBe(new Reachability("keycloak", "http://localhost:8080/realms/commerce", true, 200));
         result.Single(r => r.Name == "grafana").ShouldBe(new Reachability("grafana", "http://localhost:3000/api/health", false, null));
@@ -68,6 +68,8 @@ public sealed class PlatformProbeTests
             "http://localhost:5200/health/ready",
             "http://localhost:5103/health/ready",
             "http://localhost:5104/health/ready",
+            "http://127.0.0.1:8333/status",
+            "http://127.0.0.1:9000/healthz",
             "http://localhost:8080/realms/commerce",
             "http://localhost:3000/api/health",
             "http://localhost:5173/",

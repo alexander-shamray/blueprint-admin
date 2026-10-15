@@ -10,7 +10,12 @@ test('the stack screen lists the fake services and runs up', async ({ page }) =>
   await expect(service('sql')).toContainText('healthy');
   await expect(service('gateway')).toContainText('running');
   await expect(service('gateway')).not.toContainText('healthy');
-  await expect(page.locator('.reachability span.up')).toHaveCount(9);
+  await expect(page.locator('.reachability span.up')).toHaveCount(11);
+  // The store and the edge are surfaces of their own: an Up that leaves the image store unprovisioned looks green otherwise.
+  await expect(page.locator('.reachability span.up', { hasText: 'object-store' })).toHaveCount(1);
+  await expect(page.locator('.reachability span.up', { hasText: 'image-edge' })).toHaveCount(1);
+  // The one-shot that makes the bucket is shown like a migrator: exited, with its code.
+  await expect(service('object-store-init')).toContainText('exited');
 
   await page.getByRole('button', { name: 'Up' }).click();
   await expect(page.locator('app-output-pane pre')).toContainText('commerce-gateway-1  Healthy');
@@ -35,7 +40,8 @@ test('the workstation panel is read before Up, green where fine and red where a 
   await page.goto('/stack');
   const rows = page.getByRole('region', { name: 'Workstation' }).locator('table.doctor tbody tr');
 
-  await expect(rows).toHaveCount(7);
+  await expect(rows).toHaveCount(8);
+  await expect(rows.filter({ hasText: 'Object store' })).toHaveClass('state-Ok');
   await expect(rows.filter({ hasText: 'Docker' })).toHaveClass('state-Ok');
   await expect(rows.filter({ hasText: 'Docker' }).locator('td.state')).toHaveText('ok');
   await expect(rows.filter({ hasText: 'Ports' })).toHaveClass('state-Problem');
@@ -85,6 +91,6 @@ test('reset needs the typed confirmation, then runs down -v, up and the readines
   const output = page.locator('app-output-pane pre');
   await expect(output).toContainText('Volume commerce_sql-data  Removed');
   await expect(output).toContainText('commerce-gateway-1  Healthy');
-  await expect(output).toContainText('ready: gateway, catalog, ordering, bff, inventory, payments, keycloak, grafana');
+  await expect(output).toContainText('ready: gateway, catalog, ordering, bff, inventory, payments, object-store, image-edge, keycloak, grafana');
   await expect(output).toContainText('exited 0');
 });

@@ -25,6 +25,11 @@ public static class ApiEndpoints
                 ? TypedResults.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Request not sent", detail: problem)
                 : TypedResults.Ok(await proxy.SendAsync(request, cancellationToken)));
 
+        app.MapPost("/api/product-images/upload", async Task<Results<Ok<ProxyResult>, ProblemHttpResult>> (ProductImageUploadRequest request, ProductImageUploader uploader, CancellationToken cancellationToken) =>
+            uploader.Validate(request) is string problem
+                ? TypedResults.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Upload not sent", detail: problem)
+                : TypedResults.Ok(await uploader.SendAsync(request, cancellationToken)));
+
         return app;
     }
 }

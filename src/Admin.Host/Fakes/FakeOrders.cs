@@ -41,6 +41,9 @@ public sealed class FakeOrders(TimeProvider time)
     private readonly Lock gate = new();
     private readonly Dictionary<string, Placed> placed = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Product> products = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, bool> uploads = new(StringComparer.Ordinal);
+    private readonly HashSet<string> publishedImages = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> addresses = new(StringComparer.Ordinal);
     private long next = FirstLaterId;
     private long nextProduct = FirstLaterProductId;
 
@@ -48,15 +51,89 @@ public sealed class FakeOrders(TimeProvider time)
     /// Publishes a product at <paramref name="amount"/> and answers with its id: <see cref="FakeGateway.PublishedProductId"/>
     /// the first time, a fresh one after, so two runs at once each hold a product of their own.
     /// </summary>
-    public string Publish(decimal amount)
+    public string Publish(decimal amount, string name = "Walnut desk", string? thumbnailUrl = null)
     {
         lock (gate)
         {
             string id = products.Count == 0
                 ? FakeGateway.PublishedProductId
                 : "0199a1b2-0000-7000-8000-" + (nextProduct++).ToString("x12", CultureInfo.InvariantCulture);
-            products[id] = new Product(amount, null);
+            products[id] = new Product(amount, null, name, thumbnailUrl);
             return id;
+        }
+    }
+
+    /// <summary>The listing's row for a product this fake published, as Catalog's <c>GetProduct</c> answers it; null for any other id.</summary>
+    public string? ProductSummary(string id)
+    {
+        lock (gate)
+        {
+            return products.TryGetValue(id, out Product? product)
+                ? JsonSerializer.Serialize(new
+                {
+                    productId = id,
+                    name = product.Name,
+                    thumbnailUrl = product.ThumbnailUrl,
+                    amount = product.Amount,
+                    currency = "EUR",
+                    publishedAt = time.GetUtcNow(),
+                })
+                : null;
+        }
+    }
+
+    /// <summary>
+    /// What the object store holds: a key the BFF issued is written when the bytes arrive, with whether they were an image,
+    /// because the store keeps any bytes and Catalog is what sniffs them when it attaches the upload.
+    /// </summary>
+    public void Store(string key, bool isImage)
+    {
+        lock (gate)
+        {
+            uploads[key] = isImage;
+        }
+    }
+
+    /// <summary>Null when nothing is stored under the key; otherwise whether what is stored is an image.</summary>
+    public bool? Stored(string key)
+    {
+        lock (gate)
+        {
+            return uploads.TryGetValue(key, out bool isImage) ? isImage : null;
+        }
+    }
+
+    /// <summary>Marks a published image's key as one the edge serves.</summary>
+    public void ServeImage(string productKey)
+    {
+        lock (gate)
+        {
+            publishedImages.Add(productKey);
+        }
+    }
+
+    public bool Serves(string productKey)
+    {
+        lock (gate)
+        {
+            return publishedImages.Contains(productKey);
+        }
+    }
+
+    /// <summary>The caller's saved address, the one the BFF keeps per user; null where none was put.</summary>
+    public string? Address(string subject)
+    {
+        lock (gate)
+        {
+            return addresses.GetValueOrDefault(subject);
+        }
+    }
+
+    public void SaveAddress(string subject, string json)
+    {
+        lock (gate)
+        {
+            addresses[subject] = json;
         }
     }
 
@@ -206,5 +283,5 @@ public sealed class FakeOrders(TimeProvider time)
 
     private sealed record Placed(DateTimeOffset At, DateTimeOffset? CancelAskedAt, string? Ended);
 
-    private sealed record Product(decimal Amount, int? OnHand);
+    private sealed record Product(decimal Amount, int? OnHand, string Name, string? ThumbnailUrl);
 }

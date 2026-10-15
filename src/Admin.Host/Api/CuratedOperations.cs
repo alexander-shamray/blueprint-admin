@@ -7,7 +7,9 @@ namespace Admin.Host.Api;
 /// reads, which have no document (blueprint-backend <c>src/BFF/Web.Bff/Endpoints/CheckoutEndpoints.cs</c>,
 /// <c>OrderEndpoints.cs</c>), every
 /// host's readiness check (<c>Common.Web.HealthCheckExtensions</c>), called on the host's own port,
-/// and the payment simulator's request log, the one view of what Payments asked the provider for
+/// the product-image upload and the saved delivery address, which are the BFF's too
+/// (<c>ProductImageEndpoints.cs</c>, <c>SavedAddressEndpoints.cs</c>), the stored image read back through
+/// <c>image-edge</c> (blueprint-backend <c>deploy/compose/object-store/edge.conf</c>), and the payment simulator's request log, the one view of what Payments asked the provider for
 /// (blueprint-backend <c>deploy/compose/psp-simulator/README.md</c>).
 /// </summary>
 public static class CuratedOperations
@@ -49,6 +51,54 @@ public static class CuratedOperations
             null,
             false,
             GatewayRoutes.PolicyFor("GET", "/bff/v1/orders/{id}"),
+            true),
+        new ApiOperation(
+            "bff:IssueProductImageUpload",
+            "bff",
+            "IssueProductImageUpload",
+            "POST",
+            Join(options.GatewayUrl, "/bff/v1/product-images"),
+            [],
+            [],
+            RunLocallyExamples.ProductImageUpload,
+            false,
+            GatewayRoutes.PolicyFor("POST", "/bff/v1/product-images"),
+            true),
+        new ApiOperation(
+            "bff:GetSavedAddress",
+            "bff",
+            "GetSavedAddress",
+            "GET",
+            Join(options.GatewayUrl, "/bff/v1/saved-address"),
+            [],
+            [],
+            null,
+            false,
+            GatewayRoutes.PolicyFor("GET", "/bff/v1/saved-address"),
+            true),
+        new ApiOperation(
+            "bff:PutSavedAddress",
+            "bff",
+            "PutSavedAddress",
+            "PUT",
+            Join(options.GatewayUrl, "/bff/v1/saved-address"),
+            [],
+            [],
+            RunLocallyExamples.SavedAddress,
+            false,
+            GatewayRoutes.PolicyFor("PUT", "/bff/v1/saved-address"),
+            true),
+        new ApiOperation(
+            "edge:GetProductImage",
+            "edge",
+            "GetProductImage",
+            "GET",
+            Join(options.ImageEdgeUrl, "/products/{seller}/{file}"),
+            [new ApiParameter("seller", true, "string"), new ApiParameter("file", true, "string")],
+            [],
+            null,
+            false,
+            GatewayRoutes.Direct,
             true),
         Health("gateway", options.GatewayUrl),
         Health("catalog", options.CatalogUrl),

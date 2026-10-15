@@ -72,10 +72,11 @@ public sealed class ApiCatalogTests : IDisposable
         view.Sources.ShouldAllBe(s => s.Changes!.BaselineTaken);
         view.Operations.Select(o => o.Id).ShouldBe(
         [
-            "catalog:PublishProduct", "catalog:GetProducts", "ordering:PlaceOrder", "ordering:CancelOrder",
+            "catalog:PublishProduct", "catalog:GetProducts", "catalog:GetProduct", "ordering:PlaceOrder", "ordering:CancelOrder",
             "inventory:SetOnHand", "inventory:GetStock", "inventory:GetReservation", "inventory:ReleaseReservation",
             "inventory:ReinstateReservation", "payments:GetPayment",
-            "bff:Quote", "bff:ListOrders", "bff:GetOrder", "health:gateway", "health:catalog", "health:ordering", "health:bff", "health:inventory",
+            "bff:Quote", "bff:ListOrders", "bff:GetOrder", "bff:IssueProductImageUpload", "bff:GetSavedAddress", "bff:PutSavedAddress",
+            "edge:GetProductImage", "health:gateway", "health:catalog", "health:ordering", "health:bff", "health:inventory",
             "health:payments", "simulator:Requests", "carrier:Requests",
         ]);
         handler.Requests.Where(r => r.Request.RequestUri!.AbsolutePath == "/openapi/v1.json")
@@ -187,7 +188,7 @@ public sealed class ApiCatalogTests : IDisposable
         ApiCatalogView view = await Catalog(handler).GetAsync(Token);
 
         view.Sources.ShouldAllBe(s => !s.Available && s.Error == "The token request for demo answered 401.");
-        view.Operations.Select(o => o.Source).Distinct().ShouldBe(["bff", "health", "simulator", "carrier"]);
+        view.Operations.Select(o => o.Source).Distinct().ShouldBe(["bff", "edge", "health", "simulator", "carrier"]);
     }
 
     [Fact]

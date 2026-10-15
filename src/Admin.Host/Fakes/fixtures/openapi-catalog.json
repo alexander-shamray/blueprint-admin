@@ -65,6 +65,33 @@
           }
         }
       }
+    },
+    "/v1/catalog/products/{id}": {
+      "get": {
+        "tags": [
+          "Products"
+        ],
+        "operationId": "GetProduct",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -73,7 +100,7 @@
         "required": [
           "commandId",
           "name",
-          "thumbnailUrl",
+          "imageKey",
           "amount",
           "currency"
         ],
@@ -86,7 +113,7 @@
           "name": {
             "type": "string"
           },
-          "thumbnailUrl": {
+          "imageKey": {
             "type": [
               "null",
               "string"

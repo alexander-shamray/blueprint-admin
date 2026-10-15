@@ -1,7 +1,10 @@
 using System.Net;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Admin.Host.Api;
+using Admin.Host.Config;
 using Admin.Host.Identity;
 
 namespace Admin.Host.Fakes;
@@ -56,6 +59,36 @@ internal static partial class FakeGateway
         {"type":"https://tools.ietf.org/html/rfc9110#section-15.5.5","title":"Not Found","status":404,"code":"order.not_found","detail":"No order with that id."}
         """;
 
+    /// <summary>
+    /// Catalog's rule errors as <c>ToHttpResult</c> writes them: <c>ErrorType.Rule</c> is a 422 with the error's code
+    /// and description (blueprint-backend <c>ResultExtensions</c>, <c>ProductErrors</c>).
+    /// </summary>
+    private static HttpResponseMessage Rule(string code, string detail) =>
+        FakeHttp.Json(HttpStatusCode.UnprocessableEntity, JsonSerializer.Serialize(new
+        {
+            type = "https://tools.ietf.org/html/rfc4918#section-11.2",
+            title = "Unprocessable Entity",
+            status = 422,
+            code,
+            detail,
+        }));
+
+    /// <summary>The content types the BFF signs an upload for, and the extension each key carries (<c>ProductImageKeys</c>).</summary>
+    private static readonly Dictionary<string, string> ImageExtensions = new(StringComparer.Ordinal)
+    {
+        ["image/jpeg"] = "jpg",
+        ["image/png"] = "png",
+        ["image/webp"] = "webp",
+    };
+
+    private const long MaxImageBytes = 5 * 1024 * 1024;
+
+    [GeneratedRegex("^uploads/(?<seller>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(png|jpg|webp)$")]
+    private static partial Regex UploadKeyShape();
+
+    [GeneratedRegex("^/api/v1/catalog/products/(?<id>[0-9a-fA-F-]{36})$")]
+    private static partial Regex ProductReadPath();
+
     [GeneratedRegex("^/api/v1/orders/(?<id>[0-9a-fA-F-]{36})/cancel$")]
     private static partial Regex CancelPath();
 
@@ -72,17 +105,27 @@ internal static partial class FakeGateway
     [GeneratedRegex("^/api/v1/payments/(?<id>[0-9a-fA-F-]{36})$")]
     private static partial Regex PaymentPath();
 
-    public static HttpResponseMessage Send(HttpRequestMessage request, FakeOrders orders)
+    public static HttpResponseMessage Send(HttpRequestMessage request, FakeOrders orders, AdminOptions? options = null)
     {
+        options ??= new AdminOptions();
         // YARP and ASP.NET routing ignore case; every id is read as a Guid, so lower case is its canonical form.
         string path = request.RequestUri!.AbsolutePath.TrimEnd('/').ToLowerInvariant();
         string[]? permissions = Permissions(request);
         Match orderRead = OrderReadPath().Match(path);
+        Match productRead = ProductReadPath().Match(path);
 
         HttpResponseMessage response = EdgePolicy(GatewayRoutes.PolicyFor(request.Method.Method, path), permissions) ?? (request.Method.Method, path) switch
         {
             ("GET", "/api/v1/catalog/products") => FakeHttp.Json(HttpStatusCode.OK, Products),
-            ("POST", "/api/v1/catalog/products") => Authorize(permissions, "catalog:write", () => Published(orders, request)),
+            ("GET", _) when productRead.Success => orders.ProductSummary(productRead.Groups["id"].Value) is { } summary
+                ? FakeHttp.Json(HttpStatusCode.OK, summary)
+                : FakeHttp.Problem(HttpStatusCode.NotFound, "Not Found"),
+            ("POST", "/api/v1/catalog/products") => Authorize(permissions, "catalog:write", () => Published(orders, request, options.ImageEdgeUrl)),
+            ("POST", "/bff/v1/product-images") => Authorize(permissions, "catalog:write", () => ImageUpload(orders, request, options.ObjectStoreUrl)),
+            ("GET", "/bff/v1/saved-address") => Authorize(permissions, null, () => orders.Address(Seller(request)) is { } saved
+                ? FakeHttp.Json(HttpStatusCode.OK, saved)
+                : FakeHttp.Problem(HttpStatusCode.NotFound, "Not Found")),
+            ("PUT", "/bff/v1/saved-address") => Authorize(permissions, null, () => SavedAddress(orders, request)),
             ("POST", "/api/v1/orders") => Authorize(permissions, "orders:write", () => Placed(orders, request)),
             ("POST", var p) when CancelPath().Match(p) is { Success: true } cancel => Authorize(permissions, "orders:cancel", () => Cancelled(orders, cancel.Groups["id"].Value)),
             ("POST", "/bff/v1/checkout/quote") => Authorize(permissions, null, () => FakeHttp.Json(HttpStatusCode.OK, Quote)),
@@ -141,11 +184,125 @@ internal static partial class FakeGateway
         : FakeHttp.Json(HttpStatusCode.NotFound, OrderNotFound);
 
     /// <summary>The amount the body publishes at, which the fake keeps so an order for it can end as the amount scripts (<see cref="FakeOrders.DeclinedMinorUnits"/>).</summary>
-    private static HttpResponseMessage Published(FakeOrders orders, HttpRequestMessage request)
+    private static HttpResponseMessage Published(FakeOrders orders, HttpRequestMessage request, string imageEdgeUrl)
     {
-        decimal amount = Body(request)?.Get("amount") is { ValueKind: JsonValueKind.Number } n && n.TryGetDecimal(out decimal read) ? read : 0m;
+        JsonElement? body = Body(request);
+        decimal amount = body?.Get("amount") is { ValueKind: JsonValueKind.Number } n && n.TryGetDecimal(out decimal read) ? read : 0m;
+        string name = body?.Get("name") is { ValueKind: JsonValueKind.String } text && text.GetString() is { Length: > 0 } given ? given : "Walnut desk";
 
-        return FakeHttp.Json(HttpStatusCode.OK, $"\"{orders.Publish(amount)}\"");
+        if (body?.Get("imageKey") is not { ValueKind: JsonValueKind.String } image)
+        {
+            return FakeHttp.Json(HttpStatusCode.OK, $"\"{orders.Publish(amount, name)}\"");
+        }
+
+        // The key must be one this seller's upload returned (§10.8): the BFF's shape, under the caller's own prefix.
+        string key = image.GetString()!;
+        Match shape = UploadKeyShape().Match(key);
+
+        if (!shape.Success || shape.Groups["seller"].Value != Seller(request))
+        {
+            return Rule("product.image_key_invalid", "The image key is not one this seller's upload returned.");
+        }
+
+        if (orders.Stored(key) is not { } isImage)
+        {
+            return Rule("product.image_not_uploaded", "No image has been uploaded under that key.");
+        }
+
+        if (!isImage)
+        {
+            return Rule("product.image_not_an_image", "The uploaded file is not the image its content type declares.");
+        }
+
+        // Derived from the upload's key, so a retried publish copies to the same place (§10.8).
+        string productKey = "products/" + key["uploads/".Length..];
+        orders.ServeImage(productKey);
+
+        return FakeHttp.Json(HttpStatusCode.OK, $"\"{orders.Publish(amount, name, $"{imageEdgeUrl.TrimEnd('/')}/{productKey}")}\"");
+    }
+
+    /// <summary>
+    /// §10.8's upload endpoint: a pre-signed <c>PUT</c> for one key the server chose, under the caller's own prefix. The
+    /// signature is a placeholder the fake store looks for; the headers are the two it signs.
+    /// </summary>
+    private static HttpResponseMessage ImageUpload(FakeOrders orders, HttpRequestMessage request, string objectStoreUrl)
+    {
+        JsonElement? body = Body(request);
+        string? contentType = body?.Get("contentType") is { ValueKind: JsonValueKind.String } type ? type.GetString() : null;
+        long? size = body?.Get("sizeBytes") is { ValueKind: JsonValueKind.Number } n && n.TryGetInt64(out long read) ? read : null;
+
+        if (contentType is null || !ImageExtensions.TryGetValue(contentType, out string? extension) || size is not (> 0 and <= MaxImageBytes))
+        {
+            return FakeHttp.Json(HttpStatusCode.BadRequest, """{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.1","title":"One or more validation errors occurred.","status":400}""");
+        }
+
+        string key = $"uploads/{Seller(request)}/{Guid.CreateVersion7():D}.{extension}";
+
+        return FakeHttp.Json(HttpStatusCode.OK, JsonSerializer.Serialize(new
+        {
+            uploadUrl = $"{objectStoreUrl.TrimEnd('/')}/{FakeObjectStore.Bucket}/{key}?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=300&X-Amz-SignedHeaders=content-length%3Bcontent-type%3Bhost&X-Amz-Signature=fake",
+            headers = new Dictionary<string, string> { ["Content-Type"] = contentType, ["Content-Length"] = size.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) },
+            key,
+            expiresAt = DateTimeOffset.UtcNow.AddMinutes(5),
+        }));
+    }
+
+    /// <summary>§10.9's saved address: the caller's own, trimmed, the country upper case, and refused where a required line is empty or the country is not two letters.</summary>
+    private static HttpResponseMessage SavedAddress(FakeOrders orders, HttpRequestMessage request)
+    {
+        JsonElement? body = Body(request);
+        string? Line(string name) => body?.Get(name) is { ValueKind: JsonValueKind.String } v ? v.GetString()?.Trim() : null;
+
+        string? line1 = Line("line1");
+        string? line2 = Line("line2");
+        string? city = Line("city");
+        string? postalCode = Line("postalCode");
+        string? country = Line("country");
+
+        if (string.IsNullOrEmpty(line1) || string.IsNullOrEmpty(city) || string.IsNullOrEmpty(postalCode)
+            || country is not { Length: 2 } || !country.All(char.IsAsciiLetter))
+        {
+            return FakeHttp.Json(HttpStatusCode.BadRequest, """{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.1","title":"One or more validation errors occurred.","status":400}""");
+        }
+
+        string saved = JsonSerializer.Serialize(new
+        {
+            line1,
+            line2 = string.IsNullOrEmpty(line2) ? null : line2,
+            city,
+            postalCode,
+            country = country.ToUpperInvariant(),
+        });
+        orders.SaveAddress(Seller(request), saved);
+
+        return FakeHttp.Json(HttpStatusCode.OK, saved);
+    }
+
+    /// <summary>
+    /// The caller's id as the fake gives one: the token carries no <c>sub</c>, so a stable Guid is made of the username,
+    /// and an unreadable token is the zero Guid. The real subject is the realm's; a seller prefix only has to be the caller's own.
+    /// </summary>
+    private static string Seller(HttpRequestMessage request)
+    {
+        if (request.Headers.Authorization?.Parameter is { } token)
+        {
+            try
+            {
+                JsonElement claims = JwtPayload.Decode(token);
+
+                if (claims.ValueKind == JsonValueKind.Object
+                    && claims.TryGetProperty("preferred_username", out JsonElement user)
+                    && user.ValueKind == JsonValueKind.String)
+                {
+                    return new Guid(SHA256.HashData(Encoding.UTF8.GetBytes(user.GetString()!)).AsSpan(0, 16)).ToString("D");
+                }
+            }
+            catch (FormatException)
+            {
+            }
+        }
+
+        return Guid.Empty.ToString("D");
     }
 
     private static HttpResponseMessage Stocked(FakeOrders orders, string productId, HttpRequestMessage request)

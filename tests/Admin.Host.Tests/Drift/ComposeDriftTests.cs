@@ -26,6 +26,8 @@ public sealed partial class ComposeDriftTests
         ["payments-api"] = o => o.PaymentsUrl,
         ["psp-simulator"] = o => o.PaymentSimulatorUrl,
         ["carrier-simulator"] = o => o.CarrierSimulatorUrl,
+        ["object-store"] = o => o.ObjectStoreUrl,
+        ["image-edge"] = o => o.ImageEdgeUrl,
         ["keycloak"] = o => o.KeycloakUrl,
         ["grafana"] = o => o.GrafanaUrl,
     };
