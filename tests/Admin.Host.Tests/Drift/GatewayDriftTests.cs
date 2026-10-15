@@ -28,8 +28,7 @@ public sealed class GatewayDriftTests
         foreach (JsonProperty route in routes.EnumerateObject())
         {
             JsonElement match = route.Value.GetProperty("Match");
-            string path = match.GetProperty("Path").GetString()!;
-            string prefix = path[..path.IndexOf('{', StringComparison.Ordinal)];
+            string prefix = GatewayRoutes.PrefixOf(match.GetProperty("Path").GetString()!);
             string policy = route.Value.GetProperty("AuthorizationPolicy").GetString()!;
             string[] methods = match.TryGetProperty("Methods", out JsonElement listed)
                 ? [.. listed.EnumerateArray().Select(m => m.GetString()!)]
@@ -58,8 +57,7 @@ public sealed class GatewayDriftTests
         foreach (JsonProperty route in settings.RootElement.GetProperty("ReverseProxy").GetProperty("Routes").EnumerateObject())
         {
             JsonElement match = route.Value.GetProperty("Match");
-            string path = match.GetProperty("Path").GetString()!;
-            string prefix = path[..path.IndexOf('{', StringComparison.Ordinal)];
+            string prefix = GatewayRoutes.PrefixOf(match.GetProperty("Path").GetString()!);
             string policy = route.Value.GetProperty("AuthorizationPolicy").GetString()!;
 
             if (match.TryGetProperty("Methods", out JsonElement listed))
