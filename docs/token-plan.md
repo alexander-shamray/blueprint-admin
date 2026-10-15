@@ -72,6 +72,11 @@ file; the measurement of the effect waits on sessions run since.
 Replace the external review loops, switched off and still resident in
 `ship.md`, with one local review. **Exit** on the review quality set.
 
+**Built** (#124): `/ship` step 5 reviews in rounds of a read-only
+`branch-reviewer`; the external reviewers' commands, agents, helpers,
+hooks, suites and sandbox are at the tag `archive/external-reviewers`.
+The exit is not measured: it waits on the quality sets (#121).
+
 ### Step 5 — the sweeps
 
 `bug-sweep.md` and `security-sweep.md` read in slices from an explicit file
@@ -84,6 +89,12 @@ Each command splits into a runbook and its argument, the argument read only
 when the command is disputed. `ship.md` is the target; its size
 is in the baseline. **Exit.** A `/ship` run reaches the same end state with a
 smaller resident prompt, measured by the step 1 report.
+
+**Built** (#126): `ship`, `branch`, `review-branch`, `bug-sweep` and
+`security-sweep` are runbooks in `.claude/commands/` with their argument
+in [`commands/`](commands/); `test_command_runbooks.py` holds each
+runbook under a ceiling and each citation to a heading that exists. The
+exit is not measured: it waits on sessions run since, and on #121.
 
 ## 3. What each step may not do
 

@@ -13,6 +13,7 @@ whole.
 | [`docs/working-rules.md`](docs/working-rules.md) | Build policy, style, working rules, precedence, commands |
 | [`docs/change-locality.md`](docs/change-locality.md) | The operating contract: trust order, classes, touch sets; the gate reads `.github/locality-gate/classes.yml` |
 | [`docs/harness-boundaries.md`](docs/harness-boundaries.md) | What the harness grants these commands, and refuses; start at its index |
+| [`docs/commands/`](docs/commands/) | The argument for each long command in `.claude/commands/`, whose runbook cites it by heading; read only when a command is disputed or edited |
 | [`docs/style-guide.md`](docs/style-guide.md) | Pointers to the two dialects; `/style-pass` records a newly settled form here |
 | [`docs/testing.md`](docs/testing.md) | Host vs SPA vs smoke vs harness; FakePlatform for e2e |
 | [`docs/token-plan.md`](docs/token-plan.md), [`docs/token-usage.md`](docs/token-usage.md) | Where a session's tokens go, and the plan to cut them |
