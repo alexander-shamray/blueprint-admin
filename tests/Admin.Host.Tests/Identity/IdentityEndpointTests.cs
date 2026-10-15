@@ -18,7 +18,7 @@ public sealed class IdentityEndpointTests(AdminHostFactory factory) : IClassFixt
     {
         string body = await client.GetStringAsync("/api/identity/users", Token);
 
-        body.ShouldBe("""[{"username":"demo"},{"username":"browser"}]""");
+        body.ShouldBe("""[{"username":"demo"},{"username":"browser"},{"username":"privacy"}]""");
     }
 
     [Fact]

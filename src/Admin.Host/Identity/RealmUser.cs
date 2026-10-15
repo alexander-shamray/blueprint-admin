@@ -12,15 +12,16 @@ public sealed class RealmUser
 
 public static class RealmUsers
 {
-    // Owner: blueprint-backend deploy/compose/keycloak/realm-export.json, users "demo" and "browser".
+    // Owner: blueprint-backend deploy/compose/keycloak/realm-export.json, users "demo", "browser" and "privacy".
     private static readonly IReadOnlyList<RealmUser> Defaults =
     [
         new RealmUser { Username = "demo", Password = "demo" },
         new RealmUser { Username = "browser", Password = "browser" },
+        new RealmUser { Username = "privacy", Password = "privacy" },
     ];
 
     /// <summary>
-    /// The configured users, or the realm export's two when configuration names none. The defaults
+    /// The configured users, or the realm export's three when configuration names none. The defaults
     /// are not a list initializer on <see cref="AdminOptions.Users"/> because the configuration
     /// binder appends to an existing list instead of replacing it.
     /// </summary>

@@ -214,7 +214,7 @@ public sealed class TokenServiceTests
     [Fact]
     public void Configured_users_replace_the_defaults()
     {
-        RealmUsers.Of(new AdminOptions()).Select(u => u.Username).ShouldBe(["demo", "browser"]);
+        RealmUsers.Of(new AdminOptions()).Select(u => u.Username).ShouldBe(["demo", "browser", "privacy"]);
         RealmUsers.Of(new AdminOptions { Users = [new RealmUser { Username = "ops", Password = "x" }] }).Select(u => u.Username).ShouldBe(["ops"]);
     }
 

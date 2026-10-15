@@ -106,6 +106,7 @@ public static class CuratedOperations
         Health("bff", options.BffUrl),
         Health("inventory", options.InventoryUrl),
         Health("payments", options.PaymentsUrl),
+        Health("privacy", options.PrivacyUrl),
         new ApiOperation(
             "simulator:Requests",
             "simulator",

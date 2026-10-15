@@ -5,6 +5,7 @@ export const routes: Routes = [
   { path: 'stack', loadComponent: () => import('./features/stack/stack-page').then((m) => m.StackPage) },
   { path: 'logs', loadComponent: () => import('./features/logs/logs-page').then((m) => m.LogsPage) },
   { path: 'broker', loadComponent: () => import('./features/broker/broker-page').then((m) => m.BrokerPage) },
+  { path: 'erasure', loadComponent: () => import('./features/erasure/erasure-page').then((m) => m.ErasurePage) },
   { path: 'requests', loadComponent: () => import('./features/api/api-page').then((m) => m.ApiPage) },
   { path: 'trace', loadComponent: () => import('./features/trace/trace-page').then((m) => m.TracePage) },
   { path: 'scenario', loadComponent: () => import('./features/scenario/scenario-page').then((m) => m.ScenarioPage) },

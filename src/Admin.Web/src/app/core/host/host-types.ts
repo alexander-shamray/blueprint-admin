@@ -226,6 +226,43 @@ export interface QueuesView {
   projection: ProjectionDrain;
 }
 
+/** A holder Privacy asks to erase a subject, and the depth of its `*-privacy` queue; null when the broker did not say. */
+export interface ErasureHolder {
+  name: string;
+  queue: string;
+  pending: number | null;
+}
+
+/** The host's `HoldersView`: the holders in the backend's order, `privacy-completions`' depth and the overdue runbook. */
+export interface HoldersView {
+  reachable: boolean;
+  error: string | null;
+  holders: ErasureHolder[];
+  completionsPending: number | null;
+  runbookUrl: string;
+}
+
+/** One holder's answer; `counted` is false for a name outside the set the request was raised with. */
+export interface HolderAnswer {
+  responder: string;
+  count: number;
+  counted: boolean;
+  receivedAt: string;
+}
+
+/** Privacy's `ErasureRequestView`, as the gateway answers `GET /api/v1/privacy/erasure-requests/{id}`; never the subject. */
+export interface ErasureRequestView {
+  requestId: string;
+  status: 'Open' | 'Overdue' | 'Closed';
+  raisedAt: string;
+  dueAt: string;
+  closedAt: string | null;
+  reissues: number;
+  responders: string[];
+  missing: string[];
+  answers: HolderAnswer[];
+}
+
 export interface BrokerExchange {
   name: string;
   type: string;

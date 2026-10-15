@@ -45,6 +45,9 @@ public sealed class FakeOrders(TimeProvider time)
     private readonly HashSet<string> publishedImages = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> addresses = new(StringComparer.Ordinal);
     private long next = FirstLaterId;
+
+    /// <summary>The erasure requests Privacy has been asked to raise; they live beside the orders so they outlast the handlers the client factory rotates.</summary>
+    internal FakeErasures Erasures { get; } = new(time);
     private long nextProduct = FirstLaterProductId;
 
     /// <summary>

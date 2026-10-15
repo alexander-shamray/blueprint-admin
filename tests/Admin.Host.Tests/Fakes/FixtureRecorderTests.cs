@@ -222,8 +222,9 @@ public sealed class FixtureRecorderTests : IDisposable
         Recorded("openapi-ordering.json").ShouldContain(Options.OrderingUrl + "/openapi/v1.json");
         Recorded("openapi-inventory.json").ShouldContain(Options.InventoryUrl + "/openapi/v1.json");
         Recorded("openapi-payments.json").ShouldContain(Options.PaymentsUrl + "/openapi/v1.json");
+        Recorded("openapi-privacy.json").ShouldContain(Options.PrivacyUrl + "/openapi/v1.json");
         Recorded("grafana-datasources.json").ShouldContain(Options.GrafanaUrl + "/api/datasources");
-        Directory.EnumerateFiles(Fixtures).Count().ShouldBe(5, "the token answer is never a fixture");
+        Directory.EnumerateFiles(Fixtures).Count().ShouldBe(6, "the token answer is never a fixture");
     }
 
     /// <summary>The seams are Program.cs's: deleting either would leave a recording run that records nothing.</summary>

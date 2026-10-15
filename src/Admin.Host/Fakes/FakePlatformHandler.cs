@@ -28,6 +28,7 @@ public sealed class FakePlatformHandler(AdminOptions options, FakeOrders orders)
             : path == "/openapi/v1.json" && Is(uri, options.OrderingUrl) ? FakeOpenApi.Document(request, "ordering")
             : path == "/openapi/v1.json" && Is(uri, options.InventoryUrl) ? FakeOpenApi.Document(request, "inventory")
             : path == "/openapi/v1.json" && Is(uri, options.PaymentsUrl) ? FakeOpenApi.Document(request, "payments")
+            : path == "/openapi/v1.json" && Is(uri, options.PrivacyUrl) ? FakeOpenApi.Document(request, "privacy")
             // WireMock.Net's request log, as the simulator answered it with nothing yet asked of it.
             : Is(uri, options.PaymentSimulatorUrl) && path == "/__admin/requests" ? FakeHttp.Json(HttpStatusCode.OK, "[]")
             // The carrier simulator is the same WireMock.Net image, answering the same way before Shipping despatches.

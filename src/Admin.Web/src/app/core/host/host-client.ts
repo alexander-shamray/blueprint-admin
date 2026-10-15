@@ -5,6 +5,7 @@ import {
   ApiCatalogView,
   ConfigView,
   ExchangesView,
+  HoldersView,
   Identity,
   JobSummary,
   DoctorView,
@@ -100,6 +101,11 @@ export class HostClient {
   /** The image's bytes to the pre-signed URL the BFF issued: the one call the proxy cannot carry, because its body is text. */
   uploadProductImage(request: ProductImageUploadRequest): Observable<ProxyResult> {
     return this.http.post<ProxyResult>('/api/product-images/upload', request);
+  }
+
+  /** The holders an erasure request waits on, each with its queue's depth. The request itself goes through `proxy`. */
+  erasureHolders(): Observable<HoldersView> {
+    return this.http.get<HoldersView>('/api/erasure/holders');
   }
 
   brokerQueues(): Observable<QueuesView> {

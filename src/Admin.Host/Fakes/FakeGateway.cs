@@ -105,6 +105,13 @@ internal static partial class FakeGateway
     [GeneratedRegex("^/api/v1/payments/(?<id>[0-9a-fA-F-]{36})$")]
     private static partial Regex PaymentPath();
 
+    [GeneratedRegex("^/api/v1/privacy/erasure-requests(?:/(?<id>[0-9a-fA-F-]{36})(?<action>/reissue)?)?$")]
+    private static partial Regex ErasurePath();
+
+    private const string ErasureNotFound = """
+        {"type":"https://tools.ietf.org/html/rfc9110#section-15.5.5","title":"Not Found","status":404,"code":"erasure_request.not_found","detail":"No erasure request under that identifier."}
+        """;
+
     public static HttpResponseMessage Send(HttpRequestMessage request, FakeOrders orders, AdminOptions? options = null)
     {
         options ??= new AdminOptions();
@@ -133,6 +140,7 @@ internal static partial class FakeGateway
             ("GET", _) when orderRead.Success => Authorize(permissions, null, () => OrderRead(orders, orderRead.Groups["id"].Value)),
             (_, var p) when p.StartsWith("/api/v1/inventory/", StringComparison.Ordinal) => Authorize(permissions, "inventory:admin", () => Inventory(orders, request, p)),
             (_, var p) when p.StartsWith("/api/v1/payments/", StringComparison.Ordinal) => Authorize(permissions, "payments:admin", () => Payments(request.Method.Method, p)),
+            (_, var p) when p.StartsWith("/api/v1/privacy/", StringComparison.Ordinal) => Authorize(permissions, "privacy:erase", () => Privacy(orders.Erasures, request, p)),
             _ => FakeHttp.Problem(HttpStatusCode.NotFound, "Not Found"),
         };
 
@@ -161,6 +169,44 @@ internal static partial class FakeGateway
             ("GET", true, _) when stock.Groups["id"].Value == StockedProductId => FakeHttp.Json(HttpStatusCode.OK, Stock),
             ("GET", _, true) when reservation.Groups["action"].Value == "" && reservation.Groups["id"].Value == PlacedOrderId => FakeHttp.Json(HttpStatusCode.OK, Reservation),
             ("POST", _, true) when reservation.Groups["action"].Value != "" => new HttpResponseMessage(HttpStatusCode.NoContent),
+            _ => FakeHttp.Problem(HttpStatusCode.NotFound, "Not Found"),
+        };
+    }
+
+    /// <summary>
+    /// Privacy's three routes behind <c>privacy:erase</c>. A subject id that is no Guid, or is empty, is the validator's
+    /// 400; a request id the fake never raised is <c>erasure_request.not_found</c>, and a reissue of a closed one is
+    /// <c>erasure_request.closed</c>, the 404 and 422 that <c>ErasureRequestErrors</c> words (blueprint-backend
+    /// <c>Privacy.Application/ErasureRequests/ErasureRequestErrors.cs</c>).
+    /// </summary>
+    private static HttpResponseMessage Privacy(FakeErasures erasures, HttpRequestMessage request, string path)
+    {
+        Match route = ErasurePath().Match(path);
+
+        if (!route.Success)
+        {
+            return FakeHttp.Problem(HttpStatusCode.NotFound, "Not Found");
+        }
+
+        string method = request.Method.Method;
+        bool hasId = Guid.TryParse(route.Groups["id"].Value, out Guid id);
+        bool reissue = route.Groups["action"].Value != "";
+
+        return (method, hasId, reissue) switch
+        {
+            ("POST", false, _) when route.Groups["id"].Value == "" =>
+                Body(request)?.Get("subjectId") is { ValueKind: JsonValueKind.String } subject && Guid.TryParse(subject.GetString(), out Guid subjectId) && subjectId != Guid.Empty
+                    ? FakeHttp.Json(HttpStatusCode.OK, $"\"{erasures.Raise(subjectId)}\"")
+                    : FakeHttp.Json(HttpStatusCode.BadRequest, """{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.1","title":"One or more validation errors occurred.","status":400,"errors":{"SubjectId":["'Subject Id' must not be empty."]}}"""),
+            ("GET", true, false) => erasures.Read(id) is { } view
+                ? FakeHttp.Json(HttpStatusCode.OK, view)
+                : FakeHttp.Json(HttpStatusCode.NotFound, ErasureNotFound),
+            ("POST", true, true) => erasures.Reissue(id) switch
+            {
+                Reissued.Asked => new HttpResponseMessage(HttpStatusCode.NoContent),
+                Reissued.Closed => Rule("erasure_request.closed", "The request has closed, so it no longer holds the subject to ask about."),
+                _ => FakeHttp.Json(HttpStatusCode.NotFound, ErasureNotFound),
+            },
             _ => FakeHttp.Problem(HttpStatusCode.NotFound, "Not Found"),
         };
     }

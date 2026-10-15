@@ -45,6 +45,13 @@ public sealed class AdminOptions
     public string PaymentsUrl { get; set; } = "http://localhost:5104";
 
     /// <summary>
+    /// The Privacy service (<c>privacy-api</c> in blueprint-backend's <c>deploy/compose/services/privacy.yml</c>), which raises an
+    /// erasure request and asks every personal-data holder to answer it. Reached through the gateway's <c>/api/v1/privacy/</c>
+    /// route; this URL serves its readiness probe and its OpenAPI document.
+    /// </summary>
+    public string PrivacyUrl { get; set; } = "http://localhost:5105";
+
+    /// <summary>
     /// The payment provider simulator Payments authorises against. Its request log is the only by-hand view of
     /// what Payments asked for, and a decline is caused through it by the order's amount (run-locally.md).
     /// </summary>
