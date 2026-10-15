@@ -87,8 +87,8 @@ arbitrary**. State the exceptions with them — half that file's value is the
 carve-outs, and a rule recorded without its exceptions gets applied to the
 exceptions next time.
 
-**`CLAUDE.md` keeps a short list of these rules under *Style*, and the guide
-is the master copy.** If the form you corrected is one of the ones it names,
+**`docs/working-rules.md` keeps a short list of these rules under *Style*, and
+the guide is the master copy.** If the form you corrected is one of the ones it names,
 the change has to reach both in this pass — a rule in two places that moves
 in one of them is the drift the split was accepted in order to buy.
 
