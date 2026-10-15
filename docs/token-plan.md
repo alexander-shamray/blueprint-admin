@@ -39,9 +39,11 @@ one at a time.
 - The quality sets are recorded in [`token-quality-sets.md`](token-quality-sets.md):
   a review set of deferred findings, and an empty sweep set, since no sweep
   has filed here. **Landed.** Steps 4–6 hold recall against them.
-- **Owed:** a baseline run of a reviewer over the review set, so a recall
-  figure exists; no step that shortens a prompt or changes a reviewer may
-  claim its exit before it does.
+- The baseline run of `branch-reviewer` over the review set is recorded in
+  the same file: 4 of 12 rows found. **Landed.** A step that shortens a
+  prompt or changes a reviewer claims its exit by finding no fewer.
+- **Owed:** the same run with `bug-auditor`, the reviewer's findings that
+  matched no row verified, and a run against each PR's head, not `main`.
 
 **Exit.** Attribution holds on a known session. **Passed** on the `/ship`
 run `token-usage.md` names: its 88 calls are counted under `/ship` and its
@@ -79,8 +81,8 @@ Replace the external review loops, switched off and still resident in
 **Built** (#124): `/ship` step 5 reviews in rounds of a read-only
 `branch-reviewer`; the external reviewers' commands, agents, helpers,
 hooks, suites and sandbox are at the tag `archive/external-reviewers`.
-The exit is not measured: it waits on the baseline run over the quality
-sets, owed in step 1.
+The exit is not measured: it holds the reviewer to the baseline recall
+recorded in step 1.
 
 ### Step 5 — the sweeps
 
@@ -99,12 +101,11 @@ smaller resident prompt, measured by the step 1 report.
 `security-sweep` are runbooks in `.claude/commands/` with their argument
 in [`commands/`](commands/); `test_command_runbooks.py` holds each
 runbook under a ceiling and each citation to a heading that exists. The
-exit is not measured: it waits on sessions run since, and on the baseline
-run owed in step 1.
+exit is not measured: it waits on sessions run since (#123).
 
 ## 3. What each step may not do
 
 A cut that loses a finding is not a saving. Steps 4–6 each hold recall
-against the step 1 quality sets, and none claims its exit until the
-baseline run over them exists.
+against the step 1 quality sets, and none claims its exit by finding fewer
+rows than the baseline run recorded there.
 Steps 2 and 3 move no behaviour and need no set.
