@@ -184,13 +184,16 @@ opens those files:
     branch, *before* the session enters the worktree.
   - **A PR opens**: the **In progress** row for the work names the PR and
     the issues it closes. Work no issue started has no row yet: it gets one
-    now, with `—` for the issue, and loses it when it lands or stops.
-  - **A PR merges or closes, or an issue closes**: the row is deleted, with
-    no note of what landed, which git and the closed issues already keep.
-    Whatever the work found and filed gets its row in its wave.
+    now, with `—` for the issue.
+  - **A PR merges, or an issue closes**: the row is deleted, with no note
+    of what landed, which git and the closed issues already keep. Whatever
+    the work found and filed gets its row in its wave.
+  - **Work stops without landing** (a PR closed unmerged, one merged
+    without closing its issue, or a branch abandoned): an issue still open
+    goes back to its wave; work with no issue has nothing to go back to, so
+    its row is deleted.
   - **An issue is filed, reopened or labelled `paused`**: it gets a row in
-    its wave, or in **Paused**. Work that stops without landing sends its
-    row back to its wave.
+    its wave, or in **Paused**.
 
   Only the main checkout's copy counts, never one in a worktree — and a
   session inside `.claude/worktrees/` is refused that copy by Claude Code's
