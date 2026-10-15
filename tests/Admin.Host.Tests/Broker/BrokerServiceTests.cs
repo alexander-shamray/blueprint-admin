@@ -3,6 +3,7 @@ using Admin.Host.Compose;
 using Admin.Host.Config;
 using Admin.Host.Fakes;
 using Admin.Host.Jobs;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 
@@ -12,6 +13,7 @@ public sealed class BrokerServiceTests : IAsyncDisposable
 {
     private static readonly RepoPaths Paths = new("/repo/backend", "/repo/frontend", "/repo/backend/deploy/compose/docker-compose.yml");
     private static readonly string Exec = $"compose -f {Paths.ComposeFile} exec -T rabbitmq rabbitmqctl ";
+    private static readonly string Runbooks = new AdminOptions().BackendRunbooksUrl;
     private readonly FakeTimeProvider time = new();
     private readonly FakeProcessRunner runner;
 
@@ -20,7 +22,7 @@ public sealed class BrokerServiceTests : IAsyncDisposable
         runner = new FakeProcessRunner(new JobRegistry(time));
     }
 
-    private BrokerService Service => new(new ComposeService(runner, Paths, time));
+    private BrokerService Service => new(new ComposeService(runner, Paths, time), Options.Create(new AdminOptions()));
 
     public ValueTask DisposeAsync() => runner.DisposeAsync();
 
@@ -52,10 +54,41 @@ public sealed class BrokerServiceTests : IAsyncDisposable
         view.Queues.ShouldBe(
         [
             new BrokerQueue("ordering-catalog-events", 3, false, "Ordering's price projection"),
-            new BrokerQueue("ordering-catalog-events_error", 1, true, "Ordering's price projection"),
+            new BrokerQueue(
+                "ordering-catalog-events_error", 1, true, "Ordering's price projection", "error", $"{Runbooks}/error-queue.md"),
             new BrokerQueue("ordering-commands", 0, false, "Ordering's command consumers"),
             new BrokerQueue("something-else", 0, false, null),
         ]);
+    }
+
+    [Fact]
+    public async Task A_skipped_queue_is_named_by_the_endpoint_it_was_skipped_from_and_given_its_own_runbook()
+    {
+        runner.On("docker", Exec + "list_queues", 0,
+            "[",
+            """{"name":"bff-order-events_skipped","messages":2}""",
+            """,{"name":"unknown-endpoint_skipped","messages":1}""",
+            "]");
+
+        QueuesView view = await Service.QueuesAsync(TestContext.Current.CancellationToken);
+
+        view.Queues.ShouldBe(
+        [
+            new BrokerQueue("bff-order-events_skipped", 2, false, "the BFF's order projection", "skipped", $"{Runbooks}/skipped-queue.md"),
+            new BrokerQueue("unknown-endpoint_skipped", 1, false, null, "skipped", $"{Runbooks}/skipped-queue.md"),
+        ]);
+    }
+
+    [Fact]
+    public async Task The_runbook_base_is_the_configured_one_whatever_its_trailing_slash()
+    {
+        runner.On("docker", Exec + "list_queues", 0, "[", """{"name":"a_skipped","messages":1}""", "]");
+        BrokerService service = new(
+            new ComposeService(runner, Paths, time), Options.Create(new AdminOptions { BackendRunbooksUrl = "https://example.test/rb/" }));
+
+        QueuesView view = await service.QueuesAsync(TestContext.Current.CancellationToken);
+
+        view.Queues.Single().Runbook.ShouldBe("https://example.test/rb/skipped-queue.md");
     }
 
     [Fact]

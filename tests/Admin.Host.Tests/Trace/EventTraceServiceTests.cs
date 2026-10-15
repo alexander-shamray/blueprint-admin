@@ -117,7 +117,7 @@ public sealed class EventTraceServiceTests : IAsyncDisposable
 
     private EventTraceService Service(ScriptedHandler handler, AdminOptions? options = null) =>
         new(new GrafanaClient(new HttpClient(handler), Options.Create(options ?? new AdminOptions())),
-            new BrokerService(new ComposeService(runner, Paths, time)),
+            new BrokerService(new ComposeService(runner, Paths, time), Options.Create(options ?? new AdminOptions())),
             Options.Create(options ?? new AdminOptions()),
             time);
 

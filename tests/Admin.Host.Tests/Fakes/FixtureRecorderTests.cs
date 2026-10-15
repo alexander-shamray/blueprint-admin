@@ -166,7 +166,7 @@ public sealed class FixtureRecorderTests : IDisposable
         await using FakeProcessRunner fake = FakePlatformScripts.Script(new FakeProcessRunner(new JobRegistry(TimeProvider.System)), Paths);
         RecordingProcessRunner runner = new(fake, Recorder(), Paths);
         ComposeService compose = new(runner, Paths, TimeProvider.System);
-        BrokerService broker = new(compose);
+        BrokerService broker = new(compose, Microsoft.Extensions.Options.Options.Create(Options));
         CancellationToken token = TestContext.Current.CancellationToken;
 
         await compose.PsAsync(token);
