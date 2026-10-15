@@ -122,6 +122,29 @@ public sealed class FixtureScrubberTests
         FixtureScrubber.Findings(expected).ShouldBeEmpty();
     }
 
+    [Theory]
+    [InlineData("""Password="ab\"cd1234";X=1""", "Password=<scrubbed>;X=1")]
+    [InlineData("""Password="a""b;c";Encrypt=True""", "Password=<scrubbed>;Encrypt=True")]
+    [InlineData("pwd=it's-secret99;X=1", "pwd=<scrubbed>;X=1")]
+    [InlineData("""password="abc""", "password=<scrubbed>")]
+    [InlineData("""Password="<scrubbed>";X=1""", """Password="<scrubbed>";X=1""")]
+    public void A_quoted_value_is_taken_whole_whatever_escape_it_uses_and_a_scrubbed_one_is_left(string text, string expected)
+    {
+        FixtureScrubber.Scrub(text).ShouldBe(expected);
+        FixtureScrubber.Findings(expected).ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("refresh_token=r&x=1", "refresh_token=<scrubbed>&x=1")]
+    [InlineData("id_token=i;x=1", "id_token=<scrubbed>;x=1")]
+    [InlineData("token=t&x=1", "token=<scrubbed>&x=1")]
+    [InlineData("apikey=k&x=1", "apikey=<scrubbed>&x=1")]
+    [InlineData("Server=s;ClientSecret=c;X=1", "Server=s;ClientSecret=<scrubbed>;X=1")]
+    public void Every_key_the_form_rule_names_is_scrubbed(string text, string expected)
+    {
+        FixtureScrubber.Scrub(text).ShouldBe(expected);
+    }
+
     [Fact]
     public void A_json_pwd_is_scrubbed()
     {
@@ -135,6 +158,29 @@ public sealed class FixtureScrubberTests
     public void A_url_password_holding_a_raw_separator_is_scrubbed_whole(string text, string expected)
     {
         FixtureScrubber.Scrub(text).ShouldBe(expected);
+    }
+
+    [Fact]
+    public void A_url_password_holding_a_raw_at_sign_is_scrubbed_to_the_last_one()
+    {
+        FixtureScrubber.Scrub("amqp://guest:p@ssw0rd-long@rabbit:5672/").ShouldBe("amqp://guest:<scrubbed>@rabbit:5672/");
+    }
+
+    [Fact]
+    public void An_ipv6_literal_is_not_userinfo()
+    {
+        const string url = "curl http://[::1]:5000/search?e=a@b";
+
+        FixtureScrubber.Scrub(url).ShouldBe(url);
+    }
+
+    /// <summary>The accepted cost of the port guard: a password that is digits and then a separator reads as a port.</summary>
+    [Fact]
+    public void A_url_password_of_digits_then_a_separator_is_read_as_a_port_and_left_alone()
+    {
+        const string url = "amqp://u:12345#abc@h:5672";
+
+        FixtureScrubber.Scrub(url).ShouldBe(url);
     }
 
     [Theory]
