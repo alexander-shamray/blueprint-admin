@@ -181,6 +181,23 @@ public sealed class OperatorTranscriptTests
     }
 
     [Fact]
+    public void A_variable_the_spec_names_secret_keeps_its_name_and_loses_a_value_no_pattern_would_catch()
+    {
+        Dictionary<string, string> environment = new() { ["DEAD_LETTERS_PASSWORD"] = "0f3c9a2be41d", ["DEAD_LETTERS_USER"] = "dead-letter-operator" };
+
+        new TranscribingProcessRunner(new StubRunner(), transcript).Start(new ProcessSpec("py", ["-3.12", "dead_letters.py", "list"], "/work/backend")
+        {
+            Environment = environment,
+            SecretEnvironment = new HashSet<string> { "DEAD_LETTERS_PASSWORD" },
+        });
+
+        string command = transcript.Read().Entries[0].Command;
+
+        command.ShouldBe("DEAD_LETTERS_PASSWORD='<scrubbed>' DEAD_LETTERS_USER=dead-letter-operator py -3.12 dead_letters.py list");
+        command.ShouldNotContain("0f3c9a2be41d");
+    }
+
+    [Fact]
     public void Past_its_capacity_the_oldest_entry_goes_and_is_counted()
     {
         for (int i = 0; i < OperatorTranscript.Capacity + 3; i++)
