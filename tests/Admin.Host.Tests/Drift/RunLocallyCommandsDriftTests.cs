@@ -137,8 +137,10 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
         runner.Start(ProjectionRebuildService.ReplaySpec(reset: false, Paths, new AdminOptions()));
         runner.Start(ProjectionRebuildService.ReplaySpec(reset: true, Paths, new AdminOptions()));
 
-        // The dead-letter lines with the document's own placeholders, the variable for the password, the queue it
-        // names, <id> and its two file names, so each argv the host builds is compared token for token with its line.
+        // The dead-letter lines built by the host's own spec builders with the document's example values in place of
+        // the run's: the variable for the password, the queue it names, its --limit 5 (the host reads
+        // DeadLetterService.InspectLimit), <id> and its two file names. So what is compared token for token is each
+        // line's shape, its verb, flags and their order, which is what the host must not drift from.
         const string Variable = "$env:DEAD_LETTERS_PASSWORD";
         const string Queue = "ordering-catalog-events_error";
         await compose.ExecListedAsync("rabbitmq", DeadLetterService.SetPasswordArguments(Variable), new HashSet<string>(), TestContext.Current.CancellationToken);
