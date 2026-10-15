@@ -298,20 +298,16 @@ class TheShipChainReadsTheIndex(unittest.TestCase):
 
     def test_every_review_round_starts_from_the_blast_radius(self):
         body = body_of(SHIP)
-        # Inside item (1), which step (3) loops back to, so every round reads
-        # it and not only the first; against the merge base, which an exact
-        # grant lets the command read.
-        loop = body.index("6. **The Copilot loop.**")
-        item = body.find("\n   1. **", loop)
-        base = body.find("git merge-base origin/main HEAD", loop)
-        impact = body.find("codebase-index diff-impact --base <that sha>", loop)
-        request = body.find("bash .claude/scripts/copilot-request.sh <n>", loop)
-        self.assertTrue(-1 < item < base < impact < request,
-                        (item, base, impact, request))
-        # A resumed run that waits on an outstanding review never passes
-        # through item (1), and its predecessor's scratchpad is gone.
-        self.assertIn("run step 6 item (1)'s blast-radius read",
-                      " ".join(body[:loop].split()))
+        # Inside item (1) of step 5, which items (2) and (3) loop back to, so
+        # every round reads it and not only the first; against the merge base,
+        # which an exact grant lets the command read.
+        review = body.index("5. **The local review.**")
+        item = body.find("\n   1. **", review)
+        base = body.find("git merge-base origin/main HEAD", review)
+        impact = body.find("codebase-index diff-impact --base <that sha>", review)
+        spawn = body.find("spawn `branch-reviewer`", review)
+        self.assertTrue(-1 < item < base < impact < spawn,
+                        (item, base, impact, spawn))
         self.assertIn("Bash(git merge-base origin/main HEAD)",
                       SHIP.read_text(encoding="utf-8").split("---", 2)[1])
 
