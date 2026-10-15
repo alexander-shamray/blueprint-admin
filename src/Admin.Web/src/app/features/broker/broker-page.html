@@ -35,7 +35,8 @@
   <section class="dead-letters" aria-labelledby="dead-letters-heading">
     <h2 id="dead-letters-heading">Dead letters on <code>{{ queue }}</code></h2>
     <p>
-      Read with the backend's <code>tools/dead-letters</code>, which puts each message back, flagged redelivered. Each
+      The first {{ deadLetterPlan()?.inspectLimit }} messages, read with the backend's <code>tools/dead-letters</code>,
+      which puts each back, flagged redelivered; a deeper queue holds more than this shows. Each
       replay or discard is a dry run first; the real run writes every message it takes to a record file under
       <code>{{ deadLetterPlan()?.recordDir }}</code> before it moves it. The runbook says when to do either.
       <button class="close-dead-letters" (click)="closeDeadLetters()">Close</button>
@@ -45,6 +46,13 @@
     }
     @if (deadLetterError(); as e) {
       <p class="error" role="alert">{{ e }}</p>
+    }
+    @if (moved()) {
+      <p class="moved" role="status">
+        The messages above have been sent to the real run, so they are no longer listed. Read the queue again once its
+        output says it has ended.
+        <button class="reread" [disabled]="inspecting()" (click)="openDeadLetters(queue)">Read again</button>
+      </p>
     }
     @if (inspection(); as view) {
       @if (view.error) {

@@ -557,6 +557,40 @@ describe('BrokerPage', () => {
       expect(fixture.nativeElement.querySelector('button.execute')).toBeNull();
     });
 
+    it('says how many messages a read shows, so a deeper queue is not taken as all of it', () => {
+      const fixture = render();
+      click(fixture, 'button.open-dead-letters');
+
+      expect(fixture.nativeElement.querySelector('.dead-letters p')?.textContent).toContain('The first 20 messages');
+    });
+
+    it('drops what it listed once the real run is sent, and reads the queue again on asking', () => {
+      const fixture = render();
+      click(fixture, 'button.open-dead-letters');
+      click(fixture, 'button.dry-replay');
+      type(fixture, '--execute');
+      click(fixture, 'button.execute');
+
+      expect(fixture.nativeElement.querySelectorAll('article.dead-letter').length).toBe(0);
+      expect(fixture.nativeElement.querySelector('.moved')?.textContent).toContain('no longer listed');
+      click(fixture, 'button.reread');
+      expect(host.deadLetters).toHaveBeenCalledTimes(2);
+      expect(fixture.nativeElement.querySelectorAll('article.dead-letter').length).toBe(2);
+      expect(fixture.nativeElement.querySelector('.moved')).toBeNull();
+    });
+
+    it("opening another queue does not show the last queue's job", () => {
+      const fixture = render();
+      click(fixture, 'button.open-dead-letters');
+      click(fixture, 'button.dry-replay');
+      expect(fixture.nativeElement.querySelector('.dead-letters app-output-pane')).not.toBeNull();
+
+      (fixture.nativeElement.querySelectorAll('button.open-dead-letters')[1] as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelector('.dead-letters app-output-pane')).toBeNull();
+    });
+
     it('a dry run of the other verb re-arms the real run for that verb', () => {
       const fixture = render();
       click(fixture, 'button.open-dead-letters');
