@@ -4058,7 +4058,7 @@ class TheGitArgvGuard(unittest.TestCase):
         # bound is what needs rewriting.
         self.assertAdmitted("F=--output=/tmp/x; git log $F")
         # The other two shapes narrowed when a computed word in program
-        # position — one that could name the review helpers — started being
+        # position — one that could name any program — started being
         # refused: a command WORD taken from a variable, and a substitution
         # whose output is the command line. Raised by Copilot; the paragraph
         # moved with them.
