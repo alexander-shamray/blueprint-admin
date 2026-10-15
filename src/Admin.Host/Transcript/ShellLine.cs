@@ -18,13 +18,15 @@ public static partial class ShellLine
     /// and then quoted, so a placeholder is quoted rather than read as a redirection. A secret is caught within its
     /// word; one the argv splits across two, as a bare <c>Bearer</c> beside an opaque token, is not, and no command
     /// the host runs passes one. The variables the child is given come first, as bash takes them, each value
-    /// scrubbed and quoted like a word: the line a person types to do by hand what the host did. A variable the spec
-    /// names in <see cref="ProcessSpec.SecretEnvironment"/> keeps its name and loses its value, as a token does.
+    /// scrubbed and quoted like a word: the line a person types to do by hand what the host did. A word or a variable's
+    /// value that is one of <see cref="ProcessSpec.Secrets"/> is scrubbed outright, as a token is, since no pattern
+    /// would catch it.
     /// </summary>
     public static string Command(ProcessSpec spec) =>
-        string.Join(' ', (spec.Environment ?? new Dictionary<string, string>())
-            .Select(v => $"{v.Key}={(spec.SecretEnvironment.Contains(v.Key) ? Quote(FixtureScrubber.Scrubbed) : Word(v.Value))}")
-            .Concat(new[] { spec.FileName }.Concat(spec.Arguments).Select(Word)));
+        string.Join(' ', (spec.Environment ?? new Dictionary<string, string>()).Select(v => $"{v.Key}={Secret(spec, v.Value)}")
+            .Concat(new[] { spec.FileName }.Concat(spec.Arguments).Select(w => Secret(spec, w))));
+
+    private static string Secret(ProcessSpec spec, string word) => spec.Secrets.Contains(word) ? Quote(FixtureScrubber.Scrubbed) : Word(word);
 
     /// <summary>
     /// The curl for the message the proxy built, headers as it sends them. The token it attached and any

@@ -18,9 +18,9 @@ namespace Admin.Host.Broker;
 /// <remarks>
 /// The password is random, minted for one run and cleared when the run ends, whether the tool succeeded or not, so
 /// between runs the account has none, as it ships, and nothing holds one (spec §8). Runs are one at a time: a second
-/// run's clear would end the first one's login. The set and the clear are <c>exec</c> reads, which the transcript leaves
-/// out (spec §5.11); the tool is a listed process whose variable the transcript prints scrubbed
-/// (<see cref="ProcessSpec.SecretEnvironment"/>).
+/// run's clear would end the first one's login. The clear is attempted from the moment the set is, since a set that
+/// timed out may still have landed. The set, the tool and the clear are all listed processes the operator caused, so
+/// the transcript holds the whole run, with the password scrubbed wherever it appears (<see cref="ProcessSpec.Secrets"/>).
 /// </remarks>
 public sealed partial class DeadLetterService(
     ComposeService compose,
@@ -99,25 +99,16 @@ public sealed partial class DeadLetterService(
         try
         {
             string password = NewPassword();
-            CommandOutput set = await compose.ExecAsync("rabbitmq", SetPasswordArguments(password), cancellationToken);
-
-            if (set.Error is { } refused)
-            {
-                return Failed(queue, $"The operator's password could not be set: {refused}");
-            }
-
             DeadLetterInspection inspection;
             string? stuck;
 
             try
             {
-                Job read = runner.Start(InspectSpec(queue, InspectLimit, paths, password));
-                CommandOutput output = await OneShot.CompleteAsync(runner, read, "dead_letters inspect", time, cancellationToken);
-                inspection = output.Error is { } error ? Failed(queue, error) : Parse(queue, output.Stdout);
+                inspection = await ReadAsync(queue, password, cancellationToken);
             }
             finally
             {
-                stuck = (await compose.ExecAsync("rabbitmq", ClearPasswordArguments, CancellationToken.None)).Error;
+                stuck = (await ClearAsync()).Error;
             }
 
             return stuck is null ? inspection : inspection with { Error = Joined(inspection.Error, StillSet(stuck)) };
@@ -127,6 +118,26 @@ public sealed partial class DeadLetterService(
             Leave();
         }
     }
+
+    private async Task<DeadLetterInspection> ReadAsync(string queue, string password, CancellationToken cancellationToken)
+    {
+        if ((await SetAsync(password, cancellationToken)).Error is { } refused)
+        {
+            return Failed(queue, $"The operator's password could not be set: {refused}");
+        }
+
+        Job read = runner.Start(InspectSpec(queue, InspectLimit, paths, password));
+        CommandOutput output = await OneShot.CompleteAsync(runner, read, "dead_letters inspect", time, cancellationToken);
+
+        return output.Error is { } error ? Failed(queue, error) : Parse(queue, output.Stdout);
+    }
+
+    private Task<CommandOutput> SetAsync(string password, CancellationToken cancellationToken) =>
+        compose.ExecListedAsync("rabbitmq", SetPasswordArguments(password), Secret(password), cancellationToken);
+
+    /// <summary>Never cancelled: a clear abandoned with its caller's request would leave the account with a password.</summary>
+    private Task<CommandOutput> ClearAsync() =>
+        compose.ExecListedAsync("rabbitmq", ClearPasswordArguments, new HashSet<string>(), CancellationToken.None);
 
     /// <summary>
     /// Starts a replay or discard as one listed job; null while another run holds the operator. The job carries the
@@ -173,20 +184,21 @@ public sealed partial class DeadLetterService(
     private async Task<int> MoveAsync(Job job, DeadLetterVerb verb, string queue, IReadOnlyList<string> messageIds, bool execute)
     {
         string password = NewPassword();
-        job.Append(OutputStream.Stdout, $"$ docker compose exec rabbitmq rabbitmqctl change_password {Operator} {FixtureScrubber.Scrubbed}");
-        CommandOutput set = await compose.ExecAsync("rabbitmq", SetPasswordArguments(password), CancellationToken.None);
-
-        if (set.Error is { } refused)
-        {
-            job.Append(OutputStream.Stderr, $"The operator's password could not be set, so the tool did not run: {refused}");
-            return 1;
-        }
-
         int exitCode;
 
         try
         {
-            exitCode = await ToolAsync(job, verb, queue, messageIds, execute, password);
+            job.Append(OutputStream.Stdout, $"$ docker compose exec rabbitmq rabbitmqctl change_password {Operator} {FixtureScrubber.Scrubbed}");
+
+            if ((await SetAsync(password, CancellationToken.None)).Error is { } refused)
+            {
+                job.Append(OutputStream.Stderr, $"The operator's password could not be set, so the tool did not run: {refused}");
+                exitCode = 1;
+            }
+            else
+            {
+                exitCode = await ToolAsync(job, verb, queue, messageIds, execute, password);
+            }
         }
         catch (Exception ex)
         {
@@ -196,9 +208,8 @@ public sealed partial class DeadLetterService(
         finally
         {
             job.Append(OutputStream.Stdout, $"$ docker compose exec rabbitmq {string.Join(' ', ClearPasswordArguments)}");
-            CommandOutput cleared = await compose.ExecAsync("rabbitmq", ClearPasswordArguments, CancellationToken.None);
 
-            if (cleared.Error is { } stuck)
+            if ((await ClearAsync()).Error is { } stuck)
             {
                 job.Append(OutputStream.Stderr, StillSet(stuck));
             }
@@ -234,8 +245,17 @@ public sealed partial class DeadLetterService(
 
             if (line.Stream == OutputStream.Stderr && line.Text.StartsWith(UnrecordedPrefix, StringComparison.Ordinal) && unrecorded is not null)
             {
-                await File.AppendAllTextAsync(unrecorded, line.Text[UnrecordedPrefix.Length..] + "\n");
-                job.Append(OutputStream.Stderr, $"The line above is the last copy of a message the tool could not record; it is kept in {unrecorded}.");
+                // Inside the loop on purpose: leaving it would clear the password and free the operator under a tool
+                // that is still moving messages, so a file that cannot be written is said and the job keeps the line.
+                try
+                {
+                    await File.AppendAllTextAsync(unrecorded, line.Text[UnrecordedPrefix.Length..] + "\n");
+                    job.Append(OutputStream.Stderr, $"The line above is the last copy of a message the tool could not record; it is kept in {unrecorded}.");
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    job.Append(OutputStream.Stderr, $"The line above is the last copy of a message the tool could not record, and {unrecorded} could not be written ({ex.Message}): copy the line now.");
+                }
             }
         }
 
@@ -275,13 +295,15 @@ public sealed partial class DeadLetterService(
         new(Python[0], [.. Python[1..], Tool, .. arguments], paths.BackendDir)
         {
             Environment = new Dictionary<string, string>(StringComparer.Ordinal) { [PasswordVariable] = password },
-            SecretEnvironment = new HashSet<string>(StringComparer.Ordinal) { PasswordVariable },
+            Secrets = Secret(password),
         };
+
+    private static HashSet<string> Secret(string password) => new(StringComparer.Ordinal) { password };
 
     private static string NewPassword() => RandomNumberGenerator.GetHexString(32, lowercase: true);
 
     private static string StillSet(string error) =>
-        $"The operator still has a password ({error}); clear it with: docker compose exec rabbitmq {string.Join(' ', ClearPasswordArguments)}";
+        $"The operator's password could not be cleared ({error}); if it was set, it still is, so clear it with: docker compose exec rabbitmq {string.Join(' ', ClearPasswordArguments)}";
 
     private static string Joined(string? first, string second) => first is null ? second : $"{first} {second}";
 
@@ -333,9 +355,10 @@ public sealed partial class DeadLetterService(
             _ => null,
         };
 
-    [GeneratedRegex(@"^[a-z][a-z0-9-]*_(error|skipped)$")]
+    // \z, not $: in .NET a $ also matches before a final newline, which would let "x_error\n" through to the tool's argv.
+    [GeneratedRegex(@"^[a-z][a-z0-9-]*_(error|skipped)\z")]
     private static partial Regex ParkedName();
 
-    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")]
+    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\z")]
     private static partial Regex MessageIdShape();
 }

@@ -3,7 +3,8 @@ namespace Admin.Host.Jobs;
 /// <summary>What to run and where. Arguments are passed as a list, never joined into a shell string.</summary>
 public sealed record ProcessSpec(string FileName, IReadOnlyList<string> Arguments, string WorkingDirectory)
 {
-    public string CommandLine => Arguments.Count == 0 ? FileName : $"{FileName} {string.Join(' ', Arguments)}";
+    /// <summary>The command as the host shows and logs it: every word that is one of <see cref="Secrets"/> is scrubbed.</summary>
+    public string CommandLine => Arguments.Count == 0 ? FileName : $"{FileName} {string.Join(' ', Arguments.Select(Shown))}";
 
     /// <summary>
     /// Whether <see cref="JobRegistry"/> keeps the job, so that <c>/api/jobs</c> lists it and a screen can reopen
@@ -19,8 +20,13 @@ public sealed record ProcessSpec(string FileName, IReadOnlyList<string> Argument
     public IReadOnlyDictionary<string, string>? Environment { get; init; }
 
     /// <summary>
-    /// Names in <see cref="Environment"/> whose value the transcript never prints, because no pattern can recognise it:
-    /// the dead-letter operator's password is random hex, minted for one run (<c>Broker/DeadLetterService.cs</c>).
+    /// Values never shown as they are, wherever this spec is: an argument or a variable equal to one is scrubbed in
+    /// <see cref="CommandLine"/>, which the job list and the host's log print, and in the transcript. No pattern can
+    /// recognise these by value: the dead-letter operator's password is random hex, minted for one run
+    /// (<c>Broker/DeadLetterService.cs</c>).
     /// </summary>
-    public IReadOnlySet<string> SecretEnvironment { get; init; } = new HashSet<string>();
+    public IReadOnlySet<string> Secrets { get; init; } = new HashSet<string>();
+
+    /// <summary>A word as it may be shown: <see cref="Fakes.FixtureScrubber.Scrubbed"/> for one of <see cref="Secrets"/>.</summary>
+    public string Shown(string word) => Secrets.Contains(word) ? Fakes.FixtureScrubber.Scrubbed : word;
 }

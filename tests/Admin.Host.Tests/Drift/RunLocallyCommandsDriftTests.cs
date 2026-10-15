@@ -141,8 +141,8 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
         // names, <id> and its two file names, so each argv the host builds is compared token for token with its line.
         const string Variable = "$env:DEAD_LETTERS_PASSWORD";
         const string Queue = "ordering-catalog-events_error";
-        compose.Exec("rabbitmq", DeadLetterService.SetPasswordArguments(Variable));
-        compose.Exec("rabbitmq", DeadLetterService.ClearPasswordArguments);
+        await compose.ExecListedAsync("rabbitmq", DeadLetterService.SetPasswordArguments(Variable), new HashSet<string>(), TestContext.Current.CancellationToken);
+        await compose.ExecListedAsync("rabbitmq", DeadLetterService.ClearPasswordArguments, new HashSet<string>(), TestContext.Current.CancellationToken);
         runner.Start(DeadLetterService.InspectSpec(Queue, 5, Paths, Variable));
 
         foreach (DeadLetterVerb verb in Enum.GetValues<DeadLetterVerb>())
