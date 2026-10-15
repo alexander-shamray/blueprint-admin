@@ -21,6 +21,9 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/RaiseErasureRequestCommand"
+              },
+              "example": {
+                "subjectId": "0199b0c4-6f2e-7a31-8c5d-2e4f6a7b8c9d"
               }
             }
           },
@@ -55,20 +58,34 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ReissueErasureRequestRequest"
+              },
+              "example": {
+                "commandId": "0199b0c4-8b21-7c53-ae7f-4a6b8c9d0e1f"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
-          },
           "404": {
-            "description": "Not Found"
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           },
           "422": {
-            "description": "Unprocessable Entity"
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -92,10 +109,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErasureRequestView"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Not Found"
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -103,6 +134,137 @@
   },
   "components": {
     "schemas": {
+      "ErasureRequestView": {
+        "required": [
+          "requestId",
+          "status",
+          "raisedAt",
+          "dueAt",
+          "closedAt",
+          "reissues",
+          "responders",
+          "missing",
+          "answers"
+        ],
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          },
+          "raisedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dueAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "closedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "reissues": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "responders": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "answers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HolderAnswer"
+            }
+          }
+        }
+      },
+      "HolderAnswer": {
+        "required": [
+          "responder",
+          "count",
+          "counted",
+          "receivedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "responder": {
+            "type": "string"
+          },
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "counted": {
+            "type": "boolean"
+          },
+          "receivedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "RaiseErasureRequestCommand": {
         "required": [
           "subjectId"

@@ -74,7 +74,8 @@ public sealed class ApiCatalogTests : IDisposable
         view.Sources.ShouldAllBe(s => s.Changes!.BaselineTaken);
         view.Operations.Select(o => o.Id).ShouldBe(
         [
-            "catalog:PublishProduct", "catalog:GetProducts", "catalog:GetProduct", "ordering:PlaceOrder", "ordering:CancelOrder",
+            "catalog:PublishProduct", "catalog:GetProducts", "catalog:ChangePrice", "catalog:WithdrawProduct",
+            "catalog:GetOwnProducts", "catalog:GetProduct", "ordering:PlaceOrder", "ordering:CancelOrder",
             "inventory:SetOnHand", "inventory:GetStock", "inventory:GetReservation", "inventory:ReleaseReservation",
             "inventory:ReinstateReservation", "payments:GetPayment",
             "privacy:RaiseErasureRequest", "privacy:ReissueErasureRequest", "privacy:GetErasureRequest",

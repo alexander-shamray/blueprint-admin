@@ -21,6 +21,23 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/PlaceOrderCommand"
+              },
+              "example": {
+                "commandId": "0199b0c4-8b21-7c53-8e7f-4a6b8c9d0e1f",
+                "items": [
+                  {
+                    "productId": "0199b0c4-6f2e-7a31-8c5d-2e4f6a7b8c9d",
+                    "quantity": 2
+                  }
+                ],
+                "shippingAddress": {
+                  "line1": "1 Example Street",
+                  "line2": null,
+                  "city": "Sampleton",
+                  "postalCode": "1234 AB",
+                  "country": "NL"
+                },
+                "currency": "EUR"
               }
             }
           },
@@ -55,6 +72,9 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CancelOrderRequest"
+              },
+              "example": {
+                "reason": "customer_request"
               }
             }
           },

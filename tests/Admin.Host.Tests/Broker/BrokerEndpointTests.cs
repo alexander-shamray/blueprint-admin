@@ -63,7 +63,7 @@ public sealed class BrokerEndpointTests : IClassFixture<AdminHostFactory>
         JsonElement view = await client.GetFromJsonAsync<JsonElement>("/api/broker/exchanges", TestContext.Current.CancellationToken);
 
         JsonElement[] exchanges = [.. view.GetProperty("exchanges").EnumerateArray()];
-        exchanges.Length.ShouldBe(47);
+        exchanges.Length.ShouldBe(56);
         exchanges.ShouldContain(e => e.GetProperty("name").GetString() == "ordering-fulfilment-saga_delay" && e.GetProperty("type").GetString() == "x-delayed-message");
     }
 
@@ -73,6 +73,9 @@ public sealed class BrokerEndpointTests : IClassFixture<AdminHostFactory>
         JsonElement view = await client.GetFromJsonAsync<JsonElement>("/api/broker/permissions", TestContext.Current.CancellationToken);
 
         view.GetProperty("permissions").EnumerateArray().Select(p => p.GetProperty("user").GetString()).ShouldBe(
-            ["bff-svc", "catalog-svc", "inventory-svc", "notifications-svc", "ordering-svc", "payments-svc", "shipping-svc"]);
+            [
+                "bff-svc", "catalog-svc", "dead-letter-operator", "inventory-svc", "notifications-svc", "ordering-svc",
+                "payments-svc", "privacy-svc", "shipping-svc",
+            ]);
     }
 }

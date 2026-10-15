@@ -46,9 +46,9 @@ test('the broker screen lists queues, exchanges and permissions', async ({ page 
   await expect(page.locator('table.queues tbody tr.skipped-queue a')).toHaveAttribute('href', /\/docs\/runbooks\/skipped-queue\.md$/);
   await expect(page.locator('table.queues tbody tr.error-queue a')).toHaveAttribute('href', /\/docs\/runbooks\/error-queue\.md$/);
   await expect(page.locator('app-drained-indicator')).toContainText('[drained] ordering-catalog-events');
-  await expect(page.locator('table.exchanges tbody tr')).toHaveCount(47);
+  await expect(page.locator('table.exchanges tbody tr')).toHaveCount(56);
   await expect(page.locator('table.exchanges tbody tr', { hasText: 'ordering-fulfilment-saga_delay' })).toContainText('x-delayed-message');
-  await expect(page.locator('table.permissions tbody tr')).toHaveCount(7);
+  await expect(page.locator('table.permissions tbody tr')).toHaveCount(9);
 
   await page.getByRole('button', { name: 'Refresh' }).click();
   await expect(page.locator('table.queues tbody tr')).toHaveCount(20);
