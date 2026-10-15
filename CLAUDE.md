@@ -182,8 +182,9 @@ opens those files:
   - **Work starts on an issue** (a branch or worktree is created for it):
     its row leaves **Remaining** and enters **In progress** with its
     branch, *before* the session enters the worktree.
-  - **A PR opens**: the **In progress** row names the PR and the issues it
-    closes.
+  - **A PR opens**: the **In progress** row for the work names the PR and
+    the issues it closes. Work no issue started has no row yet: it gets one
+    now, with `—` for the issue, and loses it when it lands or stops.
   - **A PR merges or closes, or an issue closes**: the row is deleted, with
     no note of what landed, which git and the closed issues already keep.
     Whatever the work found and filed gets its row in its wave.
