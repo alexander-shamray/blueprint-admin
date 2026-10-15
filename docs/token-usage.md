@@ -106,12 +106,16 @@ Measured by the same report at `main` e0af55b, `--since 2026-10-15`.
 holds the sessions before the merge as well as after: it is the day, not the
 effect of the cut.
 
+The three largest rows of the report, and its total over every row (the
+rest are `/ship` forks and `branch-reviewer`, `skill:pr` and other small
+rows):
+
 | Who | Contexts | Calls | Mean context | Input equivalent | After a wake |
 |---|---|---|---|---|---|
 | `/ship`, `main` | 20 | 1,599 | 254k | 47.6M | 15.3M |
 | no command, `main` | 87 | 323 | 231k | 9.9M | 1.4M |
 | `/ship`, `bug-auditor` | 51 | 296 | 38k | 3.4M | 1.3M |
-| **Total** | 178 | 2,388 | 217k | 64.3M | 18.1M |
+| **Total, every row** | 178 | 2,388 | 217k | 64.3M | 18.1M |
 
 Against the baseline above, `/ship`'s mean context is 254k a call, to be
 read against 259k over all history, and its wake share 32% (15.3M of 47.6M)
