@@ -11,13 +11,14 @@
   @if (q.reachable) {
     <app-drained-indicator [projection]="q.projection" />
     <table class="queues">
-      <thead><tr><th>Queue</th><th>Messages</th><th>Consumed by</th></tr></thead>
+      <thead><tr><th>Queue</th><th>Messages</th><th>Consumed by</th><th>Runbook</th></tr></thead>
       <tbody>
         @for (queue of q.queues; track queue.name) {
-          <tr [class.error-queue]="queue.isErrorQueue">
-            <td>@if (queue.isErrorQueue) {<span class="marker">[error]</span> }{{ queue.name }}</td>
+          <tr [class.error-queue]="queue.parked === 'error'" [class.skipped-queue]="queue.parked === 'skipped'">
+            <td>@if (queue.parked; as kind) {<span class="marker">[{{ kind }}]</span> }{{ queue.name }}</td>
             <td>{{ queue.messages ?? '—' }}</td>
             <td class="consumer">{{ queue.consumer ?? '' }}</td>
+            <td class="runbook">@if (queue.runbook && (queue.messages ?? 0) > 0) {<a [href]="queue.runbook" target="_blank" rel="noopener noreferrer">{{ queue.parked }}-queue runbook</a>}</td>
           </tr>
         }
       </tbody>

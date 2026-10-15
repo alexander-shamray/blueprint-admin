@@ -8,9 +8,32 @@ const queues: QueuesView = {
   reachable: true,
   error: null,
   queues: [
-    { name: 'ordering-catalog-events', messages: 2, isErrorQueue: false, consumer: "Ordering's price projection" },
-    { name: 'ordering-catalog-events_error', messages: 1, isErrorQueue: true, consumer: "Ordering's price projection" },
-    { name: 'something-else', messages: 0, isErrorQueue: false, consumer: null },
+    { name: 'ordering-catalog-events', messages: 2, isErrorQueue: false, consumer: "Ordering's price projection", parked: null, runbook: null },
+    {
+      name: 'ordering-catalog-events_error',
+      messages: 1,
+      isErrorQueue: true,
+      consumer: "Ordering's price projection",
+      parked: 'error',
+      runbook: 'https://example.test/runbooks/error-queue.md',
+    },
+    {
+      name: 'bff-order-events_skipped',
+      messages: 1,
+      isErrorQueue: false,
+      consumer: "the BFF's order projection",
+      parked: 'skipped',
+      runbook: 'https://example.test/runbooks/skipped-queue.md',
+    },
+    {
+      name: 'payments-events_skipped',
+      messages: 0,
+      isErrorQueue: false,
+      consumer: "Payments' order events",
+      parked: 'skipped',
+      runbook: 'https://example.test/runbooks/skipped-queue.md',
+    },
+    { name: 'something-else', messages: 0, isErrorQueue: false, consumer: null, parked: null, runbook: null },
   ],
   projection: { queue: 'ordering-catalog-events', found: true, messages: 2, drained: false },
 };
@@ -63,11 +86,25 @@ describe('BrokerPage', () => {
 
     expect(rows(fixture, 'queues')).toEqual([
       "ordering-catalog-events 2 Ordering's price projection",
-      "[error] ordering-catalog-events_error 1 Ordering's price projection",
+      "[error] ordering-catalog-events_error 1 Ordering's price projection error-queue runbook",
+      "[skipped] bff-order-events_skipped 1 the BFF's order projection skipped-queue runbook",
+      "[skipped] payments-events_skipped 0 Payments' order events",
       'something-else 0',
     ]);
     expect(fixture.nativeElement.querySelector('table.queues tr.error-queue')).not.toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('table.queues tr.skipped-queue').length).toBe(2);
     expect(fixture.nativeElement.querySelector('app-drained-indicator')?.textContent).toContain('[waiting]');
+  });
+
+  it('links the runbook of a parked queue that holds a message, and of an empty one not', () => {
+    const fixture = render();
+    const links = Array.from(fixture.nativeElement.querySelectorAll('table.queues td.runbook a')) as HTMLAnchorElement[];
+
+    expect(links.map((a) => a.getAttribute('href'))).toEqual([
+      'https://example.test/runbooks/error-queue.md',
+      'https://example.test/runbooks/skipped-queue.md',
+    ]);
+    expect(links.every((a) => a.target === '_blank' && a.rel === 'noopener noreferrer')).toBe(true);
   });
 
   it('lists exchanges, naming the default exchange, and permissions per user', () => {
@@ -134,7 +171,7 @@ describe('BrokerPage', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('.error')?.textContent).toContain('boom');
-    expect(rows(fixture, 'queues').length).toBe(3);
+    expect(rows(fixture, 'queues').length).toBe(5);
   });
 
   it('a failed exchanges read is not cleared by a queues read that succeeds after it', async () => {

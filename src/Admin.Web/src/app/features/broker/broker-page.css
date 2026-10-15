@@ -3,5 +3,6 @@ h2 { font-size: 1rem; margin: 1rem 0 0.5rem; }
 table { border-collapse: collapse; margin-bottom: 1rem; }
 td, th { padding: 0.25rem 0.75rem; border-bottom: 1px solid #eee; text-align: left; vertical-align: top; }
 tr.error-queue td { color: #b00; font-weight: 600; }
+tr.skipped-queue td { color: #8a5a00; font-weight: 600; }
 code { word-break: break-all; }
 .error { color: #b00; }
