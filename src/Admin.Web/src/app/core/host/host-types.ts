@@ -194,6 +194,17 @@ export interface BrokerQueue {
   runbook: string | null;
 }
 
+/**
+ * What the Broker screen says before either projection button is pressed. The host owns the words: each limit restates
+ * a sentence of the backend's `tools/bff-replay` README that the drift gate holds it to, and `rebuildConfirm` is what a
+ * person types before a rebuild deletes the projection.
+ */
+export interface ProjectionPlan {
+  queue: string;
+  rebuildConfirm: string;
+  limits: string[];
+}
+
 /** Whether a queue is drained: declared and empty. The queue is `PlatformQueues.Projection`, which owns what it feeds. */
 export interface ProjectionDrain {
   queue: string;

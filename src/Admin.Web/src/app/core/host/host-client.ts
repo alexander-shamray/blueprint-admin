@@ -10,6 +10,7 @@ import {
   DoctorView,
   JobView,
   PermissionsView,
+  ProjectionPlan,
   ProxyRequest,
   ProxyResult,
   QueuesView,
@@ -105,6 +106,21 @@ export class HostClient {
 
   brokerPermissions(): Observable<PermissionsView> {
     return this.http.get<PermissionsView>('/api/broker/permissions');
+  }
+
+  /** What to say before either projection button is pressed: the queue, the typed confirmation, the tool's limits. */
+  projectionPlan(): Observable<ProjectionPlan> {
+    return this.http.get<ProjectionPlan>('/api/broker/projection');
+  }
+
+  /** The BFF projection repaired: the tool with no argument, nothing deleted. */
+  projectionRepair(): Observable<JobSummary> {
+    return this.http.post<JobSummary>('/api/broker/projection/repair', null);
+  }
+
+  /** The BFF projection rebuilt: stop the BFF, the tool with `--reset`, start it again. Takes the typed confirmation. */
+  projectionRebuild(confirm: string): Observable<JobSummary> {
+    return this.http.post<JobSummary>('/api/broker/projection/rebuild', { confirm });
   }
 
   trace(correlationId: string, window?: string): Observable<TraceView> {
