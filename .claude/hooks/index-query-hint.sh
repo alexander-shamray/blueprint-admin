@@ -36,11 +36,24 @@
 # `awk`, where a pasted log appended one character at a time is not.
 
 awk '
-function emit(kind, command) {
+# The MCP tool answering each subcommand a hint can name. The same map is
+# `TOOLS` in `index-search-hint.py`, and `test_index_search_hint.py` holds the
+# two equal.
+BEGIN {
+  TOOL["search"] = "search_code"
+  TOOL["explain"] = "explain_code"
+  TOOL["symbol"] = "find_symbol"
+  TOOL["refs"] = "find_refs"
+  TOOL["impact"] = "impact_of"
+}
+
+function emit(kind, command,    words, tool) {
+  split(command, words, " ")
+  tool = TOOL[words[2]]
   printf "{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"%s\"}}\n", \
     "This reads as a " kind " question, so load the codebase-index skill and query the index before any Grep or Read of the tree, starting with " \
     command \
-    ". Pick one session tag for this conversation and pass it to every search and explain; start a new one after a clear or compaction, and never hand it to a subagent. Read only the recommended line ranges, and treat an empty refs or impact result as inconclusive."
+    ". Pick one session tag for this conversation and pass it to every search and explain; start a new one after a clear or compaction, and never hand it to a subagent. Read only the recommended line ranges, and treat an empty refs or impact result as inconclusive. The MCP tool mcp__codebase-index__" tool " answers the same question once loaded with ToolSearch select:mcp__codebase-index__" tool "; it reads the checkout the session started in, so after a move into a worktree run the command instead."
 }
 
 # The `prompt` value, decoded. A JSON string holds no raw quote, so the first

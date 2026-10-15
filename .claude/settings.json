@@ -104,6 +104,16 @@
             "statusMessage": "checking edit target"
           }
         ]
+      },
+      {
+        "matcher": "Grep|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/index-hint-run.sh\" PreToolUse index-search-hint.py",
+            "timeout": 15
+          }
+        ]
       }
     ],
     "PostToolUse": [

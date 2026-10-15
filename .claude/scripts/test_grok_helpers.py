@@ -10053,11 +10053,18 @@ class TheHookWiringRunsOnMoreThanOneOperatingSystem(unittest.TestCase):
                 # another.
                 self.assertNotRegex(command, r"(^|\s)python3(\s|$)")
 
+    # The one launcher that is not `run-guard.sh`, by design: a hint has to fail
+    # open, and that launcher leaves with 2 on every failure, which blocks the
+    # tool call (#119). The list is closed, and `test_index_search_hint.py`
+    # holds the hint's own launcher to its contract.
+    HINT_LAUNCHERS = ("index-hint-run.sh",)
+
     def test_every_hook_goes_through_the_launcher(self):
         for command in self.commands():
             with self.subTest(command=command):
-                self.assertIn("run-guard.sh", command)
                 self.assertIn("${CLAUDE_PROJECT_DIR}", command)
+                if not any(name in command for name in self.HINT_LAUNCHERS):
+                    self.assertIn("run-guard.sh", command)
 
     def test_the_launcher_probes_py_before_python3(self):
         # **The order is the whole of what this file decides, and it is a
