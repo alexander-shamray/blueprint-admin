@@ -159,6 +159,8 @@ public sealed class FixtureScrubberTests
     [InlineData("""{"body":"username=demo&password=","method":"POST"}""")]
     [InlineData("""{"a":["password="],"b":1}""")]
     [InlineData("""{"body":"password="}""")]
+    [InlineData("{\"cmd\": \"x password=\"\n}")]
+    [InlineData("password=\"")]
     public void An_empty_value_before_a_json_strings_closing_quote_is_left_as_it_is(string json)
     {
         FixtureScrubber.Scrub(json).ShouldBe(json);
