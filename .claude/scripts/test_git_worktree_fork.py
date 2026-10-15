@@ -8,6 +8,7 @@ repository with an `origin/main` to fork from, rather than a Python reading of
 its checks.
 """
 
+import json
 import os
 import shutil
 import subprocess
@@ -123,6 +124,72 @@ class ForkShape(unittest.TestCase):
         self.assertEqual(0, ran.returncode, "the fork never ran the refresh")
         self.assertTrue(ran.stdout.strip().endswith("/.claude/worktrees/probe"),
                         ran.stdout)
+
+    def approve(self, root, local, mcp=None):
+        """Write the main checkout's untracked local settings, and optionally
+        its `.mcp.json`, as bash would find them."""
+        script = ('cd "$C" && mkdir -p .claude && '
+                  'printf %s "$L" > .claude/settings.local.json')
+        if mcp is not None:
+            script += ' && printf %s "$M" > .mcp.json'
+        made = run_bash(script, C=f"{root}/checkout", L=local, M=mcp or "")
+        self.assertEqual(0, made.returncode, made.stderr)
+
+    def carried(self, root):
+        """The worktree's own local settings, or None when it has none."""
+        read = run_bash('cat "$W/.claude/settings.local.json"',
+                        W=f"{root}/checkout/.claude/worktrees/probe")
+        return json.loads(read.stdout) if read.returncode == 0 else None
+
+    def test_the_mcp_approval_crosses_as_names_and_never_as_the_file(self):
+        # A session started in the worktree reads that directory's own local
+        # settings; without the names it reports `Pending approval` and falls
+        # back to grep (#117). The `permissions` rows are the main checkout's
+        # own grants and stay there.
+        root = self.fixture()
+        self.approve(root, json.dumps({
+            "permissions": {"allow": ["Bash(gh pr *)"]},
+            "enabledMcpjsonServers": ["codebase-index"],
+            "somethingElse": 1}))
+        result = self.fork(f"{root}/checkout", ".claude/worktrees/probe")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual({"enabledMcpjsonServers": ["codebase-index"]},
+                         self.carried(root))
+
+    def test_an_approve_all_crosses_as_the_servers_defined_now(self):
+        root = self.fixture()
+        self.approve(root, json.dumps({"enableAllProjectMcpServers": True}),
+                     mcp=json.dumps({"mcpServers": {"a": {}, "b": {}}}))
+        result = self.fork(f"{root}/checkout", ".claude/worktrees/probe")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual({"enabledMcpjsonServers": ["a", "b"]},
+                         self.carried(root))
+
+    def test_a_disabled_server_is_never_approved_in_the_worktree(self):
+        root = self.fixture()
+        self.approve(root, json.dumps({
+            "enabledMcpjsonServers": ["a", "b"],
+            "disabledMcpjsonServers": ["b"]}))
+        result = self.fork(f"{root}/checkout", ".claude/worktrees/probe")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual({"enabledMcpjsonServers": ["a"]}, self.carried(root))
+
+    def test_no_approval_in_the_main_checkout_writes_nothing(self):
+        root = self.fixture()
+        result = self.fork(f"{root}/checkout", ".claude/worktrees/probe")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIsNone(self.carried(root))
+
+    def test_a_shape_it_cannot_copy_warns_and_leaves_the_fork_done(self):
+        root = self.fixture()
+        self.approve(root, json.dumps({"enabledMcpjsonServers": "codebase-index"}))
+        result = self.fork(f"{root}/checkout", ".claude/worktrees/probe")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("warning: could not copy the MCP approval", result.stderr)
+        self.assertIsNone(self.carried(root))
+        listed = run_bash('git -C "$C" worktree list --porcelain',
+                          C=f"{root}/checkout")
+        self.assertIn("refs/heads/feat/probe", listed.stdout)
 
     def test_any_other_path_is_refused(self):
         root = self.fixture()

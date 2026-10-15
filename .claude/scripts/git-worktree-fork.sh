@@ -61,6 +61,42 @@ esac
 git show-ref --verify --quiet refs/remotes/origin/main ||
   { echo "no refs/remotes/origin/main — fetch first (step 1)" >&2; exit 4; }
 git worktree add --no-track -b "$branch" "$path" origin/main
+# python3 stands in where the `py` launcher the hooks name does not exist.
+python=python3
+command -v py >/dev/null 2>&1 && python="py -3"
+# A session started in the worktree reads that directory's own untracked local
+# settings, where the main checkout's approval of its `.mcp.json` servers does
+# not reach (#117), so the approval crosses as the names it covers, an
+# approve-all expanded to the servers defined now; never the file, whose
+# `permissions` rows are the main checkout's own grants. A server defined later
+# still prompts. A shape it cannot copy warns and leaves the fork done.
+settings=.claude/settings.local.json
+# -L as well as -e, because -e follows a link and a dangling one reads absent.
+if [ -f "$settings" ] && [ ! -L "$path/$settings" ] && [ ! -e "$path/$settings" ]; then
+  # -I keeps a checkout-root json.py off the import path.
+  if ! $python -I - "$settings" "$path/$settings" .mcp.json <<'PY'; then
+import json, os, sys
+local = json.load(open(sys.argv[1], encoding="utf-8"))
+servers = local.get("enabledMcpjsonServers", [])
+if not (isinstance(servers, list) and all(isinstance(s, str) for s in servers)):
+    sys.exit("enabledMcpjsonServers is not a list of server names")
+if local.get("enableAllProjectMcpServers") is True and os.path.isfile(sys.argv[3]):
+    defined = json.load(open(sys.argv[3], encoding="utf-8")).get("mcpServers")
+    if not isinstance(defined, dict):
+        sys.exit(f"{sys.argv[3]} has no mcpServers object")
+    servers += [name for name in defined if name not in servers]
+disabled = local.get("disabledMcpjsonServers", [])
+if not isinstance(disabled, list):
+    sys.exit("disabledMcpjsonServers is not a list")
+servers = [s for s in servers if s not in disabled]
+if servers:
+    os.makedirs(os.path.dirname(sys.argv[2]), exist_ok=True)
+    with open(sys.argv[2], "w", encoding="utf-8") as out:
+        json.dump({"enabledMcpjsonServers": servers}, out)
+PY
+    echo "warning: could not copy the MCP approval from $settings; the worktree's MCP servers stay unapproved" >&2
+  fi
+fi
 # Seed the new worktree's code index now rather than at its first edit: /branch
 # enters it mid-session, where no `SessionStart` fires, and a query there before
 # any edit would build from scratch. The worktree's own hook does the work,
