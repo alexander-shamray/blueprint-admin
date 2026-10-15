@@ -19,6 +19,9 @@ SPA versions live in `src/Admin.Web/package.json` with **exact** pins — no
 `^`, no `~` — and `package-lock.json` moves in the same commit. `.nvmrc`
 pins Node.
 
+The host refuses to start if `Admin:BackendDir` / `Admin:FrontendDir` are
+wrong, naming the key. It does **not** run `npm ci` in the frontend clone.
+
 One lesson stays here, because its subject is every other rule: **a gate that
 silently stops covering the newest surface is the most-repeated failure in
 these repositories**, and the only defence is a test whose subject is *what
