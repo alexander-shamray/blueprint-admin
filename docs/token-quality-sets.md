@@ -136,8 +136,8 @@ Each of the eight source PRs was checked out detached at its head
 (`refs/pull/<n>/head`) outside the repository, its diff written beside it, and
 reviewed **twice** by `branch-reviewer` (a full pass, the diff read whole in
 consecutive chunks, no impact or locality file) and **once** by `bug-auditor`
-(scoped to the files the diff touches, told of no known defect). Sixteen
-reports, none shown a row. This removes the three limits above and leaves two
+(scoped to the files the diff touches, told of no known defect). Twenty-four
+reports (sixteen reviewer, eight auditor), none shown a row. This removes the three limits above and leaves two
 of its own, below.
 
 | Row | PR | Baseline (on `main`) | Reviewer, run 1 | Reviewer, run 2 | `bug-auditor` |
@@ -157,7 +157,7 @@ of its own, below.
 | **Found** | | **4 of 12** | **1** | **2** | **1** |
 
 **Three rows found by some run at the head (#144, #147, #153), four by some run
-anywhere (#141 as well, in the baseline), eight by none of the four runs.** Read it
+anywhere (#141 as well, in the baseline), eight by none of the three head columns or the baseline.** Read it
 with the spread in view, which is the new fact:
 
 - **The baseline's 33% does not repeat.** The same reviewer at the PR's head
@@ -185,7 +185,7 @@ it (#141 is the likely case: the PR's own change marks `_skipped`); and the
 reviewer was given no impact or locality file, as in the baseline, so it read
 less than the live loop gives it.
 
-### What the sixteen runs raised that matches no row
+### What the twenty-four reports raised that matches no row
 
 Traced to `main` at 059b8c4, nits not filed:
 
