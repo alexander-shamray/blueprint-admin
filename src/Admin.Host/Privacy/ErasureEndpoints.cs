@@ -21,16 +21,23 @@ public static class ErasureEndpoints
         app.MapGet("/api/erasure/holders", async (BrokerService broker, IOptions<AdminOptions> options, CancellationToken cancellationToken) =>
         {
             QueuesView queues = await broker.QueuesAsync(cancellationToken);
-            long? Depth(string name) => queues.Reachable ? queues.Queues.FirstOrDefault(q => q.Name == name)?.Messages : null;
 
-            return TypedResults.Ok(new HoldersView(
-                queues.Reachable,
-                queues.Error,
-                [.. ErasureHolders.Table.Select(h => new HolderView(h.Name, h.Queue, Depth(h.Queue)))],
-                Depth(ErasureHolders.CompletionsQueue),
-                $"{options.Value.BackendRunbooksUrl.TrimEnd('/')}/{ErasureHolders.OverdueRunbook}"));
+            return TypedResults.Ok(View(queues, options.Value.BackendRunbooksUrl));
         });
 
         return app;
+    }
+
+    /// <summary>The holders with the depths the broker reported; none of them when it did not answer, the list still there.</summary>
+    internal static HoldersView View(QueuesView queues, string runbooksUrl)
+    {
+        long? Depth(string name) => queues.Reachable ? queues.Queues.FirstOrDefault(q => q.Name == name)?.Messages : null;
+
+        return new HoldersView(
+            queues.Reachable,
+            queues.Error,
+            [.. ErasureHolders.Table.Select(h => new HolderView(h.Name, h.Queue, Depth(h.Queue)))],
+            Depth(ErasureHolders.CompletionsQueue),
+            $"{runbooksUrl.TrimEnd('/')}/{ErasureHolders.OverdueRunbook}");
     }
 }

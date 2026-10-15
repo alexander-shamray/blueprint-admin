@@ -28,6 +28,7 @@ public sealed partial class ErasureHoldersDriftTests
         HashSet<string> listed = [.. PlatformQueues.Table.Select(q => q.Name)];
 
         ErasureHolders.Table.Select(h => h.Queue).Where(q => !listed.Contains(q)).ShouldBeEmpty();
+        ErasureHolders.Table.Where(h => h.Queue != $"{h.Name}-privacy").ShouldBeEmpty("a holder consumes its own <holder>-privacy queue");
         listed.ShouldContain(ErasureHolders.CompletionsQueue);
     }
 

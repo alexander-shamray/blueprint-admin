@@ -47,7 +47,9 @@ export class ErasurePage {
   readonly request = signal<ErasureRequestView | null>(null);
   readonly holders = signal<HoldersView | null>(null);
   readonly error = signal<string | null>(null);
-  readonly busy = signal(false);
+  /** Calls out, counted: a raise or reissue reads from inside its own call, so a flag would clear while that read is still out. */
+  private readonly inFlight = signal(0);
+  readonly busy = computed(() => this.inFlight() > 0);
   readonly watch = signal(false);
   /** The correlation id of the raise, which Trace reads the whole fan-out under. */
   readonly raisedUnder = signal<string | null>(null);
@@ -159,7 +161,7 @@ export class ErasurePage {
 
   private send(method: string, path: string, body: string | null = null): Observable<ProxyResult> {
     const gateway = this.config()?.urls.gateway ?? '';
-    this.busy.set(true);
+    this.inFlight.update((n) => n + 1);
     this.error.set(null);
     return this.host
       .proxy({ method, url: gateway.replace(/\/+$/, '') + path, headers: body ? { 'Content-Type': 'application/json' } : {}, body, identity: PRIVACY_IDENTITY, correlationId: null })
@@ -169,7 +171,7 @@ export class ErasurePage {
           this.error.set(this.describe(e));
           return EMPTY;
         }),
-        finalize(() => this.busy.set(false)),
+        finalize(() => this.inFlight.update((n) => n - 1)),
       );
   }
 
