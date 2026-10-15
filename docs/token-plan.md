@@ -79,7 +79,8 @@ Replace the external review loops, switched off and still resident in
 **Built** (#124): `/ship` step 5 reviews in rounds of a read-only
 `branch-reviewer`; the external reviewers' commands, agents, helpers,
 hooks, suites and sandbox are at the tag `archive/external-reviewers`.
-The exit is not measured: it waits on the quality sets (#121).
+The exit is not measured: it waits on the baseline run over the quality
+sets, owed in step 1.
 
 ### Step 5 — the sweeps
 
@@ -98,10 +99,12 @@ smaller resident prompt, measured by the step 1 report.
 `security-sweep` are runbooks in `.claude/commands/` with their argument
 in [`commands/`](commands/); `test_command_runbooks.py` holds each
 runbook under a ceiling and each citation to a heading that exists. The
-exit is not measured: it waits on sessions run since, and on #121.
+exit is not measured: it waits on sessions run since, and on the baseline
+run owed in step 1.
 
 ## 3. What each step may not do
 
 A cut that loses a finding is not a saving. Steps 4–6 each hold recall
-against the step 1 quality sets, and until those exist they do not land.
+against the step 1 quality sets, and none claims its exit until the
+baseline run over them exists.
 Steps 2 and 3 move no behaviour and need no set.
