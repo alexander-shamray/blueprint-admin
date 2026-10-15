@@ -335,6 +335,14 @@ not content.
    stale base. Cutting the worktree from the remote-tracking ref is where that
    is cheapest to get right.
 
+   **The task list is the caller's to move, not this command's.** Once the
+   session is inside the worktree it is refused `TODO.md` at the main
+   checkout's root, and this command cannot edit files at all, so the row's
+   move from **Remaining** to **In progress** is made before it runs (`/ship`
+   step 1 does). A `/branch` run directly for an issue reports that the row
+   has not moved and is owed. The rule that decides the row is in
+   `docs/working-rules.md`.
+
    Then switch the session into it with **`EnterWorktree`**, passing the new
    directory as `path` — the worktree exists and `git worktree list` reports
    it, which is what that form of the tool requires. When both steps succeed,
@@ -449,6 +457,9 @@ The branch created, what it was cut from, **the worktree it lives in and
 whether the session is now inside it**, and — if the tree was dirty — the files
 carried across, so the user can confirm they belong on this branch and not the
 next one.
+
+**For an issue, one line on the task list**: that its row had moved before
+this command ran, or that the move is owed.
 
 The workspace gets its own line whether or not one was created, and a branch
 made in place says so in the same breath as why. A reader who cannot tell which
