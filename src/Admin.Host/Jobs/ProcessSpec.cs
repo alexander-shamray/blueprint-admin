@@ -17,4 +17,10 @@ public sealed record ProcessSpec(string FileName, IReadOnlyList<string> Argument
     /// Never part of <see cref="CommandLine"/>: a value may be a connection string.
     /// </summary>
     public IReadOnlyDictionary<string, string>? Environment { get; init; }
+
+    /// <summary>
+    /// Names in <see cref="Environment"/> whose value the transcript never prints, because no pattern can recognise it:
+    /// the dead-letter operator's password is random hex, minted for one run (<c>Broker/DeadLetterService.cs</c>).
+    /// </summary>
+    public IReadOnlySet<string> SecretEnvironment { get; init; } = new HashSet<string>();
 }

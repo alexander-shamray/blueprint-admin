@@ -18,10 +18,12 @@ public static partial class ShellLine
     /// and then quoted, so a placeholder is quoted rather than read as a redirection. A secret is caught within its
     /// word; one the argv splits across two, as a bare <c>Bearer</c> beside an opaque token, is not, and no command
     /// the host runs passes one. The variables the child is given come first, as bash takes them, each value
-    /// scrubbed and quoted like a word: the line a person types to do by hand what the host did.
+    /// scrubbed and quoted like a word: the line a person types to do by hand what the host did. A variable the spec
+    /// names in <see cref="ProcessSpec.SecretEnvironment"/> keeps its name and loses its value, as a token does.
     /// </summary>
     public static string Command(ProcessSpec spec) =>
-        string.Join(' ', (spec.Environment ?? new Dictionary<string, string>()).Select(v => $"{v.Key}={Word(v.Value)}")
+        string.Join(' ', (spec.Environment ?? new Dictionary<string, string>())
+            .Select(v => $"{v.Key}={(spec.SecretEnvironment.Contains(v.Key) ? Quote(FixtureScrubber.Scrubbed) : Word(v.Value))}")
             .Concat(new[] { spec.FileName }.Concat(spec.Arguments).Select(Word)));
 
     /// <summary>
