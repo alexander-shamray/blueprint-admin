@@ -432,15 +432,13 @@ public sealed class EventTraceServiceTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task A_queue_with_both_parked_twins_names_each_and_an_empty_twin_is_left_out()
+    public async Task A_queue_with_both_parked_twins_names_each()
     {
         runner.On("docker", Exec + "list_queues", 0,
             "[",
             """{"name":"ordering-catalog-events","messages":0}""",
             """,{"name":"ordering-catalog-events_error","messages":1}""",
             """,{"name":"ordering-catalog-events_skipped","messages":3}""",
-            """,{"name":"ordering-commands","messages":0}""",
-            """,{"name":"ordering-commands_skipped","messages":0}""",
             "]");
 
         TraceView view = await Service(Grafana(LokiStreams())).BuildAsync("abc-123", TimeSpan.FromMinutes(15), Token);
@@ -448,6 +446,27 @@ public sealed class EventTraceServiceTests : IAsyncDisposable
         view.Events[^1].Summary.ShouldStartWith(
             "ordering-catalog-events: 0 messages (drained), 1 parked in ordering-catalog-events_error, "
             + "3 parked in ordering-catalog-events_skipped.");
+    }
+
+    /// <summary>
+    /// The projection queue is the one the summary always reads, so its empty twin is what proves an empty twin is
+    /// left out: the sentence must close straight after the non-empty one.
+    /// </summary>
+    [Theory]
+    [InlineData("_error", "_skipped")]
+    [InlineData("_skipped", "_error")]
+    public async Task An_empty_parked_twin_is_left_out_of_the_summary(string holding, string empty)
+    {
+        runner.On("docker", Exec + "list_queues", 0,
+            "[",
+            """{"name":"ordering-catalog-events","messages":0}""",
+            $$$""",{"name":"ordering-catalog-events{{{holding}}}","messages":2}""",
+            $$$""",{"name":"ordering-catalog-events{{{empty}}}","messages":0}""",
+            "]");
+
+        TraceView view = await Service(Grafana(LokiStreams())).BuildAsync("abc-123", TimeSpan.FromMinutes(15), Token);
+
+        view.Events[^1].Summary.ShouldStartWith($"ordering-catalog-events: 0 messages (drained), 2 parked in ordering-catalog-events{holding}. ");
     }
 
     [Fact]
