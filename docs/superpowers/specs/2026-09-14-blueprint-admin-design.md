@@ -352,9 +352,13 @@ runs are one at a time, since one run's clear would end another's login. A
 read is `inspect --json`, the contract the tool's README fixes for this
 console (schema 1), and puts every message back, flagged redelivered, so it
 takes no confirmation. A replay or discard names its messages by id and is a
-listed job: a dry run first, and the real run with `--execute` takes the typed
-confirmation (`--execute`) as a wipe does (§8), and always passes `--record` and
-`--audit-log` under `Admin:DataDir`'s `dead-letters/`. A stderr line the tool
+listed job. The real run with `--execute` takes the typed confirmation
+(`--execute`) as a wipe does (§8), and always passes `--record` and
+`--audit-log` under `Admin:DataDir`'s `dead-letters/`; FakePlatform, whose
+records no incident could need, writes them under the temp directory instead.
+The host takes the real run on its own; it is the screen that offers it only
+for the message and verb a dry run was last started for, and the dry run's
+output, beside the button, says what the real run would do. A stderr line the tool
 prefixes `unrecorded` is the last copy of a message it took and could not
 record, so the job keeps it in a file beside the record and says where. The
 drift gate holds the tool's path, the account, the variable, the prefix and the
@@ -632,7 +636,7 @@ and names the active option through `aria-activedescendant`.
 |---|---|---|
 | **Stack** | the workstation doctor's rows above the buttons, read when the screen opens; one row per Compose service with state, health and port; the frontend job; a reachability strip; quick links to the client, Grafana, Keycloak | Check the workstation again; Up, Down, Down and wipe, Reset (both behind one typed confirmation), Start and Stop frontend; opens the job's output pane |
 | **Logs** | a follow stream with service filter, text search and correlation-id highlight | start, stop (the host's follow job too, as does leaving the screen), clear |
-| **Broker** | queues with depth, `_error` and `_skipped` queues marked with the runbook of one that holds a message, a BFF projection panel (what the rebuild tool cannot restore, the depth of `bff-order-events`), exchanges, permissions; a drained indicator for `ordering-catalog-events`; an opened parked queue's messages, each with its fault, type, body and correlation id as a link into Trace | refresh, auto-refresh of all three; Repair, and Rebuild behind a typed confirmation, each opening the job's output pane; Open on a parked queue that holds a message; per message a dry-run Replay or Discard, then that one for real behind a typed confirmation, each opening the job's output pane |
+| **Broker** | queues with depth, `_error` and `_skipped` queues marked with the runbook of one that holds a message, a BFF projection panel (what the rebuild tool cannot restore, the depth of `bff-order-events`), exchanges, permissions; a drained indicator for `ordering-catalog-events`; an opened parked queue's messages, each with its fault, type, body and correlation id as a link into Trace | refresh, auto-refresh of all three; Repair, and Rebuild behind a typed confirmation, each opening the job's output pane; Open on a parked queue that holds a message; per message a dry-run Replay or Discard, then, once a dry run of that message and verb is started, that one for real behind a typed confirmation, each opening the job's output pane |
 | **Erasure** | one row per holder of an erasure request (the backend's `Privacy__Responders__n`), each answered, waiting or overdue as the request reads, with its `*-privacy` queue's depth and `privacy-completions`' beside them; the request's status, dates and reissue count; an answer from outside the request's set marked not counted; the overdue runbook's link | Raise a request for a subject id, as the `privacy` login; read one by id, or every 3 s until it closes; Reissue an overdue one. Nothing here grants the role: the realm's owner does (§13) |
 | **API** | operation tree on the left, each source with what its document changed since the kept baseline; request editor (path params, headers, body pre-filled from the schema example, `commandId` generated per send) and identity picker with its token clock (§5.6); response pane with status, timing, headers, body; a history list | Send; accept a changed document as the new baseline; "Trace this call" opens the Trace screen with the response's correlation id |
 | **Trace** | the §5.9 timeline for a correlation id, grouped by service, with Grafana deep links, and on a refetch what arrived or left since the last one | enter an id or arrive from the API screen; reload |
