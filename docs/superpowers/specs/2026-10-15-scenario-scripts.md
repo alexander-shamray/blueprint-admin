@@ -29,6 +29,18 @@ needs, not from the plan's list.
 | Reservation failed (`Stock_that_cannot_cover_the_order_…`) | stock set to 0 (`run-locally.md`, stock paragraph) | `out-of-stock` | `out_of_stock` |
 | Payment declined (`A_declined_card_…`) | an amount ending `.01` (`run-locally.md`, "A declined payment is caused by the amount") | `declined` | `declined` |
 
+One script walks no branch of the saga and exists for the store instead:
+
+| What it proves | Cause by hand | Script | Watch |
+|---|---|---|---|
+| A product published with an image is stored and served (`run-locally.md`, "Attach a product image by hand") | none | `image` | the edge's `HEAD` of the thumbnail |
+
+It is a script of its own and not two steps woven into the order scripts: the
+store is not the saga, and an order script that failed on a broken store would
+hide the saga regression it exists to find. It ends on the edge's answer being
+an image with `nosniff`, because that is what a buyer's browser needs and what a
+store the BFF could sign for but Catalog could not read would not give.
+
 A script that applies a cause sets it with the paragraph's own call: the
 publish's `amount`, the stock write's `onHand`. It never guesses a product: it
 publishes its own, so the stock it sets is a count it chose and not a `null`
@@ -63,8 +75,14 @@ keeps a small amount of state in `FakeOrders`, written by hand:
   `DeclinedMinorUnits` ends it `declined`. Either lands one `Step` after the
   place with nothing confirmed, despatched or delivered, and a cancel asked of
   it changes nothing. A product the fake never published takes the happy path.
+- **The object store** (`FakeObjectStore`) keeps a key when a signed `PUT`
+  reaches it and refuses one with no signature in the URL; it keeps any bytes
+  and records whether they were an image. A publish with an `imageKey` is
+  refused as the platform refuses it, with the 422 rule errors Catalog's
+  `ProductErrors` names: not this seller's key, nothing uploaded under it,
+  or not an image. The edge serves a key only once a publish attached it.
 - **The gateway** reads the request bodies it needs (`amount`, `onHand`,
-  `items[0].productId`) and nothing else. The cause lives in the request, as
+  `items[0].productId`, and for an image `imageKey`) and nothing else. The cause lives in the request, as
   it does on a stack, so the script's request is what scripts the fake.
 
 Order of precedence matches the saga's: a reservation comes before a payment,
