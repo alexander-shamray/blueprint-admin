@@ -133,10 +133,9 @@ are announced.
   run. Nothing detects the run, because the host cannot observe one.
 - Stop gives up waiting after 10 s and says so in the output; the process
   may still be running.
-- The proxy sends only to the gateway, Catalog, Ordering, BFF, Inventory,
-  Payments and payment simulator URLs in
-  `Admin:*Url`, and refuses a correlation id the platform would replace
-  (anything but 1 to 128 ASCII letters, digits, `-` and `_`).
+- The proxy sends only to the `Admin:*Url` surfaces that
+  `RequestProxy.Surfaces()` lists, and refuses a correlation id the platform
+  would replace (anything but 1 to 128 ASCII letters, digits, `-` and `_`).
 - Operation examples are the bodies `run-locally.md` sends where there is one,
   otherwise placeholders built from the schema; the documents carry none.
 - API history is kept only while the screen is open.
