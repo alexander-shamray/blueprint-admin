@@ -65,6 +65,9 @@ routes are `Gateway.Api/appsettings.json`; health endpoints are mapped by
 | Stop and start the BFF | `... stop web-bff` and `... start web-bff`, backend; only around a projection rebuild |
 | Repair the BFF projection | `dotnet run --project tools/bff-replay`, backend, with the six connections `run-locally.md` sets as `$env:` lines |
 | Rebuild the BFF projection | `dotnet run --project tools/bff-replay -- --reset`, backend, between the stop and the start above. Deletes the projection |
+| Give the dead-letter operator a password, and take it away | `... exec rabbitmq rabbitmqctl change_password dead-letter-operator <password>` and `... clear_password dead-letter-operator`, backend; around every dead-letter run, with a password minted for that run |
+| Read a parked queue | `py -3.12 tools/dead-letters/dead_letters.py inspect <queue> --limit 20 --json`, backend, with the password in `DEAD_LETTERS_PASSWORD` |
+| Replay or discard a dead letter | `py -3.12 tools/dead-letters/dead_letters.py replay\|discard <queue> --message-id <id>`, backend; a dry run, and with `--execute --record <file> --audit-log <file>` the real run, which takes each message off the queue |
 | Start frontend | `npm start` (`ng serve`, port 5173), frontend |
 | Stop frontend | kill the `npm start` process tree |
 
@@ -334,6 +337,26 @@ to the tool's README. A rebuild deletes the projection, so it takes a typed
 confirmation (`bff-replay --reset`) as a wipe does (§8); a repair deletes
 nothing and takes none.
 
+`DeadLetterService` reads, replays and discards a parked message with the
+backend's `tools/dead-letters`, as `run-locally.md`'s "Replay or discard a dead
+letter" does it by hand; the console parses no queue and moves no message
+itself. The tool runs as the broker account `dead-letter-operator`, which ships
+with no password. Each run mints a random one, sets it with `rabbitmqctl
+change_password`, hands it to the tool as `DEAD_LETTERS_PASSWORD`
+(`ProcessSpec.Environment`, never argv), and clears it when the run ends,
+whether the tool succeeded or not; so between runs the account has none, and
+runs are one at a time, since one run's clear would end another's login. A
+read is `inspect --json`, the contract the tool's README fixes for this
+console (schema 1), and puts every message back, flagged redelivered, so it
+takes no confirmation. A replay or discard names its messages by id and is a
+listed job: a dry run first, and the real run with `--execute` takes the typed
+confirmation (`--execute`) as a wipe does (§8), and always passes `--record` and
+`--audit-log` under `Admin:DataDir`'s `dead-letters/`. A stderr line the tool
+prefixes `unrecorded` is the last copy of a message it took and could not
+record, so the job keeps it in a file beside the record and says where. The
+drift gate holds the tool's path, the account, the variable, the prefix and the
+contract's fields to the backend.
+
 ### 5.6 Identity
 
 `TokenService.Get(identity)` performs the password grant against
@@ -536,6 +559,7 @@ All under `/api`, JSON, loopback only.
 | `POST /logs/follow/{id}/stop` | stops that follow job if it is still the current one; 204 either way. Named, so a Stop that reaches the host after the next Follow ends nothing. There is no generic job stop: it would reach `up`, `down -v` and the supervisor's `npm start` |
 | `GET /broker/queues`, `/broker/exchanges`, `/broker/permissions` | §5.5; `queues` also carries `projection`, the drain state of `ordering-catalog-events` |
 | `GET /broker/projection`, `POST /broker/projection/repair`, `POST /broker/projection/rebuild` | §5.5; the plan (queue, typed confirmation, the tool's limits), then a listed job; the rebuild is refused with 400 unless `confirm` is `bff-replay --reset`; a repair or rebuild is refused with 409 while a run of the other kind is going, and the same kind is returned as it is |
+| `GET /broker/dead-letters`, `GET /broker/dead-letters/{queue}`, `POST /broker/dead-letters/{queue}/{replay\|discard}` | §5.5; the plan (typed confirmation, the read's limit, the record directory), a parked queue's messages, then a listed job for body `{ messageIds, execute, confirm }`. 400 for a queue that is not an `_error` or `_skipped` one, no ids or an id that could read as a flag, or `execute` without `confirm` of `--execute`; 409 while another dead-letter run holds the operator |
 | `GET /erasure/holders` | §6's Erasure screen: the holders Privacy asks (`ErasureHolders.Table`, drift-checked against the backend's `Privacy__Responders__n`), each with the depth of its `*-privacy` queue, `privacy-completions`' depth and the overdue runbook's URL. The request itself is raised, read and reissued through `POST /proxy`, as the gateway answers it |
 | `GET /identity/users`, `POST /identity/token`, `POST /identity/clock` | §5.6 |
 | `GET /catalog/operations`, `POST /catalog/reload` | §5.7 |
@@ -568,7 +592,9 @@ order is the order things began and a send abandoned mid-flight is still on the
 record. A token the proxy attached, and any Authorization a caller pasted, keep
 their scheme and lose their value, and a Cookie keeps its names and loses its
 values: the headers the API screen's history drops, which no pattern can
-recognise by value. Every word then passes through `FixtureScrubber` before it
+recognise by value. A variable a spec names in `ProcessSpec.SecretEnvironment`,
+the dead-letter operator's per-run password, keeps its name and loses its value
+for the same reason. Every word then passes through `FixtureScrubber` before it
 is quoted, so a transcript and a fixture are held to one definition of a
 secret. The quoted line is not scrubbed again: the form rule's value may be a
 quote, and a second pass would take a closing one. The token grant itself is `TokenService`'s and not a proxied
@@ -599,7 +625,7 @@ and names the active option through `aria-activedescendant`.
 |---|---|---|
 | **Stack** | the workstation doctor's rows above the buttons, read when the screen opens; one row per Compose service with state, health and port; the frontend job; a reachability strip; quick links to the client, Grafana, Keycloak | Check the workstation again; Up, Down, Down and wipe, Reset (both behind one typed confirmation), Start and Stop frontend; opens the job's output pane |
 | **Logs** | a follow stream with service filter, text search and correlation-id highlight | start, stop (the host's follow job too, as does leaving the screen), clear |
-| **Broker** | queues with depth, `_error` and `_skipped` queues marked with the runbook of one that holds a message, a BFF projection panel (what the rebuild tool cannot restore, the depth of `bff-order-events`), exchanges, permissions; a drained indicator for `ordering-catalog-events` | refresh, auto-refresh of all three; Repair, and Rebuild behind a typed confirmation, each opening the job's output pane |
+| **Broker** | queues with depth, `_error` and `_skipped` queues marked with the runbook of one that holds a message, a BFF projection panel (what the rebuild tool cannot restore, the depth of `bff-order-events`), exchanges, permissions; a drained indicator for `ordering-catalog-events`; an opened parked queue's messages, each with its fault, type, body and correlation id as a link into Trace | refresh, auto-refresh of all three; Repair, and Rebuild behind a typed confirmation, each opening the job's output pane; Open on a parked queue that holds a message; per message a dry-run Replay or Discard, then that one for real behind a typed confirmation, each opening the job's output pane |
 | **Erasure** | one row per holder of an erasure request (the backend's `Privacy__Responders__n`), each answered, waiting or overdue as the request reads, with its `*-privacy` queue's depth and `privacy-completions`' beside them; the request's status, dates and reissue count; an answer from outside the request's set marked not counted; the overdue runbook's link | Raise a request for a subject id, as the `privacy` login; read one by id, or every 3 s until it closes; Reissue an overdue one. Nothing here grants the role: the realm's owner does (§13) |
 | **API** | operation tree on the left, each source with what its document changed since the kept baseline; request editor (path params, headers, body pre-filled from the schema example, `commandId` generated per send) and identity picker with its token clock (§5.6); response pane with status, timing, headers, body; a history list | Send; accept a changed document as the new baseline; "Trace this call" opens the Trace screen with the response's correlation id |
 | **Trace** | the §5.9 timeline for a correlation id, grouped by service, with Grafana deep links, and on a refetch what arrived or left since the last one | enter an id or arrive from the API screen; reload |
@@ -633,7 +659,15 @@ The console holds realm passwords and can wipe volumes, so it is a loopback
 tool and nothing else. The host binds `127.0.0.1` only, refuses to start on
 any other address, and sets no CORS headers, so a page on another origin
 cannot drive it. There is no login of its own. `down -v` requires the typed
-confirmation. The proxy accepts only URLs on the configured surfaces, so it
+confirmation, as do a projection rebuild and a dead letter's real replay or
+discard.
+
+Beside the realm passwords it knows the local stack's development defaults
+(`SqlPassword`, `BffBrokerConnection`) and one broker credential it never
+stores: the dead-letter operator's password, minted for one run, set before it
+and cleared after it (§5.5), so the account has none between runs, as it ships.
+That credential reaches the Management API only through the backend's tool;
+the console never calls that API itself. The proxy accepts only URLs on the configured surfaces, so it
 cannot be used as an open relay from a tab the developer left open.
 
 ## 9. Error handling
