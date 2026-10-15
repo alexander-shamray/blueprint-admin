@@ -102,7 +102,7 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
     private async Task<IReadOnlyList<string[]>> HostCommandsAsync()
     {
         ComposeService compose = new(runner, Paths, time);
-        BrokerService broker = new(compose);
+        BrokerService broker = new(compose, Options.Create(new AdminOptions()));
         using FrontendSupervisor frontend = new(runner, Paths, _ => true);
 
         compose.Up();

@@ -56,6 +56,12 @@ public sealed class AdminOptions
     /// </summary>
     public string CarrierSimulatorUrl { get; set; } = "http://localhost:5191";
 
+    /// <summary>
+    /// Where blueprint-backend's <c>docs/runbooks/</c> are read: the Broker screen links a parked queue to the runbook
+    /// that owns it (<c>Broker/ParkedQueues.cs</c>). A link the browser follows, not a request the host makes.
+    /// </summary>
+    public string BackendRunbooksUrl { get; set; } = "https://github.com/alexander-shamray/blueprint-backend/blob/main/docs/runbooks";
+
     public string KeycloakUrl { get; set; } = "http://localhost:8080";
 
     public string GrafanaUrl { get; set; } = "http://localhost:3000";

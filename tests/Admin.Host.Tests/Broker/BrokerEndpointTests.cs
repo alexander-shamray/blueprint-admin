@@ -22,13 +22,39 @@ public sealed class BrokerEndpointTests : IClassFixture<AdminHostFactory>
 
         view.GetProperty("reachable").GetBoolean().ShouldBeTrue();
         JsonElement[] queues = [.. view.GetProperty("queues").EnumerateArray()];
-        queues.Length.ShouldBe(PlatformQueues.Table.Length + 1);
+        queues.Length.ShouldBe(PlatformQueues.Table.Length + 2);
         JsonElement error = queues.Single(q => q.GetProperty("isErrorQueue").GetBoolean());
         error.GetProperty("name").GetString().ShouldBe("ordering-catalog-events_error");
         error.GetProperty("messages").GetInt64().ShouldBe(1);
+        error.GetProperty("parked").GetString().ShouldBe("error");
+        error.GetProperty("runbook").GetString().ShouldEndWith("/docs/runbooks/error-queue.md");
+        error.GetProperty("consumer").GetString().ShouldBe("Ordering's price projection");
         JsonElement projection = view.GetProperty("projection");
         projection.GetProperty("queue").GetString().ShouldBe("ordering-catalog-events");
         projection.GetProperty("drained").GetBoolean().ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Queues_names_the_endpoint_a_skipped_message_was_skipped_from_and_links_its_runbook()
+    {
+        JsonElement view = await client.GetFromJsonAsync<JsonElement>("/api/broker/queues", TestContext.Current.CancellationToken);
+
+        JsonElement skipped = view.GetProperty("queues").EnumerateArray().Single(q => q.GetProperty("name").GetString() == "bff-order-events_skipped");
+        skipped.GetProperty("messages").GetInt64().ShouldBe(1);
+        skipped.GetProperty("isErrorQueue").GetBoolean().ShouldBeFalse();
+        skipped.GetProperty("parked").GetString().ShouldBe("skipped");
+        skipped.GetProperty("consumer").GetString().ShouldBe("the BFF's order projection");
+        skipped.GetProperty("runbook").GetString().ShouldEndWith("/docs/runbooks/skipped-queue.md");
+    }
+
+    [Fact]
+    public async Task Queues_gives_a_queue_that_is_not_parked_no_kind_and_no_runbook()
+    {
+        JsonElement view = await client.GetFromJsonAsync<JsonElement>("/api/broker/queues", TestContext.Current.CancellationToken);
+
+        JsonElement live = view.GetProperty("queues").EnumerateArray().Single(q => q.GetProperty("name").GetString() == PlatformQueues.Projection);
+        live.GetProperty("parked").ValueKind.ShouldBe(JsonValueKind.Null);
+        live.GetProperty("runbook").ValueKind.ShouldBe(JsonValueKind.Null);
     }
 
     [Fact]

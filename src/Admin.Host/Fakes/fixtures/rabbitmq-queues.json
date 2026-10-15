@@ -18,4 +18,5 @@
 ,{"name":"notifications-privacy","messages":0}
 ,{"name":"bff-privacy","messages":0}
 ,{"name":"ordering-catalog-events_error","messages":1}
+,{"name":"bff-order-events_skipped","messages":1}
 ]

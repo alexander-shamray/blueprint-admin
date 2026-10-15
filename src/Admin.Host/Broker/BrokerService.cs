@@ -1,5 +1,7 @@
 using System.Text.Json;
 using Admin.Host.Compose;
+using Admin.Host.Config;
+using Microsoft.Extensions.Options;
 
 namespace Admin.Host.Broker;
 
@@ -7,7 +9,7 @@ namespace Admin.Host.Broker;
 /// The three broker inspections run-locally.md gives, through rabbitmqctl inside the Compose rabbitmq
 /// container (spec §5.5): the management UI on 15672 has no login, so the console does not use it.
 /// </summary>
-public sealed class BrokerService(ComposeService compose)
+public sealed class BrokerService(ComposeService compose, IOptions<AdminOptions> options)
 {
     /// <summary>The Compose service, owned by blueprint-backend deploy/compose/infrastructure.yml.</summary>
     public const string Service = "rabbitmq";
@@ -26,9 +28,22 @@ public sealed class BrokerService(ComposeService compose)
 
         List<BrokerQueue> queues = [.. rows
             .OrderBy(r => r.Name, StringComparer.Ordinal)
-            .Select(r => new BrokerQueue(r.Name, r.Messages, r.Name.EndsWith(ErrorSuffix, StringComparison.Ordinal), PlatformQueues.ConsumerOf(r.Name)))];
+            .Select(r => Describe(r.Name, r.Messages))];
 
         return new QueuesView(true, null, queues, IsDrained(queues, PlatformQueues.Projection));
+    }
+
+    private BrokerQueue Describe(string name, long? messages)
+    {
+        ParkedKind? kind = ParkedQueues.KindOf(name);
+
+        return new BrokerQueue(
+            name,
+            messages,
+            kind == ParkedQueues.Error,
+            PlatformQueues.ConsumerOf(name),
+            kind?.Name,
+            kind is null ? null : $"{options.Value.BackendRunbooksUrl.TrimEnd('/')}/{kind.Runbook}");
     }
 
     public async Task<ExchangesView> ExchangesAsync(CancellationToken cancellationToken)

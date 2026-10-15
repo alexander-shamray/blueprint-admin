@@ -60,7 +60,8 @@ public static class FixtureRecordings
         ["rabbitmq-queues.json"] =
             "the list_queues answer recorded on 2026-10-04, plus the privacy queues PlatformQueues.Table gained since "
             + "(empty, written without a stack to read them from), plus an ordering-catalog-events_error queue holding "
-            + "one message, so the Broker screen has an error queue to mark: a state a clean stack is not in",
+            + "one message, plus a bff-order-events_skipped queue holding one, so the Broker screen has one parked queue "
+            + "of each kind to mark: a state a clean stack is not in",
     };
 
     public static HttpRecording? For(AdminOptions options, Uri uri) => Http.FirstOrDefault(r => r.Answers(options, uri));

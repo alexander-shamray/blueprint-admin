@@ -36,10 +36,10 @@ public static class PlatformQueues
         new("bff-privacy", "the BFF's erasure request", "Web.Bff.Messaging.DependencyInjection.PrivacyQueue"),
     ];
 
-    /// <summary>What a queue feeds, its <c>_error</c> twin included, or null for a queue the table does not name.</summary>
+    /// <summary>What a queue feeds, its parked twins (<see cref="ParkedQueues"/>) included, or null for a queue the table does not name.</summary>
     public static string? ConsumerOf(string queue)
     {
-        string name = queue.EndsWith(BrokerService.ErrorSuffix, StringComparison.Ordinal) ? queue[..^BrokerService.ErrorSuffix.Length] : queue;
+        string name = ParkedQueues.EndpointOf(queue);
 
         return Table.FirstOrDefault(q => q.Name == name)?.Consumer;
     }

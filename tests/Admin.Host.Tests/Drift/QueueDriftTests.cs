@@ -43,6 +43,35 @@ public sealed partial class QueueDriftTests
         PlatformQueues.Table.Select(q => q.Name).ShouldContain(PlatformQueues.Projection);
     }
 
+    [Fact]
+    public void Every_parked_kind_is_a_suffix_the_dead_letter_tool_reads_and_nothing_it_reads_is_missing()
+    {
+        string tool = Backend.Read("tools", "dead-letters", "dead_letters.py");
+        Match suffixes = ToolSuffixes().Match(tool);
+
+        suffixes.Success.ShouldBeTrue("SUFFIXES was not found in dead_letters.py; the tool's shape has moved");
+
+        Dictionary<string, string> read = ToolSuffix().Matches(suffixes.Groups[1].Value)
+            .ToDictionary(m => m.Groups[1].Value, m => m.Groups[2].Value, StringComparer.Ordinal);
+
+        ParkedQueues.All.ToDictionary(k => k.Suffix, k => k.Name, StringComparer.Ordinal).ShouldBe(read, ignoreOrder: true);
+    }
+
+    [Fact]
+    public void Every_parked_kind_names_a_runbook_the_backend_still_has()
+    {
+        foreach (ParkedKind kind in ParkedQueues.All)
+        {
+            File.Exists(Path.Combine(Backend.Dir, "docs", "runbooks", kind.Runbook)).ShouldBeTrue(kind.Runbook);
+        }
+    }
+
+    [GeneratedRegex(@"SUFFIXES\s*=\s*\{([^}]*)\}")]
+    private static partial Regex ToolSuffixes();
+
+    [GeneratedRegex(@"""(_\w+)""\s*:\s*""(\w+)""")]
+    private static partial Regex ToolSuffix();
+
     /// <summary>
     /// Every <c>public const string …Queue = "…"</c> under the backend's src, keyed by the symbol the table cites:
     /// the file's namespace, its first top-level type and the field.
