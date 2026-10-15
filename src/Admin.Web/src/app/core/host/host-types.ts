@@ -211,6 +211,41 @@ export interface ProjectionPlan {
   limits: string[];
 }
 
+/**
+ * What the Broker screen says before a dead letter is read or moved: what a person types before the real run, how
+ * many messages one read takes and puts back, and where each real run's record file is written.
+ */
+export interface DeadLetterPlan {
+  executeConfirm: string;
+  inspectLimit: number;
+  recordDir: string;
+}
+
+/** One parked message as the backend's `tools/dead-letters` describes it (its README, "The JSON contract"). */
+export interface DeadLetterMessage {
+  messageId: string | null;
+  correlationId: string | null;
+  messageType: string | null;
+  faultMessage: string | null;
+  faultExceptionType: string | null;
+  inputAddress: string | null;
+  reason: string | null;
+  redelivered: boolean;
+  /** Null when the body is not UTF-8. */
+  body: string | null;
+}
+
+/** A parked queue's messages, read and put back; `error` says why there are none when the tool or broker did not answer. */
+export interface DeadLetterInspection {
+  queue: string;
+  endpoint: string | null;
+  kind: string | null;
+  messages: DeadLetterMessage[];
+  error: string | null;
+}
+
+export type DeadLetterVerb = 'replay' | 'discard';
+
 /** Whether a queue is drained: declared and empty. The queue is `PlatformQueues.Projection`, which owns what it feeds. */
 export interface ProjectionDrain {
   queue: string;
