@@ -37,9 +37,9 @@ public sealed class ErasureEndpointTests : IClassFixture<AdminHostFactory>
             true,
             null,
             [
-                new BrokerQueue("ordering-privacy", 4, false),
-                new BrokerQueue("payments-privacy", 0, false),
-                new BrokerQueue("privacy-completions", 7, false),
+                new BrokerQueue("ordering-privacy", 4),
+                new BrokerQueue("payments-privacy", 0),
+                new BrokerQueue("privacy-completions", 7),
             ],
             new ProjectionDrain(PlatformQueues.Projection, false, null, false));
 

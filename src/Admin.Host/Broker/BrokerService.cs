@@ -40,7 +40,6 @@ public sealed class BrokerService(ComposeService compose, IOptions<AdminOptions>
         return new BrokerQueue(
             name,
             messages,
-            kind == ParkedQueues.Error,
             PlatformQueues.ConsumerOf(name),
             kind?.Name,
             kind is null ? null : $"{options.Value.BackendRunbooksUrl.TrimEnd('/')}/{kind.Runbook}");

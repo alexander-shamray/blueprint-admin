@@ -6,7 +6,7 @@ namespace Admin.Host.Broker;
 /// <see cref="Parked"/> is the <see cref="ParkedKind.Name"/> of a parked queue and <see cref="Runbook"/> the URL of the
 /// runbook that owns it; both are null for a queue that is not one.
 /// </summary>
-public sealed record BrokerQueue(string Name, long? Messages, bool IsErrorQueue, string? Consumer = null, string? Parked = null, string? Runbook = null);
+public sealed record BrokerQueue(string Name, long? Messages, string? Consumer = null, string? Parked = null, string? Runbook = null);
 
 /// <summary>Whether a queue has caught up: declared and empty. A queue that is not declared is not drained.</summary>
 public sealed record ProjectionDrain(string Queue, bool Found, long? Messages, bool Drained);

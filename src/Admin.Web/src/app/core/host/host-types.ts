@@ -191,7 +191,6 @@ export type ProxyResult =
 export interface BrokerQueue {
   name: string;
   messages: number | null;
-  isErrorQueue: boolean;
   /** What consumes it, from the host's `PlatformQueues.Table`; null for a queue that table does not name. */
   consumer: string | null;
   /** The kind of parked queue this is, from the host's `ParkedQueues`; null for a queue that is not one. */

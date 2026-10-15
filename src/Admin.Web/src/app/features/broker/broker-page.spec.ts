@@ -18,11 +18,10 @@ const queues: QueuesView = {
   reachable: true,
   error: null,
   queues: [
-    { name: 'ordering-catalog-events', messages: 2, isErrorQueue: false, consumer: "Ordering's price projection", parked: null, runbook: null },
+    { name: 'ordering-catalog-events', messages: 2, consumer: "Ordering's price projection", parked: null, runbook: null },
     {
       name: 'ordering-catalog-events_error',
       messages: 1,
-      isErrorQueue: true,
       consumer: "Ordering's price projection",
       parked: 'error',
       runbook: 'https://example.test/runbooks/error-queue.md',
@@ -30,7 +29,6 @@ const queues: QueuesView = {
     {
       name: 'bff-order-events_skipped',
       messages: 1,
-      isErrorQueue: false,
       consumer: "the BFF's order projection",
       parked: 'skipped',
       runbook: 'https://example.test/runbooks/skipped-queue.md',
@@ -38,13 +36,12 @@ const queues: QueuesView = {
     {
       name: 'payments-events_skipped',
       messages: 0,
-      isErrorQueue: false,
       consumer: "Payments' order events",
       parked: 'skipped',
       runbook: 'https://example.test/runbooks/skipped-queue.md',
     },
-    { name: 'something-else', messages: 0, isErrorQueue: false, consumer: null, parked: null, runbook: null },
-    { name: 'bff-order-events', messages: 0, isErrorQueue: false, consumer: "the BFF's order projection", parked: null, runbook: null },
+    { name: 'something-else', messages: 0, consumer: null, parked: null, runbook: null },
+    { name: 'bff-order-events', messages: 0, consumer: "the BFF's order projection", parked: null, runbook: null },
   ],
   projection: { queue: 'ordering-catalog-events', found: true, messages: 2, drained: false },
 };
