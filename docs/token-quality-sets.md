@@ -55,3 +55,45 @@ beside the set, not in it.
    so no recall figure exists. That, not the rows, is the remaining work
    before step 4's or step 6's exit can be claimed (#121 closes with the sets;
    the baseline run is filed separately).
+
+## 2026-10-15 — the baseline run of `branch-reviewer`
+
+One full pass of `branch-reviewer` per source PR, eight in all, each given
+only the PR's diff (`gh pr diff <n>`) and no hint of what the set expects.
+**Four of twelve rows were found, a recall of 33%.**
+
+| Row | PR | Found | The reviewer's finding |
+|---|---|---|---|
+| #11 | #10 | no | one unrelated finding about a scenario step losing its trace link |
+| #40 | #39 | no | none |
+| #41 | #39 | no | none |
+| #116 | #115 | no | none |
+| #118 | #115 | no | none |
+| #141 | #140 | **yes** | a message parked in `_skipped` is not reported on the Trace screen |
+| #144 | #139 | **yes** | the token tool's suite is run by no workflow or check script |
+| #145 | #142 | no | none |
+| #147 | #146 | **yes** | a password holding `;` is scrubbed only up to the semicolon |
+| #151 | #149 | no | none |
+| #152 | #149 | no | none |
+| #153 | #149 | **yes** | a quoted secret followed by `, ` or `: ` leaks past the closing quote |
+
+Read it with these limits, which the next run should remove:
+
+- **The tree was `main`, not the PR's head.** The reviewer read the diff and
+  then the files it touches as they are today, so a row whose code has since
+  changed was judged from the diff alone. The reviewer said so on #140.
+- **One run per PR, no repeat**, so the 33% carries no spread.
+- **#141 may be contaminated.** The reviewer named #141 in its finding, so it
+  had seen the later record in the tree. The row is counted found because it
+  also located the fault in the diff.
+- **PR #115 was read in part.** Its 2,907-line diff was read as lines 1–1063
+  and 1450–2908, so #116 and #118 may lie in the gap; both rows are counted
+  missed all the same, because a gap that size is what a real review of it
+  would have had.
+- **Three of the four found rows are `low` in a single file**, the scrubber
+  or a harness helper; the misses include one-line prose and README claims
+  (#40, #118, #145), which a diff-only reader has no reason to check.
+- **`bug-auditor` was not run**, and the sweep set stays empty.
+
+The reviewer also raised findings that match no row (PR #10 one, #140 one
+nit, #146 four, #149 one more, #139 two). Nothing here verifies them.
