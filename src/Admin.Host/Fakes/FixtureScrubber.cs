@@ -60,18 +60,18 @@ public static partial class FixtureScrubber
     /// unterminated quote takes the rest of the run. A bare value may hold <c>'</c> but not <c>"</c>, because in a
     /// JSON body that is where the string ends, so a bare value holding a double quote keeps the part after it.
     /// </summary>
-    [GeneratedRegex(@"\b((?:password|pwd|client_?secret|secret|(?:access_|refresh_|id_)?token|api_?key)=)(?!\\?""?<scrubbed>)(?:\\""(?:(?!\\"").)*\\""|""(?:""""|\\.|[^""\\])*""|'(?:\\.|[^'\\])*'|[^&;\s""'][^&;\s""]*|\\?""[^&;\s]*)", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\b((?:password|pwd|client_?secret|secret|(?:access_|refresh_|id_)?token|api_?key)=)(?!\\?""?<scrubbed>)(?:\\""(?:(?!\\"").)*\\""|""(?:""""|\\.|[^""\\])*""|'(?:''|\\.|[^'\\])*'|(?:[^&;\s""'\\]|\\(?!""))(?:[^&;\s""\\]|\\(?!""))*|\\?[""'][^&;\s]*)", RegexOptions.IgnoreCase)]
     private static partial Regex SecretForm();
 
     /// <summary>
     /// The password in a URL's userinfo, the part between the second colon and the <c>@</c>, as an AMQP connection string
     /// carries it, raw <c>/</c>, <c>?</c> and <c>#</c> included: a valid URL percent-encodes them, but a configured value
     /// is not always valid. A URL with a port and no <c>@</c> after it, such as <c>http://localhost:5000/api</c>, has no
-    /// userinfo and is left alone, and so is one whose "password" is a port followed by a path, query or fragment, such as
+    /// userinfo and is left alone, and so is one whose "password" is a port followed by a path, query, fragment or the bracket, comma or angle that ends a link, such as
     /// <c>https://h:443?e=a@b</c>. The password runs to the last <c>@</c> before whitespace or a quote, so a raw
     /// <c>@</c> inside it leaves nothing behind; the cost is that a later <c>@</c> in the same URL's query is taken too,
     /// which over-scrubs rather than leaks. An IPv6 literal's brackets cannot be userinfo.
     /// </summary>
-    [GeneratedRegex(@"(\b[a-z][a-z0-9+.-]*://[^:/\s@\[\]""']+:)(?!<scrubbed>@)(?!\d+[/?#])[^\s""']+(@)", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"(\b[a-z][a-z0-9+.-]*://[^:/\s@\[\]""']+:)(?!<scrubbed>@)(?!\d+[/?#\])>,])[^\s""']+(@)", RegexOptions.IgnoreCase)]
     private static partial Regex UrlPassword();
 }
