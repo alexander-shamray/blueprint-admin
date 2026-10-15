@@ -36,7 +36,7 @@ GIT = shutil.which("git")
 
 
 def setUpModule():
-    # Not a skip. `test_grok_helpers.py` owns that argument for the same two
+    # Not a skip. `test_harness_helpers.py` owns that argument for the same two
     # tools: a skip on a missing tool reports a pass, and this suite would then
     # have established nothing about the only force push in the repository.
     missing = [name for name, path in (("bash", BASH), ("git", GIT))
@@ -52,7 +52,7 @@ def run_bash(script, subject="", **env_extra):
     """Run a bash fragment with the subject on stdin and everything else in env.
 
     Nothing crosses as an argument, for the MSYS re-parsing reason
-    `test_grok_helpers.py` sets out: an argv element entering `bash.exe` is
+    `test_harness_helpers.py` sets out: an argv element entering `bash.exe` is
     re-parsed by the MSYS runtime, so the fixture paths below would arrive
     mangled and the failure would be silent.
     """

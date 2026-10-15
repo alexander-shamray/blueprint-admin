@@ -76,10 +76,10 @@ trap 'exit 2' EXIT
 trap 'exit 2' PIPE
 
 [ "$#" -eq 1 ] ||
-  { echo "usage: run-guard.sh <guard-git-argv.py|guard-edit-target.py|guard-triager-dispatch.py|guard-triager-edit.py>" >&2; exit 2; }
+  { echo "usage: run-guard.sh <guard-git-argv.py|guard-edit-target.py>" >&2; exit 2; }
 
 case "$1" in
-  guard-git-argv.py|guard-edit-target.py|guard-triager-dispatch.py|guard-triager-edit.py) ;;
+  guard-git-argv.py|guard-edit-target.py) ;;
   *) echo "run-guard.sh: not a hook this launcher runs: $1" >&2; exit 2 ;;
 esac
 

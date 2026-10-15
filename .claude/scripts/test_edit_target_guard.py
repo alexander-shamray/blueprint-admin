@@ -1131,7 +1131,7 @@ class TheWiringWithoutWhichNoneOfTheAboveRuns(unittest.TestCase):
         Windows Python launcher and ships nowhere else, so on macOS or Linux the
         hook command could not start and every `Edit`, `Write` and `Bash` call
         failed before the guard ran. Two cases pinned the broken spelling — this
-        one and its twin in `test_grok_helpers.py` — and both passed on the only
+        one and its twin in `test_harness_helpers.py` — and both passed on the only
         platform where it worked.
 
         `run-guard.sh` chooses the interpreter and keeps the floor: `py -3.12`
