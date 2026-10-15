@@ -535,7 +535,7 @@ All under `/api`, JSON, loopback only.
 | `POST /logs/follow` | body `{ services }`; stops the previous follow job if it is still running, starts one and returns it — the host keeps one |
 | `POST /logs/follow/{id}/stop` | stops that follow job if it is still the current one; 204 either way. Named, so a Stop that reaches the host after the next Follow ends nothing. There is no generic job stop: it would reach `up`, `down -v` and the supervisor's `npm start` |
 | `GET /broker/queues`, `/broker/exchanges`, `/broker/permissions` | §5.5; `queues` also carries `projection`, the drain state of `ordering-catalog-events` |
-| `GET /broker/projection`, `POST /broker/projection/repair`, `POST /broker/projection/rebuild` | §5.5; the plan (queue, typed confirmation, the tool's limits), then a listed job; the rebuild is refused with 400 unless `confirm` is `bff-replay --reset` |
+| `GET /broker/projection`, `POST /broker/projection/repair`, `POST /broker/projection/rebuild` | §5.5; the plan (queue, typed confirmation, the tool's limits), then a listed job; the rebuild is refused with 400 unless `confirm` is `bff-replay --reset`; a repair or rebuild is refused with 409 while a run of the other kind is going, and the same kind is returned as it is |
 | `GET /erasure/holders` | §6's Erasure screen: the holders Privacy asks (`ErasureHolders.Table`, drift-checked against the backend's `Privacy__Responders__n`), each with the depth of its `*-privacy` queue, `privacy-completions`' depth and the overdue runbook's URL. The request itself is raised, read and reissued through `POST /proxy`, as the gateway answers it |
 | `GET /identity/users`, `POST /identity/token`, `POST /identity/clock` | §5.6 |
 | `GET /catalog/operations`, `POST /catalog/reload` | §5.7 |
