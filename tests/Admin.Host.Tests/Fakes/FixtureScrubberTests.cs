@@ -128,6 +128,9 @@ public sealed class FixtureScrubberTests
     [InlineData("pwd=it's-secret99;X=1", "pwd=<scrubbed>;X=1")]
     [InlineData("""password="abc""", "password=<scrubbed>")]
     [InlineData("""Password="<scrubbed>";X=1""", """Password="<scrubbed>";X=1""")]
+    [InlineData("""Server=s;Password=",hunter2";X=1""", "Server=s;Password=<scrubbed>;X=1")]
+    [InlineData("""pwd="}Zk9";X=1""", "pwd=<scrubbed>;X=1")]
+    [InlineData("""Password=":abc";X=1""", "Password=<scrubbed>;X=1")]
     [InlineData("Server=s;Password='a''b';X=1", "Server=s;Password=<scrubbed>;X=1")]
     [InlineData("Password='abc;X=1", "Password=<scrubbed>;X=1")]
     [InlineData("""{"cs":"{\"ConnectionString\":\"Server=s;Password=pw\"}"}""", """{"cs":"{\"ConnectionString\":\"Server=s;Password=<scrubbed>\"}"}""")]
@@ -172,6 +175,10 @@ public sealed class FixtureScrubberTests
     [InlineData("""{"AdminPassword":"hunter2","n":1}""", """{"AdminPassword":"<scrubbed>","n":1}""")]
     [InlineData("""{"secret":"x"}""", """{"secret":"<scrubbed>"}""")]
     [InlineData("""{"my_refresh_token":"r"}""", """{"my_refresh_token":"<scrubbed>"}""")]
+    [InlineData("""{"body":"{\"password\":\"demo\",\"u\":1}"}""", """{"body":"{\"password\":\"<scrubbed>\",\"u\":1}"}""")]
+    [InlineData("""{"body":"{\"access_token\":\"abc\"}"}""", """{"body":"{\"access_token\":\"<scrubbed>\"}"}""")]
+    [InlineData("""{"b":"{\"Authorization\":\"Basic ZGVtbzpkZW1v\"}"}""", """{"b":"{\"Authorization\":\"<scrubbed>\"}"}""")]
+    [InlineData("""{"body":"{\"password\":\"<scrubbed>\"}"}""", """{"body":"{\"password\":\"<scrubbed>\"}"}""")]
     public void A_json_key_is_scrubbed_whatever_prefixes_its_name(string json, string expected)
     {
         FixtureScrubber.Scrub(json).ShouldBe(expected);
