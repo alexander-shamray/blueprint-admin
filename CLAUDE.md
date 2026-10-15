@@ -190,9 +190,10 @@ opens those files:
   | Open PR | **In progress**, one row for the PR naming the open, unpaused issues it closes, or `—` when there are none; an issue so named has no row of its own |
   | Closed issue; merged or closed PR | no row, and no note of what landed, which git and the closed issues already keep |
 
-  Three things follow. A PR closed unmerged, or merged without closing its
-  issue, leaves the issue open, so its row is re-derived by the table: **In
-  progress** with the branch if one remains, otherwise back to its wave.
+  Three things follow. Work that stops without landing (a claim abandoned,
+  a PR closed unmerged, or one merged without closing its issue) leaves the
+  issue open and ends its claim, so its row is re-derived by the table:
+  **In progress** with the branch if one remains, otherwise back to its wave.
   Whatever the work found and filed has its own row by the same table, made
   in the main checkout or owed as the paragraph below says. And the move from
   **Remaining** to **In progress** is made before the session enters the
@@ -202,7 +203,8 @@ opens those files:
   session inside `.claude/worktrees/` is refused that copy by Claude Code's
   own isolation. So the move in is made in the main checkout before
   `EnterWorktree` and the re-derivation after `ExitWorktree` (which removes
-  the row only when the issue has closed); every event that
+  the row when the issue has closed and otherwise moves it as the paragraph
+  above says); every event that
   happens inside the worktree (a PR opens, a filing, work stops) is carried
   in the report as owed and made once the session is back. The file's own
   note, topmost, holds the section and column rules. When in doubt, rebuild
