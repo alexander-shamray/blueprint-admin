@@ -57,13 +57,15 @@ public static partial class FixtureScrubber
     /// query string (<c>Pwd</c>, <c>secret</c>, a token), and as an environment variable names it. The key needs no boundary before
     /// it, so <c>Section__Key</c>, <c>UPPER_SNAKE</c> and <c>DbPassword</c> are covered; the cost is that a name merely
     /// ending in one, such as a pagination <c>page_token</c>, is scrubbed too, which fails closed. An empty value
-    /// followed by a JSON string's closing quote is left alone rather than read as an opening quote. A bare value ends at <c>&amp;</c> or <c>;</c>, so a connection
+    /// followed by a JSON string's closing quote (a quote then a comma, brace, bracket, colon, line break or the end)
+    /// is left alone rather than read as an opening quote; a space after the quote is not enough to say so, because a
+    /// quoted password may begin with one. A bare value ends at <c>&amp;</c> or <c>;</c>, so a connection
     /// string keeps the options that follow its password: the line a person copies must still run. A quoted value, its
     /// quotes possibly JSON-escaped, is taken whole, so a <c>;</c> inside it does not leave the tail behind, and an
     /// unterminated quote takes the rest of the run. A bare value may hold <c>'</c> but not <c>"</c>, because in a
     /// JSON body that is where the string ends, so a bare value holding a double quote keeps the part after it.
     /// </summary>
-    [GeneratedRegex(@"((?:password|pwd|client_?secret|secret|(?:access_|refresh_|id_)?token|api_?key)=)(?!\\?""?<scrubbed>)(?!""[,}\]:])(?:\\""(?:(?!\\"").)*\\""|""(?:""""|\\.|[^""\\])*""|'(?:''|\\.|[^'\\])*'|(?:[^&;\s""'\\]|\\\\|\\(?!""))(?:[^&;\s""\\]|\\\\|\\(?!""))*|\\?[""'][^&;\s]*)", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"((?:password|pwd|client_?secret|secret|(?:access_|refresh_|id_)?token|api_?key)=)(?!\\?""?<scrubbed>)(?!""(?:[,}\]:]|[\r\n]|$))(?:\\""(?:(?!\\"").)*\\""|""(?:""""|\\.|[^""\\])*""|'(?:''|\\.|[^'\\])*'|(?:[^&;\s""'\\]|\\\\|\\(?!""))(?:[^&;\s""\\]|\\\\|\\(?!""))*|\\?[""'][^&;\s]*)", RegexOptions.IgnoreCase)]
     private static partial Regex SecretForm();
 
     /// <summary>
