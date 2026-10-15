@@ -54,13 +54,14 @@ public static partial class FixtureScrubber
 
     /// <summary>
     /// The password grant's own form, as a request log would hold it, and the same keys in a connection string or a
-    /// query string (<c>Pwd</c>, <c>secret</c>, a token). A bare value ends at <c>&amp;</c> or <c>;</c>, so a connection
+    /// query string (<c>Pwd</c>, <c>secret</c>, a token), and as an environment variable names it: the key may follow an
+    /// underscore, so <c>Section__Key</c> and <c>UPPER_SNAKE</c> lines are covered. A bare value ends at <c>&amp;</c> or <c>;</c>, so a connection
     /// string keeps the options that follow its password: the line a person copies must still run. A quoted value, its
     /// quotes possibly JSON-escaped, is taken whole, so a <c>;</c> inside it does not leave the tail behind, and an
     /// unterminated quote takes the rest of the run. A bare value may hold <c>'</c> but not <c>"</c>, because in a
     /// JSON body that is where the string ends, so a bare value holding a double quote keeps the part after it.
     /// </summary>
-    [GeneratedRegex(@"\b((?:password|pwd|client_?secret|secret|(?:access_|refresh_|id_)?token|api_?key)=)(?!\\?""?<scrubbed>)(?:\\""(?:(?!\\"").)*\\""|""(?:""""|\\.|[^""\\])*""|'(?:''|\\.|[^'\\])*'|(?:[^&;\s""'\\]|\\(?!""))(?:[^&;\s""\\]|\\(?!""))*|\\?[""'][^&;\s]*)", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"(?<![A-Za-z0-9])((?:password|pwd|client_?secret|secret|(?:access_|refresh_|id_)?token|api_?key)=)(?!\\?""?<scrubbed>)(?:\\""(?:(?!\\"").)*\\""|""(?:""""|\\.|[^""\\])*""|'(?:''|\\.|[^'\\])*'|(?:[^&;\s""'\\]|\\(?!""))(?:[^&;\s""\\]|\\(?!""))*|\\?[""'][^&;\s]*)", RegexOptions.IgnoreCase)]
     private static partial Regex SecretForm();
 
     /// <summary>

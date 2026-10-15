@@ -143,6 +143,10 @@ public sealed class FixtureScrubberTests
     [InlineData("token=t&x=1", "token=<scrubbed>&x=1")]
     [InlineData("apikey=k&x=1", "apikey=<scrubbed>&x=1")]
     [InlineData("Server=s;ClientSecret=c;X=1", "Server=s;ClientSecret=<scrubbed>;X=1")]
+    [InlineData("KEYCLOAK_ADMIN_PASSWORD=admin", "KEYCLOAK_ADMIN_PASSWORD=<scrubbed>")]
+    [InlineData("POSTGRES_PASSWORD=s3cret", "POSTGRES_PASSWORD=<scrubbed>")]
+    [InlineData("Keycloak__ClientSecret=abc", "Keycloak__ClientSecret=<scrubbed>")]
+    [InlineData("Redis__Password=hunter2", "Redis__Password=<scrubbed>")]
     public void Every_key_the_form_rule_names_is_scrubbed(string text, string expected)
     {
         FixtureScrubber.Scrub(text).ShouldBe(expected);
