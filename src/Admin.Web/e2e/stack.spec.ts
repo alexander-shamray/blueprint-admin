@@ -4,12 +4,12 @@ test('the stack screen lists the fake services and runs up', async ({ page }) =>
   await page.goto('/stack');
 
   await expect(page.locator('table.services tbody tr')).toHaveCount(32);
-  // As recorded: SQL Server has a healthcheck and the gateway has none, so ps gives it a state and no health.
+  // As recorded: SQL Server has a healthcheck and the carrier simulator has none, so ps gives it a state and no health.
   const service = (name: string) =>
     page.locator('table.services tbody tr').filter({ has: page.locator('td:first-child', { hasText: new RegExp(`^${name}$`) }) });
   await expect(service('sql')).toContainText('healthy');
-  await expect(service('gateway')).toContainText('running');
-  await expect(service('gateway')).not.toContainText('healthy');
+  await expect(service('carrier-simulator')).toContainText('running');
+  await expect(service('carrier-simulator')).not.toContainText('healthy');
   await expect(page.locator('.reachability span.up')).toHaveCount(12);
   // The store and the edge are surfaces of their own: an Up that leaves the image store unprovisioned looks green otherwise.
   await expect(page.locator('.reachability span.up', { hasText: 'object-store' })).toHaveCount(1);

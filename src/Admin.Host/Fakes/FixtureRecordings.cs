@@ -25,14 +25,10 @@ public static class FixtureRecordings
 
     public static readonly HttpRecording[] Http =
     [
-        // Edited by hand since its recording: GetProduct (GET /v1/catalog/products/{id}) was added, and PublishProductCommand's
-        // thumbnailUrl became imageKey, as the backend's ProductEndpoints.cs and PublishProductCommand.cs have them,
-        // so the Scenario's image script can read a product back. Re-record with Admin:Record=true to replace them (#133).
         new("openapi-catalog.json", (o, uri) => FakePlatformHandler.Is(uri, o.CatalogUrl) && uri.AbsolutePath == OpenApi),
         new("openapi-ordering.json", (o, uri) => FakePlatformHandler.Is(uri, o.OrderingUrl) && uri.AbsolutePath == OpenApi),
         new("openapi-inventory.json", (o, uri) => FakePlatformHandler.Is(uri, o.InventoryUrl) && uri.AbsolutePath == OpenApi),
         new("openapi-payments.json", (o, uri) => FakePlatformHandler.Is(uri, o.PaymentsUrl) && uri.AbsolutePath == OpenApi),
-        // Derived, not recorded: written from the backend's ErasureRequestEndpoints.cs with no stack up. Re-record with Admin:Record=true (#133).
         new("openapi-privacy.json", (o, uri) => FakePlatformHandler.Is(uri, o.PrivacyUrl) && uri.AbsolutePath == OpenApi),
         new("grafana-datasources.json", (o, uri) => FakePlatformHandler.Is(uri, o.GrafanaUrl) && uri.AbsolutePath == "/api/datasources"),
         new(
@@ -42,10 +38,7 @@ public static class FixtureRecordings
     ];
 
     /// <summary>
-    /// The reads ComposeService and BrokerService make, each in the form run-locally.md gives it. The last seven
-    /// rows of compose-ps.jsonl (the services the backend's Compose model gained since the last recording) were
-    /// written without a stack up: their names, images and ports come from <c>docker compose config</c> and the
-    /// rest copies a recorded row of the same kind. Re-record with <c>Admin:Record=true</c> to replace them.
+    /// The reads ComposeService and BrokerService make, each in the form run-locally.md gives it.
     /// </summary>
     public static readonly ProcessRecording[] Process =
     [
@@ -64,7 +57,7 @@ public static class FixtureRecordings
             "the trace of that same publish, under the trace id FakeGrafana.RecordedTraceId names",
         ["rabbitmq-queues.json"] =
             "the list_queues answer recorded on 2026-10-04, plus the privacy queues PlatformQueues.Table gained since "
-            + "(empty, written without a stack to read them from), plus an ordering-catalog-events_error queue holding "
+            + "(empty, as a live stack listed them on 2026-10-15), plus an ordering-catalog-events_error queue holding "
             + "one message, plus a bff-order-events_skipped queue holding one, so the Broker screen has one parked queue "
             + "of each kind to mark: a state a clean stack is not in",
     };

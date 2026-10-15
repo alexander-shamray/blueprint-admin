@@ -30,6 +30,9 @@ public sealed class OpenApiReaderTests
         [
             ("catalog:PublishProduct", "POST", "http://localhost:5000/api/v1/catalog/products", "authenticated"),
             ("catalog:GetProducts", "GET", "http://localhost:5000/api/v1/catalog/products", "anonymous"),
+            ("catalog:ChangePrice", "PUT", "http://localhost:5000/api/v1/catalog/products/{id}/price", "authenticated"),
+            ("catalog:WithdrawProduct", "POST", "http://localhost:5000/api/v1/catalog/products/{id}/withdrawal", "authenticated"),
+            ("catalog:GetOwnProducts", "GET", "http://localhost:5000/api/v1/catalog/products/mine", "authenticated"),
             ("catalog:GetProduct", "GET", "http://localhost:5000/api/v1/catalog/products/{id}", "anonymous"),
         ]);
         operations.ShouldAllBe(o => o.Source == "catalog" && o.Available);
@@ -39,7 +42,13 @@ public sealed class OpenApiReaderTests
     public void Query_and_path_parameters_are_listed_with_their_type()
     {
         ApiOperation list = Read("catalog", "openapi-catalog.json").Single(o => o.Name == "GetProducts");
-        list.QueryParameters.ShouldBe([new ApiParameter("cursor", false, "string"), new ApiParameter("limit", false, "integer")]);
+        list.QueryParameters.ShouldBe(
+        [
+            new ApiParameter("cursor", false, "string"),
+            new ApiParameter("q", false, "string"),
+            new ApiParameter("sort", false, "string"),
+            new ApiParameter("limit", false, "integer"),
+        ]);
         list.PathParameters.ShouldBeEmpty();
         list.ExampleBody.ShouldBeNull();
         list.HasCommandId.ShouldBeFalse();
