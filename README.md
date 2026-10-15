@@ -71,7 +71,7 @@ service's golden signals from Prometheus, one column per panel of the
 backend golden-signals dashboard: request rate, 5xx share, p99 latency, the
 422 and 401 refusals, and §13.7's command and query p95), the Logs screen
 (follow, service filter, text filter, correlation-id highlight) and the API
-screen (Catalog's, Ordering's, Inventory's and Payments' OpenAPI operations
+screen (Catalog's, Ordering's, Inventory's, Payments' and Privacy's OpenAPI operations
 through the gateway, the BFF quote, its product-image upload and saved address,
 a stored image read back through the image edge, every host's readiness and the payment
 and carrier simulators' request logs; send as anonymous, a realm user, with
@@ -87,6 +87,14 @@ as a repair, or as a rebuild behind a typed confirmation that stops the BFF,
 deletes its order projection, replays the outbox window and starts it again
 (the commands are `run-locally.md`'s); and the API
 screen shows whether `ordering-catalog-events` has drained after a publish.
+The Erasure screen raises an erasure request for a subject id as the realm's
+`privacy` login (the one that holds `privacy:erase`; `demo` does not, and a stack
+whose realm was imported before that login needs `docker compose down -v`), then
+shows one row per holder Privacy asked, answered, waiting or overdue, with the
+depth of its `*-privacy` queue and of `privacy-completions` beside it; an overdue
+request is reissued from the screen and links the backend's `erasure-overdue`
+runbook. Against FakePlatform the subject ending `dead` is the one that goes
+overdue, so the reissue has something to do.
 The Trace screen joins a correlation id's Loki lines and Tempo spans into one
 timeline, each of those rows linking into Grafana Explore, and closing with a
 snapshot of the projection queue and every other queue the spans crossed; the
