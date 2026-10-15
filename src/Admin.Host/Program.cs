@@ -83,6 +83,7 @@ builder.Services.AddSingleton<IProcessRunner>(sp => new TranscribingProcessRunne
     sp.GetRequiredService<OperatorTranscript>()));
 
 builder.Services.AddSingleton<ComposeService>();
+builder.Services.AddSingleton<ComposeGate>();
 builder.Services.AddSingleton<WorkstationDoctor>();
 builder.Services.AddSingleton<LogFollower>();
 builder.Services.AddSingleton<BrokerService>();
@@ -110,6 +111,7 @@ builder.Services.AddSingleton(sp =>
 // singleton holding one HttpClient for the host's life.
 builder.Services.AddSingleton(sp => new ResetService(
     sp.GetRequiredService<ComposeService>(),
+    sp.GetRequiredService<ComposeGate>(),
     cancellationToken => sp.GetRequiredService<PlatformProbe>().ProbeAsync(cancellationToken),
     sp.GetRequiredService<JobRegistry>(),
     sp.GetRequiredService<RepoPaths>(),

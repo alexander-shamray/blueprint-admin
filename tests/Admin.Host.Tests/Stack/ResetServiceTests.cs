@@ -18,6 +18,7 @@ public sealed class ResetServiceTests : IAsyncDisposable
     private static readonly string Prefix = $"compose -f {Paths.ComposeFile} ";
 
     private readonly FakeTimeProvider time = new();
+    private readonly ComposeGate gate = new();
     private readonly JobRegistry registry;
     private readonly FakeProcessRunner runner;
 
@@ -35,7 +36,7 @@ public sealed class ResetServiceTests : IAsyncDisposable
         runner.On("docker", Prefix + "down -v", 0, " Volume commerce_sql-data  Removed")
             .On("docker", Prefix + "up -d --wait", 0, " Container commerce-gateway-1  Healthy");
 
-        Job reset = Service(Ready("gateway", "catalog", "client")).Start();
+        Job reset = Service(Ready("gateway", "catalog", "client")).Start().Job;
         int exitCode = await reset.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
         exitCode.ShouldBe(0);
@@ -55,7 +56,7 @@ public sealed class ResetServiceTests : IAsyncDisposable
     {
         runner.OnFailing("docker", Prefix + "down -v", 1, "Error response from daemon: no such volume");
 
-        Job reset = Service(Ready("gateway")).Start();
+        Job reset = Service(Ready("gateway")).Start().Job;
         int exitCode = await reset.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
         exitCode.ShouldBe(1);
@@ -74,7 +75,7 @@ public sealed class ResetServiceTests : IAsyncDisposable
             polls++;
             return Task.FromResult<IReadOnlyList<Reachability>>(
                 [new("gateway", "", true, 200), new("ordering", "", polls > 1, polls > 1 ? 200 : 503)]);
-        }).Start();
+        }).Start().Job;
 
         await WaitUntilAsync(() => Texts(reset).Contains("waiting for: ordering"));
         time.Advance(ResetService.ReadinessInterval);
@@ -90,7 +91,7 @@ public sealed class ResetServiceTests : IAsyncDisposable
         runner.On("docker", Prefix + "down -v", 0).On("docker", Prefix + "up -d --wait", 0);
 
         DateTimeOffset start = time.GetUtcNow();
-        Job reset = Service(_ => Task.FromResult<IReadOnlyList<Reachability>>([new("ordering", "", false, null)])).Start();
+        Job reset = Service(_ => Task.FromResult<IReadOnlyList<Reachability>>([new("ordering", "", false, null)])).Start().Job;
 
         int seen = 0;
 
@@ -121,15 +122,27 @@ public sealed class ResetServiceTests : IAsyncDisposable
         runner.OnLongRunning("docker", Prefix + "down -v");
         ResetService service = Service(Ready("gateway"));
 
-        Job first = service.Start();
+        Job first = service.Start().Job;
 
-        service.Start().ShouldBeSameAs(first);
+        service.Start().Job.ShouldBeSameAs(first);
+    }
+
+    [Fact]
+    public void A_reset_while_another_compose_job_runs_returns_that_job_and_starts_nothing()
+    {
+        runner.OnLongRunning("docker", Prefix + "up -d --wait");
+        Claim up = gate.Claim("up", new ComposeService(runner, Paths, time).Up);
+
+        Claim asked = Service(Ready("gateway")).Start();
+
+        asked.ShouldBeSameAs(up);
+        runner.Started.ShouldNotContain(s => s.Arguments.Contains("-v"), "the refused reset must not run down -v");
     }
 
     private static int Waits(Job reset) => Texts(reset).Count(t => t.StartsWith("waiting for:", StringComparison.Ordinal));
 
     private ResetService Service(Func<CancellationToken, Task<IReadOnlyList<Reachability>>> probe) =>
-        new(new ComposeService(runner, Paths, time), probe, registry, Paths, time);
+        new(new ComposeService(runner, Paths, time), gate, probe, registry, Paths, time);
 
     private static Func<CancellationToken, Task<IReadOnlyList<Reachability>>> Ready(params string[] names) =>
         _ => Task.FromResult<IReadOnlyList<Reachability>>([.. names.Select(n => new Reachability(n, "", true, 200))]);

@@ -23,6 +23,7 @@ public sealed class ProjectionRebuildServiceTests : IAsyncDisposable
     private const string Tool = "run --project tools/bff-replay";
 
     private readonly FakeTimeProvider time = new();
+    private readonly ComposeGate gate = new();
     private readonly JobRegistry registry;
     private readonly FakeProcessRunner runner;
 
@@ -174,11 +175,11 @@ public sealed class ProjectionRebuildServiceTests : IAsyncDisposable
         runner.OnLongRunning("dotnet", Tool);
         ProjectionRebuildService service = Service();
 
-        Started first = service.Start(RebuildMode.Repair);
-        Started second = service.Start(RebuildMode.Repair);
+        Claim first = service.Start(RebuildMode.Repair);
+        Claim second = service.Start(RebuildMode.Repair);
 
         second.Job.ShouldBeSameAs(first.Job);
-        second.Mode.ShouldBe(RebuildMode.Repair);
+        second.Kind.ShouldBe("repair");
     }
 
     [Fact]
@@ -187,12 +188,45 @@ public sealed class ProjectionRebuildServiceTests : IAsyncDisposable
         runner.OnLongRunning("dotnet", Tool);
         ProjectionRebuildService service = Service();
 
-        Started repair = service.Start(RebuildMode.Repair);
-        Started asked = service.Start(RebuildMode.Rebuild);
+        Claim repair = service.Start(RebuildMode.Repair);
+        Claim asked = service.Start(RebuildMode.Rebuild);
 
         asked.Job.ShouldBeSameAs(repair.Job);
-        asked.Mode.ShouldBe(RebuildMode.Repair);
+        asked.Kind.ShouldBe("repair");
         runner.Started.Any(s => s.Arguments.Contains("stop")).ShouldBeFalse("the refused rebuild must not stop the BFF");
+    }
+
+    [Fact]
+    public void A_rebuild_while_a_reset_holds_the_compose_gate_returns_the_reset_and_stops_nothing()
+    {
+        Job reset = registry.Create(new ProcessSpec("reset", ["down -v", "up -d --wait", "readiness"], Paths.BackendDir));
+        gate.Claim("reset", () => reset);
+
+        Claim asked = Service().Start(RebuildMode.Rebuild);
+
+        asked.Job.ShouldBeSameAs(reset);
+        asked.Kind.ShouldBe("reset");
+        runner.Started.ShouldBeEmpty("the refused rebuild must not stop the BFF");
+    }
+
+    [Fact]
+    public void A_repair_touches_no_service_so_a_running_reset_does_not_hold_it_back()
+    {
+        runner.OnLongRunning("dotnet", Tool);
+        gate.Claim("reset", () => registry.Create(new ProcessSpec("reset", [], Paths.BackendDir)));
+
+        Claim repair = Service().Start(RebuildMode.Repair);
+
+        repair.Kind.ShouldBe("repair");
+    }
+
+    [Fact]
+    public void A_running_rebuild_holds_the_compose_gate_against_a_reset()
+    {
+        runner.On("docker", Prefix + "stop web-bff", 0).OnLongRunning("dotnet", Tool);
+        Claim rebuild = Service().Start(RebuildMode.Rebuild);
+
+        gate.Claim("reset", () => throw new InvalidOperationException("the reset must not start")).ShouldBeSameAs(rebuild);
     }
 
     [Fact]
@@ -202,12 +236,12 @@ public sealed class ProjectionRebuildServiceTests : IAsyncDisposable
             .On("docker", Prefix + "stop web-bff", 0).On("docker", Prefix + "start web-bff", 0);
         ProjectionRebuildService service = Service();
 
-        Started first = service.Start(RebuildMode.Repair);
+        Claim first = service.Start(RebuildMode.Repair);
         await first.Job.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
-        Started second = service.Start(RebuildMode.Rebuild);
+        Claim second = service.Start(RebuildMode.Rebuild);
 
         second.Job.ShouldNotBeSameAs(first.Job);
-        second.Mode.ShouldBe(RebuildMode.Rebuild);
+        second.Kind.ShouldBe("rebuild");
         await second.Job.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
         runner.Started.Select(s => s.Arguments[^1]).ShouldContain("--reset", "the rebuild must run the tool with --reset");
     }
@@ -219,7 +253,7 @@ public sealed class ProjectionRebuildServiceTests : IAsyncDisposable
         ThrowingRunner throwing = new(runner, "dotnet");
         ComposeService compose = new(throwing, Paths, time);
         ProjectionRebuildService service = new(
-            compose, throwing, new BrokerService(compose, Options.Create(new AdminOptions())), registry, Paths, Options.Create(new AdminOptions()), time);
+            compose, gate, throwing, new BrokerService(compose, Options.Create(new AdminOptions())), registry, Paths, Options.Create(new AdminOptions()), time);
 
         Job job = service.Start(RebuildMode.Rebuild).Job;
         int exit = await job.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
@@ -251,6 +285,7 @@ public sealed class ProjectionRebuildServiceTests : IAsyncDisposable
 
     private ProjectionRebuildService Service() => new(
         new ComposeService(runner, Paths, time),
+        gate,
         runner,
         new BrokerService(new ComposeService(runner, Paths, time), Options.Create(new AdminOptions())),
         registry,
@@ -289,17 +324,19 @@ public sealed class ProjectionRebuildAnswerTests
     [Fact]
     public void A_run_of_the_kind_asked_for_is_accepted_whether_it_was_just_started_or_already_going()
     {
-        IResult result = BrokerEndpoints.Answer(new Started(Running, RebuildMode.Rebuild), RebuildMode.Rebuild).Result;
+        IResult result = new Claim(Running, "rebuild").Answer("rebuild").Result;
 
         result.ShouldBeOfType<Accepted<JobSummary>>().Value!.Id.ShouldBe("job-9");
     }
 
     [Theory]
-    [InlineData(RebuildMode.Repair, RebuildMode.Rebuild, "A repair (job job-9) is still running, so this rebuild was not started.")]
-    [InlineData(RebuildMode.Rebuild, RebuildMode.Repair, "A rebuild (job job-9) is still running, so this repair was not started.")]
-    public void A_run_of_the_other_kind_is_refused_with_a_conflict_naming_the_one_going(RebuildMode going, RebuildMode wanted, string detail)
+    [InlineData("repair", "rebuild", "A repair (job job-9) is still running, so this rebuild was not started.")]
+    [InlineData("rebuild", "repair", "A rebuild (job job-9) is still running, so this repair was not started.")]
+    [InlineData("reset", "rebuild", "A reset (job job-9) is still running, so this rebuild was not started.")]
+    [InlineData("rebuild", "down -v", "A rebuild (job job-9) is still running, so this down -v was not started.")]
+    public void A_run_of_the_other_kind_is_refused_with_a_conflict_naming_the_one_going(string going, string wanted, string detail)
     {
-        IResult result = BrokerEndpoints.Answer(new Started(Running, going), wanted).Result;
+        IResult result = new Claim(Running, going).Answer(wanted).Result;
 
         ProblemHttpResult problem = result.ShouldBeOfType<ProblemHttpResult>();
         problem.StatusCode.ShouldBe(StatusCodes.Status409Conflict);

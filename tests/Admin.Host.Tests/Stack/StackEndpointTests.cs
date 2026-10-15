@@ -1,7 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Admin.Host.Compose;
 using Admin.Host.Fakes;
+using Admin.Host.Jobs;
 using Admin.Host.Tests.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
@@ -78,6 +80,29 @@ public sealed class StackEndpointTests : IClassFixture<AdminHostFactory>
 
         response.StatusCode.ShouldBe(HttpStatusCode.Accepted);
         Runner.Started[^1].Arguments.TakeLast(2).ShouldBe(["down", "-v"]);
+    }
+
+    [Fact]
+    public async Task Up_while_a_projection_rebuild_runs_is_refused_naming_the_rebuild_and_starts_nothing()
+    {
+        Job rebuild = factory.Services.GetRequiredService<JobRegistry>().Create(new ProcessSpec("bff-replay", ["--reset"], "/repo/backend"));
+        factory.Services.GetRequiredService<ComposeGate>().Claim("rebuild", () => rebuild);
+        int upsBefore = Runner.Started.Count(s => s.Arguments.Contains("up"));
+
+        try
+        {
+            HttpResponseMessage response = await client.PostAsync("/api/stack/backend/up", null, TestContext.Current.CancellationToken);
+
+            response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+            JsonElement problem = await response.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken);
+            problem.GetProperty("detail").GetString().ShouldStartWith($"A rebuild (job {rebuild.Id}) is still running, so this up was not started.");
+            Runner.Started.Count(s => s.Arguments.Contains("up")).ShouldBe(upsBefore);
+        }
+        finally
+        {
+            // The gate is the fixture's singleton: the sibling tests' Up and Down must find it free.
+            rebuild.MarkExited(0);
+        }
     }
 
     [Fact]

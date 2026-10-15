@@ -303,6 +303,14 @@ under one id. It wipes volumes, so its endpoint takes the same typed
 confirmation as `down -v`. There is no seed step: the backend has no seed to
 run yet.
 
+`ComposeGate` lets one job at a time stop or start the stack's services: Up,
+Down, the reset and §5.5's projection rebuild each claim it, and a Compose read
+claims nothing. While one of them runs, a request of the same kind is answered
+with the running job and any other kind is refused with 409 naming the kind and
+the job id, so a rebuild's `stop web-bff` and `start web-bff` never land inside
+a reset's `down -v` and `up`. A repair stops and starts nothing and does not
+claim it.
+
 ### 5.4 FrontendSupervisor
 
 Holds at most one `npm start` job in `FrontendDir`. `Start()` refuses if one
@@ -561,16 +569,16 @@ All under `/api`, JSON, loopback only.
 |---|---|
 | `GET /stack` | `ServiceStatus[]`, the frontend job summary, and reachability of every HTTP surface of §2.2 that answers a readiness route, the object store and image edge among them |
 | `GET /stack/doctor` | §5.3's workstation checks, one row each with its verdict and what the reads said |
-| `POST /stack/backend/up` | Compose up; returns the job |
-| `POST /stack/backend/down` | body `{ wipeVolumes, confirm }`; returns the job |
-| `POST /stack/backend/reset` | body `{ confirm }`, which must be `down -v`; §5.3's reset, returned as one job, or the one still running |
+| `POST /stack/backend/up` | Compose up; returns the job, or the Up still running; 409 while another `ComposeGate` job (§5.3) runs |
+| `POST /stack/backend/down` | body `{ wipeVolumes, confirm }`; returns the job, or the same Down still running; 409 while another `ComposeGate` job (§5.3) runs |
+| `POST /stack/backend/reset` | body `{ confirm }`, which must be `down -v`; §5.3's reset, returned as one job, or the one still running; 409 while another `ComposeGate` job runs |
 | `POST /stack/frontend/start`, `POST /stack/frontend/stop` | supervisor |
 | `GET /jobs`, `GET /jobs/{id}` | summaries; one job with its last lines |
 | `GET /jobs/{id}/stream` | Server-Sent Events, one event per line, `id:` is the sequence number so `Last-Event-ID` resumes from the ring buffer |
 | `POST /logs/follow` | body `{ services }`; stops the previous follow job if it is still running, starts one and returns it — the host keeps one |
 | `POST /logs/follow/{id}/stop` | stops that follow job if it is still the current one; 204 either way. Named, so a Stop that reaches the host after the next Follow ends nothing. There is no generic job stop: it would reach `up`, `down -v` and the supervisor's `npm start` |
 | `GET /broker/queues`, `/broker/exchanges`, `/broker/permissions` | §5.5; `queues` also carries `projection`, the drain state of `ordering-catalog-events` |
-| `GET /broker/projection`, `POST /broker/projection/repair`, `POST /broker/projection/rebuild` | §5.5; the plan (queue, typed confirmation, the tool's limits), then a listed job; the rebuild is refused with 400 unless `confirm` is `bff-replay --reset`; a repair or rebuild is refused with 409 while a run of the other kind is going, and the same kind is returned as it is |
+| `GET /broker/projection`, `POST /broker/projection/repair`, `POST /broker/projection/rebuild` | §5.5; the plan (queue, typed confirmation, the tool's limits), then a listed job; the rebuild is refused with 400 unless `confirm` is `bff-replay --reset`; a repair or rebuild is refused with 409 while a run of the other kind is going, and the same kind is returned as it is; a rebuild is also refused with 409 while a reset, Up or Down holds `ComposeGate` (§5.3) |
 | `GET /broker/dead-letters`, `GET /broker/dead-letters/{queue}`, `POST /broker/dead-letters/{queue}/{replay\|discard}` | §5.5; the plan (typed confirmation, the read's limit, the record directory), a parked queue's messages, then a listed job for body `{ messageIds, execute, confirm }`. 400 for a queue that is not an `_error` or `_skipped` one, no ids or an id that could read as a flag, or `execute` without `confirm` of `--execute`; 409 while another dead-letter run holds the operator |
 | `GET /erasure/holders` | §6's Erasure screen: the holders Privacy asks (`ErasureHolders.Table`, drift-checked against the backend's `Privacy__Responders__n`), each with the depth of its `*-privacy` queue, `privacy-completions`' depth and the overdue runbook's URL. The request itself is raised, read and reissued through `POST /proxy`, as the gateway answers it |
 | `GET /identity/users`, `POST /identity/token`, `POST /identity/clock` | §5.6 |

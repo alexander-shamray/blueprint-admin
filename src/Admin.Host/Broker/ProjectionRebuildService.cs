@@ -16,6 +16,7 @@ namespace Admin.Host.Broker;
 /// </summary>
 public sealed class ProjectionRebuildService(
     ComposeService compose,
+    ComposeGate composeGate,
     IProcessRunner runner,
     BrokerService broker,
     JobRegistry registry,
@@ -55,33 +56,49 @@ public sealed class ProjectionRebuildService(
     ];
 
     private readonly Lock gate = new();
-    private Job? current;
-    private RebuildMode currentMode;
+    private Claim? current;
 
     public static ProjectionPlan Plan() => new(PlatformQueues.BffProjection, RebuildConfirm, [.. Limits.Select(l => l.Text)]);
 
     /// <summary>
     /// Starts a run. Two at once would delete and send over each other, so a run still going answers instead: the same
-    /// kind of run is returned as it is (a second click is idempotent), and a different kind is <see cref="Started.Mode"/>
-    /// saying so, for the caller to refuse rather than show the wrong job under a confirmed request.
+    /// kind of run is returned as it is (a second click is idempotent), and a different kind is <see cref="Claim.Kind"/>
+    /// saying so, for the caller to refuse rather than show the wrong job under a confirmed request. A rebuild stops and
+    /// starts the BFF, so it also claims <see cref="ComposeGate"/>, and a reset, Up or Down still going answers the same
+    /// way; a repair touches no service and claims nothing there.
     /// </summary>
-    public Started Start(RebuildMode mode)
+    public Claim Start(RebuildMode mode)
     {
         lock (gate)
         {
-            if (current is { Status.State: JobState.Running } running)
+            if (current is { Job.Status.State: JobState.Running } running)
             {
-                return new Started(running, currentMode);
+                return running;
             }
 
-            string[] arguments = mode == RebuildMode.Rebuild ? ["--reset"] : [];
-            Job job = registry.Create(new ProcessSpec("bff-replay", arguments, paths.BackendDir));
-            current = job;
-            currentMode = mode;
-            _ = Task.Run(() => RunAsync(job, mode));
+            Claim claim = mode == RebuildMode.Rebuild
+                ? composeGate.Claim(Kind(mode), () => Begin(mode))
+                : new Claim(Begin(mode), Kind(mode));
 
-            return new Started(job, mode);
+            if (claim.Kind == Kind(mode))
+            {
+                current = claim;
+            }
+
+            return claim;
         }
+    }
+
+    /// <summary>How a run is named in a refusal, and the kind <see cref="Claim.Answer"/> is asked for.</summary>
+    public static string Kind(RebuildMode mode) => mode.ToString().ToLowerInvariant();
+
+    private Job Begin(RebuildMode mode)
+    {
+        string[] arguments = mode == RebuildMode.Rebuild ? ["--reset"] : [];
+        Job job = registry.Create(new ProcessSpec("bff-replay", arguments, paths.BackendDir));
+        _ = Task.Run(() => RunAsync(job, mode));
+
+        return job;
     }
 
     private async Task RunAsync(Job job, RebuildMode mode)

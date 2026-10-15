@@ -13,6 +13,7 @@ namespace Admin.Host.Stack;
 /// </summary>
 public sealed class ResetService(
     ComposeService compose,
+    ComposeGate composeGate,
     Func<CancellationToken, Task<IReadOnlyList<Reachability>>> probe,
     JobRegistry registry,
     RepoPaths paths,
@@ -25,26 +26,20 @@ public sealed class ResetService(
     /// <summary>The reference client is not part of the backend a reset brings back, so it is not waited for.</summary>
     private const string Client = "client";
 
-    private readonly Lock gate = new();
-    private Job? current;
+    /// <summary>How a reset is named in a refusal, and the kind <see cref="Claim.Answer"/> is asked for.</summary>
+    public const string Kind = "reset";
 
-    /// <summary>Starts a reset, or returns the one still running: two at once would race each other's down and up.</summary>
-    public Job Start()
+    /// <summary>
+    /// Starts a reset under <see cref="ComposeGate"/>, or returns the job still running there: two resets at once would
+    /// race each other's down and up, and a reset beside an Up, a Down or a projection rebuild would race theirs.
+    /// </summary>
+    public Claim Start() => composeGate.Claim(Kind, () =>
     {
-        lock (gate)
-        {
-            if (current is { Status.State: JobState.Running } running)
-            {
-                return running;
-            }
+        Job reset = registry.Create(new ProcessSpec("reset", ["down -v", "up -d --wait", "readiness"], paths.BackendDir));
+        _ = Task.Run(() => RunAsync(reset));
 
-            Job reset = registry.Create(new ProcessSpec("reset", ["down -v", "up -d --wait", "readiness"], paths.BackendDir));
-            current = reset;
-            _ = Task.Run(() => RunAsync(reset));
-
-            return reset;
-        }
-    }
+        return reset;
+    });
 
     private async Task RunAsync(Job reset)
     {
