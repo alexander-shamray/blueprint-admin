@@ -53,11 +53,11 @@ public sealed class BrokerServiceTests : IAsyncDisposable
         view.Reachable.ShouldBeTrue();
         view.Queues.ShouldBe(
         [
-            new BrokerQueue("ordering-catalog-events", 3, false, "Ordering's price projection"),
+            new BrokerQueue("ordering-catalog-events", 3, "Ordering's price projection"),
             new BrokerQueue(
-                "ordering-catalog-events_error", 1, true, "Ordering's price projection", "error", $"{Runbooks}/error-queue.md"),
-            new BrokerQueue("ordering-commands", 0, false, "Ordering's command consumers"),
-            new BrokerQueue("something-else", 0, false, null),
+                "ordering-catalog-events_error", 1, "Ordering's price projection", "error", $"{Runbooks}/error-queue.md"),
+            new BrokerQueue("ordering-commands", 0, "Ordering's command consumers"),
+            new BrokerQueue("something-else", 0, null),
         ]);
     }
 
@@ -74,8 +74,8 @@ public sealed class BrokerServiceTests : IAsyncDisposable
 
         view.Queues.ShouldBe(
         [
-            new BrokerQueue("bff-order-events_skipped", 2, false, "the BFF's order projection", "skipped", $"{Runbooks}/skipped-queue.md"),
-            new BrokerQueue("unknown-endpoint_skipped", 1, false, null, "skipped", $"{Runbooks}/skipped-queue.md"),
+            new BrokerQueue("bff-order-events_skipped", 2, "the BFF's order projection", "skipped", $"{Runbooks}/skipped-queue.md"),
+            new BrokerQueue("unknown-endpoint_skipped", 1, null, "skipped", $"{Runbooks}/skipped-queue.md"),
         ]);
     }
 
@@ -114,7 +114,7 @@ public sealed class BrokerServiceTests : IAsyncDisposable
     [Fact]
     public void A_queue_that_is_not_declared_is_not_drained()
     {
-        BrokerService.IsDrained([new BrokerQueue("ordering-commands", 0, false)], "ordering-catalog-events")
+        BrokerService.IsDrained([new BrokerQueue("ordering-commands", 0)], "ordering-catalog-events")
             .ShouldBe(new ProjectionDrain("ordering-catalog-events", false, null, false));
     }
 

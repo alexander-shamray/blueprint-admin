@@ -23,7 +23,7 @@ public sealed class BrokerEndpointTests : IClassFixture<AdminHostFactory>
         view.GetProperty("reachable").GetBoolean().ShouldBeTrue();
         JsonElement[] queues = [.. view.GetProperty("queues").EnumerateArray()];
         queues.Length.ShouldBe(PlatformQueues.Table.Length + 2);
-        JsonElement error = queues.Single(q => q.GetProperty("isErrorQueue").GetBoolean());
+        JsonElement error = queues.Single(q => q.GetProperty("parked").GetString() == "error");
         error.GetProperty("name").GetString().ShouldBe("ordering-catalog-events_error");
         error.GetProperty("messages").GetInt64().ShouldBe(1);
         error.GetProperty("parked").GetString().ShouldBe("error");
@@ -41,7 +41,6 @@ public sealed class BrokerEndpointTests : IClassFixture<AdminHostFactory>
 
         JsonElement skipped = view.GetProperty("queues").EnumerateArray().Single(q => q.GetProperty("name").GetString() == "bff-order-events_skipped");
         skipped.GetProperty("messages").GetInt64().ShouldBe(1);
-        skipped.GetProperty("isErrorQueue").GetBoolean().ShouldBeFalse();
         skipped.GetProperty("parked").GetString().ShouldBe("skipped");
         skipped.GetProperty("consumer").GetString().ShouldBe("the BFF's order projection");
         skipped.GetProperty("runbook").GetString().ShouldEndWith("/docs/runbooks/skipped-queue.md");
