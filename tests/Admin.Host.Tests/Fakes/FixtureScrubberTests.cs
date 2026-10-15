@@ -128,6 +128,9 @@ public sealed class FixtureScrubberTests
     [InlineData("pwd=it's-secret99;X=1", "pwd=<scrubbed>;X=1")]
     [InlineData("""password="abc""", "password=<scrubbed>")]
     [InlineData("""Password="<scrubbed>";X=1""", """Password="<scrubbed>";X=1""")]
+    [InlineData("Server=s;Password='a''b';X=1", "Server=s;Password=<scrubbed>;X=1")]
+    [InlineData("Password='abc;X=1", "Password=<scrubbed>;X=1")]
+    [InlineData("""{"cs":"{\"ConnectionString\":\"Server=s;Password=pw\"}"}""", """{"cs":"{\"ConnectionString\":\"Server=s;Password=<scrubbed>\"}"}""")]
     public void A_quoted_value_is_taken_whole_whatever_escape_it_uses_and_a_scrubbed_one_is_left(string text, string expected)
     {
         FixtureScrubber.Scrub(text).ShouldBe(expected);
@@ -186,6 +189,8 @@ public sealed class FixtureScrubberTests
     [Theory]
     [InlineData("http://localhost:5000/api?mail=a@b.com")]
     [InlineData("https://h:443/x#frag@y")]
+    [InlineData("[http://localhost:5000](mailto:a@b.com)")]
+    [InlineData("see (http://h:5000), mail x@y")]
     public void A_port_followed_by_a_path_is_not_a_url_password(string text)
     {
         FixtureScrubber.Scrub(text).ShouldBe(text);
