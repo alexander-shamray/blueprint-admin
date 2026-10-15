@@ -49,21 +49,25 @@ public static partial class FixtureScrubber
     [GeneratedRegex(@"(""(?:access_token|refresh_token|id_token)""\s*:\s*)""(?!<scrubbed>"")(?:\\.|[^""\\])*""")]
     private static partial Regex TokenField();
 
-    [GeneratedRegex(@"(""(?:password|client_?secret)""\s*:\s*)""(?!<scrubbed>"")(?:\\.|[^""\\])*""", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"(""(?:password|pwd|client_?secret)""\s*:\s*)""(?!<scrubbed>"")(?:\\.|[^""\\])*""", RegexOptions.IgnoreCase)]
     private static partial Regex SecretField();
 
     /// <summary>
-    /// The password grant's own form, as a request log would hold it. The value ends at <c>&amp;</c> or <c>;</c>, so a
-    /// connection string keeps the options that follow its password: the line a person copies must still run.
+    /// The password grant's own form, as a request log would hold it, and the same keys in a connection string or a
+    /// query string (<c>Pwd</c>, <c>secret</c>, a token). A bare value ends at <c>&amp;</c> or <c>;</c>, so a connection
+    /// string keeps the options that follow its password: the line a person copies must still run. A quoted value, its
+    /// quotes possibly JSON-escaped, is taken whole, so a <c>;</c> inside it does not leave the tail behind.
     /// </summary>
-    [GeneratedRegex(@"\b((?:password|client_?secret)=)(?!<scrubbed>)[^&;\s""]+", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\b((?:password|pwd|client_?secret|secret|(?:access_|refresh_|id_)?token|api_?key)=)(?!<scrubbed>)(?:\\?""[^""]*""|'[^']*'|[^&;\s""']+)", RegexOptions.IgnoreCase)]
     private static partial Regex SecretForm();
 
     /// <summary>
     /// The password in a URL's userinfo, the part between the second colon and the <c>@</c>, as an AMQP connection string
-    /// carries it. A URL with a port and no <c>@</c> after it, such as <c>http://localhost:5000/api</c>, has no userinfo
-    /// and is left alone.
+    /// carries it, raw <c>/</c>, <c>?</c> and <c>#</c> included: a valid URL percent-encodes them, but a configured value
+    /// is not always valid. A URL with a port and no <c>@</c> after it, such as <c>http://localhost:5000/api</c>, has no
+    /// userinfo and is left alone, and so is one whose "password" is a port followed by a path, query or fragment, such as
+    /// <c>https://h:443?e=a@b</c>.
     /// </summary>
-    [GeneratedRegex(@"(\b[a-z][a-z0-9+.-]*://[^:/\s@""']+:)(?!<scrubbed>@)[^@\s/?#""']+(@)", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"(\b[a-z][a-z0-9+.-]*://[^:/\s@""']+:)(?!<scrubbed>@)(?!\d+[/?#])[^@\s""']+(@)", RegexOptions.IgnoreCase)]
     private static partial Regex UrlPassword();
 }

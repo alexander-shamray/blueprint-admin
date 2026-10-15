@@ -102,6 +102,50 @@ public sealed class FixtureScrubberTests
     }
 
     [Fact]
+    public void A_quoted_connection_password_is_scrubbed_whole_even_when_it_holds_a_semicolon()
+    {
+        FixtureScrubber.Scrub("""Server=s;Password="a;b";TrustServerCertificate=True""")
+            .ShouldBe("Server=s;Password=<scrubbed>;TrustServerCertificate=True");
+        FixtureScrubber.Scrub("Server=s;Password='a;b';Encrypt=True").ShouldBe("Server=s;Password=<scrubbed>;Encrypt=True");
+        FixtureScrubber.Scrub("""{"cs":"Server=s;Password=\"a;b\";Encrypt=True"}""")
+            .ShouldBe("""{"cs":"Server=s;Password=<scrubbed>;Encrypt=True"}""");
+    }
+
+    [Theory]
+    [InlineData("Server=s;Pwd=hunter2;Encrypt=True", "Server=s;Pwd=<scrubbed>;Encrypt=True")]
+    [InlineData("https://h/cb?access_token=abc123&state=1", "https://h/cb?access_token=<scrubbed>&state=1")]
+    [InlineData("https://h/x?api_key=k&y=2", "https://h/x?api_key=<scrubbed>&y=2")]
+    [InlineData("Secret=s;Id=1", "Secret=<scrubbed>;Id=1")]
+    public void A_differently_spelled_secret_key_is_scrubbed(string text, string expected)
+    {
+        FixtureScrubber.Scrub(text).ShouldBe(expected);
+        FixtureScrubber.Findings(expected).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void A_json_pwd_is_scrubbed()
+    {
+        FixtureScrubber.Scrub("""{"pwd":"x"}""").ShouldBe("""{"pwd":"<scrubbed>"}""");
+    }
+
+    [Theory]
+    [InlineData("amqp://u:pa/ss@h:5672", "amqp://u:<scrubbed>@h:5672")]
+    [InlineData("amqp://u:pa?ss@h:5672", "amqp://u:<scrubbed>@h:5672")]
+    [InlineData("amqp://u:pa#ss@h:5672", "amqp://u:<scrubbed>@h:5672")]
+    public void A_url_password_holding_a_raw_separator_is_scrubbed_whole(string text, string expected)
+    {
+        FixtureScrubber.Scrub(text).ShouldBe(expected);
+    }
+
+    [Theory]
+    [InlineData("http://localhost:5000/api?mail=a@b.com")]
+    [InlineData("https://h:443/x#frag@y")]
+    public void A_port_followed_by_a_path_is_not_a_url_password(string text)
+    {
+        FixtureScrubber.Scrub(text).ShouldBe(text);
+    }
+
+    [Fact]
     public void A_url_without_userinfo_is_left_alone_whatever_its_query_holds()
     {
         const string url = "https://h:443?e=a@b";
