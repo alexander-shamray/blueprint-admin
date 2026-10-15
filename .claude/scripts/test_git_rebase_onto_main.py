@@ -659,6 +659,25 @@ class TheHelperPublishesWhatItRebased(unittest.TestCase):
         self.assertEqual("", self.at("git log --oneline HEAD..origin/main").stdout,
                          "and the branch now holds everything main does")
 
+    def test_a_scoped_feature_branch_is_replayed_and_published(self):
+        # The name `/branch` gives a scoped feature, end to end. The pattern
+        # is one place the name goes; the lease, the pending record and the
+        # refspec carry it too, so a parenthesis has to survive all of them
+        # (#181, where PR #180's `feat(broker)/...` was refused at exit 2).
+        scoped = "feat(broker)/x"
+        moved = run_bash('cd "$W" && git branch -m feat/x "$B" '
+                         '&& git push -q -u origin "$B"', W=self.work, B=scoped)
+        self.assertEqual(0, moved.returncode, moved.stderr)
+        before = self.at("git rev-parse HEAD").stdout.strip()
+
+        result = self.helper(branch=scoped)
+        self.assertEqual(0, result.returncode, result.stderr)
+        after = self.at("git rev-parse HEAD").stdout.strip()
+        self.assertNotEqual(before, after, "a replay onto a moved base makes new SHAs")
+        remote = run_bash('cd "$W" && git rev-parse "refs/remotes/origin/$B"',
+                          W=self.work, B=scoped)
+        self.assertEqual(after, remote.stdout.strip(), "and the scoped name is what was published")
+
     def test_configuration_cannot_change_what_the_replay_does(self):
         # Both settings are the caller's, and both break a stated guarantee:
         # one keeps the merge commits this helper exists to be rid of, the
@@ -943,6 +962,20 @@ class TheBranchNameGuardsEachHaveTheirOwnCase(unittest.TestCase):
                 result = self.refuse(branch)
                 self.assertEqual(2, result.returncode, result.stderr)
                 self.assertIn("not a branch name this helper will take", result.stderr)
+
+    def test_it_takes_every_name_the_branch_creating_helper_makes(self):
+        # One class, read from both files: a name `git-branch-create.sh` can
+        # make and this helper refuses is a branch with no way through a
+        # conflict, which is how every `feat(<scope>)/` branch went
+        # unrebasable (#181). Read from the files rather than run, because
+        # this class has no fixture and a name that passed every guard would
+        # go on to read whichever checkout the suite runs in.
+        def admitted(path):
+            found = re.findall(r'\[\[ "\$branch" =~ (\S+) \]\]',
+                               path.read_text(encoding="utf-8"))
+            self.assertEqual(1, len(found), f"{path.name}: one branch-name pattern")
+            return found[0]
+        self.assertEqual(admitted(SCRIPTS / "git-branch-create.sh"), admitted(HELPER))
 
     def test_an_unknown_mode_is_refused_by_its_own_message(self):
         result = self.refuse("feat/x", "skip")

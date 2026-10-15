@@ -46,7 +46,12 @@ case "$branch" in
   -*) echo "branch name may not start with '-'" >&2; exit 2 ;;
   *..*) echo "branch name may not contain '..'" >&2; exit 2 ;;
 esac
-[[ "$branch" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] ||
+# The set `git-branch-create.sh` admits, parentheses included: `/branch`
+# names a scoped feature `feat(<scope>)/<summary>`, and a name that helper
+# can make and this one refuses is a branch whose only way through a
+# conflict is closed (#181). The two guards above still hold, and `$`, `;`
+# and blanks stay outside the class; every use below is quoted.
+[[ "$branch" =~ ^[A-Za-z0-9][A-Za-z0-9._/()-]*$ ]] ||
   { echo "not a branch name this helper will take: $branch" >&2; exit 2; }
 
 # By name, before anything reads the checkout. The current-branch test below
