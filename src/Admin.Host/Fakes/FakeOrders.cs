@@ -98,7 +98,9 @@ public sealed class FakeOrders(TimeProvider time)
             return "out_of_stock";
         }
 
-        return (int)(Math.Abs(product.Amount) * 100m % 100m) == DeclinedMinorUnits ? "declined" : null;
+        // The fraction is scaled, not the whole amount, which overflows decimal for a huge price; an amount with a
+        // third decimal place has no minor units to decline on.
+        return Math.Abs(product.Amount) % 1m * 100m == DeclinedMinorUnits ? "declined" : null;
     }
 
     /// <summary>A cancel for an order never placed changes nothing; the fake's cancel answers 204 for any id, as before.</summary>

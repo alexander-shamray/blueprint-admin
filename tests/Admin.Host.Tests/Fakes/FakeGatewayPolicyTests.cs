@@ -57,8 +57,10 @@ public sealed class FakeGatewayPolicyTests
     [InlineData("""{"items":[{"productId":123,"quantity":1}]}""")]
     [InlineData("""{"items":[{"productId":{},"quantity":1}]}""")]
     [InlineData("""{"items":"x"}""")]
+    [InlineData("""{"items":[1]}""")]
+    [InlineData("""{"items":[]}""")]
     [InlineData("not json")]
-    public void An_order_body_the_script_cannot_read_still_places_an_unscripted_order(string body)
+    public async Task An_order_body_the_script_cannot_read_still_places_an_unscripted_order(string body)
     {
         using HttpRequestMessage request = new(HttpMethod.Post, Origin + "/api/v1/orders")
         {
@@ -69,6 +71,8 @@ public sealed class FakeGatewayPolicyTests
         using HttpResponseMessage response = FakeGateway.Send(request, orders);
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))
+            .ShouldBe($"\"{FakeGateway.PlacedOrderId}\"");
     }
 
     private static string Jwt(string permissions) => TokenServiceTests.Jwt($$"""{"permission":{{permissions}}}""");
