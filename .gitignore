@@ -41,17 +41,17 @@
 # Python — the hooks and their suite under .claude/ are scripts, not a package.
 __pycache__/
 
-# /review-branch's proof that it ran, which grok-review.sh requires before it
-# reads a missing suggestions.md as a clean pass.
-/.grok-review-ran
-
 # /pr scratch, same names as the other two clones.
 /pr-body.md
 /pr-title.txt
-# /review-copilot scratch — body must not cross the parent shell.
-/pr-reply.pr
-/pr-reply.id
-/pr-reply.body
+# /ship step 5's review input: the diff and locality verdict a round's
+# branch-reviewer reads. Written by the session, read inside the checkout
+# because the agent is confined to it, and never committed.
+/artifacts/
+
+# /review-branch's working state: one run's findings, rechecked by the next.
+# Never committed, and ignored so a leftover cannot dirty /ship's clean-tree gate.
+/suggestions.md
 
 # The user's local task list, kept current by Claude (CLAUDE.md, Working in
 # this repo). Local by design: it changes too often to go through a PR.
