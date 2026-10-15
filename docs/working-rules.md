@@ -83,6 +83,13 @@ dialects.
   `gh pr list --limit 1000` and `gh issue list --limit 1000`, because the
   default of 30 truncates silently.
 
+## One owner per fact
+
+Every fact has exactly one owner, and every other mention cites the owner by
+symbol or file, never by value. `CLAUDE.md` is inside the rule too, and **no
+gate reads it**: a rule stated there and argued in `.editorconfig` or
+`Directory.Build.props` moves in both.
+
 ## Precedence where two documents disagree
 
 The code and `README.md` beat the spec on a matter of fact.
