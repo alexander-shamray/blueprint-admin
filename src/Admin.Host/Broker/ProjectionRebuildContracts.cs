@@ -16,3 +16,6 @@ public sealed record ReplayLimit(string Text, string Anchor);
 public sealed record ProjectionPlan(string Queue, string RebuildConfirm, IReadOnlyList<string> Limits);
 
 public sealed record RebuildRequest(string? Confirm);
+
+/// <summary>A run <see cref="ProjectionRebuildService.Start"/> began or found still going, with the kind it is.</summary>
+public sealed record Started(Jobs.Job Job, RebuildMode Mode);

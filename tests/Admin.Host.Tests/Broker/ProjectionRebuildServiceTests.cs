@@ -7,6 +7,8 @@ using Admin.Host.Config;
 using Admin.Host.Fakes;
 using Admin.Host.Jobs;
 using Admin.Host.Tests.TestSupport;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -37,7 +39,7 @@ public sealed class ProjectionRebuildServiceTests : IAsyncDisposable
     {
         runner.On("dotnet", Tool, 0, "Sent 0 event(s) to bff-order-events.").On("docker", ListQueues, 0, Queues(0));
 
-        Job job = Service().Start(RebuildMode.Repair);
+        Job job = Service().Start(RebuildMode.Repair).Job;
         int exit = await job.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
         exit.ShouldBe(0);
@@ -70,7 +72,7 @@ public sealed class ProjectionRebuildServiceTests : IAsyncDisposable
             .On("docker", Prefix + "start web-bff", 0, "Started")
             .On("docker", ListQueues, 0, Queues(0));
 
-        Job job = Service().Start(RebuildMode.Rebuild);
+        Job job = Service().Start(RebuildMode.Rebuild).Job;
         int exit = await job.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
         exit.ShouldBe(0);
@@ -91,7 +93,7 @@ public sealed class ProjectionRebuildServiceTests : IAsyncDisposable
     {
         runner.OnFailing("docker", Prefix + "stop web-bff", 1, "no such service").On("dotnet", Tool + " -- --reset", 0, "Reset: deleted");
 
-        Job job = Service().Start(RebuildMode.Rebuild);
+        Job job = Service().Start(RebuildMode.Rebuild).Job;
         int exit = await job.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
         exit.ShouldBe(1);
@@ -106,7 +108,7 @@ public sealed class ProjectionRebuildServiceTests : IAsyncDisposable
             .On("docker", Prefix + "start web-bff", 0, "Started")
             .On("docker", ListQueues, 0, Queues(0));
 
-        Job job = Service().Start(RebuildMode.Rebuild);
+        Job job = Service().Start(RebuildMode.Rebuild).Job;
         int exit = await job.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
         exit.ShouldBe(1);
@@ -121,7 +123,7 @@ public sealed class ProjectionRebuildServiceTests : IAsyncDisposable
     {
         runner.On("dotnet", Tool, 0, "Sent 24 event(s) to bff-order-events.").On("docker", ListQueues, 0, Queues(5));
 
-        Job job = Service().Start(RebuildMode.Repair);
+        Job job = Service().Start(RebuildMode.Repair).Job;
         int waits = 0;
 
         while (true)
@@ -148,7 +150,7 @@ public sealed class ProjectionRebuildServiceTests : IAsyncDisposable
     {
         runner.On("dotnet", Tool, 0, "Sent 0 event(s) to bff-order-events.").OnFailing("docker", ListQueues, 1, "service rabbitmq is not running");
 
-        Job job = Service().Start(RebuildMode.Repair);
+        Job job = Service().Start(RebuildMode.Repair).Job;
         int exit = await job.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
         exit.ShouldBe(0);
@@ -160,21 +162,79 @@ public sealed class ProjectionRebuildServiceTests : IAsyncDisposable
     {
         runner.On("dotnet", Tool, 0).On("docker", ListQueues, 0, "[", """{"name":"ordering-commands","messages":0}""", "]");
 
-        Job job = Service().Start(RebuildMode.Repair);
+        Job job = Service().Start(RebuildMode.Repair).Job;
         await job.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
         Texts(job)[^1].ShouldBe("bff-order-events: queue not declared; watch the Broker screen.");
     }
 
     [Fact]
-    public void A_second_run_while_one_is_going_returns_the_running_one()
+    public void A_second_run_of_the_same_kind_while_one_is_going_returns_the_running_one()
     {
         runner.OnLongRunning("dotnet", Tool);
         ProjectionRebuildService service = Service();
 
-        Job first = service.Start(RebuildMode.Repair);
+        Started first = service.Start(RebuildMode.Repair);
+        Started second = service.Start(RebuildMode.Repair);
 
-        service.Start(RebuildMode.Rebuild).ShouldBeSameAs(first);
+        second.Job.ShouldBeSameAs(first.Job);
+        second.Mode.ShouldBe(RebuildMode.Repair);
+    }
+
+    [Fact]
+    public void A_run_of_the_other_kind_while_one_is_going_reports_the_kind_that_is_running_and_starts_nothing()
+    {
+        runner.OnLongRunning("dotnet", Tool);
+        ProjectionRebuildService service = Service();
+
+        Started repair = service.Start(RebuildMode.Repair);
+        Started asked = service.Start(RebuildMode.Rebuild);
+
+        asked.Job.ShouldBeSameAs(repair.Job);
+        asked.Mode.ShouldBe(RebuildMode.Repair);
+        runner.Started.Any(s => s.Arguments.Contains("stop")).ShouldBeFalse("the refused rebuild must not stop the BFF");
+    }
+
+    [Fact]
+    public async Task A_run_after_the_last_one_ended_starts_a_new_job_of_whatever_kind()
+    {
+        runner.On("dotnet", Tool, 0).On("docker", ListQueues, 0, Queues(0))
+            .On("docker", Prefix + "stop web-bff", 0).On("dotnet", Tool + " -- --reset", 0).On("docker", Prefix + "start web-bff", 0);
+        ProjectionRebuildService service = Service();
+
+        Started first = service.Start(RebuildMode.Repair);
+        await first.Job.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        Started second = service.Start(RebuildMode.Rebuild);
+
+        second.Job.ShouldNotBeSameAs(first.Job);
+        second.Mode.ShouldBe(RebuildMode.Rebuild);
+        await second.Job.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task A_runner_that_throws_for_the_tool_still_has_the_bff_started_again()
+    {
+        runner.On("docker", Prefix + "stop web-bff", 0).On("docker", Prefix + "start web-bff", 0, "Started");
+        ThrowingRunner throwing = new(runner, "dotnet");
+        ComposeService compose = new(throwing, Paths, time);
+        ProjectionRebuildService service = new(
+            compose, throwing, new BrokerService(compose, Options.Create(new AdminOptions())), registry, Paths, Options.Create(new AdminOptions()), time);
+
+        Job job = service.Start(RebuildMode.Rebuild).Job;
+        int exit = await job.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        exit.ShouldBe(1);
+        runner.Started.Select(s => s.Arguments[^1]).ShouldBe(["web-bff", "web-bff"]);
+        Texts(job).ShouldContain("The tool could not run: boom");
+        Texts(job).ShouldContain("Started");
+    }
+
+    /// <summary>Throws from <c>Start</c> for one executable, as a process that cannot be started for a reason the runner does not catch.</summary>
+    private sealed class ThrowingRunner(IProcessRunner inner, string fileName) : IProcessRunner
+    {
+        public Job Start(ProcessSpec spec) => spec.FileName == fileName ? throw new InvalidOperationException("boom") : inner.Start(spec);
+
+        public Task StopAsync(Job job, CancellationToken cancellationToken) => inner.StopAsync(job, cancellationToken);
     }
 
     [Fact]
@@ -218,6 +278,31 @@ public sealed class ProjectionRebuildServiceTests : IAsyncDisposable
             DateTime.UtcNow.ShouldBeLessThan(until, "the run never reached the awaited state");
             await Task.Delay(10, TestContext.Current.CancellationToken);
         }
+    }
+}
+
+public sealed class ProjectionRebuildAnswerTests
+{
+    private static readonly Job Running = new("job-9", new ProcessSpec("bff-replay", [], "/repo/backend"), TimeProvider.System);
+
+    [Fact]
+    public void A_run_of_the_kind_asked_for_is_accepted_whether_it_was_just_started_or_already_going()
+    {
+        IResult result = BrokerEndpoints.Answer(new Started(Running, RebuildMode.Rebuild), RebuildMode.Rebuild).Result;
+
+        result.ShouldBeOfType<Accepted<JobSummary>>().Value!.Id.ShouldBe("job-9");
+    }
+
+    [Theory]
+    [InlineData(RebuildMode.Repair, RebuildMode.Rebuild, "A repair (job job-9) is still running, so this rebuild was not started.")]
+    [InlineData(RebuildMode.Rebuild, RebuildMode.Repair, "A rebuild (job job-9) is still running, so this repair was not started.")]
+    public void A_run_of_the_other_kind_is_refused_with_a_conflict_naming_the_one_going(RebuildMode going, RebuildMode wanted, string detail)
+    {
+        IResult result = BrokerEndpoints.Answer(new Started(Running, going), wanted).Result;
+
+        ProblemHttpResult problem = result.ShouldBeOfType<ProblemHttpResult>();
+        problem.StatusCode.ShouldBe(StatusCodes.Status409Conflict);
+        problem.ProblemDetails.Detail.ShouldStartWith(detail);
     }
 }
 

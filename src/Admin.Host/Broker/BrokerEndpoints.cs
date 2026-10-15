@@ -20,8 +20,8 @@ public static class BrokerEndpoints
 
         // A repair deletes nothing, so it takes no confirmation; a rebuild deletes the projection and takes the typed
         // one the Stack screen's wipe takes (spec §8), spelled as the command.
-        app.MapPost("/api/broker/projection/repair", (ProjectionRebuildService rebuild) =>
-            TypedResults.Accepted((string?)null, JobSummary.Of(rebuild.Start(RebuildMode.Repair))));
+        app.MapPost("/api/broker/projection/repair", Results<Accepted<JobSummary>, ProblemHttpResult> (ProjectionRebuildService rebuild) =>
+            Answer(rebuild.Start(RebuildMode.Repair), RebuildMode.Repair));
 
         app.MapPost("/api/broker/projection/rebuild", Results<Accepted<JobSummary>, ProblemHttpResult> (RebuildRequest request, ProjectionRebuildService rebuild) =>
             request.Confirm != ProjectionRebuildService.RebuildConfirm
@@ -29,8 +29,20 @@ public static class BrokerEndpoints
                     statusCode: StatusCodes.Status400BadRequest,
                     title: "Confirmation required",
                     detail: $"A rebuild deletes the BFF's order projection first. Send confirm: \"{ProjectionRebuildService.RebuildConfirm}\".")
-                : TypedResults.Accepted((string?)null, JobSummary.Of(rebuild.Start(RebuildMode.Rebuild))));
+                : Answer(rebuild.Start(RebuildMode.Rebuild), RebuildMode.Rebuild));
 
         return app;
     }
+
+    /// <summary>
+    /// The run that was started, or the same kind still going. A different kind still going is refused, naming it: a
+    /// confirmed rebuild that came back as someone else's repair would be a request swallowed without a word.
+    /// </summary>
+    internal static Results<Accepted<JobSummary>, ProblemHttpResult> Answer(Started started, RebuildMode wanted) =>
+        started.Mode == wanted
+            ? TypedResults.Accepted((string?)null, JobSummary.Of(started.Job))
+            : TypedResults.Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "A run is already going",
+                detail: $"A {started.Mode.ToString().ToLowerInvariant()} (job {started.Job.Id}) is still running, so this {wanted.ToString().ToLowerInvariant()} was not started. Wait for it to end.");
 }
