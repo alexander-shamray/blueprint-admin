@@ -176,30 +176,32 @@ opens those files:
   where one can be, and says where it is not.
 - **The task list is `TODO.md` at the main checkout's root: gitignored,
   local, never committed.** It is for the user, and it lists open PRs
-  (with the issues each closes) and open issues with no PR. Every agent
-  that works here keeps it true **at each of these moments, in the same
-  act**, and a row never sits in two sections:
-  - **Work starts on an issue** (a branch or worktree is created for it):
-    its row leaves **Remaining** and enters **In progress** with its
-    branch, *before* the session enters the worktree.
-  - **A PR opens**: the **In progress** row for the work names the PR and
-    the issues it closes. Work no issue started has no row yet: it gets one
-    now, with `—` for the issue.
-  - **A PR merges, or an issue closes**: the row is deleted, with no note
-    of what landed, which git and the closed issues already keep. Whatever
-    the work found and filed gets its row in its wave.
-  - **Work stops without landing** (a PR closed unmerged, one merged
-    without closing its issue, or a branch abandoned): an issue still open
-    goes back to its wave; work with no issue has nothing to go back to, so
-    its row is deleted.
-  - **An issue is filed, reopened or labelled `paused`**: it gets a row in
-    its wave, or in **Paused**.
+  (with the issues each closes) and open issues with no PR. **Where a row
+  sits is a function of state, so every agent that works here re-derives it
+  at each event** (work starts on an issue, a PR opens, merges or closes,
+  an issue is filed, closed, reopened, paused or unpaused, work is
+  abandoned) **and writes the result in the same act**:
+
+  | State | Where |
+  |---|---|
+  | Open issue, nothing built for it | **Remaining**, in its wave |
+  | Open issue labelled `paused` | **Paused**, whatever else is true of it |
+  | Open issue with a branch, a worktree or an open PR | **In progress**, with the branch or PR |
+  | Open PR | **In progress**, one row naming the issues it closes that are still open, or `—` when there are none |
+  | Closed issue; merged or closed PR | no row, and no note of what landed, which git and the closed issues already keep |
+
+  Two things follow. A PR closed unmerged, or merged without closing its
+  issue, leaves the issue open, so the issue's row goes back to its wave; and
+  whatever the work found and filed has its own row at once, by the same
+  table. The *before* matters too: the move from **Remaining** to **In
+  progress** is made before the session enters the worktree.
 
   Only the main checkout's copy counts, never one in a worktree — and a
   session inside `.claude/worktrees/` is refused that copy by Claude Code's
-  own isolation. So the first move is made in the main checkout before
-  `EnterWorktree` and the deletion after `ExitWorktree`; a session that
-  cannot reach it carries the update in the report as owed. The file's own
+  own isolation. So the move in is made in the main checkout before
+  `EnterWorktree` and the removal after `ExitWorktree`; every event that
+  happens inside the worktree (a PR opens, a filing, work stops) is carried
+  in the report as owed and made once the session is back. The file's own
   note, topmost, holds the section and column rules. When in doubt, rebuild
   it from `gh pr list --limit 1000` and `gh issue list --limit 1000`,
   because the default of 30 truncates silently.
