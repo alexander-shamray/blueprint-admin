@@ -87,11 +87,16 @@ export class BrokerPage {
     this.host.projectionRepair().subscribe(this.projectionStarted);
   }
 
-  /** The tool with `--reset` between a stop and a start of the BFF; only with the typed confirmation. */
+  /** The tool with `--reset` between a stop and a start of the BFF; only with the typed confirmation, which a refusal leaves in the box so a retry is not retyped. */
   rebuild(): void {
     if (!this.canRebuild()) return;
-    this.host.projectionRebuild(this.confirmText()).subscribe(this.projectionStarted);
-    this.confirmText.set('');
+    this.host.projectionRebuild(this.confirmText()).subscribe({
+      next: (job) => {
+        this.confirmText.set('');
+        this.projectionStarted.next(job);
+      },
+      error: this.projectionStarted.error,
+    });
   }
 
   /** Reads a parked queue's messages with the backend's tool, which puts each back flagged redelivered. */
