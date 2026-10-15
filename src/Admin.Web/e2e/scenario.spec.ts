@@ -51,6 +51,29 @@ test('the cancel script cancels the placed order and reads it back cancelled', a
   await expect(steps.nth(5).locator('.detail')).toContainText('The order read shows cancelled at');
 });
 
+// The fake scripts the end from the request, as the platform does from run-locally.md's cause
+// (FakeOrders.EndOf): a price ending .01 is declined, stock below one is out of stock, a second after the place.
+for (const [script, ended, stock] of [
+  ['declined', 'declined', 'set to 10'],
+  ['out-of-stock', 'out_of_stock', 'set to 0'],
+] as const) {
+  test(`the ${script} script sets its cause and reads the order back ${ended}`, async ({ page }) => {
+    await page.goto('/scenario');
+
+    await page.getByLabel('Script').selectOption(script);
+    await page.getByRole('button', { name: 'Run' }).click();
+
+    const steps = page.locator('ol.steps li.step');
+    await expect(steps).toHaveCount(6);
+    await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(6, WATCH);
+    await expect(steps.nth(2).locator('.request')).toHaveText(
+      /^PUT http:\/\/localhost:5000\/api\/v1\/inventory\/stock\/[0-9a-f-]{36}$/,
+    );
+    await expect(steps.nth(2).locator('.detail')).toContainText(stock);
+    await expect(steps.nth(5).locator('.detail')).toContainText(`The order read shows ${ended} at`);
+  });
+}
+
 test('a user without the permissions stops the run at the publish', async ({ page }) => {
   await page.goto('/scenario');
 

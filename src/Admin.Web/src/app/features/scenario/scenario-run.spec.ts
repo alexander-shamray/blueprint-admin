@@ -9,6 +9,7 @@ import {
   secondsBetween,
   stepCorrelationId,
   verdict,
+  withField,
   withProductId,
 } from './scenario-run';
 
@@ -249,6 +250,64 @@ describe('verdict', () => {
     expect(verdict('cancelled', read('dispatched', { dispatched: '2026-10-05T12:00:02Z' }))).toEqual({
       kind: 'waiting',
     });
+  });
+});
+
+describe('verdict for the saga refusals', () => {
+  it.each(['declined', 'out_of_stock'] as const)('reaches %s only on that status, at the cancel time', (key) => {
+    expect(verdict(key, read('placed'))).toEqual({ kind: 'waiting' });
+    expect(verdict(key, read(key, { cancelled: '2026-10-05T12:00:01Z' }))).toEqual({
+      kind: 'reached',
+      at: '2026-10-05T12:00:01Z',
+    });
+  });
+
+  it('fails a refusal watch on any other end, naming it, rather than waiting out the cap', () => {
+    expect(verdict('declined', read('out_of_stock'))).toEqual({
+      kind: 'failed',
+      reason: 'The order ended out_of_stock, not declined.',
+    });
+    expect(verdict('out_of_stock', read('cancelled'))).toEqual({
+      kind: 'failed',
+      reason: 'The order ended cancelled, not out_of_stock.',
+    });
+    expect(verdict('declined', read('delivered'))).toEqual({
+      kind: 'failed',
+      reason: 'The order ended delivered, not declined.',
+    });
+  });
+});
+
+describe('withField', () => {
+  it('sets one field and keeps the rest', () => {
+    expect(JSON.parse(withField('{"name":"Walnut desk","amount":19.99}', 'amount', 10.01))).toEqual({
+      name: 'Walnut desk',
+      amount: 10.01,
+    });
+  });
+
+  it('returns a body that is not a JSON object as it was', () => {
+    expect(withField('not json', 'amount', 1)).toBe('not json');
+    expect(withField('[1]', 'amount', 1)).toBe('[1]');
+  });
+});
+
+describe('the unhappy scripts', () => {
+  it('state their cause the way run-locally.md does: a .01 price, and stock below one', () => {
+    expect(SCRIPTS.declined.amount).toBe(10.01);
+    expect(SCRIPTS.declined.onHand).toBeGreaterThan(0);
+    expect(SCRIPTS['out-of-stock'].onHand).toBe(0);
+    expect(SCRIPTS['out-of-stock'].amount).toBeUndefined();
+  });
+
+  it('resolve the stock write from the catalog beside the calls every script makes', () => {
+    const view: ApiCatalogView = {
+      sources: [],
+      operations: Object.values(SCENARIO_OPERATIONS).map((id) => op(id)),
+    };
+
+    expect(resolveOperations(view, SCRIPTS.declined).operations?.stock?.id).toBe('inventory:SetOnHand');
+    expect(resolveOperations(view, SCRIPTS.deliver).operations?.stock).toBeUndefined();
   });
 });
 
