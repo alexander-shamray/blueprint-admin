@@ -1,0 +1,100 @@
+# Token usage — the measurements
+
+What `tools/token-usage/` reported, and the other measurements
+[`token-plan.md`](token-plan.md)'s steps rest on, one dated section per
+measurement. Every figure is a record of its day and none is kept current;
+a later measurement is a new section, never an edit of an old one.
+
+## Running the report
+
+`tools/token-usage/` is ported unchanged from
+`alexander-shamray/blueprint-backend`'s, which owns it; its
+[`README`](../tools/token-usage/README.md) says what each column and view
+means. It is stdlib only and reads Claude Code's local transcripts, so a
+baseline is measured on the machine that ran the sessions.
+
+```bash
+py -3.12 tools/token-usage/token_usage.py                       # all history
+py -3.12 tools/token-usage/token_usage.py --since 2026-10-01    # a window
+py -3.12 tools/token-usage/token_usage.py --session <id>        # one session
+py -3.12 tools/token-usage/token_usage.py --since 2026-10-01 --spawns 40
+py -3.12 tools/token-usage/token_usage.py --since 2026-10-01 --tools 30
+py -3.12 tools/token-usage/token_usage.py --since 2026-10-01 --docs
+py -3.12 tools/token-usage/token_usage.py --since 2026-10-01 --models
+cd tools/token-usage && py -3.12 -m unittest                    # its suite
+```
+
+## 2026-10-15 — the baseline, the owner's machine
+
+Measured by the ported report at `main` 854ee92, over every transcript
+under the main checkout's directory and the 37 worktree directories beside
+it. Attribution is the backend's: a command owns everything until the next
+prompt a person types.
+
+### All history, 2026-09-15 to 2026-10-15
+
+No `--since`, so this is a total and not a rate. 10,633 responses in 587
+contexts re-sent 2.10B tokens from the cache and wrote 37.3M to it, an input
+equivalent of 270M; output was 6.2M. 121.5M of that input equivalent, 45%,
+was spent after a wake.
+
+| Who | Input equivalent | Contexts | Calls | Mean context per call |
+|---|---|---|---|---|
+| `main`, no command | 110.5M | 394 | 4,040 | 216k |
+| `/ship`, `main` | 77.6M | 30 | 2,468 | 259k |
+| `skill:ship`, `main` | 21.7M | 16 | 1,001 | 179k |
+| `skill:commit`, `main` | 16.0M | 7 | 488 | 302k |
+| `skill:branch`, `main` | 13.1M | 4 | 291 | 418k |
+| `bug-auditor`, every command | 20.7M | 138 | 1,742 | 56k |
+
+Main sessions are 89% of the spend and subagents 11%: the largest cost here
+is the context a long session re-sends, not the agents it starts.
+`bug-auditor` is 70% of the subagent share.
+
+### Since 2026-10-01
+
+The transcripts hold responses only from 2026-10-03 to 2026-10-15; the span
+2026-10-08 to 2026-10-14 is absent, so `--since 2026-10-08` reports one day
+and is not a window. 5,098 calls in 289 contexts, an input equivalent of
+126.7M, 33.4M of it after a wake (26%). The same view with `--models`: the
+`/ship` main row ran on `claude-opus-5-5` for 20 of 26 contexts and
+`claude-sonnet-5-5` for the rest, and its mean context was 278k and 183k a
+call respectively.
+
+### One named `/ship` run
+
+Session `698dc312-2b5e-4080-a6d9-6e17f0d6d782`, the run that took
+`fix/drift-gates-catch-up-with-backend` to PR #132, merged as 7a2060c.
+
+| Who | Contexts | Calls | Mean context | Input equivalent | After a wake |
+|---|---|---|---|---|---|
+| `/ship`, `main` | 1 | 88 | 228k | 2.37M | 0.74M |
+| `/ship`, `bug-auditor` | 3 | 18 | 44k | 0.27M | 0.07M |
+| no command, `main` | 1 | 7 | 80k | 0.23M | 0 |
+| **Total** | 5 | 113 | 189k | **2.87M** | 0.81M |
+
+Attribution holds on it: the command's one prompt owns 88 calls and the three
+`bug-auditor` rounds the run dispatched sit under `/ship`, not under a
+command of their own. For 2026-10-15 as a whole, `--tools` puts `/ship`'s
+`Bash` results at 73k tokens across 210 results and its `Read` results at
+22k: what a long main session's context is made of.
+
+### What every turn and every `/ship` carries
+
+Bytes over four, which is close for prose; none of this is a transcript
+figure.
+
+| | Tokens |
+|---|---|
+| `CLAUDE.md` | 3.1k, resident in every turn |
+| `docs/harness-boundaries.md` | 5.8k, read whole before touching `.claude/` |
+| `ship.md` | 33.7k, resident for the rest of a `/ship` run |
+| `bug-sweep.md`, `security-sweep.md` | 16.6k, 12.8k |
+| `branch.md`, `review-branch.md`, `review-copilot.md` | 6.9k, 5.9k, 5.6k |
+| `review-grok.md`, `pr.md`, `style-pass.md`, `commit.md` | 4.7k, 3.1k, 2.8k, 1.1k |
+| All ten commands | 93.0k |
+| Four agent profiles and two skills | 10.7k |
+
+A `/ship` run loads `ship`, `branch`, `commit`, `pr` and `review-copilot`
+through the `Skill` tool, with `CLAUDE.md`: about 54k tokens of this
+repository's text, re-sent on every later turn.
