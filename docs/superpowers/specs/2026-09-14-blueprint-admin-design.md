@@ -358,7 +358,7 @@ listed job. The real run with `--execute` takes the typed confirmation
 records no incident could need, writes them under the temp directory instead.
 The host takes the real run on its own; it is the screen that offers it only
 for the message and verb a dry run was last started for, and the dry run's
-output, beside the button, says what the real run would do. A stderr line the tool
+output, in the job pane below the messages, says what the real run would do. A stderr line the tool
 prefixes `unrecorded` is the last copy of a message it took and could not
 record, so the job keeps it in a file beside the record and says where. The
 drift gate holds the tool's path, the account, the variable, the prefix and the
