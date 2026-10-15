@@ -6,7 +6,9 @@ import { PUBLISH_OPERATION } from '../api/api-page';
  * the watches that read the order back through the BFF's order read until it shows a step.
  */
 export type StepKey =
+  | 'upload'
   | 'publish'
+  | 'thumbnail'
   | 'drain'
   | 'quote'
   | 'stock'
@@ -38,7 +40,7 @@ export function isWatch(key: StepKey): key is WatchKey {
   return WATCHES.includes(key);
 }
 
-export type ScriptKey = 'deliver' | 'cancel' | 'declined' | 'out-of-stock';
+export type ScriptKey = 'deliver' | 'cancel' | 'declined' | 'out-of-stock' | 'image';
 
 export interface Script {
   title: string;
@@ -53,7 +55,13 @@ export interface Script {
   onHand?: number;
 }
 
-export const SCRIPT_KEYS: readonly ScriptKey[] = ['deliver', 'cancel', 'declined', 'out-of-stock'];
+export const SCRIPT_KEYS: readonly ScriptKey[] = [
+  'deliver',
+  'cancel',
+  'declined',
+  'out-of-stock',
+  'image',
+];
 
 /** run-locally.md, "A declined payment is caused by the amount": a price ending `.01` is `card_declined`. */
 const DECLINED_AMOUNT = 10.01;
@@ -82,6 +90,14 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
     amount: DECLINED_AMOUNT,
     onHand: STOCKED,
   },
+  // A script of its own, not two steps woven into the order scripts: the store is not the saga, and an order script
+  // that failed on a broken store would hide the saga regression it exists to find.
+  image: {
+    title: 'Product with an image',
+    intro:
+      'Ask the BFF for a pre-signed upload, PUT an image to the object store, publish a product with the key it returned, read the product back, and fetch its thumbnail from image-edge as a buyer\'s browser would.',
+    steps: ['upload', 'publish', 'thumbnail'],
+  },
   'out-of-stock': {
     title: 'Reservation failed',
     intro:
@@ -92,7 +108,9 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
 };
 
 export const STEP_TITLES: Record<StepKey, string> = {
+  upload: 'Upload a product image',
   publish: 'Publish a product',
+  thumbnail: 'Read the image back through the edge',
   drain: 'Wait for the projection',
   quote: 'Quote a basket',
   stock: 'Set the stock on hand',
@@ -122,7 +140,15 @@ export const WATCHING_FOR: Record<WatchKey, string> = {
 };
 
 /** The calls the steps make, each by its role. */
-export type OperationRole = 'publish' | 'stock' | 'quote' | 'order' | 'cancel' | 'read';
+export type OperationRole =
+  | 'image'
+  | 'publish'
+  | 'product'
+  | 'stock'
+  | 'quote'
+  | 'order'
+  | 'cancel'
+  | 'read';
 
 /**
  * The catalog operation each role sends, by the id the host gives it: `<source>:<operationId>` for
@@ -131,7 +157,9 @@ export type OperationRole = 'publish' | 'stock' | 'quote' | 'order' | 'cancel' |
  * example, which `RunLocallyExamples` owns.
  */
 export const SCENARIO_OPERATIONS: Record<OperationRole, string> = {
+  image: 'bff:IssueProductImageUpload',
   publish: `catalog:${PUBLISH_OPERATION}`,
+  product: 'catalog:GetProduct',
   stock: 'inventory:SetOnHand',
   quote: 'bff:Quote',
   order: 'ordering:PlaceOrder',
@@ -142,6 +170,8 @@ export const SCENARIO_OPERATIONS: Record<OperationRole, string> = {
 /** The role a step sends as; the drain asks the broker and sends none. */
 export function roleOf(key: StepKey): OperationRole | null {
   if (key === 'drain') return null;
+  if (key === 'upload') return 'image';
+  if (key === 'thumbnail') return 'product';
   return isWatch(key) ? 'read' : key;
 }
 
@@ -195,7 +225,7 @@ export function idFrom(body: string): string | null {
  * was. The scripts set only what run-locally.md names as the cause: the publish's `amount`, the
  * stock write's `onHand`.
  */
-export function withField(body: string, name: string, value: number): string {
+export function withField(body: string, name: string, value: number | string): string {
   let parsed: unknown;
   try {
     parsed = JSON.parse(body);
@@ -342,4 +372,69 @@ export function secondsBetween(from: string | null, to: string): number | null {
   if (!from) return null;
   const ms = Date.parse(to) - Date.parse(from);
   return Number.isFinite(ms) ? Math.round(ms / 100) / 10 : null;
+}
+
+/** What the BFF's `POST /bff/v1/product-images` returns: the pre-signed URL, the headers it signed, and the key to publish with. */
+export interface ImageUpload {
+  uploadUrl: string;
+  headers: Record<string, string>;
+  key: string;
+}
+
+/**
+ * The upload the BFF issued (blueprint-backend `ProductImageUpload`), or null for a body that is not one, so
+ * a malformed answer stops the run at the step that produced it instead of PUTting to nowhere.
+ */
+export function uploadFrom(body: string): ImageUpload | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const { uploadUrl, headers, key } = parsed as Record<string, unknown>;
+  if (typeof uploadUrl !== 'string' || typeof key !== 'string' || !uploadUrl || !key) return null;
+  const signed: Record<string, string> = {};
+  if (headers && typeof headers === 'object' && !Array.isArray(headers)) {
+    for (const [name, value] of Object.entries(headers)) {
+      if (typeof value === 'string') signed[name] = value;
+    }
+  }
+  return { uploadUrl, headers: signed, key };
+}
+
+/** The `thumbnailUrl` of a product read, or null where the product carries none (it has no image). */
+export function thumbnailFrom(body: string): string | null {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    const url = (parsed as Record<string, unknown>)['thumbnailUrl'];
+    return typeof url === 'string' && url ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+/** One response header's first value, found without regard to case, as HTTP names ignore it. */
+export function headerOf(headers: Record<string, string[]>, name: string): string | null {
+  const found = Object.entries(headers).find(([key]) => key.toLowerCase() === name.toLowerCase());
+  return found?.[1][0] ?? null;
+}
+
+/**
+ * What a buyer's browser needs of the stored image: the edge answered, said it is an image, and set `nosniff`, which
+ * the store does not and the edge must (blueprint-backend `deploy/compose/object-store/edge.conf`). Null is a pass;
+ * otherwise the reason it is not one.
+ */
+export function imageFault(status: number, headers: Record<string, string[]>): string | null {
+  if (status < 200 || status >= 300) return `The edge answered ${status}, not the image.`;
+  const type = headerOf(headers, 'Content-Type');
+  if (!type?.toLowerCase().startsWith('image/')) {
+    return `The edge served ${type ?? 'no content type'}, not an image.`;
+  }
+  if (headerOf(headers, 'X-Content-Type-Options')?.toLowerCase() !== 'nosniff') {
+    return 'The edge did not set X-Content-Type-Options: nosniff.';
+  }
+  return null;
 }

@@ -37,10 +37,13 @@ import {
   WATCHING_FOR,
   WatchKey,
   idFrom,
+  imageFault,
   orderRead,
   resolveOperations,
   secondsBetween,
   stepCorrelationId,
+  thumbnailFrom,
+  uploadFrom,
   verdict,
   withField,
   withProductId,
@@ -258,14 +261,26 @@ export class ScenarioPage {
   ): Promise<void> {
     let productId = '';
     let orderId = '';
+    let imageKey = '';
 
     for (const key of script.steps) {
       switch (key) {
+        case 'upload': {
+          const uploaded = await this.upload(operations.image!, run, identity);
+          if (uploaded === null) return;
+          imageKey = uploaded;
+          break;
+        }
+        case 'thumbnail':
+          if (!(await this.thumbnail(operations.product!, run, identity, productId))) return;
+          break;
         case 'publish': {
           const fresh = withFreshCommandId(operations.publish!.exampleBody ?? '', this.uuid());
           // An unhappy branch's cause that is a price is set here and nowhere else.
-          const body =
+          const priced =
             script.amount === undefined ? fresh : withField(fresh, 'amount', script.amount);
+          // The key the upload returned, never a URL (run-locally.md, "Attach a product image by hand").
+          const body = imageKey ? withField(priced, 'imageKey', imageKey) : priced;
           const id = await this.send(key, operations.publish!, run, identity, body, {}, true);
           if (id === null) return;
           productId = id;
@@ -307,6 +322,178 @@ export class ScenarioPage {
           if (!(await this.watch(key, operations.read!, run, identity, orderId))) return;
       }
     }
+  }
+
+  /**
+   * run-locally.md's "Attach a product image by hand", first two calls: ask the BFF for a pre-signed PUT, then PUT the
+   * image to the store. Resolves to the key to publish with, and to null once a failure has been recorded on the step.
+   * The second call is the host's (`POST /api/product-images/upload`), because the proxy's body is text and the image is not.
+   */
+  private async upload(
+    operation: ApiOperation,
+    run: string,
+    identity: Identity,
+  ): Promise<string | null> {
+    if (this.destroyed) return null;
+
+    const key: StepKey = 'upload';
+    const correlationId = stepCorrelationId(run, key);
+    const url = buildUrl(operation.url, {}, {});
+    this.patch(key, { state: 'running', correlationId, request: `${operation.method} ${url}` });
+
+    const issued = await this.exchange(
+      key,
+      operation.method,
+      url,
+      operation.exampleBody ?? '',
+      identity,
+      correlationId,
+    );
+    if (issued === null) return null;
+    if (issued.status < 200 || issued.status >= 300) {
+      this.patch(key, {
+        state: 'failed',
+        status: issued.status,
+        body: issued.body,
+        detail: `Answered ${issued.status}.`,
+      });
+      return null;
+    }
+    const signed = uploadFrom(issued.body);
+    if (signed === null) {
+      this.patch(key, {
+        state: 'failed',
+        status: issued.status,
+        body: issued.body,
+        detail: `Answered ${issued.status}, but not with the upload URL and key the next steps need.`,
+      });
+      return null;
+    }
+
+    // The query carries the signature: it is long, expires in minutes and says nothing a reader needs.
+    const target = signed.uploadUrl.split('?')[0];
+    this.patch(key, { request: `PUT ${target}`, detail: 'Signed; sending the image to the store.' });
+    let put: ProxyResult;
+    try {
+      put = await firstValueFrom(
+        this.host.uploadProductImage({ uploadUrl: signed.uploadUrl, headers: signed.headers }),
+      );
+    } catch (e: unknown) {
+      this.patch(key, { state: 'failed', status: null, body: null, detail: describe(e) });
+      return null;
+    }
+    if (put.outcome === 'unreached') {
+      this.patch(key, {
+        state: 'failed',
+        status: null,
+        body: null,
+        detail: `No answer from the object store: ${put.error}`,
+      });
+      return null;
+    }
+    if (put.outcome !== 'responded') {
+      this.patch(key, { state: 'failed', status: put.status, body: put.body, detail: 'Refused.' });
+      return null;
+    }
+    if (put.status < 200 || put.status >= 300) {
+      this.patch(key, {
+        state: 'failed',
+        status: put.status,
+        body: put.body,
+        detail: `The store answered ${put.status} to the PUT.`,
+      });
+      return null;
+    }
+
+    this.patch(key, {
+      state: 'ok',
+      status: put.status,
+      body: issued.body,
+      detail: `Signed ${signed.key}, and the store answered ${put.status} to the PUT.`,
+    });
+    return signed.key;
+  }
+
+  /**
+   * The last two calls of the same paragraph: read the product back, and fetch its `thumbnailUrl` from the edge. A product with
+   * no thumbnail means the publish dropped the image; an edge that answers anything but an image with `nosniff` is a store
+   * a buyer would see broken, which is what this step exists to fail on.
+   */
+  private async thumbnail(
+    operation: ApiOperation,
+    run: string,
+    identity: Identity,
+    productId: string,
+  ): Promise<boolean> {
+    if (this.destroyed) return false;
+
+    const key: StepKey = 'thumbnail';
+    const correlationId = stepCorrelationId(run, key);
+    const path = { [operation.pathParameters[0]?.name ?? 'id']: productId };
+    const url = buildUrl(operation.url, path, {});
+    this.patch(key, { state: 'running', correlationId, request: `${operation.method} ${url}` });
+
+    const read = await this.exchange(key, operation.method, url, '', identity, correlationId);
+    if (read === null) return false;
+    if (read.status < 200 || read.status >= 300) {
+      this.patch(key, {
+        state: 'failed',
+        status: read.status,
+        body: read.body,
+        detail: `Answered ${read.status}.`,
+      });
+      return false;
+    }
+    const thumbnail = thumbnailFrom(read.body);
+    if (thumbnail === null) {
+      this.patch(key, {
+        state: 'failed',
+        status: read.status,
+        body: read.body,
+        detail: 'The product has no thumbnailUrl, so the image did not attach.',
+      });
+      return false;
+    }
+
+    this.patch(key, { request: `HEAD ${thumbnail}`, detail: 'Read the product; asking the edge for its image.' });
+    let head: ProxyResult;
+    try {
+      // Anonymous, as a buyer's browser is: the edge serves products/ to anyone (blueprint-backend edge.conf).
+      head = await firstValueFrom(
+        this.host.proxy({
+          method: 'HEAD',
+          url: thumbnail,
+          headers: {},
+          body: null,
+          identity: null,
+          correlationId,
+        }),
+      );
+    } catch (e: unknown) {
+      this.patch(key, { state: 'failed', status: null, body: null, detail: describe(e) });
+      return false;
+    }
+    if (head.outcome !== 'responded') {
+      this.patch(key, {
+        state: 'failed',
+        status: null,
+        body: null,
+        detail:
+          head.outcome === 'unreached'
+            ? `No answer from the edge: ${head.error}`
+            : `Refused: ${head.status}.`,
+      });
+      return false;
+    }
+
+    const fault = imageFault(head.status, head.headers);
+    this.patch(key, {
+      state: fault === null ? 'ok' : 'failed',
+      status: head.status,
+      body: read.body,
+      detail: fault ?? `The edge answered ${head.status} with an image and nosniff.`,
+    });
+    return fault === null;
   }
 
   /**
