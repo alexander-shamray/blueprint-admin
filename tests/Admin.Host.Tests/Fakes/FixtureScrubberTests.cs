@@ -68,10 +68,11 @@ public sealed class FixtureScrubberTests
     {
         string raw = $$"""
             {"access_token":"{{Jwt}}","password":"demo","h":"Bearer 0123456789abcdef0123",
-             "Authorization":["Basic ZGVtbzpkZW1v"],"body":"username=demo&password=demo"}
+             "Authorization":["Basic ZGVtbzpkZW1v"],"body":"username=demo&password=demo",
+             "broker":"amqp://bff-svc:local-dev-bff@127.0.0.1:5672"}
             """;
 
-        FixtureScrubber.Findings(raw).Count.ShouldBe(6);
+        FixtureScrubber.Findings(raw).Count.ShouldBe(7);
 
         string once = FixtureScrubber.Scrub(raw);
 
@@ -90,6 +91,22 @@ public sealed class FixtureScrubberTests
     {
         FixtureScrubber.Scrub("""{"clientSecret":"s"}""").ShouldBe("""{"clientSecret":"<scrubbed>"}""");
         FixtureScrubber.Scrub("clientSecret=s&x=1").ShouldBe("clientSecret=<scrubbed>&x=1");
+    }
+
+    [Fact]
+    public void A_connection_strings_password_is_scrubbed_and_the_options_after_it_kept()
+    {
+        FixtureScrubber.Scrub("Server=s;User Id=sa;Password=pw;TrustServerCertificate=True")
+            .ShouldBe("Server=s;User Id=sa;Password=<scrubbed>;TrustServerCertificate=True");
+        FixtureScrubber.Scrub("Server=s;Password=pw").ShouldBe("Server=s;Password=<scrubbed>");
+    }
+
+    [Fact]
+    public void A_url_without_userinfo_is_left_alone_whatever_its_query_holds()
+    {
+        const string url = "https://h:443?e=a@b";
+
+        FixtureScrubber.Scrub(url).ShouldBe(url);
     }
 
     [Fact]

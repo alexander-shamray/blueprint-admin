@@ -34,8 +34,9 @@ public sealed class ProjectionRebuildService(
     public const string RebuildConfirm = "bff-replay --reset";
 
     /// <summary>
-    /// What the tool cannot do, each line with the words of <c>tools/bff-replay/README.md</c> it restates. The drift gate
-    /// reads the README for every anchor, so a limit the owner stops stating fails there rather than staying on screen.
+    /// What the tool cannot do, each line with the words of blueprint-backend's <c>tools/bff-replay/README.md</c> it
+    /// restates. The drift gate reads the README for every anchor (tests/Admin.Host.Tests/Drift/ReplayDriftTests.cs), so
+    /// a limit the owner stops stating fails there rather than staying on screen.
     /// </summary>
     public static readonly ReplayLimit[] Limits =
     [
@@ -55,25 +56,31 @@ public sealed class ProjectionRebuildService(
 
     private readonly Lock gate = new();
     private Job? current;
+    private RebuildMode currentMode;
 
     public static ProjectionPlan Plan() => new(PlatformQueues.BffProjection, RebuildConfirm, [.. Limits.Select(l => l.Text)]);
 
-    /// <summary>Starts a run, or returns the one still going: two at once would delete and send over each other.</summary>
-    public Job Start(RebuildMode mode)
+    /// <summary>
+    /// Starts a run. Two at once would delete and send over each other, so a run still going answers instead: the same
+    /// kind of run is returned as it is (a second click is idempotent), and a different kind is <see cref="Started.Mode"/>
+    /// saying so, for the caller to refuse rather than show the wrong job under a confirmed request.
+    /// </summary>
+    public Started Start(RebuildMode mode)
     {
         lock (gate)
         {
             if (current is { Status.State: JobState.Running } running)
             {
-                return running;
+                return new Started(running, currentMode);
             }
 
             string[] arguments = mode == RebuildMode.Rebuild ? ["--reset"] : [];
             Job job = registry.Create(new ProcessSpec("bff-replay", arguments, paths.BackendDir));
             current = job;
+            currentMode = mode;
             _ = Task.Run(() => RunAsync(job, mode));
 
-            return job;
+            return new Started(job, mode);
         }
     }
 
@@ -108,7 +115,19 @@ public sealed class ProjectionRebuildService(
             return false;
         }
 
-        bool replayed = await StepAsync(job, Replay(reset: true));
+        bool replayed;
+
+        try
+        {
+            replayed = await StepAsync(job, Replay(reset: true));
+        }
+        catch (Exception ex)
+        {
+            // Anything the runner or the follow throws once the BFF is stopped is the tool not finishing, and must not
+            // skip the start below.
+            job.Append(OutputStream.Stderr, $"The tool could not run: {ex.Message}");
+            replayed = false;
+        }
 
         if (!replayed)
         {

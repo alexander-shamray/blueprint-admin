@@ -52,8 +52,11 @@ public static partial class FixtureScrubber
     [GeneratedRegex(@"(""(?:password|client_?secret)""\s*:\s*)""(?!<scrubbed>"")(?:\\.|[^""\\])*""", RegexOptions.IgnoreCase)]
     private static partial Regex SecretField();
 
-    /// <summary>The password grant's own form, as a request log would hold it.</summary>
-    [GeneratedRegex(@"\b((?:password|client_?secret)=)(?!<scrubbed>)[^&\s""]+", RegexOptions.IgnoreCase)]
+    /// <summary>
+    /// The password grant's own form, as a request log would hold it. The value ends at <c>&amp;</c> or <c>;</c>, so a
+    /// connection string keeps the options that follow its password: the line a person copies must still run.
+    /// </summary>
+    [GeneratedRegex(@"\b((?:password|client_?secret)=)(?!<scrubbed>)[^&;\s""]+", RegexOptions.IgnoreCase)]
     private static partial Regex SecretForm();
 
     /// <summary>
@@ -61,6 +64,6 @@ public static partial class FixtureScrubber
     /// carries it. A URL with a port and no <c>@</c> after it, such as <c>http://localhost:5000/api</c>, has no userinfo
     /// and is left alone.
     /// </summary>
-    [GeneratedRegex(@"(\b[a-z][a-z0-9+.-]*://[^:/\s@""']+:)(?!<scrubbed>@)[^@\s/""']+(@)", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"(\b[a-z][a-z0-9+.-]*://[^:/\s@""']+:)(?!<scrubbed>@)[^@\s/?#""']+(@)", RegexOptions.IgnoreCase)]
     private static partial Regex UrlPassword();
 }

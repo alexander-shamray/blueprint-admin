@@ -175,7 +175,7 @@ public sealed class OperatorTranscriptTests
         string command = transcript.Read().Entries[0].Command;
 
         command.ShouldBe(
-            "ConnectionStrings__Bff='Server=127.0.0.1,1433;Database=Bff;User Id=sa;Password=<scrubbed>' "
+            "ConnectionStrings__Bff='Server=127.0.0.1,1433;Database=Bff;User Id=sa;Password=<scrubbed>;TrustServerCertificate=True' "
             + "ConnectionStrings__Plain=x dotnet run --project tools/bff-replay");
         command.ShouldNotContain("hunter2");
     }
