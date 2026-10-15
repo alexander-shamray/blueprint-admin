@@ -1,0 +1,92 @@
+# Token usage — the plan
+
+**Goal.** A Claude Code session here spends its tokens on the change, not on
+re-reading text the change does not need. Every turn re-sends the whole
+context, so a prompt that stays resident costs far more than its size.
+This file records where the tokens go, sequences the work that cuts them
+and names the test each step passes. It follows
+`alexander-shamray/blueprint-backend`'s `docs/token-plan.md`, which owns the
+method: measure first, one PR per step, an exit test per step.
+
+The figures are not restated here. [`token-usage.md`](token-usage.md) owns
+them, one dated section per measurement, and every number below cites it.
+
+## 1. What the baseline says
+
+From the 2026-10-15 baseline in [`token-usage.md`](token-usage.md):
+
+- **Main sessions are the spend.** Subagents are a ninth of the input
+  equivalent and `bug-auditor` most of that, so the backend's first target,
+  the `general-purpose` agents, is not the one here.
+- **A `/ship` main context is large.** Its mean is above 250k tokens a call
+  and 45% of all history's input equivalent comes after a wake, when a
+  session resumes into a context the cache may have dropped.
+- **What is resident is large and mostly unread.** `ship.md` alone is
+  about 34k tokens and the ten commands together 93k; `CLAUDE.md` is 3.1k in
+  every turn and `docs/harness-boundaries.md` 5.8k when read whole.
+
+## 2. The sequence
+
+Each step names the issue that carries it. Steps that edit `.claude/**`
+lift the edit deny for their own PR, per `harness-boundaries.md`, and land
+one at a time.
+
+### Step 1 — measure
+
+- `tools/token-usage/` ported from the backend, with its suite. **Landed.**
+- `token-usage.md` records an all-history total, a window and one named
+  `/ship` run. **Landed**, with the gap in the window noted there.
+- **Owed:** the quality sets — the issues earlier sweeps filed with the
+  commits they were found on, and the findings earlier review rounds raised
+  on merged PRs. Steps 4–6 hold recall against them, and no step that
+  shortens a prompt or changes a reviewer may claim its exit before they
+  exist.
+
+**Exit.** Attribution holds on a known session. **Passed** on the `/ship`
+run `token-usage.md` names: its 88 calls are counted under `/ship` and its
+three `bug-auditor` rounds under the same command.
+
+### Step 2 — what fills a main session
+
+Measure which tool results fill a `/ship` context (`--tools`) and cut the
+largest: `Bash` output read whole where a count would do. Add one short
+delegation rule and a rule to compact before a wait, since a wake into a
+long context re-sends all of it.
+
+**Exit.** A `/ship` main session's mean context under 200k a call and less
+than 35% of its input equivalent after a wake.
+
+### Step 3 — what every session loads
+
+- `CLAUDE.md` cut to a locator and its hard rules; every rule it drops is
+  cited from [`working-rules.md`](working-rules.md), its new owner.
+- `docs/harness-boundaries.md` gains an index, so a session reads the one
+  residual it needs.
+
+**Exit.** `CLAUDE.md` at least 40% under its 2026-10-15 size, and the lower
+per-turn resident size shown by the step 1 report. **Landed** with this
+file; the measurement of the effect waits on sessions run since.
+
+### Step 4 — local review
+
+Replace the external review loops, switched off and still resident in
+`ship.md`, with one local review. **Exit** on the review quality set.
+
+### Step 5 — the sweeps
+
+`bug-sweep.md` and `security-sweep.md` read in slices from an explicit file
+list, follow leads in round two onwards, and keep the commit of the last
+clean sweep. **Exit** on the sweep quality set.
+
+### Step 6 — the commands
+
+Each command splits into a runbook and its argument, the argument read only
+when the command is disputed. `ship.md` is the target: 134,904 bytes on
+2026-10-15. **Exit.** A `/ship` run reaches the same end state with a
+smaller resident prompt, measured by the step 1 report.
+
+## 3. What each step may not do
+
+A cut that loses a finding is not a saving. Steps 4–6 each hold recall
+against the step 1 quality sets, and until those exist they do not land.
+Steps 2 and 3 move no behaviour and need no set.
