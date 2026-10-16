@@ -100,7 +100,8 @@ keeps a small amount of state in `FakeOrders`, written by hand:
   publishes; `Stock(productId, onHand)` remembers the stock a write set. The
   first product is the recorded id, each later one a fresh id, as orders are.
 - **Orders.** `Place(productId)` decides the order's end once, at the place:
-  stock below one ends it `out_of_stock`, else a price whose minor units are
+  stock never set, or set below one, ends it `out_of_stock` (a product published a moment ago has no count, and the
+  platform's reservation fails for it as for zero), else a price whose minor units are
   `DeclinedMinorUnits` ends it `declined`. Either lands one `Step` after the
   place with nothing confirmed, despatched or delivered, and a cancel asked of
   it changes nothing. A product the fake never published takes the happy path.

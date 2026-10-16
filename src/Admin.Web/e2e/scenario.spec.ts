@@ -17,21 +17,23 @@ test('the deliver script orders and reads the order back until it is delivered, 
   await page.getByRole('button', { name: 'Run' }).click();
 
   const steps = page.locator('ol.steps li.step');
-  await expect(steps).toHaveCount(7);
-  await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(7, WATCH);
+  await expect(steps).toHaveCount(8);
+  await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(8, WATCH);
   // The fake numbers each published product apart, as it does orders, so only the first is the recorded id.
   await expect(steps.nth(0).locator('.detail')).toContainText(/Answered 200 with id [0-9a-f-]{36}\./);
   await expect(steps.nth(1).locator('app-drained-indicator')).toContainText('[drained]');
   // The order the run placed, which the fake numbers apart from any other run's.
-  const placed = (await steps.nth(3).locator('.detail').textContent())!.match(/with id ([0-9a-f-]{36})/)![1];
-  await expect(steps.nth(4).locator('.request')).toHaveText(`GET http://localhost:5000/bff/v1/orders/${placed}`);
-  await expect(steps.nth(4).locator('.detail')).toContainText('The order read shows confirmed at');
-  await expect(steps.nth(6).locator('.detail')).toContainText('The order read shows delivered at');
-  await expect(steps.nth(6).locator('.detail')).toContainText('after it was placed');
+  await expect(steps.nth(2).locator('.request')).toHaveText(/^PUT http:\/\/localhost:5000\/api\/v1\/inventory\/stock\/[0-9a-f-]{36}$/);
+  await expect(steps.nth(2).locator('.detail')).toContainText('stock on hand set to 10');
+  const placed = (await steps.nth(4).locator('.detail').textContent())!.match(/with id ([0-9a-f-]{36})/)![1];
+  await expect(steps.nth(5).locator('.request')).toHaveText(`GET http://localhost:5000/bff/v1/orders/${placed}`);
+  await expect(steps.nth(5).locator('.detail')).toContainText('The order read shows confirmed at');
+  await expect(steps.nth(7).locator('.detail')).toContainText('The order read shows delivered at');
+  await expect(steps.nth(7).locator('.detail')).toContainText('after it was placed');
 
   // The drain step asks the broker, not the platform's HTTP surface, so it has nothing to trace.
-  await expect(page.locator('a.trace-step')).toHaveCount(6);
-  await steps.nth(2).locator('a.trace-step').click();
+  await expect(page.locator('a.trace-step')).toHaveCount(7);
+  await steps.nth(3).locator('a.trace-step').click();
   await expect(page).toHaveURL(/\/trace\/scenario-[0-9a-f]{8}-quote$/);
   await expect(page.locator('p.summary')).toContainText('-quote');
 });
@@ -43,13 +45,13 @@ test('the cancel script cancels the placed order and reads it back cancelled', a
   await page.getByRole('button', { name: 'Run' }).click();
 
   const steps = page.locator('ol.steps li.step');
-  await expect(steps).toHaveCount(6);
-  await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(6, WATCH);
-  await expect(steps.nth(4).locator('.status')).toHaveText('204');
-  await expect(steps.nth(4).locator('.request')).toHaveText(
+  await expect(steps).toHaveCount(7);
+  await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(7, WATCH);
+  await expect(steps.nth(5).locator('.status')).toHaveText('204');
+  await expect(steps.nth(5).locator('.request')).toHaveText(
     /^POST http:\/\/localhost:5000\/api\/v1\/orders\/[0-9a-f-]{36}\/cancel$/,
   );
-  await expect(steps.nth(5).locator('.detail')).toContainText('The order read shows cancelled at');
+  await expect(steps.nth(6).locator('.detail')).toContainText('The order read shows cancelled at');
 });
 
 // The fake scripts the end from the request, as the platform does from run-locally.md's cause
@@ -84,10 +86,10 @@ test('the in-transit script orders to SIM-TRANSIT and reads the order back despa
   await page.getByRole('button', { name: 'Run' }).click();
 
   const steps = page.locator('ol.steps li.step');
-  await expect(steps).toHaveCount(6);
-  await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(6, WATCH);
-  await expect(steps.nth(3).locator('.detail')).toContainText('to the delivery postal code SIM-TRANSIT');
-  await expect(steps.nth(5).locator('.detail')).toContainText('The order read shows dispatched at');
+  await expect(steps).toHaveCount(7);
+  await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(7, WATCH);
+  await expect(steps.nth(4).locator('.detail')).toContainText('to the delivery postal code SIM-TRANSIT');
+  await expect(steps.nth(6).locator('.detail')).toContainText('The order read shows dispatched at');
 });
 
 test('the already-shipped script is refused 422 order.already_shipped and reads the order back unchanged', async ({ page }) => {
@@ -97,11 +99,11 @@ test('the already-shipped script is refused 422 order.already_shipped and reads 
   await page.getByRole('button', { name: 'Run' }).click();
 
   const steps = page.locator('ol.steps li.step');
-  await expect(steps).toHaveCount(8);
-  await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(8, WATCH);
-  await expect(steps.nth(6).locator('.status')).toHaveText('422');
-  await expect(steps.nth(6).locator('.detail')).toContainText('order.already_shipped');
-  await expect(steps.nth(7).locator('.detail')).toContainText('The order read shows unchanged at');
+  await expect(steps).toHaveCount(9);
+  await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(9, WATCH);
+  await expect(steps.nth(7).locator('.status')).toHaveText('422');
+  await expect(steps.nth(7).locator('.detail')).toContainText('order.already_shipped');
+  await expect(steps.nth(8).locator('.detail')).toContainText('The order read shows unchanged at');
 });
 
 // The four carrier outcomes the order read cannot tell apart are read from the simulator's own request log
@@ -120,12 +122,12 @@ for (const [script, code, saw] of [
     await page.getByRole('button', { name: 'Run' }).click();
 
     const steps = page.locator('ol.steps li.step');
-    await expect(steps).toHaveCount(7);
-    await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(7, { timeout: 60_000 });
-    await expect(steps.nth(3).locator('.detail')).toContainText(`to the delivery postal code ${code}`);
-    await expect(steps.nth(5).locator('.request')).toHaveText('POST http://localhost:5191/__admin/requests/find');
-    await expect(steps.nth(5).locator('.detail')).toContainText(saw);
-    await expect(steps.nth(6).locator('.detail')).toContainText('The order read shows held at');
+    await expect(steps).toHaveCount(8);
+    await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(8, { timeout: 60_000 });
+    await expect(steps.nth(4).locator('.detail')).toContainText(`to the delivery postal code ${code}`);
+    await expect(steps.nth(6).locator('.request')).toHaveText('POST http://localhost:5191/__admin/requests/find');
+    await expect(steps.nth(6).locator('.detail')).toContainText(saw);
+    await expect(steps.nth(7).locator('.detail')).toContainText('The order read shows held at');
   });
 }
 
@@ -181,7 +183,7 @@ test('a user without the permissions stops the run at the publish', async ({ pag
   const steps = page.locator('ol.steps li.step');
   await expect(steps.nth(0).locator('.state')).toHaveText('[failed]');
   await expect(steps.nth(0).locator('.status')).toHaveText('403');
-  await expect(steps.locator('.state', { hasText: '[not run]' })).toHaveCount(6);
+  await expect(steps.locator('.state', { hasText: '[not run]' })).toHaveCount(7);
 });
 
 // The fake store and edge (src/Admin.Host/Fakes/FakeObjectStore.cs) follow the platform's rules: the BFF signs a PUT, the
