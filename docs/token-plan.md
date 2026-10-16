@@ -59,11 +59,13 @@ long context re-sends all of it.
 **Exit.** A `/ship` main session's mean context under 200k a call and less
 than 35% of its input equivalent after a wake.
 
-**Built** (#122): `CLAUDE.md`'s *Subagents, review rounds and plans* holds
-the delegation brief, the review loop's ceiling and recheck rule, the
-planning rule, the compact-before-a-wait rule and one task per session. The exit reads met on the Sonnet `/ship` row of
-the 2026-10-16 section of [`token-usage.md`](token-usage.md), a day of
-sessions that cannot isolate these rules.
+**Built** (#122): the rules. `CLAUDE.md`'s *Subagents, review rounds and
+plans* holds the delegation brief, the review loop (citing `/ship` step 5),
+the planning rule, the compact-before-a-wait rule and one task per session.
+**Owed:** the tool-result cut, cutting the largest `--tools` results. The
+exit is read on the Sonnet `/ship` row alone of the 2026-10-16 section of
+[`token-usage.md`](token-usage.md) (192k, 28%); the `skill:ship` row there
+is 211k, over it, and a day of sessions cannot isolate these rules.
 
 ### Step 3 — what every session loads
 
