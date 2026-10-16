@@ -715,7 +715,7 @@ All under `/api`, JSON, loopback only.
 | `GET /review/{orderId}?window=30m` | §5.9's review read: the flags Ordering logged for one order, from Loki, each `{ at, reason, line }`, with `reachable` and `error` when Loki is not. 400 for an id that is not a Guid (it reaches a LogQL string, so this is the injection boundary) and for a window as `/trace`'s |
 | `GET /telemetry/health` | the golden-signal strip |
 | `GET /telemetry/alerts` | the alert strip: loaded rules and the waiting ones, apart |
-| `GET /transcript`, `GET /transcript/script` | §5.11; the entries, and the same as one bash script in `text/plain` |
+| `GET /transcript`, `GET /transcript/script?after=n` | §5.11; the entries, and the same as one bash script in `text/plain`, with only the entries whose sequence is greater than `after` when it is given (§5.13: a Scenario export takes the lines its run caused) |
 | `POST /scenario/export` | §5.13; body `{ markdown }`, answered as `text/markdown` after `FixtureScrubber.Scrub`; 400 for no document, 413 past `ExportEndpoints.MaxCharacters`; nothing is stored |
 
 Streams use Server-Sent Events rather than WebSockets because every stream is
@@ -810,12 +810,14 @@ read is of the whole table, written against a deployed environment, and the
 console does not make it: a developer by hand has the buyer's order read for the
 order they placed, which is what the strip shows. FakePlatform's scripted state
 (`FakeOrders`) drives the strip; the Playwright spec covers a saga that advances to
-delivered and one that stops at despatched, and the stall mark is held by unit
-tests of `sagaStrip`, because no fake saga stands still for `STALL_AFTER_MS`
-within a watch.
+delivered and one that stops at despatched; the stall mark is covered there too,
+by holding the order read at confirmed with a route and running the page's clock
+forward, since no fake saga stands still for `STALL_AFTER_MS` of its own accord,
+and `sagaStrip`'s unit tests hold its edges.
 
 **The export.** A finished run is one Markdown document for an issue. The page
-writes it from what it holds (`buildExport`: the transcript script, the steps with
+writes it from what it holds (`buildExport`: the transcript script from where the run
+began, the steps with
 status, request, detail and body, the strip, the correlation ids, each id's trace
 timeline read from `/trace`, the broker's queue depths at the drain step and when
 the export is made), and posts it to `POST /scenario/export`, where
@@ -824,7 +826,10 @@ a transcript, a fixture and an export are held to one definition of a secret. A
 section whose source is missing says so in one line (the transcript the host would
 not render; a trace Grafana did not answer; the mail the run caused, which the
 console does not yet count, #66). The document is built in the browser and
-downloaded from it; the host stores nothing and writes to no sibling clone.
+downloaded from it; the host stores nothing and writes to no sibling clone. The
+page notes the transcript's highest sequence when a run begins and asks for the
+script after it, so the section is the run's lines and not the session's; where
+that sequence could not be read the section is the whole session and says so.
 
 ## 6. The SPA
 
