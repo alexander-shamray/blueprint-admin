@@ -72,6 +72,8 @@ routes are `Gateway.Api/appsettings.json`; health endpoints are mapped by
 | Stop frontend | kill the `npm start` process tree |
 | Build the client for the emulator | `npm run emulator:android` (`ng build --configuration android && cap sync android`), frontend; `run-locally.md` step 4 |
 | Read the device lane | three reads from `run-locally.md` step 4, each run as written through PowerShell: `adb.exe devices`, a `curl.exe` CORS preflight to the gateway, and the running realm's `mobile-app` redirects through Keycloak's admin API. None changes anything |
+| Stop and restore Inventory for a Scenario | `... stop inventory-api`, and `... up -d --no-deps inventory-api` to restore it, backend; only for a script whose cause `run-locally.md` gives as stopping it (§5.3, *Scenario service control*) |
+| Shorten the saga's waits for a Scenario | `... up -d --no-deps ordering-api` with the saga timeout variables `run-locally.md` names set in the child's environment, backend, and the same line with them unset to restore it; only for a script whose cause is one of those waits (§5.3) |
 
 `npm ci` is not a console operation. It is a one-time prerequisite and the
 console reports its absence (no `node_modules`) rather than running it.
@@ -315,6 +317,44 @@ with 409 naming the kind and the job id, so a rebuild's `stop web-bff` and
 and wipe are two kinds because a plain Down answered with a running wipe would
 show a volume wipe under a request that did not ask for one. A repair stops and
 starts nothing and does not claim it.
+
+**Scenario service control.** A Scenario script whose cause `run-locally.md`
+gives as changing a service may change it, and nothing else may. Two changes
+exist: stopping `inventory-api`, and recreating `ordering-api` with the saga's
+timeout variables set so the waits run in seconds instead of minutes. They are
+a code-owned table (`ScenarioControl.Table`, which cites the document and the
+backend's variable names) and the host runs no other service change for any
+screen. The rules are these, and a change to any of them is a change to this
+paragraph first:
+
+- **A lease, not a switch.** The change is held as one lease under a new
+  `ComposeGate` kind. At most one lease exists. While it is held, Up, Down, Down
+  and wipe, the reset and a projection rebuild are refused with 409 naming the
+  lease, so the stack is never taken apart under a run that depends on it.
+- **Written before it is made.** The lease is journaled to a file under
+  `Admin:DataDir` (service, change, the run, when) before the first command of
+  the change runs, and removed only after the restore has been verified.
+- **Always restored, by one line.** The restore of either change is
+  `up -d --no-deps <service>` with the saga variables unset in the child's
+  environment. Compose starts a stopped container and recreates one whose
+  environment differs, so one line undoes both, and it also works on a service
+  whose container a Down removed. It runs on success, on failure, on the run's
+  cancellation and on the page being left. It runs again from the journal when
+  the host starts, so a host that was killed leaves nothing changed past its
+  next start. A restore that fails keeps the lease and says so; it is never
+  dropped silently.
+- **The limit, stated.** A host killed outright cannot run its own `finally`.
+  Until the next start the stack stays as the run left it. The Stack screen
+  shows any lease in force, what it changed and since when, with a Restore
+  button, and reads the journal rather than memory.
+- **Visible and stoppable.** Before Run the Scenario page names the services the
+  script will change and for how long it expects to hold them. A script that
+  holds a lease shows progress as every watch does (what it waits for, how long
+  it has, what it last read) and can be cancelled from the console, which
+  restores. Run is the confirmation; there is no typed text, since nothing is
+  destroyed.
+- **FakePlatform is first-class.** The fakes take the same changes and show the
+  same lease, so the smoke covers the control without a stack.
 
 ### 5.4 FrontendSupervisor
 
@@ -753,7 +793,10 @@ tool and nothing else. The host binds `127.0.0.1` only, refuses to start on
 any other address, and sets no CORS headers, so a page on another origin
 cannot drive it. There is no login of its own. `down -v` requires the typed
 confirmation, as do a projection rebuild and a dead letter's real replay or
-discard.
+discard. The one service change the console makes beyond Up, Down and the BFF
+rebuild is a Scenario's lease (§5.3): two named changes, journaled before they
+are made, always undone, and refused while anything else is taking the stack
+apart.
 
 Beside the realm passwords it knows the local stack's development defaults
 (`SqlPassword`, `BffBrokerConnection`) and one broker credential it never
