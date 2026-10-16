@@ -15,7 +15,33 @@ public sealed class FakeGatewayPolicyTests
 {
     private const string Origin = "http://gateway.test";
 
-    private readonly FakeOrders orders = new(new FakeTimeProvider(new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.Zero)));
+    private readonly FakeTimeProvider time = new(new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.Zero));
+    private readonly FakeOrders orders;
+
+    public FakeGatewayPolicyTests() => orders = new(time);
+
+    [Fact]
+    public async Task A_cancel_of_an_order_the_carrier_collected_is_the_422_the_platform_gave()
+    {
+        using HttpRequestMessage place = new(HttpMethod.Post, Origin + "/api/v1/orders")
+        {
+            Content = new StringContent("""{"items":[{"productId":"0199a1b2-0000-7000-8000-000000000001","quantity":1}],"shippingAddress":{"postalCode":"SIM-TRANSIT"}}"""),
+        };
+        place.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Jwt("""["orders:write"]"""));
+        using HttpResponseMessage placed = FakeGateway.Send(place, orders);
+        string id = (await placed.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Trim('"');
+        time.Advance(FakeOrders.Step * 3);
+
+        using HttpRequestMessage cancel = new(HttpMethod.Post, $"{Origin}/api/v1/orders/{id}/cancel")
+        {
+            Content = new StringContent("{}"),
+        };
+        cancel.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Jwt("""["orders:cancel"]"""));
+        using HttpResponseMessage response = FakeGateway.Send(cancel, orders);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).ShouldContain("order.already_shipped");
+    }
 
     [Theory]
     [InlineData("DELETE", "/bff/v1/orders/0199a1b2-0000-7000-8000-000000000002")]

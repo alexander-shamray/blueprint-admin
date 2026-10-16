@@ -84,6 +84,45 @@ public sealed class FakeOrdersTests
     }
 
     [Fact]
+    public void A_cancel_after_despatch_is_refused_and_one_before_it_is_taken()
+    {
+        FakeOrders orders = new(time);
+        string early = orders.Place();
+        string late = orders.Place();
+        orders.Cancel(early).ShouldBe(CancelOutcome.Accepted);
+        time.Advance(FakeOrders.Step * 2);
+
+        orders.Cancel(late).ShouldBe(CancelOutcome.AlreadyShipped);
+        orders.Cancel("0199a1b2-0000-7000-8000-0000000000ff").ShouldBe(CancelOutcome.Accepted);
+    }
+
+    [Fact]
+    public void An_order_to_the_in_transit_postal_code_is_collected_and_never_delivered()
+    {
+        FakeOrders orders = new(time);
+        string id = orders.Place(postalCode: FakeOrders.InTransitPostalCode);
+
+        string[] seen = [.. Enumerable.Range(0, 5).Select(_ => Advance(orders, id))];
+
+        seen.ShouldBe(["placed", "confirmed", "dispatched", "dispatched", "dispatched"]);
+        using JsonDocument read = JsonDocument.Parse(orders.Detail(id)!);
+        read.RootElement.GetProperty("cancellable").GetBoolean().ShouldBeFalse();
+        read.RootElement.GetProperty("timeline").GetProperty("delivered").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public void A_cancel_of_an_in_transit_order_is_refused_and_changes_nothing()
+    {
+        FakeOrders orders = new(time);
+        string id = orders.Place(postalCode: FakeOrders.InTransitPostalCode);
+        time.Advance(FakeOrders.Step * 3);
+
+        orders.Cancel(id).ShouldBe(CancelOutcome.AlreadyShipped);
+
+        Status(orders.Detail(id)!).ShouldBe("dispatched");
+    }
+
+    [Fact]
     public void A_cancel_a_tick_before_the_confirmation_turns_into_a_cancellation_just_before_despatch()
     {
         FakeOrders orders = new(time);

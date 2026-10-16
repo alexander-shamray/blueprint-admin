@@ -5,7 +5,10 @@ import {
   SCRIPTS,
   headerOf,
   idFrom,
+  hasShippingPostalCode,
   imageFault,
+  isAlreadyShipped,
+  isWatch,
   orderRead,
   resolveOperations,
   roleOf,
@@ -17,6 +20,7 @@ import {
   hasField,
   withField,
   withProductId,
+  withShippingPostalCode,
 } from './scenario-run';
 
 function op(id: string, available = true): ApiOperation {
@@ -314,6 +318,58 @@ describe('the unhappy scripts', () => {
 
     expect(resolveOperations(view, SCRIPTS.declined).operations?.stock?.id).toBe('inventory:SetOnHand');
     expect(resolveOperations(view, SCRIPTS.deliver).operations?.stock).toBeUndefined();
+  });
+});
+
+describe('the carrier scripts', () => {
+  const order = JSON.stringify({ items: [{ productId: 'p' }], shippingAddress: { line1: '1 Test Street', postalCode: '050000' } });
+
+  it('state their cause the way run-locally.md does: the SIM-TRANSIT postal code', () => {
+    expect(SCRIPTS['in-transit'].postalCode).toBe('SIM-TRANSIT');
+    expect(SCRIPTS['already-shipped'].postalCode).toBe('SIM-TRANSIT');
+    expect(SCRIPTS.deliver.postalCode).toBeUndefined();
+  });
+
+  it('set the postal code on the address and keep the rest of the order', () => {
+    const body = JSON.parse(withShippingPostalCode(order, 'SIM-TRANSIT'));
+
+    expect(body.shippingAddress).toEqual({ line1: '1 Test Street', postalCode: 'SIM-TRANSIT' });
+    expect(body.items).toEqual([{ productId: 'p' }]);
+    expect(hasShippingPostalCode(withShippingPostalCode(order, 'SIM-TRANSIT'), 'SIM-TRANSIT')).toBe(true);
+  });
+
+  it('leave an order with no address, or no JSON, as it was', () => {
+    expect(withShippingPostalCode('{"items":[]}', 'SIM-TRANSIT')).toBe('{"items":[]}');
+    expect(withShippingPostalCode('not json', 'SIM-TRANSIT')).toBe('not json');
+    expect(hasShippingPostalCode('{"items":[]}', 'SIM-TRANSIT')).toBe(false);
+  });
+
+  it('send the late cancel as the cancel operation, and read the order back as the order read', () => {
+    expect(roleOf('late_cancel')).toBe('cancel');
+    expect(roleOf('unchanged')).toBe('read');
+    expect(isWatch('unchanged')).toBe(true);
+    expect(isWatch('late_cancel')).toBe(false);
+  });
+
+  it('count only the platforms 422 with its code as the refusal of a cancel after despatch', () => {
+    expect(isAlreadyShipped(422, '{"code":"order.already_shipped"}')).toBe(true);
+    expect(isAlreadyShipped(422, '{"code":"order.not_found"}')).toBe(false);
+    expect(isAlreadyShipped(204, '')).toBe(false);
+    expect(isAlreadyShipped(422, 'not json')).toBe(false);
+    expect(isAlreadyShipped(409, '{"code":"order.already_shipped"}')).toBe(false);
+  });
+
+  it('reads an unchanged order only as still despatched and never cancelled', () => {
+    const at = '2026-10-05T12:00:02Z';
+    const read = (status: string, cancelled: string | null): OrderRead => ({
+      status,
+      timeline: { placed: '2026-10-05T12:00:00Z', confirmed: '2026-10-05T12:00:01Z', dispatched: at, delivered: null, cancelled },
+      asOf: at,
+    });
+
+    expect(verdict('unchanged', read('dispatched', null))).toEqual({ kind: 'reached', at });
+    expect(verdict('unchanged', read('cancelled', at)).kind).toBe('failed');
+    expect(verdict('unchanged', read('delivered', null)).kind).toBe('failed');
   });
 });
 

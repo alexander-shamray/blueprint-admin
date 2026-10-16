@@ -14,17 +14,19 @@ export type StepKey =
   | 'stock'
   | 'order'
   | 'cancel'
+  | 'late_cancel'
   | 'confirmed'
   | 'dispatched'
   | 'delivered'
   | 'cancelled'
   | 'declined'
-  | 'out_of_stock';
+  | 'out_of_stock'
+  | 'unchanged';
 
 /** The steps that wait on the order read rather than send once. */
 export type WatchKey = Extract<
   StepKey,
-  'confirmed' | 'dispatched' | 'delivered' | 'cancelled' | 'declined' | 'out_of_stock'
+  'confirmed' | 'dispatched' | 'delivered' | 'cancelled' | 'declined' | 'out_of_stock' | 'unchanged'
 >;
 
 const WATCHES: readonly StepKey[] = [
@@ -34,13 +36,21 @@ const WATCHES: readonly StepKey[] = [
   'cancelled',
   'declined',
   'out_of_stock',
+  'unchanged',
 ];
 
 export function isWatch(key: StepKey): key is WatchKey {
   return WATCHES.includes(key);
 }
 
-export type ScriptKey = 'deliver' | 'cancel' | 'declined' | 'out-of-stock' | 'image';
+export type ScriptKey =
+  | 'deliver'
+  | 'cancel'
+  | 'declined'
+  | 'out-of-stock'
+  | 'in-transit'
+  | 'already-shipped'
+  | 'image';
 
 export interface Script {
   title: string;
@@ -53,6 +63,11 @@ export interface Script {
    */
   amount?: number;
   onHand?: number;
+  /**
+   * The delivery postal code the order is placed to, which scripts the carrier simulator (run-locally.md, "The carrier's
+   * answer is scripted by the delivery postal code"). Unset, the example body's own code takes the default outcome.
+   */
+  postalCode?: string;
 }
 
 export const SCRIPT_KEYS: readonly ScriptKey[] = [
@@ -60,8 +75,13 @@ export const SCRIPT_KEYS: readonly ScriptKey[] = [
   'cancel',
   'declined',
   'out-of-stock',
+  'in-transit',
+  'already-shipped',
   'image',
 ];
+
+/** run-locally.md's carrier table: `SIM-TRANSIT` is collected and never delivered, so the order read stays `dispatched`. */
+const IN_TRANSIT_CODE = 'SIM-TRANSIT';
 
 /** run-locally.md, "A declined payment is caused by the amount": a price ending `.01` is `card_declined`. */
 const DECLINED_AMOUNT = 10.01;
@@ -105,7 +125,24 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
     steps: ['publish', 'drain', 'stock', 'quote', 'order', 'out_of_stock'],
     onHand: 0,
   },
+  'in-transit': {
+    title: 'Parcel collected, never delivered',
+    intro:
+      'Publish a product, order it to the delivery postal code SIM-TRANSIT, which scripts the carrier simulator to collect the parcel and never deliver it, and read the order back until it is despatched. It stays despatched.',
+    steps: ['publish', 'drain', 'quote', 'order', 'confirmed', 'dispatched'],
+    postalCode: IN_TRANSIT_CODE,
+  },
+  'already-shipped': {
+    title: 'Cancel after despatch',
+    intro:
+      'Order a product to SIM-TRANSIT, wait until the order is despatched, ask to cancel it, expect the platform to refuse with 422 order.already_shipped, and read the order back unchanged.',
+    steps: ['publish', 'drain', 'quote', 'order', 'confirmed', 'dispatched', 'late_cancel', 'unchanged'],
+    postalCode: IN_TRANSIT_CODE,
+  },
 };
+
+/** What run-locally.md ("After despatch there is nothing to compensate") observed a cancel after despatch answer. */
+export const ALREADY_SHIPPED = { status: 422, code: 'order.already_shipped' } as const;
 
 export const STEP_TITLES: Record<StepKey, string> = {
   upload: 'Upload a product image',
@@ -116,12 +153,14 @@ export const STEP_TITLES: Record<StepKey, string> = {
   stock: 'Set the stock on hand',
   order: 'Place an order',
   cancel: 'Cancel it',
+  late_cancel: 'Ask to cancel it after despatch',
   confirmed: 'Wait for confirmed',
   dispatched: 'Wait for despatch',
   delivered: 'Wait for delivery',
   cancelled: 'Wait for the cancellation',
   declined: 'Wait for the decline',
   out_of_stock: 'Wait for the stock refusal',
+  unchanged: 'Read the order back unchanged',
 };
 
 /**
@@ -137,6 +176,7 @@ export const WATCHING_FOR: Record<WatchKey, string> = {
   cancelled: 'the saga to act on the cancel',
   declined: 'the saga to ask the payment provider to authorise the order and be refused',
   out_of_stock: 'the saga to ask Inventory to reserve the stock and be refused',
+  unchanged: 'the order read, which a refused cancel leaves where it was: despatched and no longer cancellable',
 };
 
 /** The calls the steps make, each by its role. */
@@ -172,6 +212,7 @@ export function roleOf(key: StepKey): OperationRole | null {
   if (key === 'drain') return null;
   if (key === 'upload') return 'image';
   if (key === 'thumbnail') return 'product';
+  if (key === 'late_cancel') return 'cancel';
   return isWatch(key) ? 'read' : key;
 }
 
@@ -280,6 +321,56 @@ export function withProductId(body: string, productId: string): string {
 }
 
 /**
+ * The example order body with the delivery postal code set to `code`: the one field of an order the carrier sees
+ * (run-locally.md, "The carrier's answer is scripted by the delivery postal code"). A body that is not a JSON object,
+ * or has no `shippingAddress` object, is returned as it was, so the run does not invent an address.
+ */
+export function withShippingPostalCode(body: string, code: string): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return body;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return body;
+  const object = parsed as Record<string, unknown>;
+  const address = object['shippingAddress'];
+  if (!address || typeof address !== 'object' || Array.isArray(address)) return body;
+  return JSON.stringify({ ...object, shippingAddress: { ...address, postalCode: code } }, null, 2);
+}
+
+/** Whether the body's `shippingAddress.postalCode` is `code`: what `withShippingPostalCode` sets, or declined to. */
+export function hasShippingPostalCode(body: string, code: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    const address = (parsed as Record<string, unknown> | null)?.['shippingAddress'];
+    return (
+      !!address &&
+      typeof address === 'object' &&
+      !Array.isArray(address) &&
+      (address as Record<string, unknown>)['postalCode'] === code
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Whether a refused cancel's body is the platform's `order.already_shipped` problem (a `code` member). */
+export function isAlreadyShipped(status: number, body: string): boolean {
+  if (status !== ALREADY_SHIPPED.status) return false;
+  try {
+    const parsed: unknown = JSON.parse(body);
+    return (
+      !!parsed &&
+      typeof parsed === 'object' &&
+      (parsed as Record<string, unknown>)['code'] === ALREADY_SHIPPED.code
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * One run's correlation id for one step. Letters, digits and `-` only, well inside the 128
  * characters the backend adopts (`Common.Web.CorrelationIdExtensions`), so the id the Trace screen
  * is asked for is the one the platform logged.
@@ -347,6 +438,13 @@ export type WatchVerdict =
  * a reason of its own, and a delivery means the cancel came too late.
  */
 export function verdict(key: WatchKey, read: OrderRead): WatchVerdict {
+  if (key === 'unchanged') {
+    // Not a wait: the cancel was refused, so the order is still where the script left it, despatched and never cancelled.
+    return read.status === 'dispatched' && read.timeline.cancelled === null
+      ? { kind: 'reached', at: read.timeline.dispatched ?? read.asOf }
+      : { kind: 'failed', reason: `The order reads ${read.status}, not dispatched: the refused cancel should have moved nothing.` };
+  }
+
   if (key === 'declined' || key === 'out_of_stock') {
     // The saga's own refusals: the status the BFF gives the cause is the only one that will do.
     if (read.status === key) {

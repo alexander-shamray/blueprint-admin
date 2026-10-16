@@ -37,6 +37,12 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
             "a by-hand read of a table the console does not query; the cause scripts that need it wait on #67",
         ["docker compose -f deploy/compose/docker-compose.yml exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Local_Dev_Pa55w0rd!' -d Ordering -W -Q \"select Reason from ordering.OrderReviews where OrderId = '$orderId'\""] =
             "a by-hand read of a table the console does not query; the cause scripts that need it wait on #67",
+        ["docker compose -f deploy/compose/docker-compose.yml stop inventory-api"] =
+            "the cause of the saga's stock, release and payment timeouts, which then take five to fifteen minutes; not scripted, #67 keeps them",
+        ["docker compose -f deploy/compose/docker-compose.yml start inventory-api"] =
+            "the undo of the line above, which is not run",
+        ["docker compose -f deploy/compose/docker-compose.yml exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Local_Dev_Pa55w0rd!' -d Ordering -W -Q \"select Status, CancelReason from ordering.OrderSummaries where OrderId = '$orderId'\""] =
+            "a by-hand read of the cancel reason, which the order read folds; the console queries no database",
         [@"& ""$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"" reverse tcp:8080 tcp:8080"] =
             "it changes the emulator's forwarding, and the device lane is reads and one build (spec §5.4)",
         [@"& ""$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"" reverse --list"] = "the read-back of the line above, which is not run",

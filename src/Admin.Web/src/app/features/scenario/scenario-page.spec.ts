@@ -71,7 +71,7 @@ const catalog: ApiCatalogView = {
     op({
       id: 'ordering:PlaceOrder',
       url: 'http://localhost:5000/api/v1/orders/',
-      exampleBody: `{"commandId":"${zero}","items":[{"productId":"${zero}","quantity":1}]}`,
+      exampleBody: `{"commandId":"${zero}","items":[{"productId":"${zero}","quantity":1}],"shippingAddress":{"line1":"1 Test Street","city":"Almaty","postalCode":"050000","country":"KZ"}}`,
       hasCommandId: true,
     }),
     op({
@@ -276,6 +276,115 @@ describe('ScenarioPage', () => {
     ]);
     expect(sent()[3].url).toBe(`http://localhost:5000/api/v1/orders/${orderId}/cancel`);
     expect(page.steps()[5].detail).toContain('cancelled at 2026-10-05T12:00:02Z, 2 s after');
+  });
+
+  const dispatched = order('dispatched', { confirmed: '2026-10-05T12:00:01Z', dispatched: '2026-10-05T12:00:06Z' });
+  const alreadyShipped =
+    '{"status":422,"code":"order.already_shipped","detail":"An order that has already shipped cannot be cancelled; raise a return instead."}';
+
+  it('runs the in-transit script: the order goes to SIM-TRANSIT and the watch reads it despatched', async () => {
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      isRead(request) ? of(responded(200, dispatched, '')) : of(platform(request)),
+    );
+    const page = render().componentInstance;
+    page.pick('in-transit');
+
+    await page.run();
+
+    expect(page.steps().map((s) => [s.key, s.state])).toEqual([
+      ['publish', 'ok'],
+      ['drain', 'ok'],
+      ['quote', 'ok'],
+      ['order', 'ok'],
+      ['confirmed', 'ok'],
+      ['dispatched', 'ok'],
+    ]);
+    const placed = sent()[2];
+    expect(JSON.parse(placed.body!).shippingAddress).toEqual({
+      line1: '1 Test Street',
+      city: 'Almaty',
+      postalCode: 'SIM-TRANSIT',
+      country: 'KZ',
+    });
+    expect(page.steps()[3].detail).toBe(`Answered with id ${orderId}, to the delivery postal code SIM-TRANSIT.`);
+  });
+
+  it('says so when the example order has no address to script the carrier with', async () => {
+    host.operations.mockReturnValue(
+      of({
+        ...catalog,
+        operations: catalog.operations.map((o) =>
+          o.id === 'ordering:PlaceOrder' ? { ...o, exampleBody: `{"commandId":"${zero}","items":[{"productId":"${zero}","quantity":1}]}` } : o,
+        ),
+      }),
+    );
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      isRead(request) ? of(responded(200, dispatched, '')) : of(platform(request)),
+    );
+    const page = render().componentInstance;
+    page.pick('in-transit');
+
+    await page.run();
+
+    expect(page.steps()[3].detail).toContain('no shippingAddress to set');
+  });
+
+  it('runs the already-shipped script: the cancel is refused 422 order.already_shipped and the order is unchanged', async () => {
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      isRead(request)
+        ? of(responded(200, dispatched, ''))
+        : request.url.endsWith('/cancel')
+          ? of(responded(422, alreadyShipped, request.correlationId ?? ''))
+          : of(platform(request)),
+    );
+    const page = render().componentInstance;
+    page.pick('already-shipped');
+
+    await page.run();
+
+    expect(page.steps().map((s) => [s.key, s.state])).toEqual([
+      ['publish', 'ok'],
+      ['drain', 'ok'],
+      ['quote', 'ok'],
+      ['order', 'ok'],
+      ['confirmed', 'ok'],
+      ['dispatched', 'ok'],
+      ['late_cancel', 'ok'],
+      ['unchanged', 'ok'],
+    ]);
+    expect(page.steps()[6].status).toBe(422);
+    expect(page.steps()[6].detail).toBe('Refused with 422 order.already_shipped, as an order the carrier has collected is.');
+  });
+
+  it('fails the already-shipped script when the cancel is taken, and does not read the order back', async () => {
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      isRead(request) ? of(responded(200, dispatched, '')) : of(platform(request)),
+    );
+    const page = render().componentInstance;
+    page.pick('already-shipped');
+
+    await page.run();
+
+    expect(page.steps()[6].state).toBe('failed');
+    expect(page.steps()[6].detail).toBe('Answered 204: the cancel was taken, so this order was not despatched.');
+    expect(page.steps()[7].state).toBe('skipped');
+  });
+
+  it('fails the already-shipped script on a refusal that is not the despatch one', async () => {
+    host.proxy.mockImplementation((request: ProxyRequest) =>
+      isRead(request)
+        ? of(responded(200, dispatched, ''))
+        : request.url.endsWith('/cancel')
+          ? of(responded(422, '{"status":422,"code":"order.not_cancellable"}', ''))
+          : of(platform(request)),
+    );
+    const page = render().componentInstance;
+    page.pick('already-shipped');
+
+    await page.run();
+
+    expect(page.steps()[6].state).toBe('failed');
+    expect(page.steps()[6].detail).toBe('Answered 422, not the 422 order.already_shipped a despatched order is refused with.');
   });
 
   it.each([

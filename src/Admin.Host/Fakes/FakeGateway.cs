@@ -370,7 +370,10 @@ internal static partial class FakeGateway
             product = items[0].Get("productId") is { ValueKind: JsonValueKind.String } id ? id.GetString() : null;
         }
 
-        return FakeHttp.Json(HttpStatusCode.OK, $"\"{orders.Place(product)}\"");
+        // run-locally.md: the carrier's answer is scripted by the delivery postal code, the one field of the order it sees.
+        string? postalCode = Body(request)?.Get("shippingAddress")?.Get("postalCode") is { ValueKind: JsonValueKind.String } code ? code.GetString() : null;
+
+        return FakeHttp.Json(HttpStatusCode.OK, $"\"{orders.Place(product, postalCode)}\"");
     }
 
     /// <summary>
@@ -401,10 +404,15 @@ internal static partial class FakeGateway
 
     private static HttpResponseMessage Cancelled(FakeOrders orders, string orderId)
     {
-        orders.Cancel(orderId);
-
-        return new HttpResponseMessage(HttpStatusCode.NoContent);
+        return orders.Cancel(orderId) == CancelOutcome.AlreadyShipped
+            ? FakeHttp.Json(HttpStatusCode.UnprocessableEntity, AlreadyShipped)
+            : new HttpResponseMessage(HttpStatusCode.NoContent);
     }
+
+    /// <summary>The platform's refusal of a cancel after despatch, as run-locally.md ("After despatch there is nothing to compensate") observed it live.</summary>
+    private const string AlreadyShipped = """
+        {"type":"https://tools.ietf.org/html/rfc9110#section-15.5.21","title":"Unprocessable Entity","status":422,"code":"order.already_shipped","detail":"An order that has already shipped cannot be cancelled; raise a return instead."}
+        """;
 
     // The route policy comes first on the platform, whatever the destination goes on to serve (GatewayRoutes owns the
     // table), so a path the fake does not model still answers 401 with no token. Null admits the call.
