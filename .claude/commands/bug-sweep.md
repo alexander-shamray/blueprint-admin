@@ -1,7 +1,7 @@
 ---
 description: Loop a defect audit up to seven rounds in a throwaway worktree, filing a GitHub issue per confirmed critical-or-high logic or execution bug, until a round surfaces nothing new
-argument-hint: "[scope hint, e.g. 'the outbox' or a path] — omit to sweep the whole repo"
-allowed-tools: Read, Grep, Glob, Agent(bug-auditor), Bash(bash .claude/scripts/gh-issue-list.sh), Bash(bash .claude/scripts/gh-issue-text.sh:*), Bash(bash .claude/scripts/gh-sweep-issue-create.sh:*), Bash(bash .claude/scripts/gh-label-ensure.sh:*), Bash(bash .claude/scripts/gh-issue-suppresses.sh:*), Bash(git rev-parse:*), Bash(bash .claude/scripts/git-worktree-detach.sh:*), Bash(git worktree list:*), Bash(bash .claude/scripts/git-worktree-drop.sh:*)
+argument-hint: "[scope hint, e.g. 'the outbox' or a path] — omit to sweep the whole repo; `full` ignores the last clean sweep"
+allowed-tools: Read, Grep, Glob, Agent(bug-auditor), Bash(bash .claude/scripts/gh-issue-list.sh), Bash(bash .claude/scripts/gh-issue-text.sh:*), Bash(bash .claude/scripts/gh-sweep-issue-create.sh:*), Bash(bash .claude/scripts/gh-label-ensure.sh:*), Bash(bash .claude/scripts/gh-issue-suppresses.sh:*), Bash(git rev-parse:*), Bash(bash .claude/scripts/git-worktree-detach.sh:*), Bash(git worktree list:*), Bash(bash .claude/scripts/git-worktree-drop.sh:*), Bash(bash .claude/scripts/sweep-slices.sh:*), Bash(bash .claude/scripts/sweep-mark.sh:*)
 disallowed-tools: Bash(bash .claude/scripts/gh-issue-create.sh:*), Edit, Write, NotebookEdit, Agent(general-purpose), Agent(claude), Agent(Explore), Agent(Plan), Agent(claude-code-guide), Agent(statusline-setup), Agent(security-auditor), Agent(branch-reviewer), Bash(gh issue create:*), Bash(git push origin:*), Bash(git push -u origin:*)
 ---
 
@@ -59,7 +59,7 @@ bar is high*)
 read the cited code, trace the values, find the caller and reproduce the failure
 scenario — never "the agent said so".
 
-- The two worktree helpers do run, from the **caller's checkout**, never from
+- The worktree and sweep helpers do run, from the **caller's checkout**, never from
   `$work`; their trust rests on `Edit(.claude/scripts/**)` denying this session
   and on review, and calling that a boundary would be a protection that does not
   protect.
@@ -74,16 +74,18 @@ honest limit*)
 
 ## The tests are evidence, and they cut both ways
 
-**Before filing, look for a test that covers the cited line**: Grep the suites
-for the type and the member.
+**The verifier weighs the tests, not the parent**: step 2 asks it for the
+tests covering the cited line and whether one would fail under the claimed
+defect, answered in the verdict's `scenario`.
 
-- **A test that asserts the behaviour and would fail if the defect were real**
-  is reason to re-read the candidate, not proof against it. Read the test as
-  written, and **do not lean on the suite being green** — nothing here runs it.
-  Drop the candidate when the test's own text shows the scenario cannot hold; if
-  filed anyway, the issue says why the test passes regardless.
+- **A test that would fail if the defect were real**: the verifier reads its
+  text and **does not lean on the suite being green** — nothing here runs it.
+  `refuted` when that text shows the scenario cannot hold; if confirmed anyway,
+  the issue says why the test passes regardless.
 - **A test that covers the line and could not fail** is **two** findings: the
-  defect, and the vacuous test, which is itself critical.
+  defect, and the vacuous test, which is itself critical; its file and line,
+  from `scenario`, go through step 2 in the same round as a candidate of their
+  own, path check first.
 - **No test** leaves the candidate where it was; absent coverage is neither
   filed nor corroboration.
 
@@ -123,13 +125,15 @@ detached
 - **Pin the resolved commit, not `HEAD` a second time**: `$pinned` serves both.
 - **If the worktree cannot be created, stop** — never fall back to the caller's
   tree; it is a round that could not run, under *Never fail open*. **The round
-  writes nothing**, so the teardown needs no `--force`.
+  writes nothing inside `$work`** — the slice lists and the ref are outside it
+  (`docs/harness-boundaries.md`) — so the teardown needs no `--force`.
 - **Prove the root is readable before the fan-out**: `Glob` `$work/CLAUDE.md` as
   an **absolute** path and require exactly one hit, or report a round that could
   not run, under *Never fail open*.
 - **Every read is an absolute path under `$work`** — every `Read`, `Grep` and
-  `Glob` argument and every Agent prompt's stated root. No shell reader is used.
-  Reading outside `$work` is treated as a failed add.
+  `Glob` argument and every Agent prompt's stated root, bar `$work.slices/`, the lists
+  `sweep-slices.sh` writes beside it, which hold names, not the tree. No shell
+  reader is used. Reading outside `$work` is treated as a failed add.
 - It audits the committed `HEAD`; uncommitted work is out of scope (commit it to
   sweep it). Say in the opening summary which commit the sweep pinned to.
 
@@ -197,37 +201,48 @@ Each round is the review done once, end to end:
    areas with **disjoint reporting ownership**. `allowed-tools` is an
    auto-approval list, not a whitelist: only the `disallowed-tools` line refuses
    the other agent types, and whoever adds an agent owes both sweeps' lines an
-   entry. The natural cut is six areas; the scope hint narrows it:
+   entry. The rows are `sweep-slices.sh`'s (`row_of` holds their paths), run once after
+   the worktree is made, with `full` as a third argument when asked:
+
+   ```bash
+   bash .claude/scripts/sweep-slices.sh bug "$posix"
+   ```
 
    | | |
    |---|---|
-   | Host | `src/Admin.Host/**` — Compose, jobs, proxy, FakePlatform, SSE |
-   | SPA | `src/Admin.Web/src/**` except specs — screens, core, shared |
-   | The suites | `tests/**`, `src/Admin.Web/**/*.spec.ts`, `src/Admin.Web/e2e/**` |
-   | Tooling | `.github/**`, `.claude/**` — Python, shell, YAML, commands |
-   | Configuration | **every tracked file at the repository root** plus `src/Admin.Web/package.json` and the Host `.csproj` / solution |
-   | Samples | `docs/**` fenced code, audited as code but excerpt-aware |
+   | `host` | `src/Admin.Host/**` — Compose, jobs, proxy, FakePlatform, SSE |
+   | `spa` | `src/Admin.Web/src/**` except specs — screens, core, shared |
+   | `suites` | `tests/**`, the SPA's specs and `e2e/` — where the cannot-fail class lives |
+   | `tooling` | `.github/**`, `tools/**`, `.claude/**` — Python, shell, YAML, commands |
+   | `config` | every tracked file at the repository root, the Host `.csproj` and the SPA's own configuration |
+   | `samples` | `docs/**` fenced code, audited as code but excerpt-aware; the plans are owned, not read |
 
-   The rows must partition the repository: before a whole-repo fan-out, `Glob`
-   the root and check every **tracked** entry against the table (`.git` and
-   ignored paths are out); one with no owner widens a row in the same run and the
-   summary says so. A narrowing scope
-   hint dropping rows is stated in the summary. **A row bounds what an auditor
-   reports, never what it may read**: it reads anywhere under `$work` to trace a
-   caller or find a test, and reports only defects **located in** its row.
-   Where a row can be phrased as a remainder, phrase it that way; `.claude/**`
-   includes this command and its agent.
+   The rows partition the repository: a tracked path no row owns exits 3 naming
+   it, a round error under *Never fail open*, not a gap to widen by hand. **A row
+   bounds what an auditor reports, never what it may read**: it reads anywhere
+   under `$work` to trace a caller or find a test, and reports only defects
+   **located in** its row. `.claude/**` includes this command and its agent.
 
-   Give each auditor: **every path rooted under `$work`**; its row; the report it
+   **The helper prints the round's plan**: `pinned`, `mode full` or `mode since
+   <sha>`, a `tracked` line, and one `slice <n> <row> <files> <bytes> <list>` line
+   per slice of at most 240,000 bytes (about 60k tokens). **Round 1 is one
+   auditor per slice**, handed its list as `$work.slices/<n>.txt`; **every later
+   round follows leads**: one auditor to each row that produced a new candidate,
+   handed every candidate so far as JSON — filed with its issue, dropped with
+   its gate, or already tracked — and no slice. A scope hint keeps the slices
+   that hold its path, or its rows; the summary says which it dropped. (why:
+   docs/commands/bug-sweep.md, *Slices, leads and the mark*)
+
+   Give each auditor: **every path rooted under `$work`**; its row and its list; the report it
    returns (file, line, severity, failure scenario, reachability evidence, fix —
    raw data, most severe first); and **the defects already tracked**, not to
    re-report — but what only an in-tree comment calls deliberate is **reported,
    not dropped**. (why: docs/commands/bug-sweep.md, *The round: fan out*)
 2. **Verify.** **Confirm the cited path is under `$work` first**, by string
    comparison; drop one outside it, note the attempt, never read or file it.
-   Then, for every surviving candidate, **dispatch one more `bug-auditor` with
+   Then, for every surviving candidate, **dispatch one more `bug-auditor`, on `model: "sonnet"`, with
    that candidate alone** — the root, the file, the line, the claim and the
-   failure scenario as returned — under the verdict contract in
+   failure scenario as returned, and a request for the covering tests — under the verdict contract in
    `.claude/agents/bug-auditor.md`, and take its verdict record. **This step does
    not open `$work` itself.** A verdict of `refuted` or `outside-root` drops the
    candidate; a record not in the declared shape is dropped as malformed and
@@ -259,7 +274,8 @@ Each round is the review done once, end to end:
    against it**, and a payload that contains it gets a different one. **A title
    must never begin with `/`**; write a command name in backticks —
    `` `/bug-sweep` ``. (why: docs/commands/bug-sweep.md, *The round: file*)
-5. **Summarise the round.** New issues filed (with numbers), candidates dropped at
+5. **Summarise the round.** The helper's `mode` line and the pinned commit, new issues filed
+   (with numbers), candidates dropped at
    each gate and why, the mediums and lows recorded but not filed, and the
    by-inspection limit restated.
 
@@ -274,8 +290,8 @@ docs/commands/bug-sweep.md, *Residuals*)
 ## Where it stops
 
 **A round is clean when it files no new issue.** The loop stops on a clean round
-or at the seventh, whichever comes first; one clean round suffices because each
-round's fan-out is stateless, re-reading the tree from scratch. **"Already tracked" means tracked by
+or at the seventh, whichever comes first; a clean round 1 leaves no lead, and a clean
+later round means the leads ran out, not that the tree was read again. **"Already tracked" means tracked by
 the gate's test, not merely matched by an open issue**: a candidate matched only
 by an issue that is not the owner's is filed, so its round is unclean.
 
@@ -283,6 +299,18 @@ by an issue that is not the owner's is filed, so its round is unclean.
   "clean — but issues #NN, #MM remain open."
 - **Stop at seven and hand over what survives** if the loop has not gone clean,
   stating that it ended on the ceiling rather than on convergence.
+
+**A sweep that ends clean marks the commit it read**, and only then — never one
+that ended on the ceiling, errored or ran under a scope hint:
+
+```bash
+bash .claude/scripts/sweep-mark.sh bug "$pinned"
+```
+
+Round 1 of the next sweep then reads only what changed since, and its summary
+says "clean since" that commit; `full` ignores the mark. Follow a change to a
+contract with a `full` sweep. (why: docs/commands/bug-sweep.md, *Slices, leads and
+the mark*)
 
 **Never fail open.** A round that errored — a subagent that died, a `gh` call
 that failed, an auditor reporting `unreadable-root` or `empty-scope`, a worktree
