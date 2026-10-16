@@ -433,16 +433,11 @@ public sealed class FakeOrdersTests
     [InlineData(10.02, 10)]
     [InlineData(19.019, 10)]
     [InlineData(1e27, 10)]
-    public void A_product_the_script_does_not_name_takes_the_happy_path(double amount, int? onHand)
+    public void A_product_the_script_does_not_name_takes_the_happy_path(double amount, int onHand)
     {
         FakeOrders orders = new(time);
         string product = orders.Publish((decimal)amount);
-
-        if (onHand is { } count)
-        {
-            orders.Stock(product, count);
-        }
-
+        orders.Stock(product, onHand);
         string id = orders.Place(product);
         time.Advance(FakeOrders.Step * 3);
 
