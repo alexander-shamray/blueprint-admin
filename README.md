@@ -127,7 +127,9 @@ and read it back until it is cancelled, or apply a cause `run-locally.md` names
 (a price ending `.01`, stock set to 0) and read it back until the saga has declined
 it or found it out of stock, or order to the delivery postal code `SIM-TRANSIT`, which the carrier
 simulator collects and never delivers, read the order back despatched, and see a cancel
-of it refused with 422 `order.already_shipped`. Each watch says what it is waiting
+of it refused with 422 `order.already_shipped`. The `stock-timeout` and `payment-timeout` scripts hold a
+lease on the stack (stop Inventory, shorten the saga's waits), read the order end `out_of_stock` or
+`declined`, and restore the stack whatever happens, including on Cancel. Each watch says what it is waiting
 for and what it last read; the run stops at the first step that does not
 succeed, and each sent step links to its own trace. A step for which the host
 mints a new token, because the one it held was due to renew, says so. The
@@ -182,6 +184,10 @@ are announced.
   screen shows a lease in force and refuses Up, Down and the reset while it is held. A host
   killed outright cannot undo it: the service stays as the run left it until the next
   start, or until Restore is pressed on a host that is running.
+- The release and despatch timeouts are not scripted: what they leave is a review row in
+  `ordering.OrderReviews` that nothing outside the database shows (blueprint-backend#1079), and the order
+  read says `cancelled` or `confirmed` throughout, as it does without them. The confirmation timeout is not
+  reachable by hand.
 - The console does not track a client started by hand: Start still runs a
   second `npm start`, which competes for port 5173, and its output shows
   what `ng serve` did.

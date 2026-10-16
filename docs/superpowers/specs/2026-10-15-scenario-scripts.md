@@ -29,6 +29,8 @@ needs, not from the plan's list.
 | Reservation failed (`Stock_that_cannot_cover_the_order_…`) | stock set to 0 (`run-locally.md`, stock paragraph) | `out-of-stock` | `out_of_stock` |
 | Payment declined (`A_declined_card_…`) | an amount ending `.01` (`run-locally.md`, "A declined payment is caused by the amount") | `declined` | `declined` |
 | Parcel collected, never delivered (the carrier simulator's `SIM-TRANSIT`, which no journey test walks) | the delivery postal code `SIM-TRANSIT` (`run-locally.md`, the carrier table) | `in-transit` | `confirmed`, `dispatched` |
+| Stock timeout (`A_stock_wait_that_lapses_cancels_the_order_and_Inventory_releases_off_the_cancellation`) | Inventory stopped with the saga's waits shortened, then an order (`run-locally.md`, "The branches, then") | `stock-timeout` | `out_of_stock`, which only the saga's own wait can have caused with Inventory stopped |
+| Payment timeout (`A_payment_wait_that_lapses_compensates_and_flags_the_money_that_arrives_late`) | a total ending `.09` under the short waits, Inventory up | `payment-timeout` | `declined`, which only the payment wait can have caused: `.09` is no decline code |
 | Cancel after despatch (`A_shipped_order_cannot_be_cancelled_and_nothing_moves`) | an order to `SIM-TRANSIT`, cancelled once it reads `dispatched` (`run-locally.md`, "After despatch there is nothing to compensate") | `already-shipped` | the cancel's 422 `order.already_shipped`, then the order read `unchanged` |
 
 One script walks no branch of the saga and exists for the store instead:
@@ -53,14 +55,25 @@ meaning "never reported".
 Each of these needs a cause `run-locally.md` does not yet carry, so the
 console may not invent one:
 
-- **Stock, release and payment timeouts.** `run-locally.md` now gives the by-hand
-  cause: stop Inventory and wait out the saga's own delay, five, ten or fifteen
-  minutes. A script would have the console stop a service the platform needs
-  and hold a run open that long, which is a decision about the Stack screen's
-  powers (spec §2.1) before it is a script; it is not made here.
-- **Confirmation and despatch timeouts.** `run-locally.md` says neither is
-  reachable by hand: the backend journey fires them with `ExpireAsync`, a test
-  hook with no counterpart a developer can run.
+- **The release timeout.** The cause is by hand (place a `.09` order with Inventory
+  up, stop Inventory, cancel the order, wait the release delay), and the lease can
+  make it. What it ends in is a review row `stock_not_released` in
+  `ordering.OrderReviews` and an order read that says `cancelled` throughout,
+  exactly as an ordinary cancel does. Nothing outside the database shows the row
+  (blueprint-backend#1079), so a script could not say whether the timeout fired and
+  the console does not script it.
+- **The despatch timeout.** With the short waits it is a minute (`SIM-STRANGE`,
+  `run-locally.md`), and its end is the same kind of row (`not_despatched`) with the
+  order still `confirmed`. Not scripted for the same reason, until #1079.
+- **The confirmation timeout.** `run-locally.md` says it is not reachable by
+  hand: it needs Ordering silent after it has confirmed, and the saga lives inside
+  Ordering.
+
+The stock and payment timeouts need no such evidence: Inventory is stopped, or the
+total ends `.09`, so the status they end in has one cause. The order read folds the
+saga's cancel reason (`stock_timeout` into `out_of_stock`, `payment_timeout` into
+`declined`), which is why the script stops the only thing that could have refused the
+reservation.
 - **The carrier outcomes the order read cannot tell apart** (`SIM-REFUSED`,
   `SIM-DOWN`, `SIM-SLOW`, `SIM-STRANGE`). `run-locally.md` now gives each its
   postal code, and says where each ends: the shipment is `Unfulfillable`,
@@ -95,6 +108,13 @@ keeps a small amount of state in `FakeOrders`, written by hand:
   refused as the platform refuses it, with the 422 rule errors Catalog's
   `ProductErrors` names: not this seller's key, nothing uploaded under it,
   or not an image. The edge serves a key only once a publish attached it.
+- **The stack.** `FakeStack` records whether Inventory is stopped and whether Ordering
+  was recreated with the short waits, set by the scripted `docker` commands a lease
+  runs. `FakeOrders` reads it at the place: with Inventory stopped the order ends
+  `out_of_stock` when the stock wait lapses (seconds with the short waits, five
+  minutes without, which no watch outlasts), and a total ending `.09` ends
+  `declined` by the payment wait the same way. A script that took no lease would time
+  out against the fakes as against a stack.
 - **The carrier.** `Place(productId, postalCode)` marks an order to
   `SIM-TRANSIT` as collected and never delivered: it reads `dispatched` from two
   steps on and its `delivered` stays null. A cancel asked of an order already

@@ -332,8 +332,10 @@ backend's override file) and the host runs no other service change for any
 screen. The rules are these, and a change to any of them is a change to this
 paragraph first:
 
-- **A lease, not a switch.** The change is held as one lease under the sixth
-  `ComposeGate` kind. At most one lease exists. While it is held, Up, Down, Down
+- **A lease, not a switch.** The changes a script needs are held as one lease
+  (one or more of the table's, each once: the stock timeout needs Inventory
+  stopped and the short waits together) under the sixth `ComposeGate` kind. They
+  are made in the order asked and undone last first. At most one lease exists. While it is held, Up, Down, Down
   and wipe, the reset and a projection rebuild are refused with 409 naming the
   lease (the §5.10 rows that refuse "another `ComposeGate` job" mean this too),
   so the stack is never taken apart under a run that depends on it.
@@ -368,12 +370,16 @@ paragraph first:
   that restore sets the lease the screen shows none, and a journal the host
   cannot read, or that names a change it does not know, is logged and left in
   place for a person.
-- **Visible and stoppable.** Before Run the Scenario page names the services the
-  script will change and for how long it expects to hold them. A script that
-  holds a lease shows progress as every watch does (what it waits for, how long
-  it has, what it last read) and can be cancelled from the console, which
-  restores. Run is the confirmation; there is no typed text, since nothing is
-  destroyed.
+- **Visible and stoppable.** Before Run the Scenario page names what the script
+  will change, in the host's own words from `GET /stack/lease`, and the longest
+  the host will hold it. A script that holds a lease has a `lease` step first and
+  a `restore` step last. The `restore` step does not wait for the steps between
+  to have succeeded: a failed step, Cancel and the page being left each end the
+  run through it. Every watch shows what it waits for and what it last read, and
+  Cancel ends the wait, sends nothing further and restores. A restore that
+  failed is said on the step, with the host's retry, and the Stack screen's
+  banner has Restore now. Run is the confirmation; there is no typed text, since
+  nothing is destroyed.
 - **FakePlatform is first-class.** The fakes take the same changes and show the
   same lease, so the smoke covers the control without a stack.
 
@@ -665,7 +671,7 @@ All under `/api`, JSON, loopback only.
 | Method and path | Does |
 |---|---|
 | `GET /stack` | `ServiceStatus[]`, the frontend job summary, reachability of every HTTP surface of §2.2 that answers a readiness route, the object store and image edge among them, and the Scenario lease in force or null (§5.3) |
-| `GET /stack/lease`, `POST /stack/lease`, `POST /stack/lease/restore` | §5.3's lease: the table of changes with the lease held; body `{ change, holdSeconds, label }`, which waits for the change and answers the lease held, 400 for a change off the table or a hold off its bounds, 409 naming the claim that refuses it (another lease, or another `ComposeGate` job), 500 for a change that failed, which it has already undone or says it could not; and the restore, 200 with nothing held too, 500 when the restore failed and the lease is still held |
+| `GET /stack/lease`, `POST /stack/lease`, `POST /stack/lease/restore` | §5.3's lease: the table of changes with the lease held; body `{ changes, holdSeconds, label }`, which waits for each change in turn and answers the lease held, 400 for no change, a change twice or off the table, or a hold off its bounds, 409 naming the claim that refuses it (another lease, or another `ComposeGate` job), 500 for a change that failed, which it has already undone or says it could not; and the restore, 200 with nothing held too, 500 when the restore failed and the lease is still held |
 | `GET /stack/doctor` | §5.3's workstation checks, one row each with its verdict and what the reads said |
 | `POST /stack/backend/up` | Compose up; returns the job, or the Up still running; 409 while another `ComposeGate` job (§5.3) runs |
 | `POST /stack/backend/down` | body `{ wipeVolumes, confirm }`; returns the job, or a Down with the same `wipeVolumes` still running; 409 while another `ComposeGate` job (§5.3) runs, a Down with the other `wipeVolumes` included |
@@ -783,7 +789,7 @@ and names the active option through `aria-activedescendant`.
 | **Mail** | §5.12's list, newest first: when, to whom, the subject, and the correlation id as a link into Trace, or `none`; how many the sink holds when that is more than listed; a line saying so when no message carries a correlation id; an opened message's addresses, date and body | Refresh; filter by correlation id (also `?correlationId=`), leaving one order's messages; Open a message; follow its Trace link; open the sink's own UI, where clearing is done |
 | **API** | operation tree on the left, each source with what its document changed since the kept baseline; request editor (path params, headers, body pre-filled from the schema example, `commandId` generated per send) and identity picker with its token clock (§5.6); response pane with status, timing, headers, body; a history list | Send; accept a changed document as the new baseline; "Trace this call" opens the Trace screen with the response's correlation id |
 | **Trace** | the §5.9 timeline for a correlation id, grouped by service, with Grafana deep links, and on a refetch what arrived or left since the last one | enter an id or arrive from the API screen; reload |
-| **Scenario** | `run-locally.md`'s calls as one script of a library (`SCRIPTS` in `scenario-run.ts` owns the list; `docs/superpowers/specs/2026-10-15-scenario-scripts.md` the causes and the fakes' rules) — publish, wait for the drain, quote, order, then either watch the order to confirmed, despatched and delivered, cancel it and watch it to cancelled, or apply a cause `run-locally.md` names (a price ending `.01`, stock set to 0) and watch the saga refuse the order, or order to the delivery postal code `SIM-TRANSIT` and watch it stay despatched, and ask to cancel it and see the platform refuse with 422 `order.already_shipped` — each step with its status, body and own correlation id, each watch saying what it waits for and what it last read | Pick the script; run as a realm user; each step that sent links to its trace; the first step that does not succeed ends the run |
+| **Scenario** | `run-locally.md`'s calls as one script of a library (`SCRIPTS` in `scenario-run.ts` owns the list; `docs/superpowers/specs/2026-10-15-scenario-scripts.md` the causes and the fakes' rules) — publish, wait for the drain, quote, order, then either watch the order to confirmed, despatched and delivered, cancel it and watch it to cancelled, or apply a cause `run-locally.md` names (a price ending `.01`, stock set to 0) and watch the saga refuse the order, or order to the delivery postal code `SIM-TRANSIT` and watch it stay despatched, and ask to cancel it and see the platform refuse with 422 `order.already_shipped`, or hold a lease on the stack (§5.3) so the saga's stock or payment wait lapses in seconds and read the order end `out_of_stock` or `declined`, with the stack restored whatever happens and a Cancel that ends the wait — each step with its status, body and own correlation id, each watch saying what it waits for and what it last read | Pick the script; run as a realm user; each step that sent links to its trace; the first step that does not succeed ends the run |
 | **Transcript** | §5.11's entries in order: each process with its directory and exit code, each request as its `curl` with the identity and status, polled | Copy as shell script, which copies the host's rendered script rather than one built in the page, so the scrubber has the last word |
 
 The API screen keeps one behaviour from `run-locally.md` explicit: after a
