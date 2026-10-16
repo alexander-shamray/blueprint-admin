@@ -79,3 +79,38 @@
   color: #555;
   font-style: italic;
 }
+
+.run {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.run .steps {
+  flex: 1 1 28rem;
+  min-width: 0;
+}
+.saga {
+  flex: 0 1 22rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+}
+.saga h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+.saga-status {
+  font-family: monospace;
+}
+.transitions {
+  padding-left: 1.25rem;
+}
+.saga-stalled {
+  color: #b00;
+  font-weight: 700;
+}
+.saga-caveat {
+  color: #555;
+  font-size: 0.875rem;
+}

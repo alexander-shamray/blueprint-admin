@@ -262,6 +262,9 @@ describe('ScenarioPage', () => {
     leaseAddChange: ReturnType<typeof vi.fn>;
     leaseRestore: ReturnType<typeof vi.fn>;
     reviewFlags: ReturnType<typeof vi.fn>;
+    transcriptScript: ReturnType<typeof vi.fn>;
+    trace: ReturnType<typeof vi.fn>;
+    scenarioExport: ReturnType<typeof vi.fn>;
   };
   let uuids: number;
 
@@ -281,6 +284,11 @@ describe('ScenarioPage', () => {
       leaseAddChange: vi.fn(() => of(heldLease)),
       leaseRestore: vi.fn(() => of({ lease: null, changes: leaseChanges })),
       reviewFlags: vi.fn(() => of(flagView([flagged('not_despatched')]))),
+      transcriptScript: vi.fn(() => of('curl http://x')),
+      trace: vi.fn((id: string) =>
+        of({ correlationId: id, window: '30m', reachable: true, error: null, traceIds: [], tracesTruncated: false, warning: null, events: [] }),
+      ),
+      scenarioExport: vi.fn((markdown: string) => of(markdown)),
     };
     TestBed.configureTestingModule({
       imports: [ScenarioPage],
@@ -339,6 +347,78 @@ describe('ScenarioPage', () => {
     expect(
       sent().every((r) => r.identity?.username === 'demo' && r.identity.password === null),
     ).toBe(true);
+  });
+
+  it("fills the saga strip from the watches' order reads", async () => {
+    const page = render().componentInstance;
+    expect(page.strip()).toBeNull();
+
+    await page.run();
+
+    const strip = page.strip()!;
+    expect(strip.status).toBe('delivered');
+    expect(strip.reads).toBe(3);
+    expect(strip.transitions.map((t) => [t.from, t.to, t.seconds])).toEqual([
+      ['placed', 'confirmed', 1],
+      ['confirmed', 'dispatched', 5],
+      ['dispatched', 'delivered', 34],
+    ]);
+    expect(strip.stalled).toBe(false);
+  });
+
+  it("empties the strip when the next run starts, so a run never shows the last one's order", async () => {
+    const page = render().componentInstance;
+    await page.run();
+    host.proxy.mockReturnValue(new Subject<ProxyResult>());
+
+    void page.run();
+
+    expect(page.strip()).toBeNull();
+  });
+
+  it("exports a finished run through the host's scrubber and downloads what comes back", async () => {
+    const created: Blob[] = [];
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((b) => (created.push(b as Blob), 'blob:x'));
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    host.scenarioExport.mockImplementation((md: string) => of(md.replace('curl http://x', '<scrubbed>')));
+    const page = render().componentInstance;
+    await page.run();
+
+    await page.export();
+
+    expect(host.scenarioExport).toHaveBeenCalledTimes(1);
+    const sentDoc = host.scenarioExport.mock.calls[0][0] as string;
+    expect(sentDoc).toContain('# Scenario run abcdef12: ');
+    expect(sentDoc).toContain('## Trace timeline');
+    expect(host.trace).toHaveBeenCalledWith('scenario-abcdef12-publish');
+    expect(click).toHaveBeenCalledTimes(1);
+    const text = await created[0].text();
+    expect(text).toContain('<scrubbed>');
+    expect(text).not.toContain('curl http://x');
+    expect(page.exportError()).toBeNull();
+  });
+
+  it('exports nothing before a run has ended', async () => {
+    const page = render().componentInstance;
+
+    await page.export();
+
+    expect(host.scenarioExport).not.toHaveBeenCalled();
+    expect(page.finished()).toBe(false);
+  });
+
+  it('says so when the host would not scrub the export, and downloads nothing', async () => {
+    const spy = vi.spyOn(URL, 'createObjectURL');
+    spy.mockClear();
+    host.scenarioExport.mockReturnValue(throwError(() => ({ error: { detail: 'Export too large' } })));
+    const page = render().componentInstance;
+    await page.run();
+
+    await page.export();
+
+    expect(page.exportError()).toBe('Export too large');
+    expect(spy).not.toHaveBeenCalled();
   });
 
   it('runs the cancel script: the cancel goes to the placed order and the watch reads it cancelled', async () => {

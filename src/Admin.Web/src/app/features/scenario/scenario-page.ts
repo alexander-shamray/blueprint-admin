@@ -27,6 +27,7 @@ import { IdentityState } from '../../core/identity/identity-state';
 import { DrainedIndicator } from '../../shared/drained-indicator/drained-indicator';
 import { DRAIN_POLL_MS, DRAIN_WATCH_MS, UUID } from '../api/api-page';
 import { ScenarioLauncher } from './scenario-launcher';
+import { TraceRead, buildExport } from './scenario-export';
 import { buildUrl, pretty, withFreshCommandId } from '../api/request-builder';
 import {
   CARRIER_POLL_MS,
@@ -36,6 +37,7 @@ import {
   REVIEW_POLL_MS,
   REVIEW_WATCH_MS,
   CarrierEntry,
+  SagaRead,
   SCRIPTS,
   SCRIPT_KEYS,
   STEP_TITLES,
@@ -52,6 +54,7 @@ import {
   orderRead,
   reservationVerdict,
   resolveOperations,
+  sagaStrip,
   reviewVerdict,
   secondsBetween,
   stepCorrelationId,
@@ -94,6 +97,9 @@ const STATE_WORDS: Record<StepState, string> = {
   failed: '[failed]',
   skipped: '[not run]',
 };
+
+/** The reads the strip keeps: a watch polls every few seconds for minutes, and the first and last are what it shows. */
+const SAGA_READS_KEPT = 200;
 
 function initialSteps(script: ScriptKey): StepView[] {
   return SCRIPTS[script].steps.map((key) => ({
@@ -175,6 +181,18 @@ export class ScenarioPage {
   readonly running = signal(false);
   readonly runId = signal<string | null>(null);
   readonly projection = signal<ProjectionDrain | null>(null);
+
+  /** Every order read the run's watches made, oldest first and capped; the strip is computed from them (spec §5.13). */
+  readonly sagaReads = signal<SagaRead[]>([]);
+  readonly strip = computed(() => sagaStrip(this.sagaReads()));
+  /** The broker's queues as the drain step first read them, kept for the export's depths. */
+  private queuesBefore: QueuesView | null = null;
+  readonly exporting = signal(false);
+  readonly exportError = signal<string | null>(null);
+  /** True once a run has ended, so there is a finished run to write up. */
+  readonly finished = signal(false);
+  private exportedScript: ScriptKey = 'deliver';
+  private exportedUser = '';
   /** The realm user picked here; empty until one is, when the API screen's user is the default. */
   readonly username = signal('');
 
@@ -249,6 +267,68 @@ export class ScenarioPage {
     });
   }
 
+  /** Whole seconds in a span of milliseconds. */
+  seconds(ms: number): number {
+    return Math.round(ms / 1000);
+  }
+
+  /** At a time of day on the console's clock, to the second, for the strip's "read at". */
+  at(ms: number): string {
+    return new Date(ms).toLocaleTimeString('en-GB');
+  }
+
+  /**
+   * The finished run as one Markdown file (spec §5.13): the page writes it from what it holds and reads the rest (the
+   * transcript, each step's trace, the queues now) from the host, then the host's scrubber has the last word before the
+   * download. Nothing is stored or posted anywhere.
+   */
+  async export(): Promise<void> {
+    const run = this.runId();
+    if (!run || this.running() || this.exporting()) return;
+    this.exporting.set(true);
+    this.exportError.set(null);
+    try {
+      const steps = this.steps();
+      const ids = [...new Set(steps.flatMap((s) => (s.correlationId ? [s.correlationId] : [])))];
+      const [transcript, queuesAfter, ...traces] = await Promise.all([
+        firstValueFrom(this.host.transcriptScript()).catch(() => null),
+        firstValueFrom(this.host.brokerQueues()).catch(() => null),
+        ...ids.map((id) =>
+          firstValueFrom(this.host.trace(id)).catch((e: unknown): TraceRead => describe(e)),
+        ),
+      ]);
+      const read: Record<string, TraceRead> = {};
+      ids.forEach((id, i) => (read[id] = traces[i]));
+      const markdown = buildExport({
+        title: SCRIPTS[this.exportedScript].title,
+        run,
+        username: this.exportedUser,
+        exportedAt: new Date().toISOString(),
+        steps,
+        strip: this.strip(),
+        transcript,
+        traces: read,
+        queuesBefore: this.queuesBefore,
+        queuesAfter,
+      });
+      const scrubbed = await firstValueFrom(this.host.scenarioExport(markdown));
+      this.download(`scenario-${run}.md`, scrubbed);
+    } catch (e: unknown) {
+      this.exportError.set(describe(e));
+    } finally {
+      this.exporting.set(false);
+    }
+  }
+
+  private download(name: string, text: string): void {
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = name;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   /** A script picked between runs shows its own steps; the last run's results go with the old one. */
   pick(script: ScriptKey): void {
     if (this.running() || script === this.script()) return;
@@ -256,6 +336,9 @@ export class ScenarioPage {
     this.steps.set(initialSteps(script));
     this.runId.set(null);
     this.projection.set(null);
+    this.sagaReads.set([]);
+    this.finished.set(false);
+    this.exportError.set(null);
   }
 
   /**
@@ -299,6 +382,12 @@ export class ScenarioPage {
     this.leaseTaken = false;
     this.placedAt = 0;
     this.projection.set(null);
+    this.sagaReads.set([]);
+    this.queuesBefore = null;
+    this.finished.set(false);
+    this.exportError.set(null);
+    this.exportedScript = script;
+    this.exportedUser = username;
     this.steps.set(initialSteps(script));
 
     try {
@@ -318,6 +407,7 @@ export class ScenarioPage {
       );
       this.running.set(false);
       this.cancelling.set(false);
+      this.finished.set(true);
     }
   }
 
@@ -1023,6 +1113,11 @@ export class ScenarioPage {
           return false;
         }
 
+        this.sagaReads.update((all) => [
+          ...all.slice(-(SAGA_READS_KEPT - 1)),
+          { readAt: Date.now(), status: order.status, asOf: order.asOf, timeline: order.timeline },
+        ]);
+
         const v = verdict(key, order);
         if (v.kind === 'reached') {
           const after = secondsBetween(order.timeline.placed, v.at);
@@ -1181,7 +1276,10 @@ export class ScenarioPage {
       last = await lastValueFrom(
         timer(0, DRAIN_POLL_MS).pipe(
           exhaustMap(() => this.host.brokerQueues()),
-          tap((view) => this.projection.set(view.reachable ? view.projection : null)),
+          tap((view) => {
+            this.queuesBefore ??= view;
+            this.projection.set(view.reachable ? view.projection : null);
+          }),
           takeWhile(
             (view) => view.reachable && view.projection.found && !view.projection.drained,
             true,

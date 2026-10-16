@@ -91,6 +91,11 @@ export class HostClient {
     return this.http.get<ReviewFlagView>(`/api/review/${encodeURIComponent(orderId)}`, { params: { window } });
   }
 
+  /** A Scenario export, scrubbed by the host: the page writes the document, the scrubber has the last word (spec §5.13). */
+  scenarioExport(markdown: string): Observable<string> {
+    return this.http.post('/api/scenario/export', { markdown }, { responseType: 'text' });
+  }
+
   frontendDeviceBuild(): Observable<JobSummary> {
     return this.http.post<JobSummary>('/api/stack/frontend/device-build', null);
   }
