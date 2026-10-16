@@ -207,7 +207,7 @@ not content.
    | | |
    |---|---|
    | `docs/**` only | `docs/` |
-   | `.editorconfig`, `CLAUDE.md`, `AGENTS.md`, `.claude/**`, CI, `.mcp.json`, `.codeindexignore`, `src/Admin.Web/package.json`, `src/Admin.Web/eslint.config.js`, `src/Admin.Web/.prettierrc` | `chore/` |
+   | `.editorconfig`, `CLAUDE.md`, `AGENTS.md`, `.claude/**`, `tools/**`, CI, `.mcp.json`, `.codeindexignore`, `src/Admin.Web/package.json`, `src/Admin.Web/eslint.config.js`, `src/Admin.Web/.prettierrc` | `chore/` |
    | `src/Admin.Host/**`, `src/Admin.Web/**`, `tests/**` | `feat(<scope>)/`, `fix/` or `refactor/` — the diff decides which |
 
    **A mixed tree takes the type of the change that carries the argument, not
