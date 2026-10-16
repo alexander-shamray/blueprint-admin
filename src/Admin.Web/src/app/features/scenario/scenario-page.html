@@ -35,7 +35,19 @@
   @if (runId(); as id) {
     <span class="run-id">run {{ id }}</span>
   }
+  <button
+    class="export"
+    type="button"
+    [disabled]="!finished() || running() || exporting()"
+    (click)="export()"
+  >
+    {{ exporting() ? 'Exporting…' : 'Export Markdown' }}
+  </button>
 </section>
+
+@if (exportError(); as e) {
+  <p class="error export-error" role="alert">Export failed: {{ e }}</p>
+}
 
 <p class="intro">
   {{ intro() }} As run-locally.md does it by hand: each step carries its own correlation id, so each
@@ -68,6 +80,7 @@
 
 <p class="visually-hidden" role="status" aria-live="polite">{{ announcement() }}</p>
 
+<div class="run">
 <ol class="steps">
   @for (step of steps(); track step.key) {
     <li class="step state-{{ step.state }}">
@@ -106,3 +119,42 @@
     </li>
   }
 </ol>
+
+<aside class="saga" aria-label="Order state as the platform reports it">
+  <h2>The order's state</h2>
+  @if (strip(); as s) {
+    <p class="saga-read">
+      Reads <strong class="saga-status">{{ s.status }}</strong>, read at
+      {{ at(s.readAt) }} (the BFF knew it as of {{ s.asOf }}).
+      @if (running()) {
+        Still reading.
+      } @else {
+        Not reading now: this is the last state read, not the order's state at this moment.
+      }
+    </p>
+    @if (s.transitions.length > 0) {
+      <ul class="transitions">
+        @for (t of s.transitions; track t.to) {
+          <li>
+            {{ t.from }} → {{ t.to }}:
+            {{ t.seconds === null ? 'time unreadable' : t.seconds + ' s' }}
+          </li>
+        }
+      </ul>
+    }
+    @if (s.stalled) {
+      <p class="saga-stalled" role="status">
+        [stalled] The status has stood at {{ s.status }} for {{ seconds(s.unchangedForMs) }} s
+        across {{ s.reads }} reads.
+      </p>
+    }
+  } @else {
+    <p class="saga-none">No order read yet: the strip fills when a watch reads the order.</p>
+  }
+  <p class="saga-caveat">
+    This strip is the only stuck-saga detector a workstation has. The backend's
+    <code>StuckSaga</code> rule sits in <code>deploy/observability/alerts/awaiting-signal.yaml</code>,
+    waiting on an instrument nothing publishes, so no alert can fire for it locally.
+  </p>
+</aside>
+</div>

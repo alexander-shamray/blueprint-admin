@@ -905,6 +905,71 @@ export function secondsBetween(from: string | null, to: string): number | null {
   return Number.isFinite(ms) ? Math.round(ms / 100) / 10 : null;
 }
 
+/** One successful order read of a run, with the console's own clock beside the platform's, so the strip can say when it last looked. */
+export interface SagaRead {
+  /** `Date.now()` when the read answered: the console's clock, the only one that says how long ago the strip looked. */
+  readAt: number;
+  status: string;
+  /** The BFF's `asOf`: when it knew the order so, by the platform's clock. */
+  asOf: string;
+  timeline: Record<TimelineStep, string | null>;
+}
+
+/** How long a status may stay as it is, across reads, before the strip calls the saga stalled; no saga step of the fakes or of `run-locally.md`'s happy path takes this long. */
+export const STALL_AFTER_MS = 30_000;
+
+/** The statuses the saga does not leave, so an unchanged read of one is an end and not a stall. */
+const SETTLED: readonly string[] = ['delivered', ...CANCELLATIONS];
+
+export interface SagaTransition {
+  from: TimelineStep;
+  to: TimelineStep;
+  /** Seconds between the two stamps the order read carries; null where either is unreadable. */
+  seconds: number | null;
+}
+
+/** What the strip shows: the last state read and when, the time each transition took, and whether the state has stood still. */
+export interface SagaStrip {
+  status: string;
+  readAt: number;
+  asOf: string;
+  reads: number;
+  transitions: SagaTransition[];
+  /** From the first of the trailing reads that show this status to the last, on the console's clock. */
+  unchangedForMs: number;
+  stalled: boolean;
+}
+
+/** The strip for a run's reads, oldest first, or null before the first one. A transition's time is the platform's two stamps, never the console's polls. */
+export function sagaStrip(reads: readonly SagaRead[]): SagaStrip | null {
+  const last = reads.at(-1);
+  if (!last) return null;
+
+  let first = last;
+  for (let i = reads.length - 2; i >= 0 && reads[i].status === last.status; i--) first = reads[i];
+
+  const stamped = TIMELINE_STEPS.filter((step) => last.timeline[step] !== null);
+  const transitions: SagaTransition[] = [];
+  for (let i = 1; i < stamped.length; i++) {
+    transitions.push({
+      from: stamped[i - 1],
+      to: stamped[i],
+      seconds: secondsBetween(last.timeline[stamped[i - 1]], last.timeline[stamped[i]]!),
+    });
+  }
+
+  const unchangedForMs = last.readAt - first.readAt;
+  return {
+    status: last.status,
+    readAt: last.readAt,
+    asOf: last.asOf,
+    reads: reads.length,
+    transitions,
+    unchangedForMs,
+    stalled: unchangedForMs >= STALL_AFTER_MS && !SETTLED.includes(last.status),
+  };
+}
+
 /** What the BFF's `POST /bff/v1/product-images` returns: the pre-signed URL, the headers it signed, and the key to publish with. */
 export interface ImageUpload {
   uploadUrl: string;

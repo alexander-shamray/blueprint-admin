@@ -92,6 +92,67 @@ test('the in-transit script orders to SIM-TRANSIT and reads the order back despa
   await expect(steps.nth(6).locator('.detail')).toContainText('The order read shows dispatched at');
 });
 
+// The saga strip beside the steps (spec §5.12): the order's state as the BFF last read it, the time each transition took
+// from the platform's own stamps, and what it is: the last read, and the only stuck-saga detector a workstation has.
+test('the saga strip follows a saga that advances to delivered and says it is the last read', async ({ page }) => {
+  await page.goto('/scenario');
+  await expect(page.locator('aside.saga .saga-none')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Run' }).click();
+
+  const strip = page.locator('aside.saga');
+  await expect(strip.locator('.saga-status')).toHaveText('delivered', WATCH);
+  await expect(strip.locator('.transitions li')).toHaveCount(3);
+  await expect(strip.locator('.transitions li').first()).toContainText('placed → confirmed:');
+  await expect(strip.locator('.transitions li').last()).toContainText('dispatched → delivered:');
+  await expect(strip.locator('.saga-read')).toContainText('Not reading now: this is the last state read');
+  await expect(strip.locator('.saga-caveat')).toContainText('only stuck-saga detector a workstation has');
+  await expect(strip.locator('.saga-stalled')).toHaveCount(0);
+});
+
+test('the saga strip shows a saga that stops at despatched as despatched, with no delivery it never read', async ({ page }) => {
+  await page.goto('/scenario');
+
+  await page.getByLabel('Script').selectOption('in-transit');
+  await page.getByRole('button', { name: 'Run' }).click();
+
+  const strip = page.locator('aside.saga');
+  await expect(strip.locator('.saga-status')).toHaveText('dispatched', WATCH);
+  await expect(page.getByRole('button', { name: 'Export Markdown' })).toBeEnabled(WATCH);
+  await expect(strip.locator('.transitions li').last()).toContainText('confirmed → dispatched:');
+  await expect(strip.locator('.transitions li', { hasText: 'delivered' })).toHaveCount(0);
+});
+
+test('a finished run exports as one Markdown document, scrubbed by the host, with its sections', async ({ page }) => {
+  await page.goto('/scenario');
+  const exportButton = page.getByRole('button', { name: 'Export Markdown' });
+  await expect(exportButton).toBeDisabled();
+
+  await page.getByRole('button', { name: 'Run' }).click();
+  await expect(exportButton).toBeEnabled(WATCH);
+  const [download] = await Promise.all([page.waitForEvent('download'), exportButton.click()]);
+
+  expect(download.suggestedFilename()).toMatch(/^scenario-[0-9a-f]{8}\.md$/);
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(chunk as Buffer);
+  const md = Buffer.concat(chunks).toString('utf-8');
+  for (const heading of [
+    '## Operator transcript',
+    '## Steps',
+    '## The order, as the platform reported it',
+    '## Correlation ids',
+    '## Trace timeline',
+    '## Queue depths',
+    '## Mail the run caused',
+  ]) {
+    expect(md).toContain(heading);
+  }
+  expect(md).toContain('- Outcome: every step succeeded');
+  expect(md).toContain('(#66)');
+  expect(md).not.toMatch(/eyJ[A-Za-z0-9_-]{10,}\./);
+});
+
 test('the already-shipped script is refused 422 order.already_shipped and reads the order back unchanged', async ({ page }) => {
   await page.goto('/scenario');
 

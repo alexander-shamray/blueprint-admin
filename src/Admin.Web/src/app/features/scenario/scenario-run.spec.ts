@@ -4,6 +4,8 @@ import {
   OrderRead,
   SCENARIO_OPERATIONS,
   SCRIPTS,
+  SagaRead,
+  STALL_AFTER_MS,
   carrierEntries,
   carrierVerdict,
   headerOf,
@@ -17,6 +19,7 @@ import {
   resolveOperations,
   reviewVerdict,
   roleOf,
+  sagaStrip,
   secondsBetween,
   stepCorrelationId,
   thumbnailFrom,
@@ -815,5 +818,74 @@ describe('hasField', () => {
     expect(hasField('{}', 'onHand', 0)).toBe(false);
     expect(hasField('[0]', 'onHand', 0)).toBe(false);
     expect(hasField('not json', 'onHand', 0)).toBe(false);
+  });
+});
+
+describe('sagaStrip', () => {
+  const none = { placed: null, confirmed: null, dispatched: null, delivered: null, cancelled: null };
+
+  function read(status: string, readAt: number, timeline: Partial<SagaRead['timeline']> = {}): SagaRead {
+    return {
+      readAt,
+      status,
+      asOf: '2026-10-05T12:00:09Z',
+      timeline: { ...none, placed: '2026-10-05T12:00:00Z', ...timeline },
+    };
+  }
+
+  it('has nothing to show before the first read', () => {
+    expect(sagaStrip([])).toBeNull();
+  });
+
+  it("shows the last read, and the time each transition took from the platform's two stamps", () => {
+    const strip = sagaStrip([
+      read('placed', 1_000),
+      read('delivered', 9_000, {
+        confirmed: '2026-10-05T12:00:01Z',
+        dispatched: '2026-10-05T12:00:06Z',
+        delivered: '2026-10-05T12:00:40Z',
+      }),
+    ])!;
+
+    expect(strip.status).toBe('delivered');
+    expect(strip.readAt).toBe(9_000);
+    expect(strip.reads).toBe(2);
+    expect(strip.transitions).toEqual([
+      { from: 'placed', to: 'confirmed', seconds: 1 },
+      { from: 'confirmed', to: 'dispatched', seconds: 5 },
+      { from: 'dispatched', to: 'delivered', seconds: 34 },
+    ]);
+  });
+
+  it('names a cancellation as a transition from the last step before it', () => {
+    const strip = sagaStrip([read('cancelled', 1_000, { cancelled: '2026-10-05T12:00:02Z' })])!;
+
+    expect(strip.transitions).toEqual([{ from: 'placed', to: 'cancelled', seconds: 2 }]);
+  });
+
+  it('stalls a status that has stood still for the whole stall time, and not before', () => {
+    const early = sagaStrip([read('confirmed', 0), read('confirmed', STALL_AFTER_MS - 1)])!;
+    const late = sagaStrip([read('confirmed', 0), read('confirmed', 10_000), read('confirmed', STALL_AFTER_MS)])!;
+
+    expect(early.stalled).toBe(false);
+    expect(late.stalled).toBe(true);
+    expect(late.unchangedForMs).toBe(STALL_AFTER_MS);
+  });
+
+  it('counts the stand-still from the last change, not from the first read', () => {
+    const strip = sagaStrip([
+      read('placed', 0),
+      read('confirmed', STALL_AFTER_MS),
+      read('confirmed', STALL_AFTER_MS + 1_000),
+    ])!;
+
+    expect(strip.unchangedForMs).toBe(1_000);
+    expect(strip.stalled).toBe(false);
+  });
+
+  it('does not call an end a stall: delivered, cancelled, declined and out of stock are where the saga stops', () => {
+    for (const status of ['delivered', 'cancelled', 'declined', 'out_of_stock']) {
+      expect(sagaStrip([read(status, 0), read(status, STALL_AFTER_MS * 2)])!.stalled).toBe(false);
+    }
   });
 });
