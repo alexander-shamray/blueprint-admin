@@ -13,6 +13,8 @@ import {
   JobSummary,
   DoctorView,
   JobView,
+  MailListView,
+  MailMessageRead,
   PermissionsView,
   ProjectionPlan,
   ProductImageUploadRequest,
@@ -109,6 +111,16 @@ export class HostClient {
   /** The holders an erasure request waits on, each with its queue's depth. The request itself goes through `proxy`. */
   erasureHolders(): Observable<HoldersView> {
     return this.http.get<HoldersView>('/api/erasure/holders');
+  }
+
+  /** What the mail sink holds, newest first, each message with its correlation id where it carries one. */
+  mailMessages(): Observable<MailListView> {
+    return this.http.get<MailListView>('/api/mail/messages');
+  }
+
+  /** One message's body. Opening it marks it read in the sink, as the sink's own UI does. */
+  mailMessage(id: string): Observable<MailMessageRead> {
+    return this.http.get<MailMessageRead>(`/api/mail/messages/${encodeURIComponent(id)}`);
   }
 
   brokerQueues(): Observable<QueuesView> {

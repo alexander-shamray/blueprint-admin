@@ -38,7 +38,10 @@ Most of FakePlatform's fixtures are recordings; `FixtureRecordings` names
 which, and why each of the rest is written by hand. To re-record, bring the stack up,
 run `dotnet run --project src/Admin.Host -- --Admin:Record=true`, and open
 Stack, Broker and API. Then send some traffic and open the Stack strip and a
-trace, so that the golden signals and Grafana's datasources are read. Review
+trace, so that the golden signals and Grafana's datasources are read. Open
+Mail and each message on it once an order has run, so the sink's list, every
+message and its headers are read; the Mail e2e spec counts that order's
+messages, so it moves with the recording. Review
 the diff under `src/Admin.Host/Fakes/fixtures`, since a test or a spec that
 pinned the old answer moves with it.
 

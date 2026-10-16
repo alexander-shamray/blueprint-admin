@@ -276,6 +276,53 @@ export interface HoldersView {
   runbookUrl: string;
 }
 
+/** A mailbox as the mail sink parsed it; `name` is empty when the message gave none. */
+export interface Mailbox {
+  name: string;
+  address: string;
+}
+
+/** One message in the host's `MailListView`; `correlationId` is null when the message carries none the backend would adopt. */
+export interface MailSummary {
+  id: string;
+  from: Mailbox;
+  to: Mailbox[];
+  subject: string;
+  created: string;
+  snippet: string;
+  read: boolean;
+  correlationId: string | null;
+}
+
+/** The host's `MailListView`: the newest messages first, what the sink holds in all, and the sink's own UI. */
+export interface MailListView {
+  reachable: boolean;
+  error: string | null;
+  total: number;
+  messages: MailSummary[];
+  sinkUrl: string;
+}
+
+/** One message opened, with the parts the sink split it into; either may be empty. */
+export interface MailMessageView {
+  id: string;
+  from: Mailbox;
+  to: Mailbox[];
+  cc: Mailbox[];
+  subject: string;
+  date: string;
+  text: string;
+  html: string;
+  correlationId: string | null;
+}
+
+/** The host's `MailMessageRead`: the message, or why there is none. */
+export interface MailMessageRead {
+  reachable: boolean;
+  error: string | null;
+  message: MailMessageView | null;
+}
+
 /** One holder's answer; `counted` is false for a name outside the set the request was raised with. */
 export interface HolderAnswer {
   responder: string;

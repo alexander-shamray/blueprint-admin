@@ -106,6 +106,13 @@ depth of its `*-privacy` queue and of `privacy-completions` beside it; an overdu
 request is reissued from the screen and links the backend's `erasure-overdue`
 runbook. Against FakePlatform the subject ending `dead` is the one that goes
 overdue, so the reissue has something to do.
+The Mail screen lists what Notifications sent, newest first, as the mail sink
+(Mailpit) holds it: when, to whom, the subject, and the message's
+`X-Correlation-Id` as a link into its Trace timeline; a correlation id typed
+into its filter leaves one order's messages alone. Opening a message shows
+its body: the HTML part in a frame sandboxed with no scripts, or the plain
+text. It only reads: clearing the sink is done in the sink's own UI, which it
+links, and the sink's chaos API is never called.
 The Trace screen joins a correlation id's Loki lines and Tempo spans into one
 timeline, each of those rows linking into Grafana Explore, and closing with a
 snapshot of the projection queue and every other queue the spans crossed; the
@@ -205,6 +212,10 @@ are announced.
   service; Grafana's panel shows the split. Its command and query p95 are
   quantiles over the backend's `request.duration` histogram, so they are only
   as fine as that histogram's bucket boundaries.
+- The Mail screen lists the sink's newest `MailSinkClient.Limit` messages and
+  says how many it holds in all. Opening a message marks it read in the sink,
+  as opening it in the sink's own UI does. A message with no
+  `X-Correlation-Id`, or one the backend would not adopt, has no Trace link.
 
 ## Tests
 
