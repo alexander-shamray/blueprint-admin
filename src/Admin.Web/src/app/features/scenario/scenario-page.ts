@@ -601,6 +601,9 @@ export class ScenarioPage {
       this.patch('stop', { state: 'ok', detail: `Held: ${held.title}. The host restores it by itself at ${held.expiresAt}.` });
       return !this.destroyed;
     } catch (e: unknown) {
+      // A 409 says no lease is held: the deadline already restored it, and a lease taken since is another run's, which the restore
+      // step must not end. A 500 is a change the host undid, or says it could not and keeps the lease, so the restore still runs.
+      if ((e as { status?: number } | null)?.status === 409) this.leaseTaken = false;
       if (this.cancelled || this.screenGone) return false;
       this.patch('stop', { state: 'failed', detail: describe(e) });
       return false;

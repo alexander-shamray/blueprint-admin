@@ -1212,7 +1212,7 @@ describe('ScenarioPage', () => {
       expect(page.steps().find((s) => s.key === 'restore')!.state).toBe('ok');
     });
 
-    it('fails the stop step on a 409, which the host answers when no lease is held, and still asks for the restore', async () => {
+    it('fails the stop step on a 409, which the host answers when no lease is held, and does not restore a lease that belongs to another run', async () => {
       host.leaseAddChange.mockReturnValue(throwError(() => ({ status: 409, error: { detail: 'No lease is held.' } })));
       const page = render().componentInstance;
       page.pick('release-timeout');
@@ -1220,7 +1220,8 @@ describe('ScenarioPage', () => {
       await page.run();
 
       expect(page.steps().find((s) => s.key === 'stop')!.detail).toContain('No lease is held.');
-      expect(host.leaseRestore).toHaveBeenCalledTimes(1);
+      expect(host.leaseRestore).not.toHaveBeenCalled();
+      expect(page.steps().find((s) => s.key === 'restore')!.state).toBe('skipped');
     });
 
     it('cancels from the console while the reservation is awaited, takes no change, and restores the stack', async () => {
