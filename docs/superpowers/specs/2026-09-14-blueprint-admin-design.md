@@ -1054,9 +1054,10 @@ A watch reads the BFF's buyer order read, the one `run-locally.md` makes by
 hand, with the drain's interval and cap, until its timeline shows the step
 waited for. The BFF learns from the broker, so a 404 before its first answer
 is waited out; any other status ends the step, and so does an order that
-ended in a cancellation the watch was not waiting for. The order's state is
-the buyer's view, not the saga's: confirmed, despatched and delivered are what
-the BFF projected, and the reservation and payment between them are on the
+ended in a cancellation the watch was not waiting for. A step's verdict rests
+on the buyer's view, not the saga's (the strip also reads the saga's own state
+beside it, §5.13): confirmed, despatched and delivered are what the BFF
+projected, and the reservation and payment between them are on the
 Trace screen. FakePlatform's `FakeOrders` moves each order it placed a step a
 second, so the watches have something to watch; it is written by hand, since a
 recording holds one instant of an order.
