@@ -125,7 +125,9 @@ the projection to drain, quote, order, and then either read the order back
 through the BFF until it is confirmed, despatched and delivered, cancel it
 and read it back until it is cancelled, or apply a cause `run-locally.md` names
 (a price ending `.01`, stock set to 0) and read it back until the saga has declined
-it or found it out of stock. Each watch says what it is waiting
+it or found it out of stock, or order to the delivery postal code `SIM-TRANSIT`, which the carrier
+simulator collects and never delivers, read the order back despatched, and see a cancel
+of it refused with 422 `order.already_shipped`. Each watch says what it is waiting
 for and what it last read; the run stops at the first step that does not
 succeed, and each sent step links to its own trace. A step for which the host
 mints a new token, because the one it held was due to renew, says so. The
