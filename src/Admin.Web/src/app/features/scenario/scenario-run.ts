@@ -1079,7 +1079,8 @@ export function sagaStrip(reads: readonly SagaRead[]): SagaStrip | null {
   return {
     statusChangedAt: step === null ? null : last.timeline[step],
     saga: last.saga,
-    sagaSeenAt: last.saga === null ? null : sagaFirst.readAt,
+    // An unreadable answer saw no state, so it has no "seen so" to claim.
+    sagaSeenAt: last.saga === null || last.saga.kind === 'unreadable' ? null : sagaFirst.readAt,
     pairing: last.saga === null ? null : pairing(last.saga, last.status),
     status: last.status,
     readAt: last.readAt,
