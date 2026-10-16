@@ -596,6 +596,35 @@ describe('ScenarioPage', () => {
       expect(host.proxy).not.toHaveBeenCalled();
     });
 
+    it('restores after a 500 from the lease, because the host may have kept the lease it could not undo', async () => {
+      host.leaseAcquire.mockReturnValue(
+        throwError(() => ({
+          status: 500,
+          error: { detail: 'docker exited with 1. They could not be undone: ... The lease is still held; Restore it from the Stack screen.' },
+        })),
+      );
+      const page = render().componentInstance;
+      page.pick('stock-timeout');
+
+      await page.run();
+
+      expect(page.steps()[0].state).toBe('failed');
+      expect(host.leaseRestore).toHaveBeenCalledTimes(1);
+      expect(page.steps()[5].state).toBe('ok');
+      expect(host.proxy).not.toHaveBeenCalled();
+    });
+
+    it('does not restore after a 409, whose lease is another run\'s', async () => {
+      host.leaseAcquire.mockReturnValue(throwError(() => ({ status: 409, error: { detail: 'A Scenario already holds a lease.' } })));
+      const page = render().componentInstance;
+      page.pick('stock-timeout');
+
+      await page.run();
+
+      expect(host.leaseRestore).not.toHaveBeenCalled();
+      expect(page.steps()[5].detail).toBe('No lease was taken, so nothing was changed.');
+    });
+
     it('says plainly when the restore itself failed, and that the host will try again', async () => {
       readsAs(outOfStock);
       host.leaseRestore.mockReturnValue(throwError(() => ({ error: { detail: 'docker did not answer' } })));

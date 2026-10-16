@@ -440,6 +440,10 @@ export class ScenarioPage {
       });
       return !this.destroyed;
     } catch (e: unknown) {
+      // A 500 is a change that failed: the host undid it, or says it could not and keeps the lease. Only that answer can leave
+      // a lease of this run's behind, so only it sends the run to the restore; a 400 or a 409 changed nothing, and a 409's lease
+      // is another run's, which this one must not restore.
+      if ((e as { status?: number } | null)?.status === 500) this.leaseTaken = true;
       if (this.cancelled || this.screenGone) return false;
       this.patch('lease', { state: 'failed', detail: describe(e) });
       return false;
