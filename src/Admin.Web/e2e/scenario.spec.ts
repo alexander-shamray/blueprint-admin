@@ -92,7 +92,7 @@ test('the in-transit script orders to SIM-TRANSIT and reads the order back despa
   await expect(steps.nth(6).locator('.detail')).toContainText('The order read shows dispatched at');
 });
 
-// The saga strip beside the steps (spec §5.12): the order's state as the BFF last read it, the time each transition took
+// The saga strip beside the steps (spec §5.13): the order's state as the BFF last read it, the time each transition took
 // from the platform's own stamps, and what it is: the last read, and the only stuck-saga detector a workstation has.
 test('the saga strip follows a saga that advances to delivered and says it is the last read', async ({ page }) => {
   await page.goto('/scenario');
