@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Admin.Host.Compose;
 using Admin.Host.Config;
 using Admin.Host.Jobs;
@@ -13,7 +14,7 @@ namespace Admin.Host.Frontend;
 /// <see cref="DoctorState.Unknown"/> where the stack may simply be down, and a problem where the silence is the cause
 /// (no <c>adb</c>, so no device run).
 /// </summary>
-public sealed class DeviceReads(IProcessRunner runner, RepoPaths paths, TimeProvider time)
+public sealed partial class DeviceReads(IProcessRunner runner, RepoPaths paths, TimeProvider time)
 {
     /// <summary>Owner: run-locally.md step 4, first read. Android Studio's default SDK place, as the document spells it.</summary>
     internal const string AdbDevicesLine = """& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" devices""";
@@ -106,16 +107,11 @@ public sealed class DeviceReads(IProcessRunner runner, RepoPaths paths, TimeProv
             return new(name, DoctorState.Unknown, $"Keycloak's admin API did not answer: {error}");
         }
 
-        // The last line is webOrigins, joined; the lines before it are the redirects, one each. A single line holding a
-        // comma is the origins of a client with no redirect at all.
-        string[] lines = [.. realm.Stdout.Select(l => l.Trim())];
-        string[] redirects = lines switch
-        {
-            [] => [],
-            [var only] => only.Contains(',', StringComparison.Ordinal) ? [] : [only],
-            _ => [.. lines[..^1]],
-        };
-        redirects = [.. redirects.Where(r => r.Length > 0)];
+        // The output is the redirects, one a line, then webOrigins joined, which is a blank line (and may be dropped) when
+        // the client lists none. So the last line is the origins only if it is shaped like them, each part a scheme and
+        // an authority and no path, and never by its position: a redirect is a URI with a path.
+        string[] lines = [.. realm.Stdout.Select(l => l.Trim()).Where(l => l.Length > 0)];
+        string[] redirects = lines.Length > 0 && lines[^1].Split(',').All(p => OriginShape().IsMatch(p)) ? lines[..^1] : lines;
 
         return redirects switch
         {
@@ -124,6 +120,10 @@ public sealed class DeviceReads(IProcessRunner runner, RepoPaths paths, TimeProv
             _ => new(name, DoctorState.Problem, $"mobile-app redirects to {string.Join(", ", redirects)}, not exactly {NativeRedirectUri}, which the client sends. The realm is the backend's to change."),
         };
     }
+
+    /// <summary>A web origin as Keycloak lists it: a scheme and an authority, with no path.</summary>
+    [GeneratedRegex(@"^[A-Za-z][A-Za-z0-9+.\-]*://[^/,\s]+$")]
+    private static partial Regex OriginShape();
 
     private Task<CommandOutput> PowerShellAsync(string line, CancellationToken cancellationToken) =>
         OneShot.CompleteAsync(
