@@ -619,8 +619,9 @@ both. What is this sweep's own follows.
 `source` is all of `src/` and `tests/`, because an exploit path starts in the
 Host and lands in the SPA and the reporting row is not where it is found, and
 `config` is the tracked files at the repository root. `tooling` and `samples`
-are the bug sweep's rows. The SPA's lockfile and the frozen delivery plans are
-owned and not read, for the reason given there. A new project under `src/` is
+are the bug sweep's rows. The SPA's lockfile is owned, counted and checked by
+the helper rather than listed, and the frozen delivery plans are owned and not
+read, for the reasons given there. A new project under `src/` is
 `source` the day it lands; a new top-level tree refuses the run until a row owns
 it, and `test_sweep_slices.py` holds both commands' tables to `row_of`.
 
