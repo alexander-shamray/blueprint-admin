@@ -13,6 +13,8 @@ export type StepKey =
   | 'quote'
   | 'stock'
   | 'order'
+  | 'lease'
+  | 'restore'
   | 'cancel'
   | 'late_cancel'
   | 'confirmed'
@@ -50,7 +52,19 @@ export type ScriptKey =
   | 'out-of-stock'
   | 'in-transit'
   | 'already-shipped'
+  | 'stock-timeout'
+  | 'payment-timeout'
   | 'image';
+
+/**
+ * A change to the stack the script holds for its cause (spec §5.3, Scenario service control): the ids of
+ * the host's `ScenarioControl.Table`, and how long the host holds them before it restores them itself. The `lease` step takes
+ * it and the `restore` step ends it, which runs whatever happened between.
+ */
+export interface ScriptLease {
+  changes: readonly string[];
+  holdSeconds: number;
+}
 
 export interface Script {
   title: string;
@@ -68,6 +82,8 @@ export interface Script {
    * answer is scripted by the delivery postal code"). Unset, the example body's own code takes the default outcome.
    */
   postalCode?: string;
+  /** The change to the stack its cause needs, taken by the `lease` step and always ended by the `restore` step. */
+  lease?: ScriptLease;
 }
 
 export const SCRIPT_KEYS: readonly ScriptKey[] = [
@@ -77,8 +93,20 @@ export const SCRIPT_KEYS: readonly ScriptKey[] = [
   'out-of-stock',
   'in-transit',
   'already-shipped',
+  'stock-timeout',
+  'payment-timeout',
   'image',
 ];
+
+/** The host's `ScenarioControl` change ids (ids, not copies of what they do: the host's table owns that). */
+const SHORT_WAITS = 'short-waits';
+const STOP_INVENTORY = 'stop-inventory';
+
+/**
+ * run-locally.md, "The branches, then": a total ending .09 is the payment simulator answering after the adapter's own
+ * budget, which holds Payments up, so the order is declined only by the saga's payment wait.
+ */
+const PAYMENT_WAIT_AMOUNT = 10.09;
 
 /** run-locally.md's carrier table: `SIM-TRANSIT` is collected and never delivered, so the order read stays `dispatched`. */
 const IN_TRANSIT_CODE = 'SIM-TRANSIT';
@@ -139,6 +167,22 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
     steps: ['publish', 'drain', 'quote', 'order', 'confirmed', 'dispatched', 'late_cancel', 'unchanged'],
     postalCode: IN_TRANSIT_CODE,
   },
+  'stock-timeout': {
+    title: 'Stock timeout',
+    intro:
+      "Shorten the saga's waits and stop Inventory, so nothing can answer the reservation; publish a product, order it, and read the order back until the saga's own stock wait has lapsed and ended it out of stock. Only that wait can have ended it. The stack is restored afterwards, whatever happens.",
+    steps: ['lease', 'publish', 'drain', 'order', 'out_of_stock', 'restore'],
+    lease: { changes: [SHORT_WAITS, STOP_INVENTORY], holdSeconds: 420 },
+  },
+  'payment-timeout': {
+    title: 'Payment timeout',
+    intro:
+      "Shorten the saga's waits, publish a product at 10.09 (the payment simulator answers a total ending .09 after the adapter's own budget), stock it, order it, and read the order back until the saga's payment wait has lapsed and declined it. A .09 order holds Payments up while it waits, so run nothing else beside it. The stack is restored afterwards, whatever happens.",
+    steps: ['lease', 'publish', 'drain', 'stock', 'quote', 'order', 'declined', 'restore'],
+    amount: PAYMENT_WAIT_AMOUNT,
+    onHand: STOCKED,
+    lease: { changes: [SHORT_WAITS], holdSeconds: 360 },
+  },
 };
 
 /** What run-locally.md ("After despatch there is nothing to compensate") observed a cancel after despatch answer. */
@@ -153,6 +197,8 @@ export const STEP_TITLES: Record<StepKey, string> = {
   stock: 'Set the stock on hand',
   order: 'Place an order',
   cancel: 'Cancel it',
+  lease: 'Change the stack for the cause',
+  restore: 'Restore the stack',
   late_cancel: 'Ask to cancel it after despatch',
   confirmed: 'Wait for confirmed',
   dispatched: 'Wait for despatch',
@@ -209,7 +255,7 @@ export const SCENARIO_OPERATIONS: Record<OperationRole, string> = {
 
 /** The role a step sends as; the drain asks the broker and sends none. */
 export function roleOf(key: StepKey): OperationRole | null {
-  if (key === 'drain') return null;
+  if (key === 'drain' || key === 'lease' || key === 'restore') return null;
   if (key === 'upload') return 'image';
   if (key === 'thumbnail') return 'product';
   if (key === 'late_cancel') return 'cancel';
