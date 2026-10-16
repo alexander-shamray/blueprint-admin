@@ -23,6 +23,8 @@ public sealed class RunLocallyDriftTests
         { "Place an order", RunLocallyExamples.For("PlaceOrder")! },
         { "Stock for a product", RunLocallyExamples.For("SetOnHand")! },
         { "Cancel (", RunLocallyExamples.For("CancelOrder")! },
+        { "The log keeps every request", RunLocallyExamples.CarrierBookings },
+        { "And the polls of one script's parcel feed", RunLocallyExamples.CarrierFeedPolls },
     };
 
     [Theory]

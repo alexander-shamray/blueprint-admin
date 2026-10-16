@@ -26,6 +26,27 @@ public static class RunLocallyExamples
         }
         """;
 
+    /// <summary>
+    /// run-locally.md, the carrier simulator's "booking attempts for one code": WireMock.Net's own request model, filtered to
+    /// the bookings whose body names a postal code. The document names <c>SIM-DOWN</c>; the Scenario sets the code its script
+    /// scripts (<c>scenario-run.ts</c>).
+    /// </summary>
+    public const string CarrierBookings = """
+        {
+          "Methods": [ "POST" ],
+          "Path": { "Matchers": [ { "Name": "ExactMatcher", "Pattern": "/v1/shipments" } ] },
+          "Body": { "Matchers": [ { "Name": "WildcardMatcher", "Pattern": "*SIM-DOWN*" } ] }
+        }
+        """;
+
+    /// <summary>run-locally.md, the carrier simulator's "polls of one script's parcel feed": the feed of the <c>SIM-STRANGE</c> parcel.</summary>
+    public const string CarrierFeedPolls = """
+        {
+          "Methods": [ "GET" ],
+          "Path": { "Matchers": [ { "Name": "ExactMatcher", "Pattern": "/v1/shipments/crr_SIM-STRANGE/events" } ] }
+        }
+        """;
+
     /// <summary>run-locally.md, "Saved delivery address".</summary>
     public const string SavedAddress = """
         {

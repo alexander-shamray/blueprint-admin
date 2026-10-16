@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace Admin.Host.Fakes;
@@ -72,6 +74,15 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
     /// end where the order read cannot tell them from a confirmed order and are not modelled here.
     /// </summary>
     internal const string InTransitPostalCode = "SIM-TRANSIT";
+
+    /// <summary>
+    /// The carrier simulator's codes whose outcome the order read cannot tell from a confirmed order (run-locally.md's table):
+    /// refused, down, slow and strange. Only the simulator's request log tells them apart.
+    /// </summary>
+    internal static readonly string[] CarrierCodes = ["SIM-REFUSED", "SIM-DOWN", "SIM-SLOW", "SIM-STRANGE"];
+
+    /// <summary>The most entries the fake simulator's log shows a code, so a long-lived fake host's answer stays small.</summary>
+    private const int MaxCarrierEntries = 20;
 
     /// <summary>What an order for a product the fake was never told about shows: the recorded listing's Walnut desk.</summary>
     private const string DefaultName = "Walnut desk";
@@ -216,6 +227,7 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
             {
                 InTransit = string.Equals(postalCode, InTransitPostalCode, StringComparison.Ordinal),
                 EndDelay = after,
+                Carrier = postalCode is not null && CarrierCodes.Contains(postalCode) ? postalCode : null,
             };
             return id;
         }
@@ -286,6 +298,84 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
         }
     }
 
+    /// <summary>
+    /// What the carrier simulator's request log holds of the orders placed to <paramref name="code"/>, as WireMock.Net's
+    /// <c>/__admin/requests/find</c> answers it, entry by entry in the shape the Scenario reads: <c>Request.DateTime</c>,
+    /// <c>Method</c>, <c>Path</c> and <c>Body</c>, and <c>Response.StatusCode</c>. The cadence is the fake's own and the shapes
+    /// are run-locally.md's: <c>SIM-REFUSED</c> one booking answered 422; <c>SIM-DOWN</c> repeated bookings, each 503;
+    /// <c>SIM-SLOW</c> repeated bookings of one shipment, each 201; <c>SIM-STRANGE</c> one booking answered 201 and then
+    /// repeated polls of the feed. <paramref name="polls"/> asks for the feed's polls, not the bookings.
+    /// </summary>
+    public string CarrierLog(string code, bool polls)
+    {
+        KeyValuePair<string, Placed>[] orders;
+
+        lock (gate)
+        {
+            orders = [.. placed.Where(o => o.Value.Carrier == code)];
+        }
+
+        DateTimeOffset now = time.GetUtcNow();
+        List<object> entries = [];
+
+        foreach ((string orderId, Placed order) in orders)
+        {
+            Guid shipment = new(SHA256.HashData(Encoding.UTF8.GetBytes(orderId)).AsSpan(0, 16));
+            string body = JsonSerializer.Serialize(new { shipmentId = shipment, address = new { line1 = "1 Test Street", city = "Almaty", postalCode = code, country = "KZ" } });
+            DateTimeOffset booked = order.At + (2 * Step);
+
+            void Add(DateTimeOffset at, string method, string path, string? requestBody, int status, string title)
+            {
+                if (at <= now && entries.Count < MaxCarrierEntries)
+                {
+                    entries.Add(new
+                    {
+                        Guid = Guid.NewGuid(),
+                        Request = new { DateTime = at, Method = method, Path = path, Body = requestBody },
+                        Response = new { StatusCode = status },
+                        MappingTitle = title,
+                    });
+                }
+            }
+
+            if (polls)
+            {
+                for (int i = 0; code == "SIM-STRANGE" && i < MaxCarrierEntries; i++)
+                {
+                    Add(order.At + (3 * Step) + (2 * Step * i), "GET", "/v1/shipments/crr_SIM-STRANGE/events", null, 200, "SIM-STRANGE: a status nobody agreed");
+                }
+
+                continue;
+            }
+
+            switch (code)
+            {
+                case "SIM-REFUSED":
+                    Add(booked, "POST", "/v1/shipments", body, 422, "SIM-REFUSED is an address the carrier will not serve");
+                    break;
+                case "SIM-DOWN":
+                    for (int i = 0; i < MaxCarrierEntries; i++)
+                    {
+                        Add(booked + (Step * i), "POST", "/v1/shipments", body, 503, "SIM-DOWN is a carrier that is down");
+                    }
+
+                    break;
+                case "SIM-SLOW":
+                    for (int i = 0; i < MaxCarrierEntries; i++)
+                    {
+                        Add(booked + (2 * Step * i), "POST", "/v1/shipments", body, 201, "SIM-SLOW delays past the adapter's total, then answers as booked");
+                    }
+
+                    break;
+                default:
+                    Add(booked, "POST", "/v1/shipments", body, 201, "SIM-STRANGE books, and its feed is a stranger's input");
+                    break;
+            }
+        }
+
+        return JsonSerializer.Serialize(entries);
+    }
+
     /// <summary>The BFF's detail for <paramref name="orderId"/>, or null where it answers 404: an order it never learned of.</summary>
     public string? Detail(string orderId)
     {
@@ -321,8 +411,8 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
         DateTimeOffset? cancelled = scripted ? (p + order.EndDelay <= now ? p + order.EndDelay : null)
             : order.CancelAskedAt is { } c && c + Step < p + (2 * Step) && c + Step <= now ? c + Step : null;
         DateTimeOffset? confirmed = scripted ? null : Reached(p + Step, now, cancelled);
-        DateTimeOffset? dispatched = scripted ? null : Reached(p + (2 * Step), now, cancelled);
-        DateTimeOffset? delivered = scripted || order.InTransit ? null : Reached(p + (3 * Step), now, cancelled);
+        DateTimeOffset? dispatched = scripted || order.Carrier is not null ? null : Reached(p + (2 * Step), now, cancelled);
+        DateTimeOffset? delivered = scripted || order.InTransit || order.Carrier is not null ? null : Reached(p + (3 * Step), now, cancelled);
 
         string status = delivered is not null ? "delivered"
             : cancelled is not null ? order.Ended ?? "cancelled"
@@ -382,6 +472,12 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
 
         /// <summary>How long after the place a scripted end lands: one <see cref="Step"/> unless a saga wait is what ends it.</summary>
         public TimeSpan EndDelay { get; init; } = Step;
+
+        /// <summary>
+        /// The postal code of an order to one of the carrier outcomes the order read cannot tell apart: it is confirmed and stays
+        /// so, and only the simulator's request log (<see cref="CarrierLog"/>) shows what the carrier saw.
+        /// </summary>
+        public string? Carrier { get; init; }
     }
 
     private sealed record Product(decimal Amount, int? OnHand, string Name, string? ThumbnailUrl);

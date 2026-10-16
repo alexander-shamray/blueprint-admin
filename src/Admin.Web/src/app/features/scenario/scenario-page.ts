@@ -28,6 +28,9 @@ import { DRAIN_POLL_MS, DRAIN_WATCH_MS, UUID } from '../api/api-page';
 import { ScenarioLauncher } from './scenario-launcher';
 import { buildUrl, pretty, withFreshCommandId } from '../api/request-builder';
 import {
+  CARRIER_POLL_MS,
+  CARRIER_WATCH_MS,
+  CarrierEntry,
   SCRIPTS,
   SCRIPT_KEYS,
   STEP_TITLES,
@@ -37,6 +40,8 @@ import {
   StepKey,
   WATCHING_FOR,
   WatchKey,
+  carrierEntries,
+  carrierVerdict,
   idFrom,
   imageFault,
   orderRead,
@@ -49,6 +54,7 @@ import {
   hasField,
   hasShippingPostalCode,
   isAlreadyShipped,
+  withCarrierCode,
   withField,
   withProductId,
   withShippingPostalCode,
@@ -137,6 +143,9 @@ export class ScenarioPage {
 
   /** Whether the `lease` step took a lease this run has still to end. */
   private leaseTaken = false;
+
+  /** When this run's order was placed, in ms, as the order read gave it: where the carrier step starts reading the simulator's log. */
+  private placedAt = 0;
 
   /** The changes the host may make for a script, by id, for the note before Run: the host's table, not a copy of it. */
   readonly changes = signal<LeaseChange[]>([]);
@@ -281,6 +290,7 @@ export class ScenarioPage {
     this.cancelled = false;
     this.cancelling.set(false);
     this.leaseTaken = false;
+    this.placedAt = 0;
     this.projection.set(null);
     this.steps.set(initialSteps(script));
 
@@ -331,6 +341,9 @@ export class ScenarioPage {
       switch (key) {
         case 'lease':
           if (!(await this.takeLease(script))) return;
+          break;
+        case 'carrier':
+          if (!(await this.carrierLog(script, operations))) return;
           break;
         case 'upload': {
           const uploaded = await this.upload(operations.image!, run, identity);
@@ -409,6 +422,88 @@ export class ScenarioPage {
           if (!(await this.watch(key, operations.read!, run, identity, orderId))) return;
       }
     }
+  }
+
+  /**
+   * Reads what the carrier saw of this order from the simulator's request log (run-locally.md), filtered by the simulator
+   * itself for the script's code, until the log shows the outcome the code scripts or the wait runs out. The simulator is
+   * anonymous and untraced, so nothing is sent as the user and the step has no trace. A log cut short by the proxy's
+   * cap, or an answer that is not a list of entries, fails the step: it never reads as a log with nothing in it.
+   */
+  private async carrierLog(script: Script, operations: ScenarioOperations): Promise<boolean> {
+    const carrier = script.carrier;
+    if (!carrier || this.destroyed) return false;
+
+    const key: StepKey = 'carrier';
+    const bookings = operations.bookings!;
+    const polls = operations.polls;
+    const bookingBody = withCarrierCode(bookings.exampleBody ?? '', carrier.code);
+    const since = this.placedAt;
+    const waiting = `Waiting for the carrier simulator's log to show ${carrier.code}: reading it every ${CARRIER_POLL_MS / 1000} s for up to ${CARRIER_WATCH_MS / 1000} s, from when the order was placed.`;
+    this.patch(key, { state: 'running', request: `${bookings.method} ${bookings.url}`, detail: waiting });
+
+    const deadline = Date.now() + CARRIER_WATCH_MS;
+
+    for (;;) {
+      const found = await this.findInCarrierLog(key, bookings, bookingBody);
+      if (found === null) return false;
+      let feed: CarrierEntry[] = [];
+      if (carrier.outcome === 'strange' && polls) {
+        const read = await this.findInCarrierLog(key, polls, polls.exampleBody ?? '');
+        if (read === null) return false;
+        feed = read;
+      }
+
+      const v = carrierVerdict(carrier.outcome, found, feed, since);
+      if (v.kind === 'reached') {
+        this.patch(key, { state: 'ok', detail: v.detail });
+        return true;
+      }
+      if (v.kind === 'failed') {
+        this.patch(key, { state: 'failed', detail: v.reason });
+        return false;
+      }
+      if (Date.now() >= deadline) {
+        this.patch(key, { state: 'failed', detail: `Not shown after ${CARRIER_WATCH_MS / 1000} s. ${v.detail}` });
+        return false;
+      }
+      this.patch(key, { detail: `${waiting} ${v.detail}` });
+
+      await firstValueFrom(timer(CARRIER_POLL_MS).pipe(takeUntil(this.stopped)), { defaultValue: undefined });
+      if (this.destroyed) return false;
+    }
+  }
+
+  /** One `find` on the simulator, as the entries it logged; null once a failure has been recorded on the step. */
+  private async findInCarrierLog(key: StepKey, operation: ApiOperation, body: string): Promise<CarrierEntry[] | null> {
+    let result: ProxyResult;
+    try {
+      result = await firstValueFrom(
+        this.host.proxy({ method: operation.method, url: operation.url, headers: {}, body, identity: null, correlationId: null }),
+      );
+    } catch (e: unknown) {
+      this.patch(key, { state: 'failed', status: null, body: null, detail: describe(e) });
+      return null;
+    }
+
+    if (result.outcome !== 'responded') {
+      const why = result.outcome === 'unreached' ? `No answer from the carrier simulator: ${result.error}` : 'The request was refused.';
+      this.patch(key, { state: 'failed', status: null, body: null, detail: why });
+      return null;
+    }
+
+    this.patch(key, { status: result.status, body: result.body });
+    const entries = result.status === 200 && !result.bodyTruncated ? carrierEntries(result.body) : null;
+    if (entries === null) {
+      this.patch(key, {
+        state: 'failed',
+        detail: result.bodyTruncated
+          ? "The simulator's answer was longer than the proxy reads, so the log cannot be judged."
+          : `The simulator answered ${result.status}, not a list of the requests it logged.`,
+      });
+    }
+
+    return entries;
   }
 
   /**
@@ -779,6 +874,9 @@ export class ScenarioPage {
       } else {
         this.orderAnswered = true;
         const order = orderRead(result.body);
+        // The carrier step reads the simulator's log from when this order was placed, by the platform's own clock.
+        const placed = order?.timeline.placed ? Date.parse(order.timeline.placed) : Number.NaN;
+        if (!Number.isNaN(placed)) this.placedAt = placed;
         if (order === null) {
           this.patch(key, {
             state: 'failed',

@@ -131,6 +131,33 @@ public static class CuratedOperations
             false,
             GatewayRoutes.Direct,
             true),
+
+        // The same log, filtered by the simulator itself: the whole of it grows without bound (nearly a megabyte after a day
+        // of orders, against the proxy's one-megabyte cap), so the Scenario's carrier step asks for one code's requests.
+        new ApiOperation(
+            "carrier:FindBookings",
+            "carrier",
+            "FindBookings",
+            "POST",
+            Join(options.CarrierSimulatorUrl, "/__admin/requests/find"),
+            [],
+            [],
+            RunLocallyExamples.CarrierBookings,
+            false,
+            GatewayRoutes.Direct,
+            true),
+        new ApiOperation(
+            "carrier:FindFeedPolls",
+            "carrier",
+            "FindFeedPolls",
+            "POST",
+            Join(options.CarrierSimulatorUrl, "/__admin/requests/find"),
+            [],
+            [],
+            RunLocallyExamples.CarrierFeedPolls,
+            false,
+            GatewayRoutes.Direct,
+            true),
     ];
 
     private static ApiOperation Health(string host, string baseUrl) =>

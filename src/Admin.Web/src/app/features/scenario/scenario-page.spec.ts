@@ -13,6 +13,7 @@ import {
 import { DRAIN_POLL_MS, DRAIN_WATCH_MS, UUID } from '../api/api-page';
 import { ScenarioLauncher } from './scenario-launcher';
 import { ScenarioPage } from './scenario-page';
+import { CARRIER_POLL_MS, CARRIER_WATCH_MS } from './scenario-run';
 
 function op(partial: Partial<ApiOperation> & { id: string }): ApiOperation {
   const [source, name] = partial.id.split(':');
@@ -85,6 +86,18 @@ const catalog: ApiCatalogView = {
       method: 'GET',
       url: 'http://localhost:5000/bff/v1/orders/{id}',
       pathParameters: [{ name: 'id', required: true, type: 'string' }],
+    }),
+    op({
+      id: 'carrier:FindBookings',
+      url: 'http://localhost:5191/__admin/requests/find',
+      exampleBody:
+        '{"Methods":["POST"],"Path":{"Matchers":[{"Name":"ExactMatcher","Pattern":"/v1/shipments"}]},"Body":{"Matchers":[{"Name":"WildcardMatcher","Pattern":"*SIM-DOWN*"}]}}',
+    }),
+    op({
+      id: 'carrier:FindFeedPolls',
+      url: 'http://localhost:5191/__admin/requests/find',
+      exampleBody:
+        '{"Methods":["GET"],"Path":{"Matchers":[{"Name":"ExactMatcher","Pattern":"/v1/shipments/crr_SIM-STRANGE/events"}]}}',
     }),
   ],
 };
@@ -477,6 +490,176 @@ describe('ScenarioPage', () => {
 
     expect(page.steps()[5].state).toBe('failed');
     expect(page.steps()[5].detail).toBe('The order ended delivered, not declined.');
+  });
+
+  describe('the carrier log scripts', () => {
+    const confirmedOrder = order('confirmed', { confirmed: '2026-10-05T12:00:01Z' });
+    const logged = (secondsAfter: number, status: number, shipmentId = 's1', method = 'POST') => ({
+      Request: {
+        DateTime: new Date(Date.parse(placedAt) + secondsAfter * 1000).toISOString(),
+        Method: method,
+        Path: method === 'POST' ? '/v1/shipments' : '/v1/shipments/crr_SIM-STRANGE/events',
+        Body: method === 'POST' ? JSON.stringify({ shipmentId, address: { postalCode: 'x' } }) : null,
+      },
+      Response: { StatusCode: status },
+    });
+
+    /** The order reads confirmed throughout, and each find answers what `bookings` and `polls` are called for. */
+    function simulator(bookings: () => unknown[], polls: () => unknown[] = () => []): void {
+      host.proxy.mockImplementation((request: ProxyRequest) => {
+        if (request.url.endsWith('/__admin/requests/find')) {
+          const feed = request.body!.includes('"GET"');
+          return of(responded(200, JSON.stringify(feed ? polls() : bookings()), ''));
+        }
+        return isRead(request) ? of(responded(200, confirmedOrder, '')) : of(platform(request));
+      });
+    }
+
+    it.each([
+      ['carrier-refused', 'SIM-REFUSED', () => [logged(2, 422)], 'The carrier refused the booking with 422.'],
+      [
+        'carrier-down',
+        'SIM-DOWN',
+        () => [logged(2, 503), logged(3, 503)],
+        'The carrier saw 2 attempts at the same booking, each answered 503.',
+      ],
+      [
+        'carrier-slow',
+        'SIM-SLOW',
+        () => [logged(2, 201), logged(4, 201)],
+        'The carrier saw 2 attempts at the same booking, each answered 201 after Shipping had stopped waiting.',
+      ],
+    ] as const)('runs the %s script: the order goes to %s and the simulator\'s log shows the outcome', async (script, code, bookings, detail) => {
+      simulator(bookings);
+      const page = render().componentInstance;
+      page.pick(script);
+
+      await page.run();
+
+      expect(page.steps().map((s) => [s.key, s.state])).toEqual([
+        ['publish', 'ok'],
+        ['drain', 'ok'],
+        ['quote', 'ok'],
+        ['order', 'ok'],
+        ['confirmed', 'ok'],
+        ['carrier', 'ok'],
+        ['held', 'ok'],
+      ]);
+      expect(JSON.parse(sent()[2].body!).shippingAddress.postalCode).toBe(code);
+      const find = sent().find((r) => r.url.endsWith('/__admin/requests/find'))!;
+      expect(JSON.parse(find.body!).Body.Matchers[0].Pattern).toBe(`*${code}*`);
+      // The simulator is anonymous and untraced: nothing is sent as the user.
+      expect(find.identity).toBeNull();
+      expect(find.correlationId).toBeNull();
+      expect(page.steps()[5].detail).toBe(detail);
+      expect(page.steps()[5].correlationId).toBeNull();
+    });
+
+    it('runs the carrier-strange script: one booking, then the feed polled again and again', async () => {
+      simulator(() => [logged(2, 201)], () => [logged(5, 200, 's1', 'GET'), logged(8, 200, 's1', 'GET')]);
+      const page = render().componentInstance;
+      page.pick('carrier-strange');
+
+      await page.run();
+
+      expect(page.steps().map((s) => s.state)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok']);
+      expect(page.steps()[5].detail).toBe('The carrier booked the parcel once (201) and its feed has been polled 2 times since.');
+      expect(sent().filter((r) => r.url.endsWith('/__admin/requests/find')).map((r) => JSON.parse(r.body!).Methods[0])).toEqual(['POST', 'GET']);
+    });
+
+    it('waits for the second attempt, saying what it has seen, then reaches the outcome', async () => {
+      vi.useFakeTimers();
+      const answers = [[logged(2, 503)], [logged(2, 503), logged(3, 503)]];
+      simulator(() => (answers.length > 1 ? answers.shift()! : answers[0]));
+      const page = render().componentInstance;
+      page.pick('carrier-down');
+
+      const done = page.run();
+      await vi.advanceTimersByTimeAsync(0);
+      const carrier = () => page.steps().find((s) => s.key === 'carrier')!;
+      expect(carrier().state).toBe('running');
+      expect(carrier().detail).toContain('The carrier has seen 1 attempt, answered 503');
+
+      await vi.advanceTimersByTimeAsync(CARRIER_POLL_MS);
+      await done;
+      vi.useRealTimers();
+
+      expect(carrier().state).toBe('ok');
+    });
+
+    it('fails when the carrier answered what the code does not script, naming it', async () => {
+      simulator(() => [logged(2, 201)]);
+      const page = render().componentInstance;
+      page.pick('carrier-refused');
+
+      await page.run();
+
+      expect(page.steps()[5].state).toBe('failed');
+      expect(page.steps()[5].detail).toBe('The carrier answered 201 to a booking attempt, not 422.');
+      expect(page.steps()[6].state).toBe('skipped');
+    });
+
+    it('fails at the cap with what it last saw', async () => {
+      vi.useFakeTimers();
+      simulator(() => [logged(2, 503)]);
+      const page = render().componentInstance;
+      page.pick('carrier-down');
+
+      const done = page.run();
+      await vi.advanceTimersByTimeAsync(CARRIER_WATCH_MS + CARRIER_POLL_MS);
+      await done;
+      vi.useRealTimers();
+
+      expect(page.steps()[5].state).toBe('failed');
+      expect(page.steps()[5].detail).toContain(`Not shown after ${CARRIER_WATCH_MS / 1000} s. The carrier has seen 1 attempt`);
+    });
+
+    it('never reads a truncated log, or an answer that is not a list, as an empty one', async () => {
+      host.proxy.mockImplementation((request: ProxyRequest) =>
+        request.url.endsWith('/__admin/requests/find')
+          ? of({ ...responded(200, '[{"Request":', ''), bodyTruncated: true })
+          : isRead(request)
+            ? of(responded(200, confirmedOrder, ''))
+            : of(platform(request)),
+      );
+      const page = render().componentInstance;
+      page.pick('carrier-down');
+
+      await page.run();
+
+      expect(page.steps()[5].state).toBe('failed');
+      expect(page.steps()[5].detail).toBe("The simulator's answer was longer than the proxy reads, so the log cannot be judged.");
+
+      host.proxy.mockImplementation((request: ProxyRequest) =>
+        request.url.endsWith('/__admin/requests/find')
+          ? of(responded(400, '{"Status":"Bad JSON"}', ''))
+          : isRead(request)
+            ? of(responded(200, confirmedOrder, ''))
+            : of(platform(request)),
+      );
+      await page.run();
+
+      expect(page.steps()[5].detail).toBe('The simulator answered 400, not a list of the requests it logged.');
+    });
+
+    it('fails the last step when the order read left confirmed', async () => {
+      host.proxy.mockImplementation((request: ProxyRequest) =>
+        request.url.endsWith('/__admin/requests/find')
+          ? of(responded(200, JSON.stringify([logged(2, 422)]), ''))
+          : isRead(request)
+            ? of(responded(200, order('dispatched', { confirmed: '2026-10-05T12:00:01Z', dispatched: '2026-10-05T12:00:06Z' }), ''))
+            : of(platform(request)),
+      );
+      const page = render().componentInstance;
+      page.pick('carrier-refused');
+
+      await page.run();
+
+      expect(page.steps()[4].state).toBe('ok');
+      expect(page.steps()[5].state).toBe('ok');
+      expect(page.steps()[6].state).toBe('failed');
+      expect(page.steps()[6].detail).toBe('The order reads dispatched, not confirmed: this carrier outcome should leave it there.');
+    });
   });
 
   describe('the timeout scripts and the lease', () => {
