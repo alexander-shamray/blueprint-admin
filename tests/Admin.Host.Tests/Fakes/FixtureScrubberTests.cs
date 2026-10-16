@@ -309,6 +309,30 @@ public sealed class FixtureScrubberTests
         FixtureScrubber.Findings(expected).ShouldBeEmpty();
     }
 
+    /// <summary>A value that only begins like a scrubbed one is still a credential: the skip is the whole value, as the other rules' is.</summary>
+    [Theory]
+    [InlineData("""{"authorization": ["<scrubbed>hunter2", "<scrubbed>"]}""", """{"authorization": ["<scrubbed>", "<scrubbed>"]}""")]
+    [InlineData("""{"authorization":"<scrubbed>hunter2"}""", """{"authorization":"<scrubbed>"}""")]
+    [InlineData("""{"b":"{\"authorization\":[\"<scrubbed>hunter2\"]}"}""", """{"b":"{\"authorization\":[\"<scrubbed>\"]}"}""")]
+    public void A_value_that_merely_begins_with_the_scrubbed_marker_is_scrubbed_too(string text, string expected)
+    {
+        FixtureScrubber.Scrub(text).ShouldBe(expected);
+        FixtureScrubber.Findings(text).ShouldNotBeEmpty();
+    }
+
+    /// <summary>A value holding an escaped quote is taken whole inside an escaped document too, at the depth the document sits at.</summary>
+    [Theory]
+    [InlineData("""{"b":"{\"password\":\"pa\\\"ss\",\"u\":1}"}""", """{"b":"{\"password\":\"<scrubbed>\",\"u\":1}"}""")]
+    [InlineData("""{"b":"{\"authorization\":[\"Basic a\\\"b\",\"Basic c\"]}"}""", """{"b":"{\"authorization\":[\"<scrubbed>\",\"<scrubbed>\"]}"}""")]
+    [InlineData(
+        """{"a":"{\"b\":\"{\\\"password\\\":\\\"pa\\\\\\\"ss\\\",\\\"u\\\":1}\"}"}""",
+        """{"a":"{\"b\":\"{\\\"password\\\":\\\"<scrubbed>\\\",\\\"u\\\":1}\"}"}""")]
+    public void A_value_holding_an_escaped_quote_inside_an_escaped_document_is_scrubbed_whole(string text, string expected)
+    {
+        FixtureScrubber.Scrub(text).ShouldBe(expected);
+        FixtureScrubber.Findings(expected).ShouldBeEmpty();
+    }
+
     [Fact]
     public void A_single_authorization_value_does_not_take_the_next_pair_with_it()
     {
@@ -357,7 +381,7 @@ public sealed class FixtureScrubberTests
 
     /// <summary>
     /// The accepted cost of two guesses free text forces (#153): a bare value ends at a double quote, because in a JSON
-    /// body that is where the string ends, and an unterminated quote takes the run only to whitespace.
+    /// body that is where the string ends, and an unterminated quote takes the run only to <c>;</c>, <c>&amp;</c> or whitespace.
     /// </summary>
     [Theory]
     [InlineData("password=ab\"cd", "password=<scrubbed>\"cd")]
