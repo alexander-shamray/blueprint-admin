@@ -650,36 +650,28 @@ Each round is the review done once, end to end:
    it: an inventory written by listing the types you thought of omits the ones
    you did not, whether or not they are new.
 
-   The natural cut is six areas, and the scope hint narrows it:
-
-   | | |
-   |---|---|
-   | Host | `src/Admin.Host/**` — Compose, jobs, proxy, FakePlatform, SSE |
-   | SPA | `src/Admin.Web/src/**` except specs — screens, core, shared |
-   | The suites | `tests/**`, `src/Admin.Web/**/*.spec.ts`, `src/Admin.Web/e2e/**` |
-   | Tooling | `.github/**`, `.claude/**` — Python, shell, YAML, commands |
-   | Configuration | **every tracked file at the repository root** plus `src/Admin.Web/package.json` and the Host `.csproj` / solution |
-   | Samples | `docs/**` fenced code, audited as code but excerpt-aware |
+   The natural cut is six areas, and the scope hint narrows it. **The cut is
+   `sweep-slices.sh`'s, not this file's**: its `row_of` holds each row's paths,
+   the runbook's table says why each row exists, and `test_sweep_slices.py` holds
+   the two to each other. *Slices, leads and the mark* below argues the rest.
 
    **The rows have to partition the repository, not merely sample it.** A row is
    an auditor's **reporting** ownership, so a path no row owns is not a path
    without defects — it is a path nobody was answerable for, reported as a clean
    sweep. That is this command's own fail-open, and it is the failure
-   class the bar ranks critical when it finds it in someone else's code. Before
-   fanning out on a whole-repo run, `Glob` the repository root and check every
-   **tracked** entry against the table; if one has no owner, widen a row in the
-   same run and say so in the summary. A narrowing scope hint is the one case
-   where coverage is deliberately partial, and the summary says which rows it
-   dropped.
+   class the bar ranks critical when it finds it in someone else's code. It used
+   to be a `Glob` of the root that the parent checked against a table, a check
+   that cost a turn and could be skipped; the helper now reads the pinned
+   commit's tracked files and exits 3 naming a path no row owns. A narrowing
+   scope hint is the one case where coverage is deliberately partial, and the
+   summary says which rows it dropped.
 
    **"Tracked" is doing real work in that sentence, and `.git` is why.** A
    linked worktree carries a `.git` **file** at its root and the main checkout a
-   `.git` directory; the root row owns tracked files only, so a preflight
-   counting every entry would find `.git` unowned on every single run — either
-   reporting a permanent false gap or widening an audit into git plumbing.
-   Anything `.gitignore` covers is out for the same reason, and the reason is
-   not convenience: this command audits the committed `HEAD`, so untracked and
-   ignored paths were never in its subject.
+   `.git` directory; the helper reads `git ls-tree` of the pinned commit, so it
+   never meets `.git`, and anything `.gitignore` covers is out for the same
+   reason: this command audits the committed `HEAD`, so untracked and ignored
+   paths were never in its subject.
 
    **A row bounds what an auditor reports, never what it may read**, and
    collapsing those two loses real defects quietly. Reachability is evidence a
@@ -882,6 +874,80 @@ What stays open is the rest of the paragraph above: a crafted file can still
 name a host path in prose, and only the path rule and the verify step stand
 against an agent that follows it.
 
+## Slices, leads and the mark
+
+**Why the sweep stopped re-reading the tree.** A row bounded what an auditor
+reported and nothing bounded what it read, every round read the whole tree
+again, and a sweep run a week later started from zero. Token plan step 5 (#125,
+`docs/token-plan.md`) ported the three pieces of blueprint-backend #599; each is
+argued here, and `.claude/commands/bug-sweep.md` carries only the rule.
+
+**`sweep-slices.sh` owns the partition as code.** It cuts each row's files into
+lists of at most 240,000 bytes, about 60k tokens and the most one auditor reads
+whole, and keeps them in `$work.slices/`, beside the worktree. A file larger than
+that is a slice of its own, so `test_harness_helpers.py` is read by one auditor
+and never split. The lists hold names, not the tree, so reading one is the only
+exception to *every read is an absolute path under `$work`*; `git-worktree-drop.sh` removes them with the
+worktree, and the helper refuses any path that is not a sweep-shaped direct child
+of the temp root, so the one directory it writes is the sweep's own. Each row is
+one arm of `row_of`, the first match owns the path, and
+`test_sweep_slices.py` holds the runbook's table to the arms: a spec is the
+suites' before it is the SPA's, and what is left of `src/Admin.Web` — its
+`package.json`, `angular.json`, lint and TypeScript configuration — is
+`config`. A new project under `src/` is owned by nothing and refuses the run
+until a row is added, which is the point: the other answer, a catch-all, is the
+unowned path reported as swept.
+
+**What is counted and not listed.** The plan's `tracked` line gives each reason
+a file is not in a slice. `unchanged` is a file a mark made unnecessary to read;
+`empty` and `binary` have nothing to audit; `record` is the delivery plans under
+`docs/superpowers/plans/`, frozen and never edited to match the code, so a defect
+in their samples has no fix to file; `generated` is the SPA's lockfile, whose
+integrity hashes npm reads and an auditor cannot; `fenceless` is a `docs/` file
+with no fenced block. A sample counts only its fenced lines, the part the row
+audits as code. `docs/superpowers/specs/` is not a record: the design is live and
+is amended with the code, so its fences are read.
+
+**Round 1 is one auditor per slice; later rounds follow leads.** The old
+fan-out gave an auditor a row and let it read freely, which is why a round cost
+what the tree weighed whatever the round found. A later round goes only to the
+rows that produced a new candidate, handed every candidate so far, to hunt the
+same pattern elsewhere in the row and the callers of each; the row still bounds
+what it reports. A round that leaves no new candidate leaves no lead. That
+changes what a clean round means, and *Where it stops* says it: a clean round 1
+read every slice and found nothing, but a clean later round means the leads ran
+out.
+
+**The mark.** `sweep-mark.sh` records a clean sweep's pinned commit as the local
+`refs/sweeps/bug`, with `git update-ref` and nothing else. `sweep-slices.sh`
+reads it back and, when it is an ancestor of the commit being swept, lists only
+the files changed since (`mode since <sha>`). A ref that is not an ancestor marks
+a sweep of another line of history, and the diff from it would skip files this
+commit never had swept, so it is ignored and the mode is `full`; `full` as a
+third argument ignores a good one. Only a sweep that ended clean marks, never one
+that ended on the ceiling, errored or ran under a scope hint, because what it
+read was not the tree. The ref is local, so a checkout without it sweeps in
+full, never less. **The residual is an unchanged file that a changed one
+breaks**: it is in no slice, and only an auditor reading outside its slice to
+trace a caller reaches it, so a change to a contract is followed by a `full`
+sweep.
+
+**Verification runs on Sonnet.** The verifier reads one candidate that the
+fan-out already found. A cheaper model can refute what it should have
+confirmed, and the next `full` sweep finds the candidate again; it cannot file
+what the fan-out never found, because a verdict drops a candidate and never adds
+one. The verifier also weighs the tests, which is why *The tests are evidence*
+names it and not the parent: the parent does not open `$work` in the step that
+files, so a parent grep for the covering test contradicted the rule that keeps
+the audited tree out of the invocation holding the filing helper.
+
+**Two Windows pitfalls the backend met on the owner's machine.** The helper
+prints a POSIX `/tmp/…` path that Windows Python reads as `C:\tmp\…`, so the
+suite reads every list through bash and the auditors take `$work`'s native
+spelling; and a suite that clones the whole repository per test is slow there,
+so only the real-tree case runs against this checkout and the rest run over a
+small synthetic repository with one file in every row.
+
 ## Where it stops
 
 **A round is clean when it files no new issue** — every candidate either failed
@@ -899,10 +965,7 @@ nor end the sweep, because it never counted as tracking in the first place.
 safe to stop on it anyway.** This repo has watched an external review loop go clean
 and then find more — one round came back clean and every round after it
 surfaced findings, which is the whole reason that loop's ceiling moved from
-three to twelve. A sweep differs from a loop that reacts to the fixes of the
-round before it, in the way that makes a single clean round the right stop here: each round's fan-out is **stateless**, re-reading the tree
-from scratch rather than reacting to the last round's fixes, so a clean round is
-a fresh full read that found nothing, not a lull between exchanges. But the
+three to twelve. A sweep's round 1 reads every slice, which is why one clean round 1 is the right stop; a later round reads only the leads the rounds before it found, so its being clean means the leads ran out, not that the tree was read again and found clean (*Slices, leads and the mark*). But the
 earlier rounds change the tree only if the **user** acts on the filed issues
 between runs; this command files and does not fix. So:
 

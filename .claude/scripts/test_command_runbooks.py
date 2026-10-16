@@ -16,8 +16,8 @@ ARGUMENTS = COMMANDS.parent.parent / "docs" / "commands"
 # each landed size and about a tenth: a runbook past it has regrown its argument.
 CEILINGS = {
     "ship.md": 33300,
-    "bug-sweep.md": 20100,
-    "security-sweep.md": 16100,
+    "bug-sweep.md": 22000,
+    "security-sweep.md": 18600,
     "branch.md": 10800,
     "review-branch.md": 12200,
 }

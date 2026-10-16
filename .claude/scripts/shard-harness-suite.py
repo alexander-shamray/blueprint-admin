@@ -77,12 +77,16 @@ SERIAL = frozenset({
 # The first three create and list fixed `secsweep-*` names in the shared bash
 # temp root and drive `git worktree add`/`remove` against this checkout; the
 # fourth reads the whole working tree and asserts a finding list is empty, so
-# a concurrent worktree round trip is exactly what could disturb it.
+# a concurrent worktree round trip is exactly what could disturb it. The last
+# two make detached sweep worktrees, of this checkout and of a synthetic
+# repository, in the same `secsweep-*` namespace the first lists.
 TOGETHER = {
     "test_harness_helpers.SweepWorktreeShape": "the checkout",
     "test_harness_helpers.NoCommandHoldsAPrefixGrantThatAdmitsAForbiddenFlag": "the checkout",
     "test_harness_helpers.TheFourPortedResiduals": "the checkout",
     "test_root_ignore_coverage.ThisRepository": "the checkout",
+    "test_sweep_slices.TheRealTree": "the checkout",
+    "test_sweep_slices.ASmallRepository": "the checkout",
 }
 
 # Seconds a class costs, every one of them measured on one Windows host on

@@ -436,8 +436,8 @@ Each round is the review done once, end to end:
    admitted by default" understated it: an inventory written by listing the
    types you thought of omits the ones you did not, whether or not they are new.
 
-   The natural cut is CI/tooling, the application source, and the native and
-   configuration surface, but let the scope hint narrow it. Give each
+   The cut is `sweep-slices.sh`'s (`row_of` holds the rows; *Slices, leads and the mark*
+   argues it). Give each
    the same contract: **root every path under `$work`** (the pinned worktree,
    per the rule above — an agent left to default to the caller's workspace
    reads the wrong tree); report file, line, severity, the concrete exploit
@@ -608,6 +608,33 @@ What stays open is the rest of the paragraph above: a crafted file can still
 name a host path in prose, and only the path rule and the verify step stand
 against an agent that follows it.
 
+## Slices, leads and the mark
+
+**The argument is shared with the other sweep and is not restated.**
+`docs/commands/bug-sweep.md`, *Slices, leads and the mark*, argues the slices,
+the leads, the mark and the verifier's model, and a rule moved in one is moved in
+both. What is this sweep's own follows.
+
+**Its rows are four, and two of them are wider than the bug sweep's.**
+`source` is all of `src/` and `tests/`, because an exploit path starts in the
+Host and lands in the SPA and the reporting row is not where it is found, and
+`config` is the tracked files at the repository root. `tooling` and `samples`
+are the bug sweep's rows. The SPA's lockfile and the frozen delivery plans are
+owned and not read, for the reason given there. A new project under `src/` is
+`source` the day it lands; a new top-level tree refuses the run until a row owns
+it, and `test_sweep_slices.py` holds both commands' tables to `row_of`.
+
+**The mark is per kind.** `refs/sweeps/security` and `refs/sweeps/bug` move
+independently, so a clean bug sweep never narrows a security one. Only a clean
+sweep marks; a sweep under a scope hint, at the ceiling or after an error does
+not.
+
+**A clean later round means less here too.** Round 1 reads every slice; a later
+round follows the leads, so it goes clean when they run out and not when the
+tree was read again. The ceiling and the mark are what make a stop on it safe,
+and the residual is the one named there: an unchanged file a changed one
+exposes, answered by a `full` sweep after a change to a contract.
+
 ## Where it stops
 
 **A round is clean when it files no new issue** — every candidate either failed
@@ -625,11 +652,7 @@ nor end the sweep, because it never counted as tracking in the first place.
 is safe to stop on it anyway.** This repo has watched a review loop go clean and
 then find more — PR-11's review round eight came back clean and every round
 after it surfaced findings, which is the whole reason its review ceiling moved
-from three to twelve. A security sweep differs from a review loop in the way
-that makes a single clean round the right stop here: each round's
-fan-out is **stateless** — it re-reads the tree from scratch, not a reviewer
-reacting to the last round's fixes — so a clean round is a fresh full read that
-found nothing, not a lull between exchanges. But the earlier rounds change the
+from three to twelve. A sweep's round 1 reads every slice, which is why one clean round 1 is the right stop; a later round reads only the leads the rounds before it found, so its being clean means the leads ran out, not that the tree was read again and found clean (*Slices, leads and the mark*). But the earlier rounds change the
 tree only if the **user** acts on the filed issues between runs; this command
 files and does not fix. So:
 
