@@ -55,9 +55,9 @@ export interface FrontendStatus {
  */
 export interface LeaseView {
   id: string;
-  change: string;
+  changes: string[];
   title: string;
-  service: string;
+  services: string[];
   label: string | null;
   since: string;
   expiresAt: string;
@@ -80,7 +80,7 @@ export interface LeaseState {
 }
 
 export interface LeaseRequest {
-  change: string;
+  changes: string[];
   holdSeconds: number;
   label?: string;
 }

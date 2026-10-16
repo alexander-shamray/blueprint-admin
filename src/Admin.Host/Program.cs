@@ -73,9 +73,11 @@ builder.Services.AddSingleton(sp => FixtureRecorder.From(
 // Whichever it is, the transcript wraps it, so a fake run is transcribed too.
 builder.Services.AddSingleton<OperatorTranscript>();
 builder.Services.AddSingleton<ProcessRunner>();
+builder.Services.AddSingleton<FakeStack>();
 builder.Services.AddSingleton(sp => FakePlatformScripts.Script(
     new FakeProcessRunner(sp.GetRequiredService<JobRegistry>()),
-    sp.GetRequiredService<RepoPaths>()));
+    sp.GetRequiredService<RepoPaths>(),
+    sp.GetRequiredService<FakeStack>()));
 builder.Services.AddSingleton<IProcessRunner>(sp => new TranscribingProcessRunner(
     sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform ? sp.GetRequiredService<FakeProcessRunner>()
     : sp.GetRequiredService<FixtureRecorder>().On ? new RecordingProcessRunner(
@@ -149,7 +151,7 @@ builder.Services.AddSingleton(sp =>
 });
 
 // The fake gateway's orders outlive the handlers the client factory rotates, so they advance across them.
-builder.Services.AddSingleton(sp => new FakeOrders(sp.GetRequiredService<TimeProvider>()));
+builder.Services.AddSingleton(sp => new FakeOrders(sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<FakeStack>()));
 
 builder.Services.AddHttpClient<PlatformProbe>().ConfigurePrimaryHttpMessageHandler(sp =>
     sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform

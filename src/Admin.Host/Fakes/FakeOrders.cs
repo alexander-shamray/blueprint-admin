@@ -29,8 +29,14 @@ public enum CancelOutcome
 /// with nothing confirmed, despatched or delivered. A product the fake was never told about takes the happy path.
 /// </para>
 /// </remarks>
-public sealed class FakeOrders(TimeProvider time)
+public sealed class FakeOrders(TimeProvider time, FakeStack stack)
 {
+    /// <summary>A fake whose stack is as it was recorded: Inventory running and the saga's waits at their minutes.</summary>
+    public FakeOrders(TimeProvider time)
+        : this(time, new FakeStack())
+    {
+    }
+
     internal static readonly TimeSpan Step = TimeSpan.FromSeconds(1);
 
     /// <summary>Later ids count up from here, clear of the fakes' fixed product and order ids.</summary>
@@ -44,6 +50,21 @@ public sealed class FakeOrders(TimeProvider time)
     /// to decline: <c>.01</c> is <c>card_declined</c>. The simulator's other scripted amounts are not modelled here.
     /// </summary>
     internal const int DeclinedMinorUnits = 1;
+
+    /// <summary>The minor units run-locally.md scripts the payment simulator to answer after the adapter's own budget (the payment wait).</summary>
+    internal const int PaymentWaitMinorUnits = 9;
+
+    /// <summary>
+    /// The saga's waits as the fake keeps them: with the short-timeouts override a couple of the fake's own steps, without it
+    /// the minutes the real ones are (stock 5, payment 15), which no watch of the Scenario outlasts.
+    /// </summary>
+    internal static readonly TimeSpan ShortStockWait = TimeSpan.FromSeconds(3);
+
+    internal static readonly TimeSpan ShortPaymentWait = TimeSpan.FromSeconds(3);
+
+    internal static readonly TimeSpan NormalStockWait = TimeSpan.FromMinutes(5);
+
+    internal static readonly TimeSpan NormalPaymentWait = TimeSpan.FromMinutes(15);
 
     /// <summary>
     /// The delivery postal code run-locally.md ("The carrier's answer is scripted by the delivery postal code") gives to
@@ -184,36 +205,57 @@ public sealed class FakeOrders(TimeProvider time)
                 ? FakeGateway.PlacedOrderId
                 : "0199a1b2-0000-7000-8000-" + (next++).ToString("x12", CultureInfo.InvariantCulture);
             Product? known = productId is not null && products.TryGetValue(productId, out Product? found) ? found : null;
+            (string? ended, TimeSpan after) = EndOf(productId);
             placed[id] = new Placed(
                 time.GetUtcNow(),
                 null,
-                EndOf(productId),
+                ended,
                 known is null ? FakeGateway.StockedProductId : productId!,
                 known?.Name ?? DefaultName,
                 known?.Amount ?? DefaultAmount)
             {
                 InTransit = string.Equals(postalCode, InTransitPostalCode, StringComparison.Ordinal),
+                EndDelay = after,
             };
             return id;
         }
     }
 
-    /// <summary>Reservation comes before payment in the saga, so a product with no stock ends out of stock whatever it costs.</summary>
-    private string? EndOf(string? productId)
+    /// <summary>
+    /// How an order for the product ends and how long after the place. Reservation comes before payment in the saga, so a
+    /// product with no stock ends out of stock whatever it costs; and with Inventory stopped nothing answers the reservation,
+    /// so the order ends out of stock only when the saga's own wait lapses (<see cref="FakeStack.ShortWaits"/> says which
+    /// delay: the override's seconds, or the minutes the watch will not outlast).
+    /// </summary>
+    private (string? Ended, TimeSpan After) EndOf(string? productId)
     {
+        if (stack.InventoryStopped)
+        {
+            return ("out_of_stock", stack.ShortWaits ? ShortStockWait : NormalStockWait);
+        }
+
         if (productId is null || !products.TryGetValue(productId, out Product? product))
         {
-            return null;
+            return (null, Step);
         }
 
         if (product.OnHand is < 1)
         {
-            return "out_of_stock";
+            return ("out_of_stock", Step);
         }
 
         // The fraction is scaled, not the whole amount, which overflows decimal for a huge price; an amount with a
         // third decimal place has no minor units to decline on.
-        return Math.Abs(product.Amount) % 1m * 100m == DeclinedMinorUnits ? "declined" : null;
+        decimal minorUnits = Math.Abs(product.Amount) % 1m * 100m;
+
+        if (minorUnits == DeclinedMinorUnits)
+        {
+            return ("declined", Step);
+        }
+
+        // run-locally.md: a total ending .09 is the payment simulator answering after the adapter's own budget, which Payments
+        // retries for longer than the saga waits, so the order is declined by the saga's payment wait.
+        return minorUnits == PaymentWaitMinorUnits ? ("declined", stack.ShortWaits ? ShortPaymentWait : NormalPaymentWait) : (null, Step);
     }
 
     /// <summary>
@@ -276,7 +318,7 @@ public sealed class FakeOrders(TimeProvider time)
         DateTimeOffset p = order.At;
         DateTimeOffset now = time.GetUtcNow();
         bool scripted = order.Ended is not null;
-        DateTimeOffset? cancelled = scripted ? (p + Step <= now ? p + Step : null)
+        DateTimeOffset? cancelled = scripted ? (p + order.EndDelay <= now ? p + order.EndDelay : null)
             : order.CancelAskedAt is { } c && c + Step < p + (2 * Step) && c + Step <= now ? c + Step : null;
         DateTimeOffset? confirmed = scripted ? null : Reached(p + Step, now, cancelled);
         DateTimeOffset? dispatched = scripted ? null : Reached(p + (2 * Step), now, cancelled);
@@ -337,6 +379,9 @@ public sealed class FakeOrders(TimeProvider time)
     {
         /// <summary>The carrier collected the parcel and never delivers it: the order stays dispatched.</summary>
         public bool InTransit { get; init; }
+
+        /// <summary>How long after the place a scripted end lands: one <see cref="Step"/> unless a saga wait is what ends it.</summary>
+        public TimeSpan EndDelay { get; init; } = Step;
     }
 
     private sealed record Product(decimal Amount, int? OnHand, string Name, string? ThumbnailUrl);

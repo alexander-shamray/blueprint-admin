@@ -46,8 +46,9 @@ public static class FakePlatformScripts
     /// <c>ps</c> as <c>Admin:Record</c> wrote it from the whole stack (<see cref="FixtureRecordings"/>), so the doctor
     /// finds every port Docker holds published by a container of this stack.
     /// </summary>
-    public static FakeProcessRunner Script(FakeProcessRunner runner, Config.RepoPaths paths)
+    public static FakeProcessRunner Script(FakeProcessRunner runner, Config.RepoPaths paths, FakeStack? stack = null)
     {
+        stack ??= new FakeStack();
         string prefix = $"compose -f {paths.ComposeFile} ";
 
         return runner
@@ -73,10 +74,31 @@ public static class FakePlatformScripts
                 " Network commerce_default  Removed")
             // A Scenario's lease (spec §5.3): the two changes and the one restore each. The recorded ps keeps both services
             // running, which is what the restore's verification reads, so the fake needs no state of its own for them.
-            .On("docker", prefix + "stop inventory-api", 0, " Container commerce-inventory-api-1  Stopped")
-            .On("docker", prefix + "up -d --no-deps --wait inventory-api", 0, " Container commerce-inventory-api-1  Healthy")
-            .On("docker", $"compose -f {paths.ComposeFile} -f {ComposeService.ShortTimeoutsFile(paths.ComposeFile)} up -d --no-deps --wait ordering-api", 0, " Container commerce-ordering-api-1  Healthy")
-            .On("docker", prefix + "up -d --no-deps --wait ordering-api", 0, " Container commerce-ordering-api-1  Healthy")
+            // The fake stack remembers what each did (FakeStack), so an order placed after it ends as it would on a stack.
+            .On("docker", prefix + "stop inventory-api", 0, _ =>
+            {
+                stack.InventoryStopped = true;
+
+                return [" Container commerce-inventory-api-1  Stopped"];
+            })
+            .On("docker", prefix + "up -d --no-deps --wait inventory-api", 0, _ =>
+            {
+                stack.InventoryStopped = false;
+
+                return [" Container commerce-inventory-api-1  Healthy"];
+            })
+            .On("docker", $"compose -f {paths.ComposeFile} -f {ComposeService.ShortTimeoutsFile(paths.ComposeFile)} up -d --no-deps --wait ordering-api", 0, _ =>
+            {
+                stack.ShortWaits = true;
+
+                return [" Container commerce-ordering-api-1  Healthy"];
+            })
+            .On("docker", prefix + "up -d --no-deps --wait ordering-api", 0, _ =>
+            {
+                stack.ShortWaits = false;
+
+                return [" Container commerce-ordering-api-1  Healthy"];
+            })
             .On("docker", prefix + "stop web-bff", 0, Lines(ReplayRecordings.StopBff))
             .On("docker", prefix + "start web-bff", 0, Lines(ReplayRecordings.StartBff))
             .On("dotnet", "run --project tools/bff-replay -- --reset", 0, Lines(ReplayRecordings.Rebuild))

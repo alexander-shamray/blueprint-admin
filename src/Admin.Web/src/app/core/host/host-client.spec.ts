@@ -101,11 +101,11 @@ describe('HostClient', () => {
   });
 
   it('takes a lease with the change, how long to hold it and a label', () => {
-    client.leaseAcquire({ change: 'stop-inventory', holdSeconds: 120, label: 'a run' }).subscribe();
+    client.leaseAcquire({ changes: ['stop-inventory'], holdSeconds: 120, label: 'a run' }).subscribe();
 
     const req = http.expectOne('/api/stack/lease');
     expect(req.request.method).toBe('POST');
-    expect(req.request.body).toEqual({ change: 'stop-inventory', holdSeconds: 120, label: 'a run' });
+    expect(req.request.body).toEqual({ changes: ['stop-inventory'], holdSeconds: 120, label: 'a run' });
     req.flush({});
   });
 

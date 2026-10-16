@@ -57,7 +57,10 @@ public sealed class ScenarioLeaseServiceTests : IAsyncDisposable
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     private Task<AcquireResult> Acquire(string change = ScenarioControl.StopInventory, int seconds = 120, CancellationToken? token = null) =>
-        leases.AcquireAsync(change, TimeSpan.FromSeconds(seconds), "a run", token ?? Token);
+        leases.AcquireAsync([change], TimeSpan.FromSeconds(seconds), "a run", token ?? Token);
+
+    private Task<AcquireResult> AcquireBoth(int seconds = 120) =>
+        leases.AcquireAsync([ScenarioControl.ShortWaits, ScenarioControl.StopInventory], TimeSpan.FromSeconds(seconds), "a run", Token);
 
     [Fact]
     public async Task A_lease_stops_the_service_after_the_journal_is_on_disk_and_holds_the_gate()
@@ -65,7 +68,8 @@ public sealed class ScenarioLeaseServiceTests : IAsyncDisposable
         AcquireResult result = await Acquire();
 
         result.Outcome.ShouldBe(AcquireOutcome.Held);
-        result.Lease!.Service.ShouldBe("inventory-api");
+        result.Lease!.Services.ShouldBe(["inventory-api"]);
+        result.Lease.Changes.ShouldBe([ScenarioControl.StopInventory]);
         result.Lease.Label.ShouldBe("a run");
         runner.Started.Select(s => string.Join(' ', s.Arguments)).ShouldContain(Prefix + "stop inventory-api");
         journalAtStart.First().ShouldBeTrue("the journal was not written before the first command of the change");
@@ -83,6 +87,56 @@ public sealed class ScenarioLeaseServiceTests : IAsyncDisposable
         string[] lines = [.. runner.Started.Select(s => string.Join(' ', s.Arguments))];
         lines.ShouldContain($"compose -f {Paths.ComposeFile} -f {Override} up -d --no-deps --wait ordering-api");
         lines.ShouldContain(Prefix + "up -d --no-deps --wait ordering-api");
+    }
+
+    [Fact]
+    public async Task A_lease_of_two_changes_applies_them_in_order_and_restores_the_last_first()
+    {
+        AcquireResult held = await AcquireBoth();
+
+        held.Outcome.ShouldBe(AcquireOutcome.Held);
+        held.Lease!.Services.ShouldBe(["ordering-api", "inventory-api"]);
+        held.Lease.Title.ShouldBe("The saga's waits shortened + Inventory stopped");
+        (await leases.RestoreAsync()).Outcome.ShouldBe(RestoreOutcome.Restored);
+
+        string[] lines = [.. runner.Started.Where(s => !s.Arguments.Contains("ps")).Select(s => string.Join(' ', s.Arguments))];
+        lines.ShouldBe(
+        [
+            $"compose -f {Paths.ComposeFile} -f {Override} up -d --no-deps --wait ordering-api",
+            Prefix + "stop inventory-api",
+            Prefix + "up -d --no-deps --wait inventory-api",
+            Prefix + "up -d --no-deps --wait ordering-api",
+        ]);
+        File.Exists(journal).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task A_second_change_that_fails_undoes_both_and_leaves_no_lease()
+    {
+        runner.FailIf = spec => spec.Arguments.Contains("stop");
+
+        AcquireResult result = await AcquireBoth();
+
+        result.Outcome.ShouldBe(AcquireOutcome.Failed);
+        result.Detail!.ShouldContain("The changes were undone.");
+        string[] lines = [.. runner.Started.Where(s => !s.Arguments.Contains("ps")).Select(s => string.Join(' ', s.Arguments))];
+        lines.ShouldContain(Prefix + "up -d --no-deps --wait inventory-api");
+        lines[^1].ShouldBe(Prefix + "up -d --no-deps --wait ordering-api");
+        leases.Current.ShouldBeNull();
+        File.Exists(journal).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task A_restore_that_fails_on_the_last_change_keeps_the_first_unrestored_and_the_lease()
+    {
+        await AcquireBoth();
+        runner.FailIf = spec => spec.Arguments.Contains("up") && spec.Arguments.Contains("inventory-api");
+
+        (await leases.RestoreAsync()).Outcome.ShouldBe(RestoreOutcome.Failed);
+
+        runner.Started.Select(s => string.Join(' ', s.Arguments)).ShouldNotContain(Prefix + "up -d --no-deps --wait ordering-api");
+        leases.Current.ShouldNotBeNull();
+        File.Exists(journal).ShouldBeTrue();
     }
 
     [Fact]
@@ -139,6 +193,16 @@ public sealed class ScenarioLeaseServiceTests : IAsyncDisposable
         File.Exists(journal).ShouldBeFalse();
     }
 
+    [Fact]
+    public async Task No_change_and_the_same_change_twice_are_refused_before_anything_runs()
+    {
+        (await leases.AcquireAsync([], TimeSpan.FromSeconds(60), null, Token)).Outcome.ShouldBe(AcquireOutcome.UnknownChange);
+        (await leases.AcquireAsync([ScenarioControl.StopInventory, ScenarioControl.StopInventory], TimeSpan.FromSeconds(60), null, Token))
+            .Outcome.ShouldBe(AcquireOutcome.UnknownChange);
+
+        runner.Started.ShouldBeEmpty();
+    }
+
     [Theory]
     [InlineData("nothing-else", 60)]
     [InlineData(ScenarioControl.StopInventory, 0)]
@@ -160,7 +224,7 @@ public sealed class ScenarioLeaseServiceTests : IAsyncDisposable
         AcquireResult result = await Acquire();
 
         result.Outcome.ShouldBe(AcquireOutcome.Failed);
-        result.Detail!.ShouldContain("The change was undone.");
+        result.Detail!.ShouldContain("The changes were undone.");
         runner.Started.Select(s => string.Join(' ', s.Arguments)).ShouldContain(Prefix + "up -d --no-deps --wait inventory-api");
         File.Exists(journal).ShouldBeFalse();
         leases.Current.ShouldBeNull();

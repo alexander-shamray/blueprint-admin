@@ -8,10 +8,12 @@ namespace Admin.Host.Tests.Stack;
 
 public sealed class ScenarioLeaseEndpointTests
 {
+    private static readonly string[] Both = ["short-waits", "stop-inventory"];
+
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     private static Task<HttpResponseMessage> Acquire(HttpClient client, string change = "stop-inventory", int seconds = 120) =>
-        client.PostAsJsonAsync("/api/stack/lease", new { change, holdSeconds = seconds, label = "a run" }, Token);
+        client.PostAsJsonAsync("/api/stack/lease", new { changes = new[] { change }, holdSeconds = seconds, label = "a run" }, Token);
 
     [Fact]
     public async Task The_table_of_changes_is_listed_with_no_lease_held()
@@ -35,7 +37,7 @@ public sealed class ScenarioLeaseEndpointTests
 
         acquired.StatusCode.ShouldBe(HttpStatusCode.OK);
         JsonElement lease = await acquired.Content.ReadFromJsonAsync<JsonElement>(Token);
-        lease.GetProperty("service").GetString().ShouldBe("inventory-api");
+        lease.GetProperty("services").EnumerateArray().Select(s => s.GetString()).ShouldBe(["inventory-api"]);
 
         JsonElement stack = await client.GetFromJsonAsync<JsonElement>("/api/stack", Token);
         stack.GetProperty("lease").GetProperty("id").GetString().ShouldBe(lease.GetProperty("id").GetString());
@@ -53,6 +55,23 @@ public sealed class ScenarioLeaseEndpointTests
 
         (await client.GetFromJsonAsync<JsonElement>("/api/stack", Token)).GetProperty("lease").ValueKind.ShouldBe(JsonValueKind.Null);
         (await client.PostAsync("/api/stack/backend/up", null, Token)).StatusCode.ShouldBe(HttpStatusCode.Accepted);
+    }
+
+    [Fact]
+    public async Task A_lease_of_two_changes_is_held_as_one_and_changes_what_a_fake_order_does_until_it_is_restored()
+    {
+        await using AdminHostFactory factory = new();
+        HttpClient client = factory.CreateClient();
+
+        HttpResponseMessage acquired = await client.PostAsJsonAsync(
+            "/api/stack/lease", new { changes = Both, holdSeconds = 120 }, Token);
+
+        acquired.StatusCode.ShouldBe(HttpStatusCode.OK);
+        JsonElement lease = await acquired.Content.ReadFromJsonAsync<JsonElement>(Token);
+        lease.GetProperty("services").EnumerateArray().Select(s => s.GetString()).ShouldBe(["ordering-api", "inventory-api"]);
+
+        (await client.PostAsync("/api/stack/lease/restore", null, Token)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await client.GetFromJsonAsync<JsonElement>("/api/stack", Token)).GetProperty("lease").ValueKind.ShouldBe(JsonValueKind.Null);
     }
 
     [Fact]

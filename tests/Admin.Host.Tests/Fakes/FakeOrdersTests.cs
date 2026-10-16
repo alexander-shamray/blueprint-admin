@@ -97,6 +97,50 @@ public sealed class FakeOrdersTests
     }
 
     [Fact]
+    public void An_order_placed_with_inventory_stopped_ends_out_of_stock_only_when_the_sagas_stock_wait_lapses()
+    {
+        FakeStack stack = new() { InventoryStopped = true, ShortWaits = true };
+        FakeOrders orders = new(time, stack);
+        string id = orders.Place();
+
+        Status(orders.Detail(id)!).ShouldBe("placed");
+        time.Advance(FakeOrders.ShortStockWait - TimeSpan.FromTicks(1));
+        Status(orders.Detail(id)!).ShouldBe("placed");
+        time.Advance(TimeSpan.FromTicks(1));
+        Status(orders.Detail(id)!).ShouldBe("out_of_stock");
+    }
+
+    [Fact]
+    public void Without_the_short_waits_the_same_order_is_still_waiting_when_a_watch_gives_up()
+    {
+        FakeOrders orders = new(time, new FakeStack { InventoryStopped = true });
+        string id = orders.Place();
+
+        time.Advance(TimeSpan.FromMinutes(2));
+
+        Status(orders.Detail(id)!).ShouldBe("placed");
+    }
+
+    [Fact]
+    public void An_order_that_totals_dot_09_is_declined_by_the_payment_wait_and_not_before_it()
+    {
+        FakeOrders orders = new(time, new FakeStack { ShortWaits = true });
+        string product = orders.Publish(10.09m);
+        string id = orders.Place(product);
+
+        time.Advance(FakeOrders.ShortPaymentWait - TimeSpan.FromTicks(1));
+        Status(orders.Detail(id)!).ShouldBe("placed");
+        time.Advance(TimeSpan.FromTicks(1));
+        Status(orders.Detail(id)!).ShouldBe("declined");
+
+        // Without the override the same total waits the minutes the real payment wait is.
+        FakeOrders normal = new(time, new FakeStack());
+        string waiting = normal.Place(normal.Publish(10.09m));
+        time.Advance(TimeSpan.FromMinutes(2));
+        Status(normal.Detail(waiting)!).ShouldBe("placed");
+    }
+
+    [Fact]
     public void An_order_to_the_in_transit_postal_code_is_collected_and_never_delivered()
     {
         FakeOrders orders = new(time);
