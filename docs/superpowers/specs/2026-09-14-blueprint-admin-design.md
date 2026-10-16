@@ -655,6 +655,19 @@ lacks.
 Each row deep-links to Grafana Explore with the datasource and query
 pre-filled.
 
+**The review read.** An order can end in a review row nothing in the order read
+shows (`ordering.OrderReviews`: a release that was never answered, a despatch that
+never came). The backend's `FlagOrderForReviewHandler` logs `Order <id> flagged for
+review: <reason>.` when it raises one (blueprint-backend#1079, option 2), and
+`run-locally.md` names the Loki query that finds it by order id, which
+`ReviewFlagService.LogQl` copies. The service reads it through `GrafanaClient`, keeps
+the lines that match that sentence, and answers each as a flag. It is a trace and
+not the queue: the line repeats on a redelivery and ages out with Loki's retention,
+so a flag proves the row was raised and its absence proves nothing, and only the
+`sqlcmd` read says whether an order is still awaiting review. The Scenario's
+`flagged` step therefore waits for the reason it expects and fails only when Loki
+cannot be read.
+
 The Trace screen keeps the last few timelines per correlation id for the
 browser session (`TraceHistory`, bounded by `KEPT_PER_ID` and `KEPT_IDS`),
 in memory and never in storage. A refetch of the same id, over the same
@@ -693,6 +706,7 @@ All under `/api`, JSON, loopback only.
 | `POST /proxy` | §5.7 |
 | `POST /product-images/upload` | body `{ uploadUrl, headers }`; §5.7's `PUT` of the sample image, in the proxy's result shape; 400 for a URL that is not the configured object store |
 | `GET /trace/{correlationId}?window=15m` | §5.9. `window` is `90s`/`15m`/`2h` bounded to `[1m, 24h]`, default `15m`; a window outside it, and an id outside the backend's adoptable alphabet (the id reaches a LogQL string, so this is the injection boundary), are 400 problem details. |
+| `GET /review/{orderId}?window=30m` | §5.9's review read: the flags Ordering logged for one order, from Loki, each `{ at, reason, line }`, with `reachable` and `error` when Loki is not. 400 for an id that is not a Guid (it reaches a LogQL string, so this is the injection boundary) and for a window as `/trace`'s |
 | `GET /telemetry/health` | the golden-signal strip |
 | `GET /telemetry/alerts` | the alert strip: loaded rules and the waiting ones, apart |
 | `GET /transcript`, `GET /transcript/script` | §5.11; the entries, and the same as one bash script in `text/plain` |
@@ -789,7 +803,7 @@ and names the active option through `aria-activedescendant`.
 | **Mail** | §5.12's list, newest first: when, to whom, the subject, and the correlation id as a link into Trace, or `none`; how many the sink holds when that is more than listed; a line saying so when no message carries a correlation id; an opened message's addresses, date and body | Refresh; filter by correlation id (also `?correlationId=`), leaving one order's messages; Open a message; follow its Trace link; open the sink's own UI, where clearing is done |
 | **API** | operation tree on the left, each source with what its document changed since the kept baseline; request editor (path params, headers, body pre-filled from the schema example, `commandId` generated per send) and identity picker with its token clock (§5.6); response pane with status, timing, headers, body; a history list | Send; accept a changed document as the new baseline; "Trace this call" opens the Trace screen with the response's correlation id |
 | **Trace** | the §5.9 timeline for a correlation id, grouped by service, with Grafana deep links, and on a refetch what arrived or left since the last one | enter an id or arrive from the API screen; reload |
-| **Scenario** | `run-locally.md`'s calls as one script of a library (`SCRIPTS` in `scenario-run.ts` owns the list; `docs/superpowers/specs/2026-10-15-scenario-scripts.md` the causes and the fakes' rules) — publish, wait for the drain, set the product's stock (a product published a moment ago has none, and the order would end out of stock), quote, order, then either watch the order to confirmed, despatched and delivered, cancel it and watch it to cancelled, or apply a cause `run-locally.md` names (a price ending `.01`, stock set to 0) and watch the saga refuse the order, or order to the delivery postal code `SIM-TRANSIT` and watch it stay despatched, and ask to cancel it and see the platform refuse with 422 `order.already_shipped`, or order to one of the delivery postal codes whose carrier outcome the order read cannot tell apart (`SIM-REFUSED`, `SIM-DOWN`, `SIM-SLOW`, `SIM-STRANGE`) and read the carrier simulator's own request log, filtered by the simulator, for what the carrier saw, with the order read held at confirmed, or hold a lease on the stack (§5.3) so the saga's stock or payment wait lapses in seconds and read the order end `out_of_stock` or `declined`, with the stack restored whatever happens and a Cancel that ends the wait — each step with its status, body and own correlation id, each watch saying what it waits for and what it last read | Pick the script; run as a realm user; each step that sent links to its trace; the first step that does not succeed ends the run |
+| **Scenario** | `run-locally.md`'s calls as one script of a library (`SCRIPTS` in `scenario-run.ts` owns the list; `docs/superpowers/specs/2026-10-15-scenario-scripts.md` the causes and the fakes' rules) — publish, wait for the drain, set the product's stock (a product published a moment ago has none, and the order would end out of stock), quote, order, then either watch the order to confirmed, despatched and delivered, cancel it and watch it to cancelled, or apply a cause `run-locally.md` names (a price ending `.01`, stock set to 0) and watch the saga refuse the order, or order to the delivery postal code `SIM-TRANSIT` and watch it stay despatched, or shorten the saga's waits, order to `SIM-STRANGE` and read the review flag the despatch wait raises while the order stays confirmed, and ask to cancel it and see the platform refuse with 422 `order.already_shipped`, or order to one of the delivery postal codes whose carrier outcome the order read cannot tell apart (`SIM-REFUSED`, `SIM-DOWN`, `SIM-SLOW`, `SIM-STRANGE`) and read the carrier simulator's own request log, filtered by the simulator, for what the carrier saw, with the order read held at confirmed, or hold a lease on the stack (§5.3) so the saga's stock or payment wait lapses in seconds and read the order end `out_of_stock` or `declined`, with the stack restored whatever happens and a Cancel that ends the wait — each step with its status, body and own correlation id, each watch saying what it waits for and what it last read | Pick the script; run as a realm user; each step that sent links to its trace; the first step that does not succeed ends the run |
 | **Transcript** | §5.11's entries in order: each process with its directory and exit code, each request as its `curl` with the identity and status, polled | Copy as shell script, which copies the host's rendered script rather than one built in the page, so the scrubber has the last word |
 
 The API screen keeps one behaviour from `run-locally.md` explicit: after a
