@@ -995,7 +995,7 @@ and not at its neighbour looks like.
 
    ```bash
    bash .claude/scripts/pr-state.sh <n>
-   gh pr checks <n> --watch --fail-fast
+   gh pr checks <n> --watch --fail-fast --interval 60
    git status --short              # empty
    git log <headRefOid>..HEAD      # empty: this workspace holds nothing extra
    ```
@@ -1061,6 +1061,12 @@ and not at its neighbour looks like.
    to perform. The rule above says to wait for the run on the pushed head;
    `--watch` is the spelling that actually does, and `--fail-fast` returns the
    moment one check fails rather than sitting out the rest.
+
+   **`--interval 60` is what keeps the wait cheap.** Off a terminal `--watch`
+   prints the whole table again every interval, ten seconds by default, and
+   `gh pr checks` was the largest single `Bash` result in the `--tools`
+   measurement under `token-usage.md` 2026-10-16 (#225). A minute is a sixth
+   of the repeats and costs at most that much latency on a run of minutes.
 
    **`headRefOid` is read here, before the checks and before the merge**, and
    it is the `<oid>` the merge below matches on. Reading it afterwards would

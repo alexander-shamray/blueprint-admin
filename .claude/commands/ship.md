@@ -374,7 +374,7 @@ don't restart*)
 
    ```bash
    bash .claude/scripts/pr-state.sh <n>
-   gh pr checks <n> --watch --fail-fast
+   gh pr checks <n> --watch --fail-fast --interval 60
    git status --short              # empty
    git log <headRefOid>..HEAD      # empty: this workspace holds nothing extra
    ```
