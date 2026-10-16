@@ -24,7 +24,7 @@ line names one residual below by the words it opens with.
 | The index: refresh, query or search hints, MCP approval, timeout | `Two hooks guard nothing`, `The second is the query hint`, `The search hint asks`, `A session started in a worktree`, `The CLI's skill rewrite`, `The MCP startup timeout` |
 | A command's `allowed-tools` or `disallowed-tools` | `grant the index commands`, `runs before it pushes never denies push`, `is a grant surface` |
 | The review agent grant, or restoring an external reviewer | `grants exactly`, `archive/external-reviewers` |
-| The harness suite and its shards | `shard-harness-suite.py`, `That runner owns both discovery roots` |
+| The harness suite and its shards | `shard-harness-suite.py`, `That runner owns every discovery root` |
 | Rebasing or force-pushing | `The only force push` |
 | `/branch` worktrees under `.claude/worktrees/` | `worktrees sit inside the checkout` |
 
@@ -240,10 +240,11 @@ A new residual is stated **here** and gets a row above.
 - **`python .claude/scripts/shard-harness-suite.py` is the harness's own
   suite.** It reads `git ls-files`, so a new tracked root file or top-level
   tree fails it until somebody decides which side of the boundary it is on.
-  Run it after any change under `.claude/`. Any Python 3.12 will do —
+  Run it after any change under `.claude/`, `.github/locality-gate/` or
+  `tools/`. Any Python 3.12 will do —
   `py -3.12` on Windows, `python` elsewhere — and CI's `harness` job runs
   `python` on three platforms.
-- **That runner owns both discovery roots, and runs their classes as parallel
+- **That runner owns every discovery root, and runs their classes as parallel
   workers.** `harness-checks.sh` and the `harness` job name the runner and no
   root of their own, because two copies of a root is how a local check and CI
   come to run different suites. The unit is the class, since a class is what
