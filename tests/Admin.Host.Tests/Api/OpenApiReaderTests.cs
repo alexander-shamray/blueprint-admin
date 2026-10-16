@@ -135,6 +135,8 @@ public sealed class OpenApiReaderTests
             ("health:privacy", "GET", "http://localhost:5105/health/ready", GatewayRoutes.Direct),
             ("simulator:Requests", "GET", "http://localhost:5190/__admin/requests", GatewayRoutes.Direct),
             ("carrier:Requests", "GET", "http://localhost:5191/__admin/requests", GatewayRoutes.Direct),
+            ("carrier:FindBookings", "POST", "http://localhost:5191/__admin/requests/find", GatewayRoutes.Direct),
+            ("carrier:FindFeedPolls", "POST", "http://localhost:5191/__admin/requests/find", GatewayRoutes.Direct),
         ]);
         JsonDocument.Parse(curated[0].ExampleBody!).RootElement.GetProperty("currency").GetString().ShouldBe("EUR");
     }

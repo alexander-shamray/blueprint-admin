@@ -140,6 +140,74 @@ public sealed class FakeOrdersTests
         Status(normal.Detail(waiting)!).ShouldBe("placed");
     }
 
+    private static JsonElement[] Log(FakeOrders orders, string code, bool polls = false) =>
+        [.. JsonDocument.Parse(orders.CarrierLog(code, polls)).RootElement.EnumerateArray().Select(e => e.Clone())];
+
+    [Theory]
+    [InlineData("SIM-REFUSED", 422)]
+    [InlineData("SIM-DOWN", 503)]
+    [InlineData("SIM-SLOW", 201)]
+    [InlineData("SIM-STRANGE", 201)]
+    public void An_order_to_a_carrier_code_leaves_the_bookings_the_simulator_logs_for_it(string code, int status)
+    {
+        FakeOrders orders = new(time);
+        DateTimeOffset placed = time.GetUtcNow();
+        orders.Place(postalCode: code);
+        time.Advance(FakeOrders.Step * 8);
+
+        JsonElement[] log = Log(orders, code);
+
+        log.ShouldNotBeEmpty();
+        log.ShouldAllBe(e => e.GetProperty("Response").GetProperty("StatusCode").GetInt32() == status);
+        log.ShouldAllBe(e => e.GetProperty("Request").GetProperty("Method").GetString() == "POST" && e.GetProperty("Request").GetProperty("Path").GetString() == "/v1/shipments");
+        log.ShouldAllBe(e => e.GetProperty("Request").GetProperty("DateTime").GetDateTimeOffset() > placed);
+        log.Select(e => JsonDocument.Parse(e.GetProperty("Request").GetProperty("Body").GetString()!).RootElement.GetProperty("shipmentId").GetString())
+            .Distinct().Count().ShouldBe(1);
+        log.Length.ShouldBe(code is "SIM-REFUSED" or "SIM-STRANGE" ? 1 : log.Length);
+    }
+
+    [Fact]
+    public void A_down_or_slow_booking_is_repeated_and_a_refused_one_is_not()
+    {
+        FakeOrders orders = new(time);
+        orders.Place(postalCode: "SIM-DOWN");
+        orders.Place(postalCode: "SIM-SLOW");
+        time.Advance(FakeOrders.Step * 10);
+
+        Log(orders, "SIM-DOWN").Length.ShouldBeGreaterThan(2);
+        Log(orders, "SIM-SLOW").Length.ShouldBeGreaterThan(2);
+    }
+
+    [Fact]
+    public void A_strange_parcel_is_booked_once_and_its_feed_is_polled_again_and_again()
+    {
+        FakeOrders orders = new(time);
+        orders.Place(postalCode: "SIM-STRANGE");
+        time.Advance(FakeOrders.Step * 12);
+
+        JsonElement[] polls = Log(orders, "SIM-STRANGE", polls: true);
+
+        polls.Length.ShouldBeGreaterThan(2);
+        polls.ShouldAllBe(e => e.GetProperty("Request").GetProperty("Path").GetString() == "/v1/shipments/crr_SIM-STRANGE/events");
+        polls.ShouldAllBe(e => e.GetProperty("Response").GetProperty("StatusCode").GetInt32() == 200);
+        Log(orders, "SIM-DOWN").ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Nothing_is_logged_before_the_carrier_is_asked_and_an_order_to_a_carrier_code_stays_confirmed()
+    {
+        FakeOrders orders = new(time);
+        string id = orders.Place(postalCode: "SIM-DOWN");
+
+        Log(orders, "SIM-DOWN").ShouldBeEmpty();
+        time.Advance(FakeOrders.Step * 30);
+
+        Status(orders.Detail(id)!).ShouldBe("confirmed");
+        using JsonDocument read = JsonDocument.Parse(orders.Detail(id)!);
+        read.RootElement.GetProperty("timeline").GetProperty("dispatched").ValueKind.ShouldBe(JsonValueKind.Null);
+        read.RootElement.GetProperty("cancellable").GetBoolean().ShouldBeTrue();
+    }
+
     [Fact]
     public void An_order_to_the_in_transit_postal_code_is_collected_and_never_delivered()
     {

@@ -1,8 +1,11 @@
 import { ApiCatalogView, ApiOperation } from '../../core/host/host-types';
 import {
+  CarrierEntry,
   OrderRead,
   SCENARIO_OPERATIONS,
   SCRIPTS,
+  carrierEntries,
+  carrierVerdict,
   headerOf,
   idFrom,
   hasShippingPostalCode,
@@ -18,6 +21,7 @@ import {
   uploadFrom,
   verdict,
   hasField,
+  withCarrierCode,
   withField,
   withProductId,
   withShippingPostalCode,
@@ -357,6 +361,127 @@ describe('the timeout scripts', () => {
     const stock = resolveOperations(view, SCRIPTS['stock-timeout']).operations!;
 
     expect(Object.keys(stock).sort()).toEqual(['order', 'publish', 'read']);
+  });
+});
+
+describe('the carrier log scripts', () => {
+  const placed = Date.parse('2026-10-05T12:00:00Z');
+  const entry = (secondsAfter: number, status: number, shipmentId: string | null = 's1', method = 'POST'): CarrierEntry => ({
+    at: placed + secondsAfter * 1000,
+    method,
+    path: method === 'POST' ? '/v1/shipments' : '/v1/shipments/crr_SIM-STRANGE/events',
+    status,
+    shipmentId,
+  });
+
+  it('place the order to the code they read the log for, and read the order back held at confirmed', () => {
+    const codes = {
+      'carrier-refused': 'SIM-REFUSED',
+      'carrier-down': 'SIM-DOWN',
+      'carrier-slow': 'SIM-SLOW',
+      'carrier-strange': 'SIM-STRANGE',
+    } as const;
+
+    for (const [key, code] of Object.entries(codes) as [keyof typeof codes, string][]) {
+      expect(SCRIPTS[key].postalCode).toBe(code);
+      expect(SCRIPTS[key].carrier!.code).toBe(code);
+      expect(SCRIPTS[key].steps.slice(-3)).toEqual(['confirmed', 'carrier', 'held']);
+    }
+  });
+
+  it('resolve the booking filter for every one and the feed filter for the strange feed alone', () => {
+    const view: ApiCatalogView = {
+      sources: [],
+      operations: Object.values(SCENARIO_OPERATIONS).map((id) => op(id)),
+    };
+
+    expect(Object.keys(resolveOperations(view, SCRIPTS['carrier-down']).operations!)).toContain('bookings');
+    expect(Object.keys(resolveOperations(view, SCRIPTS['carrier-down']).operations!)).not.toContain('polls');
+    expect(Object.keys(resolveOperations(view, SCRIPTS['carrier-strange']).operations!)).toContain('polls');
+    expect(roleOf('carrier')).toBe('bookings');
+    expect(isWatch('carrier')).toBe(false);
+  });
+
+  it('set the code in the booking filter and leave any other body as it was', () => {
+    const filter = '{"Methods":["POST"],"Body":{"Matchers":[{"Name":"WildcardMatcher","Pattern":"*SIM-DOWN*"}]}}';
+
+    expect(JSON.parse(withCarrierCode(filter, 'SIM-SLOW')).Body.Matchers[0].Pattern).toBe('*SIM-SLOW*');
+    expect(JSON.parse(withCarrierCode(filter, 'SIM-SLOW')).Methods).toEqual(['POST']);
+    expect(withCarrierCode('{"Methods":["GET"]}', 'SIM-SLOW')).toBe('{"Methods":["GET"]}');
+    expect(withCarrierCode('not json', 'SIM-SLOW')).toBe('not json');
+  });
+
+  it('read the simulator\'s entries, and nothing that is not a list of them', () => {
+    const body = JSON.stringify([
+      {
+        Request: { DateTime: '2026-10-05T12:00:03Z', Method: 'POST', Path: '/v1/shipments', Body: '{"shipmentId":"s1"}' },
+        Response: { StatusCode: 503 },
+      },
+      { Request: { DateTime: '2026-10-05T12:00:04Z', Method: 'GET', Path: '/v1/shipments/x/events', Body: null }, Response: { StatusCode: 200 } },
+    ]);
+
+    expect(carrierEntries(body)).toEqual([
+      { at: Date.parse('2026-10-05T12:00:03Z'), method: 'POST', path: '/v1/shipments', status: 503, shipmentId: 's1' },
+      { at: Date.parse('2026-10-05T12:00:04Z'), method: 'GET', path: '/v1/shipments/x/events', status: 200, shipmentId: null },
+    ]);
+    expect(carrierEntries('[]')).toEqual([]);
+    expect(carrierEntries('{"Status":"Bad JSON escape sequence"}')).toBeNull();
+    expect(carrierEntries('[{"Request":{"DateTime":"nope"},"Response":{"StatusCode":200}}]')).toBeNull();
+    expect(carrierEntries('[{"Request":{')).toBeNull();
+  });
+
+  it('wait for a booking since the order was placed, and ignore one logged before it', () => {
+    expect(carrierVerdict('refused', [], [], placed).kind).toBe('waiting');
+    expect(carrierVerdict('refused', [entry(-60, 422)], [], placed).kind).toBe('waiting');
+  });
+
+  it('read a refusal as one booking answered 422, and fail any other answer', () => {
+    expect(carrierVerdict('refused', [entry(2, 422)], [], placed).kind).toBe('reached');
+    expect(carrierVerdict('refused', [entry(2, 201)], [], placed)).toEqual({
+      kind: 'failed',
+      reason: 'The carrier answered 201 to a booking attempt, not 422.',
+    });
+  });
+
+  it('read an outage as repeated attempts at one booking each answered 503, and wait for the second', () => {
+    expect(carrierVerdict('down', [entry(2, 503)], [], placed).kind).toBe('waiting');
+    expect(carrierVerdict('down', [entry(2, 503), entry(3, 503)], [], placed).kind).toBe('reached');
+    expect(carrierVerdict('down', [entry(2, 503), entry(3, 201)], [], placed).kind).toBe('failed');
+  });
+
+  it('count only the attempts of this order\'s own booking, by its shipment id', () => {
+    // A later booking of another shipment is not a retry of this one.
+    expect(carrierVerdict('down', [entry(2, 503, 'a'), entry(9, 503, 'b')], [], placed).kind).toBe('waiting');
+    expect(carrierVerdict('down', [entry(2, 503, 'a'), entry(9, 503, 'b'), entry(10, 503, 'a')], [], placed).kind).toBe('reached');
+  });
+
+  it('read a slow carrier as repeated 201s of one booking', () => {
+    expect(carrierVerdict('slow', [entry(2, 201)], [], placed).kind).toBe('waiting');
+    expect(carrierVerdict('slow', [entry(2, 201), entry(4, 201)], [], placed).kind).toBe('reached');
+    expect(carrierVerdict('slow', [entry(2, 503), entry(4, 503)], [], placed).kind).toBe('failed');
+  });
+
+  it('read a strange feed as one booking and then at least two polls of the feed since it', () => {
+    const polls = (...seconds: number[]) => seconds.map((s) => entry(s, 200, null, 'GET'));
+
+    expect(carrierVerdict('strange', [entry(2, 201)], [], placed).kind).toBe('waiting');
+    expect(carrierVerdict('strange', [entry(2, 201)], polls(5), placed).kind).toBe('waiting');
+    expect(carrierVerdict('strange', [entry(2, 201)], polls(5, 8), placed).kind).toBe('reached');
+    // A poll before the booking is another parcel's.
+    expect(carrierVerdict('strange', [entry(2, 201)], polls(-10, 1, 5), placed).kind).toBe('waiting');
+    expect(carrierVerdict('strange', [entry(2, 422)], polls(5, 8), placed).kind).toBe('failed');
+  });
+
+  it('hold the order read at confirmed and nothing past it', () => {
+    const read = (status: string, dispatched: string | null): OrderRead => ({
+      status,
+      timeline: { placed: '2026-10-05T12:00:00Z', confirmed: '2026-10-05T12:00:01Z', dispatched, delivered: null, cancelled: null },
+      asOf: '2026-10-05T12:00:09Z',
+    });
+
+    expect(verdict('held', read('confirmed', null))).toEqual({ kind: 'reached', at: '2026-10-05T12:00:01Z' });
+    expect(verdict('held', read('dispatched', '2026-10-05T12:00:06Z')).kind).toBe('failed');
+    expect(verdict('held', read('cancelled', null)).kind).toBe('failed');
   });
 });
 

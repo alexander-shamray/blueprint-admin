@@ -23,12 +23,21 @@ export type StepKey =
   | 'cancelled'
   | 'declined'
   | 'out_of_stock'
-  | 'unchanged';
+  | 'unchanged'
+  | 'carrier'
+  | 'held';
 
 /** The steps that wait on the order read rather than send once. */
 export type WatchKey = Extract<
   StepKey,
-  'confirmed' | 'dispatched' | 'delivered' | 'cancelled' | 'declined' | 'out_of_stock' | 'unchanged'
+  | 'confirmed'
+  | 'dispatched'
+  | 'delivered'
+  | 'cancelled'
+  | 'declined'
+  | 'out_of_stock'
+  | 'unchanged'
+  | 'held'
 >;
 
 const WATCHES: readonly StepKey[] = [
@@ -39,6 +48,7 @@ const WATCHES: readonly StepKey[] = [
   'declined',
   'out_of_stock',
   'unchanged',
+  'held',
 ];
 
 export function isWatch(key: StepKey): key is WatchKey {
@@ -54,7 +64,20 @@ export type ScriptKey =
   | 'already-shipped'
   | 'stock-timeout'
   | 'payment-timeout'
+  | 'carrier-refused'
+  | 'carrier-down'
+  | 'carrier-slow'
+  | 'carrier-strange'
   | 'image';
+
+/** What the carrier simulator's request log shows of each code the order read cannot tell apart (run-locally.md, the carrier log). */
+export type CarrierOutcome = 'refused' | 'down' | 'slow' | 'strange';
+
+/** The code an order is placed to and what the simulator's log must then show of it. */
+export interface ScriptCarrier {
+  code: string;
+  outcome: CarrierOutcome;
+}
 
 /**
  * A change to the stack the script holds for its cause (spec §5.3, Scenario service control): the ids of
@@ -84,6 +107,8 @@ export interface Script {
   postalCode?: string;
   /** The change to the stack its cause needs, taken by the `lease` step and always ended by the `restore` step. */
   lease?: ScriptLease;
+  /** The carrier outcome its `carrier` step reads from the simulator's request log. */
+  carrier?: ScriptCarrier;
 }
 
 export const SCRIPT_KEYS: readonly ScriptKey[] = [
@@ -95,8 +120,19 @@ export const SCRIPT_KEYS: readonly ScriptKey[] = [
   'already-shipped',
   'stock-timeout',
   'payment-timeout',
+  'carrier-refused',
+  'carrier-down',
+  'carrier-slow',
+  'carrier-strange',
   'image',
 ];
+
+/** How the carrier step polls the simulator's log and how long it waits: Shipping backs off after a refusal, so a minute or two (run-locally.md). */
+export const CARRIER_POLL_MS = 5000;
+export const CARRIER_WATCH_MS = 240_000;
+
+/** run-locally.md's carrier table: the postal code each outcome is scripted by. */
+const CARRIER_STEPS: readonly StepKey[] = ['publish', 'drain', 'quote', 'order', 'confirmed', 'carrier', 'held'];
 
 /** The host's `ScenarioControl` change ids (ids, not copies of what they do: the host's table owns that). */
 const SHORT_WAITS = 'short-waits';
@@ -183,7 +219,47 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
     onHand: STOCKED,
     lease: { changes: [SHORT_WAITS], holdSeconds: 360 },
   },
+  'carrier-refused': carrierScript(
+    'Carrier refuses the address',
+    'SIM-REFUSED',
+    'refused',
+    'the carrier refuses the booking with 422 address_not_serviceable',
+  ),
+  'carrier-down': carrierScript(
+    'Carrier is down',
+    'SIM-DOWN',
+    'down',
+    'the carrier answers every booking attempt 503, and Shipping tries again',
+  ),
+  'carrier-slow': carrierScript(
+    'Carrier is slow',
+    'SIM-SLOW',
+    'slow',
+    'the carrier answers after Shipping has stopped waiting, so the same booking is tried again',
+  ),
+  'carrier-strange': carrierScript(
+    'Carrier feed is strange',
+    'SIM-STRANGE',
+    'strange',
+    "the carrier books the parcel and then serves a feed Shipping refuses whole, so it is polled again and again",
+  ),
 };
+
+/**
+ * One of the four carrier outcomes the order read cannot tell apart (run-locally.md's carrier table): the order is placed to
+ * the code that scripts the simulator, and the simulator's own request log says what the carrier saw. The order read is then
+ * held to what the document says it shows, a confirmed order. Only the carrier's side is asserted: the shipment's own state
+ * (`Unfulfillable`, `Pending`, `Booked`) is in a table the console does not query.
+ */
+function carrierScript(title: string, code: string, outcome: CarrierOutcome, saw: string): Script {
+  return {
+    title,
+    intro: `Publish a product, order it to the delivery postal code ${code}, and read the carrier simulator's request log until it shows ${saw}. The order read is then held to what run-locally.md says it shows: confirmed, never despatched. Only what the carrier saw is asserted, not the shipment's own state.`,
+    steps: CARRIER_STEPS,
+    postalCode: code,
+    carrier: { code, outcome },
+  };
+}
 
 /** What run-locally.md ("After despatch there is nothing to compensate") observed a cancel after despatch answer. */
 export const ALREADY_SHIPPED = { status: 422, code: 'order.already_shipped' } as const;
@@ -207,6 +283,8 @@ export const STEP_TITLES: Record<StepKey, string> = {
   declined: 'Wait for the decline',
   out_of_stock: 'Wait for the stock refusal',
   unchanged: 'Read the order back unchanged',
+  carrier: 'Read what the carrier saw',
+  held: 'Read the order back still confirmed',
 };
 
 /**
@@ -223,6 +301,7 @@ export const WATCHING_FOR: Record<WatchKey, string> = {
   declined: 'the saga to ask the payment provider to authorise the order and be refused',
   out_of_stock: 'the saga to ask Inventory to reserve the stock and be refused',
   unchanged: 'the order read, which a refused cancel leaves where it was: despatched and no longer cancellable',
+  held: 'the order read, which a carrier that refused, was down or slow, or served a strange feed, leaves at confirmed',
 };
 
 /** The calls the steps make, each by its role. */
@@ -234,7 +313,9 @@ export type OperationRole =
   | 'quote'
   | 'order'
   | 'cancel'
-  | 'read';
+  | 'read'
+  | 'bookings'
+  | 'polls';
 
 /**
  * The catalog operation each role sends, by the id the host gives it: `<source>:<operationId>` for
@@ -251,6 +332,8 @@ export const SCENARIO_OPERATIONS: Record<OperationRole, string> = {
   order: 'ordering:PlaceOrder',
   cancel: 'ordering:CancelOrder',
   read: 'bff:GetOrder',
+  bookings: 'carrier:FindBookings',
+  polls: 'carrier:FindFeedPolls',
 };
 
 /** The role a step sends as; the drain asks the broker and sends none. */
@@ -259,6 +342,7 @@ export function roleOf(key: StepKey): OperationRole | null {
   if (key === 'upload') return 'image';
   if (key === 'thumbnail') return 'product';
   if (key === 'late_cancel') return 'cancel';
+  if (key === 'carrier') return 'bookings';
   return isWatch(key) ? 'read' : key;
 }
 
@@ -273,6 +357,8 @@ export function resolveOperations(
   script: Script,
 ): { operations: ScenarioOperations | null; missing: string[] } {
   const roles = [...new Set(script.steps.map(roleOf).filter((r): r is OperationRole => r !== null))];
+  // A strange feed is read by its polls as well as its bookings; no other step names the second filter.
+  if (script.carrier?.outcome === 'strange') roles.push('polls');
   const found: ScenarioOperations = {};
   const missing: string[] = [];
   for (const role of roles) {
@@ -401,6 +487,136 @@ export function hasShippingPostalCode(body: string, code: string): boolean {
   }
 }
 
+/**
+ * The simulator's booking filter with its pattern set to `code`: run-locally.md's request names `SIM-DOWN`, and each script
+ * asks about the code it placed its order to. A body that is not the filter (no matcher to set) is returned as it was, so the
+ * step reads what the document's own filter gives rather than a body this guessed at.
+ */
+export function withCarrierCode(body: string, code: string): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return body;
+  }
+  const filter = parsed as { Body?: { Matchers?: { Pattern?: unknown }[] } } | null;
+  const matcher = filter?.Body?.Matchers?.[0];
+  if (!matcher || typeof matcher.Pattern !== 'string') return body;
+  matcher.Pattern = `*${code}*`;
+  return JSON.stringify(filter, null, 2);
+}
+
+/** One request the carrier simulator logged, read from a WireMock.Net entry. */
+export interface CarrierEntry {
+  /** When the simulator received it, in ms since the epoch (`Request.DateTime`, UTC). */
+  at: number;
+  method: string;
+  path: string;
+  status: number;
+  /** The booking's own id, the same on every retry of one booking (`Request.Body.shipmentId`), where the request has a body. */
+  shipmentId: string | null;
+}
+
+/**
+ * The entries of the simulator's `find` answer, or null for a body that is not an array of them (an error the simulator
+ * sent, or a log cut short by the proxy's cap), so a malformed answer fails the step instead of reading as an empty log.
+ */
+export function carrierEntries(body: string): CarrierEntry[] | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed)) return null;
+  const entries: CarrierEntry[] = [];
+  for (const raw of parsed as unknown[]) {
+    const entry = raw as { Request?: Record<string, unknown>; Response?: Record<string, unknown> } | null;
+    const at = Date.parse(String(entry?.Request?.['DateTime']));
+    const status = entry?.Response?.['StatusCode'];
+    if (!entry?.Request || Number.isNaN(at) || typeof status !== 'number') return null;
+    let shipmentId: string | null = null;
+    const requestBody = entry.Request['Body'];
+    if (typeof requestBody === 'string') {
+      try {
+        const id = (JSON.parse(requestBody) as { shipmentId?: unknown } | null)?.shipmentId;
+        shipmentId = typeof id === 'string' ? id : null;
+      } catch {
+        shipmentId = null;
+      }
+    }
+    entries.push({
+      at,
+      method: String(entry.Request['Method'] ?? ''),
+      path: String(entry.Request['Path'] ?? ''),
+      status,
+      shipmentId,
+    });
+  }
+  return entries;
+}
+
+export type CarrierVerdict =
+  | { kind: 'reached'; detail: string }
+  | { kind: 'waiting'; detail: string }
+  | { kind: 'failed'; reason: string };
+
+/**
+ * What the simulator's log must show of an order placed since `since` (ms), by the outcome its code scripts (run-locally.md):
+ * `refused` one booking answered 422; `down` repeated bookings, each 503; `slow` repeated bookings of one shipment, each
+ * 201; `strange` one booking answered 201 and then repeated polls of the feed. The order's own booking is the first one
+ * logged since it was placed, and its retries are the entries that share its `shipmentId`. The log has no order id, so
+ * an order placed to the same code at the same time by another run is not told apart (blueprint-backend#1074).
+ */
+export function carrierVerdict(
+  outcome: CarrierOutcome,
+  bookings: readonly CarrierEntry[],
+  polls: readonly CarrierEntry[],
+  since: number,
+): CarrierVerdict {
+  const mine = bookings.filter((b) => b.at >= since).sort((a, b) => a.at - b.at);
+  if (mine.length === 0) {
+    return { kind: 'waiting', detail: 'The carrier has not been asked to book this order yet.' };
+  }
+
+  const first = mine[0];
+  const attempts = first.shipmentId === null ? [first] : mine.filter((b) => b.shipmentId === first.shipmentId);
+  const wrong = attempts.find((a) => a.status !== EXPECTED_STATUS[outcome]);
+  if (wrong) {
+    return {
+      kind: 'failed',
+      reason: `The carrier answered ${wrong.status} to a booking attempt, not ${EXPECTED_STATUS[outcome]}.`,
+    };
+  }
+
+  const count = attempts.length;
+  switch (outcome) {
+    case 'refused':
+      return { kind: 'reached', detail: 'The carrier refused the booking with 422.' };
+    case 'down':
+    case 'slow': {
+      const said = outcome === 'down' ? 'answered 503' : 'answered 201 after Shipping had stopped waiting';
+      return count >= 2
+        ? { kind: 'reached', detail: `The carrier saw ${count} attempts at the same booking, each ${said}.` }
+        : { kind: 'waiting', detail: `The carrier has seen ${count} attempt, ${said}; Shipping backs off before it tries again.` };
+    }
+    default: {
+      const after = polls.filter((p) => p.at > first.at).length;
+      return after >= 2
+        ? { kind: 'reached', detail: `The carrier booked the parcel once (201) and its feed has been polled ${after} times since.` }
+        : { kind: 'waiting', detail: `The carrier booked the parcel (201); its feed has been polled ${after} time(s) since.` };
+    }
+  }
+}
+
+/** The status each outcome's bookings are answered with (run-locally.md's carrier log). */
+const EXPECTED_STATUS: Record<CarrierOutcome, number> = {
+  refused: 422,
+  down: 503,
+  slow: 201,
+  strange: 201,
+};
+
 /** Whether a refused cancel's body is the platform's `order.already_shipped` problem (a `code` member). */
 export function isAlreadyShipped(status: number, body: string): boolean {
   if (status !== ALREADY_SHIPPED.status) return false;
@@ -484,6 +700,14 @@ export type WatchVerdict =
  * a reason of its own, and a delivery means the cancel came too late.
  */
 export function verdict(key: WatchKey, read: OrderRead): WatchVerdict {
+  if (key === 'held') {
+    // run-locally.md's carrier table: a refusal, an outage, a slow carrier and a strange feed each leave the order confirmed.
+    // Not a wait: the order is read once the carrier has been seen, and it is confirmed and not despatched or it is not.
+    return read.status === 'confirmed' && read.timeline.dispatched === null
+      ? { kind: 'reached', at: read.timeline.confirmed ?? read.asOf }
+      : { kind: 'failed', reason: `The order reads ${read.status}, not confirmed: this carrier outcome should leave it there.` };
+  }
+
   if (key === 'unchanged') {
     // Not a wait: the cancel was refused, so the order is still where the script left it, despatched and never cancelled.
     return read.status === 'dispatched' && read.timeline.cancelled === null

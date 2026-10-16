@@ -59,7 +59,7 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
             "privacy:RaiseErasureRequest", "privacy:ReissueErasureRequest", "privacy:GetErasureRequest",
             "bff:Quote", "bff:ListOrders", "bff:GetOrder", "bff:IssueProductImageUpload", "bff:GetSavedAddress", "bff:PutSavedAddress",
             "edge:GetProductImage", "health:gateway", "health:catalog", "health:ordering", "health:bff", "health:inventory",
-            "health:payments", "health:privacy", "simulator:Requests", "carrier:Requests",
+            "health:payments", "health:privacy", "simulator:Requests", "carrier:Requests", "carrier:FindBookings", "carrier:FindFeedPolls",
         ]);
         JsonElement publish = view.GetProperty("operations")[0];
         publish.GetProperty("url").GetString().ShouldBe("http://localhost:5000/api/v1/catalog/products");
@@ -73,7 +73,7 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
         HttpResponseMessage response = await client.PostAsync("/api/catalog/reload", null, Token);
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
-        (await response.Content.ReadFromJsonAsync<JsonElement>(Token)).GetProperty("operations").GetArrayLength().ShouldBe(33);
+        (await response.Content.ReadFromJsonAsync<JsonElement>(Token)).GetProperty("operations").GetArrayLength().ShouldBe(35);
     }
 
     [Fact]

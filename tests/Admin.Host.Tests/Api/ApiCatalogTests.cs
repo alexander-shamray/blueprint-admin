@@ -81,7 +81,7 @@ public sealed class ApiCatalogTests : IDisposable
             "privacy:RaiseErasureRequest", "privacy:ReissueErasureRequest", "privacy:GetErasureRequest",
             "bff:Quote", "bff:ListOrders", "bff:GetOrder", "bff:IssueProductImageUpload", "bff:GetSavedAddress", "bff:PutSavedAddress",
             "edge:GetProductImage", "health:gateway", "health:catalog", "health:ordering", "health:bff", "health:inventory",
-            "health:payments", "health:privacy", "simulator:Requests", "carrier:Requests",
+            "health:payments", "health:privacy", "simulator:Requests", "carrier:Requests", "carrier:FindBookings", "carrier:FindFeedPolls",
         ]);
         handler.Requests.Where(r => r.Request.RequestUri!.AbsolutePath == "/openapi/v1.json")
             .ShouldAllBe(r => r.Request.Headers.Authorization!.Scheme == "Bearer");

@@ -104,6 +104,31 @@ test('the already-shipped script is refused 422 order.already_shipped and reads 
   await expect(steps.nth(7).locator('.detail')).toContainText('The order read shows unchanged at');
 });
 
+// The four carrier outcomes the order read cannot tell apart are read from the simulator's own request log
+// (FakeOrders.CarrierLog, answered by FakeCarrier): the order goes to the code that scripts the carrier, the log shows
+// what the carrier saw, and the order read is held at confirmed.
+for (const [script, code, saw] of [
+  ['carrier-refused', 'SIM-REFUSED', 'The carrier refused the booking with 422.'],
+  ['carrier-down', 'SIM-DOWN', 'each answered 503'],
+  ['carrier-slow', 'SIM-SLOW', 'each answered 201 after Shipping had stopped waiting'],
+  ['carrier-strange', 'SIM-STRANGE', 'its feed has been polled'],
+] as const) {
+  test(`the ${script} script orders to ${code} and reads the carrier's log and the order back`, async ({ page }) => {
+    await page.goto('/scenario');
+
+    await page.getByLabel('Script').selectOption(script);
+    await page.getByRole('button', { name: 'Run' }).click();
+
+    const steps = page.locator('ol.steps li.step');
+    await expect(steps).toHaveCount(7);
+    await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(7, { timeout: 60_000 });
+    await expect(steps.nth(3).locator('.detail')).toContainText(`to the delivery postal code ${code}`);
+    await expect(steps.nth(5).locator('.request')).toHaveText('POST http://localhost:5191/__admin/requests/find');
+    await expect(steps.nth(5).locator('.detail')).toContainText(saw);
+    await expect(steps.nth(6).locator('.detail')).toContainText('The order read shows held at');
+  });
+}
+
 // The timeout scripts hold a lease (spec §5.3). The fake stack remembers what it did (FakeStack): with Inventory stopped an
 // order ends out of stock only when the saga's stock wait lapses, and a total ending .09 ends declined by the payment wait,
 // each a few seconds with the short waits and minutes without. Every run ends with the lease restored.
