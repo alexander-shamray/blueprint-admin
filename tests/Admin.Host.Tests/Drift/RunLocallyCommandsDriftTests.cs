@@ -36,7 +36,7 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
         ["docker compose -f deploy/compose/docker-compose.yml exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Local_Dev_Pa55w0rd!' -d Shipping -W -Q \"select Status, UnfulfillableReason, Attempts, CancellationRefusedAt from shipping.Shipments where OrderId = '$orderId'\""] =
             "a by-hand read of a table the console does not query; the cause scripts that need it wait on #67",
         ["docker compose -f deploy/compose/docker-compose.yml exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Local_Dev_Pa55w0rd!' -d Ordering -W -Q \"select Reason from ordering.OrderReviews where OrderId = '$orderId'\""] =
-            "a by-hand read of a table the console does not query; the cause scripts that need it wait on #67",
+            "a by-hand read of the queue table the console does not query; the Scenario reads the log line the document gives beside it (ReviewFlagService)",
         ["docker compose -f deploy/compose/docker-compose.yml start inventory-api"] =
             "a Scenario's lease restores Inventory with up -d --no-deps, which the document says does the same (ScenarioControl.Table)",
         ["docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.short-timeouts.yml up -d --wait"] =
@@ -66,6 +66,8 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
         [@"Invoke-RestMethod $up.uploadUrl -Method Put -InFile .\desk.png -ContentType $up.headers.'Content-Type'"] = "ProductImageUploader",
         ["-ContentType 'application/json' -Body (@{"] = "the publish body the Scenario sends with imageKey, held by RunLocallyDriftTests",
         ["Invoke-WebRequest $p.thumbnailUrl -Method Head"] = "the Scenario's thumbnail step, a HEAD through the proxy",
+        ["{service_name=\"Ordering.Api\"} |= \"flagged for review\" |= \"<order id>\""] =
+            "the Scenario's review step reads Loki with it (ReviewFlagService.LogQl, held by RunLocallyDriftTests)",
         ["$env:DEAD_LETTERS_PASSWORD = [guid]::NewGuid().ToString('N')"] =
             "DeadLetterService mints a random password for each run and hands it to the tool as this variable",
         ["$c.redirectUris; $c.webOrigins -join ','"] =

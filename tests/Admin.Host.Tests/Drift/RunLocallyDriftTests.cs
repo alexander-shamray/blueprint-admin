@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Admin.Host.Api;
 using Admin.Host.Config;
+using Admin.Host.Scenario;
 using Shouldly;
 
 namespace Admin.Host.Tests.Drift;
@@ -54,6 +55,18 @@ public sealed class RunLocallyDriftTests
         ApiOperation read = CuratedOperations.All(new AdminOptions()).Single(o => o.Id == "bff:GetOrder");
 
         document.ShouldContain($"Invoke-RestMethod \"{read.Url.Replace("{id}", "$orderId", StringComparison.Ordinal)}\" -Headers $auth");
+    }
+
+    /// <summary>
+    /// The Scenario's review step reads Loki with the query run-locally.md gives for "flagged for review", so the document
+    /// holds <see cref="ReviewFlagService.LogQl"/> verbatim, with its own placeholder for the order id.
+    /// </summary>
+    [Fact]
+    public void The_review_flag_query_is_the_one_run_locally_gives_for_the_log_line()
+    {
+        string document = File.ReadAllText(Backend.RunLocally);
+
+        document.ShouldContain(ReviewFlagService.LogQl("<order id>"));
     }
 
     /// <summary>

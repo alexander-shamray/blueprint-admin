@@ -69,6 +69,23 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
     internal static readonly TimeSpan NormalPaymentWait = TimeSpan.FromMinutes(15);
 
     /// <summary>
+    /// The despatch wait (run-locally.md, "Despatch timeout"), which the real saga keeps at 60 seconds with the override and three
+    /// days without: after it an order to <see cref="StrangePostalCode"/> is flagged for review, still confirmed.
+    /// </summary>
+    internal static readonly TimeSpan ShortDespatchWait = TimeSpan.FromSeconds(4);
+
+    internal static readonly TimeSpan NormalDespatchWait = TimeSpan.FromDays(3);
+
+    /// <summary>
+    /// The carrier simulator's code whose parcel is booked and never collected, so the order stays confirmed until the saga's
+    /// despatch wait lapses and Ordering flags it (run-locally.md, "Despatch timeout"). One of <see cref="CarrierCodes"/>.
+    /// </summary>
+    internal const string StrangePostalCode = "SIM-STRANGE";
+
+    /// <summary>The reason Ordering gives when the despatch wait lapses (blueprint-backend <c>OrderReviews</c>, run-locally.md).</summary>
+    internal const string NotDespatchedReason = "not_despatched";
+
+    /// <summary>
     /// The delivery postal code run-locally.md ("The carrier's answer is scripted by the delivery postal code") gives to
     /// the carrier simulator's collected-never-delivered outcome. The simulator's README owns the codes; the others
     /// end where the order read cannot tell them from a confirmed order and are not modelled here.
@@ -233,6 +250,8 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
                 InTransit = string.Equals(postalCode, InTransitPostalCode, StringComparison.Ordinal),
                 EndDelay = after,
                 Carrier = postalCode is not null && CarrierCodes.Contains(postalCode) ? postalCode : null,
+                ReviewReason = string.Equals(postalCode, StrangePostalCode, StringComparison.Ordinal) ? NotDespatchedReason : null,
+                ReviewAfter = stack.ShortWaits ? ShortDespatchWait : NormalDespatchWait,
             };
             return id;
         }
@@ -471,6 +490,25 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
         };
     }
 
+    /// <summary>
+    /// The review flags Ordering has logged for an order by now, as Loki would hold them: none for an order the fake never
+    /// placed or one whose wait has not lapsed.
+    /// </summary>
+    public IReadOnlyList<(string Reason, DateTimeOffset At)> ReviewFlags(string orderId)
+    {
+        lock (gate)
+        {
+            if (!placed.TryGetValue(orderId, out Placed? order) || order.ReviewReason is null)
+            {
+                return [];
+            }
+
+            DateTimeOffset at = order.At + order.ReviewAfter;
+
+            return at <= time.GetUtcNow() ? [(order.ReviewReason, at)] : [];
+        }
+    }
+
     /// <summary>A step happens at its time unless the order was cancelled first.</summary>
     private static DateTimeOffset? Reached(DateTimeOffset at, DateTimeOffset now, DateTimeOffset? cancelled) =>
         at <= now && (cancelled is null || at < cancelled) ? at : null;
@@ -488,6 +526,11 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
         /// so, and only the simulator's request log (<see cref="CarrierLog"/>) shows what the carrier saw.
         /// </summary>
         public string? Carrier { get; init; }
+
+        /// <summary>The reason Ordering flags this order for review once <see cref="ReviewAfter"/> has passed, or null when it never does.</summary>
+        public string? ReviewReason { get; init; }
+
+        public TimeSpan ReviewAfter { get; init; }
     }
 
     private sealed record Product(decimal Amount, int? OnHand, string Name, string? ThumbnailUrl);
