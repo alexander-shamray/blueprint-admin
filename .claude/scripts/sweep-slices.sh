@@ -69,6 +69,28 @@ fenced_bytes() {
     END { print total + 0 }'
 }
 
+# The lockfile's two promises, read mechanically because 340 KB is not a thing
+# an auditor reads line by line: every resolved URL is on the npm registry over
+# https, and every package entry that is not a link, bundled or the root carries
+# a sha512 integrity. One fault a line; a file with no entry indented the way npm
+# writes them has nothing read, so that fails closed too.
+lockfile_faults() {
+  awk '
+    /^    "[^"]*": \{[ \t]*$/ {
+      name = $0; sub(/^    "/, "", name); sub(/": \{.*$/, "", name)
+      has = 0; link = 0; bundled = 0; entries++; next }
+    /^      "resolved": / {
+      if ($0 !~ /^      "resolved": "https:\/\/registry\.npmjs\.org\//)
+        print "resolved off the registry: " name }
+    /^      "integrity": "sha512-/ { has = 1 }
+    /^      "link": true/ { link = 1 }
+    /^      "inBundle": true/ { bundled = 1 }
+    /^    \},?[ \t]*$/ {
+      if (name != "" && !has && !link && !bundled) print "no integrity: " name
+      name = "" }
+    END { if (entries == 0) print "no package entries read" }'
+}
+
 # Each git read lands in a file with its status checked, NUL-separated, so a
 # failing git fails the run and a name holding a newline stays one name. No
 # arrays and no `mapfile`: macOS ships bash 3.2, and CI runs the suite there.
@@ -105,15 +127,29 @@ while IFS= read -r -d '' rec; do
   [ "$size" != 0 ] || { empty=$((empty + 1)); continue; }
   case "$texts" in
     *$'\n'"$file"$'\n'*) : ;;
-    *) binary=$((binary + 1)); continue ;;
+    *)
+      # Binary is skipped by an allowlist of what has nothing to audit, so a
+      # code or configuration file git calls binary (a stray NUL byte, a binary
+      # attribute) refuses the run by name and is never dropped as a count.
+      case "$(printf '%s' "$file" | tr 'A-Z' 'a-z')" in
+        *.png|*.jpg|*.jpeg|*.gif|*.ico|*.webp|*.avif|*.bmp|*.woff|*.woff2|*.ttf|*.otf|*.eot|*.pdf|*.zip|*.gz|*.tgz|*.7z|*.jar|*.dll|*.exe|*.so|*.dylib|*.mp3|*.mp4|*.wav|*.webm)
+          binary=$((binary + 1)); continue ;;
+        *) echo "git calls a file binary that is not a known asset: $file" >&2; exit 3 ;;
+      esac ;;
   esac
   # The delivery plans are frozen records (CLAUDE.md), never edited to match the
   # code, so a defect in their samples has no fix to file; and the lockfile is
-  # generated, its integrity hashes read by npm and not by an auditor. Owned by
-  # their rows, counted, not read.
+  # generated, too long for an auditor, so lockfile_faults reads it instead and a
+  # fault refuses the run. Owned by their rows, counted, not listed.
   case "$file" in
     docs/superpowers/plans/*) record=$((record + 1)); continue ;;
-    src/Admin.Web/package-lock.json) generated=$((generated + 1)); continue ;;
+    src/Admin.Web/package-lock.json)
+      faults=$(g cat-file blob "$pinned:$file" | lockfile_faults)
+      if [ -n "$faults" ]; then
+        printf '%s\n' "$faults" | head -n 20 >&2
+        echo "the lockfile fails its check: $file" >&2; exit 3
+      fi
+      generated=$((generated + 1)); continue ;;
   esac
   if [ "$row" = samples ]; then
     size=$(g cat-file blob "$pinned:$file" | fenced_bytes)

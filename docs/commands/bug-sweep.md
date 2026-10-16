@@ -901,10 +901,15 @@ unowned path reported as swept.
 
 **What is counted and not listed.** The plan's `tracked` line gives each reason
 a file is not in a slice. `unchanged` is a file a mark made unnecessary to read;
-`empty` and `binary` have nothing to audit; `record` is the delivery plans under
+`empty` has nothing to audit, and neither has `binary`, which is only an asset
+extension (an image, a font, an archive): any other file git calls binary, a
+code or configuration file with a stray NUL byte, refuses the run by name rather
+than going unaudited. `record` is the delivery plans under
 `docs/superpowers/plans/`, frozen and never edited to match the code, so a defect
-in their samples has no fix to file; `generated` is the SPA's lockfile, whose
-integrity hashes npm reads and an auditor cannot; `fenceless` is a `docs/` file
+in their samples has no fix to file; `generated` is the SPA's lockfile, too long
+for an auditor, which the helper reads mechanically instead and refuses the run
+when a resolved URL is off `registry.npmjs.org` or a package entry has no
+`sha512` integrity; `fenceless` is a `docs/` file
 with no fenced block. A sample counts only its fenced lines, the part the row
 audits as code. `docs/superpowers/specs/` is not a record: the design is live and
 is amended with the code, so its fences are read.
