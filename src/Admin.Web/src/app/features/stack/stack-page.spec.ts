@@ -52,6 +52,20 @@ const health = {
   ],
 };
 
+const alerts = {
+  reachable: true,
+  error: null,
+  loaded: [
+    { name: 'ErrorQueueDepth', group: 'platform-infrastructure', state: 'firing', health: 'ok', severity: 'page', summary: 'Messages in error queue', alerts: 1 },
+    { name: 'Latency', group: 'platform-golden-signals', state: 'pending', health: 'ok', severity: 'page', summary: null, alerts: 1 },
+    { name: 'OutboxGrowth', group: 'platform-messaging', state: 'inactive', health: 'err', severity: null, summary: null, alerts: 0 },
+  ],
+  waiting: [
+    { name: 'StuckSaga', instruments: ['ordering_saga_oldest_unfinalised_age_seconds'] },
+    { name: 'CacheHitRatioCollapse', instruments: ['hybrid_cache_hits_total', 'hybrid_cache_misses_total'] },
+  ],
+};
+
 const doctor = {
   checks: [
     { name: 'Docker', state: 'Ok', detail: 'Docker 29.7.2 is answering.' },
@@ -76,6 +90,7 @@ describe('StackPage', () => {
     frontendStart: ReturnType<typeof vi.fn>;
     frontendStop: ReturnType<typeof vi.fn>;
     telemetryHealth: ReturnType<typeof vi.fn>;
+    telemetryAlerts: ReturnType<typeof vi.fn>;
     doctor: ReturnType<typeof vi.fn>;
   };
 
@@ -96,6 +111,7 @@ describe('StackPage', () => {
       frontendStart: vi.fn(() => of({ id: 'fe-1', commandLine: 'npm start', state: 'Running', exitCode: null, startedAt: '' })),
       frontendStop: vi.fn(() => of({ id: 'fe-1', commandLine: 'npm start', state: 'Exited', exitCode: -1, startedAt: '' })),
       telemetryHealth: vi.fn(() => of(health)),
+      telemetryAlerts: vi.fn(() => of(alerts)),
       doctor: vi.fn(() => of(doctor)),
     };
     TestBed.configureTestingModule({
@@ -309,6 +325,67 @@ describe('StackPage', () => {
       expect(host.telemetryHealth).toHaveBeenCalledTimes(2);
       expect(fixture.nativeElement.querySelectorAll('table.signals tbody tr').length).toBe(2);
       expect(text(fixture.nativeElement.querySelector('.signals'))).not.toContain('network down');
+    });
+  });
+
+  describe('alert strip', () => {
+    async function render() {
+      const fixture = TestBed.createComponent(StackPage);
+      fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(0);
+      fixture.detectChanges();
+      return fixture;
+    }
+
+    it('lists each loaded rule with its state, severity and instances, and the waiting rules apart under what they wait on', async () => {
+      const fixture = await render();
+
+      const loaded = Array.from(fixture.nativeElement.querySelectorAll('table.alerts tbody tr')) as HTMLElement[];
+      expect(loaded.map((r) => text(r))).toEqual([
+        'ErrorQueueDepth firing page 1',
+        'Latency pending page 1',
+        'OutboxGrowth inactive (evaluation failing) — 0',
+      ]);
+      expect(loaded.map((r) => r.className)).toEqual(['state-firing', 'state-pending', 'state-inactive']);
+
+      const waiting = Array.from(fixture.nativeElement.querySelectorAll('table.waiting tbody tr')) as HTMLElement[];
+      expect(waiting.map((r) => text(r))).toEqual([
+        'StuckSaga ordering_saga_oldest_unfinalised_age_seconds',
+        'CacheHitRatioCollapse hybrid_cache_hits_total, hybrid_cache_misses_total',
+      ]);
+      expect(text(fixture.nativeElement.querySelector('.alerts-waiting'))).toContain('Waiting, not quiet');
+      expect(text(fixture.nativeElement.querySelector('table.waiting'))).not.toMatch(/inactive|quiet|ok/i);
+    });
+
+    it('says an empty list is not a quiet platform, and still lists the waiting rules', async () => {
+      host.telemetryAlerts.mockReturnValue(of({ ...alerts, loaded: [] }));
+      const fixture = await render();
+
+      expect(text(fixture.nativeElement.querySelector('.alerts-empty'))).toContain('not a quiet platform');
+      expect(fixture.nativeElement.querySelectorAll('table.waiting tbody tr').length).toBe(2);
+    });
+
+    it('says the rules are unavailable, with the reason, and still lists the waiting rules', async () => {
+      host.telemetryAlerts.mockReturnValue(of({ ...alerts, reachable: false, error: 'Prometheus answered 502: bad gateway', loaded: [] }));
+      const fixture = await render();
+
+      expect(text(fixture.nativeElement.querySelector('.alerts .error'))).toBe('Alert rules unavailable: Prometheus answered 502: bad gateway');
+      expect(fixture.nativeElement.querySelector('table.alerts')).toBeNull();
+      expect(fixture.nativeElement.querySelectorAll('table.waiting tbody tr').length).toBe(2);
+    });
+
+    it('polls on the slower timer and recovers after a failed read', async () => {
+      host.telemetryAlerts.mockReturnValueOnce(throwError(() => new Error('network down')));
+      const fixture = await render();
+
+      expect(text(fixture.nativeElement.querySelector('.alerts'))).toContain('network down');
+
+      await vi.advanceTimersByTimeAsync(15000);
+      fixture.detectChanges();
+
+      expect(host.telemetryAlerts).toHaveBeenCalledTimes(2);
+      expect(text(fixture.nativeElement.querySelector('.alerts'))).not.toContain('network down');
+      expect(fixture.nativeElement.querySelectorAll('table.alerts tbody tr').length).toBe(3);
     });
   });
 

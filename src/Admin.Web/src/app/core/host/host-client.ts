@@ -23,6 +23,7 @@ import {
   QueuesView,
   RealmUserView,
   StackView,
+  AlertStripView,
   TelemetryHealthView,
   TokenClockView,
   TokenView,
@@ -176,6 +177,10 @@ export class HostClient {
 
   telemetryHealth(): Observable<TelemetryHealthView> {
     return this.http.get<TelemetryHealthView>('/api/telemetry/health');
+  }
+
+  telemetryAlerts(): Observable<AlertStripView> {
+    return this.http.get<AlertStripView>('/api/telemetry/alerts');
   }
 
   doctor(): Observable<DoctorView> {

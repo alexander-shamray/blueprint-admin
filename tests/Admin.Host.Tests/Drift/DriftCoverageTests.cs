@@ -40,6 +40,7 @@ public sealed class DriftCoverageTests
         ["src/Admin.Host/Stack/PlatformProbe.cs"] = typeof(ObjectStoreDriftTests),
         ["src/Admin.Host/Stack/WorkstationDoctor.cs"] = typeof(ComposeDriftTests),
         ["src/Admin.Host/Telemetry/GoldenSignals.cs"] = typeof(GoldenSignalsDriftTests),
+        ["src/Admin.Host/Telemetry/WaitingAlerts.cs"] = typeof(WaitingAlertsDriftTests),
         ["src/Admin.Host/Telemetry/GrafanaContracts.cs"] = typeof(LiteralDriftTests),
         ["src/Admin.Host/Trace/EventTraceService.cs"] = typeof(LiteralDriftTests),
         ["src/Admin.Host/Trace/SpanRecogniser.cs"] = typeof(LiteralDriftTests),

@@ -161,6 +161,13 @@ describe('HostClient', () => {
     req.flush({ reachable: true, error: null, services: [] });
   });
 
+  it('reads the alert strip', () => {
+    client.telemetryAlerts().subscribe();
+    const req = http.expectOne('/api/telemetry/alerts');
+    expect(req.request.method).toBe('GET');
+    req.flush({ reachable: true, error: null, loaded: [], waiting: [] });
+  });
+
   it('omits the window parameter entirely when none is asked for, so the host applies its default', () => {
     client.trace('demo-trace-0001').subscribe();
     const req = http.expectOne('/api/trace/demo-trace-0001');
