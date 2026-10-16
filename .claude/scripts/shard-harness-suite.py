@@ -58,11 +58,13 @@ from pathlib import Path
 HERE = Path(__file__).resolve()
 ROOT = HERE.parents[2]
 
-# The two roots every caller used to name for itself. They live here now, so
+# The two roots every caller used to name for itself, and `tools/token-usage`,
+# whose suite nothing ran until it joined them (#144). They live here, so
 # `harness-checks.sh` and the `harness` CI job cannot drift apart about what
 # the suite is; `test_harness_shards.py` asserts each one still contributes.
 ROOTS = ((".claude/scripts", "test_*.py"),
-         (".github/locality-gate", "test*.py"))
+         (".github/locality-gate", "test*.py"),
+         ("tools/token-usage", "test_*.py"))
 
 # Whose subject is time or a port, and so cannot share a box with seven
 # workers. `TheRefresh` asserts that a hook command returns inside two seconds

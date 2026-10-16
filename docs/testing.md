@@ -46,8 +46,8 @@ pinned the old answer moves with it.
 
 `python .claude/scripts/shard-harness-suite.py` — Python 3.12, plus Bash,
 `grep`, Git and `jq` on PATH. Python plus `jq` alone fails before a case
-runs. It discovers both `.claude/scripts` and `.github/locality-gate` and
-runs their classes as parallel workers; `docs/harness-boundaries.md` owns what
+runs. It discovers `.claude/scripts`, `.github/locality-gate` and
+`tools/token-usage`, and runs their classes as parallel workers; `docs/harness-boundaries.md` owns what
 that may not do. The `harness` job in `ci.yml` is the matrix.
 
 ## Locality

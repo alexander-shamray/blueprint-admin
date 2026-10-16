@@ -799,7 +799,7 @@ and not at its neighbour looks like.
    `BlueprintAdmin.slnx`. `bash .claude/scripts/npm-checks.sh all` whenever
    it reaches `src/Admin.Web/**` or that project's lockfile, eslint or
    prettier config. `bash .claude/scripts/harness-checks.sh` whenever it
-   reaches `.claude/**` or `.github/locality-gate/**`. A docs-only change
+   reaches `.claude/**`, `.github/locality-gate/**` or `tools/**`. A docs-only change
    runs `fast` or nothing and says which.
 
    **The Playwright suite is CI's `smoke` job and is not run here.** It needs
