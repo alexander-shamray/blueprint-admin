@@ -104,6 +104,49 @@ test('the already-shipped script is refused 422 order.already_shipped and reads 
   await expect(steps.nth(7).locator('.detail')).toContainText('The order read shows unchanged at');
 });
 
+// The timeout scripts hold a lease (spec §5.3). The fake stack remembers what it did (FakeStack): with Inventory stopped an
+// order ends out of stock only when the saga's stock wait lapses, and a total ending .09 ends declined by the payment wait,
+// each a few seconds with the short waits and minutes without. Every run ends with the lease restored.
+for (const [script, ended, steps] of [
+  ['stock-timeout', 'out_of_stock', 6],
+  ['payment-timeout', 'declined', 8],
+] as const) {
+  test(`the ${script} script holds its lease, reads the order back ${ended}, and restores the stack`, async ({ page, request }) => {
+    await page.goto('/scenario');
+
+    await page.getByLabel('Script').selectOption(script);
+    await expect(page.locator('p.lease-note')).toContainText('Everything is restored when the run ends');
+    await page.getByRole('button', { name: 'Run' }).click();
+
+    const list = page.locator('ol.steps li.step');
+    await expect(list).toHaveCount(steps);
+    await expect(list.locator('.state', { hasText: '[ok]' })).toHaveCount(steps, { timeout: 60_000 });
+    await expect(list.first().locator('.detail')).toContainText('Held:');
+    await expect(list.nth(steps - 2).locator('.detail')).toContainText(`The order read shows ${ended} at`);
+    await expect(list.last().locator('.detail')).toHaveText('The stack is as the run found it.');
+
+    const state = await (await request.get('/api/stack/lease')).json();
+    expect(state.lease).toBeNull();
+  });
+}
+
+test('Cancel ends a run that is waiting and still restores the stack', async ({ page, request }) => {
+  await page.goto('/scenario');
+
+  await page.getByLabel('Script').selectOption('stock-timeout');
+  await page.getByRole('button', { name: 'Run' }).click();
+  // The lease is held from the first step on, and shown on the Stack screen while the run goes.
+  await expect(page.locator('ol.steps li.step').first().locator('.state')).toHaveText('[ok]');
+
+  await page.getByRole('button', { name: 'Cancel' }).click();
+
+  const list = page.locator('ol.steps li.step');
+  await expect(list.last().locator('.state')).toHaveText('[ok]', { timeout: 30_000 });
+  await expect(list.last().locator('.detail')).toHaveText('The stack is as the run found it.');
+  const state = await (await request.get('/api/stack/lease')).json();
+  expect(state.lease).toBeNull();
+});
+
 test('a user without the permissions stops the run at the publish', async ({ page }) => {
   await page.goto('/scenario');
 

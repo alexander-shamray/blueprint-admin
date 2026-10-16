@@ -321,6 +321,45 @@ describe('the unhappy scripts', () => {
   });
 });
 
+describe('the timeout scripts', () => {
+  it('take their lease first and end it last, and send nothing as the lease or the restore', () => {
+    for (const key of ['stock-timeout', 'payment-timeout'] as const) {
+      const steps = SCRIPTS[key].steps;
+
+      expect(steps[0]).toBe('lease');
+      expect(steps[steps.length - 1]).toBe('restore');
+      expect(SCRIPTS[key].lease).toBeDefined();
+    }
+    expect(roleOf('lease')).toBeNull();
+    expect(roleOf('restore')).toBeNull();
+    expect(isWatch('lease')).toBe(false);
+  });
+
+  it('state their causes as run-locally.md does: Inventory stopped, or a total ending .09, under the short waits', () => {
+    expect(SCRIPTS['stock-timeout'].lease!.changes).toEqual(['short-waits', 'stop-inventory']);
+    expect(SCRIPTS['payment-timeout'].lease!.changes).toEqual(['short-waits']);
+    expect(SCRIPTS['payment-timeout'].amount).toBe(10.09);
+    expect(SCRIPTS['payment-timeout'].onHand).toBeGreaterThan(0);
+  });
+
+  it('hold the stack no longer than the host allows, which is its own bound', () => {
+    for (const key of ['stock-timeout', 'payment-timeout'] as const) {
+      expect(SCRIPTS[key].lease!.holdSeconds).toBeLessThanOrEqual(600);
+    }
+  });
+
+  it('resolve only the calls they send, and a lease asks the catalog for none', () => {
+    const view: ApiCatalogView = {
+      sources: [],
+      operations: Object.values(SCENARIO_OPERATIONS).map((id) => op(id)),
+    };
+
+    const stock = resolveOperations(view, SCRIPTS['stock-timeout']).operations!;
+
+    expect(Object.keys(stock).sort()).toEqual(['order', 'publish', 'read']);
+  });
+});
+
 describe('the carrier scripts', () => {
   const order = JSON.stringify({ items: [{ productId: 'p' }], shippingAddress: { line1: '1 Test Street', postalCode: '050000' } });
 

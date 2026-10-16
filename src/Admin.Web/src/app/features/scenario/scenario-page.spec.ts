@@ -173,6 +173,24 @@ function isRead(request: ProxyRequest): boolean {
   return request.url.endsWith(`/bff/v1/orders/${orderId}`);
 }
 
+/** The host's `ScenarioControl.Table` as `GET /api/stack/lease` lists it. */
+const leaseChanges = [
+  { id: 'stop-inventory', title: 'Inventory stopped', service: 'inventory-api', description: '', maxHoldSeconds: 600 },
+  { id: 'short-waits', title: "The saga's waits shortened", service: 'ordering-api', description: '', maxHoldSeconds: 600 },
+];
+
+const heldLease = {
+  id: 'lease-1',
+  changes: ['short-waits', 'stop-inventory'],
+  title: "The saga's waits shortened + Inventory stopped",
+  services: ['ordering-api', 'inventory-api'],
+  label: 'Stock timeout',
+  since: '2026-10-16T09:00:00Z',
+  expiresAt: '2026-10-16T09:07:00Z',
+  applyJob: 'job-1',
+  restoreError: null,
+};
+
 const farOff = '2099-01-01T00:00:00Z';
 const heldClock: TokenClockView = {
   username: 'demo',
@@ -191,6 +209,9 @@ describe('ScenarioPage', () => {
     uploadProductImage: ReturnType<typeof vi.fn>;
     brokerQueues: ReturnType<typeof vi.fn>;
     tokenClock: ReturnType<typeof vi.fn>;
+    lease: ReturnType<typeof vi.fn>;
+    leaseAcquire: ReturnType<typeof vi.fn>;
+    leaseRestore: ReturnType<typeof vi.fn>;
   };
   let uuids: number;
 
@@ -205,6 +226,9 @@ describe('ScenarioPage', () => {
       uploadProductImage: vi.fn(() => of(responded(200, '', 'store'))),
       brokerQueues: vi.fn(() => of(drained)),
       tokenClock: vi.fn(() => of(heldClock)),
+      lease: vi.fn(() => of({ lease: null, changes: leaseChanges })),
+      leaseAcquire: vi.fn(() => of(heldLease)),
+      leaseRestore: vi.fn(() => of({ lease: null, changes: leaseChanges })),
     };
     TestBed.configureTestingModule({
       imports: [ScenarioPage],
@@ -453,6 +477,174 @@ describe('ScenarioPage', () => {
 
     expect(page.steps()[5].state).toBe('failed');
     expect(page.steps()[5].detail).toBe('The order ended delivered, not declined.');
+  });
+
+  describe('the timeout scripts and the lease', () => {
+    const outOfStock = order('out_of_stock', { cancelled: '2026-10-05T12:00:21Z' });
+
+    function readsAs(body: string): void {
+      host.proxy.mockImplementation((request: ProxyRequest) =>
+        isRead(request) ? of(responded(200, body, '')) : of(platform(request)),
+      );
+    }
+
+    it('names what Run will change before it is pressed, from the host\'s own table', async () => {
+      const fixture = render();
+      fixture.componentInstance.pick('stock-timeout');
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelector('.lease-note').textContent).toBe(
+        "Run changes the stack: The saga's waits shortened, then Inventory stopped (ordering-api, inventory-api). Everything is restored when the run ends, is cancelled or fails, and the host restores it by itself after 7 minutes at most.",
+      );
+    });
+
+    it('says nothing before Run for a script that changes nothing', async () => {
+      const fixture = render();
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelector('.lease-note')).toBeNull();
+    });
+
+    it('runs the stock-timeout script inside its lease: the changes first, the order, the watch, then the restore', async () => {
+      readsAs(outOfStock);
+      const calls: string[] = [];
+      host.leaseAcquire.mockImplementation(() => {
+        calls.push('acquire');
+        return of(heldLease);
+      });
+      host.leaseRestore.mockImplementation(() => {
+        calls.push('restore');
+        return of({ lease: null, changes: leaseChanges });
+      });
+      host.proxy.mockImplementation((request: ProxyRequest) => {
+        calls.push(`${request.method} ${request.url}`);
+        return isRead(request) ? of(responded(200, outOfStock, '')) : of(platform(request));
+      });
+      const page = render().componentInstance;
+      page.pick('stock-timeout');
+
+      await page.run();
+
+      expect(page.steps().map((s) => [s.key, s.state])).toEqual([
+        ['lease', 'ok'],
+        ['publish', 'ok'],
+        ['drain', 'ok'],
+        ['order', 'ok'],
+        ['out_of_stock', 'ok'],
+        ['restore', 'ok'],
+      ]);
+      expect(host.leaseAcquire).toHaveBeenCalledWith({
+        changes: ['short-waits', 'stop-inventory'],
+        holdSeconds: 420,
+        label: 'Stock timeout',
+      });
+      expect(calls[0]).toBe('acquire');
+      expect(calls[calls.length - 1]).toBe('restore');
+      expect(page.steps()[0].detail).toBe("Held: The saga's waits shortened + Inventory stopped. The host restores it by itself at 2026-10-16T09:07:00Z.");
+      expect(page.steps()[5].detail).toBe('The stack is as the run found it.');
+      // No stock write and no quote: Inventory is stopped, and the cause is that nothing answers the reservation.
+      expect(sent().some((r) => r.url.includes('/inventory/stock/'))).toBe(false);
+    });
+
+    it('runs the payment-timeout script at .09 under the short waits alone, with Inventory up to stock it', async () => {
+      readsAs(order('declined', { cancelled: '2026-10-05T12:00:31Z' }));
+      const page = render().componentInstance;
+      page.pick('payment-timeout');
+
+      await page.run();
+
+      expect(page.steps().map((s) => [s.key, s.state])).toEqual([
+        ['lease', 'ok'],
+        ['publish', 'ok'],
+        ['drain', 'ok'],
+        ['stock', 'ok'],
+        ['quote', 'ok'],
+        ['order', 'ok'],
+        ['declined', 'ok'],
+        ['restore', 'ok'],
+      ]);
+      expect(host.leaseAcquire).toHaveBeenCalledWith({ changes: ['short-waits'], holdSeconds: 360, label: 'Payment timeout' });
+      expect(JSON.parse(sent()[0].body!).amount).toBe(10.09);
+    });
+
+    it('restores when a step fails, and says so', async () => {
+      readsAs(delivered);
+      const page = render().componentInstance;
+      page.pick('payment-timeout');
+
+      await page.run();
+
+      expect(page.steps()[6].state).toBe('failed');
+      expect(page.steps()[6].detail).toBe('The order ended delivered, not declined.');
+      expect(host.leaseRestore).toHaveBeenCalledTimes(1);
+      expect(page.steps()[7].state).toBe('ok');
+    });
+
+    it('stops at a lease the host refuses, sends nothing, and has nothing to restore', async () => {
+      host.leaseAcquire.mockReturnValue(
+        throwError(() => ({ error: { detail: 'A Scenario already holds a lease (job 3). Restore it first.' } })),
+      );
+      const page = render().componentInstance;
+      page.pick('stock-timeout');
+
+      await page.run();
+
+      expect(page.steps().map((s) => s.state)).toEqual(['failed', 'skipped', 'skipped', 'skipped', 'skipped', 'skipped']);
+      expect(page.steps()[0].detail).toBe('A Scenario already holds a lease (job 3). Restore it first.');
+      expect(page.steps()[5].detail).toBe('No lease was taken, so nothing was changed.');
+      expect(host.leaseRestore).not.toHaveBeenCalled();
+      expect(host.proxy).not.toHaveBeenCalled();
+    });
+
+    it('says plainly when the restore itself failed, and that the host will try again', async () => {
+      readsAs(outOfStock);
+      host.leaseRestore.mockReturnValue(throwError(() => ({ error: { detail: 'docker did not answer' } })));
+      const page = render().componentInstance;
+      page.pick('stock-timeout');
+
+      await page.run();
+
+      expect(page.steps()[5].state).toBe('failed');
+      expect(page.steps()[5].detail).toBe(
+        'The restore failed: docker did not answer The lease is still held; the host tries again every 30 seconds, and the Stack screen has Restore now.',
+      );
+    });
+
+    it('cancels from the console: the wait ends, the rest is not run, and the stack is restored', async () => {
+      const read = new Subject<ProxyResult>();
+      host.proxy.mockImplementation((request: ProxyRequest) =>
+        isRead(request) ? read.asObservable() : of(platform(request)),
+      );
+      const page = render().componentInstance;
+      page.pick('stock-timeout');
+      const running = page.run();
+      await vi.waitFor(() => expect(sent().some(isRead)).toBe(true));
+
+      page.cancel();
+      read.next(responded(200, order('placed'), ''));
+      await running;
+
+      expect(page.steps().map((s) => [s.key, s.state])).toEqual([
+        ['lease', 'ok'],
+        ['publish', 'ok'],
+        ['drain', 'ok'],
+        ['order', 'ok'],
+        ['out_of_stock', 'failed'],
+        ['restore', 'ok'],
+      ]);
+      expect(page.steps()[4].detail).toBe('Cancelled.');
+      expect(host.leaseRestore).toHaveBeenCalledTimes(1);
+      expect(page.running()).toBe(false);
+    });
+
+    it('does not take a lease or call the restore for a script that changes nothing', async () => {
+      const page = render().componentInstance;
+
+      await page.run();
+
+      expect(host.leaseAcquire).not.toHaveBeenCalled();
+      expect(host.leaseRestore).not.toHaveBeenCalled();
+    });
   });
 
   it('shows a picked script as its own steps, and keeps the script it is running', async () => {

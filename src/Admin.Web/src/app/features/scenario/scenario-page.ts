@@ -16,6 +16,7 @@ import {
   ApiCatalogView,
   ApiOperation,
   Identity,
+  LeaseChange,
   ProjectionDrain,
   ProxyResult,
   QueuesView,
@@ -120,7 +121,25 @@ export class ScenarioPage {
    * still cancelled, so leaving never strands an order that script meant to undo.
    */
   private readonly stopped = new Subject<void>();
-  private destroyed = false;
+  private screenGone = false;
+  private cancelled = false;
+
+  /**
+   * True once nothing more is to be sent: the screen went, or Cancel was pressed. Both end the polls and stop the steps the
+   * same way; neither stops the `restore` step, which undoes a change to the stack and so runs whatever happened.
+   */
+  private get destroyed(): boolean {
+    return this.screenGone || this.cancelled;
+  }
+
+  /** Set while Cancel is going, so a second press does nothing and the button says so. */
+  readonly cancelling = signal(false);
+
+  /** Whether the `lease` step took a lease this run has still to end. */
+  private leaseTaken = false;
+
+  /** The changes the host may make for a script, by id, for the note before Run: the host's table, not a copy of it. */
+  readonly changes = signal<LeaseChange[]>([]);
   /** Whether this run has sent as its user yet: a token missing after that has expired, not never been minted. */
   private sentThisRun = false;
   /**
@@ -155,6 +174,21 @@ export class ScenarioPage {
     return c.kind === 'user' ? c.username : (this.identity.users()[0]?.username ?? '');
   });
 
+  /**
+   * What Run will change in the stack and for how long, said before it is pressed (spec §5.3): the host's own titles for the
+   * script's changes, and the hold the host restores itself at. Empty for a script that changes nothing.
+   */
+  readonly leaseNote = computed(() => {
+    const lease = SCRIPTS[this.script()].lease;
+    if (!lease) return '';
+    const table = this.changes();
+    const named = lease.changes.map((id) => table.find((c) => c.id === id)?.title ?? id);
+    const services = [
+      ...new Set(lease.changes.map((id) => table.find((c) => c.id === id)?.service ?? id)),
+    ];
+    return `Run changes the stack: ${named.join(', then ')} (${services.join(', ')}). Everything is restored when the run ends, is cancelled or fails, and the host restores it by itself after ${Math.round(lease.holdSeconds / 60)} minutes at most.`;
+  });
+
   readonly canRun = computed(
     () => !this.running() && this.resolved()?.operations != null && this.runAs() !== '',
   );
@@ -171,7 +205,7 @@ export class ScenarioPage {
 
   constructor() {
     inject(DestroyRef).onDestroy(() => {
-      this.destroyed = true;
+      this.screenGone = true;
       this.stopped.next();
       // A request this screen never acted on would otherwise start a run on the next visit, unasked.
       this.launcher.take();
@@ -180,6 +214,11 @@ export class ScenarioPage {
     this.host.operations().subscribe({
       next: (view) => this.catalog.set(view),
       error: (e: unknown) => this.error.set(describe(e)),
+    });
+    // The note before Run names what a script's lease will change; without the table it is left out, not guessed.
+    this.host.lease().subscribe({
+      next: (state) => this.changes.set(state.changes),
+      error: () => this.changes.set([]),
     });
     // The palette's "Run" waits for the catalog and a user, as the button does; one asked for during a run is
     // dropped rather than queued behind it, so a second keystroke never orders twice.
@@ -239,21 +278,41 @@ export class ScenarioPage {
     this.running.set(true);
     this.sentThisRun = false;
     this.orderAnswered = false;
+    this.cancelled = false;
+    this.cancelling.set(false);
+    this.leaseTaken = false;
     this.projection.set(null);
     this.steps.set(initialSteps(script));
 
     try {
       await this.runSteps(SCRIPTS[script], operations, run, identity);
     } finally {
+      // Whatever ended the steps, a change to the stack is undone before the run is over: the `restore` step does not wait
+      // for the steps before it to have succeeded, and Cancel and a screen that went do not stop it.
+      await this.restoreLease(script);
+      const why = this.cancelled ? 'The run was cancelled.' : 'An earlier step did not succeed.';
       this.steps.update((all) =>
-        all.map((s) =>
-          s.state === 'pending'
-            ? { ...s, state: 'skipped', detail: 'An earlier step did not succeed.' }
-            : s,
-        ),
+        all.map((s) => {
+          if (s.state === 'running') {
+            return { ...s, state: 'failed', detail: this.cancelled ? 'Cancelled.' : s.detail };
+          }
+          return s.state === 'pending' ? { ...s, state: 'skipped', detail: why } : s;
+        }),
       );
       this.running.set(false);
+      this.cancelling.set(false);
     }
+  }
+
+  /**
+   * Ends the run from the console: the polls stop, no step after the one in flight is sent, and the `restore` step still
+   * runs, so a cancelled run leaves the stack as it found it (spec §5.3).
+   */
+  cancel(): void {
+    if (!this.running() || this.cancelling()) return;
+    this.cancelling.set(true);
+    this.cancelled = true;
+    this.stopped.next();
   }
 
   /** The script's steps in order, each carrying forward what it produced; the first that fails ends it. */
@@ -267,8 +326,12 @@ export class ScenarioPage {
     let orderId = '';
     let imageKey = '';
 
-    for (const key of script.steps) {
+    // The `restore` step is not in this loop: it runs after it, whatever happened in it (see `run`).
+    for (const key of script.steps.filter((k) => k !== 'restore')) {
       switch (key) {
+        case 'lease':
+          if (!(await this.takeLease(script))) return;
+          break;
         case 'upload': {
           const uploaded = await this.upload(operations.image!, run, identity);
           if (uploaded === null) return;
@@ -345,6 +408,68 @@ export class ScenarioPage {
         default:
           if (!(await this.watch(key, operations.read!, run, identity, orderId))) return;
       }
+    }
+  }
+
+  /**
+   * Takes the script's lease (spec §5.3): the host makes its changes in order, waits for each service to be healthy, and
+   * answers the lease held, which takes a minute or two for a recreated service. A refusal (another run holds the stack, or a
+   * change failed and was undone) is the step's failure, said as the host said it.
+   */
+  private async takeLease(script: Script): Promise<boolean> {
+    const lease = script.lease;
+    if (!lease || this.destroyed) return false;
+
+    this.patch('lease', {
+      state: 'running',
+      detail: `Asking the host to change the stack and waiting for each service to be healthy, up to 3 minutes a change. ${this.leaseNote()}`,
+    });
+
+    try {
+      const held = await firstValueFrom(
+        this.host.leaseAcquire({
+          changes: [...lease.changes],
+          holdSeconds: lease.holdSeconds,
+          label: script.title,
+        }),
+      );
+      this.leaseTaken = true;
+      this.patch('lease', {
+        state: 'ok',
+        detail: `Held: ${held.title}. The host restores it by itself at ${held.expiresAt}.`,
+      });
+      return !this.destroyed;
+    } catch (e: unknown) {
+      if (this.cancelled || this.screenGone) return false;
+      this.patch('lease', { state: 'failed', detail: describe(e) });
+      return false;
+    }
+  }
+
+  /**
+   * Ends the lease the run took, if it took one. It does not wait for the steps before it to have succeeded and is not
+   * stopped by Cancel or by the screen going; a restore that fails is said plainly, because the lease is then still held and the
+   * host retries it, and the Stack screen shows it with Restore now.
+   */
+  private async restoreLease(script: ScriptKey): Promise<void> {
+    if (!SCRIPTS[script].steps.includes('restore')) return;
+
+    if (!this.leaseTaken) {
+      this.patch('restore', { state: 'skipped', detail: 'No lease was taken, so nothing was changed.' });
+      return;
+    }
+
+    this.patch('restore', { state: 'running', detail: 'Asking the host to restore the stack and waiting for each service to be running.' });
+
+    try {
+      await firstValueFrom(this.host.leaseRestore());
+      this.leaseTaken = false;
+      this.patch('restore', { state: 'ok', detail: 'The stack is as the run found it.' });
+    } catch (e: unknown) {
+      this.patch('restore', {
+        state: 'failed',
+        detail: `The restore failed: ${describe(e)} The lease is still held; the host tries again every 30 seconds, and the Stack screen has Restore now.`,
+      });
     }
   }
 
