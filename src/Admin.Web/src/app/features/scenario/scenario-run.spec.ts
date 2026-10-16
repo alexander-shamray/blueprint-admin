@@ -13,6 +13,7 @@ import {
   isAlreadyShipped,
   isWatch,
   orderRead,
+  reservationVerdict,
   resolveOperations,
   reviewVerdict,
   roleOf,
@@ -330,7 +331,7 @@ describe('the unhappy scripts', () => {
 
 describe('the timeout scripts', () => {
   it('take their lease first and end it last, and send nothing as the lease or the restore', () => {
-    for (const key of ['stock-timeout', 'payment-timeout', 'despatch-timeout'] as const) {
+    for (const key of ['stock-timeout', 'payment-timeout', 'despatch-timeout', 'release-timeout'] as const) {
       const steps = SCRIPTS[key].steps;
 
       expect(steps[0]).toBe('lease');
@@ -351,7 +352,7 @@ describe('the timeout scripts', () => {
   });
 
   it('hold the stack no longer than the host allows, which is its own bound', () => {
-    for (const key of ['stock-timeout', 'payment-timeout', 'despatch-timeout'] as const) {
+    for (const key of ['stock-timeout', 'payment-timeout', 'despatch-timeout', 'release-timeout'] as const) {
       expect(SCRIPTS[key].lease!.holdSeconds).toBeLessThanOrEqual(600);
     }
   });
@@ -365,6 +366,110 @@ describe('the timeout scripts', () => {
     const stock = resolveOperations(view, SCRIPTS['stock-timeout']).operations!;
 
     expect(Object.keys(stock).sort()).toEqual(['order', 'publish', 'read']);
+  });
+});
+
+describe('the release-timeout script', () => {
+  it('holds the payment with a .09 total, takes the short waits with the lease and Inventory only after the reservation', () => {
+    const script = SCRIPTS['release-timeout'];
+
+    expect(script.amount).toBe(10.09);
+    expect(script.onHand).toBeGreaterThan(0);
+    expect(script.lease).toEqual({ changes: ['short-waits'], holdSeconds: 420 });
+    expect(script.lateChange).toBe('stop-inventory');
+    expect(script.review).toEqual({ reason: 'stock_not_released' });
+    expect(script.steps).toEqual([
+      'lease',
+      'publish',
+      'drain',
+      'stock',
+      'quote',
+      'order',
+      'reserved',
+      'stop',
+      'cancel',
+      'cancelled',
+      'flagged',
+      'restore',
+    ]);
+    expect(script.steps.indexOf('reserved')).toBeLessThan(script.steps.indexOf('stop'));
+    expect(script.steps.indexOf('stop')).toBeLessThan(script.steps.indexOf('cancel'));
+  });
+
+  it('resolves the reservation read for its reserved step, and asks the catalog for nothing on the stop', () => {
+    const view: ApiCatalogView = {
+      sources: [],
+      operations: Object.values(SCENARIO_OPERATIONS).map((id) => op(id)),
+    };
+
+    expect(SCENARIO_OPERATIONS.reservation).toBe('inventory:GetReservation');
+    expect(roleOf('reserved')).toBe('reservation');
+    expect(roleOf('stop')).toBeNull();
+    expect(isWatch('reserved')).toBe(false);
+    expect(isWatch('stop')).toBe(false);
+    expect(Object.keys(resolveOperations(view, SCRIPTS['release-timeout']).operations!).sort()).toEqual([
+      'cancel',
+      'order',
+      'publish',
+      'quote',
+      'read',
+      'reservation',
+      'stock',
+    ]);
+  });
+
+  it('names the reservation read when the catalog does not carry it, so the run does not start', () => {
+    const view: ApiCatalogView = {
+      sources: [],
+      operations: Object.values(SCENARIO_OPERATIONS)
+        .filter((id) => id !== 'inventory:GetReservation')
+        .map((id) => op(id)),
+    };
+
+    const resolved = resolveOperations(view, SCRIPTS['release-timeout']);
+
+    expect(resolved.operations).toBeNull();
+    expect(resolved.missing).toEqual(['inventory:GetReservation is not in the operation catalog']);
+  });
+
+  describe('reservationVerdict', () => {
+    const reservation = (status: string) => JSON.stringify({ orderId: 'o', status, lines: [] });
+
+    it('reaches Reserved on a 200 that says so', () => {
+      expect(reservationVerdict(200, reservation('Reserved'))).toEqual({
+        kind: 'reached',
+        detail: 'The reservation reads Reserved: Inventory holds the stock for the order.',
+      });
+    });
+
+    it('waits through a 404, which is a reservation not yet made', () => {
+      expect(reservationVerdict(404, '{"code":"reservation.not_found"}')).toEqual({
+        kind: 'waiting',
+        detail: 'Inventory answered 404: it has made no reservation for the order yet.',
+      });
+    });
+
+    it('waits through a reservation that is not Reserved yet, naming what it read', () => {
+      expect(reservationVerdict(200, reservation('Pending'))).toEqual({
+        kind: 'waiting',
+        detail: 'Last read: the reservation is Pending, not Reserved yet.',
+      });
+    });
+
+    it('fails on any other status, since waiting cannot change it', () => {
+      for (const status of [401, 403, 500, 503]) {
+        expect(reservationVerdict(status, '')).toEqual({ kind: 'failed', reason: `Answered ${status}.` });
+      }
+    });
+
+    it('fails on a 200 that is not a reservation, rather than waiting on it', () => {
+      for (const body of ['', 'not json', '[1]', '"Reserved"', '{}', '{"status":7}']) {
+        expect(reservationVerdict(200, body)).toEqual({
+          kind: 'failed',
+          reason: 'Answered 200, but not with a reservation the step can follow.',
+        });
+      }
+    });
   });
 });
 

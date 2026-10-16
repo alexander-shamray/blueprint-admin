@@ -109,6 +109,15 @@ describe('HostClient', () => {
     req.flush({});
   });
 
+  it('adds one change to the lease it holds', () => {
+    client.leaseAddChange('stop-inventory').subscribe();
+
+    const req = http.expectOne('/api/stack/lease/changes');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ change: 'stop-inventory' });
+    req.flush({});
+  });
+
   it('restores the lease', () => {
     client.leaseRestore().subscribe();
 

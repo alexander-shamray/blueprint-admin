@@ -178,6 +178,27 @@ test('the despatch-timeout script reads the review Ordering raised, finds the or
   expect(state.lease).toBeNull();
 });
 
+// The release timeout needs Inventory stopped after its stock has reserved, so the lease takes that change while it is held
+// (POST /api/stack/lease/changes). A .09 order cancelled before its payment wait lapses is cancelled by the customer, and with
+// Inventory stopped it is flagged stock_not_released (FakeOrders.Cancel, ReviewFlags).
+test('the release-timeout script stops Inventory once the stock is reserved, cancels, reads the review, and restores the stack', async ({ page, request }) => {
+  await page.goto('/scenario');
+
+  await page.getByLabel('Script').selectOption('release-timeout');
+  await page.getByRole('button', { name: 'Run' }).click();
+
+  const list = page.locator('ol.steps li.step');
+  await expect(list).toHaveCount(12);
+  await expect(list.locator('.state', { hasText: '[ok]' })).toHaveCount(12, { timeout: 60_000 });
+  await expect(list.nth(6).locator('.detail')).toContainText('Reserved');
+  await expect(list.nth(9).locator('.detail')).toContainText('The order read shows cancelled at');
+  await expect(list.nth(10).locator('.detail')).toContainText('flagged for review: stock_not_released');
+  await expect(list.last().locator('.detail')).toHaveText('The stack is as the run found it.');
+
+  const state = await (await request.get('/api/stack/lease')).json();
+  expect(state.lease).toBeNull();
+});
+
 test('Cancel ends a run that is waiting and still restores the stack', async ({ page, request }) => {
   await page.goto('/scenario');
 

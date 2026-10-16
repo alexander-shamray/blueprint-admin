@@ -14,7 +14,13 @@ import {
 import { DRAIN_POLL_MS, DRAIN_WATCH_MS, UUID } from '../api/api-page';
 import { ScenarioLauncher } from './scenario-launcher';
 import { ScenarioPage } from './scenario-page';
-import { CARRIER_POLL_MS, CARRIER_WATCH_MS, REVIEW_POLL_MS, REVIEW_WATCH_MS } from './scenario-run';
+import {
+  CARRIER_POLL_MS,
+  CARRIER_WATCH_MS,
+  RESERVATION_POLL_MS,
+  REVIEW_POLL_MS,
+  REVIEW_WATCH_MS,
+} from './scenario-run';
 
 function op(partial: Partial<ApiOperation> & { id: string }): ApiOperation {
   const [source, name] = partial.id.split(':');
@@ -89,6 +95,12 @@ const catalog: ApiCatalogView = {
       pathParameters: [{ name: 'id', required: true, type: 'string' }],
     }),
     op({
+      id: 'inventory:GetReservation',
+      method: 'GET',
+      url: 'http://localhost:5000/api/v1/inventory/reservations/{orderId}',
+      pathParameters: [{ name: 'orderId', required: true, type: 'string' }],
+    }),
+    op({
       id: 'carrier:FindBookings',
       url: 'http://localhost:5191/__admin/requests/find',
       exampleBody:
@@ -159,6 +171,14 @@ const delivered = order('delivered', {
   delivered: '2026-10-05T12:00:40Z',
 });
 
+/** Inventory's reservation read once the saga has reserved the stock (run-locally.md). */
+const reserved = JSON.stringify({
+  orderId,
+  status: 'Reserved',
+  lines: [{ productId, quantity: 1 }],
+  updatedAt: '2026-10-05T12:00:01Z',
+});
+
 /** What the host answers of Ordering's `flagged for review` lines for the order: none, or one per reason. */
 function flagView(flags: ReviewFlagView['flags'], rest: Partial<ReviewFlagView> = {}): ReviewFlagView {
   return { orderId, window: '30m', reachable: true, error: null, flags, ...rest };
@@ -185,6 +205,7 @@ function platform(request: ProxyRequest): ProxyResult {
   if (request.url.endsWith(`/catalog/products/${productId}`)) return responded(200, product, id);
   if (request.url.endsWith('/catalog/products/')) return responded(200, `"${productId}"`, id);
   if (request.url.includes('/inventory/stock/')) return responded(204, '', id);
+  if (request.url.includes('/inventory/reservations/')) return responded(200, reserved, id);
   const quote = '{"total":19.99,"unpriced":[]}';
   if (request.url.endsWith('/checkout/quote')) return responded(200, quote, id);
   if (request.url.endsWith('/orders/')) return responded(200, `"${orderId}"`, id);
@@ -238,6 +259,7 @@ describe('ScenarioPage', () => {
     tokenClock: ReturnType<typeof vi.fn>;
     lease: ReturnType<typeof vi.fn>;
     leaseAcquire: ReturnType<typeof vi.fn>;
+    leaseAddChange: ReturnType<typeof vi.fn>;
     leaseRestore: ReturnType<typeof vi.fn>;
     reviewFlags: ReturnType<typeof vi.fn>;
   };
@@ -256,6 +278,7 @@ describe('ScenarioPage', () => {
       tokenClock: vi.fn(() => of(heldClock)),
       lease: vi.fn(() => of({ lease: null, changes: leaseChanges })),
       leaseAcquire: vi.fn(() => of(heldLease)),
+      leaseAddChange: vi.fn(() => of(heldLease)),
       leaseRestore: vi.fn(() => of({ lease: null, changes: leaseChanges })),
       reviewFlags: vi.fn(() => of(flagView([flagged('not_despatched')]))),
     };
@@ -1051,6 +1074,190 @@ describe('ScenarioPage', () => {
       expect(page.steps().find((s) => s.key === 'held')!.state).toBe('skipped');
       expect(host.leaseRestore).toHaveBeenCalledTimes(1);
       expect(page.running()).toBe(false);
+    });
+  });
+
+  describe('the release-timeout script', () => {
+    const stepsOf = (page: ScenarioPage) => page.steps().map((s) => [s.key, s.state]);
+
+    beforeEach(() => {
+      host.reviewFlags.mockReturnValue(of(flagView([flagged('stock_not_released', 31)])));
+    });
+
+    it('reserves first, then stops Inventory, then cancels, then reads the order cancelled and the review Ordering logged, then restores', async () => {
+      const calls: string[] = [];
+      host.leaseAcquire.mockImplementation(() => {
+        calls.push('acquire');
+        return of(heldLease);
+      });
+      host.leaseAddChange.mockImplementation((change: string) => {
+        calls.push(`add ${change}`);
+        return of({ ...heldLease, title: "The saga's waits shortened + Inventory stopped" });
+      });
+      host.leaseRestore.mockImplementation(() => {
+        calls.push('restore');
+        return of({ lease: null, changes: leaseChanges });
+      });
+      host.proxy.mockImplementation((request: ProxyRequest) => {
+        if (request.url.includes('/inventory/reservations/')) calls.push('read reservation');
+        if (request.url.endsWith('/cancel')) calls.push('cancel');
+        return of(platform(request));
+      });
+      const page = render().componentInstance;
+      page.pick('release-timeout');
+
+      await page.run();
+
+      expect(stepsOf(page)).toEqual([
+        ['lease', 'ok'],
+        ['publish', 'ok'],
+        ['drain', 'ok'],
+        ['stock', 'ok'],
+        ['quote', 'ok'],
+        ['order', 'ok'],
+        ['reserved', 'ok'],
+        ['stop', 'ok'],
+        ['cancel', 'ok'],
+        ['cancelled', 'ok'],
+        ['flagged', 'ok'],
+        ['restore', 'ok'],
+      ]);
+      // The lease takes the short waits alone; Inventory is added only once its stock is reserved, and before the cancel.
+      expect(host.leaseAcquire).toHaveBeenCalledWith({ changes: ['short-waits'], holdSeconds: 420, label: 'Release timeout' });
+      expect(host.leaseAddChange).toHaveBeenCalledWith('stop-inventory');
+      expect(calls).toEqual(['acquire', 'read reservation', 'add stop-inventory', 'cancel', 'restore']);
+      expect(JSON.parse(sent()[0].body!).amount).toBe(10.09);
+      const reservation = page.steps()[6];
+      expect(reservation.request).toBe(`GET http://localhost:5000/api/v1/inventory/reservations/${orderId}`);
+      expect(reservation.detail).toBe('The reservation reads Reserved: Inventory holds the stock for the order.');
+      expect(reservation.correlationId).toBe('scenario-abcdef12-reserved');
+      expect(page.steps()[7].detail).toContain("Held: The saga's waits shortened + Inventory stopped.");
+      expect(page.steps()[10].detail).toContain('flagged for review: stock_not_released.');
+      expect(page.steps()[11].detail).toBe('The stack is as the run found it.');
+      expect(sent().every((r) => r.identity?.username === 'demo')).toBe(true);
+    });
+
+    it('waits through a 404 and a reservation not yet made, saying what it saw, then reaches Reserved', async () => {
+      vi.useFakeTimers();
+      const answers = [
+        responded(404, '{"code":"reservation.not_found"}', ''),
+        responded(200, JSON.stringify({ orderId, status: 'Pending', lines: [] }), ''),
+        responded(200, reserved, ''),
+      ];
+      host.proxy.mockImplementation((request: ProxyRequest) =>
+        request.url.includes('/inventory/reservations/') ? of(answers.shift()!) : of(platform(request)),
+      );
+      const page = render().componentInstance;
+      page.pick('release-timeout');
+
+      const done = page.run();
+      await vi.advanceTimersByTimeAsync(0);
+      const reservation = () => page.steps().find((s) => s.key === 'reserved')!;
+      expect(reservation().state).toBe('running');
+      expect(reservation().detail).toContain('Inventory answered 404: it has made no reservation for the order yet.');
+
+      await vi.advanceTimersByTimeAsync(RESERVATION_POLL_MS);
+      expect(reservation().state).toBe('running');
+      expect(reservation().detail).toContain('Last read: the reservation is Pending, not Reserved yet.');
+      expect(host.leaseAddChange).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(RESERVATION_POLL_MS);
+      await done;
+      vi.useRealTimers();
+
+      expect(reservation().state).toBe('ok');
+      expect(host.leaseAddChange).toHaveBeenCalledTimes(1);
+    });
+
+    it('fails the reserved step on a 403, takes no change and sends no cancel, and still restores the stack', async () => {
+      host.proxy.mockImplementation((request: ProxyRequest) =>
+        request.url.includes('/inventory/reservations/')
+          ? of(responded(403, '', request.correlationId ?? ''))
+          : of(platform(request)),
+      );
+      const page = render().componentInstance;
+      page.pick('release-timeout');
+
+      await page.run();
+
+      const reservation = page.steps().find((s) => s.key === 'reserved')!;
+      expect(reservation.state).toBe('failed');
+      expect(reservation.status).toBe(403);
+      expect(reservation.detail).toBe('Answered 403.');
+      expect(page.steps().find((s) => s.key === 'stop')!.state).toBe('skipped');
+      expect(host.leaseAddChange).not.toHaveBeenCalled();
+      expect(sent().some((r) => r.url.endsWith('/cancel'))).toBe(false);
+      expect(host.leaseRestore).toHaveBeenCalledTimes(1);
+      expect(page.steps().find((s) => s.key === 'restore')!.state).toBe('ok');
+    });
+
+    it('fails the stop step on a 500 from the host, cancels nothing, and still asks for the restore', async () => {
+      host.leaseAddChange.mockReturnValue(
+        throwError(() => ({
+          status: 500,
+          error: { detail: 'docker compose stop inventory-api exited with 1. The changes were undone.' },
+        })),
+      );
+      const page = render().componentInstance;
+      page.pick('release-timeout');
+
+      await page.run();
+
+      const stop = page.steps().find((s) => s.key === 'stop')!;
+      expect(stop.state).toBe('failed');
+      expect(stop.detail).toContain('docker compose stop inventory-api exited with 1. The changes were undone.');
+      expect(page.steps().find((s) => s.key === 'cancel')!.state).toBe('skipped');
+      expect(sent().some((r) => r.url.endsWith('/cancel'))).toBe(false);
+      expect(host.leaseRestore).toHaveBeenCalledTimes(1);
+      expect(page.steps().find((s) => s.key === 'restore')!.state).toBe('ok');
+    });
+
+    it('fails the stop step on a 409, which the host answers when no lease is held, and still asks for the restore', async () => {
+      host.leaseAddChange.mockReturnValue(throwError(() => ({ status: 409, error: { detail: 'No lease is held.' } })));
+      const page = render().componentInstance;
+      page.pick('release-timeout');
+
+      await page.run();
+
+      expect(page.steps().find((s) => s.key === 'stop')!.detail).toContain('No lease is held.');
+      expect(host.leaseRestore).toHaveBeenCalledTimes(1);
+    });
+
+    it('cancels from the console while the reservation is awaited, takes no change, and restores the stack', async () => {
+      const read = new Subject<ProxyResult>();
+      host.proxy.mockImplementation((request: ProxyRequest) =>
+        request.url.includes('/inventory/reservations/') ? read.asObservable() : of(platform(request)),
+      );
+      const page = render().componentInstance;
+      page.pick('release-timeout');
+      const running = page.run();
+      await vi.waitFor(() => expect(sent().some((r) => r.url.includes('/inventory/reservations/'))).toBe(true));
+
+      page.cancel();
+      read.next(responded(404, '', ''));
+      read.complete();
+      await running;
+
+      expect(page.steps().find((s) => s.key === 'stop')!.state).toBe('skipped');
+      expect(host.leaseAddChange).not.toHaveBeenCalled();
+      expect(host.leaseRestore).toHaveBeenCalledTimes(1);
+      expect(page.running()).toBe(false);
+    });
+
+    it('sends no cancel and reads nothing more when Cancel is pressed while the stop is made, and still restores the stack', async () => {
+      const page = render().componentInstance;
+      host.leaseAddChange.mockImplementation(() => {
+        page.cancel();
+        return of(heldLease);
+      });
+      page.pick('release-timeout');
+
+      await page.run();
+
+      expect(page.steps().find((s) => s.key === 'cancel')!.state).toBe('skipped');
+      expect(page.steps().find((s) => s.key === 'cancelled')!.state).toBe('skipped');
+      expect(sent().some((r) => r.url.endsWith('/cancel'))).toBe(false);
+      expect(host.leaseRestore).toHaveBeenCalledTimes(1);
     });
   });
 

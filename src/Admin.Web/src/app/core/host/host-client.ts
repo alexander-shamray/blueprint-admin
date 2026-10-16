@@ -77,6 +77,11 @@ export class HostClient {
     return this.http.post<LeaseView>('/api/stack/lease', request);
   }
 
+  /** One more change taken while a lease is held, for a cause that needs the stack as it is before the change (spec §5.3). */
+  leaseAddChange(change: string): Observable<LeaseView> {
+    return this.http.post<LeaseView>('/api/stack/lease/changes', { change });
+  }
+
   leaseRestore(): Observable<LeaseState> {
     return this.http.post<LeaseState>('/api/stack/lease/restore', null);
   }

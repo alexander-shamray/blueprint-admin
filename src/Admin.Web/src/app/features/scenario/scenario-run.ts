@@ -26,6 +26,8 @@ export type StepKey =
   | 'unchanged'
   | 'carrier'
   | 'flagged'
+  | 'reserved'
+  | 'stop'
   | 'held';
 
 /** The steps that wait on the order read rather than send once. */
@@ -66,6 +68,7 @@ export type ScriptKey =
   | 'stock-timeout'
   | 'payment-timeout'
   | 'despatch-timeout'
+  | 'release-timeout'
   | 'carrier-refused'
   | 'carrier-down'
   | 'carrier-slow'
@@ -118,6 +121,11 @@ export interface Script {
   carrier?: ScriptCarrier;
   /** The reason Ordering must log when it flags the order for review, which its `flagged` step reads (run-locally.md, the Loki query). */
   review?: ScriptReview;
+  /**
+   * A `ScenarioControl.Table` id its `stop` step takes while the lease is held, after the steps before it: the cause needs the
+   * stack as it was until then (the stock reserved first, then Inventory stopped), which a change taken with the lease cannot give.
+   */
+  lateChange?: string;
 }
 
 export const SCRIPT_KEYS: readonly ScriptKey[] = [
@@ -130,6 +138,7 @@ export const SCRIPT_KEYS: readonly ScriptKey[] = [
   'stock-timeout',
   'payment-timeout',
   'despatch-timeout',
+  'release-timeout',
   'carrier-refused',
   'carrier-down',
   'carrier-slow',
@@ -147,6 +156,13 @@ export const CARRIER_WATCH_MS = 240_000;
  */
 export const REVIEW_POLL_MS = 5000;
 export const REVIEW_WATCH_MS = 150_000;
+
+/**
+ * How the reserved step reads Inventory's reservation: the saga asks for it as soon as the order is placed, so a few seconds,
+ * and a minute covers the projection and a slow start.
+ */
+export const RESERVATION_POLL_MS = 1000;
+export const RESERVATION_WATCH_MS = 60_000;
 
 /** run-locally.md's carrier table: the postal code each outcome is scripted by. */
 const CARRIER_STEPS: readonly StepKey[] = ['publish', 'drain', 'stock', 'quote', 'order', 'confirmed', 'carrier', 'held'];
@@ -253,6 +269,30 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
     lease: { changes: [SHORT_WAITS], holdSeconds: 420 },
     review: { reason: 'not_despatched' },
   },
+  'release-timeout': {
+    title: 'Release timeout',
+    intro:
+      "Shorten the saga's waits, publish a product at 10.09 (a total ending .09 holds the payment, so the stock is reserved and the order is not yet confirmed), stock it, order it, wait until Inventory has reserved the stock, stop Inventory, and cancel the order; read the order cancelled while the release the saga asks for is never answered, and Ordering's log until it has flagged the order for review as stock_not_released. A .09 order holds Payments up while it waits, so run nothing else beside it. The stack is restored afterwards, whatever happens.",
+    steps: [
+      'lease',
+      'publish',
+      'drain',
+      'stock',
+      'quote',
+      'order',
+      'reserved',
+      'stop',
+      'cancel',
+      'cancelled',
+      'flagged',
+      'restore',
+    ],
+    amount: PAYMENT_WAIT_AMOUNT,
+    onHand: STOCKED,
+    lease: { changes: [SHORT_WAITS], holdSeconds: 420 },
+    lateChange: STOP_INVENTORY,
+    review: { reason: 'stock_not_released' },
+  },
   'carrier-refused': carrierScript(
     'Carrier refuses the address',
     'SIM-REFUSED',
@@ -320,6 +360,8 @@ export const STEP_TITLES: Record<StepKey, string> = {
   unchanged: 'Read the order back unchanged',
   carrier: 'Read what the carrier saw',
   flagged: 'Read the review the platform raised',
+  reserved: 'Wait for the stock to be reserved',
+  stop: 'Stop Inventory now the stock is reserved',
   held: 'Read the order back still confirmed',
 };
 
@@ -351,7 +393,8 @@ export type OperationRole =
   | 'cancel'
   | 'read'
   | 'bookings'
-  | 'polls';
+  | 'polls'
+  | 'reservation';
 
 /**
  * The catalog operation each role sends, by the id the host gives it: `<source>:<operationId>` for
@@ -370,15 +413,17 @@ export const SCENARIO_OPERATIONS: Record<OperationRole, string> = {
   read: 'bff:GetOrder',
   bookings: 'carrier:FindBookings',
   polls: 'carrier:FindFeedPolls',
+  reservation: 'inventory:GetReservation',
 };
 
 /** The role a step sends as; the drain asks the broker and sends none. */
 export function roleOf(key: StepKey): OperationRole | null {
-  if (key === 'drain' || key === 'lease' || key === 'restore' || key === 'flagged') return null;
+  if (key === 'drain' || key === 'lease' || key === 'restore' || key === 'flagged' || key === 'stop') return null;
   if (key === 'upload') return 'image';
   if (key === 'thumbnail') return 'product';
   if (key === 'late_cancel') return 'cancel';
   if (key === 'carrier') return 'bookings';
+  if (key === 'reserved') return 'reservation';
   return isWatch(key) ? 'read' : key;
 }
 
@@ -624,6 +669,39 @@ export function reviewVerdict(view: ReviewFlagView, reason: string, placedAt: nu
 
   const others = [...new Set(view.flags.map((f) => f.reason))].join(', ');
   return { kind: 'waiting', detail: `Ordering has flagged it for review as ${others}, not ${reason}; still waiting for ${reason}.` };
+}
+
+export type ReservationVerdict =
+  | { kind: 'reached'; detail: string }
+  | { kind: 'waiting'; detail: string }
+  | { kind: 'failed'; reason: string };
+
+/**
+ * Whether Inventory holds the stock for the order (run-locally.md: the reservation read, `status: Reserved`). A 404 is the
+ * reservation not yet made, and another status is the reservation not yet done with (`Pending`) or already past it; both are
+ * said and waited out until the cap. Anything else, a 401, a 403 or a 5xx, or a 200 that is not a reservation, ends the step as the
+ * platform answered it, since waiting cannot change it.
+ */
+export function reservationVerdict(status: number, body: string): ReservationVerdict {
+  if (status === 404) {
+    return { kind: 'waiting', detail: 'Inventory answered 404: it has made no reservation for the order yet.' };
+  }
+  if (status !== 200) return { kind: 'failed', reason: `Answered ${status}.` };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    parsed = null;
+  }
+  const seen = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>)['status'] : undefined;
+  if (typeof seen !== 'string') {
+    return { kind: 'failed', reason: 'Answered 200, but not with a reservation the step can follow.' };
+  }
+  if (seen === 'Reserved') {
+    return { kind: 'reached', detail: 'The reservation reads Reserved: Inventory holds the stock for the order.' };
+  }
+  return { kind: 'waiting', detail: `Last read: the reservation is ${seen}, not Reserved yet.` };
 }
 
 export type CarrierVerdict =

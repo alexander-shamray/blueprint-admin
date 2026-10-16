@@ -31,6 +31,8 @@ import { buildUrl, pretty, withFreshCommandId } from '../api/request-builder';
 import {
   CARRIER_POLL_MS,
   CARRIER_WATCH_MS,
+  RESERVATION_POLL_MS,
+  RESERVATION_WATCH_MS,
   REVIEW_POLL_MS,
   REVIEW_WATCH_MS,
   CarrierEntry,
@@ -48,6 +50,7 @@ import {
   idFrom,
   imageFault,
   orderRead,
+  reservationVerdict,
   resolveOperations,
   reviewVerdict,
   secondsBetween,
@@ -352,6 +355,12 @@ export class ScenarioPage {
         case 'flagged':
           if (!(await this.reviewFlag(script, orderId))) return;
           break;
+        case 'reserved':
+          if (!(await this.reservation(operations.reservation!, run, identity, orderId))) return;
+          break;
+        case 'stop':
+          if (!(await this.takeLateChange(script))) return;
+          break;
         case 'upload': {
           const uploaded = await this.upload(operations.image!, run, identity);
           if (uploaded === null) return;
@@ -526,6 +535,75 @@ export class ScenarioPage {
 
       await firstValueFrom(timer(REVIEW_POLL_MS).pipe(takeUntil(this.stopped)), { defaultValue: undefined });
       if (this.destroyed) return false;
+    }
+  }
+
+  /**
+   * Reads Inventory's reservation for the order as the user (run-locally.md) until it says Reserved, so the stock is held
+   * before the cause that needs it held is applied. A 404 is the reservation not yet made and any other status than Reserved is
+   * said, and both are waited out; anything else ends the step as the platform answered it.
+   */
+  private async reservation(read: ApiOperation, run: string, identity: Identity, orderId: string): Promise<boolean> {
+    if (this.destroyed) return false;
+
+    const key: StepKey = 'reserved';
+    const correlationId = stepCorrelationId(run, key);
+    const url = buildUrl(read.url, { [read.pathParameters[0]?.name ?? 'orderId']: orderId }, {});
+    const waiting = `Waiting for Inventory to reserve the stock: reading the reservation every ${RESERVATION_POLL_MS / 1000} s for up to ${RESERVATION_WATCH_MS / 1000} s.`;
+    this.patch(key, { state: 'running', correlationId, request: `${read.method} ${url}`, detail: waiting });
+
+    const deadline = Date.now() + RESERVATION_WATCH_MS;
+    let sentUnderId = false;
+
+    for (;;) {
+      const result = await this.exchange(key, read.method, url, '', identity, correlationId, sentUnderId);
+      if (result === null) return false;
+      sentUnderId = true;
+
+      const v = reservationVerdict(result.status, result.body);
+      this.patch(key, { status: result.status, body: result.body });
+      if (v.kind === 'reached') {
+        this.patch(key, { state: 'ok', detail: v.detail });
+        return true;
+      }
+      if (v.kind === 'failed') {
+        this.patch(key, { state: 'failed', detail: v.reason });
+        return false;
+      }
+      if (Date.now() >= deadline) {
+        this.patch(key, { state: 'failed', detail: `Not reserved after ${RESERVATION_WATCH_MS / 1000} s. ${v.detail}` });
+        return false;
+      }
+      this.patch(key, { detail: `${waiting} ${v.detail}` });
+
+      await firstValueFrom(timer(RESERVATION_POLL_MS).pipe(takeUntil(this.stopped)), { defaultValue: undefined });
+      if (this.destroyed) return false;
+    }
+  }
+
+  /**
+   * Takes the change the script's cause needs only now (spec §5.3): the lease is already held, and the host adds the change to
+   * it, stops the service and answers the lease as it now is. A refusal is the step's failure, said as the host said it. A 500
+   * is a change that failed and was undone with the rest, or that could not be: either way the lease is the run's to restore,
+   * which it already is, so nothing is set that the lease step did not set.
+   */
+  private async takeLateChange(script: Script): Promise<boolean> {
+    const change = script.lateChange;
+    if (!change || this.destroyed) return false;
+
+    this.patch('stop', {
+      state: 'running',
+      detail: `Asking the host to add ${change} to the lease and waiting for it to be made. ${this.leaseNote()}`,
+    });
+
+    try {
+      const held = await firstValueFrom(this.host.leaseAddChange(change));
+      this.patch('stop', { state: 'ok', detail: `Held: ${held.title}. The host restores it by itself at ${held.expiresAt}.` });
+      return !this.destroyed;
+    } catch (e: unknown) {
+      if (this.cancelled || this.screenGone) return false;
+      this.patch('stop', { state: 'failed', detail: describe(e) });
+      return false;
     }
   }
 
