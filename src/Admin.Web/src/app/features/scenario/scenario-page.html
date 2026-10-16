@@ -132,6 +132,48 @@
         Not reading now: this is the last state read, not the order's state at this moment.
       }
     </p>
+    @if (s.saga; as word) {
+      <table class="saga-columns">
+        <caption>
+          The saga's word and the buyer's, for the same order
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col"></th>
+            <th scope="col">Saga (Ordering)</th>
+            <th scope="col">Buyer (BFF)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">State</th>
+            <td class="saga-state">{{ sagaText(word) }}</td>
+            <td class="saga-status-cell">{{ s.status }}</td>
+          </tr>
+          <tr>
+            <th scope="row">Last changed</th>
+            <td>
+              @if (s.sagaSeenAt !== null) {
+                first seen so at {{ at(s.sagaSeenAt) }} (the console's clock; the saga stores no time of entering a state)
+              }
+            </td>
+            <td>{{ s.statusChangedAt ?? 'no stamp on the order read' }} (the platform's clock)</td>
+          </tr>
+        </tbody>
+      </table>
+      @if (s.pairing; as pair) {
+        <p [class]="'saga-pair saga-pair-' + pair" role="status">
+          @if (pair === 'differs') {
+            [disagree]
+          } @else if (pair === 'ahead') {
+            [ahead]
+          }
+          {{ pairingText(pair) }}
+        </p>
+      }
+    } @else {
+      <p class="saga-unread">The saga's own read is not in the operation catalog, so only the buyer's status is shown.</p>
+    }
     @if (s.transitions.length > 0) {
       <ul class="transitions">
         @for (t of s.transitions; track t.to) {

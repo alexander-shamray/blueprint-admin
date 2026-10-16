@@ -1,5 +1,5 @@
 import { QueuesView, TraceView } from '../../core/host/host-types';
-import { SagaStrip } from './scenario-run';
+import { SagaStrip, pairingText, sagaText } from './scenario-run';
 import type { StepView } from './scenario-page';
 
 /** The most characters of one step's body the document carries; the Scenario page has the rest. */
@@ -97,6 +97,17 @@ function sagaSection(strip: SagaStrip | null): string[] {
   lines.push(
     `The last read answered \`${strip.status}\` at ${clock(strip.readAt)} on the console's clock, the BFF knowing it as of ${strip.asOf}; ${strip.reads} read${strip.reads === 1 ? '' : 's'} in all. This is the last state read, not the order's state now.`,
   );
+  if (strip.saga !== null && strip.pairing !== null) {
+    lines.push(
+      '',
+      '| | Saga (Ordering) | Buyer (BFF) |',
+      '|---|---|---|',
+      `| State | ${sagaText(strip.saga)} | \`${strip.status}\` |`,
+      `| Last changed | ${strip.sagaSeenAt === null ? '' : `first seen so at ${clock(strip.sagaSeenAt)} (the console's clock; the saga stores no time of entering a state)`} | ${strip.statusChangedAt ?? 'no stamp on the order read'} (the platform's clock) |`,
+      '',
+      `${strip.pairing === 'differs' ? '**[disagree]** ' : strip.pairing === 'ahead' ? '[ahead] ' : ''}${pairingText(strip.pairing)}`,
+    );
+  }
   if (strip.transitions.length > 0) {
     lines.push('', '| From | To | Seconds |', '|---|---|---|');
     for (const t of strip.transitions)

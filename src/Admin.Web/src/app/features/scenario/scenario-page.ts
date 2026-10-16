@@ -38,6 +38,7 @@ import {
   REVIEW_WATCH_MS,
   CarrierEntry,
   SagaRead,
+  SagaWord,
   SCRIPTS,
   SCRIPT_KEYS,
   STEP_TITLES,
@@ -54,7 +55,10 @@ import {
   orderRead,
   reservationVerdict,
   resolveOperations,
+  pairingText,
   sagaStrip,
+  sagaText,
+  sagaWord,
   reviewVerdict,
   secondsBetween,
   stepCorrelationId,
@@ -273,6 +277,9 @@ export class ScenarioPage {
   seconds(ms: number): number {
     return Math.round(ms / 1000);
   }
+
+  readonly sagaText = sagaText;
+  readonly pairingText = pairingText;
 
   /** At a time of day on the console's clock, to the second, for the strip's "read at". */
   at(ms: number): string {
@@ -539,7 +546,7 @@ export class ScenarioPage {
           break;
         }
         default:
-          if (!(await this.watch(key, operations.read!, run, identity, orderId))) return;
+          if (!(await this.watch(key, operations.read!, run, identity, orderId, operations.saga))) return;
       }
     }
   }
@@ -1083,6 +1090,7 @@ export class ScenarioPage {
     run: string,
     identity: Identity,
     orderId: string,
+    sagaRead?: ApiOperation,
   ): Promise<boolean> {
     if (this.destroyed) return false;
 
@@ -1127,9 +1135,11 @@ export class ScenarioPage {
           return false;
         }
 
+        const readAt = Date.now();
+        const saga = await this.readSaga(sagaRead, orderId, identity, correlationId);
         this.sagaReads.update((all) => [
           ...all.slice(-(SAGA_READS_KEPT - 1)),
-          { readAt: Date.now(), status: order.status, asOf: order.asOf, timeline: order.timeline },
+          { readAt, status: order.status, asOf: order.asOf, timeline: order.timeline, saga },
         ]);
 
         const v = verdict(key, order);
@@ -1167,6 +1177,33 @@ export class ScenarioPage {
         defaultValue: undefined,
       });
       if (this.destroyed) return false;
+    }
+  }
+
+  /**
+   * The saga's own word on the order, read straight after the BFF's so the strip can set the two side by side.
+   * It belongs to no step: a read that fails leaves no mark on one, and the strip says it could not read the
+   * saga instead. Null where the catalog has no such read. A token the proxy refused is the same unreadable,
+   * since the BFF read just before it used the same grant.
+   */
+  private async readSaga(
+    read: ApiOperation | undefined,
+    orderId: string,
+    identity: Identity,
+    correlationId: string,
+  ): Promise<SagaWord | null> {
+    if (!read || this.destroyed) return null;
+
+    const url = buildUrl(read.url, { [read.pathParameters[0]?.name ?? 'id']: orderId }, {});
+    try {
+      const result = await firstValueFrom(
+        this.host.proxy({ method: read.method, url, headers: {}, body: null, identity, correlationId }),
+      );
+      return result.outcome === 'responded'
+        ? sagaWord(result.status, result.body)
+        : { kind: 'unreadable', status: result.outcome === 'tokenRejected' ? result.status : null };
+    } catch {
+      return { kind: 'unreadable', status: null };
     }
   }
 

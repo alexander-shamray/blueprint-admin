@@ -394,7 +394,8 @@ export type OperationRole =
   | 'read'
   | 'bookings'
   | 'polls'
-  | 'reservation';
+  | 'reservation'
+  | 'saga';
 
 /**
  * The catalog operation each role sends, by the id the host gives it: `<source>:<operationId>` for
@@ -414,6 +415,8 @@ export const SCENARIO_OPERATIONS: Record<OperationRole, string> = {
   bookings: 'carrier:FindBookings',
   polls: 'carrier:FindFeedPolls',
   reservation: 'inventory:GetReservation',
+  // Beside the order read, not a step of its own: a catalog without it leaves the strip with the BFF's column alone.
+  saga: 'ordering:GetOrderSagaState',
 };
 
 /** The role a step sends as; the drain asks the broker and sends none. */
@@ -455,6 +458,9 @@ export function resolveOperations(
       found[role] = operation;
     }
   }
+  // The saga's read is the second column of the strip, never a reason a script cannot run: an older backend lacks it.
+  const saga = roles.includes('read') ? view.operations.find((o) => o.id === SCENARIO_OPERATIONS.saga) : undefined;
+  if (saga?.available) found.saga = saga;
   return { operations: missing.length === 0 ? found : null, missing };
 }
 
@@ -913,6 +919,93 @@ export interface SagaRead {
   /** The BFF's `asOf`: when it knew the order so, by the platform's clock. */
   asOf: string;
   timeline: Record<TimelineStep, string | null>;
+  /** The saga's own word on the order, read straight after the BFF's; null where the catalog has no such read. */
+  saga: SagaWord | null;
+}
+
+/**
+ * What Ordering's `GET /v1/orders/{id}/saga` said (blueprint-backend `SagaStateView`). A 404 is no row, which
+ * the backend's §9.6 reads as a finalised saga or an order it never saw, alike; any other answer is unreadable and
+ * is shown as what it was, never as a state.
+ */
+export type SagaWord =
+  | { kind: 'row'; state: string; startedAt: string; cancelReason: string | null }
+  | { kind: 'none' }
+  | { kind: 'unreadable'; status: number | null };
+
+/** The saga read's answer for a status and a body. */
+export function sagaWord(status: number, body: string): SagaWord {
+  if (status === 404) return { kind: 'none' };
+  if (status !== 200) return { kind: 'unreadable', status };
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { kind: 'unreadable', status };
+    const o = parsed as Record<string, unknown>;
+    const reason = o['cancelReason'];
+    if (typeof o['currentState'] !== 'string' || typeof o['startedAt'] !== 'string') return { kind: 'unreadable', status };
+    if (reason !== null && reason !== undefined && typeof reason !== 'string') return { kind: 'unreadable', status };
+    return { kind: 'row', state: o['currentState'], startedAt: o['startedAt'], cancelReason: reason ?? null };
+  } catch {
+    return { kind: 'unreadable', status };
+  }
+}
+
+/**
+ * Where the saga's state and the buyer's status meet, copied from blueprint-backend
+ * `docs/backend-architecture/09-messaging.md` §9.6, *Reading the saga's state*: the saga state (null is no row),
+ * the buyer statuses that are its own at rest, and those that can run ahead of the saga until it consumes the
+ * event. The two consume each event on their own clock. Read as vocabulary, a pair in either list; anything else
+ * is a difference of fact. A drift test reads the backend's table against this one.
+ */
+export const SAGA_PAIRS: readonly (readonly [string | null, readonly string[], readonly string[]])[] = [
+  ['AwaitingStock', ['placed'], ['cancelled']],
+  ['AwaitingPayment', ['placed'], ['cancelled']],
+  ['AwaitingConfirmation', ['placed'], ['confirmed', 'dispatched', 'cancelled']],
+  ['Confirmed', ['confirmed'], ['dispatched', 'cancelled']],
+  ['Compensating', ['placed', 'confirmed'], ['cancelled', 'out_of_stock', 'declined']],
+  [null, ['dispatched', 'delivered', 'cancelled', 'out_of_stock', 'declined', 'placed'], ['confirmed']],
+];
+
+/** The saga's word in words, for the strip and the export. */
+export function sagaText(word: SagaWord): string {
+  switch (word.kind) {
+    case 'row':
+      return word.state;
+    case 'none':
+      return 'no row (a finalised saga, or an order it never saw)';
+    case 'unreadable':
+      return `unreadable (${word.status === null ? 'no answer' : `answered ${word.status}`})`;
+  }
+}
+
+/** What a pairing means, in the words the strip and the export both use. */
+export function pairingText(pairing: Pairing): string {
+  switch (pairing) {
+    case 'agree':
+      return "The two agree: the same state in the saga's words and the buyer's.";
+    case 'ahead':
+      return "The buyer's status is ahead of the saga's state, which the backend expects until the saga has consumed the same event. If it stays so, the stuck-saga runbook is the next read.";
+    case 'differs':
+      return "The saga's state and the buyer's status are a pair the backend's table does not allow: a difference of fact, in the saga or in the BFF.";
+    case 'unknown':
+      return "This pair is not in the backend's table, so nothing is claimed about it.";
+  }
+}
+
+/**
+ * `agree`: the saga and the buyer say the same thing in their two vocabularies. `ahead`: the buyer's status is
+ * one the saga has yet to catch up to, which the backend names as expected for a while. `differs`: a pair the
+ * table does not allow, a fact to chase (the backend's stuck-saga runbook). `unknown`: a saga state the table
+ * does not name, or a read that gave no state, so nothing is claimed.
+ */
+export type Pairing = 'agree' | 'ahead' | 'differs' | 'unknown';
+
+export function pairing(saga: SagaWord | null, buyer: string): Pairing {
+  if (saga === null || saga.kind === 'unreadable') return 'unknown';
+  const row = SAGA_PAIRS.find(([state]) => state === (saga.kind === 'row' ? saga.state : null));
+  if (!row) return 'unknown';
+  if (row[1].includes(buyer)) return 'agree';
+  return row[2].includes(buyer) ? 'ahead' : 'differs';
 }
 
 /** How long a status may stay as it is, across reads, before the strip calls the saga stalled; no saga step of the fakes or of `run-locally.md`'s happy path takes this long. */
@@ -938,6 +1031,26 @@ export interface SagaStrip {
   /** From the first of the trailing reads that show this status to the last, on the console's clock. */
   unchangedForMs: number;
   stalled: boolean;
+  /** The platform's stamp for the step the buyer's status is at, or null where the order read carries none. */
+  statusChangedAt: string | null;
+  /** The saga's word at the last read; null where the catalog has no saga read. */
+  saga: SagaWord | null;
+  /** When the console first saw the saga in this state (or no row), in the trailing reads: the backend stores no time of entering a state. */
+  sagaSeenAt: number | null;
+  pairing: Pairing | null;
+}
+
+/** The step of an order read's timeline that a buyer status stands at: the two refusals are cancellations. */
+function stepOf(status: string): TimelineStep | null {
+  if (CANCELLATIONS.includes(status)) return 'cancelled';
+  return (TIMELINE_STEPS as readonly string[]).includes(status) ? (status as TimelineStep) : null;
+}
+
+/** Whether two reads have the saga in the same place: the same state, or both with no row. */
+function sameSaga(a: SagaWord | null, b: SagaWord | null): boolean {
+  if (a === null || b === null) return a === b;
+  if (a.kind !== b.kind) return false;
+  return a.kind !== 'row' || (b.kind === 'row' && a.state === b.state);
 }
 
 /** The strip for a run's reads, oldest first, or null before the first one. A transition's time is the platform's two stamps, never the console's polls. */
@@ -958,8 +1071,16 @@ export function sagaStrip(reads: readonly SagaRead[]): SagaStrip | null {
     });
   }
 
+  let sagaFirst = last;
+  for (let i = reads.length - 2; i >= 0 && sameSaga(reads[i].saga, last.saga); i--) sagaFirst = reads[i];
+
+  const step = stepOf(last.status);
   const unchangedForMs = last.readAt - first.readAt;
   return {
+    statusChangedAt: step === null ? null : last.timeline[step],
+    saga: last.saga,
+    sagaSeenAt: last.saga === null ? null : sagaFirst.readAt,
+    pairing: last.saga === null ? null : pairing(last.saga, last.status),
     status: last.status,
     readAt: last.readAt,
     asOf: last.asOf,

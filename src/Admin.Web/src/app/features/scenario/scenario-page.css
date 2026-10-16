@@ -103,6 +103,34 @@
 .saga-status {
   font-family: monospace;
 }
+.saga-columns {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.saga-columns caption {
+  text-align: left;
+  color: #555;
+  padding-bottom: 0.25rem;
+}
+.saga-columns th,
+.saga-columns td {
+  border-top: 1px solid #ddd;
+  padding: 0.25rem 0.5rem 0.25rem 0;
+  text-align: left;
+  vertical-align: top;
+}
+.saga-state,
+.saga-status-cell {
+  font-family: monospace;
+}
+.saga-pair-differs {
+  color: #b00;
+  font-weight: 700;
+}
+.saga-pair-ahead {
+  color: #8a5a00;
+}
 .transitions {
   padding-left: 1.25rem;
 }

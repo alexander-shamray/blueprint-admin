@@ -171,11 +171,38 @@ describe('buildExport', () => {
       transitions: [{ from: 'placed' as const, to: 'confirmed' as const, seconds: 1 }],
       unchangedForMs: 40_000,
       stalled: true,
+      statusChangedAt: '2026-10-05T12:00:01Z',
+      saga: null,
+      sagaSeenAt: null,
+      pairing: null,
     };
     const md = buildExport(input({ strip }));
 
     expect(md).toContain("not the order's state now");
     expect(md).toContain('| placed | confirmed | 1 |');
     expect(md).toContain('Stalled: the status stood at `confirmed` for 40 s');
+    expect(md).not.toContain('Saga (Ordering)');
+  });
+
+  it("sets the saga's word beside the buyer's, and marks a disagreement in words", () => {
+    const strip = {
+      status: 'delivered',
+      readAt: Date.parse('2026-10-05T12:00:05Z'),
+      asOf: '2026-10-05T12:00:04Z',
+      reads: 1,
+      transitions: [],
+      unchangedForMs: 0,
+      stalled: false,
+      statusChangedAt: '2026-10-05T12:00:04Z',
+      saga: { kind: 'row' as const, state: 'AwaitingStock', startedAt: '2026-10-05T12:00:00Z', cancelReason: null },
+      sagaSeenAt: Date.parse('2026-10-05T12:00:05Z'),
+      pairing: 'differs' as const,
+    };
+    const md = buildExport(input({ strip }));
+
+    expect(md).toContain('| | Saga (Ordering) | Buyer (BFF) |');
+    expect(md).toContain('| State | AwaitingStock | `delivered` |');
+    expect(md).toContain('2026-10-05T12:00:04Z (the platform');
+    expect(md).toContain('**[disagree]**');
   });
 });
