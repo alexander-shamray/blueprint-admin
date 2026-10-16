@@ -38,6 +38,11 @@ public sealed class FakeOrders(TimeProvider time)
     /// </summary>
     internal const int DeclinedMinorUnits = 1;
 
+    /// <summary>What an order for a product the fake was never told about shows: the recorded listing's Walnut desk.</summary>
+    private const string DefaultName = "Walnut desk";
+
+    private const decimal DefaultAmount = 19.99m;
+
     private readonly Lock gate = new();
     private readonly Dictionary<string, Placed> placed = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Product> products = new(StringComparer.OrdinalIgnoreCase);
@@ -160,7 +165,14 @@ public sealed class FakeOrders(TimeProvider time)
             string id = placed.Count == 0
                 ? FakeGateway.PlacedOrderId
                 : "0199a1b2-0000-7000-8000-" + (next++).ToString("x12", CultureInfo.InvariantCulture);
-            placed[id] = new Placed(time.GetUtcNow(), null, EndOf(productId));
+            Product? known = productId is not null && products.TryGetValue(productId, out Product? found) ? found : null;
+            placed[id] = new Placed(
+                time.GetUtcNow(),
+                null,
+                EndOf(productId),
+                known is null ? FakeGateway.StockedProductId : productId!,
+                known?.Name ?? DefaultName,
+                known?.Amount ?? DefaultAmount);
             return id;
         }
     }
@@ -240,7 +252,7 @@ public sealed class FakeOrders(TimeProvider time)
             : "placed";
 
         DateTimeOffset asOf = new[] { p, confirmed, dispatched, delivered, cancelled }.Max()!.Value;
-        var money = new { amount = 19.99m, currency = "EUR" };
+        var money = new { amount = order.Amount, currency = "EUR" };
         var timeline = new { placed = p, confirmed, dispatched, delivered, cancelled };
         bool cancellable = !scripted && status is "placed" or "confirmed";
 
@@ -255,7 +267,7 @@ public sealed class FakeOrders(TimeProvider time)
                 refundedAt = (DateTimeOffset?)null,
                 cancellable,
                 total = money,
-                lines = new[] { new { productId = FakeGateway.StockedProductId, productName = "Walnut desk", lineTotal = money } },
+                lines = new[] { new { productId = order.ProductId, productName = order.ProductName, lineTotal = money } },
                 asOf,
             };
         }
@@ -271,7 +283,7 @@ public sealed class FakeOrders(TimeProvider time)
             total = money,
             lines = new[]
             {
-                new { productId = FakeGateway.StockedProductId, productName = "Walnut desk", lineTotal = money, quantity = 1, unitPrice = money },
+                new { productId = order.ProductId, productName = order.ProductName, lineTotal = money, quantity = 1, unitPrice = money },
             },
             asOf,
             // The saga authorises before it confirms; the fake reports both at once.
@@ -284,7 +296,7 @@ public sealed class FakeOrders(TimeProvider time)
     private static DateTimeOffset? Reached(DateTimeOffset at, DateTimeOffset now, DateTimeOffset? cancelled) =>
         at <= now && (cancelled is null || at < cancelled) ? at : null;
 
-    private sealed record Placed(DateTimeOffset At, DateTimeOffset? CancelAskedAt, string? Ended);
+    private sealed record Placed(DateTimeOffset At, DateTimeOffset? CancelAskedAt, string? Ended, string ProductId, string ProductName, decimal Amount);
 
     private sealed record Product(decimal Amount, int? OnHand, string Name, string? ThumbnailUrl);
 }

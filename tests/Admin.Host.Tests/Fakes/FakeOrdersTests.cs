@@ -39,6 +39,20 @@ public sealed class FakeOrdersTests
     }
 
     [Fact]
+    public void An_order_shows_the_price_and_product_the_script_published()
+    {
+        FakeOrders orders = new(time);
+        string product = orders.Publish(10.01m, "Oak shelf");
+        string id = orders.Place(product);
+
+        using JsonDocument detail = JsonDocument.Parse(orders.Detail(id)!);
+        detail.RootElement.GetProperty("total").GetProperty("amount").GetDecimal().ShouldBe(10.01m);
+        JsonElement line = detail.RootElement.GetProperty("lines")[0];
+        line.GetProperty("productId").GetString().ShouldBe(product);
+        line.GetProperty("productName").GetString().ShouldBe("Oak shelf");
+    }
+
+    [Fact]
     public void A_cancel_before_despatch_ends_the_order_cancelled_and_nothing_follows_it()
     {
         FakeOrders orders = new(time);
