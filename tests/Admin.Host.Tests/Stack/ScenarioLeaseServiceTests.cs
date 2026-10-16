@@ -176,6 +176,8 @@ public sealed class ScenarioLeaseServiceTests : IAsyncDisposable
 
         await Should.ThrowAsync<OperationCanceledException>(() => Acquire(token: cancel.Token));
 
+        // The change is ended before it is undone, so the restore never runs beside the command it undoes.
+        runner.Stopped.ShouldHaveSingleItem().Spec.Arguments.ShouldContain("stop");
         runner.Started.Select(s => string.Join(' ', s.Arguments)).ShouldContain(Prefix + "up -d --no-deps --wait inventory-api");
         File.Exists(journal).ShouldBeFalse();
         leases.Current.ShouldBeNull();
@@ -199,6 +201,46 @@ public sealed class ScenarioLeaseServiceTests : IAsyncDisposable
         (await leases.RestoreAsync()).Outcome.ShouldBe(RestoreOutcome.Restored);
         File.Exists(journal).ShouldBeFalse();
         leases.Current.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task A_change_that_never_finishes_is_ended_then_undone_and_its_lease_is_not_held_past_the_hold()
+    {
+        runner.Hang = spec => spec.Arguments.Contains("stop");
+
+        Task<AcquireResult> acquiring = Acquire(seconds: 5);
+        await WaitUntilAsync(() => runner.Started.Any(s => s.Arguments.Contains("stop")));
+        leases.Current!.ExpiresAt.ShouldBe(time.GetUtcNow().AddSeconds(5));
+
+        time.Advance(ScenarioLeaseService.JobCap);
+        AcquireResult result = await acquiring;
+
+        result.Outcome.ShouldBe(AcquireOutcome.Failed);
+        result.Detail!.ShouldContain("did not finish within 180 seconds");
+        runner.Stopped.ShouldHaveSingleItem().Spec.Arguments.ShouldContain("stop");
+        runner.Started.Select(s => string.Join(' ', s.Arguments)).ShouldContain(Prefix + "up -d --no-deps --wait inventory-api");
+        leases.Current.ShouldBeNull();
+        File.Exists(journal).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task A_lease_whose_restore_failed_is_tried_again_on_its_own_until_it_works()
+    {
+        await Acquire();
+        runner.FailIf = spec => spec.Arguments.Contains("--wait") && spec.Arguments.Contains("up");
+
+        (await leases.RestoreAsync()).Outcome.ShouldBe(RestoreOutcome.Failed);
+        leases.Current.ShouldNotBeNull();
+
+        time.Advance(ScenarioLeaseService.RetryAfter);
+        await WaitUntilAsync(() => leases.Current is { RestoreError: not null } && runner.Started.Count(s => s.Arguments.Contains("up")) >= 2);
+        leases.Current.ShouldNotBeNull("a retry that fails again keeps the lease");
+
+        runner.FailIf = null;
+        time.Advance(ScenarioLeaseService.RetryAfter);
+        await WaitUntilAsync(() => leases.Current is null);
+
+        File.Exists(journal).ShouldBeFalse();
     }
 
     [Fact]
@@ -340,6 +382,13 @@ public sealed class ScenarioLeaseServiceTests : IAsyncDisposable
             return inner.Start(spec);
         }
 
-        public Task StopAsync(Job job, CancellationToken cancellationToken) => inner.StopAsync(job, cancellationToken);
+        public List<Job> Stopped { get; } = [];
+
+        public Task StopAsync(Job job, CancellationToken cancellationToken)
+        {
+            Stopped.Add(job);
+
+            return inner.StopAsync(job, cancellationToken);
+        }
     }
 }

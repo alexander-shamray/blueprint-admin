@@ -36,6 +36,9 @@ public sealed class ComposeService(IProcessRunner runner, RepoPaths paths, TimeP
             ? runner.Start(new ProcessSpec("docker", ["compose", "-f", paths.ComposeFile, "-f", ShortTimeoutsFile(paths.ComposeFile), "up", "-d", "--no-deps", "--wait", service], paths.BackendDir))
             : Run("up", "-d", "--no-deps", "--wait", service);
 
+    /// <summary>Ends a command still running, so a restore never runs beside the command it undoes (a lease's apply that timed out).</summary>
+    public Task AbandonAsync(Job job) => runner.StopAsync(job, CancellationToken.None);
+
     /// <summary>The override beside <paramref name="composeFile"/>, spelt with the separators that path uses.</summary>
     internal static string ShortTimeoutsFile(string composeFile) =>
         composeFile[..(composeFile.LastIndexOfAny(['/', '\\']) + 1)] + ShortTimeoutsFileName;

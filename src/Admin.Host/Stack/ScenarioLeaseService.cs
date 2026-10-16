@@ -60,6 +60,9 @@ public sealed partial class ScenarioLeaseService(
     /// <summary>How long an apply or a restore may take: <c>--wait</c> holds the job until the service is healthy.</summary>
     public static readonly TimeSpan JobCap = TimeSpan.FromMinutes(3);
 
+    /// <summary>How long after a restore that failed the host tries it again, so a lease never waits for a person to remember it.</summary>
+    public static readonly TimeSpan RetryAfter = TimeSpan.FromSeconds(30);
+
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     private readonly SemaphoreSlim operations = new(1, 1);
@@ -107,6 +110,10 @@ public sealed partial class ScenarioLeaseService(
 
             current = new Held(journal, change, apply!.Id, null);
 
+            // Armed as soon as the lease is held, from the journal's own deadline, so a lease never outlives the hold it was
+            // asked for by the length of the change, and one whose undo later fails still has a timer.
+            ArmDeadline(journal.ExpiresAt - time.GetUtcNow());
+
             string? failure = null;
 
             try
@@ -121,10 +128,14 @@ public sealed partial class ScenarioLeaseService(
             catch (TimeoutException)
             {
                 failure = $"{apply!.Spec.CommandLine} did not finish within {JobCap.TotalSeconds:0} seconds.";
+
+                // The restore must not run beside the command it undoes.
+                await compose.AbandonAsync(apply);
             }
             catch (OperationCanceledException)
             {
-                // The request went away mid-change: undo it before the cancellation is let through.
+                // The request went away mid-change: end the change, then undo it, before the cancellation is let through.
+                await compose.AbandonAsync(apply!);
                 await RestoreHeldAsync(current!, change.Restore(compose));
 
                 throw;
@@ -138,8 +149,6 @@ public sealed partial class ScenarioLeaseService(
                     ? $"{failure} The change was undone."
                     : $"{failure} It could not be undone: {undone.Detail} The lease is still held; Restore it from the Stack screen.");
             }
-
-            ArmDeadline(hold);
 
             return new(AcquireOutcome.Held, View(current!), null, null);
         }
@@ -244,6 +253,9 @@ public sealed partial class ScenarioLeaseService(
             current = held with { RestoreError = failure };
             RestoreFailed(logger, held.Journal.Id, failure);
 
+            // A lease whose undo failed is still held and still journaled, so the host tries again on its own.
+            ArmDeadline(RetryAfter);
+
             return new(RestoreOutcome.Failed, failure);
         }
 
@@ -264,10 +276,10 @@ public sealed partial class ScenarioLeaseService(
     }
 
     /// <summary>The lease restores itself at its deadline, so a page that went away without asking leaves nothing changed.</summary>
-    private void ArmDeadline(TimeSpan hold)
+    private void ArmDeadline(TimeSpan due)
     {
         deadline?.Dispose();
-        deadline = time.CreateTimer(state => { _ = RestoreAtDeadlineAsync(); }, null, hold, Timeout.InfiniteTimeSpan);
+        deadline = time.CreateTimer(state => { _ = RestoreAtDeadlineAsync(); }, null, due < TimeSpan.Zero ? TimeSpan.Zero : due, Timeout.InfiniteTimeSpan);
     }
 
     private async Task RestoreAtDeadlineAsync()
