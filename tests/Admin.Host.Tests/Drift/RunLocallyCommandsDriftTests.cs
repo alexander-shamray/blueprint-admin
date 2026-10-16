@@ -33,6 +33,16 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
         ["npm ci"] = "a prerequisite the console reports rather than runs (FrontendSupervisor, spec §2.1)",
         ["py -3.12 tools/dead-letters/dead_letters.py list"] =
             "the Broker screen's queue listing already gives each parked queue and its depth (BrokerService, ParkedQueues)",
+        ["docker compose -f deploy/compose/docker-compose.yml exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Local_Dev_Pa55w0rd!' -d Shipping -W -Q \"select Status, UnfulfillableReason, Attempts, CancellationRefusedAt from shipping.Shipments where OrderId = '$orderId'\""] =
+            "a by-hand read of a table the console does not query; the cause scripts that need it wait on #67",
+        ["docker compose -f deploy/compose/docker-compose.yml exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Local_Dev_Pa55w0rd!' -d Ordering -W -Q \"select Reason from ordering.OrderReviews where OrderId = '$orderId'\""] =
+            "a by-hand read of a table the console does not query; the cause scripts that need it wait on #67",
+        [@"& ""$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"" reverse tcp:8080 tcp:8080"] =
+            "it changes the emulator's forwarding, and the device lane is reads and one build (spec §5.4)",
+        [@"& ""$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"" reverse --list"] = "the read-back of the line above, which is not run",
+        [@".\gradlew.bat installDebug"] = "the install is by hand: the lane builds and syncs, and the device is the caller's (spec §5.4)",
+        [@"& ""$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"" shell am start -n dev.ashamray.blueprint/.MainActivity"] =
+            "starting the app is by hand, with the install above",
     };
 
     /// <summary>
@@ -52,6 +62,8 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
         ["Invoke-WebRequest $p.thumbnailUrl -Method Head"] = "the Scenario's thumbnail step, a HEAD through the proxy",
         ["$env:DEAD_LETTERS_PASSWORD = [guid]::NewGuid().ToString('N')"] =
             "DeadLetterService mints a random password for each run and hands it to the tool as this variable",
+        ["$c.redirectUris; $c.webOrigins -join ','"] =
+            "the third line of the realm read, run with the two lines above it as one script (DeviceReads.RealmLines, held by DeviceReadsTests)",
         ["Remove-Item Env:DEAD_LETTERS_PASSWORD"] =
             "the variable is set on the tool's own process only (ProcessSpec.Environment), so it ends with that process",
     };
@@ -158,6 +170,8 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
         await broker.ExchangesAsync(TestContext.Current.CancellationToken);
         await broker.PermissionsAsync(TestContext.Current.CancellationToken);
         await frontend.StartAsync(TestContext.Current.CancellationToken);
+        await frontend.StartDeviceBuildAsync(TestContext.Current.CancellationToken);
+        await new DeviceReads(runner, Paths, time).ReadAsync(TestContext.Current.CancellationToken);
         await new WorkstationDoctor(runner, compose, Paths, Options.Create(new AdminOptions()), time).ReadAsync(TestContext.Current.CancellationToken);
 
         return [.. runner.Started.Select(s => (string[])[s.FileName, .. s.Arguments])];
@@ -229,7 +243,7 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
             .Where(p => p.PropertyType == typeof(string) && p.Name.EndsWith("Url", StringComparison.Ordinal))
             .Select(p => (string)p.GetValue(o)!)];
 
-    [GeneratedRegex(@"^(docker|dotnet|npm|node|git|py|Get-NetTCPConnection|Get-Content) ")]
+    [GeneratedRegex(@"^(docker|dotnet|npm|node|git|py|Get-NetTCPConnection|Get-Content|curl\.exe|&) ")]
     private static partial Regex Command();
 
     [GeneratedRegex(@"https?://[^\s""'/]+[^\s""']*")]

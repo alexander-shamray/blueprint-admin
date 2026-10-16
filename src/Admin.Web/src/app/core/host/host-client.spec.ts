@@ -76,6 +76,22 @@ describe('HostClient', () => {
     req.flush({ id: 'fe-1', commandLine: 'npm start', state: 'Exited', exitCode: -1, startedAt: '' });
   });
 
+  it('builds the client for the emulator', () => {
+    client.frontendDeviceBuild().subscribe();
+
+    const req = http.expectOne('/api/stack/frontend/device-build');
+    expect(req.request.method).toBe('POST');
+    req.flush({ id: 'dev-1', commandLine: 'npm run emulator:android', state: 'Running', exitCode: null, startedAt: '' });
+  });
+
+  it('reads the device lane', () => {
+    client.frontendDeviceReads().subscribe();
+
+    const req = http.expectOne('/api/stack/frontend/device-reads');
+    expect(req.request.method).toBe('GET');
+    req.flush({ checks: [] });
+  });
+
   it('lists realm users', () => {
     client.identityUsers().subscribe();
 

@@ -13,7 +13,7 @@ const stack = {
       { service: 'catalog-migrator', state: 'exited', health: null, exitCode: 0, publishedPorts: [] },
     ],
   },
-  frontend: { job: null, installed: true },
+  frontend: { job: null, installed: true, deviceJob: null },
   reachability: [
     { name: 'gateway', url: 'http://localhost:5000/health/ready', up: true, status: 200 },
     { name: 'client', url: 'http://localhost:5173/', up: false, status: null },
@@ -75,6 +75,15 @@ const doctor = {
 };
 
 const runningJob = { id: 'fe-1', commandLine: 'npm start', state: 'Running', exitCode: null, startedAt: '' };
+const deviceJob = { id: 'dev-1', commandLine: 'npm run emulator:android', state: 'Running', exitCode: null, startedAt: '' };
+
+const deviceReads = {
+  checks: [
+    { name: 'Emulator attached', state: 'Problem', detail: 'No emulator is attached. Start the AVD from Android Studio\'s Device Manager; the console does not.' },
+    { name: 'Gateway admits the app\'s origin', state: 'Ok', detail: 'The gateway admits https://localhost.' },
+    { name: 'Realm redirect for mobile-app', state: 'Unknown', detail: 'Keycloak\'s admin API did not answer: refused' },
+  ],
+};
 
 function text(el: Element | null): string {
   return el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
@@ -89,6 +98,8 @@ describe('StackPage', () => {
     backendReset: ReturnType<typeof vi.fn>;
     frontendStart: ReturnType<typeof vi.fn>;
     frontendStop: ReturnType<typeof vi.fn>;
+    frontendDeviceBuild: ReturnType<typeof vi.fn>;
+    frontendDeviceReads: ReturnType<typeof vi.fn>;
     telemetryHealth: ReturnType<typeof vi.fn>;
     telemetryAlerts: ReturnType<typeof vi.fn>;
     doctor: ReturnType<typeof vi.fn>;
@@ -110,6 +121,8 @@ describe('StackPage', () => {
       backendReset: vi.fn(() => of({ id: 'reset-1', commandLine: 'reset down -v up -d --wait readiness', state: 'Running', exitCode: null, startedAt: '' })),
       frontendStart: vi.fn(() => of({ id: 'fe-1', commandLine: 'npm start', state: 'Running', exitCode: null, startedAt: '' })),
       frontendStop: vi.fn(() => of({ id: 'fe-1', commandLine: 'npm start', state: 'Exited', exitCode: -1, startedAt: '' })),
+      frontendDeviceBuild: vi.fn(() => of(deviceJob)),
+      frontendDeviceReads: vi.fn(() => of(deviceReads)),
       telemetryHealth: vi.fn(() => of(health)),
       telemetryAlerts: vi.fn(() => of(alerts)),
       doctor: vi.fn(() => of(doctor)),
@@ -536,6 +549,86 @@ describe('StackPage', () => {
       fixture.detectChanges();
 
       expect(fixture.nativeElement.textContent).toContain('npm start is job fe-0. Stop it first.');
+    });
+  });
+
+  describe('device lane', () => {
+    async function render() {
+      const fixture = TestBed.createComponent(StackPage);
+      fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(0);
+      fixture.detectChanges();
+      const q = (selector: string) => fixture.nativeElement.querySelector(selector) as HTMLButtonElement | null;
+      return { fixture, q };
+    }
+
+    it('reads the emulator, the gateway and the realm when the screen opens and shows each verdict', async () => {
+      const { fixture } = await render();
+
+      const rows = Array.from(fixture.nativeElement.querySelectorAll('table.device-reads tbody tr')) as HTMLElement[];
+      expect(rows.map((r) => text(r))).toEqual([
+        "Emulator attached problem No emulator is attached. Start the AVD from Android Studio's Device Manager; the console does not.",
+        "Gateway admits the app's origin ok The gateway admits https://localhost.",
+        "Realm redirect for mobile-app could not tell Keycloak's admin API did not answer: refused",
+      ]);
+      expect(host.frontendDeviceReads).toHaveBeenCalledTimes(1);
+    });
+
+    it('reads again on request, and not while a read is in flight', async () => {
+      const { fixture, q } = await render();
+
+      q('button.device-read')!.click();
+      fixture.detectChanges();
+
+      expect(host.frontendDeviceReads).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps the last reads and says so when the host does not answer', async () => {
+      const { fixture, q } = await render();
+      host.frontendDeviceReads.mockReturnValueOnce(throwError(() => new Error('network down')));
+
+      q('button.device-read')!.click();
+      fixture.detectChanges();
+
+      expect(text(fixture.nativeElement.querySelector('.frontend'))).toContain('The host did not answer for the device reads: network down');
+      expect(fixture.nativeElement.querySelectorAll('table.device-reads tbody tr').length).toBe(3);
+    });
+
+    it('builds for the emulator and hands the job to the output pane', async () => {
+      const { fixture, q } = await render();
+
+      expect(text(q('.device-status'))).toBe('npm run emulator:android not run');
+      expect(q('button.device-output')).toBeNull();
+
+      q('button.device-build')!.click();
+      fixture.detectChanges();
+
+      expect(host.frontendDeviceBuild).toHaveBeenCalled();
+      expect(fixture.componentInstance.jobId()).toBe('dev-1');
+    });
+
+    it('disables the build while it runs, and shows the exit code of one that ended', async () => {
+      host.stack.mockReturnValue(of({ ...stack, frontend: { job: null, installed: true, deviceJob } }));
+      const { fixture, q } = await render();
+
+      expect(text(q('.device-status'))).toBe('npm run emulator:android running');
+      expect(q('button.device-build')!.disabled).toBe(true);
+
+      q('button.device-output')!.click();
+      expect(fixture.componentInstance.jobId()).toBe('dev-1');
+
+      host.stack.mockReturnValue(of({ ...stack, frontend: { job: null, installed: true, deviceJob: { ...deviceJob, state: 'Exited', exitCode: 1 } } }));
+      const ended = await render();
+
+      expect(text(ended.q('.device-status'))).toBe('npm run emulator:android exited 1');
+      expect(ended.q('button.device-build')!.disabled).toBe(false);
+    });
+
+    it('disables the build when the clone has no node_modules', async () => {
+      host.stack.mockReturnValue(of({ ...stack, frontend: { job: null, installed: false, deviceJob: null } }));
+      const { q } = await render();
+
+      expect(q('button.device-build')!.disabled).toBe(true);
     });
   });
 });

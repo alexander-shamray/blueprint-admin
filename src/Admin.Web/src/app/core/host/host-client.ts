@@ -65,6 +65,14 @@ export class HostClient {
     return this.http.post<JobSummary>('/api/stack/frontend/stop', null);
   }
 
+  frontendDeviceBuild(): Observable<JobSummary> {
+    return this.http.post<JobSummary>('/api/stack/frontend/device-build', null);
+  }
+
+  frontendDeviceReads(): Observable<DoctorView> {
+    return this.http.get<DoctorView>('/api/stack/frontend/device-reads');
+  }
+
   followLogs(services: string[]): Observable<JobSummary> {
     return this.http.post<JobSummary>('/api/logs/follow', { services });
   }

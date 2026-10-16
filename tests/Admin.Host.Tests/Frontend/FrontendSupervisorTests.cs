@@ -110,6 +110,53 @@ public sealed class FrontendSupervisorTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task The_device_build_runs_the_emulator_script_beside_a_running_dev_server()
+    {
+        runner.OnLongRunning("npm", "start", "> ng serve");
+        runner.OnLongRunning("npm", "run emulator:android", "> cap sync android");
+        using FrontendSupervisor supervisor = Supervisor();
+        await supervisor.StartAsync(TestContext.Current.CancellationToken);
+
+        FrontendStartResult build = await supervisor.StartDeviceBuildAsync(TestContext.Current.CancellationToken);
+
+        build.Outcome.ShouldBe(FrontendStartOutcome.Started);
+        ProcessSpec spec = runner.Started[^1];
+        spec.Arguments.ShouldBe(["run", "emulator:android"]);
+        spec.WorkingDirectory.ShouldBe("/repo/frontend");
+        supervisor.Status().DeviceJob!.Id.ShouldBe(build.Job!.Id);
+        supervisor.Status().Job!.Id.ShouldNotBe(build.Job.Id);
+    }
+
+    [Fact]
+    public async Task A_second_device_build_while_one_runs_starts_nothing()
+    {
+        runner.OnLongRunning("npm", "run emulator:android", "> cap sync android");
+        using FrontendSupervisor supervisor = Supervisor();
+        FrontendStartResult first = await supervisor.StartDeviceBuildAsync(TestContext.Current.CancellationToken);
+
+        FrontendStartResult second = await supervisor.StartDeviceBuildAsync(TestContext.Current.CancellationToken);
+
+        second.Outcome.ShouldBe(FrontendStartOutcome.AlreadyRunning);
+        second.Job.ShouldBeSameAs(first.Job);
+        runner.Started.Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task A_finished_device_build_can_be_run_again_and_without_node_modules_none_starts()
+    {
+        runner.On("npm", "run emulator:android", 0, "[info] Sync finished");
+        using FrontendSupervisor supervisor = Supervisor();
+        await supervisor.StartDeviceBuildAsync(TestContext.Current.CancellationToken);
+
+        (await supervisor.StartDeviceBuildAsync(TestContext.Current.CancellationToken)).Outcome.ShouldBe(FrontendStartOutcome.Started);
+        runner.Started.Count.ShouldBe(2);
+
+        using FrontendSupervisor missing = Supervisor(installed: false);
+        (await missing.StartDeviceBuildAsync(TestContext.Current.CancellationToken)).Outcome.ShouldBe(FrontendStartOutcome.NotInstalled);
+        runner.Started.Count.ShouldBe(2);
+    }
+
+    [Fact]
     public async Task Stop_with_nothing_running_returns_null()
     {
         using FrontendSupervisor supervisor = Supervisor();
@@ -123,8 +170,8 @@ public sealed class FrontendSupervisorTests : IAsyncDisposable
         using FrontendSupervisor installed = Supervisor(installed: true);
         using FrontendSupervisor missing = Supervisor(installed: false);
 
-        installed.Status().ShouldBe(new FrontendStatus(null, true));
-        missing.Status().ShouldBe(new FrontendStatus(null, false));
+        installed.Status().ShouldBe(new FrontendStatus(null, true, null));
+        missing.Status().ShouldBe(new FrontendStatus(null, false, null));
     }
 
     [Fact]
