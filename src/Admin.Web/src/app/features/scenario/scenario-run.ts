@@ -236,6 +236,21 @@ export function withField(body: string, name: string, value: number | string): s
   return JSON.stringify({ ...(parsed as Record<string, unknown>), [name]: value }, null, 2);
 }
 
+/** Whether the body is a JSON object that carries `name` equal to `value`: what `withField` sets, or declined to. */
+export function hasField(body: string, name: string, value: number | string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    return (
+      !!parsed &&
+      typeof parsed === 'object' &&
+      !Array.isArray(parsed) &&
+      (parsed as Record<string, unknown>)[name] === value
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * The example body with every `productId` under its `lines` or `items` set to the product just
  * published: run-locally.md's zero Guid stands for "a product id you have". A body that is not a

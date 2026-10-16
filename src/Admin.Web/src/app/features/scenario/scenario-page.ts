@@ -45,6 +45,7 @@ import {
   thumbnailFrom,
   uploadFrom,
   verdict,
+  hasField,
   withField,
   withProductId,
 } from './scenario-run';
@@ -295,7 +296,11 @@ export class ScenarioPage {
           const path = { [stock.pathParameters[0]?.name ?? 'productId']: productId };
           const body = withField(stock.exampleBody ?? '', 'onHand', onHand);
           if ((await this.send(key, stock, run, identity, body, path)) === null) return;
-          this.patch(key, { detail: `Answered with the stock on hand set to ${onHand}.` });
+          this.patch(key, {
+            detail: hasField(body, 'onHand', onHand)
+              ? `Answered with the stock on hand set to ${onHand}.`
+              : 'Answered, but the example body has no onHand to set, so the stock is unchanged.',
+          });
           break;
         }
         case 'quote': {
