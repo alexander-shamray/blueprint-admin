@@ -62,7 +62,11 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
     /// </summary>
     internal static readonly TimeSpan ShortStockWait = TimeSpan.FromSeconds(3);
 
-    internal static readonly TimeSpan ShortPaymentWait = TimeSpan.FromSeconds(3);
+    /// <summary>
+    /// Longer than the stock wait because the release-timeout script places a <c>.09</c> order, reads its reservation, stops
+    /// Inventory and cancels, all before this lapses: a cancel that lands after it finds the order already declined.
+    /// </summary>
+    internal static readonly TimeSpan ShortPaymentWait = TimeSpan.FromSeconds(6);
 
     internal static readonly TimeSpan NormalStockWait = TimeSpan.FromMinutes(5);
 
@@ -75,6 +79,16 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
     internal static readonly TimeSpan ShortDespatchWait = TimeSpan.FromSeconds(4);
 
     internal static readonly TimeSpan NormalDespatchWait = TimeSpan.FromDays(3);
+
+    /// <summary>
+    /// The release wait (run-locally.md, "Release timeout"), which the real saga keeps at 30 seconds with the override and ten
+    /// minutes without: after it a cancelled order whose release Inventory never answered is flagged for review.
+    /// </summary>
+    internal static readonly TimeSpan ShortReleaseWait = TimeSpan.FromSeconds(4);
+
+    internal static readonly TimeSpan NormalReleaseWait = TimeSpan.FromMinutes(10);
+
+    internal const string StockNotReleasedReason = "stock_not_released";
 
     /// <summary>
     /// The carrier simulator's code whose parcel is booked and never collected, so the order stays confirmed until the saga's
@@ -315,9 +329,30 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
                 return CancelOutcome.AlreadyShipped;
             }
 
+            DateTimeOffset now = time.GetUtcNow();
+
+            // run-locally.md, "Release timeout": a .09 order is still waiting for a payment answer that comes late, with its stock
+            // reserved. A cancel that lands before the payment wait lapses ends it cancelled by the customer, and the release the
+            // saga then asks of Inventory is answered, or with Inventory stopped is never answered and flagged once the release
+            // wait lapses.
+            if (order.Ended == "declined" && order.CancelAskedAt is null && IsPaymentWait(order) && now < order.At + order.EndDelay)
+            {
+                TimeSpan sincePlace = now - order.At;
+                placed[orderId] = order with
+                {
+                    Ended = "cancelled",
+                    EndDelay = sincePlace + Step,
+                    CancelAskedAt = now,
+                    ReviewReason = stack.InventoryStopped ? StockNotReleasedReason : null,
+                    ReviewAfter = sincePlace + (stack.ShortWaits ? ShortReleaseWait : NormalReleaseWait),
+                };
+
+                return CancelOutcome.Accepted;
+            }
+
             if (order.CancelAskedAt is null)
             {
-                placed[orderId] = order with { CancelAskedAt = time.GetUtcNow() };
+                placed[orderId] = order with { CancelAskedAt = now };
             }
 
             return CancelOutcome.Accepted;
@@ -507,12 +542,28 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
 
             // run-locally.md: a cancel of a confirmed order before the wait lapses ends the saga's wait, so the despatch wait
             // never fires; what a cancel flags is a different reason (cancelled_after_confirmation), which this fake does not model.
-            if (order.CancelAskedAt is { } asked && asked < at)
+            if (order.ReviewReason == NotDespatchedReason && order.CancelAskedAt is { } asked && asked < at)
             {
                 return [];
             }
 
             return at <= time.GetUtcNow() ? [(order.ReviewReason, at)] : [];
+        }
+    }
+
+    /// <summary>Whether the order's total ends in the minor units the payment simulator answers after the adapter's own budget.</summary>
+    private static bool IsPaymentWait(Placed order) => Math.Abs(order.Amount) % 1m * 100m == PaymentWaitMinorUnits;
+
+    /// <summary>
+    /// The product an order's stock is reserved for, or null where there is no reservation: an order the fake never placed, or
+    /// one whose reservation failed. A reservation is read as <c>Reserved</c> whatever became of the order, because the release a
+    /// cancel asks for is the step that can go unanswered.
+    /// </summary>
+    public string? ReservedProduct(string orderId)
+    {
+        lock (gate)
+        {
+            return placed.TryGetValue(orderId, out Placed? order) && order.Ended != "out_of_stock" ? order.ProductId : null;
         }
     }
 

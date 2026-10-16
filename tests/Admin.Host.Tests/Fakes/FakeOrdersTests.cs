@@ -161,6 +161,99 @@ public sealed class FakeOrdersTests
         Status(orders.Detail(id)!).ShouldBe("confirmed");
     }
 
+    private static string PlaceWaitingOrder(FakeOrders orders)
+    {
+        string product = orders.Publish(10.09m);
+        orders.Stock(product, 10);
+
+        return orders.Place(product);
+    }
+
+    [Fact]
+    public void A_cancel_of_a_waiting_dot_09_order_with_inventory_stopped_after_it_is_flagged_once_the_release_wait_lapses()
+    {
+        FakeStack stack = new() { ShortWaits = true };
+        FakeOrders orders = new(time, stack);
+        string id = PlaceWaitingOrder(orders);
+        time.Advance(FakeOrders.Step);
+        stack.InventoryStopped = true;
+
+        orders.Cancel(id).ShouldBe(CancelOutcome.Accepted);
+        time.Advance(FakeOrders.Step);
+
+        // The release wait runs from the cancel, so the order reads cancelled well before the flag lands.
+        Status(orders.Detail(id)!).ShouldBe("cancelled");
+        time.Advance(FakeOrders.ShortReleaseWait - FakeOrders.Step - TimeSpan.FromTicks(1));
+        orders.ReviewFlags(id).ShouldBeEmpty();
+        time.Advance(TimeSpan.FromTicks(1));
+        (string Reason, DateTimeOffset At) flag = orders.ReviewFlags(id).ShouldHaveSingleItem();
+        flag.Reason.ShouldBe("stock_not_released");
+        Status(orders.Detail(id)!).ShouldBe("cancelled");
+    }
+
+    [Fact]
+    public void A_cancel_of_a_waiting_dot_09_order_with_inventory_up_is_cancelled_and_never_flagged()
+    {
+        FakeOrders orders = new(time, new FakeStack { ShortWaits = true });
+        string id = PlaceWaitingOrder(orders);
+        time.Advance(FakeOrders.Step);
+
+        orders.Cancel(id).ShouldBe(CancelOutcome.Accepted);
+        time.Advance(FakeOrders.ShortReleaseWait * 3);
+
+        Status(orders.Detail(id)!).ShouldBe("cancelled");
+        orders.ReviewFlags(id).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void A_cancel_after_the_payment_wait_has_lapsed_finds_the_order_declined_and_changes_nothing()
+    {
+        FakeStack stack = new() { ShortWaits = true, InventoryStopped = false };
+        FakeOrders orders = new(time, stack);
+        string id = PlaceWaitingOrder(orders);
+        time.Advance(FakeOrders.ShortPaymentWait);
+        stack.InventoryStopped = true;
+
+        orders.Cancel(id);
+        time.Advance(FakeOrders.ShortReleaseWait * 3);
+
+        Status(orders.Detail(id)!).ShouldBe("declined");
+        orders.ReviewFlags(id).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Without_the_override_the_release_wait_is_ten_minutes_and_no_flag_lands_before_it()
+    {
+        FakeStack stack = new();
+        FakeOrders orders = new(time, stack);
+        string id = PlaceWaitingOrder(orders);
+        time.Advance(FakeOrders.Step);
+        stack.InventoryStopped = true;
+        orders.Cancel(id);
+
+        time.Advance(TimeSpan.FromMinutes(9));
+        orders.ReviewFlags(id).ShouldBeEmpty();
+        time.Advance(TimeSpan.FromMinutes(2));
+        orders.ReviewFlags(id).ShouldHaveSingleItem().Reason.ShouldBe("stock_not_released");
+    }
+
+    [Fact]
+    public void A_reservation_is_held_for_an_order_whose_stock_reserved_and_for_no_other()
+    {
+        FakeStack stack = new() { ShortWaits = true };
+        FakeOrders orders = new(time, stack);
+        string reserved = PlaceWaitingOrder(orders);
+        string unstocked = orders.Place(orders.Publish(19.99m));
+        string product = orders.Publish(19.99m);
+        orders.Stock(product, 0);
+        string refused = orders.Place(product);
+
+        orders.ReservedProduct(reserved).ShouldNotBeNull();
+        orders.ReservedProduct(unstocked).ShouldBeNull();
+        orders.ReservedProduct(refused).ShouldBeNull();
+        orders.ReservedProduct("0199a1b2-0000-7000-8000-0000000000ff").ShouldBeNull();
+    }
+
     [Fact]
     public void A_cancel_before_the_despatch_wait_lapses_ends_it_and_no_not_despatched_flag_lands()
     {
