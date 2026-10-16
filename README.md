@@ -129,7 +129,9 @@ it or found it out of stock, or order to the delivery postal code `SIM-TRANSIT`,
 simulator collects and never delivers, read the order back despatched, and see a cancel
 of it refused with 422 `order.already_shipped`. The `stock-timeout` and `payment-timeout` scripts hold a
 lease on the stack (stop Inventory, shorten the saga's waits), read the order end `out_of_stock` or
-`declined`, and restore the stack whatever happens, including on Cancel. The `carrier-refused`, `carrier-down`,
+`declined`, and restore the stack whatever happens, including on Cancel. The `despatch-timeout` script shortens
+the saga's waits, orders to `SIM-STRANGE`, and reads from Loki the line Ordering logs when it flags the order for review
+(`not_despatched`) while the order read stays confirmed. The `carrier-refused`, `carrier-down`,
 `carrier-slow` and `carrier-strange` scripts order to the postal code that scripts the carrier simulator, read the
 simulator's own request log for what the carrier saw, and hold the order read at confirmed. Each watch says what it is waiting
 for and what it last read; the run stops at the first step that does not
@@ -186,10 +188,10 @@ are announced.
   screen shows a lease in force and refuses Up, Down and the reset while it is held. A host
   killed outright cannot undo it: the service stays as the run left it until the next
   start, or until Restore is pressed on a host that is running.
-- The release and despatch timeouts are not scripted: what they leave is a review row in
-  `ordering.OrderReviews` that nothing outside the database shows (blueprint-backend#1079), and the order
-  read says `cancelled` or `confirmed` throughout, as it does without them. The confirmation timeout is not
-  reachable by hand.
+- The release timeout is not scripted yet: it needs Inventory stopped after its stock has reserved, which a lease
+  that takes its changes together cannot do. Its evidence is the same review line the despatch script reads. The
+  review line is a trace and not the queue: it repeats on a redelivery and ages out with Loki's retention, so a flag
+  proves the row was raised and its absence proves nothing. The confirmation timeout is not reachable by hand.
 - The carrier-log scripts assert what the carrier saw and not the shipment's own state (`Unfulfillable`,
   `Pending`, `Booked`), which is in a table the console does not query. The log carries no order id
   (blueprint-backend#1074), so the step reads it from when the order was placed and groups retries by the
