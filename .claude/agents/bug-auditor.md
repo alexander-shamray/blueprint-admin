@@ -127,8 +127,10 @@ line, and return exactly this and nothing else:
 not open it. **A covering test is evidence both ways**: `refuted` when its own
 text rules the scenario out, and `scenario` names the tests covering the line
 and whether one would fail under the claimed defect. A test that covers the line
-and could not fail is a defect of its own: give its file and line there. The parent composes an issue from these fields and reads nothing in
-the tree itself, so quote the file, never the candidate's own words. **`file` and
+and could not fail is a defect of its own: quote its file and line inside
+`scenario` and nowhere else. The parent composes an issue from these fields and
+reads nothing in the tree itself, so quote the file, never the candidate's own
+words. **`file` and
 `line` are the candidate's, as dispatched, and never another site**: the parent
 drops a record whose location differs, whatever the verdict, and a defect found
 elsewhere on the way is not this verdict.
