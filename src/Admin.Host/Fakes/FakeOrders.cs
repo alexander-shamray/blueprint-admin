@@ -26,7 +26,7 @@ public enum CancelOutcome
 /// <para>
 /// Scripted state (docs/superpowers/specs/2026-10-15-scenario-scripts.md): the fake remembers what each publish priced and what each stock write set,
 /// and an order for such a product ends as the platform ends it when run-locally.md's cause is applied by hand. Stock
-/// set below one ends it <c>out_of_stock</c>; a price whose minor units are <see cref="DeclinedMinorUnits"/> ends it
+/// never set, or set below one, ends it <c>out_of_stock</c>; a price whose minor units are <see cref="DeclinedMinorUnits"/> ends it
 /// <c>declined</c> (the payment simulator's <c>card_declined</c>). Either lands one <see cref="Step"/> after the place,
 /// with nothing confirmed, despatched or delivered. A product the fake was never told about takes the happy path.
 /// </para>
@@ -256,7 +256,9 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
             return (null, Step);
         }
 
-        if (product.OnHand is < 1)
+        // Null is a product Inventory has never reported a count for (run-locally.md: "set a count first"): the reservation
+        // fails for it as for a count of zero, so a script that does not stock its product ends out of stock here as it does there.
+        if (product.OnHand is null or < 1)
         {
             return ("out_of_stock", Step);
         }
