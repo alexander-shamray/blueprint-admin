@@ -70,6 +70,8 @@ routes are `Gateway.Api/appsettings.json`; health endpoints are mapped by
 | Replay or discard a dead letter | `py -3.12 tools/dead-letters/dead_letters.py replay\|discard <queue> --message-id <id>`, backend; a dry run, and with `--execute --record <file> --audit-log <file>` the real run, which takes each message off the queue |
 | Start frontend | `npm start` (`ng serve`, port 5173), frontend |
 | Stop frontend | kill the `npm start` process tree |
+| Build the client for the emulator | `npm run emulator:android` (`ng build --configuration android && cap sync android`), frontend; `run-locally.md` step 4 |
+| Read the device lane | three reads from `run-locally.md` step 4, each run as written through PowerShell: `adb.exe devices`, a `curl.exe` CORS preflight to the gateway, and the running realm's `mobile-app` redirects through Keycloak's admin API. None changes anything |
 
 `npm ci` is not a console operation. It is a one-time prerequisite and the
 console reports its absence (no `node_modules`) rather than running it.
@@ -319,6 +321,20 @@ starts nothing and does not claim it.
 Holds at most one `npm start` job in `FrontendDir`. `Start()` refuses if one
 is running or if `node_modules` is absent. `Stop()` kills the tree. `Status()`
 reports the job and whether port 5173 answers.
+
+The device lane sits beside it on the Stack screen. `StartDeviceBuild()` runs
+`npm run emulator:android` in `FrontendDir` under the same gate, as a second
+job that ends by itself (no Stop), refused while one is running or if
+`node_modules` is absent, and not waiting on the dev server. `DeviceReads` makes
+the three reads of §2.1 before it is pressed and reports each as the doctor's
+rows are (`Ok`, `Problem`, `Unknown`): an emulator is attached (one line ending
+`device`, none `offline` or `unauthorized`), the gateway answers a preflight from
+`https://localhost` with that origin, and the running realm's `mobile-app` client
+redirects to exactly the client's `nativeRedirectUri`. A mismatch is reported and
+raised in the repository that owns it (the gateway's CORS list and the realm are
+the backend's), never fixed from here. Starting the AVD, installing and starting
+the app and the sign-in on the device stay by hand, as `run-locally.md` has them;
+the adb `reverse` it also lists changes the emulator's forwarding and is not run.
 
 ### 5.5 Broker
 
@@ -593,6 +609,7 @@ All under `/api`, JSON, loopback only.
 | `POST /stack/backend/down` | body `{ wipeVolumes, confirm }`; returns the job, or a Down with the same `wipeVolumes` still running; 409 while another `ComposeGate` job (§5.3) runs, a Down with the other `wipeVolumes` included |
 | `POST /stack/backend/reset` | body `{ confirm }`, which must be `down -v`; §5.3's reset, returned as one job, or the one still running; 409 while another `ComposeGate` job runs |
 | `POST /stack/frontend/start`, `POST /stack/frontend/stop` | supervisor |
+| `POST /stack/frontend/device-build`, `GET /stack/frontend/device-reads` | §5.4's device lane: the build job, or 409 while one runs or without `node_modules`; and the three reads, one row each with its verdict |
 | `GET /jobs`, `GET /jobs/{id}` | summaries; one job with its last lines |
 | `GET /jobs/{id}/stream` | Server-Sent Events, one event per line, `id:` is the sequence number so `Last-Event-ID` resumes from the ring buffer |
 | `POST /logs/follow` | body `{ services }`; stops the previous follow job if it is still running, starts one and returns it — the host keeps one |
@@ -887,4 +904,9 @@ and the Playwright smoke covering the new screen.
   anything deeper.
 - Editing the sibling repositories. If a backend fact needed for §5.8 or §5.9
   is not observable, the change is raised there, not worked around here.
-- Mobile, Ionic, Capacitor. This is a desktop tool.
+- Mobile, Ionic, Capacitor. This is a desktop tool. The one thing it does for the
+  mobile client is what it does for the web one, operate it: it runs the client's
+  own `emulator:android` npm script and reads what a first device run fails on
+  (§5.4), because `run-locally.md` step 4 has both. It starts no emulator,
+  installs and launches no app, signs in on no device and holds no mobile
+  code; the rest of step 4 stays by hand.

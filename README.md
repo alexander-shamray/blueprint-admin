@@ -166,6 +166,13 @@ are announced.
   Follow.
 - The console runs `npm start` but never `npm ci`: with no `node_modules` in
   the frontend clone, Start is refused and the screen says so.
+- The device lane builds the client for the emulator (`npm run emulator:android`)
+  and reads whether an emulator is attached, whether the gateway admits
+  `https://localhost` and what the running realm's `mobile-app` redirects to.
+  It does not start the AVD, install or start the app, or sign in on the
+  device, and a mismatch it reports is raised in the backend, not fixed here.
+  Its build and reads answer from recordings under FakePlatform, written
+  from `run-locally.md` without an emulator to record.
 - The console does not track a client started by hand: Start still runs a
   second `npm start`, which competes for port 5173, and its output shows
   what `ng serve` did.
