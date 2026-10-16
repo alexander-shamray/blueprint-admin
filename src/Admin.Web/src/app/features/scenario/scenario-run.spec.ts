@@ -14,6 +14,7 @@ import {
   thumbnailFrom,
   uploadFrom,
   verdict,
+  hasField,
   withField,
   withProductId,
 } from './scenario-run';
@@ -368,5 +369,15 @@ describe('secondsBetween', () => {
     expect(secondsBetween('2026-10-05T12:00:00Z', '2026-10-05T12:00:03.25Z')).toBe(3.3);
     expect(secondsBetween(null, '2026-10-05T12:00:03Z')).toBeNull();
     expect(secondsBetween('nope', '2026-10-05T12:00:03Z')).toBeNull();
+  });
+});
+
+describe('hasField', () => {
+  it('is true only for a JSON object carrying the field at that value', () => {
+    expect(hasField('{"onHand":0}', 'onHand', 0)).toBe(true);
+    expect(hasField('{"onHand":3}', 'onHand', 0)).toBe(false);
+    expect(hasField('{}', 'onHand', 0)).toBe(false);
+    expect(hasField('[0]', 'onHand', 0)).toBe(false);
+    expect(hasField('not json', 'onHand', 0)).toBe(false);
   });
 });
