@@ -355,11 +355,19 @@ paragraph first:
 - **A deadline.** Every lease has one. The Scenario asks to hold a change for
   1 to 600 seconds, no change may be held longer, and the host restores at the
   deadline by itself, so a page that closed without asking still leaves nothing
-  changed for as long as the host runs.
+  changed for as long as the host runs. The deadline is armed when the lease is
+  taken, from the hold asked for, so a change that takes long does not extend it.
+  A command still running when it is abandoned (a change that did not finish
+  within three minutes, or whose request was cancelled) is ended before its
+  restore starts, so the two never touch the service together. A restore that
+  failed is tried again by the host every 30 seconds, as well as by Restore.
 - **The limit, stated.** A host killed outright cannot run its own `finally`.
   Until the next start the stack stays as the run left it. The Stack screen
-  shows any lease in force, what it changed and since when, with a Restore
-  button, and reads the journal rather than memory.
+  shows the lease the host holds, what it changed and since when, with a Restore
+  button. The journal is read once, in the background, at host start: until
+  that restore sets the lease the screen shows none, and a journal the host
+  cannot read, or that names a change it does not know, is logged and left in
+  place for a person.
 - **Visible and stoppable.** Before Run the Scenario page names the services the
   script will change and for how long it expects to hold them. A script that
   holds a lease shows progress as every watch does (what it waits for, how long
