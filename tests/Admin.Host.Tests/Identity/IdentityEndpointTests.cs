@@ -30,7 +30,7 @@ public sealed class IdentityEndpointTests(AdminHostFactory factory) : IClassFixt
         JsonElement token = await response.Content.ReadFromJsonAsync<JsonElement>(Token);
         token.GetProperty("username").GetString().ShouldBe("demo");
         token.GetProperty("accessToken").GetString()!.Split('.').Length.ShouldBe(3);
-        token.GetProperty("claims").GetProperty("permission").EnumerateArray().Select(p => p.GetString()).ShouldBe(["catalog:write", "orders:write", "orders:cancel", "inventory:admin", "payments:admin"]);
+        token.GetProperty("claims").GetProperty("permission").EnumerateArray().Select(p => p.GetString()).ShouldBe(["catalog:write", "orders:write", "orders:cancel", "inventory:admin", "payments:admin", "orders:saga-read"]);
     }
 
     [Fact]

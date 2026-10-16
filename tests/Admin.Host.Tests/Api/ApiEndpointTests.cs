@@ -53,7 +53,7 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
         view.GetProperty("operations").EnumerateArray().Select(o => o.GetProperty("id").GetString()).ShouldBe(
         [
             "catalog:PublishProduct", "catalog:GetProducts", "catalog:ChangePrice", "catalog:WithdrawProduct",
-            "catalog:GetOwnProducts", "catalog:GetProduct", "ordering:PlaceOrder", "ordering:CancelOrder",
+            "catalog:GetOwnProducts", "catalog:GetProduct", "ordering:PlaceOrder", "ordering:CancelOrder", "ordering:GetOrderSagaState",
             "inventory:SetOnHand", "inventory:GetStock", "inventory:GetReservation", "inventory:ReleaseReservation",
             "inventory:ReinstateReservation", "payments:GetPayment",
             "privacy:RaiseErasureRequest", "privacy:ReissueErasureRequest", "privacy:GetErasureRequest",
@@ -73,7 +73,7 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
         HttpResponseMessage response = await client.PostAsync("/api/catalog/reload", null, Token);
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
-        (await response.Content.ReadFromJsonAsync<JsonElement>(Token)).GetProperty("operations").GetArrayLength().ShouldBe(35);
+        (await response.Content.ReadFromJsonAsync<JsonElement>(Token)).GetProperty("operations").GetArrayLength().ShouldBe(36);
     }
 
     [Fact]

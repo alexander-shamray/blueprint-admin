@@ -466,8 +466,8 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
         return JsonSerializer.Serialize(new { items = orders.Select(o => View(o.Key, o.Value, detail: false)), nextCursor = (string?)null });
     }
 
-    /// <summary><c>OrderDetail</c> when <paramref name="detail"/>, else the <c>OrderSummary</c> the list carries.</summary>
-    private object View(string orderId, Placed order, bool detail)
+    /// <summary>When each step of the order has happened by now, and the status those steps make: one clock for the BFF's read and the saga's.</summary>
+    private (DateTimeOffset? Confirmed, DateTimeOffset? Dispatched, DateTimeOffset? Delivered, DateTimeOffset? Cancelled, string Status) Moments(Placed order)
     {
         DateTimeOffset p = order.At;
         DateTimeOffset now = time.GetUtcNow();
@@ -483,6 +483,52 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
             : dispatched is not null ? "dispatched"
             : confirmed is not null ? "confirmed"
             : "placed";
+
+        return (confirmed, dispatched, delivered, cancelled, status);
+    }
+
+    /// <summary>
+    /// Ordering's saga read (<c>GET /v1/orders/{id}/saga</c>) for <paramref name="orderId"/>, or null where it answers 404: an
+    /// order the fake never placed, or one whose saga has finalised and deleted its instance. The saga's state follows the
+    /// same moments as the BFF's status, so the fake's two never disagree: placed is awaiting confirmation (stock and payment
+    /// are not told apart by the fake, except that an order scripted to end for stock or for payment waits for that), confirmed
+    /// is confirmed, and every later status has no row.
+    /// </summary>
+    public string? Saga(string orderId)
+    {
+        Placed? order;
+
+        lock (gate)
+        {
+            placed.TryGetValue(orderId, out order);
+        }
+
+        if (order is null)
+        {
+            return null;
+        }
+
+        string? state = Moments(order).Status switch
+        {
+            "placed" => order.Ended switch
+            {
+                "out_of_stock" => "AwaitingStock",
+                "declined" => "AwaitingPayment",
+                _ => "AwaitingConfirmation",
+            },
+            "confirmed" => "Confirmed",
+            _ => null,
+        };
+
+        return state is null ? null : JsonSerializer.Serialize(new { orderId, currentState = state, startedAt = order.At, cancelReason = (string?)null });
+    }
+
+    /// <summary><c>OrderDetail</c> when <paramref name="detail"/>, else the <c>OrderSummary</c> the list carries.</summary>
+    private object View(string orderId, Placed order, bool detail)
+    {
+        DateTimeOffset p = order.At;
+        (DateTimeOffset? confirmed, DateTimeOffset? dispatched, DateTimeOffset? delivered, DateTimeOffset? cancelled, string status) = Moments(order);
+        bool scripted = order.Ended is not null;
 
         DateTimeOffset asOf = new[] { p, confirmed, dispatched, delivered, cancelled }.Max()!.Value;
         var money = new { amount = order.Amount, currency = "EUR" };

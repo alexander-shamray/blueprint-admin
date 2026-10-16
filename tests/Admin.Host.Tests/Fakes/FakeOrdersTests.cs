@@ -39,6 +39,82 @@ public sealed class FakeOrdersTests
     }
 
     [Fact]
+    public void The_sagas_state_follows_the_same_moments_as_the_buyers_status_and_has_no_row_once_it_finalises()
+    {
+        FakeOrders orders = new(time);
+        orders.Saga(FakeGateway.PlacedOrderId).ShouldBeNull();
+        string id = orders.Place();
+
+        (string Status, string? Saga)[] seen = [.. Enumerable.Range(0, 5).Select(_ =>
+        {
+            (string, string?) pair = (Status(orders.Detail(id)!), SagaState(orders, id));
+            time.Advance(FakeOrders.Step);
+            return pair;
+        })];
+
+        seen.ShouldBe(
+        [
+            ("placed", "AwaitingConfirmation"),
+            ("confirmed", "Confirmed"),
+            ("dispatched", null),
+            ("delivered", null),
+            ("delivered", null),
+        ]);
+    }
+
+    [Fact]
+    public void The_sagas_read_is_orderings_SagaStateView_with_the_instance_started_at_the_place()
+    {
+        FakeOrders orders = new(time);
+        DateTimeOffset placed = time.GetUtcNow();
+        string id = orders.Place();
+
+        using JsonDocument saga = JsonDocument.Parse(orders.Saga(id)!);
+
+        saga.RootElement.EnumerateObject().Select(p => p.Name).ShouldBe(["orderId", "currentState", "startedAt", "cancelReason"]);
+        saga.RootElement.GetProperty("orderId").GetString().ShouldBe(id);
+        saga.RootElement.GetProperty("startedAt").GetDateTimeOffset().ShouldBe(placed);
+        saga.RootElement.GetProperty("cancelReason").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public void A_cancel_before_despatch_finalises_the_saga_as_it_cancels_the_order()
+    {
+        FakeOrders orders = new(time);
+        string id = orders.Place();
+        orders.Cancel(id);
+
+        SagaState(orders, id).ShouldBe("AwaitingConfirmation");
+        time.Advance(FakeOrders.Step);
+        Status(orders.Detail(id)!).ShouldBe("cancelled");
+        SagaState(orders, id).ShouldBeNull();
+    }
+
+    [Fact]
+    public void An_order_scripted_to_end_for_stock_or_payment_waits_in_that_state_until_it_ends()
+    {
+        FakeOrders orders = new(time, new FakeStack { InventoryStopped = true, ShortWaits = true });
+        string id = orders.Place();
+
+        SagaState(orders, id).ShouldBe("AwaitingStock");
+        time.Advance(FakeOrders.ShortStockWait);
+        Status(orders.Detail(id)!).ShouldBe("out_of_stock");
+        SagaState(orders, id).ShouldBeNull();
+    }
+
+    private static string? SagaState(FakeOrders orders, string id)
+    {
+        if (orders.Saga(id) is not { } body)
+        {
+            return null;
+        }
+
+        using JsonDocument saga = JsonDocument.Parse(body);
+
+        return saga.RootElement.GetProperty("currentState").GetString();
+    }
+
+    [Fact]
     public void An_order_shows_the_price_and_product_the_script_published()
     {
         FakeOrders orders = new(time);
