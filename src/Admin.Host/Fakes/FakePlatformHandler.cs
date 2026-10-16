@@ -8,8 +8,8 @@ namespace Admin.Host.Fakes;
 /// <summary>
 /// Every outbound HTTP call in FakePlatform mode. Readiness and Grafana's health answer 200 on any
 /// host; the realm token endpoint, the four OpenAPI documents, the gateway, the payment simulator's
-/// request log and Grafana's datasource proxies are recordings (FakeKeycloak, FakeOpenApi, FakeGateway,
-/// FakeGrafana), and the BFF's order read is <see cref="FakeOrders"/>. Hosts are told apart by the configured URLs.
+/// request log, the mail sink and Grafana's datasource proxies are recordings (FakeKeycloak, FakeOpenApi, FakeGateway,
+/// FakeMailSink, FakeGrafana), and the BFF's order read is <see cref="FakeOrders"/>. Hosts are told apart by the configured URLs.
 /// </summary>
 public sealed class FakePlatformHandler(AdminOptions options, FakeOrders orders) : HttpMessageHandler
 {
@@ -33,6 +33,7 @@ public sealed class FakePlatformHandler(AdminOptions options, FakeOrders orders)
             : Is(uri, options.PaymentSimulatorUrl) && path == "/__admin/requests" ? FakeHttp.Json(HttpStatusCode.OK, "[]")
             // The carrier simulator is the same WireMock.Net image, answering the same way before Shipping despatches.
             : Is(uri, options.CarrierSimulatorUrl) && path == "/__admin/requests" ? FakeHttp.Json(HttpStatusCode.OK, "[]")
+            : Is(uri, options.MailSinkUrl) ? FakeMailSink.Send(request)
             : Is(uri, options.GrafanaUrl) && path == "/api/datasources" ? FakeGrafana.Datasources()
             : Is(uri, options.GrafanaUrl) && path.Contains("/loki/api/v1/query_range", StringComparison.Ordinal) ? FakeGrafana.Loki(request)
             : Is(uri, options.GrafanaUrl) && path.Contains("/api/traces/", StringComparison.Ordinal) ? FakeGrafana.Tempo(request)
