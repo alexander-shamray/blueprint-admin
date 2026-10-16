@@ -81,8 +81,13 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
     /// </summary>
     internal static readonly string[] CarrierCodes = ["SIM-REFUSED", "SIM-DOWN", "SIM-SLOW", "SIM-STRANGE"];
 
-    /// <summary>The most entries the fake simulator's log shows a code, so a long-lived fake host's answer stays small.</summary>
+    /// <summary>
+    /// The most entries the fake simulator's log shows one order, and the most orders to one code it shows, newest last, so a
+    /// long-lived fake host's answer stays small and a later order is never crowded out by an earlier one.
+    /// </summary>
     private const int MaxCarrierEntries = 20;
+
+    private const int MaxCarrierOrders = 5;
 
     /// <summary>What an order for a product the fake was never told about shows: the recorded listing's Walnut desk.</summary>
     private const string DefaultName = "Walnut desk";
@@ -312,7 +317,7 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
 
         lock (gate)
         {
-            orders = [.. placed.Where(o => o.Value.Carrier == code)];
+            orders = [.. placed.Where(o => o.Value.Carrier == code).OrderBy(o => o.Value.At).TakeLast(MaxCarrierOrders)];
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -324,10 +329,13 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
             string body = JsonSerializer.Serialize(new { shipmentId = shipment, address = new { line1 = "1 Test Street", city = "Almaty", postalCode = code, country = "KZ" } });
             DateTimeOffset booked = order.At + (2 * Step);
 
+            int shown = 0;
+
             void Add(DateTimeOffset at, string method, string path, string? requestBody, int status, string title)
             {
-                if (at <= now && entries.Count < MaxCarrierEntries)
+                if (at <= now && shown < MaxCarrierEntries)
                 {
+                    shown++;
                     entries.Add(new
                     {
                         Guid = Guid.NewGuid(),
