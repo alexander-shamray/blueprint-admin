@@ -28,6 +28,8 @@ needs, not from the plan's list.
 | Cancel before despatch (`Cancelling_…`) | `run-locally.md`, Cancel | `cancel` | `cancelled` |
 | Reservation failed (`Stock_that_cannot_cover_the_order_…`) | stock set to 0 (`run-locally.md`, stock paragraph) | `out-of-stock` | `out_of_stock` |
 | Payment declined (`A_declined_card_…`) | an amount ending `.01` (`run-locally.md`, "A declined payment is caused by the amount") | `declined` | `declined` |
+| Parcel collected, never delivered (the carrier simulator's `SIM-TRANSIT`, which no journey test walks) | the delivery postal code `SIM-TRANSIT` (`run-locally.md`, the carrier table) | `in-transit` | `confirmed`, `dispatched` |
+| Cancel after despatch (`A_shipped_order_cannot_be_cancelled_and_nothing_moves`) | an order to `SIM-TRANSIT`, cancelled once it reads `dispatched` (`run-locally.md`, "After despatch there is nothing to compensate") | `already-shipped` | the cancel's 422 `order.already_shipped`, then the order read `unchanged` |
 
 One script walks no branch of the saga and exists for the store instead:
 
@@ -51,16 +53,28 @@ meaning "never reported".
 Each of these needs a cause `run-locally.md` does not yet carry, so the
 console may not invent one:
 
-- **Confirmation, stock, payment, despatch and release timeouts.** The backend
-  journey fires them with `ExpireAsync`, a test hook. By hand there is no
-  lever; the deadlines are minutes.
-- **Carrier outcomes by delivery postal code** (`SIM-REFUSED`, `SIM-DOWN`, and
-  the rest in the backend's `carrier-simulator/README.md`). `run-locally.md`
-  names the carrier simulator's request log and not the postal codes.
-- **Cancel after despatch, and refund of a confirmed order.** Both are by hand
-  a cancel of an order Shipping has moved, whose rejection or refund is read
-  from the order read and the payment; `run-locally.md` documents neither
-  outcome, and the scripts need to say what a developer should see.
+- **Stock, release and payment timeouts.** `run-locally.md` now gives the by-hand
+  cause: stop Inventory and wait out the saga's own delay, five, ten or fifteen
+  minutes. A script would have the console stop a service the platform needs
+  and hold a run open that long, which is a decision about the Stack screen's
+  powers (spec §2.1) before it is a script; it is not made here.
+- **Confirmation and despatch timeouts.** `run-locally.md` says neither is
+  reachable by hand: the backend journey fires them with `ExpireAsync`, a test
+  hook with no counterpart a developer can run.
+- **The carrier outcomes the order read cannot tell apart** (`SIM-REFUSED`,
+  `SIM-DOWN`, `SIM-SLOW`, `SIM-STRANGE`). `run-locally.md` now gives each its
+  postal code, and says where each ends: the shipment is `Unfulfillable`,
+  `Pending` or `Booked`, which only the shipment table shows, and the order
+  read says `confirmed` for all four, as it does a healthy order a moment
+  before its parcel is booked. The console reads no database, so a script for
+  one would assert an absence it cannot see. `SIM-TRANSIT` is scripted
+  because the order read does tell it apart, by staying `dispatched`; `SIM-REVERSED`
+  and `SIM-LATE` end `delivered`, like the happy path.
+- **Refund of a confirmed order.** `run-locally.md` says it is the void of an
+  authorisation by a cancel before despatch and nothing else: there is no refund
+  after delivery to produce, and the order read's `refunded` is that void. The
+  `cancel` script already walks the cause, and the payment's `refund` is read
+  from the payment, which the Scenario does not read.
 
 ## The fixture format: scripted state in the fakes
 
@@ -81,8 +95,14 @@ keeps a small amount of state in `FakeOrders`, written by hand:
   refused as the platform refuses it, with the 422 rule errors Catalog's
   `ProductErrors` names: not this seller's key, nothing uploaded under it,
   or not an image. The edge serves a key only once a publish attached it.
+- **The carrier.** `Place(productId, postalCode)` marks an order to
+  `SIM-TRANSIT` as collected and never delivered: it reads `dispatched` from two
+  steps on and its `delivered` stays null. A cancel asked of an order already
+  despatched (`FakeOrders.Cancel`) is refused as the platform refuses it, the
+  gateway answering 422 `order.already_shipped`; the old fake took it with a 204
+  and changed nothing, which no stack does.
 - **The gateway** reads the request bodies it needs (`amount`, `onHand`,
-  `items[0].productId`, and for an image `imageKey`) and nothing else. The cause lives in the request, as
+  `items[0].productId`, `shippingAddress.postalCode`, and for an image `imageKey`) and nothing else. The cause lives in the request, as
   it does on a stack, so the script's request is what scripts the fake.
 
 Order of precedence matches the saga's: a reservation comes before a payment,
