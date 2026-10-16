@@ -92,6 +92,9 @@ internal static partial class FakeGateway
     [GeneratedRegex("^/api/v1/orders/(?<id>[0-9a-fA-F-]{36})/cancel$")]
     private static partial Regex CancelPath();
 
+    [GeneratedRegex("^/api/v1/orders/(?<id>[0-9a-fA-F-]{36})/saga$")]
+    private static partial Regex SagaPath();
+
     // The BFF maps `/{id:guid}`, which takes any form Guid.TryParse reads; a segment that is not one matches no route.
     [GeneratedRegex("^/bff/v1/orders/(?<id>[^/]+)$")]
     private static partial Regex OrderReadPath();
@@ -135,6 +138,9 @@ internal static partial class FakeGateway
             ("PUT", "/bff/v1/saved-address") => Authorize(permissions, null, () => SavedAddress(orders, request)),
             ("POST", "/api/v1/orders") => Authorize(permissions, "orders:write", () => Placed(orders, request)),
             ("POST", var p) when CancelPath().Match(p) is { Success: true } cancel => Authorize(permissions, "orders:cancel", () => Cancelled(orders, cancel.Groups["id"].Value)),
+            ("GET", var p) when SagaPath().Match(p) is { Success: true } saga => Authorize(permissions, "orders:saga-read", () => orders.Saga(saga.Groups["id"].Value) is { } state
+                ? FakeHttp.Json(HttpStatusCode.OK, state)
+                : FakeHttp.Problem(HttpStatusCode.NotFound, "Not Found")),
             ("POST", "/bff/v1/checkout/quote") => Authorize(permissions, null, () => FakeHttp.Json(HttpStatusCode.OK, Quote)),
             ("GET", "/bff/v1/orders") => Authorize(permissions, null, () => FakeHttp.Json(HttpStatusCode.OK, orders.Page())),
             ("GET", _) when orderRead.Success => Authorize(permissions, null, () => OrderRead(orders, orderRead.Groups["id"].Value)),

@@ -58,6 +58,19 @@ public sealed class RunLocallyDriftTests
     }
 
     /// <summary>
+    /// The strip's second column is Ordering's saga read, at the gateway path the fake document gives it, so
+    /// that read is one run-locally.md makes by hand beside the BFF's.
+    /// </summary>
+    [Fact]
+    public void The_saga_read_the_strip_sets_beside_the_order_read_is_one_run_locally_makes()
+    {
+        string document = File.ReadAllText(Backend.RunLocally);
+        string gateway = new AdminOptions().GatewayUrl.TrimEnd('/');
+
+        document.ShouldContain($"Invoke-RestMethod \"{gateway}/api/v1/orders/$orderId/saga\" -Headers $auth");
+    }
+
+    /// <summary>
     /// The Scenario's review step reads Loki with the query run-locally.md gives for "flagged for review", so the document
     /// holds <see cref="ReviewFlagService.LogQl"/> verbatim, with its own placeholder for the order id.
     /// </summary>

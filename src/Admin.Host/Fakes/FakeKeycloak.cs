@@ -15,7 +15,7 @@ internal static class FakeKeycloak
 {
     internal static readonly Dictionary<string, (string Password, string[] Permissions)> Users = new(StringComparer.Ordinal)
     {
-        ["demo"] = ("demo", ["catalog:write", "orders:write", "orders:cancel", "inventory:admin", "payments:admin"]),
+        ["demo"] = ("demo", ["catalog:write", "orders:write", "orders:cancel", "inventory:admin", "payments:admin", "orders:saga-read"]),
         ["browser"] = ("browser", []),
         ["privacy"] = ("privacy", ["privacy:erase"]),
     };

@@ -76,7 +76,7 @@ public sealed class ApiCatalogTests : IDisposable
         [
             "catalog:PublishProduct", "catalog:GetProducts", "catalog:ChangePrice", "catalog:WithdrawProduct",
             "catalog:GetOwnProducts", "catalog:GetProduct", "ordering:PlaceOrder", "ordering:CancelOrder",
-            "inventory:SetOnHand", "inventory:GetStock", "inventory:GetReservation", "inventory:ReleaseReservation",
+            "ordering:GetOrderSagaState", "inventory:SetOnHand", "inventory:GetStock", "inventory:GetReservation", "inventory:ReleaseReservation",
             "inventory:ReinstateReservation", "payments:GetPayment",
             "privacy:RaiseErasureRequest", "privacy:ReissueErasureRequest", "privacy:GetErasureRequest",
             "bff:Quote", "bff:ListOrders", "bff:GetOrder", "bff:IssueProductImageUpload", "bff:GetSavedAddress", "bff:PutSavedAddress",
@@ -175,7 +175,7 @@ public sealed class ApiCatalogTests : IDisposable
         orderingUp = false;
         ApiCatalogView view = await catalog.ReloadAsync(Token);
 
-        view.Operations.Where(o => o.Source == "ordering").Select(o => (o.Name, o.Available)).ShouldBe([("PlaceOrder", false), ("CancelOrder", false)]);
+        view.Operations.Where(o => o.Source == "ordering").Select(o => (o.Name, o.Available)).ShouldBe([("PlaceOrder", false), ("CancelOrder", false), ("GetOrderSagaState", false)]);
         view.Sources.Single(s => s.Name == "ordering").Error.ShouldBe("http://localhost:5101/openapi/v1.json answered 503.");
 
         orderingUp = true;

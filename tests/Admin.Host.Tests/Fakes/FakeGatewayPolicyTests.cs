@@ -52,6 +52,35 @@ public sealed class FakeGatewayPolicyTests
         return (response.StatusCode, response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult());
     }
 
+    private HttpStatusCode ReadSaga(string orderId, string? permissions)
+    {
+        using HttpRequestMessage read = new(HttpMethod.Get, $"{Origin}/api/v1/orders/{orderId}/saga");
+
+        if (permissions is not null)
+        {
+            read.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Jwt(permissions));
+        }
+
+        using HttpResponseMessage response = FakeGateway.Send(read, orders);
+
+        return response.StatusCode;
+    }
+
+    [Fact]
+    public void The_sagas_read_wants_the_staff_permission_and_answers_404_for_an_order_with_no_row()
+    {
+        string id = orders.Place();
+
+        ReadSaga(id, null).ShouldBe(HttpStatusCode.Unauthorized);
+        ReadSaga(id, """["orders:write","orders:cancel"]""").ShouldBe(HttpStatusCode.Forbidden);
+        ReadSaga(id, """["orders:saga-read"]""").ShouldBe(HttpStatusCode.OK);
+        ReadSaga("0199a1b2-0000-7000-8000-0000000000ff", """["orders:saga-read"]""").ShouldBe(HttpStatusCode.NotFound);
+
+        time.Advance(FakeOrders.Step * 3);
+
+        ReadSaga(id, """["orders:saga-read"]""").ShouldBe(HttpStatusCode.NotFound);
+    }
+
     [Fact]
     public void A_reservation_read_of_an_order_the_fake_placed_answers_reserved_for_its_product_and_that_order()
     {
