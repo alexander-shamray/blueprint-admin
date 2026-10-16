@@ -90,6 +90,13 @@ recorded in step 1.
 list, follow leads in round two onwards, and keep the commit of the last
 clean sweep. **Exit** on the sweep quality set.
 
+**Built** (#125): `sweep-slices.sh` owns both sweeps' row partitions and
+cuts each row into lists of at most 240,000 bytes; `sweep-mark.sh` keeps a
+clean sweep's commit as the local `refs/sweeps/<kind>`; verification runs on
+Sonnet, and the bug verifier weighs the covering tests. The argument is in
+[`commands/bug-sweep.md`](commands/bug-sweep.md), *Slices, leads and the
+mark*. The exit is not measured: the sweep set is still empty.
+
 ### Step 6 — the commands
 
 Each command splits into a runbook and its argument, the argument read only
