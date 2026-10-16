@@ -1,4 +1,4 @@
-import { ApiCatalogView, ApiOperation } from '../../core/host/host-types';
+import { ApiCatalogView, ApiOperation, ReviewFlagView } from '../../core/host/host-types';
 import {
   CarrierEntry,
   OrderRead,
@@ -14,6 +14,7 @@ import {
   isWatch,
   orderRead,
   resolveOperations,
+  reviewVerdict,
   roleOf,
   secondsBetween,
   stepCorrelationId,
@@ -329,7 +330,7 @@ describe('the unhappy scripts', () => {
 
 describe('the timeout scripts', () => {
   it('take their lease first and end it last, and send nothing as the lease or the restore', () => {
-    for (const key of ['stock-timeout', 'payment-timeout'] as const) {
+    for (const key of ['stock-timeout', 'payment-timeout', 'despatch-timeout'] as const) {
       const steps = SCRIPTS[key].steps;
 
       expect(steps[0]).toBe('lease');
@@ -346,10 +347,11 @@ describe('the timeout scripts', () => {
     expect(SCRIPTS['payment-timeout'].lease!.changes).toEqual(['short-waits']);
     expect(SCRIPTS['payment-timeout'].amount).toBe(10.09);
     expect(SCRIPTS['payment-timeout'].onHand).toBeGreaterThan(0);
+    expect(SCRIPTS['despatch-timeout'].lease!.changes).toEqual(['short-waits']);
   });
 
   it('hold the stack no longer than the host allows, which is its own bound', () => {
-    for (const key of ['stock-timeout', 'payment-timeout'] as const) {
+    for (const key of ['stock-timeout', 'payment-timeout', 'despatch-timeout'] as const) {
       expect(SCRIPTS[key].lease!.holdSeconds).toBeLessThanOrEqual(600);
     }
   });
@@ -363,6 +365,113 @@ describe('the timeout scripts', () => {
     const stock = resolveOperations(view, SCRIPTS['stock-timeout']).operations!;
 
     expect(Object.keys(stock).sort()).toEqual(['order', 'publish', 'read']);
+  });
+});
+
+describe('the despatch-timeout script', () => {
+  it('orders to SIM-STRANGE under the short waits alone, stocks first, and reads the review before the order', () => {
+    const script = SCRIPTS['despatch-timeout'];
+
+    expect(script.postalCode).toBe('SIM-STRANGE');
+    expect(script.lease).toEqual({ changes: ['short-waits'], holdSeconds: 420 });
+    expect(script.onHand).toBeGreaterThan(0);
+    expect(script.review).toEqual({ reason: 'not_despatched' });
+    expect(script.steps).toEqual(['lease', 'publish', 'drain', 'stock', 'quote', 'order', 'confirmed', 'flagged', 'held', 'restore']);
+  });
+
+  it('sends nothing as a step of its own for the review read, which is the host\'s, so the catalog is asked for no more than the order scripts need', () => {
+    const view: ApiCatalogView = {
+      sources: [],
+      operations: Object.values(SCENARIO_OPERATIONS).map((id) => op(id)),
+    };
+
+    expect(roleOf('flagged')).toBeNull();
+    expect(isWatch('flagged')).toBe(false);
+    expect(Object.keys(resolveOperations(view, SCRIPTS['despatch-timeout']).operations!).sort()).toEqual([
+      'order',
+      'publish',
+      'quote',
+      'read',
+      'stock',
+    ]);
+  });
+
+  describe('reviewVerdict', () => {
+    const placed = Date.parse('2026-10-05T12:00:00Z');
+    const view = (flags: ReviewFlagView['flags'], rest: Partial<ReviewFlagView> = {}): ReviewFlagView => ({
+      orderId: 'o1',
+      window: '30m',
+      reachable: true,
+      error: null,
+      flags,
+      ...rest,
+    });
+    const flag = (reason: string, at = '2026-10-05T12:01:02.000Z') => ({
+      at,
+      reason,
+      line: `Order o1 flagged for review: ${reason}.`,
+    });
+
+    it('is reached by the line for the reason, saying when it was logged and how long after the place', () => {
+      expect(reviewVerdict(view([flag('not_despatched')]), 'not_despatched', placed)).toEqual({
+        kind: 'reached',
+        detail: 'Ordering logged "Order o1 flagged for review: not_despatched." at 2026-10-05T12:01:02.000Z, 62 s after the order was placed.',
+      });
+    });
+
+    it('does not claim a time since the place when the place is not known', () => {
+      expect(reviewVerdict(view([flag('not_despatched')]), 'not_despatched', 0)).toEqual({
+        kind: 'reached',
+        detail: 'Ordering logged "Order o1 flagged for review: not_despatched." at 2026-10-05T12:01:02.000Z.',
+      });
+    });
+
+    it('is reached by the right reason among others, and by the first of a redelivered line', () => {
+      const flags = [flag('stock_not_released', '2026-10-05T12:00:40.000Z'), flag('not_despatched'), flag('not_despatched', '2026-10-05T12:03:00.000Z')];
+
+      const v = reviewVerdict(view(flags), 'not_despatched', placed);
+
+      expect(v.kind).toBe('reached');
+      expect((v as { detail: string }).detail).toContain('12:01:02');
+    });
+
+    it('waits when nothing is logged yet, and says so', () => {
+      expect(reviewVerdict(view([]), 'not_despatched', placed)).toEqual({
+        kind: 'waiting',
+        detail: 'Ordering has not logged this order as flagged for review yet.',
+      });
+    });
+
+    it('waits, and says what else it saw, when the order was flagged for another reason only', () => {
+      expect(reviewVerdict(view([flag('stock_not_released'), flag('not_confirmed'), flag('not_confirmed')]), 'not_despatched', placed)).toEqual({
+        kind: 'waiting',
+        detail: 'Ordering has flagged it for review as stock_not_released, not_confirmed, not not_despatched; still waiting for not_despatched.',
+      });
+    });
+
+    it('fails only when Loki could not be asked, with what it said or that it said nothing', () => {
+      expect(reviewVerdict(view([], { reachable: false, error: 'Loki answered 502' }), 'not_despatched', placed)).toEqual({
+        kind: 'failed',
+        reason: 'Loki could not be read: Loki answered 502.',
+      });
+      expect(reviewVerdict(view([], { reachable: false }), 'not_despatched', placed)).toEqual({
+        kind: 'failed',
+        reason: 'Loki could not be read: no reason given.',
+      });
+    });
+  });
+
+  it('judges the held read by the script\'s own cause, not by a carrier outcome', () => {
+    const read: OrderRead = {
+      status: 'dispatched',
+      timeline: { placed: null, confirmed: '2026-10-05T12:00:01Z', dispatched: '2026-10-05T12:00:06Z', delivered: null, cancelled: null },
+      asOf: '2026-10-05T12:00:09Z',
+    };
+
+    expect(verdict('held', read)).toEqual({
+      kind: 'failed',
+      reason: "The order reads dispatched, not confirmed: this script's cause should leave it there.",
+    });
   });
 });
 

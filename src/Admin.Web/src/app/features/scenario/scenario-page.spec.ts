@@ -8,12 +8,13 @@ import {
   ProxyRequest,
   ProxyResult,
   QueuesView,
+  ReviewFlagView,
   TokenClockView,
 } from '../../core/host/host-types';
 import { DRAIN_POLL_MS, DRAIN_WATCH_MS, UUID } from '../api/api-page';
 import { ScenarioLauncher } from './scenario-launcher';
 import { ScenarioPage } from './scenario-page';
-import { CARRIER_POLL_MS, CARRIER_WATCH_MS } from './scenario-run';
+import { CARRIER_POLL_MS, CARRIER_WATCH_MS, REVIEW_POLL_MS, REVIEW_WATCH_MS } from './scenario-run';
 
 function op(partial: Partial<ApiOperation> & { id: string }): ApiOperation {
   const [source, name] = partial.id.split(':');
@@ -158,6 +159,19 @@ const delivered = order('delivered', {
   delivered: '2026-10-05T12:00:40Z',
 });
 
+/** What the host answers of Ordering's `flagged for review` lines for the order: none, or one per reason. */
+function flagView(flags: ReviewFlagView['flags'], rest: Partial<ReviewFlagView> = {}): ReviewFlagView {
+  return { orderId, window: '30m', reachable: true, error: null, flags, ...rest };
+}
+
+function flagged(reason: string, secondsAfter = 62): ReviewFlagView['flags'][number] {
+  return {
+    at: new Date(Date.parse(placedAt) + secondsAfter * 1000).toISOString(),
+    reason,
+    line: `Order ${orderId} flagged for review: ${reason}.`,
+  };
+}
+
 let cancelSent = false;
 
 /**
@@ -225,6 +239,7 @@ describe('ScenarioPage', () => {
     lease: ReturnType<typeof vi.fn>;
     leaseAcquire: ReturnType<typeof vi.fn>;
     leaseRestore: ReturnType<typeof vi.fn>;
+    reviewFlags: ReturnType<typeof vi.fn>;
   };
   let uuids: number;
 
@@ -242,6 +257,7 @@ describe('ScenarioPage', () => {
       lease: vi.fn(() => of({ lease: null, changes: leaseChanges })),
       leaseAcquire: vi.fn(() => of(heldLease)),
       leaseRestore: vi.fn(() => of({ lease: null, changes: leaseChanges })),
+      reviewFlags: vi.fn(() => of(flagView([flagged('not_despatched')]))),
     };
     TestBed.configureTestingModule({
       imports: [ScenarioPage],
@@ -667,7 +683,7 @@ describe('ScenarioPage', () => {
       expect(page.steps()[5].state).toBe('ok');
       expect(page.steps()[6].state).toBe('ok');
       expect(page.steps()[7].state).toBe('failed');
-      expect(page.steps()[7].detail).toBe('The order reads dispatched, not confirmed: this carrier outcome should leave it there.');
+      expect(page.steps()[7].detail).toBe("The order reads dispatched, not confirmed: this script's cause should leave it there.");
     });
   });
 
@@ -865,6 +881,176 @@ describe('ScenarioPage', () => {
 
       expect(host.leaseAcquire).not.toHaveBeenCalled();
       expect(host.leaseRestore).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('the despatch-timeout script', () => {
+    const confirmedOrder = order('confirmed', { confirmed: '2026-10-05T12:00:01Z' });
+
+    function readsConfirmed(): void {
+      host.proxy.mockImplementation((request: ProxyRequest) =>
+        isRead(request) ? of(responded(200, confirmedOrder, '')) : of(platform(request)),
+      );
+    }
+
+    it('runs inside the short waits alone: the order to SIM-STRANGE, the review Ordering logged, the order still confirmed, then the restore', async () => {
+      readsConfirmed();
+      const page = render().componentInstance;
+      page.pick('despatch-timeout');
+
+      await page.run();
+
+      expect(page.steps().map((s) => [s.key, s.state])).toEqual([
+        ['lease', 'ok'],
+        ['publish', 'ok'],
+        ['drain', 'ok'],
+        ['stock', 'ok'],
+        ['quote', 'ok'],
+        ['order', 'ok'],
+        ['confirmed', 'ok'],
+        ['flagged', 'ok'],
+        ['held', 'ok'],
+        ['restore', 'ok'],
+      ]);
+      expect(host.leaseAcquire).toHaveBeenCalledWith({ changes: ['short-waits'], holdSeconds: 420, label: 'Despatch timeout' });
+      expect(JSON.parse(sent()[3].body!).shippingAddress.postalCode).toBe('SIM-STRANGE');
+      expect(host.reviewFlags).toHaveBeenCalledWith(orderId);
+      const step = page.steps()[7];
+      expect(step.detail).toBe(
+        `Ordering logged "Order ${orderId} flagged for review: not_despatched." at 2026-10-05T12:01:02.000Z, 62 s after the order was placed.`,
+      );
+      expect(step.request).toBe(`GET /api/review/${orderId}`);
+      // Read from Loki through the host, not sent through the proxy as the user: nothing of it is traced.
+      expect(step.correlationId).toBeNull();
+      expect(sent().some((r) => r.url.includes('/api/review/'))).toBe(false);
+      expect(page.steps()[9].detail).toBe('The stack is as the run found it.');
+    });
+
+    it('waits through an empty answer and one for another reason, saying what it has seen, then reaches it', async () => {
+      vi.useFakeTimers();
+      readsConfirmed();
+      const answers = [
+        flagView([]),
+        flagView([flagged('stock_not_released', 40)]),
+        flagView([flagged('stock_not_released', 40), flagged('not_despatched')]),
+      ];
+      host.reviewFlags.mockImplementation(() => of(answers.length > 1 ? answers.shift()! : answers[0]));
+      const page = render().componentInstance;
+      page.pick('despatch-timeout');
+
+      const done = page.run();
+      await vi.advanceTimersByTimeAsync(0);
+      const flag = () => page.steps().find((s) => s.key === 'flagged')!;
+      expect(flag().state).toBe('running');
+      expect(flag().detail).toContain('Ordering has not logged this order as flagged for review yet.');
+
+      await vi.advanceTimersByTimeAsync(REVIEW_POLL_MS);
+      expect(flag().state).toBe('running');
+      expect(flag().detail).toContain('Ordering has flagged it for review as stock_not_released, not not_despatched');
+
+      await vi.advanceTimersByTimeAsync(REVIEW_POLL_MS);
+      await done;
+      vi.useRealTimers();
+
+      expect(flag().state).toBe('ok');
+      expect(host.reviewFlags).toHaveBeenCalledTimes(3);
+    });
+
+    it('fails at the cap with what it last saw, and still restores the stack', async () => {
+      vi.useFakeTimers();
+      readsConfirmed();
+      host.reviewFlags.mockImplementation(() => of(flagView([])));
+      const page = render().componentInstance;
+      page.pick('despatch-timeout');
+
+      const done = page.run();
+      await vi.advanceTimersByTimeAsync(REVIEW_WATCH_MS + REVIEW_POLL_MS);
+      await done;
+      vi.useRealTimers();
+
+      const flag = page.steps().find((s) => s.key === 'flagged')!;
+      expect(flag.state).toBe('failed');
+      expect(flag.detail).toBe('Not logged after 150 s. Ordering has not logged this order as flagged for review yet.');
+      expect(page.steps().find((s) => s.key === 'held')!.state).toBe('skipped');
+      expect(host.leaseRestore).toHaveBeenCalledTimes(1);
+      expect(page.steps().find((s) => s.key === 'restore')!.state).toBe('ok');
+    });
+
+    it('fails when Loki cannot be asked, rather than reading that as an order nobody flagged', async () => {
+      readsConfirmed();
+      host.reviewFlags.mockReturnValue(of(flagView([], { reachable: false, error: 'Loki answered 502: bad gateway' })));
+      const page = render().componentInstance;
+      page.pick('despatch-timeout');
+
+      await page.run();
+
+      const flag = page.steps().find((s) => s.key === 'flagged')!;
+      expect(flag.state).toBe('failed');
+      expect(flag.detail).toBe('Loki could not be read: Loki answered 502: bad gateway.');
+      expect(host.reviewFlags).toHaveBeenCalledTimes(1);
+      expect(host.leaseRestore).toHaveBeenCalledTimes(1);
+    });
+
+    it('fails when the host itself refuses the read, saying what it said', async () => {
+      readsConfirmed();
+      host.reviewFlags.mockReturnValue(throwError(() => ({ error: { detail: 'Invalid window' } })));
+      const page = render().componentInstance;
+      page.pick('despatch-timeout');
+
+      await page.run();
+
+      const flag = page.steps().find((s) => s.key === 'flagged')!;
+      expect(flag.state).toBe('failed');
+      expect(flag.detail).toContain('Invalid window');
+      expect(host.leaseRestore).toHaveBeenCalledTimes(1);
+    });
+
+    it("fails the last read when the order has moved on from confirmed, naming the script's cause", async () => {
+      let reads = 0;
+      host.proxy.mockImplementation((request: ProxyRequest) => {
+        if (!isRead(request)) return of(platform(request));
+        reads += 1;
+        return of(
+          responded(
+            200,
+            reads === 1
+              ? order('confirmed', { confirmed: '2026-10-05T12:00:01Z' })
+              : order('dispatched', { confirmed: '2026-10-05T12:00:01Z', dispatched: '2026-10-05T12:00:06Z' }),
+            '',
+          ),
+        );
+      });
+      const page = render().componentInstance;
+      page.pick('despatch-timeout');
+
+      await page.run();
+
+      expect(page.steps().find((s) => s.key === 'flagged')!.state).toBe('ok');
+      const held = page.steps().find((s) => s.key === 'held')!;
+      expect(held.state).toBe('failed');
+      expect(held.detail).toBe("The order reads dispatched, not confirmed: this script's cause should leave it there.");
+      expect(host.leaseRestore).toHaveBeenCalledTimes(1);
+    });
+
+    it('cancels from the console while the review is being read, and restores the stack', async () => {
+      readsConfirmed();
+      const read = new Subject<ReviewFlagView>();
+      host.reviewFlags.mockReturnValue(read.asObservable());
+      const page = render().componentInstance;
+      page.pick('despatch-timeout');
+      const running = page.run();
+      await vi.waitFor(() => expect(host.reviewFlags).toHaveBeenCalled());
+
+      page.cancel();
+      read.next(flagView([]));
+      await running;
+
+      const flag = page.steps().find((s) => s.key === 'flagged')!;
+      expect(flag.state).toBe('failed');
+      expect(flag.detail).toBe('Cancelled.');
+      expect(page.steps().find((s) => s.key === 'held')!.state).toBe('skipped');
+      expect(host.leaseRestore).toHaveBeenCalledTimes(1);
+      expect(page.running()).toBe(false);
     });
   });
 
