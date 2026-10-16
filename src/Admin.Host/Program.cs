@@ -254,6 +254,7 @@ app.MapErasure();
 app.MapMail();
 app.MapTrace();
 app.MapReview();
+app.MapScenarioExport();
 app.MapTelemetry();
 app.MapTranscript();
 
