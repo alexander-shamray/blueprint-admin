@@ -114,7 +114,8 @@ jobs:
       # Every root, as parallel class shards: the serial run cost 440 s on
       # this matrix's Windows leg against 107 s on ubuntu. The runner owns
       # which roots those are, so this job and harness-checks.sh cannot come
-      # to run different suites. Its roots include tools/token-usage (#144),
-      # and .github/locality-gate, whose own workflow is a different subject — the base copy of the gate judged
-      # against the PR body — rather than a duplicate of this.
+      # to run different suites. Its roots include .github/locality-gate and
+      # tools/token-usage (#144). The gate's own workflow is a different
+      # subject — the base copy of the gate judged against the PR body —
+      # rather than a duplicate of this.
       - run: python .claude/scripts/shard-harness-suite.py
