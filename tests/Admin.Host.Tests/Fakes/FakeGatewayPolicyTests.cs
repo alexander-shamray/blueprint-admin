@@ -43,6 +43,43 @@ public sealed class FakeGatewayPolicyTests
         (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).ShouldContain("order.already_shipped");
     }
 
+    private (HttpStatusCode Status, string Body) ReadReservation(string orderId)
+    {
+        using HttpRequestMessage read = new(HttpMethod.Get, $"{Origin}/api/v1/inventory/reservations/{orderId}");
+        read.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Jwt("""["inventory:admin"]"""));
+        using HttpResponseMessage response = FakeGateway.Send(read, orders);
+
+        return (response.StatusCode, response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult());
+    }
+
+    [Fact]
+    public void A_reservation_read_of_an_order_the_fake_placed_answers_reserved_for_its_product_and_that_order()
+    {
+        string product = orders.Publish(10.09m);
+        orders.Stock(product, 10);
+        orders.Place();
+        string id = orders.Place(product);
+
+        (HttpStatusCode status, string body) = ReadReservation(id);
+
+        status.ShouldBe(HttpStatusCode.OK);
+        body.ShouldContain($"\"orderId\":\"{id}\"");
+        body.ShouldContain("\"status\":\"Reserved\"");
+        body.ShouldContain($"\"productId\":\"{product}\"");
+    }
+
+    [Fact]
+    public void A_reservation_read_of_an_order_whose_stock_was_refused_or_that_was_never_placed_is_a_404()
+    {
+        string product = orders.Publish(19.99m);
+        orders.Stock(product, 0);
+        orders.Place();
+        string refused = orders.Place(product);
+
+        ReadReservation(refused).Status.ShouldBe(HttpStatusCode.NotFound);
+        ReadReservation("0199a1b2-0000-7000-8000-0000000000ff").Status.ShouldBe(HttpStatusCode.NotFound);
+    }
+
     [Theory]
     [InlineData("DELETE", "/bff/v1/orders/0199a1b2-0000-7000-8000-000000000002")]
     [InlineData("GET", "/bff/v1/orders/0199a1b2-0000-7000-8000-000000000002/x")]

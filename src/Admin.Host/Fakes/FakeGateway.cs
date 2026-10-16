@@ -168,6 +168,8 @@ internal static partial class FakeGateway
             ("PUT", true, _) => Stocked(orders, stock.Groups["id"].Value, request),
             ("GET", true, _) when stock.Groups["id"].Value == StockedProductId => FakeHttp.Json(HttpStatusCode.OK, Stock),
             ("GET", _, true) when reservation.Groups["action"].Value == "" && reservation.Groups["id"].Value == PlacedOrderId => FakeHttp.Json(HttpStatusCode.OK, Reservation),
+            ("GET", _, true) when reservation.Groups["action"].Value == "" && orders.ReservedProduct(reservation.Groups["id"].Value) is { } product =>
+                FakeHttp.Json(HttpStatusCode.OK, Reservation.Replace(PlacedOrderId, reservation.Groups["id"].Value, StringComparison.Ordinal).Replace(StockedProductId, product, StringComparison.Ordinal)),
             ("POST", _, true) when reservation.Groups["action"].Value != "" => new HttpResponseMessage(HttpStatusCode.NoContent),
             _ => FakeHttp.Problem(HttpStatusCode.NotFound, "Not Found"),
         };
