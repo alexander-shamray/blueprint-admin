@@ -181,8 +181,8 @@ runs. `docs/testing.md` owns the trigger contract.
 - `bash .claude/scripts/host-checks.sh all` and
   `bash .claude/scripts/npm-checks.sh all` — Host tests, SPA lint, tests and
   build, green before the PR opens, or said plainly in the body if not.
-  `bash .claude/scripts/harness-checks.sh` when the diff reaches `.claude/**`
-  or `.github/locality-gate/**`.
+  `bash .claude/scripts/harness-checks.sh` when the diff reaches `.claude/**`,
+  `.github/locality-gate/**` or `tools/**`.
 
 ## Steps
 

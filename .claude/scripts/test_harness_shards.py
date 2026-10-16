@@ -49,7 +49,7 @@ _found = []
 
 
 def found():
-    """Discovery, once per process: it imports every module in both roots."""
+    """Discovery, once per process: it imports every module in every root."""
     if not _found:
         _found.extend(SHARD.discovered())
     return _found
@@ -94,7 +94,7 @@ class ThePlacementIsDerivedFromDiscovery(unittest.TestCase):
         buckets, tail = SHARD.plan([*found(), stranger], SHARD.workers())
         self.assertIn(stranger, [i for bucket in buckets for i in bucket] + tail)
 
-    def test_both_roots_contribute(self):
+    def test_every_root_contributes(self):
         # A root that stops being discovered — a renamed directory, a pattern
         # that stops matching — is otherwise an empty set nobody misses.
         for start, pattern in SHARD.ROOTS:
@@ -105,6 +105,14 @@ class ThePlacementIsDerivedFromDiscovery(unittest.TestCase):
                 ids = {test.id() for test in SHARD.walk(suite)}
                 self.assertTrue(ids, f"{start} discovered nothing")
                 self.assertEqual(set(), ids - set(found()))
+
+    def test_the_token_usage_suite_is_part_of_it(self):
+        # #144: the report every token-plan exit test reads had a suite that
+        # no check ran. A root list that drops it again passes the case
+        # above, which only asks that the roots it holds contribute.
+        self.assertIn(("tools/token-usage", "test_*.py"), SHARD.ROOTS)
+        self.assertTrue(
+            any(i.startswith("test_token_usage.") for i in found()))
 
     def test_every_name_the_tables_pin_still_exists(self):
         # A renamed class loses its pinning, and a pinning that has stopped
@@ -157,7 +165,7 @@ class TheRunnerRefusesRatherThanReportingAPass(unittest.TestCase):
 
     def test_a_root_that_discovers_nothing_refuses_the_run(self):
         # A renamed directory or a pattern that stopped matching looks exactly
-        # like an empty suite, and `test_both_roots_contribute` cannot catch
+        # like an empty suite, and `test_every_root_contributes` cannot catch
         # it — that case is among the tests that stopped being discovered. So
         # the runner has to refuse rather than report zero tests and exit 0.
         with mock.patch.object(SHARD, "ROOTS", (("docs", "test_*.py"),)):

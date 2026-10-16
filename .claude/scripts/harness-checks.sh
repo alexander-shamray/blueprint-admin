@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# The harness and locality-gate suites, with no free parameter anywhere.
+# The harness, locality-gate and token-usage suites, with no free parameter
+# anywhere.
 set -euo pipefail
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
@@ -31,7 +32,7 @@ run_py() {
   exit 2
 }
 
-# Both discovery roots live in the runner now, which is what keeps this check
+# Every discovery root lives in the runner now, which is what keeps this check
 # and the `harness` CI job from coming to run different suites. It takes no
 # arguments: the worker count is the host's, capped, and a caller who could set
 # it would be a second opinion about what the suite is.
