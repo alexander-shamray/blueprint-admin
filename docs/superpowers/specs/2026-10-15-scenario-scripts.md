@@ -36,6 +36,7 @@ needs, not from the plan's list.
 | Stock timeout (`A_stock_wait_that_lapses_cancels_the_order_and_Inventory_releases_off_the_cancellation`) | Inventory stopped with the saga's waits shortened, then an order (`run-locally.md`, "The branches, then") | `stock-timeout` | `out_of_stock`, which only the saga's own wait can have caused with Inventory stopped |
 | Payment timeout (`A_payment_wait_that_lapses_compensates_and_flags_the_money_that_arrives_late`) | a total ending `.09` under the short waits, Inventory up | `payment-timeout` | `declined`, which only the payment wait can have caused: `.09` is no decline code |
 | Despatch timeout (`A_despatch_that_never_comes_is_escalated_and_the_stock_stays_reserved`) | an order to `SIM-STRANGE` under the short waits (`run-locally.md`, "Despatch timeout") | `despatch-timeout` | `flagged`: the line Ordering logs when it raises `not_despatched` (the Loki query `run-locally.md` names), then the order read `held` at `confirmed` |
+| Release timeout (`A_release_that_is_never_answered_cancels_the_order_and_flags_the_stock`) | a `.09` order under the short waits whose stock has reserved, Inventory then stopped, the order cancelled (`run-locally.md`, "Release timeout") | `release-timeout` | `cancelled`, then `flagged`: the line Ordering logs when it raises `stock_not_released` (the same read as the despatch timeout) |
 | Cancel after despatch (`A_shipped_order_cannot_be_cancelled_and_nothing_moves`) | an order to `SIM-TRANSIT`, cancelled once it reads `dispatched` (`run-locally.md`, "After despatch there is nothing to compensate") | `already-shipped` | the cancel's 422 `order.already_shipped`, then the order read `unchanged` |
 
 One script walks no branch of the saga and exists for the store instead:
@@ -50,6 +51,16 @@ hide the saga regression it exists to find. It ends on the edge's answer being
 an image with `nosniff`, because that is what a buyer's browser needs and what a
 store the BFF could sign for but Catalog could not read would not give.
 
+The four timeouts differ in what shows that they fired. The stock and payment
+timeouts need no evidence beyond the order read: Inventory is stopped, or the total
+ends `.09`, so the status they end in has one cause (the order read folds the saga's
+cancel reason, `stock_timeout` into `out_of_stock` and `payment_timeout` into
+`declined`, which is why the stock script stops the only thing that could have refused
+the reservation). The release and despatch timeouts end in a review row the order
+read does not show, so their scripts read the line Ordering logs when it raises one
+(§5.9 of the design); the order read says `cancelled` or `confirmed` throughout, as it
+does without them.
+
 A script that applies a cause sets it with the paragraph's own call: the
 publish's `amount`, the stock write's `onHand`. It never guesses a product: it
 publishes its own, so the stock it sets is a count it chose and not a `null`
@@ -57,26 +68,12 @@ meaning "never reported".
 
 ## Not scripted
 
-Each of these needs a cause `run-locally.md` does not yet carry, so the
-console may not invent one:
+Each of these needs a cause `run-locally.md` does not carry, or a read the console
+does not make, so it may not invent one:
 
-- **The release timeout.** The cause is by hand (place a `.09` order with Inventory
-  up, stop Inventory after its stock has reserved, cancel the order, wait the release
-  delay). What it ends in is a review row `stock_not_released` and an order read that
-  says `cancelled` throughout, exactly as an ordinary cancel does; the evidence is
-  the log line the review read finds (#1079 landed as that line), so the evidence now
-  exists. The lease acquires its changes together, and this cause needs Inventory
-  stopped *after* the reservation, so the script waits on a lease that can take one
-  more change while it is held. Not scripted yet; the next change.
 - **The confirmation timeout.** `run-locally.md` says it is not reachable by
   hand: it needs Ordering silent after it has confirmed, and the saga lives inside
   Ordering.
-
-The stock and payment timeouts need no such evidence: Inventory is stopped, or the
-total ends `.09`, so the status they end in has one cause. The order read folds the
-saga's cancel reason (`stock_timeout` into `out_of_stock`, `payment_timeout` into
-`declined`), which is why the script stops the only thing that could have refused the
-reservation.
 - **The shipment's own state for the four carrier outcomes** (`SIM-REFUSED`,
   `SIM-DOWN`, `SIM-SLOW`, `SIM-STRANGE`): `Unfulfillable`, `Pending` or `Booked`,
   which only the shipment table shows. The four scripts assert what the carrier
@@ -110,6 +107,12 @@ keeps a small amount of state in `FakeOrders`, written by hand:
   refused as the platform refuses it, with the 422 rule errors Catalog's
   `ProductErrors` names: not this seller's key, nothing uploaded under it,
   or not an image. The edge serves a key only once a publish attached it.
+- **The release.** A `.09` order cancelled while it still waits for its payment ends
+  `cancelled` (the customer's cancel), and with Inventory stopped at the cancel it is
+  flagged `stock_not_released` after the release wait (the real wait is 30 s with the
+  override and ten minutes without). Any order the fake placed, bar one that ended out
+  of stock, answers the reservation read `Reserved`; the fake does not model the
+  release that would end it `Released`.
 - **The review flag.** `FakeOrders.ReviewFlags(orderId)` answers the Loki query for the
   flag line (`FakeGrafana.Loki`): an order to `SIM-STRANGE` placed under the short waits
   is flagged `not_despatched` a few seconds after the place (the real wait is 60 s with
