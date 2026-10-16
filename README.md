@@ -129,7 +129,9 @@ it or found it out of stock, or order to the delivery postal code `SIM-TRANSIT`,
 simulator collects and never delivers, read the order back despatched, and see a cancel
 of it refused with 422 `order.already_shipped`. The `stock-timeout` and `payment-timeout` scripts hold a
 lease on the stack (stop Inventory, shorten the saga's waits), read the order end `out_of_stock` or
-`declined`, and restore the stack whatever happens, including on Cancel. Each watch says what it is waiting
+`declined`, and restore the stack whatever happens, including on Cancel. The `carrier-refused`, `carrier-down`,
+`carrier-slow` and `carrier-strange` scripts order to the postal code that scripts the carrier simulator, read the
+simulator's own request log for what the carrier saw, and hold the order read at confirmed. Each watch says what it is waiting
 for and what it last read; the run stops at the first step that does not
 succeed, and each sent step links to its own trace. A step for which the host
 mints a new token, because the one it held was due to renew, says so. The
@@ -188,6 +190,10 @@ are announced.
   `ordering.OrderReviews` that nothing outside the database shows (blueprint-backend#1079), and the order
   read says `cancelled` or `confirmed` throughout, as it does without them. The confirmation timeout is not
   reachable by hand.
+- The carrier-log scripts assert what the carrier saw and not the shipment's own state (`Unfulfillable`,
+  `Pending`, `Booked`), which is in a table the console does not query. The log carries no order id
+  (blueprint-backend#1074), so the step reads it from when the order was placed and groups retries by the
+  booking's `shipmentId`; an order to the same code at the same time by another run is not told apart.
 - The console does not track a client started by hand: Start still runs a
   second `npm start`, which competes for port 5173, and its output shows
   what `ng serve` did.

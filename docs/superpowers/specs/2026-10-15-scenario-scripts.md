@@ -29,6 +29,10 @@ needs, not from the plan's list.
 | Reservation failed (`Stock_that_cannot_cover_the_order_…`) | stock set to 0 (`run-locally.md`, stock paragraph) | `out-of-stock` | `out_of_stock` |
 | Payment declined (`A_declined_card_…`) | an amount ending `.01` (`run-locally.md`, "A declined payment is caused by the amount") | `declined` | `declined` |
 | Parcel collected, never delivered (the carrier simulator's `SIM-TRANSIT`, which no journey test walks) | the delivery postal code `SIM-TRANSIT` (`run-locally.md`, the carrier table) | `in-transit` | `confirmed`, `dispatched` |
+| Carrier refuses the address (the carrier simulator's `SIM-REFUSED`, which no journey test walks) | the delivery postal code `SIM-REFUSED` | `carrier-refused` | the log: one booking answered 422; then the order read `confirmed` |
+| Carrier is down (`SIM-DOWN`) | the delivery postal code `SIM-DOWN` | `carrier-down` | the log: repeated bookings of one shipment, each 503; then `confirmed` |
+| Carrier is slow (`SIM-SLOW`) | the delivery postal code `SIM-SLOW` | `carrier-slow` | the log: repeated bookings of one shipment, each 201 (the answer comes after Shipping has stopped waiting); then `confirmed` |
+| Carrier feed is strange (`SIM-STRANGE`) | the delivery postal code `SIM-STRANGE` | `carrier-strange` | the log: one booking answered 201, then the feed polled at least twice since; then `confirmed` |
 | Stock timeout (`A_stock_wait_that_lapses_cancels_the_order_and_Inventory_releases_off_the_cancellation`) | Inventory stopped with the saga's waits shortened, then an order (`run-locally.md`, "The branches, then") | `stock-timeout` | `out_of_stock`, which only the saga's own wait can have caused with Inventory stopped |
 | Payment timeout (`A_payment_wait_that_lapses_compensates_and_flags_the_money_that_arrives_late`) | a total ending `.09` under the short waits, Inventory up | `payment-timeout` | `declined`, which only the payment wait can have caused: `.09` is no decline code |
 | Cancel after despatch (`A_shipped_order_cannot_be_cancelled_and_nothing_moves`) | an order to `SIM-TRANSIT`, cancelled once it reads `dispatched` (`run-locally.md`, "After despatch there is nothing to compensate") | `already-shipped` | the cancel's 422 `order.already_shipped`, then the order read `unchanged` |
@@ -74,15 +78,13 @@ total ends `.09`, so the status they end in has one cause. The order read folds 
 saga's cancel reason (`stock_timeout` into `out_of_stock`, `payment_timeout` into
 `declined`), which is why the script stops the only thing that could have refused the
 reservation.
-- **The carrier outcomes the order read cannot tell apart** (`SIM-REFUSED`,
-  `SIM-DOWN`, `SIM-SLOW`, `SIM-STRANGE`). `run-locally.md` now gives each its
-  postal code, and says where each ends: the shipment is `Unfulfillable`,
-  `Pending` or `Booked`, which only the shipment table shows, and the order
-  read says `confirmed` for all four, as it does a healthy order a moment
-  before its parcel is booked. The console reads no database, so a script for
-  one would assert an absence it cannot see. `SIM-TRANSIT` is scripted
-  because the order read does tell it apart, by staying `dispatched`; `SIM-REVERSED`
-  and `SIM-LATE` end `delivered`, like the happy path.
+- **The shipment's own state for the four carrier outcomes** (`SIM-REFUSED`,
+  `SIM-DOWN`, `SIM-SLOW`, `SIM-STRANGE`): `Unfulfillable`, `Pending` or `Booked`,
+  which only the shipment table shows. The four scripts assert what the carrier
+  saw, from the simulator's own request log, and the order read held at
+  `confirmed`; they do not assert the shipment, which the console cannot read.
+  `SIM-REVERSED` and `SIM-LATE` end `delivered`, like the happy path, and are not
+  scripted.
 - **Refund of a confirmed order.** `run-locally.md` says it is the void of an
   authorisation by a cancel before despatch and nothing else: there is no refund
   after delivery to produce, and the order read's `refunded` is that void. The
@@ -108,6 +110,17 @@ keeps a small amount of state in `FakeOrders`, written by hand:
   refused as the platform refuses it, with the 422 rule errors Catalog's
   `ProductErrors` names: not this seller's key, nothing uploaded under it,
   or not an image. The edge serves a key only once a publish attached it.
+- **The carrier's request log.** `FakeOrders.CarrierLog(code, polls)` answers the
+  simulator's `POST /__admin/requests/find` for the two filters the Scenario sends
+  (`FakeCarrier`): the bookings whose body names a code, and the polls of the
+  `SIM-STRANGE` parcel's feed. An order to one of the four codes is confirmed and
+  stays so, and the log shows the shapes `run-locally.md` gives: `SIM-REFUSED`
+  one booking, 422; `SIM-DOWN` repeated bookings, 503; `SIM-SLOW` repeated
+  bookings of one shipment, 201; `SIM-STRANGE` one booking and then polls. The
+  cadence is the fake's own. The log carries no order id (blueprint-backend#1074
+  would add one), so the step reads from when the order was placed and groups
+  retries by the booking's `shipmentId`: an order to the same code at the same time
+  by another run is not told apart.
 - **The stack.** `FakeStack` records whether Inventory is stopped and whether Ordering
   was recreated with the short waits, set by the scripted `docker` commands a lease
   runs. `FakeOrders` reads it at the place: with Inventory stopped the order ends
