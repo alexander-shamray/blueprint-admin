@@ -308,9 +308,12 @@ under one id. It wipes volumes, so its endpoint takes the same typed
 confirmation as `down -v`. There is no seed step: the backend has no seed to
 run yet.
 
-`ComposeGate` lets one job at a time stop or start the stack's services. Five
-kinds claim it: Up, Down, Down and wipe, the reset and §5.5's projection
-rebuild. A Compose read claims nothing. While one of them runs, a request of
+`ComposeGate` lets one job at a time stop or start the stack's services. Six
+kinds claim it: Up, Down, Down and wipe, the reset, §5.5's projection rebuild
+and a Scenario's lease (below). The lease is a claim that outlives any one
+command rather than a running job, and every "another `ComposeGate` job" in §5.10
+includes it; a lease request is itself refused with 409, naming the kind and the
+job, while any of the other five runs. A Compose read claims nothing. While one of them runs, a request of
 the same kind is answered with the running job and any other kind is refused
 with 409 naming the kind and the job id, so a rebuild's `stop web-bff` and
 `start web-bff` never land inside a reset's `down -v` and `up`. Down and Down
@@ -329,10 +332,11 @@ backend's override file) and the host runs no other service change for any
 screen. The rules are these, and a change to any of them is a change to this
 paragraph first:
 
-- **A lease, not a switch.** The change is held as one lease under a new
+- **A lease, not a switch.** The change is held as one lease under the sixth
   `ComposeGate` kind. At most one lease exists. While it is held, Up, Down, Down
   and wipe, the reset and a projection rebuild are refused with 409 naming the
-  lease, so the stack is never taken apart under a run that depends on it.
+  lease (the §5.10 rows that refuse "another `ComposeGate` job" mean this too),
+  so the stack is never taken apart under a run that depends on it.
 - **Written before it is made.** The lease is journaled to a file under
   `Admin:DataDir` (service, change, the run, when) before the first command of
   the change runs, and removed only after the restore has been verified.
