@@ -238,12 +238,56 @@ class ASmallRepository(unittest.TestCase):
         self.assertEqual(len("var x = 1;\n") + len("```\ninner\n```\n"), sum(s[2] for s in slices))
 
     def test_the_lockfile_is_owned_and_counted_not_read(self):
-        self.commit("src/Admin.Web/package-lock.json", "{}\n")
+        self.commit(
+            "src/Admin.Web/package-lock.json",
+            '{\n  "packages": {\n    "node_modules/x": {\n'
+            '      "resolved": "https://registry.npmjs.org/x/-/x-1.0.0.tgz",\n'
+            '      "integrity": "sha512-AAAA"\n    }\n  }\n}\n',
+        )
         result = Sweep(self, self.repo).slices("bug", "full")
         self.assertEqual(0, result.returncode, result.stderr)
         head, slices = parse(result.stdout)
         self.assertEqual(1, head["counts"]["generated"])
         self.assertNotIn("src/Admin.Web/package-lock.json", listed(slices))
+
+    def test_a_binary_asset_is_counted_and_a_binary_code_file_refuses_the_run(self):
+        Path(self.repo, "src/Admin.Web/public").mkdir(parents=True)
+        Path(self.repo, "src/Admin.Web/public/logo.PNG").write_bytes(b"a\0b")
+        git(self.repo, "add -A")
+        git(self.repo, 'commit -q -m "an image"')
+        result = Sweep(self, self.repo).slices("bug", "full")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(1, parse(result.stdout)[0]["counts"]["binary"])
+        Path(self.repo, "tools").mkdir(exist_ok=True)
+        Path(self.repo, "tools/blob.py").write_bytes(b"print(1)\0\n")
+        git(self.repo, "add -A")
+        git(self.repo, 'commit -q -m "a code file with a NUL"')
+        result = Sweep(self, self.repo).slices("bug", "full")
+        self.assertEqual(3, result.returncode, result.stderr)
+        self.assertIn("tools/blob.py", result.stderr)
+
+    def test_a_lockfile_resolving_off_the_registry_or_missing_an_integrity_refuses_the_run(self):
+        entry = (
+            '    "node_modules/x": {\n      "version": "1.0.0",\n'
+            '      "resolved": "%s",\n%s    }'
+        )
+        integrity = '      "integrity": "sha512-AAAA"\n'
+        sound = entry % ("https://registry.npmjs.org/x/-/x-1.0.0.tgz", integrity.rstrip("\n") + ",\n")
+        lock = '{\n  "packages": {\n    "": {\n      "name": "a"\n    },\n%s\n  }\n}\n'
+        self.commit("src/Admin.Web/package-lock.json", lock % sound)
+        result = Sweep(self, self.repo).slices("bug", "full")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(1, parse(result.stdout)[0]["counts"]["generated"])
+        off = entry % ("https://evil.example/x.tgz", integrity.rstrip("\n") + ",\n")
+        self.commit("src/Admin.Web/package-lock.json", lock % off)
+        result = Sweep(self, self.repo).slices("security", "full")
+        self.assertEqual(3, result.returncode, result.stderr)
+        self.assertIn("resolved off the registry: node_modules/x", result.stderr)
+        bare = entry % ("https://registry.npmjs.org/x/-/x-1.0.0.tgz", "")
+        self.commit("src/Admin.Web/package-lock.json", lock % bare.replace('tgz",\n    }', 'tgz"\n    }'))
+        result = Sweep(self, self.repo).slices("bug", "full")
+        self.assertEqual(3, result.returncode, result.stderr)
+        self.assertIn("no integrity: node_modules/x", result.stderr)
 
     def test_full_and_a_non_ancestor_ref_both_read_everything(self):
         self.commit("tools/added.py", "print(1)\n")
