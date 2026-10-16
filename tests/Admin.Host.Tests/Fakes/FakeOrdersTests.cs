@@ -179,6 +179,36 @@ public sealed class FakeOrdersTests
     }
 
     [Fact]
+    public void A_later_order_to_a_code_is_logged_after_an_earlier_one_has_filled_its_share_of_the_log()
+    {
+        FakeOrders orders = new(time);
+        orders.Place(postalCode: "SIM-DOWN");
+        time.Advance(FakeOrders.Step * 40);
+        Log(orders, "SIM-DOWN").Length.ShouldBe(20);
+
+        DateTimeOffset second = time.GetUtcNow();
+        orders.Place(postalCode: "SIM-DOWN");
+        time.Advance(FakeOrders.Step * 8);
+
+        JsonElement[] mine = [.. Log(orders, "SIM-DOWN").Where(e => e.GetProperty("Request").GetProperty("DateTime").GetDateTimeOffset() >= second)];
+        mine.Length.ShouldBeGreaterThan(2);
+    }
+
+    [Fact]
+    public void The_log_keeps_only_the_newest_orders_to_a_code_so_a_long_lived_host_answers_small()
+    {
+        FakeOrders orders = new(time);
+
+        for (int i = 0; i < 8; i++)
+        {
+            orders.Place(postalCode: "SIM-REFUSED");
+            time.Advance(FakeOrders.Step * 3);
+        }
+
+        Log(orders, "SIM-REFUSED").Length.ShouldBe(5);
+    }
+
+    [Fact]
     public void A_strange_parcel_is_booked_once_and_its_feed_is_polled_again_and_again()
     {
         FakeOrders orders = new(time);
