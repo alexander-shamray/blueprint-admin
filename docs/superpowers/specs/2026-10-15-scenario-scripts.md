@@ -111,8 +111,9 @@ keeps a small amount of state in `FakeOrders`, written by hand:
   `cancelled` (the customer's cancel), and with Inventory stopped at the cancel it is
   flagged `stock_not_released` after the release wait (the real wait is 30 s with the
   override and ten minutes without). Any order the fake placed, bar one that ended out
-  of stock, answers the reservation read `Reserved`; the fake does not model the
-  release that would end it `Released`.
+  of stock, answers the reservation read `Reserved`, whatever state Inventory is in (a
+  stopped Inventory would give the gateway no answer) and after a cancel; the fake does
+  not model the release that would end it `Released`.
 - **The review flag.** `FakeOrders.ReviewFlags(orderId)` answers the Loki query for the
   flag line (`FakeGrafana.Loki`): an order to `SIM-STRANGE` placed under the short waits
   is flagged `not_despatched` a few seconds after the place (the real wait is 60 s with
