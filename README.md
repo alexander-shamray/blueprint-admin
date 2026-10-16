@@ -121,7 +121,7 @@ snapshot of the projection queue and every other queue the spans crossed; the
 API screen's "Trace this call" opens it on the
 response's own correlation id. The Scenario screen runs `run-locally.md`'s
 calls end to end as a realm user, in one of a library of scripts: publish, wait for
-the projection to drain, quote, order, and then either read the order back
+the projection to drain, set its stock on hand, quote, order, and then either read the order back
 through the BFF until it is confirmed, despatched and delivered, cancel it
 and read it back until it is cancelled, or apply a cause `run-locally.md` names
 (a price ending `.01`, stock set to 0) and read it back until the saga has declined
