@@ -327,6 +327,10 @@ public sealed class FixtureScrubberTests
     [InlineData(
         """{"a":"{\"b\":\"{\\\"password\\\":\\\"pa\\\\\\\"ss\\\",\\\"u\\\":1}\"}"}""",
         """{"a":"{\"b\":\"{\\\"password\\\":\\\"<scrubbed>\\\",\\\"u\\\":1}\"}"}""")]
+    [InlineData("""{"b":"{\"password\":\"ab\\\\\",\"u\":1}"}""", """{"b":"{\"password\":\"<scrubbed>\",\"u\":1}"}""")]
+    [InlineData("""{"b":"{\"password\":\"pa\\\"ss\\\\\",\"u\":1}"}""", """{"b":"{\"password\":\"<scrubbed>\",\"u\":1}"}""")]
+    [InlineData("""{"b":"{\"authorization\":[\"Basic a\\\\\",\"Basic b\"]}"}""", """{"b":"{\"authorization\":[\"<scrubbed>\",\"<scrubbed>\"]}"}""")]
+    [InlineData("""{"b":"{\"password\":\"a\\nb\",\"u\":1}"}""", """{"b":"{\"password\":\"<scrubbed>\",\"u\":1}"}""")]
     public void A_value_holding_an_escaped_quote_inside_an_escaped_document_is_scrubbed_whole(string text, string expected)
     {
         FixtureScrubber.Scrub(text).ShouldBe(expected);
