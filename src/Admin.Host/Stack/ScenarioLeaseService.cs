@@ -42,6 +42,17 @@ public enum RestoreOutcome
 
 public sealed record RestoreResult(RestoreOutcome Outcome, string? Detail);
 
+public enum AddOutcome
+{
+    Held,
+    UnknownChange,
+    NothingHeld,
+    Failed,
+}
+
+/// <summary>An add's answer: the lease with the change made, and why when it was refused or failed.</summary>
+public sealed record AddResult(AddOutcome Outcome, LeaseView? Lease, string? Detail);
+
 /// <summary>
 /// A Scenario's hold on the stack (spec §5.3, <em>Scenario service control</em>): one or more changes from
 /// <see cref="ScenarioControl.Table"/>, made in order under <see cref="ComposeGate"/> and always undone, last first. The lease
@@ -163,6 +174,80 @@ public sealed partial class ScenarioLeaseService(
             }
 
             return new(AcquireOutcome.Held, View(lease), null, null);
+        }
+        finally
+        {
+            operations.Release();
+        }
+    }
+
+    /// <summary>
+    /// Makes one more change while the lease is held, for a cause that must follow another: the release timeout needs Inventory
+    /// stopped after its stock has reserved, which a lease taking its changes together cannot do. The change joins the journal
+    /// before it runs, so a host killed mid-change restores it at the next start; the deadline is the one the lease was taken
+    /// for and does not move; and a change that fails undoes the whole lease, as a failed acquire does.
+    /// </summary>
+    public async Task<AddResult> AddChangeAsync(string changeId, CancellationToken cancellationToken)
+    {
+        if (!ScenarioControl.Table.TryGetValue(changeId, out ScenarioChange? change))
+        {
+            return new(AddOutcome.UnknownChange, null, $"A lease takes one of {string.Join(", ", ScenarioControl.Table.Keys)}; this asked for {changeId}.");
+        }
+
+        await operations.WaitAsync(cancellationToken);
+
+        try
+        {
+            if (current is not { RestoreError: null } held)
+            {
+                return new(AddOutcome.NothingHeld, null, current is null ? "No lease is held, so there is nothing to add a change to." : "The held lease is being restored.");
+            }
+
+            if (held.Changes.Any(c => c.Id == changeId))
+            {
+                return new(AddOutcome.UnknownChange, null, $"The lease already holds {changeId}.");
+            }
+
+            Journal journal = held.Journal with { Changes = [.. held.Journal.Changes ?? [], changeId], Change = null };
+            WriteJournal(journal);
+            Held lease = held with { Journal = journal, Changes = [.. held.Changes, change] };
+            current = lease;
+
+            string? failure = null;
+            Job running = change.Apply(compose);
+
+            try
+            {
+                int exitCode = await running.Completion.WaitAsync(JobCap, time, cancellationToken);
+
+                if (exitCode != 0)
+                {
+                    failure = $"{running.Spec.CommandLine} exited with {exitCode}.";
+                }
+            }
+            catch (TimeoutException)
+            {
+                failure = $"{running.Spec.CommandLine} did not finish within {JobCap.TotalSeconds:0} seconds.";
+                await compose.AbandonAsync(running);
+            }
+            catch (OperationCanceledException)
+            {
+                await compose.AbandonAsync(running);
+                await FinishRestoreAsync(lease, null);
+
+                throw;
+            }
+
+            if (failure is not null)
+            {
+                RestoreResult undone = await FinishRestoreAsync(lease, null);
+
+                return new(AddOutcome.Failed, null, undone.Outcome == RestoreOutcome.Restored
+                    ? $"{failure} The changes were undone."
+                    : $"{failure} They could not be undone: {undone.Detail} The lease is still held; Restore it from the Stack screen.");
+            }
+
+            return new(AddOutcome.Held, View(lease), null);
         }
         finally
         {

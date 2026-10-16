@@ -9,6 +9,7 @@ namespace Admin.Host.Tests.Stack;
 public sealed class ScenarioLeaseEndpointTests
 {
     private static readonly string[] Both = ["short-waits", "stop-inventory"];
+    private static readonly string[] ShortWaitsOnly = ["short-waits"];
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
@@ -72,6 +73,53 @@ public sealed class ScenarioLeaseEndpointTests
 
         (await client.PostAsync("/api/stack/lease/restore", null, Token)).StatusCode.ShouldBe(HttpStatusCode.OK);
         (await client.GetFromJsonAsync<JsonElement>("/api/stack", Token)).GetProperty("lease").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    private static Task<HttpResponseMessage> AddChange(HttpClient client, string change) =>
+        client.PostAsJsonAsync("/api/stack/lease/changes", new { change }, Token);
+
+    [Fact]
+    public async Task A_change_is_added_to_a_held_lease_and_both_are_restored_together()
+    {
+        await using AdminHostFactory factory = new();
+        HttpClient client = factory.CreateClient();
+        JsonElement acquired = await (await client.PostAsJsonAsync(
+            "/api/stack/lease", new { changes = ShortWaitsOnly, holdSeconds = 120 }, Token)).Content.ReadFromJsonAsync<JsonElement>(Token);
+
+        HttpResponseMessage added = await AddChange(client, "stop-inventory");
+
+        added.StatusCode.ShouldBe(HttpStatusCode.OK);
+        JsonElement lease = await added.Content.ReadFromJsonAsync<JsonElement>(Token);
+        lease.GetProperty("id").GetString().ShouldBe(acquired.GetProperty("id").GetString());
+        lease.GetProperty("changes").EnumerateArray().Select(c => c.GetString()).ShouldBe(["short-waits", "stop-inventory"]);
+        lease.GetProperty("expiresAt").GetString().ShouldBe(acquired.GetProperty("expiresAt").GetString());
+
+        (await client.PostAsync("/api/stack/lease/restore", null, Token)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await client.GetFromJsonAsync<JsonElement>("/api/stack", Token)).GetProperty("lease").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task A_change_off_the_table_or_already_held_is_a_400()
+    {
+        await using AdminHostFactory factory = new();
+        HttpClient client = factory.CreateClient();
+        (await Acquire(client)).StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        (await AddChange(client, "nothing-else")).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await AddChange(client, "stop-inventory")).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await client.PostAsJsonAsync("/api/stack/lease/changes", new { }, Token)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task A_change_added_with_no_lease_held_is_a_409()
+    {
+        await using AdminHostFactory factory = new();
+        HttpClient client = factory.CreateClient();
+
+        HttpResponseMessage added = await AddChange(client, "stop-inventory");
+
+        added.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await added.Content.ReadFromJsonAsync<JsonElement>(Token)).GetProperty("detail").GetString()!.ShouldContain("No lease is held");
     }
 
     [Fact]
