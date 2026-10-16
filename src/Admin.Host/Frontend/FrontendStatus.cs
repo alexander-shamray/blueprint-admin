@@ -4,11 +4,11 @@ namespace Admin.Host.Frontend;
 
 /// <summary>
 /// The reference client as the Stack screen sees it: the last <c>npm start</c>
-/// job, running or exited, and whether the clone has <c>node_modules</c>.
+/// job, running or exited, the last device build beside it, and whether the clone has <c>node_modules</c>.
 /// Whether port 5173 answers is the <c>client</c> entry of the stack's
 /// reachability, not repeated here.
 /// </summary>
-public sealed record FrontendStatus(JobSummary? Job, bool Installed);
+public sealed record FrontendStatus(JobSummary? Job, bool Installed, JobSummary? DeviceJob);
 
 public enum FrontendStartOutcome
 {

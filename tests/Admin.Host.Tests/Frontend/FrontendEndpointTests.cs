@@ -84,6 +84,36 @@ public sealed class FrontendEndpointTests
     }
 
     [Fact]
+    public async Task The_device_build_replays_the_sync_and_the_stack_reports_it_beside_the_dev_server()
+    {
+        await using AdminHostFactory factory = new();
+        HttpClient client = factory.CreateClient();
+
+        HttpResponseMessage response = await client.PostAsync("/api/stack/frontend/device-build", null, Token);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Accepted);
+        JsonElement job = await response.Content.ReadFromJsonAsync<JsonElement>(Token);
+        job.GetProperty("commandLine").GetString().ShouldBe("npm run emulator:android");
+
+        JsonElement frontend = (await client.GetFromJsonAsync<JsonElement>("/api/stack", Token)).GetProperty("frontend");
+        frontend.GetProperty("deviceJob").GetProperty("id").GetString().ShouldBe(job.GetProperty("id").GetString());
+        frontend.GetProperty("job").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task The_device_reads_answer_ok_three_times_against_the_fakes()
+    {
+        await using AdminHostFactory factory = new();
+        HttpClient client = factory.CreateClient();
+
+        JsonElement view = await client.GetFromJsonAsync<JsonElement>("/api/stack/frontend/device-reads", Token);
+
+        JsonElement[] checks = [.. view.GetProperty("checks").EnumerateArray()];
+        checks.Select(c => c.GetProperty("name").GetString()).ShouldBe(["Emulator attached", "Gateway admits the app's origin", "Realm redirect for mobile-app"]);
+        checks.ShouldAllBe(c => c.GetProperty("state").GetString() == "Ok");
+    }
+
+    [Fact]
     public async Task Start_without_node_modules_is_refused_and_says_to_run_npm_ci()
     {
         await using AdminHostFactory factory = new();

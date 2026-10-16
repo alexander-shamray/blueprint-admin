@@ -22,6 +22,13 @@ table.doctor td.state { font-weight: 600; white-space: nowrap; }
 table.doctor tr.state-Ok td.state { color: #070; }
 table.doctor tr.state-Problem td.state { color: #b00; }
 table.doctor tr.state-Unknown td.state { color: #666; }
+table.device-reads th { text-align: left; }
+table.device-reads th.name { font-weight: normal; }
+table.device-reads td.state { font-weight: 600; white-space: nowrap; }
+table.device-reads tr.state-Ok td.state { color: #070; }
+table.device-reads tr.state-Problem td.state { color: #b00; }
+table.device-reads tr.state-Unknown td.state { color: #666; }
+.frontend h3 { font-size: 0.95rem; margin: 1rem 0 0.5rem; }
 .frontend { margin-bottom: 1rem; }
 .frontend h2 { font-size: 1rem; margin: 0 0 0.5rem; }
 .frontend-status span { margin-left: 0.75rem; padding: 0.1rem 0.4rem; border-radius: 3px; }

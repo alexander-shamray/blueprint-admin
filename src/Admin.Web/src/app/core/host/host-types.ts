@@ -41,10 +41,11 @@ export interface Reachability {
   status: number | null;
 }
 
-/** The reference client's last `npm start` and whether its clone has node_modules (spec §5.4). */
+/** The reference client's last `npm start`, its last device build, and whether its clone has node_modules (spec §5.4). */
 export interface FrontendStatus {
   job: JobSummary | null;
   installed: boolean;
+  deviceJob: JobSummary | null;
 }
 
 export interface StackView {

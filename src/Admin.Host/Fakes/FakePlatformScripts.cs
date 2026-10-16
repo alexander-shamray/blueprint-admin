@@ -93,6 +93,10 @@ public static class FakePlatformScripts
             .On("git", $"-C {paths.BackendDir} status -sb", 0, "## main...origin/main")
             .On("git", $"-C {paths.FrontendDir} status -sb", 0, "## main...origin/main")
             .On("git", $"-C {paths.BackendDir} reflog -1 --date=iso-strict --format=%gd", 0, "HEAD@{2026-10-04T06:36:23+05:00}")
+            .On("powershell", "-NoProfile -Command & ", 0, DeviceRecordings.AdbDevices)
+            .On("powershell", "-NoProfile -Command curl.exe ", 0, DeviceRecordings.Preflight)
+            .On("powershell", "-NoProfile -Command $t = ", 0, DeviceRecordings.Realm)
+            .On("npm", "run emulator:android", 0, DeviceRecordings.Build)
             .OnLongRunning("npm", "start", NgServeLines);
     }
 

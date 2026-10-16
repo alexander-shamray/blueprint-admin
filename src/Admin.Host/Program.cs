@@ -86,6 +86,7 @@ builder.Services.AddSingleton<IProcessRunner>(sp => new TranscribingProcessRunne
 builder.Services.AddSingleton<ComposeService>();
 builder.Services.AddSingleton<ComposeGate>();
 builder.Services.AddSingleton<WorkstationDoctor>();
+builder.Services.AddSingleton<DeviceReads>();
 builder.Services.AddSingleton<LogFollower>();
 builder.Services.AddSingleton<BrokerService>();
 builder.Services.AddSingleton<ProjectionRebuildService>();

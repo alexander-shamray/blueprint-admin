@@ -116,8 +116,37 @@ export class StackPage {
   readonly doctorError = signal<string | null>(null);
   readonly doctorReading = signal(false);
 
+  /**
+   * The device lane's three reads (spec §5.4), read when the screen opens and on request, like the doctor's. They are
+   * reads of the emulator, the gateway and the realm, which a developer makes before pressing the build, and none of
+   * them moves by itself; a mismatch is raised in the repository that owns it, not fixed here.
+   */
+  readonly deviceReads = signal<DoctorView | null>(null);
+  readonly deviceReadsError = signal<string | null>(null);
+  readonly deviceReading = signal(false);
+
   constructor() {
     this.checkWorkstation();
+    this.checkDevice();
+  }
+
+  checkDevice(): void {
+    if (this.deviceReading()) {
+      return;
+    }
+
+    this.deviceReading.set(true);
+    this.host.frontendDeviceReads().subscribe({
+      next: (view) => {
+        this.deviceReads.set(view);
+        this.deviceReadsError.set(null);
+        this.deviceReading.set(false);
+      },
+      error: (e: unknown) => {
+        this.deviceReadsError.set(this.describeError(e));
+        this.deviceReading.set(false);
+      },
+    });
   }
 
   checkWorkstation(): void {
@@ -151,6 +180,8 @@ export class StackPage {
   readonly clientUp = computed(() => this.stack()?.reachability.find((r) => r.name === 'client')?.up ?? false);
   readonly frontendRunning = computed(() => this.stack()?.frontend.job?.state === 'Running');
 
+  readonly deviceBuildRunning = computed(() => this.stack()?.frontend.deviceJob?.state === 'Running');
+
   up(): void {
     this.host.backendUp().subscribe(this.started);
   }
@@ -181,6 +212,17 @@ export class StackPage {
 
   stopFrontend(): void {
     this.host.frontendStop().subscribe(this.started);
+  }
+
+  buildForDevice(): void {
+    this.host.frontendDeviceBuild().subscribe(this.started);
+  }
+
+  showDeviceOutput(): void {
+    const id = this.stack()?.frontend.deviceJob?.id;
+    if (id) {
+      this.jobId.set(id);
+    }
   }
 
   showFrontendOutput(): void {

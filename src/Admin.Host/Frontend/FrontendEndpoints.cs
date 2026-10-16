@@ -31,6 +31,27 @@ public static class FrontendEndpoints
                 ? TypedResults.Ok(JobSummary.Of(stopped))
                 : TypedResults.Problem(statusCode: StatusCodes.Status409Conflict, title: "Frontend not running", detail: "There is no npm start job to stop."));
 
+        app.MapPost("/api/stack/frontend/device-build", async Task<Results<Accepted<JobSummary>, ProblemHttpResult>> (FrontendSupervisor supervisor, RepoPaths paths, CancellationToken cancellationToken) =>
+        {
+            FrontendStartResult result = await supervisor.StartDeviceBuildAsync(cancellationToken);
+
+            return result.Outcome switch
+            {
+                FrontendStartOutcome.Started => TypedResults.Accepted((string?)null, JobSummary.Of(result.Job!)),
+                FrontendStartOutcome.AlreadyRunning => TypedResults.Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "Device build already running",
+                    detail: $"npm run {FrontendSupervisor.DeviceScript} is job {result.Job!.Id}. It ends by itself."),
+                _ => TypedResults.Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "Frontend dependencies not installed",
+                    detail: $"{paths.FrontendDir} has no node_modules. Run npm ci there; the console does not."),
+            };
+        });
+
+        app.MapGet("/api/stack/frontend/device-reads", async (DeviceReads reads, CancellationToken cancellationToken) =>
+            TypedResults.Ok(await reads.ReadAsync(cancellationToken)));
+
         return app;
     }
 }
