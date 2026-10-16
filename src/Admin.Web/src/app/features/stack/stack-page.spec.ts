@@ -23,9 +23,9 @@ const stack = {
 
 const lease = {
   id: 'abc',
-  change: 'stop-inventory',
-  title: 'Inventory stopped',
-  service: 'inventory-api',
+  changes: ['short-waits', 'stop-inventory'],
+  title: "The saga's waits shortened + Inventory stopped",
+  services: ['ordering-api', 'inventory-api'],
   label: 'Stock timeout',
   since: '2026-10-16T08:00:00Z',
   expiresAt: '2026-10-16T08:05:00Z',
@@ -587,9 +587,9 @@ describe('StackPage', () => {
       host.stack.mockReturnValue(of({ ...stack, lease }));
       const { q } = await render();
 
-      expect(text(q('section.lease h2'))).toBe('Inventory stopped');
+      expect(text(q('section.lease h2'))).toBe("The saga's waits shortened + Inventory stopped");
       expect(text(q('.lease-what'))).toBe(
-        'A Scenario (Stock timeout) changed inventory-api at 2026-10-16T08:00:00Z. It undoes it by itself at 2026-10-16T08:05:00Z.',
+        'A Scenario (Stock timeout) changed ordering-api, inventory-api at 2026-10-16T08:00:00Z. It undoes it by itself at 2026-10-16T08:05:00Z.',
       );
       expect(q('button.lease-restore')!.disabled).toBe(false);
     });

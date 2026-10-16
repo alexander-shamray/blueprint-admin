@@ -30,7 +30,7 @@ public static class StackEndpoints
 
         app.MapPost("/api/stack/lease", async Task<Results<Ok<LeaseView>, ProblemHttpResult>> (LeaseRequest request, ScenarioLeaseService leases, CancellationToken cancellationToken) =>
         {
-            AcquireResult result = await leases.AcquireAsync(request.Change ?? "", TimeSpan.FromSeconds(request.HoldSeconds), request.Label, cancellationToken);
+            AcquireResult result = await leases.AcquireAsync(request.Changes ?? [], TimeSpan.FromSeconds(request.HoldSeconds), request.Label, cancellationToken);
 
             return result.Outcome switch
             {
@@ -107,8 +107,8 @@ public static class StackEndpoints
 
 public sealed record StackView(ComposeStatus Backend, FrontendStatus Frontend, IReadOnlyList<Reachability> Reachability, LeaseView? Lease);
 
-/// <summary>A change from <see cref="ScenarioControl.Table"/>, how long to hold it, and a label the Stack screen shows beside it.</summary>
-public sealed record LeaseRequest(string? Change, int HoldSeconds, string? Label);
+/// <summary>One or more changes from <see cref="ScenarioControl.Table"/>, how long to hold them, and a label the Stack screen shows beside them.</summary>
+public sealed record LeaseRequest(string[]? Changes, int HoldSeconds, string? Label);
 
 public sealed record DownRequest(bool WipeVolumes, string? Confirm);
 

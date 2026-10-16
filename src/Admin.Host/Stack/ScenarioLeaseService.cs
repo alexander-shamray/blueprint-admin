@@ -7,9 +7,9 @@ namespace Admin.Host.Stack;
 /// <summary>What the Stack screen and a Scenario see of a held lease.</summary>
 public sealed record LeaseView(
     string Id,
-    string Change,
+    IReadOnlyList<string> Changes,
     string Title,
-    string Service,
+    IReadOnlyList<string> Services,
     string? Label,
     DateTimeOffset Since,
     DateTimeOffset ExpiresAt,
@@ -43,11 +43,11 @@ public enum RestoreOutcome
 public sealed record RestoreResult(RestoreOutcome Outcome, string? Detail);
 
 /// <summary>
-/// A Scenario's hold on the stack (spec §5.3, <em>Scenario service control</em>): one change from
-/// <see cref="ScenarioControl.Table"/>, made under <see cref="ComposeGate"/> and always undone. The lease is journaled
-/// before the first command runs and the journal removed only after the restore is verified; the restore runs on a failed
-/// apply, on a cancelled request, at the lease's deadline, on request, and at the next host start from the journal, so a
-/// host that was killed leaves nothing changed past its next start. A killed host cannot run its own restore, which is the
+/// A Scenario's hold on the stack (spec §5.3, <em>Scenario service control</em>): one or more changes from
+/// <see cref="ScenarioControl.Table"/>, made in order under <see cref="ComposeGate"/> and always undone, last first. The lease
+/// is journaled before the first command runs and the journal removed only after every restore is verified; the restore runs on
+/// a failed apply, on a cancelled request, at the lease's deadline, on request, and at the next host start from the journal, so
+/// a host that was killed leaves nothing changed past its next start. A killed host cannot run its own restore, which is the
 /// limit the spec states: until the next start the stack stays as the run left it, and the Stack screen shows the lease.
 /// </summary>
 public sealed partial class ScenarioLeaseService(
@@ -57,7 +57,7 @@ public sealed partial class ScenarioLeaseService(
     TimeProvider time,
     ILogger<ScenarioLeaseService> logger) : IDisposable
 {
-    /// <summary>How long an apply or a restore may take: <c>--wait</c> holds the job until the service is healthy.</summary>
+    /// <summary>How long one apply or one restore may take: <c>--wait</c> holds the job until the service is healthy.</summary>
     public static readonly TimeSpan JobCap = TimeSpan.FromMinutes(3);
 
     /// <summary>How long after a restore that failed the host tries it again, so a lease never waits for a person to remember it.</summary>
@@ -74,16 +74,22 @@ public sealed partial class ScenarioLeaseService(
     public LeaseState State() =>
         new(Current, [.. ScenarioControl.Table.Values.Select(c => new ChangeView(c.Id, c.Title, c.Service, c.Description, (int)c.MaxHold.TotalSeconds))]);
 
-    public async Task<AcquireResult> AcquireAsync(string changeId, TimeSpan hold, string? label, CancellationToken cancellationToken)
+    public async Task<AcquireResult> AcquireAsync(IReadOnlyList<string> changeIds, TimeSpan hold, string? label, CancellationToken cancellationToken)
     {
-        if (!ScenarioControl.Table.TryGetValue(changeId, out ScenarioChange? change))
+        if (changeIds.Count == 0 || changeIds.Distinct(StringComparer.Ordinal).Count() != changeIds.Count
+            || changeIds.Any(id => !ScenarioControl.Table.ContainsKey(id)))
         {
-            return new(AcquireOutcome.UnknownChange, null, null, $"'{changeId}' is not a change a Scenario may make: {string.Join(", ", ScenarioControl.Table.Keys)}.");
+            string named = changeIds.Count == 0 ? "none" : string.Join(", ", changeIds);
+
+            return new(AcquireOutcome.UnknownChange, null, null, $"A lease takes one or more of {string.Join(", ", ScenarioControl.Table.Keys)}, each once; this asked for {named}.");
         }
 
-        if (hold <= TimeSpan.Zero || hold > change.MaxHold)
+        ScenarioChange[] changes = [.. changeIds.Select(id => ScenarioControl.Table[id])];
+        TimeSpan longest = changes.Min(c => c.MaxHold);
+
+        if (hold <= TimeSpan.Zero || hold > longest)
         {
-            return new(AcquireOutcome.BadHold, null, null, $"A lease for {change.Id} may be held for 1 to {change.MaxHold.TotalSeconds:0} seconds.");
+            return new(AcquireOutcome.BadHold, null, null, $"A lease for {string.Join(" and ", changeIds)} may be held for 1 to {longest.TotalSeconds:0} seconds.");
         }
 
         await operations.WaitAsync(cancellationToken);
@@ -91,16 +97,16 @@ public sealed partial class ScenarioLeaseService(
         try
         {
             DateTimeOffset now = time.GetUtcNow();
-            Journal journal = new(Guid.NewGuid().ToString("N"), change.Id, label, now, now + hold);
-            Job? apply = null;
+            Journal journal = new(Guid.NewGuid().ToString("N"), [.. changeIds], null, label, now, now + hold);
+            Job? first = null;
 
-            // The journal is written inside the gate's start, so it is on disk before the first command of the change runs.
+            // The journal is written inside the gate's start, so it is on disk before the first command of the first change runs.
             (bool held, Claim claim) = gate.HoldLease(() =>
             {
                 WriteJournal(journal);
-                apply = change.Apply(compose);
+                first = changes[0].Apply(compose);
 
-                return apply;
+                return first;
             });
 
             if (!held)
@@ -108,49 +114,55 @@ public sealed partial class ScenarioLeaseService(
                 return new(AcquireOutcome.Busy, null, claim, null);
             }
 
-            current = new Held(journal, change, apply!.Id, null);
+            Held lease = new(journal, changes, first!.Id, null);
+            current = lease;
 
             // Armed as soon as the lease is held, from the journal's own deadline, so a lease never outlives the hold it was
-            // asked for by the length of the change, and one whose undo later fails still has a timer.
+            // asked for by the length of its changes, and one whose undo later fails still has a timer.
             ArmDeadline(journal.ExpiresAt - time.GetUtcNow());
 
             string? failure = null;
+            Job running = first!;
 
             try
             {
-                int exitCode = await apply!.Completion.WaitAsync(JobCap, time, cancellationToken);
-
-                if (exitCode != 0)
+                for (int i = 0; i < changes.Length && failure is null; i++)
                 {
-                    failure = $"{apply.Spec.CommandLine} exited with {exitCode}.";
+                    running = i == 0 ? first! : changes[i].Apply(compose);
+                    int exitCode = await running.Completion.WaitAsync(JobCap, time, cancellationToken);
+
+                    if (exitCode != 0)
+                    {
+                        failure = $"{running.Spec.CommandLine} exited with {exitCode}.";
+                    }
                 }
             }
             catch (TimeoutException)
             {
-                failure = $"{apply!.Spec.CommandLine} did not finish within {JobCap.TotalSeconds:0} seconds.";
+                failure = $"{running.Spec.CommandLine} did not finish within {JobCap.TotalSeconds:0} seconds.";
 
                 // The restore must not run beside the command it undoes.
-                await compose.AbandonAsync(apply);
+                await compose.AbandonAsync(running);
             }
             catch (OperationCanceledException)
             {
-                // The request went away mid-change: end the change, then undo it, before the cancellation is let through.
-                await compose.AbandonAsync(apply!);
-                await RestoreHeldAsync(current!, change.Restore(compose));
+                // The request went away mid-change: end the change, then undo them all, before the cancellation is let through.
+                await compose.AbandonAsync(running);
+                await FinishRestoreAsync(lease, null);
 
                 throw;
             }
 
             if (failure is not null)
             {
-                RestoreResult undone = await RestoreHeldAsync(current!, change.Restore(compose));
+                RestoreResult undone = await FinishRestoreAsync(lease, null);
 
                 return new(AcquireOutcome.Failed, null, null, undone.Outcome == RestoreOutcome.Restored
-                    ? $"{failure} The change was undone."
-                    : $"{failure} It could not be undone: {undone.Detail} The lease is still held; Restore it from the Stack screen.");
+                    ? $"{failure} The changes were undone."
+                    : $"{failure} They could not be undone: {undone.Detail} The lease is still held; Restore it from the Stack screen.");
             }
 
-            return new(AcquireOutcome.Held, View(current!), null, null);
+            return new(AcquireOutcome.Held, View(lease), null, null);
         }
         finally
         {
@@ -158,14 +170,14 @@ public sealed partial class ScenarioLeaseService(
         }
     }
 
-    /// <summary>Undoes the held change; nothing held is an answer, not an error, so a second call is harmless.</summary>
+    /// <summary>Undoes the held changes; nothing held is an answer, not an error, so a second call is harmless.</summary>
     public async Task<RestoreResult> RestoreAsync()
     {
         await operations.WaitAsync();
 
         try
         {
-            return current is { } held ? await RestoreHeldAsync(held, held.Change.Restore(compose)) : new(RestoreOutcome.NothingHeld, null);
+            return current is { } held ? await FinishRestoreAsync(held, null) : new(RestoreOutcome.NothingHeld, null);
         }
         finally
         {
@@ -175,7 +187,7 @@ public sealed partial class ScenarioLeaseService(
 
     /// <summary>
     /// The journal a previous host left, restored: the lease the host died holding. Holds the gate for the restore, so
-    /// nothing is brought up or taken down beside it, and releases it when the service is back.
+    /// nothing is brought up or taken down beside it, and releases it when the services are back.
     /// </summary>
     public async Task ReconcileAsync()
     {
@@ -189,22 +201,24 @@ public sealed partial class ScenarioLeaseService(
             }
 
             Journal? journal = ReadJournal();
+            string[] ids = journal is null ? [] : [.. journal.Changes ?? (journal.Change is null ? [] : [journal.Change])];
 
-            if (journal is null || !ScenarioControl.Table.TryGetValue(journal.Change, out ScenarioChange? change))
+            if (journal is null || ids.Length == 0 || ids.Any(id => !ScenarioControl.Table.ContainsKey(id)))
             {
                 JournalUnknown(logger, journalPath);
                 return;
             }
 
-            JournalFound(logger, journal.Id, journal.Change);
-            Job? restore = null;
-            (bool held, _) = gate.HoldLease(() => restore = change.Restore(compose));
+            JournalFound(logger, journal.Id, string.Join(", ", ids));
+            ScenarioChange[] changes = [.. ids.Select(id => ScenarioControl.Table[id])];
+            Job? firstRestore = null;
+            (bool held, _) = gate.HoldLease(() => firstRestore = changes[^1].Restore(compose));
 
             if (held)
             {
-                Held lease = new(journal, change, null, null);
+                Held lease = new(journal with { Changes = ids, Change = null }, changes, null, null);
                 current = lease;
-                await FinishRestoreAsync(lease, restore!);
+                await FinishRestoreAsync(lease, firstRestore);
             }
         }
         finally
@@ -219,33 +233,40 @@ public sealed partial class ScenarioLeaseService(
         operations.Dispose();
     }
 
-    private Task<RestoreResult> RestoreHeldAsync(Held held, Job restore) => FinishRestoreAsync(held, restore);
-
     /// <summary>
-    /// Waits for a restore, checks the service is running again, and only then drops the journal, the deadline and the
-    /// gate. A restore that did not work keeps all three and says why, so it is never silently given up.
+    /// Undoes the lease's changes, last first: each restore is waited for and its service checked running again, and only when
+    /// every one has been does the journal, the deadline and the gate go. A restore that did not work stops there, keeps all
+    /// three and says why, so it is never silently given up. <paramref name="started"/> is the last change's restore when the
+    /// caller already began it (the gate's start, at host start).
     /// </summary>
-    private async Task<RestoreResult> FinishRestoreAsync(Held held, Job restore)
+    private async Task<RestoreResult> FinishRestoreAsync(Held held, Job? started)
     {
         string? failure = null;
 
-        try
+        for (int i = held.Changes.Count - 1; i >= 0 && failure is null; i--)
         {
-            int exitCode = await restore.Completion.WaitAsync(JobCap, time, CancellationToken.None);
+            ScenarioChange change = held.Changes[i];
+            Job restore = i == held.Changes.Count - 1 && started is not null ? started : change.Restore(compose);
 
-            if (exitCode != 0)
+            try
             {
-                failure = $"{restore.Spec.CommandLine} exited with {exitCode}.";
-            }
-        }
-        catch (TimeoutException)
-        {
-            failure = $"{restore.Spec.CommandLine} did not finish within {JobCap.TotalSeconds:0} seconds.";
-        }
+                int exitCode = await restore.Completion.WaitAsync(JobCap, time, CancellationToken.None);
 
-        if (failure is null && !await ServiceRunningAsync(held.Change.Service))
-        {
-            failure = $"{held.Change.Service} is not running after the restore.";
+                if (exitCode != 0)
+                {
+                    failure = $"{restore.Spec.CommandLine} exited with {exitCode}.";
+                }
+            }
+            catch (TimeoutException)
+            {
+                failure = $"{restore.Spec.CommandLine} did not finish within {JobCap.TotalSeconds:0} seconds.";
+                await compose.AbandonAsync(restore);
+            }
+
+            if (failure is null && !await ServiceRunningAsync(change.Service))
+            {
+                failure = $"{change.Service} is not running after the restore.";
+            }
         }
 
         if (failure is not null)
@@ -298,8 +319,8 @@ public sealed partial class ScenarioLeaseService(
     [LoggerMessage(Level = LogLevel.Warning, Message = "The lease journal at {Path} names no change this host knows; it was left in place for a person to read.")]
     private static partial void JournalUnknown(ILogger logger, string path);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "The host found the lease {Id} ({Change}) in its journal and is restoring it.")]
-    private static partial void JournalFound(ILogger logger, string id, string change);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The host found the lease {Id} ({Changes}) in its journal and is restoring it.")]
+    private static partial void JournalFound(ILogger logger, string id, string changes);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "The lease {Id} could not be restored: {Failure}")]
     private static partial void RestoreFailed(ILogger logger, string id, string failure);
@@ -340,17 +361,20 @@ public sealed partial class ScenarioLeaseService(
 
     private static LeaseView View(Held held) => new(
         held.Journal.Id,
-        held.Change.Id,
-        held.Change.Title,
-        held.Change.Service,
+        [.. held.Changes.Select(c => c.Id)],
+        string.Join(" + ", held.Changes.Select(c => c.Title)),
+        [.. held.Changes.Select(c => c.Service).Distinct(StringComparer.Ordinal)],
         held.Journal.Label,
         held.Journal.Since,
         held.Journal.ExpiresAt,
         held.ApplyJob,
         held.RestoreError);
 
-    /// <summary>What the journal file holds: enough to restore a lease the host died holding.</summary>
-    private sealed record Journal(string Id, string Change, string? Label, DateTimeOffset Since, DateTimeOffset ExpiresAt);
+    /// <summary>
+    /// What the journal file holds: enough to restore a lease the host died holding. <c>Change</c> is the single-change
+    /// field the first version wrote, still read so a journal it left is restored rather than ignored.
+    /// </summary>
+    private sealed record Journal(string Id, string[]? Changes, string? Change, string? Label, DateTimeOffset Since, DateTimeOffset ExpiresAt);
 
-    private sealed record Held(Journal Journal, ScenarioChange Change, string? ApplyJob, string? RestoreError);
+    private sealed record Held(Journal Journal, IReadOnlyList<ScenarioChange> Changes, string? ApplyJob, string? RestoreError);
 }

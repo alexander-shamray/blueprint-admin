@@ -2,7 +2,7 @@
   <section class="lease" role="status" aria-label="Scenario lease">
     <h2>{{ l.title }}</h2>
     <p class="lease-what">
-      A Scenario{{ l.label ? ' (' + l.label + ')' : '' }} changed {{ l.service }} at {{ l.since }}. It undoes it by itself at {{ l.expiresAt }}.
+      A Scenario{{ l.label ? ' (' + l.label + ')' : '' }} changed {{ l.services.join(', ') }} at {{ l.since }}. It undoes it by itself at {{ l.expiresAt }}.
     </p>
     @if (l.restoreError) {
       <p class="error">The last restore failed: {{ l.restoreError }}</p>
