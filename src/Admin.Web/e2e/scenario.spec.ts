@@ -75,6 +75,35 @@ for (const [script, ended, stock] of [
   });
 }
 
+// The carrier is scripted by the delivery postal code (FakeOrders.InTransitPostalCode): SIM-TRANSIT is collected and
+// never delivered, so the order stays despatched, and a cancel asked of it is refused as the platform refuses it.
+test('the in-transit script orders to SIM-TRANSIT and reads the order back despatched', async ({ page }) => {
+  await page.goto('/scenario');
+
+  await page.getByLabel('Script').selectOption('in-transit');
+  await page.getByRole('button', { name: 'Run' }).click();
+
+  const steps = page.locator('ol.steps li.step');
+  await expect(steps).toHaveCount(6);
+  await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(6, WATCH);
+  await expect(steps.nth(3).locator('.detail')).toContainText('to the delivery postal code SIM-TRANSIT');
+  await expect(steps.nth(5).locator('.detail')).toContainText('The order read shows dispatched at');
+});
+
+test('the already-shipped script is refused 422 order.already_shipped and reads the order back unchanged', async ({ page }) => {
+  await page.goto('/scenario');
+
+  await page.getByLabel('Script').selectOption('already-shipped');
+  await page.getByRole('button', { name: 'Run' }).click();
+
+  const steps = page.locator('ol.steps li.step');
+  await expect(steps).toHaveCount(8);
+  await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(8, WATCH);
+  await expect(steps.nth(6).locator('.status')).toHaveText('422');
+  await expect(steps.nth(6).locator('.detail')).toContainText('order.already_shipped');
+  await expect(steps.nth(7).locator('.detail')).toContainText('The order read shows unchanged at');
+});
+
 test('a user without the permissions stops the run at the publish', async ({ page }) => {
   await page.goto('/scenario');
 

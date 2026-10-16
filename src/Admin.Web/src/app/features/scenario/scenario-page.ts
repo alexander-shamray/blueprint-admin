@@ -46,8 +46,11 @@ import {
   uploadFrom,
   verdict,
   hasField,
+  hasShippingPostalCode,
+  isAlreadyShipped,
   withField,
   withProductId,
+  withShippingPostalCode,
 } from './scenario-run';
 
 export type StepState = 'pending' | 'running' | 'ok' | 'failed' | 'skipped';
@@ -310,10 +313,26 @@ export class ScenarioPage {
         }
         case 'order': {
           const placed = withFreshCommandId(operations.order!.exampleBody ?? '', this.uuid());
-          const body = withProductId(placed, productId);
+          const stocked = withProductId(placed, productId);
+          // The carrier's outcome is scripted by the delivery postal code, set here and nowhere else.
+          const body =
+            script.postalCode === undefined
+              ? stocked
+              : withShippingPostalCode(stocked, script.postalCode);
           const id = await this.send(key, operations.order!, run, identity, body, {}, true);
           if (id === null) return;
+          if (script.postalCode !== undefined) {
+            this.patch(key, {
+              detail: hasShippingPostalCode(body, script.postalCode)
+                ? `Answered with id ${id}, to the delivery postal code ${script.postalCode}.`
+                : `Answered with id ${id}, but the example body has no shippingAddress to set, so the carrier takes its default.`,
+            });
+          }
           orderId = id;
+          break;
+        }
+        case 'late_cancel': {
+          if (!(await this.lateCancel(operations.cancel!, run, identity, orderId))) return;
           break;
         }
         case 'cancel': {
@@ -327,6 +346,41 @@ export class ScenarioPage {
           if (!(await this.watch(key, operations.read!, run, identity, orderId))) return;
       }
     }
+  }
+
+  /**
+   * A cancel asked of an order that is already despatched, which the platform refuses: 422 `order.already_shipped`
+   * (run-locally.md, "After despatch there is nothing to compensate"). The refusal is the pass; a cancel it accepted
+   * is the failure, because it means the order was not despatched or that nothing refused it.
+   */
+  private async lateCancel(
+    cancel: ApiOperation,
+    run: string,
+    identity: Identity,
+    orderId: string,
+  ): Promise<boolean> {
+    if (this.destroyed) return false;
+
+    const key: StepKey = 'late_cancel';
+    const correlationId = stepCorrelationId(run, key);
+    const url = buildUrl(cancel.url, { [cancel.pathParameters[0]?.name ?? 'id']: orderId }, {});
+    this.patch(key, { state: 'running', correlationId, request: `${cancel.method} ${url}` });
+
+    const result = await this.exchange(key, cancel.method, url, cancel.exampleBody ?? '', identity, correlationId);
+    if (result === null) return false;
+
+    const refused = isAlreadyShipped(result.status, result.body);
+    this.patch(key, {
+      state: refused ? 'ok' : 'failed',
+      status: result.status,
+      body: result.body,
+      detail: refused
+        ? 'Refused with 422 order.already_shipped, as an order the carrier has collected is.'
+        : result.status >= 200 && result.status < 300
+          ? `Answered ${result.status}: the cancel was taken, so this order was not despatched.`
+          : `Answered ${result.status}, not the 422 order.already_shipped a despatched order is refused with.`,
+    });
+    return refused;
   }
 
   /**

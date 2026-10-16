@@ -3,6 +3,13 @@ using System.Text.Json;
 
 namespace Admin.Host.Fakes;
 
+/// <summary>What a cancel asked of <see cref="FakeOrders"/> was told: taken, or refused because Shipping had already despatched the order.</summary>
+public enum CancelOutcome
+{
+    Accepted,
+    AlreadyShipped,
+}
+
 /// <summary>
 /// The orders FakePlatform has placed, each advancing as the saga and Shipping would advance it, so the Scenario's
 /// watch steps have something to watch. Written by hand rather than recorded: a recording holds one instant of an
@@ -37,6 +44,13 @@ public sealed class FakeOrders(TimeProvider time)
     /// to decline: <c>.01</c> is <c>card_declined</c>. The simulator's other scripted amounts are not modelled here.
     /// </summary>
     internal const int DeclinedMinorUnits = 1;
+
+    /// <summary>
+    /// The delivery postal code run-locally.md ("The carrier's answer is scripted by the delivery postal code") gives to
+    /// the carrier simulator's collected-never-delivered outcome. The simulator's README owns the codes; the others
+    /// end where the order read cannot tell them from a confirmed order and are not modelled here.
+    /// </summary>
+    internal const string InTransitPostalCode = "SIM-TRANSIT";
 
     /// <summary>What an order for a product the fake was never told about shows: the recorded listing's Walnut desk.</summary>
     private const string DefaultName = "Walnut desk";
@@ -157,8 +171,12 @@ public sealed class FakeOrders(TimeProvider time)
         }
     }
 
-    /// <summary>Places an order for <paramref name="productId"/> (null for none the fake knows) and answers with its id.</summary>
-    public string Place(string? productId = null)
+    /// <summary>
+    /// Places an order for <paramref name="productId"/> (null for none the fake knows) and answers with its id.
+    /// A <paramref name="postalCode"/> of <see cref="InTransitPostalCode"/> scripts the carrier as run-locally.md's table
+    /// does: collected, never delivered.
+    /// </summary>
+    public string Place(string? productId = null, string? postalCode = null)
     {
         lock (gate)
         {
@@ -172,7 +190,10 @@ public sealed class FakeOrders(TimeProvider time)
                 EndOf(productId),
                 known is null ? FakeGateway.StockedProductId : productId!,
                 known?.Name ?? DefaultName,
-                known?.Amount ?? DefaultAmount);
+                known?.Amount ?? DefaultAmount)
+            {
+                InTransit = string.Equals(postalCode, InTransitPostalCode, StringComparison.Ordinal),
+            };
             return id;
         }
     }
@@ -195,15 +216,31 @@ public sealed class FakeOrders(TimeProvider time)
         return Math.Abs(product.Amount) % 1m * 100m == DeclinedMinorUnits ? "declined" : null;
     }
 
-    /// <summary>A cancel for an order never placed changes nothing; the fake's cancel answers 204 for any id, as before.</summary>
-    public void Cancel(string orderId)
+    /// <summary>
+    /// A cancel for an order never placed changes nothing and is accepted, as the fake's cancel always answered 204 for
+    /// any id. One asked of an order Shipping has already despatched is refused, as the platform refuses it (422
+    /// <c>order.already_shipped</c>, run-locally.md "After despatch there is nothing to compensate"), and changes nothing.
+    /// </summary>
+    public CancelOutcome Cancel(string orderId)
     {
         lock (gate)
         {
-            if (placed.TryGetValue(orderId, out Placed? order) && order.CancelAskedAt is null)
+            if (!placed.TryGetValue(orderId, out Placed? order))
+            {
+                return CancelOutcome.Accepted;
+            }
+
+            if (order.Ended is null && order.At + (2 * Step) <= time.GetUtcNow() && order.CancelAskedAt is null)
+            {
+                return CancelOutcome.AlreadyShipped;
+            }
+
+            if (order.CancelAskedAt is null)
             {
                 placed[orderId] = order with { CancelAskedAt = time.GetUtcNow() };
             }
+
+            return CancelOutcome.Accepted;
         }
     }
 
@@ -243,7 +280,7 @@ public sealed class FakeOrders(TimeProvider time)
             : order.CancelAskedAt is { } c && c + Step < p + (2 * Step) && c + Step <= now ? c + Step : null;
         DateTimeOffset? confirmed = scripted ? null : Reached(p + Step, now, cancelled);
         DateTimeOffset? dispatched = scripted ? null : Reached(p + (2 * Step), now, cancelled);
-        DateTimeOffset? delivered = scripted ? null : Reached(p + (3 * Step), now, cancelled);
+        DateTimeOffset? delivered = scripted || order.InTransit ? null : Reached(p + (3 * Step), now, cancelled);
 
         string status = delivered is not null ? "delivered"
             : cancelled is not null ? order.Ended ?? "cancelled"
@@ -296,7 +333,11 @@ public sealed class FakeOrders(TimeProvider time)
     private static DateTimeOffset? Reached(DateTimeOffset at, DateTimeOffset now, DateTimeOffset? cancelled) =>
         at <= now && (cancelled is null || at < cancelled) ? at : null;
 
-    private sealed record Placed(DateTimeOffset At, DateTimeOffset? CancelAskedAt, string? Ended, string ProductId, string ProductName, decimal Amount);
+    private sealed record Placed(DateTimeOffset At, DateTimeOffset? CancelAskedAt, string? Ended, string ProductId, string ProductName, decimal Amount)
+    {
+        /// <summary>The carrier collected the parcel and never delivers it: the order stays dispatched.</summary>
+        public bool InTransit { get; init; }
+    }
 
     private sealed record Product(decimal Amount, int? OnHand, string Name, string? ThumbnailUrl);
 }
