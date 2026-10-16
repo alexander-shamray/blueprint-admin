@@ -18,7 +18,7 @@ public static partial class FixtureScrubber
         ("a JWT", Jwt(), Scrubbed),
         ("a bearer credential", Bearer(), $"$1 {Scrubbed}"),
         ("an Authorization header", AuthorizationHeader(), $"$1$2\"{Scrubbed}$2\""),
-        ("a token response's token", TokenField(), $"$1$2\"{Scrubbed}$2\""),
+        ("a token or API key field", TokenField(), $"$1$2\"{Scrubbed}$2\""),
         ("a password or client secret", SecretField(), $"$1$2\"{Scrubbed}$2\""),
         ("a password or client secret in a form", SecretForm(), $"$1{Scrubbed}"),
         ("a password in a connection URL", UrlPassword(), $"$1{Scrubbed}$2"),
