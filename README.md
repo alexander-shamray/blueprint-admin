@@ -142,7 +142,11 @@ mints a new token, because the one it held was due to renew, says so. The
 `image` script walks `run-locally.md`'s "Attach a product image by hand": the BFF
 signs an upload, the host PUTs a sample PNG to the object store, the product is
 published with the key it returned, and the thumbnail is fetched from the image
-edge and must be an image served with `nosniff`.
+edge and must be an image served with `nosniff`. Beside the steps a saga strip shows the order's
+state as the BFF last reported it, when it was read and how long each transition took, and says it is the
+last state read and the only stuck-saga detector a workstation has (the backend's `StuckSaga` alert cannot
+fire locally); **Export Markdown** writes a finished run, with its transcript, steps, correlation ids, trace
+timelines and queue depths, as one document scrubbed by the host, to paste into an issue.
 
 The Transcript screen shows what the operator did this session as a person
 would type it: each command the host ran, with its directory and exit code, and
