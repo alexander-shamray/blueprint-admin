@@ -337,6 +337,22 @@ public sealed class FixtureScrubberTests
         FixtureScrubber.Findings(expected).ShouldBeEmpty();
     }
 
+    /// <summary>
+    /// A recorded body may be cut short, so a value can open and never close. A run of backslashes inside it must not be
+    /// tried as every split into blocks and single ones: that grows with the run, and the regexes have no timeout.
+    /// </summary>
+    [Theory]
+    [InlineData("""" {"b":"{\"password\":\" """")]
+    [InlineData("""" {"b":"{\"authorization\":[\" """")]
+    [InlineData("""" {"b":"{\"access_token\":\" """")]
+    public void A_value_that_never_closes_is_given_up_on_in_linear_time(string opening)
+    {
+        string cut = opening.Trim() + new string('\\', 60) + "x";
+
+        Should.CompleteIn(() => FixtureScrubber.Scrub(cut), TimeSpan.FromSeconds(5));
+        Should.CompleteIn(() => FixtureScrubber.Findings(cut), TimeSpan.FromSeconds(5));
+    }
+
     [Fact]
     public void A_single_authorization_value_does_not_take_the_next_pair_with_it()
     {
