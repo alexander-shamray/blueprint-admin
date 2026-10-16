@@ -62,7 +62,11 @@ than 35% of its input equivalent after a wake.
 **Built** (#122): the rules. `CLAUDE.md`'s *Subagents, review rounds and
 plans* holds the delegation brief, the review loop (citing `/ship` step 5),
 the planning rule, the compact-before-a-wait rule and one task per session.
-**Owed:** the tool-result cut, cutting the largest `--tools` results. The
+**Built** (#225): the `--tools` measurement, recorded in
+[`token-usage.md`](token-usage.md), and the cut it names: step 6's `gh pr checks
+--watch` takes `--interval 60`. **Owed:** the effect, read on sessions run
+after, and retiring the owner's user-level copy of the #122 rules, outside this
+repository. The
 exit is read on the Sonnet `/ship` row alone of the 2026-10-16 section of
 [`token-usage.md`](token-usage.md) (192k, 28%); the `skill:ship` row there
 is 211k, over it, and a day of sessions cannot isolate these rules.

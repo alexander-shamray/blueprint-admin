@@ -167,3 +167,35 @@ window the cut ran in. What the measurement does not show is that the cut
 alone lowered it. Step 2's exit, a `/ship` main context under 200k and under
 35% after a wake, reads met by the Sonnet row on this day's sessions; that is
 recorded here, not claimed for step 2's rules, which land in the same change.
+
+## 2026-10-16 — which tool results fill a `/ship` context, the owner's machine
+
+Measured with `--tools 15 --since 2026-10-15` at `main` a8d9471, and the
+`Bash` results split by the command that produced them by a scratch script
+over the same transcripts (not part of the report; the report keys on tool
+name only). Characters, not tokens; four to a token.
+
+| Rank | Result | Characters | Calls |
+|---|---|---|---|
+| 1 | `/ship` `Bash`, all commands | 4.45M | 2,789 |
+| 2 | no command, `Read` | 1.07M | 188 |
+| 3 | no command, `Bash` | 0.67M | 609 |
+| 4 | `/ship` `Read` | 0.59M | 131 |
+
+Within `Bash`, the commands whose output was largest (the scratch script
+sees fewer characters than the report, so only the order is read):
+
+| Command | Characters | Calls |
+|---|---|---|
+| `gh pr checks` | 205k | 75 |
+| a command run in the sibling backend checkout | 158k | 56 |
+| `gh issue view` | 133k | 57 |
+| `host-checks.sh all` | 72k | 88 |
+| `codebase-index diff-impact` | 59k | 23 |
+| `git diff origin/main...HEAD` | 49k | 13 |
+
+**The cut made (#225):** `gh pr checks`, the largest, is `--watch` in
+`/ship` step 6, which reprints its table every ten seconds. The step now
+passes `--interval 60`. The others are reads the step needs whole or are
+spread over unrelated calls; none is cut here. The effect is not yet
+measured: read it on `/ship` sessions run after the change lands.
