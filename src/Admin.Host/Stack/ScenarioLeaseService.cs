@@ -203,6 +203,13 @@ public sealed partial class ScenarioLeaseService(
                 return new(AddOutcome.NothingHeld, null, current is null ? "No lease is held, so there is nothing to add a change to." : "The held lease is being restored.");
             }
 
+            // The deadline is the lease's own and does not move, so a change added at or past it would be made on a lease whose
+            // restore is already due, and answered as held.
+            if (time.GetUtcNow() >= held.Journal.ExpiresAt)
+            {
+                return new(AddOutcome.NothingHeld, null, "The lease has reached its deadline and is being restored.");
+            }
+
             if (held.Changes.Any(c => c.Id == changeId))
             {
                 return new(AddOutcome.UnknownChange, null, $"The lease already holds {changeId}.");

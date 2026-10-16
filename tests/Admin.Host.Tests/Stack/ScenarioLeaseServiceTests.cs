@@ -218,6 +218,40 @@ public sealed class ScenarioLeaseServiceTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task A_change_added_at_the_deadline_is_refused_and_stops_nothing()
+    {
+        await Acquire(ScenarioControl.ShortWaits, seconds: 120);
+        time.Advance(TimeSpan.FromSeconds(121));
+
+        AddResult result = await Add();
+
+        result.Outcome.ShouldBe(AddOutcome.NothingHeld);
+        Commands().ShouldNotContain(Prefix + "stop inventory-api");
+    }
+
+    [Fact]
+    public async Task An_added_change_that_fails_when_its_undo_fails_too_keeps_the_lease_and_a_retry_undoes_each_change_once()
+    {
+        await Acquire(ScenarioControl.ShortWaits);
+        runner.FailIf = spec => spec.Arguments.Contains("stop") || (spec.Arguments.Contains("--wait") && spec.Arguments.Contains("up"));
+
+        AddResult result = await Add();
+
+        result.Outcome.ShouldBe(AddOutcome.Failed);
+        result.Detail!.ShouldContain("could not be undone");
+        leases.Current!.RestoreError.ShouldNotBeNull();
+        File.Exists(journal).ShouldBeTrue();
+        (await Add(ScenarioControl.ShortWaits)).Outcome.ShouldBe(AddOutcome.NothingHeld);
+
+        runner.FailIf = null;
+
+        (await leases.RestoreAsync()).Outcome.ShouldBe(RestoreOutcome.Restored);
+        File.Exists(journal).ShouldBeFalse();
+        leases.Current.ShouldBeNull();
+        Commands().Count(line => line == Prefix + "up -d --no-deps --wait ordering-api").ShouldBe(1);
+    }
+
+    [Fact]
     public async Task An_added_change_that_fails_undoes_every_change_the_lease_made()
     {
         await Acquire(ScenarioControl.ShortWaits);
