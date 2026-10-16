@@ -59,7 +59,7 @@ public static partial class FixtureScrubber
     private static string AuthorizationValues(Match match) =>
         match.Groups["k"].Value + match.Groups["o"].Value + AuthorizationElement().Replace(match.Groups["v"].Value, element =>
         {
-            if (element.Groups["c"].Value.StartsWith(Scrubbed, StringComparison.Ordinal))
+            if (element.Groups["c"].Value == Scrubbed)
             {
                 return element.Value;
             }
@@ -82,7 +82,7 @@ public static partial class FixtureScrubber
     // \" (WireMock.Net logs a body that way), and one embedded in that, at any depth: the run of backslashes before a
     // value's quote is captured and its closing quote is the same run, so the replacement stays in the document's own
     // escaping. A bare number is a value too, and a secret written as one is replaced by a string.
-    private const string PlainOrEscapedString = @"(?:\\+""(?:(?!\\+"").)*\\+""|""(?:\\.|[^""\\])*"")";
+    private const string PlainOrEscapedString = @"(?:(?<q>\\+)""(?:(?!(?<!\\)\k<q>"").)*\k<q>""|""(?:\\.|[^""\\])*"")";
 
     /// <summary>A JSON key, alone or holding an array as WireMock.Net's request log writes headers: every element of it is a credential.</summary>
     [GeneratedRegex(
@@ -94,15 +94,15 @@ public static partial class FixtureScrubber
     /// One string of an Authorization array, scrubbed or not: every string is matched whole, so that one left alone is
     /// not misread as the gap before the next. <c>r</c> is its run of backslashes inside an escaped document, <c>c</c> its text.
     /// </summary>
-    [GeneratedRegex(@"(?:(?<r>\\+)""(?<c>(?:(?!\k<r>"").)*)\k<r>""|""(?<c>(?:\\.|[^""\\])*)"")")]
+    [GeneratedRegex(@"(?:(?<r>\\+)""(?<c>(?:(?!(?<!\\)\k<r>"").)*)\k<r>""|""(?<c>(?:\\.|[^""\\])*)"")")]
     private static partial Regex AuthorizationElement();
 
     // A key ending in token or api_key, so access_token, id_token, a bare token and apiKey are all covered. As with
     // SecretForm's keys, a name merely ending in one (a pagination page_token) is scrubbed too, which fails closed.
-    [GeneratedRegex(@"(?<k>\\*""[A-Za-z0-9_]*(?:token|api_?key)(?<kc>\\*)""\s*:\s*)(?:(?<r>\\+)""(?!<scrubbed>\k<r>"")(?:(?!\k<r>"").)*\k<r>""|""(?!<scrubbed>"")(?:\\.|[^""\\])*""|(?<n>-?\d[\d.eE+-]*))", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"(?<k>\\*""[A-Za-z0-9_]*(?:token|api_?key)(?<kc>\\*)""\s*:\s*)(?:(?<r>\\+)""(?!<scrubbed>\k<r>"")(?:(?!(?<!\\)\k<r>"").)*\k<r>""|""(?!<scrubbed>"")(?:\\.|[^""\\])*""|(?<n>-?\d[\d.eE+-]*))", RegexOptions.IgnoreCase)]
     private static partial Regex TokenField();
 
-    [GeneratedRegex(@"(?<k>\\*""[A-Za-z0-9_]*(?:password|pwd|client_?secret|secret)(?<kc>\\*)""\s*:\s*)(?:(?<r>\\+)""(?!<scrubbed>\k<r>"")(?:(?!\k<r>"").)*\k<r>""|""(?!<scrubbed>"")(?:\\.|[^""\\])*""|(?<n>-?\d[\d.eE+-]*))", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"(?<k>\\*""[A-Za-z0-9_]*(?:password|pwd|client_?secret|secret)(?<kc>\\*)""\s*:\s*)(?:(?<r>\\+)""(?!<scrubbed>\k<r>"")(?:(?!(?<!\\)\k<r>"").)*\k<r>""|""(?!<scrubbed>"")(?:\\.|[^""\\])*""|(?<n>-?\d[\d.eE+-]*))", RegexOptions.IgnoreCase)]
     private static partial Regex SecretField();
 
     /// <summary>
