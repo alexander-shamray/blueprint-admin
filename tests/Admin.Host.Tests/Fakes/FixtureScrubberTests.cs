@@ -276,6 +276,97 @@ public sealed class FixtureScrubberTests
         FixtureScrubber.Findings(text).ShouldBeEmpty();
     }
 
+    [Theory]
+    [InlineData("""{"password":12345}""", """{"password":"<scrubbed>"}""")]
+    [InlineData("""{"client_secret": -1.5e3,"n":1}""", """{"client_secret": "<scrubbed>","n":1}""")]
+    [InlineData("""{"api_key":42,"n":1}""", """{"api_key":"<scrubbed>","n":1}""")]
+    [InlineData("""{"access_token":9007199254740993}""", """{"access_token":"<scrubbed>"}""")]
+    [InlineData("""{"body":"{\"password\":12345,\"u\":1}"}""", """{"body":"{\"password\":\"<scrubbed>\",\"u\":1}"}""")]
+    public void A_secret_written_as_a_json_number_is_scrubbed_in_the_quotes_of_the_document_it_sits_in(string text, string expected)
+    {
+        FixtureScrubber.Scrub(text).ShouldBe(expected);
+        FixtureScrubber.Findings(text).ShouldNotBeEmpty();
+        FixtureScrubber.Findings(expected).ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("""{"expires_in":300,"max_tokens":100,"passwordMinLength":8}""")]
+    [InlineData("""{"password":true,"token":null}""")]
+    public void A_number_under_a_key_that_does_not_end_in_a_secret_word_is_left_alone(string text)
+    {
+        FixtureScrubber.Scrub(text).ShouldBe(text);
+    }
+
+    [Theory]
+    [InlineData("""{"authorization": ["Basic aaa", "Basic bbb"]}""", """{"authorization": ["<scrubbed>", "<scrubbed>"]}""")]
+    [InlineData("""{"Authorization":["Basic a","Bearer b","x"],"n":1}""", """{"Authorization":["<scrubbed>","<scrubbed>","<scrubbed>"],"n":1}""")]
+    [InlineData("""{"authorization": ["<scrubbed>", "Basic bbb"]}""", """{"authorization": ["<scrubbed>", "<scrubbed>"]}""")]
+    [InlineData("""{"b":"{\"authorization\":[\"Basic a\",\"Basic b\"]}"}""", """{"b":"{\"authorization\":[\"<scrubbed>\",\"<scrubbed>\"]}"}""")]
+    public void Every_element_of_a_multi_value_authorization_array_is_scrubbed(string text, string expected)
+    {
+        FixtureScrubber.Scrub(text).ShouldBe(expected);
+        FixtureScrubber.Findings(text).ShouldNotBeEmpty();
+        FixtureScrubber.Findings(expected).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void A_single_authorization_value_does_not_take_the_next_pair_with_it()
+    {
+        FixtureScrubber.Scrub("""{"authorization":"Basic a","other":"b","list":["c"]}""")
+            .ShouldBe("""{"authorization":"<scrubbed>","other":"b","list":["c"]}""");
+    }
+
+    [Theory]
+    [InlineData(
+        """{"a":"{\"b\":\"{\\\"password\\\":\\\"demo\\\",\\\"u\\\":1}\"}"}""",
+        """{"a":"{\"b\":\"{\\\"password\\\":\\\"<scrubbed>\\\",\\\"u\\\":1}\"}"}""")]
+    [InlineData(
+        """{"a":"{\"b\":\"{\\\"password\\\":12345}\"}"}""",
+        """{"a":"{\"b\":\"{\\\"password\\\":\\\"<scrubbed>\\\"}\"}"}""")]
+    [InlineData(
+        """{"a":"{\"b\":\"{\\\"authorization\\\":[\\\"Basic x\\\",\\\"Basic y\\\"]}\"}"}""",
+        """{"a":"{\"b\":\"{\\\"authorization\\\":[\\\"<scrubbed>\\\",\\\"<scrubbed>\\\"]}\"}"}""")]
+    public void A_document_escaped_inside_a_document_escaped_inside_a_document_is_read_too(string text, string expected)
+    {
+        FixtureScrubber.Scrub(text).ShouldBe(expected);
+        FixtureScrubber.Findings(expected).ShouldBeEmpty();
+        FixtureScrubber.Scrub(expected).ShouldBe(expected);
+    }
+
+    [Theory]
+    [InlineData("password= abc", "password=<scrubbed>")]
+    [InlineData("grant_type=password&password=\t s3&client_id=web-app", "grant_type=password&password=<scrubbed>&client_id=web-app")]
+    [InlineData("Server=db;Pwd= hunter2;Encrypt=true", "Server=db;Pwd=<scrubbed>;Encrypt=true")]
+    [InlineData("""{"body":"username=demo&password= abc","n":1}""", """{"body":"username=demo&password=<scrubbed>","n":1}""")]
+    public void A_space_after_the_equals_sign_does_not_hide_the_value(string text, string expected)
+    {
+        FixtureScrubber.Scrub(text).ShouldBe(expected);
+        FixtureScrubber.Findings(expected).ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("password= ")]
+    [InlineData("password=  &x=1")]
+    [InlineData("password= <scrubbed>")]
+    [InlineData("""{"body":"password= "}""")]
+    public void A_space_after_the_equals_sign_with_no_value_behind_it_is_left_as_it_is(string text)
+    {
+        FixtureScrubber.Scrub(text).ShouldBe(text);
+        FixtureScrubber.Findings(text).ShouldBeEmpty();
+    }
+
+    /// <summary>
+    /// The accepted cost of two guesses free text forces (#153): a bare value ends at a double quote, because in a JSON
+    /// body that is where the string ends, and an unterminated quote takes the run only to whitespace.
+    /// </summary>
+    [Theory]
+    [InlineData("password=ab\"cd", "password=<scrubbed>\"cd")]
+    [InlineData("password=\"abc def;x=1", "password=<scrubbed> def;x=1")]
+    public void A_bare_value_holding_a_double_quote_and_an_unterminated_quote_keep_what_the_value_cannot_be_told_to_include(string text, string expected)
+    {
+        FixtureScrubber.Scrub(text).ShouldBe(expected);
+    }
+
     [Fact]
     public void Findings_name_each_rule_the_text_still_breaks()
     {
