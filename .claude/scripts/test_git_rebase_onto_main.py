@@ -963,23 +963,30 @@ class TheBranchNameGuardsEachHaveTheirOwnCase(unittest.TestCase):
                 self.assertEqual(2, result.returncode, result.stderr)
                 self.assertIn("not a branch name this helper will take", result.stderr)
 
-    def test_it_takes_every_name_the_branch_creating_helpers_make(self):
-        # One class, read from each file: a name `/branch` can make and this
-        # helper refuses is a branch with no way through a conflict, which is
-        # how every `feat(<scope>)/` branch went unrebasable (#181). `/branch`
-        # makes one through `git-worktree-fork.sh` from a clean `main` and
-        # through `git-branch-create.sh` otherwise, so both are held here.
-        # Read from the files rather than run, because
-        # this class has no fixture and a name that passed every guard would
-        # go on to read whichever checkout the suite runs in.
-        def admitted(path):
+    def test_every_helper_that_takes_a_branch_takes_the_same_names(self):
+        # One class, read from every helper that tests `"$branch"`: a name
+        # `/branch` can make and one helper refuses is a branch stranded at
+        # that helper's step, which is how every `feat(<scope>)/` branch went
+        # unrebasable (#181). The helpers are found by the test they carry
+        # rather than named here, so a seventh copy is held the day it is
+        # written (#192), and both makers must be among them or the scan has
+        # stopped seeing what it exists for. Read from the files rather than
+        # run, because this class has no fixture and a name that passed every
+        # guard would go on to read whichever checkout the suite runs in.
+        patterns = {}
+        for path in sorted(SCRIPTS.glob("*.sh")):
             found = re.findall(r'\[\[ "\$branch" =~ (\S+) \]\]',
                                path.read_text(encoding="utf-8"))
-            self.assertEqual(1, len(found), f"{path.name}: one branch-name pattern")
-            return found[0]
-        for maker in ("git-branch-create.sh", "git-worktree-fork.sh"):
-            with self.subTest(maker=maker):
-                self.assertEqual(admitted(SCRIPTS / maker), admitted(HELPER))
+            if found:
+                self.assertEqual(1, len(found), f"{path.name}: one branch-name pattern")
+                patterns[path.name] = found[0]
+        for named in ("git-branch-create.sh", "git-worktree-fork.sh", HELPER.name,
+                      "git-switch-existing.sh", "git-worktree-remove.sh",
+                      "pr-for-branch.sh"):
+            self.assertIn(named, patterns)
+        for name, pattern in patterns.items():
+            with self.subTest(helper=name):
+                self.assertEqual(patterns[HELPER.name], pattern)
 
     def test_an_unknown_mode_is_refused_by_its_own_message(self):
         result = self.refuse("feat/x", "skip")
@@ -1037,6 +1044,36 @@ class TheApplyBackendIsDrivenToo(unittest.TestCase):
                          "this case is not driving the apply backend at all")
         self.at("echo resolved > a.txt && git add a.txt")
         self.assertEqual(0, self.helper("continue").returncode)
+
+    def test_a_stop_that_reported_no_conflict_is_not_called_an_empty_commit(self):
+        # #187. A patch that fails to apply with no 3-way fallback leaves what
+        # an emptied resolution leaves: nothing unmerged, a clean index, a
+        # clean tree. This drives that state rather than the failure that
+        # makes it (the fixture's blobs are all present, so git always has its
+        # fallback): start reports the conflict, the marker it wrote is removed
+        # and the tree is put back to HEAD, which is what a stop that never
+        # reported a conflict looks like. Skipping there dropped a commit that
+        # carries b.txt.
+        self.assertEqual(8, self.helper("start").returncode)
+        self.at('rm "$(git rev-parse --git-path rebase-apply)/conflict-reported"')
+        self.at("git reset --hard HEAD")
+        before = self.at("git rev-parse refs/remotes/origin/feat/x").stdout.strip()
+        self.assertTrue(before, "the remote tip was not read")
+
+        result = self.helper("continue")
+        self.assertEqual(14, result.returncode, result.stderr)
+        self.assertIn("never reported as a conflict", result.stderr)
+        self.assertNotIn("is dropped and the replay goes on", result.stderr,
+                         "the skip ran on a commit nobody showed to be empty")
+        self.assertEqual("yes", self.at('test -d "$(git rev-parse --git-path rebase-apply)" '
+                                        '&& echo yes || echo no').stdout.strip(),
+                         "the replay was thrown away rather than left to be answered")
+        self.assertEqual(before,
+                         self.at("git rev-parse refs/remotes/origin/feat/x").stdout.strip(),
+                         "the branch was published without the commit it stopped on")
+        self.assertEqual(0, self.helper("abort").returncode)
+        self.assertEqual("work\n", self.at("git show feat/x:b.txt").stdout,
+                         "abort did not put the commit back")
 
     def test_an_empty_resolution_is_dropped_rather_than_called_a_conflict(self):
         # #38's one finding with teeth. Taking origin/main's side verbatim is

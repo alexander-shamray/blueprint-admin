@@ -288,6 +288,10 @@ stopped() {
       echo "the rebase onto origin/main conflicts and is left in progress, which is the point:" >&2
       printf '%s\n' "$unmerged" >&2
       echo "resolve these, 'git add' them, then run this helper again with 'continue'" >&2
+      # The one fact that lets a later skip call this commit emptied rather than
+      # failed: this helper told the caller to resolve it. Unwritten, the skip
+      # below refuses, which fails closed.
+      : > "$now/conflict-reported" || true
       exit 8
     fi
 
@@ -318,6 +322,20 @@ stopped() {
         echo "which a skip would discard rather than drop an empty commit:" >&2
         git diff --name-only >&2
         echo "stage them or set them aside, then 'continue', or 'abort'" >&2
+        exit 14; }
+
+    # **A skip is for a commit the caller emptied, and nothing else (#187).**
+    # The reads above say the tree holds nothing to lose; they do not say the
+    # commit was ever applied. A patch that fails with no 3-way fallback leaves
+    # no unmerged path, a clean index and a clean tree too, and skipping that
+    # drops a commit carrying content before the force-push. So the skip needs
+    # the positive fact: `continue` found the marker the conflict report wrote,
+    # which means this helper asked the caller to resolve this very commit.
+    # A commit reached by a skip, or by `start`, has no such fact.
+    [ "${caller_resolved:-0}" -eq 1 ] ||
+      { echo "the replay of $branch stopped with nothing unmerged and nothing staged," >&2
+        echo "on a commit this helper never reported as a conflict, so it is not known to be empty:" >&2
+        echo "a skip would drop it if it carries content. Answer git's message above, then 'continue', or 'abort'" >&2
         exit 14; }
 
     # Counted here rather than before the loop, so a mode that never reads
@@ -357,6 +375,8 @@ stopped() {
     # agree rather than a liberty taken with the branch. Only the apply
     # backend reaches here.
     echo "the resolution left this commit of $branch empty, so it is dropped and the replay goes on" >&2
+    # The next stop is a different commit, which has reported nothing yet.
+    caller_resolved=0
     GIT_EDITOR=true git rebase --skip && return 0
     # The skip failed, and the next commit conflicting is the ordinary reason.
     # Round again: the states above are the same three.
@@ -431,6 +451,12 @@ case "$mode" in
 
     # The message is the replayed commit's own. An editor would stop the run on
     # a terminal nothing is attached to, so it is answered rather than opened.
+    # Read and cleared before the rebase runs, so the marker describes only
+    # the commit the caller has just resolved: a later stop on another commit
+    # must earn its own.
+    caller_resolved=0
+    if [ -f "$state/conflict-reported" ]; then caller_resolved=1; fi
+    rm -f "$state/conflict-reported"
     GIT_EDITOR=true git rebase --continue || stopped
     publish
     ;;
