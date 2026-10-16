@@ -108,6 +108,52 @@ test('the saga strip follows a saga that advances to delivered and says it is th
   await expect(strip.locator('.saga-read')).toContainText('Not reading now: this is the last state read');
   await expect(strip.locator('.saga-caveat')).toContainText('only stuck-saga detector a workstation has');
   await expect(strip.locator('.saga-stalled')).toHaveCount(0);
+  // The saga's own word beside the buyer's (the fake's saga finalises at despatch, so it has no row by delivery): an agreeing pair.
+  await expect(strip.locator('.saga-columns th[scope="col"]', { hasText: 'Saga (Ordering)' })).toBeVisible();
+  await expect(strip.locator('.saga-columns .saga-state')).toContainText('no row');
+  await expect(strip.locator('.saga-columns .saga-status-cell')).toHaveText('delivered');
+  await expect(strip.locator('.saga-pair-agree')).toContainText('The two agree');
+  await expect(strip.locator('.saga-pair-differs')).toHaveCount(0);
+});
+
+// The platform has no fake saga that lies, so the saga read is answered by the route: Ordering still waiting on stock while
+// the BFF's read has the order delivered is a pair §9.6 does not allow, and the strip says so in words, not by colour alone.
+test('the saga strip shows a saga still awaiting stock beside a delivered order as a disagreement', async ({ page }) => {
+  await page.route('**/api/proxy', async (route) => {
+    const sent = route.request().postDataJSON() as { method?: string; url?: string; correlationId?: string };
+    if (sent.method === 'GET' && /\/api\/v1\/orders\/[0-9a-f-]{36}\/saga$/.test(sent.url ?? '')) {
+      await route.fulfill({
+        json: {
+          outcome: 'responded',
+          status: 200,
+          headers: {},
+          body: JSON.stringify({
+            orderId: sent.url!.split('/').slice(-2)[0],
+            currentState: 'AwaitingStock',
+            startedAt: '2026-10-05T12:00:00Z',
+            cancelReason: null,
+          }),
+          bodyTruncated: false,
+          bodyError: null,
+          elapsedMs: 1,
+          correlationId: sent.correlationId ?? null,
+        },
+      });
+    } else {
+      await route.continue();
+    }
+  });
+  await page.goto('/scenario');
+  await page.getByRole('button', { name: 'Run' }).click();
+
+  const strip = page.locator('aside.saga');
+  await expect(strip.locator('.saga-status')).toHaveText('delivered', WATCH);
+  await expect(strip.locator('.saga-columns .saga-state')).toHaveText('AwaitingStock');
+  const differs = strip.locator('.saga-pair-differs');
+  await expect(differs).toContainText('[disagree]');
+  await expect(differs).toContainText("a pair the backend's table does not allow");
+  // A disagreement is shown, never a reason to stop the run: every step still passed.
+  await expect(page.locator('ol.steps li.step .state', { hasText: '[ok]' })).toHaveCount(8, WATCH);
 });
 
 test('the saga strip shows a saga that stops at despatched as despatched, with no delivery it never read', async ({ page }) => {

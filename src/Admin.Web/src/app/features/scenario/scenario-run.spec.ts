@@ -5,6 +5,7 @@ import {
   SCENARIO_OPERATIONS,
   SCRIPTS,
   SagaRead,
+  SagaWord,
   STALL_AFTER_MS,
   carrierEntries,
   carrierVerdict,
@@ -15,11 +16,15 @@ import {
   isAlreadyShipped,
   isWatch,
   orderRead,
+  pairing,
+  pairingText,
   reservationVerdict,
   resolveOperations,
   reviewVerdict,
   roleOf,
   sagaStrip,
+  sagaText,
+  sagaWord,
   secondsBetween,
   stepCorrelationId,
   thumbnailFrom,
@@ -63,6 +68,25 @@ describe('resolveOperations', () => {
     expect(deliver.operations?.read?.id).toBe('bff:GetOrder');
     expect(deliver.operations?.cancel).toBeUndefined();
     expect(cancel.operations?.cancel?.id).toBe('ordering:CancelOrder');
+  });
+
+  it("offers the saga's read to a script that watches the order, and never holds a script back for it", () => {
+    const all = Object.values(SCENARIO_OPERATIONS);
+    const withSaga: ApiCatalogView = { sources: [], operations: all.map((id) => op(id)) };
+    const without: ApiCatalogView = {
+      sources: [],
+      operations: all.filter((id) => id !== SCENARIO_OPERATIONS.saga).map((id) => op(id)),
+    };
+    const unavailable: ApiCatalogView = {
+      sources: [],
+      operations: all.map((id) => op(id, id !== SCENARIO_OPERATIONS.saga)),
+    };
+
+    expect(resolveOperations(withSaga, SCRIPTS.deliver).operations?.saga?.id).toBe('ordering:GetOrderSagaState');
+    expect(resolveOperations(without, SCRIPTS.deliver).operations).not.toBeNull();
+    expect(resolveOperations(without, SCRIPTS.deliver).operations?.saga).toBeUndefined();
+    expect(resolveOperations(unavailable, SCRIPTS.deliver).operations?.saga).toBeUndefined();
+    expect(resolveOperations(without, SCRIPTS.deliver).missing).toEqual([]);
   });
 
   it('does not hold a script back for an operation only the other script sends', () => {
@@ -368,7 +392,7 @@ describe('the timeout scripts', () => {
 
     const stock = resolveOperations(view, SCRIPTS['stock-timeout']).operations!;
 
-    expect(Object.keys(stock).sort()).toEqual(['order', 'publish', 'read']);
+    expect(Object.keys(stock).sort()).toEqual(['order', 'publish', 'read', 'saga']);
   });
 });
 
@@ -417,6 +441,7 @@ describe('the release-timeout script', () => {
       'quote',
       'read',
       'reservation',
+      'saga',
       'stock',
     ]);
   });
@@ -500,6 +525,7 @@ describe('the despatch-timeout script', () => {
       'publish',
       'quote',
       'read',
+      'saga',
       'stock',
     ]);
   });
@@ -824,14 +850,23 @@ describe('hasField', () => {
 describe('sagaStrip', () => {
   const none = { placed: null, confirmed: null, dispatched: null, delivered: null, cancelled: null };
 
-  function read(status: string, readAt: number, timeline: Partial<SagaRead['timeline']> = {}): SagaRead {
+  function read(
+    status: string,
+    readAt: number,
+    timeline: Partial<SagaRead['timeline']> = {},
+    saga: SagaRead['saga'] = null,
+  ): SagaRead {
     return {
       readAt,
       status,
       asOf: '2026-10-05T12:00:09Z',
       timeline: { ...none, placed: '2026-10-05T12:00:00Z', ...timeline },
+      saga,
     };
   }
+
+  const row = (state: string): SagaWord => ({ kind: 'row', state, startedAt: '2026-10-05T12:00:00Z', cancelReason: null });
+  const noRow: SagaWord = { kind: 'none' };
 
   it('has nothing to show before the first read', () => {
     expect(sagaStrip([])).toBeNull();
@@ -887,5 +922,100 @@ describe('sagaStrip', () => {
     for (const status of ['delivered', 'cancelled', 'declined', 'out_of_stock']) {
       expect(sagaStrip([read(status, 0), read(status, STALL_AFTER_MS * 2)])!.stalled).toBe(false);
     }
+  });
+
+  it("carries no second column where the saga was not read, and says when the buyer's status last changed", () => {
+    const strip = sagaStrip([read('confirmed', 0, { confirmed: '2026-10-05T12:00:01Z' })])!;
+
+    expect(strip.saga).toBeNull();
+    expect(strip.pairing).toBeNull();
+    expect(strip.sagaSeenAt).toBeNull();
+    expect(strip.statusChangedAt).toBe('2026-10-05T12:00:01Z');
+  });
+
+  it("reads a refusal's time from the cancellation stamp, and an unknown status as having none", () => {
+    expect(sagaStrip([read('declined', 0, { cancelled: '2026-10-05T12:00:03Z' })])!.statusChangedAt).toBe(
+      '2026-10-05T12:00:03Z',
+    );
+    expect(sagaStrip([read('on_the_moon', 0)])!.statusChangedAt).toBeNull();
+  });
+
+  it('pairs the last reads and counts the saga as seen in its state from the first trailing read that shows it', () => {
+    const strip = sagaStrip([
+      read('placed', 100, {}, row('AwaitingConfirmation')),
+      read('confirmed', 2_000, {}, row('Confirmed')),
+      read('confirmed', 4_000, {}, row('Confirmed')),
+    ])!;
+
+    expect(strip.saga).toEqual(row('Confirmed'));
+    expect(strip.pairing).toBe('agree');
+    expect(strip.sagaSeenAt).toBe(2_000);
+  });
+
+  it('shows a disagreement in fact as one, and the buyer running ahead of the saga as that', () => {
+    expect(sagaStrip([read('confirmed', 0, {}, row('Compensating'))])!.pairing).toBe('agree');
+    expect(sagaStrip([read('delivered', 0, {}, row('AwaitingStock'))])!.pairing).toBe('differs');
+    expect(sagaStrip([read('dispatched', 0, {}, row('Confirmed'))])!.pairing).toBe('ahead');
+    expect(sagaStrip([read('confirmed', 0, {}, noRow)])!.pairing).toBe('ahead');
+  });
+});
+
+describe('sagaWord', () => {
+  const body = JSON.stringify({
+    orderId: '0199b0c4-8b21-7c53-8e7f-4a6b8c9d0e1f',
+    currentState: 'Confirmed',
+    startedAt: '2026-10-05T12:00:00Z',
+    cancelReason: null,
+  });
+
+  it("reads Ordering's SagaStateView, a compensation's reason included", () => {
+    expect(sagaWord(200, body)).toEqual({
+      kind: 'row',
+      state: 'Confirmed',
+      startedAt: '2026-10-05T12:00:00Z',
+      cancelReason: null,
+    });
+    expect(sagaWord(200, body.replace('null', '"payment_declined"'))).toMatchObject({ cancelReason: 'payment_declined' });
+  });
+
+  it('takes a 404 for no row, and anything else that is not a readable state for unreadable', () => {
+    expect(sagaWord(404, '')).toEqual({ kind: 'none' });
+    expect(sagaWord(403, '')).toEqual({ kind: 'unreadable', status: 403 });
+    expect(sagaWord(200, 'not json')).toEqual({ kind: 'unreadable', status: 200 });
+    expect(sagaWord(200, '[]')).toEqual({ kind: 'unreadable', status: 200 });
+    expect(sagaWord(200, '{"currentState":1,"startedAt":"x"}')).toEqual({ kind: 'unreadable', status: 200 });
+    expect(sagaWord(200, '{"currentState":"Confirmed","startedAt":"x","cancelReason":5}')).toEqual({
+      kind: 'unreadable',
+      status: 200,
+    });
+  });
+});
+
+describe('pairing', () => {
+  const row = (state: string): SagaWord => ({ kind: 'row', state, startedAt: 'x', cancelReason: null });
+
+  it('claims nothing for a read that gave no state, or a state the backend does not name', () => {
+    expect(pairing(null, 'placed')).toBe('unknown');
+    expect(pairing({ kind: 'unreadable', status: 403 }, 'placed')).toBe('unknown');
+    expect(pairing(row('Nonesuch'), 'placed')).toBe('unknown');
+  });
+
+  it("holds the backend's table: a row's own statuses agree, its listed ones are ahead, the rest differ", () => {
+    expect(pairing(row('AwaitingPayment'), 'placed')).toBe('agree');
+    expect(pairing(row('AwaitingPayment'), 'cancelled')).toBe('ahead');
+    expect(pairing(row('AwaitingPayment'), 'confirmed')).toBe('differs');
+    expect(pairing(row('AwaitingConfirmation'), 'dispatched')).toBe('ahead');
+    expect(pairing(row('Compensating'), 'declined')).toBe('ahead');
+    expect(pairing(row('Compensating'), 'delivered')).toBe('differs');
+    expect(pairing({ kind: 'none' }, 'delivered')).toBe('agree');
+    expect(pairing({ kind: 'none' }, 'out_of_stock')).toBe('agree');
+  });
+
+  it('puts words to each pairing', () => {
+    for (const p of ['agree', 'ahead', 'differs', 'unknown'] as const) expect(pairingText(p)).not.toBe('');
+    expect(sagaText({ kind: 'row', state: 'Confirmed', startedAt: 'x', cancelReason: null })).toBe('Confirmed');
+    expect(sagaText({ kind: 'none' })).toContain('no row');
+    expect(sagaText({ kind: 'unreadable', status: 403 })).toContain('403');
+    expect(sagaText({ kind: 'unreadable', status: null })).toContain('no answer');
   });
 });

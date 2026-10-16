@@ -368,6 +368,84 @@ describe('ScenarioPage', () => {
     expect(strip.stalled).toBe(false);
   });
 
+  describe("the saga's own read", () => {
+    const sagaOp = op({
+      id: 'ordering:GetOrderSagaState',
+      method: 'GET',
+      url: 'http://localhost:5000/api/v1/orders/{id}/saga',
+      pathParameters: [{ name: 'id', required: true, type: 'string' }],
+    });
+
+    function answerSagaWith(status: number, body: string): void {
+      host.operations.mockReturnValue(of({ ...catalog, operations: [...catalog.operations, sagaOp] }));
+      host.proxy.mockImplementation((request: ProxyRequest) =>
+        of(
+          request.url.endsWith(`/orders/${orderId}/saga`)
+            ? responded(status, body, request.correlationId ?? '')
+            : platform(request),
+        ),
+      );
+    }
+
+    it("reads the saga straight after each of the BFF's order reads and sets its word beside the buyer's", async () => {
+      answerSagaWith(404, '');
+      const page = render().componentInstance;
+
+      await page.run();
+
+      const reads = sent().filter((r) => r.url.endsWith('/saga'));
+      expect(reads.map((r) => `${r.method} ${r.url}`)).toEqual(
+        Array(3).fill(`GET http://localhost:5000/api/v1/orders/${orderId}/saga`),
+      );
+      expect(reads.every((r) => r.body === null && r.identity?.username === 'demo')).toBe(true);
+      expect(page.steps().every((s) => s.state === 'ok')).toBe(true);
+      const strip = page.strip()!;
+      expect(strip.saga).toEqual({ kind: 'none' });
+      expect(strip.pairing).toBe('agree');
+      expect(strip.statusChangedAt).toBe('2026-10-05T12:00:40Z');
+    });
+
+    it('shows a saga that disagrees with the buyer as a disagreement, and does not fail the run for it', async () => {
+      answerSagaWith(
+        200,
+        JSON.stringify({ orderId, currentState: 'AwaitingStock', startedAt: placedAt, cancelReason: null }),
+      );
+      const fixture = render();
+      const page = fixture.componentInstance;
+
+      await page.run();
+      fixture.detectChanges();
+
+      expect(page.strip()!.pairing).toBe('differs');
+      expect(page.steps().every((s) => s.state === 'ok')).toBe(true);
+      const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+      expect(text).toContain('Saga (Ordering)');
+      expect(text).toContain('AwaitingStock');
+      expect(text).toContain('[disagree]');
+    });
+
+    it('says the saga could not be read, and still shows the buyer, when the read is refused', async () => {
+      answerSagaWith(403, '');
+      const page = render().componentInstance;
+
+      await page.run();
+
+      expect(page.strip()!.saga).toEqual({ kind: 'unreadable', status: 403 });
+      expect(page.strip()!.pairing).toBe('unknown');
+      expect(page.steps().every((s) => s.state === 'ok')).toBe(true);
+    });
+
+    it('shows only the buyer, and says why, when the catalog has no saga read', async () => {
+      const fixture = render();
+
+      await fixture.componentInstance.run();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.strip()!.saga).toBeNull();
+      expect((fixture.nativeElement as HTMLElement).textContent).toContain("saga's own read is not in the operation catalog");
+    });
+  });
+
   it("empties the strip when the next run starts, so a run never shows the last one's order", async () => {
     const page = render().componentInstance;
     await page.run();

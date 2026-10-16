@@ -6,7 +6,7 @@ import { expect, test } from '@playwright/test';
 test('the api screen lists operations and sends as each identity', async ({ page }) => {
   await page.goto('/requests');
 
-  await expect(page.locator('button.op')).toHaveCount(35);
+  await expect(page.locator('button.op')).toHaveCount(36);
 
   await page.locator('button.op', { hasText: 'GetProducts' }).click();
   await page.getByLabel('Identity').selectOption('anonymous');
@@ -119,7 +119,7 @@ test("the token clock shows the held token's time left and its grants, which exp
   await page.getByLabel('Identity').selectOption('user:demo');
   await page.getByRole('button', { name: 'Send' }).click();
   await expect(page.locator('.response .status')).toHaveText('200');
-  await expect(clock).toContainText('Grants catalog:write, orders:write, orders:cancel, inventory:admin, payments:admin.');
+  await expect(clock).toContainText('Grants catalog:write, orders:write, orders:cancel, inventory:admin, payments:admin, orders:saga-read.');
   await expect(clock).not.toContainText('.ey');
 });
 
@@ -166,7 +166,7 @@ test("the carrier simulator's request log is Shipping's read, sent direct", asyn
 // baseline lasts as long as the host does, and a reused host or a CI retry would then have no change to see.
 test('a reload names what moved in a document since its baseline, with the action that accepts it', async ({ page }) => {
   await page.goto('/requests');
-  await expect(page.locator('button.op')).toHaveCount(35);
+  await expect(page.locator('button.op')).toHaveCount(36);
 
   await page.getByRole('button', { name: 'Reload' }).click();
   const changes = page.locator('.contract-changes');

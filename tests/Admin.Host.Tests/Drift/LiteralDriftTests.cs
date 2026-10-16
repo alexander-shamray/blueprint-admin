@@ -167,6 +167,91 @@ public sealed partial class LiteralDriftTests
     }
 
     [Fact]
+    public void The_saga_read_the_strip_makes_is_orderings_route_name_permission_and_view()
+    {
+        string endpoints = Backend.Read("src", "Services", "Ordering", "Ordering.Api", "Endpoints", "OrderEndpoints.cs");
+        string view = Backend.Read("src", "Services", "Ordering", "Ordering.Application", "Orders", "GetSagaState", "SagaStateView.cs");
+        using JsonDocument fixture = JsonDocument.Parse(File.ReadAllText(Path.Combine(Backend.AdminRoot, "src", "Admin.Host", "Fakes", "fixtures", "openapi-ordering.json")));
+        JsonElement saga = fixture.RootElement.GetProperty("paths").GetProperty("/v1/orders/{id}/saga").GetProperty("get");
+
+        endpoints.ShouldContain(".MapGroup(\"/v1/orders\")");
+        endpoints.ShouldContain("\"/{id:guid}/saga\"");
+        endpoints.ShouldContain($".WithName(\"{saga.GetProperty("operationId").GetString()}\")");
+        endpoints.ShouldContain(".RequireAuthorization(OrderingPermissions.SagaRead)");
+        Backend.Read("src", "Services", "Ordering", "Ordering.Api", "OrderingPermissions.cs").ShouldContain("\"orders:saga-read\"");
+        view.ShouldContain("record SagaStateView(Guid OrderId, string CurrentState, DateTimeOffset StartedAt, string? CancelReason)");
+        ScenarioRun().ShouldContain("typeof o['currentState'] !== 'string' || typeof o['startedAt'] !== 'string'");
+        ScenarioRun().ShouldContain("const reason = o['cancelReason'];");
+        ScenarioRun().ShouldContain("saga: 'ordering:GetOrderSagaState'");
+    }
+
+    /// <summary>
+    /// <c>SAGA_PAIRS</c> is §9.6's table, row for row: each saga state (no row is the last), the buyer statuses that are its
+    /// own at rest, and those that can run ahead of the saga. A cell's statuses are the lower-case code spans in it; a
+    /// cancellation written as words stands for all three.
+    /// </summary>
+    [Fact]
+    public void The_saga_pairs_the_strip_judges_by_are_the_backends_table()
+    {
+        string messaging = Backend.Read("docs", "backend-architecture", "09-messaging.md");
+        int heading = messaging.IndexOf("### Reading the saga's state", StringComparison.Ordinal);
+        heading.ShouldBeGreaterThanOrEqualTo(0, "09-messaging.md no longer has the section this table is copied from");
+
+        string[] rows = [.. messaging[heading..].Split('\n')
+            .SkipWhile(l => !l.StartsWith("| Saga `currentState`", StringComparison.Ordinal))
+            .Skip(2)
+            .TakeWhile(l => l.StartsWith('|'))];
+
+        rows.ShouldNotBeEmpty("the table under 'Reading the saga's state' is no longer one this test can read");
+
+        List<(string?, string[], string[])> declared = [];
+
+        foreach (string row in rows)
+        {
+            string[] cells = [.. row.Split('|', StringSplitOptions.TrimEntries).Skip(1).Take(3)];
+            string[] states = [.. Regex.Matches(cells[0], "`([A-Za-z]+)`").Select(m => m.Groups[1].Value)];
+            string?[] owners = states.Length == 0 ? [null] : [.. states];
+
+            foreach (string? state in owners)
+            {
+                declared.Add((state, Statuses(cells[1]), Statuses(cells[2])));
+            }
+        }
+
+        List<(string?, string[], string[])> copied = [.. Regex.Matches(
+                ScenarioRun(),
+                @"\[(?<state>null|'[A-Za-z]+'), \[(?<rest>[^\]]*)\], \[(?<ahead>[^\]]*)\]\],")
+            .Select(m => (
+                m.Groups["state"].Value == "null" ? null : m.Groups["state"].Value.Trim('\''),
+                Quoted(m.Groups["rest"].Value),
+                Quoted(m.Groups["ahead"].Value)))];
+
+        copied.Count.ShouldBe(declared.Count);
+
+        foreach ((string? state, string[] rest, string[] ahead) in declared)
+        {
+            (string?, string[], string[]) found = copied.Single(c => c.Item1 == state);
+
+            found.Item2.OrderBy(s => s, StringComparer.Ordinal).ShouldBe(rest.OrderBy(s => s, StringComparer.Ordinal), $"{state ?? "no row"}: at rest");
+            found.Item3.OrderBy(s => s, StringComparer.Ordinal).ShouldBe(ahead.OrderBy(s => s, StringComparer.Ordinal), $"{state ?? "no row"}: ahead");
+        }
+    }
+
+    /// <summary>The statuses a cell names before any colon, after which the table explains rather than lists.</summary>
+    private static string[] Statuses(string cell)
+    {
+        string listed = cell.Split(':')[0];
+
+        return
+        [
+            .. Regex.Matches(listed, "`([a-z_]+)`").Select(m => m.Groups[1].Value),
+            .. listed.Contains("a cancellation", StringComparison.Ordinal) ? new[] { "cancelled", "out_of_stock", "declined" } : [],
+        ];
+    }
+
+    private static string[] Quoted(string items) => [.. Regex.Matches(items, "'([^']*)'").Select(m => m.Groups[1].Value)];
+
+    [Fact]
     public void The_cancellations_the_scenario_stops_on_are_the_bffs_cancel_outcomes()
     {
         string outcomes = Backend.Read("src", "BFF", "Web.Bff.Persistence", "CancelOutcomes.cs");
