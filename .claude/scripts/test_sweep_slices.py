@@ -273,7 +273,8 @@ class ASmallRepository(unittest.TestCase):
         )
         integrity = '      "integrity": "sha512-AAAA"\n'
         sound = entry % ("https://registry.npmjs.org/x/-/x-1.0.0.tgz", integrity.rstrip("\n") + ",\n")
-        lock = '{\n  "packages": {\n    "": {\n      "name": "a"\n    },\n%s\n  }\n}\n'
+        link = '    "node_modules/w": {\n      "resolved": "../w",\n      "link": true\n    },\n'
+        lock = '{\n  "packages": {\n    "": {\n      "name": "a"\n    },\n' + link + '%s\n  }\n}\n'
         self.commit("src/Admin.Web/package-lock.json", lock % sound)
         result = Sweep(self, self.repo).slices("bug", "full")
         self.assertEqual(0, result.returncode, result.stderr)

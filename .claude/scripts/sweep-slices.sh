@@ -72,20 +72,21 @@ fenced_bytes() {
 # The lockfile's two promises, read mechanically because 340 KB is not a thing
 # an auditor reads line by line: every resolved URL is on the npm registry over
 # https, and every package entry that is not a link, bundled or the root carries
-# a sha512 integrity. One fault a line; a file with no entry indented the way npm
+# a sha512 integrity; a link's resolved is a path, so a link is exempt from
+# both. One fault a line; a file with no entry indented the way npm
 # writes them has nothing read, so that fails closed too.
 lockfile_faults() {
   awk '
     /^    "[^"]*": \{[ \t]*$/ {
       name = $0; sub(/^    "/, "", name); sub(/": \{.*$/, "", name)
-      has = 0; link = 0; bundled = 0; entries++; next }
+      has = 0; link = 0; bundled = 0; off = 0; entries++; next }
     /^      "resolved": / {
-      if ($0 !~ /^      "resolved": "https:\/\/registry\.npmjs\.org\//)
-        print "resolved off the registry: " name }
+      if ($0 !~ /^      "resolved": "https:\/\/registry\.npmjs\.org\//) off = 1 }
     /^      "integrity": "sha512-/ { has = 1 }
     /^      "link": true/ { link = 1 }
     /^      "inBundle": true/ { bundled = 1 }
     /^    \},?[ \t]*$/ {
+      if (name != "" && off && !link) print "resolved off the registry: " name
       if (name != "" && !has && !link && !bundled) print "no integrity: " name
       name = "" }
     END { if (entries == 0) print "no package entries read" }'
