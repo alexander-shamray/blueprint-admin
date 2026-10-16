@@ -105,6 +105,21 @@ public sealed class DeviceReadsTests
     }
 
     [Fact]
+    public void Two_redirects_with_the_origins_line_dropped_as_blank_are_not_the_one_the_client_sends()
+    {
+        // The last line is a redirect here, not the origins: it has a path.
+        DeviceCheck(Out("blueprint://auth/callback", "com.example://auth/callback")).ShouldBe(DoctorState.Problem);
+    }
+
+    [Fact]
+    public void A_single_origin_is_the_origins_line_and_not_a_redirect()
+    {
+        DeviceCheck(Out("blueprint://auth/callback", "https://localhost")).ShouldBe(DoctorState.Ok);
+    }
+
+    private static DoctorState DeviceCheck(CommandOutput realm) => DeviceReads.Redirect(realm).State;
+
+    [Fact]
     public void A_client_with_no_redirect_prints_only_its_origins_and_is_a_problem()
     {
         DeviceReads.Redirect(Out("https://localhost,capacitor://localhost")).State.ShouldBe(DoctorState.Problem);
