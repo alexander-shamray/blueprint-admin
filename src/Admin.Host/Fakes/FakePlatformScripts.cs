@@ -1,4 +1,5 @@
 using System.Reflection;
+using Admin.Host.Compose;
 
 namespace Admin.Host.Fakes;
 
@@ -70,6 +71,12 @@ public static class FakePlatformScripts
                 " Container commerce-catalog-api-1  Removed",
                 " Container commerce-sql-1  Removed",
                 " Network commerce_default  Removed")
+            // A Scenario's lease (spec §5.3): the two changes and the one restore each. The recorded ps keeps both services
+            // running, which is what the restore's verification reads, so the fake needs no state of its own for them.
+            .On("docker", prefix + "stop inventory-api", 0, " Container commerce-inventory-api-1  Stopped")
+            .On("docker", prefix + "up -d --no-deps --wait inventory-api", 0, " Container commerce-inventory-api-1  Healthy")
+            .On("docker", $"compose -f {paths.ComposeFile} -f {ComposeService.ShortTimeoutsFile(paths.ComposeFile)} up -d --no-deps --wait ordering-api", 0, " Container commerce-ordering-api-1  Healthy")
+            .On("docker", prefix + "up -d --no-deps --wait ordering-api", 0, " Container commerce-ordering-api-1  Healthy")
             .On("docker", prefix + "stop web-bff", 0, Lines(ReplayRecordings.StopBff))
             .On("docker", prefix + "start web-bff", 0, Lines(ReplayRecordings.StartBff))
             .On("dotnet", "run --project tools/bff-replay -- --reset", 0, Lines(ReplayRecordings.Rebuild))

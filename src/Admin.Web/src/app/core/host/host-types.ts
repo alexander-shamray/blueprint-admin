@@ -48,10 +48,48 @@ export interface FrontendStatus {
   deviceJob: JobSummary | null;
 }
 
+/**
+ * A Scenario's hold on the stack (spec §5.3, Scenario service control): one change the host made and will undo, by a
+ * Restore, by its deadline, or at the next host start from its journal. `restoreError` is set when an undo failed and the
+ * lease is still held.
+ */
+export interface LeaseView {
+  id: string;
+  change: string;
+  title: string;
+  service: string;
+  label: string | null;
+  since: string;
+  expiresAt: string;
+  applyJob: string | null;
+  restoreError: string | null;
+}
+
+/** A change a lease may be asked for, as the host's `ScenarioControl.Table` names it. */
+export interface LeaseChange {
+  id: string;
+  title: string;
+  service: string;
+  description: string;
+  maxHoldSeconds: number;
+}
+
+export interface LeaseState {
+  lease: LeaseView | null;
+  changes: LeaseChange[];
+}
+
+export interface LeaseRequest {
+  change: string;
+  holdSeconds: number;
+  label?: string;
+}
+
 export interface StackView {
   backend: ComposeStatus;
   frontend: FrontendStatus;
   reachability: Reachability[];
+  lease: LeaseView | null;
 }
 
 export interface ConfigView {

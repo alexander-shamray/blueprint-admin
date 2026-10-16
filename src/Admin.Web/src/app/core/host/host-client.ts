@@ -12,6 +12,9 @@ import {
   Identity,
   JobSummary,
   DoctorView,
+  LeaseRequest,
+  LeaseState,
+  LeaseView,
   JobView,
   MailListView,
   MailMessageRead,
@@ -63,6 +66,18 @@ export class HostClient {
 
   frontendStop(): Observable<JobSummary> {
     return this.http.post<JobSummary>('/api/stack/frontend/stop', null);
+  }
+
+  lease(): Observable<LeaseState> {
+    return this.http.get<LeaseState>('/api/stack/lease');
+  }
+
+  leaseAcquire(request: LeaseRequest): Observable<LeaseView> {
+    return this.http.post<LeaseView>('/api/stack/lease', request);
+  }
+
+  leaseRestore(): Observable<LeaseState> {
+    return this.http.post<LeaseState>('/api/stack/lease/restore', null);
   }
 
   frontendDeviceBuild(): Observable<JobSummary> {

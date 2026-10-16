@@ -18,6 +18,19 @@ const stack = {
     { name: 'gateway', url: 'http://localhost:5000/health/ready', up: true, status: 200 },
     { name: 'client', url: 'http://localhost:5173/', up: false, status: null },
   ],
+  lease: null,
+};
+
+const lease = {
+  id: 'abc',
+  change: 'stop-inventory',
+  title: 'Inventory stopped',
+  service: 'inventory-api',
+  label: 'Stock timeout',
+  since: '2026-10-16T08:00:00Z',
+  expiresAt: '2026-10-16T08:05:00Z',
+  applyJob: 'job-9',
+  restoreError: null,
 };
 
 const config = {
@@ -100,6 +113,7 @@ describe('StackPage', () => {
     frontendStop: ReturnType<typeof vi.fn>;
     frontendDeviceBuild: ReturnType<typeof vi.fn>;
     frontendDeviceReads: ReturnType<typeof vi.fn>;
+    leaseRestore: ReturnType<typeof vi.fn>;
     telemetryHealth: ReturnType<typeof vi.fn>;
     telemetryAlerts: ReturnType<typeof vi.fn>;
     doctor: ReturnType<typeof vi.fn>;
@@ -123,6 +137,7 @@ describe('StackPage', () => {
       frontendStop: vi.fn(() => of({ id: 'fe-1', commandLine: 'npm start', state: 'Exited', exitCode: -1, startedAt: '' })),
       frontendDeviceBuild: vi.fn(() => of(deviceJob)),
       frontendDeviceReads: vi.fn(() => of(deviceReads)),
+      leaseRestore: vi.fn(() => of({ lease: null, changes: [] })),
       telemetryHealth: vi.fn(() => of(health)),
       telemetryAlerts: vi.fn(() => of(alerts)),
       doctor: vi.fn(() => of(doctor)),
@@ -549,6 +564,59 @@ describe('StackPage', () => {
       fixture.detectChanges();
 
       expect(fixture.nativeElement.textContent).toContain('npm start is job fe-0. Stop it first.');
+    });
+  });
+
+  describe('scenario lease', () => {
+    async function render() {
+      const fixture = TestBed.createComponent(StackPage);
+      fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(0);
+      fixture.detectChanges();
+      const q = (selector: string) => fixture.nativeElement.querySelector(selector) as HTMLButtonElement | null;
+      return { fixture, q };
+    }
+
+    it('shows nothing when no lease is held', async () => {
+      const { q } = await render();
+
+      expect(q('section.lease')).toBeNull();
+    });
+
+    it('says what a Scenario changed, when it undoes it by itself, and offers Restore', async () => {
+      host.stack.mockReturnValue(of({ ...stack, lease }));
+      const { q } = await render();
+
+      expect(text(q('section.lease h2'))).toBe('Inventory stopped');
+      expect(text(q('.lease-what'))).toBe(
+        'A Scenario (Stock timeout) changed inventory-api at 2026-10-16T08:00:00Z. It undoes it by itself at 2026-10-16T08:05:00Z.',
+      );
+      expect(q('button.lease-restore')!.disabled).toBe(false);
+    });
+
+    it('restores on request and opens the change\'s output', async () => {
+      host.stack.mockReturnValue(of({ ...stack, lease }));
+      const { fixture, q } = await render();
+
+      q('button.lease-restore')!.click();
+      q('button.lease-output')!.click();
+
+      expect(host.leaseRestore).toHaveBeenCalledTimes(1);
+      expect(fixture.componentInstance.jobId()).toBe('job-9');
+    });
+
+    it('shows why a restore failed, and keeps the button for another try', async () => {
+      host.stack.mockReturnValue(of({ ...stack, lease: { ...lease, restoreError: 'inventory-api is not running after the restore.' } }));
+      host.leaseRestore.mockReturnValueOnce(throwError(() => ({ error: { detail: 'docker did not answer' } })));
+      const { fixture, q } = await render();
+
+      expect(text(q('section.lease .error'))).toBe('The last restore failed: inventory-api is not running after the restore.');
+
+      q('button.lease-restore')!.click();
+      fixture.detectChanges();
+
+      expect(text(fixture.nativeElement.querySelector('section.lease'))).toContain('docker did not answer');
+      expect(q('button.lease-restore')!.disabled).toBe(false);
     });
   });
 

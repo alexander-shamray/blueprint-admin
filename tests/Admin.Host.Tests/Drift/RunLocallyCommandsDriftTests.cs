@@ -37,10 +37,10 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
             "a by-hand read of a table the console does not query; the cause scripts that need it wait on #67",
         ["docker compose -f deploy/compose/docker-compose.yml exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Local_Dev_Pa55w0rd!' -d Ordering -W -Q \"select Reason from ordering.OrderReviews where OrderId = '$orderId'\""] =
             "a by-hand read of a table the console does not query; the cause scripts that need it wait on #67",
-        ["docker compose -f deploy/compose/docker-compose.yml stop inventory-api"] =
-            "the cause of the saga's stock, release and payment timeouts, which then take five to fifteen minutes; not scripted, #67 keeps them",
         ["docker compose -f deploy/compose/docker-compose.yml start inventory-api"] =
-            "the undo of the line above, which is not run",
+            "a Scenario's lease restores Inventory with up -d --no-deps, which the document says does the same (ScenarioControl.Table)",
+        ["docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.short-timeouts.yml up -d --wait"] =
+            "the full-stack up with the override added, which a developer runs by hand; the host's Up never adds it, and a Scenario's lease recreates Ordering alone",
         ["docker compose -f deploy/compose/docker-compose.yml exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Local_Dev_Pa55w0rd!' -d Ordering -W -Q \"select Status, CancelReason from ordering.OrderSummaries where OrderId = '$orderId'\""] =
             "a by-hand read of the cancel reason, which the order read folds; the console queries no database",
         [@"& ""$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"" reverse tcp:8080 tcp:8080"] =
@@ -152,6 +152,14 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
         compose.Down(wipeVolumes: true);
         compose.Stop(ProjectionRebuildService.BffService);
         compose.Start(ProjectionRebuildService.BffService);
+
+        // A Scenario's lease: each change the host may make, and the one line that undoes it.
+        foreach (ScenarioChange change in ScenarioControl.Table.Values)
+        {
+            change.Apply(compose);
+            change.Restore(compose);
+        }
+
         runner.Start(ProjectionRebuildService.ReplaySpec(reset: false, Paths, new AdminOptions()));
         runner.Start(ProjectionRebuildService.ReplaySpec(reset: true, Paths, new AdminOptions()));
 

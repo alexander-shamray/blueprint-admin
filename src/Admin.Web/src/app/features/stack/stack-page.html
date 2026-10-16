@@ -1,3 +1,22 @@
+@if (lease(); as l) {
+  <section class="lease" role="status" aria-label="Scenario lease">
+    <h2>{{ l.title }}</h2>
+    <p class="lease-what">
+      A Scenario{{ l.label ? ' (' + l.label + ')' : '' }} changed {{ l.service }} at {{ l.since }}. It undoes it by itself at {{ l.expiresAt }}.
+    </p>
+    @if (l.restoreError) {
+      <p class="error">The last restore failed: {{ l.restoreError }}</p>
+    }
+    @if (restoreError(); as re) {
+      <p class="error">{{ re }}</p>
+    }
+    <button class="lease-restore" type="button" [disabled]="restoring()" (click)="restoreLease()">Restore now</button>
+    @if (l.applyJob) {
+      <button class="lease-output" type="button" (click)="jobId.set(l.applyJob)">Show output</button>
+    }
+  </section>
+}
+
 <section class="doctor" aria-label="Workstation">
   <div class="doctor-head">
     <h2>Workstation</h2>

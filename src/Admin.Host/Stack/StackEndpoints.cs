@@ -15,12 +15,48 @@ public static class StackEndpoints
 
     public static IEndpointRouteBuilder MapStack(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/stack", async (ComposeService compose, FrontendSupervisor frontend, PlatformProbe probe, CancellationToken cancellationToken) =>
+        app.MapGet("/api/stack", async (ComposeService compose, FrontendSupervisor frontend, PlatformProbe probe, ScenarioLeaseService leases, CancellationToken cancellationToken) =>
         {
             Task<ComposeStatus> backend = compose.PsAsync(cancellationToken);
             Task<IReadOnlyList<Reachability>> reachability = probe.ProbeAsync(cancellationToken);
 
-            return TypedResults.Ok(new StackView(await backend, frontend.Status(), await reachability));
+            return TypedResults.Ok(new StackView(await backend, frontend.Status(), await reachability, leases.Current));
+        });
+
+        // A Scenario's lease (spec §5.3): a change from ScenarioControl.Table held under ComposeGate, journaled, and always
+        // undone. The acquire waits for the change, so the answer is the lease held or why it was not; a request that goes
+        // away mid-change restores it before it ends.
+        app.MapGet("/api/stack/lease", (ScenarioLeaseService leases) => TypedResults.Ok(leases.State()));
+
+        app.MapPost("/api/stack/lease", async Task<Results<Ok<LeaseView>, ProblemHttpResult>> (LeaseRequest request, ScenarioLeaseService leases, CancellationToken cancellationToken) =>
+        {
+            AcquireResult result = await leases.AcquireAsync(request.Change ?? "", TimeSpan.FromSeconds(request.HoldSeconds), request.Label, cancellationToken);
+
+            return result.Outcome switch
+            {
+                AcquireOutcome.Held => TypedResults.Ok(result.Lease!),
+                AcquireOutcome.UnknownChange or AcquireOutcome.BadHold => TypedResults.Problem(
+                    statusCode: StatusCodes.Status400BadRequest, title: "Lease refused", detail: result.Detail),
+                AcquireOutcome.Busy => TypedResults.Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "A run is already going",
+                    detail: result.Busy!.Kind == ComposeGate.LeaseKind
+                        ? $"A Scenario already holds a lease (job {result.Busy.Job.Id}). Restore it first."
+                        : $"A {result.Busy.Kind} (job {result.Busy.Job.Id}) is still running, so no lease was taken. Wait for it to end."),
+                _ => TypedResults.Problem(statusCode: StatusCodes.Status500InternalServerError, title: "The change failed", detail: result.Detail),
+            };
+        });
+
+        app.MapPost("/api/stack/lease/restore", async Task<Results<Ok<LeaseState>, ProblemHttpResult>> (ScenarioLeaseService leases) =>
+        {
+            RestoreResult result = await leases.RestoreAsync();
+
+            return result.Outcome == RestoreOutcome.Failed
+                ? TypedResults.Problem(
+                    statusCode: StatusCodes.Status500InternalServerError,
+                    title: "The restore failed",
+                    detail: $"{result.Detail} The lease is still held; Restore tries again.")
+                : TypedResults.Ok(leases.State());
         });
 
         app.MapGet("/api/stack/doctor", async (WorkstationDoctor doctor, CancellationToken cancellationToken) =>
@@ -69,7 +105,10 @@ public static class StackEndpoints
     }
 }
 
-public sealed record StackView(ComposeStatus Backend, FrontendStatus Frontend, IReadOnlyList<Reachability> Reachability);
+public sealed record StackView(ComposeStatus Backend, FrontendStatus Frontend, IReadOnlyList<Reachability> Reachability, LeaseView? Lease);
+
+/// <summary>A change from <see cref="ScenarioControl.Table"/>, how long to hold it, and a label the Stack screen shows beside it.</summary>
+public sealed record LeaseRequest(string? Change, int HoldSeconds, string? Label);
 
 public sealed record DownRequest(bool WipeVolumes, string? Confirm);
 
