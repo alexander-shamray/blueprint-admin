@@ -70,7 +70,8 @@ fenced_bytes() {
 }
 
 # Each git read lands in a file with its status checked, NUL-separated, so a
-# failing git fails the run and a name holding a newline stays one name.
+# failing git fails the run and a name holding a newline stays one name. No
+# arrays and no `mapfile`: macOS ships bash 3.2, and CI runs the suite there.
 mkdir "$out"
 # Any exit before the plan is printed takes the half-cut lists with it.
 trap 'rm -rf "$out"' EXIT
@@ -78,18 +79,16 @@ g ls-tree -r -l -z --full-tree "$pinned" > "$out/.tree"
 g grep -I -l -z -e '' "$pinned" -- . > "$out/.text" || [ "$?" -eq 1 ]
 : > "$out/.changed"
 [ -z "$since" ] || g diff --name-only --no-renames -z "$since" "$pinned" > "$out/.changed"
-mapfile -d '' tree < "$out/.tree"
-mapfile -d '' texts < "$out/.text"
-mapfile -d '' changes < "$out/.changed"
-rm -f "$out/.tree" "$out/.text" "$out/.changed"
-[ "${#tree[@]}" -gt 0 ] || { echo "no tracked files at $pinned" >&2; exit 3; }
+[ -s "$out/.tree" ] || { echo "no tracked files at $pinned" >&2; exit 3; }
 
-declare -A text=() changed=() rowfiles=()
-for f in "${texts[@]}"; do text[${f#"$pinned:"}]=1; done
-for f in "${changes[@]}"; do changed[$f]=1; done
+# The text files and the changed ones as newline-bounded lists, tested with
+# `case`: a name holding a line break is refused below before it can matter.
+texts=$'\n' changes=$'\n'
+while IFS= read -r -d '' f; do texts+="${f#"$pinned:"}"$'\n'; done < "$out/.text"
+while IFS= read -r -d '' f; do changes+="$f"$'\n'; done < "$out/.changed"
 
 tracked=0 unowned=0 unchanged=0 empty=0 binary=0 record=0 generated=0 fenceless=0 listed=0
-for rec in "${tree[@]}"; do
+while IFS= read -r -d '' rec; do
   meta=${rec%%$'\t'*} file=${rec#*$'\t'}
   # A slice list is one name a line, so a name holding a line break cannot be
   # listed; refusing it is the only answer that does not drop it unsaid.
@@ -97,9 +96,17 @@ for rec in "${tree[@]}"; do
   tracked=$((tracked + 1))
   size=${meta##* }
   row=$(row_of "$file") || { echo "no row owns: $file" >&2; unowned=$((unowned + 1)); continue; }
-  [ -z "$since" ] || [ -n "${changed[$file]:-}" ] || { unchanged=$((unchanged + 1)); continue; }
+  if [ -n "$since" ]; then
+    case "$changes" in
+      *$'\n'"$file"$'\n'*) : ;;
+      *) unchanged=$((unchanged + 1)); continue ;;
+    esac
+  fi
   [ "$size" != 0 ] || { empty=$((empty + 1)); continue; }
-  [ -n "${text[$file]:-}" ] || { binary=$((binary + 1)); continue; }
+  case "$texts" in
+    *$'\n'"$file"$'\n'*) : ;;
+    *) binary=$((binary + 1)); continue ;;
+  esac
   # The delivery plans are frozen records (CLAUDE.md), never edited to match the
   # code, so a defect in their samples has no fix to file; and the lockfile is
   # generated, its integrity hashes read by npm and not by an auditor. Owned by
@@ -113,8 +120,9 @@ for rec in "${tree[@]}"; do
     [ "$size" -gt 0 ] || { fenceless=$((fenceless + 1)); continue; }
   fi
   listed=$((listed + 1))
-  rowfiles[$row]+="$size $file"$'\n'
-done
+  printf '%s %s\n' "$size" "$file" >> "$out/.row.$row"
+done < "$out/.tree"
+rm -f "$out/.tree" "$out/.text" "$out/.changed"
 [ "$unowned" -eq 0 ] || { echo "$unowned tracked path(s) no row owns" >&2; exit 3; }
 if [ -z "$since" ] && [ "$listed" -eq 0 ]; then
   echo "a full run that lists nothing has read nothing" >&2; exit 3
@@ -124,7 +132,9 @@ echo "pinned $pinned"
 if [ -n "$since" ]; then echo "mode since $since"; else echo "mode full"; fi
 echo "tracked $tracked listed $listed unchanged $unchanged empty $empty binary $binary record $record generated $generated fenceless $fenceless"
 n=0
-for row in $(printf '%s\n' "${!rowfiles[@]}" | sort); do
+for rowfile in "$out"/.row.*; do
+  [ -e "$rowfile" ] || continue
+  row=${rowfile##*/.row.}
   bytes=0 files=0 list=""
   flush() {
     [ "$files" -gt 0 ] || return 0
@@ -138,7 +148,8 @@ for row in $(printf '%s\n' "${!rowfiles[@]}" | sort); do
     size=${line%% *} file=${line#* }
     [ $((bytes + size)) -le "$BUDGET" ] || flush
     bytes=$((bytes + size)) files=$((files + 1)) list+="$file"$'\n'
-  done <<<"${rowfiles[$row]}"
+  done < "$rowfile"
   flush
 done
+rm -f "$out"/.row.*
 trap - EXIT
