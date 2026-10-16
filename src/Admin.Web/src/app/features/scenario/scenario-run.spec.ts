@@ -952,6 +952,13 @@ describe('sagaStrip', () => {
     expect(strip.sagaSeenAt).toBe(2_000);
   });
 
+  it('claims no first sighting for a saga read that gave no state', () => {
+    const strip = sagaStrip([read('confirmed', 0, {}, { kind: 'unreadable', status: 403 })])!;
+
+    expect(strip.saga).toEqual({ kind: 'unreadable', status: 403 });
+    expect(strip.sagaSeenAt).toBeNull();
+  });
+
   it('shows a disagreement in fact as one, and the buyer running ahead of the saga as that', () => {
     expect(sagaStrip([read('confirmed', 0, {}, row('Compensating'))])!.pairing).toBe('agree');
     expect(sagaStrip([read('delivered', 0, {}, row('AwaitingStock'))])!.pairing).toBe('differs');
