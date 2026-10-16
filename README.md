@@ -143,7 +143,9 @@ mints a new token, because the one it held was due to renew, says so. The
 signs an upload, the host PUTs a sample PNG to the object store, the product is
 published with the key it returned, and the thumbnail is fetched from the image
 edge and must be an image served with `nosniff`. Beside the steps a saga strip shows the order's
-state as the BFF last reported it, when it was read and how long each transition took, and says it is the
+state as the BFF last reported it beside the saga's own (Ordering's `/saga` read, which `demo` may make),
+when each was read, how long each transition took, and whether the pair agrees, has the buyer running ahead
+of the saga, or is a disagreement; it says it is the
 last state read and the only stuck-saga detector a workstation has (the backend's `StuckSaga` alert cannot
 fire locally); **Export Markdown** writes a finished run, with its transcript, steps, correlation ids, trace
 timelines and queue depths, as one document scrubbed by the host, to paste into an issue.
@@ -228,8 +230,10 @@ are announced.
 - Shipping has no API. What it did is read from the carrier simulator's request
   log, and an order's despatch and delivery from the BFF's buyer order read.
   That read is the buyer's view: the Scenario watches the steps the BFF
-  projected, never the saga's own state, and every read a watch makes is a
-  request the Transcript keeps.
+  projected. The saga's own state is read beside it for the strip, but the
+  backend stores no time of entering a state (blueprint-backend#1093), so
+  the strip's "last changed" for the saga is when the console first saw it
+  so. Every read a watch makes is a request the Transcript keeps.
 - The identity picker offers demo/demo and browser/browser; configuring any user
   replaces both: `--Admin:Users:0:Username=ops --Admin:Users:0:Password=…`.
 - A timeline ends at the outbox. The outbox row carries no trace context, so

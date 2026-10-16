@@ -131,7 +131,7 @@ free-form request form for anything else.
 
 | User | Password | Holds |
 |---|---|---|
-| `demo` | `demo` | `catalog:write`, `orders:write`, `orders:cancel`, `inventory:admin`, `payments:admin` |
+| `demo` | `demo` | `catalog:write`, `orders:write`, `orders:cancel`, `inventory:admin`, `payments:admin`, `orders:saga-read` |
 | `browser` | `browser` | nothing |
 | `privacy` | `privacy` | `privacy:erase` and nothing else; a login of its own because the role destroys a customer's records and `demo` stays without it. The Erasure screen sends as it |
 | anonymous | — | the catalog GET route only |
@@ -789,8 +789,8 @@ the order's state is, and a way to take a finished run away.
 
 **The strip.** Beside the steps, the order's state as the BFF last reported it.
 Its only source is the read a watch already makes (`run-locally.md`'s buyer
-order read, polled at the drain's interval and cap), so it adds no request and
-invents no state: every successful read of a run is kept (`SagaRead`, newest
+order read, polled at the drain's interval and cap), so this column adds no
+request and invents no state (the saga's column, below, adds one): every successful read of a run is kept (`SagaRead`, newest
 `SAGA_READS_KEPT`), and `sagaStrip` shows the last one, with the console's clock
 for when it was read beside the BFF's `asOf`, so a strip that has stopped
 reading says it is "the last state read, not the order's state at this moment"
@@ -804,11 +804,39 @@ words. The strip says that it is the only stuck-saga detector a workstation has:
 the backend's `StuckSaga` rule is in `awaiting-signal.yaml`, waiting on an
 instrument nothing publishes, so no alert can fire for it locally (#75).
 
+**The saga's column (#71).** An order has two statuses, the saga's and the buyer's
+(the BFF's), and the strip sets them side by side. The saga's is Ordering's own
+read, `GET /api/v1/orders/{id}/saga` (blueprint-backend `GetOrderSagaState`,
+`orders:saga-read`, which `demo` holds), the one `run-locally.md` makes beside the
+BFF's. It adds one request to each poll of a watch, sent as the identity the run
+sends as and under the step's correlation id, and it belongs to no step: a refusal
+or a failure of it is shown as *unreadable*, never as a state and never as a failed
+run. It is optional the way an older backend needs: a catalog without the operation
+leaves the BFF's column alone, and says so. The console does not become a second
+consumer of the BFF read it leans on (the issue's decision of 2026-09-20): it reads
+what is served, and a break is a drift-gate failure here, not a constraint there.
+
+A 404 is *no row*, which the backend's §9.6 reads as a finalised saga or an order it
+never saw alike, so the strip words it so. `startedAt` is when the instance began,
+not when it entered its state (backend#1093 asks for that column), so "last changed"
+is the platform's stamp for the buyer's side and, for the saga's, when the console
+first saw it in that state, labelled as the console's clock. Which pairs agree is
+§9.6's table in blueprint-backend `09-messaging.md`, *Reading the saga's state*,
+copied as `SAGA_PAIRS` in `scenario-run.ts` and read against the document by a
+drift test: a pair in a row's own column *agrees*; one in its *ahead* column is the
+buyer's status running ahead of the saga until it has consumed the same event
+(*ahead*, said as that, with the stuck-saga runbook as the next read if it stays);
+any other pair is a *disagreement*, shown in words (`[disagree]`) and carried into
+the export, and never a reason the run stops. A saga state the table does not name
+claims nothing. FakePlatform's saga follows the same moments as its BFF read, so its
+two never disagree; the Playwright spec covers an agreeing pair, and a disagreeing
+one by answering the saga read with a route.
+
 The backend's `docs/runbooks/stuck-saga.md` starts with a `sqlcmd` read of
 `ordering.OrderFulfilmentStates` for every saga unfinalised past a threshold. That
 read is of the whole table, written against a deployed environment, and the
-console does not make it: a developer by hand has the buyer's order read for the
-order they placed, which is what the strip shows. FakePlatform's scripted state
+console does not make it: a developer by hand has the two reads of the order they
+placed, which is what the strip shows. FakePlatform's scripted state
 (`FakeOrders`) drives the strip; the Playwright spec covers a saga that advances to
 delivered and one that stops at despatched; the stall mark is covered there too,
 by holding the order read at confirmed with a route and running the page's clock
