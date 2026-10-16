@@ -1,0 +1,115 @@
+{
+  "status": "success",
+  "data": {
+    "groups": [
+      {
+        "name": "platform-golden-signals",
+        "file": "/etc/prometheus/rules/platform-alerts.yaml",
+        "rules": [
+          {
+            "state": "inactive",
+            "name": "ErrorRateGateway",
+            "query": "sum(rate(http_server_request_duration_seconds_count{service_name=\"Gateway.Api\",http_response_status_code=~\"5..\"}[5m])) / sum(rate(http_server_request_duration_seconds_count{service_name=\"Gateway.Api\"}[5m])) > 0.01",
+            "duration": 300,
+            "labels": { "owner": "platform", "severity": "page" },
+            "annotations": { "summary": "5xx rate above 1% at the edge" },
+            "alerts": [],
+            "health": "ok",
+            "evaluationTime": 0.000412,
+            "lastEvaluation": "2026-10-16T09:40:12Z",
+            "type": "alerting"
+          },
+          {
+            "state": "pending",
+            "name": "Latency",
+            "query": "histogram_quantile(0.99, sum by (service_name, le) (rate(http_server_request_duration_seconds_bucket[10m]))) > 1",
+            "duration": 600,
+            "labels": { "owner": "service", "severity": "page" },
+            "annotations": { "summary": "p99 above 1s on {{ $labels.service_name }}" },
+            "alerts": [
+              {
+                "labels": { "alertname": "Latency", "service_name": "Catalog.Api", "severity": "page" },
+                "annotations": { "summary": "p99 above 1s on Catalog.Api" },
+                "state": "pending",
+                "activeAt": "2026-10-16T09:38:12Z",
+                "value": "1.4e+00"
+              }
+            ],
+            "health": "ok",
+            "evaluationTime": 0.000931,
+            "lastEvaluation": "2026-10-16T09:40:12Z",
+            "type": "alerting"
+          }
+        ],
+        "interval": 60,
+        "evaluationTime": 0.001391,
+        "lastEvaluation": "2026-10-16T09:40:12Z"
+      },
+      {
+        "name": "platform-messaging",
+        "file": "/etc/prometheus/rules/platform-alerts.yaml",
+        "rules": [
+          {
+            "state": "inactive",
+            "name": "OutboxGrowth",
+            "query": "outbox_pending_messages > 1000 and deriv(outbox_pending_messages[15m]) > 0",
+            "duration": 900,
+            "labels": { "owner": "service", "severity": "ticket" },
+            "annotations": { "summary": "Outbox backlog above 1000 and rising on {{ $labels.service_name }}" },
+            "alerts": [],
+            "health": "ok",
+            "evaluationTime": 0.000288,
+            "lastEvaluation": "2026-10-16T09:40:12Z",
+            "type": "alerting"
+          }
+        ],
+        "interval": 60,
+        "evaluationTime": 0.000288,
+        "lastEvaluation": "2026-10-16T09:40:12Z"
+      },
+      {
+        "name": "platform-infrastructure",
+        "file": "/etc/prometheus/rules/platform-alerts.yaml",
+        "rules": [
+          {
+            "state": "firing",
+            "name": "ErrorQueueDepth",
+            "query": "rabbitmq_detailed_queue_messages_ready{queue=~\".*_error\"} > 0",
+            "duration": 300,
+            "labels": { "owner": "platform", "severity": "page" },
+            "annotations": { "summary": "Messages in error queue {{ $labels.queue }}" },
+            "alerts": [
+              {
+                "labels": { "alertname": "ErrorQueueDepth", "queue": "ordering-catalog-events_error", "severity": "page" },
+                "annotations": { "summary": "Messages in error queue ordering-catalog-events_error" },
+                "state": "firing",
+                "activeAt": "2026-10-16T09:31:12Z",
+                "value": "1e+00"
+              }
+            ],
+            "health": "ok",
+            "evaluationTime": 0.000377,
+            "lastEvaluation": "2026-10-16T09:40:12Z",
+            "type": "alerting"
+          },
+          {
+            "state": "inactive",
+            "name": "MigrationJobFailed",
+            "query": "kube_job_status_failed > 0",
+            "duration": 0,
+            "labels": { "owner": "platform", "severity": "page" },
+            "annotations": { "summary": "Migration job {{ $labels.job_name }} failed or is stuck" },
+            "alerts": [],
+            "health": "unknown",
+            "evaluationTime": 0,
+            "lastEvaluation": "0001-01-01T00:00:00Z",
+            "type": "alerting"
+          }
+        ],
+        "interval": 60,
+        "evaluationTime": 0.000377,
+        "lastEvaluation": "2026-10-16T09:40:12Z"
+      }
+    ]
+  }
+}

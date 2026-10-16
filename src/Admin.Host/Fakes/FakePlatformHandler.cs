@@ -38,6 +38,7 @@ public sealed class FakePlatformHandler(AdminOptions options, FakeOrders orders)
             : Is(uri, options.GrafanaUrl) && path.Contains("/loki/api/v1/query_range", StringComparison.Ordinal) ? FakeGrafana.Loki(request)
             : Is(uri, options.GrafanaUrl) && path.Contains("/api/traces/", StringComparison.Ordinal) ? FakeGrafana.Tempo(request)
             : Is(uri, options.GrafanaUrl) && path.EndsWith("/api/v1/query", StringComparison.Ordinal) ? FakeGrafana.Prometheus(request)
+            : Is(uri, options.GrafanaUrl) && path.EndsWith("/api/v1/rules", StringComparison.Ordinal) ? FakeGrafana.Rules()
             : Is(uri, options.GatewayUrl) ? FakeGateway.Send(request, orders, options)
             : FakeHttp.Json(HttpStatusCode.OK, """{"fake":true}""");
 

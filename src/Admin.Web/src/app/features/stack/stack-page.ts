@@ -69,6 +69,27 @@ export class StackPage {
     ),
   );
 
+  /** Set when the alert strip's poll fails at the transport, cleared on the next answer; as `healthError` does it for the signals. */
+  readonly alertsError = signal<string | null>(null);
+
+  /**
+   * The alert strip (spec §5.8), on the signals' timer for the same reason: the rules are evaluated on a minute's interval,
+   * so asking every 3 seconds would only repeat the answer.
+   */
+  readonly alerts = toSignal(
+    timer(0, 15000).pipe(
+      exhaustMap(() =>
+        this.host.telemetryAlerts().pipe(
+          tap(() => this.alertsError.set(null)),
+          catchError((e: unknown) => {
+            this.alertsError.set(this.describeError(e));
+            return of();
+          }),
+        ),
+      ),
+    ),
+  );
+
   /**
    * A rate, a share and a duration as the strip's cells print them; a rate's unit is in its column header,
    * a share and a duration carry theirs in the cell, and absent is a dash, not a zero. A rate keeps two

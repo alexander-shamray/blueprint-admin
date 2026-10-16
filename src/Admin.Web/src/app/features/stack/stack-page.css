@@ -4,7 +4,12 @@
 .reachability .up { background: #dfd; }
 .reachability .down { background: #fdd; }
 table.signals td:not(:first-child), table.signals th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
-.signals-empty { color: #666; }
+.signals-empty, .alerts-empty { color: #666; }
+.alerts-waiting { color: #444; margin-bottom: 0.25rem; }
+table.alerts tr.state-firing td { color: #b00; font-weight: 600; }
+table.alerts tr.state-pending td { color: #a15c00; }
+table.alerts tr.state-inactive td { color: #666; }
+table.waiting td:last-child { font-family: monospace; }
 table { border-collapse: collapse; margin-bottom: 1rem; }
 td, th { padding: 0.25rem 0.75rem; border-bottom: 1px solid #eee; text-align: left; }
 tr.exited td { color: #666; }

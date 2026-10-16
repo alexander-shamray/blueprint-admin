@@ -174,6 +174,7 @@ builder.Services.AddSingleton(sp => new MailSinkClient(
     sp.GetRequiredService<IOptions<AdminOptions>>()));
 builder.Services.AddSingleton<EventTraceService>();
 builder.Services.AddSingleton<TelemetryHealthService>();
+builder.Services.AddSingleton<AlertStripService>();
 builder.Services.AddSingleton(sp => new RequestProxy(
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("platform"),
     sp.GetRequiredService<TokenService>(),

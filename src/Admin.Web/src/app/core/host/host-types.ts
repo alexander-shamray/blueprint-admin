@@ -421,6 +421,37 @@ export interface TelemetryHealthView {
   services: ServiceSignals[];
 }
 
+/**
+ * One loaded alerting rule as Prometheus reports it: `state` is `inactive`, `pending` or `firing`, `health` is whether
+ * its last evaluation worked, and `alerts` counts the instances alight. `severity` and `summary` are null where the rule has none.
+ */
+export interface AlertRule {
+  name: string;
+  group: string;
+  state: string;
+  health: string;
+  severity: string | null;
+  summary: string | null;
+  alerts: number;
+}
+
+/** A rule the backend wrote out and does not load, and the metrics it reads that nothing publishes yet. */
+export interface WaitingAlert {
+  name: string;
+  instruments: string[];
+}
+
+/**
+ * The Stack screen's alert strip. `loaded` means something only where `reachable`; `waiting` is always the backend's
+ * list, because it does not depend on any Grafana answering.
+ */
+export interface AlertStripView {
+  reachable: boolean;
+  error: string | null;
+  loaded: AlertRule[];
+  waiting: WaitingAlert[];
+}
+
 /** One workstation check, as the host's `WorkstationDoctor` judged it; that class says when a row is `Unknown`. */
 export interface DoctorCheck {
   name: string;

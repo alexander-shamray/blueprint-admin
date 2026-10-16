@@ -34,6 +34,24 @@ test('the stack screen shows every recorded golden signal per service', async ({
   await expect(rows.filter({ hasText: 'Payments.Api' }).locator('td')).toHaveText(['Payments.Api', '0', '—', '29 ms', '0', '0', '4750 ms', '—']);
 });
 
+// FakeGrafana answers the rules read with a hand-shaped recording: one rule firing, one pending, the rest quiet.
+// The waiting rules are the backend's awaiting-signal.yaml, which no Prometheus lists, so the host adds them.
+test('the stack screen lists a firing, a pending and a quiet rule, and the waiting ones apart', async ({ page }) => {
+  await page.goto('/stack');
+  const alerts = page.getByRole('region', { name: 'Alerts' });
+  const loaded = alerts.locator('table.alerts tbody tr');
+
+  await expect(loaded).toHaveCount(5);
+  await expect(loaded.first().locator('td')).toHaveText(['ErrorQueueDepth', 'firing', 'page', '1']);
+  await expect(loaded.filter({ hasText: 'Latency' })).toHaveClass('state-pending');
+  await expect(loaded.filter({ hasText: 'ErrorRateGateway' })).toHaveClass('state-inactive');
+
+  const waiting = alerts.locator('table.waiting tbody tr');
+  await expect(waiting).toHaveCount(3);
+  await expect(waiting.filter({ hasText: 'StuckSaga' }).locator('td')).toHaveText(['StuckSaga', 'ordering_saga_oldest_unfinalised_age_seconds']);
+  await expect(alerts.locator('table.alerts')).not.toContainText('StuckSaga');
+});
+
 // FakePlatformScripts replays this workstation's answers to the doctor's reads, with the host RabbitMQ that
 // held 5672 and 15672 kept in the listener recording (WorkstationRecordings.Listeners).
 test('the workstation panel is read before Up, green where fine and red where a port is held', async ({ page }) => {

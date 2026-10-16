@@ -98,6 +98,13 @@ internal static class FakeGrafana
     }
 
     /// <summary>
+    /// Prometheus's rules answer: one rule firing, one pending and the rest quiet, so the strip has each state to
+    /// show. Loaded rules only; the waiting ones are <see cref="Telemetry.WaitingAlerts"/>, which no Prometheus lists.
+    /// </summary>
+    public static HttpResponseMessage Rules() =>
+        FakeHttp.Json(HttpStatusCode.OK, Fixture("grafana-prometheus-rules.json"));
+
+    /// <summary>
     /// The <see cref="Telemetry.GoldenSignals"/> field a Prometheus query's URL asks for, which is the key its answer
     /// has in the recording, or null for any other query. The recorder writes under the same key.
     /// </summary>

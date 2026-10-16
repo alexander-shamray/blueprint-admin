@@ -53,3 +53,14 @@ public sealed record PrometheusSample(string Service, double? Value);
 
 /// <summary>A Prometheus query outcome. A Grafana/Prometheus that does not answer is a state, not an exception (spec §9).</summary>
 public sealed record PrometheusResult(bool Reachable, string? Error, IReadOnlyList<PrometheusSample> Samples);
+
+/// <summary>
+/// One loaded alerting rule as Prometheus's <c>/api/v1/rules</c> reports it. <paramref name="State"/> is
+/// Prometheus's own (<c>inactive</c>, <c>pending</c>, <c>firing</c>) and <paramref name="Health"/> is whether the last
+/// evaluation worked (<c>ok</c>, <c>err</c>, <c>unknown</c>). <paramref name="Alerts"/> counts the instances the rule has
+/// alight; <paramref name="Severity"/> and <paramref name="Summary"/> are the rule's own label and annotation, null where it has none.
+/// </summary>
+public sealed record AlertRule(string Name, string Group, string State, string Health, string? Severity, string? Summary, int Alerts);
+
+/// <summary>A rules read outcome. A Grafana/Prometheus that does not answer is a state, not an exception (spec §9).</summary>
+public sealed record RulesResult(bool Reachable, string? Error, IReadOnlyList<AlertRule> Rules);

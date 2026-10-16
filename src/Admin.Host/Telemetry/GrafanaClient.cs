@@ -293,6 +293,78 @@ public sealed class GrafanaClient(HttpClient http, IOptions<AdminOptions> option
     }
 
     /// <summary>
+    /// The alerting rules Prometheus loaded, through the same datasource proxy: its documented
+    /// <c>/api/v1/rules?type=alert</c>. These are Prometheus's rules, not Grafana-managed ones, so Grafana's own
+    /// alerting API would list none of them (backend#502). A Prometheus that loaded nothing answers an empty list, which
+    /// is a reachable state and not the same as one that did not answer.
+    /// </summary>
+    public async Task<RulesResult> RulesAsync(CancellationToken cancellationToken)
+    {
+        (string? prometheus, string? error) = await UidAsync(u => u.Prometheus, cancellationToken);
+
+        if (prometheus is null)
+        {
+            return new RulesResult(false, error ?? "Grafana has no Prometheus datasource.", []);
+        }
+
+        AdminOptions o = options.Value;
+        string url = $"{o.GrafanaUrl.TrimEnd('/')}/api/datasources/proxy/uid/{prometheus}/api/v1/rules?type=alert";
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            return new RulesResult(false, $"Admin:GrafanaUrl '{o.GrafanaUrl}' is not an absolute http(s) URL.", []);
+        }
+
+        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(CallTimeout);
+
+        try
+        {
+            using HttpResponseMessage response = await http.GetAsync(uri, timeout.Token);
+            string body = await response.Content.ReadAsStringAsync(timeout.Token);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return new RulesResult(false, $"Prometheus answered {(int)response.StatusCode}: {body}", []);
+            }
+
+            using JsonDocument document = JsonDocument.Parse(body);
+            List<AlertRule> rules = [];
+
+            foreach (JsonElement group in document.RootElement.GetProperty("data").GetProperty("groups").EnumerateArray())
+            {
+                string groupName = group.GetProperty("name").GetString() ?? "";
+
+                foreach (JsonElement rule in group.GetProperty("rules").EnumerateArray())
+                {
+                    if (rule.GetProperty("type").GetString() != "alerting")
+                    {
+                        continue;
+                    }
+
+                    rules.Add(new AlertRule(
+                        rule.GetProperty("name").GetString() ?? "",
+                        groupName,
+                        rule.GetProperty("state").GetString() ?? "",
+                        rule.GetProperty("health").GetString() ?? "",
+                        StringIn(rule, "labels", "severity"),
+                        StringIn(rule, "annotations", "summary"),
+                        rule.TryGetProperty("alerts", out JsonElement alerts) ? alerts.GetArrayLength() : 0));
+                }
+            }
+
+            return new RulesResult(true, null, rules);
+        }
+        catch (Exception e) when (IsUnreachable(e, cancellationToken))
+        {
+            return new RulesResult(false, e.Message, []);
+        }
+    }
+
+    private static string? StringIn(JsonElement rule, string map, string key) =>
+        rule.TryGetProperty(map, out JsonElement values) && values.TryGetProperty(key, out JsonElement value) ? value.GetString() : null;
+
+    /// <summary>
     /// Every failure this client can turn into a <c>Reachable: false</c> state rather than throw to
     /// the endpoint: the network/timeout set <see cref="Admin.Host.Identity.TokenService"/> uses,
     /// widened for a well-formed-JSON-but-wrong-shape 200 (a Grafana version that renames a field, or

@@ -22,6 +22,7 @@
     <EmbeddedResource Include="Fakes\fixtures\grafana-loki-query.json" LogicalName="grafana-loki-query.json" />
     <EmbeddedResource Include="Fakes\fixtures\grafana-tempo-trace.json" LogicalName="grafana-tempo-trace.json" />
     <EmbeddedResource Include="Fakes\fixtures\grafana-prometheus-golden-signals.json" LogicalName="grafana-prometheus-golden-signals.json" />
+    <EmbeddedResource Include="Fakes\fixtures\grafana-prometheus-rules.json" LogicalName="grafana-prometheus-rules.json" />
     <EmbeddedResource Include="Fakes\fixtures\mailpit-messages.json" LogicalName="mailpit-messages.json" />
     <EmbeddedResource Include="Fakes\fixtures\mailpit-message.json" LogicalName="mailpit-message.json" />
     <EmbeddedResource Include="Fakes\fixtures\mailpit-headers.json" LogicalName="mailpit-headers.json" />
