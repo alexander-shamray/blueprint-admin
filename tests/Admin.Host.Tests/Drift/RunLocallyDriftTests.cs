@@ -55,6 +55,20 @@ public sealed class RunLocallyDriftTests
     }
 
     /// <summary>
+    /// The Mail screen's three reads are the ones run-locally.md makes of the sink by hand, on the configured origin.
+    /// </summary>
+    [Fact]
+    public void The_mail_sink_reads_are_the_ones_run_locally_makes()
+    {
+        string document = File.ReadAllText(Backend.RunLocally);
+        string sink = new AdminOptions().MailSinkUrl;
+
+        document.ShouldContain($"Invoke-RestMethod {sink}/api/v1/messages");
+        document.ShouldContain($"Invoke-RestMethod \"{sink}/api/v1/message/$messageId/headers\"");
+        document.ShouldContain($"Invoke-RestMethod \"{sink}/api/v1/message/$messageId\"");
+    }
+
+    /// <summary>
     /// "Attach a product image by hand": the upload call names the image's type and its own length, and the length is the
     /// image the console sends (<see cref="SampleImage.SizeBytes"/>). <c>$size</c> reads as the zero Guid, so the type is
     /// compared by the document's literal and the size by the line that computes it.

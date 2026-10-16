@@ -35,6 +35,15 @@ public static class FixtureRecordings
             "grafana-prometheus-golden-signals.json",
             (o, uri) => FakePlatformHandler.Is(uri, o.GrafanaUrl) && uri.AbsolutePath.EndsWith("/api/v1/query", StringComparison.Ordinal),
             FakeGrafana.GoldenSignalOf),
+        new("mailpit-messages.json", (o, uri) => FakePlatformHandler.Is(uri, o.MailSinkUrl) && uri.AbsolutePath == "/api/v1/messages"),
+        new(
+            "mailpit-message.json",
+            (o, uri) => FakePlatformHandler.Is(uri, o.MailSinkUrl) && FakeMailSink.MessageIdOf(uri.AbsolutePath) is not null,
+            uri => FakeMailSink.MessageIdOf(uri.AbsolutePath)),
+        new(
+            "mailpit-headers.json",
+            (o, uri) => FakePlatformHandler.Is(uri, o.MailSinkUrl) && FakeMailSink.HeadersIdOf(uri.AbsolutePath) is not null,
+            uri => FakeMailSink.HeadersIdOf(uri.AbsolutePath)),
     ];
 
     /// <summary>

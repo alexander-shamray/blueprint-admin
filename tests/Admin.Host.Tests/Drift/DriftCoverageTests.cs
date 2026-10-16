@@ -35,6 +35,7 @@ public sealed class DriftCoverageTests
         ["src/Admin.Host/Fakes/FakeOrders.cs"] = typeof(LiteralDriftTests),
         ["src/Admin.Host/Identity/IdentityEndpoints.cs"] = typeof(LiteralDriftTests),
         ["src/Admin.Host/Identity/RealmUser.cs"] = typeof(LiteralDriftTests),
+        ["src/Admin.Host/Mail/MailSinkClient.cs"] = typeof(LiteralDriftTests),
         ["src/Admin.Host/Privacy/ErasureHolders.cs"] = typeof(ErasureHoldersDriftTests),
         ["src/Admin.Host/Stack/PlatformProbe.cs"] = typeof(ObjectStoreDriftTests),
         ["src/Admin.Host/Stack/WorkstationDoctor.cs"] = typeof(ComposeDriftTests),

@@ -5,6 +5,7 @@ using Admin.Host.Broker;
 using Admin.Host.Config;
 using Admin.Host.Fakes;
 using Admin.Host.Identity;
+using Admin.Host.Mail;
 using Admin.Host.Trace;
 using Shouldly;
 
@@ -54,6 +55,24 @@ public sealed partial class LiteralDriftTests
     {
         Backend.Read("src", "BuildingBlocks", "Common.Web", "PermissionClaim.cs")
             .ShouldContain($"public const string Type = \"{IdentityEndpoints.PermissionClaim}\";");
+    }
+
+    /// <summary>
+    /// The sink's API paths and shapes are those of one Mailpit version, so a bump in the Compose unit fails here
+    /// until <see cref="MailSinkClient"/> has been checked against the new one.
+    /// </summary>
+    [Fact]
+    public void The_mail_sink_is_the_mailpit_version_the_client_was_checked_against()
+    {
+        Backend.Read("deploy", "compose", "services", "notifications.yml").ShouldContain($"image: {MailSinkClient.Image}");
+    }
+
+    /// <summary>The Mail screen's Trace link is the header Notifications writes on every message it sends.</summary>
+    [Fact]
+    public void The_header_the_mail_screen_joins_on_is_the_one_notifications_sends()
+    {
+        Backend.Read("src", "Services", "Notifications", "Notifications.Infrastructure", "Mail", "SmtpMailChannel.cs")
+            .ShouldContain($"internal const string CorrelationIdHeader = \"{CorrelationId.Header}\";");
     }
 
     [Fact]

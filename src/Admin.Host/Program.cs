@@ -8,6 +8,7 @@ using Admin.Host.Fakes;
 using Admin.Host.Frontend;
 using Admin.Host.Identity;
 using Admin.Host.Jobs;
+using Admin.Host.Mail;
 using Admin.Host.Privacy;
 using Admin.Host.Security;
 using Admin.Host.Stack;
@@ -168,6 +169,9 @@ builder.Services.AddSingleton(sp => new ApiCatalog(
 builder.Services.AddSingleton(sp => new GrafanaClient(
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("platform"),
     sp.GetRequiredService<IOptions<AdminOptions>>()));
+builder.Services.AddSingleton(sp => new MailSinkClient(
+    sp.GetRequiredService<IHttpClientFactory>().CreateClient("platform"),
+    sp.GetRequiredService<IOptions<AdminOptions>>()));
 builder.Services.AddSingleton<EventTraceService>();
 builder.Services.AddSingleton<TelemetryHealthService>();
 builder.Services.AddSingleton(sp => new RequestProxy(
@@ -223,6 +227,7 @@ app.MapIdentity();
 app.MapApi();
 app.MapBroker();
 app.MapErasure();
+app.MapMail();
 app.MapTrace();
 app.MapTelemetry();
 app.MapTranscript();

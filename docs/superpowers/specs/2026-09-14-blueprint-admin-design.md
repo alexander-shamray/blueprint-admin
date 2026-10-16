@@ -87,6 +87,7 @@ console reports its absence (no `node_modules`) rather than running it.
 | Privacy API | `http://localhost:5105` | `/openapi/v1.json` (token required); `/health/ready`; its erasure requests are reached through the gateway (§2.3) |
 | Payment simulator | `http://localhost:5190` | `/__admin/requests`, what Payments asked the provider; a decline is caused by the order's amount |
 | Carrier simulator | `http://localhost:5191` | `/__admin/requests`, what Shipping asked the carrier; Shipping is a worker with no API, so this is its only by-hand view |
+| Mail sink | `http://localhost:8025` | Mailpit's API, `GET` alone: the message list, one message's headers and the message itself (§5.12); not a surface of the proxy (§8) |
 | Object store | `http://127.0.0.1:8333` | `GET /status`, the readiness the Compose healthcheck asks; the one pre-signed `PUT` of a product image, which the host sends (§5.7) and the proxy cannot (ADR-106) |
 | Image edge | `http://127.0.0.1:9000` | `GET /healthz`; a published image read back at `/products/{seller}/{file}`, anonymous, `GET` and `HEAD` only, served with `nosniff` (§10.8) |
 | Keycloak | `http://localhost:8080` | password grant on realm `commerce`, client `web-app` |
@@ -583,6 +584,7 @@ All under `/api`, JSON, loopback only.
 | `GET /broker/projection`, `POST /broker/projection/repair`, `POST /broker/projection/rebuild` | §5.5; the plan (queue, typed confirmation, the tool's limits), then a listed job; the rebuild is refused with 400 unless `confirm` is `bff-replay --reset`; a repair or rebuild is refused with 409 while a run of the other kind is going, and the same kind is returned as it is; a rebuild is also refused with 409 while any other `ComposeGate` job (§5.3) runs |
 | `GET /broker/dead-letters`, `GET /broker/dead-letters/{queue}`, `POST /broker/dead-letters/{queue}/{replay\|discard}` | §5.5; the plan (typed confirmation, the read's limit, the record directory), a parked queue's messages, then a listed job for body `{ messageIds, execute, confirm }`. 400 for a queue that is not an `_error` or `_skipped` one, no ids or an id that could read as a flag, or `execute` without `confirm` of `--execute`; 409 while another dead-letter run holds the operator |
 | `GET /erasure/holders` | §6's Erasure screen: the holders Privacy asks (`ErasureHolders.Table`, drift-checked against the backend's `Privacy__Responders__n`), each with the depth of its `*-privacy` queue, `privacy-completions`' depth and the overdue runbook's URL. The request itself is raised, read and reissued through `POST /proxy`, as the gateway answers it |
+| `GET /mail/messages`, `GET /mail/messages/{id}` | §5.12; the list, and one message read, each 200 whatever the sink did, its 404 included. 400 for an id that is not 1-64 letters or digits, since it becomes a path segment of the URL the host builds |
 | `GET /identity/users`, `POST /identity/token`, `POST /identity/clock` | §5.6 |
 | `GET /catalog/operations`, `POST /catalog/reload` | §5.7 |
 | `POST /catalog/baseline/{service}` | makes that service's last fetched document its baseline, then reloads; 404 for a name the catalog has not fetched |
@@ -627,6 +629,34 @@ quote, and a second pass would take a closing one. The token grant itself is `To
 request, so it is not in the transcript; the script's header says to mint a
 token as `run-locally.md` does. The entries kept are bounded by
 `OperatorTranscript.Capacity`, and the oldest go first and are counted.
+
+### 5.12 MailSinkClient
+
+Notifications sends every message to a sink, Mailpit (`mailpit` in the
+backend's Notifications unit), and the question "did the order tell anyone" is
+answered there. `MailSinkClient` makes the three reads `run-locally.md` makes of
+it by hand, against `Admin:MailSinkUrl` and the API of the Mailpit version
+`MailSinkClient.Image` names, which a drift check holds the Compose unit to:
+`GET /api/v1/messages` for the newest `MailSinkClient.Limit`, then each one's
+`GET /api/v1/message/{id}/headers` for its `X-Correlation-Id`, and
+`GET /api/v1/message/{id}` when one is opened. The header is the one
+Notifications writes on every message (drift-checked), and it is offered as a
+Trace link only where `CorrelationId.IsAdoptable` would adopt it, since the
+trace endpoint refuses anything else.
+
+Opening a message marks it read in the sink, as opening it in the sink's own UI
+does; the list and the headers do not. That is the only state the console
+changes there. Clearing the sink stays in its UI, which the screen links, and
+the chaos API the Compose unit enables (`PUT /api/v1/chaos`) is never called.
+A sink that does not answer is `Reachable: false` with the reason, and a
+message whose headers cannot be read is still listed, with no link.
+
+The body is shown as the sink split it. An HTML part renders in an `iframe`
+whose `sandbox` is empty, so no script in it runs and it has an opaque origin
+that cannot reach the console's; the SPA hands it to the frame unsanitised,
+because Angular's sanitiser would strip the template's styles, and the empty
+sandbox is what makes that safe. No CSP is relaxed for it. A plain-text part,
+which is what the backend sends today, is shown as text.
 
 ## 6. The SPA
 
@@ -674,6 +704,7 @@ Admin.Host (127.0.0.1:5300)
    ├─ HttpClient ────▶ gateway :5000 ─▶ catalog, ordering, bff
    │             ────▶ keycloak :8080
    │             ────▶ grafana :3000 ─▶ tempo, loki, prometheus
+   │             ────▶ mailpit :8025 (GET only)
    └─ ComposeService.Exec ─▶ rabbitmqctl inside the rabbitmq container
 ```
 
@@ -695,6 +726,16 @@ and cleared after it (§5.5), so the account has none between runs, as it ships.
 That credential reaches the Management API only through the backend's tool;
 the console never calls that API itself. The proxy accepts only URLs on the configured surfaces, so it
 cannot be used as an open relay from a tab the developer left open.
+
+The mail sink is one origin more that the host reaches, and it is kept off the
+proxy's surfaces on purpose. Its API clears the sink and stages a failing
+relay (`PUT /api/v1/chaos`), so as a surface it would put a write the platform's
+tests rely on within reach of any request the proxy forwards. `MailSinkClient`
+(§5.12) instead sends `GET` alone, to `Admin:MailSinkUrl` alone, on three paths
+it builds itself, with the one caller-supplied part, a message id, refused
+unless it is letters and digits. Linking the sink's UI instead would have cost
+the correlation join, which is the screen's whole value. What the host can do
+there is what its UI does when a message is opened: mark it read.
 
 ## 9. Error handling
 

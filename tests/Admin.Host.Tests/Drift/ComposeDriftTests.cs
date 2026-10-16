@@ -31,6 +31,7 @@ public sealed partial class ComposeDriftTests
         ["image-edge"] = o => o.ImageEdgeUrl,
         ["keycloak"] = o => o.KeycloakUrl,
         ["grafana"] = o => o.GrafanaUrl,
+        ["mailpit"] = o => o.MailSinkUrl,
     };
 
     /// <summary>
@@ -38,10 +39,7 @@ public sealed partial class ComposeDriftTests
     /// issue that adds the surface deletes its row, and a unit the backend adds that is in neither
     /// table fails the build the day it merges.
     /// </summary>
-    private static readonly Dictionary<string, string> UnitsWithoutSurface = new(StringComparer.Ordinal)
-    {
-        ["notifications"] = "#65",
-    };
+    private static readonly Dictionary<string, string> UnitsWithoutSurface = new(StringComparer.Ordinal);
 
     [Fact]
     public void Every_service_unit_has_a_configured_surface_or_a_named_exception()

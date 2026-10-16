@@ -1,0 +1,154 @@
+{
+  "6EeZYcpf9AvfCT3cPftl9j": {
+    "Content-Language": [
+      "en, kk, ru"
+    ],
+    "Content-Transfer-Encoding": [
+      "8bit"
+    ],
+    "Content-Type": [
+      "text/plain; charset=utf-8"
+    ],
+    "Date": [
+      "Thu, 15 Oct 2026 12:11:21 \u002B0000"
+    ],
+    "From": [
+      "Commerce \u003Cno-reply@commerce.test\u003E"
+    ],
+    "Message-Id": [
+      "\u003C01a13f7951e97abbbf7ca88c9ef8cc18.shipment-dispatched@commerce.test\u003E"
+    ],
+    "Mime-Version": [
+      "1.0"
+    ],
+    "Received": [
+      "from a9b02f30af5b (commerce-notifications-worker-1.commerce_default. [172.18.0.16]) by 65113b39484c (Mailpit) with SMTP for \u003Cdemo@example.invalid\u003E; Thu, 15 Oct 2026 12:11:21 \u002B0000 (UTC)"
+    ],
+    "Return-Path": [
+      "\u003Cno-reply@commerce.test\u003E"
+    ],
+    "Subject": [
+      "Your order is on its way / =?utf-8?b?0KLQsNC/0YHRi9GA0YvRgdGL0qPRi9C3INC206nQvdC10LvRgtGW0LvQtNGWIC8=?= =?utf-8?b?INCS0LDRiCDQt9Cw0LrQsNC3INC\u002B0YLQv9GA0LDQstC70LXQvQ==?="
+    ],
+    "To": [
+      "demo@example.invalid"
+    ],
+    "X-Correlation-Id": [
+      "01a13f79-2194-77a5-bbad-eaf2d69eacd6"
+    ]
+  },
+  "1XUIAaAdXAExobkcuQHftQ": {
+    "Content-Language": [
+      "en, kk, ru"
+    ],
+    "Content-Transfer-Encoding": [
+      "8bit"
+    ],
+    "Content-Type": [
+      "text/plain; charset=utf-8"
+    ],
+    "Date": [
+      "Thu, 15 Oct 2026 12:11:11 \u002B0000"
+    ],
+    "From": [
+      "Commerce \u003Cno-reply@commerce.test\u003E"
+    ],
+    "Message-Id": [
+      "\u003C01a13f792ecd799798355445d33ba803.order-confirmed@commerce.test\u003E"
+    ],
+    "Mime-Version": [
+      "1.0"
+    ],
+    "Received": [
+      "from a9b02f30af5b (commerce-notifications-worker-1.commerce_default. [172.18.0.16]) by 65113b39484c (Mailpit) with SMTP for \u003Cdemo@example.invalid\u003E; Thu, 15 Oct 2026 12:11:11 \u002B0000 (UTC)"
+    ],
+    "Return-Path": [
+      "\u003Cno-reply@commerce.test\u003E"
+    ],
+    "Subject": [
+      "Your order is confirmed / =?utf-8?b?0KLQsNC/0YHRi9GA0YvRgdGL0qPRi9C3INGA0LDRgdGC0LDQu9C00YsgLw==?= =?utf-8?b?INCS0LDRiCDQt9Cw0LrQsNC3INC/0L7QtNGC0LLQtdGA0LbQtNGR0L0=?="
+    ],
+    "To": [
+      "demo@example.invalid"
+    ],
+    "X-Correlation-Id": [
+      "01a13f79-2194-77a5-bbad-eaf2d69eacd6"
+    ]
+  },
+  "4214Ji17w29YtX8IUEwuq5": {
+    "Content-Language": [
+      "en, kk, ru"
+    ],
+    "Content-Transfer-Encoding": [
+      "8bit"
+    ],
+    "Content-Type": [
+      "text/plain; charset=utf-8"
+    ],
+    "Date": [
+      "Thu, 15 Oct 2026 12:11:21 \u002B0000"
+    ],
+    "From": [
+      "Commerce \u003Cno-reply@commerce.test\u003E"
+    ],
+    "Message-Id": [
+      "\u003C01a13f7951e97611989eeecbce44672b.shipment-delivered@commerce.test\u003E"
+    ],
+    "Mime-Version": [
+      "1.0"
+    ],
+    "Received": [
+      "from a9b02f30af5b (commerce-notifications-worker-1.commerce_default. [172.18.0.16]) by 65113b39484c (Mailpit) with SMTP for \u003Cdemo@example.invalid\u003E; Thu, 15 Oct 2026 12:11:21 \u002B0000 (UTC)"
+    ],
+    "Return-Path": [
+      "\u003Cno-reply@commerce.test\u003E"
+    ],
+    "Subject": [
+      "Your order has been delivered / =?utf-8?b?0KLQsNC/0YHRi9GA0YvRgdGL0qPRi9C3INC20LXRgtC60ZbQt9GW0LvQtNGWIC8=?= =?utf-8?b?INCS0LDRiCDQt9Cw0LrQsNC3INC00L7RgdGC0LDQstC70LXQvQ==?="
+    ],
+    "To": [
+      "demo@example.invalid"
+    ],
+    "X-Correlation-Id": [
+      "01a13f79-2194-77a5-bbad-eaf2d69eacd6"
+    ]
+  },
+  "32L6O8PtemNkGAHeMUkArl": {
+    "Content-Language": [
+      "en, kk, ru"
+    ],
+    "Content-Transfer-Encoding": [
+      "8bit"
+    ],
+    "Content-Type": [
+      "text/plain; charset=utf-8"
+    ],
+    "Date": [
+      "Thu, 15 Oct 2026 12:11:07 \u002B0000"
+    ],
+    "From": [
+      "Commerce \u003Cno-reply@commerce.test\u003E"
+    ],
+    "Message-Id": [
+      "\u003C01a13f7921e071a0b7f493519b362dea.order-placed@commerce.test\u003E"
+    ],
+    "Mime-Version": [
+      "1.0"
+    ],
+    "Received": [
+      "from a9b02f30af5b (commerce-notifications-worker-1.commerce_default. [172.18.0.16]) by 65113b39484c (Mailpit) with SMTP for \u003Cdemo@example.invalid\u003E; Thu, 15 Oct 2026 12:11:07 \u002B0000 (UTC)"
+    ],
+    "Return-Path": [
+      "\u003Cno-reply@commerce.test\u003E"
+    ],
+    "Subject": [
+      "We have received your order / =?utf-8?b?0KLQsNC/0YHRi9GA0YvRgdGL0qPRi9C30LTRiw==?= =?utf-8?b?INKb0LDQsdGL0LvQtNCw0LTRi9KbIC8=?= =?utf-8?b?INCc0Ysg0L/QvtC70YPRh9C40LvQuCDQstCw0Ygg0LfQsNC60LDQtw==?="
+    ],
+    "To": [
+      "demo@example.invalid"
+    ],
+    "X-Correlation-Id": [
+      "01a13f79-2194-77a5-bbad-eaf2d69eacd6"
+    ]
+  }
+}

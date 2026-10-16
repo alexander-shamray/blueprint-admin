@@ -64,6 +64,13 @@ public sealed class AdminOptions
     public string CarrierSimulatorUrl { get; set; } = "http://localhost:5191";
 
     /// <summary>
+    /// The mail sink Notifications sends through (<c>mailpit</c> in blueprint-backend's
+    /// <c>deploy/compose/services/notifications.yml</c>): its HTTP API and UI, not its SMTP port. The Mail screen reads it
+    /// with <c>GET</c> alone through <c>Mail/MailSinkClient.cs</c>; it is not a surface of the proxy (spec §8).
+    /// </summary>
+    public string MailSinkUrl { get; set; } = "http://localhost:8025";
+
+    /// <summary>
     /// Where blueprint-backend's <c>docs/runbooks/</c> are read: the Broker screen links a parked queue to the runbook
     /// that owns it (<c>Broker/ParkedQueues.cs</c>). A link the browser follows, not a request the host makes.
     /// </summary>
