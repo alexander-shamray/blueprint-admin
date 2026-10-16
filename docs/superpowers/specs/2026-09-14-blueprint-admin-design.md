@@ -716,6 +716,7 @@ All under `/api`, JSON, loopback only.
 | `GET /telemetry/health` | the golden-signal strip |
 | `GET /telemetry/alerts` | the alert strip: loaded rules and the waiting ones, apart |
 | `GET /transcript`, `GET /transcript/script` | §5.11; the entries, and the same as one bash script in `text/plain` |
+| `POST /scenario/export` | §5.13; body `{ markdown }`, answered as `text/markdown` after `FixtureScrubber.Scrub`; 400 for no document, 413 past `ExportEndpoints.MaxCharacters`; nothing is stored |
 
 Streams use Server-Sent Events rather than WebSockets because every stream is
 server-to-client and line-oriented, and SSE reconnects for free.
@@ -781,6 +782,50 @@ because Angular's sanitiser would strip the template's styles, and the empty
 sandbox is what makes that safe. No CSP is relaxed for it. A plain-text part,
 which is what the backend sends today, is shown as text.
 
+### 5.13 The saga strip and the Scenario export
+
+Two things sit on the Scenario screen that the steps alone do not give: where
+the order's state is, and a way to take a finished run away.
+
+**The strip.** Beside the steps, the order's state as the BFF last reported it.
+Its only source is the read a watch already makes (`run-locally.md`'s buyer
+order read, polled at the drain's interval and cap), so it adds no request and
+invents no state: every successful read of a run is kept (`SagaRead`, newest
+`SAGA_READS_KEPT`), and `sagaStrip` shows the last one, with the console's clock
+for when it was read beside the BFF's `asOf`, so a strip that has stopped
+reading says it is "the last state read, not the order's state at this moment"
+rather than posing as live (#11 was an indicator that said "caught up" when only a
+queue was empty). The time of each transition is the difference between the
+order read's own stamps (`placed`, `confirmed`, `dispatched`, `delivered` or
+`cancelled`), the platform's clock and not the console's polls. A status that has
+stood still across reads for `STALL_AFTER_MS`, and is not one the saga ends in
+(`delivered`, `cancelled`, `declined`, `out_of_stock`), is marked `[stalled]` in
+words. The strip says that it is the only stuck-saga detector a workstation has:
+the backend's `StuckSaga` rule is in `awaiting-signal.yaml`, waiting on an
+instrument nothing publishes, so no alert can fire for it locally (#75).
+
+The backend's `docs/runbooks/stuck-saga.md` starts with a `sqlcmd` read of
+`ordering.OrderFulfilmentStates` for every saga unfinalised past a threshold. That
+read is of the whole table, written against a deployed environment, and the
+console does not make it: a developer by hand has the buyer's order read for the
+order they placed, which is what the strip shows. FakePlatform's scripted state
+(`FakeOrders`) drives the strip; the Playwright spec covers a saga that advances to
+delivered and one that stops at despatched, and the stall mark is held by unit
+tests of `sagaStrip`, because no fake saga stands still for `STALL_AFTER_MS`
+within a watch.
+
+**The export.** A finished run is one Markdown document for an issue. The page
+writes it from what it holds (`buildExport`: the transcript script, the steps with
+status, request, detail and body, the strip, the correlation ids, each id's trace
+timeline read from `/trace`, the broker's queue depths at the drain step and when
+the export is made), and posts it to `POST /scenario/export`, where
+`FixtureScrubber` has the last word before the page downloads what comes back, so
+a transcript, a fixture and an export are held to one definition of a secret. A
+section whose source is missing says so in one line (the transcript the host would
+not render; a trace Grafana did not answer; the mail the run caused, which the
+console does not yet count, #66). The document is built in the browser and
+downloaded from it; the host stores nothing and writes to no sibling clone.
+
 ## 6. The SPA
 
 Angular 22 standalone components, signals, the router, no Ionic. The layout
@@ -809,7 +854,7 @@ and names the active option through `aria-activedescendant`.
 | **Mail** | §5.12's list, newest first: when, to whom, the subject, and the correlation id as a link into Trace, or `none`; how many the sink holds when that is more than listed; a line saying so when no message carries a correlation id; an opened message's addresses, date and body | Refresh; filter by correlation id (also `?correlationId=`), leaving one order's messages; Open a message; follow its Trace link; open the sink's own UI, where clearing is done |
 | **API** | operation tree on the left, each source with what its document changed since the kept baseline; request editor (path params, headers, body pre-filled from the schema example, `commandId` generated per send) and identity picker with its token clock (§5.6); response pane with status, timing, headers, body; a history list | Send; accept a changed document as the new baseline; "Trace this call" opens the Trace screen with the response's correlation id |
 | **Trace** | the §5.9 timeline for a correlation id, grouped by service, with Grafana deep links, and on a refetch what arrived or left since the last one | enter an id or arrive from the API screen; reload |
-| **Scenario** | `run-locally.md`'s calls as one script of a library (`SCRIPTS` in `scenario-run.ts` owns the list; `docs/superpowers/specs/2026-10-15-scenario-scripts.md` the causes and the fakes' rules) — publish, wait for the drain, set the product's stock (a product published a moment ago has none, and the order would end out of stock), quote, order, then either watch the order to confirmed, despatched and delivered, cancel it and watch it to cancelled, or apply a cause `run-locally.md` names (a price ending `.01`, stock set to 0) and watch the saga refuse the order, or order to the delivery postal code `SIM-TRANSIT` and watch it stay despatched, and ask to cancel it and see the platform refuse with 422 `order.already_shipped`, or order to one of the delivery postal codes whose carrier outcome the order read cannot tell apart (`SIM-REFUSED`, `SIM-DOWN`, `SIM-SLOW`, `SIM-STRANGE`) and read the carrier simulator's own request log, filtered by the simulator, for what the carrier saw, with the order read held at confirmed, or hold a lease on the stack (§5.3) so the saga's stock or payment wait lapses in seconds and read the order end `out_of_stock` or `declined`, or, with the despatch wait shortened too, order to `SIM-STRANGE` and read the review flag it raises (§5.9) while the order stays confirmed, or order a `.09` total, wait for its stock to reserve, stop Inventory, cancel the order and read the review flag its unanswered release raises while the order read says cancelled, with the stack restored whatever happens and a Cancel that ends the wait — each step with its status, body and own correlation id, each watch saying what it waits for and what it last read | Pick the script; run as a realm user; each step that sent links to its trace; the first step that does not succeed ends the run |
+| **Scenario** | `run-locally.md`'s calls as one script of a library (`SCRIPTS` in `scenario-run.ts` owns the list; `docs/superpowers/specs/2026-10-15-scenario-scripts.md` the causes and the fakes' rules) — publish, wait for the drain, set the product's stock (a product published a moment ago has none, and the order would end out of stock), quote, order, then either watch the order to confirmed, despatched and delivered, cancel it and watch it to cancelled, or apply a cause `run-locally.md` names (a price ending `.01`, stock set to 0) and watch the saga refuse the order, or order to the delivery postal code `SIM-TRANSIT` and watch it stay despatched, and ask to cancel it and see the platform refuse with 422 `order.already_shipped`, or order to one of the delivery postal codes whose carrier outcome the order read cannot tell apart (`SIM-REFUSED`, `SIM-DOWN`, `SIM-SLOW`, `SIM-STRANGE`) and read the carrier simulator's own request log, filtered by the simulator, for what the carrier saw, with the order read held at confirmed, or hold a lease on the stack (§5.3) so the saga's stock or payment wait lapses in seconds and read the order end `out_of_stock` or `declined`, or, with the despatch wait shortened too, order to `SIM-STRANGE` and read the review flag it raises (§5.9) while the order stays confirmed, or order a `.09` total, wait for its stock to reserve, stop Inventory, cancel the order and read the review flag its unanswered release raises while the order read says cancelled, with the stack restored whatever happens and a Cancel that ends the wait — each step with its status, body and own correlation id, each watch saying what it waits for and what it last read; beside the steps the saga strip of §5.13, and a finished run exports as one scrubbed Markdown document | Pick the script; run as a realm user; each step that sent links to its trace; the first step that does not succeed ends the run |
 | **Transcript** | §5.11's entries in order: each process with its directory and exit code, each request as its `curl` with the identity and status, polled | Copy as shell script, which copies the host's rendered script rather than one built in the page, so the scrubber has the last word |
 
 The API screen keeps one behaviour from `run-locally.md` explicit: after a
