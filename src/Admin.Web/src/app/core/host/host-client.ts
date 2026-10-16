@@ -232,8 +232,9 @@ export class HostClient {
   }
 
   /** The same transcript as a bash script, rendered and scrubbed by the host rather than here. */
-  transcriptScript(): Observable<string> {
-    return this.http.get('/api/transcript/script', { responseType: 'text' });
+  transcriptScript(after?: number): Observable<string> {
+    const params: Record<string, number> = after === undefined ? {} : { after };
+    return this.http.get('/api/transcript/script', { params, responseType: 'text' });
   }
 
   job(id: string): Observable<JobView> {

@@ -71,6 +71,7 @@ function input(partial: Partial<ExportInput> = {}): ExportInput {
     ],
     strip: null,
     transcript: 'curl -X POST http://x/p',
+    transcriptScope: 'run',
     traces: { 'scenario-abc-order': trace },
     queuesBefore: queues(['orders', 3]),
     queuesAfter: queues(['orders', 0], ['mail', 1]),
@@ -138,6 +139,11 @@ describe('buildExport', () => {
     );
 
     expect(md).toContain('- Outcome: stopped at "Order": Answered 403.');
+  });
+
+  it("says when the transcript is the whole session because the run's start was not read", () => {
+    expect(buildExport(input({ transcriptScope: 'session' }))).toContain("The host's whole session");
+    expect(buildExport(input())).toContain('from when this run began');
   });
 
   it('omits the transcript with a line when the host would not render it', () => {
