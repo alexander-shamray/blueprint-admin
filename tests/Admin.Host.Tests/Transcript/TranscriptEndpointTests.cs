@@ -35,6 +35,19 @@ public sealed class TranscriptEndpointTests(AdminHostFactory factory) : IClassFi
     }
 
     [Fact]
+    public async Task A_script_after_the_last_sequence_has_a_header_and_no_entries()
+    {
+        await client.PostAsJsonAsync("/api/proxy", new { method = "GET", url = "http://localhost:5000/api/v1/orders", identity = new { username = "demo", password = "demo" } }, Token);
+        JsonElement view = await client.GetFromJsonAsync<JsonElement>("/api/transcript", Token);
+        long last = view.GetProperty("entries").EnumerateArray().Max(e => e.GetProperty("sequence").GetInt64());
+
+        string script = await client.GetStringAsync($"/api/transcript/script?after={last}", Token);
+
+        script.ShouldStartWith("#!/usr/bin/env bash\n");
+        script.ShouldNotContain("curl -i");
+    }
+
+    [Fact]
     public async Task The_script_is_plain_text_and_every_entry_is_clean_by_the_fixture_gates_rules()
     {
         await client.PostAsJsonAsync("/api/proxy", new { method = "GET", url = "http://localhost:5000/api/v1/orders", identity = new { username = "demo", password = "demo" } }, Token);

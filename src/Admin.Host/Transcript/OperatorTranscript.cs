@@ -66,9 +66,10 @@ public sealed class OperatorTranscript(TimeProvider time)
     /// <summary>
     /// The transcript as a bash script, one command per entry with its outcome above it, in LF whatever the host's
     /// platform. Each entry's command and directory were scrubbed when they were kept; the script is not scrubbed
-    /// again as a whole, for the reason <see cref="ShellLine"/> gives.
+    /// again as a whole, for the reason <see cref="ShellLine"/> gives. <paramref name="after"/> keeps only the entries
+    /// whose sequence is greater, which is how a Scenario export takes the lines its own run caused (spec §5.13).
     /// </summary>
-    public string Script()
+    public string Script(long after = 0)
     {
         TranscriptView view = Read();
         List<string> lines =
@@ -84,7 +85,7 @@ public sealed class OperatorTranscript(TimeProvider time)
             lines.Add(string.Create(CultureInfo.InvariantCulture, $"# {view.Dropped} earlier entries were dropped past the last {Capacity}."));
         }
 
-        foreach (TranscriptEntry entry in view.Entries)
+        foreach (TranscriptEntry entry in view.Entries.Where(e => e.Sequence > after))
         {
             lines.Add("");
             lines.Add(string.Create(CultureInfo.InvariantCulture, $"# {entry.Sequence} · {entry.At:u} · {Outcome(entry)}"));

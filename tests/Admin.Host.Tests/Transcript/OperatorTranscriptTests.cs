@@ -218,6 +218,19 @@ public sealed class OperatorTranscriptTests
     }
 
     [Fact]
+    public void A_script_after_a_sequence_keeps_only_the_later_entries()
+    {
+        transcript.Request("curl -i http://localhost:5000/before", null)(200);
+        transcript.Request("curl -i http://localhost:5000/during", null)(200);
+
+        string script = transcript.Script(after: 1);
+
+        script.ShouldNotContain("/before");
+        script.ShouldContain("curl -i http://localhost:5000/during");
+        transcript.Script().ShouldContain("/before");
+    }
+
+    [Fact]
     public void The_script_runs_each_process_in_its_directory_under_its_outcome()
     {
         TranscribingProcessRunner runner = new(new StubRunner(), transcript);

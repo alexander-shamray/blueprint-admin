@@ -6,8 +6,8 @@ public static class TranscriptEndpoints
     {
         app.MapGet("/api/transcript", (OperatorTranscript transcript) => TypedResults.Ok(transcript.Read()));
 
-        app.MapGet("/api/transcript/script", (OperatorTranscript transcript) =>
-            TypedResults.Text(transcript.Script(), "text/plain; charset=utf-8"));
+        app.MapGet("/api/transcript/script", (OperatorTranscript transcript, long? after) =>
+            TypedResults.Text(transcript.Script(Math.Max(after ?? 0, 0)), "text/plain; charset=utf-8"));
 
         return app;
     }
