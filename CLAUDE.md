@@ -99,6 +99,26 @@ Checks are `bash .claude/scripts/host-checks.sh` and
 `bash .claude/scripts/npm-checks.sh`. The host refuses to start if
 `Admin:BackendDir` / `Admin:FrontendDir` are wrong, naming the key.
 
+## Subagents, review rounds and plans
+
+Every turn re-sends the whole context, so an agent costs what it reads times
+the turns it takes; `docs/token-plan.md` is where the spend was measured.
+
+- **Delegate with a brief.** A subagent is handed the files, diff or question
+  it needs and returns a short structured answer, findings as `file:line`.
+  `Explore` before `general-purpose` for a search; nothing is delegated that
+  one `Grep` answers.
+- **The review loop** is `/ship` step 5's: rounds of one read-only
+  `branch-reviewer`, handed the diff under `artifacts/review/` and not the
+  author's conclusions, to a seven-round ceiling. Round 2 onwards reads the
+  diff since the last round and the open findings, not the tree. Never
+  `general-purpose`, never the session reviewing its own diff.
+- **Plans.** A change that fits one PR takes plan mode, not a plan file; a
+  plan cites code by path and symbol, and stays under 50 KB.
+- **Before a wait, shed the context.** A session about to wait on CI or a
+  background agent compacts first: a wake re-sends all of it.
+- **One task per session**: `/clear` between tasks.
+
 ## Hard rules
 
 Each is argued in [`docs/working-rules.md`](docs/working-rules.md).
