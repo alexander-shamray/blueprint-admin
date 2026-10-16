@@ -505,6 +505,13 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
 
             DateTimeOffset at = order.At + order.ReviewAfter;
 
+            // run-locally.md: a cancel of a confirmed order before the wait lapses ends the saga's wait, so the despatch wait
+            // never fires; what a cancel flags is a different reason (cancelled_after_confirmation), which this fake does not model.
+            if (order.CancelAskedAt is { } asked && asked < at)
+            {
+                return [];
+            }
+
             return at <= time.GetUtcNow() ? [(order.ReviewReason, at)] : [];
         }
     }

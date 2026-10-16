@@ -162,6 +162,19 @@ public sealed class FakeOrdersTests
     }
 
     [Fact]
+    public void A_cancel_before_the_despatch_wait_lapses_ends_it_and_no_not_despatched_flag_lands()
+    {
+        FakeOrders orders = new(time, new FakeStack { ShortWaits = true });
+        string id = orders.Place(postalCode: FakeOrders.StrangePostalCode);
+
+        time.Advance(FakeOrders.Step);
+        orders.Cancel(id);
+        time.Advance(FakeOrders.ShortDespatchWait * 2);
+
+        orders.ReviewFlags(id).ShouldBeEmpty();
+    }
+
+    [Fact]
     public void Without_the_override_the_despatch_wait_is_days_and_no_flag_lands_within_an_hour()
     {
         FakeOrders orders = new(time, new FakeStack());
