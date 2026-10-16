@@ -70,7 +70,9 @@ output; the reference
 client's `npm start` with start, stop and its output; a table of each
 service's golden signals from Prometheus, one column per panel of the
 backend golden-signals dashboard: request rate, 5xx share, p99 latency, the
-422 and 401 refusals, and §13.7's command and query p95), the Logs screen
+422 and 401 refusals, and §13.7's command and query p95; beside it, the alert rules Prometheus
+loaded, firing first, and the backend's `awaiting-signal.yaml` rules listed apart
+as waiting, each with the metric it lacks), the Logs screen
 (follow, service filter, text filter, correlation-id highlight) and the API
 screen (Catalog's, Ordering's, Inventory's, Payments' and Privacy's OpenAPI operations
 through the gateway, the BFF quote, its product-image upload and saved address,

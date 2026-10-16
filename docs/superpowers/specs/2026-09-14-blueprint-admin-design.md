@@ -478,6 +478,23 @@ alternative at all. The three calls are:
   add. One failed query makes the whole strip unavailable, never a partial
   one. The targets in the §13.7 panel titles are the backend's, and the
   strip prints measured values only.
+- Prometheus, alert rules: `GET …/proxy/uid/{prometheus}/api/v1/rules?type=alert`,
+  Prometheus's own rules read, for the alert strip beside the golden signals.
+  The rules are Prometheus's and not Grafana-managed (the local `grafana`
+  service mounts `platform-alerts.yaml` into the Prometheus its image bundles,
+  backend#502), so Grafana's own alerting API would list none of them; the
+  read goes through `GrafanaClient` to the configured Grafana URL and adds no
+  origin. Each loaded rule shows its state (`inactive`, `pending`, `firing`),
+  severity label and the instances alight, firing first. An empty list is
+  said to be empty and is never shown as a quiet platform. **The rules in
+  `awaiting-signal.yaml` are listed apart, as waiting, each with the metric it
+  reads that nothing publishes yet**: no Prometheus loads that file, so they
+  are never in the loaded list and never shown as inactive, because a rule
+  that cannot fire says nothing about health. `WaitingAlerts` copies their
+  names and metrics, and the drift gate checks both against the file, and
+  against `platform-alerts.yaml`, in which none may appear. The waiting list
+  is the host's and is returned whether or not Prometheus answered; the
+  loaded list is unavailable, with the reason, when it did not.
 
 How the correlation id reaches telemetry is a backend fact, and it decides
 the join: `Common.Web.CorrelationIdExtensions` puts the id in a logging scope
@@ -592,6 +609,7 @@ All under `/api`, JSON, loopback only.
 | `POST /product-images/upload` | body `{ uploadUrl, headers }`; §5.7's `PUT` of the sample image, in the proxy's result shape; 400 for a URL that is not the configured object store |
 | `GET /trace/{correlationId}?window=15m` | §5.9. `window` is `90s`/`15m`/`2h` bounded to `[1m, 24h]`, default `15m`; a window outside it, and an id outside the backend's adoptable alphabet (the id reaches a LogQL string, so this is the injection boundary), are 400 problem details. |
 | `GET /telemetry/health` | the golden-signal strip |
+| `GET /telemetry/alerts` | the alert strip: loaded rules and the waiting ones, apart |
 | `GET /transcript`, `GET /transcript/script` | §5.11; the entries, and the same as one bash script in `text/plain` |
 
 Streams use Server-Sent Events rather than WebSockets because every stream is
