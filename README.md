@@ -175,6 +175,13 @@ are announced.
   device, and a mismatch it reports is raised in the backend, not fixed here.
   Its build and reads answer from recordings under FakePlatform, written
   from `run-locally.md` without an emulator to record.
+- A Scenario lease is the console's one change to a service beyond Up, Down and the BFF
+  rebuild: stopping `inventory-api`, or recreating `ordering-api` with the backend's
+  short-timeouts override. It is journaled under `Admin:DataDir` before it is made and
+  undone by Restore, at its deadline (10 minutes at most), and at the next host start. The Stack
+  screen shows a lease in force and refuses Up, Down and the reset while it is held. A host
+  killed outright cannot undo it: the service stays as the run left it until the next
+  start, or until Restore is pressed on a host that is running.
 - The console does not track a client started by hand: Start still runs a
   second `npm start`, which competes for port 5173, and its output shows
   what `ng serve` did.
