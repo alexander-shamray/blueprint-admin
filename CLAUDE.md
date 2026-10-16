@@ -110,11 +110,11 @@ the turns it takes; `docs/token-plan.md` is where the spend was measured.
   one `Grep` answers.
 - **The review loop** is `/ship` step 5's: rounds of one read-only
   `branch-reviewer`, handed the diff under `artifacts/review/` and not the
-  author's conclusions, to a seven-round ceiling. Round 2 onwards reads the
-  diff since the last round and the open findings, not the tree. Never
-  `general-purpose`, never the session reviewing its own diff.
+  author's conclusions. The ceiling, and when a round is a recheck of the
+  diff since the last round rather than a full pass, are `/ship` step 5's.
+  Never `general-purpose`, never the session reviewing its own diff.
 - **Plans.** A change that fits one PR takes plan mode, not a plan file; a
-  plan cites code by path and symbol, and stays under 50 KB.
+  plan cites code by path and symbol rather than pasting it.
 - **Before a wait, shed the context.** A session about to wait on CI or a
   background agent compacts first: a wake re-sends all of it.
 - **One task per session**: `/clear` between tasks.
