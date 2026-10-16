@@ -193,6 +193,8 @@ export class ScenarioPage {
   readonly finished = signal(false);
   private exportedScript: ScriptKey = 'deliver';
   private exportedUser = '';
+  /** The transcript's highest sequence when the run began, so the export carries the run's lines and not the session's; null where it could not be read. */
+  private transcriptAfter: number | null = null;
   /** The realm user picked here; empty until one is, when the API screen's user is the default. */
   readonly username = signal('');
 
@@ -291,7 +293,7 @@ export class ScenarioPage {
       const steps = this.steps();
       const ids = [...new Set(steps.flatMap((s) => (s.correlationId ? [s.correlationId] : [])))];
       const [transcript, queuesAfter, ...traces] = await Promise.all([
-        firstValueFrom(this.host.transcriptScript()).catch(() => null),
+        firstValueFrom(this.host.transcriptScript(this.transcriptAfter ?? undefined)).catch(() => null),
         firstValueFrom(this.host.brokerQueues()).catch(() => null),
         ...ids.map((id) =>
           firstValueFrom(this.host.trace(id)).catch((e: unknown): TraceRead => describe(e)),
@@ -307,6 +309,7 @@ export class ScenarioPage {
         steps,
         strip: this.strip(),
         transcript,
+        transcriptScope: this.transcriptAfter === null ? 'session' : 'run',
         traces: read,
         queuesBefore: this.queuesBefore,
         queuesAfter,
@@ -317,6 +320,16 @@ export class ScenarioPage {
       this.exportError.set(describe(e));
     } finally {
       this.exporting.set(false);
+    }
+  }
+
+  /** The highest sequence the transcript holds now; the entries after it are this run's. Null where the host would not say. */
+  private async transcriptMark(): Promise<number | null> {
+    try {
+      const view = await firstValueFrom(this.host.transcript());
+      return view.entries.reduce((high, e) => Math.max(high, e.sequence), 0);
+    } catch {
+      return null;
     }
   }
 
@@ -388,6 +401,7 @@ export class ScenarioPage {
     this.exportError.set(null);
     this.exportedScript = script;
     this.exportedUser = username;
+    this.transcriptAfter = await this.transcriptMark();
     this.steps.set(initialSteps(script));
 
     try {

@@ -24,6 +24,8 @@ export interface ExportInput {
   strip: SagaStrip | null;
   /** The host's rendered, scrubbed transcript script; null when it could not be read. */
   transcript: string | null;
+  /** Whether the transcript starts where the run did, or is the host's whole session because the starting point was not read. */
+  transcriptScope: 'run' | 'session';
   /** By correlation id. */
   traces: Readonly<Record<string, TraceRead>>;
   /** The broker's queues at the drain step, and when the export was made; null where there was no read. */
@@ -179,6 +181,10 @@ export function buildExport(input: ExportInput): string {
     `- Outcome: ${outcome(input.steps)}`,
     '',
     '## Operator transcript',
+    '',
+    input.transcriptScope === 'run'
+      ? "The commands and requests the host kept from when this run began."
+      : "The host's whole session: the point where this run began could not be read.",
     '',
     input.transcript === null
       ? 'Omitted: the host would not render the transcript.'

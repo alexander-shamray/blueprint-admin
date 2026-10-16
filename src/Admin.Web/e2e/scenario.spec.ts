@@ -123,6 +123,52 @@ test('the saga strip shows a saga that stops at despatched as despatched, with n
   await expect(strip.locator('.transitions li', { hasText: 'delivered' })).toHaveCount(0);
 });
 
+// No fake saga stands still for the strip's stall time inside a watch, so the order read is held at confirmed by the route
+// and the page's clock is run forward: the console's own polling and its clock are what the stall mark is measured by.
+test('the saga strip marks a saga that stands still at confirmed as stalled, in words', async ({ page }) => {
+  const placed = '2026-10-05T12:00:00Z';
+  const confirmed = '2026-10-05T12:00:01Z';
+  await page.route('**/api/proxy', async (route) => {
+    const sent = route.request().postDataJSON() as { method?: string; url?: string; correlationId?: string };
+    if (sent.method === 'GET' && /\/bff\/v1\/orders\/[0-9a-f-]{36}$/.test(sent.url ?? '')) {
+      const body = JSON.stringify({
+        orderId: sent.url!.split('/').pop(),
+        status: 'confirmed',
+        timeline: { placed, confirmed, dispatched: null, delivered: null, cancelled: null },
+        asOf: confirmed,
+      });
+      await route.fulfill({
+        json: {
+          outcome: 'responded',
+          status: 200,
+          headers: {},
+          body,
+          bodyTruncated: false,
+          bodyError: null,
+          elapsedMs: 1,
+          correlationId: sent.correlationId ?? null,
+        },
+      });
+    } else {
+      await route.continue();
+    }
+  });
+  await page.clock.install();
+  await page.goto('/scenario');
+  await page.getByRole('button', { name: 'Run' }).click();
+
+  const stalled = page.locator('aside.saga .saga-stalled');
+  for (let i = 0; i < 200 && !(await stalled.isVisible()); i++) {
+    await page.clock.runFor(1000);
+    await page.waitForTimeout(25);
+  }
+
+  await expect(stalled).toBeVisible();
+  await expect(stalled).toContainText('[stalled] The status has stood at confirmed for');
+  await expect(page.locator('aside.saga .saga-status')).toHaveText('confirmed');
+  await expect(page.locator('aside.saga .saga-read')).toContainText('Still reading.');
+});
+
 test('a finished run exports as one Markdown document, scrubbed by the host, with its sections', async ({ page }) => {
   await page.goto('/scenario');
   const exportButton = page.getByRole('button', { name: 'Export Markdown' });

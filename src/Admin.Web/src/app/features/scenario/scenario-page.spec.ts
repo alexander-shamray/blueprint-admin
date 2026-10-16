@@ -265,6 +265,7 @@ describe('ScenarioPage', () => {
     transcriptScript: ReturnType<typeof vi.fn>;
     trace: ReturnType<typeof vi.fn>;
     scenarioExport: ReturnType<typeof vi.fn>;
+    transcript: ReturnType<typeof vi.fn>;
   };
   let uuids: number;
 
@@ -289,6 +290,7 @@ describe('ScenarioPage', () => {
         of({ correlationId: id, window: '30m', reachable: true, error: null, traceIds: [], tracesTruncated: false, warning: null, events: [] }),
       ),
       scenarioExport: vi.fn((markdown: string) => of(markdown)),
+      transcript: vi.fn(() => of({ entries: [{ sequence: 7 }, { sequence: 9 }], dropped: 0 })),
     };
     TestBed.configureTestingModule({
       imports: [ScenarioPage],
@@ -392,11 +394,28 @@ describe('ScenarioPage', () => {
     expect(sentDoc).toContain('# Scenario run abcdef12: ');
     expect(sentDoc).toContain('## Trace timeline');
     expect(host.trace).toHaveBeenCalledWith('scenario-abcdef12-publish');
+    // The transcript is asked for from the highest sequence it held when the run began.
+    expect(host.transcriptScript).toHaveBeenCalledWith(9);
+    expect(sentDoc).toContain('from when this run began');
     expect(click).toHaveBeenCalledTimes(1);
     const text = await created[0].text();
     expect(text).toContain('<scrubbed>');
     expect(text).not.toContain('curl http://x');
     expect(page.exportError()).toBeNull();
+  });
+
+  it("exports the whole session's transcript, and says so, when the run's starting point could not be read", async () => {
+    vi.spyOn(URL, 'createObjectURL').mockImplementation(() => 'blob:x');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    host.transcript.mockReturnValue(throwError(() => new Error('no')));
+    const page = render().componentInstance;
+    await page.run();
+
+    await page.export();
+
+    expect(host.transcriptScript).toHaveBeenCalledWith(undefined);
+    expect(host.scenarioExport.mock.calls[0][0]).toContain("The host's whole session");
   });
 
   it('exports nothing before a run has ended', async () => {
