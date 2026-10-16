@@ -6019,6 +6019,7 @@ class TheGitArgvGuard(unittest.TestCase):
         os.makedirs(os.path.join(root, "src", "app"))
         for command in ("ls > src/app/x.ts", "ls > docs/notes.md",
                         "ls > E2E/smoke.spec.ts", "ls > ./public/index.html",
+                        "ls > tests/x.cs", "ls > tools/x.py",
                         f"ls > {Path(root).as_posix()}/src/app/x.ts"):
             with self.subTest(command=command):
                 self.assertRefused(command, cwd=root)
