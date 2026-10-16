@@ -25,6 +25,7 @@ line names one residual below by the words it opens with.
 | A command's `allowed-tools` or `disallowed-tools` | `grant the index commands`, `runs before it pushes never denies push`, `is a grant surface` |
 | The review agent grant, or restoring an external reviewer | `grants exactly`, `archive/external-reviewers` |
 | The harness suite and its shards | `shard-harness-suite.py`, `That runner owns every discovery root` |
+| The sweeps' slice lists and `refs/sweeps/` | `The sweeps write two things` |
 | Rebasing or force-pushing | `The only force push` |
 | `/branch` worktrees under `.claude/worktrees/` | `worktrees sit inside the checkout` |
 
@@ -259,6 +260,19 @@ A new residual is stated **here** and gets a row above.
   ones sharing a `secsweep-*` namespace in the temp root or this checkout's
   own `.git`, and a name in either that no longer resolves fails a test, so a
   renamed class loses its pinning loudly.
+
+- **The sweeps write two things outside `$work`, and both are fixed
+  helpers' to write.** `sweep-slices.sh` cuts the pinned commit into lists of
+  names in `$work.slices/`, a sibling of the worktree that
+  `git-worktree-drop.sh` removes with it, so reading a list is the one
+  exception to *every read is an absolute path under `$work`* and it exposes
+  names, not the tree. `sweep-mark.sh` moves the local ref `refs/sweeps/<kind>`
+  to a full commit sha with `git update-ref`, nothing else; it never pushes, and
+  a checkout without the ref sweeps in full. Both take a closed kind, and the
+  first refuses any path that is not a sweep-shaped direct child of the temp
+  root, as the worktree helpers do. The residual is the ref: a wrong mark
+  narrows the next sweep, and `full` is the answer. Their argument is in
+  [`commands/bug-sweep.md`](commands/bug-sweep.md), *Slices, leads and the mark*.
 
 - **The only force push in this repository is
   `.claude/scripts/git-rebase-onto-main.sh`, and `/ship` step 7 grants it by
