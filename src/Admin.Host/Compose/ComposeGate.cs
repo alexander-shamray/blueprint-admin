@@ -11,17 +11,26 @@ namespace Admin.Host.Compose;
 /// </summary>
 public sealed class ComposeGate
 {
+    /// <summary>The kind of a Scenario's lease (spec §5.3, <em>Scenario service control</em>), as a refusal names it.</summary>
+    public const string LeaseKind = "scenario lease";
+
     private readonly Lock gate = new();
     private Claim? current;
+    private Claim? lease;
 
     /// <summary>
-    /// Runs <paramref name="start"/> and holds the gate with its job, unless a job is still running under it; that one
-    /// is returned instead, with its own kind, and nothing is started.
+    /// Runs <paramref name="start"/> and holds the gate with its job, unless a job is still running under it or a lease is
+    /// held; that one is returned instead, with its own kind, and nothing is started.
     /// </summary>
     public Claim Claim(string kind, Func<Job> start)
     {
         lock (gate)
         {
+            if (lease is { } held)
+            {
+                return held;
+            }
+
             if (current is { Job.Status.State: JobState.Running } running)
             {
                 return running;
@@ -30,6 +39,39 @@ public sealed class ComposeGate
             current = new Claim(start(), kind);
 
             return current;
+        }
+    }
+
+    /// <summary>
+    /// Runs <paramref name="start"/> and holds the gate as a lease until <see cref="ReleaseLease"/>, which outlives the
+    /// job that began it: the claim a Scenario keeps while a service is stopped or recreated. Refused, with the claim that
+    /// refuses it, while a job is running or a lease is already held; nothing is started then.
+    /// </summary>
+    public (bool Held, Claim Claim) HoldLease(Func<Job> start)
+    {
+        lock (gate)
+        {
+            if (lease is { } held)
+            {
+                return (false, held);
+            }
+
+            if (current is { Job.Status.State: JobState.Running } running)
+            {
+                return (false, running);
+            }
+
+            lease = new Claim(start(), LeaseKind);
+
+            return (true, lease);
+        }
+    }
+
+    public void ReleaseLease()
+    {
+        lock (gate)
+        {
+            lease = null;
         }
     }
 }
@@ -48,5 +90,7 @@ public sealed record Claim(Job Job, string Kind)
             : TypedResults.Problem(
                 statusCode: StatusCodes.Status409Conflict,
                 title: "A run is already going",
-                detail: $"A {Kind} (job {Job.Id}) is still running, so this {wanted} was not started. Wait for it to end.");
+                detail: Kind == ComposeGate.LeaseKind
+                    ? $"A Scenario holds a lease (job {Job.Id}), so this {wanted} was not started. Restore it on the Stack screen, or wait for its deadline."
+                    : $"A {Kind} (job {Job.Id}) is still running, so this {wanted} was not started. Wait for it to end.");
 }

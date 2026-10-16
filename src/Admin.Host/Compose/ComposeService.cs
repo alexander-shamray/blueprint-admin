@@ -19,6 +19,27 @@ public sealed class ComposeService(IProcessRunner runner, RepoPaths paths, TimeP
 
     public Job Start(string service) => Run("start", service);
 
+    /// <summary>
+    /// The backend's override that cuts the saga's waits to seconds (ADR-128), a sibling of the Compose file. It belongs to the
+    /// full-stack <c>up</c> only (run-locally.md), and it is only ever added to a recreate of Ordering by a Scenario's lease.
+    /// </summary>
+    internal const string ShortTimeoutsFileName = "docker-compose.short-timeouts.yml";
+
+    /// <summary>
+    /// One service recreated alone, as run-locally.md's "Restoring one service, and changing the saga's waits" gives it:
+    /// <c>up -d --no-deps</c> for the named service, with the short-timeouts file added to the <c>-f</c> list or not. Compose
+    /// starts a stopped container and recreates one whose environment differs, so the same line without the override
+    /// restores either change. <c>--wait</c> is added, so the job ends when the service is healthy.
+    /// </summary>
+    public Job Recreate(string service, bool shortTimeouts) =>
+        shortTimeouts
+            ? runner.Start(new ProcessSpec("docker", ["compose", "-f", paths.ComposeFile, "-f", ShortTimeoutsFile(paths.ComposeFile), "up", "-d", "--no-deps", "--wait", service], paths.BackendDir))
+            : Run("up", "-d", "--no-deps", "--wait", service);
+
+    /// <summary>The override beside <paramref name="composeFile"/>, spelt with the separators that path uses.</summary>
+    internal static string ShortTimeoutsFile(string composeFile) =>
+        composeFile[..(composeFile.LastIndexOfAny(['/', '\\']) + 1)] + ShortTimeoutsFileName;
+
     public Job FollowLogs(IReadOnlyList<string> services) => Run(["logs", "-f", "--tail", "200", .. services]);
 
     public Job Exec(string service, params string[] args) => Read(["exec", "-T", service, .. args]);

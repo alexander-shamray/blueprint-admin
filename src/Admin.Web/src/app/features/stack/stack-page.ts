@@ -214,6 +214,31 @@ export class StackPage {
     this.host.frontendStop().subscribe(this.started);
   }
 
+  /** Set while a Restore is going, and the host's reason when it did not undo the lease; the lease stays held then. */
+  readonly restoring = signal(false);
+  readonly restoreError = signal<string | null>(null);
+
+  /** The Scenario lease the host holds (spec §5.3), read with the stack, so a lease a run left behind is on this screen. */
+  readonly lease = computed(() => this.stack()?.lease ?? null);
+
+  restoreLease(): void {
+    if (this.restoring()) {
+      return;
+    }
+
+    this.restoring.set(true);
+    this.host.leaseRestore().subscribe({
+      next: () => {
+        this.restoreError.set(null);
+        this.restoring.set(false);
+      },
+      error: (e: unknown) => {
+        this.restoreError.set(this.describeError(e, 'The host did not answer the restore.'));
+        this.restoring.set(false);
+      },
+    });
+  }
+
   buildForDevice(): void {
     this.host.frontendDeviceBuild().subscribe(this.started);
   }

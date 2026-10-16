@@ -92,6 +92,31 @@ describe('HostClient', () => {
     req.flush({ checks: [] });
   });
 
+  it('reads the lease and the changes a Scenario may ask for', () => {
+    client.lease().subscribe();
+
+    const req = http.expectOne('/api/stack/lease');
+    expect(req.request.method).toBe('GET');
+    req.flush({ lease: null, changes: [] });
+  });
+
+  it('takes a lease with the change, how long to hold it and a label', () => {
+    client.leaseAcquire({ change: 'stop-inventory', holdSeconds: 120, label: 'a run' }).subscribe();
+
+    const req = http.expectOne('/api/stack/lease');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ change: 'stop-inventory', holdSeconds: 120, label: 'a run' });
+    req.flush({});
+  });
+
+  it('restores the lease', () => {
+    client.leaseRestore().subscribe();
+
+    const req = http.expectOne('/api/stack/lease/restore');
+    expect(req.request.method).toBe('POST');
+    req.flush({ lease: null, changes: [] });
+  });
+
   it('lists realm users', () => {
     client.identityUsers().subscribe();
 

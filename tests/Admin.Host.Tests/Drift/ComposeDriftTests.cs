@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Admin.Host.Broker;
+using Admin.Host.Compose;
 using Admin.Host.Config;
 using Admin.Host.Fakes;
 using Admin.Host.Stack;
@@ -88,6 +89,26 @@ public sealed partial class ComposeDriftTests
         unit.ShouldContain($"{WorkstationDoctor.CorsSwitch}:");
         Backend.Read("src", "Gateway", "Gateway.Api", "Program.cs")
             .ShouldContain($"GetValue<bool>(\"{WorkstationDoctor.CorsSwitch.Replace("__", ":", StringComparison.Ordinal)}\")");
+    }
+
+    [Fact]
+    public void Every_service_a_scenario_lease_changes_is_one_the_backend_composes()
+    {
+        HashSet<string> services = [.. Compose.Services().Select(s => s.Name)];
+
+        ScenarioControl.Table.Values.Select(c => c.Service).Where(s => !services.Contains(s)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void The_short_timeouts_override_is_a_compose_file_that_sets_the_saga_waits_of_the_service_the_lease_recreates()
+    {
+        string file = Backend.Read("deploy", "compose", ComposeService.ShortTimeoutsFileName);
+        string recreated = ScenarioControl.Table[ScenarioControl.ShortWaits].Service;
+
+        file.ShouldContain($"{recreated}:");
+        file.ShouldContain("Saga__StockTimeoutDelay:");
+        file.ShouldContain("Saga__ReleaseTimeoutDelay:");
+        file.ShouldContain("Saga__PaymentTimeoutDelay:");
     }
 
     [Fact]

@@ -87,6 +87,24 @@ builder.Services.AddSingleton<ComposeService>();
 builder.Services.AddSingleton<ComposeGate>();
 builder.Services.AddSingleton<WorkstationDoctor>();
 builder.Services.AddSingleton<DeviceReads>();
+
+// The lease's journal lives beside the baselines under Admin:DataDir, where a restart finds it. FakePlatform writes nothing a
+// real incident could need, and each fake host takes a journal of its own, so two test hosts never read each other's lease.
+builder.Services.AddSingleton(sp =>
+{
+    AdminOptions o = sp.GetRequiredService<IOptions<AdminOptions>>().Value;
+    string journal = o.FakePlatform
+        ? Path.Combine(Path.GetTempPath(), "blueprint-admin-fake", $"scenario-lease-{Guid.NewGuid():N}.json")
+        : Path.Combine(Path.GetFullPath(o.DataDir, clonesBase), "scenario-lease.json");
+
+    return new ScenarioLeaseService(
+        sp.GetRequiredService<ComposeService>(),
+        sp.GetRequiredService<ComposeGate>(),
+        journal,
+        sp.GetRequiredService<TimeProvider>(),
+        sp.GetRequiredService<ILogger<ScenarioLeaseService>>());
+});
+builder.Services.AddHostedService<LeaseReconciler>();
 builder.Services.AddSingleton<LogFollower>();
 builder.Services.AddSingleton<BrokerService>();
 builder.Services.AddSingleton<ProjectionRebuildService>();

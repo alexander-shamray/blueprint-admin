@@ -28,6 +28,9 @@ table.device-reads td.state { font-weight: 600; white-space: nowrap; }
 table.device-reads tr.state-Ok td.state { color: #070; }
 table.device-reads tr.state-Problem td.state { color: #b00; }
 table.device-reads tr.state-Unknown td.state { color: #666; }
+.lease { margin-bottom: 1rem; padding: 0.5rem 0.75rem; border: 1px solid #a15c00; background: #fff6e5; }
+.lease h2 { font-size: 1rem; margin: 0 0 0.25rem; }
+.lease button { margin-right: 0.5rem; }
 .frontend h3 { font-size: 0.95rem; margin: 1rem 0 0.5rem; }
 .frontend { margin-bottom: 1rem; }
 .frontend h2 { font-size: 1rem; margin: 0 0 0.5rem; }
