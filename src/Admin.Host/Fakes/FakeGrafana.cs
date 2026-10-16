@@ -36,8 +36,13 @@ internal static class FakeGrafana
     /// the caller filtered on so the screen shows the id the user typed. The rewrite is what lets one
     /// recording answer any id; everything else in it is the measurement.
     /// </summary>
-    public static HttpResponseMessage Loki(HttpRequestMessage request)
+    public static HttpResponseMessage Loki(HttpRequestMessage request, FakeOrders orders)
     {
+        if (FlaggedOrderIn(request.RequestUri!.Query) is { } flaggedOrder)
+        {
+            return FakeHttp.Json(HttpStatusCode.OK, ReviewFlags(flaggedOrder, orders));
+        }
+
         string requested = CorrelationIdIn(request.RequestUri!.Query) ?? RecordedCorrelationId;
         string body = Fixture("grafana-loki-query.json").Replace(RecordedCorrelationId, requested, StringComparison.Ordinal);
 
@@ -48,6 +53,42 @@ internal static class FakeGrafana
         }
 
         return FakeHttp.Json(HttpStatusCode.OK, body);
+    }
+
+    /// <summary>
+    /// The review-flag query's answer (run-locally.md, "flagged for review"): one stream per flag the fake order has, whose line is
+    /// the one Ordering logs, or an empty result for an order with none. The console builds the query in
+    /// <c>ReviewFlagService.LogQl</c>.
+    /// </summary>
+    private static string ReviewFlags(string orderId, FakeOrders orders)
+    {
+        string streams = string.Join(",", orders.ReviewFlags(orderId).Select(flag =>
+        {
+            long nanoseconds = flag.At.ToUnixTimeMilliseconds() * 1_000_000L;
+            string line = $"Order {orderId} flagged for review: {flag.Reason}.";
+
+            return $$$"""{"stream":{"service_name":"Ordering.Api","severity_text":"Information"},"values":[["{{{nanoseconds}}}","{{{line}}}"]]}""";
+        }));
+
+        return $$$"""{"status":"success","data":{"resultType":"streams","result":[{{{streams}}}]}}""";
+    }
+
+    /// <summary>The order id inside the review-flag query, or null for any other query.</summary>
+    private static string? FlaggedOrderIn(string query)
+    {
+        string decoded = Uri.UnescapeDataString(query);
+        const string marker = "flagged for review\" |= \"";
+        int start = decoded.IndexOf(marker, StringComparison.Ordinal);
+
+        if (start < 0)
+        {
+            return null;
+        }
+
+        int from = start + marker.Length;
+        int end = decoded.IndexOf('"', from);
+
+        return end < 0 ? null : decoded[from..end];
     }
 
     /// <summary>

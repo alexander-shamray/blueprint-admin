@@ -143,6 +143,57 @@ public sealed class FakeOrdersTests
         Status(normal.Detail(waiting)!).ShouldBe("placed");
     }
 
+    [Fact]
+    public void An_order_to_SIM_STRANGE_is_flagged_not_despatched_once_the_despatch_wait_lapses_and_not_before()
+    {
+        FakeOrders orders = new(time, new FakeStack { ShortWaits = true });
+        string id = orders.Place(postalCode: FakeOrders.StrangePostalCode);
+
+        time.Advance(FakeOrders.ShortDespatchWait - TimeSpan.FromTicks(1));
+        orders.ReviewFlags(id).ShouldBeEmpty();
+
+        time.Advance(TimeSpan.FromTicks(1));
+        (string Reason, DateTimeOffset At) flag = orders.ReviewFlags(id).ShouldHaveSingleItem();
+        flag.Reason.ShouldBe("not_despatched");
+        flag.At.ShouldBe(time.GetUtcNow());
+
+        // The order read is what it was: confirmed, never despatched.
+        Status(orders.Detail(id)!).ShouldBe("confirmed");
+    }
+
+    [Fact]
+    public void Without_the_override_the_despatch_wait_is_days_and_no_flag_lands_within_an_hour()
+    {
+        FakeOrders orders = new(time, new FakeStack());
+        string id = orders.Place(postalCode: FakeOrders.StrangePostalCode);
+
+        time.Advance(TimeSpan.FromHours(1));
+
+        orders.ReviewFlags(id).ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("SIM-REFUSED")]
+    [InlineData("SIM-DOWN")]
+    [InlineData("SIM-SLOW")]
+    [InlineData("SIM-TRANSIT")]
+    [InlineData(null)]
+    public void An_order_to_any_other_code_is_never_flagged(string? code)
+    {
+        FakeOrders orders = new(time, new FakeStack { ShortWaits = true });
+        string id = orders.Place(postalCode: code);
+
+        time.Advance(TimeSpan.FromDays(4));
+
+        orders.ReviewFlags(id).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void An_order_the_fake_never_placed_has_no_flags()
+    {
+        new FakeOrders(time).ReviewFlags(FakeGateway.PlacedOrderId).ShouldBeEmpty();
+    }
+
     private static JsonElement[] Log(FakeOrders orders, string code, bool polls = false) =>
         [.. JsonDocument.Parse(orders.CarrierLog(code, polls)).RootElement.EnumerateArray().Select(e => e.Clone())];
 
