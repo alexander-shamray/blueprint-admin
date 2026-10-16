@@ -2,8 +2,8 @@ using System.Text.RegularExpressions;
 
 namespace Admin.Host.Tests.Drift;
 
-/// <summary>One Compose service of the backend, the unit file that declares it, and its first host port.</summary>
-internal sealed record ComposeUnitService(string Name, string Unit, int? HostPort);
+/// <summary>One Compose service of the backend, the unit file that declares it, and every host port its <c>ports:</c> line publishes, in order.</summary>
+internal sealed record ComposeUnitService(string Name, string Unit, IReadOnlyList<int> HostPorts);
 
 /// <summary>
 /// The backend's Compose tree read the way it is written: <c>docker-compose.yml</c> is an index of
@@ -60,7 +60,7 @@ internal static partial class Compose
             string unit = include.StartsWith("services/", StringComparison.Ordinal) ? Path.GetFileNameWithoutExtension(include) : "";
             bool inServices = false;
             string? current = null;
-            int? port = null;
+            List<int> ports = [];
 
             foreach (string line in Lines(include))
             {
@@ -85,11 +85,9 @@ internal static partial class Compose
                     continue;
                 }
 
-                Match ports = HostPort().Match(line);
-
-                if (current is not null && port is null && line.TrimStart().StartsWith("ports:", StringComparison.Ordinal) && ports.Success)
+                if (current is not null && ports.Count == 0 && line.TrimStart().StartsWith("ports:", StringComparison.Ordinal))
                 {
-                    port = int.Parse(ports.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+                    ports.AddRange(HostPort().Matches(line).Select(m => int.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture)));
                 }
             }
 
@@ -99,11 +97,11 @@ internal static partial class Compose
             {
                 if (current is not null)
                 {
-                    services.Add(new ComposeUnitService(current, unit, port));
+                    services.Add(new ComposeUnitService(current, unit, [.. ports]));
                 }
 
                 current = null;
-                port = null;
+                ports = [];
             }
         }
 

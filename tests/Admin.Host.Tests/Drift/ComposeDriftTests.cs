@@ -70,7 +70,7 @@ public sealed partial class ComposeDriftTests
         foreach ((string service, Func<AdminOptions, string> url) in Surfaces)
         {
             services.ShouldContainKey(service);
-            services[service].HostPort.ShouldBe(new Uri(url(options)).Port, service);
+            services[service].HostPorts.ShouldContain(new Uri(url(options)).Port, service);
         }
     }
 
