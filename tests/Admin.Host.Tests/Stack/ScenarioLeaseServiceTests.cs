@@ -126,6 +126,170 @@ public sealed class ScenarioLeaseServiceTests : IAsyncDisposable
         File.Exists(journal).ShouldBeFalse();
     }
 
+    private Task<AddResult> Add(string change = ScenarioControl.StopInventory, CancellationToken? token = null) =>
+        leases.AddChangeAsync(change, token ?? Token);
+
+    private string[] Commands() =>
+        [.. runner.Started.Where(s => !s.Arguments.Contains("ps")).Select(s => string.Join(' ', s.Arguments))];
+
+    [Fact]
+    public async Task A_change_added_to_a_held_lease_is_journaled_before_it_runs_and_the_deadline_does_not_move()
+    {
+        AcquireResult held = await Acquire(ScenarioControl.ShortWaits, seconds: 300);
+        string? journalWhenStopStarted = null;
+        runner.OnStart = spec =>
+        {
+            if (spec.Arguments.Contains("stop"))
+            {
+                journalWhenStopStarted = File.ReadAllText(journal);
+            }
+        };
+        time.Advance(TimeSpan.FromSeconds(40));
+
+        AddResult added = await Add();
+
+        added.Outcome.ShouldBe(AddOutcome.Held);
+        added.Lease!.Id.ShouldBe(held.Lease!.Id);
+        added.Lease.Changes.ShouldBe([ScenarioControl.ShortWaits, ScenarioControl.StopInventory]);
+        added.Lease.Services.ShouldBe(["ordering-api", "inventory-api"]);
+        added.Lease.ExpiresAt.ShouldBe(held.Lease.ExpiresAt);
+        journalWhenStopStarted.ShouldNotBeNull().ShouldContain("stop-inventory");
+        Commands().ShouldContain(Prefix + "stop inventory-api");
+        leases.Current!.Changes.ShouldBe([ScenarioControl.ShortWaits, ScenarioControl.StopInventory]);
+    }
+
+    [Fact]
+    public async Task A_change_added_later_is_undone_first_and_the_earlier_one_after_it()
+    {
+        await Acquire(ScenarioControl.ShortWaits);
+        await Add();
+
+        (await leases.RestoreAsync()).Outcome.ShouldBe(RestoreOutcome.Restored);
+
+        Commands().ShouldBe(
+        [
+            $"compose -f {Paths.ComposeFile} -f {Override} up -d --no-deps --wait ordering-api",
+            Prefix + "stop inventory-api",
+            Prefix + "up -d --no-deps --wait inventory-api",
+            Prefix + "up -d --no-deps --wait ordering-api",
+        ]);
+        File.Exists(journal).ShouldBeFalse();
+        leases.Current.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task A_change_off_the_table_or_already_in_the_lease_is_refused_and_runs_nothing()
+    {
+        await Acquire(ScenarioControl.StopInventory);
+        int before = runner.Started.Count;
+
+        (await Add("nothing-else")).Outcome.ShouldBe(AddOutcome.UnknownChange);
+        AddResult twice = await Add(ScenarioControl.StopInventory);
+
+        twice.Outcome.ShouldBe(AddOutcome.UnknownChange);
+        twice.Detail!.ShouldContain("already holds");
+        runner.Started.Count.ShouldBe(before);
+    }
+
+    [Fact]
+    public async Task A_change_added_with_no_lease_held_is_refused()
+    {
+        AddResult result = await Add();
+
+        result.Outcome.ShouldBe(AddOutcome.NothingHeld);
+        runner.Started.ShouldBeEmpty();
+        File.Exists(journal).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task A_change_added_to_a_lease_whose_restore_failed_is_refused()
+    {
+        await Acquire(ScenarioControl.ShortWaits);
+        runner.FailIf = spec => spec.Arguments.Contains("--wait") && spec.Arguments.Contains("up");
+        (await leases.RestoreAsync()).Outcome.ShouldBe(RestoreOutcome.Failed);
+        runner.FailIf = null;
+        int before = runner.Started.Count;
+
+        AddResult result = await Add();
+
+        result.Outcome.ShouldBe(AddOutcome.NothingHeld);
+        result.Detail!.ShouldContain("being restored");
+        runner.Started.Count.ShouldBe(before);
+    }
+
+    [Fact]
+    public async Task An_added_change_that_fails_undoes_every_change_the_lease_made()
+    {
+        await Acquire(ScenarioControl.ShortWaits);
+        runner.FailIf = spec => spec.Arguments.Contains("stop");
+
+        AddResult result = await Add();
+
+        result.Outcome.ShouldBe(AddOutcome.Failed);
+        result.Detail!.ShouldContain("The changes were undone.");
+        string[] lines = Commands();
+        lines.ShouldContain(Prefix + "up -d --no-deps --wait inventory-api");
+        lines[^1].ShouldBe(Prefix + "up -d --no-deps --wait ordering-api");
+        leases.Current.ShouldBeNull();
+        File.Exists(journal).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task An_added_change_that_never_finishes_is_ended_then_the_lease_is_undone()
+    {
+        await Acquire(ScenarioControl.ShortWaits, seconds: 600);
+        runner.Hang = spec => spec.Arguments.Contains("stop");
+
+        Task<AddResult> adding = Add();
+        await WaitUntilAsync(() => runner.Started.Any(s => s.Arguments.Contains("stop")));
+        time.Advance(ScenarioLeaseService.JobCap);
+        AddResult result = await adding;
+
+        result.Outcome.ShouldBe(AddOutcome.Failed);
+        result.Detail!.ShouldContain("did not finish within 180 seconds");
+        runner.Stopped.ShouldHaveSingleItem().Spec.Arguments.ShouldContain("stop");
+        leases.Current.ShouldBeNull();
+        File.Exists(journal).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task A_request_cancelled_mid_added_change_is_undone_before_the_cancellation_ends_it()
+    {
+        await Acquire(ScenarioControl.ShortWaits);
+        using CancellationTokenSource cancel = new();
+        runner.OnStart = spec =>
+        {
+            if (spec.Arguments.Contains("stop"))
+            {
+                cancel.Cancel();
+            }
+        };
+        runner.Hang = spec => spec.Arguments.Contains("stop");
+
+        await Should.ThrowAsync<OperationCanceledException>(() => Add(token: cancel.Token));
+
+        runner.Stopped.ShouldHaveSingleItem().Spec.Arguments.ShouldContain("stop");
+        Commands().ShouldContain(Prefix + "up -d --no-deps --wait inventory-api");
+        leases.Current.ShouldBeNull();
+        File.Exists(journal).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task A_journal_holding_an_added_change_is_restored_whole_at_the_next_start()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(journal)!);
+        await File.WriteAllTextAsync(
+            journal,
+            $$"""{"id":"abc","changes":["short-waits","stop-inventory"],"label":"a run","since":"{{time.GetUtcNow():O}}","expiresAt":"{{time.GetUtcNow().AddMinutes(5):O}}"}""",
+            Token);
+
+        await leases.ReconcileAsync();
+
+        Commands().ShouldBe([Prefix + "up -d --no-deps --wait inventory-api", Prefix + "up -d --no-deps --wait ordering-api"]);
+        File.Exists(journal).ShouldBeFalse();
+        leases.Current.ShouldBeNull();
+    }
+
     [Fact]
     public async Task A_restore_that_fails_on_the_last_change_keeps_the_first_unrestored_and_the_lease()
     {

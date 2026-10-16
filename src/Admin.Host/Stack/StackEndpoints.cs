@@ -47,6 +47,23 @@ public static class StackEndpoints
             };
         });
 
+        // One more change while the lease is held (spec §5.3), for a cause that must follow another. The lease's own deadline
+        // stands; a change that fails undoes every change the lease made.
+        app.MapPost("/api/stack/lease/changes", async Task<Results<Ok<LeaseView>, ProblemHttpResult>> (LeaseChangeRequest request, ScenarioLeaseService leases, CancellationToken cancellationToken) =>
+        {
+            AddResult result = await leases.AddChangeAsync(request.Change ?? string.Empty, cancellationToken);
+
+            return result.Outcome switch
+            {
+                AddOutcome.Held => TypedResults.Ok(result.Lease!),
+                AddOutcome.UnknownChange => TypedResults.Problem(
+                    statusCode: StatusCodes.Status400BadRequest, title: "Change refused", detail: result.Detail),
+                AddOutcome.NothingHeld => TypedResults.Problem(
+                    statusCode: StatusCodes.Status409Conflict, title: "No lease to add to", detail: result.Detail),
+                _ => TypedResults.Problem(statusCode: StatusCodes.Status500InternalServerError, title: "The change failed", detail: result.Detail),
+            };
+        });
+
         app.MapPost("/api/stack/lease/restore", async Task<Results<Ok<LeaseState>, ProblemHttpResult>> (ScenarioLeaseService leases) =>
         {
             RestoreResult result = await leases.RestoreAsync();
@@ -109,6 +126,8 @@ public sealed record StackView(ComposeStatus Backend, FrontendStatus Frontend, I
 
 /// <summary>One or more changes from <see cref="ScenarioControl.Table"/>, how long to hold them, and a label the Stack screen shows beside them.</summary>
 public sealed record LeaseRequest(string[]? Changes, int HoldSeconds, string? Label);
+
+public sealed record LeaseChangeRequest(string? Change);
 
 public sealed record DownRequest(bool WipeVolumes, string? Confirm);
 
