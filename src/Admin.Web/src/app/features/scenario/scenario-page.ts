@@ -20,6 +20,7 @@ import {
   ProjectionDrain,
   ProxyResult,
   QueuesView,
+  ReviewFlagView,
   TokenClockView,
 } from '../../core/host/host-types';
 import { IdentityState } from '../../core/identity/identity-state';
@@ -30,6 +31,8 @@ import { buildUrl, pretty, withFreshCommandId } from '../api/request-builder';
 import {
   CARRIER_POLL_MS,
   CARRIER_WATCH_MS,
+  REVIEW_POLL_MS,
+  REVIEW_WATCH_MS,
   CarrierEntry,
   SCRIPTS,
   SCRIPT_KEYS,
@@ -46,6 +49,7 @@ import {
   imageFault,
   orderRead,
   resolveOperations,
+  reviewVerdict,
   secondsBetween,
   stepCorrelationId,
   thumbnailFrom,
@@ -345,6 +349,9 @@ export class ScenarioPage {
         case 'carrier':
           if (!(await this.carrierLog(script, operations))) return;
           break;
+        case 'flagged':
+          if (!(await this.reviewFlag(script, orderId))) return;
+          break;
         case 'upload': {
           const uploaded = await this.upload(operations.image!, run, identity);
           if (uploaded === null) return;
@@ -470,6 +477,54 @@ export class ScenarioPage {
       this.patch(key, { detail: `${waiting} ${v.detail}` });
 
       await firstValueFrom(timer(CARRIER_POLL_MS).pipe(takeUntil(this.stopped)), { defaultValue: undefined });
+      if (this.destroyed) return false;
+    }
+  }
+
+  /**
+   * Reads what Ordering logged when it flagged the order for review (run-locally.md, the Loki query), through the host,
+   * until the line for the script's reason is there or the wait runs out. The host asks Loki by the order's own id, so the
+   * lines are this order's and nothing is sent as the user and the step has no trace. A Loki that cannot be asked fails the
+   * step: it never reads as an order nobody flagged.
+   */
+  private async reviewFlag(script: Script, orderId: string): Promise<boolean> {
+    const review = script.review;
+    if (!review || this.destroyed) return false;
+
+    const key: StepKey = 'flagged';
+    const waiting = `Waiting for Ordering to log the order as flagged for review as ${review.reason}: reading it every ${REVIEW_POLL_MS / 1000} s for up to ${REVIEW_WATCH_MS / 1000} s.`;
+    this.patch(key, { state: 'running', request: `GET /api/review/${orderId}`, detail: waiting });
+
+    const deadline = Date.now() + REVIEW_WATCH_MS;
+
+    for (;;) {
+      let view: ReviewFlagView;
+      try {
+        view = await firstValueFrom(this.host.reviewFlags(orderId));
+      } catch (e: unknown) {
+        if (this.cancelled || this.screenGone) return false;
+        this.patch(key, { state: 'failed', status: null, body: null, detail: describe(e) });
+        return false;
+      }
+      // A Cancel or a screen that went while the read was in flight ends the step without another wait.
+      if (this.destroyed) return false;
+
+      const v = reviewVerdict(view, review.reason, this.placedAt);
+      if (v.kind === 'reached') {
+        this.patch(key, { state: 'ok', detail: v.detail });
+        return true;
+      }
+      if (v.kind === 'failed') {
+        this.patch(key, { state: 'failed', detail: v.reason });
+        return false;
+      }
+      if (Date.now() >= deadline) {
+        this.patch(key, { state: 'failed', detail: `Not logged after ${REVIEW_WATCH_MS / 1000} s. ${v.detail}` });
+        return false;
+      }
+      this.patch(key, { detail: `${waiting} ${v.detail}` });
+
+      await firstValueFrom(timer(REVIEW_POLL_MS).pipe(takeUntil(this.stopped)), { defaultValue: undefined });
       if (this.destroyed) return false;
     }
   }

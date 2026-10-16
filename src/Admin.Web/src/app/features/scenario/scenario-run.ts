@@ -1,4 +1,4 @@
-import { ApiCatalogView, ApiOperation } from '../../core/host/host-types';
+import { ApiCatalogView, ApiOperation, ReviewFlagView } from '../../core/host/host-types';
 import { PUBLISH_OPERATION } from '../api/api-page';
 
 /**
@@ -25,6 +25,7 @@ export type StepKey =
   | 'out_of_stock'
   | 'unchanged'
   | 'carrier'
+  | 'flagged'
   | 'held';
 
 /** The steps that wait on the order read rather than send once. */
@@ -64,6 +65,7 @@ export type ScriptKey =
   | 'already-shipped'
   | 'stock-timeout'
   | 'payment-timeout'
+  | 'despatch-timeout'
   | 'carrier-refused'
   | 'carrier-down'
   | 'carrier-slow'
@@ -72,6 +74,11 @@ export type ScriptKey =
 
 /** What the carrier simulator's request log shows of each code the order read cannot tell apart (run-locally.md, the carrier log). */
 export type CarrierOutcome = 'refused' | 'down' | 'slow' | 'strange';
+
+/** The review Ordering raises when a wait of the saga lapses (blueprint-backend `OrderReviews`), by the reason it records. */
+export interface ScriptReview {
+  reason: string;
+}
 
 /** The code an order is placed to and what the simulator's log must then show of it. */
 export interface ScriptCarrier {
@@ -109,6 +116,8 @@ export interface Script {
   lease?: ScriptLease;
   /** The carrier outcome its `carrier` step reads from the simulator's request log. */
   carrier?: ScriptCarrier;
+  /** The reason Ordering must log when it flags the order for review, which its `flagged` step reads (run-locally.md, the Loki query). */
+  review?: ScriptReview;
 }
 
 export const SCRIPT_KEYS: readonly ScriptKey[] = [
@@ -120,6 +129,7 @@ export const SCRIPT_KEYS: readonly ScriptKey[] = [
   'already-shipped',
   'stock-timeout',
   'payment-timeout',
+  'despatch-timeout',
   'carrier-refused',
   'carrier-down',
   'carrier-slow',
@@ -130,6 +140,13 @@ export const SCRIPT_KEYS: readonly ScriptKey[] = [
 /** How the carrier step polls the simulator's log and how long it waits: Shipping backs off after a refusal, so a minute or two (run-locally.md). */
 export const CARRIER_POLL_MS = 5000;
 export const CARRIER_WATCH_MS = 240_000;
+
+/**
+ * How the flagged step reads Ordering's log line and how long it waits: the despatch wait is 60 s with the short-timeouts
+ * override (`deploy/compose/docker-compose.short-timeouts.yml`) and Loki lags the log a few seconds behind it.
+ */
+export const REVIEW_POLL_MS = 5000;
+export const REVIEW_WATCH_MS = 150_000;
 
 /** run-locally.md's carrier table: the postal code each outcome is scripted by. */
 const CARRIER_STEPS: readonly StepKey[] = ['publish', 'drain', 'stock', 'quote', 'order', 'confirmed', 'carrier', 'held'];
@@ -143,6 +160,9 @@ const STOP_INVENTORY = 'stop-inventory';
  * budget, which holds Payments up, so the order is declined only by the saga's payment wait.
  */
 const PAYMENT_WAIT_AMOUNT = 10.09;
+
+/** run-locally.md's carrier table: `SIM-STRANGE` books the parcel and never has it collected, so the despatch wait lapses. */
+const STRANGE_CODE = 'SIM-STRANGE';
 
 /** run-locally.md's carrier table: `SIM-TRANSIT` is collected and never delivered, so the order read stays `dispatched`. */
 const IN_TRANSIT_CODE = 'SIM-TRANSIT';
@@ -223,6 +243,16 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
     onHand: STOCKED,
     lease: { changes: [SHORT_WAITS], holdSeconds: 360 },
   },
+  'despatch-timeout': {
+    title: 'Despatch timeout',
+    intro:
+      "Shorten the saga's waits, publish a product, stock it, and order it to the delivery postal code SIM-STRANGE, whose parcel is booked and never collected; read Ordering's log until the despatch wait has lapsed and it has flagged the order for review as not_despatched, and read the order back still confirmed. Nothing compensates it: a person owns it now. The stack is restored afterwards, whatever happens.",
+    steps: ['lease', 'publish', 'drain', 'stock', 'quote', 'order', 'confirmed', 'flagged', 'held', 'restore'],
+    onHand: STOCKED,
+    postalCode: STRANGE_CODE,
+    lease: { changes: [SHORT_WAITS], holdSeconds: 420 },
+    review: { reason: 'not_despatched' },
+  },
   'carrier-refused': carrierScript(
     'Carrier refuses the address',
     'SIM-REFUSED',
@@ -243,7 +273,7 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
   ),
   'carrier-strange': carrierScript(
     'Carrier feed is strange',
-    'SIM-STRANGE',
+    STRANGE_CODE,
     'strange',
     "the carrier books the parcel and then serves a feed Shipping refuses whole, so it is polled again and again",
   ),
@@ -289,6 +319,7 @@ export const STEP_TITLES: Record<StepKey, string> = {
   out_of_stock: 'Wait for the stock refusal',
   unchanged: 'Read the order back unchanged',
   carrier: 'Read what the carrier saw',
+  flagged: 'Read the review the platform raised',
   held: 'Read the order back still confirmed',
 };
 
@@ -306,7 +337,7 @@ export const WATCHING_FOR: Record<WatchKey, string> = {
   declined: 'the saga to ask the payment provider to authorise the order and be refused',
   out_of_stock: 'the saga to ask Inventory to reserve the stock and be refused',
   unchanged: 'the order read, which a refused cancel leaves where it was: despatched and no longer cancellable',
-  held: 'the order read, which a carrier that refused, was down or slow, or served a strange feed, leaves at confirmed',
+  held: 'the order read, which a carrier that refused, was down or slow, or served a strange feed, and a despatch that never comes, leave at confirmed',
 };
 
 /** The calls the steps make, each by its role. */
@@ -343,7 +374,7 @@ export const SCENARIO_OPERATIONS: Record<OperationRole, string> = {
 
 /** The role a step sends as; the drain asks the broker and sends none. */
 export function roleOf(key: StepKey): OperationRole | null {
-  if (key === 'drain' || key === 'lease' || key === 'restore') return null;
+  if (key === 'drain' || key === 'lease' || key === 'restore' || key === 'flagged') return null;
   if (key === 'upload') return 'image';
   if (key === 'thumbnail') return 'product';
   if (key === 'late_cancel') return 'cancel';
@@ -561,6 +592,40 @@ export function carrierEntries(body: string): CarrierEntry[] | null {
   return entries;
 }
 
+export type ReviewVerdict =
+  | { kind: 'reached'; detail: string }
+  | { kind: 'waiting'; detail: string }
+  | { kind: 'failed'; reason: string };
+
+/**
+ * Whether Ordering has logged the order as flagged for review for `reason` (run-locally.md: `Order <id> flagged for review:
+ * <reason>.`, found in Loki by the order id). The host reads Loki by the order's own id, so the lines are this order's;
+ * `placedAt` (ms, 0 when unknown) only says how long after the place it was logged. A flag for another reason is not a
+ * failure on its own: an order may be flagged more than once, so it is said and the wait goes on. Only a Loki that could
+ * not be asked fails the step, because then nothing can be judged.
+ */
+export function reviewVerdict(view: ReviewFlagView, reason: string, placedAt: number): ReviewVerdict {
+  if (!view.reachable) {
+    return { kind: 'failed', reason: `Loki could not be read: ${view.error ?? 'no reason given'}.` };
+  }
+
+  const wanted = view.flags.find((f) => f.reason === reason);
+  if (wanted) {
+    const after = placedAt > 0 ? secondsBetween(new Date(placedAt).toISOString(), wanted.at) : null;
+    return {
+      kind: 'reached',
+      detail: `Ordering logged "${wanted.line}" at ${wanted.at}${after === null ? '' : `, ${after} s after the order was placed`}.`,
+    };
+  }
+
+  if (view.flags.length === 0) {
+    return { kind: 'waiting', detail: 'Ordering has not logged this order as flagged for review yet.' };
+  }
+
+  const others = [...new Set(view.flags.map((f) => f.reason))].join(', ');
+  return { kind: 'waiting', detail: `Ordering has flagged it for review as ${others}, not ${reason}; still waiting for ${reason}.` };
+}
+
 export type CarrierVerdict =
   | { kind: 'reached'; detail: string }
   | { kind: 'waiting'; detail: string }
@@ -710,7 +775,7 @@ export function verdict(key: WatchKey, read: OrderRead): WatchVerdict {
     // Not a wait: the order is read once the carrier has been seen, and it is confirmed and not despatched or it is not.
     return read.status === 'confirmed' && read.timeline.dispatched === null
       ? { kind: 'reached', at: read.timeline.confirmed ?? read.asOf }
-      : { kind: 'failed', reason: `The order reads ${read.status}, not confirmed: this carrier outcome should leave it there.` };
+      : { kind: 'failed', reason: `The order reads ${read.status}, not confirmed: this script's cause should leave it there.` };
   }
 
   if (key === 'unchanged') {

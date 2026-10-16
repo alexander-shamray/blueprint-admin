@@ -74,6 +74,25 @@ export interface LeaseChange {
   maxHoldSeconds: number;
 }
 
+/** One line Ordering logged when it flagged an order for review: `Order <id> flagged for review: <reason>.` (run-locally.md). */
+export interface ReviewFlag {
+  at: string;
+  reason: string;
+  line: string;
+}
+
+/**
+ * What Ordering logged about one order being flagged for review, read from Loki by the host (spec §5.3). `reachable` is false
+ * when Loki could not be asked, and `error` says why; an empty `flags` with `reachable` true means nothing was logged yet.
+ */
+export interface ReviewFlagView {
+  orderId: string;
+  window: string;
+  reachable: boolean;
+  error: string | null;
+  flags: ReviewFlag[];
+}
+
 export interface LeaseState {
   lease: LeaseView | null;
   changes: LeaseChange[];

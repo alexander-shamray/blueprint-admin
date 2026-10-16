@@ -157,6 +157,27 @@ for (const [script, ended, steps] of [
   });
 }
 
+// The despatch timeout ends in a review row no order read shows, so the script reads the line Ordering logs when it raises one
+// (FakeOrders.ReviewFlags, answered by FakeGrafana.Loki): an order to SIM-STRANGE under the short waits is flagged a few seconds
+// after the place, and the order read is still confirmed.
+test('the despatch-timeout script reads the review Ordering raised, finds the order still confirmed, and restores the stack', async ({ page, request }) => {
+  await page.goto('/scenario');
+
+  await page.getByLabel('Script').selectOption('despatch-timeout');
+  await page.getByRole('button', { name: 'Run' }).click();
+
+  const list = page.locator('ol.steps li.step');
+  await expect(list).toHaveCount(10);
+  await expect(list.locator('.state', { hasText: '[ok]' })).toHaveCount(10, { timeout: 60_000 });
+  await expect(list.nth(7).locator('.request')).toHaveText(/^GET \/api\/review\/[0-9a-f-]{36}$/);
+  await expect(list.nth(7).locator('.detail')).toContainText('flagged for review: not_despatched');
+  await expect(list.nth(8).locator('.detail')).toContainText('The order read shows held at');
+  await expect(list.last().locator('.detail')).toHaveText('The stack is as the run found it.');
+
+  const state = await (await request.get('/api/stack/lease')).json();
+  expect(state.lease).toBeNull();
+});
+
 test('Cancel ends a run that is waiting and still restores the stack', async ({ page, request }) => {
   await page.goto('/scenario');
 

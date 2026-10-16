@@ -25,6 +25,7 @@ import {
   ProxyResult,
   QueuesView,
   RealmUserView,
+  ReviewFlagView,
   StackView,
   AlertStripView,
   TelemetryHealthView,
@@ -78,6 +79,11 @@ export class HostClient {
 
   leaseRestore(): Observable<LeaseState> {
     return this.http.post<LeaseState>('/api/stack/lease/restore', null);
+  }
+
+  /** The lines Ordering logged when it flagged the order for review, read from Loki by the host (spec §5.3). */
+  reviewFlags(orderId: string, window = '30m'): Observable<ReviewFlagView> {
+    return this.http.get<ReviewFlagView>(`/api/review/${encodeURIComponent(orderId)}`, { params: { window } });
   }
 
   frontendDeviceBuild(): Observable<JobSummary> {
