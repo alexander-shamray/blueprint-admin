@@ -126,6 +126,7 @@ public sealed class FakeOrdersTests
     {
         FakeOrders orders = new(time, new FakeStack { ShortWaits = true });
         string product = orders.Publish(10.09m);
+        orders.Stock(product, 10);
         string id = orders.Place(product);
 
         time.Advance(FakeOrders.ShortPaymentWait - TimeSpan.FromTicks(1));
@@ -135,7 +136,9 @@ public sealed class FakeOrdersTests
 
         // Without the override the same total waits the minutes the real payment wait is.
         FakeOrders normal = new(time, new FakeStack());
-        string waiting = normal.Place(normal.Publish(10.09m));
+        string stocked = normal.Publish(10.09m);
+        normal.Stock(stocked, 10);
+        string waiting = normal.Place(stocked);
         time.Advance(TimeSpan.FromMinutes(2));
         Status(normal.Detail(waiting)!).ShouldBe("placed");
     }
@@ -372,23 +375,29 @@ public sealed class FakeOrdersTests
         read.RootElement.GetProperty("cancellable").GetBoolean().ShouldBeFalse();
     }
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData(1)]
-    public void A_declined_amount_ends_the_order_declined_whether_the_stock_is_unreported_or_exactly_one(int? onHand)
+    [Fact]
+    public void A_declined_amount_ends_the_order_declined_when_the_stock_is_exactly_one()
     {
         FakeOrders orders = new(time);
         string product = orders.Publish(10.01m);
-
-        if (onHand is { } count)
-        {
-            orders.Stock(product, count);
-        }
-
+        orders.Stock(product, 1);
         string id = orders.Place(product);
         time.Advance(FakeOrders.Step);
 
         Status(orders.Detail(id)!).ShouldBe("declined");
+    }
+
+    // run-locally.md: a product published a moment ago has no count in Inventory, not a zero, and its reservation fails.
+    // A script that does not stock its product passed against the fake and failed on a stack until the fake said so too.
+    [Fact]
+    public void A_product_nobody_stocked_ends_its_order_out_of_stock()
+    {
+        FakeOrders orders = new(time);
+        string product = orders.Publish(19.99m);
+        string id = orders.Place(product);
+        time.Advance(FakeOrders.Step);
+
+        Status(orders.Detail(id)!).ShouldBe("out_of_stock");
     }
 
     [Fact]
@@ -420,7 +429,6 @@ public sealed class FakeOrdersTests
 
     [Theory]
     [InlineData(19.99, 10)]
-    [InlineData(19.99, null)]
     [InlineData(19.99, 1)]
     [InlineData(10.02, 10)]
     [InlineData(19.019, 10)]
