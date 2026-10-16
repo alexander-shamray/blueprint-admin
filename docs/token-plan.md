@@ -59,6 +59,12 @@ long context re-sends all of it.
 **Exit.** A `/ship` main session's mean context under 200k a call and less
 than 35% of its input equivalent after a wake.
 
+**Built** (#122): `CLAUDE.md`'s *Subagents, review rounds and plans* holds
+the delegation brief, the review loop's ceiling and recheck rule, the
+planning rule, the compact-before-a-wait rule and one task per session. The exit reads met on the Sonnet `/ship` row of
+the 2026-10-16 section of [`token-usage.md`](token-usage.md), a day of
+sessions that cannot isolate these rules.
+
 ### Step 3 — what every session loads
 
 - `CLAUDE.md` cut to a locator and its hard rules; every rule it drops is
@@ -68,10 +74,10 @@ than 35% of its input equivalent after a wake.
 
 **Exit.** `CLAUDE.md` at least 40% under its 2026-10-15 size, and the lower
 per-turn resident size shown by the step 1 report. **Landed** with this
-file. The measurement is in [`token-usage.md`](token-usage.md) under
-2026-10-15, *Since #139*: the report's `--since` takes a date, so the day
-#139 merged cannot be split and the effect is not yet separable. **Owed:**
-the same view with `--since` a later date, once sessions have run.
+file. The first measurement, under 2026-10-15, *since #139*, could not
+split the day #139 merged. The second, under 2026-10-16, *since the day
+after #139*, shows the lower per-turn size of a `/ship` and does not
+attribute it to this cut. **Exit met** (#123).
 
 ### Step 4 — local review
 

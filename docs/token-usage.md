@@ -131,3 +131,39 @@ against 45%. Neither difference can be attributed to the cut:
 So **the step 3 exit's second half is not shown, and not refuted**. The
 measurement owed is `--since` the first day after the last prompt-shortening
 merge, against this section's `/ship` row.
+
+## 2026-10-16 — since the day after #139, the owner's machine
+
+Measured by the same report at `main` 3df4e83, `--since 2026-10-16 --models`.
+The window starts the day after #139 merged, so every session in it ran with
+the cut `CLAUDE.md`; it covers 161 contexts and 2,048 calls, 55.9M input
+equivalent in all.
+
+The `/ship` rows, split by model because a Sonnet and an Opus context differ
+by more than `CLAUDE.md`'s saving:
+
+| Who | Contexts | Calls | Mean context | Input equivalent | After a wake |
+|---|---|---|---|---|---|
+| `/ship`, `main`, Sonnet | 13 | 716 | 192k | 16.9M | 4.7M (28%) |
+| `/ship`, `main`, Opus | 2 | 143 | 148k | 2.8M | 0.2M (7%) |
+| `skill:ship`, `main`, Sonnet | 1 | 119 | 211k | 2.9M | none |
+
+Against the baselines above, `/ship`'s Sonnet mean context is 192k a call
+where the 2026-10-15 day read 254k and all history 259k, and its wake share
+28% where they read 32% and 45%.
+
+- **The lower per-turn size is shown.** Every `/ship` row in the window sits
+  under the earlier means, and the Sonnet row, the closest to the earlier
+  mix, is 62k under the day it is compared with.
+- **It is not `CLAUDE.md`'s doing.** The cut is some 1.3k tokens of that 62k.
+  The rest is what else changed before the window, the command split (#126)
+  and the local review (#124) among it. The report cannot apportion it, and
+  this section does not.
+- **Thin.** Fifteen `/ship` contexts in one day; the Opus row is two.
+
+So **the step 3 exit is met on both halves**: `CLAUDE.md` is more than 40%
+under its 2026-10-15 size, and the per-turn size of a `/ship` is lower in the
+window the cut ran in. What the measurement does not show is that the cut
+alone lowered it. Step 2's exit, a `/ship` main context under 200k and under
+35% after a wake, reads met by the Sonnet row on this day's sessions; that is
+recorded here, not claimed for step 2's rules, which land in the same change.
