@@ -343,11 +343,19 @@ paragraph first:
 - **Always restored, by one line.** The restore of either change is
   `up -d --no-deps <service>` on the base compose file alone. Compose starts a
   stopped container and recreates one whose environment differs, so one line
-  undoes both, and it also works on a service whose container a Down removed. It runs on success, on failure, on the run's
-  cancellation and on the page being left. It runs again from the journal when
-  the host starts, so a host that was killed leaves nothing changed past its
-  next start. A restore that fails keeps the lease and says so; it is never
-  dropped silently.
+  undoes both, and it also works on a service whose container a Down removed. It
+  adds `--wait`, and the lease is dropped only once `ps` shows the service
+  running. The host runs it when a change fails, when the request that asked for
+  one goes away mid-change, on request (a Scenario's own call at its end, and on
+  its cancellation or the page being left), and at the lease's deadline. It runs
+  again from the journal when the host starts, so a host that was killed leaves
+  nothing changed past its next start. A restore that fails keeps the lease, the
+  journal and the gate, and says so; it is never dropped silently, and Restore
+  tries again.
+- **A deadline.** Every lease has one. The Scenario asks to hold a change for
+  1 to 600 seconds, no change may be held longer, and the host restores at the
+  deadline by itself, so a page that closed without asking still leaves nothing
+  changed for as long as the host runs.
 - **The limit, stated.** A host killed outright cannot run its own `finally`.
   Until the next start the stack stays as the run left it. The Stack screen
   shows any lease in force, what it changed and since when, with a Restore
@@ -648,7 +656,8 @@ All under `/api`, JSON, loopback only.
 
 | Method and path | Does |
 |---|---|
-| `GET /stack` | `ServiceStatus[]`, the frontend job summary, and reachability of every HTTP surface of §2.2 that answers a readiness route, the object store and image edge among them |
+| `GET /stack` | `ServiceStatus[]`, the frontend job summary, reachability of every HTTP surface of §2.2 that answers a readiness route, the object store and image edge among them, and the Scenario lease in force or null (§5.3) |
+| `GET /stack/lease`, `POST /stack/lease`, `POST /stack/lease/restore` | §5.3's lease: the table of changes with the lease held; body `{ change, holdSeconds, label }`, which waits for the change and answers the lease held, 400 for a change off the table or a hold off its bounds, 409 naming the claim that refuses it (another lease, or another `ComposeGate` job), 500 for a change that failed, which it has already undone or says it could not; and the restore, 200 with nothing held too, 500 when the restore failed and the lease is still held |
 | `GET /stack/doctor` | §5.3's workstation checks, one row each with its verdict and what the reads said |
 | `POST /stack/backend/up` | Compose up; returns the job, or the Up still running; 409 while another `ComposeGate` job (§5.3) runs |
 | `POST /stack/backend/down` | body `{ wipeVolumes, confirm }`; returns the job, or a Down with the same `wipeVolumes` still running; 409 while another `ComposeGate` job (§5.3) runs, a Down with the other `wipeVolumes` included |
