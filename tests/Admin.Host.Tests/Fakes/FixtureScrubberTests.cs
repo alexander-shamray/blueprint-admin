@@ -43,6 +43,17 @@ public sealed class FixtureScrubberTests
         scrubbed.ShouldBe("""{"access_token":"<scrubbed>","refresh_token":"<scrubbed>","id_token":"<scrubbed>","expires_in":300}""");
     }
 
+    [Theory]
+    [InlineData("""{"token":"opaque","n":1}""", """{"token":"<scrubbed>","n":1}""")]
+    [InlineData("""{"api_key":"k","n":1}""", """{"api_key":"<scrubbed>","n":1}""")]
+    [InlineData("""{"apiKey":"k","n":1}""", """{"apiKey":"<scrubbed>","n":1}""")]
+    public void A_bare_token_or_api_key_in_json_is_scrubbed(string text, string expected)
+    {
+        FixtureScrubber.Scrub(text).ShouldBe(expected);
+        FixtureScrubber.Findings(text).ShouldNotBeEmpty();
+        FixtureScrubber.Findings(expected).ShouldBeEmpty();
+    }
+
     [Fact]
     public void A_password_or_client_secret_is_scrubbed_in_json_and_in_a_form()
     {

@@ -4,7 +4,7 @@ namespace Admin.Host.Fakes;
 
 /// <summary>
 /// What never reaches a fixture: a JWT, a bearer credential, an <c>Authorization</c> header's value, a token
-/// response's token fields, and a password or client secret in a JSON body or a form. Every recorded byte passes
+/// response's token fields, a bare token or API key, and a password or client secret in a JSON body or a form. Every recorded byte passes
 /// through <see cref="Scrub"/> before it is written, and FixtureGateTests runs <see cref="Findings"/> over every
 /// file under <c>Fakes/</c>, so a fixture is clean exactly when scrubbing would leave it unchanged. Each rule
 /// skips a value already scrubbed, which is what makes that equivalence hold.
@@ -47,7 +47,9 @@ public static partial class FixtureScrubber
     [GeneratedRegex(@"(\\?""authorization\\?""\s*:\s*\[?\s*)(?:(\\)""(?!<scrubbed>\\"")(?:(?!\\"").)*\\""|""(?!<scrubbed>"")(?:\\.|[^""\\])*"")", RegexOptions.IgnoreCase)]
     private static partial Regex AuthorizationHeader();
 
-    [GeneratedRegex(@"(\\?""[A-Za-z0-9_]*(?:access_token|refresh_token|id_token)\\?""\s*:\s*)(?:(\\)""(?!<scrubbed>\\"")(?:(?!\\"").)*\\""|""(?!<scrubbed>"")(?:\\.|[^""\\])*"")")]
+    // A key ending in token or api_key, so access_token, id_token, a bare token and apiKey are all covered. As with
+    // SecretForm's keys, a name merely ending in one (a pagination page_token) is scrubbed too, which fails closed.
+    [GeneratedRegex(@"(\\?""[A-Za-z0-9_]*(?:token|api_?key)\\?""\s*:\s*)(?:(\\)""(?!<scrubbed>\\"")(?:(?!\\"").)*\\""|""(?!<scrubbed>"")(?:\\.|[^""\\])*"")", RegexOptions.IgnoreCase)]
     private static partial Regex TokenField();
 
     [GeneratedRegex(@"(\\?""[A-Za-z0-9_]*(?:password|pwd|client_?secret|secret)\\?""\s*:\s*)(?:(\\)""(?!<scrubbed>\\"")(?:(?!\\"").)*\\""|""(?!<scrubbed>"")(?:\\.|[^""\\])*"")", RegexOptions.IgnoreCase)]
