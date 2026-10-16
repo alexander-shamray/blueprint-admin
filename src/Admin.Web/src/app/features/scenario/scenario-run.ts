@@ -132,7 +132,7 @@ export const CARRIER_POLL_MS = 5000;
 export const CARRIER_WATCH_MS = 240_000;
 
 /** run-locally.md's carrier table: the postal code each outcome is scripted by. */
-const CARRIER_STEPS: readonly StepKey[] = ['publish', 'drain', 'quote', 'order', 'confirmed', 'carrier', 'held'];
+const CARRIER_STEPS: readonly StepKey[] = ['publish', 'drain', 'stock', 'quote', 'order', 'confirmed', 'carrier', 'held'];
 
 /** The host's `ScenarioControl` change ids (ids, not copies of what they do: the host's table owns that). */
 const SHORT_WAITS = 'short-waits';
@@ -157,14 +157,16 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
   deliver: {
     title: 'Order to delivered',
     intro:
-      'Publish a product, wait for ordering-catalog-events to drain, quote a basket holding it, order it, and read the order back until the platform has confirmed, despatched and delivered it.',
-    steps: ['publish', 'drain', 'quote', 'order', 'confirmed', 'dispatched', 'delivered'],
+      'Publish a product, wait for ordering-catalog-events to drain, set its stock on hand, quote a basket holding it, order it, and read the order back until the platform has confirmed, despatched and delivered it.',
+    steps: ['publish', 'drain', 'stock', 'quote', 'order', 'confirmed', 'dispatched', 'delivered'],
+    onHand: STOCKED,
   },
   cancel: {
     title: 'Order and cancel',
     intro:
-      'Publish a product, wait for ordering-catalog-events to drain, quote a basket holding it, order it, cancel the order, and read it back until the platform says it is cancelled.',
-    steps: ['publish', 'drain', 'quote', 'order', 'cancel', 'cancelled'],
+      'Publish a product, wait for ordering-catalog-events to drain, set its stock on hand, quote a basket holding it, order it, cancel the order, and read it back until the platform says it is cancelled.',
+    steps: ['publish', 'drain', 'stock', 'quote', 'order', 'cancel', 'cancelled'],
+    onHand: STOCKED,
   },
   declined: {
     title: 'Payment declined',
@@ -192,15 +194,17 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
   'in-transit': {
     title: 'Parcel collected, never delivered',
     intro:
-      'Publish a product, order it to the delivery postal code SIM-TRANSIT, which scripts the carrier simulator to collect the parcel and never deliver it, and read the order back until it is despatched. It stays despatched.',
-    steps: ['publish', 'drain', 'quote', 'order', 'confirmed', 'dispatched'],
+      'Publish a product, stock it, order it to the delivery postal code SIM-TRANSIT, which scripts the carrier simulator to collect the parcel and never deliver it, and read the order back until it is despatched. It stays despatched.',
+    steps: ['publish', 'drain', 'stock', 'quote', 'order', 'confirmed', 'dispatched'],
+    onHand: STOCKED,
     postalCode: IN_TRANSIT_CODE,
   },
   'already-shipped': {
     title: 'Cancel after despatch',
     intro:
-      'Order a product to SIM-TRANSIT, wait until the order is despatched, ask to cancel it, expect the platform to refuse with 422 order.already_shipped, and read the order back unchanged.',
-    steps: ['publish', 'drain', 'quote', 'order', 'confirmed', 'dispatched', 'late_cancel', 'unchanged'],
+      'Order a stocked product to SIM-TRANSIT, wait until the order is despatched, ask to cancel it, expect the platform to refuse with 422 order.already_shipped, and read the order back unchanged.',
+    steps: ['publish', 'drain', 'stock', 'quote', 'order', 'confirmed', 'dispatched', 'late_cancel', 'unchanged'],
+    onHand: STOCKED,
     postalCode: IN_TRANSIT_CODE,
   },
   'stock-timeout': {
@@ -254,8 +258,9 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
 function carrierScript(title: string, code: string, outcome: CarrierOutcome, saw: string): Script {
   return {
     title,
-    intro: `Publish a product, order it to the delivery postal code ${code}, and read the carrier simulator's request log until it shows ${saw}. The order read is then held to what run-locally.md says it shows: confirmed, never despatched. Only what the carrier saw is asserted, not the shipment's own state.`,
+    intro: `Publish a product, stock it, order it to the delivery postal code ${code}, and read the carrier simulator's request log until it shows ${saw}. The order read is then held to what run-locally.md says it shows: confirmed, never despatched. Only what the carrier saw is asserted, not the shipment's own state.`,
     steps: CARRIER_STEPS,
+    onHand: STOCKED,
     postalCode: code,
     carrier: { code, outcome },
   };

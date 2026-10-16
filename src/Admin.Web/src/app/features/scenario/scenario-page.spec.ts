@@ -271,15 +271,20 @@ describe('ScenarioPage', () => {
     expect(page.steps().map((s) => s.key)).toEqual([
       'publish',
       'drain',
+      'stock',
       'quote',
       'order',
       'confirmed',
       'dispatched',
       'delivered',
     ]);
-    expect(page.steps().map((s) => s.state)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok']);
-    const [publish, quote, placed, ...reads] = sent();
+    expect(page.steps().map((s) => s.state)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok']);
+    const [publish, stock, quote, placed, ...reads] = sent();
     expect(JSON.parse(publish.body!).commandId).not.toBe(zero);
+    // A product published a moment ago has no stock, and the order would end out of stock.
+    expect(stock.method).toBe('PUT');
+    expect(stock.url).toBe(`http://localhost:5000/api/v1/inventory/stock/${productId}`);
+    expect(JSON.parse(stock.body!)).toEqual({ onHand: 10 });
     expect(JSON.parse(quote.body!).lines[0].productId).toBe(productId);
     expect(JSON.parse(placed.body!).items[0].productId).toBe(productId);
     expect(JSON.parse(placed.body!).commandId).not.toBe(zero);
@@ -287,11 +292,11 @@ describe('ScenarioPage', () => {
       Array(3).fill(`GET http://localhost:5000/bff/v1/orders/${orderId}`),
     );
     expect(reads.every((r) => r.body === null)).toBe(true);
-    expect(page.steps()[6].detail).toBe(
+    expect(page.steps()[7].detail).toBe(
       'The order read shows delivered at 2026-10-05T12:00:40Z, 40 s after it was placed.',
     );
     // Each watch keeps the read that reached its step.
-    expect(page.steps().slice(4).map((s) => [s.status, s.body])).toEqual(Array(3).fill([200, delivered]));
+    expect(page.steps().slice(5).map((s) => [s.status, s.body])).toEqual(Array(3).fill([200, delivered]));
     expect(
       sent().every((r) => r.identity?.username === 'demo' && r.identity.password === null),
     ).toBe(true);
@@ -306,13 +311,14 @@ describe('ScenarioPage', () => {
     expect(page.steps().map((s) => [s.key, s.state])).toEqual([
       ['publish', 'ok'],
       ['drain', 'ok'],
+      ['stock', 'ok'],
       ['quote', 'ok'],
       ['order', 'ok'],
       ['cancel', 'ok'],
       ['cancelled', 'ok'],
     ]);
-    expect(sent()[3].url).toBe(`http://localhost:5000/api/v1/orders/${orderId}/cancel`);
-    expect(page.steps()[5].detail).toContain('cancelled at 2026-10-05T12:00:02Z, 2 s after');
+    expect(sent()[4].url).toBe(`http://localhost:5000/api/v1/orders/${orderId}/cancel`);
+    expect(page.steps()[6].detail).toContain('cancelled at 2026-10-05T12:00:02Z, 2 s after');
   });
 
   const dispatched = order('dispatched', { confirmed: '2026-10-05T12:00:01Z', dispatched: '2026-10-05T12:00:06Z' });
@@ -331,19 +337,20 @@ describe('ScenarioPage', () => {
     expect(page.steps().map((s) => [s.key, s.state])).toEqual([
       ['publish', 'ok'],
       ['drain', 'ok'],
+      ['stock', 'ok'],
       ['quote', 'ok'],
       ['order', 'ok'],
       ['confirmed', 'ok'],
       ['dispatched', 'ok'],
     ]);
-    const placed = sent()[2];
+    const placed = sent()[3];
     expect(JSON.parse(placed.body!).shippingAddress).toEqual({
       line1: '1 Test Street',
       city: 'Almaty',
       postalCode: 'SIM-TRANSIT',
       country: 'KZ',
     });
-    expect(page.steps()[3].detail).toBe(`Answered with id ${orderId}, to the delivery postal code SIM-TRANSIT.`);
+    expect(page.steps()[4].detail).toBe(`Answered with id ${orderId}, to the delivery postal code SIM-TRANSIT.`);
   });
 
   it('says so when the example order has no address to script the carrier with', async () => {
@@ -363,7 +370,7 @@ describe('ScenarioPage', () => {
 
     await page.run();
 
-    expect(page.steps()[3].detail).toContain('no shippingAddress to set');
+    expect(page.steps()[4].detail).toContain('no shippingAddress to set');
   });
 
   it('runs the already-shipped script: the cancel is refused 422 order.already_shipped and the order is unchanged', async () => {
@@ -382,6 +389,7 @@ describe('ScenarioPage', () => {
     expect(page.steps().map((s) => [s.key, s.state])).toEqual([
       ['publish', 'ok'],
       ['drain', 'ok'],
+      ['stock', 'ok'],
       ['quote', 'ok'],
       ['order', 'ok'],
       ['confirmed', 'ok'],
@@ -389,8 +397,8 @@ describe('ScenarioPage', () => {
       ['late_cancel', 'ok'],
       ['unchanged', 'ok'],
     ]);
-    expect(page.steps()[6].status).toBe(422);
-    expect(page.steps()[6].detail).toBe('Refused with 422 order.already_shipped, as an order the carrier has collected is.');
+    expect(page.steps()[7].status).toBe(422);
+    expect(page.steps()[7].detail).toBe('Refused with 422 order.already_shipped, as an order the carrier has collected is.');
   });
 
   it('fails the already-shipped script when the cancel is taken, and does not read the order back', async () => {
@@ -402,9 +410,9 @@ describe('ScenarioPage', () => {
 
     await page.run();
 
-    expect(page.steps()[6].state).toBe('failed');
-    expect(page.steps()[6].detail).toBe('Answered 204: the cancel was taken, so this order was not despatched.');
-    expect(page.steps()[7].state).toBe('skipped');
+    expect(page.steps()[7].state).toBe('failed');
+    expect(page.steps()[7].detail).toBe('Answered 204: the cancel was taken, so this order was not despatched.');
+    expect(page.steps()[8].state).toBe('skipped');
   });
 
   it('fails the already-shipped script on a refusal that is not the despatch one', async () => {
@@ -420,8 +428,8 @@ describe('ScenarioPage', () => {
 
     await page.run();
 
-    expect(page.steps()[6].state).toBe('failed');
-    expect(page.steps()[6].detail).toBe('Answered 422, not the 422 order.already_shipped a despatched order is refused with.');
+    expect(page.steps()[7].state).toBe('failed');
+    expect(page.steps()[7].detail).toBe('Answered 422, not the 422 order.already_shipped a despatched order is refused with.');
   });
 
   it.each([
@@ -539,20 +547,21 @@ describe('ScenarioPage', () => {
       expect(page.steps().map((s) => [s.key, s.state])).toEqual([
         ['publish', 'ok'],
         ['drain', 'ok'],
+        ['stock', 'ok'],
         ['quote', 'ok'],
         ['order', 'ok'],
         ['confirmed', 'ok'],
         ['carrier', 'ok'],
         ['held', 'ok'],
       ]);
-      expect(JSON.parse(sent()[2].body!).shippingAddress.postalCode).toBe(code);
+      expect(JSON.parse(sent()[3].body!).shippingAddress.postalCode).toBe(code);
       const find = sent().find((r) => r.url.endsWith('/__admin/requests/find'))!;
       expect(JSON.parse(find.body!).Body.Matchers[0].Pattern).toBe(`*${code}*`);
       // The simulator is anonymous and untraced: nothing is sent as the user.
       expect(find.identity).toBeNull();
       expect(find.correlationId).toBeNull();
-      expect(page.steps()[5].detail).toBe(detail);
-      expect(page.steps()[5].correlationId).toBeNull();
+      expect(page.steps()[6].detail).toBe(detail);
+      expect(page.steps()[6].correlationId).toBeNull();
     });
 
     it('runs the carrier-strange script: one booking, then the feed polled again and again', async () => {
@@ -562,8 +571,8 @@ describe('ScenarioPage', () => {
 
       await page.run();
 
-      expect(page.steps().map((s) => s.state)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok']);
-      expect(page.steps()[5].detail).toBe('The carrier booked the parcel once (201) and its feed has been polled 2 times since.');
+      expect(page.steps().map((s) => s.state)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok']);
+      expect(page.steps()[6].detail).toBe('The carrier booked the parcel once (201) and its feed has been polled 2 times since.');
       expect(sent().filter((r) => r.url.endsWith('/__admin/requests/find')).map((r) => JSON.parse(r.body!).Methods[0])).toEqual(['POST', 'GET']);
     });
 
@@ -594,9 +603,9 @@ describe('ScenarioPage', () => {
 
       await page.run();
 
-      expect(page.steps()[5].state).toBe('failed');
-      expect(page.steps()[5].detail).toBe('The carrier answered 201 to a booking attempt, not 422.');
-      expect(page.steps()[6].state).toBe('skipped');
+      expect(page.steps()[6].state).toBe('failed');
+      expect(page.steps()[6].detail).toBe('The carrier answered 201 to a booking attempt, not 422.');
+      expect(page.steps()[7].state).toBe('skipped');
     });
 
     it('fails at the cap with what it last saw', async () => {
@@ -610,8 +619,8 @@ describe('ScenarioPage', () => {
       await done;
       vi.useRealTimers();
 
-      expect(page.steps()[5].state).toBe('failed');
-      expect(page.steps()[5].detail).toContain(`Not shown after ${CARRIER_WATCH_MS / 1000} s. The carrier has seen 1 attempt`);
+      expect(page.steps()[6].state).toBe('failed');
+      expect(page.steps()[6].detail).toContain(`Not shown after ${CARRIER_WATCH_MS / 1000} s. The carrier has seen 1 attempt`);
     });
 
     it('never reads a truncated log, or an answer that is not a list, as an empty one', async () => {
@@ -627,8 +636,8 @@ describe('ScenarioPage', () => {
 
       await page.run();
 
-      expect(page.steps()[5].state).toBe('failed');
-      expect(page.steps()[5].detail).toBe("The simulator's answer was longer than the proxy reads, so the log cannot be judged.");
+      expect(page.steps()[6].state).toBe('failed');
+      expect(page.steps()[6].detail).toBe("The simulator's answer was longer than the proxy reads, so the log cannot be judged.");
 
       host.proxy.mockImplementation((request: ProxyRequest) =>
         request.url.endsWith('/__admin/requests/find')
@@ -639,7 +648,7 @@ describe('ScenarioPage', () => {
       );
       await page.run();
 
-      expect(page.steps()[5].detail).toBe('The simulator answered 400, not a list of the requests it logged.');
+      expect(page.steps()[6].detail).toBe('The simulator answered 400, not a list of the requests it logged.');
     });
 
     it('fails the last step when the order read left confirmed', async () => {
@@ -655,10 +664,10 @@ describe('ScenarioPage', () => {
 
       await page.run();
 
-      expect(page.steps()[4].state).toBe('ok');
       expect(page.steps()[5].state).toBe('ok');
-      expect(page.steps()[6].state).toBe('failed');
-      expect(page.steps()[6].detail).toBe('The order reads dispatched, not confirmed: this carrier outcome should leave it there.');
+      expect(page.steps()[6].state).toBe('ok');
+      expect(page.steps()[7].state).toBe('failed');
+      expect(page.steps()[7].detail).toBe('The order reads dispatched, not confirmed: this carrier outcome should leave it there.');
     });
   });
 
@@ -876,10 +885,10 @@ describe('ScenarioPage', () => {
     publish.next(responded(200, `"${productId}"`, 'scenario-abcdef12-publish'));
     publish.complete();
     await running;
-    expect(page.steps().map((s) => s.state)).toEqual(Array(6).fill('ok'));
+    expect(page.steps().map((s) => s.state)).toEqual(Array(7).fill('ok'));
     page.pick('deliver');
 
-    expect(page.steps().map((s) => s.state)).toEqual(Array(7).fill('pending'));
+    expect(page.steps().map((s) => s.state)).toEqual(Array(8).fill('pending'));
     expect(page.runId()).toBeNull();
   });
 
@@ -911,7 +920,7 @@ describe('ScenarioPage', () => {
 
     expect(confirmed().state).toBe('ok');
     expect(confirmed().detail).toContain('3 s after it was placed');
-    expect(page.steps().map((s) => s.state)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok']);
+    expect(page.steps().map((s) => s.state)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok']);
   });
 
   it('fails a watch on a status it was not waiting for and never retries it, a 401 included', async () => {
@@ -924,12 +933,12 @@ describe('ScenarioPage', () => {
 
     await page.run();
 
-    expect(page.steps()[4].state).toBe('failed');
-    expect(page.steps()[4].status).toBe(401);
-    expect(page.steps()[4].body).toBe('{"title":"Unauthorized"}');
-    expect(page.steps()[4].detail).toBe('Answered 401.');
+    expect(page.steps()[5].state).toBe('failed');
+    expect(page.steps()[5].status).toBe(401);
+    expect(page.steps()[5].body).toBe('{"title":"Unauthorized"}');
+    expect(page.steps()[5].detail).toBe('Answered 401.');
     expect(sent().filter(isRead)).toHaveLength(1);
-    expect(page.steps().slice(5).map((s) => s.state)).toEqual(['skipped', 'skipped']);
+    expect(page.steps().slice(6).map((s) => s.state)).toEqual(['skipped', 'skipped']);
   });
 
   it('fails a 404 that follows an answer, since the BFF had already learned of the order', async () => {
@@ -945,16 +954,16 @@ describe('ScenarioPage', () => {
 
     const done = page.run();
     await vi.advanceTimersByTimeAsync(0);
-    expect(page.steps()[4].body).toBe(order('placed'));
+    expect(page.steps()[5].body).toBe(order('placed'));
     await vi.advanceTimersByTimeAsync(DRAIN_POLL_MS);
     await done;
     vi.useRealTimers();
 
-    expect(page.steps()[4].state).toBe('failed');
-    expect(page.steps()[4].detail).toBe('Answered 404.');
+    expect(page.steps()[5].state).toBe('failed');
+    expect(page.steps()[5].detail).toBe('Answered 404.');
     // The 404 replaces the placed read's answer, so what is shown is what failed.
-    expect(page.steps()[4].status).toBe(404);
-    expect(page.steps()[4].body).toBe('{"code":"order.not_found"}');
+    expect(page.steps()[5].status).toBe(404);
+    expect(page.steps()[5].body).toBe('{"code":"order.not_found"}');
   });
 
   it('keeps the last 404 on a watch that saw nothing else before the cap', async () => {
@@ -969,12 +978,12 @@ describe('ScenarioPage', () => {
     await done;
     vi.useRealTimers();
 
-    expect(page.steps()[4].state).toBe('failed');
-    expect(page.steps()[4].detail).toBe(
+    expect(page.steps()[5].state).toBe('failed');
+    expect(page.steps()[5].detail).toBe(
       `Not confirmed after ${DRAIN_WATCH_MS / 1000} s. The BFF answered 404: it has not learned of the order yet.`,
     );
-    expect(page.steps()[4].status).toBe(404);
-    expect(page.steps()[4].body).toBe('{"code":"order.not_found"}');
+    expect(page.steps()[5].status).toBe(404);
+    expect(page.steps()[5].body).toBe('{"code":"order.not_found"}');
   });
 
   it('stops a watch at once when the order ends in a cancellation, rather than waiting out the cap', async () => {
@@ -987,10 +996,10 @@ describe('ScenarioPage', () => {
 
     await page.run();
 
-    expect(page.steps()[4].state).toBe('failed');
-    expect(page.steps()[4].detail).toBe('The order ended declined before it was confirmed.');
-    expect(page.steps()[4].status).toBe(200);
-    expect(page.steps()[4].body).toBe(order('declined', { cancelled: '2026-10-05T12:00:02Z' }));
+    expect(page.steps()[5].state).toBe('failed');
+    expect(page.steps()[5].detail).toBe('The order ended declined before it was confirmed.');
+    expect(page.steps()[5].status).toBe(200);
+    expect(page.steps()[5].body).toBe(order('declined', { cancelled: '2026-10-05T12:00:02Z' }));
     expect(sent().filter(isRead)).toHaveLength(1);
   });
 
@@ -1002,10 +1011,10 @@ describe('ScenarioPage', () => {
 
     await page.run();
 
-    expect(page.steps()[4].state).toBe('failed');
-    expect(page.steps()[4].detail).toContain('not with an order read');
-    expect(page.steps()[4].status).toBe(200);
-    expect(page.steps()[4].body).toBe('{"items":[]}');
+    expect(page.steps()[5].state).toBe('failed');
+    expect(page.steps()[5].detail).toContain('not with an order read');
+    expect(page.steps()[5].status).toBe(200);
+    expect(page.steps()[5].body).toBe('{"items":[]}');
   });
 
   it('gives up a watch at the cap and says what it last read', async () => {
@@ -1020,8 +1029,8 @@ describe('ScenarioPage', () => {
     await done;
     vi.useRealTimers();
 
-    expect(page.steps()[4].state).toBe('failed');
-    expect(page.steps()[4].detail).toBe(
+    expect(page.steps()[5].state).toBe('failed');
+    expect(page.steps()[5].detail).toBe(
       `Not confirmed after ${DRAIN_WATCH_MS / 1000} s. Last read: placed, as the BFF knew it at 2026-10-05T12:00:09Z.`,
     );
     const reads = sent().filter(isRead).length;
@@ -1061,12 +1070,12 @@ describe('ScenarioPage', () => {
 
     const note =
       'The token held for demo was due to renew at 2026-01-01T00:00:00Z, so the host minted a new one for this call.';
-    expect(page.steps().slice(0, 4).map((s) => s.regrant)).toEqual([null, null, null, null]);
-    expect(page.steps()[4].regrant).toBe(note);
+    expect(page.steps().slice(0, 5).map((s) => s.regrant)).toEqual([null, null, null, null, null]);
+    expect(page.steps()[5].regrant).toBe(note);
     // The note is for the operator, so it is on the page and not only in the step's state.
     const items = fixture.nativeElement.querySelectorAll('ol.steps li.step');
-    expect(items[4].querySelector('.regrant')?.textContent.trim()).toBe(note);
-    expect(items[3].querySelector('.regrant')).toBeNull();
+    expect(items[5].querySelector('.regrant')?.textContent.trim()).toBe(note);
+    expect(items[4].querySelector('.regrant')).toBeNull();
   });
 
   it("clears a watch's note when a later read is answered without a mint, so it names the last call", async () => {
@@ -1087,13 +1096,13 @@ describe('ScenarioPage', () => {
 
     const done = page.run();
     await vi.advanceTimersByTimeAsync(0);
-    expect(page.steps()[4].regrant).toContain('minted a new one for this call');
+    expect(page.steps()[5].regrant).toContain('minted a new one for this call');
     await vi.advanceTimersByTimeAsync(DRAIN_POLL_MS);
     await done;
     vi.useRealTimers();
 
-    expect(page.steps()[4].state).toBe('ok');
-    expect(page.steps()[4].regrant).toBeNull();
+    expect(page.steps()[5].state).toBe('ok');
+    expect(page.steps()[5].regrant).toBeNull();
   });
 
   it('waits out every 404 before the first answer, not only the first', async () => {
@@ -1111,7 +1120,7 @@ describe('ScenarioPage', () => {
     vi.useRealTimers();
 
     expect(answers).toHaveLength(0);
-    expect(page.steps().map((s) => s.state)).toEqual(Array(7).fill('ok'));
+    expect(page.steps().map((s) => s.state)).toEqual(Array(8).fill('ok'));
   });
 
   it('says nothing was minted when the grant the clock foresaw was refused, or the host did not answer', async () => {
@@ -1130,16 +1139,16 @@ describe('ScenarioPage', () => {
 
       await page.run();
 
-      expect(page.steps()[4].state).toBe('failed');
-      expect(page.steps()[4].regrant).toBeNull();
+      expect(page.steps()[5].state).toBe('failed');
+      expect(page.steps()[5].regrant).toBeNull();
       // The order step, whose call did go out under a renewed token, still says so.
-      expect(page.steps()[3].regrant).toContain('minted a new one for this call');
+      expect(page.steps()[4].regrant).toContain('minted a new one for this call');
     }
   });
 
   it('says so when the token expired after the run sent, but not before its first call', async () => {
     host.tokenClock.mockImplementation(() =>
-      // Nothing held before the first call, which mints; then nothing held again before the quote.
+      // Nothing held before the first call, which mints; then nothing held again before the stock write.
       of({ ...heldClock, held: sent().length !== 0 && sent().length !== 1 }),
     );
     const page = render().componentInstance;
@@ -1174,11 +1183,11 @@ describe('ScenarioPage', () => {
 
     await page.run();
 
-    expect(page.steps()[4].state).toBe('failed');
-    expect(page.steps()[4].regrant).toBeNull();
+    expect(page.steps()[5].state).toBe('failed');
+    expect(page.steps()[5].regrant).toBeNull();
     // Its first read never left the console, so no service logged the id and there is no trace to offer.
-    expect(page.steps()[4].correlationId).toBeNull();
-    expect(page.steps()[4].detail).toBe(
+    expect(page.steps()[5].correlationId).toBeNull();
+    expect(page.steps()[5].detail).toBe(
       'No answer from the platform: Keycloak did not answer: connection refused',
     );
   });
@@ -1193,8 +1202,8 @@ describe('ScenarioPage', () => {
 
     await page.run();
 
-    expect(page.steps()[4].correlationId).toBeNull();
-    expect(page.steps()[4].detail).toBe('Keycloak refused demo: 401. Nothing was sent.');
+    expect(page.steps()[5].correlationId).toBeNull();
+    expect(page.steps()[5].detail).toBe('Keycloak refused demo: 401. Nothing was sent.');
   });
 
   it('offers no trace for a first send the host itself did not answer, since no service logged it', async () => {
@@ -1219,7 +1228,7 @@ describe('ScenarioPage', () => {
 
     await page.run();
 
-    expect(page.steps()[4].detail).toBe('The order read shows confirmed at 2026-10-05T12:00:01Z.');
+    expect(page.steps()[5].detail).toBe('The order read shows confirmed at 2026-10-05T12:00:01Z.');
   });
 
   describe('a later read that never leaves the console', () => {
@@ -1235,11 +1244,11 @@ describe('ScenarioPage', () => {
       const page = render().componentInstance;
       const done = page.run();
       await vi.advanceTimersByTimeAsync(0);
-      const first = page.steps()[4];
+      const first = page.steps()[5];
       await vi.advanceTimersByTimeAsync(DRAIN_POLL_MS * 2);
       await done;
       vi.useRealTimers();
-      return { first, confirmed: page.steps()[4] };
+      return { first, confirmed: page.steps()[5] };
     }
 
     it('keeps the trace of the 404 that went before it', async () => {
@@ -1342,9 +1351,9 @@ describe('ScenarioPage', () => {
 
     await page.run();
 
-    expect(page.steps()[4].state).toBe('ok');
-    expect(page.steps()[5].state).toBe('failed');
-    expect(page.steps()[5].detail).toBe('Answered 404.');
+    expect(page.steps()[5].state).toBe('ok');
+    expect(page.steps()[6].state).toBe('failed');
+    expect(page.steps()[6].detail).toBe('Answered 404.');
     expect(sent().filter(isRead)).toHaveLength(2);
   });
 
@@ -1364,7 +1373,7 @@ describe('ScenarioPage', () => {
     await done;
     vi.useRealTimers();
 
-    const confirmed = page.steps()[4];
+    const confirmed = page.steps()[5];
     expect(confirmed.state).toBe('failed');
     expect(confirmed.correlationId).toBe('scenario-abcdef12-confirmed');
     expect(confirmed.detail).toBe('Keycloak refused demo: 401. This read was not sent.');
@@ -1394,8 +1403,8 @@ describe('ScenarioPage', () => {
 
     await page.run();
 
-    expect(page.steps()[4].state).toBe('failed');
-    expect(page.steps()[4].regrant).toContain('so the host minted a new one for this call');
+    expect(page.steps()[5].state).toBe('failed');
+    expect(page.steps()[5].regrant).toContain('so the host minted a new one for this call');
   });
 
   it("waits out a new run's first 404, since the last run's answer was for another order", async () => {
@@ -1413,7 +1422,7 @@ describe('ScenarioPage', () => {
     vi.useRealTimers();
 
     expect(answers).toHaveLength(0);
-    expect(page.steps().map((s) => s.state)).toEqual(Array(7).fill('ok'));
+    expect(page.steps().map((s) => s.state)).toEqual(Array(8).fill('ok'));
   });
 
   it('starts each run afresh, so a user never minted before is not reported as expired', async () => {
@@ -1495,6 +1504,7 @@ describe('ScenarioPage', () => {
 
     expect(sent().map((r) => r.correlationId)).toEqual([
       'scenario-abcdef12-publish',
+      'scenario-abcdef12-stock',
       'scenario-abcdef12-quote',
       'scenario-abcdef12-order',
       'scenario-abcdef12-confirmed',
@@ -1512,7 +1522,7 @@ describe('ScenarioPage', () => {
 
     await page.run();
 
-    expect(page.steps().map((s) => s.state)).toEqual(['failed', ...Array(6).fill('skipped')]);
+    expect(page.steps().map((s) => s.state)).toEqual(['failed', ...Array(7).fill('skipped')]);
     expect(page.steps()[0].detail).toBe('Answered 403.');
     expect(host.brokerQueues).not.toHaveBeenCalled();
   });
@@ -1704,13 +1714,14 @@ describe('ScenarioPage', () => {
     );
 
     const done = fixture.componentInstance.run();
-    await vi.waitFor(() => expect(sent()).toHaveLength(3));
+    await vi.waitFor(() => expect(sent()).toHaveLength(4));
     fixture.destroy();
     placing.next(responded(200, `"${orderId}"`, 'scenario-abcdef12-order'));
     await done;
 
     expect(sent().map((r) => r.correlationId)).toEqual([
       'scenario-abcdef12-publish',
+      'scenario-abcdef12-stock',
       'scenario-abcdef12-quote',
       'scenario-abcdef12-order',
       'scenario-abcdef12-cancel',
@@ -1739,12 +1750,12 @@ describe('ScenarioPage', () => {
     );
 
     const done = fixture.componentInstance.run();
-    await vi.waitFor(() => expect(sent()).toHaveLength(2));
+    await vi.waitFor(() => expect(sent()).toHaveLength(3));
     fixture.destroy();
     quote.next(responded(200, '{"total":19.99,"unpriced":[]}', 'scenario-abcdef12-quote'));
     await done;
 
-    expect(sent()).toHaveLength(2);
+    expect(sent()).toHaveLength(3);
   });
 
   it('clears an earlier reload failure when a run starts', async () => {

@@ -89,6 +89,7 @@ describe('resolveOperations', () => {
 
     expect(operations).toBeNull();
     expect(missing).toEqual([
+      'inventory:SetOnHand is not in the operation catalog',
       "ordering:PlaceOrder is unavailable: its service's document did not load",
       'ordering:CancelOrder is not in the operation catalog',
     ]);
@@ -314,14 +315,15 @@ describe('the unhappy scripts', () => {
     expect(SCRIPTS['out-of-stock'].amount).toBeUndefined();
   });
 
-  it('resolve the stock write from the catalog beside the calls every script makes', () => {
+  it('resolve the stock write from the catalog for each script that stocks, and none for the one that stops Inventory', () => {
     const view: ApiCatalogView = {
       sources: [],
       operations: Object.values(SCENARIO_OPERATIONS).map((id) => op(id)),
     };
 
     expect(resolveOperations(view, SCRIPTS.declined).operations?.stock?.id).toBe('inventory:SetOnHand');
-    expect(resolveOperations(view, SCRIPTS.deliver).operations?.stock).toBeUndefined();
+    expect(resolveOperations(view, SCRIPTS.deliver).operations?.stock?.id).toBe('inventory:SetOnHand');
+    expect(resolveOperations(view, SCRIPTS['stock-timeout']).operations?.stock).toBeUndefined();
   });
 });
 
