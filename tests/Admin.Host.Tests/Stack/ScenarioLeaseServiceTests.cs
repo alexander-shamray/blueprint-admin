@@ -46,7 +46,12 @@ public sealed class ScenarioLeaseServiceTests : IAsyncDisposable
     {
         leases.Dispose();
         await fake.DisposeAsync();
-        File.Delete(journal);
+
+        // A test that is refused before anything is written never creates the directory, and File.Delete does not forgive that.
+        if (File.Exists(journal))
+        {
+            File.Delete(journal);
+        }
     }
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
