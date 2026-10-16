@@ -73,7 +73,7 @@ routes are `Gateway.Api/appsettings.json`; health endpoints are mapped by
 | Build the client for the emulator | `npm run emulator:android` (`ng build --configuration android && cap sync android`), frontend; `run-locally.md` step 4 |
 | Read the device lane | three reads from `run-locally.md` step 4, each run as written through PowerShell: `adb.exe devices`, a `curl.exe` CORS preflight to the gateway, and the running realm's `mobile-app` redirects through Keycloak's admin API. None changes anything |
 | Stop and restore Inventory for a Scenario | `... stop inventory-api`, and `... up -d --no-deps inventory-api` to restore it, backend; only for a script whose cause `run-locally.md` gives as stopping it (§5.3, *Scenario service control*) |
-| Shorten the saga's waits for a Scenario | `... up -d --no-deps ordering-api` with the saga timeout variables `run-locally.md` names set in the child's environment, backend, and the same line with them unset to restore it; only for a script whose cause is one of those waits (§5.3) |
+| Shorten the saga's waits for a Scenario | `docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.short-timeouts.yml up -d --no-deps ordering-api`, backend (ADR-128), and the same without the second file to restore it; only for a script whose cause is one of those waits (§5.3) |
 
 `npm ci` is not a console operation. It is a one-time prerequisite and the
 console reports its absence (no `node_modules`) rather than running it.
@@ -320,10 +320,12 @@ starts nothing and does not claim it.
 
 **Scenario service control.** A Scenario script whose cause `run-locally.md`
 gives as changing a service may change it, and nothing else may. Two changes
-exist: stopping `inventory-api`, and recreating `ordering-api` with the saga's
-timeout variables set so the waits run in seconds instead of minutes. They are
+exist: stopping `inventory-api`, and recreating `ordering-api` with the
+backend's `docker-compose.short-timeouts.yml` added to the `-f` list, so the
+saga's waits run in seconds instead of minutes. The values are that file's
+(ADR-128); the console sets none of its own. They are
 a code-owned table (`ScenarioControl.Table`, which cites the document and the
-backend's variable names) and the host runs no other service change for any
+backend's override file) and the host runs no other service change for any
 screen. The rules are these, and a change to any of them is a change to this
 paragraph first:
 
@@ -335,10 +337,9 @@ paragraph first:
   `Admin:DataDir` (service, change, the run, when) before the first command of
   the change runs, and removed only after the restore has been verified.
 - **Always restored, by one line.** The restore of either change is
-  `up -d --no-deps <service>` with the saga variables unset in the child's
-  environment. Compose starts a stopped container and recreates one whose
-  environment differs, so one line undoes both, and it also works on a service
-  whose container a Down removed. It runs on success, on failure, on the run's
+  `up -d --no-deps <service>` on the base compose file alone. Compose starts a
+  stopped container and recreates one whose environment differs, so one line
+  undoes both, and it also works on a service whose container a Down removed. It runs on success, on failure, on the run's
   cancellation and on the page being left. It runs again from the journal when
   the host starts, so a host that was killed leaves nothing changed past its
   next start. A restore that fails keeps the lease and says so; it is never
