@@ -55,7 +55,7 @@ test('the cancel script cancels the placed order and reads it back cancelled', a
 });
 
 // The fake scripts the end from the request, as the platform does from run-locally.md's cause
-// (FakeOrders.EndOf): a price ending .01 is declined, stock below one is out of stock, a second after the place.
+// (FakeOrders.EndOf): a price ending .01 is declined, stock never set or below one is out of stock, a second after the place.
 for (const [script, ended, stock] of [
   ['declined', 'declined', 'set to 10'],
   ['out-of-stock', 'out_of_stock', 'set to 0'],
