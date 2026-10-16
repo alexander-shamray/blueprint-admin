@@ -685,13 +685,14 @@ Each round is the review done once, end to end:
    defects **located in** its own row. Disjointness is about who owns which
    finding, not about who may open which file.
 
-   **Two rows are written as a remainder rather than a list, and that is what
-   makes the partition survive the repo growing.** "All of `src/Admin.Host/**`"
+   **Inside a project a row is a remainder rather than a list, and that is what
+   makes the partition survive the project growing.** "All of `src/Admin.Host/**`"
    and "non-spec TypeScript under `src/Admin.Web/src/**`" cannot be quietly
    outgrown; a named list of screens or of build files can, and nearly were —
-   a preflight that reads `src` as owned would never notice a new
-   `src/Admin.Web/src/app/widgets/` arriving unswept. Where a row can be phrased as
-   everything-not-already-taken, phrase it that way.
+   a new `src/Admin.Web/src/app/widgets/` arrives owned. **Between projects it
+   is the opposite**: a new project under `src/` is owned by no arm of `row_of`
+   and refuses the run until a row is added, because a catch-all there would be
+   the unowned path reported as swept.
 
    **`.claude/**` includes this command and its agent**, which is intended
    rather than awkward: a sweep that cannot audit its own definition is one
