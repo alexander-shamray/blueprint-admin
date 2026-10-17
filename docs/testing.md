@@ -49,9 +49,24 @@ pinned the old answer moves with it.
 
 `python .claude/scripts/shard-harness-suite.py` — Python 3.12, plus Bash,
 `grep`, Git and `jq` on PATH. Python plus `jq` alone fails before a case
-runs. It discovers `.claude/scripts`, `.github/locality-gate` and
-`tools/token-usage`, and runs their classes as parallel workers; `docs/harness-boundaries.md` owns what
+runs. It discovers `.claude/scripts`, `.github/locality-gate`,
+`.github/commit-gate` and `tools/token-usage`, and runs their classes as parallel workers; `docs/harness-boundaries.md` owns what
 that may not do. The `harness` job in `ci.yml` is the matrix.
+
+## Commit gate
+
+`python -m unittest` in `.github/commit-gate/` is the gate's own suite, and
+the `harness` job runs it too. The `commit-gate` workflow runs it on every
+pull request, then enforces the **base** copy of the gate. It reads git
+rather than `gh`, so a branch can run it once its pull request exists:
+
+```bash
+git fetch origin main
+py -3.12 .github/commit-gate/commit_gate.py --pr <n> origin/main HEAD
+```
+
+The `commits` job in `ci.yml` is its other half: it builds every commit
+before the head and runs no tests.
 
 ## Locality
 
