@@ -18,6 +18,7 @@ describe('request-builder', () => {
     expect(withPathValues(body, {})).toBe(body);
     expect(withPathValues(body, { id: 'x' })).toBe(body);
     expect(withPathValues('{"a":1}', { orderId: 'x' })).toBe('{"a":1}');
+    expect(withPathValues('{"note":"{constructor} {toString}"}', { orderId: 'x' })).toBe('{"note":"{constructor} {toString}"}');
   });
 
   it('leaves an unfilled placeholder in place so the platform answers for it', () => {
