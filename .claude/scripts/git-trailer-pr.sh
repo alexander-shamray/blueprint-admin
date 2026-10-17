@@ -60,10 +60,18 @@ fi
 # The exec skips a commit that has the trailer, so a rerun after a failed push changes nothing already done.
 if [ "$owned" -lt "$total" ]; then
   exec_cmd="git log -1 --format=%B | git interpret-trailers --parse | grep -qx '$wanted' || git commit --amend --no-edit --trailer '$wanted'"
-  if ! GIT_SEQUENCE_EDITOR=true git rebase --quiet -x "$exec_cmd" "$base_oid"; then
+  # A concurrent git reader can hold the worktree index for an instant (#243), which aborts the rewrite with an
+  # `index.lock` message and nothing wrong. One more attempt after the abort is safe, since the abort restores the
+  # branch; any other failure, and a second lock failure, stops as before.
+  attempt=1
+  until err=$(GIT_SEQUENCE_EDITOR=true git rebase --quiet -x "$exec_cmd" "$base_oid" 2>&1); do
     git rebase --abort || true
+    if [ "$attempt" -eq 1 ] && [[ "$err" == *index.lock* ]]; then
+      attempt=2; sleep 1; continue
+    fi
+    printf '%s\n' "$err" >&2
     echo "adding the trailer failed; the branch is as it was" >&2; exit 6
-  fi
+  done
 fi
 
 git push --quiet --force-with-lease="refs/heads/$branch:$remote" origin "HEAD:refs/heads/$branch" ||
