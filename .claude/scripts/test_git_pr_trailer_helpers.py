@@ -224,6 +224,45 @@ class TrailerHelper(Fixture):
         out = self.run_helper(TRAILER)
         self.assertEqual(5, out.returncode, out.stderr)
 
+    def lock_hook(self, fails, message):
+        # A pre-commit hook fails the first `fails` amends with `message`, which the rewrite's `git commit --amend`
+        # runs, and counts every call in a file beside the remote.
+        count = f"{self.root}/count"
+        body = (f'#!/bin/sh\nn=$(cat "{count}" 2>/dev/null || echo 0)\necho $((n+1)) > "{count}"\n'
+                f'[ "$n" -ge {fails} ] && exit 0\necho "{message}" >&2\nexit 1\n')
+        hook = '"$WORK/.git/hooks/pre-commit"'
+        self.assertEqual(0, sh(f'printf %s "$BODY" > {hook} && chmod +x {hook}', WORK=self.work, BODY=body).returncode)
+
+    def hook_calls(self):
+        return int(sh('cat "$ROOT/count"', ROOT=self.root).stdout.strip())
+
+    LOCK = "fatal: Unable to create '/x/.git/index.lock': File exists."
+
+    def test_a_single_index_lock_failure_is_retried_once_and_succeeds(self):
+        self.two_commit_branch()
+        self.lock_hook(1, self.LOCK)
+        out = self.run_helper(TRAILER)
+        self.assertEqual(0, out.returncode, out.stderr)
+        self.assertEqual(["docs: two|#7", "feat(x): one|#7"], self.subjects_and_trailers("origin/main..HEAD"))
+        self.assertEqual(3, self.hook_calls())
+
+    def test_a_persistent_index_lock_failure_stops_after_two_attempts_with_the_branch_as_it_was(self):
+        self.two_commit_branch()
+        before = self.git("rev-parse", "HEAD")
+        self.lock_hook(99, self.LOCK)
+        out = self.run_helper(TRAILER)
+        self.assertEqual(6, out.returncode, out.stderr)
+        self.assertIn("index.lock", out.stderr)
+        self.assertEqual(2, self.hook_calls())
+        self.assertEqual(before, self.git("rev-parse", "HEAD"))
+
+    def test_a_failure_that_is_not_a_lock_is_not_retried(self):
+        self.two_commit_branch()
+        self.lock_hook(99, "boom")
+        out = self.run_helper(TRAILER)
+        self.assertEqual(6, out.returncode, out.stderr)
+        self.assertEqual(1, self.hook_calls())
+
     def test_the_arguments_are_checked_first(self):
         for bad in ("", "x7", "7 8", "-1"):
             with self.subTest(pr=bad):
