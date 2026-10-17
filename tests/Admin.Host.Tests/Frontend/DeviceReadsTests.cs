@@ -77,22 +77,24 @@ public sealed class DeviceReadsTests
         DeviceReads.Origin(CommandOutput.Failed("powershell exited with 1")).State.ShouldBe(DoctorState.Unknown);
     }
 
+    private const string Marker = "--- webOrigins ---";
+
     [Fact]
     public void The_one_redirect_the_client_sends_is_ok()
     {
-        DeviceReads.Redirect(Out("blueprint://auth/callback", "https://localhost,capacitor://localhost")).State.ShouldBe(DoctorState.Ok);
+        DeviceReads.Redirect(Out("blueprint://auth/callback", Marker, "https://localhost,capacitor://localhost")).State.ShouldBe(DoctorState.Ok);
     }
 
     [Fact]
     public void The_one_redirect_is_ok_when_the_origins_line_was_dropped_as_blank()
     {
-        DeviceReads.Redirect(Out("blueprint://auth/callback")).State.ShouldBe(DoctorState.Ok);
+        DeviceReads.Redirect(Out("blueprint://auth/callback", Marker)).State.ShouldBe(DoctorState.Ok);
     }
 
     [Fact]
     public void A_redirect_that_is_not_the_clients_is_a_problem_naming_it()
     {
-        DoctorCheck check = DeviceReads.Redirect(Out("com.example://callback", "https://localhost"));
+        DoctorCheck check = DeviceReads.Redirect(Out("com.example://callback", Marker, "https://localhost"));
 
         check.State.ShouldBe(DoctorState.Problem);
         check.Detail.ShouldContain("com.example://callback");
@@ -101,55 +103,40 @@ public sealed class DeviceReadsTests
     [Fact]
     public void An_extra_redirect_beside_the_right_one_is_not_exactly_the_clients()
     {
-        DeviceReads.Redirect(Out("blueprint://auth/callback", "http://localhost:5173/*", "https://localhost")).State.ShouldBe(DoctorState.Problem);
+        DeviceReads.Redirect(Out("blueprint://auth/callback", "http://localhost:5173/*", Marker, "https://localhost")).State.ShouldBe(DoctorState.Problem);
     }
 
-    [Fact]
-    public void Two_redirects_with_the_origins_line_dropped_as_blank_are_not_the_one_the_client_sends()
+    [Theory]
+    [InlineData("com.example://app")]
+    [InlineData("https://localhost")]
+    public void A_path_less_redirect_beside_the_right_one_is_a_redirect_whatever_it_looks_like(string extra)
     {
-        // The last line is a redirect here, not the origins: it has a path.
-        DeviceCheck(Out("blueprint://auth/callback", "com.example://auth/callback")).ShouldBe(DoctorState.Problem);
-    }
-
-    [Fact]
-    public void A_single_origin_is_the_origins_line_and_not_a_redirect()
-    {
-        DeviceCheck(Out("blueprint://auth/callback", "https://localhost")).ShouldBe(DoctorState.Ok);
-    }
-
-    [Fact]
-    public void A_path_less_redirect_beside_the_right_one_is_not_taken_for_the_origins()
-    {
-        DoctorCheck check = DeviceReads.Redirect(Out("blueprint://auth/callback", "com.example://app"));
+        DoctorCheck check = DeviceReads.Redirect(Out("blueprint://auth/callback", extra, Marker, "https://localhost,capacitor://localhost"));
 
         check.State.ShouldBe(DoctorState.Problem);
-        check.Detail.ShouldContain("com.example://app");
-        check.Detail.ShouldContain("does not list https://localhost");
+        check.Detail.ShouldContain(extra);
     }
 
     [Fact]
-    public void Web_origins_without_the_apps_origin_read_as_a_redirect_and_say_so()
+    public void A_client_whose_origins_lack_the_apps_is_not_misread_as_a_redirect()
     {
-        DoctorCheck check = DeviceReads.Redirect(Out("blueprint://auth/callback", "capacitor://localhost"));
-
-        check.State.ShouldBe(DoctorState.Problem);
-        check.Detail.ShouldContain("capacitor://localhost");
-        check.Detail.ShouldContain("the client lacks https://localhost");
+        DeviceReads.Redirect(Out("blueprint://auth/callback", Marker, "capacitor://localhost")).State.ShouldBe(DoctorState.Ok);
     }
 
     [Fact]
-    public void A_path_less_redirect_is_still_a_redirect_when_the_origins_line_follows()
+    public void A_client_with_no_redirect_prints_only_the_marker_and_its_origins_and_is_a_problem()
     {
-        DeviceCheck(Out("blueprint://auth/callback", "com.example://app", "https://localhost,capacitor://localhost")).ShouldBe(DoctorState.Problem);
-    }
-
-    private static DoctorState DeviceCheck(CommandOutput realm) => DeviceReads.Redirect(realm).State;
-
-    [Fact]
-    public void A_client_with_no_redirect_prints_only_its_origins_and_is_a_problem()
-    {
-        DeviceReads.Redirect(Out("https://localhost,capacitor://localhost")).State.ShouldBe(DoctorState.Problem);
+        DeviceReads.Redirect(Out(Marker, "https://localhost,capacitor://localhost")).State.ShouldBe(DoctorState.Problem);
         DeviceReads.Redirect(Out()).State.ShouldBe(DoctorState.Problem);
+    }
+
+    [Fact]
+    public void Output_with_no_marker_is_a_problem_naming_it_and_not_a_guess_at_the_redirects()
+    {
+        DoctorCheck check = DeviceReads.Redirect(Out("blueprint://auth/callback", "https://localhost"));
+
+        check.State.ShouldBe(DoctorState.Problem);
+        check.Detail.ShouldContain(Marker);
     }
 
     [Fact]
