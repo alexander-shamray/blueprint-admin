@@ -135,7 +135,7 @@ calls end to end as a realm user, in one of a library of scripts: publish, wait 
 the projection to drain, set its stock on hand, quote, order, and then either read the order back
 through the BFF until it is confirmed, despatched and delivered and then count the mail it sent
 (one message for each event it raised, read from the mail sink by the order's id; a second message
-for one event fails the step; every script that orders and waits for an end counts its own, the carrier and timeout scripts too), cancel it
+for one event fails the step; the cancel, declined, out-of-stock, carrier and timeout scripts count theirs too), cancel it
 and read it back until it is cancelled, or apply a cause `run-locally.md` names
 (a price ending `.01`, stock set to 0) and read it back until the saga has declined
 it or found it out of stock, or order to the delivery postal code `SIM-TRANSIT`, which the carrier
