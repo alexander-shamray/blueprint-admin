@@ -11,6 +11,17 @@ export function buildUrl(template: string, path: Record<string, string>, query: 
 }
 
 /**
+ * Fills the `{name}` placeholders of a body from the path values the operation declares, as the URL's are, so an example
+ * that names a path of its own order's (the carrier feed filter) can be sent from the page. The value goes into the JSON
+ * text as a string's content; a placeholder with no value, or no declared name, stays in place.
+ */
+export function withPathValues(body: string, path: Record<string, string>): string {
+  return body.replace(/\{([^{}"]+)\}/g, (whole, name: string) =>
+    path[name] ? JSON.stringify(path[name]).slice(1, -1) : whole,
+  );
+}
+
+/**
  * One `Name: value` per line; blank lines are skipped. Any other line is reported, and so is a line
  * whose name repeats an earlier one ignoring case (the host refuses the pair).
  */

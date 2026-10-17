@@ -1,4 +1,4 @@
-import { buildUrl, parseHeaders, pretty, withFreshCommandId } from './request-builder';
+import { buildUrl, parseHeaders, pretty, withFreshCommandId, withPathValues } from './request-builder';
 
 describe('request-builder', () => {
   it('fills path placeholders encoded and appends only non-empty query values', () => {
@@ -8,6 +8,16 @@ describe('request-builder', () => {
     expect(
       buildUrl('http://localhost:5000/api/v1/catalog/products/', {}, { cursor: '', limit: '5' }),
     ).toBe('http://localhost:5000/api/v1/catalog/products/?limit=5');
+  });
+
+  it('fills a body placeholder from the path values as a JSON string, and leaves one with no value in place', () => {
+    const body = '{"Path":{"Matchers":[{"Pattern":"/v1/shipments/crr_SIM-STRANGE-{orderId}/events"}]}}';
+
+    expect(JSON.parse(withPathValues(body, { orderId: 'ab-12' })).Path.Matchers[0].Pattern).toBe('/v1/shipments/crr_SIM-STRANGE-ab-12/events');
+    expect(JSON.parse(withPathValues(body, { orderId: 'a"b\\c$&' })).Path.Matchers[0].Pattern).toBe('/v1/shipments/crr_SIM-STRANGE-a"b\\c$&/events');
+    expect(withPathValues(body, {})).toBe(body);
+    expect(withPathValues(body, { id: 'x' })).toBe(body);
+    expect(withPathValues('{"a":1}', { orderId: 'x' })).toBe('{"a":1}');
   });
 
   it('leaves an unfilled placeholder in place so the platform answers for it', () => {

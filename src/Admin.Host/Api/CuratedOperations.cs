@@ -152,7 +152,7 @@ public static class CuratedOperations
             "FindFeedPolls",
             "POST",
             Join(options.CarrierSimulatorUrl, "/__admin/requests/find"),
-            [],
+            [new ApiParameter("orderId", true, "string")], // not in the URL: the screen fills the body's {orderId} (request-builder.ts)
             [],
             RunLocallyExamples.CarrierFeedPolls,
             false,
