@@ -863,11 +863,12 @@ page notes the transcript's highest sequence when a run begins and asks for the
 script after it, so the section is the run's lines and not the session's; where
 that sequence could not be read the section is the whole session and says so.
 
-**The mail count (#66).** The deliver script ends in a `mail` step: after the order
-read says delivered, it reads the mail sink through the host's `GET /mail/messages`
+**The mail count (#66, #232).** The deliver, cancel, declined and out-of-stock scripts end in a `mail` step: after the order
+read says the script's last state, it reads the mail sink through the host's `GET /mail/messages`
 (§5.12), the read the Mail screen makes, and counts the messages whose
-`X-Correlation-Id` begins `scenario-{run}-`, the prefix of every step's id
-(`stepCorrelationId`). The event a message answered is read from its `Message-ID`, whose
+`X-Correlation-Id` is the order's own id. Notifications stamps that header from the integration event's
+`CorrelationId`, a `Guid` the order's id fills, so the `scenario-{run}-{step}` id the console sends reaches
+Ordering and the traces but never the mail (read against a live Mailpit, #232). The event a message answered is read from its `Message-ID`, whose
 local part Notifications derives from the event's id and the template key, so a
 redelivery that sends twice sends the same id twice. `Script.mail` lists the template keys the run
 must have sent, one message each, and `MAIL_EVENTS` pairs each key with the event it
@@ -879,11 +880,16 @@ message not yet sent is waited for, with the drain's interval and cap
 (`DRAIN_POLL_MS`, `DRAIN_WATCH_MS`), because the send worker is asynchronous; a sink that
 cannot be read fails the step and never reads as a run that sent nothing. The step sends
 nothing as the user and has no trace. Only the newest `MailSinkClient.Limit` messages are
-read, so a run's mail is counted among them only while it is among the newest. The other scripts
-end in states whose mail depends on timing (a cancel may land before or after the confirmation),
-so they have no `mail` step. Against FakePlatform the fake sink holds, beside its four recorded
-messages, one for each event a Scenario order (a correlation id under `scenario-`) has
-raised (`FakeOrders.Mail`), never doubled; the Playwright spec doubles one in flight to see
+read, so a run's mail is counted among them only while it is among the newest. The sets, each read live over repeated runs and
+stable in all of them: deliver is placed, confirmed, dispatched, delivered; cancel (asked a fraction of a second
+after the place) is placed and cancelled, 14 of 14 runs; out-of-stock is placed and cancelled, 3 of 3; declined is
+placed, cancelled and payment-declined, 4 of 4, because the saga compensates a declined payment by cancelling. A cancel
+asked after the confirmation also mails a confirmation and a refund, which is why the cancel script
+asks at once and no script that waits first has a `mail` step; the carrier scripts (`carrier-refused`: placed and
+confirmed, 2 of 2 runs) and the timeout scripts are not asked, their sets resting on waits and holds that were not
+measured. Against FakePlatform the fake sink holds, beside its four recorded
+messages, one for each event a Scenario order (placed under a correlation id beginning `scenario-`) has
+raised (`FakeOrders.Mail`), carrying the order's id as the real ones do and never doubled; the Playwright spec doubles one in flight to see
 the step fail.
 
 ### 5.14 Runbooks and the game day
