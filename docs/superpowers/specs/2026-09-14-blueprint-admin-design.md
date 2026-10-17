@@ -767,7 +767,10 @@ it by hand, against `Admin:MailSinkUrl` and the API of the Mailpit version
 `GET /api/v1/message/{id}` when one is opened. The header is the one
 Notifications writes on every message (drift-checked), and it is offered as a
 Trace link only where `CorrelationId.IsAdoptable` would adopt it, since the
-trace endpoint refuses anything else.
+trace endpoint refuses anything else. Each listed message also carries its
+`Message-ID` as the sink lists it, `{event id}.{template key}@{domain}`
+(blueprint-backend `MailMessageId`, drift-checked), which names the event the
+message answered and is what the Scenario's mail count (§5.13) reads.
 
 Opening a message marks it read in the sink, as opening it in the sink's own UI
 does; the list and the headers do not. That is the only state the console
@@ -853,12 +856,35 @@ the export is made), and posts it to `POST /scenario/export`, where
 `FixtureScrubber` has the last word before the page downloads what comes back, so
 a transcript, a fixture and an export are held to one definition of a secret. A
 section whose source is missing says so in one line (the transcript the host would
-not render; a trace Grafana did not answer; the mail the run caused, which the
-console does not yet count, #66). The document is built in the browser and
+not render; a trace Grafana did not answer; the mail the run caused, for a script
+with no `mail` step). The document is built in the browser and
 downloaded from it; the host stores nothing and writes to no sibling clone. The
 page notes the transcript's highest sequence when a run begins and asks for the
 script after it, so the section is the run's lines and not the session's; where
 that sequence could not be read the section is the whole session and says so.
+
+**The mail count (#66).** The deliver script ends in a `mail` step: after the order
+read says delivered, it reads the mail sink through the host's `GET /mail/messages`
+(§5.12), the read the Mail screen makes, and counts the messages whose
+`X-Correlation-Id` begins `scenario-{run}-`, the prefix of every step's id
+(`stepCorrelationId`). The event a message answered is read from its `Message-ID`, whose
+local part Notifications derives from the event's id and the template key, so a
+redelivery that sends twice sends the same id twice. `Script.mail` lists the template keys the run
+must have sent, one message each, and `MAIL_EVENTS` pairs each key with the event it
+answers (blueprint-backend `TemplateKeys` and `Intake/*Handler`, drift-checked in
+`LiteralDriftTests`). The step's output names each event with its count; a second
+message for one event fails the step at once, naming the event and the count, and a message
+for an event the script does not expect fails it too, so neither can be read as success. A
+message not yet sent is waited for, with the drain's interval and cap
+(`DRAIN_POLL_MS`, `DRAIN_WATCH_MS`), because the send worker is asynchronous; a sink that
+cannot be read fails the step and never reads as a run that sent nothing. The step sends
+nothing as the user and has no trace. Only the newest `MailSinkClient.Limit` messages are
+read, so a run's mail is counted among them only while it is among the newest. The other scripts
+end in states whose mail depends on timing (a cancel may land before or after the confirmation),
+so they have no `mail` step. Against FakePlatform the fake sink holds, beside its four recorded
+messages, one for each event a Scenario order (a correlation id under `scenario-`) has
+raised (`FakeOrders.Mail`), never doubled; the Playwright spec doubles one in flight to see
+the step fail.
 
 ### 5.14 Runbooks and the game day
 
@@ -919,7 +945,7 @@ and names the active option through `aria-activedescendant`.
 | **Mail** | §5.12's list, newest first: when, to whom, the subject, and the correlation id as a link into Trace, or `none`; how many the sink holds when that is more than listed; a line saying so when no message carries a correlation id; an opened message's addresses, date and body | Refresh; filter by correlation id (also `?correlationId=`), leaving one order's messages; Open a message; follow its Trace link; open the sink's own UI, where clearing is done |
 | **API** | operation tree on the left, each source with what its document changed since the kept baseline; request editor (path params, headers, body pre-filled from the schema example, `commandId` generated per send) and identity picker with its token clock (§5.6); response pane with status, timing, headers, body; a history list | Send; accept a changed document as the new baseline; "Trace this call" opens the Trace screen with the response's correlation id |
 | **Trace** | the §5.9 timeline for a correlation id, grouped by service, with Grafana deep links, and on a refetch what arrived or left since the last one | enter an id or arrive from the API screen; reload |
-| **Scenario** | `run-locally.md`'s calls as one script of a library (`SCRIPTS` in `scenario-run.ts` owns the list; `docs/superpowers/specs/2026-10-15-scenario-scripts.md` the causes and the fakes' rules) — publish, wait for the drain, set the product's stock (a product published a moment ago has none, and the order would end out of stock), quote, order, then either watch the order to confirmed, despatched and delivered, cancel it and watch it to cancelled, or apply a cause `run-locally.md` names (a price ending `.01`, stock set to 0) and watch the saga refuse the order, or order to the delivery postal code `SIM-TRANSIT` and watch it stay despatched, and ask to cancel it and see the platform refuse with 422 `order.already_shipped`, or order to one of the delivery postal codes whose carrier outcome the order read cannot tell apart (`SIM-REFUSED`, `SIM-DOWN`, `SIM-SLOW`, `SIM-STRANGE`) and read the carrier simulator's own request log, filtered by the simulator, for what the carrier saw, with the order read held at confirmed, or hold a lease on the stack (§5.3) so the saga's stock or payment wait lapses in seconds and read the order end `out_of_stock` or `declined`, or, with the despatch wait shortened too, order to `SIM-STRANGE` and read the review flag it raises (§5.9) while the order stays confirmed, or order a `.09` total, wait for its stock to reserve, stop Inventory, cancel the order and read the review flag its unanswered release raises while the order read says cancelled, with the stack restored whatever happens and a Cancel that ends the wait — each step with its status, body and own correlation id, each watch saying what it waits for and what it last read; beside the steps the saga strip of §5.13, and a finished run exports as one scrubbed Markdown document | Pick the script; run as a realm user; each step that sent links to its trace; the first step that does not succeed ends the run |
+| **Scenario** | `run-locally.md`'s calls as one script of a library (`SCRIPTS` in `scenario-run.ts` owns the list; `docs/superpowers/specs/2026-10-15-scenario-scripts.md` the causes and the fakes' rules) — publish, wait for the drain, set the product's stock (a product published a moment ago has none, and the order would end out of stock), quote, order, then either watch the order to confirmed, despatched and delivered and count the mail it sent (§5.13), cancel it and watch it to cancelled, or apply a cause `run-locally.md` names (a price ending `.01`, stock set to 0) and watch the saga refuse the order, or order to the delivery postal code `SIM-TRANSIT` and watch it stay despatched, and ask to cancel it and see the platform refuse with 422 `order.already_shipped`, or order to one of the delivery postal codes whose carrier outcome the order read cannot tell apart (`SIM-REFUSED`, `SIM-DOWN`, `SIM-SLOW`, `SIM-STRANGE`) and read the carrier simulator's own request log, filtered by the simulator, for what the carrier saw, with the order read held at confirmed, or hold a lease on the stack (§5.3) so the saga's stock or payment wait lapses in seconds and read the order end `out_of_stock` or `declined`, or, with the despatch wait shortened too, order to `SIM-STRANGE` and read the review flag it raises (§5.9) while the order stays confirmed, or order a `.09` total, wait for its stock to reserve, stop Inventory, cancel the order and read the review flag its unanswered release raises while the order read says cancelled, with the stack restored whatever happens and a Cancel that ends the wait — each step with its status, body and own correlation id, each watch saying what it waits for and what it last read; beside the steps the saga strip of §5.13, and a finished run exports as one scrubbed Markdown document | Pick the script; run as a realm user; each step that sent links to its trace; the first step that does not succeed ends the run |
 | **Runbooks** | the backend's runbooks as the tool lists them, one with no script marked and its reason given; for the one opened, each alert's state from §5.8's read (`inactive`, `pending`, `firing`, `not loaded` for a rule Prometheus does not list, `unknown` where Grafana did not answer), what causing it costs and the tool's deadlines for it to fire and to clear, and the runbook's text beside, rendered from the clone as elements and never as HTML | Pick a runbook; Cause its alert (the second alert of a runbook with two, named); Undo; the confirmation §5.14 maps, pressed twice or typed; Refresh |
 | **Transcript** | §5.11's entries in order: each process with its directory and exit code, each request as its `curl` with the identity and status, polled | Copy as shell script, which copies the host's rendered script rather than one built in the page, so the scrubber has the last word |
 
