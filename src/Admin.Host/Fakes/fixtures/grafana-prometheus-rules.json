@@ -104,6 +104,32 @@
             "evaluationTime": 0,
             "lastEvaluation": "0001-01-01T00:00:00Z",
             "type": "alerting"
+          },
+          {
+            "state": "inactive",
+            "name": "ContactReadRefused",
+            "query": "sum(increase(contact_reads_refused_total[10m])) > 0",
+            "duration": 300,
+            "labels": { "owner": "platform", "severity": "page" },
+            "annotations": { "summary": "Contact reads refused" },
+            "alerts": [],
+            "health": "ok",
+            "evaluationTime": 0.000301,
+            "lastEvaluation": "2026-10-16T09:40:12Z",
+            "type": "alerting"
+          },
+          {
+            "state": "inactive",
+            "name": "ErrorRateService",
+            "query": "sum(rate(http_server_request_duration_seconds_count{http_response_status_code=~\"5..\"}[5m])) / sum(rate(http_server_request_duration_seconds_count[5m])) > 0.01",
+            "duration": 300,
+            "labels": { "owner": "platform", "severity": "page" },
+            "annotations": { "summary": "5xx rate above 1% inside a service" },
+            "alerts": [],
+            "health": "ok",
+            "evaluationTime": 0.000301,
+            "lastEvaluation": "2026-10-16T09:40:12Z",
+            "type": "alerting"
           }
         ],
         "interval": 60,

@@ -39,6 +39,9 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
     {
     }
 
+    /// <summary>The fake stack these orders read, for the other fakes that answer from the same state (a game-day cause's alerts).</summary>
+    internal FakeStack Stack => stack;
+
     internal static readonly TimeSpan Step = TimeSpan.FromSeconds(1);
 
     /// <summary>Later ids count up from here, clear of the fakes' fixed product and order ids.</summary>
