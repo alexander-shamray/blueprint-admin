@@ -193,8 +193,8 @@ function flagged(reason: string, secondsAfter = 62): ReviewFlagView['flags'][num
   };
 }
 
-/** The mail sink as the Mail screen lists it: one message for each template given, the run's by its correlation id, a template given twice sent twice. */
-function mailView(templates: string[], over: Partial<MailListView> = {}, correlationId = 'scenario-abcdef12-order'): MailListView {
+/** The mail sink as the Mail screen lists it: one message for each template given, the order's by its correlation id (the order's own id, as Notifications stamps it), a template given twice sent twice. */
+function mailView(templates: string[], over: Partial<MailListView> = {}, correlationId = orderId): MailListView {
   return {
     reachable: true,
     error: null,
@@ -217,6 +217,8 @@ function mailView(templates: string[], over: Partial<MailListView> = {}, correla
 }
 
 const DELIVERED_MAIL = ['order-placed', 'order-confirmed', 'shipment-dispatched', 'shipment-delivered'];
+/** What the order of a script that ends in a cancellation mails, read from the live stack: the placing, then the cancellation. */
+const CANCELLED_MAIL = ['order-placed', 'order-cancelled'];
 
 let cancelSent = false;
 
@@ -416,7 +418,7 @@ describe('ScenarioPage', () => {
     });
 
     it('counts only the mail whose correlation id is the run\'s', async () => {
-      const other = mailView(['order-placed', 'order-placed'], {}, 'scenario-ffffff00-order');
+      const other = mailView(['order-placed', 'order-placed'], {}, '0199a1b2-0000-7000-8000-0000000000ff');
       host.mailMessages.mockReturnValue(of({ ...mailView(DELIVERED_MAIL), messages: [...other.messages, ...mailView(DELIVERED_MAIL).messages] }));
       const page = render().componentInstance;
 
@@ -652,6 +654,7 @@ describe('ScenarioPage', () => {
   });
 
   it('runs the cancel script: the cancel goes to the placed order and the watch reads it cancelled', async () => {
+    host.mailMessages.mockReturnValue(of(mailView(CANCELLED_MAIL)));
     const page = render().componentInstance;
     page.pick('cancel');
 
@@ -665,6 +668,7 @@ describe('ScenarioPage', () => {
       ['order', 'ok'],
       ['cancel', 'ok'],
       ['cancelled', 'ok'],
+      ['mail', 'ok'],
     ]);
     expect(sent()[4].url).toBe(`http://localhost:5000/api/v1/orders/${orderId}/cancel`);
     expect(page.steps()[6].detail).toContain('cancelled at 2026-10-05T12:00:02Z, 2 s after');
@@ -782,11 +786,12 @@ describe('ScenarioPage', () => {
   });
 
   it.each([
-    ['declined', 'declined', 10.01, 10],
-    ['out-of-stock', 'out_of_stock', 19.99, 0],
+    ['declined', 'declined', 10.01, 10, ['order-placed', 'order-cancelled', 'payment-declined']],
+    ['out-of-stock', 'out_of_stock', 19.99, 0, CANCELLED_MAIL],
   ] as const)(
     'runs the %s script: its cause is set before the order and the watch reads the refusal',
-    async (script, status, amount, onHand) => {
+    async (script, status, amount, onHand, mail) => {
+      host.mailMessages.mockReturnValue(of(mailView([...mail])));
       host.proxy.mockImplementation((request: ProxyRequest) =>
         isRead(request)
           ? of(responded(200, order(status, { cancelled: '2026-10-05T12:00:01Z' }), ''))
@@ -804,6 +809,7 @@ describe('ScenarioPage', () => {
         ['quote', 'ok'],
         ['order', 'ok'],
         [status, 'ok'],
+        ['mail', 'ok'],
       ]);
       const [publish, stock, , placed] = sent();
       expect(JSON.parse(publish.body!).amount).toBe(amount);
@@ -831,6 +837,7 @@ describe('ScenarioPage', () => {
       'ok',
       'ok',
       'failed',
+      'skipped',
       'skipped',
       'skipped',
       'skipped',
@@ -1577,6 +1584,7 @@ describe('ScenarioPage', () => {
     host.proxy.mockImplementation((request: ProxyRequest) =>
       request.url.endsWith('/catalog/products/') ? publish.asObservable() : of(platform(request)),
     );
+    host.mailMessages.mockReturnValue(of(mailView(CANCELLED_MAIL)));
     const page = render().componentInstance;
     page.pick('cancel');
     expect(page.steps().map((s) => s.key)).toContain('cancel');
@@ -1589,7 +1597,7 @@ describe('ScenarioPage', () => {
     publish.next(responded(200, `"${productId}"`, 'scenario-abcdef12-publish'));
     publish.complete();
     await running;
-    expect(page.steps().map((s) => s.state)).toEqual(Array(7).fill('ok'));
+    expect(page.steps().map((s) => s.state)).toEqual(Array(8).fill('ok'));
     page.pick('deliver');
 
     expect(page.steps().map((s) => s.state)).toEqual(Array(9).fill('pending'));

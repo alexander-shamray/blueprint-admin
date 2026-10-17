@@ -469,7 +469,7 @@ export class ScenarioPage {
           if (!(await this.reviewFlag(script, orderId))) return;
           break;
         case 'mail':
-          if (!(await this.mailCount(script, run))) return;
+          if (!(await this.mailCount(script, orderId))) return;
           break;
         case 'reserved':
           if (!(await this.reservation(operations.reservation!, run, identity, orderId))) return;
@@ -656,12 +656,12 @@ export class ScenarioPage {
 
   /**
    * Counts the mail the run sent, read from the mail sink through the host as the Mail screen reads it, until the sink holds
-   * one message for each event the script expects or the wait runs out. The messages are the run's by their correlation id,
-   * so a second run's mail is never counted; the wait is the drain's interval and cap, since the send worker is asynchronous.
+   * one message for each event the script expects or the wait runs out. The messages are the order's by their correlation id
+   * (the order's own id, which Notifications stamps), so a second run's mail is never counted; the wait is the drain's interval and cap, since the send worker is asynchronous.
    * A second message for one event fails the step at once. The sink is anonymous and untraced, so nothing is sent as the user
    * and the step has no trace.
    */
-  private async mailCount(script: Script, run: string): Promise<boolean> {
+  private async mailCount(script: Script, orderId: string): Promise<boolean> {
     const expected = script.mail;
     if (!expected || this.destroyed) return false;
 
@@ -683,7 +683,7 @@ export class ScenarioPage {
       // A Cancel or a screen that went while the read was in flight ends the step without another wait.
       if (this.destroyed) return false;
 
-      const v = mailVerdict(view, run, expected);
+      const v = mailVerdict(view, orderId, expected);
       if (v.kind === 'reached') {
         this.patch(key, { state: 'ok', detail: v.detail });
         return true;
