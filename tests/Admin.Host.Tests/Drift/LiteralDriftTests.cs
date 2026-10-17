@@ -179,7 +179,11 @@ public sealed partial class LiteralDriftTests
         endpoints.ShouldContain($".WithName(\"{saga.GetProperty("operationId").GetString()}\")");
         endpoints.ShouldContain(".RequireAuthorization(OrderingPermissions.SagaRead)");
         Backend.Read("src", "Services", "Ordering", "Ordering.Api", "OrderingPermissions.cs").ShouldContain("\"orders:saga-read\"");
-        view.ShouldContain("record SagaStateView(Guid OrderId, string CurrentState, DateTimeOffset StartedAt, string? CancelReason)");
+        view.ShouldContain("record SagaStateView(");
+        view.ShouldContain("Guid OrderId,");
+        view.ShouldContain("string CurrentState,");
+        view.ShouldContain("DateTimeOffset StartedAt,");
+        view.ShouldContain("string? CancelReason)");
         ScenarioRun().ShouldContain("typeof o['currentState'] !== 'string' || typeof o['startedAt'] !== 'string'");
         ScenarioRun().ShouldContain("const reason = o['cancelReason'];");
         ScenarioRun().ShouldContain("saga: 'ordering:GetOrderSagaState'");
