@@ -6,9 +6,12 @@ public sealed record Mailbox(string Name, string Address);
 /// <summary>
 /// One message in the sink's list. <see cref="CorrelationId"/> is the message's <c>X-Correlation-Id</c> header when it
 /// carries one the backend would adopt, and null otherwise: a value the trace endpoint would refuse is no link.
+/// <see cref="MessageId"/> is the message's <c>Message-ID</c> as the sink lists it, <c>{event id}.{template key}@{domain}</c>
+/// (blueprint-backend <c>MailMessageId</c>), which says which event the message answered.
 /// </summary>
 public sealed record MailSummary(
     string Id,
+    string MessageId,
     Mailbox From,
     IReadOnlyList<Mailbox> To,
     string Subject,

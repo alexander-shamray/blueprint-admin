@@ -12,6 +12,9 @@ public enum CancelOutcome
     AlreadyShipped,
 }
 
+/// <summary>One message <see cref="FakeOrders.Mail"/> holds: the sink's id, the <c>Message-ID</c> it was sent under, and the correlation id it carries.</summary>
+internal sealed record FakeMail(string Id, string MessageId, string Template, string Subject, DateTimeOffset Created, string CorrelationId);
+
 /// <summary>
 /// The orders FakePlatform has placed, each advancing as the saga and Shipping would advance it, so the Scenario's
 /// watch steps have something to watch. Written by hand rather than recorded: a recording holds one instant of an
@@ -247,7 +250,7 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
     /// A <paramref name="postalCode"/> of <see cref="InTransitPostalCode"/> scripts the carrier as run-locally.md's table
     /// does: collected, never delivered.
     /// </summary>
-    public string Place(string? productId = null, string? postalCode = null)
+    public string Place(string? productId = null, string? postalCode = null, string? correlationId = null)
     {
         lock (gate)
         {
@@ -269,6 +272,7 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
                 Carrier = postalCode is not null && CarrierCodes.Contains(postalCode) ? postalCode : null,
                 ReviewReason = string.Equals(postalCode, StrangePostalCode, StringComparison.Ordinal) ? NotDespatchedReason : null,
                 ReviewAfter = stack.ShortWaits ? ShortDespatchWait : NormalDespatchWait,
+                CorrelationId = correlationId,
             };
             return id;
         }
@@ -616,6 +620,71 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
         }
     }
 
+    /// <summary>
+    /// The mail the sink holds for the Scenario's orders by now, oldest first: one message for each event an order has raised, as
+    /// Notifications sends them (blueprint-backend <c>Intake/*Handler</c>), each carrying the correlation id of the request that
+    /// placed the order. Only an order placed under a <see cref="MailCorrelationPrefix"/> id sends any, so the recorded sink the
+    /// Mail screen reads stays four messages for every other caller. No message is ever doubled: a redelivery is not modelled.
+    /// </summary>
+    internal IReadOnlyList<FakeMail> Mail()
+    {
+        KeyValuePair<string, Placed>[] orders;
+
+        lock (gate)
+        {
+            orders = [.. placed.Where(o => o.Value.CorrelationId?.StartsWith(MailCorrelationPrefix, StringComparison.Ordinal) == true)];
+        }
+
+        List<FakeMail> mail = [];
+
+        foreach ((string orderId, Placed order) in orders)
+        {
+            (DateTimeOffset? confirmed, DateTimeOffset? dispatched, DateTimeOffset? delivered, DateTimeOffset? cancelled, string status) = Moments(order);
+            string correlation = order.CorrelationId!;
+
+            mail.Add(Message(orderId, "order-placed", order.At, correlation));
+
+            if (confirmed is { } c)
+            {
+                mail.Add(Message(orderId, "order-confirmed", c, correlation));
+            }
+
+            if (dispatched is { } d)
+            {
+                mail.Add(Message(orderId, "shipment-dispatched", d, correlation));
+            }
+
+            if (delivered is { } v)
+            {
+                mail.Add(Message(orderId, "shipment-delivered", v, correlation));
+            }
+
+            if (cancelled is { } x)
+            {
+                mail.Add(Message(orderId, status == "declined" ? "payment-declined" : "order-cancelled", x, correlation));
+            }
+        }
+
+        return [.. mail.OrderBy(m => m.Created)];
+    }
+
+    /// <summary>The correlation ids the Scenario mints (<c>scenario-{run}-{step}</c>); the only orders whose mail the fake sink holds.</summary>
+    internal const string MailCorrelationPrefix = "scenario-";
+
+    /// <summary>One message as the sink would list it: its id and event id are stable for the order and template, as Notifications' are for the event.</summary>
+    private static FakeMail Message(string orderId, string template, DateTimeOffset created, string correlationId)
+    {
+        string hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"{orderId}.{template}")));
+
+        return new FakeMail(
+            "fake" + hash[..16],
+            $"{hash[16..48]}.{template}@commerce.test",
+            template,
+            $"{template} / order {orderId}",
+            created,
+            correlationId);
+    }
+
     /// <summary>A step happens at its time unless the order was cancelled first.</summary>
     private static DateTimeOffset? Reached(DateTimeOffset at, DateTimeOffset now, DateTimeOffset? cancelled) =>
         at <= now && (cancelled is null || at < cancelled) ? at : null;
@@ -638,6 +707,9 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
         public string? ReviewReason { get; init; }
 
         public TimeSpan ReviewAfter { get; init; }
+
+        /// <summary>The correlation id the place-order request carried, which the mail the order sends carries in turn.</summary>
+        public string? CorrelationId { get; init; }
     }
 
     private sealed record Product(decimal Amount, int? OnHand, string Name, string? ThumbnailUrl);

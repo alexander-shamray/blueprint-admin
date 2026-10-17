@@ -10,6 +10,7 @@ const ORDER = '01a13f79-2194-77a5-bbad-eaf2d69eacd6';
 function summary(over: Partial<MailSummary>): MailSummary {
   return {
     id: 'm1',
+    messageId: '01a13f792ecd799798355445d33ba803.order-confirmed@commerce.test',
     from: { name: 'Commerce', address: 'no-reply@commerce.test' },
     to: [{ name: '', address: 'demo@example.invalid' }],
     subject: 'Your order is confirmed',

@@ -68,6 +68,7 @@ public sealed partial class MailSinkClient(HttpClient http, IOptions<AdminOption
             MailSummary[] messages = [.. listed
                 .Select((m, i) => new MailSummary(
                     m.Id ?? "",
+                    m.MessageID ?? "",
                     Box(m.From),
                     Boxes(m.To),
                     m.Subject ?? "",
@@ -195,7 +196,7 @@ public sealed partial class MailSinkClient(HttpClient http, IOptions<AdminOption
 
     private sealed record SinkAddress(string? Name, string? Address);
 
-    private sealed record SinkSummary(string? Id, SinkAddress? From, SinkAddress[]? To, string? Subject, DateTimeOffset Created, string? Snippet, bool Read);
+    private sealed record SinkSummary(string? Id, string? MessageID, SinkAddress? From, SinkAddress[]? To, string? Subject, DateTimeOffset Created, string? Snippet, bool Read);
 
     private sealed record SinkList(int Total, SinkSummary[]? Messages);
 

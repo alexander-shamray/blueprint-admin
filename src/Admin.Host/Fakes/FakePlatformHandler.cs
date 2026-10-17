@@ -34,7 +34,7 @@ public sealed class FakePlatformHandler(AdminOptions options, FakeOrders orders)
             // The carrier simulator is the same WireMock.Net image, answering the same way before Shipping despatches.
             : Is(uri, options.CarrierSimulatorUrl) && path == "/__admin/requests" ? FakeHttp.Json(HttpStatusCode.OK, "[]")
             : Is(uri, options.CarrierSimulatorUrl) && path == "/__admin/requests/find" ? FakeCarrier.Find(request, orders)
-            : Is(uri, options.MailSinkUrl) ? FakeMailSink.Send(request)
+            : Is(uri, options.MailSinkUrl) ? FakeMailSink.Send(request, orders)
             : Is(uri, options.GrafanaUrl) && path == "/api/datasources" ? FakeGrafana.Datasources()
             : Is(uri, options.GrafanaUrl) && path.Contains("/loki/api/v1/query_range", StringComparison.Ordinal) ? FakeGrafana.Loki(request, orders)
             : Is(uri, options.GrafanaUrl) && path.Contains("/api/traces/", StringComparison.Ordinal) ? FakeGrafana.Tempo(request)
