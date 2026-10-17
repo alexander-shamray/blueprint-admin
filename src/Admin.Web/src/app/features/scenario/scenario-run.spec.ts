@@ -679,6 +679,7 @@ describe('the carrier log scripts', () => {
 
     expect(JSON.parse(withFeedOrder(filter, 'ord-1')).Path.Matchers[0].Pattern).toBe('/v1/shipments/crr_SIM-STRANGE-ord-1/events');
     expect(JSON.parse(withFeedOrder(filter, 'ord-1')).Methods).toEqual(['GET']);
+    expect(JSON.parse(withFeedOrder(filter, 'a$&b')).Path.Matchers[0].Pattern).toBe('/v1/shipments/crr_SIM-STRANGE-a$&b/events');
     expect(withFeedOrder('{"Methods":["GET"]}', 'ord-1')).toBe('{"Methods":["GET"]}');
     expect(withFeedOrder('not json', 'ord-1')).toBe('not json');
   });
