@@ -7,7 +7,7 @@ import { EMPTY, Subscription, catchError, exhaustMap, map, takeUntil, takeWhile,
 import { HostClient } from '../../core/host/host-client';
 import { ApiCatalogView, ApiOperation, OpenApiChanges, ProjectionDrain, ProxyRequest, ProxyResult, TokenClockView, TokenView } from '../../core/host/host-types';
 import { IdentityChoice, IdentityState } from '../../core/identity/identity-state';
-import { buildUrl, parseHeaders, pretty, withFreshCommandId, withoutCredentialHeaders, withoutCredentialLines, withoutSetCookie } from './request-builder';
+import { buildUrl, parseHeaders, pretty, withFreshCommandId, withoutCredentialHeaders, withoutCredentialLines, withoutSetCookie, withPathValues } from './request-builder';
 import { DrainedIndicator } from '../../shared/drained-indicator/drained-indicator';
 
 export const UUID = new InjectionToken<() => string>('UUID', { factory: () => () => crypto.randomUUID() });
@@ -25,6 +25,8 @@ export interface HistoryEntry {
   urlTemplate: string;
   pathValues: Record<string, string>;
   queryValues: Record<string, string>;
+  /** The body as typed, before its `{name}` placeholders were filled from `pathValues`, so a restore can change what they fill. */
+  bodyTemplate: string;
   identity: string;
   /** Who it went out as, without a custom password: history is not a credential store, so a restore asks for it again. */
   sentAs: SentAs;
@@ -292,7 +294,7 @@ export class ApiPage {
       method: this.method(),
       url: buildUrl(this.url(), this.pathValues(), this.queryValues()),
       headers,
-      body: body.trim() ? body : null,
+      body: body.trim() ? withPathValues(body, this.pathValues()) : null,
       identity: this.identity.request(),
       correlationId: this.correlationId().trim() || null,
     };
@@ -320,7 +322,7 @@ export class ApiPage {
             this.watchProjection();
           }
         }
-        this.history.update((all) => [{ seq: ++this.seq, at: new Date(), name, operationId, hasCommandId, headersText: withoutCredentialLines(headersText), urlTemplate, pathValues, queryValues, identity, sentAs, request: { ...request, headers: withoutCredentialHeaders(request.headers), identity: null }, result: withoutSetCookie(result) }, ...all].slice(0, MAX_HISTORY));
+        this.history.update((all) => [{ seq: ++this.seq, at: new Date(), name, operationId, hasCommandId, headersText: withoutCredentialLines(headersText), urlTemplate, pathValues, queryValues, bodyTemplate: body, identity, sentAs, request: { ...request, headers: withoutCredentialHeaders(request.headers), identity: null }, result: withoutSetCookie(result) }, ...all].slice(0, MAX_HISTORY));
       },
       error: (e: unknown) => {
         // A refusal belongs to the editor that sent it; one that moved on has nothing to show it against.
@@ -362,7 +364,7 @@ export class ApiPage {
     this.pathValues.set(entry.pathValues);
     this.queryValues.set(entry.queryValues);
     this.headersText.set(entry.headersText);
-    this.body.set(entry.request.body ?? '');
+    this.body.set(entry.bodyTemplate);
     this.correlationId.set(entry.request.correlationId ?? '');
     const sentAs = entry.sentAs;
     if (sentAs.kind === 'anonymous') {

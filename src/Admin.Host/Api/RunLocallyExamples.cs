@@ -42,7 +42,8 @@ public static class RunLocallyExamples
     /// <summary>
     /// run-locally.md, the carrier simulator's "polls of one script's parcel feed": the feed of the <c>SIM-STRANGE</c> parcel
     /// the order was booked, which is served at a path of its own order's (<c>crr_SIM-STRANGE-&lt;orderId&gt;</c>). The document
-    /// holds that path in <c>$feed</c>; <c>{orderId}</c> stands for it here and the Scenario fills it (<c>withFeedOrder</c>).
+    /// holds that path in <c>$feed</c>; <c>{orderId}</c> stands for it here. The Scenario fills it from the order it placed
+    /// (<c>withFeedOrder</c>); the API screen asks for it as the operation's <c>orderId</c> path parameter and fills it on Send.
     /// </summary>
     public const string CarrierFeedPolls = """
         {

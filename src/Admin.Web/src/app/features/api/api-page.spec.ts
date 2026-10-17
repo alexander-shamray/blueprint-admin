@@ -29,6 +29,11 @@ const catalog: ApiCatalogView = {
       id: 'ordering:CancelOrder', source: 'ordering', name: 'CancelOrder', method: 'POST', available: false,
       url: 'http://localhost:5000/api/v1/orders/{id}/cancel', pathParameters: [{ name: 'id', required: true, type: 'string' }],
     }),
+    op({
+      id: 'carrier:FindFeedPolls', source: 'carrier', name: 'FindFeedPolls', method: 'POST',
+      url: 'http://localhost:5191/__admin/requests/find', pathParameters: [{ name: 'orderId', required: true, type: 'string' }],
+      exampleBody: '{"Methods":["GET"],"Path":{"Matchers":[{"Name":"ExactMatcher","Pattern":"/v1/shipments/crr_SIM-STRANGE-{orderId}/events"}]}}',
+    }),
   ],
 };
 
@@ -143,7 +148,7 @@ describe('ApiPage', () => {
     const text = fixture.nativeElement.textContent as string;
 
     expect(Array.from(fixture.nativeElement.querySelectorAll('button.op')).map((b) => (b as HTMLElement).textContent?.trim()))
-      .toEqual([expect.stringContaining('GetProducts'), expect.stringContaining('PublishProduct'), expect.stringContaining('CancelOrder')]);
+      .toEqual([expect.stringContaining('GetProducts'), expect.stringContaining('PublishProduct'), expect.stringContaining('CancelOrder'), expect.stringContaining('FindFeedPolls')]);
     expect(text).toContain('answered 503.');
     expect(fixture.nativeElement.querySelector('button.op.unavailable')).not.toBeNull();
   });
@@ -266,6 +271,24 @@ describe('ApiPage', () => {
     click(fixture, 'Send');
 
     expect(host.proxy.mock.calls[0][0].url).toBe('http://localhost:5000/api/v1/orders/abc/cancel');
+  });
+
+  it('fills a path parameter into the body it sends and keeps the body as typed, also on a restore', () => {
+    const fixture = render();
+    const page = fixture.componentInstance;
+    click(fixture, 'POST FindFeedPolls');
+    page.setPathValue('orderId', 'ord-1');
+    click(fixture, 'Send');
+
+    expect(JSON.parse(host.proxy.mock.calls[0][0].body).Path.Matchers[0].Pattern).toBe('/v1/shipments/crr_SIM-STRANGE-ord-1/events');
+    expect(page.body()).toContain('{orderId}');
+
+    (fixture.nativeElement.querySelectorAll('.history li button')[0] as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(page.body()).toContain('{orderId}');
+    page.setPathValue('orderId', 'ord-2');
+    click(fixture, 'Send');
+    expect(JSON.parse(host.proxy.mock.calls[1][0].body).Path.Matchers[0].Pattern).toBe('/v1/shipments/crr_SIM-STRANGE-ord-2/events');
   });
 
   it('renders an unreached result differently from a response', () => {

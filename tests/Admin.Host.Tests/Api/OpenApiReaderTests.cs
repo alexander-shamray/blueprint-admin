@@ -140,4 +140,13 @@ public sealed class OpenApiReaderTests
         ]);
         JsonDocument.Parse(curated[0].ExampleBody!).RootElement.GetProperty("currency").GetString().ShouldBe("EUR");
     }
+
+    [Fact]
+    public void The_carrier_feed_filter_asks_for_the_order_whose_id_its_body_names()
+    {
+        ApiOperation feed = CuratedOperations.All(new AdminOptions()).Single(o => o.Id == "carrier:FindFeedPolls");
+
+        feed.PathParameters.ShouldBe([new ApiParameter("orderId", true, "string")]);
+        feed.ExampleBody.ShouldNotBeNull().ShouldContain("{orderId}");
+    }
 }
