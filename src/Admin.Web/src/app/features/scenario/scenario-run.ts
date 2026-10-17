@@ -644,7 +644,7 @@ export function withFeedOrder(body: string, orderId: string): string {
   const filter = parsed as { Path?: { Matchers?: { Pattern?: unknown }[] } } | null;
   const matcher = filter?.Path?.Matchers?.[0];
   if (!matcher || typeof matcher.Pattern !== 'string' || !matcher.Pattern.includes('{orderId}')) return body;
-  matcher.Pattern = matcher.Pattern.replace('{orderId}', orderId);
+  matcher.Pattern = matcher.Pattern.replace('{orderId}', () => orderId);
   return JSON.stringify(filter, null, 2);
 }
 
