@@ -660,6 +660,19 @@ describe('the carrier log scripts', () => {
     expect(withCarrierCode('not json', 'SIM-SLOW')).toBe('not json');
   });
 
+  it('ask for the bookings of one run only when the address carries its mark', () => {
+    const filter = '{"Methods":["POST"],"Body":{"Matchers":[{"Name":"WildcardMatcher","Pattern":"*SIM-DOWN*"}]}}';
+    const marked = JSON.parse(withCarrierCode(filter, 'SIM-SLOW', 'scenario-ab12cd34'));
+
+    expect(marked.Body.MatchOperator).toBe('And');
+    expect(marked.Body.Matchers).toEqual([
+      { Name: 'WildcardMatcher', Pattern: '*SIM-SLOW*' },
+      { Name: 'WildcardMatcher', Pattern: '*scenario-ab12cd34*' },
+    ]);
+    expect(JSON.parse(withCarrierCode(filter, 'SIM-SLOW')).Body.MatchOperator).toBeUndefined();
+    expect(withCarrierCode('{"Methods":["GET"]}', 'SIM-SLOW', 'scenario-ab12cd34')).toBe('{"Methods":["GET"]}');
+  });
+
   it('read the simulator\'s entries, and nothing that is not a list of them', () => {
     const body = JSON.stringify([
       {
@@ -752,6 +765,9 @@ describe('the carrier scripts', () => {
   });
 
   it('leave an order with no address, or no JSON, as it was', () => {
+    expect(JSON.parse(withShippingPostalCode(order, 'SIM-DOWN', 'scenario-ab12cd34')).shippingAddress.line1).toBe(
+      `${JSON.parse(order).shippingAddress.line1} scenario-ab12cd34`,
+    );
     expect(withShippingPostalCode('{"items":[]}', 'SIM-TRANSIT')).toBe('{"items":[]}');
     expect(withShippingPostalCode('not json', 'SIM-TRANSIT')).toBe('not json');
     expect(hasShippingPostalCode('{"items":[]}', 'SIM-TRANSIT')).toBe(false);

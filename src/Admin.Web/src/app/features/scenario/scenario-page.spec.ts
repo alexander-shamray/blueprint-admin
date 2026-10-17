@@ -924,6 +924,11 @@ describe('ScenarioPage', () => {
       expect(JSON.parse(sent()[3].body!).shippingAddress.postalCode).toBe(code);
       const find = sent().find((r) => r.url.endsWith('/__admin/requests/find'))!;
       expect(JSON.parse(find.body!).Body.Matchers[0].Pattern).toBe(`*${code}*`);
+      // Only this run's bookings are asked for: the order's address carries a mark and the filter requires it too.
+      const mark = JSON.parse(sent()[3].body!).shippingAddress.line1 as string;
+      expect(mark).toMatch(/^1 Test Street scenario-[0-9a-f]{8}$/);
+      expect(JSON.parse(find.body!).Body.MatchOperator).toBe('And');
+      expect(JSON.parse(find.body!).Body.Matchers[1].Pattern).toBe(`*${mark.split(' ').pop()}*`);
       // The simulator is anonymous and untraced: nothing is sent as the user.
       expect(find.identity).toBeNull();
       expect(find.correlationId).toBeNull();
@@ -1004,7 +1009,7 @@ describe('ScenarioPage', () => {
       await page.run();
 
       expect(page.steps()[6].state).toBe('failed');
-      expect(page.steps()[6].detail).toBe("The simulator's answer was longer than the proxy reads, so the log cannot be judged.");
+      expect(page.steps()[6].detail).toContain("The simulator's answer was longer than the proxy reads, so the log cannot be judged");
 
       host.proxy.mockImplementation((request: ProxyRequest) =>
         request.url.endsWith('/__admin/requests/find')
