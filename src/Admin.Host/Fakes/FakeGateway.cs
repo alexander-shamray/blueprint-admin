@@ -381,7 +381,9 @@ internal static partial class FakeGateway
         // run-locally.md: the carrier's answer is scripted by the delivery postal code, the one field of the order it sees.
         string? postalCode = Body(request)?.Get("shippingAddress")?.Get("postalCode") is { ValueKind: JsonValueKind.String } code ? code.GetString() : null;
 
-        return FakeHttp.Json(HttpStatusCode.OK, $"\"{orders.Place(product, postalCode)}\"");
+        string? correlationId = request.Headers.TryGetValues(CorrelationId.Header, out IEnumerable<string>? ids) ? ids.FirstOrDefault() : null;
+
+        return FakeHttp.Json(HttpStatusCode.OK, $"\"{orders.Place(product, postalCode, correlationId)}\"");
     }
 
     /// <summary>

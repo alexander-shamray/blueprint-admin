@@ -343,6 +343,8 @@ export interface Mailbox {
 /** One message in the host's `MailListView`; `correlationId` is null when the message carries none the backend would adopt. */
 export interface MailSummary {
   id: string;
+  /** The `Message-ID` as the sink lists it: `<event id>.<template key>@<domain>`, which names the event the message answered. */
+  messageId: string;
   from: Mailbox;
   to: Mailbox[];
   subject: string;

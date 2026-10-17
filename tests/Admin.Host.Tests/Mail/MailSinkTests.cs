@@ -150,7 +150,7 @@ public sealed class MailSinkTests : IClassFixture<AdminHostFactory>
     {
         using HttpRequestMessage clear = new(HttpMethod.Delete, "http://localhost:8025/api/v1/messages");
 
-        FakeMailSink.Send(clear).StatusCode.ShouldBe(HttpStatusCode.MethodNotAllowed);
+        FakeMailSink.Send(clear, new FakeOrders(TimeProvider.System)).StatusCode.ShouldBe(HttpStatusCode.MethodNotAllowed);
     }
 
     private static MailSinkClient Client(ScriptedHandler handler) => new(new HttpClient(handler), Options.Create(new AdminOptions()));
