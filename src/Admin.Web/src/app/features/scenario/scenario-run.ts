@@ -627,6 +627,27 @@ export function withCarrierCode(body: string, code: string, marker?: string): st
   return JSON.stringify(filter, null, 2);
 }
 
+/**
+ * The simulator's feed filter with the order's id put into its path: run-locally.md reads the polls of one order's parcel
+ * feed, which a `SIM-STRANGE` booking serves at `crr_SIM-STRANGE-<orderId>`, so the answer is this order's polls and does not
+ * grow with the journal. The example body holds `{orderId}` where the document holds `$orderId`. A body that is not the
+ * filter, or has no `{orderId}` to fill, is returned as it was, so the step reads what the document's own filter gives
+ * rather than a body this guessed at.
+ */
+export function withFeedOrder(body: string, orderId: string): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return body;
+  }
+  const filter = parsed as { Path?: { Matchers?: { Pattern?: unknown }[] } } | null;
+  const matcher = filter?.Path?.Matchers?.[0];
+  if (!matcher || typeof matcher.Pattern !== 'string' || !matcher.Pattern.includes('{orderId}')) return body;
+  matcher.Pattern = matcher.Pattern.replace('{orderId}', orderId);
+  return JSON.stringify(filter, null, 2);
+}
+
 /** One request the carrier simulator logged, read from a WireMock.Net entry. */
 export interface CarrierEntry {
   /** When the simulator received it, in ms since the epoch (`Request.DateTime`, UTC). */

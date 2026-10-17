@@ -372,15 +372,16 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
     /// <c>Method</c>, <c>Path</c> and <c>Body</c>, and <c>Response.StatusCode</c>. The cadence is the fake's own and the shapes
     /// are run-locally.md's: <c>SIM-REFUSED</c> one booking answered 422; <c>SIM-DOWN</c> repeated bookings, each 503;
     /// <c>SIM-SLOW</c> repeated bookings of one shipment, each 201; <c>SIM-STRANGE</c> one booking answered 201 and then
-    /// repeated polls of the feed. <paramref name="polls"/> asks for the feed's polls, not the bookings.
+    /// repeated polls of the feed. <paramref name="polls"/> asks for the feed's polls, not the bookings; the feed is served at
+    /// a path of its own order's, so <paramref name="onlyOrder"/> narrows the polls to that order's.
     /// </summary>
-    public string CarrierLog(string code, bool polls)
+    public string CarrierLog(string code, bool polls, string? onlyOrder = null)
     {
         KeyValuePair<string, Placed>[] orders;
 
         lock (gate)
         {
-            orders = [.. placed.Where(o => o.Value.Carrier == code).OrderBy(o => o.Value.At).TakeLast(MaxCarrierOrders)];
+            orders = [.. placed.Where(o => o.Value.Carrier == code && (onlyOrder is null || o.Key == onlyOrder)).OrderBy(o => o.Value.At).TakeLast(MaxCarrierOrders)];
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -413,7 +414,7 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
             {
                 for (int i = 0; code == "SIM-STRANGE" && i < MaxCarrierEntries; i++)
                 {
-                    Add(order.At + (3 * Step) + (2 * Step * i), "GET", "/v1/shipments/crr_SIM-STRANGE/events", null, 200, "SIM-STRANGE: a status nobody agreed");
+                    Add(order.At + (3 * Step) + (2 * Step * i), "GET", $"/v1/shipments/crr_SIM-STRANGE-{orderId}/events", null, 200, "SIM-STRANGE: a status nobody agreed");
                 }
 
                 continue;

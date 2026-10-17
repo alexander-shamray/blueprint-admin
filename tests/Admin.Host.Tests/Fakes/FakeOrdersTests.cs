@@ -448,15 +448,30 @@ public sealed class FakeOrdersTests
     public void A_strange_parcel_is_booked_once_and_its_feed_is_polled_again_and_again()
     {
         FakeOrders orders = new(time);
-        orders.Place(postalCode: "SIM-STRANGE");
+        string id = orders.Place(postalCode: "SIM-STRANGE");
         time.Advance(FakeOrders.Step * 12);
 
         JsonElement[] polls = Log(orders, "SIM-STRANGE", polls: true);
 
         polls.Length.ShouldBeGreaterThan(2);
-        polls.ShouldAllBe(e => e.GetProperty("Request").GetProperty("Path").GetString() == "/v1/shipments/crr_SIM-STRANGE/events");
+        polls.ShouldAllBe(e => e.GetProperty("Request").GetProperty("Path").GetString() == $"/v1/shipments/crr_SIM-STRANGE-{id}/events");
         polls.ShouldAllBe(e => e.GetProperty("Response").GetProperty("StatusCode").GetInt32() == 200);
         Log(orders, "SIM-DOWN").ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void A_strange_feed_is_served_at_its_own_orders_path_and_asked_for_by_it()
+    {
+        FakeOrders orders = new(time);
+        string first = orders.Place(postalCode: "SIM-STRANGE");
+        string second = orders.Place(postalCode: "SIM-STRANGE");
+        time.Advance(FakeOrders.Step * 12);
+
+        JsonElement[] polls = [.. JsonDocument.Parse(orders.CarrierLog("SIM-STRANGE", polls: true, onlyOrder: first)).RootElement.EnumerateArray().Select(e => e.Clone())];
+
+        polls.ShouldNotBeEmpty();
+        polls.ShouldAllBe(e => e.GetProperty("Request").GetProperty("Path").GetString() == $"/v1/shipments/crr_SIM-STRANGE-{first}/events");
+        Log(orders, "SIM-STRANGE", polls: true).Select(e => e.GetProperty("Request").GetProperty("Path").GetString()).ShouldContain($"/v1/shipments/crr_SIM-STRANGE-{second}/events");
     }
 
     [Fact]

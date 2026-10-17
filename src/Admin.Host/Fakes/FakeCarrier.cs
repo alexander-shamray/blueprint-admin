@@ -7,8 +7,9 @@ namespace Admin.Host.Fakes;
 /// <summary>
 /// The carrier simulator's <c>POST /__admin/requests/find</c> (run-locally.md): WireMock.Net's own request model in, the
 /// matching log entries out. Only the two filters the Scenario sends are understood: the bookings whose body names a code
-/// (<c>Body.Matchers[0].Pattern</c> of <c>*SIM-X*</c>) and the feed polls of one parcel (<c>Path.Matchers[0].Pattern</c> of
-/// <c>/v1/shipments/crr_SIM-X/events</c>). A second body matcher, the Scenario's mark of its own run, is not read: the fake's
+/// (<c>Body.Matchers[0].Pattern</c> of <c>*SIM-X*</c>) and the feed polls of one order's parcel (<c>Path.Matchers[0].Pattern</c> of
+/// <c>/v1/shipments/crr_SIM-X-&lt;orderId&gt;/events</c>; the bare <c>crr_SIM-X</c> path the simulator still serves for an earlier
+/// booking is read as every order of the code). A second body matcher, the Scenario's mark of its own run, is not read: the fake's
 /// log holds the orders to the code and none of them carries a mark. Anything else finds nothing, as an unmatched filter does on the simulator.
 /// </summary>
 internal static partial class FakeCarrier
@@ -22,7 +23,7 @@ internal static partial class FakeCarrier
 
         if (method == "GET" && FeedPath().Match(path) is { Success: true } feed)
         {
-            return FakeHttp.Json(HttpStatusCode.OK, orders.CarrierLog(feed.Groups["code"].Value, polls: true));
+            return FakeHttp.Json(HttpStatusCode.OK, orders.CarrierLog(feed.Groups["code"].Value, polls: true, feed.Groups["order"] is { Success: true } order ? order.Value : null));
         }
 
         if (method == "POST" && path == "/v1/shipments" && Code().Match(content) is { Success: true } booking)
@@ -61,7 +62,7 @@ internal static partial class FakeCarrier
     private static JsonElement? Get(this JsonElement element, string name) =>
         element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out JsonElement value) ? value : null;
 
-    [GeneratedRegex(@"^/v1/shipments/crr_(?<code>SIM-[A-Z]+)/events$")]
+    [GeneratedRegex(@"^/v1/shipments/crr_(?<code>SIM-[A-Z]+)(-(?<order>[^/]+))?/events$")]
     private static partial Regex FeedPath();
 
     [GeneratedRegex(@"^\*(?<code>SIM-[A-Z]+)\*$")]
