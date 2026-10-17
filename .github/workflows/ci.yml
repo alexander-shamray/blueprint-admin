@@ -91,6 +91,54 @@ jobs:
           name: playwright-report
           path: src/Admin.Web/playwright-report/
 
+  # A pull request lands by rebase, so every commit reaches `main` as pushed and
+  # `host`, `web` and `smoke` have only ever seen the head. Each commit before
+  # the head is built here, so `git bisect` meets only commits that compile. A
+  # red test in one costs a single step, so tests are not run; a pull request of
+  # one commit has nothing to build and passes. The SPA is built only for a
+  # commit that touches it, after one `npm ci` per lockfile.
+  commits:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Every commit before the head builds
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          mapfile -t shas < <(git rev-list --reverse "$BASE_SHA..$HEAD_SHA" | grep -vx "$HEAD_SHA" || true)
+          echo "${#shas[@]} commit(s) besides the head"
+          installed=""
+          for sha in "${shas[@]}"; do
+            echo "::group::$sha"
+            git checkout --quiet --detach "$sha"
+            git clean -fdxq -e src/Admin.Web/node_modules
+            dotnet build BlueprintAdmin.slnx --configuration Release
+            if git diff --quiet "$sha^" "$sha" -- src/Admin.Web; then
+              echo "no SPA change: not built"
+            else
+              lock=$(git hash-object src/Admin.Web/package-lock.json)
+              if [ "$lock" != "$installed" ]; then
+                (cd src/Admin.Web && npm ci)
+                installed="$lock"
+              fi
+              (cd src/Admin.Web && npm run build)
+            fi
+            echo "::endgroup::"
+          done
+
   # The harness's own suite. Python 3.12 matches the PreToolUse hooks.
   # The matrix is the module's own claim: link resolution, case folding and
   # which primitives exist differ by platform.

@@ -64,6 +64,7 @@ ROOT = HERE.parents[2]
 # the suite is; `test_harness_shards.py` asserts each one still contributes.
 ROOTS = ((".claude/scripts", "test_*.py"),
          (".github/locality-gate", "test*.py"),
+         (".github/commit-gate", "test*.py"),
          ("tools/token-usage", "test_*.py"))
 
 # Whose subject is time or a port, and so cannot share a box with seven

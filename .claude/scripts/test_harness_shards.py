@@ -114,6 +114,14 @@ class ThePlacementIsDerivedFromDiscovery(unittest.TestCase):
         self.assertTrue(
             any(i.startswith("test_token_usage.") for i in found()))
 
+    def test_the_commit_gate_suite_is_part_of_it(self):
+        # #216: the gate's own cases are what stops a change to it from
+        # passing unjudged, and a root list that drops them passes the
+        # case above, which only asks that the roots it holds contribute.
+        self.assertIn((".github/commit-gate", "test*.py"), SHARD.ROOTS)
+        self.assertTrue(
+            any(i.startswith("test_commit_gate.") for i in found()))
+
     def test_every_name_the_tables_pin_still_exists(self):
         # A renamed class loses its pinning, and a pinning that has stopped
         # applying reads exactly like one that is working.
