@@ -13,9 +13,11 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
 
     private readonly HttpClient client = factory.CreateClient();
 
-    private async Task<JsonElement> ProxyAsync(object request)
+    private Task<JsonElement> ProxyAsync(object request) => ProxyAsync(client, request);
+
+    private static async Task<JsonElement> ProxyAsync(HttpClient on, object request)
     {
-        HttpResponseMessage response = await client.PostAsJsonAsync("/api/proxy", request, Token);
+        HttpResponseMessage response = await on.PostAsJsonAsync("/api/proxy", request, Token);
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
 
         return await response.Content.ReadFromJsonAsync<JsonElement>(Token);
@@ -163,9 +165,14 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
     [Fact]
     public async Task Cancel_and_quote_answer_as_the_gateway_would()
     {
-        (await ProxyAsync(new { method = "POST", url = "http://localhost:5000/api/v1/orders/0199a1b2-0000-7000-8000-000000000002/cancel", body = """{"reason":"customer_request"}""", identity = new { username = "demo" } }))
+        // The first order a host's fake places is 0199a1b2-...-0002, and the fake refuses its cancel (422) once it is two
+        // seconds old. The other tests in this class place on the shared host, so on a slow runner this one would meet
+        // that order grown old; a host of its own has placed nothing, and a cancel of an order never placed is accepted.
+        using HttpClient own = factory.WithWebHostBuilder(_ => { }).CreateClient();
+
+        (await ProxyAsync(own, new { method = "POST", url = "http://localhost:5000/api/v1/orders/0199a1b2-0000-7000-8000-000000000002/cancel", body = """{"reason":"customer_request"}""", identity = new { username = "demo" } }))
             .GetProperty("status").GetInt32().ShouldBe(204);
-        (await ProxyAsync(new { method = "POST", url = "http://localhost:5000/bff/v1/checkout/quote", body = "{}", identity = new { username = "browser" } }))
+        (await ProxyAsync(own, new { method = "POST", url = "http://localhost:5000/bff/v1/checkout/quote", body = "{}", identity = new { username = "browser" } }))
             .GetProperty("body").GetString()!.ShouldContain("\"total\"");
     }
 
