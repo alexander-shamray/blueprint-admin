@@ -63,6 +63,15 @@ dialects.
   argues the change. A `Closes #n` in a commit body fires on merge whatever
   the description says, so the description is reconciled to the commits and
   never the reverse.
+- **Every commit carries `PR: #<n>`, and every intermediate commit
+  builds.** A pull request lands by rebase, so the trailer is the only
+  record of which pull request a commit on `main` came from; `/pr` adds it
+  once the number exists, `/commit` writes it after, and
+  [the commit gate](../.github/commit-gate/README.md) refuses a range
+  without it. The `commits` job in `ci.yml` builds each commit but the head,
+  which `host`, `web` and `smoke` cover, so `git bisect` meets only commits
+  that compile. Reverting a pull request is
+  `bash .claude/scripts/git-revert-pr.sh <n>`.
 - **A reply is not a resolution.** Resolve a review thread in the same act as
   the reply, and leave an `Ask` open on purpose.
 - **Uncommitted work in the tree belongs in the PR being worked on**, in its

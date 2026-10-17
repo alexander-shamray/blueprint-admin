@@ -855,6 +855,13 @@ and not at its neighbour looks like.
    is that decision already made: pushes that close review findings update
    the PR without asking again.
 
+   **`/pr` also stamps the PR's number on the branch's commits**, straight
+   after creating it, through `git-trailer-pr.sh`. It runs before the first
+   review round so that the SHA rewrite never forces a recheck; a round's own
+   fix commits carry the trailer from `/commit`, which reads the number from
+   `pr-for-branch.sh`. A rebase landing keeps the messages, so the trailer
+   reaches `main` (#216).
+
 ### Step 5: the local review
 
 5. **The local review.** Once the PR is open, review the branch in rounds of
@@ -1074,7 +1081,12 @@ and not at its neighbour looks like.
    PR was mergeable, so that everything between that decision and the merge is
    something the merge can refuse.
 
-   `mergeable` must be `MERGEABLE` and every check must pass. **A merge onto a
+   `mergeable` must be `MERGEABLE` and every check must pass, `commits` and
+   `commit-gate` among them: **an exit of 0 is not a pass on its own**, because
+   on a pull request whose `mergeable` reads `CONFLICTING` GitHub starts none
+   of the `pull_request` workflows and `--fail-fast` can exit 0 with nothing
+   run. The two are the checks this change added, and a list that omits
+   either is a wait that did not happen (#216). **A merge onto a
    red `main` is not a recommended option**, and a conflicted branch is a
    question about the caller's tree that this chain cannot answer. Either one
    stops here and is reported as what it is.

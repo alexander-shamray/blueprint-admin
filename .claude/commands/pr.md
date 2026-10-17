@@ -1,7 +1,7 @@
 ---
 description: Open a pull request with a body in the house form
 argument-hint: "[title — omit to derive it from the commits]"
-allowed-tools: Read, Grep, Glob, Write, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git branch --list:*), Bash(git branch --show-current), Bash(git branch -a), Bash(git push -u origin:*), Bash(git push origin:*), Bash(bash .claude/scripts/gh-pr-create.sh), Bash(bash .claude/scripts/pr-closure-input.sh:*), Bash(bash .claude/scripts/pr-for-branch.sh:*), Bash(bash .claude/scripts/npm-checks.sh:*), Bash(bash .claude/scripts/host-checks.sh:*), Bash(bash .claude/scripts/harness-checks.sh:*)
+allowed-tools: Read, Grep, Glob, Write, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git branch --list:*), Bash(git branch --show-current), Bash(git branch -a), Bash(git push -u origin:*), Bash(git push origin:*), Bash(bash .claude/scripts/gh-pr-create.sh), Bash(bash .claude/scripts/pr-closure-input.sh:*), Bash(bash .claude/scripts/pr-for-branch.sh:*), Bash(bash .claude/scripts/git-trailer-pr.sh:*), Bash(bash .claude/scripts/npm-checks.sh:*), Bash(bash .claude/scripts/host-checks.sh:*), Bash(bash .claude/scripts/harness-checks.sh:*)
 disallowed-tools: Edit(.claude/**), Edit(./.claude/**), Edit(.github/**), Edit(./.github/**), Edit(.remember/**), Edit(./.remember/**), Edit(android/**), Edit(./android/**), Edit(ios/**), Edit(./ios/**), Edit(.git/**), Edit(./.git/**), Edit(package.json), Edit(./package.json), Edit(package-lock.json), Edit(./package-lock.json), Edit(npm-shrinkwrap.json), Edit(./npm-shrinkwrap.json), Edit(.npmrc), Edit(./.npmrc), Edit(angular.json), Edit(./angular.json), Edit(tsconfig.json), Edit(./tsconfig.json), Edit(tsconfig.app.json), Edit(./tsconfig.app.json), Edit(tsconfig.spec.json), Edit(./tsconfig.spec.json), Edit(eslint.config.js), Edit(./eslint.config.js), Edit(.prettierrc), Edit(./.prettierrc), Edit(capacitor.config.ts), Edit(./capacitor.config.ts), Edit(playwright.config.ts), Edit(./playwright.config.ts), Edit(ionic.config.json), Edit(./ionic.config.json), Edit(.nvmrc), Edit(./.nvmrc), Edit(.editorconfig), Edit(./.editorconfig), Edit(.gitattributes), Edit(./.gitattributes), Edit(.gitignore), Edit(./.gitignore), Edit(CLAUDE.md), Edit(./CLAUDE.md), Edit(README.md), Edit(./README.md), Edit(**/*.config.js), Edit(**/*.config.cjs), Edit(**/*.config.mjs), Edit(**/*.config.ts), Edit(**/*.config.mts), Edit(**/package.json), Edit(**/.npmrc), Edit(**/tsconfig*.json), Edit(**/.prettierrc*), Edit(node_modules/**), Edit(./node_modules/**)
 ---
 
@@ -30,7 +30,9 @@ happening silently.
 **Two kinds of push are denied in `.claude/settings.json`, and neither is a
 step to work around:** rewriting history (`--force`, `-f`, `--force-with-lease`,
 `--delete`) and anything landing on `main`. A branch wanting either is raising
-a decision — stop and say so. Do not reach for `gh pr create`'s own offer to
+a decision — stop and say so. The trailer helper in *Steps* is not a way
+round the first: it carries its own lease (`docs/harness-boundaries.md`).
+Do not reach for `gh pr create`'s own offer to
 push either: it is the same action by a route that skips the upstream check
 above, so it pushes without ever reporting that it did.
 
@@ -211,7 +213,21 @@ bounded away from. Both files are gitignored, a tracked one is refused as the
 branch's text rather than this run's, and the helper removes both once the PR
 is open, so a successful run leaves nothing for `/ship`'s clean-tree gate.
 
+**Then stamp the number on the branch's commits**, before anything reviews
+them:
+
+```bash
+bash .claude/scripts/git-trailer-pr.sh <n>
+```
+
+`<n>` is the number `gh-pr-create.sh` printed. The helper adds `PR: #<n>` to
+each commit lacking it and publishes under a lease, so the SHAs change once,
+here, and no review round has to be repeated for it. A branch whose commits
+all carry it is left alone. A non-zero exit is a stop: say which refusal it
+was, and that the PR is open without the trailer, which the commit gate will
+turn red.
+
 ## Report
 
-The PR URL, its title, and the commits it carries. If any check you named above
-was skipped, say which.
+The PR URL, its title, the commits it carries and whether the trailer
+helper rewrote any. If any check you named above was skipped, say which.

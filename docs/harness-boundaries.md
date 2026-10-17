@@ -26,7 +26,7 @@ line names one residual below by the words it opens with.
 | The review agent grant, or restoring an external reviewer | `grants exactly`, `archive/external-reviewers` |
 | The harness suite and its shards | `shard-harness-suite.py`, `That runner owns every discovery root` |
 | The sweeps' slice lists and `refs/sweeps/` | `The sweeps write two things` |
-| Rebasing or force-pushing | `The only force push` |
+| Rebasing or force-pushing | `The only force push`, `A second helper rewrites` |
 | `/branch` worktrees under `.claude/worktrees/` | `worktrees sit inside the checkout` |
 
 A new residual is stated **here** and gets a row above.
@@ -298,6 +298,23 @@ A new residual is stated **here** and gets a row above.
   the argument. What differs here is that `/ship` step 0 reads ancestry rather
   than content, so the helper's merge guard is the only place in this
   repository that reads it.
+
+- **A second helper rewrites published commits, and is a second force push.**
+  `.claude/scripts/git-trailer-pr.sh` adds `PR: #<n>` to the commits of the
+  branch checked out, which changes their SHAs, so it leases its push as the
+  rebase helper does; `/pr` grants it by name and the `settings.json` denies
+  are untouched. It takes one number and spells the `git rebase -x` command
+  itself, so no `-x` grant stands beside it. It refuses a pull request that
+  is not an open, same-repository one into `main` for this branch, a dirty
+  tree, a remote that differs from the checkout in either direction, a merge
+  commit, and a commit that already names another pull request. Its residual
+  is a push that fails after the rewrite: the local branch then carries the
+  trailers and origin's does not, and a rerun finishes it, because a commit
+  that has the trailer is skipped. `git-revert-pr.sh` writes no remote; it
+  reads trailers off `origin/main` and reverts on the current branch, and no
+  command grants it yet. Ported from `alexander-shamray/blueprint-backend`
+  (#1086, PR 1098), which owns the argument; here the helper reads the pull
+  request with a plain `gh pr view`, this tree having no bounded reader.
 - **`/branch`'s worktrees sit inside the checkout, under
   `.claude/worktrees/`, and three residuals follow from it.** Once a session
   has entered one, `settings.json`'s denies anchor at the worktree and refuse
