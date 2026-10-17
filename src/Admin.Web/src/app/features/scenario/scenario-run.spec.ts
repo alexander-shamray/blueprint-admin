@@ -420,6 +420,7 @@ describe('the release-timeout script', () => {
       'cancel',
       'cancelled',
       'flagged',
+      'mail',
       'restore',
     ]);
     expect(script.steps.indexOf('reserved')).toBeLessThan(script.steps.indexOf('stop'));
@@ -512,7 +513,7 @@ describe('the despatch-timeout script', () => {
     expect(script.lease).toEqual({ changes: ['short-waits'], holdSeconds: 420 });
     expect(script.onHand).toBeGreaterThan(0);
     expect(script.review).toEqual({ reason: 'not_despatched' });
-    expect(script.steps).toEqual(['lease', 'publish', 'drain', 'stock', 'quote', 'order', 'confirmed', 'flagged', 'held', 'restore']);
+    expect(script.steps).toEqual(['lease', 'publish', 'drain', 'stock', 'quote', 'order', 'confirmed', 'flagged', 'held', 'mail', 'restore']);
   });
 
   it('sends nothing as a step of its own for the review read, which is the host\'s, so the catalog is asked for no more than the order scripts need', () => {
@@ -633,7 +634,7 @@ describe('the carrier log scripts', () => {
     for (const [key, code] of Object.entries(codes) as [keyof typeof codes, string][]) {
       expect(SCRIPTS[key].postalCode).toBe(code);
       expect(SCRIPTS[key].carrier!.code).toBe(code);
-      expect(SCRIPTS[key].steps.slice(-3)).toEqual(['confirmed', 'carrier', 'held']);
+      expect(SCRIPTS[key].steps.slice(-4)).toEqual(['confirmed', 'carrier', 'held', 'mail']);
     }
   });
 
@@ -1132,11 +1133,22 @@ describe('the mail count', () => {
     expect(SCRIPTS.cancel.mail).toEqual(['order-placed', 'order-cancelled']);
     expect(SCRIPTS['out-of-stock'].mail).toEqual(['order-placed', 'order-cancelled']);
     expect(SCRIPTS.declined.mail).toEqual(['order-placed', 'order-cancelled', 'payment-declined']);
-    expect(Object.values(SCRIPTS).filter((s) => s.mail).length).toBe(4);
+    for (const key of ['carrier-refused', 'carrier-down', 'carrier-slow', 'carrier-strange', 'despatch-timeout'] as const) {
+      expect(SCRIPTS[key].mail).toEqual(['order-placed', 'order-confirmed']);
+    }
+    for (const key of ['stock-timeout', 'release-timeout'] as const) {
+      expect(SCRIPTS[key].mail).toEqual(['order-placed', 'order-cancelled']);
+    }
+    expect(SCRIPTS['payment-timeout'].mail).toEqual(['order-placed', 'order-cancelled', 'payment-declined']);
+    expect(Object.values(SCRIPTS).filter((s) => s.mail).length).toBe(12);
     expect(roleOf('mail')).toBeNull();
   });
 
-  it('puts the mail step last in each script that asks for it', () => {
-    for (const script of Object.values(SCRIPTS).filter((s) => s.mail)) expect(script.steps.at(-1)).toBe('mail');
+  it('puts the mail step last in each script that asks for it, before the restore of one that holds a lease', () => {
+    for (const script of Object.values(SCRIPTS).filter((s) => s.mail)) {
+      const steps = script.steps.filter((k) => k !== 'restore');
+      expect(steps.at(-1)).toBe('mail');
+      if (script.lease) expect(script.steps.at(-1)).toBe('restore');
+    }
   });
 });

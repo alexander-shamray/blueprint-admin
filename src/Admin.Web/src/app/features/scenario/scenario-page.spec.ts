@@ -21,6 +21,7 @@ import {
   RESERVATION_POLL_MS,
   REVIEW_POLL_MS,
   REVIEW_WATCH_MS,
+  SCRIPTS,
 } from './scenario-run';
 
 function op(partial: Partial<ApiOperation> & { id: string }): ApiOperation {
@@ -297,10 +298,13 @@ describe('ScenarioPage', () => {
     transcript: ReturnType<typeof vi.fn>;
   };
   let uuids: number;
+  /** The mail the sink holds by default: the picked script's own set, which `render` follows. */
+  let sinkMail: readonly string[];
 
   beforeEach(() => {
     uuids = 0;
     cancelSent = false;
+    sinkMail = DELIVERED_MAIL;
     host = {
       operations: vi.fn(() => of(catalog)),
       reloadOperations: vi.fn(() => of(catalog)),
@@ -314,7 +318,7 @@ describe('ScenarioPage', () => {
       leaseAddChange: vi.fn(() => of(heldLease)),
       leaseRestore: vi.fn(() => of({ lease: null, changes: leaseChanges })),
       reviewFlags: vi.fn(() => of(flagView([flagged('not_despatched')]))),
-      mailMessages: vi.fn(() => of(mailView(DELIVERED_MAIL))),
+      mailMessages: vi.fn(() => of(mailView([...sinkMail]))),
       transcriptScript: vi.fn(() => of('curl http://x')),
       trace: vi.fn((id: string) =>
         of({ correlationId: id, window: '30m', reachable: true, error: null, traceIds: [], tracesTruncated: false, warning: null, events: [] }),
@@ -335,6 +339,12 @@ describe('ScenarioPage', () => {
   function render() {
     const fixture = TestBed.createComponent(ScenarioPage);
     fixture.detectChanges();
+    const page = fixture.componentInstance;
+    const pick = page.pick.bind(page);
+    page.pick = (key) => {
+      sinkMail = SCRIPTS[key].mail ?? DELIVERED_MAIL;
+      pick(key);
+    };
     return fixture;
   }
 
@@ -909,6 +919,7 @@ describe('ScenarioPage', () => {
         ['confirmed', 'ok'],
         ['carrier', 'ok'],
         ['held', 'ok'],
+        ['mail', 'ok'],
       ]);
       expect(JSON.parse(sent()[3].body!).shippingAddress.postalCode).toBe(code);
       const find = sent().find((r) => r.url.endsWith('/__admin/requests/find'))!;
@@ -927,7 +938,7 @@ describe('ScenarioPage', () => {
 
       await page.run();
 
-      expect(page.steps().map((s) => s.state)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok']);
+      expect(page.steps().map((s) => s.state)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok']);
       expect(page.steps()[6].detail).toBe('The carrier booked the parcel once (201) and its feed has been polled 2 times since.');
       expect(sent().filter((r) => r.url.endsWith('/__admin/requests/find')).map((r) => JSON.parse(r.body!).Methods[0])).toEqual(['POST', 'GET']);
     });
@@ -1079,6 +1090,7 @@ describe('ScenarioPage', () => {
         ['drain', 'ok'],
         ['order', 'ok'],
         ['out_of_stock', 'ok'],
+        ['mail', 'ok'],
         ['restore', 'ok'],
       ]);
       expect(host.leaseAcquire).toHaveBeenCalledWith({
@@ -1089,7 +1101,7 @@ describe('ScenarioPage', () => {
       expect(calls[0]).toBe('acquire');
       expect(calls[calls.length - 1]).toBe('restore');
       expect(page.steps()[0].detail).toBe("Held: The saga's waits shortened + Inventory stopped. The host restores it by itself at 2026-10-16T09:07:00Z.");
-      expect(page.steps()[5].detail).toBe('The stack is as the run found it.');
+      expect(page.steps()[6].detail).toBe('The stack is as the run found it.');
       // No stock write and no quote: Inventory is stopped, and the cause is that nothing answers the reservation.
       expect(sent().some((r) => r.url.includes('/inventory/stock/'))).toBe(false);
     });
@@ -1109,6 +1121,7 @@ describe('ScenarioPage', () => {
         ['quote', 'ok'],
         ['order', 'ok'],
         ['declined', 'ok'],
+        ['mail', 'ok'],
         ['restore', 'ok'],
       ]);
       expect(host.leaseAcquire).toHaveBeenCalledWith({ changes: ['short-waits'], holdSeconds: 360, label: 'Payment timeout' });
@@ -1125,7 +1138,8 @@ describe('ScenarioPage', () => {
       expect(page.steps()[6].state).toBe('failed');
       expect(page.steps()[6].detail).toBe('The order ended delivered, not declined.');
       expect(host.leaseRestore).toHaveBeenCalledTimes(1);
-      expect(page.steps()[7].state).toBe('ok');
+      expect(page.steps()[7].state).toBe('skipped');
+      expect(page.steps()[8].state).toBe('ok');
     });
 
     it('stops at a lease the host refuses, sends nothing, and has nothing to restore', async () => {
@@ -1137,9 +1151,9 @@ describe('ScenarioPage', () => {
 
       await page.run();
 
-      expect(page.steps().map((s) => s.state)).toEqual(['failed', 'skipped', 'skipped', 'skipped', 'skipped', 'skipped']);
+      expect(page.steps().map((s) => s.state)).toEqual(['failed', 'skipped', 'skipped', 'skipped', 'skipped', 'skipped', 'skipped']);
       expect(page.steps()[0].detail).toBe('A Scenario already holds a lease (job 3). Restore it first.');
-      expect(page.steps()[5].detail).toBe('No lease was taken, so nothing was changed.');
+      expect(page.steps()[6].detail).toBe('No lease was taken, so nothing was changed.');
       expect(host.leaseRestore).not.toHaveBeenCalled();
       expect(host.proxy).not.toHaveBeenCalled();
     });
@@ -1158,7 +1172,7 @@ describe('ScenarioPage', () => {
 
       expect(page.steps()[0].state).toBe('failed');
       expect(host.leaseRestore).toHaveBeenCalledTimes(1);
-      expect(page.steps()[5].state).toBe('ok');
+      expect(page.steps()[6].state).toBe('ok');
       expect(host.proxy).not.toHaveBeenCalled();
     });
 
@@ -1170,7 +1184,7 @@ describe('ScenarioPage', () => {
       await page.run();
 
       expect(host.leaseRestore).not.toHaveBeenCalled();
-      expect(page.steps()[5].detail).toBe('No lease was taken, so nothing was changed.');
+      expect(page.steps()[6].detail).toBe('No lease was taken, so nothing was changed.');
     });
 
     it('says plainly when the restore itself failed, and that the host will try again', async () => {
@@ -1181,8 +1195,8 @@ describe('ScenarioPage', () => {
 
       await page.run();
 
-      expect(page.steps()[5].state).toBe('failed');
-      expect(page.steps()[5].detail).toBe(
+      expect(page.steps()[6].state).toBe('failed');
+      expect(page.steps()[6].detail).toBe(
         'The restore failed: docker did not answer The lease is still held; the host tries again every 30 seconds, and the Stack screen has Restore now.',
       );
     });
@@ -1207,6 +1221,7 @@ describe('ScenarioPage', () => {
         ['drain', 'ok'],
         ['order', 'ok'],
         ['out_of_stock', 'failed'],
+        ['mail', 'skipped'],
         ['restore', 'ok'],
       ]);
       expect(page.steps()[4].detail).toBe('Cancelled.');
@@ -1250,6 +1265,7 @@ describe('ScenarioPage', () => {
         ['confirmed', 'ok'],
         ['flagged', 'ok'],
         ['held', 'ok'],
+        ['mail', 'ok'],
         ['restore', 'ok'],
       ]);
       expect(host.leaseAcquire).toHaveBeenCalledWith({ changes: ['short-waits'], holdSeconds: 420, label: 'Despatch timeout' });
@@ -1263,7 +1279,7 @@ describe('ScenarioPage', () => {
       // Read from Loki through the host, not sent through the proxy as the user: nothing of it is traced.
       expect(step.correlationId).toBeNull();
       expect(sent().some((r) => r.url.includes('/api/review/'))).toBe(false);
-      expect(page.steps()[9].detail).toBe('The stack is as the run found it.');
+      expect(page.steps()[10].detail).toBe('The stack is as the run found it.');
     });
 
     it('waits through an empty answer and one for another reason, saying what it has seen, then reaches it', async () => {
@@ -1437,6 +1453,7 @@ describe('ScenarioPage', () => {
         ['cancel', 'ok'],
         ['cancelled', 'ok'],
         ['flagged', 'ok'],
+        ['mail', 'ok'],
         ['restore', 'ok'],
       ]);
       // The lease takes the short waits alone; Inventory is added only once its stock is reserved, and before the cancel.
@@ -1450,7 +1467,7 @@ describe('ScenarioPage', () => {
       expect(reservation.correlationId).toBe('scenario-abcdef12-reserved');
       expect(page.steps()[7].detail).toContain("Held: The saga's waits shortened + Inventory stopped.");
       expect(page.steps()[10].detail).toContain('flagged for review: stock_not_released.');
-      expect(page.steps()[11].detail).toBe('The stack is as the run found it.');
+      expect(page.steps()[12].detail).toBe('The stack is as the run found it.');
       expect(sent().every((r) => r.identity?.username === 'demo')).toBe(true);
     });
 
