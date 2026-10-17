@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -13,7 +14,7 @@ export const ALERT_POLL_MS = 5000;
 
 @Component({
   selector: 'app-runbooks-page',
-  imports: [FormsModule, OutputPane, RunbookSpans],
+  imports: [FormsModule, NgTemplateOutlet, OutputPane, RunbookSpans],
   templateUrl: './runbooks-page.html',
   styleUrl: './runbooks-page.css',
   // Keep the whitespace between adjacent <td>s so row text reads as separate cells, as the Stack screen does.
