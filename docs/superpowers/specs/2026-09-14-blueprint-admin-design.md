@@ -863,7 +863,9 @@ page notes the transcript's highest sequence when a run begins and asks for the
 script after it, so the section is the run's lines and not the session's; where
 that sequence could not be read the section is the whole session and says so.
 
-**The mail count (#66, #232).** The deliver, cancel, declined and out-of-stock scripts end in a `mail` step: after the order
+**The mail count (#66, #232, #235).** The deliver, cancel, declined, out-of-stock, carrier (`carrier-refused`, `-down`, `-slow`,
+`-strange`) and timeout (`stock-`, `payment-`, `despatch-`, `release-timeout`) scripts end in a `mail` step (a timeout script's
+comes before its `restore`, which runs whatever the step says): after the order
 read says the script's last state, it reads the mail sink through the host's `GET /mail/messages`
 (§5.12), the read the Mail screen makes, and counts the messages whose
 `X-Correlation-Id` is the order's own id. Notifications stamps that header from the integration event's
@@ -885,9 +887,13 @@ stable in all of them: deliver is placed, confirmed, dispatched, delivered; canc
 after the place) is placed and cancelled, 14 of 14 runs; out-of-stock is placed and cancelled, 3 of 3; declined is
 placed, cancelled and payment-declined, 4 of 4, because the saga compensates a declined payment by cancelling. A cancel
 asked after the confirmation also mails a confirmation and a refund, which is why the cancel script
-asks at once and no script that waits first has a `mail` step; the carrier scripts (`carrier-refused`: placed and
-confirmed, 2 of 2 runs) and the timeout scripts are not asked, their sets resting on waits and holds that were not
-measured. Against FakePlatform the fake sink holds, beside its four recorded
+asks at once and no script that cancels after a wait for the confirmation has a `mail` step. The carrier scripts are placed and
+confirmed whatever the carrier did (the order read stays confirmed and a refused, down, slow or strange carrier mails
+nothing more), 10 of 10 runs across the four outcomes. Of the timeout scripts, `stock-timeout` is placed and cancelled (2 of 2, with
+Inventory stopped, which Notifications does not need), `payment-timeout` placed, cancelled and payment-declined (2 of 2, as a
+declined payment is), `despatch-timeout` placed and confirmed (2 of 2; the review flag mails nothing) and `release-timeout`
+placed and cancelled (2 of 2; cancelled before the held payment answered, so no confirmation). Each was read by order id
+from a live Mailpit after the run and again after later runs, and no set changed. Against FakePlatform the fake sink holds, beside its four recorded
 messages, one for each event a Scenario order (placed under a correlation id beginning `scenario-`) has
 raised (`FakeOrders.Mail`), carrying the order's id as the real ones do and never doubled; the Playwright spec doubles one in flight to see
 the step fail.
