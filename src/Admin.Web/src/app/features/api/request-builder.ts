@@ -17,7 +17,7 @@ export function buildUrl(template: string, path: Record<string, string>, query: 
  */
 export function withPathValues(body: string, path: Record<string, string>): string {
   return body.replace(/\{([^{}"]+)\}/g, (whole, name: string) =>
-    path[name] ? JSON.stringify(path[name]).slice(1, -1) : whole,
+    Object.hasOwn(path, name) && path[name] ? JSON.stringify(path[name]).slice(1, -1) : whole,
   );
 }
 
