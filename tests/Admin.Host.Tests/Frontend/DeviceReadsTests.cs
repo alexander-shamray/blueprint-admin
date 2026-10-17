@@ -117,6 +117,21 @@ public sealed class DeviceReadsTests
         DeviceCheck(Out("blueprint://auth/callback", "https://localhost")).ShouldBe(DoctorState.Ok);
     }
 
+    [Fact]
+    public void A_path_less_redirect_beside_the_right_one_is_not_taken_for_the_origins()
+    {
+        DoctorCheck check = DeviceReads.Redirect(Out("blueprint://auth/callback", "com.example://"));
+
+        check.State.ShouldBe(DoctorState.Problem);
+        check.Detail.ShouldContain("com.example://");
+    }
+
+    [Fact]
+    public void A_path_less_redirect_is_still_a_redirect_when_the_origins_line_follows()
+    {
+        DeviceCheck(Out("blueprint://auth/callback", "com.example://", "https://localhost,capacitor://localhost")).ShouldBe(DoctorState.Problem);
+    }
+
     private static DoctorState DeviceCheck(CommandOutput realm) => DeviceReads.Redirect(realm).State;
 
     [Fact]

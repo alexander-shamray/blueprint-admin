@@ -108,16 +108,24 @@ public sealed partial class DeviceReads(IProcessRunner runner, RepoPaths paths, 
         }
 
         // The output is the redirects, one a line, then webOrigins joined, which is a blank line (and may be dropped) when
-        // the client lists none. So the last line is the origins only if it is shaped like them, each part a scheme and
-        // an authority and no path, and never by its position: a redirect is a URI with a path.
+        // the client lists none. A redirect is a URI with a path, so a last line with one is never the origins; a path-less
+        // one is the origins only when it lists AppOrigin, which run-locally.md says the client's webOrigins do. A path-less
+        // redirect such as com.example:// looks the same as any origin, so without AppOrigin it is read as a redirect and
+        // never dropped (a marker in the document would settle it; the document is not ours to change).
         string[] lines = [.. realm.Stdout.Select(l => l.Trim()).Where(l => l.Length > 0)];
-        string[] redirects = lines.Length > 0 && lines[^1].Split(',').All(p => OriginShape().IsMatch(p)) ? lines[..^1] : lines;
+        string[] last = lines.Length > 0 ? lines[^1].Split(',') : [];
+        bool originShaped = last.Length > 0 && last.All(p => OriginShape().IsMatch(p));
+        bool origins = originShaped && last.Contains(AppOrigin);
+        string[] redirects = origins ? lines[..^1] : lines;
+        string ambiguity = originShaped && !origins
+            ? $" The last line has no path and does not list {AppOrigin}, so it is read as a redirect; if it is the web origins, the client lacks {AppOrigin}, which run-locally.md expects."
+            : string.Empty;
 
         return redirects switch
         {
             [] => new(name, DoctorState.Problem, "The running realm's mobile-app client has no redirect (or the client is absent). The realm is imported only into an empty database; it is the backend's to change."),
             [NativeRedirectUri] => new(name, DoctorState.Ok, $"mobile-app redirects to exactly {NativeRedirectUri}."),
-            _ => new(name, DoctorState.Problem, $"mobile-app redirects to {string.Join(", ", redirects)}, not exactly {NativeRedirectUri}, which the client sends. The realm is the backend's to change."),
+            _ => new(name, DoctorState.Problem, $"mobile-app redirects to {string.Join(", ", redirects)}, not exactly {NativeRedirectUri}, which the client sends. The realm is the backend's to change.{ambiguity}"),
         };
     }
 
