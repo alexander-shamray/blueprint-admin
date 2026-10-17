@@ -510,6 +510,42 @@ export interface AlertStripView {
   waiting: WaitingAlert[];
 }
 
+/**
+ * One alert a runbook's script causes, as the backend's `game_day.py --list --json` describes it. `impact` and `confirmation`
+ * are the tool's words for what the cause costs; `confirmWith` is what the host requires the request to carry (null: nothing),
+ * which `GameDayService.ConfirmationFor` owns: the word `cause` for a `confirm`, the runbook's name for a `typed`.
+ */
+export interface RunbookPhase {
+  alert: string;
+  impact: string;
+  confirmation: string;
+  confirmWith: string | null;
+  sustained: boolean;
+  firesWithinSeconds: number;
+  clearsWithinSeconds: number;
+}
+
+/** A runbook in the backend clone's `docs/runbooks/`; one with no script has a `reason` and no phases. */
+export interface RunbookEntry {
+  runbook: string;
+  alerts: string[];
+  script: boolean;
+  reason: string | null;
+  phases: RunbookPhase[];
+}
+
+/** The listing the tool printed, or why it could not be read. */
+export interface RunbookCatalogue {
+  runbooks: RunbookEntry[];
+  error: string | null;
+}
+
+/** A runbook's Markdown as the clone holds it. */
+export interface RunbookText {
+  runbook: string;
+  markdown: string;
+}
+
 /** One workstation check, as the host's `WorkstationDoctor` judged it; that class says when a row is `Unknown`. */
 export interface DoctorCheck {
   name: string;

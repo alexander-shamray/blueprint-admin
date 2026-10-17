@@ -11,5 +11,6 @@ export const SCREENS = [
   { path: 'requests', label: 'API' },
   { path: 'trace', label: 'Trace' },
   { path: 'scenario', label: 'Scenario' },
+  { path: 'runbooks', label: 'Runbooks' },
   { path: 'transcript', label: 'Transcript' },
 ] as const;

@@ -108,7 +108,8 @@ describe('CommandPalette', () => {
     const launcher = TestBed.inject(ScenarioLauncher);
     fixture.componentInstance.open();
 
-    const input = type(fixture, 'run');
+    // "run" alone would also match "Go to Runbooks", which sorts first.
+    const input = type(fixture, 'run the');
     key(input, { key: 'Enter' });
 
     expect(launcher.pending()).toBe(true);

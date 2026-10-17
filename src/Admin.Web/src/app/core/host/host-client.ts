@@ -25,6 +25,8 @@ import {
   ProxyResult,
   QueuesView,
   RealmUserView,
+  RunbookCatalogue,
+  RunbookText,
   ReviewFlagView,
   StackView,
   AlertStripView,
@@ -235,6 +237,26 @@ export class HostClient {
   transcriptScript(after?: number): Observable<string> {
     const params: Record<string, number> = after === undefined ? {} : { after };
     return this.http.get('/api/transcript/script', { params, responseType: 'text' });
+  }
+
+  /** Every runbook in the backend clone, with the phases its script causes; read from the clone each time. */
+  runbooks(): Observable<RunbookCatalogue> {
+    return this.http.get<RunbookCatalogue>('/api/runbooks');
+  }
+
+  /** One runbook's Markdown, read from the backend clone and never kept here. */
+  runbookText(name: string): Observable<RunbookText> {
+    return this.http.get<RunbookText>(`/api/runbooks/${encodeURIComponent(name)}`);
+  }
+
+  /** The tool's `--cause` for a runbook's phase (the first when `phase` is null), with the confirmation that phase takes. */
+  runbookCause(name: string, phase: string | null, confirm: string | null): Observable<JobSummary> {
+    return this.http.post<JobSummary>(`/api/runbooks/${encodeURIComponent(name)}/cause`, { phase, confirm });
+  }
+
+  /** The tool's `--restore`: puts the stack back, safe twice; it returns when the stack is back, not when the alert has cleared. */
+  runbookRestore(name: string): Observable<JobSummary> {
+    return this.http.post<JobSummary>(`/api/runbooks/${encodeURIComponent(name)}/restore`, null);
   }
 
   job(id: string): Observable<JobView> {
