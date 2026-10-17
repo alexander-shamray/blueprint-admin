@@ -6,6 +6,7 @@ using Admin.Host.Config;
 using Admin.Host.Fakes;
 using Admin.Host.Frontend;
 using Admin.Host.Jobs;
+using Admin.Host.Runbooks;
 using Admin.Host.Stack;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -180,6 +181,15 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
             runner.Start(DeadLetterService.MoveSpec(verb, Queue, ["<id>"], null, Paths, Variable));
             runner.Start(DeadLetterService.MoveSpec(verb, Queue, ["<id>"], ("incident.jsonl", "audit.jsonl"), Paths, Variable));
         }
+
+        // The game day: the listing, and each half of a runbook the document names.
+        runner.Start(GameDayService.Spec(GameDayService.ListArguments, Paths));
+
+        foreach (GameDayMode mode in Enum.GetValues<GameDayMode>())
+        {
+            runner.Start(GameDayService.Spec(GameDayService.Arguments("outbox-broker", mode, null), Paths));
+        }
+
         compose.FollowLogs([.. Compose.Services().Select(s => s.Name)]);
         await compose.PsAsync(TestContext.Current.CancellationToken);
         await broker.QueuesAsync(TestContext.Current.CancellationToken);

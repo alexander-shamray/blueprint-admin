@@ -41,7 +41,8 @@ test('the stack screen lists a firing, a pending and a quiet rule, and the waiti
   const alerts = page.getByRole('region', { name: 'Alerts' });
   const loaded = alerts.locator('table.alerts tbody tr');
 
-  await expect(loaded).toHaveCount(5);
+  // Five of the platform's, and the two the Runbooks screen's fake causes fire (ContactReadRefused, ErrorRateService).
+  await expect(loaded).toHaveCount(7);
   await expect(loaded.first().locator('td')).toHaveText(['ErrorQueueDepth', 'firing', 'page', '1']);
   await expect(loaded.filter({ hasText: 'Latency' })).toHaveClass('state-pending');
   await expect(loaded.filter({ hasText: 'ErrorRateGateway' })).toHaveClass('state-inactive');

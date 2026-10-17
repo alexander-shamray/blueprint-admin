@@ -1,6 +1,7 @@
 using System.Net;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Admin.Host.Fakes;
 
@@ -142,8 +143,36 @@ internal static class FakeGrafana
     /// Prometheus's rules answer: one rule firing, one pending and the rest quiet, so the strip has each state to
     /// show. Loaded rules only; the waiting ones are <see cref="Telemetry.WaitingAlerts"/>, which no Prometheus lists.
     /// </summary>
-    public static HttpResponseMessage Rules() =>
-        FakeHttp.Json(HttpStatusCode.OK, Fixture("grafana-prometheus-rules.json"));
+    public static HttpResponseMessage Rules(FakeStack stack)
+    {
+        string recording = Fixture("grafana-prometheus-rules.json");
+
+        return FakeHttp.Json(HttpStatusCode.OK, stack.CausedAlerts is { Count: > 0 } caused ? Caused(recording, caused) : recording);
+    }
+
+    /// <summary>
+    /// The rules answer with each caused alert firing, as a rule is once its cause has held for its deadline: the recording is one
+    /// instant and a game day changes it (<see cref="RunbookRecordings"/>). A rule the recording does not list stays unlisted.
+    /// </summary>
+    private static string Caused(string recording, IReadOnlySet<string> caused)
+    {
+        JsonNode document = JsonNode.Parse(recording)!;
+
+        foreach (JsonNode? rule in document["data"]!["groups"]!.AsArray().SelectMany(g => g!["rules"]!.AsArray()))
+        {
+            if (rule!["name"]!.GetValue<string>() is { } name && caused.Contains(name))
+            {
+                rule["state"] = "firing";
+                rule["alerts"] = new JsonArray(new JsonObject
+                {
+                    ["labels"] = new JsonObject { ["alertname"] = name, ["severity"] = rule["labels"]?["severity"]?.GetValue<string>() },
+                    ["state"] = "firing",
+                });
+            }
+        }
+
+        return document.ToJsonString();
+    }
 
     /// <summary>
     /// The <see cref="Telemetry.GoldenSignals"/> field a Prometheus query's URL asks for, which is the key its answer

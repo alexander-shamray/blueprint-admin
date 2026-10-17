@@ -66,7 +66,8 @@ public static class FixtureRecordings
             "the trace of that same publish, under the trace id FakeGrafana.RecordedTraceId names",
         ["grafana-prometheus-rules.json"] =
             "the shape /api/v1/rules answers, over rules named in platform-alerts.yaml, with one firing and one pending so "
-            + "the alert strip has each state: a stack that is up and healthy lists every rule inactive",
+            + "the alert strip has each state: a stack that is up and healthy lists every rule inactive. ContactReadRefused and "
+            + "ErrorRateService are listed so the Runbooks screen's fake causes have a rule to fire (FakeGrafana.Rules)",
         ["rabbitmq-queues.json"] =
             "the list_queues answer recorded on 2026-10-04, plus the privacy queues PlatformQueues.Table gained since "
             + "(empty, as a live stack listed them on 2026-10-15), plus an ordering-catalog-events_error queue holding "

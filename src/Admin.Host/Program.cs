@@ -10,6 +10,7 @@ using Admin.Host.Identity;
 using Admin.Host.Jobs;
 using Admin.Host.Mail;
 using Admin.Host.Privacy;
+using Admin.Host.Runbooks;
 using Admin.Host.Scenario;
 using Admin.Host.Security;
 using Admin.Host.Stack;
@@ -129,6 +130,16 @@ builder.Services.AddSingleton(sp =>
         recordDir,
         sp.GetRequiredService<TimeProvider>());
 });
+
+// The runbooks are read from the sibling clone, never copied; FakePlatform has no clone to read, so it replays three of them.
+builder.Services.AddSingleton(sp => new GameDayService(
+    sp.GetRequiredService<IProcessRunner>(),
+    sp.GetRequiredService<ComposeGate>(),
+    sp.GetRequiredService<RepoPaths>(),
+    sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform
+        ? RunbookRecordings.Markdown
+        : GameDayService.ReadFromClone(sp.GetRequiredService<RepoPaths>()),
+    sp.GetRequiredService<TimeProvider>()));
 
 // PlatformProbe is a typed client, so each readiness poll resolves a fresh one rather than the
 // singleton holding one HttpClient for the host's life.
@@ -250,6 +261,7 @@ app.MapFrontend();
 app.MapIdentity();
 app.MapApi();
 app.MapBroker();
+app.MapRunbooks();
 app.MapErasure();
 app.MapMail();
 app.MapTrace();

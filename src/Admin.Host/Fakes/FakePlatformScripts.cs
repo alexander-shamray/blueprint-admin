@@ -111,6 +111,9 @@ public static class FakePlatformScripts
             .On("py", DeadLetterRecordings.Prefix + "inspect ", 0, DeadLetterRecordings.Inspect)
             .On("py", DeadLetterRecordings.Prefix + "replay ", 0, rest => DeadLetterRecordings.Move(["replay", .. rest]))
             .On("py", DeadLetterRecordings.Prefix + "discard ", 0, rest => DeadLetterRecordings.Move(["discard", .. rest]))
+            // The game day (run-locally.md, "Game day"): the listing first, since the cause and restore prefix would also match it.
+            .On("py", RunbookRecordings.Prefix + "--list --json", 0, Lines(RunbookRecordings.Catalogue))
+            .On("py", RunbookRecordings.Prefix, 0, rest => RunbookRecordings.Run(rest, stack))
             .OnLongRunning("docker", prefix + "logs -f --tail 200", services => FollowLogLines.Where(l => services.Count == 0 || services.Contains(ServiceOf(l))))
             .On("docker", prefix + "config --format json", 0, Lines(WorkstationRecordings.ComposeConfig))
             .On("docker", prefix + "images --format json", 0, Lines(WorkstationRecordings.ComposeImages))
