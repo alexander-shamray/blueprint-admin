@@ -1,7 +1,12 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Admin.Host.Fakes;
+using Admin.Host.Jobs;
 using Admin.Host.Tests.TestSupport;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
 
 namespace Admin.Host.Tests.Stack;
@@ -131,6 +136,90 @@ public sealed class ScenarioLeaseEndpointTests
         HttpResponseMessage restored = await client.PostAsync("/api/stack/lease/restore", null, Token);
 
         restored.StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    private static WebApplicationFactory<Program> FailableHost(AdminHostFactory factory, out FailingProcessRunner runner)
+    {
+        FailingProcessRunner? failing = null;
+        WebApplicationFactory<Program> host = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+            services.AddSingleton<IProcessRunner>(sp => failing = new FailingProcessRunner(sp.GetRequiredService<FakeProcessRunner>(), sp.GetRequiredService<JobRegistry>()))));
+        _ = host.Server;
+        runner = failing!;
+
+        return host;
+    }
+
+    private static bool Stops(ProcessSpec spec) => spec.Arguments.Contains("stop");
+
+    private static bool StopsOrBringsUp(ProcessSpec spec) => Stops(spec) || (spec.Arguments.Contains("up") && spec.Arguments.Contains("--wait"));
+
+    private static async Task<JsonElement> ProblemOf(HttpResponseMessage response)
+    {
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+
+        return await response.Content.ReadFromJsonAsync<JsonElement>(Token);
+    }
+
+    [Fact]
+    public async Task An_acquire_whose_change_fails_is_a_500_that_says_the_changes_were_undone()
+    {
+        await using AdminHostFactory factory = new();
+        using WebApplicationFactory<Program> host = FailableHost(factory, out FailingProcessRunner runner);
+        HttpClient client = host.CreateClient();
+        runner.FailIf = Stops;
+
+        JsonElement problem = await ProblemOf(await Acquire(client));
+
+        problem.GetProperty("title").GetString().ShouldBe("The change failed");
+        problem.GetProperty("detail").GetString()!.ShouldContain("The changes were undone.");
+        (await client.GetFromJsonAsync<JsonElement>("/api/stack/lease", Token)).GetProperty("lease").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task An_acquire_whose_change_and_undo_both_fail_is_a_500_that_says_the_lease_is_still_held()
+    {
+        await using AdminHostFactory factory = new();
+        using WebApplicationFactory<Program> host = FailableHost(factory, out FailingProcessRunner runner);
+        HttpClient client = host.CreateClient();
+        runner.FailIf = StopsOrBringsUp;
+
+        JsonElement problem = await ProblemOf(await Acquire(client));
+
+        problem.GetProperty("title").GetString().ShouldBe("The change failed");
+        problem.GetProperty("detail").GetString()!.ShouldContain("The lease is still held");
+        (await client.GetFromJsonAsync<JsonElement>("/api/stack/lease", Token)).GetProperty("lease").ValueKind.ShouldBe(JsonValueKind.Object);
+    }
+
+    [Fact]
+    public async Task An_added_change_that_fails_is_a_500_that_says_the_changes_were_undone()
+    {
+        await using AdminHostFactory factory = new();
+        using WebApplicationFactory<Program> host = FailableHost(factory, out FailingProcessRunner runner);
+        HttpClient client = host.CreateClient();
+        (await Acquire(client, "short-waits")).StatusCode.ShouldBe(HttpStatusCode.OK);
+        runner.FailIf = Stops;
+
+        JsonElement problem = await ProblemOf(await AddChange(client, "stop-inventory"));
+
+        problem.GetProperty("title").GetString().ShouldBe("The change failed");
+        problem.GetProperty("detail").GetString()!.ShouldContain("The changes were undone.");
+        (await client.GetFromJsonAsync<JsonElement>("/api/stack/lease", Token)).GetProperty("lease").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task An_added_change_and_its_undo_that_both_fail_are_a_500_that_says_the_lease_is_still_held()
+    {
+        await using AdminHostFactory factory = new();
+        using WebApplicationFactory<Program> host = FailableHost(factory, out FailingProcessRunner runner);
+        HttpClient client = host.CreateClient();
+        (await Acquire(client, "short-waits")).StatusCode.ShouldBe(HttpStatusCode.OK);
+        runner.FailIf = StopsOrBringsUp;
+
+        JsonElement problem = await ProblemOf(await AddChange(client, "stop-inventory"));
+
+        problem.GetProperty("title").GetString().ShouldBe("The change failed");
+        problem.GetProperty("detail").GetString()!.ShouldContain("The lease is still held");
+        (await client.GetFromJsonAsync<JsonElement>("/api/stack/lease", Token)).GetProperty("lease").ValueKind.ShouldBe(JsonValueKind.Object);
     }
 
     [Theory]
