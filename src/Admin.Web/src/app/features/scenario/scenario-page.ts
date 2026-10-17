@@ -166,6 +166,9 @@ export class ScenarioPage {
   /** When this run's order was placed, in ms, as the order read gave it: where the carrier step starts reading the simulator's log. */
   private placedAt = 0;
 
+  /** The mark this run put in its order's address, so the carrier step reads this run's bookings and not the whole journal's. */
+  private carrierMarker = '';
+
   /** The changes the host may make for a script, by id, for the note before Run: the host's table, not a copy of it. */
   readonly changes = signal<LeaseChange[]>([]);
   /** Whether this run has sent as its user yet: a token missing after that has expired, not never been minted. */
@@ -403,6 +406,7 @@ export class ScenarioPage {
     this.cancelling.set(false);
     this.leaseTaken = false;
     this.placedAt = 0;
+    this.carrierMarker = '';
     this.projection.set(null);
     this.sagaReads.set([]);
     this.queuesBefore = null;
@@ -523,10 +527,11 @@ export class ScenarioPage {
           const placed = withFreshCommandId(operations.order!.exampleBody ?? '', this.uuid());
           const stocked = withProductId(placed, productId);
           // The carrier's outcome is scripted by the delivery postal code, set here and nowhere else.
+          if (script.carrier) this.carrierMarker = `scenario-${run}`;
           const body =
             script.postalCode === undefined
               ? stocked
-              : withShippingPostalCode(stocked, script.postalCode);
+              : withShippingPostalCode(stocked, script.postalCode, this.carrierMarker || undefined);
           const id = await this.send(key, operations.order!, run, identity, body, {}, true);
           if (id === null) return;
           if (script.postalCode !== undefined) {
@@ -569,7 +574,7 @@ export class ScenarioPage {
     const key: StepKey = 'carrier';
     const bookings = operations.bookings!;
     const polls = operations.polls;
-    const bookingBody = withCarrierCode(bookings.exampleBody ?? '', carrier.code);
+    const bookingBody = withCarrierCode(bookings.exampleBody ?? '', carrier.code, this.carrierMarker || undefined);
     const since = this.placedAt;
     const waiting = `Waiting for the carrier simulator's log to show ${carrier.code}: reading it every ${CARRIER_POLL_MS / 1000} s for up to ${CARRIER_WATCH_MS / 1000} s, from when the order was placed.`;
     this.patch(key, { state: 'running', request: `${bookings.method} ${bookings.url}`, detail: waiting });
@@ -799,7 +804,7 @@ export class ScenarioPage {
       this.patch(key, {
         state: 'failed',
         detail: result.bodyTruncated
-          ? "The simulator's answer was longer than the proxy reads, so the log cannot be judged."
+          ? "The simulator's answer was longer than the proxy reads, so the log cannot be judged: its request journal has grown too large for this screen to read (clear it, or restart the carrier simulator, and run again)."
           : `The simulator answered ${result.status}, not a list of the requests it logged.`,
       });
     }

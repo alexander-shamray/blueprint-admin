@@ -566,9 +566,11 @@ export function withProductId(body: string, productId: string): string {
 /**
  * The example order body with the delivery postal code set to `code`: the one field of an order the carrier sees
  * (run-locally.md, "The carrier's answer is scripted by the delivery postal code"). A body that is not a JSON object,
- * or has no `shippingAddress` object, is returned as it was, so the run does not invent an address.
+ * or has no `shippingAddress` object, is returned as it was, so the run does not invent an address. A `marker` is appended to
+ * `line1`, which reaches the carrier's request log whole, so the carrier step can ask the simulator for this run's bookings
+ * alone (`withCarrierCode`) and not for every earlier order to the same code.
  */
-export function withShippingPostalCode(body: string, code: string): string {
+export function withShippingPostalCode(body: string, code: string, marker?: string): string {
   let parsed: unknown;
   try {
     parsed = JSON.parse(body);
@@ -579,7 +581,9 @@ export function withShippingPostalCode(body: string, code: string): string {
   const object = parsed as Record<string, unknown>;
   const address = object['shippingAddress'];
   if (!address || typeof address !== 'object' || Array.isArray(address)) return body;
-  return JSON.stringify({ ...object, shippingAddress: { ...address, postalCode: code } }, null, 2);
+  const line1 = (address as Record<string, unknown>)['line1'];
+  const marked = marker === undefined ? {} : { line1: `${typeof line1 === 'string' ? line1 : ''} ${marker}`.trim() };
+  return JSON.stringify({ ...object, shippingAddress: { ...address, postalCode: code, ...marked } }, null, 2);
 }
 
 /** Whether the body's `shippingAddress.postalCode` is `code`: what `withShippingPostalCode` sets, or declined to. */
@@ -601,19 +605,25 @@ export function hasShippingPostalCode(body: string, code: string): boolean {
 /**
  * The simulator's booking filter with its pattern set to `code`: run-locally.md's request names `SIM-DOWN`, and each script
  * asks about the code it placed its order to. A body that is not the filter (no matcher to set) is returned as it was, so the
- * step reads what the document's own filter gives rather than a body this guessed at.
+ * step reads what the document's own filter gives rather than a body this guessed at. With a `marker` (the one
+ * `withShippingPostalCode` put in the address) the filter also requires it, both matchers having to match, so the answer is
+ * this run's bookings and does not grow with the journal.
  */
-export function withCarrierCode(body: string, code: string): string {
+export function withCarrierCode(body: string, code: string, marker?: string): string {
   let parsed: unknown;
   try {
     parsed = JSON.parse(body);
   } catch {
     return body;
   }
-  const filter = parsed as { Body?: { Matchers?: { Pattern?: unknown }[] } } | null;
+  const filter = parsed as { Body?: { MatchOperator?: string; Matchers?: { Name?: unknown; Pattern?: unknown }[] } } | null;
   const matcher = filter?.Body?.Matchers?.[0];
-  if (!matcher || typeof matcher.Pattern !== 'string') return body;
+  if (!filter?.Body?.Matchers || !matcher || typeof matcher.Pattern !== 'string') return body;
   matcher.Pattern = `*${code}*`;
+  if (marker !== undefined) {
+    filter.Body.MatchOperator = 'And';
+    filter.Body.Matchers.push({ Name: matcher.Name, Pattern: `*${marker}*` });
+  }
   return JSON.stringify(filter, null, 2);
 }
 

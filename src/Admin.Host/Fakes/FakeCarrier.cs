@@ -8,7 +8,8 @@ namespace Admin.Host.Fakes;
 /// The carrier simulator's <c>POST /__admin/requests/find</c> (run-locally.md): WireMock.Net's own request model in, the
 /// matching log entries out. Only the two filters the Scenario sends are understood: the bookings whose body names a code
 /// (<c>Body.Matchers[0].Pattern</c> of <c>*SIM-X*</c>) and the feed polls of one parcel (<c>Path.Matchers[0].Pattern</c> of
-/// <c>/v1/shipments/crr_SIM-X/events</c>). Anything else finds nothing, as an unmatched filter does on the simulator.
+/// <c>/v1/shipments/crr_SIM-X/events</c>). A second body matcher, the Scenario's mark of its own run, is not read: the fake's
+/// log holds the orders to the code and none of them carries a mark. Anything else finds nothing, as an unmatched filter does on the simulator.
 /// </summary>
 internal static partial class FakeCarrier
 {
