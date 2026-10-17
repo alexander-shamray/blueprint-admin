@@ -51,6 +51,8 @@ export class RunbooksPage {
   });
 
   readonly jobId = signal<string | null>(null);
+  /** Which runbook's cause or undo `jobId` is, since the pane outlives the selection. */
+  readonly jobLabel = signal('');
   readonly running = signal(false);
   readonly jobError = signal<string | null>(null);
 
@@ -130,14 +132,17 @@ export class RunbooksPage {
       this.armed.set(true);
       return;
     }
-    this.start(this.host.runbookCause(entry.runbook, phase.alert === entry.phases[0]?.alert ? null : phase.alert, phase.confirmWith));
+    this.start(
+      this.host.runbookCause(entry.runbook, phase.alert === entry.phases[0]?.alert ? null : phase.alert, phase.confirmWith),
+      `cause of ${phase.alert} (${entry.runbook})`,
+    );
   }
 
   /** The tool's `--restore`. It deletes nothing the cause did not make and is safe twice, so it takes no confirmation. */
   restore(): void {
     const entry = this.entry();
     if (!entry?.script || this.running()) return;
-    this.start(this.host.runbookRestore(entry.runbook));
+    this.start(this.host.runbookRestore(entry.runbook), `undo of ${entry.runbook}`);
   }
 
   /** The job has ended: read the alerts at once instead of at the next tick. */
@@ -163,11 +168,12 @@ export class RunbooksPage {
     return seconds < 90 ? `${seconds} s` : `${Math.round(seconds / 60)} min`;
   }
 
-  private start(job: Observable<JobSummary>): void {
+  private start(job: Observable<JobSummary>, label: string): void {
     this.running.set(true);
     this.jobError.set(null);
     job.subscribe({
       next: (summary) => {
+        this.jobLabel.set(label);
         this.jobId.set(summary.id);
         this.disarm();
       },

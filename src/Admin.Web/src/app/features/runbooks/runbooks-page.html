@@ -99,9 +99,6 @@
           @if (jobError(); as err) {
             <p class="error" role="alert">{{ err }}</p>
           }
-          @if (jobId(); as id) {
-            <app-output-pane [jobId]="id" (exited)="jobEnded()" />
-          }
         }
       </section>
 
@@ -164,6 +161,13 @@
       <p class="hint">Choose a runbook.</p>
     }
   </div>
+  <!-- Outside the selected runbook's block, so choosing another runbook neither hides a running job nor stops the page hearing it exit. -->
+  @if (jobId(); as id) {
+    <section class="job" aria-label="Job output">
+      <p class="note">Output of the {{ jobLabel() }}.</p>
+      <app-output-pane [jobId]="id" (exited)="jobEnded()" />
+    </section>
+  }
 } @else if (!loadError()) {
   <p>Listing the runbooks…</p>
 }
