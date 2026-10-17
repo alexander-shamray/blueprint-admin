@@ -100,13 +100,40 @@ describe('buildExport', () => {
   it("puts the mail step's own count in the mail section where the script has one", () => {
     const md = buildExport(
       input({
-        steps: [step({ key: 'mail', title: 'Count the mail', state: 'failed', detail: 'A message was sent more than once: OrderConfirmed (order-confirmed) sent 2 times.' })],
+        steps: [
+          step({
+            key: 'mail',
+            title: 'Count the mail',
+            state: 'failed',
+            detail:
+              'A message was sent more than once: OrderConfirmed (order-confirmed) sent 2 times.',
+          }),
+        ],
       }),
     );
 
     expect(md).not.toContain(MAIL_OMITTED);
     expect(md.slice(md.indexOf('## Mail the run caused'))).toContain(
       'failed: A message was sent more than once: OrderConfirmed (order-confirmed) sent 2 times.',
+    );
+  });
+
+  it('says a mail step that did not run made no count, not the reason the run stopped', () => {
+    const md = buildExport(
+      input({
+        steps: [
+          step({
+            key: 'mail',
+            title: 'Count the mail',
+            state: 'skipped',
+            detail: 'An earlier step did not succeed.',
+          }),
+        ],
+      }),
+    );
+
+    expect(md.slice(md.indexOf('## Mail the run caused'))).toContain(
+      'Not counted: the mail step did not run.',
     );
   });
 
@@ -155,7 +182,9 @@ describe('buildExport', () => {
   });
 
   it("says when the transcript is the whole session because the run's start was not read", () => {
-    expect(buildExport(input({ transcriptScope: 'session' }))).toContain("The host's whole session");
+    expect(buildExport(input({ transcriptScope: 'session' }))).toContain(
+      "The host's whole session",
+    );
     expect(buildExport(input())).toContain('from when this run began');
   });
 
@@ -207,7 +236,12 @@ describe('buildExport', () => {
       unchangedForMs: 0,
       stalled: false,
       statusChangedAt: '2026-10-05T12:00:04Z',
-      saga: { kind: 'row' as const, state: 'AwaitingStock', startedAt: '2026-10-05T12:00:00Z', cancelReason: null },
+      saga: {
+        kind: 'row' as const,
+        state: 'AwaitingStock',
+        startedAt: '2026-10-05T12:00:00Z',
+        cancelReason: null,
+      },
       sagaSeenAt: Date.parse('2026-10-05T12:00:05Z'),
       pairing: 'differs' as const,
     };

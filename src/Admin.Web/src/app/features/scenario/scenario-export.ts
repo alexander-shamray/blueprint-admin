@@ -9,7 +9,8 @@ export const BODY_LIMIT = 4000;
 export const EVENT_LIMIT = 60;
 
 /** What the section says of a script with no `mail` step: the export's own line, not a guess at the sink's contents (spec §5.13). */
-export const MAIL_OMITTED = "Omitted: this script does not count the mail the run caused; the deliver script's `mail` step does.";
+export const MAIL_OMITTED =
+  "Omitted: this script does not count the mail the run caused; the deliver script's `mail` step does.";
 
 /** Why a trace could not be read, in place of its timeline, or the view that was. */
 export type TraceRead = TraceView | string;
@@ -35,7 +36,11 @@ export interface ExportInput {
 /** The `mail` step's own count, as the page said it, or the line that says the script does not count one. */
 function mailSection(steps: readonly StepView[]): string[] {
   const step = steps.find((s) => s.key === 'mail');
-  return step ? [`${step.state}: ${step.detail}`] : [MAIL_OMITTED];
+  if (!step) return [MAIL_OMITTED];
+  // A step that never ran has no count; its detail is the run's reason for stopping, not the sink's answer.
+  return step.state === 'skipped' || step.state === 'pending'
+    ? ['Not counted: the mail step did not run.']
+    : [`${step.state}: ${step.detail}`];
 }
 
 /** A fence longer than any run of backticks in the text, so a body that holds one cannot close it early. */
@@ -199,7 +204,7 @@ export function buildExport(input: ExportInput): string {
     '## Operator transcript',
     '',
     input.transcriptScope === 'run'
-      ? "The commands and requests the host kept from when this run began."
+      ? 'The commands and requests the host kept from when this run began.'
       : "The host's whole session: the point where this run began could not be read.",
     '',
     input.transcript === null
