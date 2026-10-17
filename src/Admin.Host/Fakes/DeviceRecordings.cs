@@ -33,6 +33,7 @@ internal static class DeviceRecordings
     public static readonly string[] Realm =
     [
         "blueprint://auth/callback",
+        "--- webOrigins ---",
         "https://localhost,capacitor://localhost",
     ];
 }

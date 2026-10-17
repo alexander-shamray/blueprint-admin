@@ -71,7 +71,7 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
             "the Scenario's review step reads Loki with it (ReviewFlagService.LogQl, held by RunLocallyDriftTests)",
         ["$env:DEAD_LETTERS_PASSWORD = [guid]::NewGuid().ToString('N')"] =
             "DeadLetterService mints a random password for each run and hands it to the tool as this variable",
-        ["$c.redirectUris; $c.webOrigins -join ','"] =
+        ["$c.redirectUris; '--- webOrigins ---'; $c.webOrigins -join ','"] =
             "the third line of the realm read, run with the two lines above it as one script (DeviceReads.RealmLines, held by DeviceReadsTests)",
         ["Remove-Item Env:DEAD_LETTERS_PASSWORD"] =
             "the variable is set on the tool's own process only (ProcessSpec.Environment), so it ends with that process",

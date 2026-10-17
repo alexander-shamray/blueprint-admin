@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Admin.Host.Compose;
 using Admin.Host.Config;
 using Admin.Host.Jobs;
@@ -14,7 +13,7 @@ namespace Admin.Host.Frontend;
 /// <see cref="DoctorState.Unknown"/> where the stack may simply be down, and a problem where the silence is the cause
 /// (no <c>adb</c>, so no device run).
 /// </summary>
-public sealed partial class DeviceReads(IProcessRunner runner, RepoPaths paths, TimeProvider time)
+public sealed class DeviceReads(IProcessRunner runner, RepoPaths paths, TimeProvider time)
 {
     /// <summary>Owner: run-locally.md step 4, first read. Android Studio's default SDK place, as the document spells it.</summary>
     internal const string AdbDevicesLine = """& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" devices""";
@@ -23,13 +22,19 @@ public sealed partial class DeviceReads(IProcessRunner runner, RepoPaths paths, 
     internal const string CorsLine =
         """curl.exe -s -i -X OPTIONS http://localhost:5000/api/v1/catalog/products -H "Origin: https://localhost" -H "Access-Control-Request-Method: GET" | Select-String 'HTTP/|Access-Control-Allow-Origin'""";
 
-    /// <summary>Owner: run-locally.md step 4, third read: three lines, the admin token, the client, then what it redirects to.</summary>
+    /// <summary>
+    /// Owner: run-locally.md step 4, third read: three lines, the admin token, the client, then what it redirects to, the
+    /// marker line, and its web origins.
+    /// </summary>
     internal static readonly string[] RealmLines =
     [
         """$t = (Invoke-RestMethod http://localhost:8080/realms/master/protocol/openid-connect/token -Method Post -Body @{ grant_type = 'password'; client_id = 'admin-cli'; username = 'admin'; password = 'admin' }).access_token""",
         """$c = (Invoke-RestMethod 'http://localhost:8080/admin/realms/commerce/clients?clientId=mobile-app' -Headers @{ Authorization = "Bearer $t" })[0]""",
-        """$c.redirectUris; $c.webOrigins -join ','""",
+        """$c.redirectUris; '--- webOrigins ---'; $c.webOrigins -join ','""",
     ];
+
+    /// <summary>Owner: run-locally.md step 4, the line the realm read prints between the redirects and the web origins.</summary>
+    internal const string WebOriginsMarker = "--- webOrigins ---";
 
     /// <summary>The origin the packaged Android app sends (the client's Capacitor <c>androidScheme</c>), which the gateway must admit.</summary>
     internal const string AppOrigin = "https://localhost";
@@ -107,31 +112,25 @@ public sealed partial class DeviceReads(IProcessRunner runner, RepoPaths paths, 
             return new(name, DoctorState.Unknown, $"Keycloak's admin API did not answer: {error}");
         }
 
-        // The output is the redirects, one a line, then webOrigins joined, which is a blank line (and may be dropped) when
-        // the client lists none. A redirect is a URI with a path, so a last line with one is never the origins; a path-less
-        // one is the origins only when it lists AppOrigin, which run-locally.md says the client's webOrigins do. A path-less
-        // redirect such as com.example://app looks the same as any origin, so without AppOrigin it is read as a redirect and
-        // never dropped (a marker in the document would settle it; the document is not ours to change).
+        // The output is the redirects, one a line, the marker, then webOrigins joined (blank when the client lists none).
+        // A redirect is every line before the marker; what follows it is not read.
         string[] lines = [.. realm.Stdout.Select(l => l.Trim()).Where(l => l.Length > 0)];
-        string[] last = lines.Length > 0 ? lines[^1].Split(',') : [];
-        bool originShaped = last.Length > 0 && last.All(p => OriginShape().IsMatch(p));
-        bool origins = originShaped && last.Contains(AppOrigin);
-        string[] redirects = origins ? lines[..^1] : lines;
-        string ambiguity = originShaped && !origins
-            ? $" The last line has no path and does not list {AppOrigin}, so it is read as a redirect; if it is the web origins, the client lacks {AppOrigin}, which run-locally.md expects."
-            : string.Empty;
+        int marker = Array.IndexOf(lines, WebOriginsMarker);
+
+        if (marker < 0 && lines.Length > 0)
+        {
+            return new(name, DoctorState.Problem, $"Keycloak answered with no {WebOriginsMarker} line, so the redirects cannot be told from the web origins. run-locally.md step 4 prints it; the document and RealmLines have drifted.");
+        }
+
+        string[] redirects = marker < 0 ? [] : lines[..marker];
 
         return redirects switch
         {
             [] => new(name, DoctorState.Problem, "The running realm's mobile-app client has no redirect (or the client is absent). The realm is imported only into an empty database; it is the backend's to change."),
             [NativeRedirectUri] => new(name, DoctorState.Ok, $"mobile-app redirects to exactly {NativeRedirectUri}."),
-            _ => new(name, DoctorState.Problem, $"mobile-app redirects to {string.Join(", ", redirects)}, not exactly {NativeRedirectUri}, which the client sends. The realm is the backend's to change.{ambiguity}"),
+            _ => new(name, DoctorState.Problem, $"mobile-app redirects to {string.Join(", ", redirects)}, not exactly {NativeRedirectUri}, which the client sends. The realm is the backend's to change."),
         };
     }
-
-    /// <summary>A web origin as Keycloak lists it: a scheme and an authority, with no path.</summary>
-    [GeneratedRegex(@"^[A-Za-z][A-Za-z0-9+.\-]*://[^/,\s]+$")]
-    private static partial Regex OriginShape();
 
     private Task<CommandOutput> PowerShellAsync(string line, CancellationToken cancellationToken) =>
         OneShot.CompleteAsync(
