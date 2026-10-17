@@ -129,6 +129,17 @@ describe('RunbooksPage', () => {
     expect(el(fixture).querySelector('[role="alert"]')?.textContent).toContain('py: not found');
   });
 
+  it('renders a nested list item as a list inside the item it belongs to', () => {
+    host.runbookText.mockReturnValue(of({ runbook: 'x', markdown: ['1. drain', '   - check `a`', '   - check `b`', '2. restore'].join('\n') }));
+    const fixture = render();
+    open(fixture, 'outbox-growth');
+
+    const outer = el(fixture).querySelectorAll('.runbook-text > ul');
+    expect(outer).toHaveLength(1);
+    expect(outer[0].querySelectorAll(':scope > li')).toHaveLength(2);
+    expect(Array.from(outer[0].querySelectorAll(':scope > li > ul > li')).map((li) => li.textContent?.trim())).toEqual(['check a', 'check b']);
+  });
+
   it("shows the alert's state beside the runbook rendered from the clone, and reads the alerts again on the poll", () => {
     const fixture = render();
     open(fixture, 'outbox-growth');
