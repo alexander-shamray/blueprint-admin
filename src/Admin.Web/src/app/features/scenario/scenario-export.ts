@@ -10,7 +10,7 @@ export const EVENT_LIMIT = 60;
 
 /** What the section says of a script with no `mail` step: the export's own line, not a guess at the sink's contents (spec §5.13). */
 export const MAIL_OMITTED =
-  "Omitted: this script does not count the mail the run caused; the deliver script's `mail` step does.";
+  'Omitted: this script has no `mail` step, so it does not count the mail the run caused.';
 
 /** Why a trace could not be read, in place of its timeline, or the view that was. */
 export type TraceRead = TraceView | string;
