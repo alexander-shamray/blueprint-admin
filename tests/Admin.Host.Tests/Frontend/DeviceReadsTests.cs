@@ -120,16 +120,27 @@ public sealed class DeviceReadsTests
     [Fact]
     public void A_path_less_redirect_beside_the_right_one_is_not_taken_for_the_origins()
     {
-        DoctorCheck check = DeviceReads.Redirect(Out("blueprint://auth/callback", "com.example://"));
+        DoctorCheck check = DeviceReads.Redirect(Out("blueprint://auth/callback", "com.example://app"));
 
         check.State.ShouldBe(DoctorState.Problem);
-        check.Detail.ShouldContain("com.example://");
+        check.Detail.ShouldContain("com.example://app");
+        check.Detail.ShouldContain("does not list https://localhost");
+    }
+
+    [Fact]
+    public void Web_origins_without_the_apps_origin_read_as_a_redirect_and_say_so()
+    {
+        DoctorCheck check = DeviceReads.Redirect(Out("blueprint://auth/callback", "capacitor://localhost"));
+
+        check.State.ShouldBe(DoctorState.Problem);
+        check.Detail.ShouldContain("capacitor://localhost");
+        check.Detail.ShouldContain("the client lacks https://localhost");
     }
 
     [Fact]
     public void A_path_less_redirect_is_still_a_redirect_when_the_origins_line_follows()
     {
-        DeviceCheck(Out("blueprint://auth/callback", "com.example://", "https://localhost,capacitor://localhost")).ShouldBe(DoctorState.Problem);
+        DeviceCheck(Out("blueprint://auth/callback", "com.example://app", "https://localhost,capacitor://localhost")).ShouldBe(DoctorState.Problem);
     }
 
     private static DoctorState DeviceCheck(CommandOutput realm) => DeviceReads.Redirect(realm).State;
