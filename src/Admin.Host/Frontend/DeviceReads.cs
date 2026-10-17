@@ -110,7 +110,7 @@ public sealed partial class DeviceReads(IProcessRunner runner, RepoPaths paths, 
         // The output is the redirects, one a line, then webOrigins joined, which is a blank line (and may be dropped) when
         // the client lists none. A redirect is a URI with a path, so a last line with one is never the origins; a path-less
         // one is the origins only when it lists AppOrigin, which run-locally.md says the client's webOrigins do. A path-less
-        // redirect such as com.example:// looks the same as any origin, so without AppOrigin it is read as a redirect and
+        // redirect such as com.example://app looks the same as any origin, so without AppOrigin it is read as a redirect and
         // never dropped (a marker in the document would settle it; the document is not ours to change).
         string[] lines = [.. realm.Stdout.Select(l => l.Trim()).Where(l => l.Length > 0)];
         string[] last = lines.Length > 0 ? lines[^1].Split(',') : [];
