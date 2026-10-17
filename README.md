@@ -133,7 +133,9 @@ API screen's "Trace this call" opens it on the
 response's own correlation id. The Scenario screen runs `run-locally.md`'s
 calls end to end as a realm user, in one of a library of scripts: publish, wait for
 the projection to drain, set its stock on hand, quote, order, and then either read the order back
-through the BFF until it is confirmed, despatched and delivered, cancel it
+through the BFF until it is confirmed, despatched and delivered and then count the mail it sent
+(one message for each event it raised, read from the mail sink by correlation id; a second message
+for one event fails the step), cancel it
 and read it back until it is cancelled, or apply a cause `run-locally.md` names
 (a price ending `.01`, stock set to 0) and read it back until the saga has declined
 it or found it out of stock, or order to the delivery postal code `SIM-TRANSIT`, which the carrier
@@ -275,6 +277,9 @@ are announced.
   says how many it holds in all. Opening a message marks it read in the sink,
   as opening it in the sink's own UI does. A message with no
   `X-Correlation-Id`, or one the backend would not adopt, has no Trace link.
+- The deliver script's mail count reads only the newest `MailSinkClient.Limit` messages, so a run's
+  mail is counted only while it is among them, and no other script counts mail: whether a cancel
+  mails a confirmation first depends on timing. The count has not been run against a live Mailpit.
 
 ## Tests
 
