@@ -108,6 +108,17 @@ depth of its `*-privacy` queue and of `privacy-completions` beside it; an overdu
 request is reissued from the screen and links the backend's `erasure-overdue`
 runbook. Against FakePlatform the subject ending `dead` is the one that goes
 overdue, so the reissue has something to do.
+The Runbooks screen lists the backend's `docs/runbooks/` as its `tools/game-day`
+lists them (`py -3.12 tools/game-day/game_day.py --list --json`, read on every
+request, so a new runbook appears without a console change). For one with a
+script it shows each alert's state beside the runbook's text, read from the
+clone and never copied, with what a cause costs and the tool's deadlines for the
+alert to fire and clear. Cause runs `RUNBOOK --cause`, and Undo runs `RUNBOOK
+--restore`; both are `run-locally.md`'s "Game day" lines, as jobs under the same
+gate as Up and Down. A cause the tool lists as `confirm` takes a second press of
+the button, and one it lists as `typed` takes the runbook's name typed, as the
+wipe takes `down -v`. Against FakePlatform four runbooks are listed and a cause
+fires its alert in the alert read until Undo. Spec §5.14 has the rest.
 The Mail screen lists what Notifications sent, newest first, as the mail sink
 (Mailpit) holds it: when, to whom, the subject, and the message's
 `X-Correlation-Id` as a link into its Trace timeline; a correlation id typed
@@ -175,6 +186,13 @@ is a log a screen reader can read on demand; only a job's start and its exit
 are announced.
 
 ## Known limits
+
+- A game-day cause stays until Undo is pressed, and a host that is stopped while
+  one is in force does not undo it: the stack stays as the cause left it, and the
+  backend's own `--restore` (run-locally.md, "Game day") puts it back. The alert
+  column needs the backend's alert rules loaded by Grafana and reads `not loaded`
+  for a rule Prometheus does not list. A restore does not take back the orders a
+  cause placed or `contact-refused`'s deleted contacts.
 
 - The host keeps at most one `logs -f` job, so a Follow in a second browser
   tab ends the first tab's. A follow whose answer never reached the page,

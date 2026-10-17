@@ -717,6 +717,7 @@ All under `/api`, JSON, loopback only.
 | `GET /telemetry/alerts` | the alert strip: loaded rules and the waiting ones, apart |
 | `GET /transcript`, `GET /transcript/script?after=n` | §5.11; the entries, and the same as one bash script in `text/plain`, with only the entries whose sequence is greater than `after` when it is given (§5.13: a Scenario export takes the lines its run caused) |
 | `POST /scenario/export` | §5.13; body `{ markdown }`, answered as `text/markdown` after `FixtureScrubber.Scrub`; 400 for no document, 413 past `ExportEndpoints.MaxCharacters`; nothing is stored |
+| `GET /runbooks`, `GET /runbooks/{name}`, `POST /runbooks/{name}/cause`, `POST /runbooks/{name}/restore` | §5.14; the game day's catalogue read from the tool each time (200 with `error` when it could not be, never a thrown 500), one runbook's Markdown from the backend clone (404 for a name that is no file there), then a listed job. A cause is 400 for a runbook with no script, an alert its script does not cause, or without the confirmation its phase takes; the restore takes none. Both are 404 for a runbook the tool does not list, and 409 while another `ComposeGate` job (§5.3) runs, a game-day job included |
 
 Streams use Server-Sent Events rather than WebSockets because every stream is
 server-to-client and line-oriented, and SSE reconnects for free.
@@ -859,6 +860,37 @@ page notes the transcript's highest sequence when a run begins and asks for the
 script after it, so the section is the run's lines and not the session's; where
 that sequence could not be read the section is the whole session and says so.
 
+### 5.14 Runbooks and the game day
+
+The backend's `tools/game-day` causes a runbook's alert on the Compose stack, and `run-locally.md`'s "Game day" gives
+the lines this section runs: `--list --json`, `RUNBOOK --cause [--phase ALERT]` and `RUNBOOK --restore`. The console
+adds nothing to them. Which runbooks have a script, what a cause costs and how long its alert takes are the tool's
+(`tools/game-day/README.md`), read from `--list --json` on every request, so a runbook added to the clone appears with no
+change here; a runbook the tool lists with no script is still listed, with its reason, because its text can be read
+beside the alert. The runbook's Markdown is read from the clone's `docs/runbooks/` and never copied into this tree.
+
+`GameDayService` runs each half as one listed job under `ComposeGate` (§5.3), because a cause stops or pauses a
+container, cuts a grant or purges a queue and must not land in the middle of a Down or a lease. The alert's state is
+§5.8's alert read, repeated by the screen; the console reads no Prometheus of its own.
+
+**Which causes take the typed confirmation is the tool's decision, not this console's.** Its catalogue gives each
+phase a `confirmation`, and the host maps it to what the request must carry (`GameDayService.ConfirmationFor`): `none`
+nothing (a cause that plants and removes rows by id), `confirm` the word `cause` (the screen's Cause button pressed a
+second time, for a cause that stops something the rest of the stack uses), and `typed` the runbook's name, as the wipe
+takes `down -v` typed (§8), for a cause that deletes what the game day did not put there. A word the tool adds later is taken
+as the strictest, so a cause is never easier to confirm than its owner meant. The host decides from its own read of the
+catalogue, never from what the request says its phase costs. The restore deletes nothing the cause did not make and is
+safe twice, so it takes none.
+
+A cause is destructive and stays until the restore, which returns when the stack is back and not when the alert has
+cleared; the screen shows the alert's state and the tool's `clears_within_seconds` for that. A restore does not take
+back what the tool says it cannot (the orders a cause placed, `contact-refused`'s deleted contacts); that is
+`run-locally.md`'s sentence and the screen quotes the cost, not a promise.
+
+FakePlatform (`RunbookRecordings`) replays four entries of the catalogue as the backend printed them, one for each
+confirmation and one with no script, and three runbook texts. A scripted cause puts its alert in `FakeStack`, which
+`FakeGrafana.Rules` answers firing until the restore.
+
 ## 6. The SPA
 
 Angular 22 standalone components, signals, the router, no Ionic. The layout
@@ -888,6 +920,7 @@ and names the active option through `aria-activedescendant`.
 | **API** | operation tree on the left, each source with what its document changed since the kept baseline; request editor (path params, headers, body pre-filled from the schema example, `commandId` generated per send) and identity picker with its token clock (§5.6); response pane with status, timing, headers, body; a history list | Send; accept a changed document as the new baseline; "Trace this call" opens the Trace screen with the response's correlation id |
 | **Trace** | the §5.9 timeline for a correlation id, grouped by service, with Grafana deep links, and on a refetch what arrived or left since the last one | enter an id or arrive from the API screen; reload |
 | **Scenario** | `run-locally.md`'s calls as one script of a library (`SCRIPTS` in `scenario-run.ts` owns the list; `docs/superpowers/specs/2026-10-15-scenario-scripts.md` the causes and the fakes' rules) — publish, wait for the drain, set the product's stock (a product published a moment ago has none, and the order would end out of stock), quote, order, then either watch the order to confirmed, despatched and delivered, cancel it and watch it to cancelled, or apply a cause `run-locally.md` names (a price ending `.01`, stock set to 0) and watch the saga refuse the order, or order to the delivery postal code `SIM-TRANSIT` and watch it stay despatched, and ask to cancel it and see the platform refuse with 422 `order.already_shipped`, or order to one of the delivery postal codes whose carrier outcome the order read cannot tell apart (`SIM-REFUSED`, `SIM-DOWN`, `SIM-SLOW`, `SIM-STRANGE`) and read the carrier simulator's own request log, filtered by the simulator, for what the carrier saw, with the order read held at confirmed, or hold a lease on the stack (§5.3) so the saga's stock or payment wait lapses in seconds and read the order end `out_of_stock` or `declined`, or, with the despatch wait shortened too, order to `SIM-STRANGE` and read the review flag it raises (§5.9) while the order stays confirmed, or order a `.09` total, wait for its stock to reserve, stop Inventory, cancel the order and read the review flag its unanswered release raises while the order read says cancelled, with the stack restored whatever happens and a Cancel that ends the wait — each step with its status, body and own correlation id, each watch saying what it waits for and what it last read; beside the steps the saga strip of §5.13, and a finished run exports as one scrubbed Markdown document | Pick the script; run as a realm user; each step that sent links to its trace; the first step that does not succeed ends the run |
+| **Runbooks** | the backend's runbooks as the tool lists them, one with no script marked and its reason given; for the one opened, each alert's state from §5.8's read (`inactive`, `pending`, `firing`, `not loaded` for a rule Prometheus does not list, `unknown` where Grafana did not answer), what causing it costs and the tool's deadlines for it to fire and to clear, and the runbook's text beside, rendered from the clone as elements and never as HTML | Pick a runbook; Cause its alert (the second alert of a runbook with two, named); Undo; the confirmation §5.14 maps, pressed twice or typed; Refresh |
 | **Transcript** | §5.11's entries in order: each process with its directory and exit code, each request as its `curl` with the identity and status, polled | Copy as shell script, which copies the host's rendered script rather than one built in the page, so the scrubber has the last word |
 
 The API screen keeps one behaviour from `run-locally.md` explicit: after a
