@@ -1,7 +1,7 @@
 ---
 description: Split the working tree into semantic commits with bodies that argue the change
 argument-hint: "[what to commit — omit for everything staged and unstaged]"
-allowed-tools: Read, Grep, Glob, Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch --list:*), Bash(git branch --show-current), Bash(git branch -a), Bash(git add:*), Bash(git commit:*), Bash(bash .claude/scripts/git-unstage.sh:*), Bash(wc:*)
+allowed-tools: Read, Grep, Glob, Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch --list:*), Bash(git branch --show-current), Bash(git branch -a), Bash(git add:*), Bash(git commit:*), Bash(bash .claude/scripts/pr-for-branch.sh:*), Bash(bash .claude/scripts/git-unstage.sh:*), Bash(wc:*)
 ---
 
 Commit the working tree. Scope: $1 — if empty, everything modified and
@@ -70,6 +70,11 @@ British spelling in prose, identifiers left alone.>
   description edit, and that workflow was not ported. So the reconciliation
   is checked by reading, and `/pr` says how.
 - Keep the `Co-Authored-By:` and `Claude-Session:` trailers.
+- **A branch with an open pull request commits with `--trailer "PR: #<n>"`.**
+  Read the number from `bash .claude/scripts/pr-for-branch.sh`, its `OPEN`
+  row. Before the PR exists there is nothing to name, and `/pr` adds the
+  trailer to those commits once there is. The commit gate refuses a pushed
+  commit without it (`docs/working-rules.md`).
 
 ## Steps
 
