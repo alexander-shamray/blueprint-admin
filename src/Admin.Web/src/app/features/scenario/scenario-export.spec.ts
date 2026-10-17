@@ -80,7 +80,7 @@ function input(partial: Partial<ExportInput> = {}): ExportInput {
 }
 
 describe('buildExport', () => {
-  it("carries the issue's sections in its order, ending with the mail it cannot yet count", () => {
+  it("carries the issue's sections in its order, ending with the mail section", () => {
     const md = buildExport(input());
     const at = [
       '## Operator transcript',
@@ -95,6 +95,19 @@ describe('buildExport', () => {
     expect(at).toEqual([...at].sort((a, b) => a - b));
     expect(md).toContain(MAIL_OMITTED);
     expect(md).toContain('- Outcome: every step succeeded');
+  });
+
+  it("puts the mail step's own count in the mail section where the script has one", () => {
+    const md = buildExport(
+      input({
+        steps: [step({ key: 'mail', title: 'Count the mail', state: 'failed', detail: 'A message was sent more than once: OrderConfirmed (order-confirmed) sent 2 times.' })],
+      }),
+    );
+
+    expect(md).not.toContain(MAIL_OMITTED);
+    expect(md.slice(md.indexOf('## Mail the run caused'))).toContain(
+      'failed: A message was sent more than once: OrderConfirmed (order-confirmed) sent 2 times.',
+    );
   });
 
   it('lists each step with its status and correlation id, and pretty-prints a JSON body', () => {

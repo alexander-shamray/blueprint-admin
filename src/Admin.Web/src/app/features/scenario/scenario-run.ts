@@ -1,4 +1,4 @@
-import { ApiCatalogView, ApiOperation, ReviewFlagView } from '../../core/host/host-types';
+import { ApiCatalogView, ApiOperation, MailListView, ReviewFlagView } from '../../core/host/host-types';
 import { PUBLISH_OPERATION } from '../api/api-page';
 
 /**
@@ -28,7 +28,8 @@ export type StepKey =
   | 'flagged'
   | 'reserved'
   | 'stop'
-  | 'held';
+  | 'held'
+  | 'mail';
 
 /** The steps that wait on the order read rather than send once. */
 export type WatchKey = Extract<
@@ -126,6 +127,11 @@ export interface Script {
    * stack as it was until then (the stock reserved first, then Inventory stopped), which a change taken with the lease cannot give.
    */
   lateChange?: string;
+  /**
+   * The template keys of the mail the run must have sent by its end, one message each (`MAIL_EVENTS` names the event each
+   * answers), which its `mail` step counts in the mail sink.
+   */
+  mail?: readonly string[];
 }
 
 export const SCRIPT_KEYS: readonly ScriptKey[] = [
@@ -194,8 +200,9 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
     title: 'Order to delivered',
     intro:
       'Publish a product, wait for ordering-catalog-events to drain, set its stock on hand, quote a basket holding it, order it, and read the order back until the platform has confirmed, despatched and delivered it.',
-    steps: ['publish', 'drain', 'stock', 'quote', 'order', 'confirmed', 'dispatched', 'delivered'],
+    steps: ['publish', 'drain', 'stock', 'quote', 'order', 'confirmed', 'dispatched', 'delivered', 'mail'],
     onHand: STOCKED,
+    mail: ['order-placed', 'order-confirmed', 'shipment-dispatched', 'shipment-delivered'],
   },
   cancel: {
     title: 'Order and cancel',
@@ -363,6 +370,7 @@ export const STEP_TITLES: Record<StepKey, string> = {
   reserved: 'Wait for the stock to be reserved',
   stop: 'Stop Inventory now the stock is reserved',
   held: 'Read the order back still confirmed',
+  mail: 'Count the mail the order sent',
 };
 
 /**
@@ -421,7 +429,7 @@ export const SCENARIO_OPERATIONS: Record<OperationRole, string> = {
 
 /** The role a step sends as; the drain asks the broker and sends none. */
 export function roleOf(key: StepKey): OperationRole | null {
-  if (key === 'drain' || key === 'lease' || key === 'restore' || key === 'flagged' || key === 'stop') return null;
+  if (key === 'drain' || key === 'lease' || key === 'restore' || key === 'flagged' || key === 'stop' || key === 'mail') return null;
   if (key === 'upload') return 'image';
   if (key === 'thumbnail') return 'product';
   if (key === 'late_cancel') return 'cancel';
@@ -641,6 +649,102 @@ export function carrierEntries(body: string): CarrierEntry[] | null {
     });
   }
   return entries;
+}
+
+/**
+ * Every message Notifications sends and the event it answers, as `<template key>=<event>`: blueprint-backend
+ * `Notifications.Application.Rendering.TemplateKeys` for the keys and the `Intake/<event>Handler` that records each. The key is
+ * what a sent message's `Message-ID` carries after the event's id (`MailMessageId`).
+ */
+const MAIL_EVENTS = [
+  'order-placed=OrderPlaced',
+  'order-confirmed=OrderConfirmed',
+  'order-cancelled=OrderCancelled',
+  'payment-declined=PaymentDeclined',
+  'payment-refunded=PaymentRefunded',
+  'shipment-dispatched=ShipmentDispatched',
+  'shipment-delivered=ShipmentDelivered',
+];
+
+/** The event a template's message answers, or the key itself for one this console does not know. */
+export function mailEvent(template: string): string {
+  const found = MAIL_EVENTS.find((e) => e.startsWith(`${template}=`));
+  return found ? found.slice(template.length + 1) : template;
+}
+
+/** The mail a run sent: one entry for each event the sink holds a message for, with how many messages answered it. */
+export interface MailTally {
+  event: string;
+  template: string;
+  /** The event's id as the `Message-ID` spells it. */
+  eventId: string;
+  messages: number;
+}
+
+/**
+ * The run's messages in the sink, counted by the event each answers. A message is the run's when its `X-Correlation-Id`
+ * begins with `scenario-<run>-`, the prefix every step's id has (`stepCorrelationId`); its event is read from the
+ * `Message-ID`, `<event id>.<template key>@<domain>`, which Notifications derives from the event's id so that a redelivery
+ * that sends twice sends the same id twice. One that does not read that way is counted under its whole id. The tallies come
+ * oldest first.
+ */
+export function tallyMail(view: MailListView, run: string): MailTally[] {
+  const prefix = `scenario-${run}-`;
+  const tallies = new Map<string, MailTally>();
+  // The sink lists newest first; the count is told oldest first, the order the events happened in.
+  for (const m of [...view.messages].reverse()) {
+    if (!m.correlationId?.startsWith(prefix)) continue;
+    const local = m.messageId.split('@')[0];
+    const dot = local.indexOf('.');
+    const eventId = dot < 0 ? local : local.slice(0, dot);
+    const template = dot < 0 ? '' : local.slice(dot + 1);
+    const key = `${eventId}.${template}`;
+    const seen = tallies.get(key);
+    if (seen) seen.messages++;
+    else tallies.set(key, { event: mailEvent(template), template, eventId, messages: 1 });
+  }
+  return [...tallies.values()];
+}
+
+export type MailVerdict =
+  | { kind: 'reached'; detail: string }
+  | { kind: 'waiting'; detail: string }
+  | { kind: 'failed'; reason: string };
+
+/**
+ * Whether the sink holds exactly one message for each event the script expects. A second message for an event is the
+ * defect the step exists to show and does not wait on a further one: it fails at once, naming the event and the count. A
+ * message for an event the script does not expect fails the step too. Missing ones are waited out, since the send worker is
+ * asynchronous. A sink that cannot be read fails it: it never reads as a run that sent nothing.
+ */
+export function mailVerdict(view: MailListView, run: string, expected: readonly string[]): MailVerdict {
+  if (!view.reachable) {
+    return { kind: 'failed', reason: `The mail sink could not be read: ${view.error ?? 'no reason given'}.` };
+  }
+
+  const tallies = tallyMail(view, run);
+  const counts = tallies.map((t) => `${t.event} (${t.template}) ×${t.messages}`);
+  const said = counts.length === 0 ? 'no message for this run yet' : counts.join(', ');
+
+  const doubled = tallies.filter((t) => t.messages > 1);
+  if (doubled.length > 0) {
+    const list = doubled.map((t) => `${t.event} (${t.template}) sent ${t.messages} times`).join(', ');
+    return { kind: 'failed', reason: `A message was sent more than once: ${list}. Counted: ${said}.` };
+  }
+
+  const unexpected = tallies.filter((t) => !expected.includes(t.template));
+  if (unexpected.length > 0) {
+    const list = unexpected.map((t) => (t.template ? `${t.event} (${t.template})` : t.eventId)).join(', ');
+    return { kind: 'failed', reason: `A message answered an event this run does not expect: ${list}. Counted: ${said}.` };
+  }
+
+  const missing = expected.filter((template) => !tallies.some((t) => t.template === template));
+  if (missing.length > 0) {
+    const list = missing.map((t) => `${mailEvent(t)} (${t})`).join(', ');
+    return { kind: 'waiting', detail: `Not sent yet: ${list}. Counted: ${said}.` };
+  }
+
+  return { kind: 'reached', detail: `One message for each event the order raised: ${said}.` };
 }
 
 export type ReviewVerdict =

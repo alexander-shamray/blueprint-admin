@@ -17,8 +17,8 @@ test('the deliver script orders and reads the order back until it is delivered, 
   await page.getByRole('button', { name: 'Run' }).click();
 
   const steps = page.locator('ol.steps li.step');
-  await expect(steps).toHaveCount(8);
-  await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(8, WATCH);
+  await expect(steps).toHaveCount(9);
+  await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(9, WATCH);
   // The fake numbers each published product apart, as it does orders, so only the first is the recorded id.
   await expect(steps.nth(0).locator('.detail')).toContainText(/Answered 200 with id [0-9a-f-]{36}\./);
   await expect(steps.nth(1).locator('app-drained-indicator')).toContainText('[drained]');
@@ -30,12 +30,39 @@ test('the deliver script orders and reads the order back until it is delivered, 
   await expect(steps.nth(5).locator('.detail')).toContainText('The order read shows confirmed at');
   await expect(steps.nth(7).locator('.detail')).toContainText('The order read shows delivered at');
   await expect(steps.nth(7).locator('.detail')).toContainText('after it was placed');
+  // The fake sink answers for the run's own order: one message for each event it raised (FakeOrders.Mail), read through the host.
+  await expect(steps.nth(8).locator('.request')).toHaveText('GET /api/mail/messages');
+  await expect(steps.nth(8).locator('.detail')).toContainText(
+    'OrderPlaced (order-placed) ×1, OrderConfirmed (order-confirmed) ×1, ShipmentDispatched (shipment-dispatched) ×1, ShipmentDelivered (shipment-delivered) ×1',
+  );
 
   // The drain step asks the broker, not the platform's HTTP surface, so it has nothing to trace.
   await expect(page.locator('a.trace-step')).toHaveCount(7);
   await steps.nth(3).locator('a.trace-step').click();
   await expect(page).toHaveURL(/\/trace\/scenario-[0-9a-f]{8}-quote$/);
   await expect(page.locator('p.summary')).toContainText('-quote');
+});
+
+// The fake never sends a message twice, so the doubled one is the sink's answer altered in flight: the confirmed message listed
+// again, as a redelivery that sends twice would leave it.
+test('a doubled message is shown as two and fails the mail step', async ({ page }) => {
+  await page.route('**/api/mail/messages', async (route) => {
+    const response = await route.fetch();
+    const view = await response.json();
+    const confirmed = view.messages.find((m: { messageId: string }) => m.messageId.includes('.order-confirmed@'));
+    view.messages.push({ ...confirmed, id: `${confirmed.id}-again` });
+    await route.fulfill({ response, json: view });
+  });
+  await page.goto('/scenario');
+
+  await page.getByRole('button', { name: 'Run' }).click();
+
+  const steps = page.locator('ol.steps li.step');
+  await expect(steps.locator('.state', { hasText: '[failed]' })).toHaveCount(1, WATCH);
+  await expect(steps.nth(8).locator('.state')).toHaveText('[failed]');
+  await expect(steps.nth(8).locator('.detail')).toContainText(
+    'A message was sent more than once: OrderConfirmed (order-confirmed) sent 2 times.',
+  );
 });
 
 test('the cancel script cancels the placed order and reads it back cancelled', async ({ page }) => {
@@ -153,7 +180,7 @@ test('the saga strip shows a saga still awaiting stock beside a delivered order 
   await expect(differs).toContainText('[disagree]');
   await expect(differs).toContainText("a pair the backend's table does not allow");
   // A disagreement is shown, never a reason to stop the run: every step still passed.
-  await expect(page.locator('ol.steps li.step .state', { hasText: '[ok]' })).toHaveCount(8, WATCH);
+  await expect(page.locator('ol.steps li.step .state', { hasText: '[ok]' })).toHaveCount(9, WATCH);
 });
 
 test('the saga strip shows a saga that stops at despatched as despatched, with no delivery it never read', async ({ page }) => {
@@ -241,7 +268,8 @@ test('a finished run exports as one Markdown document, scrubbed by the host, wit
     expect(md).toContain(heading);
   }
   expect(md).toContain('- Outcome: every step succeeded');
-  expect(md).toContain('(#66)');
+  expect(md).toContain('## Mail the run caused');
+  expect(md).toContain('ok: One message for each event the order raised: OrderPlaced (order-placed) ×1');
   expect(md).not.toMatch(/eyJ[A-Za-z0-9_-]{10,}\./);
 });
 
@@ -378,7 +406,7 @@ test('a user without the permissions stops the run at the publish', async ({ pag
   const steps = page.locator('ol.steps li.step');
   await expect(steps.nth(0).locator('.state')).toHaveText('[failed]');
   await expect(steps.nth(0).locator('.status')).toHaveText('403');
-  await expect(steps.locator('.state', { hasText: '[not run]' })).toHaveCount(7);
+  await expect(steps.locator('.state', { hasText: '[not run]' })).toHaveCount(8);
 });
 
 // The fake store and edge (src/Admin.Host/Fakes/FakeObjectStore.cs) follow the platform's rules: the BFF signs a PUT, the

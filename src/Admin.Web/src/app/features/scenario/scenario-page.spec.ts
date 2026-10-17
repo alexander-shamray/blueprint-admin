@@ -5,6 +5,7 @@ import { HostClient } from '../../core/host/host-client';
 import {
   ApiCatalogView,
   ApiOperation,
+  MailListView,
   ProxyRequest,
   ProxyResult,
   QueuesView,
@@ -192,6 +193,31 @@ function flagged(reason: string, secondsAfter = 62): ReviewFlagView['flags'][num
   };
 }
 
+/** The mail sink as the Mail screen lists it: one message for each template given, the run's by its correlation id, a template given twice sent twice. */
+function mailView(templates: string[], over: Partial<MailListView> = {}, correlationId = 'scenario-abcdef12-order'): MailListView {
+  return {
+    reachable: true,
+    error: null,
+    total: templates.length,
+    sinkUrl: 'http://localhost:8025',
+    // Newest first, as the sink lists them.
+    messages: [...templates].reverse().map((template, i) => ({
+      id: `m${i}`,
+      messageId: `${(templates.indexOf(template) + 1).toString(16).padStart(32, '0')}.${template}@commerce.test`,
+      from: { name: 'Commerce', address: 'no-reply@commerce.test' },
+      to: [{ name: '', address: 'demo@example.invalid' }],
+      subject: template,
+      created: placedAt,
+      snippet: '',
+      read: false,
+      correlationId,
+    })),
+    ...over,
+  };
+}
+
+const DELIVERED_MAIL = ['order-placed', 'order-confirmed', 'shipment-dispatched', 'shipment-delivered'];
+
 let cancelSent = false;
 
 /**
@@ -262,6 +288,7 @@ describe('ScenarioPage', () => {
     leaseAddChange: ReturnType<typeof vi.fn>;
     leaseRestore: ReturnType<typeof vi.fn>;
     reviewFlags: ReturnType<typeof vi.fn>;
+    mailMessages: ReturnType<typeof vi.fn>;
     transcriptScript: ReturnType<typeof vi.fn>;
     trace: ReturnType<typeof vi.fn>;
     scenarioExport: ReturnType<typeof vi.fn>;
@@ -285,6 +312,7 @@ describe('ScenarioPage', () => {
       leaseAddChange: vi.fn(() => of(heldLease)),
       leaseRestore: vi.fn(() => of({ lease: null, changes: leaseChanges })),
       reviewFlags: vi.fn(() => of(flagView([flagged('not_despatched')]))),
+      mailMessages: vi.fn(() => of(mailView(DELIVERED_MAIL))),
       transcriptScript: vi.fn(() => of('curl http://x')),
       trace: vi.fn((id: string) =>
         of({ correlationId: id, window: '30m', reachable: true, error: null, traceIds: [], tracesTruncated: false, warning: null, events: [] }),
@@ -326,8 +354,9 @@ describe('ScenarioPage', () => {
       'confirmed',
       'dispatched',
       'delivered',
+      'mail',
     ]);
-    expect(page.steps().map((s) => s.state)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok']);
+    expect(page.steps().map((s) => s.state)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok']);
     const [publish, stock, quote, placed, ...reads] = sent();
     expect(JSON.parse(publish.body!).commandId).not.toBe(zero);
     // A product published a moment ago has no stock, and the order would end out of stock.
@@ -345,7 +374,7 @@ describe('ScenarioPage', () => {
       'The order read shows delivered at 2026-10-05T12:00:40Z, 40 s after it was placed.',
     );
     // Each watch keeps the read that reached its step.
-    expect(page.steps().slice(5).map((s) => [s.status, s.body])).toEqual(Array(3).fill([200, delivered]));
+    expect(page.steps().slice(5, 8).map((s) => [s.status, s.body])).toEqual(Array(3).fill([200, delivered]));
     expect(
       sent().every((r) => r.identity?.username === 'demo' && r.identity.password === null),
     ).toBe(true);
@@ -366,6 +395,110 @@ describe('ScenarioPage', () => {
       ['dispatched', 'delivered', 34],
     ]);
     expect(strip.stalled).toBe(false);
+  });
+
+  describe('the mail count', () => {
+    it('reads the sink through the host and names the event each of the run\'s messages answered', async () => {
+      const page = render().componentInstance;
+
+      await page.run();
+
+      const step = page.steps()[8];
+      expect(step.key).toBe('mail');
+      expect(step.state).toBe('ok');
+      expect(step.request).toBe('GET /api/mail/messages');
+      expect(step.detail).toBe(
+        'One message for each event the order raised: OrderPlaced (order-placed) ×1, OrderConfirmed (order-confirmed) ×1, ShipmentDispatched (shipment-dispatched) ×1, ShipmentDelivered (shipment-delivered) ×1.',
+      );
+      // Read from the sink through the host, not sent through the proxy as the user: nothing of it is traced.
+      expect(step.correlationId).toBeNull();
+      expect(sent().some((r) => r.url.includes('/api/mail/'))).toBe(false);
+    });
+
+    it('counts only the mail whose correlation id is the run\'s', async () => {
+      const other = mailView(['order-placed', 'order-placed'], {}, 'scenario-ffffff00-order');
+      host.mailMessages.mockReturnValue(of({ ...mailView(DELIVERED_MAIL), messages: [...other.messages, ...mailView(DELIVERED_MAIL).messages] }));
+      const page = render().componentInstance;
+
+      await page.run();
+
+      expect(page.steps()[8].state).toBe('ok');
+    });
+
+    it('fails at once on a second message for one event, naming it, and does not read the sink again', async () => {
+      host.mailMessages.mockReturnValue(of(mailView([...DELIVERED_MAIL, 'order-confirmed'])));
+      const page = render().componentInstance;
+
+      await page.run();
+
+      const step = page.steps()[8];
+      expect(step.state).toBe('failed');
+      expect(step.detail).toContain('A message was sent more than once: OrderConfirmed (order-confirmed) sent 2 times.');
+      expect(step.detail).toContain('ShipmentDelivered (shipment-delivered) ×1');
+      expect(host.mailMessages).toHaveBeenCalledTimes(1);
+    });
+
+    it('fails on a message for an event the run does not expect', async () => {
+      host.mailMessages.mockReturnValue(of(mailView([...DELIVERED_MAIL, 'order-cancelled'])));
+      const page = render().componentInstance;
+
+      await page.run();
+
+      expect(page.steps()[8].state).toBe('failed');
+      expect(page.steps()[8].detail).toContain('does not expect: OrderCancelled (order-cancelled)');
+    });
+
+    it('fails on a sink that cannot be read, never as a run that sent nothing', async () => {
+      host.mailMessages.mockReturnValue(of(mailView([], { reachable: false, error: 'connection refused' })));
+      const page = render().componentInstance;
+
+      await page.run();
+
+      expect(page.steps()[8].state).toBe('failed');
+      expect(page.steps()[8].detail).toBe('The mail sink could not be read: connection refused.');
+      expect(host.mailMessages).toHaveBeenCalledTimes(1);
+    });
+
+    it("waits with the drain's interval for the send worker, saying what is not sent yet, then passes", async () => {
+      vi.useFakeTimers();
+      try {
+        host.mailMessages
+          .mockReturnValueOnce(of(mailView(DELIVERED_MAIL.slice(0, 2))))
+          .mockReturnValue(of(mailView(DELIVERED_MAIL)));
+        const page = render().componentInstance;
+        const run = page.run();
+
+        await vi.advanceTimersByTimeAsync(0);
+        await vi.waitFor(() => expect(host.mailMessages).toHaveBeenCalledTimes(1));
+        expect(page.steps()[8].state).toBe('running');
+        expect(page.steps()[8].detail).toContain('Not sent yet: ShipmentDispatched (shipment-dispatched), ShipmentDelivered (shipment-delivered).');
+
+        await vi.advanceTimersByTimeAsync(DRAIN_POLL_MS);
+        await run;
+
+        expect(host.mailMessages).toHaveBeenCalledTimes(2);
+        expect(page.steps()[8].state).toBe('ok');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("fails after the drain's cap when an event never mails", async () => {
+      vi.useFakeTimers();
+      try {
+        host.mailMessages.mockReturnValue(of(mailView(DELIVERED_MAIL.slice(0, 3))));
+        const page = render().componentInstance;
+        const run = page.run();
+
+        await vi.advanceTimersByTimeAsync(DRAIN_WATCH_MS + DRAIN_POLL_MS);
+        await run;
+
+        expect(page.steps()[8].state).toBe('failed');
+        expect(page.steps()[8].detail).toContain(`Not all sent after ${DRAIN_WATCH_MS / 1000} s. Not sent yet: ShipmentDelivered (shipment-delivered).`);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe("the saga's own read", () => {
@@ -1459,7 +1592,7 @@ describe('ScenarioPage', () => {
     expect(page.steps().map((s) => s.state)).toEqual(Array(7).fill('ok'));
     page.pick('deliver');
 
-    expect(page.steps().map((s) => s.state)).toEqual(Array(8).fill('pending'));
+    expect(page.steps().map((s) => s.state)).toEqual(Array(9).fill('pending'));
     expect(page.runId()).toBeNull();
   });
 
@@ -1491,7 +1624,7 @@ describe('ScenarioPage', () => {
 
     expect(confirmed().state).toBe('ok');
     expect(confirmed().detail).toContain('3 s after it was placed');
-    expect(page.steps().map((s) => s.state)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok']);
+    expect(page.steps().map((s) => s.state)).toEqual(Array(9).fill('ok'));
   });
 
   it('fails a watch on a status it was not waiting for and never retries it, a 401 included', async () => {
@@ -1509,7 +1642,7 @@ describe('ScenarioPage', () => {
     expect(page.steps()[5].body).toBe('{"title":"Unauthorized"}');
     expect(page.steps()[5].detail).toBe('Answered 401.');
     expect(sent().filter(isRead)).toHaveLength(1);
-    expect(page.steps().slice(6).map((s) => s.state)).toEqual(['skipped', 'skipped']);
+    expect(page.steps().slice(6).map((s) => s.state)).toEqual(['skipped', 'skipped', 'skipped']);
   });
 
   it('fails a 404 that follows an answer, since the BFF had already learned of the order', async () => {
@@ -1691,7 +1824,7 @@ describe('ScenarioPage', () => {
     vi.useRealTimers();
 
     expect(answers).toHaveLength(0);
-    expect(page.steps().map((s) => s.state)).toEqual(Array(8).fill('ok'));
+    expect(page.steps().map((s) => s.state)).toEqual(Array(9).fill('ok'));
   });
 
   it('says nothing was minted when the grant the clock foresaw was refused, or the host did not answer', async () => {
@@ -1993,7 +2126,7 @@ describe('ScenarioPage', () => {
     vi.useRealTimers();
 
     expect(answers).toHaveLength(0);
-    expect(page.steps().map((s) => s.state)).toEqual(Array(8).fill('ok'));
+    expect(page.steps().map((s) => s.state)).toEqual(Array(9).fill('ok'));
   });
 
   it('starts each run afresh, so a user never minted before is not reported as expired', async () => {
@@ -2093,7 +2226,7 @@ describe('ScenarioPage', () => {
 
     await page.run();
 
-    expect(page.steps().map((s) => s.state)).toEqual(['failed', ...Array(7).fill('skipped')]);
+    expect(page.steps().map((s) => s.state)).toEqual(['failed', ...Array(8).fill('skipped')]);
     expect(page.steps()[0].detail).toBe('Answered 403.');
     expect(host.brokerQueues).not.toHaveBeenCalled();
   });

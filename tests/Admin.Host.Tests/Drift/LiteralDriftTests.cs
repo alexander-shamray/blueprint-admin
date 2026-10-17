@@ -265,6 +265,36 @@ public sealed partial class LiteralDriftTests
         ArrayLiteral(ScenarioRun(), "CANCELLATIONS").ShouldBe(declared, ignoreOrder: true);
     }
 
+    /// <summary>
+    /// The Scenario's mail count names each message's event from its template key, so the keys are Notifications' own and each is
+    /// recorded by the handler of the event the table pairs it with; and a message's <c>Message-ID</c> is still the event's id
+    /// and the key, which is what the count reads the event from.
+    /// </summary>
+    [Fact]
+    public void The_mail_the_scenario_counts_is_the_templates_and_events_notifications_sends()
+    {
+        string keys = Backend.Read("src", "Services", "Notifications", "Notifications.Application", "Rendering", "TemplateKeys.cs");
+        Dictionary<string, string> constants = TemplateKey().Matches(keys).ToDictionary(m => m.Groups["value"].Value, m => m.Groups["name"].Value);
+
+        constants.ShouldNotBeEmpty("TemplateKeys no longer declares string constants this test can read");
+
+        string[] table = ArrayLiteral(ScenarioRun(), "MAIL_EVENTS");
+        string[] templates = [.. table.Select(e => e.Split('=')[0])];
+        templates.ShouldBe(constants.Keys, ignoreOrder: true);
+
+        foreach (string entry in table)
+        {
+            string[] pair = entry.Split('=');
+            string handler = Backend.Read("src", "Services", "Notifications", "Notifications.Application", "Intake", $"{pair[1]}Handler.cs");
+
+            handler.ShouldContain($"IIntegrationEventHandler<{pair[1]}>", customMessage: entry);
+            handler.ShouldContain($"TemplateKeys.{constants[pair[0]]},", customMessage: entry);
+        }
+
+        Backend.Read("src", "Services", "Notifications", "Notifications.Application", "Mail", "MailMessageId.cs")
+            .ShouldContain("public string LocalPart => $\"{EventId:N}.{TemplateKey}\";");
+    }
+
     [Fact]
     public void The_timeline_the_scenario_reads_is_the_bffs_order_timeline()
     {
@@ -442,4 +472,7 @@ public sealed partial class LiteralDriftTests
 
     [GeneratedRegex("public const string \\w+ = \"(?<value>[^\"]*)\";")]
     private static partial Regex ConstantValue();
+
+    [GeneratedRegex("public const string (?<name>\\w+) = \"(?<value>[^\"]*)\";")]
+    private static partial Regex TemplateKey();
 }
