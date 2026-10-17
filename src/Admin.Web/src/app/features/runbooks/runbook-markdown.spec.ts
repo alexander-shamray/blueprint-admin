@@ -1,4 +1,6 @@
-import { blocks, inline } from './runbook-markdown';
+import { ListItem, blocks, inline } from './runbook-markdown';
+
+const text = (item: ListItem): string => item.spans.map((s) => s.text).join('');
 
 describe('runbook markdown', () => {
   it('reads code, strong and a link as spans, keeping the link words and dropping its target', () => {
@@ -28,9 +30,20 @@ describe('runbook markdown', () => {
     const result = blocks(['- first', '  continued', '- second', '', '1. one', '2. two'].join('\n'));
 
     expect(result.map((b) => b.kind)).toEqual(['list', 'list']);
-    const [bullets, numbers] = result as { kind: 'list'; items: { text: string }[][] }[];
-    expect(bullets.items.map((i) => i.map((s) => s.text).join(''))).toEqual(['first continued', 'second']);
-    expect(numbers.items.map((i) => i.map((s) => s.text).join(''))).toEqual(['one', 'two']);
+    const [bullets, numbers] = result as { kind: 'list'; items: ListItem[] }[];
+    expect(bullets.items.map(text)).toEqual(['first continued', 'second']);
+    expect(numbers.items.map(text)).toEqual(['one', 'two']);
+  });
+
+  it('keeps an indented item under the item before it, to any depth, and returns to the outer list after it', () => {
+    const result = blocks(['1. drain', '   - check `a`', '   - check `b`', '     - deeper', '2. restore', '   continued'].join('\n'));
+
+    expect(result).toHaveLength(1);
+    const [list] = result as { kind: 'list'; items: ListItem[] }[];
+    expect(list.items.map(text)).toEqual(['drain', 'restore continued']);
+    expect(list.items[0].children.map(text)).toEqual(['check a', 'check b']);
+    expect(list.items[0].children[1].children.map(text)).toEqual(['deeper']);
+    expect(list.items[1].children).toEqual([]);
   });
 
   it('reads a pipe table into a header and rows, and a leading pipe line with no rule under it as a paragraph', () => {

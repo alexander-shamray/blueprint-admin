@@ -119,11 +119,7 @@
                 <p><app-runbook-spans [spans]="b.spans" /></p>
               }
               @case ('list') {
-                <ul>
-                  @for (item of b.items; track $index) {
-                    <li><app-runbook-spans [spans]="item" /></li>
-                  }
-                </ul>
+                <ng-container *ngTemplateOutlet="listItems; context: { $implicit: b.items }" />
               }
               @case ('code') {
                 <pre class="code" tabindex="0">{{ b.text }}</pre>
@@ -171,3 +167,16 @@
 } @else if (!loadError()) {
   <p>Listing the runbooks…</p>
 }
+
+<ng-template #listItems let-items>
+  <ul>
+    @for (item of items; track $index) {
+      <li>
+        <app-runbook-spans [spans]="item.spans" />
+        @if (item.children.length > 0) {
+          <ng-container *ngTemplateOutlet="listItems; context: { $implicit: item.children }" />
+        }
+      </li>
+    }
+  </ul>
+</ng-template>

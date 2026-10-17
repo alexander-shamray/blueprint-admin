@@ -4,6 +4,12 @@ export interface Span {
   text: string;
 }
 
+/** One item of a list, with the items indented under it. */
+export interface ListItem {
+  spans: Span[];
+  children: ListItem[];
+}
+
 /**
  * The blocks of the backend's runbooks, which use headings, paragraphs, lists, fenced commands and pipe tables and nothing
  * else. Rendered by the template as elements and never as HTML, so a runbook cannot put markup on the page.
@@ -11,7 +17,7 @@ export interface Span {
 export type Block =
   | { kind: 'heading'; level: number; spans: Span[] }
   | { kind: 'paragraph'; spans: Span[] }
-  | { kind: 'list'; items: Span[][] }
+  | { kind: 'list'; items: ListItem[] }
   | { kind: 'code'; text: string }
   | { kind: 'table'; header: Span[][]; rows: Span[][][] }
   | { kind: 'rule' };
@@ -38,6 +44,19 @@ export function inline(text: string): Span[] {
 function cells(line: string): string[] {
   const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
   return trimmed.split('|').map((c) => c.trim());
+}
+
+/** The items of a list, each under the nearest item before it that is indented less. */
+function nest(entries: { indent: number; text: string }[]): ListItem[] {
+  const root: ListItem[] = [];
+  const open: { indent: number; item: ListItem }[] = [];
+  for (const entry of entries) {
+    const item: ListItem = { spans: inline(entry.text), children: [] };
+    while (open.length > 0 && open[open.length - 1].indent >= entry.indent) open.pop();
+    (open.length > 0 ? open[open.length - 1].item.children : root).push(item);
+    open.push({ indent: entry.indent, item });
+  }
+  return root;
 }
 
 /** The runbook as blocks. A line that fits no block is a paragraph's, so nothing in the text is ever dropped. */
@@ -93,18 +112,19 @@ export function blocks(markdown: string): Block[] {
     const item = ITEM.exec(line);
     if (item) {
       endParagraph();
-      const items: string[] = [item[2]];
+      const entries: { indent: number; text: string }[] = [{ indent: item[1].length, text: item[2] }];
       for (; i + 1 < lines.length; i++) {
         const next = lines[i + 1];
-        if (ITEM.test(next) && !/^\s/.test(next)) {
-          items.push(ITEM.exec(next)![2]);
-        } else if (/^\s+\S/.test(next) && !ITEM.test(next)) {
-          items[items.length - 1] += ' ' + next.trim();
+        const nextItem = ITEM.exec(next);
+        if (nextItem) {
+          entries.push({ indent: nextItem[1].length, text: nextItem[2] });
+        } else if (/^\s+\S/.test(next)) {
+          entries[entries.length - 1].text += ' ' + next.trim();
         } else {
           break;
         }
       }
-      out.push({ kind: 'list', items: items.map(inline) });
+      out.push({ kind: 'list', items: nest(entries) });
       continue;
     }
 
