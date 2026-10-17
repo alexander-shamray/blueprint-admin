@@ -171,7 +171,7 @@ export const RESERVATION_POLL_MS = 1000;
 export const RESERVATION_WATCH_MS = 60_000;
 
 /** run-locally.md's carrier table: the postal code each outcome is scripted by. */
-const CARRIER_STEPS: readonly StepKey[] = ['publish', 'drain', 'stock', 'quote', 'order', 'confirmed', 'carrier', 'held'];
+const CARRIER_STEPS: readonly StepKey[] = ['publish', 'drain', 'stock', 'quote', 'order', 'confirmed', 'carrier', 'held', 'mail'];
 
 /** The host's `ScenarioControl` change ids (ids, not copies of what they do: the host's table owns that). */
 const SHORT_WAITS = 'short-waits';
@@ -259,27 +259,33 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
     title: 'Stock timeout',
     intro:
       "Shorten the saga's waits and stop Inventory, so nothing can answer the reservation; publish a product, order it, and read the order back until the saga's own stock wait has lapsed and ended it out of stock. Only that wait can have ended it. The stack is restored afterwards, whatever happens.",
-    steps: ['lease', 'publish', 'drain', 'order', 'out_of_stock', 'restore'],
+    steps: ['lease', 'publish', 'drain', 'order', 'out_of_stock', 'mail', 'restore'],
     lease: { changes: [SHORT_WAITS, STOP_INVENTORY], holdSeconds: 420 },
+    // Notifications is not Inventory: the cancel is mailed with Inventory stopped (read live, 2 of 2 runs).
+    mail: ['order-placed', 'order-cancelled'],
   },
   'payment-timeout': {
     title: 'Payment timeout',
     intro:
       "Shorten the saga's waits, publish a product at 10.09 (the payment simulator answers a total ending .09 after the adapter's own budget), stock it, order it, and read the order back until the saga's payment wait has lapsed and declined it. A .09 order holds Payments up while it waits, so run nothing else beside it. The stack is restored afterwards, whatever happens.",
-    steps: ['lease', 'publish', 'drain', 'stock', 'quote', 'order', 'declined', 'restore'],
+    steps: ['lease', 'publish', 'drain', 'stock', 'quote', 'order', 'declined', 'mail', 'restore'],
     amount: PAYMENT_WAIT_AMOUNT,
     onHand: STOCKED,
     lease: { changes: [SHORT_WAITS], holdSeconds: 360 },
+    // The saga compensates the lapsed payment wait as it does a declined payment (read live, 2 of 2 runs).
+    mail: ['order-placed', 'order-cancelled', 'payment-declined'],
   },
   'despatch-timeout': {
     title: 'Despatch timeout',
     intro:
       "Shorten the saga's waits, publish a product, stock it, and order it to the delivery postal code SIM-STRANGE, whose parcel is booked and never collected; read Ordering's log until the despatch wait has lapsed and it has flagged the order for review as not_despatched, and read the order back still confirmed. Nothing compensates it: a person owns it now. The stack is restored afterwards, whatever happens.",
-    steps: ['lease', 'publish', 'drain', 'stock', 'quote', 'order', 'confirmed', 'flagged', 'held', 'restore'],
+    steps: ['lease', 'publish', 'drain', 'stock', 'quote', 'order', 'confirmed', 'flagged', 'held', 'mail', 'restore'],
     onHand: STOCKED,
     postalCode: STRANGE_CODE,
     lease: { changes: [SHORT_WAITS], holdSeconds: 420 },
     review: { reason: 'not_despatched' },
+    // A review flag mails nothing: the order stays confirmed (read live, 2 of 2 runs).
+    mail: ['order-placed', 'order-confirmed'],
   },
   'release-timeout': {
     title: 'Release timeout',
@@ -297,6 +303,7 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
       'cancel',
       'cancelled',
       'flagged',
+      'mail',
       'restore',
     ],
     amount: PAYMENT_WAIT_AMOUNT,
@@ -304,6 +311,8 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
     lease: { changes: [SHORT_WAITS], holdSeconds: 420 },
     lateChange: STOP_INVENTORY,
     review: { reason: 'stock_not_released' },
+    // Cancelled before the held payment answered, so no confirmation (read live, 2 of 2 runs).
+    mail: ['order-placed', 'order-cancelled'],
   },
   'carrier-refused': carrierScript(
     'Carrier refuses the address',
@@ -345,6 +354,8 @@ function carrierScript(title: string, code: string, outcome: CarrierOutcome, saw
     onHand: STOCKED,
     postalCode: code,
     carrier: { code, outcome },
+    // Confirmed and never despatched, whatever the carrier did: read live, 10 of 10 runs across the four outcomes.
+    mail: ['order-placed', 'order-confirmed'],
   };
 }
 

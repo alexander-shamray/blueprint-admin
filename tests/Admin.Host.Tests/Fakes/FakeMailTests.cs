@@ -69,6 +69,61 @@ public sealed class FakeMailTests
         orders.Mail().Select(m => m.Template).Order().ShouldBe(["order-cancelled", "order-placed"]);
     }
 
+    [Theory]
+    [InlineData("SIM-REFUSED")]
+    [InlineData("SIM-DOWN")]
+    [InlineData("SIM-SLOW")]
+    [InlineData("SIM-STRANGE")]
+    public void An_order_to_a_carrier_code_sends_its_placing_and_its_confirmation_whatever_the_carrier_did(string code)
+    {
+        FakeOrders orders = new(time);
+        string product = orders.Publish(10m);
+        orders.Stock(product, 10);
+        orders.Place(product, code, Run);
+        time.Advance(FakeOrders.Step * 5);
+
+        orders.Mail().Select(m => m.Template).ShouldBe(["order-placed", "order-confirmed"]);
+    }
+
+    [Fact]
+    public void An_order_Inventory_cannot_answer_for_sends_its_placing_and_its_cancellation_when_the_stock_wait_lapses()
+    {
+        FakeOrders orders = new(time, new FakeStack { InventoryStopped = true, ShortWaits = true });
+        string product = orders.Publish(10m);
+        orders.Place(product, correlationId: Run);
+        time.Advance(FakeOrders.ShortStockWait * 2);
+
+        orders.Mail().Select(m => m.Template).Order().ShouldBe(["order-cancelled", "order-placed"]);
+    }
+
+    [Fact]
+    public void An_order_the_payment_wait_declines_sends_the_cancellation_and_the_decline_as_a_declined_payment_does()
+    {
+        FakeOrders orders = new(time, new FakeStack { ShortWaits = true });
+        string product = orders.Publish(10.09m);
+        orders.Stock(product, 10);
+        orders.Place(product, correlationId: Run);
+        time.Advance(FakeOrders.ShortPaymentWait * 2);
+
+        orders.Mail().Select(m => m.Template).Order().ShouldBe(["order-cancelled", "order-placed", "payment-declined"]);
+    }
+
+    [Fact]
+    public void A_held_payment_order_cancelled_before_the_wait_lapses_sends_no_confirmation_and_no_decline()
+    {
+        FakeStack stack = new() { ShortWaits = true };
+        FakeOrders orders = new(time, stack);
+        string product = orders.Publish(10.09m);
+        orders.Stock(product, 10);
+        string id = orders.Place(product, correlationId: Run);
+        time.Advance(FakeOrders.Step);
+        stack.InventoryStopped = true;
+        orders.Cancel(id);
+        time.Advance(FakeOrders.Step * 3);
+
+        orders.Mail().Select(m => m.Template).Order().ShouldBe(["order-cancelled", "order-placed"]);
+    }
+
     [Fact]
     public void An_order_placed_under_no_scenario_id_sends_nothing_so_the_recorded_sink_stays_as_recorded()
     {

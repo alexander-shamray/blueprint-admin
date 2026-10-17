@@ -307,21 +307,23 @@ for (const [script, code, saw] of [
     await page.getByRole('button', { name: 'Run' }).click();
 
     const steps = page.locator('ol.steps li.step');
-    await expect(steps).toHaveCount(8);
-    await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(8, { timeout: 60_000 });
+    await expect(steps).toHaveCount(9);
+    await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(9, { timeout: 60_000 });
     await expect(steps.nth(4).locator('.detail')).toContainText(`to the delivery postal code ${code}`);
     await expect(steps.nth(6).locator('.request')).toHaveText('POST http://localhost:5191/__admin/requests/find');
     await expect(steps.nth(6).locator('.detail')).toContainText(saw);
     await expect(steps.nth(7).locator('.detail')).toContainText('The order read shows held at');
+    // Confirmed and never despatched, whatever the carrier did (read live, #235).
+    await expect(steps.nth(8).locator('.detail')).toContainText('OrderPlaced (order-placed) ×1, OrderConfirmed (order-confirmed) ×1');
   });
 }
 
 // The timeout scripts hold a lease (spec §5.3). The fake stack remembers what it did (FakeStack): with Inventory stopped an
 // order ends out of stock only when the saga's stock wait lapses, and a total ending .09 ends declined by the payment wait,
 // each a few seconds with the short waits and minutes without. Every run ends with the lease restored.
-for (const [script, ended, steps] of [
-  ['stock-timeout', 'out_of_stock', 6],
-  ['payment-timeout', 'declined', 8],
+for (const [script, ended, steps, mailed] of [
+  ['stock-timeout', 'out_of_stock', 7, 'OrderPlaced (order-placed) ×1, OrderCancelled (order-cancelled) ×1'],
+  ['payment-timeout', 'declined', 9, 'OrderPlaced (order-placed) ×1, PaymentDeclined (payment-declined) ×1, OrderCancelled (order-cancelled) ×1'],
 ] as const) {
   test(`the ${script} script holds its lease, reads the order back ${ended}, and restores the stack`, async ({ page, request }) => {
     await page.goto('/scenario');
@@ -334,7 +336,9 @@ for (const [script, ended, steps] of [
     await expect(list).toHaveCount(steps);
     await expect(list.locator('.state', { hasText: '[ok]' })).toHaveCount(steps, { timeout: 60_000 });
     await expect(list.first().locator('.detail')).toContainText('Held:');
-    await expect(list.nth(steps - 2).locator('.detail')).toContainText(`The order read shows ${ended} at`);
+    await expect(list.nth(steps - 3).locator('.detail')).toContainText(`The order read shows ${ended} at`);
+    // The mail step runs before the restore, so the stack is put back whatever the sink says.
+    await expect(list.nth(steps - 2).locator('.detail')).toContainText(mailed);
     await expect(list.last().locator('.detail')).toHaveText('The stack is as the run found it.');
 
     const state = await (await request.get('/api/stack/lease')).json();
@@ -352,11 +356,12 @@ test('the despatch-timeout script reads the review Ordering raised, finds the or
   await page.getByRole('button', { name: 'Run' }).click();
 
   const list = page.locator('ol.steps li.step');
-  await expect(list).toHaveCount(10);
-  await expect(list.locator('.state', { hasText: '[ok]' })).toHaveCount(10, { timeout: 60_000 });
+  await expect(list).toHaveCount(11);
+  await expect(list.locator('.state', { hasText: '[ok]' })).toHaveCount(11, { timeout: 60_000 });
   await expect(list.nth(7).locator('.request')).toHaveText(/^GET \/api\/review\/[0-9a-f-]{36}$/);
   await expect(list.nth(7).locator('.detail')).toContainText('flagged for review: not_despatched');
   await expect(list.nth(8).locator('.detail')).toContainText('The order read shows held at');
+  await expect(list.nth(9).locator('.detail')).toContainText('OrderPlaced (order-placed) ×1, OrderConfirmed (order-confirmed) ×1');
   await expect(list.last().locator('.detail')).toHaveText('The stack is as the run found it.');
 
   const state = await (await request.get('/api/stack/lease')).json();
@@ -373,11 +378,12 @@ test('the release-timeout script stops Inventory once the stock is reserved, can
   await page.getByRole('button', { name: 'Run' }).click();
 
   const list = page.locator('ol.steps li.step');
-  await expect(list).toHaveCount(12);
-  await expect(list.locator('.state', { hasText: '[ok]' })).toHaveCount(12, { timeout: 60_000 });
+  await expect(list).toHaveCount(13);
+  await expect(list.locator('.state', { hasText: '[ok]' })).toHaveCount(13, { timeout: 60_000 });
   await expect(list.nth(6).locator('.detail')).toContainText('Reserved');
   await expect(list.nth(9).locator('.detail')).toContainText('The order read shows cancelled at');
   await expect(list.nth(10).locator('.detail')).toContainText('flagged for review: stock_not_released');
+  await expect(list.nth(11).locator('.detail')).toContainText('OrderPlaced (order-placed) ×1, OrderCancelled (order-cancelled) ×1');
   await expect(list.last().locator('.detail')).toHaveText('The stack is as the run found it.');
 
   const state = await (await request.get('/api/stack/lease')).json();
