@@ -18,7 +18,7 @@ test('a runbook is caused, watched firing beside its text, and undone', async ({
   await expect(detail.getByRole('button', { name: 'Confirm: cause OutboxGrowth (outage)' })).toBeVisible();
   await detail.getByRole('button', { name: 'Confirm: cause OutboxGrowth (outage)' }).click();
 
-  const log = detail.getByRole('log', { name: 'Job output' });
+  const log = page.getByRole('log', { name: 'Job output' });
   await expect(log).toContainText('game day: cause OK');
   await expect(log).toContainText('exited 0');
   await expect(detail.locator('td.state')).toHaveText('[firing]');
@@ -39,7 +39,7 @@ test('a cause that deletes data is not offered until the runbook name is typed',
   await expect(cause).toBeEnabled();
   await cause.click();
 
-  await expect(detail.getByRole('log', { name: 'Job output' })).toContainText('game day: cause OK');
+  await expect(page.getByRole('log', { name: 'Job output' })).toContainText('game day: cause OK');
   await expect(detail.locator('td.state')).toHaveText('[firing]');
 
   await detail.getByRole('button', { name: 'Undo' }).click();

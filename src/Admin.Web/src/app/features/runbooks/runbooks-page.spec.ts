@@ -239,6 +239,22 @@ describe('RunbooksPage', () => {
     expect(el(fixture).querySelector('p.error')?.textContent).toContain('still running');
   });
 
+  it("keeps a running job's output, named for its runbook, when another runbook is chosen", () => {
+    const fixture = render();
+    open(fixture, 'error-queue');
+    button(fixture, 'button.cause').click();
+    fixture.detectChanges();
+
+    open(fixture, 'stuck-saga');
+
+    expect(el(fixture).querySelector('section.job')?.textContent).toContain('cause of ErrorQueueDepth (error-queue)');
+    expect(el(fixture).querySelector('app-output-pane')).not.toBeNull();
+
+    fixture.componentInstance.jobEnded();
+    open(fixture, 'error-queue');
+    expect(button(fixture, 'button.cause').disabled).toBe(false);
+  });
+
   it('offers a runbook with no script nothing to press, and says why', () => {
     const fixture = render();
     open(fixture, 'stuck-saga');
