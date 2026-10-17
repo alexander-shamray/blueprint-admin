@@ -72,20 +72,22 @@ test('the cancel script cancels the placed order and reads it back cancelled', a
   await page.getByRole('button', { name: 'Run' }).click();
 
   const steps = page.locator('ol.steps li.step');
-  await expect(steps).toHaveCount(7);
-  await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(7, WATCH);
+  await expect(steps).toHaveCount(8);
+  await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(8, WATCH);
   await expect(steps.nth(5).locator('.status')).toHaveText('204');
   await expect(steps.nth(5).locator('.request')).toHaveText(
     /^POST http:\/\/localhost:5000\/api\/v1\/orders\/[0-9a-f-]{36}\/cancel$/,
   );
   await expect(steps.nth(6).locator('.detail')).toContainText('The order read shows cancelled at');
+  // Cancelled before the confirmation, so none is mailed (FakeOrders.Mail); read the same from the live stack.
+  await expect(steps.nth(7).locator('.detail')).toContainText('OrderPlaced (order-placed) ×1, OrderCancelled (order-cancelled) ×1');
 });
 
 // The fake scripts the end from the request, as the platform does from run-locally.md's cause
 // (FakeOrders.EndOf): a price ending .01 is declined, stock never set or below one is out of stock, a second after the place.
-for (const [script, ended, stock] of [
-  ['declined', 'declined', 'set to 10'],
-  ['out-of-stock', 'out_of_stock', 'set to 0'],
+for (const [script, ended, stock, mailed] of [
+  ['declined', 'declined', 'set to 10', ['OrderPlaced (order-placed) ×1', 'OrderCancelled (order-cancelled) ×1', 'PaymentDeclined (payment-declined) ×1']],
+  ['out-of-stock', 'out_of_stock', 'set to 0', ['OrderPlaced (order-placed) ×1', 'OrderCancelled (order-cancelled) ×1']],
 ] as const) {
   test(`the ${script} script sets its cause and reads the order back ${ended}`, async ({ page }) => {
     await page.goto('/scenario');
@@ -94,13 +96,15 @@ for (const [script, ended, stock] of [
     await page.getByRole('button', { name: 'Run' }).click();
 
     const steps = page.locator('ol.steps li.step');
-    await expect(steps).toHaveCount(6);
-    await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(6, WATCH);
+    await expect(steps).toHaveCount(7);
+    await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(7, WATCH);
     await expect(steps.nth(2).locator('.request')).toHaveText(
       /^PUT http:\/\/localhost:5000\/api\/v1\/inventory\/stock\/[0-9a-f-]{36}$/,
     );
     await expect(steps.nth(2).locator('.detail')).toContainText(stock);
     await expect(steps.nth(5).locator('.detail')).toContainText(`The order read shows ${ended} at`);
+    // The cancellation and the decline land in the same instant, so the order they are listed in is not asserted.
+    for (const counted of mailed) await expect(steps.nth(6).locator('.detail')).toContainText(counted);
   });
 }
 

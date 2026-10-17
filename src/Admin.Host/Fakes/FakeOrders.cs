@@ -622,9 +622,10 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
 
     /// <summary>
     /// The mail the sink holds for the Scenario's orders by now, oldest first: one message for each event an order has raised, as
-    /// Notifications sends them (blueprint-backend <c>Intake/*Handler</c>), each carrying the correlation id of the request that
-    /// placed the order. Only an order placed under a <see cref="MailCorrelationPrefix"/> id sends any, so the recorded sink the
-    /// Mail screen reads stays four messages for every other caller. No message is ever doubled: a redelivery is not modelled.
+    /// Notifications sends them (blueprint-backend <c>Intake/*Handler</c>), each carrying the order's own id as its correlation
+    /// id, which is what Notifications stamps (its integration events' <c>CorrelationId</c> is a <c>Guid</c>, so the Scenario's
+    /// own id never reaches the mail). Only an order placed under a <see cref="MailCorrelationPrefix"/> id sends any, so the
+    /// recorded sink the Mail screen reads stays four messages for every other caller. No message is ever doubled: a redelivery is not modelled.
     /// </summary>
     internal IReadOnlyList<FakeMail> Mail()
     {
@@ -640,11 +641,15 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
         foreach ((string orderId, Placed order) in orders)
         {
             (DateTimeOffset? confirmed, DateTimeOffset? dispatched, DateTimeOffset? delivered, DateTimeOffset? cancelled, string status) = Moments(order);
-            string correlation = order.CorrelationId!;
+            string correlation = orderId;
 
             mail.Add(Message(orderId, "order-placed", order.At, correlation));
 
-            if (confirmed is { } c)
+            // The live stack takes a cancel asked within a step of the place before the saga confirms (14 of 14 runs mailed no
+            // confirmation), though the fake's status read still shows the confirmed moment between the two.
+            bool cancelledFirst = order.CancelAskedAt is { } asked && asked < order.At + Step;
+
+            if (confirmed is { } c && !cancelledFirst)
             {
                 mail.Add(Message(orderId, "order-confirmed", c, correlation));
             }
@@ -661,7 +666,13 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
 
             if (cancelled is { } x)
             {
-                mail.Add(Message(orderId, status == "declined" ? "payment-declined" : "order-cancelled", x, correlation));
+                // A declined payment is compensated by cancelling the order, and Notifications mails both events.
+                mail.Add(Message(orderId, "order-cancelled", x, correlation));
+
+                if (status == "declined")
+                {
+                    mail.Add(Message(orderId, "payment-declined", x, correlation));
+                }
             }
         }
 

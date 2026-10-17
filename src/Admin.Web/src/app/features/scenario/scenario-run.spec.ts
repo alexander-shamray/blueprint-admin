@@ -1055,16 +1055,18 @@ describe('the mail count', () => {
     };
   }
 
-  const placed = (event = EVENT): [string, string] => [`${event}.order-placed@commerce.test`, 'scenario-r1-order'];
-  const confirmed = (event = '1'.repeat(32)): [string, string] => [`${event}.order-confirmed@commerce.test`, 'scenario-r1-order'];
+  const ORDER = '01a14a4e-0d03-7adf-b1f6-2ba62a99f00a';
+  const OTHER_ORDER = '01a14a4f-16d8-7a5c-9d1e-3b0a8c2f4e11';
+  const placed = (event = EVENT): [string, string] => [`${event}.order-placed@commerce.test`, ORDER];
+  const confirmed = (event = '1'.repeat(32)): [string, string] => [`${event}.order-confirmed@commerce.test`, ORDER];
 
   it('names the event a template answers, and a key it does not know by itself', () => {
     expect(mailEvent('shipment-delivered')).toBe('ShipmentDelivered');
     expect(mailEvent('newsletter')).toBe('newsletter');
   });
 
-  it("counts the run's messages by the event in each Message-ID, and not another run's", () => {
-    const tally = tallyMail(mail([['x.order-placed@commerce.test', 'scenario-r2-order'], ['y.order-placed@commerce.test', null], confirmed(), placed(), placed()]), 'r1');
+  it("counts the order's messages by the event in each Message-ID, and not another order's", () => {
+    const tally = tallyMail(mail([['x.order-placed@commerce.test', OTHER_ORDER], ['y.order-placed@commerce.test', null], confirmed(), placed(), placed()]), ORDER);
 
     expect(tally.map((t) => [t.event, t.messages])).toEqual([
       ['OrderPlaced', 2],
@@ -1073,13 +1075,13 @@ describe('the mail count', () => {
   });
 
   it('counts a Message-ID it cannot read under the whole id, with no event', () => {
-    expect(tallyMail(mail([['odd@commerce.test', 'scenario-r1-order']]), 'r1')).toEqual([
+    expect(tallyMail(mail([['odd@commerce.test', ORDER]]), ORDER)).toEqual([
       { event: '', template: '', eventId: 'odd', messages: 1 },
     ]);
   });
 
   it('reaches on one message for each expected event, saying the count of each', () => {
-    const v = mailVerdict(mail([confirmed(), placed()]), 'r1', EXPECTED);
+    const v = mailVerdict(mail([confirmed(), placed()]), ORDER, EXPECTED);
 
     expect(v).toEqual({
       kind: 'reached',
@@ -1088,15 +1090,15 @@ describe('the mail count', () => {
   });
 
   it('waits, naming what is missing, while the send worker has not sent it', () => {
-    expect(mailVerdict(mail([placed()]), 'r1', EXPECTED)).toEqual({
+    expect(mailVerdict(mail([placed()]), ORDER, EXPECTED)).toEqual({
       kind: 'waiting',
       detail: 'Not sent yet: OrderConfirmed (order-confirmed). Counted: OrderPlaced (order-placed) ×1.',
     });
-    expect(mailVerdict(mail([]), 'r1', EXPECTED)).toMatchObject({ kind: 'waiting', detail: expect.stringContaining('no message for this run yet') });
+    expect(mailVerdict(mail([]), ORDER, EXPECTED)).toMatchObject({ kind: 'waiting', detail: expect.stringContaining('no message for this run yet') });
   });
 
   it('fails a second message for one event as two, which cannot be read as success', () => {
-    const v = mailVerdict(mail([confirmed(), placed(), placed()]), 'r1', EXPECTED);
+    const v = mailVerdict(mail([confirmed(), placed(), placed()]), ORDER, EXPECTED);
 
     expect(v).toEqual({
       kind: 'failed',
@@ -1105,21 +1107,36 @@ describe('the mail count', () => {
   });
 
   it('fails a message for an event the script does not expect, and a sink that cannot be read', () => {
-    const extra: [string, string] = [`${'2'.repeat(32)}.order-cancelled@commerce.test`, 'scenario-r1-order'];
+    const extra: [string, string] = [`${'2'.repeat(32)}.order-cancelled@commerce.test`, ORDER];
 
-    expect(mailVerdict(mail([placed(), confirmed(), extra]), 'r1', EXPECTED)).toMatchObject({
+    expect(mailVerdict(mail([placed(), confirmed(), extra]), ORDER, EXPECTED)).toMatchObject({
       kind: 'failed',
       reason: expect.stringContaining('does not expect: OrderCancelled (order-cancelled)'),
     });
-    expect(mailVerdict(mail([], { reachable: false, error: 'refused' }), 'r1', EXPECTED)).toEqual({
+    expect(mailVerdict(mail([], { reachable: false, error: 'refused' }), ORDER, EXPECTED)).toEqual({
       kind: 'failed',
       reason: 'The mail sink could not be read: refused.',
     });
   });
 
-  it('is asked of the deliver script alone, for the four events its order raises', () => {
+  it("matches the order's id however the sink spells its case, and never the scenario id the request carried", () => {
+    const upper: [string, string] = [`${EVENT}.order-placed@commerce.test`, ORDER.toUpperCase()];
+    const carried: [string, string] = [`${EVENT}.order-placed@commerce.test`, 'scenario-r1-order'];
+
+    expect(tallyMail(mail([upper]), ORDER).map((t) => t.messages)).toEqual([1]);
+    expect(tallyMail(mail([carried]), ORDER)).toEqual([]);
+  });
+
+  it("is asked of the scripts whose order's mail was read live to be the same each run, for the events it raises", () => {
     expect(SCRIPTS.deliver.mail).toEqual(['order-placed', 'order-confirmed', 'shipment-dispatched', 'shipment-delivered']);
-    expect(Object.values(SCRIPTS).filter((s) => s.mail).length).toBe(1);
+    expect(SCRIPTS.cancel.mail).toEqual(['order-placed', 'order-cancelled']);
+    expect(SCRIPTS['out-of-stock'].mail).toEqual(['order-placed', 'order-cancelled']);
+    expect(SCRIPTS.declined.mail).toEqual(['order-placed', 'order-cancelled', 'payment-declined']);
+    expect(Object.values(SCRIPTS).filter((s) => s.mail).length).toBe(4);
     expect(roleOf('mail')).toBeNull();
+  });
+
+  it('puts the mail step last in each script that asks for it', () => {
+    for (const script of Object.values(SCRIPTS).filter((s) => s.mail)) expect(script.steps.at(-1)).toBe('mail');
   });
 });

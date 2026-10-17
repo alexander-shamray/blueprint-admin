@@ -208,16 +208,20 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
     title: 'Order and cancel',
     intro:
       'Publish a product, wait for ordering-catalog-events to drain, set its stock on hand, quote a basket holding it, order it, cancel the order, and read it back until the platform says it is cancelled.',
-    steps: ['publish', 'drain', 'stock', 'quote', 'order', 'cancel', 'cancelled'],
+    steps: ['publish', 'drain', 'stock', 'quote', 'order', 'cancel', 'cancelled', 'mail'],
     onHand: STOCKED,
+    // The cancel is asked a fraction of a second after the place, long before the saga confirms: no confirmation is mailed.
+    mail: ['order-placed', 'order-cancelled'],
   },
   declined: {
     title: 'Payment declined',
     intro:
       'Publish a product at 10.01, because the payment simulator declines an amount whose minor units are .01, stock it, order it, and read the order back until the saga says it was declined.',
-    steps: ['publish', 'drain', 'stock', 'quote', 'order', 'declined'],
+    steps: ['publish', 'drain', 'stock', 'quote', 'order', 'declined', 'mail'],
     amount: DECLINED_AMOUNT,
     onHand: STOCKED,
+    // The saga compensates a declined payment by cancelling the order, so Notifications mails both events.
+    mail: ['order-placed', 'order-cancelled', 'payment-declined'],
   },
   // A script of its own, not two steps woven into the order scripts: the store is not the saga, and an order script
   // that failed on a broken store would hide the saga regression it exists to find.
@@ -231,8 +235,9 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
     title: 'Reservation failed',
     intro:
       'Publish a product, set its stock on hand to 0, order it, and read the order back until the saga says it is out of stock.',
-    steps: ['publish', 'drain', 'stock', 'quote', 'order', 'out_of_stock'],
+    steps: ['publish', 'drain', 'stock', 'quote', 'order', 'out_of_stock', 'mail'],
     onHand: 0,
+    mail: ['order-placed', 'order-cancelled'],
   },
   'in-transit': {
     title: 'Parcel collected, never delivered',
@@ -682,18 +687,19 @@ export interface MailTally {
 }
 
 /**
- * The run's messages in the sink, counted by the event each answers. A message is the run's when its `X-Correlation-Id`
- * begins with `scenario-<run>-`, the prefix every step's id has (`stepCorrelationId`); its event is read from the
+ * The order's messages in the sink, counted by the event each answers. A message is the order's when its `X-Correlation-Id`
+ * is the order's id: Notifications stamps the header from the integration event's `CorrelationId`, a `Guid` the order's own
+ * id fills, so the `scenario-<run>-<step>` id the console sends never reaches the mail (read live, 2026-10-17). Its event is read from the
  * `Message-ID`, `<event id>.<template key>@<domain>`, which Notifications derives from the event's id so that a redelivery
  * that sends twice sends the same id twice. One that does not read that way is counted under its whole id. The tallies come
  * oldest first.
  */
-export function tallyMail(view: MailListView, run: string): MailTally[] {
-  const prefix = `scenario-${run}-`;
+export function tallyMail(view: MailListView, orderId: string): MailTally[] {
+  const wanted = orderId.toLowerCase();
   const tallies = new Map<string, MailTally>();
   // The sink lists newest first; the count is told oldest first, the order the events happened in.
   for (const m of [...view.messages].reverse()) {
-    if (!m.correlationId?.startsWith(prefix)) continue;
+    if (m.correlationId?.toLowerCase() !== wanted) continue;
     const local = m.messageId.split('@')[0];
     const dot = local.indexOf('.');
     const eventId = dot < 0 ? local : local.slice(0, dot);
@@ -717,12 +723,12 @@ export type MailVerdict =
  * message for an event the script does not expect fails the step too. Missing ones are waited out, since the send worker is
  * asynchronous. A sink that cannot be read fails it: it never reads as a run that sent nothing.
  */
-export function mailVerdict(view: MailListView, run: string, expected: readonly string[]): MailVerdict {
+export function mailVerdict(view: MailListView, orderId: string, expected: readonly string[]): MailVerdict {
   if (!view.reachable) {
     return { kind: 'failed', reason: `The mail sink could not be read: ${view.error ?? 'no reason given'}.` };
   }
 
-  const tallies = tallyMail(view, run);
+  const tallies = tallyMail(view, orderId);
   const counts = tallies.map((t) => `${t.event} (${t.template}) ×${t.messages}`);
   const said = counts.length === 0 ? 'no message for this run yet' : counts.join(', ');
 
