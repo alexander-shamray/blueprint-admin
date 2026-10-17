@@ -25,23 +25,48 @@ public sealed class RunLocallyDriftTests
         { "Stock for a product", RunLocallyExamples.For("SetOnHand")! },
         { "Cancel (", RunLocallyExamples.For("CancelOrder")! },
         { "The log keeps every request", RunLocallyExamples.CarrierBookings },
-        { "And the polls of one script's parcel feed", RunLocallyExamples.CarrierFeedPolls },
     };
 
     [Theory]
     [MemberData(nameof(Bodies))]
     public void The_example_body_is_the_one_run_locally_sends(string heading, string example)
     {
+        JsonNode sent = Sent(File.ReadAllText(Backend.RunLocally), heading);
+
+        JsonNode.DeepEquals(sent, JsonNode.Parse(example)).ShouldBeTrue($"{heading}\nrun-locally.md: {sent.ToJsonString()}\nexample: {JsonNode.Parse(example)!.ToJsonString()}");
+    }
+
+    /// <summary>
+    /// The feed read is the one body whose pattern the document builds in a variable first
+    /// (<c>$feed = "/v1/shipments/crr_SIM-STRANGE-$orderId/events"</c>), which the reader can only call a variable. So the
+    /// body is held with the pattern taken from the example, and the pattern is held as that line: the example's
+    /// <c>{orderId}</c> is the document's <c>$orderId</c>.
+    /// </summary>
+    [Fact]
+    public void The_feed_read_is_the_one_run_locally_sends_for_the_order_it_placed()
+    {
+        const string heading = "And the polls of one script's parcel feed";
         string document = File.ReadAllText(Backend.RunLocally);
+        JsonNode sent = Sent(document, heading);
+        JsonNode example = JsonNode.Parse(RunLocallyExamples.CarrierFeedPolls)!;
+        string pattern = example["Path"]!["Matchers"]![0]!["Pattern"]!.GetValue<string>();
+
+        sent["Path"]!["Matchers"]![0]!["Pattern"] = pattern;
+
+        JsonNode.DeepEquals(sent, example).ShouldBeTrue($"{heading}\nrun-locally.md: {sent.ToJsonString()}\nexample: {example.ToJsonString()}");
+        document.ShouldContain($"$feed = \"{pattern.Replace("{orderId}", "$orderId", StringComparison.Ordinal)}\"");
+    }
+
+    /// <summary>The <c>-Body (@{ … })</c> hashtable run-locally.md sends under <paramref name="heading"/>, as JSON.</summary>
+    private static JsonNode Sent(string document, string heading)
+    {
         int at = document.IndexOf("\n" + heading, StringComparison.Ordinal);
         at.ShouldBeGreaterThanOrEqualTo(0, $"run-locally.md has no paragraph starting '{heading}'");
 
         int body = document.IndexOf("-Body (@{", at, StringComparison.Ordinal);
         body.ShouldBeGreaterThanOrEqualTo(0, $"'{heading}' sends no -Body hashtable");
 
-        JsonNode sent = JsonNode.Parse(new HashtableReader(document, body + "-Body (".Length).ReadValue())!;
-
-        JsonNode.DeepEquals(sent, JsonNode.Parse(example)).ShouldBeTrue($"{heading}\nrun-locally.md: {sent.ToJsonString()}\nexample: {JsonNode.Parse(example)!.ToJsonString()}");
+        return JsonNode.Parse(new HashtableReader(document, body + "-Body (".Length).ReadValue())!;
     }
 
     /// <summary>

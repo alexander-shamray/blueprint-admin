@@ -39,11 +39,15 @@ public static class RunLocallyExamples
         }
         """;
 
-    /// <summary>run-locally.md, the carrier simulator's "polls of one script's parcel feed": the feed of the <c>SIM-STRANGE</c> parcel.</summary>
+    /// <summary>
+    /// run-locally.md, the carrier simulator's "polls of one script's parcel feed": the feed of the <c>SIM-STRANGE</c> parcel
+    /// the order was booked, which is served at a path of its own order's (<c>crr_SIM-STRANGE-&lt;orderId&gt;</c>). The document
+    /// holds that path in <c>$feed</c>; <c>{orderId}</c> stands for it here and the Scenario fills it (<c>withFeedOrder</c>).
+    /// </summary>
     public const string CarrierFeedPolls = """
         {
           "Methods": [ "GET" ],
-          "Path": { "Matchers": [ { "Name": "ExactMatcher", "Pattern": "/v1/shipments/crr_SIM-STRANGE/events" } ] }
+          "Path": { "Matchers": [ { "Name": "ExactMatcher", "Pattern": "/v1/shipments/crr_SIM-STRANGE-{orderId}/events" } ] }
         }
         """;
 

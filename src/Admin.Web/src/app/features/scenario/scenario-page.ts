@@ -71,6 +71,7 @@ import {
   mailVerdict,
   isAlreadyShipped,
   withCarrierCode,
+  withFeedOrder,
   withField,
   withProductId,
   withShippingPostalCode,
@@ -467,7 +468,7 @@ export class ScenarioPage {
           if (!(await this.takeLease(script))) return;
           break;
         case 'carrier':
-          if (!(await this.carrierLog(script, operations))) return;
+          if (!(await this.carrierLog(script, operations, orderId))) return;
           break;
         case 'flagged':
           if (!(await this.reviewFlag(script, orderId))) return;
@@ -563,11 +564,12 @@ export class ScenarioPage {
 
   /**
    * Reads what the carrier saw of this order from the simulator's request log (run-locally.md), filtered by the simulator
-   * itself for the script's code, until the log shows the outcome the code scripts or the wait runs out. The simulator is
+   * itself for the script's code and this run's mark, and the strange feed for this order's own path, until the log shows
+   * the outcome the code scripts or the wait runs out. The simulator is
    * anonymous and untraced, so nothing is sent as the user and the step has no trace. A log cut short by the proxy's
    * cap, or an answer that is not a list of entries, fails the step: it never reads as a log with nothing in it.
    */
-  private async carrierLog(script: Script, operations: ScenarioOperations): Promise<boolean> {
+  private async carrierLog(script: Script, operations: ScenarioOperations, orderId: string): Promise<boolean> {
     const carrier = script.carrier;
     if (!carrier || this.destroyed) return false;
 
@@ -586,7 +588,7 @@ export class ScenarioPage {
       if (found === null) return false;
       let feed: CarrierEntry[] = [];
       if (carrier.outcome === 'strange' && polls) {
-        const read = await this.findInCarrierLog(key, polls, polls.exampleBody ?? '');
+        const read = await this.findInCarrierLog(key, polls, withFeedOrder(polls.exampleBody ?? '', orderId));
         if (read === null) return false;
         feed = read;
       }

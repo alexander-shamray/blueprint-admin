@@ -119,10 +119,11 @@ keeps a small amount of state in `FakeOrders`, written by hand:
   is flagged `not_despatched` a few seconds after the place (the real wait is 60 s with
   the override and three days without, which no watch outlasts). Every other Loki query
   answers as before.
-- **The carrier's request log.** `FakeOrders.CarrierLog(code, polls)` answers the
+- **The carrier's request log.** `FakeOrders.CarrierLog(code, polls, onlyOrder)` answers the
   simulator's `POST /__admin/requests/find` for the two filters the Scenario sends
-  (`FakeCarrier`): the bookings whose body names a code, and the polls of the
-  `SIM-STRANGE` parcel's feed. An order to one of the four codes is confirmed and
+  (`FakeCarrier`): the bookings whose body names a code, and the polls of one
+  order's `SIM-STRANGE` parcel feed, served at that order's own path as the
+  simulator now books it (blueprint-backend#1117). An order to one of the four codes is confirmed and
   stays so, and the log shows the shapes `run-locally.md` gives: `SIM-REFUSED`
   one booking, 422; `SIM-DOWN` repeated bookings, 503; `SIM-SLOW` repeated
   bookings of one shipment, 201; `SIM-STRANGE` one booking and then polls. The

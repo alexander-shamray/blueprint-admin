@@ -35,6 +35,7 @@ import {
   verdict,
   hasField,
   withCarrierCode,
+  withFeedOrder,
   withField,
   withProductId,
   withShippingPostalCode,
@@ -618,7 +619,7 @@ describe('the carrier log scripts', () => {
   const entry = (secondsAfter: number, status: number, shipmentId: string | null = 's1', method = 'POST'): CarrierEntry => ({
     at: placed + secondsAfter * 1000,
     method,
-    path: method === 'POST' ? '/v1/shipments' : '/v1/shipments/crr_SIM-STRANGE/events',
+    path: method === 'POST' ? '/v1/shipments' : '/v1/shipments/crr_SIM-STRANGE-o1/events',
     status,
     shipmentId,
   });
@@ -671,6 +672,15 @@ describe('the carrier log scripts', () => {
     ]);
     expect(JSON.parse(withCarrierCode(filter, 'SIM-SLOW')).Body.MatchOperator).toBeUndefined();
     expect(withCarrierCode('{"Methods":["GET"]}', 'SIM-SLOW', 'scenario-ab12cd34')).toBe('{"Methods":["GET"]}');
+  });
+
+  it('put the order in the feed filter\'s path and leave any other body as it was', () => {
+    const filter = '{"Methods":["GET"],"Path":{"Matchers":[{"Name":"ExactMatcher","Pattern":"/v1/shipments/crr_SIM-STRANGE-{orderId}/events"}]}}';
+
+    expect(JSON.parse(withFeedOrder(filter, 'ord-1')).Path.Matchers[0].Pattern).toBe('/v1/shipments/crr_SIM-STRANGE-ord-1/events');
+    expect(JSON.parse(withFeedOrder(filter, 'ord-1')).Methods).toEqual(['GET']);
+    expect(withFeedOrder('{"Methods":["GET"]}', 'ord-1')).toBe('{"Methods":["GET"]}');
+    expect(withFeedOrder('not json', 'ord-1')).toBe('not json');
   });
 
   it('read the simulator\'s entries, and nothing that is not a list of them', () => {

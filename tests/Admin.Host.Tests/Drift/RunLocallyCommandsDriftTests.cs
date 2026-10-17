@@ -73,6 +73,8 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
             "DeadLetterService mints a random password for each run and hands it to the tool as this variable",
         ["$c.redirectUris; '--- webOrigins ---'; $c.webOrigins -join ','"] =
             "the third line of the realm read, run with the two lines above it as one script (DeviceReads.RealmLines, held by DeviceReadsTests)",
+        ["$feed = \"/v1/shipments/crr_SIM-STRANGE-$orderId/events\""] =
+            "the path the feed read matches, which the Scenario fills with its own order's id (RunLocallyExamples.CarrierFeedPolls, held by RunLocallyDriftTests)",
         ["Remove-Item Env:DEAD_LETTERS_PASSWORD"] =
             "the variable is set on the tool's own process only (ProcessSpec.Environment), so it ends with that process",
     };

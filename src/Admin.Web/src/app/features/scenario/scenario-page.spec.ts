@@ -112,7 +112,7 @@ const catalog: ApiCatalogView = {
       id: 'carrier:FindFeedPolls',
       url: 'http://localhost:5191/__admin/requests/find',
       exampleBody:
-        '{"Methods":["GET"],"Path":{"Matchers":[{"Name":"ExactMatcher","Pattern":"/v1/shipments/crr_SIM-STRANGE/events"}]}}',
+        '{"Methods":["GET"],"Path":{"Matchers":[{"Name":"ExactMatcher","Pattern":"/v1/shipments/crr_SIM-STRANGE-{orderId}/events"}]}}',
     }),
   ],
 };
@@ -872,7 +872,7 @@ describe('ScenarioPage', () => {
       Request: {
         DateTime: new Date(Date.parse(placedAt) + secondsAfter * 1000).toISOString(),
         Method: method,
-        Path: method === 'POST' ? '/v1/shipments' : '/v1/shipments/crr_SIM-STRANGE/events',
+        Path: method === 'POST' ? '/v1/shipments' : `/v1/shipments/crr_SIM-STRANGE-${orderId}/events`,
         Body: method === 'POST' ? JSON.stringify({ shipmentId, address: { postalCode: 'x' } }) : null,
       },
       Response: { StatusCode: status },
@@ -946,6 +946,17 @@ describe('ScenarioPage', () => {
       expect(page.steps().map((s) => s.state)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok']);
       expect(page.steps()[6].detail).toBe('The carrier booked the parcel once (201) and its feed has been polled 2 times since.');
       expect(sent().filter((r) => r.url.endsWith('/__admin/requests/find')).map((r) => JSON.parse(r.body!).Methods[0])).toEqual(['POST', 'GET']);
+    });
+
+    it('asks for the feed of the order it placed, by that order\'s own path', async () => {
+      simulator(() => [logged(2, 201)], () => [logged(5, 200, 's1', 'GET'), logged(8, 200, 's1', 'GET')]);
+      const page = render().componentInstance;
+      page.pick('carrier-strange');
+
+      await page.run();
+
+      const feed = sent().find((r) => r.url.endsWith('/__admin/requests/find') && JSON.parse(r.body!).Methods[0] === 'GET')!;
+      expect(JSON.parse(feed.body!).Path.Matchers[0].Pattern).toBe(`/v1/shipments/crr_SIM-STRANGE-${orderId}/events`);
     });
 
     it('waits for the second attempt, saying what it has seen, then reaches the outcome', async () => {
