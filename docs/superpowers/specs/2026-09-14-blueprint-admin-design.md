@@ -432,7 +432,8 @@ here; the blocks are copied and held to the document word for word
   count are left as they are. Run is the confirmation; nothing is destroyed.
 - **FakePlatform.** Each block replays what a live run of it printed, and the
   run's block puts the fake strip on the signals recorded during that run for
-  a minute (`LoadRunRecordings`, `FakeStack.LoadWindow`).
+  a minute (`LoadRunRecordings`, `FakeStack.LoadWindow`), or until a Down,
+  which removes the container those samples live in (`FakeStack.Unload`).
 
 ### 5.4 FrontendSupervisor
 

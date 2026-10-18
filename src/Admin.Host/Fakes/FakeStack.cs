@@ -12,7 +12,7 @@ public sealed class FakeStack(TimeProvider? time = null)
     /// <summary>
     /// How long the strip reads the recording made under load once a fake load run's k6 block has run: long enough for the Stack
     /// screen's 15-second poll to read it more than once, short enough that a later test on the same host reads the idle
-    /// recording again. A host reused across Playwright runs (<c>reuseExistingServer</c>) inside the minute still reads the load.
+    /// recording again. A <c>down</c> ends it sooner (<see cref="Unload"/>).
     /// </summary>
     public static readonly TimeSpan LoadWindow = TimeSpan.FromMinutes(1);
 
@@ -28,6 +28,12 @@ public sealed class FakeStack(TimeProvider? time = null)
 
     /// <summary>A load run's k6 block ran: the strip reads the recording made under load until <see cref="LoadWindow"/> has passed.</summary>
     public void Load() => Interlocked.Exchange(ref loadedUntilTicks, (clock.GetUtcNow() + LoadWindow).UtcTicks);
+
+    /// <summary>
+    /// The stack came down: Compose removed the <c>grafana</c> container, whose Prometheus keeps its samples in the container
+    /// and in no volume (backend <c>deploy/compose/infrastructure.yml</c>), so the strip reads no load after the next Up.
+    /// </summary>
+    public void Unload() => Interlocked.Exchange(ref loadedUntilTicks, 0);
 
     public bool InventoryStopped
     {
