@@ -545,8 +545,8 @@ a `demo` token, rewrites each path onto the gateway (`/v1/catalog/...` becomes
 `/api/v1/catalog/...`), and merges the curated operations from §2.3. Each
 operation carries method, gateway path, path parameters, an example body (the
 one `run-locally.md` sends for that operation where there is one, otherwise
-placeholders built from the request schema, since the documents carry no
-examples), and the edge policy from a cited copy of the gateway's route table
+the document's own `example` on the request's media type, otherwise
+placeholders built from the request schema), and the edge policy from a cited copy of the gateway's route table
 (`Api/GatewayRoutes.cs`). The catalog is cached and reloaded on demand; when a
 service is down its operations are listed as unavailable rather than dropped.
 

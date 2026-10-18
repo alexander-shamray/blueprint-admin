@@ -86,6 +86,34 @@ public sealed class OpenApiReaderTests
         cancel.HasCommandId.ShouldBeFalse();
     }
 
+    // The recorded documents carry the media type's example where the backend declares one (WithRequestExample).
+    [Fact]
+    public void An_operation_without_a_run_locally_body_takes_the_documents_own_example()
+    {
+        ApiOperation price = Read("catalog", "openapi-catalog.json").Single(o => o.Name == "ChangePrice");
+        JsonElement body = JsonDocument.Parse(price.ExampleBody!).RootElement;
+        body.GetProperty("amount").GetDecimal().ShouldBe(54.9m);
+        body.GetProperty("currency").GetString().ShouldBe("EUR");
+        price.HasCommandId.ShouldBeTrue();
+
+        ApiOperation erasure = Read("privacy", "openapi-privacy.json").Single(o => o.Name == "RaiseErasureRequest");
+        JsonDocument.Parse(erasure.ExampleBody!).RootElement.GetProperty("subjectId").GetString().ShouldBe("0199b0c4-6f2e-7a31-8c5d-2e4f6a7b8c9d");
+        erasure.HasCommandId.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void A_media_types_example_wins_over_the_placeholder_its_schema_would_give()
+    {
+        const string Document = """
+        { "paths": { "/v1/things/": { "put": { "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "count": { "type": "integer" } } }, "example": { "count": 7 } } } } } } } }
+        """;
+        using JsonDocument document = JsonDocument.Parse(Document);
+
+        ApiOperation put = OpenApiReader.Read("catalog", document.RootElement, "http://localhost:5000").ShouldHaveSingleItem();
+
+        JsonDocument.Parse(put.ExampleBody!).RootElement.GetProperty("count").GetInt32().ShouldBe(7);
+    }
+
     [Fact]
     public void An_operation_without_a_run_locally_body_gets_a_synthesized_example()
     {
