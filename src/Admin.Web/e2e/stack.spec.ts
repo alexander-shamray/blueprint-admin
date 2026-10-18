@@ -118,29 +118,38 @@ test('reset needs the typed confirmation, then runs down -v, up and the readines
 
 // Last in the file: FakePlatformScripts replays each block of run-locally.md's load run as a live run printed it, and the
 // run's block puts FakeGrafana's strip on the signals recorded 150 s into that run for a minute (LoadRunRecordings,
-// FakeStack.LoadWindow), which the idle-strip test above would otherwise read. It ends on a Down, which removes the
-// container holding the samples (FakeStack.Unload), so a rerun on a reused host reads the idle strip as well.
-test('a load run runs the backend SLO run as one job, the strip beside it reads the load, and a Down ends it', async ({ page }) => {
-  test.setTimeout(45_000);
-  await page.goto('/stack');
-  const load = page.getByRole('region', { name: 'Load run' });
+// FakeStack.LoadWindow), which the idle-strip test above would otherwise read. The test ends on a Down, which removes the
+// container holding the samples (FakeStack.Unload), so a rerun on a reused host reads the idle strip as well; a run that
+// fails before that Down sends one after it, since a timeout skips the rest of the test.
+test.describe('the load run', () => {
+  test.afterEach(async ({ request }, testInfo) => {
+    if (testInfo.status !== testInfo.expectedStatus) {
+      await request.post('/api/stack/backend/down', { data: { wipeVolumes: false } });
+    }
+  });
 
-  await expect(load).toContainText('A local run is not a staging baseline and proves nothing about the SLO (§13.7).');
-  await expect(load.getByRole('button', { name: 'Stop load' })).toBeDisabled();
-  await load.getByRole('button', { name: 'Run load' }).click();
+  test('a load run runs the backend SLO run as one job, the strip beside it reads the load, and a Down ends it', async ({ page }) => {
+    test.setTimeout(45_000);
+    await page.goto('/stack');
+    const load = page.getByRole('region', { name: 'Load run' });
 
-  const output = page.locator('app-output-pane pre');
-  await expect(output).toContainText('token check: pass');
-  await expect(output).toContainText('k6 exit: 0');
-  await expect(output).toContainText('k6 exited 0: a pass');
-  await expect(load.locator('.load-run-status')).toHaveText(/exited 0/);
+    await expect(load).toContainText('A local run is not a staging baseline and proves nothing about the SLO (§13.7).');
+    await expect(load.getByRole('button', { name: 'Stop load' })).toBeDisabled();
+    await load.getByRole('button', { name: 'Run load' }).click();
 
-  // The strip reads on its own 15-second timer, so the load arrives at its next tick.
-  const gateway = page.getByRole('region', { name: 'Golden signals' }).locator('table.signals tbody tr').filter({ hasText: 'Gateway.Api' });
-  await expect(gateway.locator('td').nth(1)).toHaveText('2.3', { timeout: 20_000 });
+    const output = page.locator('app-output-pane pre');
+    await expect(output).toContainText('token check: pass');
+    await expect(output).toContainText('k6 exit: 0');
+    await expect(output).toContainText('k6 exited 0: a pass');
+    await expect(load.locator('.load-run-status')).toHaveText(/exited 0/);
 
-  await page.getByRole('button', { name: 'Down', exact: true }).click();
-  await expect(output).toContainText('Network commerce_default  Removed');
-  await page.reload();
-  await expect(gateway.locator('td').nth(1)).toHaveText('0.22');
+    // The strip reads on its own 15-second timer, so the load arrives at its next tick.
+    const gateway = page.getByRole('region', { name: 'Golden signals' }).locator('table.signals tbody tr').filter({ hasText: 'Gateway.Api' });
+    await expect(gateway.locator('td').nth(1)).toHaveText('2.3', { timeout: 20_000 });
+
+    await page.getByRole('button', { name: 'Down', exact: true }).click();
+    await expect(output).toContainText('Network commerce_default  Removed');
+    await page.reload();
+    await expect(gateway.locator('td').nth(1)).toHaveText('0.22');
+  });
 });
