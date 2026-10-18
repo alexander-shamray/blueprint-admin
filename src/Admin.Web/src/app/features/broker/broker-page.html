@@ -150,6 +150,30 @@
   }
 }
 
+<h2>Bindings</h2>
+@if (bindingsError(); as e) {
+  <p class="error" role="alert">The host did not answer: {{ e }}</p>
+}
+@if (bindings(); as b) {
+  @if (b.reachable) {
+    <table class="bindings">
+      <thead><tr><th>Source</th><th>Destination</th><th>Kind</th><th>Routing key</th></tr></thead>
+      <tbody>
+        @for (binding of b.bindings; track $index) {
+          <tr>
+            <td>{{ exchangeName(binding.source) }}</td>
+            <td>{{ binding.destination }}</td>
+            <td>{{ binding.destinationKind }}</td>
+            <td><code>{{ binding.routingKey }}</code></td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  } @else {
+    <p class="error" role="alert">The broker did not answer: {{ b.error }}</p>
+  }
+}
+
 <h2>Permissions</h2>
 @if (permissionsError(); as e) {
   <p class="error" role="alert">The host did not answer: {{ e }}</p>

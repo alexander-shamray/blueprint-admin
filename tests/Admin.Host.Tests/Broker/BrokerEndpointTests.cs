@@ -66,6 +66,20 @@ public sealed class BrokerEndpointTests : IClassFixture<AdminHostFactory>
         exchanges.ShouldContain(e => e.GetProperty("name").GetString() == "ordering-fulfilment-saga_delay" && e.GetProperty("type").GetString() == "x-delayed-message");
     }
 
+    // The two bindings run-locally.md names for Catalog's price changes reaching Ordering, both from fanout exchanges.
+    [Fact]
+    public async Task Bindings_lists_the_fake_brokers_bindings_with_the_two_run_locally_names()
+    {
+        JsonElement view = await client.GetFromJsonAsync<JsonElement>("/api/broker/bindings", TestContext.Current.CancellationToken);
+
+        JsonElement[] bindings = [.. view.GetProperty("bindings").EnumerateArray()];
+        bindings.Length.ShouldBe(102);
+        string[] rows = [.. bindings.Select(b =>
+            $"{b.GetProperty("source").GetString()} -> {b.GetProperty("destination").GetString()} ({b.GetProperty("destinationKind").GetString()}) '{b.GetProperty("routingKey").GetString()}'")];
+        rows.ShouldContain("Common.Contracts.Catalog.V1:PriceChanged -> ordering-catalog-events (exchange) ''");
+        rows.ShouldContain("ordering-catalog-events -> ordering-catalog-events (queue) ''");
+    }
+
     [Fact]
     public async Task Permissions_lists_each_service_user_the_broker_answered()
     {

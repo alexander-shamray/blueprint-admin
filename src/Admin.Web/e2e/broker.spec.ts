@@ -67,8 +67,9 @@ test('an error queue opens into its message, dry-runs a replay, then replays it 
 
 // Against the fake platform's recorded rabbitmqctl output (src/Admin.Host/Fakes/fixtures/rabbitmq-*.json):
 // twenty queues, an _error queue and a _skipped queue each holding a message, ordering-catalog-events empty; 56 exchanges;
-// a permission row per service user.
-test('the broker screen lists queues, exchanges and permissions', async ({ page }) => {
+// 102 bindings, among them run-locally.md's two for Catalog's price changes reaching Ordering; a permission row per
+// service user.
+test('the broker screen lists queues, exchanges, bindings and permissions', async ({ page }) => {
   await page.goto('/broker');
 
   await expect(page.locator('table.queues tbody tr')).toHaveCount(20);
@@ -82,6 +83,14 @@ test('the broker screen lists queues, exchanges and permissions', async ({ page 
   await expect(page.locator('app-drained-indicator')).toContainText('[drained] ordering-catalog-events');
   await expect(page.locator('table.exchanges tbody tr')).toHaveCount(56);
   await expect(page.locator('table.exchanges tbody tr', { hasText: 'ordering-fulfilment-saga_delay' })).toContainText('x-delayed-message');
+  const bindings = page.locator('table.bindings tbody tr');
+  await expect(bindings).toHaveCount(102);
+  await expect(bindings.filter({ hasText: 'Common.Contracts.Catalog.V1:PriceChanged' })).toHaveText(
+    /Common\.Contracts\.Catalog\.V1:PriceChanged\s+ordering-catalog-events\s+exchange/,
+  );
+  await expect(bindings.filter({ has: page.locator('td:first-child', { hasText: /^ordering-catalog-events$/ }) })).toHaveText(
+    /ordering-catalog-events\s+ordering-catalog-events\s+queue/,
+  );
   await expect(page.locator('table.permissions tbody tr')).toHaveCount(9);
 
   await page.getByRole('button', { name: 'Refresh' }).click();

@@ -61,7 +61,7 @@ routes are `Gateway.Api/appsettings.json`; health endpoints are mapped by
 | Stop and wipe | `... down -v`, backend. Destroys databases and broker state |
 | Backend status | `... ps --format json`, backend |
 | Backend logs | `... logs -f [service...]`, backend |
-| Broker inspection | `... exec rabbitmq rabbitmqctl list_queues name messages --formatter json` and the `list_exchanges name type`, `list_permissions` forms, backend |
+| Broker inspection | `... exec rabbitmq rabbitmqctl list_queues name messages --formatter json` and the `list_exchanges name type`, `list_bindings source_name source_kind destination_name destination_kind routing_key`, `list_permissions` forms, backend |
 | Stop and start the BFF | `... stop web-bff` and `... start web-bff`, backend; only around a projection rebuild |
 | Repair the BFF projection | `dotnet run --project tools/bff-replay`, backend, with the six connections `run-locally.md` sets as `$env:` lines |
 | Rebuild the BFF projection | `dotnet run --project tools/bff-replay -- --reset`, backend, between the stop and the start above. Deletes the projection |
@@ -457,9 +457,11 @@ the adb `reverse` it also lists changes the emulator's forwarding and is not run
 
 ### 5.5 Broker
 
-`BrokerService` runs the three `rabbitmqctl` forms from §2.1 with
+`BrokerService` runs the four `rabbitmqctl` forms from §2.1 with
 `--formatter json` through `ComposeService.Exec` and returns queues,
-exchanges and permissions. It marks queues whose name ends in `_error` or
+exchanges, bindings and permissions. A binding is an exchange (empty for the
+default exchange) bound to a queue or to another exchange, with its routing
+key, sorted by source. It marks queues whose name ends in `_error` or
 `_skipped` (`ParkedQueues`, a cited copy of the dead-letter tool's suffixes
 and the runbook that owns each kind), links the runbook of one that holds a
 message, names each queue's consumer from `PlatformQueues.Table` (a cited
@@ -990,7 +992,7 @@ and names the active option through `aria-activedescendant`.
 |---|---|---|
 | **Stack** | the workstation doctor's rows above the buttons, read when the screen opens; one row per Compose service with state, health and port; the frontend job; a reachability strip; the load run's state beside the golden signals (§5.3); quick links to the client, Grafana, Keycloak | Check the workstation again; Up, Down, Down and wipe, Reset (both behind one typed confirmation), Start and Stop frontend; Run load and Stop load; opens the job's output pane |
 | **Logs** | a follow stream with service filter, text search and correlation-id highlight | start, stop (the host's follow job too, as does leaving the screen), clear |
-| **Broker** | queues with depth, `_error` and `_skipped` queues marked with the runbook of one that holds a message, a BFF projection panel (what the rebuild tool cannot restore, the depth of `bff-order-events`), exchanges, permissions; a drained indicator for `ordering-catalog-events`; an opened parked queue's messages, each with its fault, type, body and correlation id as a link into Trace | refresh, auto-refresh of all three; Repair, and Rebuild behind a typed confirmation, each opening the job's output pane and reading the queues again when it starts and when it ends; Open on a parked queue that holds a message; per message a dry-run Replay or Discard, then, once a dry run of that message and verb is started, that one for real behind a typed confirmation, each opening the job's output pane |
+| **Broker** | queues with depth, `_error` and `_skipped` queues marked with the runbook of one that holds a message, a BFF projection panel (what the rebuild tool cannot restore, the depth of `bff-order-events`), exchanges, bindings, permissions; a drained indicator for `ordering-catalog-events`; an opened parked queue's messages, each with its fault, type, body and correlation id as a link into Trace | refresh, auto-refresh of all four; Repair, and Rebuild behind a typed confirmation, each opening the job's output pane and reading the queues again when it starts and when it ends; Open on a parked queue that holds a message; per message a dry-run Replay or Discard, then, once a dry run of that message and verb is started, that one for real behind a typed confirmation, each opening the job's output pane |
 | **Erasure** | one row per holder of an erasure request (the backend's `Privacy__Responders__n`), each answered, waiting or overdue as the request reads, with its `*-privacy` queue's depth and `privacy-completions`' beside them; the request's status, dates and reissue count; an answer from outside the request's set marked not counted; the overdue runbook's link | Raise a request for a subject id, as the `privacy` login; read one by id, or every 3 s until it closes; Reissue an overdue one. Nothing here grants the role: the realm's owner does (§13) |
 | **Mail** | §5.12's list, newest first: when, to whom, the subject, and the correlation id as a link into Trace, or `none`; how many the sink holds when that is more than listed; a line saying so when no message carries a correlation id; an opened message's addresses, date and body | Refresh; filter by correlation id (also `?correlationId=`), leaving one order's messages; Open a message; follow its Trace link; open the sink's own UI, where clearing is done |
 | **API** | operation tree on the left, each source with what its document changed since the kept baseline; request editor (path params, headers, body pre-filled from the schema example, `commandId` generated per send) and identity picker with its token clock (§5.6); response pane with status, timing, headers, body; a history list | Send; accept a changed document as the new baseline; "Trace this call" opens the Trace screen with the response's correlation id |

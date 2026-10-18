@@ -2,15 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { Subject, of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
-import {
-  DeadLetterInspection,
-  DeadLetterPlan,
-  ExchangesView,
-  JobSummary,
-  PermissionsView,
-  ProjectionPlan,
-  QueuesView,
-} from '../../core/host/host-types';
+import { BindingsView, DeadLetterInspection, DeadLetterPlan, ExchangesView, JobSummary, PermissionsView, ProjectionPlan, QueuesView } from '../../core/host/host-types';
 import { JobEvent, SseClient } from '../../core/host/sse-client';
 import { BrokerPage } from './broker-page';
 
@@ -93,6 +85,17 @@ const exchanges: ExchangesView = {
   exchanges: [{ name: '', type: 'direct' }, { name: 'ordering-fulfilment-saga_delay', type: 'x-delayed-message' }],
 };
 
+// run-locally.md's two bindings for Catalog's price changes reaching Ordering, and the default exchange's to the queue.
+const bindings: BindingsView = {
+  reachable: true,
+  error: null,
+  bindings: [
+    { source: '', sourceKind: 'exchange', destination: 'ordering-catalog-events', destinationKind: 'queue', routingKey: 'ordering-catalog-events' },
+    { source: 'Common.Contracts.Catalog.V1:PriceChanged', sourceKind: 'exchange', destination: 'ordering-catalog-events', destinationKind: 'exchange', routingKey: '' },
+    { source: 'ordering-catalog-events', sourceKind: 'exchange', destination: 'ordering-catalog-events', destinationKind: 'queue', routingKey: '' },
+  ],
+};
+
 const permissions: PermissionsView = {
   reachable: true,
   error: null,
@@ -108,6 +111,7 @@ describe('BrokerPage', () => {
   let host: {
     brokerQueues: ReturnType<typeof vi.fn>;
     brokerExchanges: ReturnType<typeof vi.fn>;
+    brokerBindings: ReturnType<typeof vi.fn>;
     brokerPermissions: ReturnType<typeof vi.fn>;
     projectionPlan: ReturnType<typeof vi.fn>;
     projectionRepair: ReturnType<typeof vi.fn>;
@@ -121,6 +125,7 @@ describe('BrokerPage', () => {
     host = {
       brokerQueues: vi.fn(() => of(queues)),
       brokerExchanges: vi.fn(() => of(exchanges)),
+      brokerBindings: vi.fn(() => of(bindings)),
       brokerPermissions: vi.fn(() => of(permissions)),
       projectionPlan: vi.fn(() => of(plan)),
       projectionRepair: vi.fn(() => of(job)),
@@ -337,6 +342,27 @@ describe('BrokerPage', () => {
     expect(rows(fixture, 'permissions')).toEqual(['catalog-svc ^(MassTransit:) ^(MassTransit:) ^(MassTransit:)']);
   });
 
+  it('lists bindings by source, naming the default exchange, with the kind and routing key of each', () => {
+    const fixture = render();
+
+    expect(rows(fixture, 'bindings')).toEqual([
+      '(default) ordering-catalog-events queue ordering-catalog-events',
+      'Common.Contracts.Catalog.V1:PriceChanged ordering-catalog-events exchange',
+      'ordering-catalog-events ordering-catalog-events queue',
+    ]);
+  });
+
+  it('marks the bindings broker-unreachable message as an alert', () => {
+    host.brokerBindings.mockReturnValue(of({ ...bindings, reachable: false, error: 'service "rabbitmq" is not running', bindings: [] }));
+
+    const fixture = render();
+
+    expect(fixture.nativeElement.querySelector('table.bindings')).toBeNull();
+    const messages = Array.from(fixture.nativeElement.querySelectorAll('p.error')) as HTMLElement[];
+    const bindingsMessage = messages.find((m) => m.textContent?.includes('service "rabbitmq" is not running'));
+    expect(bindingsMessage?.getAttribute('role')).toBe('alert');
+  });
+
   it('does not show Loading behind a first-load error', () => {
     host.brokerQueues.mockReturnValue(throwError(() => ({ error: { title: 'Server error', detail: 'boom' } })));
 
@@ -377,12 +403,13 @@ describe('BrokerPage', () => {
     expect(permissionsMessage?.getAttribute('role')).toBe('alert');
   });
 
-  it('refresh reads all three again', () => {
+  it('refresh reads all four again', () => {
     const fixture = render();
     (fixture.nativeElement.querySelector('button.refresh') as HTMLButtonElement).click();
 
     expect(host.brokerQueues).toHaveBeenCalledTimes(2);
     expect(host.brokerExchanges).toHaveBeenCalledTimes(2);
+    expect(host.brokerBindings).toHaveBeenCalledTimes(2);
     expect(host.brokerPermissions).toHaveBeenCalledTimes(2);
   });
 
@@ -417,11 +444,12 @@ describe('BrokerPage', () => {
     expect(fixture.nativeElement.textContent).toContain('exchanges boom');
   });
 
-  it('auto-refresh re-reads queues, exchanges and permissions every 5 seconds until turned off', async () => {
+  it('auto-refresh re-reads queues, exchanges, bindings and permissions every 5 seconds until turned off', async () => {
     vi.useFakeTimers();
     const fixture = render();
     host.brokerQueues.mockClear();
     host.brokerExchanges.mockClear();
+    host.brokerBindings.mockClear();
     host.brokerPermissions.mockClear();
 
     fixture.componentInstance.setAutoRefresh(true);
@@ -429,6 +457,7 @@ describe('BrokerPage', () => {
     await vi.advanceTimersByTimeAsync(5000);
     expect(host.brokerQueues).toHaveBeenCalledTimes(2);
     expect(host.brokerExchanges).toHaveBeenCalledTimes(2);
+    expect(host.brokerBindings).toHaveBeenCalledTimes(2);
     expect(host.brokerPermissions).toHaveBeenCalledTimes(2);
 
     fixture.componentInstance.setAutoRefresh(false);

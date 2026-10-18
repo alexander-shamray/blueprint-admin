@@ -172,11 +172,13 @@ public sealed class FixtureRecorderTests : IDisposable
         await compose.PsAsync(token);
         await broker.QueuesAsync(token);
         await broker.ExchangesAsync(token);
+        await broker.BindingsAsync(token);
         await broker.PermissionsAsync(token);
         await runner.Settled();
 
         Recorded("compose-ps.jsonl").ShouldBe(string.Join('\n', FakePlatformScripts.ComposePsLines()) + "\n");
         Recorded("rabbitmq-exchanges.json").ShouldBe(string.Join('\n', FakePlatformScripts.FixtureLines("rabbitmq-exchanges.json")) + "\n");
+        Recorded("rabbitmq-bindings.json").ShouldBe(string.Join('\n', FakePlatformScripts.FixtureLines("rabbitmq-bindings.json")) + "\n");
         Exists("rabbitmq-permissions.json").ShouldBeTrue();
 
         // Hand-written, for its error queue: a recording run must leave it alone.

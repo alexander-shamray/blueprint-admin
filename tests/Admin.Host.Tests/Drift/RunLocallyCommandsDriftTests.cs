@@ -211,6 +211,7 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
         await compose.PsAsync(TestContext.Current.CancellationToken);
         await broker.QueuesAsync(TestContext.Current.CancellationToken);
         await broker.ExchangesAsync(TestContext.Current.CancellationToken);
+        await broker.BindingsAsync(TestContext.Current.CancellationToken);
         await broker.PermissionsAsync(TestContext.Current.CancellationToken);
         await frontend.StartAsync(TestContext.Current.CancellationToken);
         await frontend.StartDeviceBuildAsync(TestContext.Current.CancellationToken);

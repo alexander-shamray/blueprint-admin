@@ -7,6 +7,7 @@ import {
   DeadLetterInspection,
   DeadLetterPlan,
   DeadLetterVerb,
+  BindingsView,
   ExchangesView,
   HoldersView,
   Identity,
@@ -181,6 +182,10 @@ export class HostClient {
 
   brokerExchanges(): Observable<ExchangesView> {
     return this.http.get<ExchangesView>('/api/broker/exchanges');
+  }
+
+  brokerBindings(): Observable<BindingsView> {
+    return this.http.get<BindingsView>('/api/broker/bindings');
   }
 
   brokerPermissions(): Observable<PermissionsView> {
