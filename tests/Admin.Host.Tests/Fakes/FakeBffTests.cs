@@ -96,7 +96,7 @@ public sealed class FakeBffTests : IDisposable
         direct.Headers.GetValues("X-Correlation-Id").ShouldHaveSingleItem().ShouldNotBeNullOrEmpty();
     }
 
-    // The BFF's own order-not-found, which the gateway fake serves typed application/json, is a problem with a correlationId.
+    // The BFF's own order-not-found is a problem like any other, with a correlationId.
     [Fact]
     public async Task An_order_the_bff_holds_no_row_for_is_its_problem_with_the_correlation_id()
     {

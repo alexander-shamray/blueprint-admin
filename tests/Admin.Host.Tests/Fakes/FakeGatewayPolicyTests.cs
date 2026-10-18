@@ -40,7 +40,21 @@ public sealed class FakeGatewayPolicyTests
         using HttpResponseMessage response = FakeGateway.Send(cancel, orders);
 
         response.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+        response.Content.Headers.ContentType!.MediaType.ShouldBe("application/problem+json");
         (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).ShouldContain("order.already_shipped");
+    }
+
+    // #268: every recorded problem body is typed as the platform types it, not as plain JSON.
+    [Fact]
+    public async Task An_order_read_the_bff_holds_no_row_for_is_typed_as_a_problem()
+    {
+        using HttpRequestMessage read = new(HttpMethod.Get, $"{Origin}/bff/v1/orders/{Guid.Empty}");
+        read.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Jwt("[]"));
+        using HttpResponseMessage response = FakeGateway.Send(read, orders);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        response.Content.Headers.ContentType!.MediaType.ShouldBe("application/problem+json");
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).ShouldContain("order.not_found");
     }
 
     private (HttpStatusCode Status, string Body) ReadReservation(string orderId)

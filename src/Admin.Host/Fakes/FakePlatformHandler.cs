@@ -61,6 +61,13 @@ internal static class FakeHttp
     public static HttpResponseMessage Json(HttpStatusCode status, string body) =>
         new(status) { Content = new StringContent(body, Encoding.UTF8, MediaTypeNames.Application.Json) };
 
+    /// <summary>
+    /// A problem body recorded or copied whole from the platform, typed as the platform's services type every problem
+    /// (Common.Web's problem-details defaults), so a client that reads the type sees what the stack sends.
+    /// </summary>
+    public static HttpResponseMessage RecordedProblem(HttpStatusCode status, string body) =>
+        new(status) { Content = new StringContent(body, Encoding.UTF8, MediaTypeNames.Application.ProblemJson) };
+
     /// <summary>The shape <c>UseStatusCodePages</c> gives a bare 401/403/404 on the platform's hosts.</summary>
     public static HttpResponseMessage Problem(HttpStatusCode status, string title) =>
         new(status)
