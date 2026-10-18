@@ -115,8 +115,6 @@ the turns it takes; `docs/token-plan.md` is where the spend was measured.
   Never `general-purpose`, never the session reviewing its own diff.
 - **Plans.** A change that fits one PR takes plan mode, not a plan file; a
   plan cites code by path and symbol rather than pasting it.
-- **Before a wait, shed the context.** A session about to wait on CI or a
-  background agent compacts first: a wake re-sends all of it.
 - **One task per session**: `/clear` between tasks.
 
 ## Hard rules
