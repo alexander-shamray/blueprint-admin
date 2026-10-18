@@ -673,11 +673,14 @@ sets from each host's service name.
 
 The result is one ordered timeline of `TraceEvent { At, Source, Service,
 Kind, Summary, TraceId, Link }`, where `Kind` is one of `HttpIn`, `Log`,
-`Span`, `Outbox`, `Publish`, `Consume`, `Saga`, `Queued`, `Error`. `Outbox`,
-`Publish`, `Consume` and `Saga` are recognised from span names and attributes
-that MassTransit's instrumentation and `Common.Infrastructure`'s
-`OutboxDispatcher` own; the recogniser is a table of patterns, so a renamed
-span is a one-line change and an unrecognised span is still shown as `Span`.
+`Span`, `Outbox`, `Publish`, `Consume`, `Saga`, `Queued`, `Error`. `Outbox`
+is the database write that names the outbox table
+(`SpanRecogniser.OutboxTable`); `Publish`, `Consume` and `Saga` are recognised
+from span names and attributes that MassTransit's instrumentation owns. The
+dispatcher's own `outbox deliver` span carries only a message id, and the send
+under it names the destination, so it is shown as `Span`. The recogniser is a
+table of patterns, so a renamed span is a one-line change and an unrecognised
+span is still shown as `Span`.
 MassTransit tags a publish and a command send alike `send`, and both are a
 handover (`Publish`). A row may name a step of the platform as well as a kind
 of span: the fulfilment saga's step (`Saga`, with the states it moved
