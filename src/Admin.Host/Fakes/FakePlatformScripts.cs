@@ -121,6 +121,7 @@ public static class FakePlatformScripts
             .On("dotnet", "run --project tools/bff-replay", 0, Lines(ReplayRecordings.Repair))
             .On("docker", prefix + "exec -T rabbitmq rabbitmqctl list_queues name messages --formatter json", 0, [.. FixtureLines("rabbitmq-queues.json")])
             .On("docker", prefix + "exec -T rabbitmq rabbitmqctl list_exchanges name type --formatter json", 0, [.. FixtureLines("rabbitmq-exchanges.json")])
+            .On("docker", prefix + "exec -T rabbitmq rabbitmqctl list_bindings source_name source_kind destination_name destination_kind routing_key --formatter json", 0, [.. FixtureLines("rabbitmq-bindings.json")])
             .On("docker", prefix + "exec -T rabbitmq rabbitmqctl list_permissions --formatter json", 0, [.. FixtureLines("rabbitmq-permissions.json")])
             .On("docker", prefix + "exec -T rabbitmq rabbitmqctl change_password dead-letter-operator ", 0, "Changing password for user \"dead-letter-operator\" ...")
             .On("docker", prefix + "exec -T rabbitmq rabbitmqctl clear_password dead-letter-operator", 0, "Clearing password for user \"dead-letter-operator\" ...")

@@ -85,8 +85,9 @@ and password, with a correlation id; status, timing, headers
 and body as the platform returned them; a history of this visit's calls).
 The Broker screen lists queues (`_error` and `_skipped` queues marked, each named
 with what consumes it, and a non-empty one linking the backend runbook that owns
-it), exchanges and
-permissions through `rabbitmqctl` in the `rabbitmq` container; below the queues
+it), exchanges, bindings (what each exchange feeds, a queue or another
+exchange, with its routing key) and permissions through `rabbitmqctl` in the
+`rabbitmq` container; below the queues
 a BFF projection panel says what `tools/bff-replay` cannot restore and runs it
 as a repair, or as a rebuild behind a typed confirmation that stops the BFF,
 deletes its order projection, replays the outbox window and starts it again

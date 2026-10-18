@@ -417,6 +417,21 @@ export interface ExchangesView {
   exchanges: BrokerExchange[];
 }
 
+/** One `list_bindings` row (spec §5.5): `source` is empty for the broker's default exchange. */
+export interface BrokerBinding {
+  source: string;
+  sourceKind: string;
+  destination: string;
+  destinationKind: string;
+  routingKey: string;
+}
+
+export interface BindingsView {
+  reachable: boolean;
+  error: string | null;
+  bindings: BrokerBinding[];
+}
+
 export interface BrokerPermission {
   user: string;
   configure: string;

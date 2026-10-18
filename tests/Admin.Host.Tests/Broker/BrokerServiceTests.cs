@@ -165,6 +165,30 @@ public sealed class BrokerServiceTests : IAsyncDisposable
         view.Exchanges.ShouldBe([new BrokerExchange("", "direct"), new BrokerExchange("amq.topic", "topic")]);
     }
 
+    // run-locally.md's line names five columns, and with --formatter json each row is keyed by them.
+    [Fact]
+    public async Task Bindings_are_listed_by_source_with_the_default_exchange_first()
+    {
+        runner.On("docker", Exec + "list_bindings", 0,
+            "[",
+            """{"source_name":"ordering-catalog-events","source_kind":"exchange","destination_name":"ordering-catalog-events","destination_kind":"queue","routing_key":""}""",
+            """,{"source_name":"","source_kind":"exchange","destination_name":"ordering-catalog-events","destination_kind":"queue","routing_key":"ordering-catalog-events"}""",
+            """,{"source_name":"Common.Contracts.Catalog.V1:PriceChanged","source_kind":"exchange","destination_name":"ordering-catalog-events","destination_kind":"exchange","routing_key":""}""",
+            "]");
+
+        BindingsView view = await Service.BindingsAsync(TestContext.Current.CancellationToken);
+
+        runner.Started.Single().Arguments.TakeLast(8).ShouldBe(
+            ["list_bindings", "source_name", "source_kind", "destination_name", "destination_kind", "routing_key", "--formatter", "json"]);
+        view.Reachable.ShouldBeTrue();
+        view.Bindings.ShouldBe(
+        [
+            new BrokerBinding("", "exchange", "ordering-catalog-events", "queue", "ordering-catalog-events"),
+            new BrokerBinding("Common.Contracts.Catalog.V1:PriceChanged", "exchange", "ordering-catalog-events", "exchange", ""),
+            new BrokerBinding("ordering-catalog-events", "exchange", "ordering-catalog-events", "queue", ""),
+        ]);
+    }
+
     [Fact]
     public async Task Permissions_are_listed_per_user()
     {

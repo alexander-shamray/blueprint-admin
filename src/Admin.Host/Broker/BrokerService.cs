@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Admin.Host.Compose;
 using Admin.Host.Config;
 using Microsoft.Extensions.Options;
@@ -6,7 +7,7 @@ using Microsoft.Extensions.Options;
 namespace Admin.Host.Broker;
 
 /// <summary>
-/// The three broker inspections run-locally.md gives, through rabbitmqctl inside the Compose rabbitmq
+/// The four broker inspections run-locally.md gives, through rabbitmqctl inside the Compose rabbitmq
 /// container (spec §5.5): the management UI on 15672 has no login, so the console does not use it.
 /// </summary>
 public sealed class BrokerService(ComposeService compose, IOptions<AdminOptions> options)
@@ -54,6 +55,21 @@ public sealed class BrokerService(ComposeService compose, IOptions<AdminOptions>
             : new ExchangesView(true, null, [.. rows.OrderBy(r => r.Name, StringComparer.Ordinal)]);
     }
 
+    /// <summary>The five columns run-locally.md's line names, in its order; the JSON keys are those names.</summary>
+    public async Task<BindingsView> BindingsAsync(CancellationToken cancellationToken)
+    {
+        (IReadOnlyList<BindingRow>? rows, string? error) = await ListAsync<BindingRow>(
+            ["list_bindings", "source_name", "source_kind", "destination_name", "destination_kind", "routing_key"], cancellationToken);
+
+        return rows is null
+            ? new BindingsView(false, error, [])
+            : new BindingsView(true, null, [.. rows
+                .OrderBy(r => r.SourceName, StringComparer.Ordinal)
+                .ThenBy(r => r.DestinationName, StringComparer.Ordinal)
+                .ThenBy(r => r.RoutingKey, StringComparer.Ordinal)
+                .Select(r => new BrokerBinding(r.SourceName, r.SourceKind, r.DestinationName, r.DestinationKind, r.RoutingKey))]);
+    }
+
     public async Task<PermissionsView> PermissionsAsync(CancellationToken cancellationToken)
     {
         (IReadOnlyList<BrokerPermission>? rows, string? error) = await ListAsync<BrokerPermission>(["list_permissions"], cancellationToken);
@@ -90,4 +106,11 @@ public sealed class BrokerService(ComposeService compose, IOptions<AdminOptions>
     }
 
     private sealed record QueueRow(string Name, long? Messages);
+
+    private sealed record BindingRow(
+        [property: JsonPropertyName("source_name")] string SourceName,
+        [property: JsonPropertyName("source_kind")] string SourceKind,
+        [property: JsonPropertyName("destination_name")] string DestinationName,
+        [property: JsonPropertyName("destination_kind")] string DestinationKind,
+        [property: JsonPropertyName("routing_key")] string RoutingKey);
 }

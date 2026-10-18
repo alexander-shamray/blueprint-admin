@@ -18,6 +18,15 @@ public sealed record BrokerExchange(string Name, string Type);
 
 public sealed record ExchangesView(bool Reachable, string? Error, IReadOnlyList<BrokerExchange> Exchanges);
 
+/// <summary>
+/// One binding as run-locally.md's <c>list_bindings</c> read gives it: an exchange (<see cref="Source"/>, empty for the
+/// broker's default exchange) bound to a queue or another exchange (<see cref="DestinationKind"/> says which), with the
+/// routing key it matches.
+/// </summary>
+public sealed record BrokerBinding(string Source, string SourceKind, string Destination, string DestinationKind, string RoutingKey);
+
+public sealed record BindingsView(bool Reachable, string? Error, IReadOnlyList<BrokerBinding> Bindings);
+
 public sealed record BrokerPermission(string User, string Configure, string Write, string Read);
 
 public sealed record PermissionsView(bool Reachable, string? Error, IReadOnlyList<BrokerPermission> Permissions);

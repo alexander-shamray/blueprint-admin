@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { EMPTY, Observable, Subscription, catchError, finalize, of, tap, timer } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
-import { DeadLetterInspection, DeadLetterVerb, ExchangesView, JobSummary, PermissionsView, QueuesView } from '../../core/host/host-types';
+import { BindingsView, DeadLetterInspection, DeadLetterVerb, ExchangesView, JobSummary, PermissionsView, QueuesView } from '../../core/host/host-types';
 import { DrainedIndicator } from '../../shared/drained-indicator/drained-indicator';
 import { OutputPane } from '../../shared/output-pane/output-pane';
 
@@ -29,6 +29,7 @@ export class BrokerPage {
 
   readonly queues = signal<QueuesView | null>(null);
   readonly exchanges = signal<ExchangesView | null>(null);
+  readonly bindings = signal<BindingsView | null>(null);
   readonly permissions = signal<PermissionsView | null>(null);
   readonly autoRefresh = signal(false);
   /** True while any read started by refresh() is still out; refresh() is not re-entrant while it is. */
@@ -38,12 +39,13 @@ export class BrokerPage {
   private refreshOwed = false;
   /**
    * One failed-read signal per endpoint, not a shared one: each is set only by its own read's
-   * failure and cleared only by that same read's success, so an exchanges or permissions failure
+   * failure and cleared only by that same read's success, so an exchanges, bindings or permissions failure
    * is not silently hidden by another read's success.
    * The last good listing stays on screen meanwhile.
    */
   readonly queuesError = signal<string | null>(null);
   readonly exchangesError = signal<string | null>(null);
+  readonly bindingsError = signal<string | null>(null);
   readonly permissionsError = signal<string | null>(null);
 
   /** On error, fall back to undefined so the projection panel simply does not render: the host did not answer, and the queues say so. */
@@ -171,9 +173,10 @@ export class BrokerPage {
   refresh(): void {
     if (this.refreshing()) return;
     this.refreshing.set(true);
-    this.pendingReads = 3;
+    this.pendingReads = 4;
     this.withPendingCountdown(this.read(this.host.brokerQueues(), this.queuesError)).subscribe((view) => this.queues.set(view));
     this.withPendingCountdown(this.read(this.host.brokerExchanges(), this.exchangesError)).subscribe((view) => this.exchanges.set(view));
+    this.withPendingCountdown(this.read(this.host.brokerBindings(), this.bindingsError)).subscribe((view) => this.bindings.set(view));
     this.withPendingCountdown(this.read(this.host.brokerPermissions(), this.permissionsError)).subscribe((view) => this.permissions.set(view));
   }
 

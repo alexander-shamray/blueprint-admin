@@ -14,6 +14,9 @@ public static class BrokerEndpoints
         app.MapGet("/api/broker/exchanges", async (BrokerService broker, CancellationToken cancellationToken) =>
             TypedResults.Ok(await broker.ExchangesAsync(cancellationToken)));
 
+        app.MapGet("/api/broker/bindings", async (BrokerService broker, CancellationToken cancellationToken) =>
+            TypedResults.Ok(await broker.BindingsAsync(cancellationToken)));
+
         app.MapGet("/api/broker/permissions", async (BrokerService broker, CancellationToken cancellationToken) =>
             TypedResults.Ok(await broker.PermissionsAsync(cancellationToken)));
 

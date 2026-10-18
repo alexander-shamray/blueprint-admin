@@ -53,6 +53,7 @@ public static class FixtureRecordings
     [
         new("compose-ps.jsonl", ["ps", "-a", "--format", "json"]),
         new("rabbitmq-exchanges.json", ["exec", "-T", "rabbitmq", "rabbitmqctl", "list_exchanges", "name", "type", "--formatter", "json"]),
+        new("rabbitmq-bindings.json", ["exec", "-T", "rabbitmq", "rabbitmqctl", "list_bindings", "source_name", "source_kind", "destination_name", "destination_kind", "routing_key", "--formatter", "json"]),
         new("rabbitmq-permissions.json", ["exec", "-T", "rabbitmq", "rabbitmqctl", "list_permissions", "--formatter", "json"]),
     ];
 
