@@ -15,6 +15,10 @@
 /src/Admin.Web/playwright-report/
 # ng invoked from the repo root drops cache here, not under Admin.Web.
 .angular/
+# The Playwright MCP's page snapshots, written to whichever directory the
+# session runs in. Untracked, they read as a dirty tree to /branch and to
+# the clean-tree helpers (#255).
+.playwright-mcp/
 
 # Per-developer overrides
 .claude/settings.local.json
