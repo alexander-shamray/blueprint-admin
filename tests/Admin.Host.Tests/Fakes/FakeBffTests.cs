@@ -96,6 +96,19 @@ public sealed class FakeBffTests : IDisposable
         direct.Headers.GetValues("X-Correlation-Id").ShouldHaveSingleItem().ShouldNotBeNullOrEmpty();
     }
 
+    // The BFF's own order-not-found, which the gateway fake serves typed application/json, is a problem with a correlationId.
+    [Fact]
+    public async Task An_order_the_bff_holds_no_row_for_is_its_problem_with_the_correlation_id()
+    {
+        using HttpResponseMessage response = await GetAsync(Bff($"/v1/orders/{Guid.Empty}"), withToken: true, correlationId: "direct-2");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        response.Content.Headers.ContentType!.MediaType.ShouldBe("application/problem+json");
+        using JsonDocument problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Token));
+        problem.RootElement.GetProperty("code").GetString().ShouldBe("order.not_found");
+        problem.RootElement.GetProperty("correlationId").GetString().ShouldBe("direct-2");
+    }
+
     [Fact]
     public async Task Readiness_on_the_bffs_port_still_answers_healthy()
     {
