@@ -61,9 +61,15 @@ internal static class FakeBff
         }
     }
 
+    /// <summary>
+    /// A failure's body is a problem whatever type the gateway fake served it as: some of its recorded bodies, the BFF's
+    /// order-not-found among them, are typed <c>application/json</c>, where the BFF itself answers every one as
+    /// <c>application/problem+json</c> with a <c>correlationId</c>.
+    /// </summary>
     private static async Task<HttpResponseMessage> WithCorrelationId(HttpResponseMessage response, string correlationId, CancellationToken cancellationToken)
     {
-        if (response.Content.Headers.ContentType?.MediaType != MediaTypeNames.Application.ProblemJson
+        if (response.IsSuccessStatusCode
+            || response.Content.Headers.ContentType?.MediaType is not (MediaTypeNames.Application.ProblemJson or MediaTypeNames.Application.Json)
             || JsonNode.Parse(await response.Content.ReadAsStringAsync(cancellationToken)) is not JsonObject problem)
         {
             return response;
