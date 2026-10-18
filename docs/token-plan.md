@@ -20,7 +20,9 @@ From the 2026-10-15 baseline in [`token-usage.md`](token-usage.md):
   the `general-purpose` agents, is not the one here.
 - **A `/ship` main context is large.** Its mean is above 250k tokens a call
   and 45% of all history's input equivalent comes after a wake, when a
-  session resumes into a context the cache may have dropped.
+  session resumes into a context the cache may have dropped. #253 later
+  found that share counts the calls after a wake, not cache lost to one
+  (step 2).
 - **What is resident is large and mostly unread.** `ship.md` alone is
   a third of the commands' total, and `CLAUDE.md` is in every turn; the
   sizes are in the baseline's table of what every turn carries.
@@ -54,10 +56,11 @@ three `bug-auditor` rounds under the same command.
 Measure which tool results fill a `/ship` context (`--tools`) and cut the
 largest: `Bash` output read whole where a count would do. Add one short
 delegation rule and a rule to compact before a wait, since a wake into a
-long context re-sends all of it.
+long context re-sends all of it. (It does, as every call does, and from a
+warm cache: #253, below.)
 
-**Exit.** A `/ship` main session's mean context under 200k a call, and the
-first call after a wake writing under 5% of its context to the cache.
+**Exit.** A `/ship` main session's mean context under 200k a call, and
+every first call after a wake writing under 5% of its context to the cache.
 
 The exit's second half read "less than 35% of its input equivalent after a
 wake" until #253 measured what that share counts: every call from a run's
@@ -66,21 +69,23 @@ rather than with what waking costs. The cost a wake can add is the cache
 rewrite on the call after it, so that is what the exit now holds.
 
 **Built** (#122): the rules. `CLAUDE.md`'s *Subagents, review rounds and
-plans* holds the delegation brief, the review loop (citing `/ship` step 5),
-the planning rule, the compact-before-a-wait rule and one task per session.
+plans* held the delegation brief, the review loop (citing `/ship` step 5),
+the planning rule, the compact-before-a-wait rule and one task per session;
+it holds them still, but for the compact rule, retired below.
 **Built** (#225): the `--tools` measurement, recorded in
 [`token-usage.md`](token-usage.md), and the cut it names: step 6's `gh pr checks
 --watch` takes `--interval 60`; its effect is read in the 2026-10-18 section
 there. The owner's user-level copy of the #122 rules was retired outside this
 repository. **Measured** (#252, #253): the shell reads by path and step and
 the wakes by wait, in the second 2026-10-18 section there. The largest
-`Bash` results are ranged reads of the application and its tests between
-the branch and the first commit, the work itself, and are not cut. The
-compact-before-a-wait rule is **retired** from `CLAUDE.md`: no session
-followed it in 81 wakes, none has a tool to, and the cost it was written
-against is under 1%. **Exit met:** the
-2026-10-18 Sonnet `/ship` row is under 200k a call, and the call after a
-wake wrote 0.3% of its context to the cache.
+`Bash` results are the reads between the branch and the first commit, about
+half of them of the application and its tests, the work itself, and are not
+cut. The compact-before-a-wait rule is **retired** from `CLAUDE.md`: no
+session followed it in 81 wakes, none has a tool to, and the cost it was
+written against is under 1%. **Exit met:** the 2026-10-18 Sonnet `/ship`
+row is under 200k a call, and over the UTC day 2026-10-17, every model's
+`/ship`, no first call after a wake wrote more than 1.2% of its context to
+the cache.
 
 ### Step 3 — what every session loads
 
