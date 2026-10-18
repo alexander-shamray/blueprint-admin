@@ -50,6 +50,10 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
         [@".\gradlew.bat installDebug"] = "the install is by hand: the lane builds and syncs, and the device is the caller's (spec §5.4)",
         [@"& ""$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"" shell am start -n dev.ashamray.blueprint/.MainActivity"] =
             "starting the app is by hand, with the install above",
+        ["'slo-run exists: ' + $(if ($found.Count -gt 0) { 'yes' } else { 'no' })"] =
+            "the load run's client block reads the same and says created or already there (LoadRunService.SloClient)",
+        ["if (-not $c) { 'slo-run: missing (create it first)'; exit 1 }"] =
+            "the secret read prints the secret, and the load run's own block reads it into k6's environment (LoadRunService.Run)",
     };
 
     /// <summary>
@@ -99,6 +103,11 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
 
         foreach (string line in lines.Where(l => !NotRun.ContainsKey(l) && !Accounted.ContainsKey(l)))
         {
+            if (host.Any(h => RunsWhole(h, line)))
+            {
+                continue;
+            }
+
             if (Command().IsMatch(line))
             {
                 if (!host.Any(h => h.Contains(line) || Runs(h, Tokens(line), services)))
@@ -184,6 +193,12 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
             runner.Start(DeadLetterService.MoveSpec(verb, Queue, ["<id>"], ("incident.jsonl", "audit.jsonl"), Paths, Variable));
         }
 
+        // The load run: every block it runs, each whole, as it starts them.
+        foreach (LoadRunStep step in LoadRunService.Steps)
+        {
+            runner.Start(LoadRunService.Spec(step.Block, Paths));
+        }
+
         // The game day: the listing, and each half of a runbook the document names.
         runner.Start(GameDayService.Spec(GameDayService.ListArguments, Paths));
 
@@ -211,6 +226,13 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
     /// </summary>
     private static string[] Tokens(string line) =>
         [.. line.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(t => t.Length > 1 && t[0] == '\'' && t[^1] == '\'' ? t[1..^1] : t)];
+
+    /// <summary>
+    /// A line of a script the host hands PowerShell whole, as its one <c>-Command</c> argument of one line or several: the line is
+    /// run as the document has it. Whether a whole block is the document's is LoadRunDriftTests' to say.
+    /// </summary>
+    private static bool RunsWhole(string[] host, string line) =>
+        host is ["powershell", "-NoProfile", "-Command", var script] && script.Split('\n').Any(l => l.Trim() == line);
 
     /// <summary>
     /// The host runs the document's line when every token of the line is in the host's argv and the

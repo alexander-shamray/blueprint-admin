@@ -91,6 +91,7 @@ builder.Services.AddSingleton<ComposeService>();
 builder.Services.AddSingleton<ComposeGate>();
 builder.Services.AddSingleton<WorkstationDoctor>();
 builder.Services.AddSingleton<DeviceReads>();
+builder.Services.AddSingleton<LoadRunService>();
 
 // The lease's journal lives beside the baselines under Admin:DataDir, where a restart finds it. FakePlatform writes nothing a
 // real incident could need, and each fake host takes a journal of its own, so two test hosts never read each other's lease.

@@ -129,10 +129,13 @@ internal static class FakeGrafana
     /// Prometheus proxy on 2026-10-03 under steady traffic and keyed by the field that holds the query.
     /// A query is matched by its exact text, because the 401 and 422 queries differ from the request-rate
     /// one only inside the selector; any other query answers the empty vector Prometheus gives for no series.
+    /// While a fake load run's traffic is inside the strip's reads (<see cref="FakeStack.Loaded"/>) the answers are
+    /// the ones recorded under a live load run instead (<see cref="LoadRunRecordings.GoldenSignals"/>), whose
+    /// absent 5xx, 401 and 422 series answer the empty vector Prometheus gave.
     /// </summary>
-    public static HttpResponseMessage Prometheus(HttpRequestMessage request)
+    public static HttpResponseMessage Prometheus(HttpRequestMessage request, FakeStack stack)
     {
-        using JsonDocument recording = JsonDocument.Parse(Fixture("grafana-prometheus-golden-signals.json"));
+        using JsonDocument recording = JsonDocument.Parse(stack.Loaded ? LoadRunRecordings.GoldenSignals : Fixture("grafana-prometheus-golden-signals.json"));
 
         return GoldenSignalOf(request.RequestUri!) is { } field
             ? FakeHttp.Json(HttpStatusCode.OK, recording.RootElement.GetProperty(field).GetRawText())

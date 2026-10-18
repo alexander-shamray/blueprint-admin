@@ -239,6 +239,26 @@ export class StackPage {
     });
   }
 
+  /** The last load run (spec §5.3), read with the stack, so a run started elsewhere or before a reload is on this screen. */
+  readonly loadRun = computed(() => this.stack()?.loadRun ?? null);
+  readonly loadRunning = computed(() => this.loadRun()?.state === 'Running');
+
+  startLoadRun(): void {
+    this.host.loadRunStart().subscribe(this.started);
+  }
+
+  /** Stop answers once the run has ended, so its output is already showing; only a refusal needs saying. */
+  stopLoadRun(): void {
+    this.host.loadRunStop().subscribe({ error: (e: unknown) => this.error.set(this.describeError(e, 'The host refused the request.')) });
+  }
+
+  showLoadRunOutput(): void {
+    const id = this.loadRun()?.id;
+    if (id) {
+      this.jobId.set(id);
+    }
+  }
+
   buildForDevice(): void {
     this.host.frontendDeviceBuild().subscribe(this.started);
   }

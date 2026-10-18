@@ -19,6 +19,7 @@ const stack = {
     { name: 'client', url: 'http://localhost:5173/', up: false, status: null },
   ],
   lease: null,
+  loadRun: null,
 };
 
 const lease = {
@@ -89,6 +90,7 @@ const doctor = {
 
 const runningJob = { id: 'fe-1', commandLine: 'npm start', state: 'Running', exitCode: null, startedAt: '' };
 const deviceJob = { id: 'dev-1', commandLine: 'npm run emulator:android', state: 'Running', exitCode: null, startedAt: '' };
+const loadJob = { id: 'load-1', commandLine: 'load-run k6 prometheus slo-run token product restock run', state: 'Running', exitCode: null, startedAt: '' };
 
 const deviceReads = {
   checks: [
@@ -114,6 +116,8 @@ describe('StackPage', () => {
     frontendDeviceBuild: ReturnType<typeof vi.fn>;
     frontendDeviceReads: ReturnType<typeof vi.fn>;
     leaseRestore: ReturnType<typeof vi.fn>;
+    loadRunStart: ReturnType<typeof vi.fn>;
+    loadRunStop: ReturnType<typeof vi.fn>;
     telemetryHealth: ReturnType<typeof vi.fn>;
     telemetryAlerts: ReturnType<typeof vi.fn>;
     doctor: ReturnType<typeof vi.fn>;
@@ -138,6 +142,8 @@ describe('StackPage', () => {
       frontendDeviceBuild: vi.fn(() => of(deviceJob)),
       frontendDeviceReads: vi.fn(() => of(deviceReads)),
       leaseRestore: vi.fn(() => of({ lease: null, changes: [] })),
+      loadRunStart: vi.fn(() => of(loadJob)),
+      loadRunStop: vi.fn(() => of({ ...loadJob, state: 'Exited', exitCode: -1 })),
       telemetryHealth: vi.fn(() => of(health)),
       telemetryAlerts: vi.fn(() => of(alerts)),
       doctor: vi.fn(() => of(doctor)),
@@ -475,6 +481,76 @@ describe('StackPage', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('Wiping volumes destroys databases and broker state.');
+  });
+
+  describe('load run', () => {
+    async function render() {
+      const fixture = TestBed.createComponent(StackPage);
+      fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(0);
+      fixture.detectChanges();
+      const q = (selector: string) => fixture.nativeElement.querySelector(selector) as HTMLButtonElement | null;
+      return { fixture, q };
+    }
+
+    it('sits beside the signals, says a local run proves nothing about the SLO, and offers Run with Stop disabled', async () => {
+      const { fixture, q } = await render();
+      const section = fixture.nativeElement.querySelector('section.load-run') as HTMLElement;
+
+      expect(section.previousElementSibling?.classList).toContain('signals');
+      expect(text(q('.load-run-status'))).toBe('k6 run slo.js not run');
+      expect(text(q('.load-run-note'))).toContain('A local run is not a staging baseline and proves nothing about the SLO (§13.7).');
+      expect(q('button.load-run-start')!.disabled).toBe(false);
+      expect(q('button.load-run-stop')!.disabled).toBe(true);
+      expect(q('button.load-run-output')).toBeNull();
+    });
+
+    it('starts a run and hands its job to the output pane', async () => {
+      const { fixture, q } = await render();
+
+      q('button.load-run-start')!.click();
+      fixture.detectChanges();
+
+      expect(host.loadRunStart).toHaveBeenCalled();
+      expect(fixture.componentInstance.jobId()).toBe('load-1');
+    });
+
+    it('disables Run and enables Stop while a run goes, and Stop calls the host', async () => {
+      host.stack.mockReturnValue(of({ ...stack, loadRun: loadJob }));
+      const { fixture, q } = await render();
+
+      expect(text(q('.load-run-status'))).toBe('k6 run slo.js running');
+      expect(q('button.load-run-start')!.disabled).toBe(true);
+      expect(q('button.load-run-stop')!.disabled).toBe(false);
+
+      q('button.load-run-stop')!.click();
+      fixture.detectChanges();
+
+      expect(host.loadRunStop).toHaveBeenCalled();
+    });
+
+    it('shows the exit code of a run that ended and opens its output', async () => {
+      host.stack.mockReturnValue(of({ ...stack, loadRun: { ...loadJob, state: 'Exited', exitCode: 99 } }));
+      const { fixture, q } = await render();
+
+      expect(text(q('.load-run-status'))).toBe('k6 run slo.js exited 99');
+      expect(q('button.load-run-start')!.disabled).toBe(false);
+
+      q('button.load-run-output')!.click();
+
+      expect(fixture.componentInstance.jobId()).toBe('load-1');
+    });
+
+    it('shows why the host refused a Stop', async () => {
+      host.stack.mockReturnValue(of({ ...stack, loadRun: loadJob }));
+      host.loadRunStop.mockReturnValue(throwError(() => ({ error: { title: 'No load run going', detail: 'There is no load run to stop.' } })));
+      const { fixture, q } = await render();
+
+      q('button.load-run-stop')!.click();
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.textContent).toContain('There is no load run to stop.');
+    });
   });
 
   describe('reference client', () => {

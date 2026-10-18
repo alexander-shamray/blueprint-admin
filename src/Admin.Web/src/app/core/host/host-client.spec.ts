@@ -84,6 +84,22 @@ describe('HostClient', () => {
     req.flush({ id: 'dev-1', commandLine: 'npm run emulator:android', state: 'Running', exitCode: null, startedAt: '' });
   });
 
+  it('starts a load run', () => {
+    client.loadRunStart().subscribe();
+
+    const req = http.expectOne('/api/stack/load-run');
+    expect(req.request.method).toBe('POST');
+    req.flush({ id: 'load-1', commandLine: 'load-run k6 prometheus slo-run token product restock run', state: 'Running', exitCode: null, startedAt: '' });
+  });
+
+  it('stops the load run', () => {
+    client.loadRunStop().subscribe();
+
+    const req = http.expectOne('/api/stack/load-run/stop');
+    expect(req.request.method).toBe('POST');
+    req.flush({ id: 'load-1', commandLine: 'load-run k6 prometheus slo-run token product restock run', state: 'Exited', exitCode: -1, startedAt: '' });
+  });
+
   it('reads the device lane', () => {
     client.frontendDeviceReads().subscribe();
 

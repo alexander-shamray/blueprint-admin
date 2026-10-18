@@ -109,6 +109,8 @@ export interface StackView {
   frontend: FrontendStatus;
   reachability: Reachability[];
   lease: LeaseView | null;
+  /** The last load run (spec §5.3), running or exited; null before the first. */
+  loadRun: JobSummary | null;
 }
 
 export interface ConfigView {

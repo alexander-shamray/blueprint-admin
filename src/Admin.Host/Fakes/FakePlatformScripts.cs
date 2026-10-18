@@ -1,5 +1,6 @@
 using System.Reflection;
 using Admin.Host.Compose;
+using Admin.Host.Stack;
 
 namespace Admin.Host.Fakes;
 
@@ -125,6 +126,20 @@ public static class FakePlatformScripts
             .On("git", $"-C {paths.BackendDir} status -sb", 0, "## main...origin/main")
             .On("git", $"-C {paths.FrontendDir} status -sb", 0, "## main...origin/main")
             .On("git", $"-C {paths.BackendDir} reflog -1 --date=iso-strict --format=%gd", 0, "HEAD@{2026-10-04T06:36:23+05:00}")
+            // The load run (run-locally.md, "Load run (k6)"): each block as a live run of it printed, the k6 read also being the
+            // doctor's. Six blocks open on the same lines, so each is matched whole. The run's block puts the strip under load.
+            .On("powershell", PowerShell(LoadRunService.K6Read), 0, Recorded(LoadRunRecordings.K6))
+            .On("powershell", PowerShell(LoadRunService.PrometheusReady), 0, Recorded(LoadRunRecordings.Prometheus))
+            .On("powershell", PowerShell(LoadRunService.SloClient), 0, Recorded(LoadRunRecordings.SloClient))
+            .On("powershell", PowerShell(LoadRunService.TokenCheck), 0, Recorded(LoadRunRecordings.TokenCheck))
+            .On("powershell", PowerShell(LoadRunService.Product), 0, Recorded(LoadRunRecordings.Product))
+            .On("powershell", PowerShell(LoadRunService.Restock), 0, Recorded(LoadRunRecordings.Restock))
+            .On("powershell", PowerShell(LoadRunService.Run), 0, _ =>
+            {
+                stack.Load();
+
+                return Recorded(LoadRunRecordings.Run);
+            })
             .On("powershell", "-NoProfile -Command & ", 0, DeviceRecordings.AdbDevices)
             .On("powershell", "-NoProfile -Command curl.exe ", 0, DeviceRecordings.Preflight)
             .On("powershell", "-NoProfile -Command $t = ", 0, DeviceRecordings.Realm)
@@ -136,6 +151,12 @@ public static class FakePlatformScripts
 
     private static string[] Lines(string recording) =>
         recording.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    /// <summary>The arguments the host gives <c>powershell</c> for one block (<see cref="LoadRunService.Arguments"/>), joined as the runner joins them.</summary>
+    private static string PowerShell(string block) => string.Join(' ', LoadRunService.Arguments(block));
+
+    /// <summary>A recording one line to an entry as it printed, its indentation and blank lines kept, whatever this file's line ending.</summary>
+    private static string[] Recorded(string recording) => recording.ReplaceLineEndings("\n").Split('\n');
 
     /// <summary>A recorded output embedded under its logical name, one entry per non-empty line.</summary>
     public static IReadOnlyList<string> FixtureLines(string logicalName)

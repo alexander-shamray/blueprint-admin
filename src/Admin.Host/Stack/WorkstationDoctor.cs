@@ -61,12 +61,13 @@ public sealed partial class WorkstationDoctor(
         Task<CommandOutput> node = RunAsync("node", ["--version"], cancellationToken);
         Task<CommandOutput> nvmrc = PowerShellAsync($"Get-Content '{Quoted($"{paths.FrontendDir}/.nvmrc")}'", cancellationToken);
         Task<CommandOutput> python = RunAsync(DeadLetterService.Python[0], [.. DeadLetterService.Python[1..], "--version"], cancellationToken);
+        Task<CommandOutput> k6 = PowerShellAsync(LoadRunService.K6Read, cancellationToken);
         Task<CommandOutput> backend = RunAsync("git", ["-C", paths.BackendDir, "status", "-sb"], cancellationToken);
         Task<CommandOutput> frontend = RunAsync("git", ["-C", paths.FrontendDir, "status", "-sb"], cancellationToken);
         Task<CommandOutput> headMoved = RunAsync("git", ["-C", paths.BackendDir, "reflog", "-1", "--date=iso-strict", "--format=%gd"], cancellationToken);
         Task<ComposeStatus> stack = compose.PsAsync(cancellationToken);
 
-        await Task.WhenAll(docker, config, images, listeners, node, nvmrc, python, backend, frontend, headMoved, stack);
+        await Task.WhenAll(docker, config, images, listeners, node, nvmrc, python, k6, backend, frontend, headMoved, stack);
 
         JsonDocument? model = Parse(config.Result);
 
@@ -79,6 +80,7 @@ public sealed partial class WorkstationDoctor(
                 Cors(model, config.Result, options.Value.ClientUrl),
                 Node(node.Result, nvmrc.Result),
                 Python(python.Result),
+                K6(k6.Result),
                 Clone("Backend clone", backend.Result),
                 Clone("Frontend clone", frontend.Result),
                 Images(images.Result, headMoved.Result),
@@ -322,6 +324,27 @@ public sealed partial class WorkstationDoctor(
         return PythonVersion().Match(said) is { Success: true } match
             ? new(name, DoctorState.Ok, $"Python {match.Groups[1].Value}, which the dead-letter workbench runs under.")
             : new(name, DoctorState.Problem, $"py -3.12 answered {(said.Length > 0 ? $"\"{said}\"" : "nothing")}, not Python 3.12; {needs}.");
+    }
+
+    /// <summary>
+    /// The stack runs without k6; the Stack screen's load run does not (<see cref="LoadRunService"/>). The read is run-locally.md
+    /// step 0's, which installs nothing and, when k6 is missing, says so and names the install, so its own line is the detail. A
+    /// PowerShell that did not answer cannot tell, as the other PowerShell reads cannot.
+    /// </summary>
+    internal static DoctorCheck K6(CommandOutput version)
+    {
+        const string name = "k6";
+
+        if (version.Error is { } error)
+        {
+            return new(name, DoctorState.Unknown, $"The k6 read did not run: {error}");
+        }
+
+        string said = Joined(version);
+
+        return said.Length == 0 || said.StartsWith(LoadRunService.K6Missing, StringComparison.Ordinal)
+            ? new(name, DoctorState.Problem, $"{(said.Length > 0 ? said : "The k6 read printed nothing")}; the load run needs it.")
+            : new(name, DoctorState.Ok, $"{said}, which the load run runs.");
     }
 
     /// <summary>Judged against the last fetch: the doctor makes no network call, so a clone behind an unfetched origin reads level.</summary>

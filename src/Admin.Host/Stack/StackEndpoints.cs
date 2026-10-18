@@ -15,13 +15,24 @@ public static class StackEndpoints
 
     public static IEndpointRouteBuilder MapStack(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/stack", async (ComposeService compose, FrontendSupervisor frontend, PlatformProbe probe, ScenarioLeaseService leases, CancellationToken cancellationToken) =>
+        app.MapGet("/api/stack", async (ComposeService compose, FrontendSupervisor frontend, PlatformProbe probe, ScenarioLeaseService leases, LoadRunService loadRun, CancellationToken cancellationToken) =>
         {
             Task<ComposeStatus> backend = compose.PsAsync(cancellationToken);
             Task<IReadOnlyList<Reachability>> reachability = probe.ProbeAsync(cancellationToken);
+            JobSummary? lastRun = loadRun.Current is { } run ? JobSummary.Of(run) : null;
 
-            return TypedResults.Ok(new StackView(await backend, frontend.Status(), await reachability, leases.Current));
+            return TypedResults.Ok(new StackView(await backend, frontend.Status(), await reachability, leases.Current, lastRun));
         });
+
+        // The backend's SLO run as one job (spec §5.3): a run still going answers a second Run with itself, as an Up does, and
+        // Stop ends it at the step it is in.
+        app.MapPost("/api/stack/load-run", (LoadRunService loadRun) =>
+            TypedResults.Accepted((string?)null, JobSummary.Of(loadRun.Start())));
+
+        app.MapPost("/api/stack/load-run/stop", async Task<Results<Ok<JobSummary>, ProblemHttpResult>> (LoadRunService loadRun) =>
+            await loadRun.StopAsync() is Job stopped
+                ? TypedResults.Ok(JobSummary.Of(stopped))
+                : TypedResults.Problem(statusCode: StatusCodes.Status409Conflict, title: "No load run going", detail: "There is no load run to stop."));
 
         // A Scenario's lease (spec §5.3): a change from ScenarioControl.Table held under ComposeGate, journaled, and always
         // undone. The acquire waits for the change, so the answer is the lease held or why it was not; a request that goes
@@ -122,7 +133,7 @@ public static class StackEndpoints
     }
 }
 
-public sealed record StackView(ComposeStatus Backend, FrontendStatus Frontend, IReadOnlyList<Reachability> Reachability, LeaseView? Lease);
+public sealed record StackView(ComposeStatus Backend, FrontendStatus Frontend, IReadOnlyList<Reachability> Reachability, LeaseView? Lease, JobSummary? LoadRun);
 
 /// <summary>One or more changes from <see cref="ScenarioControl.Table"/>, how long to hold them, and a label the Stack screen shows beside them.</summary>
 public sealed record LeaseRequest(string[]? Changes, int HoldSeconds, string? Label);
