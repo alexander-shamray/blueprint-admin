@@ -61,18 +61,33 @@ public static class FakePlatformScripts
                 " Container commerce-keycloak-1  Healthy",
                 " Container commerce-catalog-api-1  Healthy",
                 " Container commerce-gateway-1  Healthy")
-            .On("docker", prefix + "down -v", 0,
-                " Container commerce-gateway-1  Removed",
-                " Container commerce-catalog-api-1  Removed",
-                " Container commerce-sql-1  Removed",
-                " Volume commerce_sql-data  Removed",
-                " Volume commerce_rabbit-data  Removed",
-                " Network commerce_default  Removed")
-            .On("docker", prefix + "down", 0,
-                " Container commerce-gateway-1  Removed",
-                " Container commerce-catalog-api-1  Removed",
-                " Container commerce-sql-1  Removed",
-                " Network commerce_default  Removed")
+            // Either down removes the container a load run's samples live in, so it ends the strip's load too.
+            .On("docker", prefix + "down -v", 0, _ =>
+            {
+                stack.Unload();
+
+                return
+                [
+                    " Container commerce-gateway-1  Removed",
+                    " Container commerce-catalog-api-1  Removed",
+                    " Container commerce-sql-1  Removed",
+                    " Volume commerce_sql-data  Removed",
+                    " Volume commerce_rabbit-data  Removed",
+                    " Network commerce_default  Removed",
+                ];
+            })
+            .On("docker", prefix + "down", 0, _ =>
+            {
+                stack.Unload();
+
+                return
+                [
+                    " Container commerce-gateway-1  Removed",
+                    " Container commerce-catalog-api-1  Removed",
+                    " Container commerce-sql-1  Removed",
+                    " Network commerce_default  Removed",
+                ];
+            })
             // A Scenario's lease (spec §5.3): the two changes and the one restore each. The restore's verification reads the
             // recorded ps, which keeps both services running. What each command did is remembered in FakeStack, so an order
             // placed after it ends as it would on a stack.
