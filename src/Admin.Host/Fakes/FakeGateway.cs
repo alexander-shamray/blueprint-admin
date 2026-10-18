@@ -441,7 +441,7 @@ internal static partial class FakeGateway
     /// payload may be any JSON: one that is not an object is unreadable, and a claim that is not an array
     /// of strings grants nothing.
     /// </summary>
-    private static string[]? Permissions(HttpRequestMessage request)
+    internal static string[]? Permissions(HttpRequestMessage request)
     {
         // Authentication schemes ignore case (RFC 9110 §11.1), as the gateway's JWT bearer handler does.
         if (request.Headers.Authorization is not { Scheme: string scheme, Parameter: string token }

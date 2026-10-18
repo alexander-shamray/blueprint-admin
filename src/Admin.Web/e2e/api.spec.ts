@@ -83,6 +83,24 @@ test('show token displays the demo permissions', async ({ page }) => {
   await expect(page.locator('.claims')).toContainText('orders:cancel');
 });
 
+// run-locally.md, "Call the BFF directly (no gateway)": Admin:BffUrl is a surface the proxy admits, and the BFF checks the
+// token itself, then answers its own routes, which are the gateway's /bff ones without the prefix (FakeBff, #136).
+test('a call sent straight to the bff port is the bff own 401, then its 404 for a path it does not serve', async ({ page }) => {
+  await page.goto('/requests');
+
+  await page.locator('button.op', { hasText: 'GetProducts' }).click();
+  await page.getByLabel('URL').fill('http://localhost:5200/v1/no-such-path');
+  await page.getByLabel('Identity').selectOption('anonymous');
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.locator('.response .status')).toHaveText('401');
+  await expect(page.locator('.response pre.body')).toContainText('Unauthorized');
+
+  await page.getByLabel('Identity').selectOption('user:demo');
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.locator('.response .status')).toHaveText('404');
+  await expect(page.locator('.response pre.body')).toContainText('Not Found');
+});
+
 // Spec §10: "a trace renders a timeline". The button carries the response's own correlation id to
 // the Trace screen, which loads it from the route rather than from anything this screen holds.
 test('trace this call opens the response correlation id on the trace screen', async ({ page }) => {
