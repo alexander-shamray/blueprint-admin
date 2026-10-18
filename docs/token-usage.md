@@ -205,29 +205,33 @@ measured: read it on `/ship` sessions run after the change lands.
 #226 merged at 16:56 UTC on 2026-10-16, so every `/ship` from 2026-10-17 ran
 with the cut. Measured at `main` a07e43b with `--since 2026-10-17` (`--tools
 15` and `--models`), and the `/ship` `Bash` results split by command by a
-scratch script over the same transcripts, bounded to 2026-10-15 up to #226's
-merge for *before* and from 2026-10-17 for *after*; the evening between is in
-neither. It classifies a call by the first named command anywhere in it and
-the shell readers (`sed`, `cat`, `grep`) by their first word; characters, not
-tokens. The *after* window includes the session that measured it.
+scratch script over the same transcripts. Its *before* is 2026-10-15 up to
+#226's merge and its *after* is the UTC day 2026-10-17, so the evening between
+is in neither and *after* closes before the session that measured it began;
+an entry with no timestamp is in neither, since the transcripts of sessions
+still running would otherwise add to both. It classifies a call by the first
+named command anywhere in it and the shell readers (`sed`, `cat`, `grep`) by
+their first word; characters, not tokens.
 
 | `/ship` `Bash` | Before | After |
 |---|---|---|
-| All results | 4.48M, 2,829 calls | 0.98M, 800 calls |
-| `gh pr checks` | 247k, 97 calls, 2,551 a call | 49k, 26 calls, 1,896 a call |
-| its share of all | 5.5% | 5.0% |
-| `gh issue view` | 287k, 114 calls | 67k, 38 calls |
-| shell file reads, `sed` + `cat` + `grep` | 1.76M (39%) | 0.34M (34%) |
+| All results | 4.41M, 2,674 calls | 0.91M, 665 calls |
+| `gh pr checks` | 236k, 89 calls, 2,651 a call | 39k, 19 calls, 2,034 a call |
+| its share of all | 5.4% | 4.2% |
+| `gh issue view` | 285k, 112 calls | 64k, 36 calls |
+| shell file reads, `sed` + `cat` + `grep` | 1.76M (40%) | 0.34M (37%) |
 
 - **The cut did what it says.** A `gh pr checks` call, with `--watch` or
   without, returns about a quarter less text than before. Its share of
-  `/ship`'s `Bash` barely moved, because the call is a small part of the
-  whole.
+  `/ship`'s `Bash` moved by about a point, because the call is a small part
+  of the whole.
 - **It was never the largest.** Classified this way, `gh pr checks` is
-  seventh before and sixth after; the 2026-10-16 table ranked it first on a
+  seventh in both windows; the 2026-10-16 table ranked it first on a
   script that saw fewer characters. In both windows the largest `Bash`
   results are file reads through the shell, ahead of `gh issue view`.
 - **Step 2's exit, half met.** The Sonnet `/ship` row (15 contexts, 869
   calls) has a mean context of 138k a call, under 200k, against 192k on
   2026-10-16. Its after-a-wake share is 6.0M of 15.4M, 39%, over 35% and up
-  from 28%. The Opus `/ship` row is one context and is not read.
+  from 28%. The report's `--since` takes a date, so this row runs through
+  2026-10-18; the measuring session is the one Opus `/ship` context, which
+  is not read.
