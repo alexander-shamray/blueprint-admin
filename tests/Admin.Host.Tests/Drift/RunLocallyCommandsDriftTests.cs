@@ -43,7 +43,7 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
         ["docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.short-timeouts.yml up -d --wait"] =
             "the full-stack up with the override added, which a developer runs by hand; the host's Up never adds it, and a Scenario's lease recreates Ordering alone",
         ["docker compose -f deploy/compose/docker-compose.yml exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Local_Dev_Pa55w0rd!' -d Ordering -W -Q \"select Status, CancelReason from ordering.OrderSummaries where OrderId = '$orderId'\""] =
-            "a by-hand read of the cancel reason, which the order read folds; the console queries no database",
+            "a by-hand read of the cancel reason, which the order read folds; the console does not read that table",
         [@"& ""$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"" reverse tcp:8080 tcp:8080"] =
             "it changes the emulator's forwarding, and the device lane is reads and one build (spec §5.4)",
         [@"& ""$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"" reverse --list"] = "the read-back of the line above, which is not run",
