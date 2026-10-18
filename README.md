@@ -61,7 +61,7 @@ then open the screens that read them and review the diff;
 Phases 0 to 6 of the spec: the Stack screen (a workstation doctor read before
 Up: Docker, the published ports and what holds them, the gateway's CORS
 origins, Node against the client's `.nvmrc`, `py -3.12` for the dead-letter
-workbench, both clones against their last
+workbench, k6 for the load run, both clones against their last
 fetch, image age, and whether the image store was provisioned (`object-store`
 and `image-edge` healthy, `object-store-init` exited 0); then Compose services, reachability,
 up, down, down with a typed `down -v` confirmation, Reset behind the same
@@ -72,7 +72,9 @@ service's golden signals from Prometheus, one column per panel of the
 backend golden-signals dashboard: request rate, 5xx share, p99 latency, the
 422 and 401 refusals, and §13.7's command and query p95; beside it, the alert rules Prometheus
 loaded, firing first, and the backend's `awaiting-signal.yaml` rules listed apart
-as waiting, each with the metric it lacks), the Logs screen
+as waiting, each with the metric it lacks; and the load run, the backend's
+§13.7 SLO run as one job, block by block as `run-locally.md`'s "Load run
+(k6)" runs it, with Stop, so the strip is read under load), the Logs screen
 (follow, service filter, text filter, correlation-id highlight) and the API
 screen (Catalog's, Ordering's, Inventory's, Payments' and Privacy's OpenAPI operations
 through the gateway, the BFF quote, its product-image upload and saved address,
@@ -273,6 +275,10 @@ are announced.
   service; Grafana's panel shows the split. Its command and query p95 are
   quantiles over the backend's `request.duration` histogram, so they are only
   as fine as that histogram's bucket boundaries.
+- The load run's Stop ends k6's process tree, not k6's own Ctrl+C, so its
+  `teardown()` does not run and a stopped run has no verdict. A run leaves its
+  orders, the `slo-run` client and the restocked count as they are, and a
+  local run proves nothing about the SLO (§13.7).
 - The Mail screen lists the sink's newest `MailSinkClient.Limit` messages and
   says how many it holds in all. Opening a message marks it read in the sink,
   as opening it in the sink's own UI does. A message with no
