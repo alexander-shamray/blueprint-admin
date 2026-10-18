@@ -64,7 +64,7 @@ internal static partial class FakeGateway
     /// and description (blueprint-backend <c>ResultExtensions</c>, <c>ProductErrors</c>).
     /// </summary>
     private static HttpResponseMessage Rule(string code, string detail) =>
-        FakeHttp.Json(HttpStatusCode.UnprocessableEntity, JsonSerializer.Serialize(new
+        FakeHttp.RecordedProblem(HttpStatusCode.UnprocessableEntity, JsonSerializer.Serialize(new
         {
             type = "https://tools.ietf.org/html/rfc4918#section-11.2",
             title = "Unprocessable Entity",
@@ -205,15 +205,15 @@ internal static partial class FakeGateway
             ("POST", false, _) when route.Groups["id"].Value == "" =>
                 Body(request)?.Get("subjectId") is { ValueKind: JsonValueKind.String } subject && Guid.TryParse(subject.GetString(), out Guid subjectId) && subjectId != Guid.Empty
                     ? FakeHttp.Json(HttpStatusCode.OK, $"\"{erasures.Raise(subjectId)}\"")
-                    : FakeHttp.Json(HttpStatusCode.BadRequest, """{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.1","title":"One or more validation errors occurred.","status":400,"errors":{"SubjectId":["'Subject Id' must not be empty."]}}"""),
+                    : FakeHttp.RecordedProblem(HttpStatusCode.BadRequest, """{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.1","title":"One or more validation errors occurred.","status":400,"errors":{"SubjectId":["'Subject Id' must not be empty."]}}"""),
             ("GET", true, false) => erasures.Read(id) is { } view
                 ? FakeHttp.Json(HttpStatusCode.OK, view)
-                : FakeHttp.Json(HttpStatusCode.NotFound, ErasureNotFound),
+                : FakeHttp.RecordedProblem(HttpStatusCode.NotFound, ErasureNotFound),
             ("POST", true, true) => erasures.Reissue(id) switch
             {
                 Reissued.Asked => new HttpResponseMessage(HttpStatusCode.NoContent),
                 Reissued.Closed => Rule("erasure_request.closed", "The request has closed, so it no longer holds the subject to ask about."),
-                _ => FakeHttp.Json(HttpStatusCode.NotFound, ErasureNotFound),
+                _ => FakeHttp.RecordedProblem(HttpStatusCode.NotFound, ErasureNotFound),
             },
             _ => FakeHttp.Problem(HttpStatusCode.NotFound, "Not Found"),
         };
@@ -235,7 +235,7 @@ internal static partial class FakeGateway
     private static HttpResponseMessage OrderRead(FakeOrders orders, string segment) =>
         !Guid.TryParse(Uri.UnescapeDataString(segment), out Guid id) ? FakeHttp.Problem(HttpStatusCode.NotFound, "Not Found")
         : orders.Detail(id.ToString("D")) is { } detail ? FakeHttp.Json(HttpStatusCode.OK, detail)
-        : FakeHttp.Json(HttpStatusCode.NotFound, OrderNotFound);
+        : FakeHttp.RecordedProblem(HttpStatusCode.NotFound, OrderNotFound);
 
     /// <summary>The amount the body publishes at, which the fake keeps so an order for it can end as the amount scripts (<see cref="FakeOrders.DeclinedMinorUnits"/>).</summary>
     private static HttpResponseMessage Published(FakeOrders orders, HttpRequestMessage request, string imageEdgeUrl)
@@ -287,7 +287,7 @@ internal static partial class FakeGateway
 
         if (contentType is null || !ImageExtensions.TryGetValue(contentType, out string? extension) || size is not (> 0 and <= MaxImageBytes))
         {
-            return FakeHttp.Json(HttpStatusCode.BadRequest, """{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.1","title":"One or more validation errors occurred.","status":400}""");
+            return FakeHttp.RecordedProblem(HttpStatusCode.BadRequest, """{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.1","title":"One or more validation errors occurred.","status":400}""");
         }
 
         string key = $"uploads/{Seller(request)}/{Guid.CreateVersion7():D}.{extension}";
@@ -316,7 +316,7 @@ internal static partial class FakeGateway
         if (string.IsNullOrEmpty(line1) || string.IsNullOrEmpty(city) || string.IsNullOrEmpty(postalCode)
             || country is not { Length: 2 } || !country.All(char.IsAsciiLetter))
         {
-            return FakeHttp.Json(HttpStatusCode.BadRequest, """{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.1","title":"One or more validation errors occurred.","status":400}""");
+            return FakeHttp.RecordedProblem(HttpStatusCode.BadRequest, """{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.1","title":"One or more validation errors occurred.","status":400}""");
         }
 
         string saved = JsonSerializer.Serialize(new
@@ -415,7 +415,7 @@ internal static partial class FakeGateway
     private static HttpResponseMessage Cancelled(FakeOrders orders, string orderId)
     {
         return orders.Cancel(orderId) == CancelOutcome.AlreadyShipped
-            ? FakeHttp.Json(HttpStatusCode.UnprocessableEntity, AlreadyShipped)
+            ? FakeHttp.RecordedProblem(HttpStatusCode.UnprocessableEntity, AlreadyShipped)
             : new HttpResponseMessage(HttpStatusCode.NoContent);
     }
 
