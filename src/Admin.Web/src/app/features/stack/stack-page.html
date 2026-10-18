@@ -130,7 +130,7 @@
     </p>
     <button class="load-run-start" type="button" [disabled]="loadRunning()" (click)="startLoadRun()">Run load</button>
     <button class="load-run-stop" type="button" [disabled]="!loadRunning()" (click)="stopLoadRun()"
-      title="Ends k6 at once: teardown() does not run, so there is no verdict">Stop load</button>
+      title="Ends the step going at once; during k6, teardown() does not run, so there is no verdict">Stop load</button>
     @if (loadRun()) {
       <button class="load-run-output" type="button" (click)="showLoadRunOutput()">Show load output</button>
     }
