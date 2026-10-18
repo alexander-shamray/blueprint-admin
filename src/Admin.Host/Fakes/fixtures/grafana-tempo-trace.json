@@ -73,6 +73,100 @@
               "status": {}
             }
           ]
+        },
+        {
+          "scope": { "name": "Commerce.Outbox" },
+          "spans": [
+            {
+              "traceId": "S/kvNXezTaajzpKdDg5HNg==",
+              "spanId": "APBnqgupAro=",
+              "parentSpanId": "APBnqgupArg=",
+              "name": "outbox deliver",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1789532581510000000",
+              "endTimeUnixNano": "1789532581534700000",
+              "attributes": [{ "key": "messaging.message.id", "value": { "stringValue": "0199b0c4-6f2e-7a31-8c5d-2e4f6a7b8c9d" } }],
+              "status": {}
+            }
+          ]
+        },
+        {
+          "scope": { "name": "MassTransit" },
+          "spans": [
+            {
+              "traceId": "S/kvNXezTaajzpKdDg5HNg==",
+              "spanId": "APBnqgupArs=",
+              "parentSpanId": "APBnqgupAro=",
+              "name": "Common.Contracts.Catalog.V1:ProductPublished send",
+              "kind": "SPAN_KIND_PRODUCER",
+              "startTimeUnixNano": "1789532581510300000",
+              "endTimeUnixNano": "1789532581518100000",
+              "attributes": [
+                { "key": "messaging.operation", "value": { "stringValue": "send" } },
+                { "key": "messaging.system", "value": { "stringValue": "rabbitmq" } },
+                { "key": "messaging.destination.name", "value": { "stringValue": "Common.Contracts.Catalog.V1:ProductPublished" } },
+                {
+                  "key": "messaging.masstransit.message_types",
+                  "value": {
+                    "stringValue": "urn:message:Common.Contracts.Catalog.V1:ProductPublished,urn:message:Common.Contracts:IIntegrationEvent"
+                  }
+                }
+              ],
+              "status": {}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "resource": {
+        "attributes": [{ "key": "service.name", "value": { "stringValue": "Ordering.Api" } }]
+      },
+      "scopeSpans": [
+        {
+          "scope": { "name": "MassTransit" },
+          "spans": [
+            {
+              "traceId": "S/kvNXezTaajzpKdDg5HNg==",
+              "spanId": "APBnqgupArw=",
+              "parentSpanId": "APBnqgupArs=",
+              "name": "ordering-catalog-events receive",
+              "kind": "SPAN_KIND_CONSUMER",
+              "startTimeUnixNano": "1789532581516000000",
+              "endTimeUnixNano": "1789532581547800000",
+              "attributes": [
+                { "key": "messaging.operation", "value": { "stringValue": "receive" } },
+                { "key": "messaging.destination.name", "value": { "stringValue": "ordering-catalog-events" } },
+                { "key": "messaging.masstransit.input_address", "value": { "stringValue": "rabbitmq://rabbitmq/ordering-catalog-events" } }
+              ],
+              "status": {}
+            },
+            {
+              "traceId": "S/kvNXezTaajzpKdDg5HNg==",
+              "spanId": "APBnqgupAr0=",
+              "parentSpanId": "APBnqgupArw=",
+              "name": "ordering-catalog-events process",
+              "kind": "SPAN_KIND_CONSUMER",
+              "startTimeUnixNano": "1789532581518500000",
+              "endTimeUnixNano": "1789532581539400000",
+              "attributes": [
+                { "key": "messaging.operation", "value": { "stringValue": "process" } },
+                {
+                  "key": "messaging.masstransit.message_types",
+                  "value": {
+                    "stringValue": "urn:message:Common.Contracts.Catalog.V1:ProductPublished,urn:message:Common.Contracts:IIntegrationEvent"
+                  }
+                },
+                {
+                  "key": "messaging.masstransit.consumer_type",
+                  "value": {
+                    "stringValue": "Common.Infrastructure.Messaging.IntegrationEventConsumer<Common.Contracts.Catalog.V1.ProductPublished>"
+                  }
+                }
+              ],
+              "status": {}
+            }
+          ]
         }
       ]
     }

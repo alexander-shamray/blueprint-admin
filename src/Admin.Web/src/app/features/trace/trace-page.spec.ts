@@ -11,7 +11,7 @@ const queued = {
   service: 'rabbitmq',
   kind: 'Queued' as const,
   summary:
-    'ordering-catalog-events: 0 messages (drained). The publish runs in a new trace — the outbox carries no trace context, so the consume side is not joinable by this correlation id.',
+    'ordering-catalog-events: 0 messages (drained). No consume of the handover appears yet; a message still waiting shows in the depths above.',
   traceId: null,
   link: null,
 };
@@ -94,13 +94,13 @@ describe('TracePage', () => {
     expect(timeline[2]).toContain('[queued]');
   });
 
-  it('renders the terminal queued row last with the sentence that explains why the timeline stops', () => {
+  it('renders the terminal queued row last with the queue depths and what the timeline does not yet show', () => {
     configure('demo-trace-0001');
     const fixture = render();
 
     const last = rows(fixture).at(-1) ?? '';
     expect(last).toContain('ordering-catalog-events: 0 messages (drained).');
-    expect(last).toContain('the outbox carries no trace context');
+    expect(last).toContain('No consume of the handover appears yet');
     expect(fixture.nativeElement.querySelector('tr.kind-Queued')).toBeTruthy();
   });
 

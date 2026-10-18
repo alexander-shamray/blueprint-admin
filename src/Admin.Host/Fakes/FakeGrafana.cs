@@ -13,9 +13,10 @@ namespace Admin.Host.Fakes;
 /// <c>CorrelationId</c> is structured metadata, and Tempo answers OTLP-JSON with base64 ids.
 /// <para>
 /// The recording is one publish of a product: a first attempt that failed with 503, then a retry
-/// that succeeded and wrote an outbox row. It ends at that row on purpose — the backend's outbox
-/// carries no trace context (plan M2), so there is no publish or consume span to record here, and a
-/// recording that showed one would contradict the very thing the Trace screen exists to say.
+/// that succeeded and wrote an outbox row. The outbox carries the trace on, so the retry's trace goes on
+/// to the dispatcher's delivery, the <c>ProductPublished</c> send and Ordering's consume of it on the
+/// projection queue: those four spans are a live publish's, recorded 2026-10-18 and moved under the
+/// fixture's trace id and times.
 /// </para>
 /// </summary>
 internal static class FakeGrafana
@@ -106,8 +107,7 @@ internal static class FakeGrafana
 
     /// <summary>
     /// What lands after the first fetch: the same publish sent again under the same correlation id, as
-    /// run-locally.md says to reuse a commandId to retry an intent. It is the request's own side of the outbox,
-    /// the only side this correlation id reaches (spec §5.9).
+    /// run-locally.md says to reuse a commandId to retry an intent.
     /// </summary>
     private const string LaterLine = """
         {"stream":{"CorrelationId":"demo-trace-0001","detected_level":"info","scope_name":"Microsoft.AspNetCore.Hosting.Diagnostics","service_name":"Gateway.Api","severity_number":"9","severity_text":"Information"},"values":[["1789532585000000000","Request finished POST /api/v1/products - 201 (the same commandId sent again)"]]},

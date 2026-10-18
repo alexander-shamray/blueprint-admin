@@ -8,10 +8,10 @@ namespace Admin.Host.Trace;
 
 /// <summary>
 /// Builds one correlation id's timeline from Loki's lines, Tempo's spans and the broker's projection
-/// snapshot (spec §5.9, as corrected by plan M2). The timeline ends at the outbox on purpose: the
-/// backend's outbox row carries no trace context, so the publish starts a new trace that this
-/// correlation id cannot reach, and the terminal <see cref="TraceEventKind.Queued"/> event says so
-/// in words rather than letting the silence read as "nothing happened".
+/// snapshot (spec §5.9). The backend's outbox row carries the trace it was written under and the
+/// dispatcher delivers it as that trace's child, so a request's trace runs on across the broker into
+/// every consume, saga step and later handover. The terminal <see cref="TraceEventKind.Queued"/> event
+/// is the broker as of now: the depth of each queue the timeline crossed and anything parked beside it.
 /// </summary>
 public sealed class EventTraceService(GrafanaClient grafana, BrokerService broker, IOptions<AdminOptions> options, TimeProvider time)
 {
@@ -178,8 +178,8 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
 
     /// <summary>
     /// The terminal marker's words. It states the projection queue and every other queue the timeline's spans
-    /// crossed, each with its depth and anything parked in its <c>_error</c> or <c>_skipped</c> twin, then why the timeline stops here
-    /// rather than continuing into the consume side (plan M2).
+    /// crossed, each with its depth and anything parked in its <c>_error</c> or <c>_skipped</c> twin, then a sentence
+    /// where the timeline alone would mislead: no handover at all, or a handover no consume has followed yet.
     /// </summary>
     private static string QueuedSummary(QueuesView queues, string[] crossed, bool handedToTheBroker, bool consumed)
     {
@@ -197,22 +197,17 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
             ? string.Concat(crossed.Select(name => $"; {name}: {CrossedDepth(queues, name)}{Parked(queues, name)}"))
             : "";
 
-        // Only claimed when the timeline actually shows a handover. A read-only request, or one whose
-        // lines have aged out, never wrote an outbox row, and telling its operator about "the publish"
-        // would invent an event this console has no evidence for.
-        // And once consume-side spans are on the timeline, saying the consume side cannot be joined would contradict
-        // the rows above: they arrived through traces whose services logged this id, and only a hop that logged
-        // nothing is missing.
-        string why = !handedToTheBroker
-            ? "No outbox write appears in this timeline, so nothing here was handed to the broker; the "
-                + "queue is shown because a handover would not be joinable by this correlation id either."
-            : consumed
-                ? "The outbox carries no trace context, so each consume above was found only because its service "
-                    + "logged this correlation id; a hop that logged nothing is missing from this timeline."
-                : "The publish runs in a new trace — the outbox carries no trace context, so the consume "
-                    + "side is not joinable by this correlation id.";
+        // A read-only request, or one whose lines have aged out, never wrote an outbox row, and telling its operator
+        // about "the publish" would invent an event this console has no evidence for. A handover with no consume yet
+        // is a delivery the dispatcher has not made or a consumer that is not running; the depths above say which.
+        // Once a consume is on the timeline the rows speak for themselves: the trace carried on across the broker.
+        string? why = !handedToTheBroker
+            ? " No outbox write appears in this timeline, so nothing here was handed to the broker."
+            : !consumed
+                ? " No consume of the handover appears yet; a message still waiting shows in the depths above."
+                : null;
 
-        return $"{projection.Queue}: {depth}{Parked(queues, projection.Queue)}{others}. {why}";
+        return $"{projection.Queue}: {depth}{Parked(queues, projection.Queue)}{others}.{why}";
     }
 
     private static string CrossedDepth(QueuesView queues, string name) =>
