@@ -11,7 +11,7 @@ const queued = {
   service: 'rabbitmq',
   kind: 'Queued' as const,
   summary:
-    'ordering-catalog-events: 0 messages (drained). No consume of the handover appears yet; a message still waiting shows in the depths above.',
+    'ordering-catalog-events: 0 messages (drained). No consume of the handover appears yet; the depths before this say whether a message is still waiting.',
   traceId: null,
   link: null,
 };
