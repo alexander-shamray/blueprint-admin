@@ -5,9 +5,10 @@ namespace Admin.Host.Api;
 
 /// <summary>
 /// A placeholder value for an OpenAPI 3.1 schema, for a request body whose document declares no
-/// example (<see cref="OpenApiReader"/> prefers one where it does). Understands <c>$ref</c> into <c>components.schemas</c>, type arrays (the null branch
-/// and the string branch of a string-readable number are skipped), <c>enum</c>, <c>default</c>,
-/// <c>oneOf</c>/<c>anyOf</c> (first non-null branch) and <c>allOf</c> (merged).
+/// example (<see cref="OpenApiReader"/> prefers one where it does). Understands <c>$ref</c> into
+/// <c>components.schemas</c>, type arrays (the null branch and the string branch of a
+/// string-readable number are skipped), <c>enum</c>, <c>default</c>, <c>oneOf</c>/<c>anyOf</c>
+/// (first non-null branch) and <c>allOf</c> (merged).
 /// </summary>
 public static class ExampleBuilder
 {
