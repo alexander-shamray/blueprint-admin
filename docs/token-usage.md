@@ -199,3 +199,34 @@ sees fewer characters than the report, so only the order is read):
 passes `--interval 60`. The others are reads the step needs whole or are
 spread over unrelated calls; none is cut here. The effect is not yet
 measured: read it on `/ship` sessions run after the change lands.
+
+## 2026-10-18 — the effect of `--interval 60`, the owner's machine
+
+#226 merged at 16:56 UTC on 2026-10-16, so every `/ship` from 2026-10-17 ran
+with the cut. Measured at `main` a07e43b with `--since 2026-10-17` (`--tools
+15` and `--models`), and the `/ship` `Bash` results split by command by a
+scratch script over the same transcripts, bounded to 2026-10-15–16 for
+*before* and from 2026-10-17 for *after*. It classifies a call by the first
+named command anywhere in it and the shell readers (`sed`, `cat`, `grep`) by
+their first word; characters, not tokens. The *after* window includes the
+session that measured it.
+
+| `/ship` `Bash` | Before | After |
+|---|---|---|
+| All results | 4.48M, 2,828 calls | 0.98M, 800 calls |
+| `gh pr checks` | 249k, 98 calls, 2,536 a call | 49k, 26 calls, 1,896 a call |
+| its share of all | 5.5% | 5.0% |
+| `gh issue view` | 287k, 114 calls | 67k, 38 calls |
+| shell file reads, `sed` + `cat` + `grep` | 1.76M (39%) | 0.34M (34%) |
+
+- **The cut did what it says.** A `gh pr checks --watch` call returns about
+  a quarter less text than before. Its share of `/ship`'s `Bash` barely
+  moved, because the call is a small part of the whole.
+- **It was never the largest.** Classified this way, `gh pr checks` is
+  seventh before and sixth after; the 2026-10-16 table ranked it first on a
+  script that saw fewer characters. In both windows the largest `Bash`
+  results are file reads through the shell, ahead of `gh issue view`.
+- **Step 2's exit, half met.** The Sonnet `/ship` row (15 contexts, 869
+  calls) has a mean context of 138k a call, under 200k, against 192k on
+  2026-10-16. Its after-a-wake share is 6.0M of 15.4M, 39%, over 35% and up
+  from 28%. The Opus `/ship` row is one context and is not read.
