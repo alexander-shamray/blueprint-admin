@@ -300,8 +300,8 @@ workbench, for Python) will meet:
 
 A Compose port override has no row: the Compose files declare no port
 variable, and `-f` keeps Compose from reading an override file. The
-listener and `.nvmrc` reads are PowerShell's, so off Windows the Ports and
-Node rows cannot tell.
+listener, `.nvmrc` and k6 reads are PowerShell's, so off Windows the Ports,
+Node and k6 rows cannot tell.
 
 `ResetService` is "back to a known state" as one listed job: `Down(true)`,
 then `Up()`, then the reachability probe of §5.10's `GET /stack` until every
