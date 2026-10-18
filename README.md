@@ -237,7 +237,8 @@ are announced.
   `RequestProxy.Surfaces()` lists, and refuses a correlation id the platform
   would replace (anything but 1 to 128 ASCII letters, digits, `-` and `_`).
 - Operation examples are the bodies `run-locally.md` sends where there is one,
-  otherwise placeholders built from the schema; the documents carry none.
+  otherwise the document's own `example`; only a body the document declares
+  without one falls back to placeholders built from the schema.
 - API history is kept only while the screen is open.
 - OpenAPI baselines live under `Admin:DataDir`, which defaults to a directory
   inside `/artifacts/`; deleting it starts every service's baseline again.

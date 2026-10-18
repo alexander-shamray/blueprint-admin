@@ -80,17 +80,25 @@ public static class OpenApiReader
         }
     }
 
+    /// <summary>
+    /// The document's own example where the media type declares one (blueprint-backend's <c>WithRequestExample</c>
+    /// puts it there), otherwise a placeholder built from the schema.
+    /// </summary>
     private static string? Example(JsonElement operation, JsonElement schemas)
     {
-        if (operation.TryGetProperty("requestBody", out JsonElement body)
-            && body.TryGetProperty("content", out JsonElement content)
-            && content.TryGetProperty("application/json", out JsonElement json)
-            && json.TryGetProperty("schema", out JsonElement schema))
+        if (!operation.TryGetProperty("requestBody", out JsonElement body)
+            || !body.TryGetProperty("content", out JsonElement content)
+            || !content.TryGetProperty("application/json", out JsonElement json))
         {
-            return ExampleBuilder.Build(schema, schemas)?.ToJsonString(Indented);
+            return null;
         }
 
-        return null;
+        if (json.TryGetProperty("example", out JsonElement declared))
+        {
+            return JsonNode.Parse(declared.GetRawText())?.ToJsonString(Indented);
+        }
+
+        return json.TryGetProperty("schema", out JsonElement schema) ? ExampleBuilder.Build(schema, schemas)?.ToJsonString(Indented) : null;
     }
 
     private static bool HasCommandId(string? example)

@@ -56,6 +56,7 @@ public sealed class DriftCoverageTests
     /// <summary>Files that name the backend without copying anything from it.</summary>
     private static readonly Dictionary<string, string> CitesWithoutCopying = new(StringComparer.Ordinal)
     {
+        ["src/Admin.Host/Api/OpenApiReader.cs"] = "names where a document's example comes from, and reads the documents live",
         ["src/Admin.Web/src/app/features/scenario/scenario-page.ts"] = "says a product-specific signal would be a backend change",
     };
 

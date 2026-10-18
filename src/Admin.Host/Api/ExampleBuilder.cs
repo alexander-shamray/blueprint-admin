@@ -4,8 +4,8 @@ using System.Text.Json.Nodes;
 namespace Admin.Host.Api;
 
 /// <summary>
-/// A placeholder value for an OpenAPI 3.1 schema, because the platform's documents carry no
-/// examples. Understands <c>$ref</c> into <c>components.schemas</c>, type arrays (the null branch
+/// A placeholder value for an OpenAPI 3.1 schema, for a request body whose document declares no
+/// example (<see cref="OpenApiReader"/> prefers one where it does). Understands <c>$ref</c> into <c>components.schemas</c>, type arrays (the null branch
 /// and the string branch of a string-readable number are skipped), <c>enum</c>, <c>default</c>,
 /// <c>oneOf</c>/<c>anyOf</c> (first non-null branch) and <c>allOf</c> (merged).
 /// </summary>
