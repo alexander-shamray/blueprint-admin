@@ -7,8 +7,8 @@ a later measurement is a new section, never an edit of an old one.
 
 ## Running the report
 
-`tools/token-usage/` is ported unchanged from
-`alexander-shamray/blueprint-backend`'s, which owns it; its
+`tools/token-usage/` is ported from `alexander-shamray/blueprint-backend`'s
+and has taken fixes and views of its own here since; its
 [`README`](../tools/token-usage/README.md) says what each column and view
 means. It is stdlib only and reads Claude Code's local transcripts, so a
 baseline is measured on the machine that ran the sessions.
@@ -19,6 +19,8 @@ py -3.12 tools/token-usage/token_usage.py --since 2026-10-01    # a window
 py -3.12 tools/token-usage/token_usage.py --session <id>        # one session
 py -3.12 tools/token-usage/token_usage.py --since 2026-10-01 --spawns 40
 py -3.12 tools/token-usage/token_usage.py --since 2026-10-01 --tools 30
+py -3.12 tools/token-usage/token_usage.py --since 2026-10-01 --shell 30
+py -3.12 tools/token-usage/token_usage.py --since 2026-10-15 --until 2026-10-16T16:56:17 --shell 30
 py -3.12 tools/token-usage/token_usage.py --since 2026-10-01 --docs
 py -3.12 tools/token-usage/token_usage.py --since 2026-10-01 --models
 cd tools/token-usage && py -3.12 -m unittest                    # its suite
@@ -325,3 +327,48 @@ completing (a task notification whose summary names an MCP task), two are backgr
 - **No session compacted before a wait, in 81 wakes**, and none could: a
   session has no tool that compacts its own context, and a compaction
   rewrites the context it keeps into the cache, which a warm wake does not.
+
+## 2026-10-18 — the 2,674 and the 2,673, traced (#258), the owner's machine
+
+The two sections above count `/ship`'s `Bash` results over what both call
+the same *before* window and differ by one. Measured at `main` 89576f0 by
+re-running both scratch scripts over the window and diffing the tool-result
+ids each counted, then by the report itself once it could take the window.
+
+- **The window's end differed, not the classifiers.** The *effect of
+  `--interval 60`* script ended *before* at #226's merge to the second,
+  `2026-10-16T16:56:17`; the *shell reads* script ended it at the minute,
+  `16:56`. The one result between them is the `pr-state.sh 226` read at
+  16:56:04, in #226's own `/ship` run. With the same end, both scripts count
+  the same 2,673 ids. 2,674 is the window as both sections define it, up to
+  the merge; the shell-read figures are unchanged by it, since that result
+  is not a file read, and the *wakes* table shares the minute's end.
+- **The report counted some results twice.** Claude Code also writes each
+  request it sends as an untimestamped `api-request-blob` entry, and those
+  replay calls and results that a user entry already carries: 641 results
+  across this checkout's transcripts, every one a copy. `--tools` counted
+  them; the scratch scripts did not, because they read only timestamped
+  entries. Since 2026-10-15, `/ship`'s `Bash` row read 3,687 results and
+  5.56M characters with the copies and reads 3,520 and 5.49M without, so
+  a `--tools` figure recorded above this section may include some; which
+  ones cannot be read back, since a blob carries no time.
+
+The report now counts a result only from its user entry, takes `--until`
+and a UTC time in either bound, and splits shell results by program with
+`--shell N`, so neither measurement needs a scratch script again. With
+`--since 2026-10-15 --until 2026-10-16T16:56:17` it reads 2,674 results and
+4.41M characters; ending at `16:56`, 2,673; over the UTC day 2026-10-17,
+665 and 0.91M: the figures both sections recorded.
+
+| `/ship` `--shell`, top five | Before | After |
+|---|---|---|
+| `sed` | 1.23M (28%), 323 calls | 269k (30%), 78 calls |
+| `cat` | 643k (15%), 116 calls | 83k (9%), 20 calls |
+| `grep` | 603k (14%), 314 calls | 135k (15%), 72 calls |
+| `gh pr checks` | 185k (4.2%), 54 calls | 28k (3.0%), 12 calls |
+| `gh issue view` | 124k (2.8%), 50 calls | 31k (3.4%), 16 calls |
+
+`--shell` names a call by its first command after any `cd`, as the *shell
+reads* section does, so its `gh pr checks` row is smaller than the *effect
+of `--interval 60`* section's, which took the first named command anywhere
+in the call.
