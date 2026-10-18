@@ -235,3 +235,90 @@ their first word; characters, not tokens.
   from 28%. The report's `--since` takes a date, so this row runs through
   2026-10-18; the measuring session is the one Opus `/ship` context, which
   is not read.
+
+## 2026-10-18 — `/ship`'s shell reads by path and step, and its wakes by wait, the owner's machine
+
+Measured at `main` fd46ad7 by a scratch script over the same transcripts and
+the same two windows as the section above, reusing the report's own prompt,
+wake and command classifiers so that a run and a wake mean what the report
+means by them. Characters, not tokens, for results; input equivalent for
+usage. Two classifications differ from the section above and are stated here:
+
+- **A call is a shell file read when its first command, after any `cd`, is
+  `sed`, `cat`, `grep`, `head`, `tail`, `rg` or `awk`.** The section above
+  classified a call by the first *named* command anywhere in it, so a `sed`
+  followed by `gh issue view` counted as `gh`. Neither is wrong; this one is
+  what "a file read through the shell" means here, and it counts more.
+- **A step is read off the run's own milestones**: start until the fork or
+  branch (step 0), then until the first `git commit` (steps 1–2, the work and
+  its checks), then until `gh-pr-create.sh` (3–4), then until
+  `gh-pr-merge.sh` (5), then the teardown (6). A resumed run that starts in
+  its worktree has no fork, so its reads count as step 0.
+
+### Shell reads (#252)
+
+| `/ship` `Bash` | Before | After |
+|---|---|---|
+| All results | 4.41M, 2,673 | 0.91M, 665 |
+| Shell file reads | 2.50M (57%), 773 calls | 0.49M (54%), 169 calls |
+| … a `sed -n a,bp` range | 1.76M, 406 calls | 353k, 97 calls, 3.6k a call |
+| … `grep` | 370k, 240 calls | 69k, 51 calls |
+| … a whole file (`cat`, or a reader with no range) | 369k, 127 calls | 64k, 21 calls |
+| … a path the same run had already read | 208k | 41k |
+
+| Step | Before | After |
+|---|---|---|
+| 0, start | 265k | 78k |
+| 1–2, branch to first commit | 1.89M | 386k |
+| 3–4, commit to PR | 43k | 2k |
+| 5, review | 73k | 14k |
+| 6, merge and teardown | 226k | 6k |
+
+After, by what was read: the SPA 111k, the host 57k and its tests 37k, so
+the application and its tests are 205k of the 486k; a pipe's own input 63k; command
+files 42k in four calls, from one session editing those commands;
+`TODO.md` 25k in nine; docs 23k; workflows 22k; helpers 17k.
+
+- **The largest is the work.** Three in four of these characters before,
+  and four in five after, are read between the branch and the first commit,
+  most of them ranges of the application and its tests, about ninety lines
+  a call. `/ship` step 1
+  already routes that reading through the index's ranges; a `Read` of the
+  same range returns the same text with line numbers added, so moving it
+  off the shell saves nothing.
+- **What a rule could cut is small.** Whole-file reads are 8% of `/ship`'s
+  `Bash` before and 7% after, and re-reads of a path already read in the
+  run 4.7% and 4.5%; a re-read after an edit is often the check of that
+  edit. Step 2's premise, `Bash` output read whole where a count would do,
+  describes neither.
+
+### Wakes (#253)
+
+| `/ship` main | Before | After |
+|---|---|---|
+| Input equivalent after a wake | 23.9M of 85.6M (28%) | 6.04M of 15.4M (39%) |
+| Wakes | 69 | 12 |
+| Context of the first call after a wake, median | 181k | 114k |
+| Cache it wrote, of the context it sent | 69k of 12.0M (0.6%) | 5k of 1.94M (0.3%) |
+| Wakes with a compaction since the run's prompt or last wake | 0 | 0 |
+
+After, the twelve wakes: six are the `token-weather` plugin's prompt for a
+reply that did not end with its apply-status line, three are MCP tasks
+completing, two are background `harness-checks.sh` runs and one a background
+`spa-ci.sh`. Counted by the wake that first put a run into the share: the
+`spa-ci.sh` run 2.23M, the MCP tasks 1.57M, the plugin 1.41M and
+`harness-checks.sh` 0.83M. Before, the largest first wakes were
+`bug-auditor` agents (8.67M) and `harness-checks.sh` (5.54M).
+
+- **A wake costs about what any call costs.** The call after one sends its
+  whole context, and so does every call; what a wake could add is the cache
+  rewrite when the wait outlasted the cache, and that is under 1% of the
+  context in both windows: the waits measured all ended inside the cache's
+  lifetime.
+- **So the share counts work, not waking.** A call is "after a wake" from a
+  run's first wake to its next prompt, so the share moves with how early in
+  a run the first background wait falls. Foregrounding the waits would lower
+  it and leave the same calls, billed the same, from the same warm cache.
+- **No session compacted before a wait, in 81 wakes**, and none could: a
+  session has no tool that compacts its own context, and a compaction
+  rewrites the context it keeps into the cache, which a warm wake does not.
