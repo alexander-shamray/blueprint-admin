@@ -1105,7 +1105,7 @@ the console in a minute.
 answer is recorded. `FixtureRecordings` owns the list: the upstream answer
 each recorded file comes from, and each file written by hand with the
 reason a recording run cannot produce it. The answers kept in code
-(`WorkstationRecordings`, `FakeGateway`, `FakeKeycloak` and
+(`WorkstationRecordings`, `FakeGateway`, `FakeBff`, `FakeKeycloak` and
 `FakePlatformScripts`) are outside the switch. A re-recording is reviewed as
 its diff.
 
