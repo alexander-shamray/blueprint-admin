@@ -259,7 +259,7 @@ usage. Two classifications differ from the section above and are stated here:
 
 | `/ship` `Bash` | Before | After |
 |---|---|---|
-| All results | 4.41M, 2,673 | 0.91M, 665 |
+| All results | 4.41M, 2,673 (one fewer than above, not traced) | 0.91M, 665 |
 | Shell file reads | 2.50M (57%), 773 calls | 0.49M (54%), 169 calls |
 | … a `sed -n a,bp` range | 1.76M, 406 calls | 353k, 97 calls, 3.6k a call |
 | … `grep` | 370k, 240 calls | 69k, 51 calls |
@@ -277,14 +277,16 @@ usage. Two classifications differ from the section above and are stated here:
 After, by what was read: the SPA 111k, the host 57k and its tests 37k, so
 the application and its tests are 205k of the 486k; a pipe's own input
 63k; command files 42k in four calls, from one session editing those
-commands; `TODO.md` 25k in nine; docs 23k; workflows 22k; helpers 17k.
+commands; `TODO.md` 25k in nine; docs 23k; workflows 22k; helpers 17k; and
+77k of paths the script does not place.
 
 - **The largest is the work.** Three in four of these characters before,
-  and four in five after, are read between the branch and the first commit,
-  most of them ranges of the application and its tests, about ninety lines
-  a call. `/ship` step 1 already routes that reading through the index's
-  ranges; a `Read` of the same range returns the same text with line
-  numbers added, so moving it off the shell saves nothing.
+  and four in five after, are read between the branch and the first commit;
+  about half of those, 907k of 1.89M before and 192k of 386k after, are the
+  application and its tests. A range is about ninety lines a call. `/ship`
+  step 1 already routes that reading through the index's ranges; a `Read`
+  of the same range returns the same text with line numbers added, so
+  moving it off the shell saves nothing.
 - **What a rule could cut is small.** Whole-file reads are 8% of `/ship`'s
   `Bash` before and 7% after, and re-reads of a path already read in the
   run 4.7% and 4.5%; a re-read after an edit is often the check of that
@@ -297,13 +299,15 @@ commands; `TODO.md` 25k in nine; docs 23k; workflows 22k; helpers 17k.
 |---|---|---|
 | Input equivalent after a wake | 23.9M of 85.6M (28%) | 6.04M of 15.4M (39%) |
 | Wakes | 69 | 12 |
-| Context of the first call after a wake, median | 181k | 114k |
-| Cache it wrote, of the context it sent | 69k of 12.0M (0.6%) | 5k of 1.94M (0.3%) |
+| First calls after a wake (back-to-back wakes share one) | 59 | 12 |
+| Their context, median | 181k | 114k |
+| Cache they wrote, of the context they sent | 69k of 12.0M (0.6%) | 5k of 1.94M (0.3%) |
+| … the largest single call's share | 2.1% | 1.2% |
 | Wakes with a compaction since the run's prompt or last wake | 0 | 0 |
 
 After, the twelve wakes: six are the `token-weather` plugin's prompt for a
 reply that did not end with its apply-status line, three are MCP tasks
-completing, two are background `harness-checks.sh` runs and one a background
+completing (a task notification whose summary names an MCP task), two are background `harness-checks.sh` runs and one a background
 `spa-ci.sh`. Counted by the wake that first put a run into the share: the
 `spa-ci.sh` run 2.23M, the MCP tasks 1.57M, the plugin 1.41M and
 `harness-checks.sh` 0.83M. Before, the largest first wakes were
@@ -312,8 +316,8 @@ completing, two are background `harness-checks.sh` runs and one a background
 - **A wake costs about what any call costs.** The call after one sends its
   whole context, and so does every call; what a wake could add is the cache
   rewrite when the wait outlasted the cache, and that is under 1% of the
-  context in both windows: the waits measured all ended inside the cache's
-  lifetime.
+  context in both windows and at most 2.1% on any one call: the waits
+  measured all ended inside the cache's lifetime.
 - **So the share counts work, not waking.** A call is "after a wake" from a
   run's first wake to its next prompt, so the share moves with how early in
   a run the first background wait falls. Foregrounding the waits would lower
