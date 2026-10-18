@@ -113,6 +113,29 @@
     }
   </section>
 
+  <section class="load-run" aria-label="Load run">
+    <h2>Load run</h2>
+    <p class="load-run-status">
+      k6 run slo.js
+      @if (loadRun(); as job) {
+        @if (job.state === 'Running') { running } @else { exited {{ job.exitCode }} }
+      } @else {
+        not run
+      }
+    </p>
+    <p class="load-run-note">
+      The backend's SLO run, so the signals above are read under load: it places orders and lists products through the gateway
+      for a few minutes. A local run is not a staging baseline and proves nothing about the SLO (§13.7). Its orders, the slo-run
+      client and the restocked count are left as they are (run-locally.md, Load run (k6), Afterwards).
+    </p>
+    <button class="load-run-start" type="button" [disabled]="loadRunning()" (click)="startLoadRun()">Run load</button>
+    <button class="load-run-stop" type="button" [disabled]="!loadRunning()" (click)="stopLoadRun()"
+      title="Ends k6 at once: teardown() does not run, so there is no verdict">Stop load</button>
+    @if (loadRun()) {
+      <button class="load-run-output" type="button" (click)="showLoadRunOutput()">Show load output</button>
+    }
+  </section>
+
   <section class="alerts" aria-label="Alerts">
     @if (alertsError(); as ae) {
       <p class="error">The host did not answer for the alert rules: {{ ae }}</p>

@@ -59,8 +59,9 @@ test('the workstation panel is read before Up, green where fine and red where a 
   await page.goto('/stack');
   const rows = page.getByRole('region', { name: 'Workstation' }).locator('table.doctor tbody tr');
 
-  await expect(rows).toHaveCount(9);
+  await expect(rows).toHaveCount(10);
   await expect(rows.filter({ hasText: 'Python' })).toHaveClass('state-Ok');
+  await expect(rows.filter({ has: page.getByRole('rowheader', { name: 'k6', exact: true }) })).toHaveClass('state-Ok');
   await expect(rows.filter({ hasText: 'Object store' })).toHaveClass('state-Ok');
   await expect(rows.filter({ hasText: 'Docker' })).toHaveClass('state-Ok');
   await expect(rows.filter({ hasText: 'Docker' }).locator('td.state')).toHaveText('ok');
@@ -113,4 +114,27 @@ test('reset needs the typed confirmation, then runs down -v, up and the readines
   await expect(output).toContainText('commerce-gateway-1  Healthy');
   await expect(output).toContainText('ready: gateway, catalog, ordering, bff, inventory, payments, privacy, object-store, image-edge, keycloak, grafana');
   await expect(output).toContainText('exited 0');
+});
+
+// Last in the file: FakePlatformScripts replays each block of run-locally.md's load run as a live run printed it, and the
+// run's block puts FakeGrafana's strip on the signals recorded 150 s into that run for a minute (LoadRunRecordings,
+// FakeStack.LoadWindow), which the idle-strip test above would otherwise read.
+test('a load run runs the backend SLO run as one job, and the strip beside it reads the load', async ({ page }) => {
+  test.setTimeout(45_000);
+  await page.goto('/stack');
+  const load = page.getByRole('region', { name: 'Load run' });
+
+  await expect(load).toContainText('A local run is not a staging baseline and proves nothing about the SLO (§13.7).');
+  await expect(load.getByRole('button', { name: 'Stop load' })).toBeDisabled();
+  await load.getByRole('button', { name: 'Run load' }).click();
+
+  const output = page.locator('app-output-pane pre');
+  await expect(output).toContainText('token check: pass');
+  await expect(output).toContainText('k6 exit: 0');
+  await expect(output).toContainText('k6 exited 0: a pass');
+  await expect(load.locator('.load-run-status')).toHaveText(/exited 0/);
+
+  // The strip reads on its own 15-second timer, so the load arrives at its next tick.
+  const gateway = page.getByRole('region', { name: 'Golden signals' }).locator('table.signals tbody tr').filter({ hasText: 'Gateway.Api' });
+  await expect(gateway.locator('td').nth(1)).toHaveText('2.3', { timeout: 20_000 });
 });

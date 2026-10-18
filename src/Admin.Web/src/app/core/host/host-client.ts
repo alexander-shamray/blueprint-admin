@@ -71,6 +71,16 @@ export class HostClient {
     return this.http.post<JobSummary>('/api/stack/frontend/stop', null);
   }
 
+  /** The backend's SLO run as one job (spec §5.3), or the run still going. */
+  loadRunStart(): Observable<JobSummary> {
+    return this.http.post<JobSummary>('/api/stack/load-run', null);
+  }
+
+  /** Ends the run going at the step it is in; 409 when none is going. */
+  loadRunStop(): Observable<JobSummary> {
+    return this.http.post<JobSummary>('/api/stack/load-run/stop', null);
+  }
+
   lease(): Observable<LeaseState> {
     return this.http.get<LeaseState>('/api/stack/lease');
   }

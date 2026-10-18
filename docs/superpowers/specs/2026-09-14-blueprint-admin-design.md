@@ -284,6 +284,11 @@ workbench, for Python) will meet:
   it; the Broker screen's dead-letter workbench (§5.5) runs its tool under
   that same `py -3.12`, so a `py` that does not start, or answers another
   version, is a problem before the first Open on a parked queue meets it.
+- k6: the step's k6 read answers with a version. The stack runs without it;
+  the load run (below) does not. The read installs nothing and, when k6 is
+  missing, says so and names the install, so its own line is the problem's
+  detail. It is a PowerShell read, so a PowerShell that did not answer cannot
+  tell.
 - Each clone: on `main`, and not behind its upstream as last fetched.
 - Images: no image Compose built predates the backend's last commit, since Up
   does not rebuild an image that exists.
@@ -388,6 +393,42 @@ paragraph first:
   nothing is destroyed.
 - **FakePlatform is first-class.** The fakes take the same changes and show the
   same lease, so the smoke covers the control without a stack.
+
+**The load run.** The golden-signal strip (§5.8) had only ever shown a platform
+nobody was loading. `LoadRunService` runs the backend's §13.7 SLO run,
+`deploy/observability/slo/slo.js`, as one listed job on the Stack screen,
+beside the strip, so the strip is read under load. Every step is a block of
+`run-locally.md`'s "Load run (k6)", run whole through PowerShell from the
+backend clone and in that document's order: the k6 read of step 0, Prometheus
+answering through Grafana, the `slo-run` client made if missing and granted
+its two roles, its token checked, a product chosen and restocked, then k6. Two
+of the document's blocks are not run: whether the client exists, which the
+client block reads again, and the secret, which the run block reads into k6's
+environment itself, so no secret is ever printed. The console runs the
+backend's script and carries none, so a change to the run there needs nothing
+here; the blocks are copied and held to the document word for word
+(`LoadRunDriftTests`).
+
+- **One job, its steps' output in order.** Like the reset, the load-run job
+  owns no process: each step is a listed job of its own (so it is in the
+  transcript, §5.11), and its lines are carried under a line naming it. A step
+  that fails ends the run there; the two reads that exit 0 whatever they found
+  are judged by the line the document says they print. The run's exit is k6's,
+  and the job's last line says what the document says that code means
+  (`LoadRunService.Verdicts`).
+- **One at a time, no gate.** A Run while one goes answers with the one going.
+  It claims no `ComposeGate`: it stops and starts nothing, and a Down under it
+  fails the step it lands in.
+- **Stop ends it at once.** Stop kills the step's process tree (§5.2), which is
+  not k6's Ctrl+C: the document says ending the process skips `teardown()`, so
+  a stopped run has no verdict, and the job says so. What it placed stays, as
+  a finished run's does.
+- **What the screen says.** A local run is not a staging baseline and proves
+  nothing about the SLO (§13.7), and its orders, the client and the restocked
+  count are left as they are. Run is the confirmation; nothing is destroyed.
+- **FakePlatform.** Each block replays what a live run of it printed, and the
+  run's block puts the fake strip on the signals recorded during that run for
+  a minute (`LoadRunRecordings`, `FakeStack.LoadWindow`).
 
 ### 5.4 FrontendSupervisor
 
@@ -689,7 +730,8 @@ All under `/api`, JSON, loopback only.
 
 | Method and path | Does |
 |---|---|
-| `GET /stack` | `ServiceStatus[]`, the frontend job summary, reachability of every HTTP surface of §2.2 that answers a readiness route, the object store and image edge among them, and the Scenario lease in force or null (§5.3) |
+| `GET /stack` | `ServiceStatus[]`, the frontend job summary, reachability of every HTTP surface of §2.2 that answers a readiness route, the object store and image edge among them, the Scenario lease in force or null, and the last load run's job summary or null (§5.3) |
+| `POST /stack/load-run`, `POST /stack/load-run/stop` | §5.3's load run: returns the job, or the run still going; and Stop, 200 with the run once it has ended, 409 when none is going |
 | `GET /stack/lease`, `POST /stack/lease`, `POST /stack/lease/changes`, `POST /stack/lease/restore` | §5.3's lease: the table of changes with the lease held; body `{ changes, holdSeconds, label }`, which waits for each change in turn and answers the lease held, 400 for no change, a change twice or off the table, or a hold off its bounds, 409 naming the claim that refuses it (another lease, or another `ComposeGate` job), 500 for a change that failed, which it has already undone or says it could not; and the restore, 200 with nothing held too, 500 when the restore failed and the lease is still held; `POST /stack/lease/changes`, body `{ change }`, takes one more change into the lease held (§5.3), 200 with the lease, 400 for a change off the table or already in the lease, 409 when no lease is held, 500 for a change that failed, which undid the whole lease or says it could not |
 | `GET /stack/doctor` | §5.3's workstation checks, one row each with its verdict and what the reads said |
 | `POST /stack/backend/up` | Compose up; returns the job, or the Up still running; 409 while another `ComposeGate` job (§5.3) runs |
@@ -1140,7 +1182,11 @@ and the Playwright smoke covering the new screen.
 
 - Deployment, containers, multi-user, any listener that is not loopback.
 - Keycloak realm administration (users, clients, roles). The Keycloak console
-  is linked for that.
+  is linked for that. The one change the console makes to the realm is the
+  load run's (§5.3): it makes the `slo-run` client when it is missing and
+  grants it its two roles, by `run-locally.md`'s own block, because that
+  document's run needs it and Keycloak keeps no volume, so every `down` takes
+  it away. It edits nothing else, and offers no way to.
 - Replacing Grafana. The Trace screen joins; Explore is one click away for
   anything deeper.
 - Editing the sibling repositories. If a backend fact needed for §5.8 or §5.9

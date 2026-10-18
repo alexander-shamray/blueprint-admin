@@ -153,6 +153,31 @@ public sealed class WorkstationDoctorTests(AdminHostFactory factory) : IClassFix
         check.Detail.ShouldContain("dead-letter");
     }
 
+    [Fact]
+    public void K6_answering_is_ok_and_names_its_version()
+    {
+        DoctorCheck check = WorkstationDoctor.K6(Said("k6.exe v2.2.0 (commit/00a9a1b7f5, go1.26.5, windows/amd64)"));
+
+        check.State.ShouldBe(DoctorState.Ok);
+        check.Detail.ShouldStartWith("k6.exe v2.2.0");
+    }
+
+    [Fact]
+    public void A_missing_k6_is_a_problem_in_the_reads_own_words_which_name_the_install()
+    {
+        DoctorCheck check = WorkstationDoctor.K6(Said("k6: not installed (winget install k6 --source winget)"));
+
+        check.State.ShouldBe(DoctorState.Problem);
+        check.Detail.ShouldBe("k6: not installed (winget install k6 --source winget); the load run needs it.");
+    }
+
+    [Fact]
+    public void A_k6_read_that_did_not_run_cannot_tell_and_one_that_said_nothing_is_a_problem()
+    {
+        WorkstationDoctor.K6(Failed("powershell: not found")).State.ShouldBe(DoctorState.Unknown);
+        WorkstationDoctor.K6(Said("")).State.ShouldBe(DoctorState.Problem);
+    }
+
     [Theory]
     [InlineData("## main...origin/main", DoctorState.Ok, "On main, level with origin/main as last fetched.")]
     [InlineData("## main...origin/main [ahead 1]", DoctorState.Ok, "On main, level with origin/main as last fetched (ahead 1).")]
@@ -331,7 +356,8 @@ public sealed class WorkstationDoctorTests(AdminHostFactory factory) : IClassFix
 
         Dictionary<string, (string State, string Detail)> rows = view.GetProperty("checks").EnumerateArray()
             .ToDictionary(c => c.GetProperty("name").GetString()!, c => (c.GetProperty("state").GetString()!, c.GetProperty("detail").GetString()!));
-        rows.Keys.ShouldBe(["Docker", "Ports", "Gateway CORS", "Node", "Python", "Backend clone", "Frontend clone", "Images", "Object store"]);
+        rows.Keys.ShouldBe(["Docker", "Ports", "Gateway CORS", "Node", "Python", "k6", "Backend clone", "Frontend clone", "Images", "Object store"]);
+        rows["k6"].ShouldBe(("Ok", "k6.exe v2.2.0 (commit/00a9a1b7f5, go1.26.5, windows/amd64), which the load run runs."));
         rows["Docker"].ShouldBe(("Ok", "Docker 29.7.2 is answering."));
         rows["Ports"].ShouldBe(("Problem", "Held by another program, so Up cannot publish them: 5672, 15672 by erl (pid 7376)."));
         rows["Gateway CORS"].State.ShouldBe("Ok");
