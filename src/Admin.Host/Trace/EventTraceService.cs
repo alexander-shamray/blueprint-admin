@@ -199,12 +199,12 @@ public sealed class EventTraceService(GrafanaClient grafana, BrokerService broke
 
         // A read-only request, or one whose lines have aged out, never wrote an outbox row, and telling its operator
         // about "the publish" would invent an event this console has no evidence for. A handover with no consume yet
-        // is a delivery the dispatcher has not made or a consumer that is not running; the depths above say which.
+        // is a delivery the dispatcher has not made or a consumer that is not running; the depths say which.
         // Once a consume is on the timeline the rows speak for themselves: the trace carried on across the broker.
         string? why = !handedToTheBroker
             ? " No outbox write appears in this timeline, so nothing here was handed to the broker."
             : !consumed
-                ? " No consume of the handover appears yet; a message still waiting shows in the depths above."
+                ? " No consume of the handover appears yet; the depths before this say whether a message is still waiting."
                 : null;
 
         return $"{projection.Queue}: {depth}{Parked(queues, projection.Queue)}{others}.{why}";

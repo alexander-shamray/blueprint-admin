@@ -539,7 +539,7 @@ public sealed class EventTraceServiceTests : IAsyncDisposable
         TraceView view = await Service(handler).BuildAsync("abc-123", TimeSpan.FromMinutes(15), Token);
 
         view.Events.ShouldContain(e => e.Kind == TraceEventKind.Outbox);
-        view.Events[^1].Summary.ShouldEndWith(" No consume of the handover appears yet; a message still waiting shows in the depths above.");
+        view.Events[^1].Summary.ShouldEndWith(" No consume of the handover appears yet; the depths before this say whether a message is still waiting.");
     }
 
     [Fact]
