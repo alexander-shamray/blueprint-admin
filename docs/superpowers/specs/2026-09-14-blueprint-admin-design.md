@@ -638,8 +638,8 @@ named `CorrelationId` on every record of the request, and when the caller
 sent none it uses the current trace id as the correlation id. No span carries
 the id as an attribute. So the console finds spans through logs: the Loki
 lines for a correlation id carry OpenTelemetry's `trace_id`, and those trace
-ids are what Tempo is asked for — but that reaches the request's **own** trace
-only, because the outbox severs the context (§5.9). The `service_name` label is the
+ids are what Tempo is asked for. That trace runs on across the outbox into
+every consume it leads to (§5.9). The `service_name` label is the
 `service.name` resource attribute that `Common.Web`'s telemetry registration
 sets from each host's service name.
 
@@ -649,34 +649,27 @@ sets from each host's service name.
 
 1. Loki: every line scoped to the correlation id, and the set of distinct
    `trace_id` values on those lines.
-2. Tempo: each of those traces. **The broker hop is not inside them.** Measured
-   2026-09-16 against the backend's source: `OutboxMessage` has no
-   `traceparent` column, and `OutboxDispatcher` is a `BackgroundService` that
-   publishes without starting an `Activity`, so `Activity.Current` is null at
-   publish time and MassTransit's send span is the root of a **new** trace.
-   (The message-level `Guid CorrelationId` is not the HTTP correlation id
-   either; Catalog sets it to the product id.) The join therefore reaches the
-   request's own spans — inbound HTTP, handlers, the database write that
-   stages the outbox row — and stops at that row.
-3. Broker: the current queue snapshot from §5.5. Because step 2 stops at the
-   outbox, this is not a nicety but the **only bridge across the hop**, and it
-   is rendered as the timeline's terminal event: the projection queue, then
-   every other queue of `PlatformQueues.Table` a span of the timeline named
-   (a receive's endpoint or a send's destination; an exchange is not in the
-   table and is left out), each with its depth, and a sentence saying that
-   the publish runs in a trace this correlation id cannot reach — or, where
-   consume-side spans did reach the timeline through traces their services
-   logged this id in, that a hop which logged nothing is missing; and a
-   timeline with no outbox write at all says nothing was handed over. On the
-   live platform the saga's consume-side traces are not reached today (below,
-   and #54), so after a write the publish form is the one an operator sees. A
-   message
-   still waiting in one of them or parked in its `_error` or `_skipped` queue
-   shows there rather than as silence.
-
-Restoring the trace across the hop is a `blueprint-backend` change — persist
-`traceparent` on the outbox row when it is staged and restore it into an
-`Activity` at dispatch — and is raised there, not worked around here.
+2. Tempo: each of those traces. **The broker hop is inside them.** The
+   backend's outbox row stages the W3C trace context it was written under,
+   and the dispatcher delivers each row as that trace's child
+   (blueprint-backend 32aa9878 and 20b0c2f2, 2026-10-07). So the request's
+   own trace — inbound HTTP, handlers, the database write that stages the
+   outbox row — runs on into the dispatcher's send, every consume of it, the
+   saga's steps and each later handover. Measured 2026-10-18 on a live stack:
+   one placed order's trace held the saga from `Initial` to `Confirmed`,
+   Inventory's reservation, Payments' authorisation and Shipping's despatch.
+   (The message-level `Guid CorrelationId` is not the HTTP correlation id;
+   Catalog sets it to the product id.)
+3. Broker: the current queue snapshot from §5.5, rendered as the timeline's
+   terminal event: the projection queue, then every other queue of
+   `PlatformQueues.Table` a span of the timeline named (a receive's endpoint
+   or a send's destination; an exchange is not in the table and is left
+   out), each with its depth. A message still waiting in one of them or
+   parked in its `_error` or `_skipped` queue shows there rather than as
+   silence. A sentence follows only where the rows alone would mislead: a
+   timeline with no outbox write says nothing was handed over, and one with a
+   handover but no consume yet says the depths show whether a message is
+   still waiting.
 
 The result is one ordered timeline of `TraceEvent { At, Source, Service,
 Kind, Summary, TraceId, Link }`, where `Kind` is one of `HttpIn`, `Log`,
@@ -695,16 +688,10 @@ the same event). The tag values are those of the
 MassTransit version `SpanRecogniser.MassTransitVersion` names, and the drift
 gate holds that version to the backend's pin.
 
-**None of those step rows is fed on the live platform yet.** Measured
-2026-10-03 and recorded on #54: the saga's spans live in traces rooted at
-outbox sends, and no saga log line carries a correlation id, so step 1 never
-names those traces and step 2 never fetches them. The rows recognise the spans
-the day a timeline reaches them — the backend carrying the correlation id onto
-the saga's log scope or trace context through the outbox, or a search here by
-order id, which would be a change to this section — and until then the
-timeline ends at the outbox as step 2 says. FakePlatform records no saga trace
-for the same reason: a fake that reached one would invent a reach the platform
-lacks.
+Those step rows are fed on the live platform through step 2: the saga's
+spans are in the trace of the request that placed the order (#54). FakePlatform's
+recorded trace is a product publish, whose consume is Ordering's projection, so
+it shows the crossing but no saga step.
 Each row deep-links to Grafana Explore with the datasource and query
 pre-filled.
 

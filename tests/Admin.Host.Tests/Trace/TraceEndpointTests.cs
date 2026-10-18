@@ -43,21 +43,21 @@ public sealed class TraceEndpointTests(AdminHostFactory factory) : IClassFixture
     }
 
     [Fact]
-    public async Task The_timeline_ends_at_the_outbox_with_the_projection_snapshot()
+    public async Task The_timeline_follows_the_trace_across_the_outbox_to_the_projection_snapshot()
     {
         JsonElement view = await client.GetFromJsonAsync<JsonElement>("/api/trace/demo-trace-0001", Token);
         string[] kinds = Kinds(view);
 
-        // The recording is one publish of a product: two inbound requests and the outbox write that
-        // ends what this correlation id can see (plan M2). No Publish or Consume can appear here.
+        // The recording is one publish of a product: two inbound requests, the outbox write, and then, in the same
+        // trace, the dispatcher's send and Ordering's consume of it on the projection queue.
         kinds.ShouldContain("HttpIn");
-        kinds.ShouldContain("Outbox");
         kinds.ShouldContain("Error");
+        kinds.Where(k => k is "Outbox" or "Publish" or "Consume").ShouldBe(["Outbox", "Publish", "Consume", "Consume"]);
         kinds[^1].ShouldBe("Queued");
-        kinds.ShouldNotContain("Publish");
 
         JsonElement last = view.GetProperty("events").EnumerateArray().Last();
-        last.GetProperty("summary").GetString().ShouldNotBeNull().ShouldContain("the outbox carries no trace context");
+        // The fake broker parks one message beside the projection queue (FixtureRecordings, rabbitmq-queues.json).
+        last.GetProperty("summary").GetString().ShouldBe("ordering-catalog-events: 0 messages (drained), 1 parked in ordering-catalog-events_error.");
     }
 
     [Fact]

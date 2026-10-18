@@ -93,8 +93,8 @@ public static class SpanRecogniser
         new("A consumer span on a broker that did not stamp messaging.operation.",
             span => span.Kind == "SPAN_KIND_CONSUMER" && span.Attributes.ContainsKey("messaging.system"),
             TraceEventKind.Consume),
-        new("A database span that names the outbox table. The backend starts no outbox span of its own "
-            + "(plan M2), so the write to that table is the only honest marker of the handover.",
+        new("A database span that names the outbox table. The backend's Commerce.Outbox spans are the later delivery's, "
+            + "and none marks staging the row, so the write to that table is the only honest marker of the handover.",
             IsOutboxWrite,
             TraceEventKind.Outbox),
     ];

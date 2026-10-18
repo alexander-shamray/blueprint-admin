@@ -129,7 +129,9 @@ its body: the HTML part in a frame sandboxed with no scripts, or the plain
 text. It only reads: clearing the sink is done in the sink's own UI, which it
 links, and the sink's chaos API is never called.
 The Trace screen joins a correlation id's Loki lines and Tempo spans into one
-timeline, each of those rows linking into Grafana Explore, and closing with a
+timeline that follows the request across the broker into each consume, naming
+the fulfilment saga's steps, Inventory's reservation, Payments' authorisation
+and Shipping's despatch; each row links into Grafana Explore, closing with a
 snapshot of the projection queue and every other queue the spans crossed; the
 API screen's "Trace this call" opens it on the
 response's own correlation id. The Scenario screen runs `run-locally.md`'s
@@ -259,15 +261,6 @@ are announced.
   so. Every read a watch makes is a request the Transcript keeps.
 - The identity picker offers demo/demo and browser/browser; configuring any user
   replaces both: `--Admin:Users:0:Username=ops --Admin:Users:0:Password=…`.
-- A timeline ends at the outbox. The outbox row carries no trace context, so
-  the dispatcher's publish, the consume on the other service and the projection
-  write run in a trace the correlation id cannot reach; the Trace screen ends
-  with the projection queue's depth and says why it stops there. Raised for
-  `blueprint-backend`, which owns the fix.
-- The Trace screen recognises the fulfilment saga's steps, Inventory's
-  reservation, Payments' authorisation and Shipping's despatch, but on the live
-  platform no timeline reaches them: no saga log line carries a correlation id,
-  so their traces are never fetched. The rows wait on that reach (#54).
 - The transcript lives in the host's memory and ends with it, keeping the
   newest `OperatorTranscript.Capacity` entries. It holds what the host ran and
   the proxy sent, so a Keycloak token grant is not in it: its curl lines carry

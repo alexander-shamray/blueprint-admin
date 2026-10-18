@@ -63,7 +63,8 @@ public static class FixtureRecordings
             "one publish that failed with 503 and then succeeded on retry: a state a real stack is not easily put in, "
             + "and FakeGrafana rewrites its correlation id and pins its two trace ids",
         ["grafana-tempo-trace.json"] =
-            "the trace of that same publish, under the trace id FakeGrafana.RecordedTraceId names",
+            "the trace of that same publish, under the trace id FakeGrafana.RecordedTraceId names, carried across the outbox "
+            + "by four spans of a live publish recorded on 2026-10-18",
         ["grafana-prometheus-rules.json"] =
             "the shape /api/v1/rules answers, over rules named in platform-alerts.yaml, with one firing and one pending so "
             + "the alert strip has each state: a stack that is up and healthy lists every rule inactive. ContactReadRefused and "

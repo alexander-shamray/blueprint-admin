@@ -236,10 +236,10 @@ public sealed class EventTraceServiceTests : IAsyncDisposable
 
         TraceView view = await Service(handler).BuildAsync("abc-123", TimeSpan.FromMinutes(15), Token);
 
-        view.Events[^1].Summary.ShouldStartWith(
+        // A consume is on the timeline, so the snapshot is the depths alone: the trace carried on across the broker.
+        view.Events[^1].Summary.ShouldBe(
             "ordering-catalog-events: 0 messages (drained); ordering-fulfilment-saga: 0 messages; "
-            + "inventory-commands: 2 messages waiting, 1 parked in inventory-commands_error. The outbox carries no trace context, "
-            + "so each consume above was found only because its service logged this correlation id");
+            + "inventory-commands: 2 messages waiting, 1 parked in inventory-commands_error.");
     }
 
     [Fact]
@@ -526,7 +526,7 @@ public sealed class EventTraceServiceTests : IAsyncDisposable
             .Query.ShouldContain($"limit={EventTraceService.MaxLines + 1}");
     }
     [Fact]
-    public async Task A_timeline_with_an_outbox_write_explains_where_the_trace_is_severed()
+    public async Task A_handover_no_consume_has_followed_yet_points_at_the_depths()
     {
         TheProjectionQueueIsDrained();
         string trace = TraceHex(1);
@@ -539,7 +539,7 @@ public sealed class EventTraceServiceTests : IAsyncDisposable
         TraceView view = await Service(handler).BuildAsync("abc-123", TimeSpan.FromMinutes(15), Token);
 
         view.Events.ShouldContain(e => e.Kind == TraceEventKind.Outbox);
-        view.Events[^1].Summary.ShouldContain("The publish runs in a new trace — the outbox carries no trace context, so the consume side is not joinable by this correlation id.");
+        view.Events[^1].Summary.ShouldEndWith(" No consume of the handover appears yet; a message still waiting shows in the depths above.");
     }
 
     [Fact]
@@ -556,7 +556,7 @@ public sealed class EventTraceServiceTests : IAsyncDisposable
 
         view.Events.ShouldNotContain(e => e.Kind == TraceEventKind.Outbox);
         view.Events[^1].Summary.ShouldContain("No outbox write appears in this timeline");
-        view.Events[^1].Summary.ShouldNotContain("The publish runs in a new trace");
+        view.Events[^1].Summary.ShouldNotContain("handover");
     }
     [Fact]
     public async Task A_Grafana_without_Tempo_is_said_once_rather_than_re_resolved_for_every_trace()

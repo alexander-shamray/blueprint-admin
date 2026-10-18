@@ -431,9 +431,8 @@ export interface PermissionsView {
 }
 
 /**
- * What one row of a timeline is (spec §5.9). `Queued` is the terminal marker: the backend's outbox
- * carries no trace context, so the publish runs in a trace this correlation id cannot reach, and the
- * event's summary says so in words.
+ * What one row of a timeline is (spec §5.9). `Queued` is the terminal marker: the broker as of the
+ * fetch, each queue the timeline crossed with its depth and anything parked beside it.
  */
 export type TraceEventKind = 'HttpIn' | 'Log' | 'Span' | 'Outbox' | 'Publish' | 'Consume' | 'Saga' | 'Queued' | 'Error';
 
