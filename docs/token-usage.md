@@ -205,16 +205,16 @@ measured: read it on `/ship` sessions run after the change lands.
 #226 merged at 16:56 UTC on 2026-10-16, so every `/ship` from 2026-10-17 ran
 with the cut. Measured at `main` a07e43b with `--since 2026-10-17` (`--tools
 15` and `--models`), and the `/ship` `Bash` results split by command by a
-scratch script over the same transcripts, bounded to 2026-10-15–16 for
-*before* and from 2026-10-17 for *after*. It classifies a call by the first
-named command anywhere in it and the shell readers (`sed`, `cat`, `grep`) by
-their first word; characters, not tokens. The *after* window includes the
-session that measured it.
+scratch script over the same transcripts, bounded to 2026-10-15 up to #226's
+merge for *before* and from 2026-10-17 for *after*; the evening between is in
+neither. It classifies a call by the first named command anywhere in it and
+the shell readers (`sed`, `cat`, `grep`) by their first word; characters, not
+tokens. The *after* window includes the session that measured it.
 
 | `/ship` `Bash` | Before | After |
 |---|---|---|
-| All results | 4.48M, 2,828 calls | 0.98M, 800 calls |
-| `gh pr checks` | 249k, 98 calls, 2,536 a call | 49k, 26 calls, 1,896 a call |
+| All results | 4.48M, 2,829 calls | 0.98M, 800 calls |
+| `gh pr checks` | 247k, 97 calls, 2,551 a call | 49k, 26 calls, 1,896 a call |
 | its share of all | 5.5% | 5.0% |
 | `gh issue view` | 287k, 114 calls | 67k, 38 calls |
 | shell file reads, `sed` + `cat` + `grep` | 1.76M (39%) | 0.34M (34%) |
