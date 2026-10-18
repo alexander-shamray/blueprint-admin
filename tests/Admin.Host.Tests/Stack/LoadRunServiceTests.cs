@@ -159,7 +159,26 @@ public sealed class LoadRunServiceTests : IAsyncDisposable
         stopped.ShouldBeSameAs(run);
         k6Job.Status.State.ShouldBe(JobState.Exited);
         run.Status.ShouldBe((JobState.Exited, -1));
-        Texts(run)[^1].ShouldBe(LoadRunService.Stopped);
+        Texts(run)[^1].ShouldBe(LoadRunService.StoppedInRun);
+    }
+
+    [Fact]
+    public async Task Stop_before_k6_names_the_step_it_ended_and_says_no_load_was_driven()
+    {
+        runner.On("powershell", Arguments(LoadRunService.K6Read), 0, Recorded(LoadRunRecordings.K6))
+            .On("powershell", Arguments(LoadRunService.PrometheusReady), 0, Recorded(LoadRunRecordings.Prometheus))
+            .On("powershell", Arguments(LoadRunService.SloClient), 0, Recorded(LoadRunRecordings.SloClient))
+            .OnLongRunning("powershell", Arguments(LoadRunService.TokenCheck), "permission: inventory:admin,orders:write");
+        LoadRunService service = Service();
+
+        Job run = service.Start();
+        await WaitUntilAsync(() => runner.LastStarted is { State: JobState.Running } token && token.Spec.Arguments[^1] == LoadRunService.TokenCheck);
+
+        await service.StopAsync().WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        run.Status.ShouldBe((JobState.Exited, -1));
+        runner.Started.Count.ShouldBe(4);
+        Texts(run)[^1].ShouldBe("stopped at the token step, before k6 started: no load was driven and no order was placed.");
     }
 
     [Fact]

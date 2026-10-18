@@ -421,8 +421,10 @@ here; the blocks are copied and held to the document word for word
   fails the step it lands in.
 - **Stop ends it at once.** Stop kills the step's process tree (§5.2), which is
   not k6's Ctrl+C: the document says ending the process skips `teardown()`, so
-  a stopped run has no verdict, and the job says so. What it placed stays, as
-  a finished run's does.
+  a run stopped during k6 has no verdict, and the job says so. What it placed
+  stays, as a finished run's does. A Stop before k6 names the step it ended and
+  says no load was driven; one that arrives after k6 has ended by itself kills
+  nothing and leaves k6's verdict standing.
 - **What the screen says.** A local run is not a staging baseline and proves
   nothing about the SLO (§13.7), and its orders, the client and the restocked
   count are left as they are. Run is the confirmation; nothing is destroyed.

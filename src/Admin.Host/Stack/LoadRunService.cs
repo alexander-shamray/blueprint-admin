@@ -134,11 +134,14 @@ public sealed class LoadRunService(IProcessRunner runner, JobRegistry registry, 
     };
 
     /// <summary>
-    /// What a Stop leaves, said on the job: the console ends the process tree, which run-locally.md says skips teardown(), and the
-    /// orders already placed go on through the saga.
+    /// What a Stop during k6 leaves, said on the job: the console ends the process tree, which run-locally.md says skips teardown(),
+    /// and the orders already placed go on through the saga.
     /// </summary>
-    internal const string Stopped =
+    internal const string StoppedInRun =
         "stopped: k6 was ended, so teardown() did not run and there is no verdict; the orders it placed stay, as a finished run's do.";
+
+    /// <summary>What a Stop before k6 leaves: no load was driven, so there is no verdict to lose and no order placed.</summary>
+    internal static string StoppedBefore(string step) => $"stopped at the {step} step, before k6 started: no load was driven and no order was placed.";
 
     private readonly Lock gate = new();
 
@@ -175,7 +178,8 @@ public sealed class LoadRunService(IProcessRunner runner, JobRegistry registry, 
 
     /// <summary>
     /// Ends the run going, at the step it is in, and waits for the job to say so; null when none is going. The step's process
-    /// tree is killed (spec §5.2), which is not k6's Ctrl+C.
+    /// tree is killed (spec §5.2), which is not k6's Ctrl+C. A Stop that arrives after k6 has ended by itself kills nothing and
+    /// leaves k6's verdict to stand.
     /// </summary>
     public async Task<Job?> StopAsync()
     {
@@ -191,7 +195,16 @@ public sealed class LoadRunService(IProcessRunner runner, JobRegistry registry, 
 
             run = going;
             running = step;
-            stopping = true;
+
+            // k6 already ended on its own: its verdict stands, and the job is about to say it.
+            if (running is { State: JobState.Exited } && IsRun(running))
+            {
+                running = null;
+            }
+            else
+            {
+                stopping = true;
+            }
         }
 
         if (running is not null)
@@ -222,7 +235,7 @@ public sealed class LoadRunService(IProcessRunner runner, JobRegistry registry, 
                 {
                     if (stopping)
                     {
-                        run.Append(OutputStream.Stderr, Stopped);
+                        run.Append(OutputStream.Stderr, StoppedBefore(next.Name));
                         run.MarkExited(-1);
                         return;
                     }
@@ -232,10 +245,16 @@ public sealed class LoadRunService(IProcessRunner runner, JobRegistry registry, 
                 }
 
                 (int exitCode, List<string> stdout) = await FollowAsync(run, next, job);
+                bool stopped;
 
-                if (Volatile.Read(ref stopping))
+                lock (gate)
                 {
-                    run.Append(OutputStream.Stderr, Stopped);
+                    stopped = stopping;
+                }
+
+                if (stopped)
+                {
+                    run.Append(OutputStream.Stderr, IsRun(job) ? StoppedInRun : StoppedBefore(next.Name));
                     run.MarkExited(-1);
                     return;
                 }
@@ -281,6 +300,9 @@ public sealed class LoadRunService(IProcessRunner runner, JobRegistry registry, 
 
         return (await job.Completion, stdout);
     }
+
+    /// <summary>Whether a step's job is k6's own, the last block.</summary>
+    private static bool IsRun(Job job) => job.Spec.Arguments is [.., var block] && block == Run;
 
     private static string Verdict(int exitCode) => Verdicts.TryGetValue(exitCode, out string? verdict) ? verdict : "k6's own code, which run-locally.md does not read";
 
