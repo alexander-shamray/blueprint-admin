@@ -371,6 +371,10 @@ class ReportTests(unittest.TestCase):
                 ("gh issue view 258 --json title", "gh issue view"),
                 ("sed -n '1,90p' docs/token-usage.md", "sed"),
                 ("FOO=1 npm test", "npm test"),
+                ('git -C "$path" rev-parse --git-dir', "git rev-parse"),
+                ("git -c core.quotePath=off ls-files -z", "git ls-files"),
+                ("gh -R owner/repo pr view 259", "gh pr view"),
+                ("npm --prefix src/Admin.Web run lint", "npm run"),
                 ("cd tools", "?"), ("", "?"), (None, "?")):
             with self.subTest(command=command):
                 self.assertEqual(token_usage.program_of(command), program)

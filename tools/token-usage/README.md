@@ -64,7 +64,8 @@ counted from the user entry that carries it; the untimestamped
 not read. `--shell N` splits the `Bash` and `PowerShell` rows of the same
 count by the program that produced each result: the call's first command
 after any `cd` or variable assignment, with its subcommand or script for a
-front such as `git`, `bash` or `py` (two words for `gh`), so a call that
+front such as `git`, `bash` or `py` (two words for `gh`), read past the
+value of an option such as `git -C <dir>` (`VALUED_OPTIONS`). A call that
 pipes `sed` into `head` is `sed`. A subagent's type
 comes from its `.meta.json`, else from the parent's tool result naming it,
 else it is `subagent`.

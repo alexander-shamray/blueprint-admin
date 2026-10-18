@@ -38,6 +38,8 @@ ASSIGNMENT = re.compile(r"[A-Za-z_]\w*=")
 # A program that is a front for others, named with the subcommand or script it runs: `gh` takes two words.
 SUBCOMMANDS = {"git": 1, "gh": 2, "bash": 1, "sh": 1, "py": 1, "python": 1, "python3": 1, "dotnet": 1, "npm": 1,
                "npx": 1, "codebase-index": 1}
+# The fronts' options whose value is the next word, as in `git -C <dir> diff`.
+VALUED_OPTIONS = {"git": {"-C", "-c"}, "gh": {"-R", "--repo"}, "npm": {"--prefix"}}
 # Where a run starts: what a command, an agent or a skill names, it is handed.
 ENTRY = re.compile(r"\.claude/(?:commands/[^/]+|agents/[^/]+|skills/[^/]+/SKILL)\.md")
 MENTION = re.compile(r"[\w./<>{}-]*[\w>}]\.md\b")
@@ -313,9 +315,11 @@ def program_of(command) -> str:
         if not words or words[0] == "cd":
             continue
         program = posixpath.basename(slashed(words[0]))
-        # An option, a redirect or a here-document's marker is not what runs.
-        rest = [posixpath.basename(slashed(w)) for w in words[1:]
-                if not w.startswith("-") and "<" not in w and ">" not in w]
+        # An option and its value, a redirect or a here-document's marker is not what runs.
+        rest, valued = [], VALUED_OPTIONS.get(program, set())
+        for previous, word in zip(words, words[1:]):
+            if not word.startswith("-") and "<" not in word and ">" not in word and previous not in valued:
+                rest.append(posixpath.basename(slashed(word)))
         return " ".join([program, *rest[:SUBCOMMANDS.get(program, 0)]])
     return "?"
 
