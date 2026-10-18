@@ -547,8 +547,9 @@ operation carries method, gateway path, path parameters, an example body (the
 one `run-locally.md` sends for that operation where there is one, otherwise
 the document's own `example` on the request's media type, otherwise
 placeholders built from the request schema), and the edge policy from a cited
-copy of the gateway's route table (`Api/GatewayRoutes.cs`). The catalog is cached and reloaded on demand; when a
-service is down its operations are listed as unavailable rather than dropped.
+copy of the gateway's route table (`Api/GatewayRoutes.cs`). The catalog is
+cached and reloaded on demand; when a service is down its operations are
+listed as unavailable rather than dropped.
 
 Each document read is also compared with the one kept for its service
 (`OpenApiBaselines`, under `Admin:DataDir`), and the source carries the
