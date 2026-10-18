@@ -11,8 +11,8 @@ public sealed class FakeStack(TimeProvider? time = null)
 {
     /// <summary>
     /// How long the strip reads the recording made under load once a fake load run's k6 block has run: long enough for the Stack
-    /// screen's 15-second poll to read it more than once, short enough that a later read of the idle recording is not one an
-    /// earlier run left behind.
+    /// screen's 15-second poll to read it more than once, short enough that a later test on the same host reads the idle
+    /// recording again. A host reused across Playwright runs (<c>reuseExistingServer</c>) inside the minute still reads the load.
     /// </summary>
     public static readonly TimeSpan LoadWindow = TimeSpan.FromMinutes(1);
 
