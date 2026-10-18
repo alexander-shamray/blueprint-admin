@@ -14,6 +14,9 @@ namespace Admin.Host.Fakes;
 /// The gateway's <c>web-bff</c> route only strips <c>/bff</c> (<see cref="Api.GatewayRoutes"/>), so each <c>/v1</c> path
 /// is answered as <see cref="FakeGateway"/> answers its <c>/bff</c> twin. Every answer carries the BFF's own
 /// <c>X-Correlation-Id</c>, the caller's when it sent one, and every problem body a <c>correlationId</c> of that value.
+/// Left out of the recording: a problem's <c>instance</c> and <c>traceId</c> members and its RFC 9110 section anchor,
+/// which the fakes' shared problem shape omits on every host, and the gateway path's <c>Vary</c> header, which the
+/// direct one did not carry anyway.
 /// </summary>
 internal static class FakeBff
 {
