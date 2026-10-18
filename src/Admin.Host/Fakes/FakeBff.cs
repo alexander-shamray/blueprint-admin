@@ -25,7 +25,10 @@ internal static class FakeBff
             ? id
             : Guid.NewGuid().ToString("N");
 
-        HttpResponseMessage response = FakeGateway.Permissions(request) is null
+        // The BFF maps its liveness and startup probes anonymous, as it does readiness, which every fake host already answers.
+        HttpResponseMessage response = request.RequestUri!.AbsolutePath is "/health/live" or "/health/startup"
+            ? FakeHttp.Json(HttpStatusCode.OK, """{"status":"Healthy"}""")
+            : FakeGateway.Permissions(request) is null
             ? Unauthorized()
             : request.RequestUri!.AbsolutePath.StartsWith("/v1/", StringComparison.OrdinalIgnoreCase)
                 ? AsGatewayTwin(request, orders, options)

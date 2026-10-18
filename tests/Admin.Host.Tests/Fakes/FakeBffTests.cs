@@ -109,10 +109,14 @@ public sealed class FakeBffTests : IDisposable
         problem.RootElement.GetProperty("correlationId").GetString().ShouldBe("direct-2");
     }
 
-    [Fact]
-    public async Task Readiness_on_the_bffs_port_still_answers_healthy()
+    // Common.Web maps all three probes AllowAnonymous on every host, the BFF included.
+    [Theory]
+    [InlineData("/health/ready")]
+    [InlineData("/health/live")]
+    [InlineData("/health/startup")]
+    public async Task Each_probe_on_the_bffs_port_answers_with_no_token(string probe)
     {
-        using HttpResponseMessage response = await GetAsync(Bff("/health/ready"), withToken: false);
+        using HttpResponseMessage response = await GetAsync(Bff(probe), withToken: false);
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
     }
