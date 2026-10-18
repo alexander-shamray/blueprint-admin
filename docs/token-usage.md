@@ -219,9 +219,10 @@ tokens. The *after* window includes the session that measured it.
 | `gh issue view` | 287k, 114 calls | 67k, 38 calls |
 | shell file reads, `sed` + `cat` + `grep` | 1.76M (39%) | 0.34M (34%) |
 
-- **The cut did what it says.** A `gh pr checks --watch` call returns about
-  a quarter less text than before. Its share of `/ship`'s `Bash` barely
-  moved, because the call is a small part of the whole.
+- **The cut did what it says.** A `gh pr checks` call, with `--watch` or
+  without, returns about a quarter less text than before. Its share of
+  `/ship`'s `Bash` barely moved, because the call is a small part of the
+  whole.
 - **It was never the largest.** Classified this way, `gh pr checks` is
   seventh before and sixth after; the 2026-10-16 table ranked it first on a
   script that saw fewer characters. In both windows the largest `Bash`
