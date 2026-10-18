@@ -234,7 +234,7 @@ class Report:
             return
         if self.outside(entry):
             return
-        cwd =str(entry.get("cwd") or "")
+        cwd = str(entry.get("cwd") or "")
         for block in content:
             if isinstance(block, dict) and block.get("type") == "tool_use":
                 # A subagent's call can be written both as a sidechain line and in its own transcript.
