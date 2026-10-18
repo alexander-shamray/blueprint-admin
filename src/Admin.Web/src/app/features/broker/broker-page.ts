@@ -10,7 +10,7 @@ import { OutputPane } from '../../shared/output-pane/output-pane';
 
 /**
  * Every read, not queues only: each is a `docker compose exec` the host does not keep among its jobs
- * (spec §5.2), so a tick costs three short processes and nothing that lasts.
+ * (spec §5.2), so a tick costs one short process per read and nothing that lasts.
  */
 export const AUTO_REFRESH_MS = 5000;
 
