@@ -134,11 +134,12 @@ public sealed class LoadRunService(IProcessRunner runner, JobRegistry registry, 
     };
 
     /// <summary>
-    /// What a Stop during k6 leaves, said on the job: the console ends the process tree, which run-locally.md says skips teardown(),
-    /// and the orders already placed go on through the saga.
+    /// What a Stop in the run block leaves, said on the job. The block reads the secret and the product before its k6 line, so
+    /// k6 may not have started; if it had, the console ended its process tree, which run-locally.md says skips teardown(), and the
+    /// orders already placed go on through the saga.
     /// </summary>
     internal const string StoppedInRun =
-        "stopped: k6 was ended, so teardown() did not run and there is no verdict; the orders it placed stay, as a finished run's do.";
+        "stopped in the run block: if k6 had started, teardown() did not run and there is no verdict; any orders it placed stay, as a finished run's do.";
 
     /// <summary>What a Stop before k6 leaves: no load was driven, so there is no verdict to lose and no order placed.</summary>
     internal static string StoppedBefore(string step) => $"stopped at the {step} step, before k6 started: no load was driven and no order was placed.";
