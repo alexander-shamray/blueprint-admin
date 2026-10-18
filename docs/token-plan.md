@@ -75,9 +75,10 @@ there. The owner's user-level copy of the #122 rules was retired outside this
 repository. **Measured** (#252, #253): the shell reads by path and step and
 the wakes by wait, in the second 2026-10-18 section there. The largest
 `Bash` results are ranged reads of the application and its tests between
-the branch and the first commit, the work itself, and are not cut. The compact-before-a-wait rule is
-**retired** from `CLAUDE.md`: no session followed it in 81 wakes, none has a
-tool to, and the cost it was written against is under 1%. **Exit met:** the
+the branch and the first commit, the work itself, and are not cut. The
+compact-before-a-wait rule is **retired** from `CLAUDE.md`: no session
+followed it in 81 wakes, none has a tool to, and the cost it was written
+against is under 1%. **Exit met:** the
 2026-10-18 Sonnet `/ship` row is under 200k a call, and the call after a
 wake wrote 0.3% of its context to the cache.
 

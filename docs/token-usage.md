@@ -275,17 +275,16 @@ usage. Two classifications differ from the section above and are stated here:
 | 6, merge and teardown | 226k | 6k |
 
 After, by what was read: the SPA 111k, the host 57k and its tests 37k, so
-the application and its tests are 205k of the 486k; a pipe's own input 63k; command
-files 42k in four calls, from one session editing those commands;
-`TODO.md` 25k in nine; docs 23k; workflows 22k; helpers 17k.
+the application and its tests are 205k of the 486k; a pipe's own input
+63k; command files 42k in four calls, from one session editing those
+commands; `TODO.md` 25k in nine; docs 23k; workflows 22k; helpers 17k.
 
 - **The largest is the work.** Three in four of these characters before,
   and four in five after, are read between the branch and the first commit,
   most of them ranges of the application and its tests, about ninety lines
-  a call. `/ship` step 1
-  already routes that reading through the index's ranges; a `Read` of the
-  same range returns the same text with line numbers added, so moving it
-  off the shell saves nothing.
+  a call. `/ship` step 1 already routes that reading through the index's
+  ranges; a `Read` of the same range returns the same text with line
+  numbers added, so moving it off the shell saves nothing.
 - **What a rule could cut is small.** Whole-file reads are 8% of `/ship`'s
   `Bash` before and 7% after, and re-reads of a path already read in the
   run 4.7% and 4.5%; a re-read after an edit is often the check of that
