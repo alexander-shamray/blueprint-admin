@@ -56,8 +56,14 @@ largest: `Bash` output read whole where a count would do. Add one short
 delegation rule and a rule to compact before a wait, since a wake into a
 long context re-sends all of it.
 
-**Exit.** A `/ship` main session's mean context under 200k a call and less
-than 35% of its input equivalent after a wake.
+**Exit.** A `/ship` main session's mean context under 200k a call, and the
+first call after a wake writing under 5% of its context to the cache.
+
+The exit's second half read "less than 35% of its input equivalent after a
+wake" until #253 measured what that share counts: every call from a run's
+first wake to its next prompt, which moves with where the first wait falls
+rather than with what waking costs. The cost a wake can add is the cache
+rewrite on the call after it, so that is what the exit now holds.
 
 **Built** (#122): the rules. `CLAUDE.md`'s *Subagents, review rounds and
 plans* holds the delegation brief, the review loop (citing `/ship` step 5),
@@ -66,9 +72,14 @@ the planning rule, the compact-before-a-wait rule and one task per session.
 [`token-usage.md`](token-usage.md), and the cut it names: step 6's `gh pr checks
 --watch` takes `--interval 60`; its effect is read in the 2026-10-18 section
 there. The owner's user-level copy of the #122 rules was retired outside this
-repository. **Exit:** half met. The 2026-10-18 Sonnet `/ship` row is under
-200k a call and over 35% after a wake (#253); the largest `Bash` results are
-file reads through the shell, which this step has not cut (#252).
+repository. **Measured** (#252, #253): the shell reads by path and step and
+the wakes by wait, in the second 2026-10-18 section there. The largest
+`Bash` results are ranged reads of the application and its tests between
+the branch and the first commit, the work itself, and are not cut. The compact-before-a-wait rule is
+**retired** from `CLAUDE.md`: no session followed it in 81 wakes, none has a
+tool to, and the cost it was written against is under 1%. **Exit met:** the
+2026-10-18 Sonnet `/ship` row is under 200k a call, and the call after a
+wake wrote 0.3% of its context to the cache.
 
 ### Step 3 — what every session loads
 
