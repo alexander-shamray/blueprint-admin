@@ -368,7 +368,8 @@ and a UTC time in either bound, and splits shell results by program with
 | `gh pr checks` | 185k (4.2%), 54 calls | 28k (3.0%), 12 calls |
 | `gh issue view` | 124k (2.8%), 50 calls | 31k (3.4%), 16 calls |
 
-`--shell` names a call by its first command after any `cd`, as the *shell
-reads* section does, so its `gh pr checks` row is smaller than the *effect
-of `--interval 60`* section's, which took the first named command anywhere
-in the call.
+`--shell` names a call by its first command after any `cd` or variable
+assignment (the [README](../tools/token-usage/README.md) owns the rule), as
+the *shell reads* section does apart from the assignment, so its `gh pr
+checks` row is smaller than the *effect of `--interval 60`* section's, which
+took the first named command anywhere in the call.
