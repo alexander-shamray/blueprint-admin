@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Sum Claude Code's recorded token usage per slash command and agent type.
 
-    python tools/token-usage/token_usage.py [PROJECT_DIR ...] [--since 2026-10-01] [--json]
+    python tools/token-usage/token_usage.py [PROJECT_DIR ...] [--since 2026-10-01] [--until 2026-10-02T12:00] [--json]
 """
 
 from __future__ import annotations
@@ -33,11 +33,17 @@ SHELL_READERS = {"cat", "head", "tail", "sed", "less", "more", "type", "gc", "ge
 SHELL_SEGMENT = re.compile(r"&&|\|\||[;|\n]")
 SED_IN_PLACE = re.compile(r"--in-place(?:=.*)?|-[A-Za-z]*i.*")
 SHELL_WORD = re.compile(r'"[^"]*"|\'[^\']*\'|\S+')
+SHELLS = {"Bash", "PowerShell"}
+ASSIGNMENT = re.compile(r"[A-Za-z_]\w*=")
+# A program that is a front for others, named with the subcommand or script it runs: `gh` takes two words.
+SUBCOMMANDS = {"git": 1, "gh": 2, "bash": 1, "sh": 1, "py": 1, "python": 1, "python3": 1, "dotnet": 1, "npm": 1,
+               "npx": 1, "codebase-index": 1}
 # Where a run starts: what a command, an agent or a skill names, it is handed.
 ENTRY = re.compile(r"\.claude/(?:commands/[^/]+|agents/[^/]+|skills/[^/]+/SKILL)\.md")
 MENTION = re.compile(r"[\w./<>{}-]*[\w>}]\.md\b")
 PLACEHOLDER = re.compile(r"<[^<>/]+>|\{[^{}/]+\}")
 LINKS = ("entry point", "named by entry", "CLAUDE.md only", "none")
+BOUND = re.compile(r"\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)?Z?")
 
 # Anthropic's prompt-caching prices as multiples of the base input price.
 WRITE_5M = 1.25
@@ -96,8 +102,9 @@ class Usage:
 
 
 class Report:
-    def __init__(self, since: str | None = None, session: str = "") -> None:
+    def __init__(self, since: str | None = None, session: str = "", until: str | None = None) -> None:
         self.since = since
+        self.until = until
         self.session = session
         self.groups: dict[tuple[str, str], Usage] = {}
         self.by_model: dict[tuple[str, str, str], Usage] = {}
@@ -106,8 +113,18 @@ class Report:
         self.span: list[str] = []
         self.spawns: list[dict] = []
         self.results: dict[tuple[str, str], list[int]] = {}
+        self.programs: dict[str, str] = {}
+        self.shell: dict[tuple[str, str], list[int]] = {}
         self.reads: dict[tuple[str, str], int] = {}
         self.read_calls: set[str] = set()
+
+    def outside(self, entry: dict) -> bool:
+        """Whether an entry falls before `since` or at or after `until`; one with no timestamp never does."""
+        at = entry.get("timestamp")
+        if not isinstance(at, str) or not at:
+            return False
+        # A bound is a date or a UTC time, and an ISO timestamp sorts as its text does.
+        return bool(self.since and at < self.since or self.until and at >= self.until)
 
     def add(self, command: str, agent: str, entry: dict, context: str, woken: bool = False) -> dict | None:
         """Count a response once, and return its usage when it was counted."""
@@ -117,7 +134,7 @@ class Report:
         usage = message.get("usage")
         if not isinstance(usage, dict):
             return None
-        if self.since and str(entry.get("timestamp", self.since))[:10] < self.since:
+        if self.outside(entry):
             return None
         # A response is written once per content block, each line carrying the same usage.
         key = message.get("id") or entry.get("requestId") or entry.get("uuid")
@@ -190,27 +207,34 @@ class Report:
         # A call is an assistant's and a result a user's; an `api-request-blob` replays both, untimestamped.
         if not isinstance(content, list) or entry.get("type") not in ("assistant", "user"):
             return
-        if self.since and str(entry.get("timestamp", self.since))[:10] < self.since:
+        if self.outside(entry):
             return
         for block in content:
             if not isinstance(block, dict):
                 continue
             if block.get("type") == "tool_use" and isinstance(block.get("id"), str):
                 tools[block["id"]] = str(block.get("name") or "?")
+                if tools[block["id"]] in SHELLS:
+                    self.programs[block["id"]] = program_of((block.get("input") or {}).get("command"))
             elif block.get("type") == "tool_result":
                 tool = tools.get(str(block.get("tool_use_id")), "?")
+                size = len(result_text(block.get("content")))
                 counted = self.results.setdefault((command, tool), [0, 0])
                 counted[0] += 1
-                counted[1] += len(result_text(block.get("content")))
+                counted[1] += size
+                if (program := self.programs.get(str(block.get("tool_use_id")))) is not None:
+                    counted = self.shell.setdefault((command, program), [0, 0])
+                    counted[0] += 1
+                    counted[1] += size
 
     def count_reads(self, entry: dict, who: str) -> None:
         """Count each markdown file a response opens, by its absolute path, with Read or a shell command."""
         content = (entry.get("message") or {}).get("content") if entry.get("type") == "assistant" else None
         if not isinstance(content, list):
             return
-        if self.since and str(entry.get("timestamp", self.since))[:10] < self.since:
+        if self.outside(entry):
             return
-        cwd = str(entry.get("cwd") or "")
+        cwd =str(entry.get("cwd") or "")
         for block in content:
             if isinstance(block, dict) and block.get("type") == "tool_use":
                 # A subagent's call can be written both as a sidechain line and in its own transcript.
@@ -278,6 +302,22 @@ def markdown_read(tool: str, given) -> list[str]:
         printed = next((i for i, w in enumerate(words) if ">" in w), len(words))
         found += [w for w in words[1:printed] if w.lower().endswith(".md") and not w.startswith("-")]
     return found
+
+
+def program_of(command) -> str:
+    """What a shell call ran: its first command after any `cd` or variable assignment, with its subcommand."""
+    for segment in SHELL_SEGMENT.split(command if isinstance(command, str) else ""):
+        words = [w.strip("\"'") for w in SHELL_WORD.findall(segment)]
+        while words and ASSIGNMENT.match(words[0]):
+            words = words[1:]
+        if not words or words[0] == "cd":
+            continue
+        program = posixpath.basename(slashed(words[0]))
+        # An option, a redirect or a here-document's marker is not what runs.
+        rest = [posixpath.basename(slashed(w)) for w in words[1:]
+                if not w.startswith("-") and "<" not in w and ">" not in w]
+        return " ".join([program, *rest[:SUBCOMMANDS.get(program, 0)]])
+    return "?"
 
 
 def slashed(path: str) -> str:
@@ -462,13 +502,14 @@ MODEL_ROWS = ("command", "agent", "model", "contexts", "calls", "mean_context", 
 ROWS = tuple(c for c in MODEL_ROWS if c != "model")
 DOCS = ("doc", "named_by", "reads", "main", "subagents")
 RESULTS = ("command", "tool", "results", "characters", "approx_tokens")
+SHELL_RESULTS = ("command", "program", "results", "characters", "approx_tokens")
 SPAWNS = ("command", "agent", "started", "calls", "input_equivalent", "description")
 
 
 def render(rows: list[dict], columns: tuple[str, ...] = ROWS) -> str:
     cells = [list(columns)] + [[f"{r[c]:,}" if isinstance(r[c], int) else r[c] for c in columns] for r in rows]
     widths = [max(len(row[i]) for row in cells) for i in range(len(columns))]
-    left = {"command", "agent", "model", "started", "description", "tool", "doc", "named_by"}
+    left = {"command", "agent", "model", "started", "description", "tool", "program", "doc", "named_by"}
     lines = ["  ".join(cell.ljust(w) if c in left else cell.rjust(w) for c, cell, w in zip(columns, row, widths))
              for row in cells]
     return "\n".join(line.rstrip() for line in lines)
@@ -481,13 +522,16 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("projects", nargs="*", type=Path,
                         help="transcript directories; defaults to this checkout's under ~/.claude/projects")
-    parser.add_argument("--since", help="only responses on or after this date, YYYY-MM-DD")
+    parser.add_argument("--since", help="only entries on or after this date, YYYY-MM-DD, or UTC time, YYYY-MM-DDTHH:MM[:SS]")
+    parser.add_argument("--until", help="only entries before this date or UTC time, in --since's form")
     parser.add_argument("--json", action="store_true", help="print the rows as JSON")
     views = parser.add_mutually_exclusive_group()
     views.add_argument("--spawns", type=int, metavar="N",
                        help="list the N costliest subagents, each with the task it was given, instead")
     views.add_argument("--tools", type=int, metavar="N",
                        help="list the N commands and tools whose results put the most text into main sessions")
+    views.add_argument("--shell", type=int, metavar="N",
+                       help="list the N commands and shell programs whose results put the most text into main sessions")
     views.add_argument("--models", action="store_true",
                        help="split each command and agent row by the model that answered")
     views.add_argument("--docs", action="store_true",
@@ -495,14 +539,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--session", default="", metavar="ID",
                         help="only the session whose id starts with ID, with its subagents")
     args = parser.parse_args(argv)
-    if args.since and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", args.since):
-        parser.error("--since takes YYYY-MM-DD")
+    for name in ("since", "until"):
+        if (bound := getattr(args, name)) is not None:
+            if not BOUND.fullmatch(bound):
+                parser.error(f"--{name} takes YYYY-MM-DD or YYYY-MM-DDTHH:MM[:SS]")
+            # A transcript's `Z` would sort after the fraction of a second it follows.
+            setattr(args, name, bound.removesuffix("Z"))
     projects = args.projects or [p for p in default_projects(Path.cwd()) if p.is_dir()]
     missing = [p for p in args.projects if not p.is_dir()] if args.projects else []
     if missing or not projects:
         print(f"no transcript directory at {(missing or default_projects(Path.cwd()))[0]}", file=sys.stderr)
         return 2
-    report = Report(args.since, args.session)
+    report = Report(args.since, args.session, args.until)
     for project in projects:
         report.read_project(project)
     print(f"read {projects[0]}" + (f" and {len(projects) - 1} more" if len(projects) > 1 else ""), file=sys.stderr)
@@ -521,6 +569,11 @@ def main(argv: list[str] | None = None) -> int:
                 for (c, t), (n, size) in report.results.items()]
         rows = sorted(rows, key=lambda r: r["characters"], reverse=True)[:args.tools]
         columns = RESULTS
+    elif args.shell is not None:
+        rows = [{"command": c, "program": p, "results": n, "characters": size, "approx_tokens": size // 4}
+                for (c, p), (n, size) in report.shell.items()]
+        rows = sorted(rows, key=lambda r: r["characters"], reverse=True)[:args.shell]
+        columns = SHELL_RESULTS
     elif args.spawns is not None:
         rows = sorted(report.spawns, key=lambda r: r["input_equivalent"], reverse=True)[:args.spawns]
         columns = SPAWNS

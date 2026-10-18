@@ -63,8 +63,8 @@ class ReportTests(unittest.TestCase):
         self.root = Path(self.directory.name)
         self.files = Transcripts(self.root)
 
-    def rows(self, since=None):
-        report = Report(since)
+    def rows(self, since=None, until=None):
+        report = Report(since, until=until)
         report.read_project(self.root)
         return {(r["command"], r["agent"]): r for r in report.rows()}, report
 
@@ -273,6 +273,16 @@ class ReportTests(unittest.TestCase):
         rows, _ = self.rows(since="2026-10-05")
         self.assertEqual(rows["/ship", "main"]["cache_read"], 2)
 
+    def test_a_window_bounded_by_times_keeps_since_and_drops_until(self):
+        self.files.write("s.jsonl", [ship(), reply("m1", at="2026-10-07T09:59:59.999Z", read=1),
+                                     reply("m2", at="2026-10-07T10:00:00.000Z", read=2),
+                                     reply("m3", at="2026-10-07T16:56:04.035Z", read=4),
+                                     reply("m4", at="2026-10-07T16:56:17.000Z", read=8)])
+        rows, _ = self.rows(since="2026-10-07T10:00", until="2026-10-07T16:56:17")
+        self.assertEqual(rows["/ship", "main"]["cache_read"], 2 + 4)
+        rows, _ = self.rows(until="2026-10-07T16:56")
+        self.assertEqual(rows["/ship", "main"]["cache_read"], 1 + 2)
+
     def test_an_unreadable_line_is_skipped_and_counted(self):
         self.files.write("s.jsonl", [ship(), reply("m1", read=1)], extra_lines=["{not json"])
         rows, report = self.rows()
@@ -334,6 +344,36 @@ class ReportTests(unittest.TestCase):
         self.files.write("s.jsonl", [ship(), calls, results, blob])
         _, report = self.rows(since="2026-10-05")
         self.assertEqual(report.results, {("/ship", "Bash"): [1, 40]})
+
+    def test_shell_results_are_counted_per_command_and_program(self):
+        def run(call_id, command):
+            return {"type": "tool_use", "id": call_id, "name": "Bash", "input": {"command": command}}
+
+        calls = {"type": "assistant", "timestamp": "2026-10-07T09:05:00.000Z", "message": {
+            "id": "m1", "usage": usage(read=1), "content": [
+                run("t1", "cd /r/repo && gh pr checks 258 --watch"), run("t2", "gh pr checks 257"),
+                run("t3", "sed -n 1,90p docs/x.md"),
+                {"type": "tool_use", "id": "t4", "name": "Read", "input": {"file_path": "x.md"}}]}}
+        results = {"type": "user", "timestamp": "2026-10-07T09:06:00.000Z", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": t, "content": "x" * n} for t, n in
+            (("t1", 30), ("t2", 10), ("t3", 90), ("t4", 7))]}}
+        self.files.write("s.jsonl", [ship(), calls, results])
+        _, report = self.rows()
+        self.assertEqual(report.shell, {("/ship", "gh pr checks"): [2, 40], ("/ship", "sed"): [1, 90]})
+        self.assertEqual(report.results[("/ship", "Bash")], [3, 130])
+
+    def test_a_program_is_the_first_command_after_any_cd_or_assignment_with_its_subcommand(self):
+        for command, program in (
+                ("cd /r/repo && git diff origin/main...HEAD", "git diff"),
+                ('S=/d/tmp/s; py -3.12 -I "$S/ship_split.py" x', "py ship_split.py"),
+                ("bash .claude/scripts/host-checks.sh all 2>&1 | tail -5", "bash host-checks.sh"),
+                ("py -3.12 -I - <<'EOF'\nprint(1)\nEOF", "py"),
+                ("gh issue view 258 --json title", "gh issue view"),
+                ("sed -n '1,90p' docs/token-usage.md", "sed"),
+                ("FOO=1 npm test", "npm test"),
+                ("cd tools", "?"), ("", "?"), (None, "?")):
+            with self.subTest(command=command):
+                self.assertEqual(token_usage.program_of(command), program)
 
 
 def call(tool, at="2026-10-07T09:10:00.000Z", cwd="/r/repo", call_id=None, **given):
@@ -458,7 +498,7 @@ class CommandLineTests(unittest.TestCase):
                 self.assertEqual(token_usage.default_projects(worktree), expected)
 
     def test_the_spawns_tools_and_docs_views_cannot_be_asked_for_together(self):
-        for views in (["--spawns", "5", "--tools", "5"], ["--tools", "5", "--docs"]):
+        for views in (["--spawns", "5", "--tools", "5"], ["--tools", "5", "--docs"], ["--tools", "5", "--shell", "5"]):
             with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as refused:
                 token_usage.main(views)
             self.assertEqual(refused.exception.code, 2)
@@ -476,6 +516,20 @@ class CommandLineTests(unittest.TestCase):
                 self.assertEqual(token_usage.main([directory, "--models"]), 0)
         self.assertIn("model", out.getvalue().splitlines()[0])
         self.assertIn("opus", out.getvalue())
+
+    def test_a_bound_takes_a_date_or_a_utc_time_and_a_trailing_z_is_the_same_time(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Transcripts(Path(directory)).write("s.jsonl", [ship(), reply("m1", at="2026-10-07T16:56:17.035Z", read=3)])
+            for until, read in (("2026-10-07T16:56:17", 0), ("2026-10-07T16:56:17Z", 0), ("2026-10-08", 3)):
+                out = io.StringIO()
+                with self.subTest(until=until), contextlib.redirect_stdout(out), \
+                        contextlib.redirect_stderr(io.StringIO()):
+                    self.assertEqual(token_usage.main([directory, "--until", until, "--json"]), 0)
+                    self.assertEqual(json.loads(out.getvalue())[-1]["cache_read"], read)
+        for bad in (["--since", "2026-10-7"], ["--until", "yesterday"]):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as refused:
+                token_usage.main(bad)
+            self.assertEqual(refused.exception.code, 2)
 
     def test_a_missing_directory_exits_2(self):
         with contextlib.redirect_stderr(io.StringIO()):

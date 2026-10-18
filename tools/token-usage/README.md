@@ -8,6 +8,8 @@ py -3.12 tools/token-usage/token_usage.py                      # this checkout's
 py -3.12 tools/token-usage/token_usage.py --since 2026-10-01 --json
 py -3.12 tools/token-usage/token_usage.py --since 2026-10-01 --spawns 40   # the costliest subagents and their tasks
 py -3.12 tools/token-usage/token_usage.py --since 2026-10-01 --tools 30    # what tool results put into main sessions
+py -3.12 tools/token-usage/token_usage.py --since 2026-10-01 --shell 30    # the same for shell calls, by program
+py -3.12 tools/token-usage/token_usage.py --since 2026-10-15 --until 2026-10-16T16:56:17   # a window that ends at a merge
 py -3.12 tools/token-usage/token_usage.py --since 2026-10-01 --docs        # every tracked .md, who names it, how often it was opened
 py -3.12 tools/token-usage/token_usage.py --since 2026-10-01 --models      # each row split by the model that answered
 py -3.12 tools/token-usage/token_usage.py --session <id>      # one session and its subagents
@@ -47,13 +49,23 @@ typed** — a task notification, a scheduled wake — keeps the label, because
 most are a background agent or CI watch reporting back inside the
 command's own run; what the session spent from the first such wake to the
 next typed prompt is `woken_equivalent`, beside `input_equivalent` and
-part of it. The first and last day counted go to stderr.
+part of it. The first and last day counted go to stderr. `--since` keeps
+entries at or after its bound and `--until` those before its own; each is
+a date or a UTC time to the minute or second, compared with the entry's
+timestamp as text, and an entry with no timestamp is in every window.
 `--spawns N` lists single subagents instead, costliest first, each with the
 description it was spawned with — which says why a command no one wrote to
 delegate spent most of its tokens in agents. `--tools N` lists the
 commands and tools whose results put the most text into main sessions,
 in characters and about a quarter as many tokens: what a large context is
-made of, since a result stays in it for every later turn. A subagent's type
+made of, since a result stays in it for every later turn. A result is
+counted from the user entry that carries it; the untimestamped
+`api-request-blob` entries that replay a request's calls and results are
+not read. `--shell N` splits the `Bash` and `PowerShell` rows of the same
+count by the program that produced each result: the call's first command
+after any `cd` or variable assignment, with its subcommand or script for a
+front such as `git`, `bash` or `py` (two words for `gh`), so a call that
+pipes `sed` into `head` is `sed`. A subagent's type
 comes from its `.meta.json`, else from the parent's tool result naming it,
 else it is `subagent`.
 
