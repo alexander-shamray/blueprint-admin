@@ -64,12 +64,11 @@ plans* holds the delegation brief, the review loop (citing `/ship` step 5),
 the planning rule, the compact-before-a-wait rule and one task per session.
 **Built** (#225): the `--tools` measurement, recorded in
 [`token-usage.md`](token-usage.md), and the cut it names: step 6's `gh pr checks
---watch` takes `--interval 60`. **Owed:** the effect, read on sessions run
-after, and retiring the owner's user-level copy of the #122 rules, outside this
-repository. The
-exit is read on the Sonnet `/ship` row alone of the 2026-10-16 section of
-[`token-usage.md`](token-usage.md) (192k, 28%); the `skill:ship` row there
-is 211k, over it, and a day of sessions cannot isolate these rules.
+--watch` takes `--interval 60`; its effect is read in the 2026-10-18 section
+there. The owner's user-level copy of the #122 rules was retired outside this
+repository. **Exit:** half met. The 2026-10-18 Sonnet `/ship` row is under
+200k a call and over 35% after a wake (#253); the largest `Bash` results are
+file reads through the shell, which this step has not cut (#252).
 
 ### Step 3 — what every session loads
 
