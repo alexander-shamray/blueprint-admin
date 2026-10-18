@@ -275,8 +275,9 @@ are announced.
   service; Grafana's panel shows the split. Its command and query p95 are
   quantiles over the backend's `request.duration` histogram, so they are only
   as fine as that histogram's bucket boundaries.
-- The load run's Stop ends k6's process tree, not k6's own Ctrl+C, so its
-  `teardown()` does not run and a stopped run has no verdict. A run leaves its
+- The load run's Stop ends the step going by killing its process tree, not by
+  k6's own Ctrl+C: a Stop before k6 drives no load, and a Stop during k6 skips
+  its `teardown()`, so that run has no verdict. A run leaves its
   orders, the `slo-run` client and the restocked count as they are, and a
   local run proves nothing about the SLO (§13.7).
 - The Mail screen lists the sink's newest `MailSinkClient.Limit` messages and
