@@ -4400,11 +4400,16 @@ def git_subcommand_offence(segment):
             "`git diff` and read the output."
         )
     arguments = after_global_options(segment)[1:]
-    if ((subcommand == "bisect" and "run" in arguments)
-            or (subcommand == "submodule" and "foreach" in arguments)
-            or (subcommand == "filter-branch")
-            or (subcommand == "rebase" and any(
-                argument.startswith(("-x", "--exec", "--extcmd"))
+    # By `verb_name`, as the executing subcommands above are, so a case or quote
+    # variant is the same verb. A short cluster holding `x` (`-ix`) and any
+    # `--e...` abbreviation of `--exec` count for `rebase`; over-refusing
+    # `--empty` is the safe direction.
+    verb = verb_name(subcommand)
+    if ((verb == "bisect" and "run" in arguments)
+            or (verb in ("submodule", "submodule--helper") and "foreach" in arguments)
+            or (verb == "filter-branch")
+            or (verb == "rebase" and any(
+                re.match(r"^-[A-Za-z]*x", argument) or argument.startswith("--e")
                 for argument in arguments))):
         return (
             f"`git {subcommand}` here runs a command string the command line "
