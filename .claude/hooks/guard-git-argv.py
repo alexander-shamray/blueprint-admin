@@ -675,6 +675,9 @@ def _quoting(command, quotes=True, data=()):
                     index += 2
                     dollar = False
                     continue
+                # `"$${y:-"` is not a `$$` pair followed by text: bash reads the
+                # second `$` with the `{` as an expansion and refuses the whole
+                # line (measured), so a frame opens here for every `${`.
                 if char == "$" and command.startswith("{", index + 1):
                     yield index, "double", False
                     yield index + 1, "double", False
@@ -710,6 +713,13 @@ def _quoting(command, quotes=True, data=()):
                 at_word_start = False
             elif char == "}" and brace_depth:
                 brace_depth -= 1
+                at_word_start = False
+            elif char in "(`" and brace_depth and (char == "`" or dollar):
+                # A command substitution inside `${` has braces of its own
+                # (`${x:-$(echo })}`), which this walk does not track. Pinning
+                # the depth up for the rest of the command means no `#` is a
+                # comment from here: more of the line is judged, never less.
+                brace_depth += 1000
                 at_word_start = False
             elif char == "#" and at_word_start and not brace_depth:
                 comment = True
@@ -774,23 +784,17 @@ def heredoc_spans(command):
     # this loop only ever appends spans that start ahead of it, so the list is
     # sorted by construction and the walk stays monotonic.
     data, spans, pending = [], [], 0
-    # Arithmetic depth, and where the `((` or `))` just counted ends (#277).
-    arithmetic, counted = 0, 0
     for index, in_quotes, in_comment in shell_positions(command, data):
-        if in_quotes or in_comment or index < counted:
-            continue
-        if command.startswith("((", index):
-            arithmetic, counted = arithmetic + 1, index + 2
-            continue
-        if arithmetic and command.startswith("))", index):
-            arithmetic, counted = arithmetic - 1, index + 2
+        if in_quotes or in_comment:
             continue
         if not command.startswith("<<", index):
             continue
-        if arithmetic or _escaped(command, index):
-            # A shift inside `(( ))` or `$(( ))` (#277), or a `<` the shell was
-            # told to read as a character (#276), opens no heredoc: the lines
-            # after it are commands and must be judged as such.
+        if _escaped(command, index):
+            # A `<` the shell was told to read as a character opens no heredoc
+            # (#276): the lines after it are commands and must be judged as
+            # such. A shift inside `(( ))` is not counted here but refused by
+            # `ambiguous_arithmetic` (#277), because a count of `((` that bash
+            # does not share hides a live command in either direction.
             continue
         # **`<<<` is a here-string, and it fed a push straight past this.**
         # The bare-delimiter alternative excludes `<`, so no opener matched at
@@ -901,6 +905,33 @@ def strip_comments(command):
     )
 
 
+def ambiguous_arithmetic(command):
+    """Whether `command` has an unquoted `((` and an unquoted `<<` (#277).
+
+    Inside `(( ))` and `$(( ))` a `<<` is a left shift, and nothing opens a
+    heredoc; outside, the same two characters hide every line to the delimiter.
+    Telling them apart means parsing bash's arithmetic grammar: `(( 1 ) )` is two
+    subshells, `$(( (1+(2)) <<EOF ))` is arithmetic whose nested parentheses end
+    a naive count early, and an unmatched `((` is read as subshells. A counter
+    that was wrong in either direction either hid a live command or let an
+    undecodable delimiter past the refusal beside this one, so the combination is
+    refused instead of counted. No command this repository writes needs both.
+    Quoted text, comments and heredoc bodies do not count.
+    """
+    bodies = [(start, end) for start, end, _ in heredoc_spans(command)]
+    paren = shift = False
+
+    for index, in_quotes, in_comment in shell_positions(command, bodies):
+        if in_quotes or in_comment:
+            continue
+        if command.startswith("((", index):
+            paren = True
+        elif command.startswith("<<", index) and not _escaped(command, index):
+            shift = True
+
+    return paren and shift
+
+
 def undecodable_heredoc(command):
     """Whether a heredoc names a delimiter this file cannot read.
 
@@ -928,23 +959,15 @@ def undecodable_heredoc(command):
     # body left the scanner in quote state, so a later undecodable opener
     # looked quoted and this refusal never fired. Raised in review.
     bodies = heredoc_spans(command)
-    quoted, arithmetic, counted = set(), 0, 0
+    quoted = set()
     for index, in_quotes, in_comment in shell_positions(
             command, [(start, end) for start, end, _ in bodies]):
         if in_quotes or in_comment:
             quoted.add(index)
-            continue
-        # The same two exclusions `heredoc_spans` makes (#276, #277): an
-        # escaped `<` and a shift inside arithmetic open no heredoc, so their
-        # delimiter is none this refusal is about.
-        if index < counted:
-            continue
-        if command.startswith("((", index):
-            arithmetic, counted = arithmetic + 1, index + 2
-        elif arithmetic and command.startswith("))", index):
-            arithmetic, counted = arithmetic - 1, index + 2
-        elif command.startswith("<<", index) and (arithmetic or _escaped(command, index)):
-            quoted.add(index)
+    # **Without the escape exclusion `heredoc_spans` makes (#276), on purpose.**
+    # That is a judgement about where a body starts; suppressing this refusal on
+    # it would let an undecodable delimiter through to the tokenising path that
+    # does not enforce the push allow-list. When in doubt this refuses.
     # **A `<<` inside a heredoc BODY is data, not an opener**, and reading one
     # as an opener refused an innocent filing: a body quoting `<<$'E\\x4fF'` —
     # documentation of this very mechanism — was rejected as an undecodable
@@ -4180,6 +4203,14 @@ def _offence(command, depth, judged):
             "a heredoc names a delimiter this guard cannot decode, so it "
             "cannot tell where the body ends or which lines after it are "
             "commands; refusing rather than reading part of it."
+        )
+    if ambiguous_arithmetic(command):
+        return (
+            "`((` and `<<` in one command: inside arithmetic `<<` is a shift "
+            "and opens no heredoc, outside it hides every line to its "
+            "delimiter, and this guard cannot tell which without parsing "
+            "bash's arithmetic. Run the arithmetic and the heredoc as "
+            "separate commands."
         )
 
 
