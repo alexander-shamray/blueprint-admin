@@ -2869,6 +2869,7 @@ class TheGitArgvGuard(unittest.TestCase):
             "a quoted command string after git rebase -x": "git rebase -x 'git-push origin HEAD:main'",
             "a glued git rebase -x": "git rebase -xgit-push",
             "a quoted command string under a wrapper": "sudo 'git-push origin HEAD:main'",
+            "git filter-branch with a filter": "git filter-branch --tree-filter 'rm -f x' HEAD",
             "git config edit, a verb with one word": "git config edit",
             "git config unset, a verb": "git config unset",
         }.items():
@@ -2887,6 +2888,9 @@ class TheGitArgvGuard(unittest.TestCase):
             "a path named git-something added": "git add git-hooks",
             "a package named git-something": "npm i git-url-parse",
             "a directory entered": "cd git-hooks",
+            "a rebase that runs nothing": "git rebase origin/main",
+            "a submodule update": "git submodule update --init",
+            "a bisect that is only marked": "git bisect good",
         }.items():
             with self.subTest(label):
                 self.assertAdmitted(command)
