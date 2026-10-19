@@ -136,7 +136,8 @@ GIT_WRITING_SUBCOMMANDS = frozenset({"rm", "mv"})
 # `sort` is the same shape: `-o FILE` and `--output` write one, and
 # `--compress-program` runs one, and it is a substitution program. The names are
 # matched whole, with `=`, or as GNU abbreviates a long flag (`--out`, `--compress`);
-# a short flag also in its glued form (`-ofile`).
+# a short flag anywhere in a cluster (`-ofile`, `-uo file`), over-refusing a cluster
+# whose letter belongs to another option's argument, which is the safe direction.
 EXECUTING_PROGRAM_FLAGS = {
     "rg": ("--pre", "--hostname-bin"),
     "sort": ("-o", "--output", "--compress-program"),
@@ -144,11 +145,19 @@ EXECUTING_PROGRAM_FLAGS = {
 
 # Environment variables git EXECUTES (#281), the spellings of `git -c` and
 # `--ext-diff` the global option scan cannot see because they are not options.
-# `GIT_DIR` and `GIT_WORK_TREE` only point, and stay admitted.
+# Also the generic names git and rg consult when theirs is unset (`PAGER`,
+# `EDITOR`, `VISUAL`, `SSH_ASKPASS`), the directories git reads configuration or
+# templates from (`HOME`, `XDG_CONFIG_HOME`, `GIT_DIR`, `GIT_COMMON_DIR`,
+# `GIT_TEMPLATE_DIR`), and `RIPGREP_CONFIG_PATH`, whose file may hold `--pre`.
+# Matched without regard to case, as Windows reads the environment. `GIT_WORK_TREE`
+# only points at files to read, and stays admitted.
 GIT_EXECUTING_ENVIRONMENT = re.compile(
-    r"^GIT_(?:CONFIG_COUNT|CONFIG_KEY_\w+|CONFIG_VALUE_\w+|CONFIG_PARAMETERS"
+    r"^(?:GIT_(?:CONFIG_COUNT|CONFIG_KEY_\w+|CONFIG_VALUE_\w+|CONFIG_PARAMETERS"
     r"|CONFIG_GLOBAL|CONFIG_SYSTEM|EXTERNAL_DIFF|SSH|SSH_COMMAND|EXEC_PATH"
-    r"|PAGER|ASKPASS|PROXY_COMMAND|EDITOR|SEQUENCE_EDITOR)\+?=")
+    r"|PAGER|ASKPASS|PROXY_COMMAND|EDITOR|SEQUENCE_EDITOR|DIR|COMMON_DIR"
+    r"|TEMPLATE_DIR)"
+    r"|PAGER|EDITOR|VISUAL|SSH_ASKPASS|HOME|XDG_CONFIG_HOME|RIPGREP_CONFIG_PATH)"
+    r"\+?=", re.IGNORECASE)
 
 # Commands whose arguments are assignments, as `export GIT_PAGER=x` is.
 ASSIGNING_COMMANDS = frozenset({"env", "export", "declare", "typeset", "local", "readonly"})
@@ -4138,7 +4147,8 @@ def program_flag_offence(tokens):
                 name = word.split("=", 1)[0]
                 if any(
                         name == flag
-                        or (not flag.startswith("--") and word.startswith(flag))
+                        or (not flag.startswith("--") and word.startswith("-")
+                            and not word.startswith("--") and flag[1] in word[1:])
                         or (flag.startswith("--") and name.startswith("--")
                             and len(name) > 2 and flag.startswith(name))
                         for flag in flags):
@@ -4161,19 +4171,26 @@ def git_environment_offence(tokens):
     assignments of a run, and the arguments of `env`, `export` and their kind.
     """
     for run in command_runs(tokens):
-        lead = next((index for index, word in enumerate(run)
-                     if not ASSIGNMENT.match(word)), len(run))
-        assigned = list(run[:lead])
-        if lead < len(run) and program_name(run[lead]) in ASSIGNING_COMMANDS:
-            assigned += [word for word in run[lead + 1:] if ASSIGNMENT.match(word)]
-        for word in assigned:
-            if GIT_EXECUTING_ENVIRONMENT.match(word):
-                return (
-                    f"`{word.split('=', 1)[0]}` is an environment variable git "
-                    "EXECUTES — a command, a pager, an ssh or an external diff. "
-                    "It is `git -c` and `--ext-diff` spelled as an assignment, "
-                    "and those are refused; this is too."
-                )
+        # Whether a word here is an assignment to the environment: at the start
+        # of a run, right after a launcher, and from `env` or `export` onward,
+        # wherever in the run they stand (`sudo env GIT_PAGER=x git log`).
+        assigning, sticky = True, False
+        for word in run:
+            if ASSIGNMENT.match(word):
+                if (assigning or sticky) and GIT_EXECUTING_ENVIRONMENT.match(word):
+                    return (
+                        f"`{word.split('=', 1)[0]}` is an environment variable "
+                        "git or rg EXECUTES — a command, a pager, an ssh, an "
+                        "external diff or a configuration file. It is `git -c`, "
+                        "`--ext-diff` or `--pre` spelled as an assignment, and "
+                        "those are refused; this is too."
+                    )
+                continue
+            if word.startswith("-"):
+                continue  # an option of env, sudo or a launcher
+            name = program_name(word)
+            sticky = sticky or name in ASSIGNING_COMMANDS
+            assigning = name in ASSIGNING_COMMANDS or name in LAUNCHERS or name == "sudo"
     return None
 
 
