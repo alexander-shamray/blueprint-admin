@@ -129,6 +129,16 @@ public sealed class GameDayServiceTests : IAsyncDisposable
         runner.Started[^1].Arguments.ShouldBe(["-3.12", "tools/game-day/game_day.py", "latency", "--restore"]);
     }
 
+    [Theory]
+    [InlineData("../latency")]
+    [InlineData("--x")]
+    [InlineData("Latency")]
+    public void A_name_that_is_not_a_runbook_never_reaches_the_reader(string name)
+    {
+        // A reader that answers every name: only the name check in Text can return null here, not an absent file.
+        Service(read: _ => "leak").Text(name).ShouldBeNull();
+    }
+
     [Fact]
     public void A_runbook_is_read_from_the_clone_and_a_name_that_is_not_one_reads_nothing()
     {
