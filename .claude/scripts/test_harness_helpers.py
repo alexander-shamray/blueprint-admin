@@ -2864,6 +2864,9 @@ class TheGitArgvGuard(unittest.TestCase):
         for label, command in {
             "a variable that only points": "GIT_WORK_TREE=/tmp/x git status",
             "a message variable set before a commit": "BODY=text; git commit -F - <<'EOF'\nmessage\nEOF",
+            "a word env searched for by rg": "rg env -i src",
+            "a branch named env": "git diff env -u",
+            "a pattern env in git log": "git log --grep env -S foo",
             "git after env's end of options": "env -- git log -S foo",
             "git's own -S flag behind env": "env git log -S foo",
             "git's own -u flag behind env": "env git diff -u",
