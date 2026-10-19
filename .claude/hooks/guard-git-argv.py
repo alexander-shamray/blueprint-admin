@@ -669,7 +669,7 @@ def _quoting(command, quotes=True, data=(), ambiguous=None):
     # it is a backtick one. Its own braces are not followed (`${x:-$(echo })}`),
     # so `brace_depth` is frozen until its closing parenthesis or backtick, where
     # the `${` it sat in is read again.
-    sub, tick = 0, False
+    sub, tick, sub_start = 0, False, 0
     # The same for a `${` inside a double-quoted string, where a `"` after the
     # `:-` opens a quote of its own rather than ending the string, and the second
     # one closes it: `echo "${x:-" #"}"; git push ...` prints ` #` and then runs
@@ -808,12 +808,17 @@ def _quoting(command, quotes=True, data=(), ambiguous=None):
             elif sub and char in "()":
                 sub += 1 if char == "(" else -1
                 at_word_start = char == "("
+                if not sub and re.search(
+                        r"\bcase\b", command[sub_start:index]):
+                    # A `case` pattern's `)` closes nothing, so the count
+                    # above cannot be trusted for this body.
+                    lost = True
             elif brace_depth and not sub and ((char == "(" and dollar) or char == "`"):
                 # A command substitution inside `${` has braces of its own
                 # (`${x:-$(echo })}`) that this walk does not follow. It is
                 # followed by its parentheses instead, and the `${` it sat in
                 # is read again at its closing parenthesis (#296).
-                sub, tick = 1, char == "`"
+                sub, tick, sub_start = 1, char == "`", index
                 at_word_start = True
             elif char == "#" and at_word_start and not brace_depth:
                 comment = True
@@ -4263,8 +4268,9 @@ def git_config_offence(segment):
     positional = [word for word in stripped[1:] if not word.startswith("-")]
     if all(flag in CONFIG_READ_FLAGS for flag in flags) and (
             any(flag in CONFIG_READ_ACTIONS for flag in flags)
-            # `git config user.name` names one key and no value: a read.
-            or len(positional) == 1):
+            # `git config user.name` names one dotted key and no value: a read.
+            # A bare word is a verb (`edit`, `set`, `unset`), which is not.
+            or (len(positional) == 1 and "." in positional[0])):
         return None
     return (
         "`git config` is refused unless it only reads (`--get`, `--get-all`, "
@@ -4288,7 +4294,9 @@ def dashed_git_offence(tokens):
         # Not `launched()`: `sudo git-push` and `timeout 5 git-push` put the
         # program after a word it does not read as a launcher. A run led by a
         # reader (`ls git-hooks`) names it as an operand.
-        if lead in DATA_ONLY_COMMANDS or lead in READING_COMMANDS:
+        # `git` is a reading lead too, and `git bisect run git-push` runs the
+        # word after it, so it is not exempt.
+        if lead in DATA_ONLY_COMMANDS or (lead in READING_COMMANDS and lead != "git"):
             continue
         for token in run:
             if not ASSIGNMENT.match(token) and DASHED_GIT.match(program_name(token)):
