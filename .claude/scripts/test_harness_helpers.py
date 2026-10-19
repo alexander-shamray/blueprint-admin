@@ -2753,6 +2753,19 @@ class TheGitArgvGuard(unittest.TestCase):
             "a shift in $(( )) is arithmetic": "echo $(( 1 <<EOF ))\ngit push origin +HEAD:main\nEOF",
             "a # in ${} is text": "ls ${x:- #}; git push origin +HEAD:main",
             "a # in a nested ${} is text": "ls ${a:-${b:- #}}; git push origin +HEAD:main",
+            # Review round 1: a count of `((` is not bash's, so the pair is refused whole.
+            "nested parentheses end a naive arithmetic count early":
+                "echo $(( (1+(2)) <<EOF ))\ngit push origin +HEAD:main\nEOF",
+            "an unmatched (( is two subshells to bash":
+                "((echo a) | cat); git commit -F - <<'EOF'\nit's\nEOF\ngit push origin +HEAD:main",
+            "a } inside a substitution inside ${} closes nothing":
+                "ls ${x:-$(echo }) #}; git push origin +HEAD:main",
+            "a } inside backticks inside ${} closes nothing":
+                "ls ${x:-`echo }` #}; git push origin +HEAD:main",
+            # An undecodable delimiter is refused wherever it sits (#277 review): the
+            # arithmetic count is not bash's for `(( 1 ) )`, which is two subshells.
+            "an undecodable delimiter in arithmetic position": "(( 1 <<$'E\\x4fF' ))\ngit push origin +HEAD:main",
+            "an undecodable delimiter after an escaped <": "ls \\<<$'E\\x4fF'\ngit push origin +HEAD:main",
             # Measured under bash: the inner quotes pair up, ` #` is text, and the push runs.
             "a quote nested in a double-quoted ${} does not end the string": 'echo "${x:-" #"}"; git push origin +HEAD:main',
             "the same with a second expansion inside": 'echo "${x:-${y:-" #"}}"; git push origin +HEAD:main',
@@ -2769,6 +2782,8 @@ class TheGitArgvGuard(unittest.TestCase):
             "a quoted real heredoc": "git commit -F - <<'EOF'\nfix: ls > .claude/settings.json\nEOF",
             "an escaped backslash leaves the heredoc real": "cat \\\\<<EOF\ngit push origin +HEAD:main\nEOF",
             "a comment is still a comment": "ls # git push origin +HEAD:main",
+            "a (( inside a quoted argument is text": "git commit -m '(( x <<EOF'",
+            "a (( inside a heredoc body is data": "git commit -F - <<'EOF'\n(( x <<EOF ))\nEOF",
             "a # after a closed ${} is a comment": "ls ${x:-y} # git push origin +HEAD:main",
             "a # after a closed double-quoted ${} is a comment": 'echo "a ${x:-y} b" # git push origin +HEAD:main',
             "a quoted ${} with nested quotes that closes": 'echo "${x:-"y"}" # git push origin +HEAD:main',
