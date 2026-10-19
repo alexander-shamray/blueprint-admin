@@ -73,23 +73,43 @@ fenced_bytes() {
 # an auditor reads line by line: every resolved URL is on the npm registry over
 # https, and every package entry that is not a link, bundled or the root carries
 # a sha512 integrity; a link's resolved is a path, so a link is exempt from
-# both. One fault a line; a file with no entry indented the way npm
-# writes them has nothing read, so that fails closed too.
+# both. One fault a line. It is read as JSON, never as text: `npm ci` parses the
+# file and ignores its whitespace, so a check that matched npm's own indentation
+# was passed by an entry reformatted, or written on one line. A file that is not
+# JSON, or has no package entries, fails closed, and so does a host with no
+# Python 3 to read it.
 lockfile_faults() {
-  awk '
-    /^    "[^"]*": \{[ \t]*$/ {
-      name = $0; sub(/^    "/, "", name); sub(/": \{.*$/, "", name)
-      has = 0; link = 0; bundled = 0; off = 0; entries++; next }
-    /^      "resolved": / {
-      if ($0 !~ /^      "resolved": "https:\/\/registry\.npmjs\.org\//) off = 1 }
-    /^      "integrity": "sha512-/ { has = 1 }
-    /^      "link": true/ { link = 1 }
-    /^      "inBundle": true/ { bundled = 1 }
-    /^    \},?[ \t]*$/ {
-      if (name != "" && off && !link) print "resolved off the registry: " name
-      if (name != "" && !has && !link && !bundled) print "no integrity: " name
-      name = "" }
-    END { if (entries == 0) print "no package entries read" }'
+  local python
+  if command -v py >/dev/null 2>&1 && py -3 -c '' >/dev/null 2>&1; then python="py -3"
+  elif command -v python3 >/dev/null 2>&1 && python3 -c '' >/dev/null 2>&1; then python=python3
+  elif command -v python >/dev/null 2>&1 && python -c 'import sys; sys.exit(sys.version_info[0] != 3)' >/dev/null 2>&1; then python=python
+  else echo "no Python 3 to read the lockfile"; return 0
+  fi
+  $python -I -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    print("the lockfile is not valid JSON")
+    sys.exit(0)
+packages = data.get("packages") if isinstance(data, dict) else None
+if not isinstance(packages, dict) or not packages:
+    print("no package entries read")
+    sys.exit(0)
+for name, entry in packages.items():
+    shown = ascii(name)[1:-1]
+    if not isinstance(entry, dict):
+        print("malformed entry: " + shown)
+        continue
+    if name == "" or entry.get("link") is True:
+        continue
+    resolved = entry.get("resolved")
+    if "resolved" in entry and not (isinstance(resolved, str) and resolved.startswith("https://registry.npmjs.org/")):
+        print("resolved off the registry: " + shown)
+    integrity = entry.get("integrity")
+    if not (isinstance(integrity, str) and integrity.startswith("sha512-")) and entry.get("inBundle") is not True:
+        print("no integrity: " + shown)
+'
 }
 
 # Each git read lands in a file with its status checked, NUL-separated, so a
