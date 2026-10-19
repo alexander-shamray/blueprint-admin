@@ -217,6 +217,11 @@ A new residual is stated **here** and gets a row above.
   `/review-branch`, and `AWritingCommandDeniesTheUsersMemoryAndOutputStyles`
   fails when a command that grants either tool lacks them. A session inside one
   of those commands therefore cannot save a memory: it saves it afterwards.
+  **What this does not close (#291):** the rules bind the Edit and Write tools
+  only, so a Bash redirect into `~/.claude/projects/*/memory/` from an allowed
+  prefix is still the hook's to judge, and it admits the rest of `~/.claude`;
+  and the home-relative specifier was not measured to refuse a write, only to
+  be present.
 - **A command `/ship` runs before it pushes never denies push.** A
   frontmatter `disallowed-tools` holds for the rest of the user turn, not
   for the command that states it, so `Bash(git push:*)` on `/commit` or
