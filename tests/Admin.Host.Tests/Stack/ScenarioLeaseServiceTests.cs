@@ -220,13 +220,23 @@ public sealed class ScenarioLeaseServiceTests : IAsyncDisposable
     [Fact]
     public async Task A_change_added_at_the_deadline_is_refused_and_stops_nothing()
     {
-        await Acquire(ScenarioControl.ShortWaits, seconds: 120);
-        time.Advance(TimeSpan.FromSeconds(121));
+        // The Add must run after the deadline has passed but before the deadline's restore, so it is queued behind an Acquire that
+        // is still applying its change: the restore the timer starts queues behind the Add, and the lease is still held when the
+        // Add reaches the gate. Added after the restore it would be refused for holding nothing, which is another guard's refusal.
+        runner.Hang = spec => spec.Arguments.Contains("ordering-api") && runner.HungJobs.Count == 0;
+        Task<AcquireResult> acquiring = Acquire(ScenarioControl.ShortWaits, seconds: 120);
+        await WaitUntilAsync(() => runner.HungJobs.Count == 1);
+        Task<AddResult> adding = Add();
 
-        AddResult result = await Add();
+        time.Advance(TimeSpan.FromSeconds(121));
+        runner.HungJobs[0].MarkExited(0);
+        (await acquiring).Outcome.ShouldBe(AcquireOutcome.Held);
+        AddResult result = await adding;
 
         result.Outcome.ShouldBe(AddOutcome.NothingHeld);
+        result.Detail!.ShouldContain("reached its deadline");
         Commands().ShouldNotContain(Prefix + "stop inventory-api");
+        await WaitUntilAsync(() => leases.Current is null);
     }
 
     [Fact]
@@ -609,6 +619,9 @@ public sealed class ScenarioLeaseServiceTests : IAsyncDisposable
 
         public Func<ProcessSpec, bool>? Hang { get; set; }
 
+        /// <summary>The jobs <see cref="Hang"/> held open, in start order, for a test to let go of.</summary>
+        public List<Job> HungJobs { get; } = [];
+
         public string[]? PsLines { get; set; }
 
         public IReadOnlyList<ProcessSpec> Started => [.. started];
@@ -620,7 +633,10 @@ public sealed class ScenarioLeaseServiceTests : IAsyncDisposable
 
             if (Hang?.Invoke(spec) == true)
             {
-                return registry.Create(spec);
+                Job hung = registry.Create(spec);
+                HungJobs.Add(hung);
+
+                return hung;
             }
 
             if (FailIf?.Invoke(spec) == true)
