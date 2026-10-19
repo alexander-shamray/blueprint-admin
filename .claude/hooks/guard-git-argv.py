@@ -4324,11 +4324,17 @@ def dashed_git_offence(tokens):
                 # Everything after the first running word, so `submodule foreach
                 # --recursive git-push` and `bisect run sudo git-push` are read.
                 running = [index for index, token in enumerate(run)
-                           if token in GIT_RUNNING_WORDS]
+                           if token in GIT_RUNNING_WORDS
+                           or token.startswith(("-x", "--exec=", "--extcmd="))]
                 if running:
-                    candidates += run[running[0] + 1:]
+                    candidates += run[running[0]:]
         for token in candidates:
-            if not ASSIGNMENT.match(token) and DASHED_GIT.match(program_name(token)):
+            # A glued flag (`-xgit-push`, `--exec=git-push`) and a quoted command
+            # string (`'git-push origin HEAD:main'`) name the program in their
+            # first word.
+            word = re.sub(r"^(?:--exec=|--extcmd=|-x)", "", token).split(None, 1)
+            if (word and not ASSIGNMENT.match(token)
+                    and DASHED_GIT.match(program_name(word[0]))):
                 return (
                     f"`{token}` is a git subcommand run as its own program, so "
                     "the push, force and delete checks that read `git <verb>` "
