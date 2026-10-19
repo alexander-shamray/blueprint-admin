@@ -2844,6 +2844,7 @@ class TheGitArgvGuard(unittest.TestCase):
             "env --ch with a separate value, then -u": "env --ch . -u HOME git log",
             "env -C glued, then -u": "env -C. -u HOME git log",
             "a git-named value of -a before a second env": "env -a git env -u HOME rg x .",
+            "a git-named value, a wrapper, then a second env": "env -a git nice env -u HOME rg x .",
             "a second env after --": "env -- env -u HOME git log",
             "an env behind a wrapper after --": "env -- nice env -u HOME git log",
             "an env behind a wrapper after assignments": "env LANG=C nice env -u HOME git log",
