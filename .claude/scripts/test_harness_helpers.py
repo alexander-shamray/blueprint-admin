@@ -2842,6 +2842,61 @@ class TheGitArgvGuard(unittest.TestCase):
             with self.subTest(label):
                 self.assertAdmitted(command)
 
+    def test_a_persistent_alias_and_a_dashed_git_executable_cannot_reach_a_protected_ref(self):
+        # #294: the verb the guard reads is the one typed, so a written alias or the
+        # program `git-push` runs a push whose verb is something else.
+        for label, command in {
+            "an alias written": "git config alias.p push",
+            "an alias written to the user file": "git config --global alias.p push",
+            "an alias added": "git config --add alias.p push",
+            "an alias removed": "git config --unset alias.p",
+            "the editor on the file": "git config --edit",
+            "git's own set subcommand": "git config set alias.p push",
+            "an executing key": "git config core.pager ./tools/run",
+            "git-send-pack": "git-send-pack origin HEAD:main",
+            "git-push": "git-push origin HEAD:main",
+            "a dashed executable behind a launcher": "xargs git-push origin HEAD:main",
+            "a dashed executable behind sudo": "sudo git-send-pack origin HEAD:main",
+        }.items():
+            with self.subTest(label):
+                self.assertRefused(command)
+
+        for label, command in {
+            "one key read": "git config user.name",
+            "a flagged read": "git config --get user.email",
+            "the list": "git config --list",
+            "a read of a scope": "git config --global --get alias.p",
+            "a helper script named git-something": "bash .claude/scripts/git-trailer-pr.sh 5",
+            "a directory named git-something": "ls git-hooks",
+            "the name in an echoed word": "echo git-push",
+        }.items():
+            with self.subTest(label):
+                self.assertAdmitted(command)
+
+    def test_a_substitution_inside_a_parameter_expansion_does_not_blind_the_rest_of_the_command(self):
+        # #296: `lost` was set at the first `$(` inside a `${` and never cleared, so
+        # every later `#` and `<<` was refused. The substitution's parentheses are
+        # followed now, and the `${` it sat in is read again where it closes.
+        for label, command in {
+            "a substitution then a heredoc": "BODY=${X:-$(date)}; git commit -F - <<'EOF'\nmessage\nEOF",
+            "backticks then a heredoc": "BODY=${X:-`date`}; git commit -F - <<'EOF'\nmessage\nEOF",
+            "a substitution then a comment": "BODY=${X:-$(date)} # a real comment\ngit status",
+            "a nested substitution": "BODY=${X:-$(echo $(date))}; git commit -F - <<'EOF'\nmessage\nEOF",
+        }.items():
+            with self.subTest(label):
+                self.assertAdmitted(command)
+
+        for label, command in {
+            "a second expansion after the first is judged again":
+                "ls ${x:-$(echo a)} ${y:- #}; git push origin +HEAD:main",
+            "a # inside the open substitution":
+                "ls ${x:-$(echo a #}; git push origin +HEAD:main",
+            "a << inside an unclosed substitution":
+                "ls ${x:-$(echo a <<EOF\ngit push origin +HEAD:main\nEOF",
+        }.items():
+            with self.subTest(label):
+                self.assertRefused(command)
+
     def test_a_context_where_bash_reads_text_does_not_hide_the_lines_it_precedes(self):
         # #276, #277, #285: the guard's model of what is data disagreed with
         # bash's three more ways, and each stripped a live push before any check.

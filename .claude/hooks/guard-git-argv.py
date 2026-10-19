@@ -622,9 +622,10 @@ def _quoting(command, quotes=True, data=(), ambiguous=None):
 
     `ambiguous`, when a list is passed, receives the index of every character
     inside a `${...}` that this walk cannot read the way bash does: a `#` at the
-    start of a word and a `<<`, and, once a command substitution or backtick has
-    opened inside a `${` (its braces are not tracked, so the depth is lost), any
-    such `#` or `<<` after it. Each is text in one reading and a comment or a
+    start of a word and a `<<`, and, while a command substitution or backtick
+    that opened inside a `${` is open (its braces are not tracked, so the depth
+    is frozen until it closes), any such `#` or `<<`. Each is text in one
+    reading and a comment or a
     heredoc in another, and a guess either way hides a live command (#285), so
     `ambiguous_expansion` refuses the command rather than relying on one. A
     substitution inside `${` with no `#` or `<<` after it is judged as before.
@@ -661,10 +662,14 @@ def _quoting(command, quotes=True, data=(), ambiguous=None):
     # Over-counting only keeps more of the command in view, which is the safe
     # direction; an unclosed `${` leaves the rest of the command judged.
     brace_depth = 0
-    # Whether a command substitution or backtick has opened inside a `${`, whose
-    # own braces this walk does not follow, so `brace_depth` can no longer be
-    # trusted from here on.
+    # The same for a `${` inside a double-quoted string, where the depth is lost
+    # for good (`string_braces` below).
     lost = False
+    # How deep a command substitution that opened inside a `${` is, and whether
+    # it is a backtick one. Its own braces are not followed (`${x:-$(echo })}`),
+    # so `brace_depth` is frozen until its closing parenthesis or backtick, where
+    # the `${` it sat in is read again.
+    sub, tick = 0, False
     # The same for a `${` inside a double-quoted string, where a `"` after the
     # `:-` opens a quote of its own rather than ending the string, and the second
     # one closes it: `echo "${x:-" #"}"; git push ...` prints ` #` and then runs
@@ -779,13 +784,13 @@ def _quoting(command, quotes=True, data=(), ambiguous=None):
             elif char == '"' and quotes:
                 double = True
                 at_word_start = False
-            elif char == "{" and dollar:
+            elif char == "{" and dollar and not sub:
                 brace_depth += 1
                 at_word_start = False
-            elif char == "}" and brace_depth:
+            elif char == "}" and brace_depth and not sub:
                 brace_depth -= 1
                 at_word_start = False
-            elif ambiguous is not None and (brace_depth or lost) and (
+            elif ambiguous is not None and (brace_depth or lost or sub) and (
                     (char == "#" and at_word_start)
                     or command.startswith("<<", index)):
                 # Inside `${`, or after its depth was lost: a `#` after a space
@@ -794,10 +799,21 @@ def _quoting(command, quotes=True, data=(), ambiguous=None):
                 # refused by `ambiguous_expansion`.
                 ambiguous.append(index)
                 at_word_start = char in METACHARACTERS
-            elif brace_depth and ((char == "(" and dollar) or char == "`"):
+            elif sub and tick:
+                # Inside a backtick body the next backtick closes it; its own
+                # braces and parentheses are not followed.
+                if char == "`":
+                    sub, tick = 0, False
+                at_word_start = char in METACHARACTERS
+            elif sub and char in "()":
+                sub += 1 if char == "(" else -1
+                at_word_start = char == "("
+            elif brace_depth and not sub and ((char == "(" and dollar) or char == "`"):
                 # A command substitution inside `${` has braces of its own
-                # (`${x:-$(echo })}`) that this walk does not follow.
-                lost = True
+                # (`${x:-$(echo })}`) that this walk does not follow. It is
+                # followed by its parentheses instead, and the `${` it sat in
+                # is read again at its closing parenthesis (#296).
+                sub, tick = 1, char == "`"
                 at_word_start = True
             elif char == "#" and at_word_start and not brace_depth:
                 comment = True
@@ -4220,6 +4236,70 @@ def git_environment_offence(tokens):
     return None
 
 
+# `git config` flags that only READ. A write is anything else: `git config
+# alias.p push` makes `p origin HEAD:main` a push whose verb is `p`, and several
+# other keys (`core.pager`, `core.sshCommand`, `core.hooksPath`) are executed.
+# Allow-listed because the writing forms keep gaining spellings (`--add`,
+# `--unset`, `--edit`, `set`), the way `-c`'s keys do (#294).
+CONFIG_READ_FLAGS = frozenset({
+    "--get", "--get-all", "--get-regexp", "--get-urlmatch", "--list", "-l",
+    "--show-origin", "--show-scope", "--name-only", "--null", "-z",
+    "--local", "--global", "--system", "--worktree", "--includes",
+    "--no-includes", "--default", "--type", "--bool", "--int", "--path",
+})
+CONFIG_READ_ACTIONS = frozenset({
+    "--get", "--get-all", "--get-regexp", "--get-urlmatch", "--list", "-l",
+})
+
+DASHED_GIT = re.compile(r"^git-[a-z][a-z0-9-]*$")
+
+
+def git_config_offence(segment):
+    """The reason to refuse a `git config` that is not a plain read, or `None`."""
+    stripped = after_global_options(segment)
+    if not stripped or stripped[0] != "config":
+        return None
+    flags = [word for word in stripped[1:] if word.startswith("-")]
+    positional = [word for word in stripped[1:] if not word.startswith("-")]
+    if all(flag in CONFIG_READ_FLAGS for flag in flags) and (
+            any(flag in CONFIG_READ_ACTIONS for flag in flags)
+            # `git config user.name` names one key and no value: a read.
+            or len(positional) == 1):
+        return None
+    return (
+        "`git config` is refused unless it only reads (`--get`, `--get-all`, "
+        "`--get-regexp`, `--list`): a written `alias.*` rewrites a verb the "
+        "protected-ref checks read by name, and `core.pager`, `core.sshCommand` "
+        "and `core.hooksPath` are executed. It is `git -c` made persistent, "
+        "and that is refused too."
+    )
+
+
+def dashed_git_offence(tokens):
+    """The reason to refuse a `git-<verb>` executable, or `None`.
+
+    `git-send-pack origin HEAD:main` and `git-push` name the program, not the
+    subcommand, so `git_segments` never reads them as a git invocation and no
+    push check runs (#294). Nothing here runs one. A script (`git-trailer-pr.sh`)
+    carries its extension and is not an executable git dispatches to.
+    """
+    for run in command_runs(tokens):
+        lead = program_name(leading_command(run))
+        # Not `launched()`: `sudo git-push` and `timeout 5 git-push` put the
+        # program after a word it does not read as a launcher. A run led by a
+        # reader (`ls git-hooks`) names it as an operand.
+        if lead in DATA_ONLY_COMMANDS or lead in READING_COMMANDS:
+            continue
+        for token in run:
+            if not ASSIGNMENT.match(token) and DASHED_GIT.match(program_name(token)):
+                return (
+                    f"`{token}` is a git subcommand run as its own program, so "
+                    "the push, force and delete checks that read `git <verb>` "
+                    "never see it. Run it as `git <verb>`."
+                )
+    return None
+
+
 def git_segments(tokens):
     """Yield the argv slice of every `git` invocation in a compound command.
 
@@ -4673,12 +4753,13 @@ def _offence(command, depth, judged):
     if refusal is not None:
         return refusal
 
-    refusal = program_flag_offence(tokens) or git_environment_offence(tokens)
+    refusal = (program_flag_offence(tokens) or git_environment_offence(tokens)
+               or dashed_git_offence(tokens))
     if refusal is not None:
         return refusal
 
     for segment in git_segments(tokens):
-        refusal = git_subcommand_offence(segment)
+        refusal = git_subcommand_offence(segment) or git_config_offence(segment)
         if refusal is not None:
             return refusal
         refusal = push_offence(segment)
