@@ -4244,10 +4244,14 @@ def env_removes_variables(words):
                 skip = False
                 continue
             if word == "--":
-                # The end of env's options; what follows may be another `env`.
-                return env_removes_variables(words[offset + 1:]) if (
-                    offset + 1 < len(words)
-                    and program_name(words[offset + 1]) == "env") else False
+                # The end of env's options; what follows may be another `env`, and
+                # a later one is still reached by the outer loop.
+                if (offset + 1 < len(words)
+                        and program_name(words[offset + 1]) == "env"):
+                    nested = env_removes_variables(words[offset + 1:])
+                    if nested:
+                        return nested
+                break
             if word == "-":
                 return True  # a bare `-` is `--ignore-environment`
             if not word.startswith("-"):
@@ -4257,7 +4261,9 @@ def env_removes_variables(words):
                 # `env` (`env -a git env -u HOME rg`, where `git` was a value) is
                 # read from there, whatever git or rg word came before it.
                 if program_name(word) == "env":
-                    return env_removes_variables(words[offset:])
+                    nested = env_removes_variables(words[offset:])
+                    if nested:
+                        return nested
                 break
             if word.startswith("--"):
                 name = word.split("=", 1)[0]
