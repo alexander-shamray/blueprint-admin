@@ -272,14 +272,14 @@ class ASmallRepository(unittest.TestCase):
             '      "resolved": "%s",\n%s    }'
         )
         integrity = '      "integrity": "sha512-AAAA"\n'
-        sound = entry % ("https://registry.npmjs.org/x/-/x-1.0.0.tgz", integrity.rstrip("\n") + ",\n")
+        sound = entry % ("https://registry.npmjs.org/x/-/x-1.0.0.tgz", integrity)
         link = '    "node_modules/w": {\n      "resolved": "../w",\n      "link": true\n    },\n'
         lock = '{\n  "packages": {\n    "": {\n      "name": "a"\n    },\n' + link + '%s\n  }\n}\n'
         self.commit("src/Admin.Web/package-lock.json", lock % sound)
         result = Sweep(self, self.repo).slices("bug", "full")
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual(1, parse(result.stdout)[0]["counts"]["generated"])
-        off = entry % ("https://evil.example/x.tgz", integrity.rstrip("\n") + ",\n")
+        off = entry % ("https://evil.example/x.tgz", integrity)
         self.commit("src/Admin.Web/package-lock.json", lock % off)
         result = Sweep(self, self.repo).slices("security", "full")
         self.assertEqual(3, result.returncode, result.stderr)
@@ -289,6 +289,44 @@ class ASmallRepository(unittest.TestCase):
         result = Sweep(self, self.repo).slices("bug", "full")
         self.assertEqual(3, result.returncode, result.stderr)
         self.assertIn("no integrity: node_modules/x", result.stderr)
+
+    def test_a_lockfile_is_read_as_json_so_its_whitespace_cannot_hide_an_entry(self):
+        # #283: `npm ci` parses the file and ignores whitespace, so the check
+        # that matched npm's own indentation was passed by reformatting one entry.
+        path = "src/Admin.Web/package-lock.json"
+        registry = "https://registry.npmjs.org/x/-/x-1.0.0.tgz"
+
+        def lock(resolved, integrity='"integrity":"sha512-AAAA",'):
+            return (
+                '{"packages":{"":{"name":"a"},"node_modules/ok":{"resolved":"%s","integrity":"sha512-BBBB"},'
+                '"node_modules/x":{%s"version":"1.0.0","resolved":"%s"}}}\n'
+            ) % (registry, integrity, resolved)
+
+        self.commit(path, lock(registry))
+        result = Sweep(self, self.repo).slices("security", "full")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(1, parse(result.stdout)[0]["counts"]["generated"])
+
+        cases = {
+            "one-line entry off the registry": (
+                lock("https://evil.example/x.tgz"), "resolved off the registry: node_modules/x"),
+            "resolved at an odd indent": (
+                '{\n "packages": {\n  "node_modules/x": {\n       "resolved": "https://evil.example/x.tgz",\n'
+                '  "integrity": "sha512-AAAA" } } }\n',
+                "resolved off the registry: node_modules/x"),
+            "one-line entry with no integrity": (
+                lock(registry, integrity=""), "no integrity: node_modules/x"),
+            "an http registry": (
+                lock("http://registry.npmjs.org/x/-/x-1.0.0.tgz"), "resolved off the registry: node_modules/x"),
+            "not JSON": ("{ not json\n", "the lockfile is not valid JSON"),
+            "no packages": ('{"lockfileVersion":3}\n', "no package entries read"),
+        }
+        for label, (content, expected) in cases.items():
+            with self.subTest(label):
+                self.commit(path, content)
+                result = Sweep(self, self.repo).slices("security", "full")
+                self.assertEqual(3, result.returncode, result.stderr)
+                self.assertIn(expected, result.stderr)
 
     def test_full_and_a_non_ancestor_ref_both_read_everything(self):
         self.commit("tools/added.py", "print(1)\n")
