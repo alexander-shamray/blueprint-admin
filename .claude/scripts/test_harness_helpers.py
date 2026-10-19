@@ -2744,6 +2744,38 @@ class TheGitArgvGuard(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertRefused(command)
 
+    def test_a_context_where_bash_reads_text_does_not_hide_the_lines_it_precedes(self):
+        # #276, #277, #285: the guard's model of what is data disagreed with
+        # bash's three more ways, and each stripped a live push before any check.
+        for label, command in {
+            "an escaped << is a literal < and a redirect": "ls \\<<EOF\ngit push origin +HEAD:main\nEOF",
+            "a shift in (( )) is arithmetic": "(( x = 1 <<EOF ))\ngit push origin +HEAD:main\nEOF",
+            "a shift in $(( )) is arithmetic": "echo $(( 1 <<EOF ))\ngit push origin +HEAD:main\nEOF",
+            "a # in ${} is text": "ls ${x:- #}; git push origin +HEAD:main",
+            "a # in a nested ${} is text": "ls ${a:-${b:- #}}; git push origin +HEAD:main",
+            # Measured under bash: the inner quotes pair up, ` #` is text, and the push runs.
+            "a quote nested in a double-quoted ${} does not end the string": 'echo "${x:-" #"}"; git push origin +HEAD:main',
+            "the same with a second expansion inside": 'echo "${x:-${y:-" #"}}"; git push origin +HEAD:main',
+            "an expansion inside the inner quote": 'echo "${x:-"${y:-a}"}"; git push origin +HEAD:main',
+        }.items():
+            with self.subTest(label):
+                self.assertRefused(command)
+
+    def test_the_contexts_above_do_not_unmake_what_they_sit_beside(self):
+        # The controls: a real heredoc, an even run of backslashes, a real
+        # comment, and a closed ${} before one, all behave as before.
+        for label, command in {
+            "a real heredoc body is data": "cat <<EOF\ngit push origin +HEAD:main\nEOF",
+            "a quoted real heredoc": "git commit -F - <<'EOF'\nfix: ls > .claude/settings.json\nEOF",
+            "an escaped backslash leaves the heredoc real": "cat \\\\<<EOF\ngit push origin +HEAD:main\nEOF",
+            "a comment is still a comment": "ls # git push origin +HEAD:main",
+            "a # after a closed ${} is a comment": "ls ${x:-y} # git push origin +HEAD:main",
+            "a # after a closed double-quoted ${} is a comment": 'echo "a ${x:-y} b" # git push origin +HEAD:main',
+            "a quoted ${} with nested quotes that closes": 'echo "${x:-"y"}" # git push origin +HEAD:main',
+        }.items():
+            with self.subTest(label):
+                self.assertAdmitted(command)
+
     def test_a_destination_git_resolves_to_main_is_refused_in_every_prefix_it_takes(self):
         # #275: `heads/main` matches the remote's `refs/heads/main` by the
         # rev-parse rule `refs/<name>`, so the strip must take both prefixes.
