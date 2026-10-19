@@ -805,6 +805,12 @@ def _quoting(command, quotes=True, data=(), ambiguous=None):
                 if char == "`":
                     sub, tick = 0, False
                 at_word_start = char in METACHARACTERS
+            elif sub and ((char == "{" and dollar) or char == "`"):
+                # A `${` or backtick inside the substitution has a close of its
+                # own that the parentheses count does not follow (`${b:-)}`
+                # holds a `)` that is text), so the depth cannot be trusted.
+                lost = True
+                at_word_start = True
             elif sub and char in "()":
                 sub += 1 if char == "(" else -1
                 at_word_start = char == "("
@@ -4258,6 +4264,13 @@ CONFIG_READ_ACTIONS = frozenset({
 
 DASHED_GIT = re.compile(r"^git-[a-z][a-z0-9-]*$")
 
+# Leads that run a program named later in the run, after options and arguments of
+# their own that `launched()` cannot skip by position.
+WRAPPERS = frozenset({
+    "sudo", "doas", "timeout", "nice", "ionice", "stdbuf", "setsid", "nohup",
+    "env", "xargs", "exec", "command", "time",
+})
+
 
 def git_config_offence(segment):
     """The reason to refuse a `git config` that is not a plain read, or `None`."""
@@ -4291,14 +4304,22 @@ def dashed_git_offence(tokens):
     """
     for run in command_runs(tokens):
         lead = program_name(leading_command(run))
-        # Not `launched()`: `sudo git-push` and `timeout 5 git-push` put the
-        # program after a word it does not read as a launcher. A run led by a
-        # reader (`ls git-hooks`) names it as an operand.
-        # `git` is a reading lead too, and `git bisect run git-push` runs the
-        # word after it, so it is not exempt.
-        if lead in DATA_ONLY_COMMANDS or (lead in READING_COMMANDS and lead != "git"):
+        if lead in DATA_ONLY_COMMANDS:
             continue
-        for token in run:
+        # Only a word that is RUN is judged, so `git checkout -b chore/git-x`,
+        # `git add git-hooks` and `npm i git-url-parse` are operands. A wrapper's
+        # whole run is judged, since `timeout 5 git-push` and `sudo -u x git-push`
+        # put the program after a word `launched()` does not read as a launcher.
+        # `git bisect run X` and `git submodule foreach X` run the word after.
+        if lead in WRAPPERS:
+            candidates = run
+        else:
+            candidates = [token for index, token in enumerate(run)
+                          if launched(run, index)]
+            if lead == "git":
+                candidates += [run[index + 1] for index, token in enumerate(run[:-1])
+                               if token in ("run", "foreach")]
+        for token in candidates:
             if not ASSIGNMENT.match(token) and DASHED_GIT.match(program_name(token)):
                 return (
                     f"`{token}` is a git subcommand run as its own program, so "
