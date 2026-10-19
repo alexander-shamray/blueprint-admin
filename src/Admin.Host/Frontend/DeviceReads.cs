@@ -33,6 +33,14 @@ public sealed class DeviceReads(IProcessRunner runner, RepoPaths paths, TimeProv
         """$c.redirectUris; '--- webOrigins ---'; $c.webOrigins -join ','""",
     ];
 
+    /// <summary>
+    /// The host's own first line of the realm script, not a line of the document: under PowerShell's default a failed
+    /// <c>Invoke-RestMethod</c> is a non-terminating error, the last line still prints the marker and the script exits 0, and a
+    /// Keycloak that is down reads as a client with no redirect. Stopping makes the script exit non-zero, which is
+    /// <see cref="DoctorState.Unknown"/>; <c>LoadRunService</c> sets it for the same reason.
+    /// </summary>
+    internal const string StopOnError = "$ErrorActionPreference = 'Stop'";
+
     /// <summary>Owner: run-locally.md step 4, the line the realm read prints between the redirects and the web origins.</summary>
     internal const string WebOriginsMarker = "--- webOrigins ---";
 
@@ -46,7 +54,7 @@ public sealed class DeviceReads(IProcessRunner runner, RepoPaths paths, TimeProv
     {
         Task<CommandOutput> adb = PowerShellAsync(AdbDevicesLine, cancellationToken);
         Task<CommandOutput> cors = PowerShellAsync(CorsLine, cancellationToken);
-        Task<CommandOutput> realm = PowerShellAsync(string.Join('\n', RealmLines), cancellationToken);
+        Task<CommandOutput> realm = PowerShellAsync(string.Join('\n', [StopOnError, .. RealmLines]), cancellationToken);
 
         await Task.WhenAll(adb, cors, realm);
 
