@@ -293,7 +293,8 @@ REF_UPDATING_PLUMBING = {"send-pack", "http-push", "receive-pack", "subtree"}
 BOOLEAN_GLOBALS = {
     "-p", "--paginate", "-P", "--no-pager", "--bare", "--no-replace-objects",
     "--literal-pathspecs", "--glob-pathspecs", "--noglob-pathspecs",
-    "--icase-pathspecs", "--no-optional-locks", "--no-advice",
+    "--icase-pathspecs", "--no-optional-locks", "--no-advice", "--no-lazy-fetch",
+    "--exec-path", "--html-path", "--man-path", "--info-path", "--version", "--help",
 }
 
 
