@@ -288,25 +288,61 @@ PROTECTED_BRANCHES = {"main"}
 # by a case-insensitive file name.
 REF_UPDATING_PLUMBING = {"send-pack", "http-push", "receive-pack", "subtree"}
 
+# The git globals that take no value, from git's synopsis, so a word after one
+# is the subcommand and not a value to look past.
+BOOLEAN_GLOBALS = {
+    "-p", "--paginate", "-P", "--no-pager", "--bare", "--no-replace-objects",
+    "--literal-pathspecs", "--glob-pathspecs", "--noglob-pathspecs",
+    "--icase-pathspecs", "--no-optional-locks", "--no-advice",
+}
+
+
+def verb_name(word):
+    """A subcommand word as Windows resolves it: lower-cased, with trailing dots and
+    spaces dropped and one executable suffix (`.exe`, `.cmd`, `.bat`, `.com`) removed.
+
+    git finds an external command by file name, and Windows finds `git-push.exe`
+    for `push.exe`, `PUSH.` and `push `. The checks below compare this, not the
+    word as typed.
+    """
+    name = word.lower().rstrip(". ")
+    for suffix in (".exe", ".cmd", ".bat", ".com"):
+        if name.endswith(suffix):
+            return name[:-len(suffix)]
+    return name
+
 
 def plumbing_verb(segment):
     """The ref-updating verb this segment runs, or None.
 
-    Located the way `push_offence` locates `push`, not read from
-    `subcommand_of`: that skips only the globals this file lists, so an unlisted
-    value-taking one (`--super-prefix X send-pack`) would make `X` the verb and
-    hide the real one. A name is taken before the "this is the subcommand"
-    test, so a value in front of it cannot shield it. Every `remote-*` helper
-    counts as well.
+    Not read from `subcommand_of`, which skips only the globals this file
+    lists: an unlisted value-taking one (`--super-prefix X send-pack`) would
+    make `X` the verb and hide the real one. So a word right after a flag this
+    file cannot place is either that flag's value or the verb, and the scan goes
+    on past it; after a listed value flag, a listed boolean or a `--flag=value`
+    the next word is the verb and the scan stops there, which is what keeps
+    `git --no-pager log remote-fix` and `git -C d log subtree` admitted. Every
+    `remote-*` helper counts as well.
     """
-    for index, element in enumerate(segment):
+    after_unplaced_flag = False
+    index = 0
+    while index < len(segment):
+        element = segment[index]
         if element.startswith("-"):
+            if element in GLOBAL_VALUE_FLAGS:
+                index += 2
+                after_unplaced_flag = False
+                continue
+            after_unplaced_flag = "=" not in element and element not in BOOLEAN_GLOBALS
+            index += 1
             continue
-        lowered = element.lower()
+        lowered = verb_name(element)
         if lowered in REF_UPDATING_PLUMBING or lowered.startswith("remote-"):
             return element
-        if index == 0 or not segment[index - 1].startswith("-"):
+        if not after_unplaced_flag:
             break
+        after_unplaced_flag = False
+        index += 1
     return None
 
 # Heredoc introducers. The body between the introducer and its delimiter is data
@@ -3962,7 +3998,7 @@ def push_offence(segment):
     for index, element in enumerate(segment):
         if element.startswith("-"):
             continue
-        if element == "push":
+        if verb_name(element) == "push":
             start = index
             break
         if index == 0 or not segment[index - 1].startswith("-"):
