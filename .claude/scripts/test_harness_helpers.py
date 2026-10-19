@@ -2756,6 +2756,11 @@ class TheGitArgvGuard(unittest.TestCase):
             "rg --hostname-bin": "rg --hostname-bin ./tools/run x .",
             "rg --pre in a substitution under an approved ls": 'ls "$(rg --pre ./tools/run . README.md)"',
             "rg --pre behind a launcher": "xargs rg --pre ./tools/run x",
+            "rg --pre behind a launcher's option argument": "xargs -n 1 rg --pre ./tools/run x",
+            "rg --pre behind env -C": "env -C d rg --pre ./tools/run x",
+            "rg --pre behind sudo": "sudo rg --pre ./tools/run x",
+            "rg --pre behind timeout": "timeout 5 rg --pre ./tools/run x",
+            "sort -o behind nice": "nice sort -o out.txt in.txt",
             "git difftool -x in a substitution": 'ls "$(git difftool -y -x ./tools/run HEAD~1)"',
             "git difftool": "git difftool -x ./tools/run HEAD~1",
             "git mergetool": "git mergetool",
@@ -2826,6 +2831,8 @@ class TheGitArgvGuard(unittest.TestCase):
             "an ordinary assignment": "X=1 git log --oneline -5",
             "the name inside a commit message": "git commit -m 'GIT_PAGER=cat is refused'",
             "the name in an echoed word": "echo GIT_PAGER=cat",
+            "a generic name for another program": "HOME=/tmp/h dotnet test",
+            "a PATH prefix for npm": "PATH=\"./node_modules/.bin:$PATH\" npm run build",
         }.items():
             with self.subTest(label):
                 self.assertAdmitted(command)
