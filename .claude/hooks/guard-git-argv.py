@@ -277,6 +277,12 @@ UNRESOLVABLE_SOURCES = {"HEAD", "@", "HEAD~", "@{u}", "@{upstream}"}
 
 PROTECTED_BRANCHES = {"main"}
 
+# Plumbing that updates a remote ref without the verb `push`, so the protected
+# branch, force and delete checks above never see it (#284). Refused by name:
+# nothing this repository does needs either, and `git push` is the one spelling
+# the checks can read.
+REF_UPDATING_PLUMBING = {"send-pack", "http-push"}
+
 # Heredoc introducers. The body between the introducer and its delimiter is data
 # the shell hands to a command, not a command line.
 # **A delimiter is a shell WORD, and matching an identifier-shaped prefix of
@@ -3889,6 +3895,12 @@ def git_subcommand_offence(segment):
     Raised by Copilot.
     """
     subcommand = subcommand_of(segment)
+    if subcommand in REF_UPDATING_PLUMBING:
+        return (
+            f"`git {subcommand}` updates a remote ref without the verb `push`, "
+            "so the protected-branch, force and delete checks never read it. "
+            "Use `git push <remote> <branch>`, which they do."
+        )
     if not subcommand or SAFE_SUBCOMMAND.match(subcommand):
         return None
     return (
@@ -3964,8 +3976,13 @@ def push_offence(segment):
             return "a `:branch` refspec deletes the remote branch"
     else:
         source, destination = refspec, refspec
-    if destination.startswith("refs/heads/"):
-        destination = destination[len("refs/heads/"):]
+    # git matches an unqualified destination against the remote's refs by its
+    # rev-parse rules, one of which is `refs/<name>`, so `heads/main` is
+    # `refs/heads/main`. Both prefixes come off, in that order, before any
+    # comparison (#275).
+    for prefix in ("refs/", "heads/"):
+        if destination.startswith(prefix):
+            destination = destination[len(prefix):]
     if source in UNRESOLVABLE_SOURCES and destination == source:
         return (
             f"`{source}` names no destination of its own; it updates whatever "
