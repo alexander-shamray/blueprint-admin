@@ -4239,18 +4239,26 @@ def env_removes_variables(words):
         if program_name(env_word) != "env" or start > first_program:
             continue
         skip = False
-        for word in words[start + 1:]:
+        for offset, word in enumerate(words[start + 1:], start + 1):
             if skip:
                 skip = False
                 continue
             if word == "--":
-                break  # the end of env's options
+                # The end of env's options; what follows may be another `env`.
+                return env_removes_variables(words[offset + 1:]) if (
+                    offset + 1 < len(words)
+                    and program_name(words[offset + 1]) == "env") else False
             if word == "-":
                 return True  # a bare `-` is `--ignore-environment`
             if not word.startswith("-"):
                 if ASSIGNMENT.match(word):
                     continue
-                break  # the program: env's options are over
+                # The program: env's options are over. A program that is itself
+                # `env` (`env -a git env -u HOME rg`, where `git` was a value) is
+                # read from there, whatever git or rg word came before it.
+                if program_name(word) == "env":
+                    return env_removes_variables(words[offset:])
+                break
             if word.startswith("--"):
                 name = word.split("=", 1)[0]
                 if len(name) > 2 and "--split-string".startswith(name):

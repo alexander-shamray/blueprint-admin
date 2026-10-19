@@ -2843,6 +2843,8 @@ class TheGitArgvGuard(unittest.TestCase):
             "env --chdir abbreviated, then -u": "env --chd=. -u HOME git log",
             "env --ch with a separate value, then -u": "env --ch . -u HOME git log",
             "env -C glued, then -u": "env -C. -u HOME git log",
+            "a git-named value of -a before a second env": "env -a git env -u HOME rg x .",
+            "a second env after --": "env -- env -u HOME git log",
             "env -u then a split string naming git": "env -u HOME -S 'git log'",
             "env --ignore-signal does not take the next word": "env --ignore-signal -u HOME git log",
             "env --b abbreviation does not take the next word": "env --b -u HOME git log",
