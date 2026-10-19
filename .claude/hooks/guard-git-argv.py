@@ -4291,14 +4291,18 @@ def _offence(command, depth, judged):
             "cannot tell where the body ends or which lines after it are "
             "commands; refusing rather than reading part of it."
         )
-    if ambiguous_expansion(command):
+    # Judged as typed and with its line continuations removed, which bash does
+    # first: `a=\<newline>( [ 1<<EOF]=1 )` is a compound assignment only once the
+    # pair is gone, and either reading refusing is enough.
+    spellings = (command, join_continuations(command))
+    if any(ambiguous_expansion(text) for text in spellings):
         return (
             "a `#`, a `<<` or a command substitution inside `${...}`: bash "
             "reads it as text where a comment or heredoc reading would strip the "
             "lines after it, and this guard cannot tell which without parsing "
             "the expansion. Write it outside the braces."
         )
-    if ambiguous_arithmetic(command):
+    if any(ambiguous_arithmetic(text) for text in spellings):
         return (
             "`((` and `<<` in one command: inside arithmetic `<<` is a shift "
             "and opens no heredoc, outside it hides every line to its "
