@@ -2744,6 +2744,76 @@ class TheGitArgvGuard(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertRefused(command)
 
+    def test_the_programs_listed_as_readers_cannot_be_made_to_run_one(self):
+        # #278, #279: `rg` and `git` sit on READING_COMMANDS and
+        # SUBSTITUTION_PROGRAMS because they cannot run a command, and each has a
+        # flag, a subcommand or an environment variable that does.
+        for label, command in {
+            "rg --pre runs a program on every file": "rg --pre rm x .claude/settings.json",
+            "rg --pre with a script": "rg --pre bash x script.sh",
+            "rg --pre=cmd": "rg --pre=./tools/run x .",
+            "rg --pre-glob": "rg --pre-glob '*.md' --pre ./tools/run x .",
+            "rg --hostname-bin": "rg --hostname-bin ./tools/run x .",
+            "rg --pre in a substitution under an approved ls": 'ls "$(rg --pre ./tools/run . README.md)"',
+            "rg --pre behind a launcher": "xargs rg --pre ./tools/run x",
+            "git difftool -x in a substitution": 'ls "$(git difftool -y -x ./tools/run HEAD~1)"',
+            "git difftool": "git difftool -x ./tools/run HEAD~1",
+            "git mergetool": "git mergetool",
+            "git difftool --extcmd": "git difftool --extcmd=./tools/run",
+            "git diff --extcmd": "git diff --extcmd=./tools/run",
+            "sort writes a file in a substitution": 'ls "$(sort -o .claude/settings.json README.md)"',
+            "sort --output": "sort --output=.claude/settings.json README.md",
+            "sort abbreviated": "sort --out=.claude/settings.json README.md",
+            "sort glued -o": "sort -ox README.md",
+            "sort runs a program": "sort --compress-program=./tools/run README.md",
+            "git rm of the guard": "git rm .claude/hooks/guard-git-argv.py",
+            "git mv of a settings file": "git mv .claude/settings.json elsewhere.json",
+            "git rm behind a global option": "git -C . rm .claude/hooks/guard-git-argv.py",
+        }.items():
+            with self.subTest(label):
+                self.assertRefused(command)
+
+    def test_the_readers_still_read(self):
+        for label, command in {
+            "rg without a flag that runs": "rg -n 'push origin' .claude/hooks",
+            "rg text that merely names the flag": "echo rg --pre ./tools/run",
+            "a pattern that starts like the flag": "rg -n -- '--pre' README.md",
+            "git rm of an ordinary file": "git rm scratch-notes.txt",
+            "git mv of an ordinary file": "git mv scratch-notes.txt scratch-old.txt",
+            "sort that only reads": "sort -u README.md",
+            "git log naming rm": "git log --oneline -- rm",
+            "git diff": "git diff --stat",
+        }.items():
+            with self.subTest(label):
+                self.assertAdmitted(command)
+
+    def test_a_git_environment_variable_that_executes_is_refused_where_it_is_assigned(self):
+        # #281: `--ext-diff` and `git -c` are refused as options; the same code
+        # runs from the environment, which arrives as an assignment word.
+        for label, command in {
+            "an external diff": "GIT_EXTERNAL_DIFF=./tools/x git diff",
+            "a config pair": "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.sshCommand GIT_CONFIG_VALUE_0=./x git fetch origin",
+            "config parameters": "GIT_CONFIG_PARAMETERS=\"'core.pager=./x'\" git log",
+            "an ssh command": "GIT_SSH_COMMAND=./x git fetch origin",
+            "a pager": "GIT_PAGER=./x git log",
+            "an exec path": "GIT_EXEC_PATH=./x git status",
+            "an editor": "GIT_EDITOR=./x git commit",
+            "through env": "env GIT_EXTERNAL_DIFF=./x git diff",
+            "through export": "export GIT_SSH_COMMAND=./x; git fetch origin",
+            "stacked with an ordinary one": "X=1 GIT_ASKPASS=./x git fetch origin",
+        }.items():
+            with self.subTest(label):
+                self.assertRefused(command)
+
+        for label, command in {
+            "a variable that only points": "GIT_DIR=/tmp/x git status",
+            "an ordinary assignment": "X=1 git log --oneline -5",
+            "the name inside a commit message": "git commit -m 'GIT_PAGER=cat is refused'",
+            "the name in an echoed word": "echo GIT_PAGER=cat",
+        }.items():
+            with self.subTest(label):
+                self.assertAdmitted(command)
+
     def test_a_context_where_bash_reads_text_does_not_hide_the_lines_it_precedes(self):
         # #276, #277, #285: the guard's model of what is data disagreed with
         # bash's three more ways, and each stripped a live push before any check.
@@ -5684,7 +5754,10 @@ class TheGitArgvGuard(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertRefused(command)
 
-        self.assertAdmitted("GIT_PAGER=cat git log --oneline -5")
+        # GIT_PAGER runs a program, so it moved to the refused list (#281); the
+        # variables that only point stay admitted.
+        self.assertRefused("GIT_PAGER=cat git log --oneline -5")
+        self.assertAdmitted("GIT_DIR=/tmp/x git log --oneline -5")
 
     def test_a_locale_quote_is_refused_for_its_own_reason(self):
         # One sentence covered two decisions and said the wrong thing about
