@@ -281,7 +281,33 @@ PROTECTED_BRANCHES = {"main"}
 # branch, force and delete checks above never see it (#284). Refused by name:
 # nothing this repository does needs either, and `git push` is the one spelling
 # the checks can read.
-REF_UPDATING_PLUMBING = {"send-pack", "http-push"}
+#
+# Besides the two push verbs: the remote helpers speak the push protocol over a
+# pipe, and `subtree push` runs `git push` itself with a destination this guard
+# never reads. Compared lower-cased, since Windows finds an external git command
+# by a case-insensitive file name.
+REF_UPDATING_PLUMBING = {"send-pack", "http-push", "receive-pack", "subtree"}
+
+
+def plumbing_verb(segment):
+    """The ref-updating verb this segment runs, or None.
+
+    Located the way `push_offence` locates `push`, not read from
+    `subcommand_of`: that skips only the globals this file lists, so an unlisted
+    value-taking one (`--super-prefix X send-pack`) would make `X` the verb and
+    hide the real one. A name is taken before the "this is the subcommand"
+    test, so a value in front of it cannot shield it. Every `remote-*` helper
+    counts as well.
+    """
+    for index, element in enumerate(segment):
+        if element.startswith("-"):
+            continue
+        lowered = element.lower()
+        if lowered in REF_UPDATING_PLUMBING or lowered.startswith("remote-"):
+            return element
+        if index == 0 or not segment[index - 1].startswith("-"):
+            break
+    return None
 
 # Heredoc introducers. The body between the introducer and its delimiter is data
 # the shell hands to a command, not a command line.
@@ -3895,9 +3921,9 @@ def git_subcommand_offence(segment):
     Raised by Copilot.
     """
     subcommand = subcommand_of(segment)
-    if subcommand in REF_UPDATING_PLUMBING:
+    if (plumbing := plumbing_verb(segment)) is not None:
         return (
-            f"`git {subcommand}` updates a remote ref without the verb `push`, "
+            f"`git {plumbing}` updates a remote ref without the verb `push`, "
             "so the protected-branch, force and delete checks never read it. "
             "Use `git push <remote> <branch>`, which they do."
         )

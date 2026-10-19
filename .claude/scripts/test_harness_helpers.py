@@ -2767,6 +2767,10 @@ class TheGitArgvGuard(unittest.TestCase):
             "git push origin HEAD:refs/heads/fix/main",
             "git push origin HEAD:maintenance",
             "git push origin heads/fix/x",
+            # A tag is not a branch, and refs/heads/heads/main is a different
+            # ref from main: git resolves it to refs/heads/heads/main.
+            "git push origin refs/tags/v1",
+            "git push origin HEAD:refs/heads/heads/main",
         ):
             with self.subTest(command=command):
                 self.assertAdmitted(command)
@@ -2781,6 +2785,16 @@ class TheGitArgvGuard(unittest.TestCase):
             "git http-push origin HEAD:main",
             "git -C /tmp/x send-pack origin HEAD:main",
             "git --no-pager send-pack origin HEAD:heads/main",
+            # The case Windows resolves, and the verbs that push without `push`.
+            "git SEND-PACK origin HEAD:main",
+            "git Http-Push origin HEAD:main",
+            "git subtree push --prefix=x origin main",
+            "git remote-https origin https://example.invalid/x.git",
+            "git remote-ext origin 'ext::sh -c x'",
+            "git receive-pack /tmp/x",
+            # An unlisted value-taking global must not make its value the verb.
+            "git --super-prefix X send-pack origin HEAD:main",
+            "git --some-future-global X http-push origin HEAD:main",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command)
