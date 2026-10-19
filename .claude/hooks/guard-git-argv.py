@@ -969,14 +969,19 @@ def ambiguous_arithmetic(command):
     for index, in_quotes, in_comment in shell_positions(command, bodies):
         if in_quotes or in_comment:
             continue
-        if (command.startswith("[", index) and index > 0
+        if command.startswith("=(", index) or command.startswith("+=(", index):
+            # A compound assignment: every element may carry a subscript, spaced
+            # or not (`a=( [ 1<<EOF]=1 )`), and the element's shape is not worth
+            # parsing for a command nobody writes next to a heredoc.
+            bracket = True
+        elif (command.startswith("[", index) and index > 0
                 and not _escaped(command, index)
                 and (command[index - 1].isalnum() or command[index - 1] in "_]"
                      or (command[index - 1] in " \t\n;&|("
                          and command[index + 1:index + 2] not in ("", " ", "\t", "\n", "[")))):
-            # `name[`, or `a=( [1<<EOF]=1 )` whose element opens at a word start
-            # with something other than a space: the shapes of a subscript.
-            # `[ -f x ]`, `[[ ... ]]` and `*.[ch]` are not.
+            # `name[`, or a `[` at a word start with something other than a space
+            # after it: the shapes of a subscript. `[ -f x ]`, `[[ ... ]]` and
+            # `*.[ch]` are not.
             bracket = True
         elif bracket and command.startswith("<<", index) and not _escaped(command, index):
             return True

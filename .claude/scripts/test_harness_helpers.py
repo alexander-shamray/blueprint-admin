@@ -2773,6 +2773,10 @@ class TheGitArgvGuard(unittest.TestCase):
                 "git commit -m \"$(cat <<'EOF'\nuse ${ here\nEOF\n)${x}\"; git push origin +HEAD:main",
             "a compound-assignment element is a subscript": "a=([1<<EOF]=1)\ngit push origin +HEAD:main\nEOF",
             "a spaced compound-assignment element is a subscript": "a=( [1<<EOF]=1 )\ngit push origin +HEAD:main\nEOF",
+            "a subscript with a space after the bracket": "a=( [ 1<<EOF]=1 )\ngit push origin +HEAD:main\nEOF",
+            "an appended compound assignment": "a+=( [ 1<<EOF]=1 )\ngit push origin +HEAD:main\nEOF",
+            "a doubled bracket in an element": "a=([[1<<EOF]]=1)\ngit push origin +HEAD:main\nEOF",
+            "an element on its own line": "a=(\n[ 1<<EOF]=1)\ngit push origin +HEAD:main\nEOF",
             "an escaped ] does not close the subscript": "a[1\\]<<EOF]=1\ngit push origin +HEAD:main\nEOF",
             "a ] inside a substitution does not close it": "a[$(echo ])<<EOF]=1\ngit push origin +HEAD:main\nEOF",
             "a real comment after a substitution in ${} is not a heredoc opener":
