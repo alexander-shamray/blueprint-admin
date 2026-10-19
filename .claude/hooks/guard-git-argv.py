@@ -116,7 +116,42 @@ import traceback
 # `--no-ext-diff` is the safe direction and stays admitted: neither the
 # prefix test nor the abbreviation test matches it against these names.
 FORBIDDEN_FLAGS = ("--output", "--upload-pack", "--receive-pack", "--exec",
-                   "--no-index", "--ext-diff", "--textconv")
+                   "--no-index", "--ext-diff", "--textconv", "--extcmd")
+
+# Git subcommands whose job is to run a program the tree names (#279): the
+# difftool and mergetool configuration, or `-x`/`--extcmd`, is a command line.
+# Nothing here runs either, so they are refused by name rather than by flag.
+GIT_EXECUTING_SUBCOMMANDS = frozenset({"difftool", "mergetool"})
+
+# Git subcommands that write the files they are given, which `READING_COMMANDS`
+# keeps from being judged when `git` leads a run (#278): `git rm` and `git mv`
+# are `rm` and `mv` against the same protected trees.
+GIT_WRITING_SUBCOMMANDS = frozenset({"rm", "mv"})
+
+# Programs on the reading and substitution lists with a flag that RUNS a program
+# the command line names (#278, #279): `rg --pre CMD` runs CMD on every file it
+# searches, `--hostname-bin` runs one for the hostname. Matched as a prefix, so
+# `--pre-glob` and `--pre=CMD` are the same refusal.
+#
+# `sort` is the same shape: `-o FILE` and `--output` write one, and
+# `--compress-program` runs one, and it is a substitution program. The names are
+# matched whole, with `=`, or as GNU abbreviates a long flag (`--out`, `--compress`);
+# a short flag also in its glued form (`-ofile`).
+EXECUTING_PROGRAM_FLAGS = {
+    "rg": ("--pre", "--hostname-bin"),
+    "sort": ("-o", "--output", "--compress-program"),
+}
+
+# Environment variables git EXECUTES (#281), the spellings of `git -c` and
+# `--ext-diff` the global option scan cannot see because they are not options.
+# `GIT_DIR` and `GIT_WORK_TREE` only point, and stay admitted.
+GIT_EXECUTING_ENVIRONMENT = re.compile(
+    r"^GIT_(?:CONFIG_COUNT|CONFIG_KEY_\w+|CONFIG_VALUE_\w+|CONFIG_PARAMETERS"
+    r"|CONFIG_GLOBAL|CONFIG_SYSTEM|EXTERNAL_DIFF|SSH|SSH_COMMAND|EXEC_PATH"
+    r"|PAGER|ASKPASS|PROXY_COMMAND|EDITOR|SEQUENCE_EDITOR)\+?=")
+
+# Commands whose arguments are assignments, as `export GIT_PAGER=x` is.
+ASSIGNING_COMMANDS = frozenset({"env", "export", "declare", "typeset", "local", "readonly"})
 
 # Judged against a whole element, and only on a subcommand that takes a
 # repository — a branch name, a path or a commit body may carry the sequence
@@ -2768,6 +2803,16 @@ def verb_offence(verb, words, command):
     return None
 
 
+def git_writes(literals):
+    """Whether a run led by `git` is a subcommand that writes its operands (#278)."""
+    words = [word for word in literals if word is not None]
+    for index, word in enumerate(words):
+        if program_name(word) == "git":
+            return subcommand_of(words[index + 1:]) in GIT_WRITING_SUBCOMMANDS
+
+    return False
+
+
 def writing_verb_offence(command):
     """The reason to refuse a writing verb's destination in `command`, or `None`.
 
@@ -2789,7 +2834,7 @@ def writing_verb_offence(command):
                      if not ASSIGNMENT.match(raw)
                      and literal not in SHELL_KEYWORDS), None)
         if lead is not None and program_name(lead) in (
-                READING_COMMANDS | DATA_ONLY_COMMANDS):
+                READING_COMMANDS | DATA_ONLY_COMMANDS) and not git_writes(literals):
             continue
         for index, literal in enumerate(literals):
             if literal is None or ASSIGNMENT.match(run[index]):
@@ -4074,6 +4119,64 @@ def computed_program_offence(tokens):
     return None
 
 
+def program_flag_offence(tokens):
+    """The reason to refuse a flag that makes a listed program run one, or `None`.
+
+    `rg --pre CMD` runs CMD on every searched file, which makes `rg`, listed as a
+    reader and as a substitution program, arbitrary execution (#278, #279). Only a
+    run where the program is launched counts, so `echo rg --pre` is text. The
+    scan sits on the token list every substitution body is judged through too.
+    """
+    for run in command_runs(tokens):
+        for index, token in enumerate(run):
+            flags = EXECUTING_PROGRAM_FLAGS.get(program_name(token))
+            if flags is None or not launched(run, index):
+                continue
+            for word in run[index + 1:]:
+                if word == "--":
+                    break  # what follows is a pattern or a path, never a flag
+                name = word.split("=", 1)[0]
+                if any(
+                        name == flag
+                        or (not flag.startswith("--") and word.startswith(flag))
+                        or (flag.startswith("--") and name.startswith("--")
+                            and len(name) > 2 and flag.startswith(name))
+                        for flag in flags):
+                    return (
+                        f"`{program_name(token)} {word}` makes it run a program "
+                        "the command line names, on every file it reads; "
+                        "nothing here needs that, and `rg` is listed as a "
+                        "program that cannot run one."
+                    )
+    return None
+
+
+def git_environment_offence(tokens):
+    """The reason to refuse a git environment variable that executes, or `None`.
+
+    `GIT_EXTERNAL_DIFF=./x git diff` and `GIT_CONFIG_COUNT=1
+    GIT_CONFIG_KEY_0=core.sshCommand ...` are the spellings of `--ext-diff` and
+    `git -c` that arrive as assignment words, which `git_segments` never reads
+    (#281). Judged where a word is an assignment to the environment: the leading
+    assignments of a run, and the arguments of `env`, `export` and their kind.
+    """
+    for run in command_runs(tokens):
+        lead = next((index for index, word in enumerate(run)
+                     if not ASSIGNMENT.match(word)), len(run))
+        assigned = list(run[:lead])
+        if lead < len(run) and program_name(run[lead]) in ASSIGNING_COMMANDS:
+            assigned += [word for word in run[lead + 1:] if ASSIGNMENT.match(word)]
+        for word in assigned:
+            if GIT_EXECUTING_ENVIRONMENT.match(word):
+                return (
+                    f"`{word.split('=', 1)[0]}` is an environment variable git "
+                    "EXECUTES — a command, a pager, an ssh or an external diff. "
+                    "It is `git -c` and `--ext-diff` spelled as an assignment, "
+                    "and those are refused; this is too."
+                )
+    return None
+
+
 def git_segments(tokens):
     """Yield the argv slice of every `git` invocation in a compound command.
 
@@ -4133,6 +4236,12 @@ def git_subcommand_offence(segment):
     Raised by Copilot.
     """
     subcommand = subcommand_of(segment)
+    if verb_name(subcommand) in GIT_EXECUTING_SUBCOMMANDS:
+        return (
+            f"`git {subcommand}` runs the program its configuration or `-x` "
+            "names, which a branch can supply; nothing here uses it. Use "
+            "`git diff` and read the output."
+        )
     if (plumbing := plumbing_verb(segment)) is not None:
         return (
             f"`git {plumbing}` updates a remote ref without the verb `push`, "
@@ -4518,6 +4627,10 @@ def _offence(command, depth, judged):
             return f"inside `env -S`: {refusal}"
 
     refusal = computed_program_offence(tokens)
+    if refusal is not None:
+        return refusal
+
+    refusal = program_flag_offence(tokens) or git_environment_offence(tokens)
     if refusal is not None:
         return refusal
 
