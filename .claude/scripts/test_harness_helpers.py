@@ -2816,6 +2816,7 @@ class TheGitArgvGuard(unittest.TestCase):
             "git --no-pager branch -d remote-x",
             "git -C d log subtree",
             "git --git-dir=.git log remote-fix",
+            "git --no-lazy-fetch log remote-fix",
             "git remote -v",
         ):
             with self.subTest(command=command):
