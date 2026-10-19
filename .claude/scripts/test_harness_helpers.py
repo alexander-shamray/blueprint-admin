@@ -2857,6 +2857,9 @@ class TheGitArgvGuard(unittest.TestCase):
             "git-push": "git-push origin HEAD:main",
             "a dashed executable behind a launcher": "xargs git-push origin HEAD:main",
             "a dashed executable behind sudo": "sudo git-send-pack origin HEAD:main",
+            "a dashed executable run by git bisect": "git bisect run git-push origin HEAD:main",
+            "git config edit, a verb with one word": "git config edit",
+            "git config unset, a verb": "git config unset",
         }.items():
             with self.subTest(label):
                 self.assertRefused(command)
@@ -2891,6 +2894,8 @@ class TheGitArgvGuard(unittest.TestCase):
                 "ls ${x:-$(echo a)} ${y:- #}; git push origin +HEAD:main",
             "a # inside the open substitution":
                 "ls ${x:-$(echo a #}; git push origin +HEAD:main",
+            "a case pattern's ) closes nothing":
+                "ls ${x:-$(case a in a) echo }; esac) #}; git push origin +HEAD:main",
             "a << inside an unclosed substitution":
                 "ls ${x:-$(echo a <<EOF\ngit push origin +HEAD:main\nEOF",
         }.items():
