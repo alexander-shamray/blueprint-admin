@@ -67,6 +67,10 @@ public sealed class IdentityEndpointTests(AdminHostFactory factory) : IClassFixt
     [Fact]
     public async Task The_clock_mints_nothing_and_says_so_for_a_custom_identity_never_granted_or_anonymous()
     {
+        // The configured demo token is minted first, so the custom password is read against a cache that holds demo and does not
+        // depend on which test of this shared host ran before.
+        (await client.PostAsJsonAsync("/api/identity/token", new { username = "demo" }, Token)).StatusCode.ShouldBe(HttpStatusCode.OK);
+
         JsonElement custom = await (await client.PostAsJsonAsync("/api/identity/clock", new { username = "demo", password = "never-sent" }, Token))
             .Content.ReadFromJsonAsync<JsonElement>(Token);
         JsonElement anonymous = await (await client.PostAsJsonAsync("/api/identity/clock", new { username = (string?)null }, Token))

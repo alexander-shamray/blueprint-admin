@@ -91,6 +91,10 @@ public sealed class TokenServiceTests
 
         await service.GetAsync("demo", "demo", Token);
         TokenIssued held = service.Held(new IdentityRequest("demo", null)).ShouldNotBeNull();
+
+        // With demo's token in the cache, a custom password still finds nothing: the read keys on the password supplied.
+        service.Held(new IdentityRequest("demo", "a-custom-secret")).ShouldBeNull();
+        service.Held(new IdentityRequest("other", null)).ShouldBeNull();
         TokenService.RenewsAt(held).ShouldBe(held.ExpiresAt - TokenService.ReuseMargin);
 
         time.Advance(TimeSpan.FromSeconds(300));
