@@ -240,7 +240,7 @@ class ASmallRepository(unittest.TestCase):
     def test_the_lockfile_is_owned_and_counted_not_read(self):
         self.commit(
             "src/Admin.Web/package-lock.json",
-            '{\n  "packages": {\n    "node_modules/x": {\n'
+            '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/x": {\n'
             '      "resolved": "https://registry.npmjs.org/x/-/x-1.0.0.tgz",\n'
             '      "integrity": "sha512-AAAA"\n    }\n  }\n}\n',
         )
@@ -274,7 +274,7 @@ class ASmallRepository(unittest.TestCase):
         integrity = '      "integrity": "sha512-AAAA"\n'
         sound = entry % ("https://registry.npmjs.org/x/-/x-1.0.0.tgz", integrity)
         link = '    "node_modules/w": {\n      "resolved": "../w",\n      "link": true\n    },\n'
-        lock = '{\n  "packages": {\n    "": {\n      "name": "a"\n    },\n' + link + '%s\n  }\n}\n'
+        lock = '{\n  "lockfileVersion": 3,\n  "packages": {\n    "": {\n      "name": "a"\n    },\n' + link + '%s\n  }\n}\n'
         self.commit("src/Admin.Web/package-lock.json", lock % sound)
         result = Sweep(self, self.repo).slices("bug", "full")
         self.assertEqual(0, result.returncode, result.stderr)
@@ -298,7 +298,7 @@ class ASmallRepository(unittest.TestCase):
 
         def lock(resolved, integrity='"integrity":"sha512-AAAA",'):
             return (
-                '{"packages":{"":{"name":"a"},"node_modules/ok":{"resolved":"%s","integrity":"sha512-BBBB"},'
+                '{"lockfileVersion":3,"packages":{"":{"name":"a"},"node_modules/ok":{"resolved":"%s","integrity":"sha512-BBBB"},'
                 '"node_modules/x":{%s"version":"1.0.0","resolved":"%s"}}}\n'
             ) % (registry, integrity, resolved)
 
@@ -307,11 +307,20 @@ class ASmallRepository(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual(1, parse(result.stdout)[0]["counts"]["generated"])
 
+        # A bundled entry is exempt from integrity, as a link is exempt from both.
+        self.commit(
+            path,
+            '{"lockfileVersion":3,"packages":{"node_modules/b":{"resolved":"%s","inBundle":true},'
+            '"node_modules/w":{"resolved":"../w","link":true}}}\n' % registry,
+        )
+        result = Sweep(self, self.repo).slices("security", "full")
+        self.assertEqual(0, result.returncode, result.stderr)
+
         cases = {
             "one-line entry off the registry": (
                 lock("https://evil.example/x.tgz"), "resolved off the registry: node_modules/x"),
             "resolved at an odd indent": (
-                '{\n "packages": {\n  "node_modules/x": {\n       "resolved": "https://evil.example/x.tgz",\n'
+                '{\n "lockfileVersion": 3, "packages": {\n  "node_modules/x": {\n       "resolved": "https://evil.example/x.tgz",\n'
                 '  "integrity": "sha512-AAAA" } } }\n',
                 "resolved off the registry: node_modules/x"),
             "one-line entry with no integrity": (
@@ -320,6 +329,19 @@ class ASmallRepository(unittest.TestCase):
                 lock("http://registry.npmjs.org/x/-/x-1.0.0.tgz"), "resolved off the registry: node_modules/x"),
             "not JSON": ("{ not json\n", "the lockfile is not valid JSON"),
             "no packages": ('{"lockfileVersion":3}\n', "no package entries read"),
+            # npm ci reads `dependencies` for a version 1 file, which this check does not walk.
+            "a version 1 file": (
+                '{"lockfileVersion":1,"dependencies":{"x":{"resolved":"https://evil.example/x.tgz"}}}\n',
+                "lockfileVersion is not 2 or 3"),
+            "no version": ('{"packages":{"node_modules/x":{}}}\n', "lockfileVersion is not 2 or 3"),
+            "a non-object entry": (
+                '{"lockfileVersion":3,"packages":{"node_modules/x":5}}\n', "malformed entry: node_modules/x"),
+            "a non-string resolved": (
+                '{"lockfileVersion":3,"packages":{"node_modules/x":{"resolved":5,"integrity":"sha512-A"}}}\n',
+                "resolved off the registry: node_modules/x"),
+            "a non-string integrity": (
+                '{"lockfileVersion":3,"packages":{"node_modules/x":{"resolved":"%s","integrity":5}}}\n' % registry,
+                "no integrity: node_modules/x"),
         }
         for label, (content, expected) in cases.items():
             with self.subTest(label):
