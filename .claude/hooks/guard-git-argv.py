@@ -130,8 +130,9 @@ GIT_WRITING_SUBCOMMANDS = frozenset({"rm", "mv"})
 
 # Programs on the reading and substitution lists with a flag that RUNS a program
 # the command line names (#278, #279): `rg --pre CMD` runs CMD on every file it
-# searches, `--hostname-bin` runs one for the hostname. Matched as a prefix, so
-# `--pre-glob` and `--pre=CMD` are the same refusal.
+# searches, `--hostname-bin` runs one for the hostname. Matched whole, with `=`
+# or abbreviated, so `--pre=CMD` is refused; a bare `--pre-glob` runs nothing
+# and is admitted.
 #
 # `sort` is the same shape: `-o FILE` and `--output` write one, and
 # `--compress-program` runs one, and it is a substitution program. The names are
@@ -4141,7 +4142,14 @@ def program_flag_offence(tokens):
     for run in command_runs(tokens):
         for index, token in enumerate(run):
             flags = EXECUTING_PROGRAM_FLAGS.get(program_name(token))
-            if flags is None or not launched(run, index):
+            # Not `launched()`: a launcher's option argument (`xargs -n 1 rg`,
+            # `env -C d rg`) or a launcher missing from LAUNCHERS (`sudo`,
+            # `timeout 5`, `nice`) leaves the program unrecognised by position.
+            # The program name anywhere in a run that is not data-only is
+            # judged, over-refusing `grep rg --pre`, which is the safe direction.
+            if (flags is None or ASSIGNMENT.match(token)
+                    or program_name(leading_command(run)) in DATA_ONLY_COMMANDS
+                    or (index > 0 and SCRIPT_FLAG.match(run[index - 1]))):
                 continue
             for word in run[index + 1:]:
                 if word == "--":
@@ -4177,9 +4185,15 @@ def git_environment_offence(tokens):
         # of a run, right after a launcher, and from `env` or `export` onward,
         # wherever in the run they stand (`sudo env GIT_PAGER=x git log`).
         assigning, sticky = True, False
+        # The generic names (`PATH`, `HOME`, `PAGER`) are ordinary for any other
+        # program, so they are judged only in a run that names git or rg. A
+        # script that runs git underneath is the gap #298 tracks.
+        mentions = any(program_name(word) in ("git", "rg") for word in run)
         for word in run:
             if ASSIGNMENT.match(word):
-                if (assigning or sticky) and GIT_EXECUTING_ENVIRONMENT.match(word):
+                if ((assigning or sticky) and GIT_EXECUTING_ENVIRONMENT.match(word)
+                        and (mentions
+                             or word.upper().startswith(("GIT_", "RIPGREP_")))):
                     return (
                         f"`{word.split('=', 1)[0]}` is an environment variable "
                         "git or rg EXECUTES — a command, a pager, an ssh, an "
