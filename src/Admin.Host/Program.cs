@@ -230,6 +230,8 @@ WebApplication app = builder.Build();
 _ = app.Services.GetRequiredService<RepoPaths>();
 _ = app.Services.GetRequiredService<FixtureRecorder>();
 
+// First, so every response carries them, an error page included: no page may frame the console (spec §8).
+app.UseFramingProtection();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
