@@ -283,7 +283,8 @@ app.Map("/api/{**catchAll}", () => Results.NotFound());
 
 if (spaFiles is not null)
 {
-    app.MapFallbackToFile("index.html", new StaticFileOptions { FileProvider = spaFiles }).ShortCircuit();
+    // Short-circuited, so it runs inside routing and before UseFramingProtection: it sets those headers itself.
+    app.MapFallbackToFile("index.html", new StaticFileOptions { FileProvider = spaFiles, OnPrepareResponse = c => FramingProtection.Apply(c.Context.Response) }).ShortCircuit();
 }
 
 app.Run();
