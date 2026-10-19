@@ -2847,6 +2847,7 @@ class TheGitArgvGuard(unittest.TestCase):
 
         for label, command in {
             "a variable that only points": "GIT_WORK_TREE=/tmp/x git status",
+            "a message variable set before a commit": "BODY=text; git commit -F - <<'EOF'\nmessage\nEOF",
             "an inert assignment": "LANG=C git log --oneline -5",
             "an inert locale assignment": "LC_ALL=C TERM=dumb git log --oneline -5",
             "the name inside a commit message": "git commit -m 'GIT_PAGER=cat is refused'",
