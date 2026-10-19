@@ -4219,6 +4219,41 @@ def program_flag_offence(tokens):
     return None
 
 
+def env_removes_variables(words):
+    """Whether an `env` in `words` clears or unsets variables before its program.
+
+    Only `env`'s OWN options are read, from the `env` word to the first word
+    that is neither an option nor an assignment, so the program's arguments
+    (`env git log -S foo`, `env git diff -u`) are not mistaken for them. A short
+    cluster holding `u` or `i` counts (`-iu`), and so does any abbreviation of
+    `--unset` and `--ignore-environment` that GNU getopt accepts (`--ign`,
+    `--uns`). `-C` and `-a` take the next word as their value.
+    """
+    for start, word in enumerate(words):
+        if program_name(word) == "env":
+            break
+    else:
+        return False
+    skip = False
+    for word in words[start + 1:]:
+        if skip:
+            skip = False
+            continue
+        if not word.startswith("-"):
+            return False  # the program: env's options are over
+        if word.startswith("--"):
+            name = word.split("=", 1)[0]
+            if len(name) > 2 and ("--unset".startswith(name)
+                                  or "--ignore-environment".startswith(name)):
+                return True
+            skip = name in ("--chdir", "--argv0") and "=" not in word
+        elif re.match(r"^-[A-Za-z]*[ui]", word):
+            return True
+        elif word in ("-C", "-a"):
+            skip = True
+    return False
+
+
 def git_environment_offence(tokens):
     """The reason to refuse a git environment variable that executes, or `None`.
 
@@ -4253,9 +4288,7 @@ def git_environment_offence(tokens):
                 if (not word.startswith("-")
                         and GIT_EXECUTING_ENVIRONMENT.match(word.split("=", 1)[0] + "=")):
                     return ENVIRONMENT_REFUSAL.format(name=word.split("=", 1)[0])
-        if runs_git and lead == "env" and any(
-                word in ("-u", "--unset", "-i", "--ignore-environment", "-S") or
-                word.startswith(("--unset=", "-u", "-S")) for word in words[1:]):
+        if runs_git and env_removes_variables(words):
             # Removing a variable changes which configuration git reads.
             return ENVIRONMENT_REFUSAL.format(name="env -u")
         for word in run:
