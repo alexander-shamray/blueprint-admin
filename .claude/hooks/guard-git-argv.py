@@ -4226,31 +4226,39 @@ def env_removes_variables(words):
     that is neither an option nor an assignment, so the program's arguments
     (`env git log -S foo`, `env git diff -u`) are not mistaken for them. A short
     cluster holding `u` or `i` counts (`-iu`), and so does any abbreviation of
-    `--unset` and `--ignore-environment` that GNU getopt accepts (`--ign`,
-    `--uns`). `-C` and `-a` take the next word as their value.
+    `--unset`, `--ignore-environment` and `--split-string` that GNU getopt
+    accepts (`--ign`, `--uns`). `-C` and `-a` take the next word as their value,
+    a bare `-` is `-i`, and `--` ends the options.
     """
-    for start, word in enumerate(words):
-        if program_name(word) == "env":
-            break
-    else:
-        return False
-    skip = False
-    for word in words[start + 1:]:
-        if skip:
-            skip = False
+    # Every `env` in the run, since `env env -u HOME git` has two.
+    for start, env_word in enumerate(words):
+        if program_name(env_word) != "env":
             continue
-        if not word.startswith("-"):
-            return False  # the program: env's options are over
-        if word.startswith("--"):
-            name = word.split("=", 1)[0]
-            if len(name) > 2 and ("--unset".startswith(name)
-                                  or "--ignore-environment".startswith(name)):
+        skip = False
+        for word in words[start + 1:]:
+            if skip:
+                skip = False
+                continue
+            if word == "--":
+                break  # the end of env's options
+            if word == "-":
+                return True  # a bare `-` is `--ignore-environment`
+            if not word.startswith("-"):
+                if ASSIGNMENT.match(word):
+                    continue
+                break  # the program: env's options are over
+            if word.startswith("--"):
+                name = word.split("=", 1)[0]
+                if len(name) > 2 and any(
+                        long.startswith(name) for long in (
+                            "--unset", "--ignore-environment", "--split-string")):
+                    return True
+                skip = name in ("--chdir", "--argv0") and "=" not in word
+            elif re.match(r"^-[A-Za-z]*[uiS]", word):
+                # `-S` carries a command string whose own options are not read.
                 return True
-            skip = name in ("--chdir", "--argv0") and "=" not in word
-        elif re.match(r"^-[A-Za-z]*[ui]", word):
-            return True
-        elif word in ("-C", "-a"):
-            skip = True
+            elif word in ("-C", "-a"):
+                skip = True
     return False
 
 
@@ -4288,7 +4296,10 @@ def git_environment_offence(tokens):
                 if (not word.startswith("-")
                         and GIT_EXECUTING_ENVIRONMENT.match(word.split("=", 1)[0] + "=")):
                     return ENVIRONMENT_REFUSAL.format(name=word.split("=", 1)[0])
-        if runs_git and env_removes_variables(words):
+        # `env -S 'cmd'` hides git inside one word, so the text of every word is
+        # searched for it here, not just the program names.
+        names_git = runs_git or any(re.search(r"\b(?:git|rg)\b", word) for word in words)
+        if names_git and env_removes_variables(words):
             # Removing a variable changes which configuration git reads.
             return ENVIRONMENT_REFUSAL.format(name="env -u")
         for word in run:

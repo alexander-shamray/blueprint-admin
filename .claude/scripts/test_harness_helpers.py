@@ -2836,6 +2836,10 @@ class TheGitArgvGuard(unittest.TestCase):
             "env --unset before rg": "env --unset=HOME rg x .",
             "env -S with an unlisted name first": "env -S 'FOO=1 GIT_PAGER=./x git log'",
             "env --split-string": "env --split-string='GIT_PAGER=./x git log'",
+            "env -vS in a cluster": "env -vS '-u HOME git log'",
+            "env --spl abbreviation": "env --spl='-u HOME' git log",
+            "a second env in the run": "env LANG=C env -u HOME git log",
+            "env with a bare dash": "env - git log",
             "env -iu in a cluster": "env -iu HOME git log",
             "env with an abbreviated --ignore-environment": "env --ign git log",
             "env -u behind sudo": "sudo env -u HOME git log",
@@ -2854,6 +2858,7 @@ class TheGitArgvGuard(unittest.TestCase):
         for label, command in {
             "a variable that only points": "GIT_WORK_TREE=/tmp/x git status",
             "a message variable set before a commit": "BODY=text; git commit -F - <<'EOF'\nmessage\nEOF",
+            "git after env's end of options": "env -- git log -S foo",
             "git's own -S flag behind env": "env git log -S foo",
             "git's own -u flag behind env": "env git diff -u",
             "rg's own -i flag behind env": "env LANG=C rg -i x .",
