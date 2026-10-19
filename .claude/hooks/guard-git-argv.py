@@ -4249,16 +4249,28 @@ def env_removes_variables(words):
                 break  # the program: env's options are over
             if word.startswith("--"):
                 name = word.split("=", 1)[0]
+                if len(name) > 2 and "--split-string".startswith(name):
+                    return "split"
                 if len(name) > 2 and any(
-                        long.startswith(name) for long in (
-                            "--unset", "--ignore-environment", "--split-string")):
+                        long.startswith(name)
+                        for long in ("--unset", "--ignore-environment")):
                     return True
-                skip = name in ("--chdir", "--argv0") and "=" not in word
-            elif re.match(r"^-[A-Za-z]*[uiS]", word):
-                # `-S` carries a command string whose own options are not read.
-                return True
-            elif word in ("-C", "-a"):
-                skip = True
+                # Options that take a value, abbreviated as getopt allows.
+                skip = "=" not in word and len(name) > 2 and any(
+                    long.startswith(name) for long in (
+                        "--chdir", "--argv0", "--block-signal", "--default-signal",
+                        "--ignore-signal", "--file"))
+            else:
+                # A short cluster, walked letter by letter: a letter that takes a
+                # value ends it, the value being the rest of the word or the next.
+                for position, letter in enumerate(word[1:], start=1):
+                    if letter == "S":
+                        return "split"
+                    if letter in "ui":
+                        return True
+                    if letter in "CaPf":
+                        skip = position == len(word) - 1
+                        break
     return False
 
 
@@ -4296,10 +4308,14 @@ def git_environment_offence(tokens):
                 if (not word.startswith("-")
                         and GIT_EXECUTING_ENVIRONMENT.match(word.split("=", 1)[0] + "=")):
                     return ENVIRONMENT_REFUSAL.format(name=word.split("=", 1)[0])
-        # `env -S 'cmd'` hides git inside one word, so the text of every word is
-        # searched for it here, not just the program names.
-        names_git = runs_git or any(re.search(r"\b(?:git|rg)\b", word) for word in words)
-        if names_git and env_removes_variables(words):
+        # `env -S 'cmd'` hands env a command string whose own options this guard
+        # does not read, with git inside the one word, so the text of every word is
+        # searched. A string with no git or rg in it (`env -S 'cp a b'`) is judged
+        # by its content as before.
+        removal = env_removes_variables(words)
+        names_git = runs_git or (removal == "split" and any(
+            re.search(r"\b(?:git|rg)\b", word) for word in words))
+        if names_git and removal:
             # Removing a variable changes which configuration git reads.
             return ENVIRONMENT_REFUSAL.format(name="env -u")
         for word in run:
