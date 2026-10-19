@@ -4256,10 +4256,10 @@ def env_removes_variables(words):
                         for long in ("--unset", "--ignore-environment")):
                     return True
                 # Options that take a value, abbreviated as getopt allows.
+                # The signal options take an optional `=value` only and never the
+                # next word, so they are not listed.
                 skip = "=" not in word and len(name) > 2 and any(
-                    long.startswith(name) for long in (
-                        "--chdir", "--argv0", "--block-signal", "--default-signal",
-                        "--ignore-signal", "--file"))
+                    long.startswith(name) for long in ("--chdir", "--argv0"))
             else:
                 # A short cluster, walked letter by letter: a letter that takes a
                 # value ends it, the value being the rest of the word or the next.
@@ -4268,7 +4268,7 @@ def env_removes_variables(words):
                         return "split"
                     if letter in "ui":
                         return True
-                    if letter in "CaPf":
+                    if letter in "CaP":
                         skip = position == len(word) - 1
                         break
     return False
@@ -4313,7 +4313,7 @@ def git_environment_offence(tokens):
         # searched. A string with no git or rg in it (`env -S 'cp a b'`) is judged
         # by its content as before.
         removal = env_removes_variables(words)
-        names_git = runs_git or (removal == "split" and any(
+        names_git = runs_git or (bool(removal) and any(
             re.search(r"\b(?:git|rg)\b", word) for word in words))
         if names_git and removal:
             # Removing a variable changes which configuration git reads.
