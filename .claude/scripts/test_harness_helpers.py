@@ -2215,7 +2215,7 @@ class AWritingCommandDeniesTheUsersMemoryAndOutputStyles(unittest.TestCase):
     def writers(self):
         return [
             path for path in sorted(COMMANDS.glob("*.md"))
-            if {"Write", "Edit"} & set(self.frontmatter(path, "allowed-tools"))
+            if any(re.match(r"(Write|Edit)(\(|$)", tool) for tool in self.frontmatter(path, "allowed-tools"))
         ]
 
     def test_the_writing_commands_are_found(self):
