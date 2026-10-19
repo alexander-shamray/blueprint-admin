@@ -599,6 +599,21 @@ def _quoting(command, quotes=True, data=()):
     # Whether the single quote now open was introduced by a `$`, and whether
     # the character just yielded was an unquoted, unescaped `$`.
     ansi_c = dollar = False
+    # How many `${` are open and unclosed. Inside one a `#` is text, never a
+    # comment (#285): `ls ${x:- #}; git push origin +HEAD:main` runs the push,
+    # and reading `#}; git push ...` as a comment stripped it before any check.
+    # Over-counting only keeps more of the command in view, which is the safe
+    # direction; an unclosed `${` leaves the rest of the command judged.
+    brace_depth = 0
+    # The same for a `${` inside a double-quoted string, where a `"` after the
+    # `:-` opens a quote of its own rather than ending the string, and the second
+    # one closes it: `echo "${x:-" #"}"; git push ...` prints ` #` and then runs
+    # the push, measured, while reading the first inner quote as the end of the
+    # string made the rest of the line a comment. One frame per open `${`, each
+    # holding whether a quote of its own is open, since a `}` inside that quote
+    # closes nothing and a `${` inside it opens a frame of its own: a single flag
+    # lost its place at `"${x:-"${y:-a}"}"` and left the rest of the line quoted.
+    string_braces = []
     # **Whether a `#` begins a WORD, tracked rather than inferred from the
     # previous character.** The old test read `command[index - 1] in " \t…"`,
     # which cannot tell a separating space from an escaped one: in
@@ -660,7 +675,18 @@ def _quoting(command, quotes=True, data=()):
                     index += 2
                     dollar = False
                     continue
-                if char == '"':
+                if char == "$" and command.startswith("{", index + 1):
+                    yield index, "double", False
+                    yield index + 1, "double", False
+                    index += 2
+                    string_braces.append(False)
+                    continue
+                if string_braces:
+                    if char == '"':
+                        string_braces[-1] = not string_braces[-1]
+                    elif char == "}" and not string_braces[-1]:
+                        string_braces.pop()
+                elif char == '"':
                     double = False
             elif char == "\\" and index + 1 < len(command):
                 # An unquoted backslash escapes the next character, so that
@@ -679,7 +705,13 @@ def _quoting(command, quotes=True, data=()):
             elif char == '"' and quotes:
                 double = True
                 at_word_start = False
-            elif char == "#" and at_word_start:
+            elif char == "{" and dollar:
+                brace_depth += 1
+                at_word_start = False
+            elif char == "}" and brace_depth:
+                brace_depth -= 1
+                at_word_start = False
+            elif char == "#" and at_word_start and not brace_depth:
                 comment = True
                 yield index, "comment", False
                 index += 1
@@ -694,6 +726,14 @@ def _quoting(command, quotes=True, data=()):
         pending = False
         dollar = char == "$" and not (single or double or comment)
         index += 1
+
+
+def _escaped(command, index):
+    """Whether the character at `index` is escaped: an odd run of backslashes before it."""
+    run = 0
+    while index - run > 0 and command[index - run - 1] == "\\":
+        run += 1
+    return run % 2 == 1
 
 
 def heredoc_spans(command):
@@ -734,10 +774,23 @@ def heredoc_spans(command):
     # this loop only ever appends spans that start ahead of it, so the list is
     # sorted by construction and the walk stays monotonic.
     data, spans, pending = [], [], 0
+    # Arithmetic depth, and where the `((` or `))` just counted ends (#277).
+    arithmetic, counted = 0, 0
     for index, in_quotes, in_comment in shell_positions(command, data):
-        if in_quotes or in_comment:
+        if in_quotes or in_comment or index < counted:
+            continue
+        if command.startswith("((", index):
+            arithmetic, counted = arithmetic + 1, index + 2
+            continue
+        if arithmetic and command.startswith("))", index):
+            arithmetic, counted = arithmetic - 1, index + 2
             continue
         if not command.startswith("<<", index):
+            continue
+        if arithmetic or _escaped(command, index):
+            # A shift inside `(( ))` or `$(( ))` (#277), or a `<` the shell was
+            # told to read as a character (#276), opens no heredoc: the lines
+            # after it are commands and must be judged as such.
             continue
         # **`<<<` is a here-string, and it fed a push straight past this.**
         # The bare-delimiter alternative excludes `<`, so no opener matched at
@@ -875,10 +928,22 @@ def undecodable_heredoc(command):
     # body left the scanner in quote state, so a later undecodable opener
     # looked quoted and this refusal never fired. Raised in review.
     bodies = heredoc_spans(command)
-    quoted = set()
+    quoted, arithmetic, counted = set(), 0, 0
     for index, in_quotes, in_comment in shell_positions(
             command, [(start, end) for start, end, _ in bodies]):
         if in_quotes or in_comment:
+            quoted.add(index)
+            continue
+        # The same two exclusions `heredoc_spans` makes (#276, #277): an
+        # escaped `<` and a shift inside arithmetic open no heredoc, so their
+        # delimiter is none this refusal is about.
+        if index < counted:
+            continue
+        if command.startswith("((", index):
+            arithmetic, counted = arithmetic + 1, index + 2
+        elif arithmetic and command.startswith("))", index):
+            arithmetic, counted = arithmetic - 1, index + 2
+        elif command.startswith("<<", index) and (arithmetic or _escaped(command, index)):
             quoted.add(index)
     # **A `<<` inside a heredoc BODY is data, not an opener**, and reading one
     # as an opener refused an innocent filing: a body quoting `<<$'E\\x4fF'` —
