@@ -2792,6 +2792,12 @@ class TheGitArgvGuard(unittest.TestCase):
             "git remote-https origin https://example.invalid/x.git",
             "git remote-ext origin 'ext::sh -c x'",
             "git receive-pack /tmp/x",
+            # Windows finds git-send-pack.exe for each of these.
+            "git send-pack.exe origin HEAD:main",
+            "git SEND-PACK. origin HEAD:main",
+            "git http-push.cmd origin HEAD:main",
+            "git push.exe origin HEAD:main",
+            "git push.exe origin heads/main",
             # An unlisted value-taking global must not make its value the verb.
             "git --super-prefix X send-pack origin HEAD:main",
             "git --some-future-global X http-push origin HEAD:main",
@@ -2804,6 +2810,13 @@ class TheGitArgvGuard(unittest.TestCase):
             "git log send-pack",
             "git show http-push",
             "git diff send-pack..HEAD",
+            # A ref named like a verb after a global that takes no value, or after
+            # a listed one, is still an argument to the verb in front of it.
+            "git --no-pager log remote-fix",
+            "git --no-pager branch -d remote-x",
+            "git -C d log subtree",
+            "git --git-dir=.git log remote-fix",
+            "git remote -v",
         ):
             with self.subTest(command=command):
                 self.assertAdmitted(command)
