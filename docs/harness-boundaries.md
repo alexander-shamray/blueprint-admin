@@ -206,6 +206,17 @@ A new residual is stated **here** and gets a row above.
   auto-approval, so a session that can rewrite `SKILL.md` widens the next
   invocation. Commands, agents, hooks and settings were already denied;
   both `Edit(.claude/skills/**)` spellings sit on the same list.
+- **A command that holds `Write` or `Edit` denies the user's memory and
+  output styles (#280).** `~/.claude/projects/*/memory/` is loaded into later
+  sessions as the user's own standing instruction, and `~/.claude/output-styles/`
+  shapes how they answer; a command that reads a branch diff and holds `Write`
+  could otherwise plant one. `guard-edit-target.py` admits the rest of
+  `~/.claude` on purpose, since a session's own memory and scratch writes live
+  there, and it cannot tell a save from an injection, so the two `Edit(~/.claude/...)`
+  denies sit in `disallowed-tools` of `/ship`, `/pr`, `/style-pass` and
+  `/review-branch`, and `AWritingCommandDeniesTheUsersMemoryAndOutputStyles`
+  fails when a command that grants either tool lacks them. A session inside one
+  of those commands therefore cannot save a memory: it saves it afterwards.
 - **A command `/ship` runs before it pushes never denies push.** A
   frontmatter `disallowed-tools` holds for the rest of the user turn, not
   for the command that states it, so `Bash(git push:*)` on `/commit` or
