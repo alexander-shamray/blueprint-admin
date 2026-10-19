@@ -759,6 +759,13 @@ def _quoting(command, quotes=True, data=(), ambiguous=None):
         pending = False
         dollar = char == "$" and not (single or double or comment)
         index += 1
+    if string_braces and ambiguous is not None:
+        # A `${` inside a double-quoted string that nothing closed: the rest of
+        # the command was read as that string's text. Bash closes the string at
+        # the quote when the `${` sat in a body this walk does not follow
+        # (`"$(cat <<'EOF' ... use ${ here ... EOF )"`), so a command after it
+        # would be hidden as quoted text. Recorded, and refused.
+        ambiguous.append(len(command))
 
 
 def _escaped(command, index):
@@ -943,7 +950,8 @@ def ambiguous_arithmetic(command):
     """
     bodies = [(start, end) for start, end, _ in heredoc_spans(command)]
     paren = shift = False
-    # Any unquoted, unescaped `[` seen so far: an array subscript (`a[1<<EOF]=1`)
+    # Any unquoted, unescaped `[` attached to a word seen so far: an array
+    # subscript (`a[1<<EOF]=1`)
     # is arithmetic as well, and bash reads its `<<` as a shift and runs the next
     # line. Never matched against a `]`: an escaped one, one inside a `$(`, and one
     # a later subscript closes all defeated a count, so any `[` before a `<<` is
@@ -953,7 +961,10 @@ def ambiguous_arithmetic(command):
     for index, in_quotes, in_comment in shell_positions(command, bodies):
         if in_quotes or in_comment:
             continue
-        if command.startswith("[", index) and not _escaped(command, index):
+        if (command.startswith("[", index) and index > 0
+                and (command[index - 1].isalnum() or command[index - 1] in "_]")
+                and not _escaped(command, index)):
+            # `name[`, the shape of a subscript; `[ -f x ]` and `*.[ch]` are not.
             bracket = True
         elif bracket and command.startswith("<<", index) and not _escaped(command, index):
             return True

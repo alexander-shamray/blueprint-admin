@@ -2767,6 +2767,8 @@ class TheGitArgvGuard(unittest.TestCase):
             "$[ ] is arithmetic too": "echo $[ 1 <<EOF ]\ngit push origin +HEAD:main\nEOF",
             # Measured under bash: the subscript is arithmetic and the next line runs.
             "an array subscript is arithmetic": "echo ok; a[1<<EOF]=1\ngit push origin +HEAD:main\nEOF",
+            "a ${ in a heredoc inside a double-quoted substitution leaves the string open":
+                "git commit -m \"$(cat <<'EOF'\nuse ${ here\nEOF\n)\"; git push origin +HEAD:main",
             "an escaped ] does not close the subscript": "a[1\\]<<EOF]=1\ngit push origin +HEAD:main\nEOF",
             "a ] inside a substitution does not close it": "a[$(echo ])<<EOF]=1\ngit push origin +HEAD:main\nEOF",
             "a real comment after a substitution in ${} is not a heredoc opener":
@@ -2793,6 +2795,8 @@ class TheGitArgvGuard(unittest.TestCase):
             "an escaped backslash leaves the heredoc real": "cat \\\\<<EOF\ngit push origin +HEAD:main\nEOF",
             "a comment is still a comment": "ls # git push origin +HEAD:main",
             "a parameter length and a trimmed one are not ambiguous": "echo ${#PATH} ${HOME#a} ${x:-y}",
+            "a test before a heredoc is not a subscript": "[ -f x ] && git commit -F - <<'EOF'\nfix: x\nEOF",
+            "a glob before a heredoc is not a subscript": "ls *.[ch]; git commit -F - <<'EOF'\nfix: x\nEOF",
             "a (( inside a quoted argument is text": "git commit -m '(( x <<EOF'",
             "a (( inside a heredoc body is data": "git commit -F - <<'EOF'\n(( x <<EOF ))\nEOF",
             "a # after a closed ${} is a comment": "ls ${x:-y} # git push origin +HEAD:main",
