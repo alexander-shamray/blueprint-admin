@@ -2810,6 +2810,11 @@ class TheGitArgvGuard(unittest.TestCase):
             "a configuration directory": "HOME=./fake git status",
             "a repository directory whose config executes": "GIT_DIR=./fake git status",
             "ripgrep's configuration file, which may carry --pre": "RIPGREP_CONFIG_PATH=./rc rg x .",
+            "a replaced PATH": "PATH=./fake git status",
+            "a pager option and preprocessor": "LESSOPEN='|./x %s' git log",
+            "a startup file": "BASH_ENV=./x git log",
+            "the Windows home": "USERPROFILE=./fake git status",
+            "sudo with an option argument before env": "sudo -u root env GIT_PAGER=./x git log",
             "sort writing through a short cluster": "sort -uo .claude/settings.json README.md",
             "sort's output flag after others": "sort -n -ro x README.md",
         }.items():
