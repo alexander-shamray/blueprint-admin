@@ -2193,6 +2193,45 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
                     self.assertNotEqual("Edit(/*)", rule)
 
 
+class AWritingCommandDeniesTheUsersMemoryAndOutputStyles(unittest.TestCase):
+    """#280 — auto-memory and output styles are instructions to every later session.
+
+    `~/.claude/projects/*/memory/` is loaded into later sessions as the user's
+    own standing instruction, and `~/.claude/output-styles/` shapes how they
+    answer. `guard-edit-target.py` admits the rest of `~/.claude` because the
+    session's own memory and scratch writes live there, so a command that
+    holds `Write` or `Edit` while reading untrusted branch text could plant
+    a persistent instruction. The hook cannot tell the user's own save from
+    an injected one, so the denial sits in the commands that run on a diff.
+    """
+
+    REQUIRED = ("Edit(~/.claude/projects/**)", "Edit(~/.claude/output-styles/**)")
+
+    @staticmethod
+    def frontmatter(path, key):
+        found = re.findall(rf"^{key}:\s*(.+)$", path.read_text(encoding="utf-8"), re.MULTILINE)
+        return [entry.strip() for entry in found[0].split(",")] if found else []
+
+    def writers(self):
+        return [
+            path for path in sorted(COMMANDS.glob("*.md"))
+            if {"Write", "Edit"} & set(self.frontmatter(path, "allowed-tools"))
+        ]
+
+    def test_the_writing_commands_are_found(self):
+        # The positive control: a glob that found none would pass the case below.
+        names = {path.name for path in self.writers()}
+        for expected in ("ship.md", "pr.md", "style-pass.md", "review-branch.md"):
+            self.assertIn(expected, names)
+
+    def test_every_command_granting_write_or_edit_denies_both_paths(self):
+        for path in self.writers():
+            rules = self.frontmatter(path, "disallowed-tools")
+            for required in self.REQUIRED:
+                with self.subTest(command=path.name, rule=required):
+                    self.assertIn(required, rules)
+
+
 class SuppressionStub:
     """A `gh` answering the two reads gh-issue-suppresses.sh makes.
 
@@ -6447,6 +6486,13 @@ class TheGitArgvGuard(unittest.TestCase):
                 if line.startswith("disallowed-tools:"):
                     for rule in re.findall(r"Edit\(([^)]*)\)", line):
                         first = rule.removeprefix("./").split("/")[0]
+
+                        # `~/.claude/...` is the user's home, not a tree of this
+                        # repository (#280); a redirect there is the edit
+                        # guard's to judge, not this list's.
+                        if rule.startswith("~"):
+                            continue
+
                         if rule.endswith("/**") and first != "**":
                             denied.add(first)
         self.assertIn("src", denied, "the frontmatter listing went empty")
