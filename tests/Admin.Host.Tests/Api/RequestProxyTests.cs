@@ -105,8 +105,8 @@ public sealed class RequestProxyTests
     [Fact]
     public void An_unparseable_content_type_is_refused()
     {
-        Proxy(new ScriptedHandler(_ => Granted())).Validate(Get(headers: new Dictionary<string, string> { ["Content-Type"] = "not a media type;;" }))
-            .ShouldNotBeNull().ShouldContain("Content-Type");
+        Proxy(new ScriptedHandler(_ => Granted())).Validate(Get(headers: new Dictionary<string, string> { ["Content-Type"] = "not a media type;;" }) with { Body = "{}" })
+            .ShouldNotBeNull().ShouldContain("is not a media type");
     }
 
     [Fact]
