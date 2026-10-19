@@ -156,7 +156,9 @@ GIT_EXECUTING_ENVIRONMENT = re.compile(
     r"|CONFIG_GLOBAL|CONFIG_SYSTEM|EXTERNAL_DIFF|SSH|SSH_COMMAND|EXEC_PATH"
     r"|PAGER|ASKPASS|PROXY_COMMAND|EDITOR|SEQUENCE_EDITOR|DIR|COMMON_DIR"
     r"|TEMPLATE_DIR)"
-    r"|PAGER|EDITOR|VISUAL|SSH_ASKPASS|HOME|XDG_CONFIG_HOME|RIPGREP_CONFIG_PATH)"
+    r"|PAGER|EDITOR|VISUAL|SSH_ASKPASS|HOME|XDG_CONFIG_HOME|RIPGREP_CONFIG_PATH"
+    r"|PATH|LESS|LESSOPEN|LESSCLOSE|BASH_ENV|ENV|SHELL|GIT_CONFIG"
+    r"|USERPROFILE|HOMEDRIVE|HOMEPATH)"
     r"\+?=", re.IGNORECASE)
 
 # Commands whose arguments are assignments, as `export GIT_PAGER=x` is.
@@ -4189,7 +4191,10 @@ def git_environment_offence(tokens):
             if word.startswith("-"):
                 continue  # an option of env, sudo or a launcher
             name = program_name(word)
-            sticky = sticky or name in ASSIGNING_COMMANDS
+            # `sudo` is sticky like `env`: its options take arguments of their own
+            # (`sudo -u x env A=1 git`), so a word after one cannot be told from
+            # the command by position alone.
+            sticky = sticky or name in ASSIGNING_COMMANDS or name == "sudo"
             assigning = name in ASSIGNING_COMMANDS or name in LAUNCHERS or name == "sudo"
     return None
 
