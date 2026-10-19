@@ -162,6 +162,23 @@ GIT_EXECUTING_ENVIRONMENT = re.compile(
     r"|USERPROFILE|HOMEDRIVE|HOMEPATH)"
     r"\+?=", re.IGNORECASE)
 
+# The only assignments admitted in a run that names git or rg (#298): none of
+# them changes which program, configuration file or pager either one runs.
+# Everything else is refused there, by name, so a variable nobody listed is
+# refused rather than admitted. `LC_*` is matched by prefix.
+INERT_ENVIRONMENT = frozenset({
+    "LANG", "LANGUAGE", "TERM", "TZ", "NO_COLOR", "COLUMNS", "LINES",
+    "GIT_WORK_TREE", "GIT_TERMINAL_PROMPT", "GIT_OPTIONAL_LOCKS",
+})
+
+ENVIRONMENT_REFUSAL = (
+    "`{name}` is an environment variable git or rg reads in a way that can "
+    "EXECUTE — a command, a pager, an ssh, an external diff or a configuration "
+    "file — or one this guard has not listed as inert. It is `git -c`, "
+    "`--ext-diff` or `--pre` spelled as an assignment, and those are refused; "
+    "this is too."
+)
+
 # Commands whose arguments are assignments, as `export GIT_PAGER=x` is.
 ASSIGNING_COMMANDS = frozenset({"env", "export", "declare", "typeset", "local", "readonly"})
 
@@ -2564,6 +2581,10 @@ WRITING_VERBS = {
     "perl": "in-place", "sed": "in-place",
     "dd": "of",
 }
+# `git restore` and `git checkout -- PATH` overwrite the paths they are given too,
+# and are NOT judged here on purpose: `git checkout HEAD -- <file>` is how this
+# repository restores a file, and every `git checkout <branch>` would be read as a
+# write (#297). `git clean` is denied by settings.json.
 
 # The verbs a `-t DIR` or `--target-directory=DIR` sends every operand into.
 TARGET_OPTION_VERBS = frozenset({"cp", "install", "ln", "mv"})
@@ -4062,8 +4083,9 @@ SUBSTITUTION_PROGRAMS = frozenset({
     "[", "basename", "cat", "cut", "date", "dirname", "echo", "expr", "false",
     "git", "grep", "head", "hostname", "id", "jq", "ls", "printf", "pwd",
     "readlink", "realpath", "rg", "seq", "sort", "stat", "tail", "test", "tr",
-    "true", "uname", "uniq", "wc", "whoami",
+    "true", "uname", "wc", "whoami",
 })
+# `uniq` was here and takes `INPUT OUTPUT`: its second operand is written (#297).
 
 
 # What runs the word after it as a script or a program, so a computed word in
@@ -4219,22 +4241,36 @@ def git_environment_offence(tokens):
         # whatever else the run names; `BASH_ENV`, `ENV` and `SHELL` are acted
         # on by the shell itself and are refused everywhere.
         words = [word for word in run if not ASSIGNMENT.match(word)]
-        mentions = (any(program_name(word) in ("git", "rg") for word in words)
-                    or not words
+        runs_git = any(program_name(word) in ("git", "rg") for word in words)
+        mentions = (runs_git or not words
                     or any(program_name(word) in ASSIGNING_COMMANDS for word in words))
+        lead = program_name(words[0]) if words else ""
+        if lead in (ASSIGNING_COMMANDS - {"env"}) | {"read", "mapfile", "readarray"} or (
+                lead == "printf" and "-v" in words):
+            # A name set without an assignment word: `export GIT_PAGER` after an
+            # earlier assignment, `read GIT_PAGER`, `printf -v GIT_PAGER`.
+            for word in words[1:]:
+                if (not word.startswith("-")
+                        and GIT_EXECUTING_ENVIRONMENT.match(word.split("=", 1)[0] + "=")):
+                    return ENVIRONMENT_REFUSAL.format(name=word.split("=", 1)[0])
+        if runs_git and lead == "env" and any(
+                word in ("-u", "--unset", "-i", "--ignore-environment", "-S") or
+                word.startswith(("--unset=", "-u", "-S")) for word in words[1:]):
+            # Removing a variable changes which configuration git reads.
+            return ENVIRONMENT_REFUSAL.format(name="env -u")
         for word in run:
             if ASSIGNMENT.match(word):
+                name = re.split(r"[\[+=]", word, maxsplit=1)[0].upper()
+                if (assigning or sticky) and runs_git and (
+                        name not in INERT_ENVIRONMENT and not name.startswith("LC_")):
+                    # An allow-list in a run that names git or rg: the denylist
+                    # below grows a name per review round (#298).
+                    return ENVIRONMENT_REFUSAL.format(name=name)
                 if ((assigning or sticky) and GIT_EXECUTING_ENVIRONMENT.match(word)
                         and (mentions
                              or word.upper().startswith(
                                  ("GIT_", "RIPGREP_", "BASH_ENV=", "ENV=", "SHELL=")))):
-                    return (
-                        f"`{word.split('=', 1)[0]}` is an environment variable "
-                        "git or rg EXECUTES — a command, a pager, an ssh, an "
-                        "external diff or a configuration file. It is `git -c`, "
-                        "`--ext-diff` or `--pre` spelled as an assignment, and "
-                        "those are refused; this is too."
-                    )
+                    return ENVIRONMENT_REFUSAL.format(name=word.split("=", 1)[0])
                 continue
             if word.startswith("-"):
                 continue  # an option of env, sudo or a launcher
@@ -4405,6 +4441,12 @@ def git_subcommand_offence(segment):
     # `--e...` abbreviation of `--exec` count for `rebase`; over-refusing
     # `--empty` is the safe direction.
     verb = verb_name(subcommand)
+    if verb in ("apply", "am"):
+        return (
+            f"`git {subcommand}` writes the files its patch names, which are in "
+            "the patch and not on the command line, so no path can be judged "
+            "(#297). Nothing here applies a patch."
+        )
     if ((verb == "bisect" and "run" in arguments)
             or (verb in ("submodule", "submodule--helper") and "foreach" in arguments)
             or (verb == "filter-branch")
