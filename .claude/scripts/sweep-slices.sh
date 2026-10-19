@@ -88,11 +88,15 @@ lockfile_faults() {
   $python -I -c '
 import json, sys
 try:
-    data = json.load(sys.stdin)
+    data = json.load(sys.stdin.buffer)
 except Exception:
     print("the lockfile is not valid JSON")
     sys.exit(0)
-packages = data.get("packages") if isinstance(data, dict) else None
+version = data.get("lockfileVersion") if isinstance(data, dict) else None
+if type(version) is not int or version not in (2, 3):
+    print("lockfileVersion is not 2 or 3, so packages is not what npm ci reads")
+    sys.exit(0)
+packages = data.get("packages")
 if not isinstance(packages, dict) or not packages:
     print("no package entries read")
     sys.exit(0)
