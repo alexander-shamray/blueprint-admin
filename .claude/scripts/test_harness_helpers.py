@@ -2777,6 +2777,8 @@ class TheGitArgvGuard(unittest.TestCase):
             "an appended compound assignment": "a+=( [ 1<<EOF]=1 )\ngit push origin +HEAD:main\nEOF",
             "a doubled bracket in an element": "a=([[1<<EOF]]=1)\ngit push origin +HEAD:main\nEOF",
             "an element on its own line": "a=(\n[ 1<<EOF]=1)\ngit push origin +HEAD:main\nEOF",
+            "a continuation between = and (": "a=\\\n( [ 1<<EOF]=1 )\ngit push origin +HEAD:main\nEOF",
+            "a continuation inside ${": "ls $\\\n{x:- #}; git push origin +HEAD:main",
             "an escaped ] does not close the subscript": "a[1\\]<<EOF]=1\ngit push origin +HEAD:main\nEOF",
             "a ] inside a substitution does not close it": "a[$(echo ])<<EOF]=1\ngit push origin +HEAD:main\nEOF",
             "a real comment after a substitution in ${} is not a heredoc opener":
