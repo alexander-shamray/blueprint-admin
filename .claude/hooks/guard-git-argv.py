@@ -4268,8 +4268,12 @@ DASHED_GIT = re.compile(r"^git-[a-z][a-z0-9-]*$")
 # their own that `launched()` cannot skip by position.
 WRAPPERS = frozenset({
     "sudo", "doas", "timeout", "nice", "ionice", "stdbuf", "setsid", "nohup",
-    "env", "xargs", "exec", "command", "time",
+    "env", "xargs", "exec", "command", "time", "taskset", "flock", "chrt",
+    "strace", "ltrace", "unshare", "nsenter", "watch", "find", "parallel",
+    "su", "firejail", "systemd-run", "chroot", "unbuffer",
 })
+# What `git` itself runs the next word for.
+GIT_RUNNING_WORDS = ("run", "foreach", "-x", "--exec", "--extcmd")
 
 
 def git_config_offence(segment):
@@ -4317,8 +4321,12 @@ def dashed_git_offence(tokens):
             candidates = [token for index, token in enumerate(run)
                           if launched(run, index)]
             if lead == "git":
-                candidates += [run[index + 1] for index, token in enumerate(run[:-1])
-                               if token in ("run", "foreach")]
+                # Everything after the first running word, so `submodule foreach
+                # --recursive git-push` and `bisect run sudo git-push` are read.
+                running = [index for index, token in enumerate(run)
+                           if token in GIT_RUNNING_WORDS]
+                if running:
+                    candidates += run[running[0] + 1:]
         for token in candidates:
             if not ASSIGNMENT.match(token) and DASHED_GIT.match(program_name(token)):
                 return (

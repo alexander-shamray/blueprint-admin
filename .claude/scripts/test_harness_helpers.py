@@ -2860,6 +2860,12 @@ class TheGitArgvGuard(unittest.TestCase):
             "a dashed executable run by git bisect": "git bisect run git-push origin HEAD:main",
             "a dashed executable behind timeout's argument": "timeout 5 git-push origin HEAD:main",
             "a dashed executable run by git submodule foreach": "git submodule foreach git-push origin HEAD:main",
+            "a dashed executable behind taskset": "taskset 1 git-push origin HEAD:main",
+            "a dashed executable behind flock": "flock /tmp/l git-push origin HEAD:main",
+            "a dashed executable run by find": "find . -exec git-push origin HEAD:main ;",
+            "a dashed executable run by git rebase -x": "git rebase -x git-push origin",
+            "a dashed executable after git submodule foreach options": "git submodule foreach --recursive git-push origin HEAD:main",
+            "a dashed executable behind a wrapper under git bisect run": "git bisect run sudo git-push origin HEAD:main",
             "git config edit, a verb with one word": "git config edit",
             "git config unset, a verb": "git config unset",
         }.items():
