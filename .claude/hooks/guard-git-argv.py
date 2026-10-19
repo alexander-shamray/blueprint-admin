@@ -557,7 +557,7 @@ def quote_states(command, quotes=True):
     return states
 
 
-def _quoting(command, quotes=True, data=()):
+def _quoting(command, quotes=True, data=(), ambiguous=None):
     """Walk `command`, yielding `(index, state, escaped)` per character.
 
     `data` is spans this scanner must read as data rather than as shell text —
@@ -572,6 +572,15 @@ def _quoting(command, quotes=True, data=()):
     could be judged; and a paren counter that did not know about quotes let
     `git log "$(printf ')'; git push origin +HEAD:main)"` close early, hiding
     the push in the outer token. Both raised in review, both verified allowed.
+
+    `ambiguous`, when a list is passed, receives the index of every character
+    inside a `${...}` that this walk cannot read the way bash does: a `#` at the
+    start of a word and a `<<`, and, once a command substitution or backtick has
+    opened inside a `${` (its braces are not tracked, so the depth is lost), any
+    such `#` or `<<` after it. Each is text in one reading and a comment or a
+    heredoc in another, and a guess either way hides a live command (#285), so
+    `ambiguous_expansion` refuses the command rather than relying on one. A
+    substitution inside `${` with no `#` or `<<` after it is judged as before.
 
     `state` is `"single"` inside `'…'`, `"double"` inside `"…"`, `"comment"`
     in a comment, `"data"` inside one of `data`'s spans and `""` elsewhere.
@@ -605,6 +614,10 @@ def _quoting(command, quotes=True, data=()):
     # Over-counting only keeps more of the command in view, which is the safe
     # direction; an unclosed `${` leaves the rest of the command judged.
     brace_depth = 0
+    # Whether a command substitution or backtick has opened inside a `${`, whose
+    # own braces this walk does not follow, so `brace_depth` can no longer be
+    # trusted from here on.
+    lost = False
     # The same for a `${` inside a double-quoted string, where a `"` after the
     # `:-` opens a quote of its own rather than ending the string, and the second
     # one closes it: `echo "${x:-" #"}"; git push ...` prints ` #` and then runs
@@ -684,6 +697,9 @@ def _quoting(command, quotes=True, data=()):
                     index += 2
                     string_braces.append(False)
                     continue
+                if string_braces and (
+                        char == "`" or (char == "$" and command.startswith("(", index + 1))):
+                    lost = True
                 if string_braces:
                     if char == '"':
                         string_braces[-1] = not string_braces[-1]
@@ -714,13 +730,20 @@ def _quoting(command, quotes=True, data=()):
             elif char == "}" and brace_depth:
                 brace_depth -= 1
                 at_word_start = False
-            elif char in "(`" and brace_depth and (char == "`" or dollar):
+            elif ambiguous is not None and (brace_depth or lost) and (
+                    (char == "#" and at_word_start)
+                    or command.startswith("<<", index)):
+                # Inside `${`, or after its depth was lost: a `#` after a space
+                # is text to bash but a comment to a guess, and a `<<` is text
+                # where a guess opens a heredoc. Recorded, and the command
+                # refused by `ambiguous_expansion`.
+                ambiguous.append(index)
+                at_word_start = char in METACHARACTERS
+            elif brace_depth and ((char == "(" and dollar) or char == "`"):
                 # A command substitution inside `${` has braces of its own
-                # (`${x:-$(echo })}`), which this walk does not track. Pinning
-                # the depth up for the rest of the command means no `#` is a
-                # comment from here: more of the line is judged, never less.
-                brace_depth += 1000
-                at_word_start = False
+                # (`${x:-$(echo })}`) that this walk does not follow.
+                lost = True
+                at_word_start = True
             elif char == "#" and at_word_start and not brace_depth:
                 comment = True
                 yield index, "comment", False
@@ -924,12 +947,38 @@ def ambiguous_arithmetic(command):
     for index, in_quotes, in_comment in shell_positions(command, bodies):
         if in_quotes or in_comment:
             continue
-        if command.startswith("((", index):
+        if command.startswith("$[", index):
+            # The legacy arithmetic expansion, where `<<` is a shift as well.
             paren = True
+        elif command.startswith("(", index):
+            # `((` however it is spelled: bash joins `(\<newline>(` before it
+            # reads either.
+            after = index + 1
+            while command.startswith("\\\n", after):
+                after += 2
+            if command.startswith("(", after):
+                paren = True
         elif command.startswith("<<", index) and not _escaped(command, index):
             shift = True
 
     return paren and shift
+
+
+def ambiguous_expansion(command):
+    """Whether `command` has text inside `${...}` this guard cannot read (#285).
+
+    See `_quoting`'s `ambiguous`: a `#` after a space or a `<<` inside a
+    parameter expansion, or after a command substitution opened in one. Honest
+    commands do not write them and every one is a way to make a stripped comment
+    or a hidden heredoc body out of a live command, so it is refused, not
+    interpreted.
+    """
+    bodies = [(start, end) for start, end, _ in heredoc_spans(command)]
+    found = []
+    for _ in _quoting(command, data=bodies, ambiguous=found):
+        pass
+
+    return bool(found)
 
 
 def undecodable_heredoc(command):
@@ -4203,6 +4252,13 @@ def _offence(command, depth, judged):
             "a heredoc names a delimiter this guard cannot decode, so it "
             "cannot tell where the body ends or which lines after it are "
             "commands; refusing rather than reading part of it."
+        )
+    if ambiguous_expansion(command):
+        return (
+            "a `#`, a `<<` or a command substitution inside `${...}`: bash "
+            "reads it as text where a comment or heredoc reading would strip the "
+            "lines after it, and this guard cannot tell which without parsing "
+            "the expansion. Write it outside the braces."
         )
     if ambiguous_arithmetic(command):
         return (

@@ -2762,6 +2762,12 @@ class TheGitArgvGuard(unittest.TestCase):
                 "ls ${x:-$(echo }) #}; git push origin +HEAD:main",
             "a } inside backticks inside ${} closes nothing":
                 "ls ${x:-`echo }` #}; git push origin +HEAD:main",
+            # Security-hook findings on the revision above.
+            "bash joins (\\newline( into ((": "(\\\n( 1 <<EOF ))\ngit push origin +HEAD:main\nEOF",
+            "$[ ] is arithmetic too": "echo $[ 1 <<EOF ]\ngit push origin +HEAD:main\nEOF",
+            "a real comment after a substitution in ${} is not a heredoc opener":
+                "ls ${x:-$(echo a)} # <<'EOF'\ngit push origin +HEAD:main\nEOF",
+            "a << inside ${} is text, not a heredoc": "echo ${x:-<<EOF}\ngit push origin +HEAD:main\nEOF",
             # An undecodable delimiter is refused wherever it sits (#277 review): the
             # arithmetic count is not bash's for `(( 1 ) )`, which is two subshells.
             "an undecodable delimiter in arithmetic position": "(( 1 <<$'E\\x4fF' ))\ngit push origin +HEAD:main",
@@ -2782,6 +2788,7 @@ class TheGitArgvGuard(unittest.TestCase):
             "a quoted real heredoc": "git commit -F - <<'EOF'\nfix: ls > .claude/settings.json\nEOF",
             "an escaped backslash leaves the heredoc real": "cat \\\\<<EOF\ngit push origin +HEAD:main\nEOF",
             "a comment is still a comment": "ls # git push origin +HEAD:main",
+            "a parameter length and a trimmed one are not ambiguous": "echo ${#PATH} ${HOME#a} ${x:-y}",
             "a (( inside a quoted argument is text": "git commit -m '(( x <<EOF'",
             "a (( inside a heredoc body is data": "git commit -F - <<'EOF'\n(( x <<EOF ))\nEOF",
             "a # after a closed ${} is a comment": "ls ${x:-y} # git push origin +HEAD:main",
