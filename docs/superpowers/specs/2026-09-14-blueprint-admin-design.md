@@ -1028,7 +1028,10 @@ The SPA never calls the platform directly; §3 says why.
 The console holds realm passwords and can wipe volumes, so it is a loopback
 tool and nothing else. The host binds `127.0.0.1` only, refuses to start on
 any other address, and sets no CORS headers, so a page on another origin
-cannot drive it. There is no login of its own. `down -v` requires the typed
+cannot drive it. Every response also forbids framing (`frame-ancestors 'none'`,
+`X-Frame-Options: DENY`), because a page that frames the console makes no
+cross-site request: the clicks inside the frame are the console's own. There is
+no login of its own. `down -v` requires the typed
 confirmation, as do a projection rebuild and a dead letter's real replay or
 discard. The one service change the console makes beyond Up, Down and the BFF
 rebuild is a Scenario's lease (§5.3): two named changes, journaled before they
