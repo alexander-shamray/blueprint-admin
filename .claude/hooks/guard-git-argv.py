@@ -4272,8 +4272,6 @@ WRAPPERS = frozenset({
     "strace", "ltrace", "unshare", "nsenter", "watch", "find", "parallel",
     "su", "firejail", "systemd-run", "chroot", "unbuffer",
 })
-# What `git` itself runs the next word for.
-GIT_RUNNING_WORDS = ("run", "foreach", "-x", "--exec", "--extcmd")
 
 
 def git_config_offence(segment):
@@ -4314,25 +4312,18 @@ def dashed_git_offence(tokens):
         # `git add git-hooks` and `npm i git-url-parse` are operands. A wrapper's
         # whole run is judged, since `timeout 5 git-push` and `sudo -u x git-push`
         # put the program after a word `launched()` does not read as a launcher.
-        # `git bisect run X` and `git submodule foreach X` run the word after.
+        # The subcommands of git that run a program, with a command string the
+        # scan cannot read (`bisect run`, `submodule foreach`, `rebase -x`), are
+        # refused by `git_subcommand_offence` instead.
         if lead in WRAPPERS:
             candidates = run
         else:
             candidates = [token for index, token in enumerate(run)
                           if launched(run, index)]
-            if lead == "git":
-                # Everything after the first running word, so `submodule foreach
-                # --recursive git-push` and `bisect run sudo git-push` are read.
-                running = [index for index, token in enumerate(run)
-                           if token in GIT_RUNNING_WORDS
-                           or token.startswith(("-x", "--exec=", "--extcmd="))]
-                if running:
-                    candidates += run[running[0]:]
         for token in candidates:
-            # A glued flag (`-xgit-push`, `--exec=git-push`) and a quoted command
-            # string (`'git-push origin HEAD:main'`) name the program in their
-            # first word.
-            word = re.sub(r"^(?:--exec=|--extcmd=|-x)", "", token).split(None, 1)
+            # A quoted command string (`'git-push origin HEAD:main'`) names the
+            # program in its first word.
+            word = token.split(None, 1)
             if (word and not ASSIGNMENT.match(token)
                     and DASHED_GIT.match(program_name(word[0]))):
                 return (
@@ -4407,6 +4398,19 @@ def git_subcommand_offence(segment):
             f"`git {subcommand}` runs the program its configuration or `-x` "
             "names, which a branch can supply; nothing here uses it. Use "
             "`git diff` and read the output."
+        )
+    arguments = after_global_options(segment)[1:]
+    if ((subcommand == "bisect" and "run" in arguments)
+            or (subcommand == "submodule" and "foreach" in arguments)
+            or (subcommand == "filter-branch")
+            or (subcommand == "rebase" and any(
+                argument.startswith(("-x", "--exec", "--extcmd"))
+                for argument in arguments))):
+        return (
+            f"`git {subcommand}` here runs a command string the command line "
+            "supplies (`bisect run`, `submodule foreach`, `filter-branch`, "
+            "`rebase -x`), which this guard cannot read as argv and nothing "
+            "here uses. Run the command itself."
         )
     if (plumbing := plumbing_verb(segment)) is not None:
         return (
