@@ -2820,6 +2820,20 @@ class TheGitArgvGuard(unittest.TestCase):
             "a startup file": "BASH_ENV=./x git log",
             "the Windows home": "USERPROFILE=./fake git status",
             "sudo with an option argument before env": "sudo -u root env GIT_PAGER=./x git log",
+            # #298: an allow-list in a run that names git or rg, and the structural
+            # spellings a denylist of names never reached.
+            "a variable nobody listed, before git": "X=1 git log --oneline -5",
+            "a variable nobody listed, before rg": "FOO=bar rg x .",
+            "an unlisted name through env": "env FOO=bar git log",
+            "a bare export of a refused name": "export GIT_PAGER; git log",
+            "a bare declare -x of a refused name": "declare -x GIT_PAGER; git log",
+            "read into a refused name": "read GIT_PAGER <<< ./x; git log",
+            "printf -v into a refused name": "printf -v GIT_PAGER ./x; git log",
+            "git apply, whose files are in the patch": "git apply fix.patch",
+            "git am, whose files are in the patch": "git am fix.mbox",
+            "uniq writes its second operand in a substitution": 'ls "$(uniq in.txt .claude/settings.json)"',
+            "env -u HOME before git": "env -u HOME git log",
+            "env --unset before rg": "env --unset=HOME rg x .",
             "a persisting PATH with no command": "export PATH=./fake; git log",
             "a bare PATH assignment": "PATH=./fake; git log",
             "BASH_ENV before any program": "BASH_ENV=./x npm run build",
@@ -2833,7 +2847,8 @@ class TheGitArgvGuard(unittest.TestCase):
 
         for label, command in {
             "a variable that only points": "GIT_WORK_TREE=/tmp/x git status",
-            "an ordinary assignment": "X=1 git log --oneline -5",
+            "an inert assignment": "LANG=C git log --oneline -5",
+            "an inert locale assignment": "LC_ALL=C TERM=dumb git log --oneline -5",
             "the name inside a commit message": "git commit -m 'GIT_PAGER=cat is refused'",
             "the name in an echoed word": "echo GIT_PAGER=cat",
             "a generic name for another program": "HOME=/tmp/h dotnet test",
@@ -5320,7 +5335,7 @@ class TheGitArgvGuard(unittest.TestCase):
 
         # The controls: an assignment prefix on honest traffic is ordinary, and
         # a printer with no shell behind it is still text.
-        self.assertAdmitted("X=1 git log --oneline -5")
+        self.assertAdmitted("LANG=C git log --oneline -5")
         self.assertAdmitted("GIT_WORK_TREE=/tmp/x git status")
         self.assertAdmitted("X=1 echo 'git push origin +HEAD:main'")
 
