@@ -4148,8 +4148,7 @@ def program_flag_offence(tokens):
             # The program name anywhere in a run that is not data-only is
             # judged, over-refusing `grep rg --pre`, which is the safe direction.
             if (flags is None or ASSIGNMENT.match(token)
-                    or program_name(leading_command(run)) in DATA_ONLY_COMMANDS
-                    or (index > 0 and SCRIPT_FLAG.match(run[index - 1]))):
+                    or program_name(leading_command(run)) in DATA_ONLY_COMMANDS):
                 continue
             for word in run[index + 1:]:
                 if word == "--":
@@ -4188,12 +4187,20 @@ def git_environment_offence(tokens):
         # The generic names (`PATH`, `HOME`, `PAGER`) are ordinary for any other
         # program, so they are judged only in a run that names git or rg. A
         # script that runs git underneath is the gap #298 tracks.
-        mentions = any(program_name(word) in ("git", "rg") for word in run)
+        # An assignment that persists (`export PATH=x`, `PATH=x;` with no
+        # command, `env`/`declare`) reaches a later run's git, so it is judged
+        # whatever else the run names; `BASH_ENV`, `ENV` and `SHELL` are acted
+        # on by the shell itself and are refused everywhere.
+        words = [word for word in run if not ASSIGNMENT.match(word)]
+        mentions = (any(program_name(word) in ("git", "rg") for word in words)
+                    or not words
+                    or any(program_name(word) in ASSIGNING_COMMANDS for word in words))
         for word in run:
             if ASSIGNMENT.match(word):
                 if ((assigning or sticky) and GIT_EXECUTING_ENVIRONMENT.match(word)
                         and (mentions
-                             or word.upper().startswith(("GIT_", "RIPGREP_")))):
+                             or word.upper().startswith(
+                                 ("GIT_", "RIPGREP_", "BASH_ENV=", "ENV=", "SHELL=")))):
                     return (
                         f"`{word.split('=', 1)[0]}` is an environment variable "
                         "git or rg EXECUTES — a command, a pager, an ssh, an "

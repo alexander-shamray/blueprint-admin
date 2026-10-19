@@ -2820,6 +2820,11 @@ class TheGitArgvGuard(unittest.TestCase):
             "a startup file": "BASH_ENV=./x git log",
             "the Windows home": "USERPROFILE=./fake git status",
             "sudo with an option argument before env": "sudo -u root env GIT_PAGER=./x git log",
+            "a persisting PATH with no command": "export PATH=./fake; git log",
+            "a bare PATH assignment": "PATH=./fake; git log",
+            "BASH_ENV before any program": "BASH_ENV=./x npm run build",
+            "rg --pre behind exec -c": "exec -c rg --pre ./tools/run x",
+            "sort -o behind exec -c": "exec -c sort -o out in",
             "sort writing through a short cluster": "sort -uo .claude/settings.json README.md",
             "sort's output flag after others": "sort -n -ro x README.md",
         }.items():
