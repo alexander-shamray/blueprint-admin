@@ -2767,6 +2767,8 @@ class TheGitArgvGuard(unittest.TestCase):
             "$[ ] is arithmetic too": "echo $[ 1 <<EOF ]\ngit push origin +HEAD:main\nEOF",
             # Measured under bash: the subscript is arithmetic and the next line runs.
             "an array subscript is arithmetic": "echo ok; a[1<<EOF]=1\ngit push origin +HEAD:main\nEOF",
+            "an escaped ] does not close the subscript": "a[1\\]<<EOF]=1\ngit push origin +HEAD:main\nEOF",
+            "a ] inside a substitution does not close it": "a[$(echo ])<<EOF]=1\ngit push origin +HEAD:main\nEOF",
             "a real comment after a substitution in ${} is not a heredoc opener":
                 "ls ${x:-$(echo a)} # <<'EOF'\ngit push origin +HEAD:main\nEOF",
             "a << inside ${} is text, not a heredoc": "echo ${x:-<<EOF}\ngit push origin +HEAD:main\nEOF",
