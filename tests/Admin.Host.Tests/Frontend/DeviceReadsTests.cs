@@ -1,6 +1,10 @@
 using Admin.Host.Compose;
+using Admin.Host.Config;
+using Admin.Host.Fakes;
 using Admin.Host.Frontend;
+using Admin.Host.Jobs;
 using Admin.Host.Stack;
+using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 
 namespace Admin.Host.Tests.Frontend;
@@ -137,6 +141,21 @@ public sealed class DeviceReadsTests
 
         check.State.ShouldBe(DoctorState.Problem);
         check.Detail.ShouldContain(Marker);
+    }
+
+    [Fact]
+    public async Task The_realm_read_stops_on_its_first_error_so_a_keycloak_that_is_down_exits_non_zero()
+    {
+        // Without it the script prints the marker after a failed request and exits 0, which reads as a client with no redirect.
+        FakeTimeProvider time = new();
+        await using FakeProcessRunner runner = new(new JobRegistry(time));
+
+        await new DeviceReads(runner, new RepoPaths("blueprint-backend", "blueprint-frontend", new AdminOptions().ComposeFile), time)
+            .ReadAsync(TestContext.Current.CancellationToken);
+
+        string script = runner.Started.Select(s => s.Arguments[^1]).Single(a => a.Contains(DeviceReads.RealmLines[0]));
+        script.ShouldBe(string.Join('\n', [DeviceReads.StopOnError, .. DeviceReads.RealmLines]));
+        script.ShouldStartWith("$ErrorActionPreference = 'Stop'");
     }
 
     [Fact]

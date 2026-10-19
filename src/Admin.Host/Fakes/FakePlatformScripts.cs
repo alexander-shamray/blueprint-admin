@@ -1,5 +1,6 @@
 using System.Reflection;
 using Admin.Host.Compose;
+using Admin.Host.Frontend;
 using Admin.Host.Stack;
 
 namespace Admin.Host.Fakes;
@@ -158,7 +159,7 @@ public static class FakePlatformScripts
             })
             .On("powershell", "-NoProfile -Command & ", 0, DeviceRecordings.AdbDevices)
             .On("powershell", "-NoProfile -Command curl.exe ", 0, DeviceRecordings.Preflight)
-            .On("powershell", "-NoProfile -Command $t = ", 0, DeviceRecordings.Realm)
+            .On("powershell", $"-NoProfile -Command {DeviceReads.StopOnError}\n$t = ", 0, DeviceRecordings.Realm)
             .On("npm", "run emulator:android", 0, DeviceRecordings.Build)
             .OnLongRunning("npm", "start", NgServeLines);
     }
