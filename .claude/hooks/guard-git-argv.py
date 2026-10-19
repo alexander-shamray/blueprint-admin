@@ -943,18 +943,19 @@ def ambiguous_arithmetic(command):
     """
     bodies = [(start, end) for start, end, _ in heredoc_spans(command)]
     paren = shift = False
-    # Unclosed unquoted `[`: an array subscript (`a[1<<EOF]=1`) is arithmetic as
-    # well, and bash reads its `<<` as a shift and runs the next line.
-    bracket = 0
+    # Any unquoted, unescaped `[` seen so far: an array subscript (`a[1<<EOF]=1`)
+    # is arithmetic as well, and bash reads its `<<` as a shift and runs the next
+    # line. Never matched against a `]`: an escaped one, one inside a `$(`, and one
+    # a later subscript closes all defeated a count, so any `[` before a `<<` is
+    # enough to refuse.
+    bracket = False
 
     for index, in_quotes, in_comment in shell_positions(command, bodies):
         if in_quotes or in_comment:
             continue
-        if command.startswith("[", index):
-            bracket += 1
-        elif command.startswith("]", index) and bracket:
-            bracket -= 1
-        elif bracket and command.startswith("<<", index):
+        if command.startswith("[", index) and not _escaped(command, index):
+            bracket = True
+        elif bracket and command.startswith("<<", index) and not _escaped(command, index):
             return True
         if command.startswith("$[", index):
             # The legacy arithmetic expansion, where `<<` is a shift as well.
