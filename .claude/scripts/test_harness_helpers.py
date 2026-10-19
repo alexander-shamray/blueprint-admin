@@ -2801,12 +2801,23 @@ class TheGitArgvGuard(unittest.TestCase):
             "through env": "env GIT_EXTERNAL_DIFF=./x git diff",
             "through export": "export GIT_SSH_COMMAND=./x; git fetch origin",
             "stacked with an ordinary one": "X=1 GIT_ASKPASS=./x git fetch origin",
+            # Security-hook findings on the first revision.
+            "env behind sudo": "sudo env GIT_PAGER=./x git log",
+            "env behind xargs": "ls | xargs env GIT_PAGER=./x git log",
+            "env after other words": "ls; env -i GIT_EXTERNAL_DIFF=./x git diff",
+            "lower case, as Windows reads the environment": "git_pager=./x git log",
+            "the generic pager": "PAGER=./x git log",
+            "a configuration directory": "HOME=./fake git status",
+            "a repository directory whose config executes": "GIT_DIR=./fake git status",
+            "ripgrep's configuration file, which may carry --pre": "RIPGREP_CONFIG_PATH=./rc rg x .",
+            "sort writing through a short cluster": "sort -uo .claude/settings.json README.md",
+            "sort's output flag after others": "sort -n -ro x README.md",
         }.items():
             with self.subTest(label):
                 self.assertRefused(command)
 
         for label, command in {
-            "a variable that only points": "GIT_DIR=/tmp/x git status",
+            "a variable that only points": "GIT_WORK_TREE=/tmp/x git status",
             "an ordinary assignment": "X=1 git log --oneline -5",
             "the name inside a commit message": "git commit -m 'GIT_PAGER=cat is refused'",
             "the name in an echoed word": "echo GIT_PAGER=cat",
@@ -5208,7 +5219,7 @@ class TheGitArgvGuard(unittest.TestCase):
         # The controls: an assignment prefix on honest traffic is ordinary, and
         # a printer with no shell behind it is still text.
         self.assertAdmitted("X=1 git log --oneline -5")
-        self.assertAdmitted("GIT_DIR=/tmp/x git status")
+        self.assertAdmitted("GIT_WORK_TREE=/tmp/x git status")
         self.assertAdmitted("X=1 echo 'git push origin +HEAD:main'")
 
     def test_a_nested_default_is_unwrapped_one_layer_at_a_time(self):
@@ -5757,7 +5768,7 @@ class TheGitArgvGuard(unittest.TestCase):
         # GIT_PAGER runs a program, so it moved to the refused list (#281); the
         # variables that only point stay admitted.
         self.assertRefused("GIT_PAGER=cat git log --oneline -5")
-        self.assertAdmitted("GIT_DIR=/tmp/x git log --oneline -5")
+        self.assertAdmitted("GIT_WORK_TREE=/tmp/x git log --oneline -5")
 
     def test_a_locale_quote_is_refused_for_its_own_reason(self):
         # One sentence covered two decisions and said the wrong thing about
