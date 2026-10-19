@@ -2744,6 +2744,56 @@ class TheGitArgvGuard(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertRefused(command)
 
+    def test_a_destination_git_resolves_to_main_is_refused_in_every_prefix_it_takes(self):
+        # #275: `heads/main` matches the remote's `refs/heads/main` by the
+        # rev-parse rule `refs/<name>`, so the strip must take both prefixes.
+        # The allow rule `Bash(git push origin:*)` approved these unprompted.
+        for command in (
+            "git push origin heads/main",
+            "git push origin HEAD:heads/main",
+            "git push origin feature:heads/main",
+            "git push origin feature:refs/heads/main",
+            "git push -u origin feature:heads/main",
+            "git -C /tmp/x push origin topic:heads/main",
+        ):
+            with self.subTest(command=command):
+                self.assertRefused(command)
+
+    def test_a_branch_whose_name_only_contains_main_is_still_admitted(self):
+        # The control for the strip above: only the protected name itself is the
+        # decision; `heads/` and `refs/` come off but a longer path stays a branch.
+        for command in (
+            "git push origin HEAD:heads/fix/main-thing",
+            "git push origin HEAD:refs/heads/fix/main",
+            "git push origin HEAD:maintenance",
+            "git push origin heads/fix/x",
+        ):
+            with self.subTest(command=command):
+                self.assertAdmitted(command)
+
+    def test_the_plumbing_that_updates_a_remote_ref_without_push_is_refused(self):
+        # #284: the protected-branch, force and delete checks key off the verb
+        # `push`, so `send-pack` and `http-push` reached the remote's ref
+        # unjudged (behind only a permission prompt, which unattended modes lack).
+        for command in (
+            "git send-pack origin HEAD:main",
+            "git send-pack --force origin HEAD:refs/heads/main",
+            "git http-push origin HEAD:main",
+            "git -C /tmp/x send-pack origin HEAD:main",
+            "git --no-pager send-pack origin HEAD:heads/main",
+        ):
+            with self.subTest(command=command):
+                self.assertRefused(command)
+
+    def test_a_ref_named_send_pack_is_data_for_another_verb(self):
+        for command in (
+            "git log send-pack",
+            "git show http-push",
+            "git diff send-pack..HEAD",
+        ):
+            with self.subTest(command=command):
+                self.assertAdmitted(command)
+
     def test_the_pushes_ship_actually_makes_are_admitted(self):
         # The control that matters operationally: over-reach here breaks the
         # delivery chain, and would be found at the worst moment.
