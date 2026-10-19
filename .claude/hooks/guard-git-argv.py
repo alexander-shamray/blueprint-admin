@@ -4230,9 +4230,13 @@ def env_removes_variables(words):
     accepts (`--ign`, `--uns`). `-C` and `-a` take the next word as their value,
     a bare `-` is `-i`, and `--` ends the options.
     """
-    # Every `env` in the run, since `env env -u HOME git` has two.
+    # The first git or rg word: an `env` after it is an argument (`rg env -i src`,
+    # `git log --grep env -S foo`), not an invocation.
+    first_program = next((index for index, word in enumerate(words)
+                          if program_name(word) in ("git", "rg")), len(words))
+    # Every `env` before it, since `env env -u HOME git` has two.
     for start, env_word in enumerate(words):
-        if program_name(env_word) != "env":
+        if program_name(env_word) != "env" or start > first_program:
             continue
         skip = False
         for word in words[start + 1:]:
