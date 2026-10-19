@@ -2769,6 +2769,10 @@ class TheGitArgvGuard(unittest.TestCase):
             "an array subscript is arithmetic": "echo ok; a[1<<EOF]=1\ngit push origin +HEAD:main\nEOF",
             "a ${ in a heredoc inside a double-quoted substitution leaves the string open":
                 "git commit -m \"$(cat <<'EOF'\nuse ${ here\nEOF\n)\"; git push origin +HEAD:main",
+            "a ${ after a substitution in a double-quoted string, though a later } closes it":
+                "git commit -m \"$(cat <<'EOF'\nuse ${ here\nEOF\n)${x}\"; git push origin +HEAD:main",
+            "a compound-assignment element is a subscript": "a=([1<<EOF]=1)\ngit push origin +HEAD:main\nEOF",
+            "a spaced compound-assignment element is a subscript": "a=( [1<<EOF]=1 )\ngit push origin +HEAD:main\nEOF",
             "an escaped ] does not close the subscript": "a[1\\]<<EOF]=1\ngit push origin +HEAD:main\nEOF",
             "a ] inside a substitution does not close it": "a[$(echo ])<<EOF]=1\ngit push origin +HEAD:main\nEOF",
             "a real comment after a substitution in ${} is not a heredoc opener":

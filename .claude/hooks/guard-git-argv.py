@@ -627,6 +627,10 @@ def _quoting(command, quotes=True, data=(), ambiguous=None):
     # closes nothing and a `${` inside it opens a frame of its own: a single flag
     # lost its place at `"${x:-"${y:-a}"}"` and left the rest of the line quoted.
     string_braces = []
+    # Whether a command substitution or backtick has opened inside the double-
+    # quoted string now open. Its body (a heredoc with a stray `${` in it) is not
+    # followed, so any `${` after it in the same string cannot be framed.
+    string_command = False
     # **Whether a `#` begins a WORD, tracked rather than inferred from the
     # previous character.** The old test read `command[index - 1] in " \t…"`,
     # which cannot tell a separating space from an escaped one: in
@@ -692,14 +696,17 @@ def _quoting(command, quotes=True, data=(), ambiguous=None):
                 # second `$` with the `{` as an expansion and refuses the whole
                 # line (measured), so a frame opens here for every `${`.
                 if char == "$" and command.startswith("{", index + 1):
+                    if string_command and ambiguous is not None:
+                        ambiguous.append(index)
                     yield index, "double", False
                     yield index + 1, "double", False
                     index += 2
                     string_braces.append(False)
                     continue
-                if string_braces and (
-                        char == "`" or (char == "$" and command.startswith("(", index + 1))):
-                    lost = True
+                if char == "`" or (char == "$" and command.startswith("(", index + 1)):
+                    string_command = True
+                    if string_braces:
+                        lost = True
                 if string_braces:
                     if char == '"':
                         string_braces[-1] = not string_braces[-1]
@@ -707,6 +714,7 @@ def _quoting(command, quotes=True, data=(), ambiguous=None):
                         string_braces.pop()
                 elif char == '"':
                     double = False
+                    string_command = False
             elif char == "\\" and index + 1 < len(command):
                 # An unquoted backslash escapes the next character, so that
                 # character is ordinary text — a space included, and an escaped
@@ -962,9 +970,13 @@ def ambiguous_arithmetic(command):
         if in_quotes or in_comment:
             continue
         if (command.startswith("[", index) and index > 0
-                and (command[index - 1].isalnum() or command[index - 1] in "_]")
-                and not _escaped(command, index)):
-            # `name[`, the shape of a subscript; `[ -f x ]` and `*.[ch]` are not.
+                and not _escaped(command, index)
+                and (command[index - 1].isalnum() or command[index - 1] in "_]"
+                     or (command[index - 1] in " \t\n;&|("
+                         and command[index + 1:index + 2] not in ("", " ", "\t", "\n", "[")))):
+            # `name[`, or `a=( [1<<EOF]=1 )` whose element opens at a word start
+            # with something other than a space: the shapes of a subscript.
+            # `[ -f x ]`, `[[ ... ]]` and `*.[ch]` are not.
             bracket = True
         elif bracket and command.startswith("<<", index) and not _escaped(command, index):
             return True
