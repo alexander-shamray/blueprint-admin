@@ -150,11 +150,14 @@ require_remote_carries_nothing_new() {
 # `refs/heads/<branch>` on both sides leaves it nothing to decide. The URL is the other
 # half: `remote.origin.pushurl`, `url.*.pushInsteadOf` and a second `url` value would point
 # the push at another repository, so a run refuses (exit 7) unless the one URL git will
-# push to names the same host and `owner/repo` the remote was added with. The lease backs that up
+# push to names the same host and path the remote was added with. The lease backs that up
 # and does not replace it: any repository whose branch is not at `$lease` refuses the force.
-# `host|owner/repo` of a remote URL, or non-zero when it has no such shape. The host is empty
-# for a local path (the test fixtures') and lower-cased otherwise; a URL's scheme, user, port
-# and trailing `.git` do not count, so https and ssh forms of one repository agree.
+#
+# `host|path` of a remote URL, or non-zero when it has no such shape. The WHOLE path counts
+# (not its last components, which let `https://h/evil/o/r` or `https://h/x/../o/r` collide
+# with `https://h/o/r`). The host is empty for a local path (the test fixtures') and
+# lower-cased otherwise; a URL's scheme, user, port, leading slash and trailing `.git` do not
+# count, so https and ssh forms of one repository on one host agree.
 repo_key() {
   local url=$1 host path
   # A query or a fragment is not part of the path a server routes on, so the last two
@@ -177,8 +180,16 @@ repo_key() {
     host=
     path=$url
   fi
-  [[ $path =~ ([^/:]+/[^/:]+)$ ]] || return 1
-  printf '%s|%s' "$(printf '%s' "$host" | tr 'A-Z' 'a-z')" "${BASH_REMATCH[1]}"
+  if [ -n "$host" ]; then
+    path=${path#/}
+    # A hosted path names an owner and a repository at least.
+    [[ $path == */* ]] || return 1
+  fi
+  # A dot segment or an empty one is a different path to the server than it reads as here.
+  case "/${path#/}/" in
+    */./* | */../* | *//*) return 1 ;;
+  esac
+  printf '%s|%s' "$(printf '%s' "$host" | tr 'A-Z' 'a-z')" "$path"
 }
 
 publish() {

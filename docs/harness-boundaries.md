@@ -444,9 +444,9 @@ A new residual is stated **here** and gets a row above.
   force push names both sides of its refspec (`<branch>:refs/heads/<branch>`), so
   `remote.origin.push` has no ref left to decide. It refuses (exit 7) when `origin`
   has more than one push URL, or when the URL git will push to, after `pushurl`,
-  `pushInsteadOf` and `insteadOf`, names a different host or `owner/repo` than the URL
-  the remote was added with (`repo_key`, lower-cased host and the last two path
-  components); a protocol rewrite on the same host (https to ssh) passes. A mirror on
+  `pushInsteadOf` and `insteadOf`, names a different host or path than the URL
+  the remote was added with (`repo_key`: lower-cased host and the whole path, so a
+  deeper `evil/o/r` is another key; a dot or empty path segment has none); a protocol rewrite on the same host (https to ssh) passes. A mirror on
   another host is refused, as is a one-component path, a URL carrying a query or
   fragment, and anything with a scheme or an scp-style colon that fits neither form
   (`ext::`, `file://`, `ssh://h:o/r`, an IPv6 host); only a plain or drive path may be

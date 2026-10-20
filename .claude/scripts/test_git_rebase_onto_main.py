@@ -905,6 +905,8 @@ class TheHelperPublishesWhatItRebased(unittest.TestCase):
             "ext::sh -c evil", "C:/x/o/r.git", "/tmp/x/o/r.git",
             "https://github.com/x/y#/o/r", "https://github.com/x/y?/o/r", "ssh://github.com:o/r",
             "git@github.com:/o/r", "https://[::1]/o/r", "file:///o/r", "ext::sh -c evil/o/r",
+            "https://github.com/evil/o/r", "https://github.com/x/../o/r", "https://github.com/o//r",
+            "/evil/o/r",
         ]
         got = {u: run_bash(script, H=str(HELPER), U=u).stdout.strip() for u in urls}
         for same in urls[:4]:
@@ -912,10 +914,15 @@ class TheHelperPublishesWhatItRebased(unittest.TestCase):
         self.assertEqual("evil.example|o/r", got["https://evil.example/o/r"])
         for refused in ("https://github.com/r", "ext::sh -c evil", "https://github.com/x/y#/o/r",
                         "https://github.com/x/y?/o/r", "ssh://github.com:o/r", "git@github.com:/o/r",
-                        "https://[::1]/o/r", "file:///o/r", "ext::sh -c evil/o/r"):
+                        "https://[::1]/o/r", "file:///o/r", "ext::sh -c evil/o/r",
+                        "https://github.com/x/../o/r", "https://github.com/o//r"):
             self.assertEqual("(none)", got[refused], refused)
-        self.assertEqual("|o/r", got["C:/x/o/r.git"])
-        self.assertEqual("|o/r", got["/tmp/x/o/r.git"])
+        # The whole path counts: a deeper path with the same last two components is another key.
+        self.assertEqual("github.com|evil/o/r", got["https://github.com/evil/o/r"])
+        self.assertNotEqual(got["https://github.com/evil/o/r"], got["https://github.com/o/r.git"])
+        self.assertEqual("|C:/x/o/r", got["C:/x/o/r.git"])
+        self.assertEqual("|/tmp/x/o/r", got["/tmp/x/o/r.git"])
+        self.assertNotEqual(got["/evil/o/r"], got["/tmp/x/o/r.git"])
 
     def test_a_remote_with_two_urls_is_refused_before_anything_is_forced(self):
         # A remote with several `url` values pushes to each: the force would reach a second
