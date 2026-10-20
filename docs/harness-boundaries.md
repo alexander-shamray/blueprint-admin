@@ -48,7 +48,8 @@ A new residual is stated **here** and gets a row above.
   (#310). That is the job (a change to code is a change to its tests), so the
   residual is stated and not closed: the unattended chain's only input is the branch
   it works on, the review reads the diff before the merge, and `main`'s ruleset
-  requires CI. **`/pr` is not narrowed to its two files, and the reason is
+  (`protect-main`, id 23805274, read with `gh api repos/.../rules/branches/main`,
+  which lists `required_status_checks`) requires CI. **`/pr` is not narrowed to its two files, and the reason is
   structural**: a frontmatter deny holds for the rest of the user turn, and `/ship`
   runs `/pr` at step 4 and then applies review fixes to `src/**` and `tests/**` at
   step 5, so `Edit(src/**)` in `/pr` would refuse the chain's own fixes. `tools/**`
