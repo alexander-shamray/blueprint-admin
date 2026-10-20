@@ -58,6 +58,18 @@ public sealed class PlatformMapServiceTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task A_table_queue_the_broker_lacks_stays_on_the_map_beside_the_parked_twin_the_broker_lists()
+    {
+        runner.On("docker", Exec + "list_queues", 0, "[", """{"name":"ordering-catalog-events_error","messages":1}""", "]");
+        runner.On("docker", Exec + "list_bindings", 0, "[", "]");
+
+        PlatformMapView view = await Map().ReadAsync(TestContext.Current.CancellationToken);
+
+        MapQueue[] queues = [.. view.Services.Single(s => s.Name == "ordering").Queues.Where(q => q.Name.StartsWith("ordering-catalog-events", StringComparison.Ordinal))];
+        queues.Select(q => (q.Name, q.Messages)).ShouldBe([("ordering-catalog-events", (long?)null), ("ordering-catalog-events_error", 1L)]);
+    }
+
+    [Fact]
     public async Task A_broker_that_does_not_answer_is_a_state_and_keeps_every_service_on_the_map()
     {
         runner.On("docker", Exec + "list_queues", 1, "Error: unreachable");

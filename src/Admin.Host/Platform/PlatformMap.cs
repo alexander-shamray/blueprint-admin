@@ -79,18 +79,27 @@ public sealed class PlatformMapService(BrokerService broker, IOptions<AdminOptio
         return new PlatformMapView(queues.Reachable && bindings.Reachable, error, services, disagreements);
     }
 
-    private static IEnumerable<MapQueue> Twins(PlatformQueue row, QueuesView queues, BindingsView bindings) =>
-        queues.Queues
-            .Where(b => ParkedQueues.EndpointOf(b.Name) == row.Name)
-            .Select(b => new MapQueue(
-                b.Name,
-                row.Consumer,
-                b.Messages,
-                b.Parked,
-                [.. bindings.Bindings
-                    .Where(x => x.Destination == b.Name && x.DestinationKind == "queue" && x.Source.Length > 0)
-                    .Select(x => new MapBinding(x.Source, x.RoutingKey))]))
-            .DefaultIfEmpty(new MapQueue(row.Name, row.Consumer, null, null, []));
+    /// <summary>The table's queue, listed whether or not the broker has it, then whichever parked twins the broker lists.</summary>
+    private static IEnumerable<MapQueue> Twins(PlatformQueue row, QueuesView queues, BindingsView bindings)
+    {
+        MapQueue Describe(string name, long? messages, string? parked) => new(
+            name,
+            row.Consumer,
+            messages,
+            parked,
+            [.. bindings.Bindings
+                .Where(x => x.Destination == name && x.DestinationKind == "queue" && x.Source.Length > 0)
+                .Select(x => new MapBinding(x.Source, x.RoutingKey))]);
+
+        BrokerQueue? own = queues.Queues.FirstOrDefault(b => b.Name == row.Name);
+
+        yield return Describe(row.Name, own?.Messages, null);
+
+        foreach (BrokerQueue twin in queues.Queues.Where(b => b.Name != row.Name && ParkedQueues.EndpointOf(b.Name) == row.Name))
+        {
+            yield return Describe(twin.Name, twin.Messages, twin.Parked);
+        }
+    }
 }
 
 public static class PlatformMapEndpoints
