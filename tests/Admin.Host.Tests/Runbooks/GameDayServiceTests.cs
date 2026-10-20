@@ -129,6 +129,35 @@ public sealed class GameDayServiceTests : IAsyncDisposable
         runner.Started[^1].Arguments.ShouldBe(["-3.12", "tools/game-day/game_day.py", "latency", "--restore"]);
     }
 
+    [Fact]
+    public async Task A_cause_for_another_phase_is_not_answered_with_the_phase_still_going()
+    {
+        runner.OnLongRunning("py", Prefix + "error-rate --cause");
+        runner.OnLongRunning("py", Prefix + "error-rate --cause --phase ErrorRateService");
+        ComposeGate gate = new();
+        GameDayService service = Service(gate: gate);
+
+        Claim first = service.Start("error-rate", GameDayMode.Cause, null, "ErrorRateGateway");
+        Claim again = service.Start("error-rate", GameDayMode.Cause, "ErrorRateGateway");
+        Claim other = service.Start("error-rate", GameDayMode.Cause, "ErrorRateService");
+
+        first.Kind.ShouldBe("game day cause error-rate (ErrorRateGateway)");
+        again.ShouldBe(first);
+        other.ShouldBe(first);
+        other.Kind.ShouldNotBe(GameDayService.Kind("error-rate", GameDayMode.Cause, "ErrorRateService"));
+        await runner.StopAsync(first.Job, Token);
+    }
+
+    [Fact]
+    public void A_catalogue_row_with_no_runbook_name_is_dropped_not_thrown_on()
+    {
+        RunbookCatalogue catalogue = GameDayService.Parse(
+            ["""[{"alerts":["X"],"script":true},{"runbook":"latency","alerts":[],"script":false,"reason":"none"}]"""]);
+
+        catalogue.Error.ShouldBeNull();
+        catalogue.Runbooks.Select(r => r.Runbook).ShouldBe(["latency"]);
+    }
+
     [Theory]
     [InlineData("../latency")]
     [InlineData("--x")]

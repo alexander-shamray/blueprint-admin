@@ -36,7 +36,8 @@ public sealed partial class GameDayService(
     public static bool IsRunbookName(string name) => RunbookName().IsMatch(name);
 
     /// <summary>How a run is named in a refusal, and the kind <see cref="Claim.Answer"/> is asked for.</summary>
-    public static string Kind(string runbook, GameDayMode mode) => $"game day {mode.ToString().ToLowerInvariant()} {runbook}";
+    public static string Kind(string runbook, GameDayMode mode, string? phase = null) =>
+        $"game day {mode.ToString().ToLowerInvariant()} {runbook}" + (phase is null ? string.Empty : $" ({phase})");
 
     /// <summary>
     /// What the request must carry to run a phase, from the tool's <c>confirmation</c>: nothing for <c>none</c>, <see cref="CauseConfirm"/>
@@ -79,10 +80,12 @@ public sealed partial class GameDayService(
 
     /// <summary>
     /// Starts one half as one listed job, unless a stack-changing job is still going (that one is returned, and the caller refuses).
-    /// <paramref name="phase"/> is the alert of a runbook's second rule and belongs to a cause alone.
+    /// <paramref name="phase"/> is the alert of a runbook's second rule and belongs to a cause alone. <paramref name="kindPhase"/> is the
+    /// phase the cause will run when <paramref name="phase"/> is null (the tool's first), so a cause for another phase is not
+    /// answered with the running one.
     /// </summary>
-    public Claim Start(string runbook, GameDayMode mode, string? phase) =>
-        gate.Claim(Kind(runbook, mode), () => runner.Start(Spec(Arguments(runbook, mode, phase), paths)));
+    public Claim Start(string runbook, GameDayMode mode, string? phase, string? kindPhase = null) =>
+        gate.Claim(Kind(runbook, mode, kindPhase ?? phase), () => runner.Start(Spec(Arguments(runbook, mode, phase), paths)));
 
     /// <summary>The tool's arguments for one half, as run-locally.md's "Game day" spells them; a phase is a cause's alone.</summary>
     public static string[] Arguments(string runbook, GameDayMode mode, string? phase) =>
@@ -100,8 +103,8 @@ public sealed partial class GameDayService(
             Row[] rows = JsonSerializer.Deserialize<Row[]>(string.Join('\n', stdout), ToolJson) ?? [];
 
             return new RunbookCatalogue(
-                [.. rows.Select(r => new RunbookEntry(
-                    r.Runbook,
+                [.. rows.Where(r => r.Runbook is not null && IsRunbookName(r.Runbook)).Select(r => new RunbookEntry(
+                    r.Runbook!,
                     r.Alerts ?? [],
                     r.Script,
                     r.Reason,
@@ -109,10 +112,10 @@ public sealed partial class GameDayService(
                         p.Alert,
                         p.Impact,
                         p.Confirmation,
-                        ConfirmationFor(p.Confirmation, r.Runbook),
+                        ConfirmationFor(p.Confirmation, r.Runbook!),
                         p.Sustained,
                         p.FiresWithinSeconds,
-                        p.ClearsWithinSeconds))])).Where(e => IsRunbookName(e.Runbook))],
+                        p.ClearsWithinSeconds))]))],
                 null);
         }
         catch (JsonException ex)
@@ -126,7 +129,7 @@ public sealed partial class GameDayService(
     [GeneratedRegex(@"^[a-z][a-z0-9-]*\z")]
     private static partial Regex RunbookName();
 
-    private sealed record Row(string Runbook, string[]? Alerts, bool Script, string? Reason, PhaseRow[]? Phases);
+    private sealed record Row(string? Runbook, string[]? Alerts, bool Script, string? Reason, PhaseRow[]? Phases);
 
     private sealed record PhaseRow(string Alert, string Impact, string Confirmation, bool Sustained, int FiresWithinSeconds, int ClearsWithinSeconds);
 }

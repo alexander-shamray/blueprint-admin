@@ -45,7 +45,8 @@ public static class RunbookEndpoints
                 return Refused("Confirmation required", $"Causing {phase.Alert} costs the stack ({phase.Impact}). Send confirm: \"{expected}\".");
             }
 
-            return gameDay.Start(entry.Runbook, GameDayMode.Cause, request.Phase).Answer(GameDayService.Kind(entry.Runbook, GameDayMode.Cause));
+            return gameDay.Start(entry.Runbook, GameDayMode.Cause, request.Phase, phase.Alert)
+                .Answer(GameDayService.Kind(entry.Runbook, GameDayMode.Cause, phase.Alert));
         });
 
         // The undo deletes nothing the cause did not make and is safe twice, so it takes no confirmation.
