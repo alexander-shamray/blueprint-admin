@@ -2920,6 +2920,11 @@ class TheGitArgvGuard(unittest.TestCase):
             "git filter-branch with a filter": "git filter-branch --tree-filter 'rm -f x' HEAD",
             "git config edit, a verb with one word": "git config edit",
             "git config unset, a verb": "git config unset",
+            # #297: a lead missing from any list is judged by what follows it.
+            "a launcher nobody listed": "busybox git-push origin HEAD:main",
+            "an unlisted lead and its options": "chrt2 -x 1 git-push origin HEAD:main",
+            "find with an exec action": "find . -execdir git-push origin HEAD:main ;",
+            "command run, not looked up": "command git-push origin HEAD:main",
         }.items():
             with self.subTest(label):
                 self.assertRefused(command)
@@ -2936,6 +2941,8 @@ class TheGitArgvGuard(unittest.TestCase):
             "a path named git-something added": "git add git-hooks",
             "a package named git-something": "npm i git-url-parse",
             "a directory entered": "cd git-hooks",
+            "a command looked up": "command -v git-lfs",
+            "find by name": "find . -name git-hooks",
             "a rebase that runs nothing": "git rebase origin/main",
             "a submodule update": "git submodule update --init",
             "a bisect that is only marked": "git bisect good",
