@@ -22,7 +22,7 @@
 # the three feed helpers exist to close.
 #
 # `body` and `commits` cross here and that is intentional — both are the
-# repository's own text, and the consumer is a parser rather than a model.
+# repository's own text, and the consumer is the `/pr` model, which reads the closing keywords out of it.
 set -euo pipefail
 pr="${1:?usage: pr-closure-input.sh <pr-number>}"
 [[ "$pr" =~ ^[0-9]+$ ]] || { echo "pr must be a number" >&2; exit 2; }

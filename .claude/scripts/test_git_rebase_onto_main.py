@@ -232,8 +232,9 @@ class TheFlagsAreTheScriptsOwn(unittest.TestCase):
     def test_there_is_exactly_one_push_and_it_carries_an_expected_value(self):
         pushes = [c for c in git_commands(self.source) if c.startswith("git push")]
         self.assertEqual(
-            pushes, ['git push --force-with-lease="$branch:$lease" origin "$branch"'],
-            "one push, leased against the commit this run read, naming its remote and its refspec")
+            pushes,
+            ['git push --force-with-lease="refs/heads/$branch:$lease" origin "$branch:refs/heads/$branch"'],
+            "one push, leased against the commit this run read, naming its remote and both sides of its refspec")
 
     def test_no_spelling_of_the_unleased_force_appears(self):
         # The commands only. Scanning the whole file catches `[ -f "$state/… ]`
