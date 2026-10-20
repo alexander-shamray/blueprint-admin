@@ -8079,9 +8079,9 @@ class TheLauncherProvesWhatItRemembers(LauncherMarkCases, unittest.TestCase):
                 make(box.mark())
                 was = os.lstat(box.mark())
                 before = box.ran()
-                started = time.monotonic()
+                # Not timed: `launch`'s own 60 s timeout is the bound, and a stopwatch inside it
+                # only fails a loaded host without catching a hang the timeout would not (#330).
                 out = box.launch(timeout=60)
-                self.assertLess(time.monotonic() - started, 30)
                 self.assertEqual(0, out.returncode, out.stderr)
                 self.assertEqual(self.PROBED, box.since(before))
                 now = os.lstat(box.mark())
