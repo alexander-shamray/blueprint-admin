@@ -276,17 +276,21 @@ the same fault.
 **What this says, and what it does not:**
 
 - **Round 1 finds about a fifth of what the full sweep filed.** The sweeps ran
-  up to seven rounds. Later rounds follow leads, and each candidate gets a
-  second auditor to verify it. So this is a lower bound on a sweep's recall
-  and not its value. A step that changes the auditors' prompt can hold this
+  up to seven rounds, and every round after the first sends an auditor after
+  the leads earlier candidates opened. That, not verification, is where the
+  rest came from. The verify step judges only candidates an auditor has
+  already raised, and can only drop them. So this is a lower bound on a
+  sweep's recall and not its value. A step that changes the auditors' prompt can hold this
   table as its baseline: the same eight slices and round 1, with no fewer
   rows found.
 - **The bug auditors miss the cannot-fail class.** All four bug rows they
   missed are tests that pass without the guard they are named for. In three
   cases the auditor named the very test file as clean. In the fourth it
   traced the test and concluded the opposite of the confirmed defect. Reading
-  a test does not show that it can fail. The sweep found these by
-  confirmation, where a candidate is read against the guard removed.
+  a test does not show that it can fail. The sweep's own round summaries were
+  not kept, so which round raised each of these is not known. The round 1
+  measured here is a separate run, so it cannot say whether the sweep's own
+  round 1 raised them or a later round did.
 - **One run per slice, no spread.** The 2026-10-15 reruns above showed the same
   reviewer finding one row and then two, so a single run is a sample, not a
   rate.
