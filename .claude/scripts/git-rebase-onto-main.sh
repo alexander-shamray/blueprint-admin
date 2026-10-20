@@ -150,8 +150,29 @@ require_remote_carries_nothing_new() {
 # `refs/heads/<branch>` on both sides leaves it nothing to decide. The URL is the other
 # half: `remote.origin.pushurl`, `url.*.pushInsteadOf` and a second `url` value would point
 # the push at another repository, so a run refuses (exit 7) unless the one URL git will
-# push to names the same `owner/repo` the remote was added with. The lease backs that up
+# push to names the same host and `owner/repo` the remote was added with. The lease backs that up
 # and does not replace it: any repository whose branch is not at `$lease` refuses the force.
+# `host|owner/repo` of a remote URL, or non-zero when it has no such shape. The host is empty
+# for a local path (the test fixtures') and lower-cased otherwise; a URL's scheme, user, port
+# and trailing `.git` do not count, so https and ssh forms of one repository agree.
+repo_key() {
+  local url=$1 host path
+  url=${url%/}
+  url=${url%.git}
+  if [[ $url =~ ^[A-Za-z][A-Za-z0-9+.-]*://([^@/]*@)?([^:/]+)(:[0-9]+)?/(.*)$ ]]; then
+    host=${BASH_REMATCH[2]}
+    path=${BASH_REMATCH[4]}
+  elif [[ $url =~ ^([^@/:]+@)?([A-Za-z0-9.-]{2,}):([^/:].*)$ ]]; then
+    host=${BASH_REMATCH[2]}
+    path=${BASH_REMATCH[3]}
+  else
+    host=
+    path=$url
+  fi
+  [[ $path =~ ([^/:]+/[^/:]+)$ ]] || return 1
+  printf '%s|%s' "$(printf '%s' "$host" | tr 'A-Z' 'a-z')" "${BASH_REMATCH[1]}"
+}
+
 publish() {
   local current head lease pushes configured resolved
   current=$(git branch --show-current)
@@ -165,14 +186,13 @@ publish() {
   [ "$pushes" -eq 1 ] ||
     { echo "origin has $pushes push URLs; a force goes to every one of them, so nothing is published" >&2; exit 7; }
   # The URL git will push to, after `pushurl`, `pushInsteadOf` and `insteadOf`, must name the
-  # same `owner/repo` as the URL the remote was added with. A host or protocol rewrite (https
-  # to ssh, a mirror) names the same repository and passes; a redirect to another repository
-  # does not, and nothing is published.
-  repo_of() { printf '%s' "$1" | sed -e 's#/*$##' -e 's#\.git$##' -e 's#^.*[:/]\([^:/][^:/]*/[^:/][^:/]*\)$#\1#'; }
-  configured=$(repo_of "$(git config --get remote.origin.url)")
-  resolved=$(repo_of "$(git remote get-url --push origin)")
+  # same host and `owner/repo` as the URL the remote was added with. A protocol rewrite on the
+  # same host (https to ssh) passes; another host, another repository, a one-component path or
+  # a transport with no host (`ext::`, `fd::`) does not, and nothing is published.
+  configured=$(repo_key "$(git config --get remote.origin.url)") || configured=
+  resolved=$(repo_key "$(git remote get-url --push origin)") || resolved=
   [ -n "$configured" ] && [ "$configured" = "$resolved" ] ||
-    { echo "origin pushes to $resolved but was added as $configured; a redirected force is not published" >&2; exit 7; }
+    { echo "origin pushes to '$resolved' but was added as '$configured'; a redirected force is not published" >&2; exit 7; }
   head=$(git rev-parse HEAD)
   if [ "$head" = "$lease" ]; then
     rm -f "$pending"
