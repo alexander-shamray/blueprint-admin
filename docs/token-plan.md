@@ -39,8 +39,9 @@ one at a time.
 - `token-usage.md` records an all-history total, a window and one named
   `/ship` run. **Landed**, with the gap in the window noted there.
 - The quality sets are recorded in [`token-quality-sets.md`](token-quality-sets.md):
-  a review set of deferred findings, and an empty sweep set, since no sweep
-  has filed here. **Landed.** Steps 4–6 hold recall against them.
+  a review set of deferred findings, and a sweep set, empty on 2026-10-15 and
+  filled by the 2026-10-18 sweeps (that file's 2026-10-20 section). **Landed.**
+  Steps 4–6 hold recall against them.
 - The baseline run of `branch-reviewer` over the review set is recorded in
   the same file: 4 of 12 rows found. **Landed.** A step that shortens a
   prompt or changes a reviewer claims its exit by finding no fewer.
@@ -123,7 +124,10 @@ cuts each row into lists of at most 240,000 bytes; `sweep-mark.sh` keeps a
 clean sweep's commit as the local `refs/sweeps/<kind>`; verification runs on
 Sonnet, and the bug verifier weighs the covering tests. The argument is in
 [`commands/bug-sweep.md`](commands/bug-sweep.md), *Slices, leads and the
-mark*. The exit is not measured: the sweep set is still empty.
+mark*. The exit is not measured yet, but it now has a baseline: the
+2026-10-20 section of [`token-quality-sets.md`](token-quality-sets.md)
+records a round-1 auditor run over the sweep set (#168). A change to the
+sweeps claims its exit by finding no fewer rows on the same slices.
 
 ### Step 6 — the commands
 
@@ -143,6 +147,6 @@ exit is not measured: it waits on sessions run since (#123).
 A cut that loses a finding is not a saving. Steps 4–6 each hold recall
 against the step 1 quality sets. Steps 4 and 6 do not claim their exit by
 finding fewer rows than the `branch-reviewer` baseline recorded there; step 5
-still waits on a sweep baseline, since the sweep set is empty and
-`bug-auditor` has not been run.
+does not claim it by finding fewer than the round-1 auditor baseline over the
+sweep set, recorded in the same file on 2026-10-20.
 Steps 2 and 3 move no behaviour and need no set.
