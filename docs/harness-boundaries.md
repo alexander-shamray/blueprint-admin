@@ -292,7 +292,7 @@ A new residual is stated **here** and gets a row above.
   own `.git`, and a name in either that no longer resolves fails a test, so a
   renamed class loses its pinning loudly.
 - **One run at a time, per user.** A run takes a lock named for the user in
-  their temp directory before it starts any worker, and a second run, from
+  their temp directory before it discovers anything, and a second run, from
   another session or worktree, waits and says so. Two at once ran twice the
   workers the host holds and each took about three times as long (#323). The
   lock spans what one user runs, which on a developer's machine is every
