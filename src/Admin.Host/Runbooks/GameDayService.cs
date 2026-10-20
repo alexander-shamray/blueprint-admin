@@ -100,10 +100,10 @@ public sealed partial class GameDayService(
     {
         try
         {
-            Row[] rows = JsonSerializer.Deserialize<Row[]>(string.Join('\n', stdout), ToolJson) ?? [];
+            Row?[] rows = JsonSerializer.Deserialize<Row?[]>(string.Join('\n', stdout), ToolJson) ?? [];
 
             return new RunbookCatalogue(
-                [.. rows.Where(r => r.Runbook is not null && IsRunbookName(r.Runbook)).Select(r => new RunbookEntry(
+                [.. rows.OfType<Row>().Where(r => r.Runbook is not null && IsRunbookName(r.Runbook)).Select(r => new RunbookEntry(
                     r.Runbook!,
                     r.Alerts ?? [],
                     r.Script,

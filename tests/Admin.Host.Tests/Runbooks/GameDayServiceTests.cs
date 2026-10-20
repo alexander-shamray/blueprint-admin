@@ -152,7 +152,7 @@ public sealed class GameDayServiceTests : IAsyncDisposable
     public void A_catalogue_row_with_no_runbook_name_is_dropped_not_thrown_on()
     {
         RunbookCatalogue catalogue = GameDayService.Parse(
-            ["""[{"alerts":["X"],"script":true},{"runbook":"latency","alerts":[],"script":false,"reason":"none"}]"""]);
+            ["""[null,{"alerts":["X"],"script":true},{"runbook":"latency","alerts":[],"script":false,"reason":"none"}]"""]);
 
         catalogue.Error.ShouldBeNull();
         catalogue.Runbooks.Select(r => r.Runbook).ShouldBe(["latency"]);
