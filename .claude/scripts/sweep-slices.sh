@@ -36,7 +36,7 @@ if [ "$mode" != full ] && last=$(g rev-parse --verify --quiet "refs/sweeps/$kind
   if g merge-base --is-ancestor "$last" "$pinned"; then since="$last"; fi
 fi
 
-# One arm to a line: test_sweep_slices.py reads the rows each kind can print
+# One arm to a line: test_sweep_slices.py reads the rows each kind can return
 # from these and holds each command's table to them. The order is the rule —
 # the first arm that matches owns the path — so a spec is the suites' before it
 # is the SPA's, and the SPA's own configuration is `config` by what is left.

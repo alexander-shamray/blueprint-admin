@@ -386,7 +386,7 @@ class ASmallRepository(unittest.TestCase):
 
 
 class TheTablesNameTheHelpersRows(unittest.TestCase):
-    """Each command's row table names exactly the rows `row_of` can print."""
+    """Each command's row table names exactly the rows `row_of` can return."""
 
     def test_each_table_matches_row_of(self):
         source = SLICES.read_text(encoding="utf-8")
