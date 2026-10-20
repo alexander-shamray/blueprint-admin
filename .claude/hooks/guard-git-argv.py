@@ -2695,10 +2695,50 @@ def _unreadable_word(literal, command):
 FIND_WRITING_ACTIONS = frozenset({"-fprint", "-fprint0", "-fprintf", "-fls"})
 
 
+def brace_group_expands(word, start):
+    """Whether the unquoted `{` at `start` opens a brace expansion.
+
+    It does when an unquoted comma or `..` stands at the group's own depth
+    before its unquoted `}`. A `}` inside quotes does not close it, so
+    `-e{'w a}','w b'}` is two words. A group with no unquoted closer is
+    literal to bash; one that still has a later `}` is refused anyway, since
+    this walk is not bash (#297).
+    """
+    depth, quote, i, multiplies = 0, None, start, False
+    while i < len(word):
+        char = word[i]
+        if quote == "'":
+            if char == "'":
+                quote = None
+        elif char == "\\":
+            i += 1
+        elif char == "'" and quote is None:
+            quote = "'"
+        elif char == '"':
+            quote = None if quote == '"' else '"'
+        elif quote is None:
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    return multiplies
+            elif depth == 1 and (char == "," or word.startswith("..", i)):
+                multiplies = True
+        i += 1
+    return "}" in word[start:]
+
+
 def shell_expands(word):
     """Whether bash expands something in the raw `word`: a `$` or a backtick
-    outside single quotes and not escaped, or an unquoted brace, which
-    multiplies one word into several (`-e{'w a','w b'}` is two scripts) (#297)."""
+    outside single quotes and not escaped, or an unquoted brace group that
+    holds a comma or `..`, which multiplies one word into several
+    (`-e{'w a','w b'}` is two scripts) (#297).
+
+    A `$` expands only before a name, a digit, a brace, a parenthesis, a quote
+    or a special parameter; `s/foo$/x/` and `{}` (find's placeholder) are
+    literal to bash and are not flagged.
+    """
     quote, i = None, 0
     while i < len(word):
         char = word[i]
@@ -2711,7 +2751,17 @@ def shell_expands(word):
             quote = "'"
         elif char == '"':
             quote = None if quote == '"' else '"'
-        elif char in "$`" or (char == "{" and quote is None):
+        elif char == "`":
+            return True
+        elif char == "$" and (
+                word[i + 1:i + 2].isalnum()
+                or word[i + 1:i + 2] in ("_", "{", "(", "[", "@", "*", "#", "?",
+                                         "!", "-", "$")
+                # `$'…'` and `$"…"` are forms only outside quotes; inside
+                # double quotes the quote after the `$` closes the string.
+                or (quote is None and word[i + 1:i + 2] in ("'", '"'))):
+            return True
+        elif char == "{" and quote is None and brace_group_expands(word, i):
             return True
         i += 1
     return False
