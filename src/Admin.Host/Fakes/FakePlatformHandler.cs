@@ -25,11 +25,8 @@ public sealed class FakePlatformHandler(AdminOptions options, FakeOrders orders)
             : Is(uri, options.ObjectStoreUrl) ? await FakeObjectStore.SendAsync(request, orders, cancellationToken)
             : Is(uri, options.ImageEdgeUrl) ? FakeObjectStore.Edge(request, orders)
             : Is(uri, options.KeycloakUrl) && path.EndsWith("/protocol/openid-connect/token", StringComparison.Ordinal) ? await FakeKeycloak.TokenAsync(request, cancellationToken)
-            : path == "/openapi/v1.json" && Is(uri, options.CatalogUrl) ? FakeOpenApi.Document(request, "catalog")
-            : path == "/openapi/v1.json" && Is(uri, options.OrderingUrl) ? FakeOpenApi.Document(request, "ordering")
-            : path == "/openapi/v1.json" && Is(uri, options.InventoryUrl) ? FakeOpenApi.Document(request, "inventory")
-            : path == "/openapi/v1.json" && Is(uri, options.PaymentsUrl) ? FakeOpenApi.Document(request, "payments")
-            : path == "/openapi/v1.json" && Is(uri, options.PrivacyUrl) ? FakeOpenApi.Document(request, "privacy")
+            : path == "/openapi/v1.json" && PlatformServices.WithOpenApi.FirstOrDefault(s => Is(uri, s.Url!(options))) is { } documented
+                ? FakeOpenApi.Document(request, documented.Name)
             // WireMock.Net's request log, as the simulator answered it with nothing yet asked of it.
             : Is(uri, options.PaymentSimulatorUrl) && path == "/__admin/requests" ? FakeHttp.Json(HttpStatusCode.OK, "[]")
             // The carrier simulator is the same WireMock.Net image, answering the same way before Shipping despatches.

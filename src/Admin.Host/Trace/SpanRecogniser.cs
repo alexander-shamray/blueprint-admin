@@ -1,4 +1,5 @@
 using System.Globalization;
+using Admin.Host.Config;
 using Admin.Host.Telemetry;
 
 namespace Admin.Host.Trace;
@@ -48,7 +49,7 @@ public static class SpanRecogniser
     /// application, and Shipping's host is the <c>Shipping.Worker</c> project. Notifications consumes the same event,
     /// so the service is what tells the despatch apart.
     /// </summary>
-    internal const string ShippingService = "Shipping.Worker";
+    internal static string ShippingService => PlatformServices.Shipping.SpanService!;
 
     /// <summary>
     /// The MassTransit version whose span tags these rows read: blueprint-backend <c>Directory.Packages.props</c>.

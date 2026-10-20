@@ -76,8 +76,7 @@ public sealed class ApiCatalog(HttpClient http, TokenService tokens, IOptions<Ad
             }
 
             AdminOptions o = options.Value;
-            (string Name, string BaseUrl)[] services =
-                [("catalog", o.CatalogUrl), ("ordering", o.OrderingUrl), ("inventory", o.InventoryUrl), ("payments", o.PaymentsUrl), ("privacy", o.PrivacyUrl)];
+            (string Name, string BaseUrl)[] services = [.. PlatformServices.WithOpenApi.Select(s => (s.Name, s.Url!(o)))];
 
             // One grant for every document: concurrent loads would each miss the empty cache and mint once apiece.
             (string? bearer, string? tokenError) = await BearerAsync(o, cancellationToken);

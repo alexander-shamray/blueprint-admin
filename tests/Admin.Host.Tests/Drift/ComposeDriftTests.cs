@@ -17,23 +17,18 @@ namespace Admin.Host.Tests.Drift;
 public sealed partial class ComposeDriftTests
 {
     /// <summary>The Compose service behind each configured URL. A port there is the backend's; the URL here copies it.</summary>
-    private static readonly Dictionary<string, Func<AdminOptions, string>> Surfaces = new(StringComparer.Ordinal)
-    {
-        ["gateway"] = o => o.GatewayUrl,
-        ["catalog-api"] = o => o.CatalogUrl,
-        ["ordering-api"] = o => o.OrderingUrl,
-        ["web-bff"] = o => o.BffUrl,
-        ["inventory-api"] = o => o.InventoryUrl,
-        ["payments-api"] = o => o.PaymentsUrl,
-        ["privacy-api"] = o => o.PrivacyUrl,
-        ["psp-simulator"] = o => o.PaymentSimulatorUrl,
-        ["carrier-simulator"] = o => o.CarrierSimulatorUrl,
-        ["object-store"] = o => o.ObjectStoreUrl,
-        ["image-edge"] = o => o.ImageEdgeUrl,
-        ["keycloak"] = o => o.KeycloakUrl,
-        ["grafana"] = o => o.GrafanaUrl,
-        ["mailpit"] = o => o.MailSinkUrl,
-    };
+    private static readonly Dictionary<string, Func<AdminOptions, string>> Surfaces = new(
+        PlatformServices.WithUrl.Select(s => KeyValuePair.Create(s.ComposeService, s.Url!)).Concat(
+        [
+            KeyValuePair.Create<string, Func<AdminOptions, string>>("psp-simulator", o => o.PaymentSimulatorUrl),
+            KeyValuePair.Create<string, Func<AdminOptions, string>>("carrier-simulator", o => o.CarrierSimulatorUrl),
+            KeyValuePair.Create<string, Func<AdminOptions, string>>("object-store", o => o.ObjectStoreUrl),
+            KeyValuePair.Create<string, Func<AdminOptions, string>>("image-edge", o => o.ImageEdgeUrl),
+            KeyValuePair.Create<string, Func<AdminOptions, string>>("keycloak", o => o.KeycloakUrl),
+            KeyValuePair.Create<string, Func<AdminOptions, string>>("grafana", o => o.GrafanaUrl),
+            KeyValuePair.Create<string, Func<AdminOptions, string>>("mailpit", o => o.MailSinkUrl),
+        ]),
+        StringComparer.Ordinal);
 
     /// <summary>
     /// Service units the console has no surface for yet, each with the issue that gives it one. The

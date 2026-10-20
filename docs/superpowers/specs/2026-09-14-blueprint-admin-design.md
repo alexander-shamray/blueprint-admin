@@ -217,6 +217,17 @@ Startup validates that both directories exist and contain what they should
 key to fix. It refuses `Record` together with `FakePlatform`, whose answers
 are the fixtures, and a `RecordDir` that does not exist.
 
+The platform's services are one list, `PlatformServices.All`
+(`src/Admin.Host/Config/PlatformServices.cs`): per service its name, Compose
+service, URL selector, whether it serves an OpenAPI document, its gateway
+route prefix (§2.3) and the backend namespace its queues live under (§5.5),
+and the `service.name` the span table (§5.9) reads where it needs one. The
+proxy's allow-list, the readiness probe, the health operations, the API
+catalogue (§5.7), the fakes' OpenAPI documents and recordings and the drift
+gates enumerate it, so adding a service is one record plus its fixtures, and
+`PlatformServiceDriftTests` fails for a record whose gateway prefix or queues
+the other tables do not carry.
+
 ### 5.2 ProcessRunner and Jobs
 
 `ProcessRunner.Start(command, args, cwd)` launches a child process, reads
