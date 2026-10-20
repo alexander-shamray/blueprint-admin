@@ -2745,6 +2745,12 @@ def brace_group_expands(word, start):
     return "}" in word[start:]
 
 
+BASH_MANAGED_VARIABLES = frozenset({
+    "REPLY", "MAPFILE", "OLDPWD", "PWD", "OPTARG", "OPTIND", "RANDOM",
+    "SECONDS", "LINENO", "PIPESTATUS", "COMP_WORDS", "HISTCMD", "SHELLOPTS",
+})
+
+
 def environment_variable(word, command):
     """Whether `word` is a lone `$NAME` or `${NAME}` that `command` never
     mentions except as that expansion, so nothing in the command can have set
@@ -2753,18 +2759,33 @@ def environment_variable(word, command):
     if not match:
         return False
     name = match.group(1) or match.group(2)
+    # Only a conventional environment name: bash manages `$_`, `$REPLY`,
+    # `$OLDPWD`, `$MAPFILE` and the like, and sets them without naming them.
+    if (not re.fullmatch(r"[A-Z][A-Z0-9_]*", name) or name.startswith("BASH")
+            or name in BASH_MANAGED_VARIABLES or name in EXPANDABLE_VARIABLES):
+        return False
     # Code built at run time can set a variable whose name never appears:
-    # `eval "$(printf '\\x46=.claude/x')"; git checkout $F`.
-    if re.search(r"\beval\b|\bsource\b|(?:^|[;&|(]\s*)\.\s|`|\$\(|<\(|\$'|"
-                 r"\$\{!", command):
+    # `eval "$(printf '\\x46=.claude/x')"; git checkout $F`. The `.` builtin
+    # is a command word after a separator, a newline, a brace, a keyword or
+    # `builtin`/`command`.
+    if re.search(
+            r"\beval\b|\bsource\b|`|\$\(|<\(|\$'|\$\{!"
+            r"|(?:^|[\s;&|(){!])\.(?=\s|$)"
+            r"|\b(?:read|mapfile|readarray|getopts|cd|pushd|popd|declare|typeset"
+            r"|export|readonly|local|let|set)\b|printf\s+-v", command,
+            re.MULTILINE):
         return False
     # A value the hook itself inherited is the value the shell inherited.
     inherited = os.environ.get(name)
-    if inherited and (protected_path(inherited)
+    if inherited and (re.search(r"[\\/]", inherited)
+                      or protected_path(inherited)
                       or linked_protected_path(inherited)
                       or application_tree(inherited)):
         return False
-    rest = re.sub(r"\$\{?" + re.escape(name) + r"\}?", "", command)
+    # Only the bare forms are the expansion: `${F:=.claude/x}` assigns, and
+    # leaves its name in the text for the search below to find.
+    rest = re.sub(r"\$" + re.escape(name) + r"\b|\$\{" + re.escape(name) + r"\}",
+                  "", command)
     return re.search(r"\b" + re.escape(name) + r"\b", rest) is None
 
 
@@ -3057,7 +3078,8 @@ def git_pathspec_offence(raw, name, separated, command, committed=False):
         # writes; anything else the shell expands is judged.
         if not named and not (
                 (shell_expands(raw) and not environment_variable(raw, command))
-                or raw.strip().startswith("~")):
+                or raw.strip().startswith("~")
+                or (changes_directory(command) and re.search(r"[./]", raw))):
             return None
     return destination_offence(raw, command, writer, writer)
 
@@ -3079,7 +3101,11 @@ def git_path_writer_offence(run, literals, command):
     if lead is not None and program_name(lead) != "git" and program_name(
             lead) in (READING_COMMANDS | DATA_ONLY_COMMANDS):
         return None
-    led = lead is not None and program_name(lead) == "git"
+    # A computed word ahead of the verb (`$W git checkout ...`) is a wrapper
+    # this guard cannot read, so git does not lead.
+    computed = any(literal is None and not ASSIGNMENT.match(raw)
+                   for raw, literal in zip(run, literals))
+    led = (lead is not None and program_name(lead) == "git" and not computed)
     candidates = [index for index, literal in enumerate(literals)
                   if literal is not None and program_name(literal) == "git"]
     for start in (candidates[:1] if led else candidates):
@@ -3089,6 +3115,16 @@ def git_path_writer_offence(run, literals, command):
         name = verb_name(stripped[0]) if stripped else ""
         if name in GIT_PATH_WRITERS:
             break
+        hidden = next((verb_name(word) for word in stripped[1:3]
+                       if verb_name(word) in GIT_PATH_WRITERS), None)
+        if led and named and named[0].startswith("-") and hidden:
+            # `--super-prefix x/ checkout ...`: the option's value is read as
+            # the verb, and the real verb follows it.
+            return (
+                f"`git {hidden}` follows an option this guard does not know, "
+                "which can take the verb's place; use only the global "
+                "options it names (#297, docs/harness-boundaries.md)."
+            )
     else:
         return None
     writer = f"`git {name}`"
@@ -3155,6 +3191,11 @@ def git_path_writer_offence(run, literals, command):
                     option):
                 source = literal.partition("=")[2] if equals else (
                     arguments[position] if position < len(arguments) else None)
+            elif name == "restore" and len(option) > 5 and (
+                    "--no-source".startswith(option)):
+                # git accepts the negated form, which resets the source to the
+                # index; it is no longer HEAD.
+                source = None
             if not equals and any(len(option) > 2 and full.startswith(option)
                                   for full in long_values):
                 position += 1
