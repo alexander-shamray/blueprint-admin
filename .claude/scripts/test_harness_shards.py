@@ -18,7 +18,7 @@ loses a unit, a unit that never finishes, a worker handed a name nothing
 discovers or handed nothing at all — each of those is a way to report a pass
 over tests that never ran, and each has a case here.
 
-**The host lock is the fourth**: a second run waits rather than running
+**The run lock is the fourth**: a second run waits rather than running
 beside the first, and a holder that dies does not leave the lock behind.
 """
 
@@ -302,16 +302,30 @@ class TheRunnerRefusesRatherThanReportingAPass(unittest.TestCase):
         self.assertIn("takes no arguments", out.stderr)
 
 
-class OneRunPerHost(unittest.TestCase):
+class OneRunAtATime(unittest.TestCase):
     """The lock two runs would otherwise interleave without (#323).
 
     Every case takes a lock file of its own: the real one is held by the run
     this case is part of, and a case that waited on it would wait on itself.
     """
 
-    def test_the_lock_lives_in_the_host_temp_directory(self):
-        # Not the checkout: two worktrees are two checkouts and one host.
+    def test_the_lock_lives_in_the_temp_directory_under_the_users_name(self):
+        # Not the checkout: two worktrees are two checkouts and one host. And
+        # the user's own file, because opening another user's in a shared
+        # `/tmp` would fail rather than wait.
         self.assertEqual(Path(tempfile.gettempdir()), SHARD.LOCK.parent)
+        with mock.patch.object(SHARD.getpass, "getuser", return_value="a b/c"):
+            self.assertEqual("blueprint-admin-harness-a_b_c.lock",
+                             SHARD.lock_path().name)
+
+    def test_a_lock_that_cannot_be_opened_refuses_the_run(self):
+        # A run that cannot take the lock cannot know it is alone; carrying on
+        # would be the interleaving the lock exists to stop, said nothing of.
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = Path(tmp) / "no-such-directory" / "lock"
+            with self.assertRaises(SHARD.LockUnavailable):
+                with SHARD.host_lock(missing):
+                    pass
 
     def test_a_second_holder_is_refused_until_the_first_lets_go(self):
         with tempfile.TemporaryDirectory() as tmp:
