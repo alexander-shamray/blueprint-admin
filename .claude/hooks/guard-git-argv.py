@@ -2745,6 +2745,29 @@ def brace_group_expands(word, start):
     return "}" in word[start:]
 
 
+def environment_variable(word, command):
+    """Whether `word` is a lone `$NAME` or `${NAME}` that `command` never
+    mentions except as that expansion, so nothing in the command can have set
+    it (#297)."""
+    match = re.fullmatch(r'"?\$(?:(\w+)|\{(\w+)\})"?', word.strip())
+    if not match:
+        return False
+    name = match.group(1) or match.group(2)
+    # Code built at run time can set a variable whose name never appears:
+    # `eval "$(printf '\\x46=.claude/x')"; git checkout $F`.
+    if re.search(r"\beval\b|\bsource\b|(?:^|[;&|(]\s*)\.\s|`|\$\(|<\(|\$'|"
+                 r"\$\{!", command):
+        return False
+    # A value the hook itself inherited is the value the shell inherited.
+    inherited = os.environ.get(name)
+    if inherited and (protected_path(inherited)
+                      or linked_protected_path(inherited)
+                      or application_tree(inherited)):
+        return False
+    rest = re.sub(r"\$\{?" + re.escape(name) + r"\}?", "", command)
+    return re.search(r"\b" + re.escape(name) + r"\b", rest) is None
+
+
 def shell_expands(word):
     """Whether bash expands something in the raw `word`: a `$` or a backtick
     outside single quotes and not escaped, or an unquoted brace group that
@@ -3019,13 +3042,22 @@ def git_pathspec_offence(raw, name, separated, command, committed=False):
     if name == "checkout" and not separated:
         # With no `--` the operand is a branch or a path and git decides which,
         # so a branch named `docs/x` must stay admitted: an application tree
-        # counts only for a name that exists or carries an extension.
+        # counts only for a name that exists or carries an extension (a dot
+        # and a letter: `spec-v1.2` is a branch, `x.ts` a file).
         last = re.split(r"[\\/]+", literal.rstrip("/\\"))[-1]
         named = protected_path(literal) or linked_protected_path(literal)
-        if not named and ("." in last or os.path.exists(
-                os.path.join(EVENT_CWD or os.getcwd(), literal))):
+        if not named and (re.search(r"\.[A-Za-z][A-Za-z0-9]{0,5}$", last)
+                          or os.path.exists(os.path.join(
+                              EVENT_CWD or os.getcwd(), literal))):
             named = application_tree(literal)
-        if not named:
+        # A word the shell expands is not the name it is written as: `git
+        # checkout $F` and `git checkout .claude{,}` are judged as paths.
+        # A lone `$NAME` the command never assigns is the environment's, not
+        # the command's, and `git checkout $BRANCH` is traffic this repository
+        # writes; anything else the shell expands is judged.
+        if not named and not (
+                (shell_expands(raw) and not environment_variable(raw, command))
+                or raw.strip().startswith("~")):
             return None
     return destination_offence(raw, command, writer, writer)
 
@@ -3047,18 +3079,28 @@ def git_path_writer_offence(run, literals, command):
     if lead is not None and program_name(lead) != "git" and program_name(
             lead) in (READING_COMMANDS | DATA_ONLY_COMMANDS):
         return None
-    start = next((index for index, literal in enumerate(literals)
-                  if literal is not None and program_name(literal) == "git"),
-                 None)
-    if start is None:
-        return None
-    rest = literals[start + 1:]
-    named = [word for word in rest if word is not None]
-    stripped = after_global_options(named)
-    name = verb_name(stripped[0]) if stripped else ""
-    if name not in GIT_PATH_WRITERS:
+    led = lead is not None and program_name(lead) == "git"
+    candidates = [index for index, literal in enumerate(literals)
+                  if literal is not None and program_name(literal) == "git"]
+    for start in (candidates[:1] if led else candidates):
+        rest = literals[start + 1:]
+        named = [word for word in rest if word is not None]
+        stripped = after_global_options(named)
+        name = verb_name(stripped[0]) if stripped else ""
+        if name in GIT_PATH_WRITERS:
+            break
+    else:
         return None
     writer = f"`git {name}`"
+    if not led:
+        # Behind `xargs`, `find -exec`, `env -C` or `sudo`, the paths arrive
+        # from elsewhere or the directory has moved, and the first `git` word
+        # may be an operand (`sudo -u git git restore ...`).
+        return (
+            f"{writer} runs behind a wrapper, which can supply its paths on "
+            "stdin, move its directory or hide which word is git; run it "
+            "directly (#297, docs/harness-boundaries.md)."
+        )
     if len(named) != len(rest):
         return (
             f"{writer} is handed a word built by a command substitution, so "
@@ -3073,7 +3115,7 @@ def git_path_writer_offence(run, literals, command):
     # seen (docs/harness-boundaries.md).
     relocated = any(
         ASSIGNMENT.match(raw) and re.match(
-            r"(?i)(GIT_WORK_TREE|GIT_DIR|GIT_COMMON_DIR|GIT_INDEX_FILE|GIT_CONFIG\w*)=",
+            r"(?i)(GIT_WORK_TREE|GIT_DIR|GIT_COMMON_DIR|GIT_INDEX_FILE|GIT_CONFIG\w*)\+?=",
             raw)
         for raw in run[:start])
     if relocated or any(
@@ -3091,7 +3133,7 @@ def git_path_writer_offence(run, literals, command):
     raws = run[start + 1 + skipped + 1:]
     short_values, long_values = GIT_PATH_VALUE_OPTIONS[name]
     operands, operand_literals, flags = [], [], []
-    separated, before, position = False, 0, 0
+    separated, before, position, source = False, 0, 0, None
 
     def has(flag):
         # git takes any unambiguous prefix of a long option.
@@ -3109,6 +3151,10 @@ def git_path_writer_offence(run, literals, command):
         elif literal.startswith("--"):
             option, equals, _ = literal.partition("=")
             flags.append(option)
+            if name == "restore" and len(option) > 3 and "--source".startswith(
+                    option):
+                source = literal.partition("=")[2] if equals else (
+                    arguments[position] if position < len(arguments) else None)
             if not equals and any(len(option) > 2 and full.startswith(option)
                                   for full in long_values):
                 position += 1
@@ -3116,6 +3162,10 @@ def git_path_writer_offence(run, literals, command):
             for offset, letter in enumerate(literal[1:]):
                 flags.append("-" + letter)
                 if letter in short_values:
+                    if name == "restore" and letter == "s":
+                        source = literal[offset + 2:] or (
+                            arguments[position] if position < len(arguments)
+                            else None)
                     if not literal[offset + 2:]:
                         position += 1
                     break
@@ -3138,9 +3188,10 @@ def git_path_writer_offence(run, literals, command):
                 "name the paths (#297, docs/harness-boundaries.md)."
             )
         return None
-    committed = (name == "checkout" and separated and before == 1
+    from_head = (name == "checkout" and separated and before == 1
                  and operand_literals[0] in ("HEAD", "@"))
-    for raw in operands[before if committed else 0:]:
+    committed = from_head or (name == "restore" and source in ("HEAD", "@"))
+    for raw in operands[before if from_head else 0:]:
         refusal = git_pathspec_offence(raw, name, separated, command, committed)
         if refusal is not None:
             return refusal
