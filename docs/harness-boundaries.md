@@ -361,6 +361,15 @@ A new residual is stated **here** and gets a row above.
   a POSIX-style absolute path on a Windows host (`/c/dev/...`) is not resolved
   against the working directory, so only the relative spellings of a parent are
   refused there. The same gap is older for `rm`: `rm -rf ..` is admitted.
+- **`sed` is judged by reading its script, and a word the shell expands is
+  refused.** `guard-git-argv.py` reads `w`, `W`, `s///w`, `e` and `s///e` in a
+  `-e` or first-operand script, refuses `-f`, and refuses any `sed` word with
+  a `$`, a backtick or an unquoted brace, since an expanded word can be an
+  option or a second script. The cost is that `sed -n 1p "$FILE"` is refused
+  until the words are named literally; operands after a literal `--` are
+  exempt once a script is given. Labels end at a blank as GNU sed 4.9 reads
+  them, so a script an older sed reads differently is refused rather than
+  admitted.
 
 A new residual is stated **here**, and `CLAUDE.md` carries the pointer rather
 than a second copy.
