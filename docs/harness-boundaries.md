@@ -496,13 +496,18 @@ A new residual is stated **here** and gets a row above.
   from the command: a command-substitution word, `-C`, `--work-tree`,
   `GIT_CONFIG*`, a wrapper (`command`, `nohup`, `xargs`, `sudo`), and an
   option git does not list among its global ones ahead of the verb, which
-  takes the verb's place (`--super-prefix x/ checkout`); `--no-pager` and `-c`
-  are known and leave `git log --grep checkout` alone. After a `cd`, every
-  operand of an unseparated checkout with several operands is judged, and a
-  lone operand with a `.` or `/`; a lone dotless one is read as a branch. `git checkout -f`, `git reset --hard`, `git stash`, `git
-  checkout-index`, `git read-tree -u` and the subcommands that merge or
-  replay (`merge`, `cherry-pick`, `rebase`) update the tree wholesale or by
-  index and are not judged.
+  takes the verb's place (`--super-prefix x/ checkout`); `--no-pager` is
+  known and leaves `git --no-pager log --grep checkout` alone. After a `cd`,
+  every operand of an unseparated checkout with several operands is judged,
+  and a lone operand with a `.` or `/`; a lone dotless one is read as a
+  branch. A relocation variable named anywhere in the command line, or
+  built by `eval`, `source`, a command substitution or any expansion in the
+  arguments of an `export`, `declare`, `env` or `read`, refuses the writer;
+  `export X=$Y; git checkout main` is refused with it, which is the cost.
+  `git checkout -f`, `git reset --hard`, `git stash`, `git checkout-index`,
+  `git read-tree -u` and the subcommands that merge or replay (`merge`,
+  `cherry-pick`, `rebase`) update the tree wholesale or by index and are not
+  judged.
 
 A new residual is stated **here**, and `CLAUDE.md` carries the pointer rather
 than a second copy.
