@@ -2024,12 +2024,17 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
         # is the one executed config /style-pass edits by design; vite, vitest, playwright and
         # prettier configs are JavaScript or TypeScript run when `npm-checks.sh` reads them, at
         # any depth, and the pass has no business in them.
-        for family in ("**/*.config.cjs", "**/*.config.mjs", "**/*.config.mts",
-                       "**/*.config.ts", "**/.prettierrc.js", "**/.prettierrc.cjs",
-                       "**/.prettierrc.mjs"):
+        for family in ("**/*.config.cjs", "**/*.config.mjs", "**/vite.config.*",
+                       "**/vitest.config.*", "**/playwright.config.*",
+                       "**/prettier.config.*", "**/jest.config.*", "**/karma.conf.js",
+                       "**/.prettierrc.js", "**/.prettierrc.cjs", "**/.prettierrc.mjs"):
             with self.subTest(family=family):
                 self.assertIn(f"Edit({family})", denied)
+        # By name, not `**/*.config.ts`: that glob also names Angular's tracked
+        # `app.config.ts`, a providers file a style pass may legitimately touch.
         self.assertNotIn("Edit(**/*.config.js)", denied)
+        self.assertNotIn("Edit(**/*.config.ts)", denied)
+        self.assertNotIn("Edit(**/*.config.mts)", denied)
 
     def test_a_command_that_does_not_publish_cannot_push(self):
         for path in sorted(COMMANDS.glob("*.md")):

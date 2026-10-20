@@ -418,7 +418,7 @@ A new residual is stated **here** and gets a row above.
 - **`/style-pass` edits `eslint.config.js` and then runs the linter it
   configures.** That is the pass's job (sections 3 and 4), so the one executed config
   stays editable and the check helper stays granted; the other executed configs
-  (`*.config.cjs|mjs|mts|ts`, `.prettierrc.js|cjs|mjs`) at any depth are denied (#313). A
+  (`vite`, `vitest`, `playwright`, `prettier`, `jest` and `karma` configs by name, `*.config.cjs|mjs`, `.prettierrc.js|cjs|mjs`) at any depth are denied (#313); `*.config.ts` is not denied here as a family, since Angular's tracked `app.config.ts` is a providers file. A
   session that writes a hostile `eslint.config.js` and runs `npm-checks.sh lint`
   executes it, the same class as session-written tests under #310; the review
   of the diff, not a rule, is what stands between them.
