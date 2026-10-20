@@ -220,11 +220,13 @@ are the fixtures, and a `RecordDir` that does not exist.
 The platform's services are one list, `PlatformServices.All`
 (`src/Admin.Host/Config/PlatformServices.cs`): per service its name, Compose
 service, URL selector, whether it serves an OpenAPI document, its gateway
-route prefix (ง2.3) and the backend namespace its queues live under (ง5.5),
-and the `service.name` the span table (ง5.9) reads where it needs one. The
+route prefix (ยง2.3) and the backend namespace its queues live under (ยง5.5),
+and the `service.name` the span table (ยง5.9) reads where it needs one. The
 proxy's allow-list, the readiness probe, the health operations, the API
-catalogue (ง5.7), the fakes' OpenAPI documents and recordings and the drift
-gates enumerate it, so adding a service is one record plus its fixtures, and
+catalogue (ยง5.7), the fakes' OpenAPI documents and recordings and the drift
+gates enumerate it (the fakes' workstation recordings and the Scenario lease's
+Compose names still name services by hand), so adding a service is one record
+plus its fixtures, and
 `PlatformServiceDriftTests` fails for a record whose gateway prefix or queues
 the other tables do not carry.
 

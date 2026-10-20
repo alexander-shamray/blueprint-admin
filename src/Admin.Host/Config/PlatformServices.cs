@@ -19,7 +19,7 @@ public sealed record PlatformService(
 /// <summary>
 /// The services of the platform, in the order the screens list them. The proxy's allow-list, the readiness probe,
 /// the health operations, the API catalogue, the fakes' OpenAPI documents and recordings, the Compose, gateway-route
-/// and queue drift checks and the span table's service name all read this list; none keeps a list of its own
+/// and queue drift checks and the span table's service name all read this list; the fakes' workstation recordings and the Scenario lease's Compose names still name services by hand
 /// (tests/Admin.Host.Tests/Drift/PlatformServiceDriftTests.cs fails a record missing a part). A service added to the
 /// console is one record here plus its fixtures. The URL it selects is still an <see cref="AdminOptions"/> property,
 /// because that is what <c>Admin:*</c> configuration binds.
