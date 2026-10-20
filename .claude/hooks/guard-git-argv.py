@@ -2893,8 +2893,12 @@ def writing_verb_offence(command):
         lead = next((literal for raw, literal in zip(run, literals)
                      if not ASSIGNMENT.match(raw)
                      and literal not in SHELL_KEYWORDS), None)
+        # `git` is the only reader that writes, and only when it leads: a
+        # `git` further along (`grep -r git rm`, `cat git mv x`) is an
+        # operand the reader prints, not a subcommand it runs (#297).
         if lead is not None and program_name(lead) in (
-                READING_COMMANDS | DATA_ONLY_COMMANDS) and not git_writes(literals):
+                READING_COMMANDS | DATA_ONLY_COMMANDS) and not (
+                program_name(lead) == "git" and git_writes(literals)):
             continue
         for index, literal in enumerate(literals):
             if literal is None or ASSIGNMENT.match(run[index]):

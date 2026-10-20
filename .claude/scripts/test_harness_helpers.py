@@ -2787,6 +2787,8 @@ class TheGitArgvGuard(unittest.TestCase):
             "git mv of an ordinary file": "git mv scratch-notes.txt scratch-old.txt",
             "sort that only reads": "sort -u README.md",
             "git log naming rm": "git log --oneline -- rm",
+            "grep for git rm over a protected path": "grep -r git rm .claude/hooks",
+            "cat naming git mv on a protected path": "cat git mv .claude/settings.json",
             "git diff": "git diff --stat",
         }.items():
             with self.subTest(label):
