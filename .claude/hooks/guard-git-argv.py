@@ -4383,8 +4383,13 @@ DASHED_GIT = re.compile(r"^git-[a-z][a-z0-9-]*$")
 # is here because every git word is judged by the rest of this file, and its
 # operands include branch names (`git checkout -b chore/git-aliases`).
 INERT_OPERAND_LEADS = READING_COMMANDS | DATA_ONLY_COMMANDS | frozenset({
-    "cd", "cp", "dotnet", "gh", "mkdir", "mv", "npm", "pwd", "rm", "sort",
-    "touch", "type", "which",
+    "cd", "cp", "mkdir", "mv", "pwd", "rm", "touch", "type", "which",
+})
+# `npm exec`, `npm run` and `npx` run a program, so `npm` is inert only for the
+# subcommands that take a package name. `sort --compress-program`, `gh` aliases
+# and extensions, and `dotnet exec` run one too, so those leads are judged whole.
+NPM_PACKAGE_SUBCOMMANDS = frozenset({
+    "add", "ci", "i", "info", "install", "remove", "uninstall", "view",
 })
 
 
@@ -4396,6 +4401,8 @@ def inert_operands(run, lead):
     # program only through one of its exec actions.
     if lead == "command":
         return len(run) > 1 and run[1] in ("-v", "-V")
+    if lead == "npm":
+        return len(run) > 1 and run[1] in NPM_PACKAGE_SUBCOMMANDS
     return lead == "find" and not any(
         word in ("-exec", "-execdir", "-ok", "-okdir") for word in run)
 

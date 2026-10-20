@@ -2924,6 +2924,9 @@ class TheGitArgvGuard(unittest.TestCase):
             "a launcher nobody listed": "busybox git-push origin HEAD:main",
             "an unlisted lead and its options": "chrt2 -x 1 git-push origin HEAD:main",
             "find with an exec action": "find . -execdir git-push origin HEAD:main ;",
+            "npm exec runs its operand": "npm exec git-push origin HEAD:main",
+            "sort runs a compressor": "sort --compress-program=git-push x",
+            "dotnet exec runs its operand": "dotnet exec git-push origin",
             "command run, not looked up": "command git-push origin HEAD:main",
         }.items():
             with self.subTest(label):
