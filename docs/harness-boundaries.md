@@ -469,19 +469,28 @@ A new residual is stated **here** and gets a row above.
   `:` magic pathspec, a path list read from a file and a bare `git clean -f`
   (which means the whole working directory) are refused, as is any of them
   under `-C`, `--work-tree` or `--git-dir`. A branch checkout, `git restore
-  --staged` alone, `git clean -n` and `git checkout HEAD -- <path>` (the
-  committed copy, which is how this repository restores a file) are admitted;
-  any other tree-ish brings in content nobody reviewed on this branch, and
-  `git checkout origin/main -- .claude/settings.json` is refused. A work
-  tree relocated by `GIT_WORK_TREE`, `GIT_DIR`, `GIT_COMMON_DIR`,
-  `GIT_INDEX_FILE` or `GIT_CONFIG*` assigned in the same command, or by `-c
-  core.worktree=`, is refused too; one exported by an earlier command is not
-  seen. A `git checkout` with no
-  `--` cannot tell a branch from a path, so an application tree such as
-  `docs/` counts there only for a name that exists or carries an extension:
-  a deleted application directory with no extension restored without `--` is
-  admitted. `git checkout -f`, `git reset --hard` and `git stash` overwrite
-  the tree wholesale and are not judged.
+  --staged` alone, `git clean -n`, `git checkout HEAD -- <path>` and `git
+  restore --source=HEAD <path>` (the committed copy, which is how this
+  repository restores a file) are admitted; any other tree-ish brings in
+  content nobody reviewed on this branch, and `git checkout origin/main --
+  .claude/settings.json` is refused. A path-writing subcommand must be led by
+  `git`: behind `xargs`, `find -exec`, `env -C` or `sudo` its paths can arrive
+  elsewhere or its directory can move, so it is refused. A work tree
+  relocated by `GIT_WORK_TREE`, `GIT_DIR`, `GIT_COMMON_DIR`, `GIT_INDEX_FILE`
+  or `GIT_CONFIG*` assigned in the same command, or by `-c core.worktree=`,
+  is refused too; one exported by an earlier command is not seen.
+  Discarding edits in an application tree with `git restore` or `git checkout
+  --` is refused as well, which is the rule rather than an oversight.
+  A `git checkout` with no `--` cannot tell a branch from a path, so an
+  application tree such as `docs/` counts there only for a name that exists
+  or ends in a dot and a letter (`x.ts`, not `spec-v1.2`): a deleted
+  application directory with no such ending restored without `--` is
+  admitted. A lone `$BRANCH` the command never assigns is the environment's
+  and admitted; one the command sets (`F=.claude/x; git checkout $F`), or any
+  other expansion, is judged as a path. `git checkout -f`, `git reset --hard`, `git stash`, `git
+  checkout-index`, `git read-tree -u` and the subcommands that merge or
+  replay (`merge`, `cherry-pick`, `rebase`) update the tree wholesale or by
+  index and are not judged.
 
 A new residual is stated **here**, and `CLAUDE.md` carries the pointer rather
 than a second copy.
