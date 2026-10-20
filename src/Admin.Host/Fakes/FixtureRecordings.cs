@@ -25,11 +25,8 @@ public static class FixtureRecordings
 
     public static readonly HttpRecording[] Http =
     [
-        new("openapi-catalog.json", (o, uri) => FakePlatformHandler.Is(uri, o.CatalogUrl) && uri.AbsolutePath == OpenApi),
-        new("openapi-ordering.json", (o, uri) => FakePlatformHandler.Is(uri, o.OrderingUrl) && uri.AbsolutePath == OpenApi),
-        new("openapi-inventory.json", (o, uri) => FakePlatformHandler.Is(uri, o.InventoryUrl) && uri.AbsolutePath == OpenApi),
-        new("openapi-payments.json", (o, uri) => FakePlatformHandler.Is(uri, o.PaymentsUrl) && uri.AbsolutePath == OpenApi),
-        new("openapi-privacy.json", (o, uri) => FakePlatformHandler.Is(uri, o.PrivacyUrl) && uri.AbsolutePath == OpenApi),
+        .. PlatformServices.WithOpenApi.Select(s =>
+            new HttpRecording($"openapi-{s.Name}.json", (o, uri) => FakePlatformHandler.Is(uri, s.Url!(o)) && uri.AbsolutePath == OpenApi)),
         new("grafana-datasources.json", (o, uri) => FakePlatformHandler.Is(uri, o.GrafanaUrl) && uri.AbsolutePath == "/api/datasources"),
         new(
             "grafana-prometheus-golden-signals.json",

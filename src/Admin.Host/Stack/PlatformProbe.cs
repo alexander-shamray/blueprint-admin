@@ -21,13 +21,7 @@ public sealed class PlatformProbe(HttpClient http, IOptions<AdminOptions> option
 
         (string Name, string Url)[] targets =
         [
-            ("gateway", Join(o.GatewayUrl, "/health/ready")),
-            ("catalog", Join(o.CatalogUrl, "/health/ready")),
-            ("ordering", Join(o.OrderingUrl, "/health/ready")),
-            ("bff", Join(o.BffUrl, "/health/ready")),
-            ("inventory", Join(o.InventoryUrl, "/health/ready")),
-            ("payments", Join(o.PaymentsUrl, "/health/ready")),
-            ("privacy", Join(o.PrivacyUrl, "/health/ready")),
+            .. PlatformServices.WithUrl.Select(s => (s.Name, Join(s.Url!(o), "/health/ready"))),
             // The store's own status route and the edge's health route are the ones their Compose healthchecks call
             // (blueprint-backend deploy/compose/infrastructure.yml), so Up that leaves either unready reads down here too.
             ("object-store", Join(o.ObjectStoreUrl, "/status")),
