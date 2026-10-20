@@ -61,8 +61,9 @@ cannot be true of the system described — not pure style taste. Prefer:
    the author's text, and a path grammar cannot keep prose out of a path,
    so the helper consumes the cell and only its own two words leave. Each
    `outside` line is a finding, and its resolution is a narrower diff, a
-   row widened with its reason beside it when the path is inside the
-   class's tree set, or a different class when it is not — never a row
+   row widened with its reason stated below the table when the path is
+   inside the class's tree set, or a different class when it is not —
+   never a row
    widened silently (`docs/change-locality.md` §3). Where the helper prints
    nothing or cannot run — a `--local` review with no PR yet, or a body
    carrying neither row — say so

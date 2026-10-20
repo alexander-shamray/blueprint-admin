@@ -184,7 +184,11 @@ def _read_touch_set(rest: str) -> list[str]:
         if token.startswith("`") and token.endswith("`") and len(token) >= 2:
             token = token[1:-1]
         elif "`" in token:
-            raise InputRefused("the Touch set row has an unbalanced backtick")
+            raise InputRefused(
+                "the Touch set row has an item that is not one backticked path: an "
+                "unbalanced backtick, or text beside a path. The cell holds paths only; "
+                "a widened row's reason goes in a sentence below the table"
+            )
         tokens.append(_normalise_token(token, where="the Touch set row"))
     return tokens
 
@@ -359,7 +363,8 @@ def check(payload: dict, class_map: dict[str, list[str]]) -> list[str]:
         if not any(match(path) for match in own):
             problems.append(
                 f"`{path}` is outside the declared touch set; docs/change-locality.md section 3: "
-                f"narrow the diff, or add the path to the `| Touch set |` row with its reason beside it"
+                f"narrow the diff, or add the path to the `| Touch set |` row and state its reason "
+                f"in a sentence below the table"
             )
     return problems
 
