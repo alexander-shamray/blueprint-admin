@@ -111,6 +111,10 @@ depth of its `*-privacy` queue and of `privacy-completions` beside it; an overdu
 request is reissued from the screen and links the backend's `erasure-overdue`
 runbook. Against FakePlatform the subject ending `dead` is the one that goes
 overdue, so the reissue has something to do.
+The Map screen shows each service of the platform with the gateway routes that reach it and the queues it consumes,
+each queue's depth, its change per second between two reads (Refresh, or every 5 s) and the exchanges bound to it. It
+is built from the host's own tables and the broker's `rabbitmqctl` reads at view time; where they differ it lists the
+disagreement and resolves nothing.
 The Runbooks screen lists the backend's `docs/runbooks/` as its `tools/game-day`
 lists them (`py -3.12 tools/game-day/game_day.py --list --json`, read on every
 request, so a new runbook appears without a console change). For one with a

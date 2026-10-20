@@ -982,6 +982,22 @@ FakePlatform (`RunbookRecordings`) replays four entries of the catalogue as the 
 confirmation and one with no script, and three runbook texts. A scripted cause puts its alert in `FakeStack`, which
 `FakeGrafana.Rules` answers firing until the restore.
 
+### 5.15 The platform map
+
+`GET /api/platform/map` joins what the console already reads: `PlatformServices.All` (§5.1) for the services, `GatewayRoutes.Routes`
+for the routes that reach each one by its prefix, `PlatformQueues.Table` for the queues it consumes (a queue belongs to the
+service whose backend namespace its constant lives under), and `BrokerService`'s queue and binding listings for depth and the
+exchanges bound to each queue. It runs `rabbitmqctl` through `BrokerService` and nothing else: the management API stays unused
+(§5.5). The map keeps no list of its own and is built at request time, so it is the backend's fitness report seen from the
+running side.
+
+Where the two halves differ the view says so and resolves nothing: a queue the table names that the broker does not list, a
+queue on the broker that no service's table names (parked twins resolve to their endpoint's queue), and a gateway route no
+service record names. A broker that does not answer is a state, as in §5.5: the services and routes are still returned and
+`brokerReachable` is false. The rate is the SPA's, read off two successive reads of the same queue; a queue seen once shows none.
+FakePlatform answers the broker half from the fakes §5.5 already has, so the map works with no stack, and its tables and the
+fake broker agree.
+
 ## 6. The SPA
 
 Angular 22 standalone components, signals, the router, no Ionic. The layout
@@ -1006,6 +1022,7 @@ and names the active option through `aria-activedescendant`.
 | **Stack** | the workstation doctor's rows above the buttons, read when the screen opens; one row per Compose service with state, health and port; the frontend job; a reachability strip; the load run's state beside the golden signals (§5.3); quick links to the client, Grafana, Keycloak | Check the workstation again; Up, Down, Down and wipe, Reset (both behind one typed confirmation), Start and Stop frontend; Run load and Stop load; opens the job's output pane |
 | **Logs** | a follow stream with service filter, text search and correlation-id highlight | start, stop (the host's follow job too, as does leaving the screen), clear |
 | **Broker** | queues with depth, `_error` and `_skipped` queues marked with the runbook of one that holds a message, a BFF projection panel (what the rebuild tool cannot restore, the depth of `bff-order-events`), exchanges, bindings, permissions; a drained indicator for `ordering-catalog-events`; an opened parked queue's messages, each with its fault, type, body and correlation id as a link into Trace | refresh, auto-refresh of all four; Repair, and Rebuild behind a typed confirmation, each opening the job's output pane and reading the queues again when it starts and when it ends; Open on a parked queue that holds a message; per message a dry-run Replay or Discard, then, once a dry run of that message and verb is started, that one for real behind a typed confirmation, each opening the job's output pane |
+| **Map** | each service of `PlatformServices.All` with the gateway routes that reach it and the queues it consumes (parked twins included), each queue's depth, its change per second between two reads and the exchanges bound to it; the places where the broker and the console's tables disagree | Refresh, and every 5 s |
 | **Erasure** | one row per holder of an erasure request (the backend's `Privacy__Responders__n`), each answered, waiting or overdue as the request reads, with its `*-privacy` queue's depth and `privacy-completions`' beside them; the request's status, dates and reissue count; an answer from outside the request's set marked not counted; the overdue runbook's link | Raise a request for a subject id, as the `privacy` login; read one by id, or every 3 s until it closes; Reissue an overdue one. Nothing here grants the role: the realm's owner does (§13) |
 | **Mail** | §5.12's list, newest first: when, to whom, the subject, and the correlation id as a link into Trace, or `none`; how many the sink holds when that is more than listed; a line saying so when no message carries a correlation id; an opened message's addresses, date and body | Refresh; filter by correlation id (also `?correlationId=`), leaving one order's messages; Open a message; follow its Trace link; open the sink's own UI, where clearing is done |
 | **API** | operation tree on the left, each source with what its document changed since the kept baseline; request editor (path params, headers, body pre-filled from the schema example, `commandId` generated per send) and identity picker with its token clock (§5.6); response pane with status, timing, headers, body; a history list | Send; accept a changed document as the new baseline; "Trace this call" opens the Trace screen with the response's correlation id |
