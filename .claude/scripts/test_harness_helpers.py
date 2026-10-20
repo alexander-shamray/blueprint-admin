@@ -7157,6 +7157,69 @@ class TheGitArgvGuard(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     module.sed_script_actions(script)
 
+    def test_git_restore_checkout_and_clean_are_judged_by_the_paths_they_write(self):
+        # #297: they overwrite or delete the pathspecs they are given.
+        root = self.writing_checkout()
+        for command in (
+            "git restore .claude/settings.json",
+            "git restore --source=HEAD~1 .claude/settings.json",
+            "git restore -s HEAD~1 -- package.json",
+            "git restore --worktree --staged package.json",
+            "git restore .",
+            "git restore ..",
+            "git restore ':(top).claude/x'",
+            "git restore '*.json'",
+            "git restore --pathspec-from-file=list",
+            "git checkout -- .claude/settings.json",
+            "git checkout HEAD~1 -- package.json",
+            "git checkout HEAD -- '.claude/*'",
+            "git checkout HEAD -- .",
+            "git checkout origin/main -- .claude/hooks/guard-git-argv.py",
+            "git checkout -- .",
+            "git checkout .",
+            "git checkout package.json",
+            "git checkout src/app/x.ts",
+            "git checkout -- src/app/x.ts",
+            "git checkout -- $F",
+            "git -C .claude checkout -- x",
+            "GIT_WORK_TREE=.claude git checkout HEAD -- settings.json",
+            "git_work_tree=.claude git checkout HEAD -- settings.json",
+            "env GIT_DIR=x git restore a",
+            "git -c core.worktree=.claude checkout HEAD -- settings.json",
+            "env git checkout -- .claude/x",
+            "git clean -fd",
+            "git clean -fdx .claude",
+            "git clean -f package.json",
+            'git checkout -- "$(cat list)"',
+        ):
+            with self.subTest(command=command):
+                self.assertRefused(command, cwd=root)
+
+        for command in (
+            "git checkout main",
+            "git checkout -b chore/git-aliases",
+            "git checkout -B fix/x origin/main",
+            "git checkout --detach origin/main",
+            "git checkout docs/home-memory-denies-measured",
+            "git checkout HEAD -- notes.txt",
+            "git checkout HEAD -- .claude/settings.json",
+            "git checkout @ -- package.json",
+            "git checkout -- notes.txt",
+            "git restore notes.txt",
+            "git restore --staged .claude/settings.json",
+            "git restore -S package.json",
+            "git clean -n",
+            "git clean -nd .claude",
+            "git clean -fd /tmp/scratch-out",
+            "git log --oneline -- .claude/hooks",
+            "grep -r git restore .claude/hooks",
+            "echo git checkout -- .claude/x",
+            "dotnet restore src/Admin.Host",
+            "git checkout main && git pull --ff-only",
+        ):
+            with self.subTest(admitted=command):
+                self.assertAdmitted(command, cwd=root)
+
     def test_an_ordinary_writing_verb_is_still_admitted(self):
         # The positive control: a rule refusing every `cp` passes every case
         # above, and takes `/ship`'s own `rm -f suggestions.md` with it. A
