@@ -68,6 +68,11 @@ and `/ship` also run `bash .claude/scripts/pr-locality.sh`.
 
 Notes:
 
+- **A touch set widened mid-work keeps its reason out of the cell.** The
+  `| Touch set |` row holds paths and nothing else, since both readers of it
+  parse the cell as paths. A file added after the first edit joins the row,
+  and the reason it was added is a sentence below the table. A row widened
+  with no reason given is a finding for `/review-branch`.
 - **`Program.cs` is the host composition root.** A Class A change that has to
   edit it has outgrown its class.
 - **A spec beside the file it covers moves with it.**
