@@ -868,10 +868,16 @@ class TheHelperPublishesWhatItRebased(unittest.TestCase):
         # `pushInsteadOf` that sends the force to another repository refuses the run. A rewrite
         # to the same `owner/repo` (https to ssh, a mirror) names the same repository and is
         # the ordinary setup the clean-update case above runs under.
+        same_path_other_host = (
+            '"https://evil.example/$(basename "$(dirname "$(git config --get remote.origin.url)")")/remote.git"')
         for key, value in (("remote.origin.pushurl", "https://example.invalid/x.git"),
+                           ("remote.origin.pushurl", None),
                            ("url.https://example.invalid/evil.git.pushinsteadof", None)):
-            with self.subTest(key=key):
-                if value is None:
+            with self.subTest(key=key, value=value):
+                if value is None and key == "remote.origin.pushurl":
+                    # The same `owner/repo` path on another host passes an owner/repo-only comparison.
+                    self.at(f"git config --local {key} {same_path_other_host}")
+                elif value is None:
                     # A rewrite of the very URL the remote was added with, to another repository.
                     self.at(f'git config --local "{key}" "$(git config --get remote.origin.url)"')
                 else:
@@ -887,6 +893,25 @@ class TheHelperPublishesWhatItRebased(unittest.TestCase):
                 self.at("git rebase --abort || true")
                 self.at("rm -f \"$(git rev-parse --git-path claude-rebase-pending)\"")
                 self.at("git reset -q --hard refs/remotes/origin/feat/x")
+
+    def test_repo_key_agrees_across_protocols_on_one_host_and_nowhere_else(self):
+        # `repo_key` is lifted out of the helper and run alone, so the spellings are exact.
+        # One URL per call, through the environment: a subject on stdin arrives with CRLF on
+        # Windows, and a trailing CR is part of the URL.
+        script = 'eval "$(sed -n \'/^repo_key() {/,/^}/p\' "$H")"; repo_key "$U" || echo "(none)"'
+        urls = [
+            "https://github.com/o/r.git", "git@github.com:o/r.git", "ssh://git@github.com:22/o/r",
+            "https://GitHub.com/o/r/", "https://evil.example/o/r", "https://github.com/r",
+            "ext::sh -c evil", "C:/x/o/r.git", "/tmp/x/o/r.git",
+        ]
+        got = {u: run_bash(script, H=str(HELPER), U=u).stdout.strip() for u in urls}
+        for same in urls[:4]:
+            self.assertEqual("github.com|o/r", got[same], same)
+        self.assertEqual("evil.example|o/r", got["https://evil.example/o/r"])
+        for refused in ("https://github.com/r", "ext::sh -c evil"):
+            self.assertEqual("(none)", got[refused], refused)
+        self.assertEqual("|o/r", got["C:/x/o/r.git"])
+        self.assertEqual("|o/r", got["/tmp/x/o/r.git"])
 
     def test_a_remote_with_two_urls_is_refused_before_anything_is_forced(self):
         # A remote with several `url` values pushes to each: the force would reach a second
