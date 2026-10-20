@@ -1768,6 +1768,7 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
     MSBUILD_FAMILIES = (
         "**/Directory.Build.*", "**/Directory.Solution.*", "**/NuGet.Config",
         "**/nuget.config", "**/NuGet.config", "**/*.slnx.targets",
+        "**/Directory.Packages.*", "**/*.csproj.user", "**/obj/**",
     )
 
     def _msbuild_rules(self):
@@ -1809,7 +1810,12 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertNotIn(name, tracked)
                 self.assertIn(name.lower(), module.PROTECTED_FILES_FOLDED)
-        self.assertIsNotNone(module.protected_path("src/Admin.Host/Directory.Build.targets"))
+        for written in ("src/Admin.Host/Directory.Build.targets",
+                        "src/Admin.Host/Admin.Host.csproj.user",
+                        "artifacts/obj/Admin.Host/Admin.Host.csproj.nuget.g.targets"):
+            with self.subTest(written=written):
+                self.assertIsNotNone(module.protected_path(written))
+        self.assertIsNone(module.protected_path("src/Admin.Host/Admin.Host.csproj"))
 
     def test_the_auto_imported_names_are_not_all_tracked(self):
         # The positive control for the case above, and the point of it: at

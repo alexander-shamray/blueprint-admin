@@ -403,10 +403,11 @@ A new residual is stated **here** and gets a row above.
   `host-checks.sh` and the build reports success (#311). Each editing command and
   `settings.json` deny them at the root in both spellings and by family at any
   depth, and `PROTECTED_FILES` carries the names, so a redirect to one is refused
-  at any depth too. The suite holds the list as the Node one is held. Not covered:
-  a `Directory.Build.props` above the checkout, which the edit guard's
-  outside-the-checkout rule judges, and the generated `*.nuget.g.targets` under
-  `artifacts/obj`, which `dotnet test`'s restore rewrites.
+  at any depth too. Beside them: `Directory.Packages.*`, `*.csproj.user` (the SDK's
+  common targets import it) and any `obj` tree, where a restore that finds nothing
+  changed does not rewrite a planted `*.nuget.g.targets`. The suite holds the list as
+  the Node one is held. Not covered: a `Directory.Build.props` above the checkout,
+  which the edit guard's outside-the-checkout rule judges.
 - **`fork` is denied beside the built-in agent types, and no other agent type is
   named.** `Agent(fork)` joins the broad types `/ship` and the two sweeps deny, since
   a fork inherits the parent's whole toolset. `allowed-tools` auto-approves rather

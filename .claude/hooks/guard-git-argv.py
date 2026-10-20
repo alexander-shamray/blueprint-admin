@@ -223,6 +223,10 @@ FORBIDDEN_SUBSTRINGS = ("ext::",)
 PROTECTED_TREES = frozenset({
     ".claude", ".git", ".github", ".remember", ".vscode", "android", "ios",
     "node_modules",
+    # MSBuild imports `<obj>/<project>.nuget.g.props` and `.targets` unasked, and
+    # a restore that finds nothing changed does not rewrite them (#311). This
+    # tree is build output (`artifacts/obj` here) and no command writes it.
+    "obj",
 })
 
 # **The root files, matched on the BASENAME, and the over-refusal is
@@ -2235,6 +2239,10 @@ def protected_path(literal):
         if comparable(part) in PROTECTED_TREES_FOLDED:
             return part
     if parts and comparable(parts[-1]) in PROTECTED_FILES_FOLDED:
+        return parts[-1]
+    # `<project>.csproj.user` is imported by the SDK's common targets (#311): a
+    # suffix rather than a name, because the project's name is the prefix.
+    if parts and comparable(parts[-1]).endswith(".csproj.user"):
         return parts[-1]
     return None
 
