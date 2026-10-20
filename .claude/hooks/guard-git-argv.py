@@ -4383,26 +4383,48 @@ DASHED_GIT = re.compile(r"^git-[a-z][a-z0-9-]*$")
 # is here because every git word is judged by the rest of this file, and its
 # operands include branch names (`git checkout -b chore/git-aliases`).
 INERT_OPERAND_LEADS = READING_COMMANDS | DATA_ONLY_COMMANDS | frozenset({
-    "cd", "cp", "mkdir", "mv", "pwd", "rm", "touch", "type", "which",
+    "basename", "cd", "chmod", "cp", "cut", "dirname", "du", "jq", "ln",
+    "mkdir", "mv", "pwd", "readlink", "realpath", "rm", "tee", "test", "touch",
+    "tr", "type", "which", "[",
 })
-# `npm exec`, `npm run` and `npx` run a program, so `npm` is inert only for the
-# subcommands that take a package name. `sort --compress-program`, `gh` aliases
-# and extensions, and `dotnet exec` run one too, so those leads are judged whole.
-NPM_PACKAGE_SUBCOMMANDS = frozenset({
-    "add", "ci", "i", "info", "install", "remove", "uninstall", "view",
-})
+# `npm exec`, `npm run` and `npx` run a program, `gh` aliases and extensions
+# and `dotnet exec` run one, and `sort --compress-program` runs one: those
+# leads are inert only for the subcommands that take a name as data.
+INERT_SUBCOMMANDS = {
+    "npm": frozenset({
+        "add", "ci", "i", "info", "install", "remove", "uninstall", "view",
+    }),
+    "gh": frozenset({
+        "api", "auth", "issue", "label", "pr", "release", "repo", "run",
+        "search", "status", "workflow",
+    }),
+    "dotnet": frozenset({
+        "build", "format", "pack", "publish", "restore", "test",
+    }),
+}
 
 
 def inert_operands(run, lead):
     """Whether `run`'s lead only reads its operands as data."""
+    raw = leading_command(run)
+    if not raw:
+        # A run of assignments alone has no command word, so it runs nothing.
+        return True
+    # A word with a `/` is a file somebody chose, whatever it is called; `git`
+    # alone is exempt because every git word is judged by the rest of this file.
+    if "/" in raw and lead != "git":
+        return False
+    position = run.index(raw) + 1
+    # The word that names the subcommand: after the lead's own options.
+    rest = [word for word in run[position:] if not word.startswith("-")]
     if lead in INERT_OPERAND_LEADS:
         return True
+    if lead in INERT_SUBCOMMANDS:
+        return bool(rest) and rest[0] in INERT_SUBCOMMANDS[lead]
     # `command -v git-lfs` looks a name up and runs nothing; `find` runs a
     # program only through one of its exec actions.
     if lead == "command":
-        return len(run) > 1 and run[1] in ("-v", "-V")
-    if lead == "npm":
-        return len(run) > 1 and run[1] in NPM_PACKAGE_SUBCOMMANDS
+        return position < len(run) and run[position] in ("-v", "-V")
     return lead == "find" and not any(
         word in ("-exec", "-execdir", "-ok", "-okdir") for word in run)
 
