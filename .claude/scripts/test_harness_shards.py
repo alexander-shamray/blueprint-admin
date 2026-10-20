@@ -258,10 +258,15 @@ class TheRunnerRefusesRatherThanReportingAPass(unittest.TestCase):
                     cwd=str(ROOT), stdout=open_logs.enter_context(log.open("wb")),
                     stderr=subprocess.STDOUT) for log in logs]
                 codes = [worker.wait(timeout=600) for worker in workers]
-            tails = [log.read_text(encoding="utf-8", errors="replace")[-2000:]
-                     for log in logs]
-            self.assertEqual([0, 0, 0, 0], codes, tails)
+            text = [log.read_text(encoding="utf-8", errors="replace")
+                    for log in logs]
+            self.assertEqual([0, 0, 0, 0], codes, [t[-2000:] for t in text])
             self.assertEqual([], SHARD.unfinished(work, names))
+            # Finished is not enough: a unit two workers both claimed would
+            # finish too. Each test has to have run exactly once.
+            ran = "".join(text)
+            twice = [i for i in ids if ran.count(f"({i})") != 1]
+            self.assertEqual([], twice, "run other than exactly once")
 
     def test_a_unit_holding_an_id_discovery_does_not_hold_stays_unfinished(self):
         # The queue's half of the runtime coverage rule: the worker refuses
