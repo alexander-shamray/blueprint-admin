@@ -234,9 +234,10 @@ class TheScan(unittest.TestCase):
         self.write("web/node_modules/pkg/.gitignore", "*\n")
         self.assertEqual(excluded_from_inside_only(self.repo), [])
 
-    def test_it_asks_git_once_per_level_of_the_tree(self):
-        # Three levels of directories and the empty fourth: four questions,
-        # however wide each level is.
+    def test_it_batches_each_level_into_one_call(self):
+        # Three levels of directories and the empty fourth: four calls to
+        # `root_covered`, however wide each level is. The last asks git
+        # nothing; what each call spawns is `root_covered`'s own business.
         for rel in ("a/one/x", "a/two/y", "b/three/z"):
             (self.repo / rel).mkdir(parents=True)
         module = sys.modules[__name__]
