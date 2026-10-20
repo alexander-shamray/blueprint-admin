@@ -136,8 +136,8 @@ TOGETHER = {
 # numbers are read against each other, so a table half old and half new orders
 # worse than either. The one this replaces was taken one class at a time on
 # 2026-09-22, before the queue, and had gone stale in both directions: one
-# class sped up ten times over in #320, and three it did not list cost 10-40x
-# their test count.
+# class sped up many times over in #320, and classes it did not list had
+# grown to cost far more than their test count (#322).
 #
 # **A class is listed when it measured 5 s or more, OR when it holds ten tests
 # or more.** Two arms because there are two ways to order the queue wrongly.
