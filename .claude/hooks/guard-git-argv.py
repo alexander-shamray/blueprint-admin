@@ -2695,6 +2695,27 @@ def _unreadable_word(literal, command):
 FIND_WRITING_ACTIONS = frozenset({"-fprint", "-fprint0", "-fprintf", "-fls"})
 
 
+def shell_expands(word):
+    """Whether bash expands something in the raw `word`: a `$` or a backtick
+    outside single quotes and not escaped (#297)."""
+    quote, i = None, 0
+    while i < len(word):
+        char = word[i]
+        if quote == "'":
+            if char == "'":
+                quote = None
+        elif char == "\\":
+            i += 1
+        elif char == "'" and quote is None:
+            quote = "'"
+        elif char == '"':
+            quote = None if quote == '"' else '"'
+        elif char in "$`":
+            return True
+        i += 1
+    return False
+
+
 # The `sed` commands that take no argument, `{` and `}` among them.
 SED_NO_ARGUMENT = frozenset("=dDgGhHnNpPxzF{}")
 
@@ -2710,11 +2731,13 @@ def sed_script_actions(script):
     """
     actions, i, n = [], 0, len(script)
 
-    def line_end(start):
-        # A text argument runs to the newline; a backslash continues the line.
+    def line_end(start, continued=False):
+        # A comment or a file name ends at the newline, whatever precedes it
+        # (GNU sed 4.9 measured); only the text of `a`, `i` and `c` is
+        # continued by a backslash.
         j = start
         while j < n and script[j] != "\n":
-            j += 2 if script[j] == "\\" else 1
+            j += 2 if continued and script[j] == "\\" else 1
         return min(j, n)
 
     def delimited(start, delimiter):
@@ -2776,11 +2799,20 @@ def sed_script_actions(script):
         if command == "#":
             i = line_end(i)
         elif command in "lLqQ":
-            i = digits(i)
-        elif command in "btT:":
-            while i < n and script[i] not in ";\n":
+            while i < n and script[i] in " \t":
                 i += 1
-        elif command in "aicrR":
+            i = digits(i)
+        elif command in "btTv:":
+            # A label ends at a blank as well as at `;`: `:x w out` writes
+            # `out` (GNU sed 4.9 measured). An older sed reads further, and
+            # reading less here only refuses more.
+            while i < n and script[i] in " \t":
+                i += 1
+            while i < n and script[i] not in " \t;\n":
+                i += 1
+        elif command in "aic":
+            i = line_end(i, True)
+        elif command in "rR":
             i = line_end(i)
         elif command in "wWe":
             end = line_end(i)
@@ -3088,6 +3120,16 @@ def verb_offence(verb, words, command):
                 break
 
     if verb == "sed":
+        # A word the shell expands is not the option or the script it will be:
+        # `-e"$(cat s)"` is read as an operand, and `s/a/$X/` as plain text.
+        for raw in words:
+            if shell_expands(raw):
+                return (
+                    f"`sed` is handed `{raw}`, which the shell expands, so "
+                    "the options and the script it receives are not the ones "
+                    "written here and may write a file or run a command; "
+                    "name them literally (#297, docs/harness-boundaries.md)."
+                )
         if not script_given and operands:
             scripts.append(target_literal(operands[0]))
         refusal = sed_script_offence(scripts, script_file, command)

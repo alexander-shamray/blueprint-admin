@@ -6806,6 +6806,11 @@ class TheGitArgvGuard(unittest.TestCase):
             'sed "$(cat s)" notes.txt',
             "sed 'w' notes.txt",
             "sed 's/a/b' notes.txt",
+            "sed -n ':x w package.json' notes.txt",
+            "sed -n 'b end;w package.json' notes.txt",
+            'sed p -e"$(cat s)" notes.txt',
+            'sed "s/a/$X/" notes.txt',
+            "X=b/w; sed \"s/a/$X/\" notes.txt",
             # A start that is, or contains, the working directory reaches the
             # machinery without naming it (round 1 of PR #305).
             "find . -delete",
@@ -6861,6 +6866,16 @@ class TheGitArgvGuard(unittest.TestCase):
             ("1a w x", []),
             ("y/we/ew/", []),
             ("w out", [("w", "out")]),
+            # A comment and a file name end at the newline, backslash or not.
+            ("#\\\nw out", [("w", "out")]),
+            ("w a\\\nw b", [("w", "a\\"), ("w", "b")]),
+            # A label ends at a blank or `;`, and `q`/`l` allow blanks.
+            (":x w out", [("w", "out")]),
+            ("b end;w out", [("w", "out")]),
+            ("q 5", []),
+            ("l 5;p", []),
+            ("v 4.2", []),
+            ("$!N;P;D", []),
             ("p;W out", [("W", "out")]),
             ("s/a/b/gw out", [("w", "out")]),
             ("s/a/b/e", [("e", "")]),
@@ -6908,6 +6923,9 @@ class TheGitArgvGuard(unittest.TestCase):
             "find /tmp -name x -fprint /tmp/out",
             # A `w` that is not a command, and one that writes elsewhere.
             "sed -n '1,5p' notes.txt",
+            "sed -n '$p' notes.txt",
+            "sed 'q 5' notes.txt",
+            "sed -n '/x/{p;l 70}' notes.txt",
             "sed 's/web/x/g' notes.txt",
             "sed -n '/w/p' notes.txt",
             "sed 's/a/b/w /tmp/out' notes.txt",
