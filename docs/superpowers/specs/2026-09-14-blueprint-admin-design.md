@@ -1028,7 +1028,7 @@ The SPA never calls the platform directly; §3 says why.
 The console holds realm passwords and can wipe volumes, so it is a loopback
 tool and nothing else. The host binds `127.0.0.1` only, refuses to start on
 any other address, and sets no CORS headers, so a page on another origin
-cannot drive it. Every response the application produces also forbids framing (`frame-ancestors 'none'`,
+cannot drive it, and `/api` refuses a request whose `Sec-Fetch-Site` is anything but `same-origin` or `none`, so a page on another localhost port (`same-site`) cannot either. Every response the application produces also forbids framing (`frame-ancestors 'none'`,
 `X-Frame-Options: DENY`), because a page that frames the console makes no
 cross-site request: the clicks inside the frame are the console's own. There is
 no login of its own. `down -v` requires the typed
