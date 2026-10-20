@@ -863,6 +863,26 @@ class TheHelperPublishesWhatItRebased(unittest.TestCase):
         self.assertEqual(4, result.returncode, result.stderr)
         self.assertIn("the waiting replay is feat/x, not feat/other", result.stderr)
 
+    def test_a_configured_push_redirect_is_refused_before_anything_is_forced(self):
+        # #343: spelling the refspec out pins the ref and not the URL, so a configured
+        # `pushurl`, a `pushInsteadOf` or a `remote.origin.push` refuses the run.
+        for key, value in (("remote.origin.pushurl", "https://example.invalid/x.git"),
+                           ("url.https://example.invalid/.pushinsteadof", "https://github.com/"),
+                           ("remote.origin.push", "refs/heads/feat/x:refs/heads/elsewhere")):
+            with self.subTest(key=key):
+                self.at(f'git config --local "{key}" "{value}"')
+                before = self.at("git rev-parse refs/remotes/origin/feat/x").stdout.strip()
+
+                result = self.helper()
+
+                self.assertEqual(7, result.returncode, result.stderr)
+                self.assertIn("a push redirect is configured", result.stderr)
+                self.assertEqual(before, self.at("git ls-remote origin refs/heads/feat/x").stdout.split()[0])
+                self.at(f'git config --local --unset-all "{key}"')
+                self.at("git rebase --abort || true")
+                self.at("rm -f \"$(git rev-parse --git-path claude-rebase-pending)\"")
+                self.at("git reset -q --hard refs/remotes/origin/feat/x")
+
     def test_publish_refuses_a_remote_that_moved_since_the_lease(self):
         # The lease was approved against a tip that no longer exists, and
         # re-approving it here is the re-read this helper exists to avoid —
