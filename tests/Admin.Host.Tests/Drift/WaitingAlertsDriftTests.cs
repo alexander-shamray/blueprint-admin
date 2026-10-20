@@ -37,6 +37,7 @@ public sealed partial class WaitingAlertsDriftTests
     [Fact]
     public void No_waiting_rule_is_also_loaded()
     {
+        Rules(Loaded).ShouldNotBeEmpty("the loaded rules file produced no rule names, so the intersection below would pass for nothing");
         Rules(Loaded).Keys.Intersect(WaitingAlerts.Table.Select(w => w.Name)).ShouldBeEmpty();
     }
 

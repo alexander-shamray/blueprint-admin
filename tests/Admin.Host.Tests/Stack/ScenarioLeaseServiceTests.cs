@@ -412,14 +412,14 @@ public sealed class ScenarioLeaseServiceTests : IAsyncDisposable
     }
 
     [Theory]
-    [InlineData("nothing-else", 60)]
-    [InlineData(ScenarioControl.StopInventory, 0)]
-    [InlineData(ScenarioControl.StopInventory, 601)]
-    public async Task A_change_off_the_table_and_a_hold_off_its_bounds_are_refused_before_anything_runs(string change, int seconds)
+    [InlineData("nothing-else", 60, AcquireOutcome.UnknownChange)]
+    [InlineData(ScenarioControl.StopInventory, 0, AcquireOutcome.BadHold)]
+    [InlineData(ScenarioControl.StopInventory, 601, AcquireOutcome.BadHold)]
+    public async Task A_change_off_the_table_and_a_hold_off_its_bounds_are_refused_before_anything_runs(string change, int seconds, AcquireOutcome expected)
     {
         AcquireResult result = await Acquire(change, seconds);
 
-        result.Outcome.ShouldBeOneOf(AcquireOutcome.UnknownChange, AcquireOutcome.BadHold);
+        result.Outcome.ShouldBe(expected);
         runner.Started.ShouldBeEmpty();
         File.Exists(journal).ShouldBeFalse();
     }

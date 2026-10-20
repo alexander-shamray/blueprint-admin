@@ -380,11 +380,11 @@ public sealed class FakeOrdersTests
         [.. JsonDocument.Parse(orders.CarrierLog(code, polls)).RootElement.EnumerateArray().Select(e => e.Clone())];
 
     [Theory]
-    [InlineData("SIM-REFUSED", 422)]
-    [InlineData("SIM-DOWN", 503)]
-    [InlineData("SIM-SLOW", 201)]
-    [InlineData("SIM-STRANGE", 201)]
-    public void An_order_to_a_carrier_code_leaves_the_bookings_the_simulator_logs_for_it(string code, int status)
+    [InlineData("SIM-REFUSED", 422, 1)]
+    [InlineData("SIM-DOWN", 503, 7)]
+    [InlineData("SIM-SLOW", 201, 4)]
+    [InlineData("SIM-STRANGE", 201, 1)]
+    public void An_order_to_a_carrier_code_leaves_the_bookings_the_simulator_logs_for_it(string code, int status, int bookings)
     {
         FakeOrders orders = new(time);
         DateTimeOffset placed = time.GetUtcNow();
@@ -399,7 +399,7 @@ public sealed class FakeOrdersTests
         log.ShouldAllBe(e => e.GetProperty("Request").GetProperty("DateTime").GetDateTimeOffset() > placed);
         log.Select(e => JsonDocument.Parse(e.GetProperty("Request").GetProperty("Body").GetString()!).RootElement.GetProperty("shipmentId").GetString())
             .Distinct().Count().ShouldBe(1);
-        log.Length.ShouldBe(code is "SIM-REFUSED" or "SIM-STRANGE" ? 1 : log.Length);
+        log.Length.ShouldBe(bookings);
     }
 
     [Fact]
