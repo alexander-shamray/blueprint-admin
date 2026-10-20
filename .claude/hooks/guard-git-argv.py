@@ -2566,6 +2566,8 @@ def destination_offence(word, command, writer, kind):
 #                each one — `mv` removes its sources, which is a write to them
 #   in-place     the file operands, but only under `-i` / `--in-place`
 #   of           the `of=` operand
+#   find         the file an `-fprint*` or `-fls` action names, and the
+#                starting points of `-delete`
 #
 # **The list trails the programs that write, and says so.** `curl -o`,
 # `rsync`, `tar -x`, `unzip`, `patch` and an interpreter
@@ -2692,6 +2694,49 @@ def _unreadable_word(literal, command):
 FIND_WRITING_ACTIONS = frozenset({"-fprint", "-fprint0", "-fprintf", "-fls"})
 
 
+def find_delete_offence(starts, files0, command):
+    """The reason to refuse a `find -delete` over `starts`, or `None`.
+
+    `-delete` removes everything its starting points reach, so a start that is
+    the working directory, a parent of it or the home directory reaches the
+    protected tree without naming it: `find . -delete` and `find .. -name x
+    -delete` were admitted while `find .claude/hooks -delete` was refused. No
+    starting point means the working directory. `-files0-from` reads the starts
+    from a file this guard cannot read. A start under a checkout is judged as
+    any other destination (#297).
+    """
+    if files0 or not starts:
+        return (
+            "`find -delete` has no starting point this guard can read — none "
+            "(which means the working directory) or `-files0-from` — so what "
+            "it removes cannot be placed. Name the starting points "
+            "(#297, docs/harness-boundaries.md)."
+        )
+    here = os.path.realpath(EVENT_CWD or os.getcwd())
+    for word in starts:
+        literal = target_literal(word)
+        if literal is not None:
+            plain = os.path.normpath(literal.replace("\\", "/")).replace("\\", "/")
+            above = plain in (".", "..", "/") or plain.startswith("../") or (
+                word.strip().startswith("~"))
+            if not above and (os.path.isabs(literal) or literal.startswith("/")):
+                real = os.path.realpath(literal)
+                above = (real == here
+                         or here.startswith(real.rstrip("/\\") + os.sep))
+            if above:
+                return (
+                    f"`find -delete` starts at `{literal}`, which is or "
+                    "contains the working directory or the home directory, "
+                    "so it removes the agent's own machinery without naming "
+                    "it. Start below it, at a path that names what is to go "
+                    "(#297, docs/harness-boundaries.md)."
+                )
+        refusal = destination_offence(word, command, "`find`", "`find`")
+        if refusal is not None:
+            return refusal
+    return None
+
+
 def find_offence(words, command):
     """The reason to refuse a `find` that writes or deletes, or `None`.
 
@@ -2705,6 +2750,7 @@ def find_offence(words, command):
     """
     literals = [target_literal(word) for word in words]
     starts, destinations, deleting, expression = [], [], False, False
+    files0 = False
     position = 0
     while position < len(words):
         raw, literal = words[position], literals[position]
@@ -2716,18 +2762,31 @@ def find_offence(words, command):
             if literal == "-D":
                 position += 1
                 continue
+            if literal == "--":
+                continue
             if literal is None or not literal.startswith(("-", "(", "!", ",")):
                 starts.append(raw)
                 continue
             expression = True
-        if literal in FIND_WRITING_ACTIONS and position < len(words):
+        if literal in FIND_EXECUTORS:
+            # The words up to the terminator are another program's, judged
+            # as that program's by `writing_verb_offence`.
+            while position < len(words) and literals[position] not in (";", "+"):
+                position += 1
+            position += 1
+        elif literal in FIND_WRITING_ACTIONS and position < len(words):
             destinations.append(words[position])
             position += 1
         elif literal == "-delete":
             deleting = True
+        elif literal == "-files0-from":
+            files0 = True
 
-    judged = destinations + ((starts or ["."]) if deleting else [])
-    for word in judged:
+    if deleting:
+        refusal = find_delete_offence(starts, files0, command)
+        if refusal is not None:
+            return refusal
+    for word in destinations:
         refusal = destination_offence(word, command, "`find`", "`find`")
         if refusal is not None:
             return refusal
