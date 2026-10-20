@@ -24,7 +24,7 @@ using Microsoft.Extensions.Options;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
-builder.Configuration.AddEnvironmentVariables("BLUEPRINT_");
+builder.Configuration.AddAdminSources(args);
 builder.Services.Configure<AdminOptions>(builder.Configuration.GetSection(AdminOptions.Section));
 
 // Relative BackendDir/FrontendDir must not resolve against the process's
