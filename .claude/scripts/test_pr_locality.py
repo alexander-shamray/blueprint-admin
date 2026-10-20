@@ -8,7 +8,14 @@ through `gh`, so a stub `gh` first on PATH answers `pr view` and `api .../files`
 script is run as it is.
 
 Each refusal case asserts two things: the shell copy refuses with the phrase, and the Python gate's source
-still carries the same phrase, so a message reworded in one copy alone fails here.
+still carries the same phrase, so a message reworded in one copy alone fails here. **The second half is a
+wording check, not a behaviour check**: a generic phrase can occur in another of the gate's messages, so the
+gate's own refusal of the same input is `.github/locality-gate/test_locality_gate.py`'s subject.
+
+The verdict cases run at the repository's HEAD against its real `.github/locality-gate/classes.yml`, which is
+how the helper reads the map when the PR base is the checkout: class D holds no `src/**`, class A holds
+`src/Admin.Host/**`. A map edit that moves either breaks them, deliberately: the helper and the map are one
+verdict.
 """
 
 import os
@@ -37,8 +44,13 @@ case "$1" in
     esac ;;
   api)
     case "$*" in
-      *@json*) while IFS= read -r n; do [ -n "$n" ] && printf '"%s"\n' "$n"; done < "$FAKE_FILES_FILE" ;;
-      *) cat "$FAKE_FILES_FILE" ;;
+      # A line is `filename` or `filename<TAB>previous_filename` (a rename); the count query
+      # reads the first column, the path query both.
+      *@json*) while IFS=$'\t' read -r n p; do
+                 if [ -n "$n" ]; then printf '"%s"\n' "$n"; fi
+                 if [ -n "$p" ]; then printf '"%s"\n' "$p"; fi
+               done < "$FAKE_FILES_FILE" ;;
+      *) cut -f1 "$FAKE_FILES_FILE" ;;
     esac ;;
 esac
 """
@@ -104,10 +116,33 @@ class TheVerdict(Case):
         self.assertEqual(
             ["class A+D", "inside src/Admin.Host/Jobs/X.cs", "inside docs/b.md", "outside docs/c.md"], result.stdout.splitlines())
 
+    def test_both_ends_of_a_rename_are_judged(self):
+        result = self.run_helper(body("D", "docs/**"), files=("docs/b.md\tsrc/Admin.Host/Program.cs",), changed=1)
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(["class D", "inside docs/b.md", "outside src/Admin.Host/Program.cs"], result.stdout.splitlines())
+
     def test_the_touch_set_cell_is_never_printed(self):
         result = self.run_helper(body("D", "docs/**"))
 
+        # Asserted against the whole expected output first, so a refusal that prints nothing cannot pass.
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(["class D", "inside docs/a.md"], result.stdout.splitlines())
         self.assertNotIn("docs/**", result.stdout)
+
+    def test_a_changed_path_that_is_not_a_plain_path_refuses_the_whole_run(self):
+        for name, path in (
+            ("a backslash", "docs\\a.md"),
+            ("a dot-dot segment", "../x.md"),
+            ("no slash or dot", "README"),
+            ("an empty segment", "docs//a.md"),
+        ):
+            with self.subTest(case=name):
+                result = self.run_helper(body("D", "docs/**"), files=("docs/ok.md", path))
+
+                self.assertEqual(3, result.returncode, result.stdout)
+                self.assertIn("a changed path is not a plain path", result.stderr)
+                self.assertEqual("", result.stdout, "a verdict list with a path withheld would read as complete")
 
     def test_a_body_with_neither_row_prints_nothing(self):
         result = self.run_helper("No rows here.\n")
