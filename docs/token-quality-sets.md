@@ -282,11 +282,12 @@ the same fault.
 
 **What this says, and what it does not:**
 
-- **Round 1 finds about a fifth of what the full sweep filed.** The sweeps ran
-  up to seven rounds, and every round after the first sends an auditor after
-  the leads earlier candidates opened. That, not verification, is where the
-  rest came from. The verify step judges only candidates an auditor has
-  already raised, and can only drop them. So this is a lower bound on a
+- **This round 1 found about a fifth of what the full sweep filed.** The
+  sweeps ran up to seven rounds, and every round after the first sends an
+  auditor after the leads earlier candidates opened. The rest came from the
+  sweep's own round 1 or from those later rounds; which is not known. It did
+  not come from verification, which judges only candidates an auditor has
+  already raised and can only drop them. So this is a lower bound on a
   sweep's recall and not its value. A step that changes the auditors' prompt can hold this
   table as its baseline: the same eight slices and round 1, with no fewer
   rows found.
