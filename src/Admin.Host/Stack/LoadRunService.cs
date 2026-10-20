@@ -1,5 +1,6 @@
 using Admin.Host.Config;
 using Admin.Host.Jobs;
+using Microsoft.Extensions.Options;
 
 namespace Admin.Host.Stack;
 
@@ -13,7 +14,7 @@ namespace Admin.Host.Stack;
 /// in order, under one id, as the reset does. It claims no <see cref="Compose.ComposeGate"/>: it stops and starts nothing, and a Down
 /// under it fails the step it lands in.
 /// </summary>
-public sealed class LoadRunService(IProcessRunner runner, JobRegistry registry, RepoPaths paths)
+public sealed class LoadRunService(IProcessRunner runner, JobRegistry registry, RepoPaths paths, IOptions<AdminOptions> options)
 {
     /// <summary>The load-run job's name in the job list, followed by its steps' names.</summary>
     public const string Kind = "load-run";
@@ -220,7 +221,15 @@ public sealed class LoadRunService(IProcessRunner runner, JobRegistry registry, 
     }
 
     /// <summary>One block run whole, from the backend clone, as run-locally.md's PowerShell blocks are.</summary>
-    public static ProcessSpec Spec(string block, RepoPaths paths) => new("powershell", Arguments(block), paths.BackendDir);
+    public static ProcessSpec Spec(string block, RepoPaths paths, string? sqlPassword = null) =>
+        new("powershell", Arguments(sqlPassword is null ? block : block.Replace(RunLocallySqlPassword, sqlPassword, StringComparison.Ordinal)), paths.BackendDir);
+
+    /// <summary>
+    /// The <c>sa</c> password run-locally.md's blocks carry, which <see cref="AdminOptions.SqlPassword"/> defaults to. The
+    /// blocks stay verbatim, and a stack started with another <c>SQL_PASSWORD</c> has this literal swapped for the configured one
+    /// when a step starts. The job's command line is not scrubbed: a secret is scrubbed as a word, and this one sits inside the block.
+    /// </summary>
+    internal const string RunLocallySqlPassword = "Local_Dev_Pa55w0rd!";
 
     public static string[] Arguments(string block) => ["-NoProfile", "-Command", block];
 
@@ -241,7 +250,7 @@ public sealed class LoadRunService(IProcessRunner runner, JobRegistry registry, 
                         return;
                     }
 
-                    job = runner.Start(Spec(next.Block, paths));
+                    job = runner.Start(Spec(next.Block, paths, options.Value.SqlPassword));
                     step = job;
                 }
 
