@@ -446,7 +446,10 @@ A new residual is stated **here** and gets a row above.
   has more than one push URL, or when the URL git will push to, after `pushurl`,
   `pushInsteadOf` and `insteadOf`, names a different `owner/repo` than the URL the remote
   was added with; a host or protocol rewrite of the same repository (https to ssh, a
-  mirror) passes. The lease (the remote's branch must already be at the commit this run
+  mirror) passes. A URL with no owner segment (a single path component) keeps its host
+  in the comparison and is refused if rewritten between forms; GitHub URLs always carry
+  an owner, so this fails closed on a setup this repository does not have. The lease (the
+  remote's branch must already be at the commit this run
   read) backs that up and does not replace it.
 
 A new residual is stated **here**, and `CLAUDE.md` carries the pointer rather
