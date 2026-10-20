@@ -9,6 +9,7 @@ using Admin.Host.Frontend;
 using Admin.Host.Identity;
 using Admin.Host.Jobs;
 using Admin.Host.Mail;
+using Admin.Host.Platform;
 using Admin.Host.Privacy;
 using Admin.Host.Runbooks;
 using Admin.Host.Scenario;
@@ -112,6 +113,7 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddHostedService<LeaseReconciler>();
 builder.Services.AddSingleton<LogFollower>();
 builder.Services.AddSingleton<BrokerService>();
+builder.Services.AddSingleton<PlatformMapService>();
 builder.Services.AddSingleton<ProjectionRebuildService>();
 
 // A record file is the last copy of a message the tool took, so it lives under Admin:DataDir beside the baselines.
@@ -264,6 +266,7 @@ app.MapFrontend();
 app.MapIdentity();
 app.MapApi();
 app.MapBroker();
+app.MapPlatformMap();
 app.MapRunbooks();
 app.MapErasure();
 app.MapMail();
