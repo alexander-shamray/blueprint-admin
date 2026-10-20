@@ -325,6 +325,43 @@ class SweepWorktreeShape(unittest.TestCase):
         self.assertEqual(self.tmproot, run_bash('dirname "$P"', P=path).stdout.strip())
         self.assertRegex(run_bash('basename "$P"', P=path).stdout.strip(), r"^secsweep-.{6}$")
 
+    def test_a_removal_git_left_half_done_is_finished_and_the_slice_lists_go_too(self):
+        # #329: git unregisters the worktree and then fails to delete its tree; the `.slices` lists
+        # beside it used to stay as well, because the failed command ended the script. A shim `git`
+        # removes for real, leaves a directory behind and fails.
+        repo = str(SCRIPTS.parent.parent)
+        pinned = run_bash('cd "$REPO" && git rev-parse HEAD', REPO=repo).stdout.strip()
+        made = run_bash('cd "$REPO" && bash "$DETACH" "$SHA" 2>/dev/null', REPO=repo, DETACH=str(DETACH), SHA=pinned)
+        path = made.stdout.strip()
+        self.assertEqual(0, made.returncode, made.stderr)
+        self.addCleanup(lambda: run_bash('rm -rf "$P" "$P.slices"', P=path))
+        slices = run_bash('mkdir -p "$P.slices" && printf x > "$P.slices/list" && echo ok', P=path)
+        self.assertEqual("ok", slices.stdout.strip(), slices.stderr)
+
+        shim_dir = Path(tempfile.mkdtemp(prefix="drop-shim-"))
+        self.addCleanup(shutil.rmtree, str(shim_dir), ignore_errors=True)
+        real_git = Path(shutil.which("git")).as_posix()
+        shim = shim_dir / "git"
+        shim.write_text(
+            "#!/usr/bin/env bash\n"
+            'if [ "$1" = worktree ] && [ "$2" = remove ]; then\n'
+            f'  "{real_git}" worktree remove "$3" && mkdir -p "$3/held" && : > "$3/held/file"\n'
+            "  exit 1\n"
+            "fi\n"
+            f'exec "{real_git}" "$@"\n',
+            encoding="utf-8", newline="\n")
+        shim.chmod(shim.stat().st_mode | 0o111)
+
+        env = dict(os.environ, CLAUDE_WORKTREE_REMOVE_TRIES="3", CLAUDE_WORKTREE_REMOVE_PAUSE="0",
+                   PATH=os.pathsep.join([str(shim_dir), os.environ.get("PATH", "")]))
+        dropped = subprocess.run([BASH, str(DROP), path], capture_output=True, text=True, cwd=repo, env=env)
+
+        self.assertEqual(0, dropped.returncode, dropped.stderr)
+        self.assertIn("after git left it behind", dropped.stdout)
+        self.assertEqual(
+            "gone", run_bash('[ -e "$P" ] || [ -e "$P.slices" ] || echo gone', P=path).stdout.strip(),
+            "neither the directory nor its slice lists are left")
+
 
 class LabelStub:
     """A `gh` on PATH answering the three calls gh-label-ensure.sh makes.
@@ -1334,6 +1371,60 @@ class NoCommandHoldsAPrefixGrantThatAdmitsAForbiddenFlag(unittest.TestCase):
         self.assertEqual(0, out.returncode, out.stderr)
         self.assertFalse((trees / "mine").exists())
         self.assertTrue((trees / "theirs").is_dir())
+
+    def test_the_worktree_helper_finishes_a_removal_git_left_half_done_and_keeps_a_refusal(self):
+        # #329: git unregisters the worktree and then fails to delete its tree (on Windows a handle
+        # on `<worktree>/.claude` was measured to last about 40 s). The directory used to be left
+        # behind. A shim `git` stands for that: it removes for real, leaves a directory, and fails.
+        # A refusal (a dirty tree, still registered) must stay a failure with the tree kept.
+        base = Path(tempfile.mkdtemp(prefix="wt-held-"))
+        self.addCleanup(shutil.rmtree, str(base), ignore_errors=True)
+        repo = base / "repo"
+        repo.mkdir()
+        trees = repo / ".claude" / "worktrees"
+        real_git = Path(shutil.which("git")).as_posix()
+
+        def git(*args):
+            subprocess.run([real_git, "-C", str(repo), *args], check=True,
+                           capture_output=True, text=True)
+
+        git("init", "-q", "-b", "main")
+        git("-c", "user.email=t@example.com", "-c", "user.name=t",
+            "commit", "-q", "--allow-empty", "-m", "root")
+        git("worktree", "add", "-q", "-b", "fix/held", ".claude/worktrees/held")
+        git("worktree", "add", "-q", "-b", "fix/dirty", ".claude/worktrees/dirty")
+        (trees / "dirty" / "untracked.txt").write_text("work\n", encoding="utf-8")
+
+        shim_dir = base / "shim"
+        shim_dir.mkdir()
+        shim = shim_dir / "git"
+        shim.write_text(
+            "#!/usr/bin/env bash\n"
+            'if [ "$1" = worktree ] && [ "$2" = remove ]; then\n'
+            f'  "{real_git}" worktree remove "$3" && mkdir -p "$3/held" && : > "$3/held/file"\n'
+            "  exit 1\n"
+            "fi\n"
+            f'exec "{real_git}" "$@"\n',
+            encoding="utf-8", newline="\n")
+        shim.chmod(shim.stat().st_mode | 0o111)
+
+        def remove(path, branch, with_shim):
+            env = dict(os.environ, CLAUDE_WORKTREE_REMOVE_TRIES="3", CLAUDE_WORKTREE_REMOVE_PAUSE="0")
+            if with_shim:
+                env["PATH"] = os.pathsep.join([str(shim_dir), env.get("PATH", "")])
+            return subprocess.run(
+                [BASH, str(SCRIPTS / "git-worktree-remove.sh"), path, branch],
+                capture_output=True, text=True, cwd=str(repo), env=env)
+
+        out = remove(".claude/worktrees/held", "fix/held", with_shim=True)
+        self.assertEqual(0, out.returncode, out.stderr)
+        self.assertIn("after git left it behind", out.stdout)
+        self.assertFalse((trees / "held").exists())
+
+        # Still registered: git refused, so the helper fails and deletes nothing.
+        out = remove(".claude/worktrees/dirty", "fix/dirty", with_shim=False)
+        self.assertNotEqual(0, out.returncode)
+        self.assertTrue((trees / "dirty" / "untracked.txt").is_file())
 
     def test_the_create_helper_refuses_a_body_it_should_not_publish(self):
         # `--body-file` publishes what it reads, including a file the session's
