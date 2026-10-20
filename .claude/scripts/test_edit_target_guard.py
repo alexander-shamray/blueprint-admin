@@ -956,6 +956,24 @@ class WhatThisGuardIsNotTheSubjectOf(GuardCase):
         # And the session standing in main itself is not a new case.
         self.assertAdmitted(os.path.join(self.root, "docs", "note.md"))
 
+    def test_the_worktree_nested_inside_main_keeps_its_own_files_admitted(self):
+        """The production layout: `/branch` forks under `<main>/.claude/worktrees/<slug>`.
+
+        The worktree's files are under main too, and `protected_path` reads every
+        one of them as `.claude`; the standing worktree has to be exempt, spelled or
+        resolved, or the session could not edit its own tree.
+        """
+        worktree = os.path.join(self.root, ".claude", "worktrees", "nested")
+        os.makedirs(os.path.join(worktree, "docs"), exist_ok=True)
+        admin = os.path.join(self.root, ".git", "worktrees", "nested")
+        os.makedirs(admin, exist_ok=True)
+        self.write(os.path.join(worktree, ".git"), "gitdir: " + admin + "\n")
+        self.write(os.path.join(admin, "gitdir"), os.path.join(worktree, ".git") + "\n")
+
+        self.assertAdmitted(os.path.join(worktree, "docs", "note.md"), cwd=worktree)
+        self.assertRefused(os.path.join(self.root, ".claude", "settings.json"), cwd=worktree)
+        self.assertRefused(os.path.join(self.root, "CLAUDE.md"), cwd=worktree)
+
     @unittest.skipUnless(os.name == "nt", "Only Windows drops a trailing dot or space when it opens a file.")
     def test_a_component_ending_in_a_dot_or_a_space_is_refused_on_windows(self):
         """#314: `package.json.` folds to `package.json` in `abspath` and `realpath`, so both forms agreed."""
