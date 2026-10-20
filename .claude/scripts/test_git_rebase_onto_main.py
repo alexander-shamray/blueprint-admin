@@ -864,24 +864,41 @@ class TheHelperPublishesWhatItRebased(unittest.TestCase):
         self.assertIn("the waiting replay is feat/x, not feat/other", result.stderr)
 
     def test_a_configured_push_redirect_is_refused_before_anything_is_forced(self):
-        # #343: spelling the refspec out pins the ref and not the URL, so a configured
-        # `pushurl`, a `pushInsteadOf` or a `remote.origin.push` refuses the run.
+        # #343: spelling the refspec out pins the ref and not the URL, so a `pushurl` or a
+        # `pushInsteadOf` that sends the force to another repository refuses the run. A rewrite
+        # to the same `owner/repo` (https to ssh, a mirror) names the same repository and is
+        # the ordinary setup the clean-update case above runs under.
         for key, value in (("remote.origin.pushurl", "https://example.invalid/x.git"),
-                           ("url.https://example.invalid/.pushinsteadof", "https://github.com/"),
-                           ("remote.origin.push", "refs/heads/feat/x:refs/heads/elsewhere")):
+                           ("url.https://example.invalid/evil.git.pushinsteadof", None)):
             with self.subTest(key=key):
-                self.at(f'git config --local "{key}" "{value}"')
+                if value is None:
+                    # A rewrite of the very URL the remote was added with, to another repository.
+                    self.at(f'git config --local "{key}" "$(git config --get remote.origin.url)"')
+                else:
+                    self.at(f'git config --local "{key}" "{value}"')
                 before = self.at("git rev-parse refs/remotes/origin/feat/x").stdout.strip()
 
                 result = self.helper()
 
                 self.assertEqual(7, result.returncode, result.stderr)
-                self.assertIn("a push redirect is configured", result.stderr)
+                self.assertIn("a redirected force is not published", result.stderr)
                 self.assertEqual(before, self.at("git ls-remote origin refs/heads/feat/x").stdout.split()[0])
                 self.at(f'git config --local --unset-all "{key}"')
                 self.at("git rebase --abort || true")
                 self.at("rm -f \"$(git rev-parse --git-path claude-rebase-pending)\"")
                 self.at("git reset -q --hard refs/remotes/origin/feat/x")
+
+    def test_a_remote_with_two_urls_is_refused_before_anything_is_forced(self):
+        # A remote with several `url` values pushes to each: the force would reach a second
+        # repository the lease was never read from.
+        self.at('git config --local --add remote.origin.url "$(git config --get remote.origin.url)-second"')
+        before = self.at("git ls-remote origin refs/heads/feat/x").stdout.split()[0]
+
+        result = self.helper()
+
+        self.assertEqual(7, result.returncode, result.stderr)
+        self.assertIn("origin has 2 push URLs", result.stderr)
+        self.assertEqual(before, self.at("git ls-remote origin refs/heads/feat/x").stdout.split()[0])
 
     def test_publish_refuses_a_remote_that_moved_since_the_lease(self):
         # The lease was approved against a tip that no longer exists, and
