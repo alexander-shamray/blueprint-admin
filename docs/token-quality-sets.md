@@ -226,30 +226,34 @@ checkout's local `refs/sweeps/bug` pointed there when it was read on
 clone, so the sha is the record. The security sweep left no mark, but
 `e9731c2` was `main`'s head from before the first filing to after the last.
 
-| Issue | Sweep | Severity | Row | Slice holding it | What |
-|---|---|---|---|---|---|
-| #270 | bug | critical | `suites` | 12 | the runbook-name test cannot fail |
-| #271 | bug | high | `host` | 4 | the realm read reports a misconfiguration when Keycloak is down |
-| #272 | bug | critical | `suites` | 13 | the lease-deadline test cannot reach its guard |
-| #273 | bug | critical | `suites` | 11 | the unparseable-Content-Type test passes without its guard |
-| #274 | bug | critical | `suites` | 12 | the token-clock test cannot fail if `Held` ignores the password |
-| #275 | security | high | `tooling` | 14 | a push to `main` spelt `heads/main` is admitted |
-| #276 | security | high | `tooling` | 14 | an escaped `\<<` is read as a heredoc |
-| #277 | security | high | `tooling` | 14 | an arithmetic `<<` is read as a heredoc |
-| #278 | security | high | `tooling` | 14 | `rg --pre` and `git rm` reach protected trees unjudged |
-| #279 | security | high | `tooling` | 14 | the substitution allow-list admits `rg` and `git` on their first word |
-| #280 | security | medium | `tooling` | 13 | the edit guard admits writes to `~/.claude` memory and output styles |
-| #281 | security | medium | `tooling` | 14 | `GIT_*` spellings of `-c` and `--ext-diff` |
-| #282 | security | medium | `source` | 5 | the console sets no framing protection |
-| #283 | security | medium | `tooling` | 15 | the lockfile check matches npm's exact indentation |
-| #284 | security | medium | `tooling` | 14 | the protected-branch check covers only `push` (`send-pack`) |
-| #285 | security | high | `tooling` | 14 | a `#` inside `${...}` is read as a comment |
+| Issue | Sweep | Severity | Row | Slice | File the defect is in | What |
+|---|---|---|---|---|---|---|
+| #270 | bug | critical | `suites` | 12 | `tests/Admin.Host.Tests/Runbooks/GameDayServiceTests.cs` | the runbook-name test cannot fail |
+| #271 | bug | high | `host` | 4 | `src/Admin.Host/Frontend/DeviceReads.cs` | the realm read reports a misconfiguration when Keycloak is down |
+| #272 | bug | critical | `suites` | 13 | `tests/Admin.Host.Tests/Stack/ScenarioLeaseServiceTests.cs` | the lease-deadline test cannot reach its guard |
+| #273 | bug | critical | `suites` | 11 | `tests/Admin.Host.Tests/Api/RequestProxyTests.cs` | the unparseable-Content-Type test passes without its guard |
+| #274 | bug | critical | `suites` | 12 | `tests/Admin.Host.Tests/Identity/TokenServiceTests.cs` | the token-clock test cannot fail if `Held` ignores the password |
+| #275 | security | high | `tooling` | 14 | `.claude/hooks/guard-git-argv.py` | a push to `main` spelt `heads/main` is admitted |
+| #276 | security | high | `tooling` | 14 | `.claude/hooks/guard-git-argv.py` | an escaped `\<<` is read as a heredoc |
+| #277 | security | high | `tooling` | 14 | `.claude/hooks/guard-git-argv.py` | an arithmetic `<<` is read as a heredoc |
+| #278 | security | high | `tooling` | 14 | `.claude/hooks/guard-git-argv.py` | `rg --pre` and `git rm` reach protected trees unjudged |
+| #279 | security | high | `tooling` | 14 | `.claude/hooks/guard-git-argv.py` | the substitution allow-list admits `rg` and `git` on their first word |
+| #280 | security | medium | `tooling` | 13 | `.claude/hooks/guard-edit-target.py` | the edit guard admits writes to `~/.claude` memory and output styles |
+| #281 | security | medium | `tooling` | 14 | `.claude/hooks/guard-git-argv.py` | `GIT_*` spellings of `-c` and `--ext-diff` |
+| #282 | security | medium | `source` | 5 | `src/Admin.Host/Program.cs` | the console sets no framing protection |
+| #283 | security | medium | `tooling` | 15 | `.claude/scripts/sweep-slices.sh` | the lockfile check matches npm's exact indentation |
+| #284 | security | medium | `tooling` | 14 | `.claude/hooks/guard-git-argv.py` | the protected-branch check covers only `push` (`send-pack`) |
+| #285 | security | high | `tooling` | 14 | `.claude/hooks/guard-git-argv.py` | a `#` inside `${...}` is read as a comment |
 
 ### How it was measured
 
 Two detached worktrees were made at `e9731c2` with `git-worktree-detach.sh`,
 and each sweep's plan was cut with `sweep-slices.sh <kind> <worktree> full`:
-20 bug slices and 19 security slices. A sweep's **round 1** is one auditor
+20 bug slices and 19 security slices. The script was the one at `9a0aba3`,
+not at `e9731c2`, and the two differ: #292 changed it in between. A slice's
+number depends on that script's `row_of` and budget, and the slice lists went
+with the worktrees. So a rerun should take the slice that holds each row's
+file, named in the table above, rather than the number. A sweep's **round 1** is one auditor
 per slice. These are the eight slices that hold a row: bug 4, 11, 12 and 13,
 and security 5, 13, 14 and 15. One `bug-auditor` or `security-auditor` ran
 on each with the sweep's own contract (root, row, list, report fields), and
