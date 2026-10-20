@@ -19,7 +19,7 @@ line names one residual below by the words it opens with.
 | Touching | Grep for |
 |---|---|
 | The check helpers, e2e, code the session writes | `Two toolchains`, `runs unjudged through a granted check helper` |
-| `settings.json` or a permission rule | `File permission rules take`, `self-locks` |
+| `settings.json` or a permission rule | `File permission rules take`, `self-locks`, `The global deny list names` |
 | A guard hook or its launcher | `Every guard hook uses` |
 | The index: refresh, query or search hints, MCP approval, timeout | `Two hooks guard nothing`, `The second is the query hint`, `The search hint asks`, `A session started in a worktree`, `The CLI's skill rewrite`, `The MCP startup timeout` |
 | A command's `allowed-tools` or `disallowed-tools` | `grant the index commands`, `runs before it pushes never denies push`, `is a grant surface`, `A command that holds` |
@@ -436,6 +436,13 @@ A new residual is stated **here** and gets a row above.
   session that writes a hostile `eslint.config.js` and runs `npm-checks.sh lint`
   executes it, the same class as session-written tests under #310; the review
   of the diff, not a rule, is what stands between them.
+- **The global deny list names `.claude/rules/**`, `.claude/output-styles/**` and
+  `CLAUDE.local.md`, and not `CLAUDE.md`.** The first three are loaded into the session
+  unasked and nothing here writes them. `CLAUDE.md` is denied by each command that edits
+  and left writable globally, because `/style-pass` (sections 3 and 4) and the owner's own
+  sessions edit it by design; a global deny would refuse them (#343). The rebase helper's
+  force push names both sides of its refspec (`<branch>:refs/heads/<branch>`), so
+  `remote.origin.push` and `pushurl` have no destination left to decide.
 
 A new residual is stated **here**, and `CLAUDE.md` carries the pointer rather
 than a second copy.
