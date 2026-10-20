@@ -566,6 +566,62 @@ public sealed class ScenarioLeaseServiceTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task A_journal_the_gate_would_not_let_the_start_restore_is_tried_again_when_the_job_ends()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(journal)!);
+        await File.WriteAllTextAsync(
+            journal,
+            $$"""{"id":"abc","change":"stop-inventory","label":"a run","since":"{{time.GetUtcNow():O}}","expiresAt":"{{time.GetUtcNow().AddMinutes(2):O}}"}""",
+            Token);
+        Job busy = gate.Claim("up", () => registry.Create(new ProcessSpec("docker", [], "/"))).Job;
+
+        await leases.ReconcileAsync();
+
+        File.Exists(journal).ShouldBeTrue();
+        runner.Started.ShouldBeEmpty();
+
+        busy.MarkExited(0);
+        time.Advance(ScenarioLeaseService.RetryAfter + TimeSpan.FromSeconds(1));
+        await WaitUntilAsync(() => !File.Exists(journal));
+
+        runner.Started.Select(s => string.Join(' ', s.Arguments)).ShouldContain(Prefix + "up -d --no-deps --wait inventory-api");
+    }
+
+    [Fact]
+    public async Task A_journal_that_cannot_be_deleted_keeps_the_lease_and_the_gate_and_arms_a_retry()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows refuses to delete a read-only file for every account.");
+        Directory.CreateDirectory(Path.GetDirectoryName(journal)!);
+        await File.WriteAllTextAsync(
+            journal,
+            $$"""{"id":"abc","change":"stop-inventory","label":"a run","since":"{{time.GetUtcNow():O}}","expiresAt":"{{time.GetUtcNow().AddMinutes(2):O}}"}""",
+            Token);
+        File.SetAttributes(journal, FileAttributes.ReadOnly);
+
+        try
+        {
+            await leases.ReconcileAsync();
+
+            leases.Current.ShouldNotBeNull();
+            leases.Current.RestoreError.ShouldNotBeNull().ShouldContain("could not be deleted");
+            gate.Claim("up", () => registry.Create(new ProcessSpec("docker", [], "/"))).Kind.ShouldBe(ComposeGate.LeaseKind);
+
+            File.SetAttributes(journal, FileAttributes.Normal);
+            time.Advance(ScenarioLeaseService.RetryAfter + TimeSpan.FromSeconds(1));
+            await WaitUntilAsync(() => leases.Current is null);
+
+            File.Exists(journal).ShouldBeFalse();
+        }
+        finally
+        {
+            if (File.Exists(journal))
+            {
+                File.SetAttributes(journal, FileAttributes.Normal);
+            }
+        }
+    }
+
+    [Fact]
     public async Task A_start_with_no_journal_does_nothing()
     {
         await leases.ReconcileAsync();
