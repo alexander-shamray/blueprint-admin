@@ -5,7 +5,8 @@ namespace Admin.Host.Config;
 /// <summary>
 /// Everything the console needs to know about the workstation, bound from the
 /// <c>Admin</c> section of appsettings, from <c>BLUEPRINT_Admin__Key</c>
-/// environment variables and from <c>--Admin:Key=value</c> on the command line.
+/// environment variables and from <c>--Admin:Key=value</c> on the command line, which wins over the other two
+/// (<see cref="AdminConfigurationSources"/>).
 /// Relative <see cref="BackendDir"/>/<see cref="FrontendDir"/> resolve against
 /// the repository root, located by walking up from the executable to
 /// <c>BlueprintAdmin.slnx</c> (see <c>Config/RepoRoot.cs</c>), independent of
