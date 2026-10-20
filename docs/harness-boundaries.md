@@ -366,6 +366,18 @@ A new residual is stated **here** and gets a row above.
   a target is spelled relative; it fails closed and no chain step writes one.
   And `git-worktree-remove.sh` refuses a worktree forked beside the checkout
   before this layout, so one of those is removed by hand.
+- **The edit guard judges the main checkout from a worktree, and refuses a
+  trailing dot or space on Windows.** A session standing in a linked worktree
+  gets `protected_in_worktree`'s inventory applied to any main checkout the
+  target sits in (`.git/`, `CLAUDE.md`, `.github/`, `.claude/`, the toolchain
+  files), because once the session is in the worktree `settings.json`'s denies
+  anchor there and name nothing in main; whether the harness re-roots the
+  project is unmeasured, so the guard does not wait for the answer. Targets in
+  the worktree the session stands in, in another linked worktree, and ordinary
+  files of main are judged as before. On Windows a path component ending in `.`
+  or a space is refused outright, since `abspath` and `realpath` drop it and
+  whether the rule matcher does is unmeasured (a link-style refusal already
+  caught an existing file spelled so; a new name such as `docs.` was admitted).
 - **`find` is judged by its writing actions only.** `guard-git-argv.py` reads
   `-fprint`, `-fprint0`, `-fprintf`, `-fls` and `-delete`. An action word that is
   itself computed (`find /tmp "$A"`) is not read, and a `-delete` start given as

@@ -919,6 +919,52 @@ class WhatThisGuardIsNotTheSubjectOf(GuardCase):
         os.makedirs(os.path.join(other, ".claude"), exist_ok=True)
         self.assertRefused(os.path.join(other, ".claude", "settings.json"))
 
+    def linked_worktree_of_root(self):
+        """A registered linked worktree of the fixture checkout, built as the sibling case builds it."""
+        worktree = os.path.join(self.outside, "standing-worktree")
+        os.makedirs(os.path.join(worktree, "docs"), exist_ok=True)
+        admin = os.path.join(self.root, ".git", "worktrees", "standing")
+        os.makedirs(admin, exist_ok=True)
+        self.write(os.path.join(worktree, ".git"), "gitdir: " + admin + "\n")
+        self.write(os.path.join(admin, "gitdir"), os.path.join(worktree, ".git") + "\n")
+        return worktree
+
+    def test_the_main_checkout_is_judged_from_inside_a_linked_worktree(self):
+        """#312: standing in `.claude/worktrees/<slug>`, a write to main's own machinery got no inventory check.
+
+        The main checkout is an anchor, `linked_worktree` answers `None` for it, and the
+        anchor loop admits what an anchor contains, so `<main>/.git/hooks/pre-commit` (run by
+        the next commit, outside every guard), `<main>/CLAUDE.md` and
+        `<main>/.github/workflows/ci.yml` were admitted from a worktree.
+        """
+        worktree = self.linked_worktree_of_root()
+
+        for parts in (
+            (".git", "hooks", "pre-commit"),
+            (".git", "config"),
+            ("CLAUDE.md",),
+            (".github", "workflows", "ci.yml"),
+            (".claude", "settings.json"),
+            ("package.json",),
+        ):
+            with self.subTest(parts=parts):
+                self.assertRefused(os.path.join(self.root, *parts), cwd=worktree)
+
+        # Not over-refused: main's ordinary files, and the worktree's own, are judged as before.
+        self.assertAdmitted(os.path.join(self.root, "docs", "note.md"), cwd=worktree)
+        self.assertAdmitted(os.path.join(worktree, "docs", "note.md"), cwd=worktree)
+        # And the session standing in main itself is not a new case.
+        self.assertAdmitted(os.path.join(self.root, "docs", "note.md"))
+
+    @unittest.skipUnless(os.name == "nt", "Only Windows drops a trailing dot or space when it opens a file.")
+    def test_a_component_ending_in_a_dot_or_a_space_is_refused_on_windows(self):
+        """#314: `package.json.` folds to `package.json` in `abspath` and `realpath`, so both forms agreed."""
+        for name in ("package.json.", "CLAUDE.md.", "package.json ", "docs."):
+            with self.subTest(name=name):
+                reason = self.assertRefused(os.path.join(self.root, name))
+                self.assertIn("ending in a dot or a space", reason)
+        self.assertAdmitted(os.path.join(self.root, "docs", "note.md"))
+
     def test_the_harness_state_root_is_admitted(self):
         # The second of the two roots the docstring names. Judged rather than
         # written: a `Write` target need not exist, and this suite has no

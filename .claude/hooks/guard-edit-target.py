@@ -678,6 +678,24 @@ def offence(event):
                 "those ways. Name the file the way the rules are written."
             )
 
+    # **A component ending in a dot or a space names a different file to the
+    # matcher than to Windows.** `abspath` and `realpath` both drop it, so
+    # `package.json.` folds to `package.json`, the lexical and resolved forms
+    # agree, and the write is admitted; whether the harness's own rule matcher
+    # folds it the same way is unmeasured (#314), so the spelling is refused
+    # rather than argued about. `guard-git-argv.py` already reads the spelling as
+    # the same file. Windows only: elsewhere a trailing dot is an ordinary name.
+    if os.name == "nt":
+        dropped = [part for part in spelled.replace("\\", "/").split("/")
+                   if part not in ("", ".", "..") and part.endswith((".", " "))]
+        if dropped:
+            return (
+                f"guard-edit-target: {spelled} has a component ending in a dot "
+                f"or a space ({dropped[0]!r}), which Windows drops when it opens "
+                "the file and a permission rule may not. Name the file without "
+                "it (docs/harness-boundaries.md)."
+            )
+
     # `realpath` is taken of the ORIGINAL spelling and `normpath` of the joined
     # one, and the order matters: `normpath` collapses `..` lexically, which is
     # the wrong answer for a `..` that follows a link, so the lexical form is
@@ -747,6 +765,39 @@ def offence(event):
             )
         checkouts = checkouts + [
             (sibling, os.path.realpath(sibling), traits_of(sibling))]
+
+    # **The main checkout, judged from a linked worktree.** `linked_worktree`
+    # answers `None` for a main checkout (its `.git` is a directory), so a
+    # session standing in `.claude/worktrees/<slug>` got no inventory check on a
+    # write to `<main>/.git/hooks/pre-commit`, `<main>/CLAUDE.md` or
+    # `<main>/.github/workflows/ci.yml`: the main checkout is itself an anchor,
+    # and the anchor loop below admits what it contains. Once the session is in
+    # the worktree the project-relative denies are anchored there and name
+    # nothing in main (#312; whether the harness re-roots the project is the
+    # unmeasured half), and a planted hook in the common git dir runs outside
+    # every guard at the next commit. So the same inventory a sibling worktree
+    # gets is applied to any main checkout the target sits in, unless the target
+    # is in the worktree the session stands in or in some other linked worktree,
+    # both of which are judged above.
+    standing = linked_worktree(cwd, checkouts) if sibling is None else None
+    if standing is not None and not under(lexical, standing, traits_of(standing)):
+        for spelled_root, real_root, traits in checkouts:
+            if os.path.isfile(os.path.join(spelled_root, ".git")):
+                continue
+            for base in (spelled_root, real_root):
+                for candidate in (lexical, resolved):
+                    if not under(candidate, base, traits):
+                        continue
+                    machinery = protected_in_worktree(candidate, base)
+                    if machinery is not None:
+                        return (
+                            f"guard-edit-target: {spelled} targets {machinery} "
+                            "in the main checkout, which this session reaches "
+                            "from a linked worktree where its permission rules "
+                            "are anchored on the worktree and name nothing "
+                            "there. Edit it from the main checkout "
+                            "(docs/harness-boundaries.md)."
+                        )
 
     # **Every anchor containing the target must agree, and the first form said
     # ANY.** One agreeing anchor was enough to admit the write, so a second
