@@ -2697,7 +2697,8 @@ FIND_WRITING_ACTIONS = frozenset({"-fprint", "-fprint0", "-fprintf", "-fls"})
 
 def shell_expands(word):
     """Whether bash expands something in the raw `word`: a `$` or a backtick
-    outside single quotes and not escaped (#297)."""
+    outside single quotes and not escaped, or an unquoted brace, which
+    multiplies one word into several (`-e{'w a','w b'}` is two scripts) (#297)."""
     quote, i = None, 0
     while i < len(word):
         char = word[i]
@@ -2710,7 +2711,7 @@ def shell_expands(word):
             quote = "'"
         elif char == '"':
             quote = None if quote == '"' else '"'
-        elif char in "$`":
+        elif char in "$`" or (char == "{" and quote is None):
             return True
         i += 1
     return False
@@ -2779,8 +2780,12 @@ def sed_script_actions(script):
         first = address(i)
         if first is not None:
             i = first
+            while i < n and script[i] in " \t":
+                i += 1
             if script[i:i + 1] == ",":
                 i += 1
+                while i < n and script[i] in " \t":
+                    i += 1
                 if script[i:i + 1] in ("+", "~"):
                     i = digits(i + 1)
                 else:
@@ -3123,6 +3128,10 @@ def verb_offence(verb, words, command):
         # A word the shell expands is not the option or the script it will be:
         # `-e"$(cat s)"` is read as an operand, and `s/a/$X/` as plain text.
         for raw in words:
+            if raw == "--" and script_given:
+                # What follows a literal `--` is a file, and the script is
+                # already given, so an expansion there cannot be either.
+                break
             if shell_expands(raw):
                 return (
                     f"`sed` is handed `{raw}`, which the shell expands, so "

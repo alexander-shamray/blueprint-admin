@@ -6807,6 +6807,9 @@ class TheGitArgvGuard(unittest.TestCase):
             "sed 'w' notes.txt",
             "sed 's/a/b' notes.txt",
             "sed -n ':x w package.json' notes.txt",
+            "sed -n -e{'w a','w package.json'} notes.txt",
+            "sed -n -e'w a'{,-b} notes.txt",
+            'sed -n p "$F" notes.txt',
             "sed -n 'b end;w package.json' notes.txt",
             'sed p -e"$(cat s)" notes.txt',
             'sed "s/a/$X/" notes.txt',
@@ -6866,6 +6869,9 @@ class TheGitArgvGuard(unittest.TestCase):
             ("1a w x", []),
             ("y/we/ew/", []),
             ("w out", [("w", "out")]),
+            ("1 ,3p", []),
+            ("1, 3p", []),
+            ("1 , 3w out", [("w", "out")]),
             # A comment and a file name end at the newline, backslash or not.
             ("#\\\nw out", [("w", "out")]),
             ("w a\\\nw b", [("w", "a\\"), ("w", "b")]),
@@ -6924,6 +6930,8 @@ class TheGitArgvGuard(unittest.TestCase):
             # A `w` that is not a command, and one that writes elsewhere.
             "sed -n '1,5p' notes.txt",
             "sed -n '$p' notes.txt",
+            'sed -n -e p -- "$F"',
+            "sed -n '1 ,2p;3, 4p' notes.txt",
             "sed 'q 5' notes.txt",
             "sed -n '/x/{p;l 70}' notes.txt",
             "sed 's/web/x/g' notes.txt",
