@@ -18,7 +18,7 @@ line names one residual below by the words it opens with.
 
 | Touching | Grep for |
 |---|---|
-| The check helpers, e2e | `Two toolchains` |
+| The check helpers, e2e, code the session writes | `Two toolchains`, `runs unjudged through a granted check helper` |
 | `settings.json` or a permission rule | `File permission rules take`, `self-locks` |
 | A guard hook or its launcher | `Every guard hook uses` |
 | The index: refresh, query or search hints, MCP approval, timeout | `Two hooks guard nothing`, `The second is the query hint`, `The search hint asks`, `A session started in a worktree`, `The CLI's skill rewrite`, `The MCP startup timeout` |
@@ -40,6 +40,19 @@ A new residual is stated **here** and gets a row above.
   `src/Admin.Web`). There is no `e2e` mode: Playwright needs the Host under
   FakePlatform, and a suite that passed because nothing was listening would
   be worse than none. CI's `smoke` job is that check.
+- **Code the session writes runs unjudged through a granted check helper, and
+  only the trust boundary stands.** `/ship` holds `Write` and `Edit` over `src/**`,
+  `tests/**` and `tools/**` beside `host-checks.sh`, `npm-checks.sh` and
+  `harness-checks.sh`, which run what the tree holds: a written test, spec or
+  `tools/token-usage/test_*.py` module executes as host code that no hook judges
+  (#310). That is the job (a change to code is a change to its tests), so the
+  residual is stated and not closed: the unattended chain's only input is the branch
+  it works on, the review reads the diff before the merge, and `main`'s ruleset
+  requires CI. **`/pr` is not narrowed to its two files, and the reason is
+  structural**: a frontmatter deny holds for the rest of the user turn, and `/ship`
+  runs `/pr` at step 4 and then applies review fixes to `src/**` and `tests/**` at
+  step 5, so `Edit(src/**)` in `/pr` would refuse the chain's own fixes. `tools/**`
+  stays editable in `/ship` because the token-usage tooling changes through it.
 - **File permission rules take `Edit(...)`, never `Write(...)`** — a
   `Write(path)` rule matches nothing and stops Claude Code from starting.
 - **`.claude/settings.json` self-locks, not instantaneously** — a change to
