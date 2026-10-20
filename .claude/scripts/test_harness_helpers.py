@@ -6808,6 +6808,8 @@ class TheGitArgvGuard(unittest.TestCase):
             "sed 's/a/b' notes.txt",
             "sed -n ':x w package.json' notes.txt",
             "sed -n -e{'w a','w package.json'} notes.txt",
+            "sed -n -e{1..2}p notes.txt",
+            "sed -n -e{'w a}','w package.json'} notes.txt",
             "sed -n -e'w a'{,-b} notes.txt",
             'sed -n p "$F" notes.txt',
             "sed -n 'b end;w package.json' notes.txt",
@@ -6859,6 +6861,34 @@ class TheGitArgvGuard(unittest.TestCase):
         ):
             with self.subTest(command=command):
                 self.assertRefused(command, cwd=root)
+
+    def test_shell_expands_reads_a_word_as_bash_does(self):
+        module = self.guard_module()
+        for word, expected in (
+            ("{}", False),
+            ("{x}", False),
+            ("{a,b}", True),
+            ("-e{'a}','b'}", True),
+            ("{'a}'}", False),
+            ("{{a,b},c}", True),
+            ("{a{b}c}", False),
+            ("$[1+2]", True),
+            ("-e{1..3}p", True),
+            ("'$x'", False),
+            ('"$x"', True),
+            ('"x$"', False),
+            ("$'x'", True),
+            ('$"x"', True),
+            ('"/^$/d"', False),
+            ("$(x)", True),
+            ("${x}", True),
+            ("`x`", True),
+            ("\\$x", False),
+            ("'{a,b}'", False),
+            ("plain", False),
+        ):
+            with self.subTest(word=word):
+                self.assertIs(module.shell_expands(word), expected)
 
     def test_a_sed_script_is_read_for_what_it_writes_and_runs(self):
         module = self.guard_module()
@@ -6930,6 +6960,10 @@ class TheGitArgvGuard(unittest.TestCase):
             # A `w` that is not a command, and one that writes elsewhere.
             "sed -n '1,5p' notes.txt",
             "sed -n '$p' notes.txt",
+            'sed "s/foo$/bar/" notes.txt',
+            'sed "/^$/d" notes.txt',
+            "find /tmp -name '*.md' -exec sed -n 1p {} \\;",
+            "find /tmp -name '*.md' -exec sed -n 1p {} +",
             'sed -n -e p -- "$F"',
             "sed -n '1 ,2p;3, 4p' notes.txt",
             "sed 'q 5' notes.txt",
