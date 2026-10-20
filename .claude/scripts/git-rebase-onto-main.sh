@@ -147,20 +147,22 @@ require_remote_carries_nothing_new() {
 # between is refused rather than overwritten. The destination ref is spelled out too:
 # `git push origin "$branch"` names a source only, so `remote.origin.push` in the
 # repository's config would decide which ref the force landed on (#343);
-# `refs/heads/<branch>` on both sides leaves it nothing to decide. **That does not pin
-# the URL**: `remote.origin.pushurl` and `url.*.pushInsteadOf` still point the push
-# at another repository. What stops a force there is the lease, which expects the
-# remote's branch to be at `$lease` and is refused by any repository whose branch is
-# not at that commit; it is not a check of the URL, and the residual is stated in
-# docs/harness-boundaries.md.
+# `refs/heads/<branch>` on both sides leaves it nothing to decide. The URL is the other
+# half: `remote.origin.pushurl` and `url.*.pushInsteadOf` would point the push at
+# another repository, so a run refuses (exit 7) while any of them, or
+# `remote.origin.push` itself, is configured. The lease backs that up and does not
+# replace it: any repository whose branch is not at `$lease` refuses the force.
 publish() {
-  local current head lease
+  local current head lease redirects
   current=$(git branch --show-current)
   [ "$current" = "$branch" ] ||
     { echo "the replay ended on ${current:-a detached HEAD} rather than $branch; nothing is published" >&2; exit 4; }
   lease="$approved_lease"
   [ -n "$lease" ] ||
     { echo "no lease was approved, so nothing here may force" >&2; exit 7; }
+  redirects=$(git config --name-only --get-regexp '^(remote\.origin\.(pushurl|push)|url\..*\.(push)?insteadof)$' || true)
+  [ -z "$redirects" ] ||
+    { echo "a push redirect is configured ($(printf '%s' "$redirects" | tr '\n' ' ')); the force would not be pinned to origin, so nothing is published" >&2; exit 7; }
   head=$(git rev-parse HEAD)
   if [ "$head" = "$lease" ]; then
     rm -f "$pending"
