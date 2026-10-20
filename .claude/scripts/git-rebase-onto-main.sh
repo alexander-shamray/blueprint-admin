@@ -160,8 +160,8 @@ require_remote_carries_nothing_new() {
 # count, so https and ssh forms of one repository on one host agree.
 repo_key() {
   local url=$1 host path
-  # A query or a fragment is not part of the path a server routes on, so the last two
-  # components of `https://host/x/y#/o/r` would name `o/r` while the push went to `x/y`.
+  # A query or a fragment is not part of the path a server routes on, so the path of
+  # `https://host/x/y#/o/r` would read as `x/y#/o/r` while the push went to `x/y`.
   [[ $url != *[\?#]* ]] || return 1
   url=${url%/}
   url=${url%.git}
@@ -205,8 +205,8 @@ publish() {
   [ "$pushes" -eq 1 ] ||
     { echo "origin has $pushes push URLs; a force goes to every one of them, so nothing is published" >&2; exit 7; }
   # The URL git will push to, after `pushurl`, `pushInsteadOf` and `insteadOf`, must name the
-  # same host and `owner/repo` as the URL the remote was added with. A protocol rewrite on the
-  # same host (https to ssh) passes; another host, another repository, a one-component path or
+  # same host and whole path as the URL the remote was added with. A protocol rewrite on the
+  # same host (https to ssh) passes; another host, another path, a one-component hosted path or
   # a transport with no host (`ext::`, `fd::`) does not, and nothing is published.
   configured=$(repo_key "$(git config --get remote.origin.url)") || configured=
   resolved=$(repo_key "$(git remote get-url --push origin)") || resolved=
