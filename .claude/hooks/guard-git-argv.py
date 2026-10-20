@@ -3180,9 +3180,16 @@ def git_path_writer_offence(run, literals, command):
             r"(?i)(GIT_WORK_TREE|GIT_DIR|GIT_COMMON_DIR|GIT_INDEX_FILE|GIT_CONFIG\w*)\+?=",
             raw)
         for raw in run[:start])
+    # The names alone, in any reading of the command: `read GIT_WORK_TREE`,
+    # `printf -v GIT_DIR` and `declare -n` write them with no `=`. Code that
+    # builds a name, `eval` and `source` included, is refused beside a writer.
     relocation = re.compile(
-        r"(?i)(?<![\w$])(GIT_WORK_TREE|GIT_DIR|GIT_COMMON_DIR|GIT_INDEX_FILE"
-        r"|GIT_CONFIG\w*)\+?=")
+        r"(?i)(?<!\w)(GIT_WORK_TREE|GIT_DIR|GIT_COMMON_DIR|GIT_INDEX_FILE"
+        r"|GIT_CONFIG\w*)\b"
+        r"|(?<![\w-])(?:eval|source)\b"
+        r"|\b(?:export|declare|typeset|local|readonly|env)\b[^;&|\n]*(?:\$\(|`)"
+        r"|\b(?:export|declare|typeset|local|readonly|env|read|mapfile|readarray)"
+        r"\b[^;&|\n]*\$|printf\s+-v\s+\S*\$")
     relocated = relocated or any(
         relocation.search(text) for text in command_readings(command))
     if relocated or any(
