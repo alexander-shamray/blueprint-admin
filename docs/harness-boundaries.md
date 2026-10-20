@@ -463,6 +463,25 @@ A new residual is stated **here** and gets a row above.
   hostless; GitHub URLs always carry an owner, so those fail closed on a setup this
   repository does not have. The lease (the remote's branch must already be at the commit
   this run read) backs that up and does not replace it.
+- **`git restore`, `git checkout` and `git clean` are judged by the paths
+  they write.** `guard-git-argv.py` reads the subcommand and its operands: a
+  pathspec on a protected surface, `.`, a parent of the checkout, a glob, a
+  `:` magic pathspec, a path list read from a file and a bare `git clean -f`
+  (which means the whole working directory) are refused, as is any of them
+  under `-C`, `--work-tree` or `--git-dir`. A branch checkout, `git restore
+  --staged` alone, `git clean -n` and `git checkout HEAD -- <path>` (the
+  committed copy, which is how this repository restores a file) are admitted;
+  any other tree-ish brings in content nobody reviewed on this branch, and
+  `git checkout origin/main -- .claude/settings.json` is refused. A work
+  tree relocated by `GIT_WORK_TREE`, `GIT_DIR`, `GIT_COMMON_DIR`,
+  `GIT_INDEX_FILE` or `GIT_CONFIG*` assigned in the same command, or by `-c
+  core.worktree=`, is refused too; one exported by an earlier command is not
+  seen. A `git checkout` with no
+  `--` cannot tell a branch from a path, so an application tree such as
+  `docs/` counts there only for a name that exists or carries an extension:
+  a deleted application directory with no extension restored without `--` is
+  admitted. `git checkout -f`, `git reset --hard` and `git stash` overwrite
+  the tree wholesale and are not judged.
 
 A new residual is stated **here**, and `CLAUDE.md` carries the pointer rather
 than a second copy.
