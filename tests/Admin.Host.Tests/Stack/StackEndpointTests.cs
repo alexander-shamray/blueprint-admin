@@ -121,6 +121,7 @@ public sealed class StackEndpointTests : IClassFixture<AdminHostFactory>
     [InlineData("-t")]
     [InlineData("gateway;ls")]
     [InlineData("")]
+    [InlineData("gateway\n")]
     public async Task Follow_logs_refuses_a_name_that_is_not_a_compose_service_name_and_starts_no_job(string name)
     {
         HttpResponseMessage response = await client.PostAsJsonAsync("/api/logs/follow", new { services = new[] { "gateway", name } }, TestContext.Current.CancellationToken);

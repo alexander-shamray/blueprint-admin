@@ -139,7 +139,7 @@ public static partial class StackEndpoints
         return app;
     }
 
-    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._-]*$")]
+    [GeneratedRegex(@"\A[A-Za-z0-9][A-Za-z0-9._-]*\z")]
     private static partial Regex ServiceName();
 }
 
