@@ -4404,6 +4404,13 @@ INERT_SUBCOMMANDS = {
 }
 
 
+VALUELESS_OPTIONS = frozenset({
+    "--global", "--ignore-scripts", "--no-audit", "--no-color", "--no-fund",
+    "--quiet", "--save-dev", "--save-exact", "--silent", "--verbose", "-D",
+    "-E", "-g", "-q",
+})
+
+
 def inert_operands(run, lead):
     """Whether `run`'s lead only reads its operands as data."""
     raw = leading_command(run)
@@ -4412,19 +4419,28 @@ def inert_operands(run, lead):
         return True
     # A word with a `/` is a file somebody chose, whatever it is called; `git`
     # alone is exempt because every git word is judged by the rest of this file.
-    if "/" in raw and lead != "git":
+    # `program_name` splits on a backslash too, so `'.\ls'` is a file as well.
+    if re.search(r"[\\/]", raw) and lead != "git":
         return False
     position = run.index(raw) + 1
-    # The word that names the subcommand: after the lead's own options.
-    rest = [word for word in run[position:] if not word.startswith("-")]
     if lead in INERT_OPERAND_LEADS:
         return True
+    options = []
+    while position < len(run) and run[position].startswith("-"):
+        options.append(run[position])
+        position += 1
     if lead in INERT_SUBCOMMANDS:
-        return bool(rest) and rest[0] in INERT_SUBCOMMANDS[lead]
+        # An option the lead gives a value to (`npm --prefix install exec ...`)
+        # would make that value the "subcommand", so only options known to take
+        # none may stand before it.
+        return (all(option in VALUELESS_OPTIONS for option in options)
+                and position < len(run)
+                and run[position] in INERT_SUBCOMMANDS[lead])
     # `command -v git-lfs` looks a name up and runs nothing; `find` runs a
     # program only through one of its exec actions.
     if lead == "command":
-        return position < len(run) and run[position] in ("-v", "-V")
+        return any(re.fullmatch(r"-[pVv]*[Vv][pVv]*", option)
+                   for option in options)
     return lead == "find" and not any(
         word in ("-exec", "-execdir", "-ok", "-okdir") for word in run)
 
