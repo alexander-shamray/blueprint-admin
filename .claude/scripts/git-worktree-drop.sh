@@ -102,11 +102,14 @@ if [ "$removed_status" -ne 0 ]; then
     esac
   done <<<"$listing"
   [ "$still" = no ] || exit "$removed_status"
-  # Asked of the directory itself: a leftover with no `.git` resolves to the checkout that
-  # contains it (not this path), and one whose `.git` points at a removed admin directory
-  # fails; only a live worktree answers with its own top level.
-  if top=$(git -C "$resolved" rev-parse --show-toplevel 2>/dev/null) && [ "$(cd "$top" && pwd -P)" = "$resolved" ]; then
-    exit "$removed_status"
+  # Asked of the directory itself, and compared git to git (never against a path string, which
+  # differs in form under MSYS and on a case-folding volume): a leftover with no `.git` resolves
+  # to the checkout that contains it, whose git dir IS the common dir; one whose `.git` points
+  # at a removed admin directory makes git fail. A live linked worktree answers with its own
+  # admin directory, which is not the common dir, and is kept.
+  if there=$(git -C "$resolved" rev-parse --path-format=absolute --git-dir 2>/dev/null); then
+    here=$(git rev-parse --path-format=absolute --git-common-dir) || exit "$removed_status"
+    [ "$there" = "$here" ] || exit "$removed_status"
   fi
   tries="${CLAUDE_WORKTREE_REMOVE_TRIES:-18}"
   pause="${CLAUDE_WORKTREE_REMOVE_PAUSE:-5}"
