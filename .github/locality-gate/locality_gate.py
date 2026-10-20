@@ -215,8 +215,8 @@ def _split_outside_braces(cell: str) -> list[str]:
 
 # Where a widened row's reason goes (docs/change-locality.md section 3). Said
 # by the backtick and not-a-path-list refusals of the Touch set row, which a
-# plain-words reason reaches; one holding `{` or `|` meets the brace or cell
-# refusal first, and those name their own fault.
+# plain-words reason reaches; one holding an unbalanced `{`/`}` or a `|` meets
+# the brace or cell refusal first, and those name their own fault.
 TOUCH_SET_HINT = "a widened row's reason goes in a sentence below the table"
 
 
