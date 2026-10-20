@@ -3,10 +3,9 @@
 **A shard runner that quietly stops placing a class is this repository's
 most-repeated failure in its cheapest form**: every worker green, and one
 class never run. Nothing here compares the placement against a list written
-here — a list is the thing that goes stale. It compares the placement back
-against discovery, and it does so at counts derived from the host and from the
-suite rather than from a literal, because a literal boundary stops being the
-boundary without saying so.
+here — a list is the thing that goes stale. It compares the units the queue
+deals back against discovery, and the units that came back against the units
+that went out.
 
 **The three tables are the second subject.** They are schedule hints, so a
 wrong entry costs a slower run; but a name in one that no longer resolves to a
@@ -15,9 +14,12 @@ same failure in a smaller place. Each of them is checked against discovery
 too.
 
 **And the refusals are the third.** A run that discovers nothing, a plan that
-loses a worker, a worker handed a name nothing discovers or handed nothing at
-all — each of those is a way to report a pass over tests that never ran, and
-each has a case here.
+loses a unit, a unit that never finishes, a worker handed a name nothing
+discovers or handed nothing at all — each of those is a way to report a pass
+over tests that never ran, and each has a case here.
+
+**The host lock is the fourth**: a second run waits rather than running
+beside the first, and a holder that dies does not leave the lock behind.
 """
 
 import importlib.util
@@ -25,6 +27,8 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -55,18 +59,15 @@ def found():
     return _found
 
 
-def counts():
-    """The worker counts every placement case is checked at.
-
-    One worker; a couple; this host's own, which is what it will actually run
-    at and which a literal tuple missed on every four-core box, including both
-    GitHub runners; the cap; and one more than there are classes, which is
-    where an off-by-one in the packing shows. The last is derived, because a
-    literal that was once larger than the class count stops being that
-    boundary the moment somebody adds classes, and says nothing when it does.
-    """
-    classes = len({SHARD.owner(test_id) for test_id in found()})
-    return (1, 2, 3, SHARD.workers(), SHARD.CAP, classes + 1)
+def queued(tmp, units):
+    """A queue directory holding <units>, as `run_all` lays one out."""
+    work = Path(tmp)
+    for part in ("queue", "taken", "done"):
+        (work / part).mkdir()
+    names = [f"{n:04d}.ids" for n in range(len(units))]
+    for name, ids in zip(names, units):
+        (work / "queue" / name).write_text("\n".join(ids), encoding="utf-8")
+    return work, names
 
 
 def uncommented(path):
@@ -80,19 +81,32 @@ class ThePlacementIsDerivedFromDiscovery(unittest.TestCase):
         # The whole claim. Placed twice is a test run twice, which is slow;
         # placed never is a test that stopped being a gate, which is worse.
         self.assertTrue(found(), "discovery returned nothing to place")
-        for count in counts():
-            with self.subTest(workers=count):
-                buckets, tail = SHARD.plan(found(), count)
-                placed = [i for bucket in buckets for i in bucket] + tail
-                self.assertEqual(len(placed), len(set(placed)), "placed twice")
-                self.assertEqual(sorted(found()), sorted(placed))
+        units, tail = SHARD.plan(found())
+        placed = [i for unit in units for i in unit] + tail
+        self.assertEqual(len(placed), len(set(placed)), "placed twice")
+        self.assertEqual(sorted(found()), sorted(placed))
 
     def test_a_class_no_table_mentions_is_placed_all_the_same(self):
         # What happens when somebody adds a file: the splitter must not need
         # telling, or the tables become the thing that decides coverage.
         stranger = "test_nobody_has_written_yet.AClass.test_it"
-        buckets, tail = SHARD.plan([*found(), stranger], SHARD.workers())
-        self.assertIn(stranger, [i for bucket in buckets for i in bucket] + tail)
+        units, tail = SHARD.plan([*found(), stranger])
+        self.assertIn([stranger], units)
+
+    def test_the_units_come_longest_first(self):
+        # The one guess a queue still pays for in full is a long class dealt
+        # last, so the order is the cost: a measured weight, else the test
+        # count at UNMEASURED a test, and the name to break a tie.
+        ids = ["m.Three.a", "m.Three.b", "m.Three.c", "m.One.a",
+               "m.Weighed.a", "m.Tied.a"]
+        with mock.patch.object(SHARD, "WEIGHT", {"m.Weighed": 10.0}), \
+                mock.patch.object(SHARD, "TOGETHER", {}), \
+                mock.patch.object(SHARD, "SERIAL", frozenset()), \
+                mock.patch.object(SHARD, "UNMEASURED", 1.0):
+            units, tail = SHARD.plan(ids)
+        self.assertEqual([["m.Weighed.a"], ["m.Three.a", "m.Three.b", "m.Three.c"],
+                          ["m.One.a"], ["m.Tied.a"]], units)
+        self.assertEqual([], tail)
 
     def test_every_root_contributes(self):
         # A root that stops being discovered — a renamed directory, a pattern
@@ -133,25 +147,24 @@ class ThePlacementIsDerivedFromDiscovery(unittest.TestCase):
                 with self.subTest(table=name, pinned=pinned):
                     self.assertIn(pinned, classes)
 
-    def test_the_classes_that_share_state_share_a_worker(self):
+    def test_the_classes_that_share_state_share_a_unit(self):
+        # One unit runs on one worker, start to finish, so a group in one unit
+        # never has two of its classes running at once.
         self.assertTrue(SHARD.TOGETHER, "nothing is pinned together any more")
-        for count in counts():
-            buckets, _ = SHARD.plan(found(), count)
-            for group in sorted(set(SHARD.TOGETHER.values())):
-                names = {n for n, g in SHARD.TOGETHER.items() if g == group}
-                landed = {n for n, bucket in enumerate(buckets)
-                          for i in bucket if SHARD.owner(i) in names}
-                with self.subTest(workers=count, group=group):
-                    self.assertEqual(1, len(landed), landed)
+        units, _ = SHARD.plan(found())
+        for group in sorted(set(SHARD.TOGETHER.values())):
+            names = {n for n, g in SHARD.TOGETHER.items() if g == group}
+            landed = {n for n, unit in enumerate(units)
+                      for i in unit if SHARD.owner(i) in names}
+            with self.subTest(group=group):
+                self.assertEqual(1, len(landed), landed)
 
-    def test_the_serial_classes_reach_no_worker(self):
-        for count in counts():
-            buckets, tail = SHARD.plan(found(), count)
-            parallel = {SHARD.owner(i) for bucket in buckets for i in bucket}
-            with self.subTest(workers=count):
-                self.assertEqual(set(), parallel & set(SHARD.SERIAL))
-                self.assertEqual(set(), set(SHARD.SERIAL) -
-                                 {SHARD.owner(i) for i in tail})
+    def test_the_serial_classes_reach_no_unit(self):
+        units, tail = SHARD.plan(found())
+        parallel = {SHARD.owner(i) for unit in units for i in unit}
+        self.assertEqual(set(), parallel & set(SHARD.SERIAL))
+        self.assertEqual(set(), set(SHARD.SERIAL) -
+                         {SHARD.owner(i) for i in tail})
 
     def test_the_worker_count_follows_the_host_up_to_the_cap(self):
         # Asserting only that the answer sits between one and the cap is an
@@ -180,36 +193,80 @@ class TheRunnerRefusesRatherThanReportingAPass(unittest.TestCase):
             with self.assertRaises(SHARD.NothingDiscovered):
                 SHARD.discovered()
 
-    def test_a_run_that_loses_a_worker_is_caught_before_it_starts(self):
+    def test_a_run_that_loses_a_unit_is_caught_before_it_starts(self):
         # `plan()` covering everything and the runs covering everything are
         # two claims, and the gate above can only see the first. This is the
-        # slip it cannot see: a bucket that never becomes a phase.
-        buckets, tail = SHARD.plan(found(), 8)
-        phases = [("shard", b) for b in buckets[:-1] if b]
+        # slip it cannot see: a unit that never becomes a phase.
+        units, tail = SHARD.plan(found())
+        phases = [("unit", u) for u in units[:-1]]
         if tail:
             phases.append(("serial", tail))
         missing, extra = SHARD.unplaced(found(), phases)
-        self.assertTrue(missing, "a dropped worker went unnoticed")
+        self.assertTrue(missing, "a dropped unit went unnoticed")
         self.assertEqual([], extra)
 
     def test_a_run_that_covers_discovery_is_not_flagged(self):
         # The control: the check must be quiet on the plan the runner makes,
         # or it would refuse every run and teach everyone to ignore it.
-        buckets, tail = SHARD.plan(found(), SHARD.workers())
-        phases = [("shard", b) for b in buckets if b]
+        units, tail = SHARD.plan(found())
+        phases = [("unit", u) for u in units]
         if tail:
             phases.append(("serial", tail))
         self.assertEqual(([], []), SHARD.unplaced(found(), phases))
 
     def test_a_test_placed_twice_is_caught(self):
-        buckets, tail = SHARD.plan(found(), 4)
-        phases = [("shard", b) for b in buckets if b]
-        phases.append(("shard", list(buckets[0])))
+        units, tail = SHARD.plan(found())
+        phases = [("unit", u) for u in units]
+        phases.append(("unit", list(units[0])))
         if tail:
             phases.append(("serial", tail))
         missing, extra = SHARD.unplaced(found(), phases)
         self.assertEqual([], missing)
-        self.assertTrue(extra, "a bucket run twice went unnoticed")
+        self.assertTrue(extra, "a unit run twice went unnoticed")
+
+    def test_a_unit_that_never_reached_done_is_named(self):
+        # What came back, not what went out: a unit still queued, one a dead
+        # worker left claimed, and one that finished. Only the last ran.
+        with tempfile.TemporaryDirectory() as tmp:
+            work, names = queued(tmp, [["a.A.x"], ["b.B.x"], ["c.C.x"]])
+            (work / "queue" / names[1]).rename(work / "taken" / names[1])
+            (work / "queue" / names[2]).rename(work / "done" / names[2])
+            self.assertEqual(names[:2], SHARD.unfinished(work, names))
+
+    def test_the_queue_is_dealt_once_each_in_order(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work, names = queued(tmp, [["a.A.x"], ["b.B.x"], ["c.C.x"]])
+            dealt = [SHARD.claim(work) for _ in names]
+            self.assertEqual(names, dealt)
+            self.assertIsNone(SHARD.claim(work))
+
+    def test_a_unit_holding_an_id_discovery_does_not_hold_stays_unfinished(self):
+        # The queue's half of the runtime coverage rule: the worker refuses
+        # the unit, and the unit stays where the parent's check names it.
+        with tempfile.TemporaryDirectory() as tmp:
+            work, names = queued(tmp, [["test_nothing_at_all.AClass.test_it"]])
+            out = subprocess.run(
+                [sys.executable, str(RUNNER), "--queue", str(work)],
+                cwd=str(ROOT), capture_output=True, text=True, timeout=600)
+            self.assertEqual(2, out.returncode, out.stdout + out.stderr)
+            self.assertIn("discovery does not hold", out.stderr)
+            self.assertEqual(names, SHARD.unfinished(work, names))
+
+    def test_a_unit_that_runs_reaches_done_with_its_time(self):
+        # The control for the case above, on a real class: the unit moves to
+        # `done/` and carries the seconds its class took, which is what the
+        # parent prints the slowest classes from.
+        ids = [i for i in found() if SHARD.owner(i) == "test_locality_gate.Verdicts"]
+        self.assertTrue(ids, "the class this case borrows is gone")
+        with tempfile.TemporaryDirectory() as tmp:
+            work, names = queued(tmp, [ids])
+            out = subprocess.run(
+                [sys.executable, str(RUNNER), "--queue", str(work)],
+                cwd=str(ROOT), capture_output=True, text=True, timeout=600)
+            self.assertEqual(0, out.returncode, out.stdout + out.stderr)
+            self.assertEqual([], SHARD.unfinished(work, names))
+            self.assertEqual(["test_locality_gate.Verdicts"],
+                             [cls for _, cls in SHARD.slowest(work)])
 
     def test_an_id_discovery_does_not_hold_stops_the_worker(self):
         # The runtime half of the coverage rule. A worker told to run a name
@@ -243,6 +300,61 @@ class TheRunnerRefusesRatherThanReportingAPass(unittest.TestCase):
                              timeout=120)
         self.assertEqual(2, out.returncode, out.stdout)
         self.assertIn("takes no arguments", out.stderr)
+
+
+class OneRunPerHost(unittest.TestCase):
+    """The lock two runs would otherwise interleave without (#323).
+
+    Every case takes a lock file of its own: the real one is held by the run
+    this case is part of, and a case that waited on it would wait on itself.
+    """
+
+    def test_the_lock_lives_in_the_host_temp_directory(self):
+        # Not the checkout: two worktrees are two checkouts and one host.
+        self.assertEqual(Path(tempfile.gettempdir()), SHARD.LOCK.parent)
+
+    def test_a_second_holder_is_refused_until_the_first_lets_go(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "lock"
+            with SHARD.host_lock(path):
+                with open(path, "a+b") as other:
+                    self.assertFalse(SHARD.try_lock(other))
+            with open(path, "a+b") as other:
+                self.assertTrue(SHARD.try_lock(other))
+                SHARD.unlock(other)
+
+    def test_a_second_run_waits_and_says_so(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "lock"
+            with open(path, "a+b") as first:
+                self.assertTrue(SHARD.try_lock(first))
+                released = threading.Timer(0.5, SHARD.unlock, (first,))
+                released.start()
+                began = time.monotonic()
+                with mock.patch("builtins.print") as said:
+                    with SHARD.host_lock(path, poll=0.05):
+                        waited = time.monotonic() - began
+                released.join()
+            self.assertGreaterEqual(waited, 0.4)
+            self.assertIn("waiting for it", said.call_args.args[0])
+
+    def test_a_holder_that_dies_leaves_no_lock_behind(self):
+        # Why there is no stale-lock recovery: the operating system drops the
+        # lock with the process, however the process ended.
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "lock"
+            child = (
+                "import importlib.util, os, sys\n"
+                "spec = importlib.util.spec_from_file_location('r', sys.argv[1])\n"
+                "r = importlib.util.module_from_spec(spec); spec.loader.exec_module(r)\n"
+                "h = open(sys.argv[2], 'a+b')\n"
+                "sys.exit(0 if not r.try_lock(h) else os._exit(7))\n")
+            out = subprocess.run([sys.executable, "-c", child, str(RUNNER),
+                                  str(path)], timeout=120)
+            self.assertEqual(7, out.returncode, "the child never held the lock")
+            with open(path, "a+b") as after:
+                self.assertTrue(SHARD.try_lock(after))
+                SHARD.unlock(after)
 
 
 class TheCallersNameTheRunnerAndNoRootOfTheirOwn(unittest.TestCase):

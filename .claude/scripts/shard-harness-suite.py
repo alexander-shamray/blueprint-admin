@@ -32,11 +32,28 @@ run. So nothing here reports a pass it has not earned.
 so running them beside seven other workers would measure the load instead.
 `TOGETHER` names the ones that share something outside their own fixture — a
 `secsweep-*` namespace in the shared temp root, and `git worktree` against
-this checkout's own `.git`. `WEIGHT` is a measurement that makes the packing
-better and cannot make it wrong: a class missing from it is packed on its test
-count, and a class whose entry has gone stale is packed badly and still runs.
+this checkout's own `.git`. `WEIGHT` is a measurement that makes the order
+better and cannot make it wrong: a class missing from it is costed on its test
+count, and a class whose entry has gone stale is dealt late and still runs.
 A name in any table that no longer resolves to a discovered class fails a
 test, so a renamed class loses its pinning loudly rather than silently.
+
+**Classes are dealt from a queue rather than packed ahead of time.** Packing
+had to guess every class's cost before the run and paid for each wrong guess
+with a whole worker: the slowest shard took 1.43-1.52x the mean in every
+green run measured, with unlisted classes costing ten to forty times what
+their test count implied (#322). Now each worker takes the next unit when it
+finishes the last, longest first, so a wrong guess costs one class. A unit is
+claimed by renaming its file, which exactly one worker can do, and moves on
+to `done/` only once it has run, so a unit a dead worker dropped is still
+visible to the check that every unit finished.
+
+**One run per host.** Each run sizes its pool for the whole host, so two at
+once — two sessions, two worktrees — ran sixteen workers and each took about
+three times as long (#323). A run takes a lock in the host's temp directory
+first, and a second run waits for it, saying so, rather than running beside
+it. The operating system releases the lock when its holder exits however it
+exits, so there is no stale lock to recover.
 
 **The floor is the longest class.** Class sharding cannot split one, so the
 makespan never goes below the slowest class however many workers there are;
@@ -54,6 +71,11 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
 
 HERE = Path(__file__).resolve()
 ROOT = HERE.parents[2]
@@ -74,20 +96,21 @@ SERIAL = frozenset({
     "test_index_refresh_hook.TheRefresh",
 })
 
-# Who shares state outside their own fixture, and therefore shares a worker.
+# Who shares state outside their own fixture, and therefore shares a unit.
 # The first three create and list fixed `secsweep-*` names in the shared bash
 # temp root and drive `git worktree add`/`remove` against this checkout; the
 # fourth reads the whole working tree and asserts a finding list is empty, so
-# a concurrent worktree round trip is exactly what could disturb it. The last
-# two make detached sweep worktrees, of this checkout and of a synthetic
-# repository, in the same `secsweep-*` namespace the first lists.
+# a concurrent worktree round trip is exactly what could disturb it. The
+# last makes a detached sweep worktree of this checkout, in the same
+# `secsweep-*` namespace the first lists. `test_sweep_slices.ASmallRepository`
+# makes its sweep worktrees of a synthetic repository under a temp root of its
+# own, so it shares nothing and runs wherever it is dealt.
 TOGETHER = {
     "test_harness_helpers.SweepWorktreeShape": "the checkout",
     "test_harness_helpers.NoCommandHoldsAPrefixGrantThatAdmitsAForbiddenFlag": "the checkout",
     "test_harness_helpers.TheFourPortedResiduals": "the checkout",
     "test_root_ignore_coverage.ThisRepository": "the checkout",
     "test_sweep_slices.TheRealTree": "the checkout",
-    "test_sweep_slices.ASmallRepository": "the checkout",
 }
 
 # Seconds a class costs, every one of them measured on one Windows host on
@@ -212,13 +235,15 @@ def owner(test_id):
     return test_id.rsplit(".", 1)[0]
 
 
-def plan(found, count):
-    """Place every id on a worker or in the serial tail.
+def plan(found):
+    """Cut every id into the units the queue deals, and the serial tail.
 
-    Longest unit first into the emptiest worker: the ordinary packing, and the
-    only place WEIGHT is read. Returns the workers' id lists and the tail, and
-    between them they hold `found` exactly once — which is the property
-    `test_harness_shards.py` checks rather than takes.
+    A unit is one class, or every class one `TOGETHER` group names. The units
+    come back longest first, which is the order the workers take them in and
+    the only place WEIGHT is read: a long class dealt last is the one wrong
+    guess a queue still pays for in full. Between them the units and the tail
+    hold `found` exactly once — which is the property `test_harness_shards.py`
+    checks rather than takes.
     """
     tail = [test_id for test_id in found if owner(test_id) in SERIAL]
 
@@ -232,13 +257,8 @@ def plan(found, count):
         cost[unit] = cost.get(unit, 0.0) + WEIGHT.get(name,
                                                       UNMEASURED * len(group))
 
-    buckets = [[] for _ in range(max(1, count))]
-    loaded = [0.0] * len(buckets)
-    for unit in sorted(members, key=lambda u: (-cost[u], u)):
-        at = loaded.index(min(loaded))
-        buckets[at].extend(members[unit])
-        loaded[at] += cost[unit]
-    return buckets, tail
+    order = sorted(members, key=lambda u: (-cost[u], u))
+    return [members[unit] for unit in order], tail
 
 
 def unplaced(found, phases):
@@ -257,13 +277,20 @@ def unplaced(found, phases):
     return missing, extra
 
 
-def run_listed(wanted):
-    """Run exactly these ids, and refuse the run if discovery lost one.
+def unfinished(work, units):
+    """The units of a queued run that never reached `done/`.
 
-    The refusal is the runtime half of the coverage rule: a worker handed a
-    name nothing discovers has been told to run something that does not exist,
-    and reporting that as a pass is the failure this file exists to avoid. A
-    worker handed nothing at all is the same failure with nothing to name.
+    `unplaced` checks what was queued; this checks what came back. A worker
+    that died mid-unit leaves its unit in `taken/`, one that refused an id
+    leaves it there too, and a unit no worker reached is still in `queue/` —
+    all three are tests that did not run, however every worker exited.
+    """
+    done = {path.name for path in (work / "done").glob("*.ids")}
+    return [name for name in units if name not in done]
+
+
+def settle_streams():
+    """Write UTF-8 to a log file, whatever the code page says.
 
     **The two streams are reconfigured because they are a file rather than a
     console**, which on Windows makes them the ANSI code page, and unittest
@@ -275,43 +302,121 @@ def run_listed(wanted):
     """
     sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
     sys.stderr.reconfigure(encoding="utf-8", errors="backslashreplace")
-    if not wanted:
-        print("shard-harness-suite.py: this worker was given no ids to run",
-              file=sys.stderr)
-        return 2
-    outstanding = set(wanted)
-    chosen = []
+
+
+def loaded():
+    """Every discovered test case, by id, in discovery order."""
+    tests = {}
     for start, pattern in ROOTS:
         where = str(ROOT / start)
         suite = unittest.TestLoader().discover(where, pattern=pattern,
                                                top_level_dir=where)
         for test in walk(suite):
-            if test.id() in outstanding:
-                outstanding.discard(test.id())
-                chosen.append(test)
+            tests[test.id()] = test
+    return tests
+
+
+def run_listed(wanted):
+    """Run exactly these ids, and refuse the run if discovery lost one.
+
+    The refusal is the runtime half of the coverage rule: a worker handed a
+    name nothing discovers has been told to run something that does not exist,
+    and reporting that as a pass is the failure this file exists to avoid. A
+    worker handed nothing at all is the same failure with nothing to name.
+    The serial tail runs this way, alone, after the queue has drained.
+    """
+    settle_streams()
+    if not wanted:
+        print("shard-harness-suite.py: this worker was given no ids to run",
+              file=sys.stderr)
+        return 2
+    tests = loaded()
+    outstanding = sorted(set(wanted) - set(tests))
     if outstanding:
         print("shard-harness-suite.py: discovery does not hold "
               f"{len(outstanding)} of the ids this worker was given: "
-              f"{sorted(outstanding)[:5]}", file=sys.stderr)
+              f"{outstanding[:5]}", file=sys.stderr)
         return 2
+    wanted = set(wanted)
+    chosen = [test for test_id, test in tests.items() if test_id in wanted]
     result = unittest.TextTestRunner(verbosity=2).run(unittest.TestSuite(chosen))
     return 0 if result.wasSuccessful() else 1
 
 
-def spawn(listing, log):
-    """One worker, reading its ids from a file and writing everything to one.
+def claim(work):
+    """Take the next unit off the queue: its name, or None when it is empty.
+
+    The rename is the claim. It succeeds for one worker and fails for every
+    other — with a missing file, or on Windows a sharing violation while the
+    winner's rename is in flight — so a failure only means "not this one".
+    A worker stops when the queue reads empty, never on a failed rename, so a
+    unit is never left behind by a race.
+    """
+    queue, taken = work / "queue", work / "taken"
+    while True:
+        names = sorted(path.name for path in queue.glob("*.ids"))
+        if not names:
+            return None
+        for name in names:
+            try:
+                os.rename(queue / name, taken / name)
+            except OSError:
+                continue
+            return name
+        time.sleep(0.05)
+
+
+def run_queue(work):
+    """Run units off the queue in `work` until it is empty.
+
+    Discovery happens once per worker, not once per unit: it imports every
+    module in every root. Each class in a unit runs as its own suite, in
+    discovery order, so its time is measured whole — `setUpClass` included —
+    and written beside the unit as it moves to `done/`, which is where the
+    parent reads the slowest classes from. A unit holding an id discovery does
+    not hold is refused and left in `taken/`, so the parent's check that every
+    unit finished fails on it by name.
+    """
+    settle_streams()
+    tests = loaded()
+    status = 0
+    while (name := claim(work)) is not None:
+        ids = (work / "taken" / name).read_text(encoding="utf-8").split()
+        outstanding = sorted(set(ids) - set(tests))
+        if not ids or outstanding:
+            print(f"shard-harness-suite.py: unit {name}: discovery does not "
+                  f"hold {len(outstanding)} of its ids: {outstanding[:5]}",
+                  file=sys.stderr)
+            status = 2
+            continue
+        times = []
+        for cls in dict.fromkeys(owner(test_id) for test_id in ids):
+            began = time.monotonic()
+            result = unittest.TextTestRunner(verbosity=2).run(
+                unittest.TestSuite(tests[i] for i in ids if owner(i) == cls))
+            times.append(f"{time.monotonic() - began:.1f}\t{cls}\n")
+            if not result.wasSuccessful():
+                status = max(status, 1)
+        (work / "done" / f"{name}.times").write_text("".join(times),
+                                                     encoding="utf-8")
+        os.rename(work / "taken" / name, work / "done" / name)
+    return status
+
+
+def spawn(args, log):
+    """One worker process, writing everything to one log.
 
     The environment is this process's, unchanged: a worker settles its own two
-    streams in `run_listed`, and anything set here would reach every process
-    the tests under it spawn.
+    streams in `settle_streams`, and anything set here would reach every
+    process the tests under it spawn.
     """
-    return subprocess.Popen([sys.executable, str(HERE), "--ids", str(listing)],
+    return subprocess.Popen([sys.executable, str(HERE), *args],
                             cwd=str(ROOT), stdout=log,
                             stderr=subprocess.STDOUT)
 
 
-def report(phases, work):
-    """Print what each run wrote, whatever ended the run.
+def report(logs):
+    """Print what each worker wrote, whatever ended the run.
 
     Called from a `finally`, and before the working directory goes: a run
     interrupted at minute four otherwise showed nothing at all, where the
@@ -319,18 +424,80 @@ def report(phases, work):
     Bytes straight through — decoding a worker's output here only to encode
     it again is what once killed the parent printing a run it had finished.
     """
-    for n, (_, ids) in enumerate(phases):
-        log = work / f"{n}.log"
+    for title, log in logs:
         if not log.exists():
             continue
-        print(f"\n===== run {n}: {len(ids)} tests =====", flush=True)
+        print(f"\n===== {title} =====", flush=True)
         sys.stdout.buffer.write(log.read_bytes())
         sys.stdout.buffer.flush()
+
+
+def slowest(work, count=15):
+    """The classes that took longest, from every unit that finished.
+
+    Printed at the end of every run so `WEIGHT` can be refreshed from data
+    rather than from a profile somebody has to remember to take.
+    """
+    rows = []
+    for path in (work / "done").glob("*.times"):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            seconds, cls = line.split("\t")
+            rows.append((float(seconds), cls))
+    return sorted(rows, reverse=True)[:count]
+
+
+# One run per host, in the host's temp directory rather than the checkout's,
+# because what two runs contend for is the host: two worktrees of this
+# repository, or two clones, are two checkouts and one set of cores.
+LOCK = Path(tempfile.gettempdir()) / "blueprint-admin-harness.lock"
+
+
+def try_lock(handle):
+    """Take the lock on <handle> if it is free; whether it was taken.
+
+    Both are locks the operating system drops when the process holding them
+    exits, killed or not, which is why there is no stale-lock recovery here.
+    """
+    try:
+        if os.name == "nt":
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return False
+    return True
+
+
+def unlock(handle):
+    if os.name == "nt":
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+@contextlib.contextmanager
+def host_lock(path=LOCK, poll=5.0):
+    """Hold the host's harness lock, waiting for another run to finish first."""
+    with open(path, "a+b") as handle:
+        if not try_lock(handle):
+            print(f"shard-harness-suite.py: another harness run on this host "
+                  f"holds {path}; waiting for it rather than running beside "
+                  f"it", flush=True)
+            while not try_lock(handle):
+                time.sleep(poll)
+        try:
+            yield
+        finally:
+            unlock(handle)
 
 
 def main(argv):
     if len(argv) == 3 and argv[1] == "--ids":
         return run_listed(Path(argv[2]).read_text(encoding="utf-8").split())
+    if len(argv) == 3 and argv[1] == "--queue":
+        return run_queue(Path(argv[2]))
     if len(argv) != 1:
         print("usage: shard-harness-suite.py        (it takes no arguments)",
               file=sys.stderr)
@@ -343,9 +510,8 @@ def main(argv):
               f"reporting a pass over nothing.", file=sys.stderr)
         return 2
 
-    buckets, tail = plan(found, workers())
-    phases = [("shard", bucket) for bucket in buckets if bucket]
-    parallel = len(phases)
+    units, tail = plan(found)
+    phases = [("unit", ids) for ids in units]
     if tail:
         phases.append(("serial", tail))
 
@@ -356,50 +522,71 @@ def main(argv):
               f"{len(extra)} unaccounted for {extra[:5]}", file=sys.stderr)
         return 2
 
-    print(f"shard-harness-suite.py: {len(found)} tests over "
-          f"{len(phases)} runs ({parallel} parallel, "
-          f"{1 if tail else 0} serial)", flush=True)
+    count = max(1, min(workers(), len(units)))
+    print(f"shard-harness-suite.py: {len(found)} tests in {len(units)} units "
+          f"over {count} parallel workers, then {len(tail)} serial",
+          flush=True)
 
+    with host_lock():
+        return run_all(units, tail, count)
+
+
+def run_all(units, tail, count):
+    """Queue the units, drain the queue with `count` workers, then the tail."""
     work = Path(tempfile.mkdtemp(prefix="harness-shards-"))
+    for part in ("queue", "taken", "done"):
+        (work / part).mkdir()
+    names = [f"{n:04d}.ids" for n in range(len(units))]
+    for name, ids in zip(names, units):
+        (work / "queue" / name).write_text("\n".join(ids), encoding="utf-8")
+
+    logs = [(f"worker {n}", work / f"worker-{n}.log") for n in range(count)]
+    if tail:
+        logs.append((f"serial: {len(tail)} tests", work / "serial.log"))
     began = time.monotonic()
-    codes, running = [], []
+    codes, running, left, times = [], [], [], []
     try:
         with contextlib.ExitStack() as open_logs:
-            for n, (kind, ids) in enumerate(phases):
-                if kind == "serial":
-                    continue
-                listing = work / f"{n}.ids"
-                listing.write_text("\n".join(ids), encoding="utf-8")
-                log = open_logs.enter_context((work / f"{n}.log").open("wb"))
-                running.append(spawn(listing, log))
+            for _, path in logs[:count]:
+                log = open_logs.enter_context(path.open("wb"))
+                running.append(spawn(["--queue", str(work)], log))
             for proc in running:
                 codes.append(proc.wait())
 
         # The tail goes last and alone, which is what "serial" means here.
-        for n, (kind, ids) in enumerate(phases):
-            if kind != "serial":
-                continue
-            listing = work / f"{n}.ids"
-            listing.write_text("\n".join(ids), encoding="utf-8")
-            with (work / f"{n}.log").open("wb") as log:
-                codes.append(spawn(listing, log).wait())
+        if tail:
+            listing = work / "serial.ids"
+            listing.write_text("\n".join(tail), encoding="utf-8")
+            with logs[-1][1].open("wb") as log:
+                codes.append(spawn(["--ids", str(listing)], log).wait())
+        left = unfinished(work, names)
+        times = slowest(work)
     finally:
         # A worker still running here is one this process is abandoning, and
         # several of them drive `git worktree` against this checkout.
         for proc in running:
             if proc.poll() is None:
                 proc.terminate()
-        report(phases, work)
+        report(logs)
         shutil.rmtree(str(work), ignore_errors=True)
 
-    bad = [n for n, code in enumerate(codes) if code != 0]
-    if len(codes) != len(phases):
-        print(f"\nshard-harness-suite.py: {len(codes)} of {len(phases)} runs "
+    print("\nshard-harness-suite.py: slowest classes, in seconds:")
+    for seconds, cls in times:
+        print(f"  {seconds:7.1f}  {cls}")
+    bad = [title for (title, _), code in zip(logs, codes) if code != 0]
+    if len(codes) != len(logs):
+        print(f"\nshard-harness-suite.py: {len(codes)} of {len(logs)} runs "
               f"reported at all", file=sys.stderr)
         return 1
-    print(f"\nshard-harness-suite.py: {len(codes)} runs in "
+    if left:
+        print(f"\nshard-harness-suite.py: {len(left)} of {len(names)} units "
+              f"never finished, so their tests did not run: {left[:5]}",
+              file=sys.stderr)
+        return 1
+    print(f"\nshard-harness-suite.py: {len(units)} units and "
+          f"{1 if tail else 0} serial run in "
           f"{time.monotonic() - began:.0f}s, "
-          f"{'runs ' + str(bad) + ' failed' if bad else 'all green'}")
+          f"{', '.join(bad) + ' failed' if bad else 'all green'}")
     return 1 if bad else 0
 
 

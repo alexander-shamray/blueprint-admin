@@ -24,7 +24,7 @@ line names one residual below by the words it opens with.
 | The index: refresh, query or search hints, MCP approval, timeout | `Two hooks guard nothing`, `The second is the query hint`, `The search hint asks`, `A session started in a worktree`, `The CLI's skill rewrite`, `The MCP startup timeout` |
 | A command's `allowed-tools` or `disallowed-tools` | `grant the index commands`, `runs before it pushes never denies push`, `is a grant surface`, `A command that holds` |
 | The review agent grant, or restoring an external reviewer | `grants exactly`, `archive/external-reviewers` |
-| The harness suite and its shards | `shard-harness-suite.py`, `That runner owns every discovery root` |
+| The harness suite and its shards | `shard-harness-suite.py`, `That runner owns every discovery root`, `One run per host` |
 | The sweeps' slice lists and `refs/sweeps/` | `The sweeps write two things` |
 | Rebasing or force-pushing | `The only force push`, `A second helper rewrites` |
 | `/branch` worktrees under `.claude/worktrees/` | `worktrees sit inside the checkout` |
@@ -273,16 +273,25 @@ A new residual is stated **here** and gets a row above.
   `tools/`. Any Python 3.12 will do —
   `py -3.12` on Windows, `python` elsewhere — and CI's `harness` job runs
   `python` on three platforms.
-- **That runner owns every discovery root, and runs their classes as parallel
-  workers.** `harness-checks.sh` and the `harness` job name the runner and no
-  root of their own, because two copies of a root is how a local check and CI
-  come to run different suites. The unit is the class, since a class is what
-  shares a fixture, and the count is the host's cores capped at the measured
-  knee. **What a splitter may never do is stop placing a class** — every
-  worker green and one class never run is this repository's most-repeated
-  failure in its cheapest form — so the placement is compared back against
-  discovery rather than against a list, by `test_harness_shards.py`, and a
-  worker refuses an id discovery does not hold rather than reporting a pass.
+- **That runner owns every discovery root, and deals their classes from a
+  queue to parallel workers.** `harness-checks.sh` and the `harness` job name
+  the runner and no root of their own, because two copies of a root is how a
+  local check and CI come to run different suites. The unit is the class,
+  since a class is what shares a fixture, and the count is the host's cores
+  capped at the measured knee. A worker takes the next unit when it finishes
+  the last, longest first, so a wrong guess at a class's cost costs that class
+  rather than a whole worker. **What a splitter may never do is stop placing a
+  class** — every worker green and one class never run is this repository's
+  most-repeated failure in its cheapest form — so the units are compared back
+  against discovery rather than against a list, by `test_harness_shards.py`,
+  every unit has to come back finished, and a worker refuses an id discovery
+  does not hold rather than reporting a pass.
+- **One run per host.** A run takes a lock in the host's temp directory
+  before it starts any worker, and a second run, from another session or
+  worktree, waits and says so. Two at once ran twice the workers the host
+  holds and each took about three times as long (#323). The operating system
+  drops the lock with the process that held it, so there is nothing stale to
+  clear.
   Two of its three tables are not about speed at all: `SERIAL` holds the
   classes whose subject is elapsed time or a listening port, `TOGETHER` the
   ones sharing a `secsweep-*` namespace in the temp root or this checkout's
