@@ -477,8 +477,9 @@ A new residual is stated **here** and gets a row above.
   `git`: behind `xargs`, `find -exec`, `env -C` or `sudo` its paths can arrive
   elsewhere or its directory can move, so it is refused. A work tree
   relocated by `GIT_WORK_TREE`, `GIT_DIR`, `GIT_COMMON_DIR`, `GIT_INDEX_FILE`
-  or `GIT_CONFIG*` assigned in the same command, or by `-c core.worktree=`,
-  is refused too; one exported by an earlier command is not seen.
+  or `GIT_CONFIG*` assigned anywhere in the command line (an `export` before
+  the git word included), or by `-c core.worktree=`, is refused too; one
+  exported by an earlier Bash call is not seen.
   Discarding edits in an application tree with `git restore` or `git checkout
   --` is refused as well, which is the rule rather than an oversight.
   A `git checkout` with no `--` cannot tell a branch from a path, so an
@@ -488,12 +489,17 @@ A new residual is stated **here** and gets a row above.
   admitted. A lone `$BRANCH` the command never assigns is the environment's
   and admitted; one the command sets (`F=.claude/x; git checkout $F`), or any
   other expansion, is judged as a path; so is a name the shell manages
-  (`$PWD`, `$REPLY`, `$_`) or one whose inherited value is a path. Refused
-  whatever the operands, because the paths cannot be read from the command: a
-  command-substitution word, `-C`, `--work-tree`, `GIT_CONFIG*`, a wrapper
-  (`command`, `nohup`, `xargs`, `sudo`), and an unknown option ahead of the
-  verb. After a `cd`, an unseparated operand with a `.` or `/` is judged as a
-  path. `git checkout -f`, `git reset --hard`, `git stash`, `git
+  (`$PWD`, `$REPLY`, `$_`) or one whose inherited value is absolute or holds
+  `..` (`BRANCH=chore/x` is a branch). A bare `$CLAUDE_PROJECT_DIR`, `$HOME`,
+  `$TEMP`, `$TMP` or `$TMPDIR` as a pathspec is the checkout or holds it, and
+  is refused. Refused whatever the operands, because the paths cannot be read
+  from the command: a command-substitution word, `-C`, `--work-tree`,
+  `GIT_CONFIG*`, a wrapper (`command`, `nohup`, `xargs`, `sudo`), and an
+  option git does not list among its global ones ahead of the verb, which
+  takes the verb's place (`--super-prefix x/ checkout`); `--no-pager` and `-c`
+  are known and leave `git log --grep checkout` alone. After a `cd`, every
+  operand of an unseparated checkout with several operands is judged, and a
+  lone operand with a `.` or `/`; a lone dotless one is read as a branch. `git checkout -f`, `git reset --hard`, `git stash`, `git
   checkout-index`, `git read-tree -u` and the subcommands that merge or
   replay (`merge`, `cherry-pick`, `rebase`) update the tree wholesale or by
   index and are not judged.
