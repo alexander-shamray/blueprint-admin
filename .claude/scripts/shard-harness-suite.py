@@ -113,74 +113,94 @@ TOGETHER = {
     "test_sweep_slices.TheRealTree": "the checkout",
 }
 
-# Seconds a class costs, every one of them measured on one Windows host on
-# 2026-09-22 (#46). Nothing reads these as a fact about anything; they exist so
-# the long poles land on different workers, which is the whole of the
-# difference between a good packing and a random one.
+# Seconds a class took, every one of them from the slowest-classes data one
+# queued run of the whole suite printed, on one Windows host on 2026-10-20
+# (#322), with #320 and #321 already in. Nothing reads these as a fact about
+# anything. They set the order the queue deals units in, longest first, and
+# under a queue the order is all a weight can buy: a class dealt late runs
+# late and still runs.
 #
-# **The lowest of repeated serial passes, and the repeats are not ceremony.**
-# #46 records that this host's variance is a third of a run, and it is right:
-# two passes over identical code differed by 26% overall and by 2.8x on one
-# class. A single pass measures the load as much as the class. The MINIMUM
-# rather than the mean, because a class has a floor — the work it actually
-# does — and everything above it is somebody else's process; the mean of a
-# contended sample estimates the contention. It is also the direction this
-# table wants to be wrong in least, since an inflated weight makes the packer
-# reserve room nothing needs, which is the mistake it was already making.
+# **Contended, and that is the right condition for them.** Each class was
+# timed whole, `setUpClass` included, while seven other workers ran beside
+# it, so these are the times a class takes inside the run it is ordered for.
+# They are several times the uncontended floor. That does not matter, because
+# they are only read against each other, and a host with less load scales
+# them together.
 #
 # **Refreshed whole rather than entry by entry, and that is the point.** These
-# numbers are read against each other, so a table half old and half new packs
-# worse than either — and the eight this replaces were taken under a loaded
-# sharded run while these were taken one class at a time.
+# numbers are read against each other, so a table half old and half new orders
+# worse than either. The one this replaces was taken one class at a time on
+# 2026-09-22, before the queue, and had gone stale in both directions: one
+# class sped up ten times over in #320, and three it did not list cost 10-40x
+# their test count.
 #
 # **A class is listed when it measured 5 s or more, OR when it holds ten tests
-# or more.** Two arms because there are two ways to steer the packer wrongly
-# and the table this replaces caught only one. Slower than its test count is
-# the obvious one: `ThisRepository` is two tests against an entry below that
-# dwarfs them, and five classes were missing from the old table entirely.
-# FASTER is the one that was missed — an unlisted class costs `UNMEASURED` per
-# test, so `TheGitArgvGuard`'s 168 tests would be costed at 168 s against the
-# entry below, and the packer would hand it a worker of its own. A class under
-# both arms is packed on its test count, and is too small for the difference to
-# reach the wall.
+# or more.** Two arms because there are two ways to order the queue wrongly.
+# Slower than its test count is the obvious one: an unlisted class costs
+# `UNMEASURED` per test, and the slowest class here holds 18 tests. Faster
+# than its test count is the other: `TheGitArgvGuard`'s many tests would be
+# costed far above what it takes, and it would be dealt ahead of the classes
+# that decide the run. A class under both arms is dealt on its test count, and
+# is too small for the difference to reach the wall.
 #
 # The seconds are not restated here on purpose: the table owns them, and a
 # comment that carries a second copy is the drift this repository keeps
-# finding.
+# finding. Every run ends by printing its slowest classes, so the next
+# refresh needs no profile.
 #
 # SERIAL classes are absent by construction: `plan()` sets them aside before
 # it reads this, so an entry for one would never be consulted.
-#
-# Across ALL discovered classes — not just the ones listed below, which sum
-# to far less — the minima are a floor rather than a wall: no run is ever
-# this fast, because no run is ever uncontended.
 WEIGHT = {
-    "test_git_rebase_onto_main.TheHelperPublishesWhatItRebased": 73.9,
-    "test_git_rebase_onto_main.AConflictIsTheCaseRebaseIsHereFor": 57.2,
-    "test_git_rebase_onto_main.TheApplyBackendIsDrivenToo": 41.1,
-    "test_root_ignore_coverage.ThisRepository": 33.3,
-    "test_git_rebase_onto_main.AStoppedReplayIsNotAlwaysAConflict": 27.8,
-    "test_git_rebase_onto_main.TheHelperRefusesBeforeItRewrites": 26.5,
-    "test_harness_helpers.TheGitArgvGuard": 23.3,
-    "test_harness_helpers.IssueHelperHasNoFreeParameter": 19.0,
-    "test_harness_helpers.LandingByRebaseMovedTheReadsThatAssumedAMergeCommit": 17.5,
-    "test_git_rebase_onto_main.ALegacyMergeForwardIsNotSilentlyDropped": 12.4,
-    "test_harness_helpers.LabelHelperBehaviour": 11.0,
-    "test_git_rebase_onto_main.TheFixtureCopyIsTheFixture": 7.2,
-    "test_edit_target_guard.WhatThisGuardIsNotTheSubjectOf": 5.0,
-    "test_harness_helpers.TheFourPortedResiduals": 3.5,
-    "test_harness_helpers.WhatSuppressesIsDecidedByCodeNow": 1.8,
-    "test_edit_target_guard.TheOrdinaryWriteIsNotDisturbed": 1.2,
-    "test_harness_helpers.CommandsEnforceTheEditingBoundariesTheyState": 0.9,
-    "test_locality_gate.Verdicts": 0.2,
-    "test_locality_gate.Matching": 0.2,
-    "test_locality_gate.TouchSetGrammar": 0.1,
-    "test_locality_gate.MapGrammar": 0.1,
+    "test_git_pr_trailer_helpers.TrailerHelper": 458.5,
+    "test_git_rebase_onto_main.TheHelperPublishesWhatItRebased": 450.2,
+    "test_sweep_slices.ASmallRepository": 423.8,
+    "test_git_rebase_onto_main.AConflictIsTheCaseRebaseIsHereFor": 262.6,
+    "test_git_rebase_onto_main.TheApplyBackendIsDrivenToo": 231.7,
+    "test_harness_helpers.TheLauncherProvesWhatItRemembers": 159.5,
+    "test_git_worktree_fork.ForkShape": 150.0,
+    "test_index_refresh_hook.TheSeed": 147.2,
+    "test_git_rebase_onto_main.TheHelperRefusesBeforeItRewrites": 137.8,
+    "test_git_pr_trailer_helpers.RevertHelper": 131.3,
+    "test_harness_helpers.ARememberedGuardAnswersAsAProbedOne": 131.2,
+    "test_index_refresh_hook.TheEvent": 122.9,
+    "test_git_rebase_onto_main.AStoppedReplayIsNotAlwaysAConflict": 105.2,
+    "test_sweep_slices.TheRealTree": 104.0,
+    "test_harness_helpers.IssueHelperHasNoFreeParameter": 73.7,
+    "test_harness_helpers.LandingByRebaseMovedTheReadsThatAssumedAMergeCommit": 72.0,
+    "test_harness_helpers.LabelHelperBehaviour": 60.8,
+    "test_git_rebase_onto_main.ALegacyMergeForwardIsNotSilentlyDropped": 58.7,
+    "test_harness_helpers.TheGitArgvGuard": 52.5,
+    "test_index_query_hint.TheHint": 37.8,
+    "test_edit_target_guard.WhatThisGuardIsNotTheSubjectOf": 31.3,
+    "test_index_search_hint.WhatItNeverTouches": 29.8,
+    "test_harness_helpers.TheHookWiringRunsOnMoreThanOneOperatingSystem": 29.1,
+    "test_root_ignore_coverage.TheScan": 25.0,
+    "test_harness_helpers.OnlyThisCheckoutsPullRequestsSurvive": 23.7,
+    "test_git_rebase_onto_main.TheFixtureCopyIsTheFixture": 21.3,
+    "test_harness_helpers.WhatSuppressesIsDecidedByCodeNow": 18.8,
+    "test_commit_gate.Reading": 18.6,
+    "test_harness_helpers.NoCommandHoldsAPrefixGrantThatAdmitsAForbiddenFlag": 17.2,
+    "test_index_search_hint.TheFirstSymbolSearchIsRefusedOnce": 14.0,
+    "test_harness_helpers.SweepWorktreeShape": 12.7,
+    "test_edit_target_guard.TheOrdinaryWriteIsNotDisturbed": 10.7,
+    "test_edit_target_guard.ALinkIsNotTheFileItIsSpelledAs": 8.7,
+    "test_git_rebase_onto_main.TheBranchNameGuardsEachHaveTheirOwnCase": 7.5,
+    "test_root_ignore_coverage.ThisRepository": 5.8,
+    "test_harness_shards.TheRunnerRefusesRatherThanReportingAPass": 4.4,
+    "test_harness_helpers.CommandsEnforceTheEditingBoundariesTheyState": 4.0,
+    "test_token_usage.ReportTests": 0.6,
+    "test_harness_shards.ThePlacementIsDerivedFromDiscovery": 0.1,
+    "test_token_usage.CommandLineTests": 0.1,
+    "test_locality_gate.Verdicts": 0.0,
+    "test_locality_gate.MapGrammar": 0.0,
+    "test_locality_gate.TouchSetGrammar": 0.0,
+    "test_locality_gate.Matching": 0.0,
+    "test_commit_gate.Judgement": 0.0,
 }
 
 # What an unmeasured class is assumed to cost per test. Deliberately coarse:
 # the classes that decide the makespan are all in WEIGHT, and a wrong guess
-# here costs a worse packing and nothing else.
+# here costs a later turn in the queue and nothing else.
 UNMEASURED = 1.0
 
 # Eight workers was the knee: sixteen bought twenty-five seconds and produced
