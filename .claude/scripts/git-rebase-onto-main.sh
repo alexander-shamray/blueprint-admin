@@ -202,6 +202,7 @@ publish() {
     { echo "no lease was approved, so nothing here may force" >&2; exit 7; }
   # A remote with several `url` values pushes to every one of them.
   pushes=$(git remote get-url --push --all origin | wc -l)
+  pushes=$((pushes))  # BSD wc pads its count with spaces; arithmetic reads it as a number
   [ "$pushes" -eq 1 ] ||
     { echo "origin has $pushes push URLs; a force goes to every one of them, so nothing is published" >&2; exit 7; }
   # The URL git will push to, after `pushurl`, `pushInsteadOf` and `insteadOf`, must name the
