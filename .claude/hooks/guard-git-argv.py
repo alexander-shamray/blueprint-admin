@@ -3186,10 +3186,18 @@ def git_path_writer_offence(run, literals, command):
     relocation = re.compile(
         r"(?i)(?<!\w)(GIT_WORK_TREE|GIT_DIR|GIT_COMMON_DIR|GIT_INDEX_FILE"
         r"|GIT_CONFIG\w*)\b"
-        r"|(?<![\w-])(?:eval|source)\b"
+        r"|(?<![\w./-])(?:eval|source|trap)(?=\s|$)"
         r"|\b(?:export|declare|typeset|local|readonly|env)\b[^;&|\n]*(?:\$\(|`)"
         r"|\b(?:export|declare|typeset|local|readonly|env|read|mapfile|readarray)"
-        r"\b[^;&|\n]*\$|printf\s+-v\s+\S*\$")
+        r"\b[^;&|\n]*\$|printf\s+-v\s+\S*\$"
+        r"|\b(?:export|declare|typeset|local|readonly|env|read|mapfile|readarray)"
+        r"\b(?:\s+-\S*)*\s+[^\s=;&|]*[{*?\[\\'\"`]"
+        r"|printf\b[^;&|\n]*-\w*v\s*\S*[$\\{*?\[\\'\"`]"
+        r"|\b(?:getopts|wait)\b[^;&|\n]*[$\\{*?\[\\'\"`]"
+        r"|(?:^|[;&|(){\n!])\s*(?:(?:\w+=(?:'[^']*'|\"[^\"]*\"|\S)*"
+        r"|\d*[<>]&?\S*)\s+)*\.(?=\s)"
+        r"|\b(?:if|while|until|then|do|else|elif|time|exec|command|builtin)"
+        r"\s+\.(?=\s)")
     relocated = relocated or any(
         relocation.search(text) for text in command_readings(command))
     if relocated or any(
