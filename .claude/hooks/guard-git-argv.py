@@ -2748,6 +2748,7 @@ def brace_group_expands(word, start):
 BASH_MANAGED_VARIABLES = frozenset({
     "REPLY", "MAPFILE", "OLDPWD", "PWD", "OPTARG", "OPTIND", "RANDOM",
     "SECONDS", "LINENO", "PIPESTATUS", "COMP_WORDS", "HISTCMD", "SHELLOPTS",
+    "DIRSTACK", "FUNCNAME", "HISTFILE", "GROUPS", "PATH", "IFS",
 })
 
 
@@ -2768,16 +2769,20 @@ def environment_variable(word, command):
     # `eval "$(printf '\\x46=.claude/x')"; git checkout $F`. The `.` builtin
     # is a command word after a separator, a newline, a brace, a keyword or
     # `builtin`/`command`.
-    if re.search(
+    dynamic = re.compile(
             r"\beval\b|\bsource\b|`|\$\(|<\(|\$'|\$\{!"
             r"|(?:^|[\s;&|(){!])\.(?=\s|$)"
             r"|\b(?:read|mapfile|readarray|getopts|cd|pushd|popd|declare|typeset"
-            r"|export|readonly|local|let|set)\b|printf\s+-v", command,
-            re.MULTILINE):
+            r"|export|readonly|local|let|set)\b|printf\s+-v", re.MULTILINE)
+    # Read the command as written and with its quotes and backslashes gone:
+    # `"re"ad` and `r\ead` are `read` to bash.
+    if any(dynamic.search(text)
+           for text in (command, re.sub(r"[\\'\"]", "", command))):
         return False
     # A value the hook itself inherited is the value the shell inherited.
     inherited = os.environ.get(name)
-    if inherited and (re.search(r"[\\/]", inherited)
+    if inherited and (os.path.isabs(inherited)
+                      or ".." in re.split(r"[\\/]", inherited)
                       or protected_path(inherited)
                       or linked_protected_path(inherited)
                       or application_tree(inherited)):
@@ -3038,7 +3043,8 @@ GIT_PATH_VALUE_OPTIONS = {
 }
 
 
-def git_pathspec_offence(raw, name, separated, command, committed=False):
+def git_pathspec_offence(raw, name, separated, command, committed=False,
+                         many=False):
     """The reason to refuse one pathspec operand of `git <name>`, or `None`."""
     writer = f"`git {name}`"
     literal = target_literal(raw)
@@ -3047,6 +3053,13 @@ def git_pathspec_offence(raw, name, separated, command, committed=False):
             f"{writer} is given the pathspec `{literal}`, which git reads as "
             "magic or a pattern, so the files it writes are not the string "
             "written here; name the paths (#297, docs/harness-boundaries.md)."
+        )
+    bare = re.fullmatch(r'"?\$(?:(\w+)|\{(\w+)\})"?', raw.strip())
+    if bare and (bare.group(1) or bare.group(2)) in EXPANDABLE_VARIABLES:
+        return (
+            f"{writer} is given `{raw}`, a directory that is the checkout or "
+            "holds it, so it writes the whole tree; name the files (#297, "
+            "docs/harness-boundaries.md)."
         )
     above = above_working_directory(raw)
     if above is not None:
@@ -3079,7 +3092,8 @@ def git_pathspec_offence(raw, name, separated, command, committed=False):
         if not named and not (
                 (shell_expands(raw) and not environment_variable(raw, command))
                 or raw.strip().startswith("~")
-                or (changes_directory(command) and re.search(r"[./]", raw))):
+                or (changes_directory(command)
+                    and (many or re.search(r"[./]", raw)))):
             return None
     return destination_offence(raw, command, writer, writer)
 
@@ -3115,9 +3129,10 @@ def git_path_writer_offence(run, literals, command):
         name = verb_name(stripped[0]) if stripped else ""
         if name in GIT_PATH_WRITERS:
             break
-        hidden = next((verb_name(word) for word in stripped[1:3]
-                       if verb_name(word) in GIT_PATH_WRITERS), None)
-        if led and named and named[0].startswith("-") and hidden:
+        hidden = next((verb_name(word) for word in stripped[1:]
+                       if not word.startswith("-")
+                       and verb_name(word) in GIT_PATH_WRITERS), None)
+        if named and named[0].startswith("-") and hidden:
             # `--super-prefix x/ checkout ...`: the option's value is read as
             # the verb, and the real verb follows it.
             return (
@@ -3154,6 +3169,9 @@ def git_path_writer_offence(run, literals, command):
             r"(?i)(GIT_WORK_TREE|GIT_DIR|GIT_COMMON_DIR|GIT_INDEX_FILE|GIT_CONFIG\w*)\+?=",
             raw)
         for raw in run[:start])
+    relocated = relocated or re.search(
+        r"(?i)(?<![\w$])(GIT_WORK_TREE|GIT_DIR|GIT_COMMON_DIR|GIT_INDEX_FILE"
+        r"|GIT_CONFIG\w*)\+?=", command)
     if relocated or any(
             word.startswith(("-C", "--work-tree", "--git-dir"))
             or "core.worktree" in word.lower()
@@ -3233,7 +3251,8 @@ def git_path_writer_offence(run, literals, command):
                  and operand_literals[0] in ("HEAD", "@"))
     committed = from_head or (name == "restore" and source in ("HEAD", "@"))
     for raw in operands[before if from_head else 0:]:
-        refusal = git_pathspec_offence(raw, name, separated, command, committed)
+        refusal = git_pathspec_offence(raw, name, separated, command, committed,
+                                       len(operands) > 1)
         if refusal is not None:
             return refusal
     return None
