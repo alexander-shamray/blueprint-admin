@@ -487,7 +487,13 @@ A new residual is stated **here** and gets a row above.
   application directory with no such ending restored without `--` is
   admitted. A lone `$BRANCH` the command never assigns is the environment's
   and admitted; one the command sets (`F=.claude/x; git checkout $F`), or any
-  other expansion, is judged as a path. `git checkout -f`, `git reset --hard`, `git stash`, `git
+  other expansion, is judged as a path; so is a name the shell manages
+  (`$PWD`, `$REPLY`, `$_`) or one whose inherited value is a path. Refused
+  whatever the operands, because the paths cannot be read from the command: a
+  command-substitution word, `-C`, `--work-tree`, `GIT_CONFIG*`, a wrapper
+  (`command`, `nohup`, `xargs`, `sudo`), and an unknown option ahead of the
+  verb. After a `cd`, an unseparated operand with a `.` or `/` is judged as a
+  path. `git checkout -f`, `git reset --hard`, `git stash`, `git
   checkout-index`, `git read-tree -u` and the subcommands that merge or
   replay (`merge`, `cherry-pick`, `rebase`) update the tree wholesale or by
   index and are not judged.
