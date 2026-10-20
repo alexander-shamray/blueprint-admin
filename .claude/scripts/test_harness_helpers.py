@@ -193,6 +193,34 @@ def code_lines(text):
     ]
 
 
+# A `git` that does what a Windows removal does when a handle is held: `worktree remove` really
+# removes, leaves a directory behind and fails; and, when GIT_SHIM_BLIND is set, `worktree list`
+# fails afterwards, a register that cannot be read. It is a bash FUNCTION sourced through
+# BASH_ENV, not a `git` earlier on PATH: PATH resolution of an extensionless script differed on
+# the Windows CI runner, and a function does not depend on it. `command git` is the real one.
+GIT_FAILING_AFTER_REMOVAL = """\
+git() {
+  if [ "$1" = worktree ] && [ "$2" = remove ]; then
+    command git worktree remove "$3" && mkdir -p "$3/held" && : > "$3/held/file"
+    : > "$GIT_SHIM_MARK"
+    return 1
+  fi
+  if [ "$1" = worktree ] && [ "$2" = list ] && [ -n "${GIT_SHIM_BLIND:-}" ] && [ -e "$GIT_SHIM_MARK" ]; then
+    return 1
+  fi
+  command git "$@"
+}
+"""
+
+
+def git_failing_after_removal(directory):
+    """The environment that makes a helper's `git` behave so: BASH_ENV and the mark file's path."""
+    directory = Path(directory)
+    shim = directory / "git-shim.sh"
+    shim.write_text(GIT_FAILING_AFTER_REMOVAL, encoding="utf-8", newline="\n")
+    return {"BASH_ENV": shim.as_posix(), "GIT_SHIM_MARK": (directory / "removed.mark").as_posix()}
+
+
 def bash_tmproot():
     """The temp root as BASH resolves it, which is not the one Python resolves.
 
@@ -340,20 +368,8 @@ class SweepWorktreeShape(unittest.TestCase):
 
         shim_dir = Path(tempfile.mkdtemp(prefix="drop-shim-"))
         self.addCleanup(shutil.rmtree, str(shim_dir), ignore_errors=True)
-        real_git = Path(shutil.which("git")).as_posix()
-        shim = shim_dir / "git"
-        shim.write_text(
-            "#!/usr/bin/env bash\n"
-            'if [ "$1" = worktree ] && [ "$2" = remove ]; then\n'
-            f'  "{real_git}" worktree remove "$3" && mkdir -p "$3/held" && : > "$3/held/file"\n'
-            "  exit 1\n"
-            "fi\n"
-            f'exec "{real_git}" "$@"\n',
-            encoding="utf-8", newline="\n")
-        shim.chmod(shim.stat().st_mode | 0o111)
-
-        env = dict(os.environ, CLAUDE_WORKTREE_REMOVE_TRIES="3", CLAUDE_WORKTREE_REMOVE_PAUSE="0",
-                   PATH=os.pathsep.join([str(shim_dir), os.environ.get("PATH", "")]))
+        env = {**os.environ, "CLAUDE_WORKTREE_REMOVE_TRIES": "3", "CLAUDE_WORKTREE_REMOVE_PAUSE": "0",
+               **git_failing_after_removal(shim_dir)}
         dropped = subprocess.run([BASH, str(DROP), path], capture_output=True, text=True, cwd=repo, env=env)
 
         self.assertEqual(0, dropped.returncode, dropped.stderr)
@@ -1412,26 +1428,13 @@ class NoCommandHoldsAPrefixGrantThatAdmitsAForbiddenFlag(unittest.TestCase):
 
         shim_dir = base / "shim"
         shim_dir.mkdir()
-        mark = (base / "removed.mark").as_posix()
-        shim = shim_dir / "git"
-        # After its failed `worktree remove` the shim also fails `worktree list` when SHIM_BLIND is
-        # set: a register that cannot be read must never read as "gone".
-        shim.write_text(
-            "#!/usr/bin/env bash\n"
-            'if [ "$1" = worktree ] && [ "$2" = remove ]; then\n'
-            f'  "{real_git}" worktree remove "$3" && mkdir -p "$3/held" && : > "$3/held/file"\n'
-            f'  : > "{mark}"\n'
-            "  exit 1\n"
-            "fi\n"
-            f'if [ "$1" = worktree ] && [ "$2" = list ] && [ -n "$SHIM_BLIND" ] && [ -e "{mark}" ]; then exit 1; fi\n'
-            f'exec "{real_git}" "$@"\n',
-            encoding="utf-8", newline="\n")
-        shim.chmod(shim.stat().st_mode | 0o111)
+        shim_env = git_failing_after_removal(shim_dir)
+        mark = shim_env["GIT_SHIM_MARK"]
 
         def remove(path, branch, with_shim, **extra):
             env = {**os.environ, "CLAUDE_WORKTREE_REMOVE_TRIES": "3", "CLAUDE_WORKTREE_REMOVE_PAUSE": "0", **extra}
             if with_shim:
-                env["PATH"] = os.pathsep.join([str(shim_dir), env.get("PATH", "")])
+                env.update(shim_env)
             return subprocess.run(
                 [BASH, str(SCRIPTS / "git-worktree-remove.sh"), path, branch],
                 capture_output=True, text=True, cwd=str(repo), env=env)
@@ -1450,7 +1453,7 @@ class NoCommandHoldsAPrefixGrantThatAdmitsAForbiddenFlag(unittest.TestCase):
         # directory is kept and the failure is git's own status. (The mark is cleared first, or the
         # shim would blind the helper's earlier register read too and the case would prove nothing.)
         Path(mark).unlink(missing_ok=True)
-        out = remove(".claude/worktrees/blind", "fix/blind", with_shim=True, SHIM_BLIND="1")
+        out = remove(".claude/worktrees/blind", "fix/blind", with_shim=True, GIT_SHIM_BLIND="1")
         self.assertNotEqual(0, out.returncode, out.stdout)
         self.assertTrue((trees / "blind" / "held" / "file").is_file(), "an unreadable register must not delete")
         self.assertNotIn("after git left it behind", out.stdout)
