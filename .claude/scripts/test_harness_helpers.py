@@ -6712,6 +6712,7 @@ class TheGitArgvGuard(unittest.TestCase):
             "every": "{verb} .claude/settings.json",
             "in-place": "{verb} -i -e 1 .claude/settings.json",
             "of": "{verb} if=/tmp/a of=.claude/settings.json",
+            "find": "{verb} /tmp -fprint .claude/settings.json",
         }
         self.assertEqual(set(shapes), set(module.WRITING_VERBS.values()))
         for verb, model in sorted(module.WRITING_VERBS.items()):
@@ -6777,6 +6778,17 @@ class TheGitArgvGuard(unittest.TestCase):
             "env --split-string='rm .claude/hooks/run-guard.sh'",
             "env -S'git push origin +HEAD:main'",
             "env -S 'cp /tmp/a $HOME/x'",
+            # `find` writes through its output actions and deletes through
+            # `-delete`, which acts on the starting points (#297).
+            "find /tmp -fprint .claude/settings.json",
+            "find /tmp -fprint0 package.json",
+            "find /tmp -fprintf package.json %p",
+            "find /tmp -fls .claude/hooks/x",
+            "find /tmp -name x -fprint /tmp/ok -fprint package.json",
+            "find .claude/hooks -name x -delete",
+            "find -L .claude/hooks -delete",
+            "find /tmp -name x -o -fprint package.json",
+            "env find /tmp -fprint package.json",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command, cwd=root)
@@ -6795,6 +6807,7 @@ class TheGitArgvGuard(unittest.TestCase):
             "git ls-files .claude | xargs rm",
             "find /tmp -name x -exec cp /tmp/a {} \\;",
             "find /tmp -name x -exec cp {} .claude/ \\;",
+            "find /tmp -fprint $F",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command, cwd=root)
@@ -6826,6 +6839,12 @@ class TheGitArgvGuard(unittest.TestCase):
             "dd if=package.json of=/tmp/x",
             "npm test 2>&1 | tee /tmp/log",
             "find /tmp -name x -exec cp {} /tmp/y \\;",
+            "find /tmp -name x -delete",
+            "find /tmp -name x -fprint /tmp/out",
+            "find . -name '*.md' -print",
+            # `printf -v` assigns a shell variable and writes no file; a name
+            # that executes is refused by the environment check (#297).
+            "printf -v out '%s' x",
             "cp /tmp/a >(cat)",
             "grep -rn tee .claude/hooks",
             "git log --oneline -- cp .claude/x",

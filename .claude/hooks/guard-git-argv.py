@@ -2568,7 +2568,7 @@ def destination_offence(word, command, writer, kind):
 #   of           the `of=` operand
 #
 # **The list trails the programs that write, and says so.** `curl -o`,
-# `rsync`, `tar -x`, `unzip`, `patch`, `find -delete` and an interpreter
+# `rsync`, `tar -x`, `unzip`, `patch` and an interpreter
 # (`python -c`, `node -e`, an `awk` or `sed` script using its own `w`) all write
 # and none is here. The suite asserts every name below reaches the check
 # through its model, and that the verbs #26 named are all on it — it cannot
@@ -2579,7 +2579,7 @@ WRITING_VERBS = {
     "mv": "every", "rm": "every", "rmdir": "every", "shred": "every",
     "tee": "every", "touch": "every", "truncate": "every", "unlink": "every",
     "perl": "in-place", "sed": "in-place",
-    "dd": "of",
+    "dd": "of", "find": "find",
 }
 # `git restore` and `git checkout -- PATH` overwrite the paths they are given too,
 # and are NOT judged here on purpose: `git checkout HEAD -- <file>` is how this
@@ -2686,6 +2686,54 @@ def _unreadable_word(literal, command):
         "$" in literal and expanded_target(literal, command) is None)
 
 
+# `find` writes through four actions and removes through one. The file an
+# `-fprint`, `-fprint0`, `-fprintf` or `-fls` action names is created or
+# truncated, and `-delete` removes everything the starting points reach (#297).
+FIND_WRITING_ACTIONS = frozenset({"-fprint", "-fprint0", "-fprintf", "-fls"})
+
+
+def find_offence(words, command):
+    """The reason to refuse a `find` that writes or deletes, or `None`.
+
+    The words before the first expression word are the starting points (the
+    current directory when there are none); `-H`, `-L`, `-P`, `-O<n>` and
+    `-D <flags>` stand among them and are not paths. Only `-delete` judges the
+    starting points, since only it acts on what they reach. A destination that
+    is computed is refused by `destination_offence`; an action word that is
+    itself computed (`find /tmp "$A"`) is not read, the same residual the other
+    models carry in `docs/harness-boundaries.md`.
+    """
+    literals = [target_literal(word) for word in words]
+    starts, destinations, deleting, expression = [], [], False, False
+    position = 0
+    while position < len(words):
+        raw, literal = words[position], literals[position]
+        position += 1
+        if not expression:
+            if literal in ("-H", "-L", "-P") or (
+                    literal is not None and literal.startswith("-O")):
+                continue
+            if literal == "-D":
+                position += 1
+                continue
+            if literal is None or not literal.startswith(("-", "(", "!", ",")):
+                starts.append(raw)
+                continue
+            expression = True
+        if literal in FIND_WRITING_ACTIONS and position < len(words):
+            destinations.append(words[position])
+            position += 1
+        elif literal == "-delete":
+            deleting = True
+
+    judged = destinations + ((starts or ["."]) if deleting else [])
+    for word in judged:
+        refusal = destination_offence(word, command, "`find`", "`find`")
+        if refusal is not None:
+            return refusal
+    return None
+
+
 def verb_offence(verb, words, command):
     """The reason to refuse `verb` run on the raw `words` after it, or `None`.
 
@@ -2697,6 +2745,9 @@ def verb_offence(verb, words, command):
     literals = [target_literal(word) for word in words]
     writer = kind = f"`{verb}`"
     model = WRITING_VERBS[verb]
+
+    if model == "find":
+        return find_offence(words, command)
 
     if model == "of":
         for raw, literal in zip(words, literals):
