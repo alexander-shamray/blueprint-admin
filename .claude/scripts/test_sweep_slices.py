@@ -17,6 +17,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 SCRIPTS = Path(__file__).resolve().parent
 SLICES = SCRIPTS / "sweep-slices.sh"
@@ -146,9 +147,25 @@ SMALL_TREE = {
 
 
 class ASmallRepository(unittest.TestCase):
-    """A small repository of its own, so a commit and a ref never touch this one."""
+    """A small repository of its own, so a commit and a ref never touch this one.
+
+    And a temp root of its own: the detach, drop and slices helpers make and
+    accept sweep worktrees only directly under `${TMPDIR:-/tmp}`, so with
+    `TMPDIR` pointed at a fresh directory this class shares no `secsweep-*`
+    namespace with `TheRealTree` or a real sweep, and the shard runner need
+    not keep it on the same worker as them (#322). The cleanups run last in,
+    first out, so the sweep is dropped while `TMPDIR` still names its root.
+    """
 
     def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="sweeproot-")
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        # A forward-slashed path, which MSYS bash takes as it stands; the
+        # helpers resolve it with `cd` and `pwd -P` themselves.
+        private = mock.patch.dict(os.environ,
+                                  {"TMPDIR": Path(self.root).as_posix()})
+        private.start()
+        self.addCleanup(private.stop)
         self.repo = tempfile.mkdtemp(prefix="sweepslices-")
         self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
         made = run_bash('cd "$R" && git init -q --initial-branch=main .', R=self.repo)
@@ -172,6 +189,21 @@ class ASmallRepository(unittest.TestCase):
         return run_bash(
             'cd "$R" && bash "$MARK" "$KIND" "$SHA"', R=self.repo, MARK=str(MARK), KIND=kind, SHA=sha
         )
+
+    def test_its_sweeps_land_in_its_own_temp_root(self):
+        # What lets the runner deal this class anywhere: if a helper stopped
+        # honouring TMPDIR under MSYS, its sweeps would land in the shared
+        # root beside `TheRealTree`'s again, and nothing else would notice.
+        sweep = Sweep(self, self.repo)
+        result = sweep.slices("bug")
+        self.assertEqual(0, result.returncode, result.stderr)
+        where = run_bash('cd "$TMPDIR" && pwd -P && cd "$(dirname "$W")" && pwd -P',
+                         W=sweep.path)
+        self.assertEqual(0, where.returncode, where.stderr)
+        root, parent = where.stdout.split()
+        self.assertEqual(root, parent)
+        listing = parse(result.stdout)[1][0][3]
+        self.assertTrue(listing.startswith(f"{sweep.path}.slices/"), listing)
 
     def test_each_row_owns_the_paths_its_command_says(self):
         sweep = Sweep(self, self.repo)
