@@ -447,8 +447,10 @@ A new residual is stated **here** and gets a row above.
   `pushInsteadOf` and `insteadOf`, names a different host or `owner/repo` than the URL
   the remote was added with (`repo_key`, lower-cased host and the last two path
   components); a protocol rewrite on the same host (https to ssh) passes. A mirror on
-  another host is refused, as is a one-component path and a hostless transport such as
-  `ext::`; GitHub URLs always carry an owner, so those fail closed on a setup this
+  another host is refused, as is a one-component path, a URL carrying a query or
+  fragment, and anything with a scheme or an scp-style colon that fits neither form
+  (`ext::`, `file://`, `ssh://h:o/r`, an IPv6 host); only a plain or drive path may be
+  hostless; GitHub URLs always carry an owner, so those fail closed on a setup this
   repository does not have. The lease (the remote's branch must already be at the commit
   this run read) backs that up and does not replace it.
 

@@ -903,12 +903,16 @@ class TheHelperPublishesWhatItRebased(unittest.TestCase):
             "https://github.com/o/r.git", "git@github.com:o/r.git", "ssh://git@github.com:22/o/r",
             "https://GitHub.com/o/r/", "https://evil.example/o/r", "https://github.com/r",
             "ext::sh -c evil", "C:/x/o/r.git", "/tmp/x/o/r.git",
+            "https://github.com/x/y#/o/r", "https://github.com/x/y?/o/r", "ssh://github.com:o/r",
+            "git@github.com:/o/r", "https://[::1]/o/r", "file:///o/r", "ext::sh -c evil/o/r",
         ]
         got = {u: run_bash(script, H=str(HELPER), U=u).stdout.strip() for u in urls}
         for same in urls[:4]:
             self.assertEqual("github.com|o/r", got[same], same)
         self.assertEqual("evil.example|o/r", got["https://evil.example/o/r"])
-        for refused in ("https://github.com/r", "ext::sh -c evil"):
+        for refused in ("https://github.com/r", "ext::sh -c evil", "https://github.com/x/y#/o/r",
+                        "https://github.com/x/y?/o/r", "ssh://github.com:o/r", "git@github.com:/o/r",
+                        "https://[::1]/o/r", "file:///o/r", "ext::sh -c evil/o/r"):
             self.assertEqual("(none)", got[refused], refused)
         self.assertEqual("|o/r", got["C:/x/o/r.git"])
         self.assertEqual("|o/r", got["/tmp/x/o/r.git"])
