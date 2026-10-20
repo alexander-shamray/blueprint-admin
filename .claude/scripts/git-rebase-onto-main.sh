@@ -144,7 +144,10 @@ require_remote_carries_nothing_new() {
 # The lease names an expected value. `--force-with-lease` left bare trusts the
 # remote-tracking ref, which any fetch in the session may have moved, so the
 # `<ref>:<sha>` form names the commit this run read and a push landing in
-# between is refused rather than overwritten.
+# between is refused rather than overwritten. The destination is spelled out too:
+# `git push origin "$branch"` names a source only, so `remote.origin.push` or
+# `remote.origin.pushurl` in the repository's config would decide where the force
+# landed (#343); `refs/heads/<branch>` on both sides leaves it nothing to decide.
 publish() {
   local current head lease
   current=$(git branch --show-current)
@@ -160,7 +163,7 @@ publish() {
     exit 0
   fi
   remember_replay "$head"
-  git push --force-with-lease="$branch:$lease" origin "$branch"
+  git push --force-with-lease="refs/heads/$branch:$lease" origin "$branch:refs/heads/$branch"
   rm -f "$pending"
   echo "published $branch at $head"
 }

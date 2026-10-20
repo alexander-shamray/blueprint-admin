@@ -1802,6 +1802,21 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
             with self.subTest(rule=rule):
                 self.assertIn(rule, denied)
 
+    def test_settings_denies_the_files_claude_code_loads_as_instructions(self):
+        # #343: `.claude/rules/**`, `.claude/output-styles/**` and `CLAUDE.local.md` are read
+        # into the session's context unasked. Nothing here writes them. `CLAUDE.md` is NOT in
+        # this list: the commands deny it themselves, and `/style-pass` and the owner's own
+        # sessions edit it by design (docs/harness-boundaries.md).
+        denied = set(json.loads(
+            SETTINGS.read_text(encoding="utf-8"))["permissions"]["deny"])
+        for rule in ("Edit(.claude/rules/**)", "Edit(./.claude/rules/**)",
+                     "Edit(.claude/output-styles/**)", "Edit(./.claude/output-styles/**)",
+                     "Edit(CLAUDE.local.md)", "Edit(./CLAUDE.local.md)"):
+            with self.subTest(rule=rule):
+                self.assertIn(rule, denied)
+        self.assertNotIn("Edit(CLAUDE.md)", denied)
+        self.assertNotIn("Edit(.claude/**)", denied)
+
     def test_the_msbuild_and_nuget_names_are_protected_files_and_untracked(self):
         spec = importlib.util.spec_from_file_location("guard_git_argv", HOOK)
         module = importlib.util.module_from_spec(spec)
