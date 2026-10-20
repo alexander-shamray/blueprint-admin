@@ -426,6 +426,42 @@ export interface BrokerBinding {
   routingKey: string;
 }
 
+/** A gateway route that reaches a service (spec §5.15): `method` is null for any. */
+export interface MapRoute {
+  method: string | null;
+  prefix: string;
+  policy: string;
+}
+
+export interface MapBinding {
+  source: string;
+  routingKey: string;
+}
+
+/** `messages` is null when the broker does not list the queue; `parked` is set for a twin of the service's queue. */
+export interface MapQueue {
+  name: string;
+  consumer: string;
+  messages: number | null;
+  parked: string | null;
+  bindings: MapBinding[];
+}
+
+export interface MapService {
+  name: string;
+  url: string | null;
+  routes: MapRoute[];
+  queues: MapQueue[];
+}
+
+/** The platform joined from the host's own tables and the broker's reads; `disagreements` are shown, never resolved. */
+export interface PlatformMapView {
+  brokerReachable: boolean;
+  error: string | null;
+  services: MapService[];
+  disagreements: string[];
+}
+
 export interface BindingsView {
   reachable: boolean;
   error: string | null;

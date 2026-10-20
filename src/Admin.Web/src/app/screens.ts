@@ -6,6 +6,7 @@ export const SCREENS = [
   { path: 'stack', label: 'Stack' },
   { path: 'logs', label: 'Logs' },
   { path: 'broker', label: 'Broker' },
+  { path: 'map', label: 'Map' },
   { path: 'erasure', label: 'Erasure' },
   { path: 'mail', label: 'Mail' },
   { path: 'requests', label: 'API' },
