@@ -219,9 +219,12 @@ what gives step 5 a recall to hold. #168 stays open for that alone.
 `/security-sweep` both ran over `main` at `e9731c2`, and sixteen issues carry
 the sweep's filing line. That supersedes "the sweep set is empty" above. All
 sixteen were confirmed and fixed (PRs #286–#299), so each is a **known defect at
-`e9731c2`**. That stands in for the seeded defect #168 asked for. The pinned
-commit is `refs/sweeps/bug`. The security sweep left no mark, but `e9731c2` was
-`main`'s head from before the first filing to after the last.
+`e9731c2`**. That stands in for the seeded defect #168 asked for. The bug
+sweep's pinned commit is `e9731c2c184e994de8816ef8012b3815e19d6859`: the main
+checkout's local `refs/sweeps/bug` pointed there when it was read on
+2026-10-20. That ref moves with the next clean sweep and exists on no other
+clone, so the sha is the record. The security sweep left no mark, but
+`e9731c2` was `main`'s head from before the first filing to after the last.
 
 | Issue | Sweep | Severity | Row | Slice holding it | What |
 |---|---|---|---|---|---|
