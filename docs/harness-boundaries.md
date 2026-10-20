@@ -355,6 +355,12 @@ A new residual is stated **here** and gets a row above.
   a target is spelled relative; it fails closed and no chain step writes one.
   And `git-worktree-remove.sh` refuses a worktree forked beside the checkout
   before this layout, so one of those is removed by hand.
+- **`find` is judged by its writing actions only.** `guard-git-argv.py` reads
+  `-fprint`, `-fprint0`, `-fprintf`, `-fls` and `-delete`. An action word that is
+  itself computed (`find /tmp "$A"`) is not read, and a `-delete` start given as
+  a POSIX-style absolute path on a Windows host (`/c/dev/...`) is not resolved
+  against the working directory, so only the relative spellings of a parent are
+  refused there. The same gap is older for `rm`: `rm -rf ..` is admitted.
 
 A new residual is stated **here**, and `CLAUDE.md` carries the pointer rather
 than a second copy.
