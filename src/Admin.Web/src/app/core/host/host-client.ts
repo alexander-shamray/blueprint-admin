@@ -8,6 +8,7 @@ import {
   DeadLetterPlan,
   DeadLetterVerb,
   BindingsView,
+  PlatformMapView,
   ExchangesView,
   HoldersView,
   Identity,
@@ -174,6 +175,10 @@ export class HostClient {
   /** One message's body. Opening it marks it read in the sink, as the sink's own UI does. */
   mailMessage(id: string): Observable<MailMessageRead> {
     return this.http.get<MailMessageRead>(`/api/mail/messages/${encodeURIComponent(id)}`);
+  }
+
+  platformMap(): Observable<PlatformMapView> {
+    return this.http.get<PlatformMapView>('/api/platform/map');
   }
 
   brokerQueues(): Observable<QueuesView> {
