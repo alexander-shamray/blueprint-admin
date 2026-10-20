@@ -501,9 +501,11 @@ A new residual is stated **here** and gets a row above.
   every operand of an unseparated checkout with several operands is judged,
   and a lone operand with a `.` or `/`; a lone dotless one is read as a
   branch. A relocation variable named anywhere in the command line, or
-  built by `eval`, `source`, `.`, `trap`, a command substitution, or an
-  expansion, brace, glob or quote in the arguments of an `export`, `declare`,
-  `env`, `read`, `printf -v` or `getopts`, refuses the writer. The cost is
+  built by `eval`, `source`, `trap`, a lone `.` followed by a word (`. file`,
+  after any prefix), a process substitution, a command substitution, or an
+  expansion, brace, glob or quote in any argument of `export`, `declare`,
+  `typeset`, `local`, `readonly`, `env`, `read`, `mapfile`, `readarray`,
+  `printf -v`, `getopts` or `wait -p`, refuses the writer. The cost is
   that `export X=$Y; git checkout main` is refused with it, and so is a
   commit message that names `GIT_DIR` in the same command line.
   `git checkout -f`, `git reset --hard`, `git stash`, `git checkout-index`,
