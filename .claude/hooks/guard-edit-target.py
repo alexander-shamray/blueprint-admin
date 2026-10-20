@@ -780,13 +780,17 @@ def offence(event):
     # is in the worktree the session stands in or in some other linked worktree,
     # both of which are judged above.
     standing = linked_worktree(cwd, checkouts) if sibling is None else None
-    if standing is not None and not under(lexical, standing, traits_of(standing)):
+    if standing is not None:
+        own = traits_of(standing)
         for spelled_root, real_root, traits in checkouts:
             if os.path.isfile(os.path.join(spelled_root, ".git")):
                 continue
             for base in (spelled_root, real_root):
                 for candidate in (lexical, resolved):
-                    if not under(candidate, base, traits):
+                    # The worktree nests inside main (`.claude/worktrees/<slug>`), so
+                    # its own files, spelled or resolved, are under main too and are
+                    # judged as the project, not as main's machinery.
+                    if under(candidate, standing, own) or not under(candidate, base, traits):
                         continue
                     machinery = protected_in_worktree(candidate, base)
                     if machinery is not None:
