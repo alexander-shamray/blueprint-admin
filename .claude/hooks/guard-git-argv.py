@@ -2745,6 +2745,14 @@ def brace_group_expands(word, start):
     return "}" in word[start:]
 
 
+def command_readings(command):
+    """The command as written, with its quotes and backslashes gone, and with
+    its parameter expansions removed as well: `"re"ad`, `GIT_WORK"_TREE"=x`
+    and `r${E}ead` are `read` and an assignment to bash (#297)."""
+    plain = re.sub(r"[\\'\"]", "", command)
+    return (command, plain, re.sub(r"\$\{[^}]*\}|\$\w+", "", plain))
+
+
 BASH_MANAGED_VARIABLES = frozenset({
     "REPLY", "MAPFILE", "OLDPWD", "PWD", "OPTARG", "OPTIND", "RANDOM",
     "SECONDS", "LINENO", "PIPESTATUS", "COMP_WORDS", "HISTCMD", "SHELLOPTS",
@@ -2776,8 +2784,7 @@ def environment_variable(word, command):
             r"|export|readonly|local|let|set)\b|printf\s+-v", re.MULTILINE)
     # Read the command as written and with its quotes and backslashes gone:
     # `"re"ad` and `r\ead` are `read` to bash.
-    if any(dynamic.search(text)
-           for text in (command, re.sub(r"[\\'\"]", "", command))):
+    if any(dynamic.search(text) for text in command_readings(command)):
         return False
     # A value the hook itself inherited is the value the shell inherited.
     inherited = os.environ.get(name)
@@ -3132,7 +3139,11 @@ def git_path_writer_offence(run, literals, command):
         hidden = next((verb_name(word) for word in stripped[1:]
                        if not word.startswith("-")
                        and verb_name(word) in GIT_PATH_WRITERS), None)
-        if named and named[0].startswith("-") and hidden:
+        leading = named[:len(named) - len(stripped)]
+        unknown = [word for word in leading if word.startswith("-")
+                   and "=" not in word
+                   and word not in GLOBAL_VALUE_FLAGS | BOOLEAN_GLOBALS]
+        if unknown and hidden:
             # `--super-prefix x/ checkout ...`: the option's value is read as
             # the verb, and the real verb follows it.
             return (
@@ -3162,16 +3173,18 @@ def git_path_writer_offence(run, literals, command):
     # A relocated work tree moves where git writes while the operand still looks
     # ordinary: `GIT_WORK_TREE=.claude git checkout HEAD -- settings.json`. The
     # environment arrives as assignment words ahead of git (or `env`'s), the
-    # config as `-c core.worktree=`; an `export` in an earlier command is not
-    # seen (docs/harness-boundaries.md).
+    # config as `-c core.worktree=`; an `export` in an earlier Bash call is
+    # not seen, one anywhere in this command line is (docs/harness-boundaries.md).
     relocated = any(
         ASSIGNMENT.match(raw) and re.match(
             r"(?i)(GIT_WORK_TREE|GIT_DIR|GIT_COMMON_DIR|GIT_INDEX_FILE|GIT_CONFIG\w*)\+?=",
             raw)
         for raw in run[:start])
-    relocated = relocated or re.search(
+    relocation = re.compile(
         r"(?i)(?<![\w$])(GIT_WORK_TREE|GIT_DIR|GIT_COMMON_DIR|GIT_INDEX_FILE"
-        r"|GIT_CONFIG\w*)\+?=", command)
+        r"|GIT_CONFIG\w*)\+?=")
+    relocated = relocated or any(
+        relocation.search(text) for text in command_readings(command))
     if relocated or any(
             word.startswith(("-C", "--work-tree", "--git-dir"))
             or "core.worktree" in word.lower()
