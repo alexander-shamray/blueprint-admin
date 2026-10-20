@@ -40,18 +40,21 @@ fi
 # from these and holds each command's table to them. The order is the rule —
 # the first arm that matches owns the path — so a spec is the suites' before it
 # is the SPA's, and the SPA's own configuration is `config` by what is left.
+# The row comes back in REPLY rather than on stdout: the loop below asks once
+# per tracked file, and `$(row_of …)` forked a subshell for every one, about
+# a tenth of a second each under MSYS, 52 s over this tree (#321).
 row_of() {
   case "$kind:$1" in
-    bug:src/Admin.Host/*.csproj) echo config ;;
-    bug:src/Admin.Host/*) echo host ;;
-    bug:src/Admin.Web/*.spec.ts|bug:src/Admin.Web/e2e/*|bug:tests/*) echo suites ;;
-    bug:src/Admin.Web/src/*) echo spa ;;
-    bug:src/Admin.Web/*) echo config ;;
-    security:src/*|security:tests/*) echo source ;;
-    *:tools/*|*:.github/*|*:.claude/*) echo tooling ;;
-    *:docs/*) echo samples ;;
+    bug:src/Admin.Host/*.csproj) REPLY=config ;;
+    bug:src/Admin.Host/*) REPLY=host ;;
+    bug:src/Admin.Web/*.spec.ts|bug:src/Admin.Web/e2e/*|bug:tests/*) REPLY=suites ;;
+    bug:src/Admin.Web/src/*) REPLY=spa ;;
+    bug:src/Admin.Web/*) REPLY=config ;;
+    security:src/*|security:tests/*) REPLY=source ;;
+    *:tools/*|*:.github/*|*:.claude/*) REPLY=tooling ;;
+    *:docs/*) REPLY=samples ;;
     */*) return 1 ;;
-    *) echo config ;;
+    *) REPLY=config ;;
   esac
 }
 
@@ -142,7 +145,8 @@ while IFS= read -r -d '' rec; do
   case "$file" in *$'\n'*|*$'\r'*) echo "a tracked name with a line break" >&2; exit 3 ;; esac
   tracked=$((tracked + 1))
   size=${meta##* }
-  row=$(row_of "$file") || { echo "no row owns: $file" >&2; unowned=$((unowned + 1)); continue; }
+  row_of "$file" || { echo "no row owns: $file" >&2; unowned=$((unowned + 1)); continue; }
+  row=$REPLY
   if [ -n "$since" ]; then
     case "$changes" in
       *$'\n'"$file"$'\n'*) : ;;
@@ -156,9 +160,12 @@ while IFS= read -r -d '' rec; do
       # Binary is skipped by an allowlist of what has nothing to audit, so a
       # code or configuration file git calls binary (a stray NUL byte, a binary
       # attribute) refuses the run by name and is never dropped as a count.
-      case "$(printf '%s' "$file" | tr 'A-Z' 'a-z')" in
+      # Matched without regard to case, by `nocasematch` (bash 3.1) rather
+      # than a `tr` pipe, which forked twice per binary file.
+      shopt -s nocasematch
+      case "$file" in
         *.png|*.jpg|*.jpeg|*.gif|*.ico|*.webp|*.avif|*.bmp|*.woff|*.woff2|*.ttf|*.otf|*.eot|*.pdf|*.zip|*.gz|*.tgz|*.7z|*.jar|*.dll|*.exe|*.so|*.dylib|*.mp3|*.mp4|*.wav|*.webm)
-          binary=$((binary + 1)); continue ;;
+          shopt -u nocasematch; binary=$((binary + 1)); continue ;;
         *) echo "git calls a file binary that is not a known asset: $file" >&2; exit 3 ;;
       esac ;;
   esac
