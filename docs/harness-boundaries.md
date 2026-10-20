@@ -229,7 +229,11 @@ A new residual is stated **here** and gets a row above.
   home directory included, so `>` into either directory was refused whether it
   was spelt absolute, `~/` or `$HOME/`. The same rule refuses
   `rm` under `~/.claude` too, so a probe file written to `scratch` is left for
-  the owner to remove.
+  the owner to remove. **What is still open:** the hook judges only redirect
+  targets and the operands of `WRITING_VERBS`, and that list trails the
+  programs that write. `curl -o`, `tar -x` and an interpreter (`python -c`,
+  `node -e`) are not on it, as its own comment says, so a Bash write into
+  `memory/` or `output-styles/` by one of those is neither denied nor judged.
 - **A command `/ship` runs before it pushes never denies push.** A
   frontmatter `disallowed-tools` holds for the rest of the user turn, not
   for the command that states it, so `Bash(git push:*)` on `/commit` or
