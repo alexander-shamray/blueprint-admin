@@ -6,6 +6,7 @@ using Admin.Host.Fakes;
 using Admin.Host.Jobs;
 using Admin.Host.Stack;
 using Admin.Host.Tests.TestSupport;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 
@@ -196,7 +197,17 @@ public sealed class LoadRunServiceTests : IAsyncDisposable
         run.Status.ExitCode.ShouldBe(0);
     }
 
-    private LoadRunService Service() => new(runner, registry, Paths);
+    [Fact]
+    public void A_stack_with_another_sql_password_has_it_in_the_blocks_that_read_the_database()
+    {
+        ProcessSpec spec = LoadRunService.Spec(LoadRunService.Product, Paths, "Other_Pa55!");
+
+        spec.Arguments[^1].ShouldContain("-P 'Other_Pa55!'");
+        spec.Arguments[^1].ShouldNotContain(LoadRunService.RunLocallySqlPassword);
+        LoadRunService.Spec(LoadRunService.Product, Paths).Arguments[^1].ShouldBe(LoadRunService.Product);
+    }
+
+    private LoadRunService Service() => new(runner, registry, Paths, Options.Create(new AdminOptions()));
 
     /// <summary>Every block as the live run recorded it, the run's exit being <paramref name="run"/>.</summary>
     private void Script(int run)
