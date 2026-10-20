@@ -205,6 +205,7 @@ public sealed class LoadRunServiceTests : IAsyncDisposable
         spec.Arguments[^1].ShouldContain("-P 'Other_Pa55!'");
         spec.Arguments[^1].ShouldNotContain(LoadRunService.RunLocallySqlPassword);
         LoadRunService.Spec(LoadRunService.Product, Paths).Arguments[^1].ShouldBe(LoadRunService.Product);
+        LoadRunService.Spec(LoadRunService.Product, Paths, "It's").Arguments[^1].ShouldContain("-P 'It''s'");
     }
 
     private LoadRunService Service() => new(runner, registry, Paths, Options.Create(new AdminOptions()));

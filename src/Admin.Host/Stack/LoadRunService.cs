@@ -222,12 +222,12 @@ public sealed class LoadRunService(IProcessRunner runner, JobRegistry registry, 
 
     /// <summary>One block run whole, from the backend clone, as run-locally.md's PowerShell blocks are.</summary>
     public static ProcessSpec Spec(string block, RepoPaths paths, string? sqlPassword = null) =>
-        new("powershell", Arguments(sqlPassword is null ? block : block.Replace(RunLocallySqlPassword, sqlPassword, StringComparison.Ordinal)), paths.BackendDir);
+        new("powershell", Arguments(sqlPassword is null ? block : block.Replace(RunLocallySqlPassword, sqlPassword.Replace("'", "''", StringComparison.Ordinal), StringComparison.Ordinal)), paths.BackendDir);
 
     /// <summary>
     /// The <c>sa</c> password run-locally.md's blocks carry, which <see cref="AdminOptions.SqlPassword"/> defaults to. The
     /// blocks stay verbatim, and a stack started with another <c>SQL_PASSWORD</c> has this literal swapped for the configured one
-    /// when a step starts. The job's command line is not scrubbed: a secret is scrubbed as a word, and this one sits inside the block.
+    /// when a step starts, a single quote in it doubled as PowerShell quotes it. The job's command line is not scrubbed: a secret is scrubbed as a word, and this one sits inside the block.
     /// </summary>
     internal const string RunLocallySqlPassword = "Local_Dev_Pa55w0rd!";
 
