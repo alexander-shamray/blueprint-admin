@@ -22,7 +22,7 @@ line names one residual below by the words it opens with.
 | `settings.json` or a permission rule | `File permission rules take`, `self-locks` |
 | A guard hook or its launcher | `Every guard hook uses` |
 | The index: refresh, query or search hints, MCP approval, timeout | `Two hooks guard nothing`, `The second is the query hint`, `The search hint asks`, `A session started in a worktree`, `The CLI's skill rewrite`, `The MCP startup timeout` |
-| A command's `allowed-tools` or `disallowed-tools` | `grant the index commands`, `runs before it pushes never denies push`, `is a grant surface` |
+| A command's `allowed-tools` or `disallowed-tools` | `grant the index commands`, `runs before it pushes never denies push`, `is a grant surface`, `A command that holds` |
 | The review agent grant, or restoring an external reviewer | `grants exactly`, `archive/external-reviewers` |
 | The harness suite and its shards | `shard-harness-suite.py`, `That runner owns every discovery root` |
 | The sweeps' slice lists and `refs/sweeps/` | `The sweeps write two things` |
