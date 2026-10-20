@@ -79,6 +79,7 @@ public sealed partial class ScenarioLeaseService(
     private readonly SemaphoreSlim operations = new(1, 1);
     private volatile Held? current;
     private ITimer? deadline;
+    private ITimer? reconcileRetry;
 
     public LeaseView? Current => current is { } held ? View(held) : null;
 
@@ -312,6 +313,13 @@ public sealed partial class ScenarioLeaseService(
                 current = lease;
                 await FinishRestoreAsync(lease, firstRestore);
             }
+            else
+            {
+                // A job holds the gate (an Up that began before this ran, say). The journal stays, and nothing else would read it
+                // again until the next host start, so try once more shortly.
+                reconcileRetry?.Dispose();
+                reconcileRetry = time.CreateTimer(_ => { _ = RetryReconcileAsync(); }, null, RetryAfter, Timeout.InfiniteTimeSpan);
+            }
         }
         finally
         {
@@ -319,9 +327,22 @@ public sealed partial class ScenarioLeaseService(
         }
     }
 
+    private async Task RetryReconcileAsync()
+    {
+        try
+        {
+            await ReconcileAsync();
+        }
+        catch (Exception ex)
+        {
+            DeadlineFailed(logger, ex);
+        }
+    }
+
     public void Dispose()
     {
         deadline?.Dispose();
+        reconcileRetry?.Dispose();
         operations.Dispose();
     }
 
@@ -361,6 +382,10 @@ public sealed partial class ScenarioLeaseService(
             }
         }
 
+        // The journal goes last. One that cannot be deleted keeps the lease and the gate, as a restore that failed does: the retry
+        // restores again, which is safe twice, and deletes it once the file is free.
+        failure ??= TryDeleteJournal();
+
         if (failure is not null)
         {
             current = held with { RestoreError = failure };
@@ -374,7 +399,6 @@ public sealed partial class ScenarioLeaseService(
 
         deadline?.Dispose();
         deadline = null;
-        DeleteJournal();
         current = null;
         gate.ReleaseLease();
 
@@ -448,6 +472,20 @@ public sealed partial class ScenarioLeaseService(
         if (File.Exists(journalPath))
         {
             File.Delete(journalPath);
+        }
+    }
+
+    private string? TryDeleteJournal()
+    {
+        try
+        {
+            DeleteJournal();
+
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return $"The lease journal at {journalPath} could not be deleted: {ex.Message}";
         }
     }
 
