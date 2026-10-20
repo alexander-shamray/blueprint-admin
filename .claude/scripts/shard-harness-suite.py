@@ -382,7 +382,8 @@ def claims(work):
     Windows it is not exclusive: two workers that opened the same file before
     either moved it both "succeeded", the second moving it onto itself, and
     ran the unit twice. A race of four workers over single-test units in
-    `test_harness_shards.py` reproduces that, and is what holds this now.
+    `test_harness_shards.py` reproduces that and asserts each test ran once,
+    and `done/` is written exclusively too, so a doubled unit fails its run.
     """
     for name in sorted(path.name for path in (work / "units").glob("*.ids")):
         try:
@@ -428,7 +429,10 @@ def run_queue(work):
                 status = max(status, 1)
         (work / "done" / f"{name}.times").write_text("".join(times),
                                                      encoding="utf-8")
-        (work / "done" / name).write_bytes(b"")
+        # Exclusively, like the claim: a unit finished twice is a unit run
+        # twice, and that fails this worker loudly rather than passing.
+        os.close(os.open(work / "done" / name,
+                         os.O_CREAT | os.O_EXCL | os.O_WRONLY))
     return status
 
 
