@@ -54,6 +54,7 @@ tools/token-usage/         Transcript report for the token plan
 | Fact | Owner |
 |---|---|
 | Ports, sibling dirs, FakePlatform | `AdminOptions.cs` |
+| Which services the platform has, and what hangs from each | `PlatformServices.All` in `src/Admin.Host/Config/PlatformServices.cs` |
 | SPA dev server and `/api` proxy | `src/Admin.Web/angular.json`, `proxy.conf.json` |
 | Compose service list | backend `deploy/compose/` |
 | Fake recordings | `src/Admin.Host/Fakes/` |
