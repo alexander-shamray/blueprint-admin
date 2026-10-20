@@ -95,8 +95,10 @@ ROOTS = ((".claude/scripts", "test_*.py"),
          ("tools/token-usage", "test_*.py"))
 
 # Whose subject is time or a port, and so cannot share a box with seven
-# workers. `TheRefresh` asserts that a hook command returns inside two seconds
-# — that is the claim, not an incidental bound.
+# workers. `TheRefresh` once asserted that a hook command returns inside two seconds,
+# which lost to a loaded host (#330); it now holds the fake CLI open until released
+# and fails on a call that cannot return. It stays here for what it still shares: a
+# real shell, a detached process and a cache directory per case.
 SERIAL = frozenset({
     "test_index_refresh_hook.TheRefresh",
 })
