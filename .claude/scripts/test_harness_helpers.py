@@ -6862,7 +6862,9 @@ class TheGitArgvGuard(unittest.TestCase):
             "dd if=package.json of=/tmp/x",
             "npm test 2>&1 | tee /tmp/log",
             "find /tmp -name x -exec cp {} /tmp/y \\;",
-            "find /tmp -name x -delete",
+            # Below the scratch root, not at it: on a Linux runner the
+            # checkout is under /tmp, and `-delete` there contains it.
+            "find /tmp/scratch-out -name x -delete",
             "find /tmp -name x -fprint /tmp/out",
             "find . -name '*.md' -print",
             # Another program's words are not find's actions.
