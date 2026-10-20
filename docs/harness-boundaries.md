@@ -28,6 +28,7 @@ line names one residual below by the words it opens with.
 | The sweeps' slice lists and `refs/sweeps/` | `The sweeps write two things` |
 | Rebasing or force-pushing | `The only force push`, `A second helper rewrites` |
 | `/branch` worktrees under `.claude/worktrees/` | `worktrees sit inside the checkout` |
+| MSBuild/NuGet auto-imports, agent types, `/style-pass` and its linter | `The files MSBuild and NuGet`, `is denied beside the built-in agent types`, `runs the linter it configures` |
 
 A new residual is stated **here** and gets a row above.
 
@@ -394,6 +395,32 @@ A new residual is stated **here** and gets a row above.
   exempt once a script is given. Labels end at a blank as GNU sed 4.9 reads
   them, so a script an older sed reads differently is refused rather than
   admitted.
+- **The files MSBuild and NuGet load without being asked are denied by name.**
+  `Directory.Build.targets` and `.rsp`, `Directory.Solution.props` and
+  `.targets`, `NuGet.Config` in each casing, and the solution's
+  `before.`/`after.`/plain `.slnx.targets` are untracked, so no listing of
+  tracked files reaches them, yet an `Exec` in one runs under the granted
+  `host-checks.sh` and the build reports success (#311). Each editing command and
+  `settings.json` deny them at the root in both spellings and by family at any
+  depth, and `PROTECTED_FILES` carries the names, so a redirect to one is refused
+  at any depth too. The suite holds the list as the Node one is held. Not covered:
+  a `Directory.Build.props` above the checkout, which the edit guard's
+  outside-the-checkout rule judges, and the generated `*.nuget.g.targets` under
+  `artifacts/obj`, which `dotnet test`'s restore rewrites.
+- **`fork` is denied beside the built-in agent types, and no other agent type is
+  named.** `Agent(fork)` joins the broad types `/ship` and the two sweeps deny, since
+  a fork inherits the parent's whole toolset. `allowed-tools` auto-approves rather
+  than whitelists, so a user-level or plugin agent type installed on a machine is
+  outside the boundary: no deny list in this tree can name a type it does not
+  know, and the suite asserts the fixed built-in list plus the repository's own
+  profiles (#315).
+- **`/style-pass` edits `eslint.config.js` and then runs the linter it
+  configures.** That is the pass's job (sections 3 and 4), so the one executed config
+  stays editable and the check helper stays granted; the other executed configs
+  (`*.config.cjs|mjs|mts|ts`, `.prettierrc.js|cjs|mjs`) at any depth are denied (#313). A
+  session that writes a hostile `eslint.config.js` and runs `npm-checks.sh lint`
+  executes it, the same class as session-written tests under #310; the review
+  of the diff, not a rule, is what stands between them.
 
 A new residual is stated **here**, and `CLAUDE.md` carries the pointer rather
 than a second copy.
