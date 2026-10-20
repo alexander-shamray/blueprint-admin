@@ -24,8 +24,9 @@ run. So nothing here reports a pass it has not earned.
   renamed directory or a pattern that stopped matching looks like, and the
   case that would have caught it is among the tests that stopped being found,
   so it cannot be left to report zero tests and exit 0.
-* A worker refuses to start when handed an id discovery does not hold, or no
-  ids at all.
+* A worker refuses a unit holding an id discovery does not hold, and leaves
+  it unfinished, so the run fails on it by name. The serial worker, handed
+  its ids directly, refuses to start on such an id, or on no ids at all.
 
 **Three tables, and every one of them is a schedule hint rather than a fact.**
 `SERIAL` names the classes whose subject is elapsed time or a listening port,
@@ -60,7 +61,7 @@ so there is no stale lock to recover.
 
 **The floor is the longest class.** Class sharding cannot split one, so the
 makespan never goes below the slowest class however many workers there are;
-past eight the packing stops improving and the interleavings start. That is
+past eight the run stops getting faster and the interleavings start. That is
 why the count is capped rather than tuned, and why the remaining lever on the
 long poles is inside those classes and not here (issue #43).
 """
