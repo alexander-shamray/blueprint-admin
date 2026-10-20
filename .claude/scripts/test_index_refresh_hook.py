@@ -242,7 +242,10 @@ class TheRefresh(unittest.TestCase):
                                 env=self.env(), stdout=subprocess.DEVNULL,
                                 stderr=subprocess.DEVNULL)
 
-    def wait_for(self, condition, what, seconds=30):
+    def wait_for(self, condition, what, seconds=90):
+        # Waits for something that WILL happen, so the deadline only has to be past the host's worst
+        # delay and costs nothing when it is met: 30 s lost to a second full suite on the same box
+        # (#330).
         deadline = time.monotonic() + seconds
         while not condition():
             if time.monotonic() > deadline:
@@ -328,18 +331,24 @@ class TheRefresh(unittest.TestCase):
         # gives `shlex.split` the same list while handing them to the CLI as
         # arguments. So the literal command runs, against a fake that prints
         # and outlasts the shell — a foreground call would be slow and loud.
-        self.fake(extra="echo loud\nsleep 3\n")
+        #
+        # **Slow is not timed (#330).** The fake is held open until this test releases it, so a
+        # foreground call cannot return at all and `run`'s own timeout is what fails. A stopwatch
+        # bound of two seconds lost to a loaded host (2.6 s measured, on a clean clone).
+        release = self.tmp / "release"
+        self.fake(extra="echo loud\n" + self.held_until(release))
         entries = read_json(EXAMPLE)["hooks"]["PostToolUse"]
         command = entries[0]["hooks"][0]["command"]
         # The line every event is pinned to, so running it here covers them
         # all. A divergence makes this test the one that fails, rather than
         # leaving an unrun event holding a command nothing executed.
         self.assertEqual(example_command(), command)
-        began = time.monotonic()
-        shell = subprocess.run([SH, "-c", command], cwd=str(self.repo),
-                               env=self.env(), capture_output=True, text=True,
-                               timeout=30)
-        self.assertLess(time.monotonic() - began, 2, "the example did not background")
+        try:
+            shell = subprocess.run([SH, "-c", command], cwd=str(self.repo),
+                                   env=self.env(), capture_output=True, text=True,
+                                   timeout=15)
+        finally:
+            release.touch()
         self.assertEqual(0, shell.returncode, shell.stderr)
         self.assertEqual("", shell.stdout + shell.stderr)
         self.wait_for(self.calls, "the fake CLI to be called")
