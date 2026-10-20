@@ -6789,6 +6789,16 @@ class TheGitArgvGuard(unittest.TestCase):
             "find -L .claude/hooks -delete",
             "find /tmp -name x -o -fprint package.json",
             "env find /tmp -fprint package.json",
+            # A start that is, or contains, the working directory reaches the
+            # machinery without naming it (round 1 of PR #305).
+            "find . -delete",
+            "find -delete",
+            "find .. -name settings.json -delete",
+            "find /tmp/.. -delete",
+            "find ~ -name x -delete",
+            "find -- .claude/hooks -delete",
+            "find /tmp -files0-from list -delete",
+            "find /tmp -fprint .claude/settings.json -exec echo x \\;",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command, cwd=root)
@@ -6808,6 +6818,19 @@ class TheGitArgvGuard(unittest.TestCase):
             "find /tmp -name x -exec cp /tmp/a {} \\;",
             "find /tmp -name x -exec cp {} .claude/ \\;",
             "find /tmp -fprint $F",
+        ):
+            with self.subTest(command=command):
+                self.assertRefused(command, cwd=root)
+
+    def test_a_find_delete_started_above_the_checkout_is_refused(self):
+        # An absolute start that contains the working directory, or is it,
+        # reaches the machinery the way `.` does.
+        root = self.writing_checkout()
+        here = Path(root).as_posix()
+        for command in (
+            f"find {here} -name x -delete",
+            f"find {here}/src/.. -delete",
+            f"find {Path(root).parent.as_posix()} -name x -delete",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command, cwd=root)
@@ -6842,6 +6865,8 @@ class TheGitArgvGuard(unittest.TestCase):
             "find /tmp -name x -delete",
             "find /tmp -name x -fprint /tmp/out",
             "find . -name '*.md' -print",
+            # Another program's words are not find's actions.
+            "find /tmp -name x -exec echo -fprint .claude/x \\;",
             # `printf -v` assigns a shell variable and writes no file; a name
             # that executes is refused by the environment check (#297).
             "printf -v out '%s' x",
