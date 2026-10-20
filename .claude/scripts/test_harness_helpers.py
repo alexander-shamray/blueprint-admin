@@ -362,6 +362,19 @@ class SweepWorktreeShape(unittest.TestCase):
             "gone", run_bash('[ -e "$P" ] || [ -e "$P.slices" ] || echo gone', P=path).stdout.strip(),
             "neither the directory nor its slice lists are left")
 
+        # A sweep worktree holding untracked work is git's refusal: still registered, so the helper
+        # fails with git's status, keeps the tree and its slice lists, and deletes nothing.
+        made = run_bash('cd "$REPO" && bash "$DETACH" "$SHA" 2>/dev/null', REPO=repo, DETACH=str(DETACH), SHA=pinned)
+        dirty = made.stdout.strip()
+        self.assertEqual(0, made.returncode, made.stderr)
+        self.addCleanup(lambda: run_bash(
+            'cd "$REPO" && git worktree remove --force "$P" >/dev/null 2>&1; rm -rf "$P" "$P.slices"', REPO=repo, P=dirty))
+        run_bash('mkdir -p "$P.slices" && printf work > "$P/untracked.txt"', P=dirty)
+        refused = subprocess.run([BASH, str(DROP), dirty], capture_output=True, text=True, cwd=repo, env=env)
+
+        self.assertNotEqual(0, refused.returncode)
+        self.assertEqual("kept", run_bash('[ -f "$P/untracked.txt" ] && [ -d "$P.slices" ] && echo kept', P=dirty).stdout.strip())
+
 
 class LabelStub:
     """A `gh` on PATH answering the three calls gh-label-ensure.sh makes.
@@ -1393,23 +1406,30 @@ class NoCommandHoldsAPrefixGrantThatAdmitsAForbiddenFlag(unittest.TestCase):
             "commit", "-q", "--allow-empty", "-m", "root")
         git("worktree", "add", "-q", "-b", "fix/held", ".claude/worktrees/held")
         git("worktree", "add", "-q", "-b", "fix/dirty", ".claude/worktrees/dirty")
+        git("worktree", "add", "-q", "-b", "fix/blind", ".claude/worktrees/blind")
+        git("worktree", "add", "-q", "-b", "fix/stuck", ".claude/worktrees/stuck")
         (trees / "dirty" / "untracked.txt").write_text("work\n", encoding="utf-8")
 
         shim_dir = base / "shim"
         shim_dir.mkdir()
+        mark = (base / "removed.mark").as_posix()
         shim = shim_dir / "git"
+        # After its failed `worktree remove` the shim also fails `worktree list` when SHIM_BLIND is
+        # set: a register that cannot be read must never read as "gone".
         shim.write_text(
             "#!/usr/bin/env bash\n"
             'if [ "$1" = worktree ] && [ "$2" = remove ]; then\n'
             f'  "{real_git}" worktree remove "$3" && mkdir -p "$3/held" && : > "$3/held/file"\n'
+            f'  : > "{mark}"\n'
             "  exit 1\n"
             "fi\n"
+            f'if [ "$1" = worktree ] && [ "$2" = list ] && [ -n "$SHIM_BLIND" ] && [ -e "{mark}" ]; then exit 1; fi\n'
             f'exec "{real_git}" "$@"\n',
             encoding="utf-8", newline="\n")
         shim.chmod(shim.stat().st_mode | 0o111)
 
-        def remove(path, branch, with_shim):
-            env = dict(os.environ, CLAUDE_WORKTREE_REMOVE_TRIES="3", CLAUDE_WORKTREE_REMOVE_PAUSE="0")
+        def remove(path, branch, with_shim, **extra):
+            env = {**os.environ, "CLAUDE_WORKTREE_REMOVE_TRIES": "3", "CLAUDE_WORKTREE_REMOVE_PAUSE": "0", **extra}
             if with_shim:
                 env["PATH"] = os.pathsep.join([str(shim_dir), env.get("PATH", "")])
             return subprocess.run(
@@ -1425,6 +1445,22 @@ class NoCommandHoldsAPrefixGrantThatAdmitsAForbiddenFlag(unittest.TestCase):
         out = remove(".claude/worktrees/dirty", "fix/dirty", with_shim=False)
         self.assertNotEqual(0, out.returncode)
         self.assertTrue((trees / "dirty" / "untracked.txt").is_file())
+
+        # A register that cannot be read after git's failure is doubt, not "gone": the leftover
+        # directory is kept and the failure is git's own status. (The mark is cleared first, or the
+        # shim would blind the helper's earlier register read too and the case would prove nothing.)
+        Path(mark).unlink(missing_ok=True)
+        out = remove(".claude/worktrees/blind", "fix/blind", with_shim=True, SHIM_BLIND="1")
+        self.assertNotEqual(0, out.returncode, out.stdout)
+        self.assertTrue((trees / "blind" / "held" / "file").is_file(), "an unreadable register must not delete")
+        self.assertNotIn("after git left it behind", out.stdout)
+
+        # A directory that never lets go: the bounded loop ends and says to delete it by hand.
+        Path(mark).unlink(missing_ok=True)
+        out = remove(".claude/worktrees/stuck", "fix/stuck", with_shim=True, CLAUDE_WORKTREE_REMOVE_TRIES="0")
+        self.assertNotEqual(0, out.returncode)
+        self.assertIn("delete it by hand", out.stderr)
+        self.assertTrue((trees / "stuck" / "held" / "file").is_file())
 
     def test_the_create_helper_refuses_a_body_it_should_not_publish(self):
         # `--body-file` publishes what it reads, including a file the session's

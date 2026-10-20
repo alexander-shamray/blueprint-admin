@@ -386,9 +386,11 @@ A new residual is stated **here** and gets a row above.
   `<worktree>/.claude` for about 40 s after a `dotnet build` there, build servers shut
   down or not, and python removed the same tree once it let go. Both removal helpers
   therefore ask the register again when git fails: still registered is git's refusal and
-  stands; unregistered leaves only a directory, which is deleted for a bounded time
-  (18 tries, 5 s apart) and reported, and the sweep helper's `.slices` lists go with it
-  (#329). A directory still held after that is named for deletion by hand.
+  stands; unregistered, established twice (a listing that runs and omits the path, and git no
+  longer recognising the directory), leaves only a directory, which is deleted for a
+  bounded time (the tries and pause are the helpers' `CLAUDE_WORKTREE_REMOVE_TRIES` and
+  `_PAUSE`) and reported, and the sweep helper's `.slices` lists go with it (#329);
+  any doubt keeps the tree and git's own exit status. A directory still held after that is named for deletion by hand.
 - **The edit guard judges the main checkout from a worktree, and refuses a
   trailing dot or space on Windows.** A session standing in a linked worktree
   gets `protected_in_worktree`'s inventory applied to any main checkout the

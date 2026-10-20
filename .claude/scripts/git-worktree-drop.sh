@@ -81,9 +81,17 @@ dir_there=$(git -C "$path" rev-parse --path-format=absolute --git-dir)
 # lists below were never reached either: 41 `secsweep-*` directories had accumulated. When
 # git fails, the register is asked again: still registered means git refused (modified or
 # untracked work), and the failure stands; not registered means only the directory is left,
-# and it is deleted here for a bounded time, since the path passed the shape and ownership
-# checks above.
-if ! git worktree remove "$resolved"; then
+# and it is deleted here for a bounded time, since the path passed the shape and same-repository
+# checks above (ownership is not proved here, as the header says).
+removed_status=0
+git worktree remove "$resolved" || removed_status=$?
+if [ "$removed_status" -ne 0 ]; then
+  # **Unregistered is established twice and positively; any doubt is "still registered".** The
+  # listing must run, name at least the main worktree, and not name this path; and git itself
+  # must no longer recognise the directory as a worktree. A failed listing, an empty one or a
+  # path-form mismatch must never read as "gone", because the next step deletes a tree.
+  listing=$(git worktree list --porcelain) || exit "$removed_status"
+  [ -n "$listing" ] || exit "$removed_status"
   still=no
   while IFS= read -r line; do
     case "$line" in
@@ -92,14 +100,22 @@ if ! git worktree remove "$resolved"; then
         [ -d "$dir" ] && [ "$(cd "$dir" && pwd -P)" = "$resolved" ] && still=yes
         ;;
     esac
-  done <<<"$(git worktree list --porcelain)"
-  [ "$still" = no ] || exit 1
+  done <<<"$listing"
+  [ "$still" = no ] || exit "$removed_status"
+  # Asked of the directory itself: a leftover with no `.git` resolves to the checkout that
+  # contains it (not this path), and one whose `.git` points at a removed admin directory
+  # fails; only a live worktree answers with its own top level.
+  if top=$(git -C "$resolved" rev-parse --show-toplevel 2>/dev/null) && [ "$(cd "$top" && pwd -P)" = "$resolved" ]; then
+    exit "$removed_status"
+  fi
   tries="${CLAUDE_WORKTREE_REMOVE_TRIES:-18}"
   pause="${CLAUDE_WORKTREE_REMOVE_PAUSE:-5}"
+  [[ "$tries" =~ ^[0-9]+$ && "$pause" =~ ^[0-9]+$ ]] ||
+    { echo "CLAUDE_WORKTREE_REMOVE_TRIES and _PAUSE must be whole numbers" >&2; exit 2; }
   for ((attempt = 1; attempt <= tries; attempt++)); do
     rm -rf -- "$resolved" 2>/dev/null || true
     [ ! -e "$resolved" ] && break
-    sleep "$pause"
+    [ "$attempt" -lt "$tries" ] && sleep "$pause"
   done
   [ ! -e "$resolved" ] ||
     { echo "$path is unregistered but a process still holds it; delete it by hand" >&2; exit 1; }
