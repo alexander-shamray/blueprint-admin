@@ -4379,14 +4379,25 @@ CONFIG_READ_ACTIONS = frozenset({
 
 DASHED_GIT = re.compile(r"^git-[a-z][a-z0-9-]*$")
 
-# Leads that run a program named later in the run, after options and arguments of
-# their own that `launched()` cannot skip by position.
-WRAPPERS = frozenset({
-    "sudo", "doas", "timeout", "nice", "ionice", "stdbuf", "setsid", "nohup",
-    "env", "xargs", "exec", "command", "time", "taskset", "flock", "chrt",
-    "strace", "ltrace", "unshare", "nsenter", "watch", "find", "parallel",
-    "su", "firejail", "systemd-run", "chroot", "unbuffer",
+# Leads whose operands are names or patterns, never a program they run. `git`
+# is here because every git word is judged by the rest of this file, and its
+# operands include branch names (`git checkout -b chore/git-aliases`).
+INERT_OPERAND_LEADS = READING_COMMANDS | DATA_ONLY_COMMANDS | frozenset({
+    "cd", "cp", "dotnet", "gh", "mkdir", "mv", "npm", "pwd", "rm", "sort",
+    "touch", "type", "which",
 })
+
+
+def inert_operands(run, lead):
+    """Whether `run`'s lead only reads its operands as data."""
+    if lead in INERT_OPERAND_LEADS:
+        return True
+    # `command -v git-lfs` looks a name up and runs nothing; `find` runs a
+    # program only through one of its exec actions.
+    if lead == "command":
+        return len(run) > 1 and run[1] in ("-v", "-V")
+    return lead == "find" and not any(
+        word in ("-exec", "-execdir", "-ok", "-okdir") for word in run)
 
 
 def git_config_offence(segment):
@@ -4430,11 +4441,16 @@ def dashed_git_offence(tokens):
         # The subcommands of git that run a program, with a command string the
         # scan cannot read (`bisect run`, `submodule foreach`, `rebase -x`), are
         # refused by `git_subcommand_offence` instead.
-        if lead in WRAPPERS:
-            candidates = run
-        else:
+        # Inverted (#297): a lead is judged by what it runs, so the whole run is
+        # read unless the lead is known to treat its operands as data. A lead
+        # missing from `WRAPPERS` no longer fails open.
+        if lead in ("command", "find") and inert_operands(run, lead):
+            candidates = run[:1]
+        elif inert_operands(run, lead):
             candidates = [token for index, token in enumerate(run)
                           if launched(run, index)]
+        else:
+            candidates = run
         for token in candidates:
             # A quoted command string (`'git-push origin HEAD:main'`) names the
             # program in its first word.
