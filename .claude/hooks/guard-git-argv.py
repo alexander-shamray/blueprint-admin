@@ -2564,14 +2564,15 @@ def destination_offence(word, command, writer, kind):
 #                other operands are sources and are only read
 #   every        every operand, because the verb writes, replaces or removes
 #                each one — `mv` removes its sources, which is a write to them
-#   in-place     the file operands, but only under `-i` / `--in-place`
+#   in-place     the file operands, but only under `-i` / `--in-place`;
+#                `sed` also has its script read for `w`, `W` and `e`
 #   of           the `of=` operand
 #   find         the file an `-fprint*` or `-fls` action names, and the
 #                starting points of `-delete`
 #
 # **The list trails the programs that write, and says so.** `curl -o`,
 # `rsync`, `tar -x`, `unzip`, `patch` and an interpreter
-# (`python -c`, `node -e`, an `awk` or `sed` script using its own `w`) all write
+# (`python -c`, `node -e`, an `awk` script using its own `print >`) all write
 # and none is here. The suite asserts every name below reaches the check
 # through its model, and that the verbs #26 named are all on it — it cannot
 # assert that nothing is missing, and `docs/harness-boundaries.md` carries that
@@ -2692,6 +2693,168 @@ def _unreadable_word(literal, command):
 # `-fprint`, `-fprint0`, `-fprintf` or `-fls` action names is created or
 # truncated, and `-delete` removes everything the starting points reach (#297).
 FIND_WRITING_ACTIONS = frozenset({"-fprint", "-fprint0", "-fprintf", "-fls"})
+
+
+# The `sed` commands that take no argument, `{` and `}` among them.
+SED_NO_ARGUMENT = frozenset("=dDgGhHnNpPxzF{}")
+
+
+def sed_script_actions(script):
+    """The writes and executions in a `sed` script, as `(command, text)`.
+
+    `w` and `W` write the file the rest of the line names, `s///w` likewise, and
+    `e` and `s///e` run a command; every other command is stepped over, so a `w`
+    inside an address, a regular expression, a replacement or the text of `a`,
+    `i` and `c` is not read as a command. A script this cannot read to its end
+    raises `ValueError`, and the caller refuses it (#297).
+    """
+    actions, i, n = [], 0, len(script)
+
+    def line_end(start):
+        # A text argument runs to the newline; a backslash continues the line.
+        j = start
+        while j < n and script[j] != "\n":
+            j += 2 if script[j] == "\\" else 1
+        return min(j, n)
+
+    def delimited(start, delimiter):
+        j = start
+        while j < n and script[j] != delimiter:
+            j += 2 if script[j] == "\\" else 1
+        if j >= n:
+            raise ValueError("an unterminated pattern")
+        return j + 1
+
+    def digits(j):
+        while j < n and script[j].isdigit():
+            j += 1
+        return j
+
+    def address(j):
+        # The index after one address at `j`, or `None` when none starts there.
+        if script[j:j + 1].isdigit():
+            j = digits(j)
+            if script[j:j + 1] == "~":
+                j = digits(j + 1)
+            return j
+        if script[j:j + 1] == "$":
+            return j + 1
+        if script[j:j + 1] == "/":
+            j = delimited(j + 1, "/")
+        elif script[j:j + 1] == "\\" and j + 1 < n:
+            j = delimited(j + 2, script[j + 1])
+        else:
+            return None
+        while j < n and script[j] in "IM":
+            j += 1
+        return j
+
+    while i < n:
+        if script[i] in " \t\n;{}":
+            i += 1
+            continue
+        first = address(i)
+        if first is not None:
+            i = first
+            if script[i:i + 1] == ",":
+                i += 1
+                if script[i:i + 1] in ("+", "~"):
+                    i = digits(i + 1)
+                else:
+                    second = address(i)
+                    if second is None:
+                        raise ValueError("an address that does not end")
+                    i = second
+            while i < n and script[i] in " \t!":
+                i += 1
+            if i >= n:
+                raise ValueError("an address with no command")
+        command = script[i]
+        i += 1
+        if command in SED_NO_ARGUMENT:
+            continue
+        if command == "#":
+            i = line_end(i)
+        elif command in "lLqQ":
+            i = digits(i)
+        elif command in "btT:":
+            while i < n and script[i] not in ";\n":
+                i += 1
+        elif command in "aicrR":
+            i = line_end(i)
+        elif command in "wWe":
+            end = line_end(i)
+            text = script[i:end].strip()
+            if not text and command != "e":
+                raise ValueError(f"a `{command}` with no file")
+            actions.append((command, text))
+            i = end
+        elif command in "sy":
+            if i >= n:
+                raise ValueError("a command with no delimiter")
+            delimiter = script[i]
+            i = delimited(delimited(i + 1, delimiter), delimiter)
+            while command == "s" and i < n:
+                flag = script[i]
+                if flag == "w":
+                    end = line_end(i + 1)
+                    text = script[i + 1:end].strip()
+                    if not text:
+                        raise ValueError("a `w` flag with no file")
+                    actions.append(("w", text))
+                    i = end
+                    break
+                if flag == "e":
+                    actions.append(("e", ""))
+                elif flag not in "gpiImME0123456789":
+                    break
+                i += 1
+        else:
+            raise ValueError(f"the command `{command}`")
+    return actions
+
+
+def sed_script_offence(scripts, script_file, command):
+    """The reason to refuse the `sed` scripts given, or `None`.
+
+    A `sed` without `-i` writes nothing to its operands, and still writes any
+    file its script names (`w`, `W`, `s///w`) and runs any command it holds
+    (`e`, `s///e`). The files are judged as any destination; a command is
+    refused, as is a script read from a file or one this cannot read (#297).
+    """
+    if script_file:
+        return (
+            "`sed -f` runs a script read from a file, which can hold `w` and "
+            "`e` commands this guard cannot see; give the script with `-e` "
+            "(#297, docs/harness-boundaries.md)."
+        )
+    for script in scripts:
+        if script is None:
+            return (
+                "`sed` is handed a script built by a command substitution, "
+                "which can write a file or run a command; name the script "
+                "(#297, docs/harness-boundaries.md)."
+            )
+        try:
+            actions = sed_script_actions(script)
+        except ValueError as problem:
+            return (
+                f"`sed` is handed a script this guard cannot read to its end "
+                f"({problem}), and a `w` or `e` in it would write a file or "
+                "run a command nothing judged; refusing (#297, "
+                "docs/harness-boundaries.md)."
+            )
+        for letter, text in actions:
+            if letter == "e":
+                return (
+                    "`sed` runs a command through an `e` command or an "
+                    "`s///e` flag, and nothing here can say what it writes "
+                    "(#297, docs/harness-boundaries.md)."
+                )
+            refusal = destination_offence(shlex.quote(text), command, "`sed`", "`sed`")
+            if refusal is not None:
+                return refusal
+    return None
 
 
 def find_delete_offence(starts, files0, command):
@@ -2825,6 +2988,7 @@ def verb_offence(verb, words, command):
 
     operands, targets, suffixes = [], [], []
     in_place = script_given = directory_mode = options_done = False
+    scripts, script_file = [], False
     # **A hard link makes a source writable under the destination's name.**
     # `ln .claude/settings.json notes/alias` judged only `notes/alias`, and a
     # redirection to that admitted name then wrote the settings file's inode.
@@ -2873,9 +3037,12 @@ def verb_offence(verb, words, command):
             if verb == "install" and abbreviates("--directory"):
                 directory_mode = True
                 continue
-            if verb == "sed" and (abbreviates("--expression")
-                                  or abbreviates("--file")):
+            if verb == "sed" and abbreviates("--expression"):
                 script_given = True
+                scripts.append(literal[len(name) + 1:] if equals else (
+                    literals[position] if position < len(words) else ""))
+            elif verb == "sed" and abbreviates("--file"):
+                script_given = script_file = True
             if not equals and any(abbreviates(option) for option in long_values):
                 position += 1
             continue
@@ -2908,12 +3075,24 @@ def verb_offence(verb, words, command):
                 verb == "perl" and letter in "eE")
             if script_letter:
                 script_given = True
+                if verb == "sed" and letter == "e":
+                    scripts.append(rest if rest else (
+                        literals[position] if position < len(words) else ""))
+                elif verb == "sed":
+                    script_file = True
             if script_letter or letter in short_values:
                 if not rest:
                     position += 1
                 break
             if verb == "perl" and letter in "CDFIMdmx":
                 break
+
+    if verb == "sed":
+        if not script_given and operands:
+            scripts.append(target_literal(operands[0]))
+        refusal = sed_script_offence(scripts, script_file, command)
+        if refusal is not None:
+            return refusal
 
     unreadable = [raw for raw, literal in zip(words, literals)
                   if _unreadable_word(literal, command)]

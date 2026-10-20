@@ -6789,6 +6789,23 @@ class TheGitArgvGuard(unittest.TestCase):
             "find -L .claude/hooks -delete",
             "find /tmp -name x -o -fprint package.json",
             "env find /tmp -fprint package.json",
+            # A `sed` script writes the file its `w`, `W` and `s///w` name and
+            # runs what `e` and `s///e` hold, with or without `-i` (#297).
+            "sed -n 'p;w .claude/settings.json' notes.txt",
+            "sed -n 'w package.json' notes.txt",
+            "sed 's/a/b/w package.json' notes.txt",
+            "sed -e 's/a/b/' -e 'w .claude/hooks/x' notes.txt",
+            "sed --expression='W package.json' notes.txt",
+            "sed -ne '/x/w package.json' notes.txt",
+            "sed -n '1,3W package.json' notes.txt",
+            "sed '$!w package.json' notes.txt",
+            "sed 'e touch x' notes.txt",
+            "sed 's/a/b/e' notes.txt",
+            "sed -f script.sed notes.txt",
+            "sed --file=script.sed notes.txt",
+            'sed "$(cat s)" notes.txt',
+            "sed 'w' notes.txt",
+            "sed 's/a/b' notes.txt",
             # A start that is, or contains, the working directory reaches the
             # machinery without naming it (round 1 of PR #305).
             "find . -delete",
@@ -6835,6 +6852,29 @@ class TheGitArgvGuard(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertRefused(command, cwd=root)
 
+    def test_a_sed_script_is_read_for_what_it_writes_and_runs(self):
+        module = self.guard_module()
+        for script, expected in (
+            ("p", []),
+            ("s/w/e/g", []),
+            ("/w/,/e/d", []),
+            ("1a w x", []),
+            ("y/we/ew/", []),
+            ("w out", [("w", "out")]),
+            ("p;W out", [("W", "out")]),
+            ("s/a/b/gw out", [("w", "out")]),
+            ("s/a/b/e", [("e", "")]),
+            ("/x/!{w a\nw b}", [("w", "a"), ("w", "b}")]),
+            ("e echo", [("e", "echo")]),
+            ("\\,a,w out", [("w", "out")]),
+        ):
+            with self.subTest(script=script):
+                self.assertEqual(module.sed_script_actions(script), expected)
+        for script in ("s/a", "w", "1,", "k", "s"):
+            with self.subTest(unreadable=script):
+                with self.assertRaises(ValueError):
+                    module.sed_script_actions(script)
+
     def test_an_ordinary_writing_verb_is_still_admitted(self):
         # The positive control: a rule refusing every `cp` passes every case
         # above, and takes `/ship`'s own `rm -f suggestions.md` with it. A
@@ -6866,6 +6906,16 @@ class TheGitArgvGuard(unittest.TestCase):
             # checkout is under /tmp, and `-delete` there contains it.
             "find /tmp/scratch-out -name x -delete",
             "find /tmp -name x -fprint /tmp/out",
+            # A `w` that is not a command, and one that writes elsewhere.
+            "sed -n '1,5p' notes.txt",
+            "sed 's/web/x/g' notes.txt",
+            "sed -n '/w/p' notes.txt",
+            "sed 's/a/b/w /tmp/out' notes.txt",
+            "sed -n 's/e/E/p;y/abc/xyz/' notes.txt",
+            "sed '/^#/d;1a hello w e' notes.txt",
+            "sed -e '1d' -e '$d' notes.txt",
+            "sed -n '2{p;q}' notes.txt",
+            "sed '1~2d;$!N' notes.txt",
             "find . -name '*.md' -print",
             # Another program's words are not find's actions.
             "find /tmp -name x -exec echo -fprint .claude/x \\;",
