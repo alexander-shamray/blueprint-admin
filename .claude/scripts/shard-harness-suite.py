@@ -48,12 +48,15 @@ claimed by renaming its file, which exactly one worker can do, and moves on
 to `done/` only once it has run, so a unit a dead worker dropped is still
 visible to the check that every unit finished.
 
-**One run per host.** Each run sizes its pool for the whole host, so two at
-once — two sessions, two worktrees — ran sixteen workers and each took about
-three times as long (#323). A run takes a lock in the host's temp directory
-first, and a second run waits for it, saying so, rather than running beside
-it. The operating system releases the lock when its holder exits however it
-exits, so there is no stale lock to recover.
+**One run at a time, per user.** Each run sizes its pool for the whole host,
+so two at once — two sessions, two worktrees — ran sixteen workers and each
+took about three times as long (#323). A run takes a lock named for the user
+in their temp directory first, and a second run waits for it, saying so,
+rather than running beside it. That spans what one user runs, which on a
+developer's machine is every session that could collide; it does not hold
+another user's runs, nor one started under a different `TMPDIR`. The
+operating system releases the lock when its holder exits however it exits,
+so there is no stale lock to recover.
 
 **The floor is the longest class.** Class sharding cannot split one, so the
 makespan never goes below the slowest class however many workers there are;
@@ -63,6 +66,7 @@ long poles is inside those classes and not here (issue #43).
 """
 
 import contextlib
+import getpass
 import os
 import shutil
 import subprocess
@@ -466,10 +470,29 @@ def slowest(work, count=15):
     return sorted(rows, reverse=True)[:count]
 
 
-# One run per host, in the host's temp directory rather than the checkout's,
-# because what two runs contend for is the host: two worktrees of this
-# repository, or two clones, are two checkouts and one set of cores.
-LOCK = Path(tempfile.gettempdir()) / "blueprint-admin-harness.lock"
+def lock_path():
+    """Where the lock lives: the user's temp directory, under the user's name.
+
+    The temp directory rather than the checkout, because what two runs contend
+    for is the host: two worktrees of this repository, or two clones, are two
+    checkouts and one set of cores. The user's name in the file, because a
+    shared `/tmp` holds other users' files, and opening one of theirs would
+    fail rather than wait. So the lock spans one user's runs, which on a
+    developer's machine is every session that could collide.
+    """
+    try:
+        user = getpass.getuser()
+    except Exception:
+        user = "unknown"
+    safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in user)
+    return Path(tempfile.gettempdir()) / f"blueprint-admin-harness-{safe}.lock"
+
+
+LOCK = lock_path()
+
+
+class LockUnavailable(RuntimeError):
+    """The lock file cannot be opened, so the run cannot know it is alone."""
 
 
 def try_lock(handle):
@@ -499,10 +522,14 @@ def unlock(handle):
 
 @contextlib.contextmanager
 def host_lock(path=LOCK, poll=5.0):
-    """Hold the host's harness lock, waiting for another run to finish first."""
-    with open(path, "a+b") as handle:
+    """Hold the user's harness lock, waiting for another run to finish first."""
+    try:
+        handle = open(path, "a+b")
+    except OSError as refused:
+        raise LockUnavailable(f"cannot open the run lock {path}: {refused}")
+    with handle:
         if not try_lock(handle):
-            print(f"shard-harness-suite.py: another harness run on this host "
+            print(f"shard-harness-suite.py: another harness run of yours "
                   f"holds {path}; waiting for it rather than running beside "
                   f"it", flush=True)
             while not try_lock(handle):
@@ -547,8 +574,13 @@ def main(argv):
           f"over {count} parallel workers, then {len(tail)} serial",
           flush=True)
 
-    with host_lock():
-        return run_all(units, tail, count)
+    try:
+        with host_lock():
+            return run_all(units, tail, count)
+    except LockUnavailable as refused:
+        print(f"shard-harness-suite.py: {refused}. Refusing the run rather "
+              f"than running beside one it cannot see.", file=sys.stderr)
+        return 2
 
 
 def run_all(units, tail, count):

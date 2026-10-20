@@ -24,7 +24,7 @@ line names one residual below by the words it opens with.
 | The index: refresh, query or search hints, MCP approval, timeout | `Two hooks guard nothing`, `The second is the query hint`, `The search hint asks`, `A session started in a worktree`, `The CLI's skill rewrite`, `The MCP startup timeout` |
 | A command's `allowed-tools` or `disallowed-tools` | `grant the index commands`, `runs before it pushes never denies push`, `is a grant surface`, `A command that holds` |
 | The review agent grant, or restoring an external reviewer | `grants exactly`, `archive/external-reviewers` |
-| The harness suite and its shards | `shard-harness-suite.py`, `That runner owns every discovery root`, `One run per host` |
+| The harness suite and its shards | `shard-harness-suite.py`, `That runner owns every discovery root`, `One run at a time, per user` |
 | The sweeps' slice lists and `refs/sweeps/` | `The sweeps write two things` |
 | Rebasing or force-pushing | `The only force push`, `A second helper rewrites` |
 | `/branch` worktrees under `.claude/worktrees/` | `worktrees sit inside the checkout` |
@@ -286,17 +286,19 @@ A new residual is stated **here** and gets a row above.
   against discovery rather than against a list, by `test_harness_shards.py`,
   every unit has to come back finished, and a worker refuses an id discovery
   does not hold rather than reporting a pass.
-- **One run per host.** A run takes a lock in the host's temp directory
-  before it starts any worker, and a second run, from another session or
-  worktree, waits and says so. Two at once ran twice the workers the host
-  holds and each took about three times as long (#323). The operating system
-  drops the lock with the process that held it, so there is nothing stale to
-  clear.
   Two of its three tables are not about speed at all: `SERIAL` holds the
   classes whose subject is elapsed time or a listening port, `TOGETHER` the
   ones sharing a `secsweep-*` namespace in the temp root or this checkout's
   own `.git`, and a name in either that no longer resolves fails a test, so a
   renamed class loses its pinning loudly.
+- **One run at a time, per user.** A run takes a lock named for the user in
+  their temp directory before it starts any worker, and a second run, from
+  another session or worktree, waits and says so. Two at once ran twice the
+  workers the host holds and each took about three times as long (#323). The
+  lock spans what one user runs, which on a developer's machine is every
+  session that could collide; another user's runs, or one under a different
+  `TMPDIR`, are not held by it. The operating system drops the lock with the
+  process that held it, so there is nothing stale to clear.
 
 - **The sweeps write two things outside `$work`, and both are fixed
   helpers' to write.** `sweep-slices.sh` cuts the pinned commit into lists of
