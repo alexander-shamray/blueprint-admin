@@ -559,6 +559,20 @@ def main(argv):
               file=sys.stderr)
         return 2
 
+    # The lock before discovery, not after it: a run that waits out another
+    # one may wait a whole suite, and a plan made before the wait would deal
+    # the tree as it was, leaving a test added meanwhile in no unit at all.
+    try:
+        with host_lock():
+            return discover_and_run()
+    except LockUnavailable as refused:
+        print(f"shard-harness-suite.py: {refused}. Refusing the run rather "
+              f"than running beside one it cannot see.", file=sys.stderr)
+        return 2
+
+
+def discover_and_run():
+    """Discover, plan, check the plan covers discovery, then run it."""
     try:
         found = discovered()
     except NothingDiscovered as empty:
@@ -582,14 +596,7 @@ def main(argv):
     print(f"shard-harness-suite.py: {len(found)} tests in {len(units)} units "
           f"over {count} parallel workers, then {len(tail)} serial",
           flush=True)
-
-    try:
-        with host_lock():
-            return run_all(units, tail, count)
-    except LockUnavailable as refused:
-        print(f"shard-harness-suite.py: {refused}. Refusing the run rather "
-              f"than running beside one it cannot see.", file=sys.stderr)
-        return 2
+    return run_all(units, tail, count)
 
 
 def queue_units(work, units):
