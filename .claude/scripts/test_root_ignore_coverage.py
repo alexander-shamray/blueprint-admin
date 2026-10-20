@@ -23,9 +23,11 @@ fail-open `test_harness_helpers.py` refuses for the same tool.
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 SCRIPTS = Path(__file__).resolve().parent
 ROOT = SCRIPTS.parent.parent
@@ -72,9 +74,15 @@ def root_covered(repo, paths):
     disk — every case this file exists for — the pathspec's own slash is the
     only thing that says so.
 
-    `-v` is what makes this a question about the *root* rule rather than about
-    git's answer, which a nested file is equally able to give: it reports the
-    ignore file credited with the match, and only the one at the root counts.
+    The question is put to an empty scratch repository holding the root file
+    as its `core.excludesFile`, so the root's rules are the only ones it can
+    read. Asked of the repository itself, a nested file answers first: `-v`
+    credits the last pattern that matched, and a deeper file's rules come
+    later, so `src/Admin.Web/.gitignore`'s `/node_modules` took the credit
+    from the root's own rule for that directory, and the walk below read all
+    of `node_modules` one spawn per directory (#320). An excludes file's
+    patterns are relative to the top of the work tree, as the root file's
+    are, and `--no-index` lets git answer for paths it does not hold.
 
     A negated match needs no handling of its own: check-ignore lists what is
     ignored, so a path re-included by a `!` rule draws no line at all and
@@ -89,18 +97,25 @@ def root_covered(repo, paths):
     """
     if not paths:
         return set()
-    proc = subprocess.run([GIT, "check-ignore", "-v", "-z", "--stdin"],
-                          cwd=str(repo), capture_output=True,
-                          input="\0".join(paths).encode("utf-8"))
+    rules = (Path(repo) / ROOT_IGNORE).as_posix()
+    with tempfile.TemporaryDirectory(prefix="root-rules-",
+                                     ignore_cleanup_errors=True) as judge:
+        subprocess.run([GIT, "init", "-q", judge], check=True)
+        proc = subprocess.run(
+            [GIT, "-c", f"core.excludesFile={rules}", "check-ignore",
+             "--no-index", "-v", "-z", "--stdin"],
+            cwd=judge, capture_output=True,
+            input="\0".join(paths).encode("utf-8"))
     # 0 is some path matched, 1 is none did; anything else is git failing, and
     # a failed read must not read as "nothing is covered".
     if proc.returncode not in (0, 1):
         raise AssertionError(
             f"check-ignore failed ({proc.returncode}): {proc.stderr.decode()}")
-    # <source> NUL <linenum> NUL <pattern> NUL <pathname> NUL, per path.
+    # <source> NUL <linenum> NUL <pattern> NUL <pathname> NUL, per path. The
+    # scratch repository's own `info/exclude` is the one other source.
     fields = proc.stdout.decode("utf-8").split("\0")[:-1]
     return {path for source, _, _, path in zip(*[iter(fields)] * 4)
-            if source == ROOT_IGNORE}
+            if source == rules}
 
 
 def excluded_from_inside_only(repo):
@@ -109,17 +124,32 @@ def excluded_from_inside_only(repo):
     Descent stops at every directory the root already covers: a blanket ignore
     nested under one of those is covered by construction, and pruning them is
     also what keeps this walk out of `node_modules`.
+
+    The tree is read a level at a time, and each level's directories go to
+    `root_covered` in one batch: a spawn costs about a tenth of a second on
+    Windows, so a question per directory cost the walk its runtime. Like
+    `os.walk`, it does not descend through a symbolic link.
     """
     found = []
-    for base, dirs, files in os.walk(repo):
-        rel = Path(base).relative_to(repo).as_posix()
-        prefix = "" if rel == "." else f"{rel}/"
-        if prefix and ROOT_IGNORE in files and blanket_ignore(Path(base, ROOT_IGNORE)):
-            found.append(prefix)
-        dirs[:] = sorted(d for d in dirs if d != ".git")
-        covered = root_covered(repo, [f"{prefix}{d}/" for d in dirs])
-        dirs[:] = [d for d in dirs if f"{prefix}{d}/" not in covered]
+    level = [""]
+    while level:
+        below = []
+        for prefix in level:
+            base = Path(repo, prefix)
+            if prefix and blanket_ignore_at(base):
+                found.append(prefix)
+            below += [f"{prefix}{entry.name}/" for entry in os.scandir(base)
+                      if entry.name != ".git" and entry.is_dir()
+                      and not entry.is_symlink()]
+        covered = root_covered(repo, below)
+        level = [path for path in below if path not in covered]
     return sorted(found)
+
+
+def blanket_ignore_at(directory):
+    """Whether <directory> holds an ignore file excluding everything in it."""
+    path = directory / ROOT_IGNORE
+    return path.is_file() and blanket_ignore(path)
 
 
 class TheScan(unittest.TestCase):
@@ -193,6 +223,27 @@ class TheScan(unittest.TestCase):
         self.write("scratch-keep/deep/.gitignore", "*\n")
         self.assertEqual(excluded_from_inside_only(self.repo),
                          ["scratch-keep/deep/"])
+
+    def test_a_nested_rule_matching_after_the_root_leaves_its_coverage(self):
+        # `src/Admin.Web` in miniature: the root covers `web/node_modules/`,
+        # and the project's own `/node_modules` matches it again, later, which
+        # is the match `-v` credits. Read that way the root covered nothing,
+        # and the walk went through every package (#320).
+        self.write(".gitignore", "/web/node_modules/\n")
+        self.write("web/.gitignore", "/node_modules\n")
+        self.write("web/node_modules/pkg/.gitignore", "*\n")
+        self.assertEqual(excluded_from_inside_only(self.repo), [])
+
+    def test_it_asks_git_once_per_level_of_the_tree(self):
+        # Three levels of directories and the empty fourth: four questions,
+        # however wide each level is.
+        for rel in ("a/one/x", "a/two/y", "b/three/z"):
+            (self.repo / rel).mkdir(parents=True)
+        module = sys.modules[__name__]
+        with mock.patch.object(module, "root_covered",
+                               wraps=root_covered) as asked:
+            excluded_from_inside_only(self.repo)
+        self.assertEqual(asked.call_count, 4)
 
 
 class ThisRepository(unittest.TestCase):
