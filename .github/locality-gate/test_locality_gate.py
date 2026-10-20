@@ -149,6 +149,11 @@ class TouchSetGrammar(unittest.TestCase):
         with self.assertRaisesRegex(InputRefused, "below the table"):
             read_rows(body("A", "`docs/a.md`, `docs/b.md` (added in review)"))
 
+    def test_a_reason_as_its_own_item_or_beside_a_bare_path_names_where_it_goes(self) -> None:
+        for row in ("`docs/a.md`, added in review", "docs/a.md (added in review)"):
+            with self.subTest(row=row), self.assertRaisesRegex(InputRefused, "below the table"):
+                read_rows(body("A", row))
+
     def test_an_unbalanced_brace_is_refused(self) -> None:
         with self.assertRaisesRegex(InputRefused, "unbalanced brace"):
             read_rows(body("A", "`src/{a,b/**`"))
