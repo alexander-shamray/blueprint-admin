@@ -364,8 +364,9 @@ A new residual is stated **here** and gets a row above.
 - **`sed` is judged by reading its script, and a word the shell expands is
   refused.** `guard-git-argv.py` reads `w`, `W`, `s///w`, `e` and `s///e` in a
   `-e` or first-operand script, refuses `-f`, and refuses any `sed` word with
-  a `$`, a backtick or an unquoted brace, since an expanded word can be an
-  option or a second script. The cost is that `sed -n 1p "$FILE"` is refused
+  an expanding `$` or a backtick outside single quotes, or an unquoted brace
+  group holding a comma or `..`, since an expanded word can be an option or a
+  second script. The cost is that `sed -n 1p "$FILE"` is refused
   until the words are named literally; operands after a literal `--` are
   exempt once a script is given. Labels end at a blank as GNU sed 4.9 reads
   them, so a script an older sed reads differently is refused rather than
