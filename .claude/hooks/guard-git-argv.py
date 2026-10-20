@@ -2599,10 +2599,11 @@ WRITING_VERBS = {
     "perl": "in-place", "sed": "in-place",
     "dd": "of", "find": "find",
 }
-# `git restore` and `git checkout -- PATH` overwrite the paths they are given too,
-# and are NOT judged here on purpose: `git checkout HEAD -- <file>` is how this
-# repository restores a file, and every `git checkout <branch>` would be read as a
-# write (#297). `git clean` is denied by settings.json.
+# `git restore`, `git checkout [<tree-ish>] -- PATH` and `git clean` write or
+# delete the paths they are given too. `git_path_writer_offence` reads the
+# subcommand and its operands: a pathspec on a protected surface is refused, a
+# branch checkout names no path, and `git checkout HEAD -- path` puts back the
+# committed copy and is admitted (#297).
 
 # The verbs a `-t DIR` or `--target-directory=DIR` sends every operand into.
 TARGET_OPTION_VERBS = frozenset({"cp", "install", "ln", "mv"})
@@ -2959,6 +2960,193 @@ def sed_script_offence(scripts, script_file, command):
     return None
 
 
+def above_working_directory(word):
+    """The literal of the raw `word` when it is, or contains, the working
+    directory or the home directory, else `None` (#297).
+
+    A write started there reaches the protected trees without naming them:
+    `find . -delete`, `git restore .` and `git clean -fd` each did while a
+    path naming `.claude` was refused.
+    """
+    literal = target_literal(word)
+    if literal is None:
+        return None
+    plain = os.path.normpath(literal.replace("\\", "/")).replace("\\", "/")
+    if plain in (".", "..", "/") or plain.startswith("../") or (
+            word.strip().startswith("~")):
+        return literal
+    if os.path.isabs(literal) or literal.startswith("/"):
+        here = os.path.realpath(EVENT_CWD or os.getcwd())
+        real = os.path.realpath(literal)
+        if real == here or here.startswith(real.rstrip("/\\") + os.sep):
+            return literal
+    return None
+
+
+# The git subcommands that overwrite or delete the paths they are given (#297).
+GIT_PATH_WRITERS = frozenset({"restore", "checkout", "clean"})
+
+# Per subcommand: the short options that take a value, and the long ones.
+GIT_PATH_VALUE_OPTIONS = {
+    "restore": ("s", ("--source", "--pathspec-from-file", "--conflict")),
+    "checkout": ("bB", ("--orphan", "--conflict", "--pathspec-from-file")),
+    "clean": ("e", ("--exclude",)),
+}
+
+
+def git_pathspec_offence(raw, name, separated, command, committed=False):
+    """The reason to refuse one pathspec operand of `git <name>`, or `None`."""
+    writer = f"`git {name}`"
+    literal = target_literal(raw)
+    if literal.startswith(":") or any(char in literal for char in "*?["):
+        return (
+            f"{writer} is given the pathspec `{literal}`, which git reads as "
+            "magic or a pattern, so the files it writes are not the string "
+            "written here; name the paths (#297, docs/harness-boundaries.md)."
+        )
+    above = above_working_directory(raw)
+    if above is not None:
+        return (
+            f"{writer} is given `{above}`, which is or contains the working "
+            "directory, so it writes the protected trees without naming them; "
+            "name the paths (#297, docs/harness-boundaries.md)."
+        )
+    if committed:
+        # `git checkout HEAD -- path` puts back the committed copy, which is how
+        # this repository restores a file; another tree-ish brings in content
+        # nobody reviewed on this branch, and stays judged.
+        return None
+    if name == "checkout" and not separated:
+        # With no `--` the operand is a branch or a path and git decides which,
+        # so a branch named `docs/x` must stay admitted: an application tree
+        # counts only for a name that exists or carries an extension.
+        last = re.split(r"[\\/]+", literal.rstrip("/\\"))[-1]
+        named = protected_path(literal) or linked_protected_path(literal)
+        if not named and ("." in last or os.path.exists(
+                os.path.join(EVENT_CWD or os.getcwd(), literal))):
+            named = application_tree(literal)
+        if not named:
+            return None
+    return destination_offence(raw, command, writer, writer)
+
+
+def git_path_writer_offence(run, literals, command):
+    """The reason to refuse a `git restore`, `checkout` or `clean`, or `None`.
+
+    These write or delete the paths they are given, and a pathspec is judged as
+    any other destination: `git checkout origin/main -- .claude/settings.json`
+    put a branch's copy of a protected file in place, and `git clean -fd`, `git
+    restore .` and `git checkout .` reach the protected trees without naming
+    them. A branch checkout names no path and stays admitted, as does a restore
+    of `--staged` alone and a `clean -n`. A run led by a reader is not judged
+    unless git leads it (#297).
+    """
+    lead = next((literal for raw, literal in zip(run, literals)
+                 if literal is not None and not ASSIGNMENT.match(raw)
+                 and literal not in SHELL_KEYWORDS), None)
+    if lead is not None and program_name(lead) != "git" and program_name(
+            lead) in (READING_COMMANDS | DATA_ONLY_COMMANDS):
+        return None
+    start = next((index for index, literal in enumerate(literals)
+                  if literal is not None and program_name(literal) == "git"),
+                 None)
+    if start is None:
+        return None
+    rest = literals[start + 1:]
+    named = [word for word in rest if word is not None]
+    stripped = after_global_options(named)
+    name = verb_name(stripped[0]) if stripped else ""
+    if name not in GIT_PATH_WRITERS:
+        return None
+    writer = f"`git {name}`"
+    if len(named) != len(rest):
+        return (
+            f"{writer} is handed a word built by a command substitution, so "
+            "the paths it writes cannot be read from this command; name them "
+            "(#297, docs/harness-boundaries.md)."
+        )
+    skipped = len(rest) - len(stripped)
+    # A relocated work tree moves where git writes while the operand still looks
+    # ordinary: `GIT_WORK_TREE=.claude git checkout HEAD -- settings.json`. The
+    # environment arrives as assignment words ahead of git (or `env`'s), the
+    # config as `-c core.worktree=`; an `export` in an earlier command is not
+    # seen (docs/harness-boundaries.md).
+    relocated = any(
+        ASSIGNMENT.match(raw) and re.match(
+            r"(?i)(GIT_WORK_TREE|GIT_DIR|GIT_COMMON_DIR|GIT_INDEX_FILE|GIT_CONFIG\w*)=",
+            raw)
+        for raw in run[:start])
+    if relocated or any(
+            word.startswith(("-C", "--work-tree", "--git-dir"))
+            or "core.worktree" in word.lower()
+            for word in rest[:skipped]):
+        return (
+            f"{writer} runs under `-C`, `--work-tree`, `--git-dir`, "
+            "`core.worktree` or a `GIT_WORK_TREE`, `GIT_DIR` or `GIT_CONFIG*` "
+            "assignment, which moves the paths it writes away from the "
+            "working directory this guard judges against; run it from the "
+            "checkout (#297, docs/harness-boundaries.md)."
+        )
+    arguments = rest[skipped + 1:]
+    raws = run[start + 1 + skipped + 1:]
+    short_values, long_values = GIT_PATH_VALUE_OPTIONS[name]
+    operands, operand_literals, flags = [], [], []
+    separated, before, position = False, 0, 0
+
+    def has(flag):
+        # git takes any unambiguous prefix of a long option.
+        return any(len(given) > 2 and flag.startswith(given) for given in flags)
+
+    while position < len(arguments):
+        raw, literal = raws[position], arguments[position]
+        position += 1
+        if separated or not literal.startswith("-") or literal == "-":
+            operands.append(raw)
+            operand_literals.append(literal)
+        elif literal == "--":
+            separated = True
+            before = len(operands)
+        elif literal.startswith("--"):
+            option, equals, _ = literal.partition("=")
+            flags.append(option)
+            if not equals and any(len(option) > 2 and full.startswith(option)
+                                  for full in long_values):
+                position += 1
+        else:
+            for offset, letter in enumerate(literal[1:]):
+                flags.append("-" + letter)
+                if letter in short_values:
+                    if not literal[offset + 2:]:
+                        position += 1
+                    break
+
+    if has("--pathspec-from-file"):
+        return (
+            f"{writer} reads its paths from a file this guard cannot read; "
+            "name them (#297, docs/harness-boundaries.md)."
+        )
+    if name == "clean" and ("-n" in flags or has("--dry-run")):
+        return None
+    if name == "restore" and ("-S" in flags or has("--staged")) and not (
+            "-W" in flags or has("--worktree")):
+        return None
+    if not operands:
+        if name == "clean":
+            return (
+                f"{writer} with no pathspec removes untracked files from the "
+                "whole working directory, the protected trees among them; "
+                "name the paths (#297, docs/harness-boundaries.md)."
+            )
+        return None
+    committed = (name == "checkout" and separated and before == 1
+                 and operand_literals[0] in ("HEAD", "@"))
+    for raw in operands[before if committed else 0:]:
+        refusal = git_pathspec_offence(raw, name, separated, command, committed)
+        if refusal is not None:
+            return refusal
+    return None
+
+
 def find_delete_offence(starts, files0, command):
     """The reason to refuse a `find -delete` over `starts`, or `None`.
 
@@ -2977,25 +3165,16 @@ def find_delete_offence(starts, files0, command):
             "it removes cannot be placed. Name the starting points "
             "(#297, docs/harness-boundaries.md)."
         )
-    here = os.path.realpath(EVENT_CWD or os.getcwd())
     for word in starts:
-        literal = target_literal(word)
-        if literal is not None:
-            plain = os.path.normpath(literal.replace("\\", "/")).replace("\\", "/")
-            above = plain in (".", "..", "/") or plain.startswith("../") or (
-                word.strip().startswith("~"))
-            if not above and (os.path.isabs(literal) or literal.startswith("/")):
-                real = os.path.realpath(literal)
-                above = (real == here
-                         or here.startswith(real.rstrip("/\\") + os.sep))
-            if above:
-                return (
-                    f"`find -delete` starts at `{literal}`, which is or "
-                    "contains the working directory or the home directory, "
-                    "so it removes the agent's own machinery without naming "
-                    "it. Start below it, at a path that names what is to go "
-                    "(#297, docs/harness-boundaries.md)."
-                )
+        above = above_working_directory(word)
+        if above is not None:
+            return (
+                f"`find -delete` starts at `{above}`, which is or contains "
+                "the working directory or the home directory, so it removes "
+                "the agent's own machinery without naming it. Start below "
+                "it, at a path that names what is to go "
+                "(#297, docs/harness-boundaries.md)."
+            )
         refusal = destination_offence(word, command, "`find`", "`find`")
         if refusal is not None:
             return refusal
@@ -3295,6 +3474,9 @@ def writing_verb_offence(command):
     """
     for run in raw_runs(command):
         literals = [target_literal(word) for word in run]
+        refusal = git_path_writer_offence(run, literals, command)
+        if refusal is not None:
+            return refusal
         lead = next((literal for raw, literal in zip(run, literals)
                      if not ASSIGNMENT.match(raw)
                      and literal not in SHELL_KEYWORDS), None)
