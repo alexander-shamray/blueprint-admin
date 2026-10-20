@@ -6,9 +6,11 @@ namespace Admin.Host.Security;
 /// reading responses: a plain <c>&lt;form method=post&gt;</c> is a simple request
 /// and still reaches a body-less endpoint such as <c>POST /api/stack/backend/up</c>.
 /// So a request whose <c>Origin</c> names anything but a loopback host, or whose
-/// <c>Sec-Fetch-Site</c> is <c>cross-site</c>, is a 403 before any endpoint runs.
-/// A request with neither header (curl, tests) passes, and so does the dev server
-/// on 5301, which proxies with a loopback Origin. DNS rebinding is the other half
+/// <c>Sec-Fetch-Site</c> is anything but <c>same-origin</c> or <c>none</c>, is a 403
+/// before any endpoint runs: <c>same-site</c> is a page on another port of the same
+/// host, which a loopback Origin alone would admit. A request with neither header
+/// (curl, tests) passes, and so does the dev server, whose proxy forwards the
+/// browser's own <c>same-origin</c>. DNS rebinding is the other half
 /// and is closed by host filtering, pinned to <see cref="LoopbackHosts"/> in Program.cs.
 /// </summary>
 public static class LoopbackOriginGuard
@@ -33,7 +35,11 @@ public static class LoopbackOriginGuard
 
     private static bool IsCrossSite(HttpRequest request)
     {
-        if (string.Equals(request.Headers["Sec-Fetch-Site"].ToString(), "cross-site", StringComparison.OrdinalIgnoreCase))
+        string site = request.Headers["Sec-Fetch-Site"].ToString();
+
+        if (site.Length > 0
+            && !string.Equals(site, "same-origin", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(site, "none", StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }

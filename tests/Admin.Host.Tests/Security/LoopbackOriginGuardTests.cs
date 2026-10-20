@@ -49,6 +49,31 @@ public sealed class LoopbackOriginGuardTests : IClassFixture<AdminHostFactory>
         Runner.Started.Count.ShouldBe(startedBefore);
     }
 
+    [Fact]
+    public async Task A_same_site_fetch_from_another_port_is_forbidden_and_starts_no_job()
+    {
+        int startedBefore = Runner.Started.Count;
+        using HttpRequestMessage request = new(HttpMethod.Post, "/api/stack/backend/up");
+        request.Headers.Add("Origin", "http://localhost:3000");
+        request.Headers.Add("Sec-Fetch-Site", "same-site");
+
+        using HttpResponseMessage response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        Runner.Started.Count.ShouldBe(startedBefore);
+    }
+
+    [Fact]
+    public async Task A_navigation_with_no_initiating_page_is_accepted()
+    {
+        using HttpRequestMessage request = new(HttpMethod.Post, "/api/stack/backend/up");
+        request.Headers.Add("Sec-Fetch-Site", "none");
+
+        using HttpResponseMessage response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Accepted);
+    }
+
     [Theory]
     [InlineData("http://127.0.0.1:5301")]
     [InlineData("http://localhost:5300")]
