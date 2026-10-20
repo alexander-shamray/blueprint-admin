@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Admin.Host.Compose;
 using Admin.Host.Frontend;
 using Admin.Host.Jobs;
@@ -5,7 +6,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace Admin.Host.Stack;
 
-public static class StackEndpoints
+public static partial class StackEndpoints
 {
     private const string Up = "up";
 
@@ -119,8 +120,14 @@ public static class StackEndpoints
                     detail: "Reset wipes volumes, which destroys databases and broker state. Send confirm: \"down -v\".")
                 : reset.Start().Answer(ResetService.Kind));
 
-        app.MapPost("/api/logs/follow", async (FollowRequest request, LogFollower follower, CancellationToken cancellationToken) =>
-            TypedResults.Accepted((string?)null, JobSummary.Of(await follower.StartAsync(request.Services ?? [], cancellationToken))));
+        // A name goes into `docker compose logs -f --tail 200 <names>`, so one that starts with '-' would be an option.
+        app.MapPost("/api/logs/follow", async Task<Results<Accepted<JobSummary>, ProblemHttpResult>> (FollowRequest request, LogFollower follower, CancellationToken cancellationToken) =>
+            (request.Services ?? []).FirstOrDefault(s => !ServiceName().IsMatch(s)) is { } refused
+                ? TypedResults.Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Not a service name",
+                    detail: $"'{refused}' is not a Compose service name (letters, digits, '.', '_' and '-', not starting with '-').")
+                : TypedResults.Accepted((string?)null, JobSummary.Of(await follower.StartAsync(request.Services ?? [], cancellationToken))));
 
         app.MapPost("/api/logs/follow/{id}/stop", async (string id, LogFollower follower, CancellationToken cancellationToken) =>
         {
@@ -131,6 +138,9 @@ public static class StackEndpoints
 
         return app;
     }
+
+    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._-]*$")]
+    private static partial Regex ServiceName();
 }
 
 public sealed record StackView(ComposeStatus Backend, FrontendStatus Frontend, IReadOnlyList<Reachability> Reachability, LeaseView? Lease, JobSummary? LoadRun);
