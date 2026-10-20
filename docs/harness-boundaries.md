@@ -217,11 +217,19 @@ A new residual is stated **here** and gets a row above.
   `/review-branch`, and `AWritingCommandDeniesTheUsersMemoryAndOutputStyles`
   fails when a command that grants either tool lacks them. A session inside one
   of those commands therefore cannot save a memory: it saves it afterwards.
-  **What this does not close (#291):** the rules bind the Edit and Write tools
-  only, so a Bash redirect into `~/.claude/projects/*/memory/` from an allowed
-  prefix is still the hook's to judge, and it admits the rest of `~/.claude`;
-  and the home-relative specifier was not measured to refuse a write, only to
-  be present.
+  **Measured, not only present (#291).** On 2026-10-20, on Windows, in a turn
+  whose `/ship` frontmatter was in force: a `Write` to
+  `~/.claude/projects/<repo>/memory/` and one to `~/.claude/output-styles/`
+  were refused with "File is in a directory that is denied by your
+  permission settings", with no prompt, and a `Write` to `~/.claude/scratch/`
+  in the same turn succeeded. So the home-relative specifier binds the
+  absolute path a tool is given. The rules still bind only the editing
+  tools. **A Bash redirect is refused by the git-argv hook, not admitted:**
+  `PROTECTED_TREES` holds `.claude` as a path component wherever it sits, the
+  home directory included, so `>` into either directory was refused whether it
+  was spelt absolute, `~/` or `$HOME/`. The same rule refuses
+  `rm` under `~/.claude` too, so a probe file written to `scratch` is left for
+  the owner to remove.
 - **A command `/ship` runs before it pushes never denies push.** A
   frontmatter `disallowed-tools` holds for the rest of the user turn, not
   for the command that states it, so `Bash(git push:*)` on `/commit` or
