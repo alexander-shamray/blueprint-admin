@@ -1759,7 +1759,7 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
     # The first group is the root spellings (both `X` and `./X` are denied); the
     # second the families, denied at any depth.
     MSBUILD_AUTO_IMPORTED = (
-        "Directory.Build.targets", "Directory.Build.rsp",
+        "Directory.Build.targets", "Directory.Build.rsp", "MSBuild.rsp", "msbuild.rsp",
         "Directory.Solution.props", "Directory.Solution.targets",
         "NuGet.Config", "nuget.config", "NuGet.config",
         "BlueprintAdmin.slnx.targets", "before.BlueprintAdmin.slnx.targets",
@@ -1769,6 +1769,7 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
         "**/Directory.Build.*", "**/Directory.Solution.*", "**/NuGet.Config",
         "**/nuget.config", "**/NuGet.config", "**/*.slnx.targets",
         "**/Directory.Packages.*", "**/*.csproj.user", "**/obj/**",
+        "**/MSBuild.rsp", "**/msbuild.rsp", "**/global.json",
     )
 
     def _msbuild_rules(self):

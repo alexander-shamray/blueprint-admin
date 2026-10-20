@@ -402,7 +402,7 @@ A new residual is stated **here** and gets a row above.
   tracked files reaches them, yet an `Exec` in one runs under the granted
   `host-checks.sh` and the build reports success (#311). Each editing command and
   `settings.json` deny them at the root in both spellings and by family at any
-  depth, and `PROTECTED_FILES` carries the names, so a redirect to one is refused
+  depth (`MSBuild.rsp` and any `global.json` among them), and `PROTECTED_FILES` carries the names, so a redirect to one is refused
   at any depth too. Beside them: `Directory.Packages.*`, `*.csproj.user` (the SDK's
   common targets import it) and any `obj` tree, where a restore that finds nothing
   changed does not rewrite a planted `*.nuget.g.targets`. The suite holds the list as
