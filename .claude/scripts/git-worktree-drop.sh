@@ -74,7 +74,37 @@ common_there=$(git -C "$path" rev-parse --path-format=absolute --git-common-dir 
 dir_there=$(git -C "$path" rev-parse --path-format=absolute --git-dir)
 [ "$dir_there" != "$common_there" ] ||
   { echo "refusing to remove the main worktree: $path" >&2; exit 3; }
-git worktree remove "$resolved"
+#
+# **A refusal and a half-finished removal are different failures (#329).** git unregisters
+# the worktree and then deletes its tree; on Windows a process holding the tree makes the
+# delete fail after the worktree is gone from the register, and with `set -e` the `.slices`
+# lists below were never reached either: 41 `secsweep-*` directories had accumulated. When
+# git fails, the register is asked again: still registered means git refused (modified or
+# untracked work), and the failure stands; not registered means only the directory is left,
+# and it is deleted here for a bounded time, since the path passed the shape and ownership
+# checks above.
+if ! git worktree remove "$resolved"; then
+  still=no
+  while IFS= read -r line; do
+    case "$line" in
+      "worktree "*)
+        dir="${line#worktree }"
+        [ -d "$dir" ] && [ "$(cd "$dir" && pwd -P)" = "$resolved" ] && still=yes
+        ;;
+    esac
+  done <<<"$(git worktree list --porcelain)"
+  [ "$still" = no ] || exit 1
+  tries="${CLAUDE_WORKTREE_REMOVE_TRIES:-18}"
+  pause="${CLAUDE_WORKTREE_REMOVE_PAUSE:-5}"
+  for ((attempt = 1; attempt <= tries; attempt++)); do
+    rm -rf -- "$resolved" 2>/dev/null || true
+    [ ! -e "$resolved" ] && break
+    sleep "$pause"
+  done
+  [ ! -e "$resolved" ] ||
+    { echo "$path is unregistered but a process still holds it; delete it by hand" >&2; exit 1; }
+  echo "removed $path after git left it behind"
+fi
 # The slice lists sweep-slices.sh wrote beside it; named from the checked path,
 # never passed, and only once git has removed the worktree itself.
 slices="$resolved.slices"

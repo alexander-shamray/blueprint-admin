@@ -381,6 +381,14 @@ A new residual is stated **here** and gets a row above.
   a target is spelled relative; it fails closed and no chain step writes one.
   And `git-worktree-remove.sh` refuses a worktree forked beside the checkout
   before this layout, so one of those is removed by hand.
+  **On Windows `git worktree remove` can unregister a worktree and then fail to delete its
+  tree** (`Permission denied` or `Invalid argument`): measured, a process held
+  `<worktree>/.claude` for about 40 s after a `dotnet build` there, build servers shut
+  down or not, and python removed the same tree once it let go. Both removal helpers
+  therefore ask the register again when git fails: still registered is git's refusal and
+  stands; unregistered leaves only a directory, which is deleted for a bounded time
+  (18 tries, 5 s apart) and reported, and the sweep helper's `.slices` lists go with it
+  (#329). A directory still held after that is named for deletion by hand.
 - **The edit guard judges the main checkout from a worktree, and refuses a
   trailing dot or space on Windows.** A session standing in a linked worktree
   gets `protected_in_worktree`'s inventory applied to any main checkout the

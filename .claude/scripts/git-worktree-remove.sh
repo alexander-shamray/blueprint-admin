@@ -80,4 +80,36 @@ done <<<"$registered"
 # No `--force`. The refusal on a dirty worktree is the point of this endpoint,
 # and `ship.md` step 8 reports the directory as left for inspection when it
 # fires rather than treating it as an error to get past.
-git worktree remove "$path"
+#
+# **A refusal and a half-finished removal are different failures, and on Windows only the
+# first was handled (#329).** git unregisters the worktree and then deletes its tree; a
+# process holding `<worktree>/.claude` (measured here: it let go about 40 s after a build,
+# with the build servers already shut down) makes the delete fail with `Permission denied`
+# or `Invalid argument` after the worktree is gone from the register. Leaving that
+# directory behind is how `.claude/worktrees` and the temp root accumulated remnants. So
+# when git fails, the register is asked again: still registered means git refused (a dirty
+# tree), and the failure stands; not registered means only the directory is left, and it
+# is deleted here, retrying for a bounded time, since the path matched the fork helper's
+# shape and was registered to the named branch above.
+if ! git worktree remove "$path"; then
+  still=no
+  while IFS= read -r line; do
+    case "$line" in
+      "worktree "*)
+        dir="${line#worktree }"
+        [ -d "$dir" ] && [ "$(cd "$dir" && pwd -P)" = "$resolved" ] && still=yes
+        ;;
+    esac
+  done <<<"$(git worktree list --porcelain)"
+  [ "$still" = no ] || exit 1
+  tries="${CLAUDE_WORKTREE_REMOVE_TRIES:-18}"
+  pause="${CLAUDE_WORKTREE_REMOVE_PAUSE:-5}"
+  for ((attempt = 1; attempt <= tries; attempt++)); do
+    rm -rf -- "$resolved" 2>/dev/null || true
+    [ ! -e "$resolved" ] && break
+    sleep "$pause"
+  done
+  [ ! -e "$resolved" ] ||
+    { echo "$path is unregistered but a process still holds it; delete it by hand" >&2; exit 1; }
+  echo "removed $path after git left it behind"
+fi
