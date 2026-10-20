@@ -1753,6 +1753,64 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
                     self.assertIn(f"Edit({target})", rules)
                     self.assertIn(f"Edit(./{target})", rules)
 
+    # What MSBuild and NuGet load without being asked (#311): a `Directory.Build.targets`
+    # `Exec` runs and the build reports success. Documented names, finite like
+    # the Node list above, and none tracked, so `git ls-files` cannot reach them.
+    # The first group is the root spellings (both `X` and `./X` are denied); the
+    # second the families, denied at any depth.
+    MSBUILD_AUTO_IMPORTED = (
+        "Directory.Build.targets", "Directory.Build.rsp",
+        "Directory.Solution.props", "Directory.Solution.targets",
+        "NuGet.Config", "nuget.config", "NuGet.config",
+        "BlueprintAdmin.slnx.targets", "before.BlueprintAdmin.slnx.targets",
+        "after.BlueprintAdmin.slnx.targets",
+    )
+    MSBUILD_FAMILIES = (
+        "**/Directory.Build.*", "**/Directory.Solution.*", "**/NuGet.Config",
+        "**/nuget.config", "**/NuGet.config", "**/*.slnx.targets",
+    )
+
+    def _msbuild_rules(self):
+        rules = []
+        for name in self.MSBUILD_AUTO_IMPORTED:
+            rules += [f"Edit({name})", f"Edit(./{name})"]
+        return rules + [f"Edit({family})" for family in self.MSBUILD_FAMILIES]
+
+    def test_every_editing_command_denies_the_msbuild_and_nuget_auto_imports(self):
+        # `/pr`, `/ship`, `/style-pass` and `/review-branch` all hold a write
+        # tool beside the granted `host-checks.sh`, which runs `dotnet test`.
+        seen = 0
+        for name in sorted(path.name for path in COMMANDS.glob("*.md")):
+            text = (COMMANDS / name).read_text(encoding="utf-8")
+            allowed = " ".join(
+                re.findall(r"^allowed-tools:\s*(.+)$", text, re.MULTILINE))
+            if not re.search(r"(^|,\s*)(Edit|Write)(\s*,|\s*$)", allowed):
+                continue
+            seen += 1
+            denied = set(self.disallowed(name))
+            for rule in self._msbuild_rules():
+                with self.subTest(command=name, rule=rule):
+                    self.assertIn(rule, denied)
+        self.assertGreater(seen, 3, "found almost no editing commands")
+
+    def test_settings_denies_the_msbuild_and_nuget_auto_imports(self):
+        denied = set(json.loads(
+            SETTINGS.read_text(encoding="utf-8"))["permissions"]["deny"])
+        for rule in self._msbuild_rules():
+            with self.subTest(rule=rule):
+                self.assertIn(rule, denied)
+
+    def test_the_msbuild_and_nuget_names_are_protected_files_and_untracked(self):
+        spec = importlib.util.spec_from_file_location("guard_git_argv", HOOK)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        tracked = self.tracked_root_files()
+        for name in self.MSBUILD_AUTO_IMPORTED:
+            with self.subTest(name=name):
+                self.assertNotIn(name, tracked)
+                self.assertIn(name.lower(), module.PROTECTED_FILES_FOLDED)
+        self.assertIsNotNone(module.protected_path("src/Admin.Host/Directory.Build.targets"))
+
     def test_the_auto_imported_names_are_not_all_tracked(self):
         # The positive control for the case above, and the point of it: at
         # least one auto-imported name is absent from the repository, so a test
@@ -1955,6 +2013,16 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
                 self.assertIn(f"Edit({prefix}{target})", denied)
         self.assertIn("Edit(**/*.csproj)", denied)
         self.assertIn("Edit(**/package.json)", denied)
+        # **And the other configs the toolchain EXECUTES to read them (#313).** `eslint.config.js`
+        # is the one executed config /style-pass edits by design; vite, vitest, playwright and
+        # prettier configs are JavaScript or TypeScript run when `npm-checks.sh` reads them, at
+        # any depth, and the pass has no business in them.
+        for family in ("**/*.config.cjs", "**/*.config.mjs", "**/*.config.mts",
+                       "**/*.config.ts", "**/.prettierrc.js", "**/.prettierrc.cjs",
+                       "**/.prettierrc.mjs"):
+            with self.subTest(family=family):
+                self.assertIn(f"Edit({family})", denied)
+        self.assertNotIn("Edit(**/*.config.js)", denied)
 
     def test_a_command_that_does_not_publish_cannot_push(self):
         for path in sorted(COMMANDS.glob("*.md")):
@@ -2011,8 +2079,14 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
     # or the network. None can be excluded by an allow, because
     # `allowed-tools` auto-approves rather than whitelists, so a command that
     # grants an exact type denies these by name.
+    #
+    # `fork` is one: it inherits the parent's whole toolset and context (#315).
+    # The list is a fixed set of the built-in types this repository knows. A
+    # user-level or plugin agent type is outside it, and `docs/harness-
+    # boundaries.md` says so; `allowed-tools` auto-approves rather than
+    # whitelists, so no deny list could name a type that is not installed here.
     BROAD_AGENT_TYPES = ("general-purpose", "claude", "Explore", "Plan",
-                         "claude-code-guide", "statusline-setup")
+                         "claude-code-guide", "statusline-setup", "fork")
     @staticmethod
     def frontmatter_list(text, key):
         return [item.strip() for line in

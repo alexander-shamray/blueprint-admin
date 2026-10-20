@@ -239,6 +239,13 @@ PROTECTED_FILES = frozenset({
     ".codeindexignore", ".mcp.json",
     "BlueprintAdmin.slnx", "Directory.Build.props", "Directory.Packages.props",
     "global.json",
+    # What MSBuild and NuGet load without being asked, so a written file runs
+    # under the granted `host-checks.sh` (#311). Not tracked, like `.npmrc`.
+    "Directory.Build.targets", "Directory.Build.rsp",
+    "Directory.Solution.props", "Directory.Solution.targets",
+    "NuGet.Config", "nuget.config",
+    "BlueprintAdmin.slnx.targets", "before.BlueprintAdmin.slnx.targets",
+    "after.BlueprintAdmin.slnx.targets",
     ".prettierrc", ".prettierrc.cjs", ".prettierrc.js", ".prettierrc.json",
     "AGENTS.md", "CLAUDE.md", "README.md",
     "angular.json", "capacitor.config.ts", "ionic.config.json",
