@@ -144,10 +144,15 @@ require_remote_carries_nothing_new() {
 # The lease names an expected value. `--force-with-lease` left bare trusts the
 # remote-tracking ref, which any fetch in the session may have moved, so the
 # `<ref>:<sha>` form names the commit this run read and a push landing in
-# between is refused rather than overwritten. The destination is spelled out too:
-# `git push origin "$branch"` names a source only, so `remote.origin.push` or
-# `remote.origin.pushurl` in the repository's config would decide where the force
-# landed (#343); `refs/heads/<branch>` on both sides leaves it nothing to decide.
+# between is refused rather than overwritten. The destination ref is spelled out too:
+# `git push origin "$branch"` names a source only, so `remote.origin.push` in the
+# repository's config would decide which ref the force landed on (#343);
+# `refs/heads/<branch>` on both sides leaves it nothing to decide. **That does not pin
+# the URL**: `remote.origin.pushurl` and `url.*.pushInsteadOf` still point the push
+# at another repository. What stops a force there is the lease, which expects the
+# remote's branch to be at `$lease` and is refused by any repository whose branch is
+# not at that commit; it is not a check of the URL, and the residual is stated in
+# docs/harness-boundaries.md.
 publish() {
   local current head lease
   current=$(git branch --show-current)
