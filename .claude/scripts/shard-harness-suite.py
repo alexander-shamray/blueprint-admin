@@ -45,9 +45,9 @@ with a whole worker: the slowest shard took 1.43-1.52x the mean in every
 green run measured, with unlisted classes costing ten to forty times what
 their test count implied (#322). Now each worker takes the next unit when it
 finishes the last, longest first, so a wrong guess costs one class. A unit is
-claimed by renaming its file, which exactly one worker can do, and moves on
-to `done/` only once it has run, so a unit a dead worker dropped is still
-visible to the check that every unit finished.
+claimed by creating its claim file exclusively, which exactly one worker can
+do, and is marked in `done/` only once it has run, so a unit a dead worker
+dropped is still visible to the check that every unit finished.
 
 **One run at a time, per user.** Each run sizes its pool for the whole host,
 so two at once — two sessions, two worktrees — ran sixteen workers and each
@@ -306,9 +306,10 @@ def unfinished(work, units):
     """The units of a queued run that never reached `done/`.
 
     `unplaced` checks what was queued; this checks what came back. A worker
-    that died mid-unit leaves its unit in `taken/`, one that refused an id
-    leaves it there too, and a unit no worker reached is still in `queue/` —
-    all three are tests that did not run, however every worker exited.
+    that died mid-unit leaves its unit claimed in `taken/` and absent from
+    `done/`, one that refused an id does too, and a unit no worker reached is
+    in neither — all three are tests that did not run, however every worker
+    exited.
     """
     done = {path.name for path in (work / "done").glob("*.ids")}
     return [name for name in units if name not in done]
@@ -368,45 +369,48 @@ def run_listed(wanted):
     return 0 if result.wasSuccessful() else 1
 
 
-def claim(work):
-    """Take the next unit off the queue: its name, or None when it is empty.
+def claims(work):
+    """The units this worker wins, longest first, each claimed once.
 
-    The rename is the claim. It succeeds for one worker and fails for every
-    other — with a missing file, or on Windows a sharing violation while the
-    winner's rename is in flight — so a failure only means "not this one".
-    A worker stops when the queue reads empty, never on a failed rename, so a
-    unit is never left behind by a race.
+    Creating `taken/<unit>` exclusively is the claim: `O_CREAT | O_EXCL` is
+    atomic on NTFS as on POSIX, so exactly one worker's create succeeds and
+    every other one sees the file exist and moves on. Every worker walks the
+    whole list in order, so a unit nobody has claimed is never passed over,
+    and a worker stops only at the end of the list.
+
+    Not a rename. A rename of a queue file was the first design, and on
+    Windows it is not exclusive: two workers that opened the same file before
+    either moved it both "succeeded", the second moving it onto itself, and
+    ran the unit twice. A race of four workers over single-test units in
+    `test_harness_shards.py` reproduces that, and is what holds this now.
     """
-    queue, taken = work / "queue", work / "taken"
-    while True:
-        names = sorted(path.name for path in queue.glob("*.ids"))
-        if not names:
-            return None
-        for name in names:
-            try:
-                os.rename(queue / name, taken / name)
-            except OSError:
-                continue
-            return name
-        time.sleep(0.05)
+    for name in sorted(path.name for path in (work / "units").glob("*.ids")):
+        try:
+            os.close(os.open(work / "taken" / name,
+                             os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+        except FileExistsError:
+            continue
+        yield name
 
 
 def run_queue(work):
-    """Run units off the queue in `work` until it is empty.
+    """Run every unit in `work` this worker can claim.
 
     Discovery happens once per worker, not once per unit: it imports every
     module in every root. Each class in a unit runs as its own suite, in
     discovery order, so its time is measured whole — `setUpClass` included —
-    and written beside the unit as it moves to `done/`, which is where the
+    and written to `done/` beside the unit's completion, which is where the
     parent reads the slowest classes from. A unit holding an id discovery does
-    not hold is refused and left in `taken/`, so the parent's check that every
-    unit finished fails on it by name.
+    not hold is refused and never reaches `done/`, so the parent's check that
+    every unit finished fails on it by name. Nothing a worker reads is a file
+    another worker writes: the ids sit in `units/`, written before any worker
+    started.
     """
     settle_streams()
     tests = loaded()
     status = 0
-    while (name := claim(work)) is not None:
-        ids = (work / "taken" / name).read_text(encoding="utf-8").split()
+    for name in claims(work):
+        ids = (work / "units" / name).read_text(encoding="utf-8").split()
         outstanding = sorted(set(ids) - set(tests))
         if not ids or outstanding:
             print(f"shard-harness-suite.py: unit {name}: discovery does not "
@@ -424,7 +428,7 @@ def run_queue(work):
                 status = max(status, 1)
         (work / "done" / f"{name}.times").write_text("".join(times),
                                                      encoding="utf-8")
-        os.rename(work / "taken" / name, work / "done" / name)
+        (work / "done" / name).write_bytes(b"")
     return status
 
 
@@ -584,14 +588,20 @@ def main(argv):
         return 2
 
 
-def run_all(units, tail, count):
-    """Queue the units, drain the queue with `count` workers, then the tail."""
-    work = Path(tempfile.mkdtemp(prefix="harness-shards-"))
-    for part in ("queue", "taken", "done"):
+def queue_units(work, units):
+    """Lay out a queue in `work`: each unit's ids, in the order they are dealt."""
+    for part in ("units", "taken", "done"):
         (work / part).mkdir()
     names = [f"{n:04d}.ids" for n in range(len(units))]
     for name, ids in zip(names, units):
-        (work / "queue" / name).write_text("\n".join(ids), encoding="utf-8")
+        (work / "units" / name).write_text("\n".join(ids), encoding="utf-8")
+    return names
+
+
+def run_all(units, tail, count):
+    """Queue the units, drain the queue with `count` workers, then the tail."""
+    work = Path(tempfile.mkdtemp(prefix="harness-shards-"))
+    names = queue_units(work, units)
 
     logs = [(f"worker {n}", work / f"worker-{n}.log") for n in range(count)]
     if tail:

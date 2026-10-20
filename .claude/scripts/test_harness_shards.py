@@ -22,6 +22,7 @@ over tests that never ran, and each has a case here.
 beside the first, and a holder that dies does not leave the lock behind.
 """
 
+import contextlib
 import importlib.util
 import re
 import subprocess
@@ -60,14 +61,9 @@ def found():
 
 
 def queued(tmp, units):
-    """A queue directory holding <units>, as `run_all` lays one out."""
+    """A queue directory holding <units>, laid out as `run_all` lays one."""
     work = Path(tmp)
-    for part in ("queue", "taken", "done"):
-        (work / part).mkdir()
-    names = [f"{n:04d}.ids" for n in range(len(units))]
-    for name, ids in zip(names, units):
-        (work / "queue" / name).write_text("\n".join(ids), encoding="utf-8")
-    return work, names
+    return work, SHARD.queue_units(work, units)
 
 
 def uncommented(path):
@@ -229,16 +225,43 @@ class TheRunnerRefusesRatherThanReportingAPass(unittest.TestCase):
         # worker left claimed, and one that finished. Only the last ran.
         with tempfile.TemporaryDirectory() as tmp:
             work, names = queued(tmp, [["a.A.x"], ["b.B.x"], ["c.C.x"]])
-            (work / "queue" / names[1]).rename(work / "taken" / names[1])
-            (work / "queue" / names[2]).rename(work / "done" / names[2])
+            (work / "taken" / names[1]).write_bytes(b"")
+            (work / "taken" / names[2]).write_bytes(b"")
+            (work / "done" / names[2]).write_bytes(b"")
             self.assertEqual(names[:2], SHARD.unfinished(work, names))
 
     def test_the_queue_is_dealt_once_each_in_order(self):
+        # Two workers' views of one queue: the second takes only what the
+        # first has not, and neither takes anything twice.
         with tempfile.TemporaryDirectory() as tmp:
             work, names = queued(tmp, [["a.A.x"], ["b.B.x"], ["c.C.x"]])
-            dealt = [SHARD.claim(work) for _ in names]
-            self.assertEqual(names, dealt)
-            self.assertIsNone(SHARD.claim(work))
+            first, second = SHARD.claims(work), SHARD.claims(work)
+            self.assertEqual(names[0], next(first))
+            self.assertEqual(names[1], next(second))
+            self.assertEqual([names[2]], list(first))
+            self.assertEqual([], list(second))
+
+    def test_racing_workers_finish_every_unit(self):
+        # The condition the windows-latest runner failed under: several
+        # workers claiming from one queue at once, many small units, every
+        # claim a race. Every unit has to come back, and every worker green.
+        ids = [i for i in found() if i.startswith("test_locality_gate.")]
+        self.assertGreater(len(ids), 40, "the suite this case borrows shrank")
+        # Logs to files, as `run_all` does: a worker writes its whole run to
+        # stderr, which would fill a pipe nobody reads until `wait` returns.
+        with tempfile.TemporaryDirectory() as tmp:
+            work, names = queued(tmp, [[i] for i in ids])
+            logs = [work / f"worker-{n}.log" for n in range(4)]
+            with contextlib.ExitStack() as open_logs:
+                workers = [subprocess.Popen(
+                    [sys.executable, str(RUNNER), "--queue", str(work)],
+                    cwd=str(ROOT), stdout=open_logs.enter_context(log.open("wb")),
+                    stderr=subprocess.STDOUT) for log in logs]
+                codes = [worker.wait(timeout=600) for worker in workers]
+            tails = [log.read_text(encoding="utf-8", errors="replace")[-2000:]
+                     for log in logs]
+            self.assertEqual([0, 0, 0, 0], codes, tails)
+            self.assertEqual([], SHARD.unfinished(work, names))
 
     def test_a_unit_holding_an_id_discovery_does_not_hold_stays_unfinished(self):
         # The queue's half of the runtime coverage rule: the worker refuses
