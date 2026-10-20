@@ -266,7 +266,7 @@ for item in "${items[@]}"; do
   t="${t%"${t##*[! ]}"}"
   case "$t" in
     '`'*'`') t="${t:1:${#t}-2}" ;;
-    *'`'*) refuse "the Touch set row has an unbalanced backtick" ;;
+    *'`'*) refuse "the Touch set row has an item that is not one backticked path: an unbalanced backtick, or text beside a path. The cell holds paths only; a widened row's reason goes in a sentence below the table" ;;
   esac
   # **The two grammars here disagreed, and the touch-set one was the narrower
   # (#19).** A changed path is admitted with `@` and `+` in it — git permits

@@ -98,7 +98,9 @@ Wrapped at 80 columns, British spelling, no emoji. Structure:
 The metadata table opens with two rows. The class and the touch set are
 decided before the first edit — in the issue, or in the first commit's body
 when there is none, per `docs/change-locality.md` §5 — and copied here when
-the PR opens, with any file added mid-work and the reason it was:
+the PR opens. The cell holds backticked paths and nothing else: a file added
+mid-work joins the row, and the reason it was added is a sentence below the
+table, never text in the cell, which the locality gate reads as paths:
 
 ```markdown
 | | |
@@ -114,7 +116,8 @@ touch set as the union. `Touch set` is the
 paths that class allows and this branch actually edited, as globs or files on
 one line. A file in the diff outside the set is a finding for
 `/review-branch`, and the answer is a narrower diff, a row widened with its
-reason beside it, or a different class — never a row widened silently.
+reason stated below the table, or a different class — never a row widened
+silently.
 
 ### What the branch closes
 
