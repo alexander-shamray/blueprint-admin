@@ -391,7 +391,7 @@ class TheTablesNameTheHelpersRows(unittest.TestCase):
     def test_each_table_matches_row_of(self):
         source = SLICES.read_text(encoding="utf-8")
         body = source[source.index("row_of() {"):source.index("\n}\n", source.index("row_of() {"))]
-        arms = re.findall(r"^\s*(.+?)\) echo ([a-z-]+) ;;$", body, re.MULTILINE)
+        arms = re.findall(r"^\s*(.+?)\) REPLY=([a-z-]+) ;;$", body, re.MULTILINE)
         self.assertGreater(len(arms), 5, "the arm pattern stopped matching row_of")
         for kind in ("bug", "security"):
             with self.subTest(kind=kind):
