@@ -148,21 +148,31 @@ require_remote_carries_nothing_new() {
 # `git push origin "$branch"` names a source only, so `remote.origin.push` in the
 # repository's config would decide which ref the force landed on (#343);
 # `refs/heads/<branch>` on both sides leaves it nothing to decide. The URL is the other
-# half: `remote.origin.pushurl` and `url.*.pushInsteadOf` would point the push at
-# another repository, so a run refuses (exit 7) while any of them, or
-# `remote.origin.push` itself, is configured. The lease backs that up and does not
-# replace it: any repository whose branch is not at `$lease` refuses the force.
+# half: `remote.origin.pushurl`, `url.*.pushInsteadOf` and a second `url` value would point
+# the push at another repository, so a run refuses (exit 7) unless the one URL git will
+# push to names the same `owner/repo` the remote was added with. The lease backs that up
+# and does not replace it: any repository whose branch is not at `$lease` refuses the force.
 publish() {
-  local current head lease redirects
+  local current head lease pushes configured resolved
   current=$(git branch --show-current)
   [ "$current" = "$branch" ] ||
     { echo "the replay ended on ${current:-a detached HEAD} rather than $branch; nothing is published" >&2; exit 4; }
   lease="$approved_lease"
   [ -n "$lease" ] ||
     { echo "no lease was approved, so nothing here may force" >&2; exit 7; }
-  redirects=$(git config --name-only --get-regexp '^(remote\.origin\.(pushurl|push)|url\..*\.(push)?insteadof)$' || true)
-  [ -z "$redirects" ] ||
-    { echo "a push redirect is configured ($(printf '%s' "$redirects" | tr '\n' ' ')); the force would not be pinned to origin, so nothing is published" >&2; exit 7; }
+  # A remote with several `url` values pushes to every one of them.
+  pushes=$(git remote get-url --push --all origin | wc -l)
+  [ "$pushes" -eq 1 ] ||
+    { echo "origin has $pushes push URLs; a force goes to every one of them, so nothing is published" >&2; exit 7; }
+  # The URL git will push to, after `pushurl`, `pushInsteadOf` and `insteadOf`, must name the
+  # same `owner/repo` as the URL the remote was added with. A host or protocol rewrite (https
+  # to ssh, a mirror) names the same repository and passes; a redirect to another repository
+  # does not, and nothing is published.
+  repo_of() { printf '%s' "$1" | sed -e 's#/*$##' -e 's#\.git$##' -e 's#^.*[:/]\([^:/][^:/]*/[^:/][^:/]*\)$#\1#'; }
+  configured=$(repo_of "$(git config --get remote.origin.url)")
+  resolved=$(repo_of "$(git remote get-url --push origin)")
+  [ -n "$configured" ] && [ "$configured" = "$resolved" ] ||
+    { echo "origin pushes to $resolved but was added as $configured; a redirected force is not published" >&2; exit 7; }
   head=$(git rev-parse HEAD)
   if [ "$head" = "$lease" ]; then
     rm -f "$pending"

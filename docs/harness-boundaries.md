@@ -442,10 +442,11 @@ A new residual is stated **here** and gets a row above.
   and left writable globally, because `/style-pass` (sections 3 and 4) and the owner's own
   sessions edit it by design; a global deny would refuse them (#343). The rebase helper's
   force push names both sides of its refspec (`<branch>:refs/heads/<branch>`), so
-  `remote.origin.push` has no ref left to decide, and it refuses (exit 7) while
-  `remote.origin.push`, `remote.origin.pushurl` or any `url.*.pushInsteadOf` or
-  `insteadOf` is configured, since any of them would point the force at another
-  repository. The lease (the remote's branch must already be at the commit this run
+  `remote.origin.push` has no ref left to decide. It refuses (exit 7) when `origin`
+  has more than one push URL, or when the URL git will push to, after `pushurl`,
+  `pushInsteadOf` and `insteadOf`, names a different `owner/repo` than the URL the remote
+  was added with; a host or protocol rewrite of the same repository (https to ssh, a
+  mirror) passes. The lease (the remote's branch must already be at the commit this run
   read) backs that up and does not replace it.
 
 A new residual is stated **here**, and `CLAUDE.md` carries the pointer rather
