@@ -157,6 +157,9 @@ require_remote_carries_nothing_new() {
 # and trailing `.git` do not count, so https and ssh forms of one repository agree.
 repo_key() {
   local url=$1 host path
+  # A query or a fragment is not part of the path a server routes on, so the last two
+  # components of `https://host/x/y#/o/r` would name `o/r` while the push went to `x/y`.
+  [[ $url != *[\?#]* ]] || return 1
   url=${url%/}
   url=${url%.git}
   if [[ $url =~ ^[A-Za-z][A-Za-z0-9+.-]*://([^@/]*@)?([^:/]+)(:[0-9]+)?/(.*)$ ]]; then
@@ -166,6 +169,11 @@ repo_key() {
     host=${BASH_REMATCH[2]}
     path=${BASH_REMATCH[3]}
   else
+    # No host: only a plain path or a Windows drive path (`C:/x/o/r`) may be hostless. Anything
+    # else with a colon is a scheme or an scp-style address that failed both forms above
+    # (`ssh://h:o/r`, `git@h:/o/r`, `file:///o/r`, `ext::cmd`), and is refused rather than
+    # compared as a path.
+    [[ $url =~ ^([A-Za-z]:)?[^:]*$ ]] || return 1
     host=
     path=$url
   fi
