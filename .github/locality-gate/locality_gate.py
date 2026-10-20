@@ -185,7 +185,7 @@ def _read_touch_set(rest: str) -> list[str]:
             token = token[1:-1]
         elif "`" in token:
             raise InputRefused(
-                "the Touch set row has an item that is not one backticked path: an "
+                "the Touch set row has an item that is not one path: an "
                 "unbalanced backtick, or text beside a path. The cell holds paths only; "
                 "a widened row's reason goes in a sentence below the table"
             )
@@ -213,12 +213,18 @@ def _split_outside_braces(cell: str) -> list[str]:
     return items
 
 
+# Where a widened row's reason goes (docs/change-locality.md section 3). Said
+# by every Touch set refusal a reason written into the cell can reach.
+TOUCH_SET_HINT = "a widened row's reason goes in a sentence below the table"
+
+
 def _normalise_token(token: str, *, where: str) -> str:
     """One path-or-glob token, checked and with a trailing slash dropped."""
     # fullmatch, because `$` matches before a final newline and a token
     # ending in one would pass as its newline-free spelling.
     if not _TOKEN.fullmatch(token) or not re.search(r"[/.]", token):
-        raise InputRefused(f"{where} is not a path list")
+        hint = ("; " + TOUCH_SET_HINT) if where == "the Touch set row" else ""
+        raise InputRefused(f"{where} is not a path list{hint}")
     # Braces are walked, not counted. A count accepts `docs/}a{` and, worse,
     # `docs/a,docs/b` — a comma outside any brace, which the touch-set row
     # can never carry because it is split on that comma first, but which a

@@ -266,7 +266,7 @@ for item in "${items[@]}"; do
   t="${t%"${t##*[! ]}"}"
   case "$t" in
     '`'*'`') t="${t:1:${#t}-2}" ;;
-    *'`'*) refuse "the Touch set row has an item that is not one backticked path: an unbalanced backtick, or text beside a path. The cell holds paths only; a widened row's reason goes in a sentence below the table" ;;
+    *'`'*) refuse "the Touch set row has an item that is not one path: an unbalanced backtick, or text beside a path. The cell holds paths only; a widened row's reason goes in a sentence below the table" ;;
   esac
   # **The two grammars here disagreed, and the touch-set one was the narrower
   # (#19).** A changed path is admitted with `@` and `+` in it — git permits
@@ -278,8 +278,8 @@ for item in "${items[@]}"; do
   # grammar plus the glob characters `*?{},`, which makes it a superset rather
   # than a second list to keep in step.
   [[ "$t" =~ $TOKEN_RE ]] ||
-    refuse "the Touch set row is not a path list"
-  case "$t" in *[/.]*) ;; *) refuse "the Touch set row is not a path list" ;; esac
+    refuse "the Touch set row is not a path list; a widened row's reason goes in a sentence below the table"
+  case "$t" in *[/.]*) ;; *) refuse "the Touch set row is not a path list; a widened row's reason goes in a sentence below the table" ;; esac
   t="${t%/}"
   # A brace alternative is a segment start too: `{../outside,docs/x.md}`
   # expands to a path that leaves the checkout, so the boundary is judged

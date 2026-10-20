@@ -98,9 +98,10 @@ Wrapped at 80 columns, British spelling, no emoji. Structure:
 The metadata table opens with two rows. The class and the touch set are
 decided before the first edit — in the issue, or in the first commit's body
 when there is none, per `docs/change-locality.md` §5 — and copied here when
-the PR opens. The cell holds backticked paths and nothing else: a file added
-mid-work joins the row, and the reason it was added is a sentence below the
-table, never text in the cell, which the locality gate reads as paths:
+the PR opens. The cell holds paths and nothing else: a file added mid-work
+joins the row, and the reason it was added is a sentence below the table,
+never text in the cell, which the locality gate reads as paths
+(`docs/change-locality.md` §3):
 
 ```markdown
 | | |
