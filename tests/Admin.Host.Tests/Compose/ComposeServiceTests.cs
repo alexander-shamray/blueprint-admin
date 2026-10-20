@@ -74,9 +74,9 @@ public sealed class ComposeServiceTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task Ps_is_unreachable_with_the_last_stderr_line_when_docker_fails()
+    public async Task Ps_is_unreachable_with_the_exit_code_when_docker_fails()
     {
-        // The fake writes to stdout only; a non-zero exit with no stderr still reports the exit code.
+        // No stderr is scripted: a non-zero exit with nothing on stderr reports the exit code.
         runner.On("docker", $"compose -f {Paths.ComposeFile} ps", 1);
 
         ComposeStatus status = await Service.PsAsync(TestContext.Current.CancellationToken);

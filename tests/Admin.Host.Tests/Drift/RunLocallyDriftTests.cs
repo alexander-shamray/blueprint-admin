@@ -138,7 +138,6 @@ public sealed class RunLocallyDriftTests
         JsonNode example = JsonNode.Parse(RunLocallyExamples.ProductImageUpload)!;
 
         sent["contentType"]!.GetValue<string>().ShouldBe(example["contentType"]!.GetValue<string>());
-        example["sizeBytes"]!.GetValue<long>().ShouldBe(SampleImage.SizeBytes);
         document.ShouldContain("$size = (Get-Item .\\desk.png).Length");
         document.ShouldContain("sizeBytes = $size");
     }

@@ -4,6 +4,7 @@ using Admin.Host.Fakes;
 using Admin.Host.Frontend;
 using Admin.Host.Jobs;
 using Admin.Host.Stack;
+using Admin.Host.Tests.Drift;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 
@@ -156,6 +157,18 @@ public sealed class DeviceReadsTests
         string script = runner.Started.Select(s => s.Arguments[^1]).Single(a => a.Contains(DeviceReads.RealmLines[0]));
         script.ShouldBe(string.Join('\n', [DeviceReads.StopOnError, .. DeviceReads.RealmLines]));
         script.ShouldStartWith("$ErrorActionPreference = 'Stop'");
+    }
+
+    /// <summary>The drift test for the document's commands accepts the third line (it runs with the two above it as one script), so this holds it.</summary>
+    [Fact]
+    public void Every_line_of_the_realm_script_is_a_line_of_run_locally()
+    {
+        string document = File.ReadAllText(Backend.RunLocally);
+
+        foreach (string line in DeviceReads.RealmLines)
+        {
+            document.ShouldContain(line);
+        }
     }
 
     [Fact]
