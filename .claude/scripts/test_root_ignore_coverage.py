@@ -82,7 +82,7 @@ def root_covered(repo, paths):
     from the root's own rule for that directory, and the walk below read all
     of `node_modules` one spawn per directory (#320). An excludes file's
     patterns are relative to the top of the work tree, as the root file's
-    are, and `--no-index` lets git answer for paths it does not hold.
+    are, and check-ignore answers for a path whether or not it exists.
 
     A negated match needs no handling of its own: check-ignore lists what is
     ignored, so a path re-included by a `!` rule draws no line at all and
@@ -103,7 +103,7 @@ def root_covered(repo, paths):
         subprocess.run([GIT, "init", "-q", judge], check=True)
         proc = subprocess.run(
             [GIT, "-c", f"core.excludesFile={rules}", "check-ignore",
-             "--no-index", "-v", "-z", "--stdin"],
+             "-v", "-z", "--stdin"],
             cwd=judge, capture_output=True,
             input="\0".join(paths).encode("utf-8"))
     # 0 is some path matched, 1 is none did; anything else is git failing, and
