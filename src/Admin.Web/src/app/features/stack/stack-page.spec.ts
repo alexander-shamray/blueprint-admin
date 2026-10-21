@@ -281,6 +281,28 @@ describe('StackPage', () => {
       ]);
     });
 
+    it('frees the buttons when the pane moves to another job before the Compose job exits', async () => {
+      const fixture = await openAndPressUp();
+      expect((fixture.nativeElement.querySelector('button.up') as HTMLButtonElement).disabled).toBe(true);
+
+      fixture.componentInstance.jobId.set('other');
+      fixture.detectChanges();
+
+      const up = fixture.nativeElement.querySelector('button.up') as HTMLButtonElement;
+      expect(up.disabled).toBe(false);
+      expect(text(up)).toBe('Up');
+    });
+
+    it('frees the buttons when the job stream fails, since no exit will come', async () => {
+      const fixture = await openAndPressUp();
+
+      events.error(new Error('The host closed the job stream.'));
+      fixture.detectChanges();
+      fixture.detectChanges();
+
+      expect((fixture.nativeElement.querySelector('button.up') as HTMLButtonElement).disabled).toBe(false);
+    });
+
     it('does not report a job opened with a Show output button as the Up that ended', async () => {
       const fixture = await openAndPressUp();
 
