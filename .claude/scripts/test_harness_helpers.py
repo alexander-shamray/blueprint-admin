@@ -7132,6 +7132,13 @@ class TheGitArgvGuard(unittest.TestCase):
             '"env" -C .claude cp /tmp/a settings.json',
             "env -S '-C .claude cp /tmp/a settings.json'",
             "env.exe -C .claude cp /tmp/a settings.json",
+            # A separator inside env's own words puts the option in another segment.
+            "env A=$(date) -C .claude cp /tmp/a settings.json",
+            "env A=${HOME} -C .claude tee settings.json",
+            "env 'A=;' -C .claude cp /tmp/a settings.json",
+            "env A=\\; -C .claude cp /tmp/a settings.json",
+            "ls; env -C .claude cp /tmp/a settings.json",
+            "FOO=1 env -C .claude cp /tmp/a settings.json",
             "find .claude/hooks -name x.py -execdir cp /tmp/a ./x.py \\;",
             "find . -name x.py -okdir cp /tmp/a ./x.py \\;",
         ):
@@ -7140,6 +7147,12 @@ class TheGitArgvGuard(unittest.TestCase):
         for command in (
             "env FOO=1 cp /tmp/a notes/x.txt",
             "find notes -name x -exec cp /tmp/a notes/x.txt \\;",
+            # Not env, or not env's option: ordinary relative writes stay admitted.
+            "env FOO=1 curl -fsSL https://x/y > notes/x.sh",
+            "cat .env --color > notes/x.txt",
+            "grep foo .env -C3 > notes/x.txt",
+            "printenv --silent > notes/x.txt",
+            "echo env -C > notes/x.txt",
         ):
             with self.subTest(command=command):
                 self.assertAdmitted(command, cwd=root)
@@ -7162,14 +7175,6 @@ class TheGitArgvGuard(unittest.TestCase):
         ):
             with self.subTest(command=command):
                 self.assertRefused(command, cwd=hooks)
-        # A cwd that is a link into the tree resolves to a protected component.
-        link = os.path.join(root, "notes", "hooks-link")
-        try:
-            os.symlink(hooks, link, target_is_directory=True)
-        except (OSError, NotImplementedError):
-            link = None
-        if link is not None:
-            self.assertRefused("cp /tmp/a evil.sh", cwd=link)
         for cwd, command in (
             (root, "cp /tmp/a notes/x.txt"),
             (os.path.join(root, "notes"), "cp /tmp/a x.txt"),
@@ -7177,6 +7182,19 @@ class TheGitArgvGuard(unittest.TestCase):
         ):
             with self.subTest(command=command, cwd=cwd):
                 self.assertAdmitted(command, cwd=cwd)
+
+    def test_a_session_whose_directory_is_a_link_into_a_protected_tree_is_refused(self):
+        # Caught by `linked_protected_path`, which joins the cwd and resolves it;
+        # `cwd_protected_path` reads the lexical join only.
+        root = self.writing_checkout()
+        hooks = os.path.join(root, ".claude", "hooks")
+        os.makedirs(hooks)
+        link = os.path.join(root, "notes", "hooks-link")
+        try:
+            os.symlink(hooks, link, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("this host cannot make a symlink")
+        self.assertRefused("cp /tmp/a evil.sh", cwd=link)
 
     def test_the_dot_command_and_a_message_are_read_where_they_stand(self):
         # #357: `.` changes directory only as a command, and only the message

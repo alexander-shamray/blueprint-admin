@@ -386,10 +386,14 @@ A new residual is stated **here** and gets a row above.
   to the target and the path from the checkout that contains it is judged, so
   after a bare `cd .claude/hooks` the next call's `cp x evil.sh` is refused. A
   command that changes directory with `cd`, `pushd`, `popd`, `source`, `eval`,
-  the dot command, `env -C` or `--chdir` (clustered or abbreviated) or
-  `find -execdir`/`-okdir` refuses every relative target in it. A directory
-  change by a program not named here (`make -C`, `tar -C`) is not seen: those
-  programs are not on the writing-verb list either.
+  the dot command, `env -C`, `--chdir`, `-S` or `--split-string` (clustered,
+  attached or abbreviated; the `env` must stand where a command stands, and its
+  option is looked for in every later word) or `find -execdir`/`-okdir` refuses
+  every relative target in it. `env X=1 ls -S` therefore reads as a directory
+  change: over-matching is the direction chosen. A directory change by a
+  program not named here (`make -C`, `tar -C`, `sudo -D`, `systemd-run
+  --working-directory`, `docker run -w`) is not seen: those programs are not on
+  the writing-verb list either, and `git -C` for `git rm`/`git mv` is #358.
   **On Windows `git worktree remove` can unregister a worktree and then fail to delete its
   tree** (`Permission denied` or `Invalid argument`): measured, a process held
   `<worktree>/.claude` for about 40 s after a `dotnet build` there, build servers shut
