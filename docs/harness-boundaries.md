@@ -389,7 +389,8 @@ A new residual is stated **here** and gets a row above.
   the dot command, `env -C`, `--chdir`, `-S` or `--split-string` (clustered,
   attached or abbreviated; any word that is `env`, wherever it stands, and its
   option is looked for in every later word) or `find -execdir`/`-okdir` refuses
-  every relative target in it. `env X=1 ls -S`, `env -uC` and `echo env -C`
+  every relative target in it. `env X=1 ls -S`, `env -uC`, `echo env -C` and a
+  path with a component named env (`grep foo app/env/x -C3`)
   therefore read as a directory change: over-matching is the direction chosen,
   because every attempt to ask where `env` stands failed open in review.
   **Not seen:** a directory change by a program not named here (`make -C`,

@@ -2404,11 +2404,12 @@ def env_changes_directory(command):
     redirect word, an assignment holding a space and every wrapper with
     arguments of its own (`sudo -u root env`, `timeout 5 env`), and splitting
     at separators missed one inside env's words (`env A=$(date) -C d`,
-    `env 'A=;' -C d`). So the word must BE `env` (after a path or a glued
-    separator, so `.env` and `printenv` are not), and the option is looked for
-    in every later word of the command. That over-matches an `-S` or `-C` of
-    the program env runs (`env X=1 ls -S`), `env -uC` (unset a variable named
-    `C`), and `echo env -C`, which is the direction to be wrong in. Only the
+    `env 'A=;' -C d`). So a piece of the word must BE `env` (split at a path
+    separator or a glued one, so `.env` and `printenv` are not), and the option
+    is looked for in every later word of the command. That over-matches an `-S`
+    or `-C` of the program env runs (`env X=1 ls -S`), `env -uC` (unset a
+    variable named `C`), `echo env -C`, and a directory component named env
+    (`grep foo app/env/x -C3`), which is the direction to be wrong in. Only the
     FIRST such `env` is scanned, since its scan covers every later one, which
     keeps this linear.
     """
