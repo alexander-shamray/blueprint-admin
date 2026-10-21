@@ -563,12 +563,29 @@ A new residual is stated **here** and gets a row above.
   given as one quoted string that expands nothing is text and is not read, so
   `git commit -m "fix GIT_DIR handling"` beside a writer is admitted. The `.`
   that changes directory is the command only where a command stands; as an
-  operand (`git add .`) it is a directory. **Still admitted, and stated here
-  rather than closed (#357):** a relocation built in a spelling none of the
-  above names. Every review round found another; the search is by shape and
-  the shell has more forms than the list, so the structural answer is to resolve
-  the work tree from git itself, which this guard does not do because a hook
-  that ran `git` would inherit the environment it judges.
+  operand (`git add .`) it is a directory. **The relocation is closed by the
+  route that exports it, not by its spelling (#357).** A hook cannot ask git
+  where it will write: the environment the command builds does not exist
+  until the command runs. A name reaches git only once it is exported, though,
+  and bash exports by a closed list of routes: an assignment ahead of a
+  command, `export` and `declare -x`, `allexport`, a nameref an `export` then
+  follows, a program that sets the environment, and code read from data.
+  Beside a writer, each one that can export a name this guard cannot read is
+  refused: an expansion anywhere in the words of `env`, `sudo` or `doas`, or
+  of a declaration builtin behind `command` or `builtin`, which split `X=$Y`
+  into a second name (`export X=$Y` alone does not, and stays admitted); any
+  nameref, which a `for` loop can point at a computed name; `set -a`, `set -o
+  allexport`, `shopt -o`, `SHELLOPTS`, a `set` option built by an expansion
+  and a shell started with `-a`; and `BASH_ENV`, `alias`, `enable` and
+  `mapfile -C`, which run code. A computed name that is only bound (`read`,
+  `printf -v`, `(( $N = 5 ))`) is exported by none of these and reaches no git
+  process. A script a shell runs (`bash -c`, `eval`, a here-string, `$(...)`)
+  is judged with the event's whole command line around it, where its
+  environment is built: until #357, `GIT_WORK_TREE=.claude bash -c 'git
+  checkout HEAD -- settings.json'` was admitted. Still not seen: a variable
+  exported before this command line runs, by an earlier Bash call or the
+  profile the shell sources, which relocates a plain `git checkout --
+  settings.json` as well.
   `git checkout -f`, `git reset --hard`, `git stash`, `git checkout-index`,
   `git read-tree -u` and the subcommands that merge or replay (`merge`,
   `cherry-pick`, `rebase`) update the tree wholesale or by index and are not

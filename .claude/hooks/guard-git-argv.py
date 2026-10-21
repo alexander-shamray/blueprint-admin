@@ -2438,6 +2438,14 @@ def env_changes_directory(command):
 # events in one process cannot carry one command's directory into the next.
 EVENT_CWD = None
 
+# The whole command line of the event `offence` is judging, while it judges
+# it. A script a shell runs (`bash -c '...'`, `eval`, a here-string, `$(...)`)
+# is judged as a string of its own, and the line around it is where that
+# shell's environment is built: `GIT_WORK_TREE=.claude bash -c 'git checkout
+# HEAD -- settings.json'` was admitted because the inner script named no
+# relocation (#357). `None` outside a judgement.
+EVENT_COMMAND = None
+
 
 def linked_protected_path(literal):
     """Which protected surface `literal` reaches THROUGH a link, or `None`.
@@ -3481,10 +3489,33 @@ def git_path_writer_offence(run, literals, command):
     # The names alone, in any reading of the command: `read GIT_WORK_TREE`,
     # `printf -v GIT_DIR` and `declare -n` write them with no `=`. Code that
     # builds a name, `eval` and `source` included, is refused beside a writer.
+    #
+    # A name reaches git only once it is exported, and bash exports by a
+    # closed list of routes (the manual's *Environment*): an assignment ahead
+    # of a command, `export` and `declare -x`, `allexport`, a nameref an
+    # `export` then follows, a program that sets the environment, and code
+    # read from data. Each route that can export a name this guard cannot read
+    # is refused here, so a name built in a spelling no line names is still
+    # never exported to git (#357): `env`, and a declaration builtin behind
+    # `command` or `builtin`, split `X=$Y` into a second name; any nameref,
+    # which a `for` loop can point at a computed name; `allexport` however it
+    # is set; and `BASH_ENV`, `alias`, `enable` and `mapfile -C`, which run
+    # code. Binding a name without exporting it, `(( $N = 5 ))`, reaches no
+    # git process.
     relocation = re.compile(
         r"(?i)(?<!\w)(GIT_WORK_TREE|GIT_DIR|GIT_COMMON_DIR|GIT_INDEX_FILE"
-        r"|GIT_CONFIG\w*)\b"
-        r"|(?<![\w./-])(?:eval|source|trap)(?![\w./-])"
+        r"|GIT_CONFIG\w*|SHELLOPTS|BASH_ENV|allexport)\b"
+        r"|(?<![\w./-])(?:eval|source|trap|alias|enable)(?![\w./-])"
+        r"|\b(?:mapfile|readarray)\b[^;&|\n]*\s-(?-i:[A-Za-z]*C)"
+        r"|(?<![\w./-])(?:env|sudo|doas)\b[^;&|\n]*[$`]"
+        r"|(?<![\w./-])(?:command|builtin)\b(?:\s+-\S+)*\s+"
+        r"(?:export|declare|typeset|local|readonly)\b[^;&|\n]*[$`]"
+        r"|\b(?:declare|typeset|local)\b(?:\s+[^\s;&|]+)*?\s+-\w*n"
+        r"|(?<![\w./-])set\b[^;&|\n]*\s-(?-i:[A-Za-z]*a)"
+        r"|(?<![\w./-])(?:set|shopt)\b[^;&|\n]*\s[-+]\S*[$`]"
+        r"|(?<![\w./-])shopt\b[^;&|\n]*\s-\w*o"
+        r"|(?<![\w.-])(?:ba|da|k|z|mk|a)?sh(?:\.exe)?\s+(?:-\S+\s+)*?"
+        r"-(?-i:[A-Za-z]*a)"
         r"|\b(?:export|declare|typeset|local|readonly|env)\b[^;&|\n]*(?:\$\(|`)"
         r"|\b(?:export|declare|typeset|local|readonly|env|read|mapfile|readarray)"
         r"\b(?:\s+[^\s;&|]+)*?\s+[^\s=;&|]*\$|printf\s+-v\s+\S*\$"
@@ -3497,9 +3528,12 @@ def git_path_writer_offence(run, literals, command):
         r"|\bwait\b(?:\s+-\S+)*?\s+-\w*p\b[^;&|\n]*[$\\{*?\[\\'\"`]"
         r"|(?<![^\s;&|(){}!])\.(?:\s+(?:\d*[<>]+&?\s*[^\s;&|<>]+\s+)*[^\s;&|<>]|\$)"
         r"|<\(")
+    # Read on the event's whole line as well as this string, which a shell
+    # around it may run in an environment the line built (#357).
     relocated = relocated or any(
-        relocation.search(text) for text in command_readings(
-            without_messages(command)))
+        relocation.search(text)
+        for line in dict.fromkeys((command, EVENT_COMMAND or command))
+        for text in command_readings(without_messages(line)))
     if relocated or any(
             word.startswith(("-C", "--work-tree", "--git-dir"))
             or "core.worktree" in word.lower()
@@ -3507,9 +3541,10 @@ def git_path_writer_offence(run, literals, command):
         return (
             f"{writer} runs under `-C`, `--work-tree`, `--git-dir`, "
             "`core.worktree` or a `GIT_WORK_TREE`, `GIT_DIR` or `GIT_CONFIG*` "
-            "assignment, which moves the paths it writes away from the "
+            "assignment, or beside a construct that can export a name this "
+            "guard cannot read, which moves the paths it writes away from the "
             "working directory this guard judges against; run it from the "
-            "checkout (#297, docs/harness-boundaries.md)."
+            "checkout (#297, #357, docs/harness-boundaries.md)."
         )
     if name in GIT_WRITING_SUBCOMMANDS:
         # `git rm` and `git mv` are judged as the verbs `rm` and `mv` by
@@ -5894,13 +5929,23 @@ def offence(command, depth=0, judged=None):
     first, so a cycle terminates without inventing a verdict — the outer call
     is the one that answers.
     """
+    global EVENT_COMMAND
     if judged is None:
         judged = {}
     if command in judged:
         return judged[command]
     judged[command] = None
 
-    verdict = _offence(command, depth, judged)
+    # Only the outermost call names the event's line, and it clears it on the
+    # way out, so a caller judging many events cannot carry one into the next.
+    outermost = depth == 0
+    if outermost:
+        EVENT_COMMAND = command
+    try:
+        verdict = _offence(command, depth, judged)
+    finally:
+        if outermost:
+            EVENT_COMMAND = None
     judged[command] = verdict
     return verdict
 
