@@ -581,9 +581,10 @@ A new residual is stated **here** and gets a row above.
   `set` or `shopt` word holding an expansion, quote, brace or glob, and a
   shell started with `-a`; and `BASH_ENV`, `ENV`, a shell started
   interactive or login (`-i`, `-l`, `--login`, `--rcfile`, `--init-file`
-  anywhere in that shell's command, a redirection or the script's own
-  options between them or not, which fails closed on `bash -c 'ls -la'`; and
-  `exec -l` or `exec -a -bash`), `zsh` and `ZDOTDIR`, since zsh reads `.zshenv` on every
+  anywhere in that shell's command, past any redirection, quoted span or
+  escape, and an option word holding a quote, backslash or `$` or any
+  unquoted expansion there, which fails closed and so also refuses `bash -c
+  'ls -la'`; and `exec -l` or `exec -a -bash`), `zsh` and `ZDOTDIR`, since zsh reads `.zshenv` on every
   start, `alias`, `enable` and `mapfile -C`, which run code. A computed name
   that is only bound (`read`, `printf -v`, `(( $N = 5 ))`) is exported by
   none of these and reaches no git process. A script a shell runs (`bash -c`,
