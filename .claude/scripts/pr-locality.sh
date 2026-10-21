@@ -70,10 +70,14 @@ refuse() { echo "$1" >&2; exit 3; }
 # carrying a newline matches under `grep` and does not here. Every value tested
 # with these is one this script is validating, so the stricter reading is the
 # one to have: `changedFiles` of `3<newline>evil` is not a count.
+#
+# **A class is spelled out, not ranged.** Under an `en_US` collation `[A-E]`
+# also matches `d`, which the gate refuses, so the two copies would disagree on
+# a lower-case class on any host that is not in the C locale.
 COUNT_RE='^[0-9]+$'
 CLASS_ROW_RE='^\| *Class *\|'
 TOUCH_ROW_RE='^\| *Touch set *\|'
-CLASS_RE='^[A-E](\+[A-E])?$'
+CLASS_RE='^[ABCDE](\+[ABCDE])?$'
 OID_RE='^[0-9a-f]{40}$'
 TOKEN_RE='^[A-Za-z0-9_./*?{},()@+-]+$'
 PATH_RE='^[A-Za-z0-9_./@+()-]+$'
@@ -220,7 +224,7 @@ while IFS= read -r raw || [ -n "$raw" ]; do
   [ -n "$line" ] || continue
   trimmed="${line#"${line%%[![:space:]]*}"}"
   case "$trimmed" in '#'*) continue ;; esac
-  if [[ "$line" =~ ^([A-E]):$ ]]; then
+  if [[ "$line" =~ ^([ABCDE]):$ ]]; then
     current="${BASH_REMATCH[1]}"
     continue
   fi
