@@ -222,23 +222,19 @@ def git_failing_after_removal(directory):
 
 
 def private_tmproot(test):
-    """A fresh temp root for `test`, as bash resolves it, removed when the test ends (#356)."""
+    """A fresh temp root for `test`, removed when the test ends (#356), as BASH resolves it.
+
+    That is not the root Python resolves. On this host `/tmp` is `D:\\tmp\\alexa` for the
+    shell and `C:\\tmp` for every Python and built-in reader — different directories,
+    both populated. A test that made its fixture with `pathlib` and then handed the path
+    to a shell script was checking a directory the script could not see, and the refusal
+    it asserted on was `not an existing directory` rather than the shape check it meant
+    to exercise. So the root is returned in bash's spelling and the fixtures are made by
+    bash too.
+    """
     root = tempfile.mkdtemp(prefix="sweeproot-")
     test.addCleanup(shutil.rmtree, root, ignore_errors=True)
     return run_bash('cd "$ROOT" && pwd -P', ROOT=root).stdout.strip()
-
-
-def bash_tmproot():
-    """The temp root as BASH resolves it, which is not the one Python resolves.
-
-    On this host `/tmp` is `D:\\tmp\\alexa` for the shell and `C:\\tmp` for every
-    Python and built-in reader — different directories, both populated. A test
-    that made its fixture with `pathlib` and then handed the path to a shell
-    script was checking a directory the script could not see, and the refusal it
-    asserted on was `not an existing directory` rather than the shape check it
-    meant to exercise. So the fixtures below are made by bash too.
-    """
-    return run_bash('cd "${TMPDIR:-/tmp}" && pwd -P').stdout.strip()
 
 
 class SweepWorktreeShape(unittest.TestCase):
