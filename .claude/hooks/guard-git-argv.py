@@ -3520,7 +3520,11 @@ def git_path_writer_offence(run, literals, command):
         r"|(?<![\w./-])(?:set|shopt)\b[^;&|\n]*[$`'\"{}\\*?\[]"
         r"|(?<![\w./-])shopt\b[^;&|\n]*\s-\w*o"
         r"|(?<![\w.-])(?:" + "|".join(sorted(EVALUATORS)) + r")(?:\.exe)?\s+"
-        r"(?:\d*[<>]+&?\s*[^\s;&|<>]+\s+|[-+]\S+\s+(?:[^-+\s;&|<>]\S*\s+)?)*?"
+        # An option and its value never hold `<` or `>`, so no word is both
+        # a value and a redirection: overlapping, they backtracked
+        # exponentially, and a run past the time limit admits (#357).
+        r"(?:\d*[<>]+&?\s*[^\s;&|<>]+\s+"
+        r"|[-+][^\s<>]+\s+(?:[^-+\s;&|<>][^\s<>]*\s+)?)*?"
         r"(?:-(?-i:[A-Za-z]*[ail])|--(?:rcfile|init-file|login))"
         r"|\b(?:export|declare|typeset|local|readonly|env)\b[^;&|\n]*(?:\$\(|`)"
         r"|\b(?:export|declare|typeset|local|readonly|env|read|mapfile|readarray)"
