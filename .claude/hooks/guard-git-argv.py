@@ -2343,8 +2343,20 @@ def application_tree(literal):
 # a keyword or a wrapper, behind assignment words. As an operand it is a
 # directory (`git add .`), and reading it as the dot-command refused every
 # relative write beside it.
+#
+# **A wrapper that changes directory for the command it runs is one too** (#359):
+# `env -C .claude cp x settings.json` and `env --chdir=.claude tee settings.json`
+# land a relative target in `.claude` with no `cd` word in the command, and so
+# does `find … -execdir cp x ./hook.py \;`, which runs from the directory of
+# each match. `env`'s short option may sit in a cluster (`-iC`) and its long one
+# may be abbreviated (`--c`; `--chdir` is the only long option that begins with
+# `c`). Over-matching is the direction to be wrong in; the words between `env`
+# and the option are bounded so a long run of `env` words stays linear.
 CHANGES_DIRECTORY = re.compile(
     r"(?:^|[\s;&|(){}`])(?:cd|pushd|popd|source|eval)(?=$|[\s;&|()])"
+    r"|(?:^|[\s;&|(){}`])env\s(?:[^\s;&|]+\s+){0,12}?(?:-[A-Za-z0-9]*C|--c[a-z]*)"
+    r"(?=$|[\s=;&|()])"
+    r"|\s-(?:exec|ok)dir(?=$|[\s;&|()])"
     r"|(?:^|[;&|(){}`!\n]|\b(?:then|do|else|elif|if|while|until|time|builtin"
     r"|command|exec)\s(?:-\S*\s+)*)\s*(?:(?:\w+=(?:\"[^\"]*\"|'[^']*'|\S*)"
     r"|\d*[<>]+&?\s*(?:\"[^\"]*\"|'[^']*'|\S+))\s+)*\.(?=$|[\s;&|()])")
@@ -2412,6 +2424,37 @@ def linked_protected_path(literal):
     if landed == ".." or landed.startswith(".." + os.sep):
         landed = resolved
     return protected_path(landed)
+
+
+def cwd_protected_path(literal):
+    """Which protected surface a RELATIVE `literal` lands in from the event's cwd.
+
+    **The spelling carries no protected component when the session already
+    stands inside the tree** (#361). One call runs `cd .claude/hooks`, which
+    writes nothing; the next arrives with that directory as its `cwd`, and
+    `cp x evil.sh` holds no `.claude` component while bash writes
+    `.claude/hooks/evil.sh`. So a relative target is placed against the event's
+    `cwd`, and the path from the checkout that contains it is judged as a
+    spelling. An absolute target is left to the lexical check, and so is one
+    that lands outside every checkout: this list is the repository's
+    machinery, not the filesystem's.
+    """
+    if os.path.isabs(literal) or literal.startswith(("/", "\\")):
+        return None
+    if not EVENT_CWD:
+        return None
+    lexical = os.path.normpath(os.path.abspath(os.path.join(EVENT_CWD, literal)))
+    root = lexical
+    while not os.path.exists(os.path.join(root, ".git")):
+        parent = os.path.dirname(root)
+        if parent == root:
+            return None
+        root = parent
+    try:
+        relative = os.path.relpath(lexical, root)
+    except ValueError:
+        return None
+    return protected_path(relative)
 
 
 def redirection_offence(command):
@@ -2562,7 +2605,7 @@ def destination_offence(word, command, writer, kind):
             "docs/harness-boundaries.md)."
         )
     named = (protected_path(literal) or linked_protected_path(literal)
-             or application_tree(literal))
+             or cwd_protected_path(literal) or application_tree(literal))
     if named is not None:
         return (
             f"{writer} would write `{literal}`, and `{named}` is the agent's "
