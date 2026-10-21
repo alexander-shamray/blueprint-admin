@@ -7579,6 +7579,9 @@ class TheGitArgvGuard(unittest.TestCase):
             "bash -x>/dev/null -i -c 'git checkout HEAD -- settings.json'",
             "bash -o vi<a -l -c 'git checkout HEAD -- settings.json'",
             "bash -o posix>/dev/null -l -c 'git checkout HEAD -- settings.json'",
+            "bash -x &>/dev/null -i -c 'git checkout HEAD -- settings.json'",
+            "bash -x >|f -l -c 'git checkout HEAD -- settings.json'",
+            "bash -x 2>&1 -i -c 'git checkout HEAD -- settings.json'",
             "bash <<'EOF'\nGIT_WORK_TREE=.claude bash -c "
             "'git checkout HEAD -- settings.json'\nEOF",
             "if . ./vars.sh; then git checkout HEAD -- settings.json; fi",

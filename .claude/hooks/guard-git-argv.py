@@ -3534,18 +3534,20 @@ def git_path_writer_offence(run, literals, command):
     # Read on every scope of the event as well as this string, which a shell
     # around it may run in an environment those scopes built (#357).
     # A shell started to read a startup file: interactive, login, `-a`, or
-    # given one by name. Matched on a copy whose redirection operators stand
-    # apart, so `bash -x</dev/null -i` is read and no word is both an
-    # option's value and a redirection; overlapping, the two branches
-    # backtracked exponentially, and a run past the time limit admits (#357).
+    # given one by name. Failing closed rather than modelling the words in
+    # between, an option of that shape anywhere in the shell's simple command
+    # counts, a script's own (`bash -c 'ls -la'`) and one behind a glued
+    # redirection (`bash -x>/dev/null -i`) included. `;`, `&`, `|` and a
+    # newline end the command, but not inside `&>`, `>&`, `<&` or `>|`. No
+    # repetition is nested, so it answers in linear time: an earlier form
+    # that parsed options and redirections backtracked exponentially, and a
+    # run past the time limit admits (#357).
     startup_shell = re.compile(
-        r"(?i)(?<![\w.-])(?:" + "|".join(sorted(EVALUATORS)) + r")(?:\.exe)?\s+"
-        r"(?:\d*[<>]+&?\s+[^\s;&|<>]+\s+"
-        r"|[-+][^\s<>]+\s+(?:[^-+\s;&|<>][^\s<>]*\s+)?)*?"
-        r"(?:-(?-i:[A-Za-z]*[ail])|--(?:rcfile|init-file|login))")
+        r"(?i)(?<![\w.-])(?:" + "|".join(sorted(EVALUATORS)) + r")(?:\.exe)?\s"
+        r"(?:[^;&|\n]|&>|[<>]&|>\|)*?"
+        r"(?<!\S)(?:-(?-i:[A-Za-z]*[ail])|--(?:rcfile|init-file|login))")
     relocated = relocated or any(
-        relocation.search(text) or startup_shell.search(re.sub(
-            r"\d*[<>]+&?", lambda found: f" {found.group(0)} ", text))
+        relocation.search(text) or startup_shell.search(text)
         for line in dict.fromkeys((command, *EVENT_SCOPES))
         for text in command_readings(without_messages(line)))
     if relocated or any(
