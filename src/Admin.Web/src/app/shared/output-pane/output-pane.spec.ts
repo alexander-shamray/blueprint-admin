@@ -49,6 +49,26 @@ describe('OutputPane', () => {
     expect(status.textContent?.trim()).toBe('The job exited 0.');
   });
 
+  it('marks every stderr line by default, and for a Compose job only the lines that say something failed', () => {
+    const events = new Subject<JobEvent>();
+    const sse = { follow: vi.fn(() => events.asObservable()) };
+    TestBed.configureTestingModule({ imports: [OutputPane], providers: [{ provide: SseClient, useValue: sse }] });
+    const fixture = TestBed.createComponent(OutputPane);
+    fixture.componentRef.setInput('jobId', 'j1');
+    fixture.detectChanges();
+    events.next({ kind: 'line', line: { sequence: 0, at: '', stream: 'Stderr', text: ' Container sql  Healthy' } });
+    events.next({ kind: 'line', line: { sequence: 1, at: '', stream: 'Stderr', text: 'Error response from daemon' } });
+    fixture.detectChanges();
+    const marked = () => Array.from(fixture.nativeElement.querySelectorAll('pre .stderr')).length;
+    expect(marked()).toBe(2);
+
+    fixture.componentRef.setInput('composeStderr', true);
+    fixture.detectChanges();
+
+    expect(marked()).toBe(1);
+    expect(fixture.nativeElement.querySelector('pre .stderr')?.textContent).toContain('Error response');
+  });
+
   it('shows the stream error and keeps the lines already received', () => {
     const events = new Subject<JobEvent>();
     const sse = { follow: vi.fn(() => events.asObservable()) };

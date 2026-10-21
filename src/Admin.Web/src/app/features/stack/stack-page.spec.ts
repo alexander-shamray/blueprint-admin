@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
-import { delay, of, throwError } from 'rxjs';
+import { Subject, delay, of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
-import { SseClient } from '../../core/host/sse-client';
+import { JobEvent, SseClient } from '../../core/host/sse-client';
 import { StackPage } from './stack-page';
 
 const stack = {
@@ -205,6 +205,92 @@ describe('StackPage', () => {
 
     expect(host.backendUp).toHaveBeenCalled();
     expect(fixture.componentInstance.jobId()).toBe('up-1');
+  });
+
+  describe('a Compose job started from the actions', () => {
+    let events: Subject<JobEvent>;
+
+    const line = (sequence: number, stream: 'Stdout' | 'Stderr', t: string): JobEvent => ({ kind: 'line', line: { sequence, at: '', stream, text: t } });
+
+    async function openAndPressUp() {
+      events = new Subject<JobEvent>();
+      TestBed.overrideProvider(SseClient, { useValue: { follow: () => events.asObservable() } });
+      const fixture = TestBed.createComponent(StackPage);
+      fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(0);
+      (fixture.nativeElement.querySelector('button.up') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      return fixture;
+    }
+
+    it('puts the output directly under the actions, before the reachability strip', async () => {
+      const fixture = await openAndPressUp();
+
+      const actions = fixture.nativeElement.querySelector('section.actions') as HTMLElement;
+      const pane = fixture.nativeElement.querySelector('app-output-pane') as HTMLElement;
+      const strip = fixture.nativeElement.querySelector('.reachability') as HTMLElement;
+      expect(actions.compareDocumentPosition(pane) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(pane.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('counts the job up on its own button, disables the four Compose buttons, and reports the outcome when it exits', async () => {
+      const fixture = await openAndPressUp();
+      const button = (cls: string) => fixture.nativeElement.querySelector(`button.${cls}`) as HTMLButtonElement;
+
+      expect(text(button('up'))).toBe('Up… 0:00');
+      expect(text(button('down'))).toBe('Down');
+      expect([button('up'), button('down'), button('wipe'), button('reset')].every((b) => b.disabled)).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(65_000);
+      fixture.detectChanges();
+      expect(text(button('up'))).toBe('Up… 1:05');
+
+      events.next({ kind: 'exited', exitCode: 0 });
+      fixture.detectChanges();
+      expect(text(button('up'))).toBe('Up');
+      expect(button('up').disabled).toBe(false);
+      expect(text(fixture.nativeElement.querySelector('.job-outcome'))).toBe('Up finished: exit 0 in 1:05');
+    });
+
+    it('says a job failed, and keeps a failure apart from success', async () => {
+      const fixture = await openAndPressUp();
+
+      events.next({ kind: 'exited', exitCode: 1 });
+      fixture.detectChanges();
+
+      const outcome = fixture.nativeElement.querySelector('.job-outcome') as HTMLElement;
+      expect(text(outcome)).toBe('Up failed: exit 1 in 0:00');
+      expect(outcome.classList.contains('failed')).toBe(true);
+    });
+
+    it('marks only error-bearing Compose stderr lines, and lists each container at its last verb', async () => {
+      const fixture = await openAndPressUp();
+
+      events.next(line(0, 'Stderr', ' Container commerce-sql-1  Creating'));
+      events.next(line(1, 'Stderr', ' Container commerce-sql-1  Healthy'));
+      events.next(line(2, 'Stderr', ' Container commerce-gateway-1  Waiting'));
+      events.next(line(3, 'Stderr', ' Container commerce-gateway-1 is unhealthy'));
+      fixture.detectChanges();
+
+      const marked = Array.from(fixture.nativeElement.querySelectorAll('pre .stderr')) as HTMLElement[];
+      expect(marked.map((m) => text(m))).toEqual(['[stderr] Container commerce-gateway-1 is unhealthy']);
+      expect(text(fixture.nativeElement.querySelector('.compose-count'))).toBe('1 of 2 services settled');
+      expect(Array.from(fixture.nativeElement.querySelectorAll('.compose-progress li')).map((li) => text(li as Element))).toEqual([
+        'commerce-sql-1 Healthy',
+        'commerce-gateway-1 Waiting',
+      ]);
+    });
+
+    it('does not report a job opened with a Show output button as the Up that ended', async () => {
+      const fixture = await openAndPressUp();
+
+      fixture.componentInstance.jobId.set('other');
+      fixture.componentInstance.jobExited(0);
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelector('.job-outcome')).toBeNull();
+      expect(fixture.nativeElement.querySelector('.compose-progress')).toBeNull();
+    });
   });
 
   it('keeps the wipe button disabled until the confirmation is typed', async () => {

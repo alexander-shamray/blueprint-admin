@@ -46,13 +46,16 @@
 </section>
 
 <section class="actions">
-  <button class="up" (click)="up()">Up</button>
-  <button class="down" (click)="down()">Down</button>
+  <button class="up" [disabled]="composeRunning()" (click)="up()">{{ buttonLabel('Up') }}</button>
+  <button class="down" [disabled]="composeRunning()" (click)="down()">{{ buttonLabel('Down') }}</button>
   <span class="wipe-box">
     <input aria-label="Type down -v to confirm wiping volumes" placeholder="type: down -v" [ngModel]="confirmText()" (ngModelChange)="confirmText.set($event)" />
-    <button class="wipe" [disabled]="!canWipe()" (click)="wipe()">Down and wipe</button>
-    <button class="reset" [disabled]="!canWipe()" (click)="reset()" title="down -v, up, then wait until every platform surface answers; the reference client is not waited for">Reset</button>
+    <button class="wipe" [disabled]="!canWipe() || composeRunning()" (click)="wipe()">{{ buttonLabel('Down and wipe') }}</button>
+    <button class="reset" [disabled]="!canWipe() || composeRunning()" (click)="reset()" title="down -v, up, then wait until every platform surface answers; the reference client is not waited for">{{ buttonLabel('Reset') }}</button>
   </span>
+  @if (outcome(); as o) {
+    <span class="job-outcome" [class.ok]="o.ok" [class.failed]="!o.ok">{{ o.text }}</span>
+  }
   @if (config(); as c) {
     <span class="links">
       <a [href]="c.urls.client" target="_blank">client</a>
@@ -65,6 +68,21 @@
 @if (error(); as e) {
   <p class="error">{{ e }}</p>
 }
+
+@if (progress(); as p) {
+  @if (p.services.length > 0) {
+    <section class="compose-progress" aria-label="Compose progress">
+      <p class="compose-count">{{ p.settled }} of {{ p.services.length }} services settled</p>
+      <ul>
+        @for (c of p.services; track c.name) {
+          <li [class.settled]="c.verb === 'Healthy'">{{ c.name }} {{ c.verb }}</li>
+        }
+      </ul>
+    </section>
+  }
+}
+
+<app-output-pane [jobId]="jobId()" [composeStderr]="composeOutput()" (exited)="jobExited($event)" />
 
 @if (pollError(); as pe) {
   <p class="error">The host did not answer: {{ pe }}</p>
@@ -259,5 +277,3 @@
 } @else {
   <p>Loading…</p>
 }
-
-<app-output-pane [jobId]="jobId()" />
