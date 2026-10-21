@@ -6278,7 +6278,8 @@ class TheGitArgvGuard(unittest.TestCase):
         out, err = _io.StringIO(), _io.StringIO()
         stdin = _sys.stdin
         try:
-            _sys.stdin = _io.StringIO(event)
+            # `main` reads bytes and decodes them as UTF-8 (#363).
+            _sys.stdin = _io.TextIOWrapper(_io.BytesIO(event.encode("utf-8")))
             with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
                 guard.main()
         finally:
@@ -7266,6 +7267,106 @@ class TheGitArgvGuard(unittest.TestCase):
         ):
             with self.subTest(command=command):
                 self.assertRefused(command, cwd=root)
+
+    def test_a_forbidden_flag_hidden_in_a_brace_list_is_refused(self):
+        # #360: bash expands braces before git sees the word, so the typed word
+        # starts with neither `--output` nor a prefix of it.
+        for command in (
+            "git log --{oneline,output=/tmp/y}",
+            "git log --out{put,}=/tmp/y",
+            "git log --outp{t..u}t=/tmp/y",
+            "git diff --{stat,no-index} /etc/x /dev/null",
+            "git log {--oneline,--output=/tmp/y}",
+            "git log --{oneline,{o..p}utput=/tmp/y}",
+            "git log --{oneline,outpu{s..u}=/tmp/y}",
+            "git log --outp{s..u..2}t=/tmp/y",
+            # A word the braces split is a value and an option, not a value.
+            "git log --grep {x,--output=/tmp/y}",
+            "git log -S {x,--output=/tmp/y}",
+            # Nested, and in the subcommand's own position.
+            "git log --{oneline,{a,output=/tmp/y}}",
+            "git {log,--output=/tmp/y}",
+        ):
+            with self.subTest(command=command):
+                self.assertRefused(command)
+        for command in (
+            "git log --{oneline,graph}",
+            "git log HEAD~{1,2}",
+            "git log --pretty={a,b}",
+            "git log {a..c}",
+        ):
+            with self.subTest(admitted=command):
+                self.assertAdmitted(command)
+
+    def test_brace_alternatives_is_bounded_and_the_command_is_refused(self):
+        # #362: n comma groups are 2^n words, and a hook that times out is
+        # non-blocking, so a short command stalled the guard past the point
+        # where `git push origin +HEAD:main` was judged at all.
+        module = self.guard_module()
+        self.assertEqual(module.brace_alternatives("a{b,c}d{e,f}"),
+                         ["abde", "abdf", "acde", "acdf"])
+        self.assertEqual(module.brace_alternatives("plain"), ["plain"])
+        with self.assertRaises(module.BraceExplosion):
+            module.brace_alternatives("{,}" * 20)
+        self.assertEqual(module.brace_variants("f{1..3}"), ["f1", "f2", "f3"])
+        self.assertEqual(module.brace_variants("{c..a}"), ["c", "b", "a"])
+        self.assertEqual(module.brace_variants("{1..9..4}"), ["1", "5", "9"])
+        # A list inside a range inside a list is reached, and a brace the
+        # guard cannot read is refused rather than read as written.
+        self.assertEqual(set(module.brace_variants("--{a,{b..c}}")),
+                         {"--a", "--b", "--c"})
+        # Balanced like bash: a brace inside a list is a word of it, a group
+        # with nothing to expand is literal and is looked through.
+        self.assertEqual(module.brace_variants("{a,{b}}"), ["a", "{b}"])
+        self.assertEqual(module.brace_variants("{a{b,c}}"), ["{ab}", "{ac}"])
+        for literal in ("HEAD@{u}", "{a..3}", "{a..b..c}", "{x}"):
+            self.assertEqual(module.brace_variants(literal), [literal])
+        # Counted before it is built, so a huge range costs nothing.
+        started = time.monotonic()
+        for word in ("{1..100000}", "{1..999999999999}", "{0..99999999..1}"):
+            with self.subTest(word=word):
+                with self.assertRaises(module.BraceExplosion):
+                    module.brace_variants(word)
+        self.assertLess(time.monotonic() - started, 2)
+        groups = "{,}" * 30
+        for command, expanded in (
+            (f"git log <(ls {groups}) ; git push origin +HEAD:main", True),
+            (f"git log $(ls {groups}) ; git push origin +HEAD:main", False),
+        ):
+            with self.subTest(command=command[:40]):
+                started = time.monotonic()
+                reason = self.judge(command)
+                self.assertIsNotNone(reason)
+                if expanded:
+                    self.assertIn("brace expansion", reason)
+                self.assertLess(time.monotonic() - started, 5)
+
+    def test_a_non_ascii_event_is_judged_and_a_late_run_is_refused(self):
+        # #363: the event is bytes decoded as UTF-8. Under a Windows code page
+        # `Á` (C3 81) made `json.load(sys.stdin)` raise, and the handler allowed
+        # the event unjudged. #362: a run still going at the watchdog's time is
+        # answered with a refusal rather than left to a timeout that admits it.
+        event = self.event("git push origin +HEAD:main # Á")
+        result = subprocess.run(
+            [sys.executable, str(HOOK)],
+            input=json.dumps(event, ensure_ascii=False).encode("utf-8"),
+            capture_output=True,
+            env={**os.environ, "PYTHONUTF8": "0", "PYTHONIOENCODING": "cp1252"})
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("deny", json.loads(result.stdout)[
+            "hookSpecificOutput"]["permissionDecision"])
+
+        script = (
+            "import importlib.util, os, time\n"
+            "spec = importlib.util.spec_from_file_location('g', os.environ['HOOK'])\n"
+            "g = importlib.util.module_from_spec(spec); spec.loader.exec_module(g)\n"
+            "g.refuse_after(0.1, {'late': True})\n"
+            "time.sleep(10)\n")
+        late = subprocess.run(
+            [sys.executable, "-c", script], capture_output=True, text=True,
+            env={**os.environ, "HOOK": str(HOOK)}, timeout=60)
+        self.assertEqual(0, late.returncode, late.stderr)
+        self.assertEqual({"late": True}, json.loads(late.stdout))
 
     def test_shell_expands_reads_a_word_as_bash_does(self):
         module = self.guard_module()

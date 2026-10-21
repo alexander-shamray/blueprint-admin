@@ -85,6 +85,7 @@ import os
 import re
 import shlex
 import sys
+import threading
 import traceback
 
 # Flags that reach outside what the grant was for. Matched on a PREFIX, so
@@ -5136,17 +5137,120 @@ LAUNCHERS = frozenset({
 })
 
 
+class BraceExplosion(Exception):
+    """A brace expansion with more words than this guard will build (#362)."""
+
+
+# The most words one brace expansion may produce. `{,}` thirty times is 2^30
+# strings from a hundred characters, and a hook that times out is non-blocking,
+# so the expansion stops here and the command is refused instead.
+BRACE_WORD_LIMIT = 256
+
+
 def brace_alternatives(word):
-    """Every word a comma brace expansion in `word` produces, `word` if none."""
-    match = re.search(r"\{([^{}]*,[^{}]*)\}", word)
-    if match is None:
-        return [word]
-    return [
-        expanded
-        for choice in match.group(1).split(",")
-        for expanded in brace_alternatives(
-            word[:match.start()] + choice + word[match.end():])
-    ]
+    """Every word a comma brace expansion in `word` produces, `word` if none.
+
+    Raises `BraceExplosion` past `BRACE_WORD_LIMIT` words; `decision` answers
+    that with a refusal.
+    """
+    pending, done = [word], []
+    while pending:
+        current = pending.pop()
+        match = re.search(r"\{([^{}]*,[^{}]*)\}", current)
+        if match is None:
+            done.append(current)
+            continue
+        choices = match.group(1).split(",")
+        if len(pending) + len(done) + len(choices) > BRACE_WORD_LIMIT:
+            raise BraceExplosion(word)
+        # Reversed, so the words come out in the order bash writes them.
+        pending.extend(
+            current[:match.start()] + choice + current[match.end():]
+            for choice in reversed(choices))
+    return done
+
+
+BRACE_RANGE = re.compile(
+    r"(-?\d+|[A-Za-z])\.\.(-?\d+|[A-Za-z])(?:\.\.(-?\d+))?")
+
+
+def _brace_group(text):
+    """The first brace group in `text` that bash expands, as `(start, end,
+    values)`, or `None`. A group is read with its braces balanced, so
+    `{a,{b,c}}` is one group of two alternatives; one with no top-level comma
+    and no range inside is literal to bash and is looked through for groups
+    nested in it (`{a{b,c}}` is `{ab}` and `{ac}`)."""
+    index = 0
+    while index < len(text):
+        if text[index] == "\\":
+            index += 2
+            continue
+        if text[index] != "{":
+            index += 1
+            continue
+        depth, cursor, commas = 1, index + 1, []
+        while cursor < len(text) and depth:
+            char = text[cursor]
+            if char == "\\":
+                cursor += 2
+                continue
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+            elif char == "," and depth == 1:
+                commas.append(cursor)
+            cursor += 1
+        if depth:
+            index += 1
+            continue
+        end = cursor
+        inner = text[index + 1:end - 1]
+        if commas:
+            cuts = [index] + commas + [end - 1]
+            return index, end, [text[a + 1:b] for a, b in zip(cuts, cuts[1:])]
+        spec = BRACE_RANGE.fullmatch(inner)
+        if spec:
+            first, last, step = spec.groups()
+            numeric = [first.lstrip("-").isdigit(), last.lstrip("-").isdigit()]
+            if numeric[0] == numeric[1]:
+                step = abs(int(step or 1)) or 1
+                if numeric[0]:
+                    low, high, to_text = int(first), int(last), str
+                else:
+                    low, high, to_text = ord(first), ord(last), chr
+                # Counted before any value is built: `{1..999999999}` is a
+                # billion strings if the cap is checked after them.
+                if abs(high - low) // step + 1 > BRACE_WORD_LIMIT:
+                    raise BraceExplosion(text)
+                direction = step if low <= high else -step
+                return index, end, [to_text(n) for n in range(
+                    low, high + (1 if direction > 0 else -1), direction)]
+        index += 1
+    return None
+
+
+def brace_variants(word):
+    """Every word `word` becomes under brace expansion: comma lists and
+    `{a..e}`, `{1..3}` and `{1..9..2}` ranges, balanced and nested, expanded
+    until no group is left (#360). Bash makes each of them a separate word.
+
+    More than `BRACE_WORD_LIMIT` words raises `BraceExplosion`.
+    """
+    pending, out = [word], []
+    while pending:
+        current = pending.pop()
+        group = _brace_group(current)
+        if group is None:
+            out.append(current)
+            continue
+        start, end, values = group
+        if len(out) + len(pending) + len(values) > BRACE_WORD_LIMIT:
+            raise BraceExplosion(word)
+        pending.extend(
+            current[:start] + value + current[end:]
+            for value in reversed(values))
+    return out
 
 
 def computed_word(token):
@@ -5568,7 +5672,13 @@ def git_segments(tokens):
         for index, token in enumerate(run):
             if program_name(token) != "git":
                 continue
-            yield run[index + 1:]
+            # **Bash expands braces before git sees a word**, so
+            # `--{oneline,output=/tmp/y}` is two options, `--grep {x,--output=y}`
+            # a value and an option, and `git {log,push}` a subcommand with an
+            # operand. Every check reads the words git will receive, not the
+            # words typed (#360).
+            yield [word for typed in run[index + 1:]
+                   for word in brace_variants(typed)]
 
 
 def after_global_options(segment):
@@ -6161,6 +6271,14 @@ def decision(event):
 
     try:
         reason = scan_budget(command) or offence(command)
+    except BraceExplosion:
+        reason = (
+            f"a brace expansion in this command makes more than "
+            f"{BRACE_WORD_LIMIT} words, more than this guard can judge inside "
+            "its time limit, and a guard that times out admits the command, so "
+            "it is refused instead. Write the words out or split the command "
+            "(#362, docs/harness-boundaries.md)."
+        )
     except Exception:  # noqa: BLE001 - the direction is the point
         # **A crash is empty stdout, and `PreToolUse` reads empty stdout as
         # non-blocking**, so every defect in this file has been a fail-open.
@@ -6192,9 +6310,52 @@ def decision(event):
     }
 
 
+# Seconds before the watchdog answers for a run that has not finished. The hook
+# entry in `.claude/settings.json` sets no timeout, and a hook that times out
+# is non-blocking, so a run still going at this point is refused here.
+WATCHDOG_SECONDS = 20
+
+
+# Whoever answers first holds this lock and records it, so the watchdog and the
+# main path cannot both write: two JSON documents on stdout are not an answer.
+ANSWER_LOCK = threading.Lock()
+ANSWERED = []
+
+
+def refuse_after(seconds, answer):
+    """Start a timer that writes `answer` and ends the process when it fires,
+    and return it so a run that finishes can cancel it (#362).
+
+    A thread, because `signal.alarm` is not on Windows. It fires between
+    bytecodes, so it answers for a Python loop that runs long; a single
+    regular-expression match holds the interpreter and is bounded by
+    `SCAN_BUDGET` and `LENGTH_BUDGET` instead.
+    """
+    def fire():
+        with ANSWER_LOCK:
+            if ANSWERED:
+                return
+            ANSWERED.append(True)
+            json.dump(answer, sys.stdout)
+            sys.stdout.flush()
+            os._exit(0)
+
+    timer = threading.Timer(seconds, fire)
+    timer.daemon = True
+    timer.start()
+    return timer
+
+
 def main():
+    del ANSWERED[:]
     try:
-        event = json.load(sys.stdin)
+        # **Bytes, decoded as UTF-8, and never the locale's code page** (#363).
+        # `json.load(sys.stdin)` decodes with cp1252 on Windows, where a
+        # command holding a character such as `Á` (the bytes C3 81) raises,
+        # and the handler below allows an event it could not read: every check
+        # in this file skipped for a command anyone can write. `replace` keeps
+        # a byte that is not UTF-8 judged as text, not dropped.
+        event = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace"))
     except (json.JSONDecodeError, ValueError):
         # A hook that cannot read its own input has established nothing. Say so
         # and allow: refusing every Bash call on a malformed event would take
@@ -6202,9 +6363,28 @@ def main():
         print("guard-git-argv: unreadable hook event; not judging", file=sys.stderr)
         return 0
 
+    timer = refuse_after(WATCHDOG_SECONDS, {
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": (
+                f"this guard had not finished judging the command after "
+                f"{WATCHDOG_SECONDS} seconds, and a hook that times out is "
+                "non-blocking, so the command is refused instead. Shorten it "
+                "or split it into separate commands (#362, "
+                "docs/harness-boundaries.md)."
+            ),
+        }
+    })
     payload = decision(event)
-    if payload is not None:
-        json.dump(payload, sys.stdout)
+    timer.cancel()
+    with ANSWER_LOCK:
+        # If the watchdog got here first it holds the lock until the process
+        # ends, so this line is reached only when it has not answered.
+        if not ANSWERED:
+            ANSWERED.append(True)
+            if payload is not None:
+                json.dump(payload, sys.stdout)
     return 0
 
 
