@@ -445,9 +445,9 @@ A new residual is stated **here** and gets a row above.
   unjudged. A malformed event that is not JSON is still allowed, and says so on
   stderr. A forbidden git flag is looked for in every word a brace list or a
   single-letter or numeric range, stepped or not, can make, expanded until
-  nothing changes, so `--{oneline,output=/tmp/y}` is refused. A list or range
-  brace the guard cannot read (`{a..3}`, `{a..b..c}`) is refused too, rather
-  than read as written.
+  nothing changes, so `--{oneline,output=/tmp/y}` is refused. A range bash
+  leaves alone (`{a..3}`, `{a..b..c}`) is judged as written, and a range that
+  would make more than the word limit is refused.
 - **`sed` is judged by reading its script, and a word the shell expands is
   refused.** `guard-git-argv.py` reads `w`, `W`, `s///w`, `e` and `s///e` in a
   `-e` or first-operand script, refuses `-f`, and refuses any `sed` word with
