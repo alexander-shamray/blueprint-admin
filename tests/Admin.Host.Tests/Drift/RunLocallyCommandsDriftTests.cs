@@ -54,6 +54,8 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
             "the load run's client block reads the same and says created or already there (LoadRunService.SloClient)",
         ["if (-not $c) { 'slo-run: missing (create it first)'; exit 1 }"] =
             "the secret read prints the secret, and the load run's own block reads it into k6's environment (LoadRunService.Run)",
+        ["} else { 'slo-run: already there' }"] =
+            "the other branch of the load run's client block, which says created or already there (LoadRunService.SloClient)",
     };
 
     /// <summary>
@@ -300,10 +302,15 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
     [GeneratedRegex(@"https?://[^\s""'/]+[^\s""']*")]
     private static partial Regex Url();
 
+    /// <summary>One right-hand side of a value line: <c>$null</c>, a variable, a number, a quoted string, a <c>[guid]</c>, or a nested array or hashtable.</summary>
+    private const string Value = @"(?:\$null|\$[\w.]+|-?\d+(?:\.\d+)?|'[^']*'|""[^""]*""|\[guid\]::NewGuid\(\)|@\(.*\)|@\{[^}]*\})";
+
     /// <summary>
-    /// PowerShell that builds a value: a hashtable assignment, a member line inside one, its close, or an environment
-    /// variable the next command reads. The environment lines are held to the host's own by ReplayDriftTests.
+    /// PowerShell that builds a value: a variable assigned a value, or the open of a hashtable, a member line inside one
+    /// whose right-hand sides are each a literal, a variable, a <c>[guid]</c> or a nested hashtable or array, the close that
+    /// pipes it to <c>ConvertTo-Json</c>, or an environment variable the next command reads. A control line (<c>} else</c>)
+    /// builds nothing and is no value. The environment lines are held to the host's own by ReplayDriftTests.
     /// </summary>
-    [GeneratedRegex(@"^(\$\w+ = @\{.*|\$env:\w+ = '.*'|\w+ = .+|\}.*|\).*)$")]
+    [GeneratedRegex(@"^(?:\$\w+ = @\{|\$\w+ = " + Value + @"(?: \| ConvertTo-Json)?(?:; \$\w+ = " + Value + @")*|\$env:\w+ = '[^']*'|\w+ = " + Value + @"(?:; \w+ = " + Value + @")*|\} \| ConvertTo-Json(?: -Depth \d+)?\))$")]
     private static partial Regex BuildsAValue();
 }
