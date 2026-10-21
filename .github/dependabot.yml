@@ -1,6 +1,7 @@
-# Weekly version updates for the three ecosystems this repository pins, and
-# security updates as the advisory lands. docs/change-locality.md section 6
-# says why the two gates skip a Dependabot pull request.
+# Weekly version updates for the three ecosystems this repository pins.
+# Security updates are a repository setting, not configured here.
+# docs/change-locality.md section 6 says why the two gates skip a Dependabot
+# pull request.
 version: 2
 updates:
   - package-ecosystem: npm
