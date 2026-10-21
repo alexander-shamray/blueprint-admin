@@ -41,7 +41,7 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
-      - run: dotnet test tests/Admin.Host.Tests --filter "FullyQualifiedName~Admin.Host.Tests.Drift"
+      - run: dotnet test tests/Admin.Host.Tests --filter-namespace "Admin.Host.Tests.Drift"
         env:
           BLUEPRINT_Admin__BackendDir: ${{ github.workspace }}/.drift/blueprint-backend
           ADMIN_DRIFT_REQUIRED: 'true'
