@@ -3205,6 +3205,10 @@ REMOVING_VERBS = frozenset({"mv", "rm", "rmdir", "shred", "unlink"})
 # The git subcommands that overwrite or delete the paths they are given (#297).
 GIT_PATH_WRITERS = frozenset({"restore", "checkout", "clean"})
 
+# The subcommands whose writes a relocated work tree moves: the three above, and
+# `rm` and `mv`, which `verb_offence` judges by their operands (#358).
+GIT_RELOCATABLE = GIT_PATH_WRITERS | GIT_WRITING_SUBCOMMANDS
+
 # Per subcommand: the short options that take a value, and the long ones.
 GIT_PATH_VALUE_OPTIONS = {
     "restore": ("s", ("--source", "--pathspec-from-file", "--conflict")),
@@ -3428,11 +3432,11 @@ def git_path_writer_offence(run, literals, command):
         named = [word for word in rest if word is not None]
         stripped = after_global_options(named)
         name = verb_name(stripped[0]) if stripped else ""
-        if name in GIT_PATH_WRITERS:
+        if name in GIT_RELOCATABLE:
             break
         hidden = next((verb_name(word) for word in stripped[1:]
                        if not word.startswith("-")
-                       and verb_name(word) in GIT_PATH_WRITERS), None)
+                       and verb_name(word) in GIT_RELOCATABLE), None)
         leading = named[:len(named) - len(stripped)]
         unknown = [word for word in leading if word.startswith("-")
                    and "=" not in word
@@ -3507,6 +3511,13 @@ def git_path_writer_offence(run, literals, command):
             "working directory this guard judges against; run it from the "
             "checkout (#297, docs/harness-boundaries.md)."
         )
+    if name in GIT_WRITING_SUBCOMMANDS:
+        # `git rm` and `git mv` are judged as the verbs `rm` and `mv` by
+        # `verb_offence`, which sees only the words after the verb and so
+        # cannot see the option that moved the work tree. Relocated, they are
+        # refused above; run from the checkout, their operands are judged there
+        # (#358).
+        return None
     arguments = rest[skipped + 1:]
     raws = run[start + 1 + skipped + 1:]
     short_values, long_values = GIT_PATH_VALUE_OPTIONS[name]

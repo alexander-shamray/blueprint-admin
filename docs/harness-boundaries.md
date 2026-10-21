@@ -518,7 +518,11 @@ A new residual is stated **here** and gets a row above.
   relocated by `GIT_WORK_TREE`, `GIT_DIR`, `GIT_COMMON_DIR`, `GIT_INDEX_FILE`
   or `GIT_CONFIG*` assigned anywhere in the command line (an `export` before
   the git word included), or by `-c core.worktree=`, is refused too; one
-  exported by an earlier Bash call is not seen.
+  exported by an earlier Bash call is not seen. **`git rm` and `git mv` are
+  held to the same relocation refusal** (#358): `verb_offence` judges their
+  operands as the verbs `rm` and `mv` and sees only the words after the verb,
+  so `git -C .claude rm -f hooks/guard-git-argv.py` had no `.claude` component
+  to refuse. Run from the checkout their operands are judged there, as before.
   Discarding edits in an application tree with `git restore` or `git checkout
   --` is refused as well, which is the rule rather than an oversight.
   A `git checkout` with no `--` cannot tell a branch from a path, so an
