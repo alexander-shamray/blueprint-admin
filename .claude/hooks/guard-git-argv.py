@@ -3519,13 +3519,6 @@ def git_path_writer_offence(run, literals, command):
         r"|(?<![\w./-])set\b[^;&|\n]*\s-(?-i:[A-Za-z]*a)"
         r"|(?<![\w./-])(?:set|shopt)\b[^;&|\n]*[$`'\"{}\\*?\[]"
         r"|(?<![\w./-])shopt\b[^;&|\n]*\s-\w*o"
-        r"|(?<![\w.-])(?:" + "|".join(sorted(EVALUATORS)) + r")(?:\.exe)?\s+"
-        # An option and its value never hold `<` or `>`, so no word is both
-        # a value and a redirection: overlapping, they backtracked
-        # exponentially, and a run past the time limit admits (#357).
-        r"(?:\d*[<>]+&?\s*[^\s;&|<>]+\s+"
-        r"|[-+][^\s<>]+\s+(?:[^-+\s;&|<>][^\s<>]*\s+)?)*?"
-        r"(?:-(?-i:[A-Za-z]*[ail])|--(?:rcfile|init-file|login))"
         r"|\b(?:export|declare|typeset|local|readonly|env)\b[^;&|\n]*(?:\$\(|`)"
         r"|\b(?:export|declare|typeset|local|readonly|env|read|mapfile|readarray)"
         r"\b(?:\s+[^\s;&|]+)*?\s+[^\s=;&|]*\$|printf\s+-v\s+\S*\$"
@@ -3540,8 +3533,19 @@ def git_path_writer_offence(run, literals, command):
         r"|<\(")
     # Read on every scope of the event as well as this string, which a shell
     # around it may run in an environment those scopes built (#357).
+    # A shell started to read a startup file: interactive, login, `-a`, or
+    # given one by name. Matched on a copy whose redirection operators stand
+    # apart, so `bash -x</dev/null -i` is read and no word is both an
+    # option's value and a redirection; overlapping, the two branches
+    # backtracked exponentially, and a run past the time limit admits (#357).
+    startup_shell = re.compile(
+        r"(?i)(?<![\w.-])(?:" + "|".join(sorted(EVALUATORS)) + r")(?:\.exe)?\s+"
+        r"(?:\d*[<>]+&?\s+[^\s;&|<>]+\s+"
+        r"|[-+][^\s<>]+\s+(?:[^-+\s;&|<>][^\s<>]*\s+)?)*?"
+        r"(?:-(?-i:[A-Za-z]*[ail])|--(?:rcfile|init-file|login))")
     relocated = relocated or any(
-        relocation.search(text)
+        relocation.search(text) or startup_shell.search(re.sub(
+            r"\d*[<>]+&?", lambda found: f" {found.group(0)} ", text))
         for line in dict.fromkeys((command, *EVENT_SCOPES))
         for text in command_readings(without_messages(line)))
     if relocated or any(
