@@ -381,6 +381,15 @@ A new residual is stated **here** and gets a row above.
   a target is spelled relative; it fails closed and no chain step writes one.
   And `git-worktree-remove.sh` refuses a worktree forked beside the checkout
   before this layout, so one of those is removed by hand.
+  **A relative write target is judged against where the session stands, and
+  refused when the command moves it** (#359, #361). The event's `cwd` is joined
+  to the target and the path from the checkout that contains it is judged, so
+  after a bare `cd .claude/hooks` the next call's `cp x evil.sh` is refused. A
+  command that changes directory with `cd`, `pushd`, `popd`, `source`, `eval`,
+  the dot command, `env -C` or `--chdir` (clustered or abbreviated) or
+  `find -execdir`/`-okdir` refuses every relative target in it. A directory
+  change by a program not named here (`make -C`, `tar -C`) is not seen: those
+  programs are not on the writing-verb list either.
   **On Windows `git worktree remove` can unregister a worktree and then fail to delete its
   tree** (`Permission denied` or `Invalid argument`): measured, a process held
   `<worktree>/.claude` for about 40 s after a `dotnet build` there, build servers shut
