@@ -6927,6 +6927,14 @@ class TheGitArgvGuard(unittest.TestCase):
             os.makedirs(os.path.join(root, tree))
         return root
 
+    def with_branches(self, root, *names):
+        """Branch refs in the fixture's `.git`, which `git checkout <name>` reads (#357)."""
+        for name in names:
+            ref = Path(root, ".git", "refs", "heads", *name.split("/"))
+            ref.parent.mkdir(parents=True, exist_ok=True)
+            ref.write_text("0" * 40, encoding="utf-8")
+        return root
+
     def test_the_measured_copy_is_refused(self):
         # **The third spelling in #26, which was admitted and landed.** The
         # first two — a computed redirection target and a redirection onto
@@ -7064,6 +7072,22 @@ class TheGitArgvGuard(unittest.TestCase):
             "find ~ -name x -delete",
             "find -- .claude/hooks -delete",
             "find /tmp -files0-from list -delete",
+            # A verb that removes or moves its operand has the same reach (#309).
+            "rm -rf ..",
+            "rm -rf ../..",
+            "rm -rf ./..",
+            "rm -rf src/../..",
+            "rm -r -- ..",
+            "rmdir ..",
+            "unlink ..",
+            "shred -u ..",
+            "mv .. /tmp/gone",
+            "mv -t /tmp ..",
+            "rm -rf ~",
+            "rm -rf /",
+            "X=..; rm -rf $X",
+            "rm -rf ~+",
+            "rm -rf ~root",
             "find /tmp -fprint .claude/settings.json -exec echo x \\;",
         ):
             with self.subTest(command=command):
@@ -7087,6 +7111,41 @@ class TheGitArgvGuard(unittest.TestCase):
         ):
             with self.subTest(command=command):
                 self.assertRefused(command, cwd=root)
+
+    def test_the_dot_command_and_a_message_are_read_where_they_stand(self):
+        # #357: `.` changes directory only as a command, and only the message
+        # of a git commit, tag or merge is text.
+        module = self.guard_module()
+        for command, expected in (
+            (". ./x", True),
+            ("a; . x", True),
+            ("FOO=1 . ./x", True),
+            ('FOO="a b" . x', True),
+            (">/dev/null . ./x", True),
+            ('> "a b" . ./x', True),
+            ("command -- . x", True),
+            ("if t; then . x; fi", True),
+            ("git add .", False),
+            ("git add . > log", False),
+            ("echo . x", False),
+        ):
+            with self.subTest(command=command):
+                self.assertIs(module.changes_directory(command), expected)
+        for command, expected in (
+            ('git commit -m "a GIT_DIR"', 'git commit -m ""'),
+            ("git commit -am 'source'", 'git commit -am ""'),
+            ('git tag v1 --message="eval"', 'git tag v1 --message=""'),
+            ('bash -cm "GIT_DIR=x"', 'bash -cm "GIT_DIR=x"'),
+            ('git add x; bash -m "y"', 'git add x; bash -m "y"'),
+            ('git commit -m "$(eval x)"', 'git commit -m "$(eval x)"'),
+            # A `-m '` inside a double-quoted script pairs with a later quote
+            # only if the match is not checked against the quoting around it.
+            ("""bash -c "git commit -m '"; export GIT_DIR=x; echo "'" """,
+             """bash -c "git commit -m '"; export GIT_DIR=x; echo "'" """),
+            ("git commit -m 'unbalanced", "git commit -m 'unbalanced"),
+        ):
+            with self.subTest(message=command):
+                self.assertEqual(module.without_messages(command), expected)
 
     def test_a_find_delete_started_above_the_checkout_is_refused(self):
         # An absolute start that contains the working directory, or is it,
@@ -7167,7 +7226,9 @@ class TheGitArgvGuard(unittest.TestCase):
 
     def test_git_restore_checkout_and_clean_are_judged_by_the_paths_they_write(self):
         # #297: they overwrite or delete the pathspecs they are given.
-        root = self.writing_checkout()
+        root = self.with_branches(
+            self.writing_checkout(), "main", "docs/spec-v1.2", "docs/adr-0.5",
+            "docs/home-memory-denies-measured")
         for command in (
             "git restore .claude/settings.json",
             "git restore --source=HEAD~1 .claude/settings.json",
@@ -7186,6 +7247,15 @@ class TheGitArgvGuard(unittest.TestCase):
             "git checkout -- .",
             "git checkout .",
             "git checkout package.json",
+            # A name no ref carries is a path, deleted or not, and after a
+            # `cd` it is the protected one (#357).
+            "git checkout tools/Makefile",
+            "git checkout src/Dockerfile",
+            "cd .claude && git checkout settings.json",
+            "cd .claude && git checkout hooks",
+            ">/dev/null . ./vars.sh; git checkout HEAD -- settings.json",
+            "declare -n r=$N; r=.claude; git checkout HEAD -- settings.json",
+            'FOO="a b" . ./vars.sh; git checkout HEAD -- settings.json',
             "git checkout src/app/x.ts",
             "git checkout -- src/app/x.ts",
             "git checkout -- $F",
@@ -7293,6 +7363,11 @@ class TheGitArgvGuard(unittest.TestCase):
             "git --no-pager log --grep checkout",
             "git --no-pager log -S clean",
             "git add . && git checkout main",
+            "export X=$Y; git checkout main",
+            'git checkout main && git commit -m "fix GIT_DIR handling"',
+            "git checkout main && git commit -am 'read the source map'",
+            "git add . > log; git checkout main",
+            "cd notes && git checkout main",
             "git checkout main & wait $!",
             "git checkout -b fix/source-map",
             "git checkout @ -- package.json",
@@ -7326,6 +7401,10 @@ class TheGitArgvGuard(unittest.TestCase):
             "rm -rf /tmp/x",
             "mv notes/a notes/b",
             "touch notes/x",
+            "touch ..",
+            "rm -rf ../old-worktree",
+            "mv notes/a ..",
+            "mv notes/a .",
             "ln -s /tmp/a notes/b",
             "ln -s .claude/settings.json /tmp/alias",
             "ln /tmp/a notes/b",

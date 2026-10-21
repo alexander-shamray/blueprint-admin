@@ -408,7 +408,12 @@ A new residual is stated **here** and gets a row above.
   itself computed (`find /tmp "$A"`) is not read, and a `-delete` start given as
   a POSIX-style absolute path on a Windows host (`/c/dev/...`) is not resolved
   against the working directory, so only the relative spellings of a parent are
-  refused there. The same gap is older for `rm`: `rm -rf ..` is admitted.
+  refused there. `rm`, `rmdir`, `shred`, `unlink` and `mv` are judged the same
+  way (#309): an operand that resolves to the working directory, a parent of it,
+  `/` or the home directory is refused (`rm -rf ..`, `mv .. /tmp/x`), as is
+  `mv`'s source but not its destination. A sibling (`rm -rf ../old`) and a
+  destination of `.` or `..` are judged only as any other path. The same
+  POSIX-style gap holds there.
 - **`sed` is judged by reading its script, and a word the shell expands is
   refused.** `guard-git-argv.py` reads `w`, `W`, `s///w`, `e` and `s///e` in a
   `-e` or first-operand script, refuses `-f`, and refuses any `sed` word with
@@ -483,10 +488,14 @@ A new residual is stated **here** and gets a row above.
   Discarding edits in an application tree with `git restore` or `git checkout
   --` is refused as well, which is the rule rather than an oversight.
   A `git checkout` with no `--` cannot tell a branch from a path, so an
-  application tree such as `docs/` counts there only for a name that exists
-  or ends in a dot and a letter (`x.ts`, not `spec-v1.2`): a deleted
-  application directory with no such ending restored without `--` is
-  admitted. A lone `$BRANCH` the command never assigns is the environment's
+  application tree such as `docs/` counts there only for a name that exists,
+  ends in a dot and a letter (`x.ts`, not `spec-v1.2`) or is **no ref**: a name
+  that is no branch, tag or remote branch, read from the repository's files
+  and not by running `git`, cannot be what git would switch to, so `git
+  checkout tools/Makefile` is a path whether or not the file is there, and
+  `docs/spec-v1.2` is admitted when a branch of that name exists. Outside a
+  repository every name is read as a ref; a repository that cannot be read, as
+  none. A lone `$BRANCH` the command never assigns is the environment's
   and admitted; one the command sets (`F=.claude/x; git checkout $F`), or any
   other expansion, is judged as a path; so is a name the shell manages
   (`$PWD`, `$REPLY`, `$_`) or one whose inherited value is absolute or holds
@@ -499,15 +508,26 @@ A new residual is stated **here** and gets a row above.
   takes the verb's place (`--super-prefix x/ checkout`); `--no-pager` is
   known and leaves `git --no-pager log --grep checkout` alone. After a `cd`,
   every operand of an unseparated checkout with several operands is judged,
-  and a lone operand with a `.` or `/`; a lone dotless one is read as a
-  branch. A relocation variable named anywhere in the command line, or
+  and a lone operand with a `.` or `/` or that is no ref (`cd .claude && git
+  checkout settings.json`); a lone one that is a ref is a branch. A
+  relocation variable named anywhere in the command line, or
   built by `eval`, `source`, `trap`, a lone `.` followed by a word (`. file`,
-  after any prefix), a process substitution, a command substitution, or an
-  expansion, brace, glob or quote in any argument of `export`, `declare`,
-  `typeset`, `local`, `readonly`, `env`, `read`, `mapfile`, `readarray`,
-  `printf -v`, `getopts` or `wait -p`, refuses the writer. The cost is
-  that `export X=$Y; git checkout main` is refused with it, and so is a
-  commit message that names `GIT_DIR` in the same command line.
+  after any prefix; a redirection and its target between them do not count,
+  so `git add . > log` is not one), a process substitution, a command
+  substitution, or an expansion in the **name** of an argument of `export`,
+  `declare`, `typeset`, `local`, `readonly`, `env`, `read`, `mapfile` or
+  `readarray` (`export X=$Y` builds a value, not a name), or a brace, glob or
+  quote in any such argument, or `printf -v`, `getopts` or `wait -p` with one,
+  refuses the writer. The message of a commit (`-m`, `-am`, `--message`)
+  given as one quoted string that expands nothing is text and is not read, so
+  `git commit -m "fix GIT_DIR handling"` beside a writer is admitted. The `.`
+  that changes directory is the command only where a command stands; as an
+  operand (`git add .`) it is a directory. **Still admitted, and stated here
+  rather than closed (#357):** a relocation built in a spelling none of the
+  above names. Every review round found another; the search is by shape and
+  the shell has more forms than the list, so the structural answer is to resolve
+  the work tree from git itself, which this guard does not do because a hook
+  that ran `git` would inherit the environment it judges.
   `git checkout -f`, `git reset --hard`, `git stash`, `git checkout-index`,
   `git read-tree -u` and the subcommands that merge or replay (`merge`,
   `cherry-pick`, `rebase`) update the tree wholesale or by index and are not
