@@ -71,9 +71,10 @@ refuse() { echo "$1" >&2; exit 3; }
 # with these is one this script is validating, so the stricter reading is the
 # one to have: `changedFiles` of `3<newline>evil` is not a count.
 #
-# **A class is spelled out, not ranged.** Under an `en_US` collation `[A-E]`
-# also matches `d`, which the gate refuses, so the two copies would disagree on
-# a lower-case class on any host that is not in the C locale.
+# **A class is spelled out, not ranged.** Where the regex library collates by
+# locale (this Windows bash under `en_US`; older glibc), a range from A to E also
+# matches `d`, which the gate refuses, so the two copies would disagree on a
+# lower-case class. A host with codepoint ranges reads both spellings alike.
 COUNT_RE='^[0-9]+$'
 CLASS_ROW_RE='^\| *Class *\|'
 TOUCH_ROW_RE='^\| *Touch set *\|'
