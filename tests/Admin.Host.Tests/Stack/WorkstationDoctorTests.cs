@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using Admin.Host.Compose;
+using Admin.Host.Frontend;
 using Admin.Host.Stack;
 using Admin.Host.Tests.TestSupport;
 using Shouldly;
@@ -338,6 +339,18 @@ public sealed class WorkstationDoctorTests(AdminHostFactory factory) : IClassFix
         check.Detail.ShouldContain($"{WorkstationDoctor.CorsSwitch} is {value}");
     }
 
+    [Theory]
+    [InlineData(InstallState.Current, DoctorState.Ok)]
+    [InlineData(InstallState.Unverified, DoctorState.Unknown)]
+    [InlineData(InstallState.Stale, DoctorState.Problem)]
+    [InlineData(InstallState.Missing, DoctorState.Problem)]
+    public void The_frontend_install_row_carries_the_reading_it_was_given(InstallState state, DoctorState expected)
+    {
+        DoctorCheck check = WorkstationDoctor.FrontendInstallRow(new InstallReading(state, "the reading's sentence"));
+
+        check.ShouldBe(new DoctorCheck("Frontend install", expected, "the reading's sentence"));
+    }
+
     [Fact]
     public void Docker_that_does_not_answer_is_a_problem_with_its_reason()
     {
@@ -356,7 +369,8 @@ public sealed class WorkstationDoctorTests(AdminHostFactory factory) : IClassFix
 
         Dictionary<string, (string State, string Detail)> rows = view.GetProperty("checks").EnumerateArray()
             .ToDictionary(c => c.GetProperty("name").GetString()!, c => (c.GetProperty("state").GetString()!, c.GetProperty("detail").GetString()!));
-        rows.Keys.ShouldBe(["Docker", "Ports", "Gateway CORS", "Node", "Python", "k6", "Backend clone", "Frontend clone", "Images", "Object store"]);
+        rows.Keys.ShouldBe(["Docker", "Ports", "Gateway CORS", "Node", "Python", "k6", "Backend clone", "Frontend clone", "Frontend install", "Images", "Object store"]);
+        rows["Frontend install"].ShouldBe(("Ok", "node_modules matches package-lock.json."));
         rows["k6"].ShouldBe(("Ok", "k6.exe v2.2.0 (commit/00a9a1b7f5, go1.26.5, windows/amd64), which the load run runs."));
         rows["Docker"].ShouldBe(("Ok", "Docker 29.7.2 is answering."));
         rows["Ports"].ShouldBe(("Problem", "Held by another program, so Up cannot publish them: 5672, 15672 by erl (pid 7376)."));

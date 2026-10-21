@@ -156,14 +156,14 @@ builder.Services.AddSingleton(sp => new ResetService(
 
 // In FakePlatform mode the frontend clone may not exist at all, and its npm
 // start is a recording, so the node_modules check would refuse for nothing.
-builder.Services.AddSingleton(sp =>
-{
-    Func<string, bool> installed = sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform
-        ? _ => true
-        : FrontendSupervisor.HasNodeModules;
+// The same reading serves Start and the doctor's "Frontend install" row.
+builder.Services.AddSingleton<InstallReader>(sp =>
+    sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform
+        ? FrontendInstall.Replayed
+        : FrontendInstall.Read);
 
-    return new FrontendSupervisor(sp.GetRequiredService<IProcessRunner>(), sp.GetRequiredService<RepoPaths>(), installed);
-});
+builder.Services.AddSingleton(sp => new FrontendSupervisor(
+    sp.GetRequiredService<IProcessRunner>(), sp.GetRequiredService<RepoPaths>(), sp.GetRequiredService<InstallReader>()));
 
 // The fake gateway's orders outlive the handlers the client factory rotates, so they advance across them.
 builder.Services.AddSingleton(sp => new FakeOrders(sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<FakeStack>()));

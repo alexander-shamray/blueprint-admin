@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using Admin.Host.Broker;
 using Admin.Host.Compose;
 using Admin.Host.Config;
+using Admin.Host.Frontend;
 using Admin.Host.Jobs;
 using Microsoft.Extensions.Options;
 
@@ -31,7 +32,7 @@ public sealed record DoctorView(IReadOnlyList<DoctorCheck> Checks);
 /// dead-letter workbench) will meet.
 /// </summary>
 public sealed partial class WorkstationDoctor(
-    IProcessRunner runner, ComposeService compose, RepoPaths paths, IOptions<AdminOptions> options, TimeProvider time)
+    IProcessRunner runner, ComposeService compose, RepoPaths paths, IOptions<AdminOptions> options, TimeProvider time, InstallReader install)
 {
     /// <summary>
     /// Owner: run-locally.md step 0. Every listener with its process name, which is what tells Docker's hold
@@ -66,8 +67,9 @@ public sealed partial class WorkstationDoctor(
         Task<CommandOutput> frontend = RunAsync("git", ["-C", paths.FrontendDir, "status", "-sb"], cancellationToken);
         Task<CommandOutput> headMoved = RunAsync("git", ["-C", paths.BackendDir, "reflog", "-1", "--date=iso-strict", "--format=%gd"], cancellationToken);
         Task<ComposeStatus> stack = compose.PsAsync(cancellationToken);
+        Task<InstallReading> modules = Task.Run(() => install(paths.FrontendDir), cancellationToken);
 
-        await Task.WhenAll(docker, config, images, listeners, node, nvmrc, python, k6, backend, frontend, headMoved, stack);
+        await Task.WhenAll(docker, config, images, listeners, node, nvmrc, python, k6, backend, frontend, headMoved, stack, modules);
 
         JsonDocument? model = Parse(config.Result);
 
@@ -83,6 +85,7 @@ public sealed partial class WorkstationDoctor(
                 K6(k6.Result),
                 Clone("Backend clone", backend.Result),
                 Clone("Frontend clone", frontend.Result),
+                FrontendInstallRow(modules.Result),
                 Images(images.Result, headMoved.Result),
                 ObjectStore(stack.Result),
             ]);
@@ -92,6 +95,19 @@ public sealed partial class WorkstationDoctor(
             model?.Dispose();
         }
     }
+
+    /// <summary>
+    /// Whether <c>npm start</c> will compile (#369): a <c>node_modules</c> left from an older lock fails <c>ng serve</c> with
+    /// errors that read as a broken frontend <c>main</c>. The reading is <see cref="FrontendInstall"/>'s, the same one Start
+    /// is refused on; a lock that could not be compared is Unknown, never a guess.
+    /// </summary>
+    internal static DoctorCheck FrontendInstallRow(InstallReading reading) =>
+        new("Frontend install", reading.State switch
+        {
+            InstallState.Current => DoctorState.Ok,
+            InstallState.Unverified => DoctorState.Unknown,
+            _ => DoctorState.Problem,
+        }, reading.Detail);
 
     internal static DoctorCheck Docker(CommandOutput info) =>
         info.Error is { } error
