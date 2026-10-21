@@ -286,6 +286,32 @@ public sealed partial class WorkspaceStoreTests : IDisposable
     }
 
     [Theory]
+    [InlineData(int.MaxValue, 2)]
+    [InlineData(25, 1)]
+    public void A_cell_pair_whose_sum_would_overflow_is_refused_not_wrapped(int x, int cols)
+    {
+        JsonObject doc = Valid();
+        doc["pages"]![0]!["widgets"]![0]!["x"] = x;
+        doc["pages"]![0]!["widgets"]![0]!["cols"] = cols;
+
+        WorkspaceSchema.Validate(doc, 1).ShouldNotBeNull();
+    }
+
+    [Fact]
+    public void Two_unreadable_files_in_one_instant_are_both_kept()
+    {
+        WorkspaceStore store = Store();
+        File.WriteAllText(Path.Combine(directory, "workspace.json"), "first");
+        string one = store.Read().KeptAside!;
+        File.WriteAllText(Path.Combine(directory, "workspace.json"), "second");
+        string two = store.Read().KeptAside!;
+
+        two.ShouldNotBe(one);
+        File.ReadAllText(one).ShouldBe("first");
+        File.ReadAllText(two).ShouldBe("second");
+    }
+
+    [Theory]
     [InlineData("x", "3")]
     [InlineData("cols", 1.5)]
     public void A_cell_that_is_not_an_integer_is_refused(string cell, object value)
