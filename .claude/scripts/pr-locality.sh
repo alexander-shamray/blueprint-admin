@@ -74,12 +74,15 @@ refuse() { echo "$1" >&2; exit 3; }
 # **A class is spelled out, not ranged.** Where the regex library collates by
 # locale (this Windows bash under `en_US`; older glibc), a range from A to E also
 # matches `d`, which the gate refuses, so the two copies would disagree on a
-# lower-case class. A host with codepoint ranges reads both spellings alike.
+# lower-case class. A host with codepoint ranges reads both spellings alike. The
+# commit id is spelled out for the same reason: a range from a to f takes A to E
+# there. The `A-Za-z` ranges below are left, since a collating library reads
+# them as the same set of letters.
 COUNT_RE='^[0-9]+$'
 CLASS_ROW_RE='^\| *Class *\|'
 TOUCH_ROW_RE='^\| *Touch set *\|'
 CLASS_RE='^[ABCDE](\+[ABCDE])?$'
-OID_RE='^[0-9a-f]{40}$'
+OID_RE='^[0123456789abcdef]{40}$'
 TOKEN_RE='^[A-Za-z0-9_./*?{},()@+-]+$'
 PATH_RE='^[A-Za-z0-9_./@+()-]+$'
 NL='
