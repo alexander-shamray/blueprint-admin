@@ -7088,6 +7088,7 @@ class TheGitArgvGuard(unittest.TestCase):
             "X=..; rm -rf $X",
             "rm -rf ~+",
             "rm -rf ~root",
+            "rm -rf $HOME",
             "find /tmp -fprint .claude/settings.json -exec echo x \\;",
         ):
             with self.subTest(command=command):
@@ -7146,6 +7147,10 @@ class TheGitArgvGuard(unittest.TestCase):
         ):
             with self.subTest(message=command):
                 self.assertEqual(module.without_messages(command), expected)
+        # A drive letter's colon is not a revision operator (#357).
+        self.assertTrue(module.names_a_ref("HEAD~1"))
+        self.assertTrue(module.names_a_ref("origin/main:file"))
+        self.assertFalse(module.names_a_ref("C:/repo/docs/old"))
 
     def test_a_find_delete_started_above_the_checkout_is_refused(self):
         # An absolute start that contains the working directory, or is it,

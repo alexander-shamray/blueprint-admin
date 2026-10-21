@@ -3081,6 +3081,10 @@ def contains_working_directory(word, command):
         here, plain))
     if real == here or here.startswith(real.rstrip("/\\") + os.sep):
         return literal
+    # The home directory itself, by whichever spelling reaches it, even from a
+    # working directory outside it: `rm -rf $HOME` and `rm -rf /home/user`.
+    if real == os.path.realpath(os.path.expanduser("~")):
+        return literal
     return None
 
 
@@ -3140,7 +3144,7 @@ def names_a_ref(literal):
     that judges more (#357).
     """
     if re.fullmatch(r"[0-9A-Fa-f]{4,40}", literal) or re.search(
-            r"[~^:@]", literal) or literal in (
+            r"[~^:@]", re.sub(r"^[A-Za-z]:[\\/]", "", literal)) or literal in (
             "HEAD", "FETCH_HEAD", "ORIG_HEAD", "MERGE_HEAD", "-"):
         return True
     try:
