@@ -1,0 +1,27 @@
+# Weekly version updates for the three ecosystems this repository pins, and
+# security updates as the advisory lands. docs/change-locality.md section 6
+# says why the two gates skip a Dependabot pull request.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /src/Admin.Web
+    schedule:
+      interval: weekly
+    groups:
+      angular:
+        applies-to: version-updates
+        patterns:
+          - '@angular/*'
+          - '@angular-devkit/*'
+
+  # Directory.Packages.props is the central pin file; Dependabot reads it from
+  # the root.
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
