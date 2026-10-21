@@ -524,8 +524,10 @@ A new residual is stated **here** and gets a row above.
   so `git -C .claude rm -f hooks/guard-git-argv.py` had no `.claude` component
   to refuse. Run from the checkout their operands are judged there, as before.
   The cost is an over-refusal: the whole-command scan also refuses `git rm`
-  or `git mv` behind a wrapper (`xargs git rm`), and beside a bare `eval`,
-  `source` or `trap` word (`git mv old.txt source`).
+  or `git mv` behind a wrapper (`xargs git rm`), beside a bare `eval`,
+  `source` or `trap` word (`git mv old.txt source`), and beside any export
+  route the relocation paragraph below lists, read across the event's whole
+  line.
   Discarding edits in an application tree with `git restore` or `git checkout
   --` is refused as well, which is the rule rather than an oversight.
   A `git checkout` with no `--` cannot tell a branch from a path, so an
