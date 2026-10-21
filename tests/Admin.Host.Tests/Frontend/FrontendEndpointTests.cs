@@ -118,7 +118,9 @@ public sealed class FrontendEndpointTests
     {
         await using AdminHostFactory factory = new();
         using WebApplicationFactory<Program> uninstalled = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
-            services.AddSingleton(sp => new FrontendSupervisor(sp.GetRequiredService<IProcessRunner>(), sp.GetRequiredService<RepoPaths>(), _ => false))));
+            services.AddSingleton(sp => new FrontendSupervisor(
+                sp.GetRequiredService<IProcessRunner>(), sp.GetRequiredService<RepoPaths>(),
+                _ => new InstallReading(InstallState.Missing, "the clone has no node_modules. Run npm ci there; the console does not.")))));
         HttpClient client = uninstalled.CreateClient();
 
         HttpResponseMessage response = await client.PostAsync("/api/stack/frontend/start", null, Token);
@@ -129,5 +131,29 @@ public sealed class FrontendEndpointTests
         problem.GetProperty("detail").GetString()!.ShouldContain("npm ci");
         uninstalled.Services.GetRequiredService<FakeProcessRunner>().Started.ShouldNotContain(s => s.FileName == "npm");
         (await client.GetFromJsonAsync<JsonElement>("/api/stack", Token)).GetProperty("frontend").GetProperty("installed").GetBoolean().ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Start_with_a_node_modules_older_than_the_lock_is_refused_with_the_reason_on_both_routes()
+    {
+        const string reason = "node_modules does not match package-lock.json (installed 2026-09-12, lock changed 2026-10-20): @angular/core 22.1.6 is installed (the lock has 22.2.3). Run npm ci in /clone; the console does not.";
+        await using AdminHostFactory factory = new();
+        using WebApplicationFactory<Program> stale = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+            services.AddSingleton(sp => new FrontendSupervisor(
+                sp.GetRequiredService<IProcessRunner>(), sp.GetRequiredService<RepoPaths>(), _ => new InstallReading(InstallState.Stale, reason)))));
+        HttpClient client = stale.CreateClient();
+
+        foreach (string route in new[] { "/api/stack/frontend/start", "/api/stack/frontend/device-build" })
+        {
+            HttpResponseMessage response = await client.PostAsync(route, null, Token);
+
+            response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+            (await response.Content.ReadFromJsonAsync<JsonElement>(Token)).GetProperty("detail").GetString().ShouldBe(reason);
+        }
+
+        stale.Services.GetRequiredService<FakeProcessRunner>().Started.ShouldNotContain(s => s.FileName == "npm");
+        JsonElement frontend = (await client.GetFromJsonAsync<JsonElement>("/api/stack", Token)).GetProperty("frontend");
+        frontend.GetProperty("installed").GetBoolean().ShouldBeFalse();
+        frontend.GetProperty("installProblem").GetString().ShouldBe(reason);
     }
 }

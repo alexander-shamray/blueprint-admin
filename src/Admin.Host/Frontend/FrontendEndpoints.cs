@@ -22,7 +22,7 @@ public static class FrontendEndpoints
                 _ => TypedResults.Problem(
                     statusCode: StatusCodes.Status409Conflict,
                     title: "Frontend dependencies not installed",
-                    detail: $"{paths.FrontendDir} has no node_modules. Run npm ci there; the console does not."),
+                    detail: result.Detail ?? $"{paths.FrontendDir} has no node_modules. Run npm ci there; the console does not."),
             };
         });
 
@@ -45,7 +45,7 @@ public static class FrontendEndpoints
                 _ => TypedResults.Problem(
                     statusCode: StatusCodes.Status409Conflict,
                     title: "Frontend dependencies not installed",
-                    detail: $"{paths.FrontendDir} has no node_modules. Run npm ci there; the console does not."),
+                    detail: result.Detail ?? $"{paths.FrontendDir} has no node_modules. Run npm ci there; the console does not."),
             };
         });
 

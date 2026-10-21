@@ -161,7 +161,7 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
     {
         ComposeService compose = new(runner, Paths, time);
         BrokerService broker = new(compose, Options.Create(new AdminOptions()));
-        using FrontendSupervisor frontend = new(runner, Paths, _ => true);
+        using FrontendSupervisor frontend = new(runner, Paths, FrontendInstall.Replayed);
 
         compose.Up();
         compose.Down(wipeVolumes: false);
@@ -218,7 +218,7 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
         await frontend.StartAsync(TestContext.Current.CancellationToken);
         await frontend.StartDeviceBuildAsync(TestContext.Current.CancellationToken);
         await new DeviceReads(runner, Paths, time).ReadAsync(TestContext.Current.CancellationToken);
-        await new WorkstationDoctor(runner, compose, Paths, Options.Create(new AdminOptions()), time).ReadAsync(TestContext.Current.CancellationToken);
+        await new WorkstationDoctor(runner, compose, Paths, Options.Create(new AdminOptions()), time, _ => new InstallReading(InstallState.Current, "")).ReadAsync(TestContext.Current.CancellationToken);
 
         return [.. runner.Started.Select(s => (string[])[s.FileName, .. s.Arguments])];
     }

@@ -21,7 +21,13 @@ public sealed class FrontendSupervisorTests : IAsyncDisposable
 
     public ValueTask DisposeAsync() => runner.DisposeAsync();
 
-    private FrontendSupervisor Supervisor(bool installed = true) => new(runner, Paths, _ => installed);
+    private static readonly InstallReading Current = new(InstallState.Current, "node_modules matches package-lock.json.");
+    private static readonly InstallReading Missing = new(InstallState.Missing, "/repo/frontend has no node_modules. Run npm ci there; the console does not.");
+    private static readonly InstallReading Stale = new(InstallState.Stale, "node_modules does not match package-lock.json. Run npm ci in /repo/frontend; the console does not.");
+
+    private FrontendSupervisor Supervisor(bool installed = true) => new(runner, Paths, _ => installed ? Current : Missing);
+
+    private FrontendSupervisor Supervisor(InstallReading reading) => new(runner, Paths, _ => reading);
 
     [Fact]
     public async Task Start_runs_npm_start_in_the_frontend_clone()
@@ -171,25 +177,31 @@ public sealed class FrontendSupervisorTests : IAsyncDisposable
         using FrontendSupervisor missing = Supervisor(installed: false);
 
         installed.Status().ShouldBe(new FrontendStatus(null, true, null));
-        missing.Status().ShouldBe(new FrontendStatus(null, false, null));
+        missing.Status().ShouldBe(new FrontendStatus(null, false, null, Missing.Detail));
     }
 
     [Fact]
-    public void HasNodeModules_is_true_only_when_the_directory_exists()
+    public async Task A_stale_install_is_refused_by_Start_and_by_the_device_build_with_the_reason()
     {
-        DirectoryInfo clone = Directory.CreateTempSubdirectory("admin-frontend-");
+        runner.OnLongRunning("npm", "start", "> ng serve");
+        using FrontendSupervisor supervisor = Supervisor(Stale);
 
-        try
-        {
-            FrontendSupervisor.HasNodeModules(clone.FullName).ShouldBeFalse();
+        FrontendStartResult start = await supervisor.StartAsync(TestContext.Current.CancellationToken);
+        FrontendStartResult device = await supervisor.StartDeviceBuildAsync(TestContext.Current.CancellationToken);
 
-            clone.CreateSubdirectory("node_modules");
+        start.ShouldBe(new FrontendStartResult(FrontendStartOutcome.NotInstalled, null, Stale.Detail));
+        device.ShouldBe(new FrontendStartResult(FrontendStartOutcome.NotInstalled, null, Stale.Detail));
+        runner.Started.ShouldBeEmpty();
+        supervisor.Status().ShouldBe(new FrontendStatus(null, false, null, Stale.Detail));
+    }
 
-            FrontendSupervisor.HasNodeModules(clone.FullName).ShouldBeTrue();
-        }
-        finally
-        {
-            clone.Delete(recursive: true);
-        }
+    [Fact]
+    public async Task An_install_that_cannot_be_compared_with_its_lock_does_not_block_Start()
+    {
+        runner.OnLongRunning("npm", "start", "> ng serve");
+        using FrontendSupervisor supervisor = Supervisor(new InstallReading(InstallState.Unverified, "package-lock.json is not there."));
+
+        (await supervisor.StartAsync(TestContext.Current.CancellationToken)).Outcome.ShouldBe(FrontendStartOutcome.Started);
+        supervisor.Status().InstallProblem.ShouldBeNull();
     }
 }
