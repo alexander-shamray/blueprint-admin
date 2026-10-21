@@ -7668,6 +7668,18 @@ class TheGitArgvGuard(unittest.TestCase):
             with self.subTest(admitted=command):
                 self.assertAdmitted(command, cwd=root)
 
+    def test_the_startup_shell_pattern_answers_in_linear_time(self):
+        # #357: a word that was both an option's value and a redirection
+        # (`-x 0<a`) doubled the relocation pattern's search per pair, 22
+        # pairs took 5.67 s, and a run past the hook's time limit admits the
+        # command. Disjoint branches answer forty pairs at once.
+        command = ("echo 'bash " + "-x 0<a " * 40 + "'; "
+                   "export GIT_WORK_TREE=.claude; "
+                   "git checkout HEAD -- settings.json")
+        started = time.monotonic()
+        self.assertIsNotNone(self.judge(command))
+        self.assertLess(time.monotonic() - started, 5)
+
     def test_an_ordinary_writing_verb_is_still_admitted(self):
         # The positive control: a rule refusing every `cp` passes every case
         # above, and takes `/ship`'s own `rm -f suggestions.md` with it. A
