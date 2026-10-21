@@ -282,7 +282,8 @@ is kept (`ComposeService.ExecListedAsync`).
 
 `WorkstationDoctor` reads the workstation before Up, so a failure Compose
 would report late is named first. Every read is a line of `run-locally.md`'s
-step 0, run as written and bounded to 30 s like `ps`; none changes anything,
+step 0, run as written and bounded to 30 s like `ps` (the Frontend install row
+below is the one exception: two files the host reads itself); none changes anything,
 none leaves the machine, and none fetches, so a clone is judged against its
 last fetch. Each row is ok, a problem, or could-not-tell where the row cannot
 be judged — a read that did not answer, or nothing yet to compare — never a
@@ -310,13 +311,15 @@ workbench, for Python) will meet:
 - Frontend install (#369): the frontend clone's `node_modules` agrees with its
   `package-lock.json`. The one row that is not a line of step 0: the host reads
   the two files itself, because the question is the version of every package, which
-  no single command prints. Ok when every package npm recorded in
-  `node_modules/.package-lock.json` has the lock's version (a package the lock
-  marks optional may be absent, and an installed package the lock does not list
-  is ignored); a problem when `node_modules` is absent, or a version differs or a
-  package is missing, naming the first few and the dates of the two files; could
-  not tell when a lock file is missing or unreadable. Start is refused on the same
-  reading (§5.4). FakePlatform replays "agrees".
+  no single command prints. Ok when every package the lock lists is installed at
+  the lock's version, as `node_modules/.package-lock.json` records it (a package
+  the lock marks `optional` or `devOptional` may be absent, because a platform's
+  own binaries are marked so and refusing a healthy install is the worse error;
+  an installed package the lock does not list is ignored); a problem when
+  `node_modules` is absent, or a version differs or a package is missing, naming
+  the first few and the dates of the two files; could not tell when a lock file is
+  missing, unreadable, or lists no packages (a `lockfileVersion` 1 lock). Start is
+  refused on the same reading (§5.4). FakePlatform replays "agrees".
 - Images: no image Compose built predates the backend's last commit, since Up
   does not rebuild an image that exists.
 - Object store: `object-store` and `image-edge` are running and healthy and
