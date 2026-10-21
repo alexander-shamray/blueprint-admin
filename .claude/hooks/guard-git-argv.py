@@ -6336,9 +6336,13 @@ def refuse_after(seconds, answer):
             if ANSWERED:
                 return
             ANSWERED.append(True)
-            json.dump(answer, sys.stdout)
-            sys.stdout.flush()
-            os._exit(0)
+            try:
+                json.dump(answer, sys.stdout)
+                sys.stdout.flush()
+            finally:
+                # A failed write must still end the run: `main` sees ANSWERED
+                # and would write nothing, which the harness reads as allow.
+                os._exit(0)
 
     timer = threading.Timer(seconds, fire)
     timer.daemon = True
