@@ -7536,6 +7536,33 @@ class TheGitArgvGuard(unittest.TestCase):
             "trap 'export GIT_WORK_$V=.claude' DEBUG; git checkout HEAD -- settings.json",
             "V=TREE; printf -vGIT_WORK_$V %s .claude; git checkout HEAD -- settings.json",
             "getopts x GIT_WORK_$V; git checkout HEAD -- settings.json",
+            # Each route by which bash exports a name, handed one this guard
+            # cannot read; no line names a relocation variable (#357).
+            "env X=$Y bash -c 'git checkout HEAD -- settings.json'",
+            "command export X=$Y; git checkout HEAD -- settings.json",
+            "builtin export X=$Y; git checkout HEAD -- settings.json",
+            "declare -n r; for r in $N; do export r=.claude; done; "
+            "git checkout HEAD -- settings.json",
+            "local -n r; git checkout HEAD -- settings.json",
+            "set -a; (( $N = 5 )); git checkout HEAD -- settings.json",
+            "set -ea; git checkout HEAD -- settings.json",
+            "set -o allexport; git checkout HEAD -- settings.json",
+            "set -$O; git checkout HEAD -- settings.json",
+            "shopt -so allexport; git checkout HEAD -- settings.json",
+            "env SHELLOPTS=allexport bash -c 'git checkout HEAD -- settings.json'",
+            "bash -ac 'git checkout HEAD -- settings.json'",
+            "BASH_ENV=/tmp/f bash -c 'git checkout HEAD -- settings.json'",
+            'shopt -s expand_aliases; alias g="$A"\ng; git checkout HEAD -- settings.json',
+            "mapfile -C export -c 1 < /tmp/f; git checkout HEAD -- settings.json",
+            "enable -f /tmp/x.so export; git checkout HEAD -- settings.json",
+            # A script a shell runs is judged with the line that builds its
+            # environment (#357).
+            "GIT_WORK_TREE=.claude bash -c 'git checkout HEAD -- settings.json'",
+            "export GIT_WORK_TREE=.claude; sh -c 'git rm -f settings.json'",
+            "GIT_WORK_TREE=.claude eval 'git checkout HEAD -- settings.json'",
+            "env GIT_DIR=x bash -c 'git checkout HEAD -- settings.json'",
+            "export GIT_WORK_TREE=.claude; bash <<< 'git checkout HEAD -- settings.json'",
+            'export GIT_WORK_TREE=.claude; echo "$(git checkout HEAD -- settings.json)"',
             "if . ./vars.sh; then git checkout HEAD -- settings.json; fi",
             "r${E}ead X <<< .claude/settings.json; git checkout $X",
             "git --a x --b y checkout origin/main -- .claude/settings.json",
@@ -7613,6 +7640,13 @@ class TheGitArgvGuard(unittest.TestCase):
             "echo git checkout -- .claude/x",
             "dotnet restore src/Admin.Host",
             "git checkout main && git pull --ff-only",
+            # Beside the export routes, and none of them (#357).
+            "set -euo pipefail; git checkout main",
+            "env FOO=bar npm test; git checkout main",
+            "git checkout -b feat/enable-alias",
+            "declare -A seen; git checkout main",
+            "mapfile -t lines < /tmp/f; git checkout main",
+            "bash -c 'git checkout HEAD -- notes.txt'",
         ):
             with self.subTest(admitted=command):
                 self.assertAdmitted(command, cwd=root)
