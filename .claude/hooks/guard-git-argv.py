@@ -2338,8 +2338,16 @@ def application_tree(literal):
 # `source`, `.` and `eval` are here too: a sourced script runs in the current
 # shell and can `cd` in a file this hook never reads, and `eval` runs text it
 # may build. Raised by Copilot.
+#
+# **`.` is the command only where a command stands** (#357): after a separator,
+# a keyword or a wrapper, behind assignment words. As an operand it is a
+# directory (`git add .`), and reading it as the dot-command refused every
+# relative write beside it.
 CHANGES_DIRECTORY = re.compile(
-    r"(?:^|[\s;&|(){}`])(?:cd|pushd|popd|source|eval|\.)(?=$|[\s;&|()])")
+    r"(?:^|[\s;&|(){}`])(?:cd|pushd|popd|source|eval)(?=$|[\s;&|()])"
+    r"|(?:^|[;&|(){}`!\n]|\b(?:then|do|else|elif|if|while|until|time|builtin"
+    r"|command|exec)\s(?:-\S*\s+)*)\s*(?:(?:\w+=(?:\"[^\"]*\"|'[^']*'|\S*)"
+    r"|\d*[<>]+&?\s*(?:\"[^\"]*\"|'[^']*'|\S+))\s+)*\.(?=$|[\s;&|()])")
 
 
 def changes_directory(command):
@@ -3039,6 +3047,48 @@ def above_working_directory(word):
     return None
 
 
+def contains_working_directory(word, command):
+    """The literal of the raw `word` when it is, or resolves to a parent of,
+    the working directory or the home directory, else `None` (#309).
+
+    The test `find -delete` applies to its starts, for the verbs that remove or
+    move what they are given: `rm -rf ..` and `rm -rf ../..` reach `.claude/`
+    and `package.json` without naming them. A path is **resolved**, so a
+    sibling (`rm -rf ../old`) is not one; a word carrying a glob is refused by
+    `destination_offence` already and is not judged here.
+    """
+    literal = target_literal(word)
+    if literal is None:
+        return None
+    if "$" in literal:
+        # Expanded as `destination_offence` expands it; a value nothing here
+        # can read is refused rather than judged as the text that spells it.
+        literal = expanded_target(literal, command)
+        if literal is None:
+            return word
+    plain = literal.replace("\\", "/")
+    if os.path.normpath(plain).replace("\\", "/") == "/" or (
+            word.strip() in ("~", "~/")):
+        return literal
+    here = os.path.realpath(EVENT_CWD or os.getcwd())
+    if word.strip().startswith("~"):
+        # `~` and `~/x` are the home directory; `~+`, `~-` and `~user` are
+        # other directories this guard does not resolve, so they are refused.
+        if not re.match(r"~(?:/|$)", plain):
+            return literal
+        plain = os.path.expanduser(plain)
+    real = os.path.realpath(plain if os.path.isabs(plain) else os.path.join(
+        here, plain))
+    if real == here or here.startswith(real.rstrip("/\\") + os.sep):
+        return literal
+    return None
+
+
+# The verbs whose operands are removed or moved away, so one that is or holds
+# the working directory takes the protected trees with it (#309).
+REMOVING_VERBS = frozenset({"mv", "rm", "rmdir", "shred", "unlink"})
+
+
 # The git subcommands that overwrite or delete the paths they are given (#297).
 GIT_PATH_WRITERS = frozenset({"restore", "checkout", "clean"})
 
@@ -3048,6 +3098,84 @@ GIT_PATH_VALUE_OPTIONS = {
     "checkout": ("bB", ("--orphan", "--conflict", "--pathspec-from-file")),
     "clean": ("e", ("--exclude",)),
 }
+
+
+def git_directory():
+    """The common git directory of the working directory, or `None` outside a
+    repository; one that cannot be read raises (#357).
+
+    Read from the file system, as `application_tree` reads `.git`: a hook that
+    ran `git` would inherit the very environment it judges, and a work tree
+    set in it would answer for the wrong repository.
+    """
+    root = os.path.realpath(EVENT_CWD or os.getcwd())
+    while True:
+        dot = os.path.join(root, ".git")
+        if os.path.isdir(dot):
+            return dot
+        if os.path.isfile(dot):
+            with open(dot, encoding="utf-8") as handle:
+                pointer = handle.read().strip()
+            if not pointer.startswith("gitdir:"):
+                raise ValueError(dot)
+            gitdir = os.path.normpath(os.path.join(
+                root, pointer[len("gitdir:"):].strip()))
+            with open(os.path.join(gitdir, "commondir"),
+                      encoding="utf-8") as handle:
+                return os.path.normpath(os.path.join(
+                    gitdir, handle.read().strip()))
+        parent = os.path.dirname(root)
+        if parent == root:
+            return None
+        root = parent
+
+
+def names_a_ref(literal):
+    """Whether `git checkout <literal>` may name a revision rather than a path.
+
+    A revision is a ref (a branch, a tag, or a branch only a remote has, which
+    git creates), `HEAD` and its kin, or anything shaped like one: an object id
+    prefix, or a name with a revision operator. **Anything else is a path**,
+    and a repository that cannot be read answers "not a ref", the direction
+    that judges more (#357).
+    """
+    if re.fullmatch(r"[0-9A-Fa-f]{4,40}", literal) or re.search(
+            r"[~^:@]", literal) or literal in (
+            "HEAD", "FETCH_HEAD", "ORIG_HEAD", "MERGE_HEAD", "-"):
+        return True
+    try:
+        gitdir = git_directory()
+    except (OSError, ValueError):
+        return False
+    if gitdir is None:
+        # Outside a repository `git checkout` writes nothing at all.
+        return True
+    name = literal.strip("/")
+    if not name or ".." in name:
+        return False
+    for prefix in ("refs/heads", "refs/tags", "refs/remotes"):
+        if os.path.isfile(os.path.join(gitdir, *prefix.split("/"), *name.split("/"))):
+            return True
+    remotes = os.path.join(gitdir, "refs", "remotes")
+    try:
+        for remote in os.listdir(remotes):
+            if os.path.isfile(os.path.join(remotes, remote, *name.split("/"))):
+                return True
+    except OSError:
+        pass
+    try:
+        with open(os.path.join(gitdir, "packed-refs"), encoding="utf-8") as handle:
+            for line in handle:
+                ref = line.split(" ", 1)[-1].strip()
+                parts = ref.split("/", 3)
+                if ref in (f"refs/heads/{name}", f"refs/tags/{name}",
+                           f"refs/remotes/{name}") or (
+                        parts[:2] == ["refs", "remotes"] and len(parts) == 4
+                        and parts[3] == name):
+                    return True
+    except OSError:
+        pass
+    return False
 
 
 def git_pathspec_offence(raw, name, separated, command, committed=False,
@@ -3087,7 +3215,13 @@ def git_pathspec_offence(raw, name, separated, command, committed=False,
         # and a letter: `spec-v1.2` is a branch, `x.ts` a file).
         last = re.split(r"[\\/]+", literal.rstrip("/\\"))[-1]
         named = protected_path(literal) or linked_protected_path(literal)
+        # A name no ref carries cannot be the branch git would switch to, so
+        # it is a path whether or not the file exists in the working tree:
+        # `git checkout Makefile` restores a deleted file, and after a `cd`
+        # `git checkout settings.json` restores a protected one (#357).
+        not_a_ref = not names_a_ref(literal)
         if not named and (re.search(r"\.[A-Za-z][A-Za-z0-9]{0,5}$", last)
+                          or not_a_ref
                           or os.path.exists(os.path.join(
                               EVENT_CWD or os.getcwd(), literal))):
             named = application_tree(literal)
@@ -3100,9 +3234,56 @@ def git_pathspec_offence(raw, name, separated, command, committed=False,
                 (shell_expands(raw) and not environment_variable(raw, command))
                 or raw.strip().startswith("~")
                 or (changes_directory(command)
-                    and (many or re.search(r"[./]", raw)))):
+                    and (many or not_a_ref or re.search(r"[./]", raw)))):
             return None
     return destination_offence(raw, command, writer, writer)
+
+
+# The value of `-m`, `-am` or `--message` when it is one quoted string that
+# expands nothing: a commit's message is text, and one that names `GIT_DIR` or
+# says `source` relocates and evaluates nothing (#357).
+INERT_MESSAGE = re.compile(
+    r"""(?<=\s)(-[A-Za-z]*m|--message)(=|\s+)("[^"$`\\]*"|'[^']*')""")
+
+
+def without_messages(command):
+    """`command` with each inert message value of a `git commit`, `tag` or
+    `merge` emptied. The run is read back to the last separator, and an option
+    cluster that carries `c`, `e` or `s` is a shell's (`bash -cm 'script'`),
+    never a message (#357)."""
+    # Where each character stands: outside every quote, or inside one. **A
+    # match is blanked only when it begins outside every quote** and the
+    # command's quotes balance, so a `-m '` inside a double-quoted `bash -c`
+    # script cannot pair its quote with a later one and hide the text between.
+    outside, state, index = [], None, 0
+    while index < len(command):
+        char = command[index]
+        outside.append(state is None)
+        if char == "\\" and state != "'" and index + 1 < len(command):
+            outside.append(state is None)
+            index += 1
+        elif state is None and char in "'\"":
+            state = char
+        elif state == char:
+            state = None
+        index += 1
+    if state is not None:
+        return command
+
+    def blank(match):
+        if not outside[match.start()] or (
+                match.end() < len(command)
+                and command[match.end()] not in " \t\n;&|)"):
+            return match.group(0)
+        before = command[:match.start()]
+        run = before[max(before.rfind(mark) for mark in ";&|\n(`") + 1:]
+        if re.search(r"\bgit\b.*\b(?:commit|tag|merge)\b", run) and not (
+                match.group(1) != "--message"
+                and re.search(r"[ces]", match.group(1))):
+            return match.group(1) + match.group(2) + '""'
+        return match.group(0)
+
+    return INERT_MESSAGE.sub(blank, command)
 
 
 def git_path_writer_offence(run, literals, command):
@@ -3189,16 +3370,19 @@ def git_path_writer_offence(run, literals, command):
         r"|(?<![\w./-])(?:eval|source|trap)(?![\w./-])"
         r"|\b(?:export|declare|typeset|local|readonly|env)\b[^;&|\n]*(?:\$\(|`)"
         r"|\b(?:export|declare|typeset|local|readonly|env|read|mapfile|readarray)"
-        r"\b[^;&|\n]*\$|printf\s+-v\s+\S*\$"
+        r"\b(?:\s+[^\s;&|]+)*?\s+[^\s=;&|]*\$|printf\s+-v\s+\S*\$"
+        r"|\b(?:export|declare|typeset|local|readonly)\b(?:\s+[^\s;&|]+)*?"
+        r"\s+-\w*n\w*\b[^;&|\n]*\$"
         r"|\b(?:export|declare|typeset|local|readonly|env|read|mapfile|readarray)"
         r"\b(?:\s+[^\s;&|]+)*?\s+[^\s=;&|]*[{*?\[\\'\"`]"
         r"|printf\b[^;&|\n]*-\w*v\s*\S*[$\\{*?\[\\'\"`]"
         r"|\bgetopts\b[^;&|\n]*[$\\{*?\[\\'\"`]"
         r"|\bwait\b(?:\s+-\S+)*?\s+-\w*p\b[^;&|\n]*[$\\{*?\[\\'\"`]"
-        r"|(?<![^\s;&|(){}!])\.(?:\s+[^\s;&|]|\$)"
+        r"|(?<![^\s;&|(){}!])\.(?:\s+(?:\d*[<>]+&?\s*[^\s;&|<>]+\s+)*[^\s;&|<>]|\$)"
         r"|<\(")
     relocated = relocated or any(
-        relocation.search(text) for text in command_readings(command))
+        relocation.search(text) for text in command_readings(
+            without_messages(command)))
     if relocated or any(
             word.startswith(("-C", "--work-tree", "--git-dir"))
             or "core.worktree" in word.lower()
@@ -3577,6 +3761,21 @@ def verb_offence(verb, words, command):
             judged = judged + [word + shlex.quote(suffix) for word in files]
     else:
         judged = []
+
+    if verb in REMOVING_VERBS:
+        # What `mv` moves is every operand but the last, or all of them when
+        # `-t` names the destination; the destination is judged below.
+        gone = operands[:-1] if verb == "mv" and not targets else operands
+        for word in gone:
+            above = contains_working_directory(word, command)
+            if above is not None:
+                return (
+                    f"`{verb}` is given `{above}`, which is or contains the "
+                    "working directory or the home directory, so it removes "
+                    "the agent's own machinery without naming it. Name what "
+                    "is to go, below the working directory "
+                    "(#309, docs/harness-boundaries.md)."
+                )
 
     for word in judged:
         refusal = destination_offence(word, command, writer, kind)
