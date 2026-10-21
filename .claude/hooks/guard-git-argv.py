@@ -3499,8 +3499,9 @@ def git_path_writer_offence(run, literals, command):
     # name this guard cannot read is refused here, so a name built in a
     # spelling no line names is still never exported to git (#357). A program
     # that sets its child's environment is one more route, which no list
-    # closes: `env`, `sudo` and `doas` are refused, and any other is not
-    # (#421). Refused, then: `env`, and a declaration builtin behind
+    # closes: `env`, `sudo` and `doas` are refused when an expansion stands
+    # in their words, and any other is not (#421). Refused, then: `env`, and
+    # a declaration builtin behind
     # `command` or `builtin`, split `X=$Y` into a second name; any nameref,
     # which a `for` loop can point at a computed name; `allexport` however it
     # is set; and `BASH_ENV`, `ENV`, an interactive or login shell (`exec -l`
