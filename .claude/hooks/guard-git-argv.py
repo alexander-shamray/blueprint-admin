@@ -2383,7 +2383,10 @@ def env_changes_directory(command):
     quadratic.** `env` may stand behind a path (`/usr/bin/env`), take any
     number of `NAME=value` words and options before its own, and spell the
     option `-C dir`, `-Cdir`, in a cluster (`-iC`), or as an abbreviated
-    `--chdir` (`--c`: the only long option that begins with `c`). So each
+    `--chdir` (`--c`: the only long option that begins with `c`). **`-S` and
+    `--split-string` count too**: their argument is split into more words, and
+    `env -S'-C .claude cp x settings.json'` hides the option inside one. The
+    name is compared folded and without `.exe`, as Windows resolves it. So each
     command segment is split into words, and once an `env` word is found every
     LATER word of that segment is asked, which is linear and also covers a
     second `env` after the first. A segment ends at a separator; over-matching
@@ -2393,9 +2396,10 @@ def env_changes_directory(command):
     for segment in re.split(r"[;&|(){}`\n]", command):
         seen = False
         for word in segment.split():
-            if seen and re.match(r"-[A-Za-z0-9]*C|--c[a-z]*(?:=|$)", word):
+            if seen and re.match(r"-[A-Za-z0-9]*[CS]|--[cs][a-z]*(?:=|$)", word):
                 return True
-            if word.rsplit("/", 1)[-1].rsplit("\\", 1)[-1] == "env":
+            name = re.split(r"[\\/]", word)[-1].lower()
+            if name in ("env", "env.exe"):
                 seen = True
     return False
 
