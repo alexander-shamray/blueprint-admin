@@ -221,6 +221,13 @@ def git_failing_after_removal(directory):
     return {"BASH_ENV": shim.as_posix(), "GIT_SHIM_MARK": (directory / "removed.mark").as_posix()}
 
 
+def private_tmproot(test):
+    """A fresh temp root for `test`, as bash resolves it, removed when the test ends (#356)."""
+    root = tempfile.mkdtemp(prefix="sweeproot-")
+    test.addCleanup(shutil.rmtree, root, ignore_errors=True)
+    return run_bash('cd "$ROOT" && pwd -P', ROOT=root).stdout.strip()
+
+
 def bash_tmproot():
     """The temp root as BASH resolves it, which is not the one Python resolves.
 
@@ -245,7 +252,10 @@ class SweepWorktreeShape(unittest.TestCase):
     """
 
     def setUp(self):
-        self.tmproot = bash_tmproot()
+        # A private temp root, handed to every helper below as `TMPDIR`: the tests that list
+        # `secsweep-*` names count a directory nothing else creates, where the shared root
+        # also held the names another shard or another session's sweep made at that moment (#356).
+        self.tmproot = private_tmproot(self)
 
     def make_dir(self, relative):
         """Create the fixture through bash, so it lands where the script looks."""
@@ -257,7 +267,7 @@ class SweepWorktreeShape(unittest.TestCase):
         return path
 
     def drop(self, path):
-        return run_bash('bash "$DROP" "$TARGET"', DROP=str(DROP), TARGET=path)
+        return run_bash('bash "$DROP" "$TARGET"', DROP=str(DROP), TARGET=path, TMPDIR=self.tmproot)
 
     def test_a_nested_path_under_a_sweep_shaped_parent_is_refused(self):
         # The issue's own table, reproduced. Both of these used to MATCH, because
@@ -303,7 +313,7 @@ class SweepWorktreeShape(unittest.TestCase):
         # The argument is checked before anything is made, so a refused call
         # leaves no litter behind for the next run to trip over.
         before = self.sweep_dirs()
-        result = run_bash('bash "$DETACH" not-a-sha', DETACH=str(DETACH))
+        result = run_bash('bash "$DETACH" not-a-sha', DETACH=str(DETACH), TMPDIR=self.tmproot)
         self.assertEqual(2, result.returncode)
         self.assertEqual(before, self.sweep_dirs())
 
@@ -326,7 +336,7 @@ class SweepWorktreeShape(unittest.TestCase):
 
         made = run_bash(
             'cd "$REPO" && bash "$DETACH" "$SHA" 2>/dev/null',
-            REPO=repo, DETACH=str(DETACH), SHA=pinned,
+            REPO=repo, DETACH=str(DETACH), SHA=pinned, TMPDIR=self.tmproot,
         )
         path = made.stdout.strip()
         # Registered before anything is asserted, so a failing assertion below
@@ -334,7 +344,7 @@ class SweepWorktreeShape(unittest.TestCase):
         self.addCleanup(
             lambda: run_bash(
                 'cd "$REPO" && bash "$DROP" "$TARGET" >/dev/null 2>&1 || true',
-                REPO=repo, DROP=str(DROP), TARGET=path,
+                REPO=repo, DROP=str(DROP), TARGET=path, TMPDIR=self.tmproot,
             )
         )
         self.assertEqual(0, made.returncode, made.stderr)
@@ -1567,14 +1577,16 @@ class TheFourPortedResiduals(unittest.TestCase):
         git("commit", "-q", "-m", "a tracked link")
         commit = git("rev-parse", "HEAD")
 
-        before = set(os.listdir(tempfile.gettempdir()))
+        # The helper's own temp root, so the listing below sees only what this call made: the shared
+        # root also held the names another shard or session created meanwhile (#356).
+        root = Path(tempfile.mkdtemp(prefix="sweeproot-"))
+        self.addCleanup(shutil.rmtree, str(root), ignore_errors=True)
         out = subprocess.run([BASH, str(SCRIPTS / "git-worktree-detach.sh"), commit],
-                             capture_output=True, text=True, cwd=str(repo))
+                             capture_output=True, text=True, cwd=str(repo),
+                             env={**os.environ, "TMPDIR": root.as_posix()})
         self.assertEqual(5, out.returncode, out.stderr)
         self.assertIn("leak", out.stderr)
-        created = {name for name in set(os.listdir(tempfile.gettempdir())) - before
-                   if name.startswith("secsweep-")}
-        self.assertEqual(set(), created)
+        self.assertEqual([], os.listdir(root))
 
     def test_both_sweeps_state_the_half_that_is_closed(self):
         # The other half of #18.1: the sweeps did not state the read half,
