@@ -331,10 +331,11 @@ public sealed partial class LiteralDriftTests
         string statuses = Backend.Read("src", "BFF", "Web.Bff", "Orders", "BuyerStatuses.cs") + Backend.Read("src", "BFF", "Web.Bff.Persistence", "CancelOutcomes.cs");
         string fake = File.ReadAllText(Path.Combine(Backend.AdminRoot, "src", "Admin.Host", "Fakes", "FakeOrders.cs"));
 
-        string[] given = [.. QuotedStatus().Matches(fake).Select(m => m.Groups[1].Value).Distinct()];
+        string[] backends = [.. ConstantValue().Matches(statuses).Select(m => m.Groups["value"].Value).Distinct()];
+        string[] given = [.. StatusSite().Matches(fake).Select(m => m.Groups[1].Value).Distinct()];
 
-        given.ShouldBe(["delivered", "cancelled", "dispatched", "confirmed", "placed", "out_of_stock", "declined"], ignoreOrder: true);
-        given.Where(s => !statuses.Contains($" = \"{s}\";", StringComparison.Ordinal)).ShouldBeEmpty();
+        backends.ShouldNotBeEmpty("no status constant was read; the backend's status files no longer fit the reader");
+        given.ShouldBe(backends, ignoreOrder: true);
     }
 
     [Fact]
@@ -467,8 +468,12 @@ public sealed partial class LiteralDriftTests
     [GeneratedRegex(@"DateTimeOffset\? (\w+)")]
     private static partial Regex TimelineMember();
 
-    [GeneratedRegex("\"(placed|confirmed|dispatched|delivered|cancelled|out_of_stock|declined)\"")]
-    private static partial Regex QuotedStatus();
+    /// <summary>
+    /// A lower-case snake literal where <c>FakeOrders</c> produces or tests an order's status: an arm of a conditional, the first
+    /// of a returned pair, or either side of an equality. It names no status, so one the fake adds that the BFF lacks is read too.
+    /// </summary>
+    [GeneratedRegex(@"(?:\? |: |\?\? |\(|[=!]= )""([a-z]+(?:_[a-z]+)*)""(?=,|;|\s*$|\s*\?)", RegexOptions.Multiline)]
+    private static partial Regex StatusSite();
 
     [GeneratedRegex("public const string \\w+ = \"(?<value>[^\"]*)\";")]
     private static partial Regex ConstantValue();
