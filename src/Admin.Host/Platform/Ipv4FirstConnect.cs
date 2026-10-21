@@ -10,6 +10,11 @@ namespace Admin.Host.Platform;
 /// back, which is the whole of <c>PlatformProbe</c>'s per-target deadline and a fixed cost on every proxied call.
 /// The URL and the <c>Host</c> header stay <c>localhost</c> (Keycloak's issuer is what the backend validates); only
 /// the order in which the resolved addresses are tried changes.
+/// <para>
+/// Addresses are still tried one after another with the connect's own timeout, as the stock handler does: a URL
+/// that points at a black-holed non-loopback IPv4 address holds the connect until the caller's deadline and the IPv6
+/// fallback is never reached. Every default target is loopback, where a connect is answered or refused.
+/// </para>
 /// </summary>
 public static class Ipv4FirstConnect
 {
