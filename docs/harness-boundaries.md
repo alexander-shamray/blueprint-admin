@@ -591,10 +591,10 @@ A new residual is stated **here** and gets a row above.
   (continuations joined, comments and heredoc bodies left as data), and every
   script that line hands a shell on stdin, which is code (a `git commit -F -`
   body stays data). Until #357, `GIT_WORK_TREE=.claude bash -c 'git checkout
-  HEAD -- settings.json'` was admitted. Still not seen: a variable
-  exported before this command line runs, by an earlier Bash call or the
-  profile the shell sources, which relocates a plain `git checkout --
-  settings.json` as well; and a writer inside a shell `EVALUATORS` does not
+  HEAD -- settings.json'` was admitted. Still not seen: a variable already
+  in the environment this command line starts with, inherited by the session
+  or exported by the profile the shell sources, which relocates a plain `git
+  checkout -- settings.json` as well; and a writer inside a shell `EVALUATORS` does not
   name, whose script the guard never reads at all (#397).
   `git checkout -f`, `git reset --hard`, `git stash`, `git checkout-index`,
   `git read-tree -u` and the subcommands that merge or replay (`merge`,
