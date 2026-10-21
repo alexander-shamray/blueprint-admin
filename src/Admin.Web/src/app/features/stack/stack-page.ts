@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal, viewChild } from '@angular/core';
+import { Component, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { catchError, exhaustMap, map, of, tap, timer } from 'rxjs';
@@ -218,6 +218,17 @@ export class StackPage {
   });
 
   readonly composeOutput = computed(() => this.compose()?.id === this.jobId());
+
+  /**
+   * The exit is only heard from the pane while it follows the job. When the operator opens another job's output, or the
+   * stream fails, no exit will come, so the running state is dropped rather than left disabling the buttons for good.
+   */
+  private readonly composeLost = effect(() => {
+    const c = this.compose();
+    if (c && c.exitCode === null && (c.id !== this.jobId() || this.pane()?.error())) {
+      this.compose.set(null);
+    }
+  });
 
   jobExited(exitCode: number): void {
     const c = this.compose();
