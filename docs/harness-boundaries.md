@@ -397,7 +397,7 @@ A new residual is stated **here** and gets a row above.
   `tar -C`, `sudo -D`, `systemd-run --working-directory`, `docker run -w`),
   which are not on the writing-verb list either; an `env` or `cd` word built
   by a substitution (`$(printf env) -C d`), the class `$(printf cd)` already
-  is; and `git -C` for `git rm`/`git mv`, which is #358.
+  is.
   **On Windows `git worktree remove` can unregister a worktree and then fail to delete its
   tree** (`Permission denied` or `Invalid argument`): measured, a process held
   `<worktree>/.claude` for about 40 s after a `dotnet build` there, build servers shut
@@ -523,6 +523,9 @@ A new residual is stated **here** and gets a row above.
   operands as the verbs `rm` and `mv` and sees only the words after the verb,
   so `git -C .claude rm -f hooks/guard-git-argv.py` had no `.claude` component
   to refuse. Run from the checkout their operands are judged there, as before.
+  The cost is an over-refusal: the whole-command scan also refuses `git rm`
+  or `git mv` behind a wrapper (`xargs git rm`), and beside a bare `eval`,
+  `source` or `trap` word (`git mv old.txt source`).
   Discarding edits in an application tree with `git restore` or `git checkout
   --` is refused as well, which is the rule rather than an oversight.
   A `git checkout` with no `--` cannot tell a branch from a path, so an
