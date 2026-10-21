@@ -580,9 +580,10 @@ A new residual is stated **here** and gets a row above.
   computed name; `set -a`, `set -o allexport`, `shopt -o`, `SHELLOPTS`, a
   `set` or `shopt` word holding an expansion, quote, brace or glob, and a
   shell started with `-a`; and `BASH_ENV`, `ENV`, a shell started
-  interactive or login (`-i`, `-l`, `--login`, `--rcfile`, `--init-file`,
-  with a redirection between it and its options or not, and `exec -l` or
-  `exec -a -bash`), `zsh` and `ZDOTDIR`, since zsh reads `.zshenv` on every
+  interactive or login (`-i`, `-l`, `--login`, `--rcfile`, `--init-file`
+  anywhere in that shell's command, a redirection or the script's own
+  options between them or not, which fails closed on `bash -c 'ls -la'`; and
+  `exec -l` or `exec -a -bash`), `zsh` and `ZDOTDIR`, since zsh reads `.zshenv` on every
   start, `alias`, `enable` and `mapfile -C`, which run code. A computed name
   that is only bound (`read`, `printf -v`, `(( $N = 5 ))`) is exported by
   none of these and reaches no git process. A script a shell runs (`bash -c`,
