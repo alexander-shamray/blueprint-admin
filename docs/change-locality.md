@@ -118,6 +118,13 @@ Directory.Packages.props        BlueprintAdmin.slnx
 - FakePlatform is first-class: a new endpoint works against the fakes and the
   Playwright smoke covers its screen.
 - Exact pins, both toolchains.
+- A Dependabot pull request (`.github/dependabot.yml`) declares no class and
+  no touch set and carries no `PR:` trailer, so `locality-gate.yml` and
+  `commit-gate.yml` skip their job when the author is `dependabot[bot]`. The
+  other jobs in `ci.yml` run on it as on any pull request, and the owner
+  merges it. The exemption is by pull request author, so a human who pushes
+  to a Dependabot branch rides on it; review such a push as you would a
+  gate bypass.
 - The dialect in [`style-guide.md`](style-guide.md).
 - `main` stays green.
 - `Closes #n` as a bare line when a change closes an issue.
