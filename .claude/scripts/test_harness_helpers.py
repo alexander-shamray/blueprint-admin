@@ -7570,6 +7570,13 @@ class TheGitArgvGuard(unittest.TestCase):
             "bash -o posix -l -c 'git checkout HEAD -- settings.json'",
             "bash --rcfile /tmp/f -c 'git checkout HEAD -- settings.json'",
             "ENV=/tmp/f sh -c 'git checkout HEAD -- settings.json'",
+            "read ENV < /tmp/f; export ENV; git checkout HEAD -- settings.json",
+            "zsh -c 'git checkout HEAD -- settings.json'",
+            "ZDOTDIR=/tmp/d git checkout HEAD -- settings.json",
+            "exec -a -bash bash -c 'git checkout HEAD -- settings.json'",
+            "bash 2>/dev/null -ic 'git checkout HEAD -- settings.json'",
+            "bash <<'EOF'\nGIT_WORK_TREE=.claude bash -c "
+            "'git checkout HEAD -- settings.json'\nEOF",
             "if . ./vars.sh; then git checkout HEAD -- settings.json; fi",
             "r${E}ead X <<< .claude/settings.json; git checkout $X",
             "git --a x --b y checkout origin/main -- .claude/settings.json",
