@@ -3194,8 +3194,8 @@ def git_path_writer_offence(run, literals, command):
         r"\b(?:\s+[^\s;&|]+)*?\s+[^\s=;&|]*[{*?\[\\'\"`]"
         r"|printf\b[^;&|\n]*-\w*v\s*\S*[$\\{*?\[\\'\"`]"
         r"|\bgetopts\b[^;&|\n]*[$\\{*?\[\\'\"`]"
-        r"|\bwait\s+-\w*p\b[^;&|\n]*[$\\{*?\[\\'\"`]"
-        r"|(?<!\S)\.(?:\s+[^\s;&|]|\$)"
+        r"|\bwait\b(?:\s+-\S+)*?\s+-\w*p\b[^;&|\n]*[$\\{*?\[\\'\"`]"
+        r"|(?<![^\s;&|(){}!])\.(?:\s+[^\s;&|]|\$)"
         r"|<\(")
     relocated = relocated or any(
         relocation.search(text) for text in command_readings(command))
