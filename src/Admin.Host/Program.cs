@@ -18,6 +18,7 @@ using Admin.Host.Stack;
 using Admin.Host.Telemetry;
 using Admin.Host.Trace;
 using Admin.Host.Transcript;
+using Admin.Host.Workspace;
 using Microsoft.AspNetCore.HostFiltering;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
@@ -229,6 +230,18 @@ builder.Services.AddSingleton(sp => new ProductImageUploader(
     sp.GetRequiredService<TimeProvider>(),
     sp.GetRequiredService<OperatorTranscript>()));
 
+// The operator's pages live under Admin:DataDir too. FakePlatform takes a temp directory of its own per host, so a smoke
+// run or a test host never reads, or writes over, a real workspace or another host's.
+builder.Services.AddSingleton(sp =>
+{
+    AdminOptions o = sp.GetRequiredService<IOptions<AdminOptions>>().Value;
+    string workspaceDir = o.FakePlatform
+        ? Path.Combine(Path.GetTempPath(), "blueprint-admin-fake", $"workspace-{Guid.NewGuid():N}")
+        : Path.GetFullPath(o.DataDir, clonesBase);
+
+    return new WorkspaceStore(workspaceDir, sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<ILogger<WorkspaceStore>>());
+});
+
 WebApplication app = builder.Build();
 
 // Resolve once so a wrong directory, or a recording of the fakes, fails
@@ -279,6 +292,7 @@ app.MapReview();
 app.MapScenarioExport();
 app.MapTelemetry();
 app.MapTranscript();
+app.MapWorkspace();
 
 // MapFallbackToFile's route has no literal segments, so without this it
 // would also catch an unmatched /api/nope (it has no dot, so it passes the
