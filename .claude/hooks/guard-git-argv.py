@@ -2377,10 +2377,14 @@ def changes_directory(command):
     by Copilot.
     """
     unquoted = re.sub(r"\$?[\"']|\\", "", command)
+    # `env` is read three ways: as written (a Windows path keeps its
+    # backslashes), without quotes, and without quotes or backslashes
+    # (`en\v -C d` is `env -C d` to bash).
     return bool(CHANGES_DIRECTORY.search(command)
                 or CHANGES_DIRECTORY.search(unquoted)
                 or env_changes_directory(command)
-                or env_changes_directory(re.sub(r"\$?[\"']", "", command)))
+                or env_changes_directory(re.sub(r"\$?[\"']", "", command))
+                or env_changes_directory(unquoted))
 
 
 def env_changes_directory(command):
@@ -2395,23 +2399,23 @@ def env_changes_directory(command):
     words, and `env -S'-C .claude cp x settings.json'` hides the option inside
     one.
 
-    **Two bounds on what is asked, because both directions failed in review.**
-    The `env` must stand where a command stands (the start, after a separator
-    or a keyword or wrapper, behind assignment words), so `cat .env --color`
-    and `printenv --silent` are not env. And the words after it are read
-    across the whole command, separators included, because a separator can sit
-    inside env's own words (`env A=$(date) -C d`, `env 'A=;' -C d`): the
-    option is looked for in every later word, which over-matches an `-S` or `-C`
-    of the program env runs (`env X=1 ls -S`) and is the direction to be wrong
-    in. Only the FIRST such `env` is scanned, since its scan covers every later
-    one, which keeps this linear.
+    **Neither where `env` stands nor where its words end is asked, because
+    asking failed open in review.** A position check missed a newline, a
+    redirect word, an assignment holding a space and every wrapper with
+    arguments of its own (`sudo -u root env`, `timeout 5 env`), and splitting
+    at separators missed one inside env's words (`env A=$(date) -C d`,
+    `env 'A=;' -C d`). So the word must BE `env` (after a path or a glued
+    separator, so `.env` and `printenv` are not), and the option is looked for
+    in every later word of the command. That over-matches an `-S` or `-C` of
+    the program env runs (`env X=1 ls -S`), `env -uC` (unset a variable named
+    `C`), and `echo env -C`, which is the direction to be wrong in. Only the
+    FIRST such `env` is scanned, since its scan covers every later one, which
+    keeps this linear.
     """
     words = command.split()
     for index, word in enumerate(words):
-        before, core = re.match(r"(.*?)([^\s\\/:(){}`;&|]*)$", word).groups()
+        core = re.search(r"[^\s\\/:(){}`;&|]*$", word).group(0)
         if core.lower() not in ("env", "env.exe"):
-            continue
-        if not env_at_command_position(words, index, before):
             continue
         for later in words[index + 1:]:
             name = later.split("=", 1)[0]
@@ -2422,27 +2426,6 @@ def env_changes_directory(command):
                 return True
         return False
     return False
-
-
-# Words after which a command stands, so an `env` behind them is the command.
-COMMAND_LEADERS = frozenset({
-    "then", "do", "else", "elif", "if", "while", "until", "time", "!", "{",
-    "builtin", "command", "exec", "sudo", "nohup", "nice", "xargs", "timeout",
-})
-
-
-def env_at_command_position(words, index, before):
-    """Whether the `env` word at `index` stands where a command stands."""
-    if re.search(r"[;&|(){}`!]", before):
-        return True
-    position = index - 1
-    while position >= 0 and re.match(r"\w+=", words[position]):
-        position -= 1
-    if position < 0:
-        return True
-    previous = words[position]
-    return (previous in COMMAND_LEADERS
-            or previous[-1] in ";&|(){}`")
 
 
 # The directory the session's command runs in, from the hook event. `None`
@@ -2510,20 +2493,30 @@ def cwd_protected_path(literal):
         return None
     if not EVENT_CWD:
         return None
-    # The lexical join only: a cwd that is a link into the tree is resolved by
-    # `linked_protected_path`, which runs before this in `destination_offence`.
-    path = os.path.normpath(os.path.abspath(os.path.join(EVENT_CWD, literal)))
-    root = path
-    while not os.path.exists(os.path.join(root, ".git")):
-        parent = os.path.dirname(root)
-        if parent == root:
-            return None
-        root = parent
-    try:
-        relative = os.path.relpath(path, root)
-    except ValueError:
-        return None
-    return protected_path(relative)
+    joined = os.path.join(EVENT_CWD, literal)
+    # Both readings, as `application_tree` takes them. `linked_protected_path`
+    # resolves a link too, but it walks up from the LEXICAL path to find the
+    # checkout, so a cwd that is a link living outside the checkout (`/tmp/l`
+    # into `.claude/hooks`) finds no root there and is left to this one.
+    for path in (os.path.normpath(os.path.abspath(joined)),
+                 os.path.realpath(joined)):
+        root = path
+        while not os.path.exists(os.path.join(root, ".git")):
+            parent = os.path.dirname(root)
+            if parent == root:
+                root = None
+                break
+            root = parent
+        if root is None:
+            continue
+        try:
+            relative = os.path.relpath(path, root)
+        except ValueError:
+            continue
+        named = protected_path(relative)
+        if named:
+            return named
+    return None
 
 
 def redirection_offence(command):

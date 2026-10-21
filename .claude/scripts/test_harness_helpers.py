@@ -7139,6 +7139,16 @@ class TheGitArgvGuard(unittest.TestCase):
             "env A=\\; -C .claude cp /tmp/a settings.json",
             "ls; env -C .claude cp /tmp/a settings.json",
             "FOO=1 env -C .claude cp /tmp/a settings.json",
+            # The position of env is not asked: each of these stood outside it.
+            "ls\nenv -C .claude cp /tmp/a settings.json",
+            ">/dev/null env -C .claude cp /tmp/a settings.json",
+            "2>&1 env -C .claude cp /tmp/a settings.json",
+            'FOO="a b" env -C .claude cp /tmp/a settings.json',
+            "sudo -u root env -C .claude cp /tmp/a settings.json",
+            "timeout 5 env -C .claude cp /tmp/a settings.json",
+            "xargs -0 env -C .claude cp /tmp/a settings.json",
+            "en\\v -C .claude cp /tmp/a settings.json",
+            "env -\\C .claude cp /tmp/a settings.json",
             "find .claude/hooks -name x.py -execdir cp /tmp/a ./x.py \\;",
             "find . -name x.py -okdir cp /tmp/a ./x.py \\;",
         ):
@@ -7152,7 +7162,6 @@ class TheGitArgvGuard(unittest.TestCase):
             "cat .env --color > notes/x.txt",
             "grep foo .env -C3 > notes/x.txt",
             "printenv --silent > notes/x.txt",
-            "echo env -C > notes/x.txt",
         ):
             with self.subTest(command=command):
                 self.assertAdmitted(command, cwd=root)
@@ -7184,17 +7193,24 @@ class TheGitArgvGuard(unittest.TestCase):
                 self.assertAdmitted(command, cwd=cwd)
 
     def test_a_session_whose_directory_is_a_link_into_a_protected_tree_is_refused(self):
-        # Caught by `linked_protected_path`, which joins the cwd and resolves it;
-        # `cwd_protected_path` reads the lexical join only.
+        # Two links: one inside the checkout, which `linked_protected_path` sees,
+        # and one outside it, where only the resolved leg of `cwd_protected_path`
+        # can find the checkout the cwd lands in.
         root = self.writing_checkout()
         hooks = os.path.join(root, ".claude", "hooks")
         os.makedirs(hooks)
-        link = os.path.join(root, "notes", "hooks-link")
+        outside = tempfile.mkdtemp(prefix="argv-link-")
+        self.addCleanup(shutil.rmtree, outside, ignore_errors=True)
+        inside_link = os.path.join(root, "notes", "hooks-link")
+        outside_link = os.path.join(outside, "hooks-link")
         try:
-            os.symlink(hooks, link, target_is_directory=True)
+            os.symlink(hooks, inside_link, target_is_directory=True)
+            os.symlink(hooks, outside_link, target_is_directory=True)
         except (OSError, NotImplementedError):
             self.skipTest("this host cannot make a symlink")
-        self.assertRefused("cp /tmp/a evil.sh", cwd=link)
+        for link in (inside_link, outside_link):
+            with self.subTest(cwd=link):
+                self.assertRefused("cp /tmp/a evil.sh", cwd=link)
 
     def test_the_dot_command_and_a_message_are_read_where_they_stand(self):
         # #357: `.` changes directory only as a command, and only the message

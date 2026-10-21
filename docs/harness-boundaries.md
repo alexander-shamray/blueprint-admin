@@ -387,10 +387,11 @@ A new residual is stated **here** and gets a row above.
   after a bare `cd .claude/hooks` the next call's `cp x evil.sh` is refused. A
   command that changes directory with `cd`, `pushd`, `popd`, `source`, `eval`,
   the dot command, `env -C`, `--chdir`, `-S` or `--split-string` (clustered,
-  attached or abbreviated; the `env` must stand where a command stands, and its
+  attached or abbreviated; any word that is `env`, wherever it stands, and its
   option is looked for in every later word) or `find -execdir`/`-okdir` refuses
-  every relative target in it. `env X=1 ls -S` therefore reads as a directory
-  change: over-matching is the direction chosen. A directory change by a
+  every relative target in it. `env X=1 ls -S`, `env -uC` and `echo env -C`
+  therefore read as a directory change: over-matching is the direction chosen,
+  because every attempt to ask where `env` stands failed open in review. A directory change by a
   program not named here (`make -C`, `tar -C`, `sudo -D`, `systemd-run
   --working-directory`, `docker run -w`) is not seen: those programs are not on
   the writing-verb list either, and `git -C` for `git rm`/`git mv` is #358.
