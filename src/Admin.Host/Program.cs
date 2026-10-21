@@ -171,7 +171,7 @@ builder.Services.AddSingleton(sp => new FakeOrders(sp.GetRequiredService<TimePro
 builder.Services.AddHttpClient<PlatformProbe>().ConfigurePrimaryHttpMessageHandler(sp =>
     sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform
         ? new FakePlatformHandler(sp.GetRequiredService<IOptions<AdminOptions>>().Value, sp.GetRequiredService<FakeOrders>())
-        : new HttpClientHandler());
+        : Ipv4FirstConnect.Handler());
 
 // One client for Keycloak, the OpenAPI documents and the proxy. No redirects and no cookies: a
 // 302 or a Set-Cookie from the platform is part of the answer the proxy shows, not something to
@@ -181,7 +181,11 @@ builder.Services.AddHttpClient("platform")
     .ConfigurePrimaryHttpMessageHandler(sp =>
         sp.GetRequiredService<IOptions<AdminOptions>>().Value is { FakePlatform: true } fake
             ? new FakePlatformHandler(fake, sp.GetRequiredService<FakeOrders>())
-            : new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false })
+            : Ipv4FirstConnect.Handler(h =>
+            {
+                h.AllowAutoRedirect = false;
+                h.UseCookies = false;
+            }))
     .AddHttpMessageHandler(sp => new RecordingHandler(
         sp.GetRequiredService<FixtureRecorder>(), sp.GetRequiredService<IOptions<AdminOptions>>()));
 
