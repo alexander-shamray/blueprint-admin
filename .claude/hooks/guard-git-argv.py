@@ -79,6 +79,7 @@ that gets worked around rather than fixed.
 
 import collections
 import fnmatch
+import functools
 import json
 import os
 import re
@@ -2358,8 +2359,14 @@ CHANGES_DIRECTORY = re.compile(
     r"|\d*[<>]+&?\s*(?:\"[^\"]*\"|'[^']*'|\S+))\s+)*\.(?=$|[\s;&|()])")
 
 
+@functools.lru_cache(maxsize=32)
 def changes_directory(command):
     """Whether `command` may change directory, read before AND after quotes.
+
+    **Asked once per command, not once per target** (#359): the answer is a
+    function of the text, `destination_offence` asks it for every redirect and
+    operand, and the word scan below made a command of many redirects cost
+    targets times length. The cache is on the string.
 
     **The raw text is not what bash runs.** `c''d .claude` spells no `cd` and
     bash runs `cd`, so the pattern is also asked of the command with every
@@ -2373,34 +2380,69 @@ def changes_directory(command):
     return bool(CHANGES_DIRECTORY.search(command)
                 or CHANGES_DIRECTORY.search(unquoted)
                 or env_changes_directory(command)
-                or env_changes_directory(unquoted))
+                or env_changes_directory(re.sub(r"\$?[\"']", "", command)))
 
 
 def env_changes_directory(command):
     """Whether an `env` in `command` carries a directory option (#359).
 
     **Words, not a pattern, because a pattern had to choose between bounded and
-    quadratic.** `env` may stand behind a path (`/usr/bin/env`), take any
-    number of `NAME=value` words and options before its own, and spell the
-    option `-C dir`, `-Cdir`, in a cluster (`-iC`), or as an abbreviated
-    `--chdir` (`--c`: the only long option that begins with `c`). **`-S` and
-    `--split-string` count too**: their argument is split into more words, and
-    `env -S'-C .claude cp x settings.json'` hides the option inside one. The
-    name is compared folded and without `.exe`, as Windows resolves it. So each
-    command segment is split into words, and once an `env` word is found every
-    LATER word of that segment is asked, which is linear and also covers a
-    second `env` after the first. A segment ends at a separator; over-matching
-    a `-C` that belongs to the program `env` runs (`env X=1 make -C d`) is the
-    direction to be wrong in.
+    quadratic.** `env` may stand behind a path (`/usr/bin/env`, `env.exe`, any
+    case, as Windows resolves it), take any number of `NAME=value` words and
+    options before its own, and spell the option `-C dir`, `-Cdir`, in a
+    cluster of env's own letters (`-iC`), or as an abbreviated `--chdir`.
+    **`-S` and `--split-string` count too**: their argument is split into more
+    words, and `env -S'-C .claude cp x settings.json'` hides the option inside
+    one.
+
+    **Two bounds on what is asked, because both directions failed in review.**
+    The `env` must stand where a command stands (the start, after a separator
+    or a keyword or wrapper, behind assignment words), so `cat .env --color`
+    and `printenv --silent` are not env. And the words after it are read
+    across the whole command, separators included, because a separator can sit
+    inside env's own words (`env A=$(date) -C d`, `env 'A=;' -C d`): the
+    option is looked for in every later word, which over-matches an `-S` or `-C`
+    of the program env runs (`env X=1 ls -S`) and is the direction to be wrong
+    in. Only the FIRST such `env` is scanned, since its scan covers every later
+    one, which keeps this linear.
     """
-    for segment in re.split(r"[;&|(){}`\n]", command):
-        seen = False
-        for word in segment.split():
-            if seen and re.match(r"-[A-Za-z0-9]*[CS]|--[cs]", word):
+    words = command.split()
+    for index, word in enumerate(words):
+        before, core = re.match(r"(.*?)([^\s\\/:(){}`;&|]*)$", word).groups()
+        if core.lower() not in ("env", "env.exe"):
+            continue
+        if not env_at_command_position(words, index, before):
+            continue
+        for later in words[index + 1:]:
+            name = later.split("=", 1)[0]
+            if re.fullmatch(r"-[iv0uaPCS]*[CS].*", later) or (
+                    len(name) > 2 and name.startswith("--")
+                    and ("--chdir".startswith(name)
+                         or "--split-string".startswith(name))):
                 return True
-            if re.split(r"[\\/:]", word)[-1].lower().endswith(("env", "env.exe")):
-                seen = True
+        return False
     return False
+
+
+# Words after which a command stands, so an `env` behind them is the command.
+COMMAND_LEADERS = frozenset({
+    "then", "do", "else", "elif", "if", "while", "until", "time", "!", "{",
+    "builtin", "command", "exec", "sudo", "nohup", "nice", "xargs", "timeout",
+})
+
+
+def env_at_command_position(words, index, before):
+    """Whether the `env` word at `index` stands where a command stands."""
+    if re.search(r"[;&|(){}`!]", before):
+        return True
+    position = index - 1
+    while position >= 0 and re.match(r"\w+=", words[position]):
+        position -= 1
+    if position < 0:
+        return True
+    previous = words[position]
+    return (previous in COMMAND_LEADERS
+            or previous[-1] in ";&|(){}`")
 
 
 # The directory the session's command runs in, from the hook event. `None`
@@ -2468,28 +2510,20 @@ def cwd_protected_path(literal):
         return None
     if not EVENT_CWD:
         return None
-    joined = os.path.join(EVENT_CWD, literal)
-    # Both readings, as `application_tree` takes them: a cwd that is a link
-    # into `.claude` spells no protected component and resolves to one.
-    for path in (os.path.normpath(os.path.abspath(joined)),
-                 os.path.realpath(joined)):
-        root = path
-        while not os.path.exists(os.path.join(root, ".git")):
-            parent = os.path.dirname(root)
-            if parent == root:
-                root = None
-                break
-            root = parent
-        if root is None:
-            continue
-        try:
-            relative = os.path.relpath(path, root)
-        except ValueError:
-            continue
-        named = protected_path(relative)
-        if named:
-            return named
-    return None
+    # The lexical join only: a cwd that is a link into the tree is resolved by
+    # `linked_protected_path`, which runs before this in `destination_offence`.
+    path = os.path.normpath(os.path.abspath(os.path.join(EVENT_CWD, literal)))
+    root = path
+    while not os.path.exists(os.path.join(root, ".git")):
+        parent = os.path.dirname(root)
+        if parent == root:
+            return None
+        root = parent
+    try:
+        relative = os.path.relpath(path, root)
+    except ValueError:
+        return None
+    return protected_path(relative)
 
 
 def redirection_offence(command):
