@@ -111,9 +111,12 @@ public sealed class Ipv4FirstConnectTests
 
         IReadOnlyList<Reachability> result = await probe.ProbeAsync(TestContext.Current.CancellationToken);
 
-        // The probe's deadline is two seconds; an IPv6 fallback on Windows costs about that, so one second
-        // is the line between "answered" and "answered at the deadline" (#371).
-        elapsed.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(1));
+        // The probe's deadline is two seconds and an IPv6 fallback on Windows costs about that (#371), so
+        // without the fix the targets land at the deadline and read down: the Up assertion is what fails
+        // there, and the clock only keeps "up" from meaning "up at the deadline". The bound leaves room for
+        // twelve first-time connects, JIT and a loaded runner. On a runner that refuses ::1 at once neither
+        // assertion can tell the two orders apart, which is what the ordering test above is for.
+        elapsed.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(1.5));
         result.ShouldAllBe(r => r.Up);
     }
 
@@ -129,6 +132,9 @@ public sealed class Ipv4FirstConnectTests
 
         using HttpClient http = new(Ipv4FirstConnect.Handler()) { Timeout = TimeSpan.FromSeconds(10) };
 
-        await Should.ThrowAsync<HttpRequestException>(() => http.GetAsync($"http://127.0.0.1:{port}/", TestContext.Current.CancellationToken));
+        // `localhost` resolves to both families, so every address is tried and the last failure is what surfaces.
+        // The port was released a moment ago; if another process took it the request would be answered, which is
+        // a risk of a few microseconds on an ephemeral port that this test accepts.
+        await Should.ThrowAsync<HttpRequestException>(() => http.GetAsync($"http://localhost:{port}/", TestContext.Current.CancellationToken));
     }
 }
