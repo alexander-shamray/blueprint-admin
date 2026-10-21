@@ -7684,15 +7684,19 @@ class TheGitArgvGuard(unittest.TestCase):
         # word, and a run past the hook's time limit admits the command.
         # `-x 0<a` was a value or a redirection (22 pairs, 5.67 s); `>&>` was
         # `>&` then `>` or `>` then `&>` (11 words, 5.93 s). Sized so either
-        # old form takes about twenty seconds; no line names a relocation,
-        # which would answer before the pattern ran.
+        # old form takes about twenty seconds, and the bound is half that so a
+        # loaded runner keeps its margin; no line names a relocation, which
+        # would answer before the pattern ran. The same body ending in `-i`
+        # is refused, which only this pattern does, so the line reaches it.
         for body in ("-x 0<a " * 24, ">&>&>&> " * 12):
             with self.subTest(body=body[:12]):
                 command = ("echo 'bash " + body + "'; "
                            "git checkout HEAD -- notes.txt")
                 started = time.monotonic()
-                self.judge(command)
-                self.assertLess(time.monotonic() - started, 5)
+                self.assertIsNone(self.judge(command))
+                self.assertLess(time.monotonic() - started, 10)
+                self.assertIsNotNone(
+                    self.judge(command.replace("'; ", "-i'; ")))
 
     def test_an_ordinary_writing_verb_is_still_admitted(self):
         # The positive control: a rule refusing every `cp` passes every case
