@@ -2414,8 +2414,10 @@ def env_changes_directory(command):
     """
     words = command.split()
     for index, word in enumerate(words):
-        core = re.search(r"[^\s\\/:(){}`;&|]*$", word).group(0)
-        if core.lower() not in ("env", "env.exe"):
+        # Every piece of the word, so `env>/dev/null` and `/usr/bin/env` are
+        # env and `.env` and `printenv` are not.
+        if not any(piece.lower() in ("env", "env.exe")
+                   for piece in re.split(r"[\\/:(){}`;&|<>]", word)):
             continue
         for later in words[index + 1:]:
             name = later.split("=", 1)[0]
