@@ -580,17 +580,21 @@ A new residual is stated **here** and gets a row above.
   computed name; `set -a`, `set -o allexport`, `shopt -o`, `SHELLOPTS`, a
   `set` or `shopt` word holding an expansion, quote, brace or glob, and a
   shell started with `-a`; and `BASH_ENV`, `ENV`, a shell started
-  interactive or login (`-i`, `-l`, `--login`, `--rcfile`, `--init-file`),
-  `alias`, `enable` and `mapfile -C`, which run code. A computed name that is only bound (`read`,
+  interactive or login (`-i`, `-l`, `--login`, `--rcfile`, `--init-file`,
+  with a redirection between it and its options or not, and `exec -l` or
+  `exec -a -bash`), `zsh` and `ZDOTDIR`, since zsh reads `.zshenv` on every
+  start, `alias`, `enable` and `mapfile -C`, which run code. A computed name that is only bound (`read`,
   `printf -v`, `(( $N = 5 ))`) is exported by none of these and reaches no git
   process. A script a shell runs (`bash -c`, `eval`, a here-string, `$(...)`)
-  is judged with the event's whole command line around it, where its
-  environment is built, read as bash performs it (continuations joined,
-  comments and heredoc bodies left as data): until #357, `GIT_WORK_TREE=.claude bash -c 'git
+  is judged with every scope around it, where its environment is built: the
+  event's line as bash performs it (continuations joined, comments and
+  heredoc bodies left as data), and every script that line hands a shell on
+  stdin, which is code (a `git commit -F -` body stays data): until #357, `GIT_WORK_TREE=.claude bash -c 'git
   checkout HEAD -- settings.json'` was admitted. Still not seen: a variable
   exported before this command line runs, by an earlier Bash call or the
   profile the shell sources, which relocates a plain `git checkout --
-  settings.json` as well.
+  settings.json` as well; and a writer inside a shell `EVALUATORS` does not
+  name, whose script the guard never reads at all (#397).
   `git checkout -f`, `git reset --hard`, `git stash`, `git checkout-index`,
   `git read-tree -u` and the subcommands that merge or replay (`merge`,
   `cherry-pick`, `rebase`) update the tree wholesale or by index and are not
