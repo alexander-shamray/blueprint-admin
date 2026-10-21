@@ -162,7 +162,7 @@ public static class WorkspaceSchema
         int cols = widget["cols"]!.GetValue<int>();
         int rows = widget["rows"]!.GetValue<int>();
 
-        if (x < 0 || y < 0 || cols < 1 || x + cols > GridColumns)
+        if (x < 0 || y < 0 || cols < 1 || x > GridColumns || cols > GridColumns - x)
         {
             return $"{at} lies outside the {GridColumns}-column grid (x {x}, y {y}, cols {cols}).";
         }

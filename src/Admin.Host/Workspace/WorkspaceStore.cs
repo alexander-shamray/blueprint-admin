@@ -140,8 +140,16 @@ public sealed partial class WorkspaceStore(
 
     private WorkspaceSnapshot KeepAside(string why)
     {
-        string aside = Path.Combine(directory, $"workspace.unreadable-{time.GetUtcNow():yyyyMMddTHHmmssfff}.json");
-        File.Move(FilePath, aside, overwrite: true);
+        // The kept file may be the last copy of the operator's pages, so a name already taken gets a suffix, never an overwrite.
+        string stem = Path.Combine(directory, $"workspace.unreadable-{time.GetUtcNow():yyyyMMddTHHmmssfff}");
+        string aside = $"{stem}.json";
+
+        for (int n = 2; File.Exists(aside); n++)
+        {
+            aside = $"{stem}-{n}.json";
+        }
+
+        File.Move(FilePath, aside);
         if (log is not null)
         {
             LogKeptAside(log, FilePath, why, aside);
