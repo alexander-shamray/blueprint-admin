@@ -5179,21 +5179,21 @@ def _brace_group(text):
     values)`, or `None`. A group is read with its braces balanced, so
     `{a,{b,c}}` is one group of two alternatives; one with no top-level comma
     and no range inside is literal to bash and is looked through for groups
-    nested in it (`{a{b,c}}` is `{ab}` and `{ac}`)."""
+    nested in it (`{a{b,c}}` is `{ab}` and `{ac}`).
+
+    A backslash is not an escape here. The words arrive from `shlex` with their
+    quoting already removed, so `a\\{b,c}` reaches this as `a\{b,c}` while
+    bash still expands it; reading `\{` as escaped would pass what bash runs.
+    Treating every brace as live over-expands (`\{a,b\}` is judged as two
+    words) and a word judged too often is refused, never allowed."""
     index = 0
     while index < len(text):
-        if text[index] == "\\":
-            index += 2
-            continue
         if text[index] != "{":
             index += 1
             continue
         depth, cursor, commas = 1, index + 1, []
         while cursor < len(text) and depth:
             char = text[cursor]
-            if char == "\\":
-                cursor += 2
-                continue
             if char == "{":
                 depth += 1
             elif char == "}":

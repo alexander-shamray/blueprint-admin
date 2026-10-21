@@ -7319,6 +7319,9 @@ class TheGitArgvGuard(unittest.TestCase):
         # with nothing to expand is literal and is looked through.
         self.assertEqual(module.brace_variants("{a,{b}}"), ["a", "{b}"])
         self.assertEqual(module.brace_variants("{a{b,c}}"), ["{ab}", "{ac}"])
+        # shlex has removed the quoting by now, so `a\\{b,c}` arrives as
+        # `a\{b,c}` while bash still expands it: a backslash is no escape.
+        self.assertEqual(module.brace_variants("a\\{b,c}"), ["a\\b", "a\\c"])
         for literal in ("HEAD@{u}", "{a..3}", "{a..b..c}", "{x}"):
             self.assertEqual(module.brace_variants(literal), [literal])
         # Counted before it is built, so a huge range costs nothing.
