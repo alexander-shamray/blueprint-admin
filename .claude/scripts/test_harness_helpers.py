@@ -7582,6 +7582,10 @@ class TheGitArgvGuard(unittest.TestCase):
             "bash -x &>/dev/null -i -c 'git checkout HEAD -- settings.json'",
             "bash -x >|f -l -c 'git checkout HEAD -- settings.json'",
             "bash -x 2>&1 -i -c 'git checkout HEAD -- settings.json'",
+            "bash -x >'a;b' -ic 'git checkout HEAD -- settings.json'",
+            "bash \"-i\" -c 'git checkout HEAD -- settings.json'",
+            "bash -x'i' -c 'git checkout HEAD -- settings.json'",
+            "bash $O -c 'git checkout HEAD -- settings.json'",
             "bash <<'EOF'\nGIT_WORK_TREE=.claude bash -c "
             "'git checkout HEAD -- settings.json'\nEOF",
             "if . ./vars.sh; then git checkout HEAD -- settings.json; fi",
@@ -7676,16 +7680,19 @@ class TheGitArgvGuard(unittest.TestCase):
                 self.assertAdmitted(command, cwd=root)
 
     def test_the_startup_shell_pattern_answers_in_linear_time(self):
-        # #357: a word that was both an option's value and a redirection
-        # (`-x 0<a`) doubled the relocation pattern's search per pair, 22
-        # pairs took 5.67 s, and a run past the hook's time limit admits the
-        # command. Disjoint branches answer forty pairs at once.
-        command = ("echo 'bash " + "-x 0<a " * 40 + "'; "
-                   "export GIT_WORK_TREE=.claude; "
-                   "git checkout HEAD -- settings.json")
-        started = time.monotonic()
-        self.assertIsNotNone(self.judge(command))
-        self.assertLess(time.monotonic() - started, 5)
+        # #357: two readings of one word doubled the startup-shell search per
+        # word, and a run past the hook's time limit admits the command.
+        # `-x 0<a` was a value or a redirection (22 pairs, 5.67 s); `>&>` was
+        # `>&` then `>` or `>` then `&>` (11 words, 5.93 s). Sized so either
+        # old form takes about twenty seconds; no line names a relocation,
+        # which would answer before the pattern ran.
+        for body in ("-x 0<a " * 24, ">&>&>&> " * 12):
+            with self.subTest(body=body[:12]):
+                command = ("echo 'bash " + body + "'; "
+                           "git checkout HEAD -- notes.txt")
+                started = time.monotonic()
+                self.judge(command)
+                self.assertLess(time.monotonic() - started, 5)
 
     def test_an_ordinary_writing_verb_is_still_admitted(self):
         # The positive control: a rule refusing every `cp` passes every case
