@@ -210,7 +210,7 @@
       <span [class.up]="clientUp()" [class.down]="!clientUp()">client {{ clientUp() ? 'answers' : 'does not answer' }}</span>
     </p>
     @if (!s.frontend.installed) {
-      <p class="error">{{ config()?.frontendDir ?? 'The frontend clone' }} has no node_modules. Run npm ci there; the console does not.</p>
+      <p class="error">{{ s.frontend.installProblem ?? (config()?.frontendDir ?? 'The frontend clone') + ' has no node_modules. Run npm ci there; the console does not.' }}</p>
     }
     <button class="frontend-start" [disabled]="frontendRunning() || !s.frontend.installed" (click)="startFrontend()">Start frontend</button>
     <button class="frontend-stop" [disabled]="!frontendRunning()" (click)="stopFrontend()">Stop frontend</button>

@@ -41,11 +41,15 @@ export interface Reachability {
   status: number | null;
 }
 
-/** The reference client's last `npm start`, its last device build, and whether its clone has node_modules (spec §5.4). */
+/**
+ * The reference client's last `npm start`, its last device build, and whether its clone's node_modules is usable (spec
+ * §5.4): `installProblem` says why not — absent, or older than package-lock.json — and is null while it is (#369).
+ */
 export interface FrontendStatus {
   job: JobSummary | null;
   installed: boolean;
   deviceJob: JobSummary | null;
+  installProblem?: string | null;
 }
 
 /**
