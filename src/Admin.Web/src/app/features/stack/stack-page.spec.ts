@@ -573,7 +573,7 @@ describe('StackPage', () => {
       expect(fixture.nativeElement.textContent).not.toContain('npm ci');
     });
 
-    it('says why Start is off when node_modules is older than the lock, in the host\'s words (#369)', async () => {
+    it('says why Start is off when node_modules differs from the lock, in the host\'s words (#369)', async () => {
       const problem =
         'node_modules does not match package-lock.json (installed 2026-09-12, lock changed 2026-10-20): ' +
         '@angular/core 22.1.6 is installed (the lock has 22.2.3). Run npm ci in C:/dev/blueprint-frontend; the console does not.';

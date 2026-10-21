@@ -43,7 +43,7 @@ export interface Reachability {
 
 /**
  * The reference client's last `npm start`, its last device build, and whether its clone's node_modules is usable (spec
- * §5.4): `installProblem` says why not — absent, or older than package-lock.json — and is null while it is (#369).
+ * §5.4): `installProblem` says why not — absent, or differing from package-lock.json — and is null while it is (#369).
  */
 export interface FrontendStatus {
   job: JobSummary | null;
