@@ -391,10 +391,12 @@ A new residual is stated **here** and gets a row above.
   option is looked for in every later word) or `find -execdir`/`-okdir` refuses
   every relative target in it. `env X=1 ls -S`, `env -uC` and `echo env -C`
   therefore read as a directory change: over-matching is the direction chosen,
-  because every attempt to ask where `env` stands failed open in review. A directory change by a
-  program not named here (`make -C`, `tar -C`, `sudo -D`, `systemd-run
-  --working-directory`, `docker run -w`) is not seen: those programs are not on
-  the writing-verb list either, and `git -C` for `git rm`/`git mv` is #358.
+  because every attempt to ask where `env` stands failed open in review.
+  **Not seen:** a directory change by a program not named here (`make -C`,
+  `tar -C`, `sudo -D`, `systemd-run --working-directory`, `docker run -w`),
+  which are not on the writing-verb list either; an `env` or `cd` word built
+  by a substitution (`$(printf env) -C d`), the class `$(printf cd)` already
+  is; and `git -C` for `git rm`/`git mv`, which is #358.
   **On Windows `git worktree remove` can unregister a worktree and then fail to delete its
   tree** (`Permission denied` or `Invalid argument`): measured, a process held
   `<worktree>/.claude` for about 40 s after a `dotnet build` there, build servers shut
