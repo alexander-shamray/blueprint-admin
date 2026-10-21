@@ -2348,14 +2348,10 @@ def application_tree(literal):
 # `env -C .claude cp x settings.json` and `env --chdir=.claude tee settings.json`
 # land a relative target in `.claude` with no `cd` word in the command, and so
 # does `find … -execdir cp x ./hook.py \;`, which runs from the directory of
-# each match. `env`'s short option may sit in a cluster (`-iC`) and its long one
-# may be abbreviated (`--c`; `--chdir` is the only long option that begins with
-# `c`). Over-matching is the direction to be wrong in; the words between `env`
-# and the option are bounded so a long run of `env` words stays linear.
+# each match. `find`'s is a pattern below; `env`'s is `env_changes_directory`,
+# which reads words rather than a regex (see there).
 CHANGES_DIRECTORY = re.compile(
     r"(?:^|[\s;&|(){}`])(?:cd|pushd|popd|source|eval)(?=$|[\s;&|()])"
-    r"|(?:^|[\s;&|(){}`])env\s(?:[^\s;&|]+\s+){0,12}?(?:-[A-Za-z0-9]*C|--c[a-z]*)"
-    r"(?=$|[\s=;&|()])"
     r"|\s-(?:exec|ok)dir(?=$|[\s;&|()])"
     r"|(?:^|[;&|(){}`!\n]|\b(?:then|do|else|elif|if|while|until|time|builtin"
     r"|command|exec)\s(?:-\S*\s+)*)\s*(?:(?:\w+=(?:\"[^\"]*\"|'[^']*'|\S*)"
@@ -2375,7 +2371,33 @@ def changes_directory(command):
     """
     unquoted = re.sub(r"\$?[\"']|\\", "", command)
     return bool(CHANGES_DIRECTORY.search(command)
-                or CHANGES_DIRECTORY.search(unquoted))
+                or CHANGES_DIRECTORY.search(unquoted)
+                or env_changes_directory(command)
+                or env_changes_directory(unquoted))
+
+
+def env_changes_directory(command):
+    """Whether an `env` in `command` carries a directory option (#359).
+
+    **Words, not a pattern, because a pattern had to choose between bounded and
+    quadratic.** `env` may stand behind a path (`/usr/bin/env`), take any
+    number of `NAME=value` words and options before its own, and spell the
+    option `-C dir`, `-Cdir`, in a cluster (`-iC`), or as an abbreviated
+    `--chdir` (`--c`: the only long option that begins with `c`). So each
+    command segment is split into words, and once an `env` word is found every
+    LATER word of that segment is asked, which is linear and also covers a
+    second `env` after the first. A segment ends at a separator; over-matching
+    a `-C` that belongs to the program `env` runs (`env X=1 make -C d`) is the
+    direction to be wrong in.
+    """
+    for segment in re.split(r"[;&|(){}`\n]", command):
+        seen = False
+        for word in segment.split():
+            if seen and re.match(r"-[A-Za-z0-9]*C|--c[a-z]*(?:=|$)", word):
+                return True
+            if word.rsplit("/", 1)[-1].rsplit("\\", 1)[-1] == "env":
+                seen = True
+    return False
 
 
 # The directory the session's command runs in, from the hook event. `None`
@@ -2443,18 +2465,28 @@ def cwd_protected_path(literal):
         return None
     if not EVENT_CWD:
         return None
-    lexical = os.path.normpath(os.path.abspath(os.path.join(EVENT_CWD, literal)))
-    root = lexical
-    while not os.path.exists(os.path.join(root, ".git")):
-        parent = os.path.dirname(root)
-        if parent == root:
-            return None
-        root = parent
-    try:
-        relative = os.path.relpath(lexical, root)
-    except ValueError:
-        return None
-    return protected_path(relative)
+    joined = os.path.join(EVENT_CWD, literal)
+    # Both readings, as `application_tree` takes them: a cwd that is a link
+    # into `.claude` spells no protected component and resolves to one.
+    for path in (os.path.normpath(os.path.abspath(joined)),
+                 os.path.realpath(joined)):
+        root = path
+        while not os.path.exists(os.path.join(root, ".git")):
+            parent = os.path.dirname(root)
+            if parent == root:
+                root = None
+                break
+            root = parent
+        if root is None:
+            continue
+        try:
+            relative = os.path.relpath(path, root)
+        except ValueError:
+            continue
+        named = protected_path(relative)
+        if named:
+            return named
+    return None
 
 
 def redirection_offence(command):

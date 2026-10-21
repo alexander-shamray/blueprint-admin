@@ -7122,6 +7122,10 @@ class TheGitArgvGuard(unittest.TestCase):
             "env --chd .claude cp /tmp/a settings.json",
             "env -iC .claude cp /tmp/a settings.json",
             "env FOO=1 -C .claude cp /tmp/a settings.json",
+            "env -C.claude cp /tmp/a settings.json",
+            "/usr/bin/env -C .claude cp /tmp/a settings.json",
+            "env " + " ".join(f"V{n}=1" for n in range(30)) + " -C .claude tee settings.json",
+            "env env -C .claude tee settings.json",
             "find .claude/hooks -name x.py -execdir cp /tmp/a ./x.py \\;",
             "find . -name x.py -okdir cp /tmp/a ./x.py \\;",
         ):
@@ -7152,6 +7156,14 @@ class TheGitArgvGuard(unittest.TestCase):
         ):
             with self.subTest(command=command):
                 self.assertRefused(command, cwd=hooks)
+        # A cwd that is a link into the tree resolves to a protected component.
+        link = os.path.join(root, "notes", "hooks-link")
+        try:
+            os.symlink(hooks, link, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            link = None
+        if link is not None:
+            self.assertRefused("cp /tmp/a evil.sh", cwd=link)
         for cwd, command in (
             (root, "cp /tmp/a notes/x.txt"),
             (os.path.join(root, "notes"), "cp /tmp/a x.txt"),
