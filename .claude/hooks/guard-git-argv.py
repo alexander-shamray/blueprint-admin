@@ -3534,18 +3534,22 @@ def git_path_writer_offence(run, literals, command):
     # Read on every scope of the event as well as this string, which a shell
     # around it may run in an environment those scopes built (#357).
     # A shell started to read a startup file: interactive, login, `-a`, or
-    # given one by name. Failing closed rather than modelling the words in
-    # between, an option of that shape anywhere in the shell's simple command
-    # counts, a script's own (`bash -c 'ls -la'`) and one behind a glued
-    # redirection (`bash -x>/dev/null -i`) included. `;`, `&`, `|` and a
-    # newline end the command, but not inside `&>`, `>&`, `<&` or `>|`. No
-    # repetition is nested, so it answers in linear time: an earlier form
-    # that parsed options and redirections backtracked exponentially, and a
+    # given one by name, anywhere in the shell's simple command, past any
+    # redirection (`bash -x>/dev/null -i`), quoted span (`>'a;b' -i`) or
+    # escape; a script's own option counts too, through the dequoted
+    # reading (`bash -c 'ls -la'`). It fails closed on what it cannot read:
+    # an option word holding a quote, backslash or `$` (`-x'i'`), a leading
+    # quote or backslash (`"-i"`), and any unquoted `$` or backtick. **Every
+    # character has one way to be read**: a quoted span or an escape is one
+    # unit, and `&` or `|` is read only after `<` or `>` or, for `&`, only
+    # before `>`. Two readings of `>&>` doubled the search per word, and a
     # run past the time limit admits (#357).
     startup_shell = re.compile(
         r"(?i)(?<![\w.-])(?:" + "|".join(sorted(EVALUATORS)) + r")(?:\.exe)?\s"
-        r"(?:[^;&|\n]|&>|[<>]&|>\|)*?"
-        r"(?<!\S)(?:-(?-i:[A-Za-z]*[ail])|--(?:rcfile|init-file|login))")
+        r"(?:'[^']*'|\"(?:[^\"\\]|\\.)*\"|\\.|[^;&|\n'\"\\]"
+        r"|(?<=[<>])[&|]|(?<![<>])&(?=>))*?"
+        r"(?:(?<!\S)['\"\\]?(?:-(?-i:[A-Za-z]*[ail])"
+        r"|--(?:rcfile|init-file|login)|-[^\s'\"\\$`;&|]*['\"\\$`])|[$`])")
     relocated = relocated or any(
         relocation.search(text) or startup_shell.search(text)
         for line in dict.fromkeys((command, *EVENT_SCOPES))
