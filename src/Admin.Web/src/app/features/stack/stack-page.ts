@@ -1,9 +1,10 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { catchError, exhaustMap, of, tap, timer } from 'rxjs';
+import { catchError, exhaustMap, map, of, tap, timer } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { DoctorView } from '../../core/host/host-types';
+import { composeProgress } from '../../shared/output-pane/compose-progress';
 import { OutputPane } from '../../shared/output-pane/output-pane';
 
 @Component({
@@ -182,19 +183,78 @@ export class StackPage {
 
   readonly deviceBuildRunning = computed(() => this.stack()?.frontend.deviceJob?.state === 'Running');
 
+  /**
+   * The Compose job this screen started last, named for the button that started it (spec §5.3). The button shows
+   * its state, and the outcome stays beside it once the job exits, so the operator need not look for the output.
+   * A job opened with a "Show output" button is not this one: it has no button to report at.
+   */
+  readonly compose = signal<{ id: string; label: string; startedAt: number; endedAt: number | null; exitCode: number | null } | null>(null);
+  private readonly now = toSignal(timer(0, 1000).pipe(map(() => Date.now())), { initialValue: Date.now() });
+  private readonly pane = viewChild(OutputPane);
+
+  readonly composeRunning = computed(() => {
+    const c = this.compose();
+    return c !== null && c.exitCode === null;
+  });
+
+  /** The running job's label for its own button, `Up… 0:42`; the other buttons keep theirs. */
+  buttonLabel(label: string, idle = label): string {
+    const c = this.compose();
+    return c && c.exitCode === null && c.label === label ? `${idle}… ${this.clock(this.now() - c.startedAt)}` : idle;
+  }
+
+  /** `Up finished: exit 0 in 1:05`, shown beside the buttons for the Compose job that ended. */
+  readonly outcome = computed(() => {
+    const c = this.compose();
+    return c && c.exitCode !== null && c.endedAt !== null
+      ? { ok: c.exitCode === 0, text: `${c.label} ${c.exitCode === 0 ? 'finished' : 'failed'}: exit ${c.exitCode} in ${this.clock(c.endedAt - c.startedAt)}` }
+      : null;
+  });
+
+  /** The per-service list read from the followed job's output, for the Compose job this screen started. */
+  readonly progress = computed(() => {
+    const c = this.compose();
+    return c && c.id === this.jobId() ? composeProgress(this.pane()?.lines() ?? []) : null;
+  });
+
+  readonly composeOutput = computed(() => this.compose()?.id === this.jobId());
+
+  jobExited(exitCode: number): void {
+    const c = this.compose();
+    if (c && c.id === this.jobId() && c.exitCode === null) {
+      this.compose.set({ ...c, exitCode, endedAt: Date.now() });
+    }
+  }
+
+  private clock(ms: number): string {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
+
+  private startedCompose(label: string) {
+    return {
+      next: (job: { id: string }) => {
+        this.error.set(null);
+        this.jobId.set(job.id);
+        this.compose.set({ id: job.id, label, startedAt: Date.now(), endedAt: null, exitCode: null });
+      },
+      error: this.started.error,
+    };
+  }
+
   up(): void {
-    this.host.backendUp().subscribe(this.started);
+    this.host.backendUp().subscribe(this.startedCompose('Up'));
   }
 
   down(): void {
-    this.host.backendDown(false).subscribe(this.started);
+    this.host.backendDown(false).subscribe(this.startedCompose('Down'));
   }
 
   wipe(): void {
     if (!this.canWipe()) {
       return;
     }
-    this.host.backendDown(true, this.confirmText()).subscribe(this.started);
+    this.host.backendDown(true, this.confirmText()).subscribe(this.startedCompose('Down and wipe'));
     this.confirmText.set('');
   }
 
@@ -202,7 +262,7 @@ export class StackPage {
     if (!this.canWipe()) {
       return;
     }
-    this.host.backendReset(this.confirmText()).subscribe(this.started);
+    this.host.backendReset(this.confirmText()).subscribe(this.startedCompose('Reset'));
     this.confirmText.set('');
   }
 

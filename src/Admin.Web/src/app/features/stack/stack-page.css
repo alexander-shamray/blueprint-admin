@@ -38,3 +38,9 @@ table.device-reads tr.state-Unknown td.state { color: #666; }
 .frontend-status .up { background: #dfd; }
 .frontend-status .down { background: #fdd; }
 .frontend button { margin-right: 0.5rem; }
+.job-outcome { font-weight: 600; }
+.job-outcome.ok { color: #070; }
+.job-outcome.failed { color: #b00; }
+.compose-progress { margin-bottom: 1rem; }
+.compose-progress ul { columns: 2; margin: 0; padding-left: 1.25rem; font-family: monospace; }
+.compose-progress li.settled { color: #070; }
