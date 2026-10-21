@@ -7113,6 +7113,53 @@ class TheGitArgvGuard(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertRefused(command, cwd=root)
 
+    def test_a_wrapper_that_changes_directory_is_one_for_a_relative_target(self):
+        # #359: no `cd` word, and the relative target still lands elsewhere.
+        root = self.writing_checkout()
+        for command in (
+            "env -C .claude cp /tmp/a settings.json",
+            "env --chdir=.claude tee settings.json",
+            "env --chd .claude cp /tmp/a settings.json",
+            "env -iC .claude cp /tmp/a settings.json",
+            "env FOO=1 -C .claude cp /tmp/a settings.json",
+            "find .claude/hooks -name x.py -execdir cp /tmp/a ./x.py \\;",
+            "find . -name x.py -okdir cp /tmp/a ./x.py \\;",
+        ):
+            with self.subTest(command=command):
+                self.assertRefused(command, cwd=root)
+        for command in (
+            "env FOO=1 cp /tmp/a notes/x.txt",
+            "find notes -name x -exec cp /tmp/a notes/x.txt \\;",
+        ):
+            with self.subTest(command=command):
+                self.assertAdmitted(command, cwd=root)
+        module = self.guard_module()
+        self.assertIs(module.changes_directory("env " * 20000), False)
+
+    def test_a_session_already_inside_a_protected_tree_is_judged_where_it_stands(self):
+        # #361: `cd .claude/hooks` writes nothing; the next call arrives with that
+        # directory as its cwd and a relative target holds no protected component.
+        root = self.writing_checkout()
+        hooks = os.path.join(root, ".claude", "hooks")
+        os.makedirs(hooks)
+        self.assertAdmitted("cd .claude/hooks", cwd=root)
+        for command in (
+            "cp /tmp/a evil.sh",
+            "ls > evil.sh",
+            "rm check.py",
+            "cp /tmp/a ../settings.json",
+            "touch ./sub/../evil.sh",
+        ):
+            with self.subTest(command=command):
+                self.assertRefused(command, cwd=hooks)
+        for cwd, command in (
+            (root, "cp /tmp/a notes/x.txt"),
+            (os.path.join(root, "notes"), "cp /tmp/a x.txt"),
+            (os.path.join(root, "notes"), "ls > x.txt"),
+        ):
+            with self.subTest(command=command, cwd=cwd):
+                self.assertAdmitted(command, cwd=cwd)
+
     def test_the_dot_command_and_a_message_are_read_where_they_stand(self):
         # #357: `.` changes directory only as a command, and only the message
         # of a git commit, tag or merge is text.
