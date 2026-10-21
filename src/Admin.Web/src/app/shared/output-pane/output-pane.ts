@@ -39,6 +39,8 @@ export class OutputPane {
   readonly exitCode = signal<number | null>(null);
   /** The followed job's exit code, once, when the stream reports it: what a screen re-reads state on. */
   readonly exited = output<number>();
+  /** Once, when the followed job's stream fails: no exit will come for it, so a screen waiting on one stops waiting. */
+  readonly failed = output<void>();
   readonly error = signal<string | null>(null);
   readonly announcement = computed(() => {
     if (!this.jobId()) return '';
@@ -81,7 +83,10 @@ export class OutputPane {
             }
           });
         },
-        error: (err: unknown) => this.error.set(err instanceof Error ? err.message : 'The job stream failed.'),
+        error: (err: unknown) => {
+          this.error.set(err instanceof Error ? err.message : 'The job stream failed.');
+          this.failed.emit();
+        },
       });
     });
   }

@@ -303,6 +303,24 @@ describe('StackPage', () => {
       expect((fixture.nativeElement.querySelector('button.up') as HTMLButtonElement).disabled).toBe(false);
     });
 
+    it('keeps a job started after a failed stream running, whatever the pane still says of the old one', async () => {
+      const fixture = await openAndPressUp();
+      events.error(new Error('The host closed the job stream.'));
+      fixture.detectChanges();
+      fixture.detectChanges();
+
+      events = new Subject<JobEvent>();
+      const up = fixture.nativeElement.querySelector('button.up') as HTMLButtonElement;
+      fixture.componentInstance.jobId.set(null);
+      fixture.detectChanges();
+      up.click();
+      fixture.detectChanges();
+      fixture.detectChanges();
+
+      expect(up.disabled).toBe(true);
+      expect(text(up)).toMatch(/^Up… /);
+    });
+
     it('does not report a job opened with a Show output button as the Up that ended', async () => {
       const fixture = await openAndPressUp();
 
