@@ -7575,6 +7575,10 @@ class TheGitArgvGuard(unittest.TestCase):
             "ZDOTDIR=/tmp/d git checkout HEAD -- settings.json",
             "exec -a -bash bash -c 'git checkout HEAD -- settings.json'",
             "bash 2>/dev/null -ic 'git checkout HEAD -- settings.json'",
+            "bash -x</dev/null -ic 'git checkout HEAD -- settings.json'",
+            "bash -x>/dev/null -i -c 'git checkout HEAD -- settings.json'",
+            "bash -o vi<a -l -c 'git checkout HEAD -- settings.json'",
+            "bash -o posix>/dev/null -l -c 'git checkout HEAD -- settings.json'",
             "bash <<'EOF'\nGIT_WORK_TREE=.claude bash -c "
             "'git checkout HEAD -- settings.json'\nEOF",
             "if . ./vars.sh; then git checkout HEAD -- settings.json; fi",
