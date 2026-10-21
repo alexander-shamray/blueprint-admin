@@ -188,6 +188,14 @@ class TheRefusalsMirrorTheGate(Case):
                 self.assertEqual("", result.stdout, "a refusal prints no verdict")
                 self.assertTrue(phrase in gate, f"the Python gate no longer carries {phrase!r}")
 
+    def test_the_class_letters_are_spelled_out_not_ranged(self):
+        # The case above runs in the host's own locale, so on a C-locale runner it passes whichever way the
+        # script spells a class. This reads the script instead: a range over letters collates by locale.
+        script = HELPER.read_text(encoding="utf-8")
+
+        self.assertNotIn("[A-E]", script, "a class is five letters, not a range")
+        self.assertIn("[ABCDE]", script)
+
     def test_two_class_rows_and_one_row_without_the_other_are_refused(self):
         two = "| Class | D |\n| Class | A |\n| Touch set | docs/a.md |\n"
         lone = "| Class | D |\n"
