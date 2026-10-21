@@ -210,7 +210,10 @@ are announced.
   or whose stop failed as the Logs screen was left, runs until the next
   Follow.
 - The console runs `npm start` but never `npm ci`: with no `node_modules` in
-  the frontend clone, Start is refused and the screen says so.
+  the frontend clone, or one whose installed versions differ from its
+  `package-lock.json`, Start is refused and the screen says which (the doctor's
+  "Frontend install" row reads the same). A lock file it cannot read does not
+  block Start.
 - The device lane builds the client for the emulator (`npm run emulator:android`)
   and reads whether an emulator is attached, whether the gateway admits
   `https://localhost` and what the running realm's `mobile-app` redirects to.

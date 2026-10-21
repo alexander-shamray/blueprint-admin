@@ -76,8 +76,11 @@ routes are `Gateway.Api/appsettings.json`; health endpoints are mapped by
 | Load run | `run-locally.md`'s "Load run (k6)" blocks, each run whole through PowerShell, backend: the k6 read, Prometheus through Grafana, the `slo-run` client made if missing, its token, a product and its restock, then `k6 run ... deploy/observability/slo/slo.js` (§5.3) |
 | Shorten the saga's waits for a Scenario | `docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.short-timeouts.yml up -d --no-deps ordering-api`, backend (ADR-128), and the same without the second file to restore it; only for a script whose cause is one of those waits (§5.3) |
 
-`npm ci` is not a console operation. It is a one-time prerequisite and the
-console reports its absence (no `node_modules`) rather than running it.
+`npm ci` is not a console operation. It is a prerequisite and the console
+reports its absence (no `node_modules`) or its staleness (a `node_modules`
+whose installed versions differ from `package-lock.json`, which `ng serve`
+meets as dozens of compile errors that read as a broken frontend `main`)
+rather than running it.
 
 ### 2.2 HTTP surfaces on the workstation
 
@@ -304,6 +307,16 @@ workbench, for Python) will meet:
   detail. It is a PowerShell read, so a PowerShell that did not answer cannot
   tell.
 - Each clone: on `main`, and not behind its upstream as last fetched.
+- Frontend install (#369): the frontend clone's `node_modules` agrees with its
+  `package-lock.json`. The one row that is not a line of step 0: the host reads
+  the two files itself, because the question is the version of every package, which
+  no single command prints. Ok when every package npm recorded in
+  `node_modules/.package-lock.json` has the lock's version (a package the lock
+  marks optional may be absent, and an installed package the lock does not list
+  is ignored); a problem when `node_modules` is absent, or a version differs or a
+  package is missing, naming the first few and the dates of the two files; could
+  not tell when a lock file is missing or unreadable. Start is refused on the same
+  reading (§5.4). FakePlatform replays "agrees".
 - Images: no image Compose built predates the backend's last commit, since Up
   does not rebuild an image that exists.
 - Object store: `object-store` and `image-edge` are running and healthy and
@@ -451,13 +464,16 @@ here; the blocks are copied and held to the document word for word
 ### 5.4 FrontendSupervisor
 
 Holds at most one `npm start` job in `FrontendDir`. `Start()` refuses if one
-is running or if `node_modules` is absent. `Stop()` kills the tree. `Status()`
-reports the job and whether port 5173 answers.
+is running or if `node_modules` is absent or differs from `package-lock.json`
+(`FrontendInstall`, #369, compares the version of every package npm recorded in
+`node_modules/.package-lock.json` with the lock; a lock that cannot be read does
+not block). `Stop()` kills the tree. `Status()` reports the job, whether the
+install is usable with the reason when it is not, and whether port 5173 answers.
 
 The device lane sits beside it on the Stack screen. `StartDeviceBuild()` runs
 `npm run emulator:android` in `FrontendDir` under the same gate, as a second
 job that ends by itself (no Stop), refused while one is running or if
-`node_modules` is absent, and not waiting on the dev server. `DeviceReads` makes
+`node_modules` is absent or stale, and not waiting on the dev server. `DeviceReads` makes
 the three reads of §2.1 before it is pressed and reports each as the doctor's
 rows are (`Ok`, `Problem`, `Unknown`): an emulator is attached (one line ending
 `device`, none `offline` or `unauthorized`), the gateway answers a preflight from
@@ -749,7 +765,7 @@ All under `/api`, JSON, loopback only.
 | `POST /stack/backend/down` | body `{ wipeVolumes, confirm }`; returns the job, or a Down with the same `wipeVolumes` still running; 409 while another `ComposeGate` job (§5.3) runs, a Down with the other `wipeVolumes` included |
 | `POST /stack/backend/reset` | body `{ confirm }`, which must be `down -v`; §5.3's reset, returned as one job, or the one still running; 409 while another `ComposeGate` job runs |
 | `POST /stack/frontend/start`, `POST /stack/frontend/stop` | supervisor |
-| `POST /stack/frontend/device-build`, `GET /stack/frontend/device-reads` | §5.4's device lane: the build job, or 409 while one runs or without `node_modules`; and the three reads, one row each with its verdict |
+| `POST /stack/frontend/device-build`, `GET /stack/frontend/device-reads` | §5.4's device lane: the build job, or 409 while one runs or without a current `node_modules`; and the three reads, one row each with its verdict |
 | `GET /jobs`, `GET /jobs/{id}` | summaries; one job with its last lines |
 | `GET /jobs/{id}/stream` | Server-Sent Events, one event per line, `id:` is the sequence number so `Last-Event-ID` resumes from the ring buffer |
 | `POST /logs/follow` | body `{ services }`; stops the previous follow job if it is still running, starts one and returns it — the host keeps one |
