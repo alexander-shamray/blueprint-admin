@@ -583,14 +583,15 @@ A new residual is stated **here** and gets a row above.
   interactive or login (`-i`, `-l`, `--login`, `--rcfile`, `--init-file`,
   with a redirection between it and its options or not, and `exec -l` or
   `exec -a -bash`), `zsh` and `ZDOTDIR`, since zsh reads `.zshenv` on every
-  start, `alias`, `enable` and `mapfile -C`, which run code. A computed name that is only bound (`read`,
-  `printf -v`, `(( $N = 5 ))`) is exported by none of these and reaches no git
-  process. A script a shell runs (`bash -c`, `eval`, a here-string, `$(...)`)
-  is judged with every scope around it, where its environment is built: the
-  event's line as bash performs it (continuations joined, comments and
-  heredoc bodies left as data), and every script that line hands a shell on
-  stdin, which is code (a `git commit -F -` body stays data): until #357, `GIT_WORK_TREE=.claude bash -c 'git
-  checkout HEAD -- settings.json'` was admitted. Still not seen: a variable
+  start, `alias`, `enable` and `mapfile -C`, which run code. A computed name
+  that is only bound (`read`, `printf -v`, `(( $N = 5 ))`) is exported by
+  none of these and reaches no git process. A script a shell runs (`bash -c`,
+  `eval`, a here-string, `$(...)`) is judged with every scope around it,
+  where its environment is built: the event's line as bash performs it
+  (continuations joined, comments and heredoc bodies left as data), and every
+  script that line hands a shell on stdin, which is code (a `git commit -F -`
+  body stays data). Until #357, `GIT_WORK_TREE=.claude bash -c 'git checkout
+  HEAD -- settings.json'` was admitted. Still not seen: a variable
   exported before this command line runs, by an earlier Bash call or the
   profile the shell sources, which relocates a plain `git checkout --
   settings.json` as well; and a writer inside a shell `EVALUATORS` does not
