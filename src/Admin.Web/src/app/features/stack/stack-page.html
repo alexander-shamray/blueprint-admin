@@ -82,7 +82,7 @@
   }
 }
 
-<app-output-pane [jobId]="jobId()" [composeStderr]="composeOutput()" (exited)="jobExited($event)" />
+<app-output-pane [jobId]="jobId()" [composeStderr]="composeOutput()" (exited)="jobExited($event)" (failed)="streamFailed()" />
 
 @if (pollError(); as pe) {
   <p class="error">The host did not answer: {{ pe }}</p>

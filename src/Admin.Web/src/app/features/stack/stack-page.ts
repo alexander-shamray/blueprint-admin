@@ -220,15 +220,23 @@ export class StackPage {
   readonly composeOutput = computed(() => this.compose()?.id === this.jobId());
 
   /**
-   * The exit is only heard from the pane while it follows the job. When the operator opens another job's output, or the
-   * stream fails, no exit will come, so the running state is dropped rather than left disabling the buttons for good.
+   * The exit is only heard from the pane while it follows the job. When the operator opens another job's output no exit
+   * will come, so the running state is dropped rather than left disabling the buttons for good.
    */
   private readonly composeLost = effect(() => {
     const c = this.compose();
-    if (c && c.exitCode === null && (c.id !== this.jobId() || this.pane()?.error())) {
+    if (c && c.exitCode === null && c.id !== this.jobId()) {
       this.compose.set(null);
     }
   });
+
+  /** The same for a stream that failed; an event rather than the pane's error signal, which lags a newly started job. */
+  streamFailed(): void {
+    const c = this.compose();
+    if (c && c.exitCode === null && c.id === this.jobId()) {
+      this.compose.set(null);
+    }
+  }
 
   jobExited(exitCode: number): void {
     const c = this.compose();
