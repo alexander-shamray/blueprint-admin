@@ -79,7 +79,13 @@ public static class FrontendInstall
         }
 
         InstallReading reading = Compare(frontendDir, lockFile, hidden);
-        Cache[frontendDir] = (lockStamp, hiddenStamp, reading);
+
+        // Only a comparison is kept. An Unverified reading may be a file npm or a scanner held for a moment, and
+        // the stamps would not change when it let go, so it is read again on the next call.
+        if (reading.State is InstallState.Current or InstallState.Stale)
+        {
+            Cache[frontendDir] = (lockStamp, hiddenStamp, reading);
+        }
 
         return reading;
     }
@@ -99,8 +105,16 @@ public static class FrontendInstall
             }
 
             List<string> differences = [];
+            List<(string Key, string Version, bool Optional)> wanted = [.. Wanted(locked.RootElement)];
 
-            foreach ((string key, string version, bool optional) in Wanted(locked.RootElement))
+            // A lockfileVersion 1 lock has no `packages` object, and an empty one lists nothing: neither says what
+            // should be installed, so "no differences" would be "agrees" by default rather than by comparison.
+            if (wanted.Count == 0)
+            {
+                return new InstallReading(InstallState.Unverified, "package-lock.json lists no node_modules packages, so the install cannot be compared with it.");
+            }
+
+            foreach ((string key, string version, bool optional) in wanted)
             {
                 if (!have.TryGetValue(key, out string? present))
                 {

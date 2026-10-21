@@ -105,6 +105,34 @@ public sealed class FrontendInstallTests : IDisposable
     }
 
     [Fact]
+    public void A_lock_that_lists_no_packages_is_unverified_not_current()
+    {
+        // lockfileVersion 1 keeps `dependencies`, not `packages`.
+        Write("{\"lockfileVersion\":1,\"dependencies\":{\"rxjs\":{\"version\":\"7.8.2\"}}}", Lock(("node_modules/rxjs", "7.8.2", null)));
+
+        InstallReading reading = FrontendInstall.Read(clone.FullName);
+
+        reading.State.ShouldBe(InstallState.Unverified);
+        reading.Usable.ShouldBeTrue();
+        reading.Detail.ShouldContain("lists no node_modules packages");
+    }
+
+    [Fact]
+    public void An_unverified_reading_is_read_again_so_a_file_that_was_held_is_not_remembered_as_unreadable()
+    {
+        string both = Lock(("node_modules/rxjs", "7.8.2", null));
+        Write(both, both);
+
+        // npm or a scanner holds the lock for a moment: the read fails, and the files do not change when it lets go.
+        using (new FileStream(Path.Combine(clone.FullName, "package-lock.json"), FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            FrontendInstall.Read(clone.FullName).State.ShouldBe(InstallState.Unverified);
+        }
+
+        FrontendInstall.Read(clone.FullName).State.ShouldBe(InstallState.Current);
+    }
+
+    [Fact]
     public void FakePlatform_replays_an_install_that_agrees()
     {
         FrontendInstall.Replayed("/does/not/exist").State.ShouldBe(InstallState.Current);
