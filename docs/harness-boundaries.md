@@ -20,7 +20,7 @@ line names one residual below by the words it opens with.
 |---|---|
 | The check helpers, e2e, code the session writes | `Two toolchains`, `runs unjudged through a granted check helper` |
 | `settings.json` or a permission rule | `File permission rules take`, `self-locks`, `The global deny list names` |
-| A guard hook or its launcher | `Every guard hook uses` |
+| A guard hook or its launcher | `Every guard hook uses`, `The git-argv hook answers` |
 | The index: refresh, query or search hints, MCP approval, timeout | `Two hooks guard nothing`, `The second is the query hint`, `The search hint asks`, `A session started in a worktree`, `The CLI's skill rewrite`, `The MCP startup timeout` |
 | A command's `allowed-tools` or `disallowed-tools` | `grant the index commands`, `runs before it pushes never denies push`, `is a grant surface`, `A command that holds` |
 | The review agent grant, or restoring an external reviewer | `grants exactly`, `archive/external-reviewers` |
@@ -431,6 +431,23 @@ A new residual is stated **here** and gets a row above.
   `mv`'s source but not its destination. A sibling (`rm -rf ../old`) and a
   destination of `.` or `..` are judged only as any other path. The same
   POSIX-style gap holds there.
+- **The git-argv hook answers for a run that does not finish, and for an event
+  it decodes itself.** A hook that times out is non-blocking, so
+  `guard-git-argv.py` refuses what it would not finish judging (#362, #363,
+  #360). A brace expansion that makes more than `BRACE_WORD_LIMIT` words
+  (`{,}` thirty times is 2^30) is refused, as is a command past
+  `SCAN_BUDGET` or `LENGTH_BUDGET`; a watchdog thread answers with a refusal
+  after `WATCHDOG_SECONDS` and ends the process, which covers a Python loop that
+  runs long and not a single regular-expression match, which holds the
+  interpreter and is bounded by the two budgets instead. The event is read as
+  bytes and decoded as UTF-8 with replacement, never with the locale's code
+  page, which on Windows raised on `Á` and let the handler allow the event
+  unjudged. A malformed event that is not JSON is still allowed, and says so on
+  stderr. A forbidden git flag is looked for in every word a brace list or a
+  single-letter or numeric range, stepped or not, can make, expanded until
+  nothing changes, so `--{oneline,output=/tmp/y}` is refused. A list or range
+  brace the guard cannot read (`{a..3}`, `{a..b..c}`) is refused too, rather
+  than read as written.
 - **`sed` is judged by reading its script, and a word the shell expands is
   refused.** `guard-git-argv.py` reads `w`, `W`, `s///w`, `e` and `s///e` in a
   `-e` or first-operand script, refuses `-f`, and refuses any `sed` word with
