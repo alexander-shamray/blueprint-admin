@@ -7563,6 +7563,13 @@ class TheGitArgvGuard(unittest.TestCase):
             "env GIT_DIR=x bash -c 'git checkout HEAD -- settings.json'",
             "export GIT_WORK_TREE=.claude; bash <<< 'git checkout HEAD -- settings.json'",
             'export GIT_WORK_TREE=.claude; echo "$(git checkout HEAD -- settings.json)"',
+            "GIT_WORK_\\\nTREE=.claude bash -c 'git checkout HEAD -- settings.json'",
+            "set -o $O; git checkout HEAD -- settings.json",
+            "/usr/bin/env X=$Y bash -c 'git checkout HEAD -- settings.json'",
+            "bash -ic 'git checkout HEAD -- settings.json'",
+            "bash -o posix -l -c 'git checkout HEAD -- settings.json'",
+            "bash --rcfile /tmp/f -c 'git checkout HEAD -- settings.json'",
+            "ENV=/tmp/f sh -c 'git checkout HEAD -- settings.json'",
             "if . ./vars.sh; then git checkout HEAD -- settings.json; fi",
             "r${E}ead X <<< .claude/settings.json; git checkout $X",
             "git --a x --b y checkout origin/main -- .claude/settings.json",
@@ -7647,6 +7654,9 @@ class TheGitArgvGuard(unittest.TestCase):
             "declare -A seen; git checkout main",
             "mapfile -t lines < /tmp/f; git checkout main",
             "bash -c 'git checkout HEAD -- notes.txt'",
+            "git checkout HEAD -- notes.txt # source: review",
+            "git commit -F - <<'EOF'\nsource, alias and enable are words\nEOF\n"
+            "git checkout main",
         ):
             with self.subTest(admitted=command):
                 self.assertAdmitted(command, cwd=root)

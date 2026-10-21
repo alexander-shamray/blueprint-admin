@@ -571,17 +571,20 @@ A new residual is stated **here** and gets a row above.
   command, `export` and `declare -x`, `allexport`, a nameref an `export` then
   follows, a program that sets the environment, and code read from data.
   Beside a writer, each one that can export a name this guard cannot read is
-  refused: an expansion anywhere in the words of `env`, `sudo` or `doas`, or
-  of a declaration builtin behind `command` or `builtin`, which split `X=$Y`
-  into a second name (`export X=$Y` alone does not, and stays admitted); any
-  nameref, which a `for` loop can point at a computed name; `set -a`, `set -o
-  allexport`, `shopt -o`, `SHELLOPTS`, a `set` option built by an expansion
-  and a shell started with `-a`; and `BASH_ENV`, `alias`, `enable` and
-  `mapfile -C`, which run code. A computed name that is only bound (`read`,
+  refused: an expansion anywhere in the words of `env`, `sudo` or `doas`
+  (path-qualified too), or of a declaration builtin behind `command` or
+  `builtin`, which split `X=$Y` into a second name (`export X=$Y` alone does
+  not, and stays admitted); any nameref, which a `for` loop can point at a
+  computed name; `set -a`, `set -o allexport`, `shopt -o`, `SHELLOPTS`, a
+  `set` or `shopt` word holding an expansion, quote, brace or glob, and a
+  shell started with `-a`; and `BASH_ENV`, `ENV`, a shell started
+  interactive or login (`-i`, `-l`, `--login`, `--rcfile`, `--init-file`),
+  `alias`, `enable` and `mapfile -C`, which run code. A computed name that is only bound (`read`,
   `printf -v`, `(( $N = 5 ))`) is exported by none of these and reaches no git
   process. A script a shell runs (`bash -c`, `eval`, a here-string, `$(...)`)
   is judged with the event's whole command line around it, where its
-  environment is built: until #357, `GIT_WORK_TREE=.claude bash -c 'git
+  environment is built, read as bash performs it (continuations joined,
+  comments and heredoc bodies left as data): until #357, `GIT_WORK_TREE=.claude bash -c 'git
   checkout HEAD -- settings.json'` was admitted. Still not seen: a variable
   exported before this command line runs, by an earlier Bash call or the
   profile the shell sources, which relocates a plain `git checkout --

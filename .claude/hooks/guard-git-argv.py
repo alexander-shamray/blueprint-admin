@@ -3499,23 +3499,25 @@ def git_path_writer_offence(run, literals, command):
     # never exported to git (#357): `env`, and a declaration builtin behind
     # `command` or `builtin`, split `X=$Y` into a second name; any nameref,
     # which a `for` loop can point at a computed name; `allexport` however it
-    # is set; and `BASH_ENV`, `alias`, `enable` and `mapfile -C`, which run
-    # code. Binding a name without exporting it, `(( $N = 5 ))`, reaches no
-    # git process.
+    # is set; and `BASH_ENV`, `ENV`, an interactive or login shell, `alias`,
+    # `enable` and `mapfile -C`, which run code. Binding a name without
+    # exporting it, `(( $N = 5 ))`, reaches no git process.
     relocation = re.compile(
         r"(?i)(?<!\w)(GIT_WORK_TREE|GIT_DIR|GIT_COMMON_DIR|GIT_INDEX_FILE"
         r"|GIT_CONFIG\w*|SHELLOPTS|BASH_ENV|allexport)\b"
+        r"|(?-i:(?<![\w$])ENV=)"
         r"|(?<![\w./-])(?:eval|source|trap|alias|enable)(?![\w./-])"
         r"|\b(?:mapfile|readarray)\b[^;&|\n]*\s-(?-i:[A-Za-z]*C)"
-        r"|(?<![\w./-])(?:env|sudo|doas)\b[^;&|\n]*[$`]"
+        r"|(?<![\w.-])(?:env|sudo|doas)\b[^;&|\n]*[$`]"
         r"|(?<![\w./-])(?:command|builtin)\b(?:\s+-\S+)*\s+"
         r"(?:export|declare|typeset|local|readonly)\b[^;&|\n]*[$`]"
         r"|\b(?:declare|typeset|local)\b(?:\s+[^\s;&|]+)*?\s+-\w*n"
         r"|(?<![\w./-])set\b[^;&|\n]*\s-(?-i:[A-Za-z]*a)"
-        r"|(?<![\w./-])(?:set|shopt)\b[^;&|\n]*\s[-+]\S*[$`]"
+        r"|(?<![\w./-])(?:set|shopt)\b[^;&|\n]*[$`'\"{}\\*?\[]"
         r"|(?<![\w./-])shopt\b[^;&|\n]*\s-\w*o"
-        r"|(?<![\w.-])(?:ba|da|k|z|mk|a)?sh(?:\.exe)?\s+(?:-\S+\s+)*?"
-        r"-(?-i:[A-Za-z]*a)"
+        r"|(?<![\w.-])(?:ba|da|k|z|mk|a)?sh(?:\.exe)?\s+"
+        r"(?:[-+]\S+\s+(?:[^-+\s;&|]\S*\s+)?)*?"
+        r"(?:-(?-i:[A-Za-z]*[ail])|--(?:rcfile|init-file|login))"
         r"|\b(?:export|declare|typeset|local|readonly|env)\b[^;&|\n]*(?:\$\(|`)"
         r"|\b(?:export|declare|typeset|local|readonly|env|read|mapfile|readarray)"
         r"\b(?:\s+[^\s;&|]+)*?\s+[^\s=;&|]*\$|printf\s+-v\s+\S*\$"
@@ -5940,7 +5942,11 @@ def offence(command, depth=0, judged=None):
     # way out, so a caller judging many events cannot carry one into the next.
     outermost = depth == 0
     if outermost:
-        EVENT_COMMAND = command
+        # The line as `_offence` judges it and bash performs it: a heredoc body
+        # and a comment are data, and a continuation is joined before bash
+        # reads a name, so `GIT_WORK_\<newline>TREE=` is the variable (#357).
+        EVENT_COMMAND = separate_lines(
+            join_continuations(strip_comments(strip_heredocs(command))))
     try:
         verdict = _offence(command, depth, judged)
     finally:
