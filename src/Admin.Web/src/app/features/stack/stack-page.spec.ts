@@ -573,6 +573,26 @@ describe('StackPage', () => {
       expect(fixture.nativeElement.textContent).not.toContain('npm ci');
     });
 
+    it('says why Start is off when node_modules is older than the lock, in the host\'s words (#369)', async () => {
+      const problem =
+        'node_modules does not match package-lock.json (installed 2026-09-12, lock changed 2026-10-20): ' +
+        '@angular/core 22.1.6 is installed (the lock has 22.2.3). Run npm ci in C:/dev/blueprint-frontend; the console does not.';
+      host.stack.mockReturnValue(of({ ...stack, frontend: { job: null, installed: false, deviceJob: null, installProblem: problem } }));
+      const { fixture, q } = await render();
+
+      expect(text(q('p.error'))).toBe(problem);
+      expect(q('button.frontend-start')!.disabled).toBe(true);
+      expect(q('button.device-build')!.disabled).toBe(true);
+      expect(fixture.nativeElement.textContent).not.toContain('has no node_modules');
+    });
+
+    it('falls back to the missing-node_modules sentence when the host names no reason', async () => {
+      host.stack.mockReturnValue(of({ ...stack, frontend: { job: null, installed: false, deviceJob: null } }));
+      const { q } = await render();
+
+      expect(text(q('p.error'))).toContain('has no node_modules. Run npm ci there; the console does not.');
+    });
+
     it('starts the frontend and hands its job to the output pane', async () => {
       const { fixture, q } = await render();
 

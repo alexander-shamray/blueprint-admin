@@ -59,8 +59,10 @@ test('the workstation panel is read before Up, green where fine and red where a 
   await page.goto('/stack');
   const rows = page.getByRole('region', { name: 'Workstation' }).locator('table.doctor tbody tr');
 
-  await expect(rows).toHaveCount(10);
+  await expect(rows).toHaveCount(11);
   await expect(rows.filter({ hasText: 'Python' })).toHaveClass('state-Ok');
+  // FrontendInstall.Replayed: FakePlatform has no frontend clone to read, so the row is the recorded "agrees" (#369).
+  await expect(rows.filter({ hasText: 'Frontend install' })).toHaveClass('state-Ok');
   await expect(rows.filter({ has: page.getByRole('rowheader', { name: 'k6', exact: true }) })).toHaveClass('state-Ok');
   await expect(rows.filter({ hasText: 'Object store' })).toHaveClass('state-Ok');
   await expect(rows.filter({ hasText: 'Docker' })).toHaveClass('state-Ok');
