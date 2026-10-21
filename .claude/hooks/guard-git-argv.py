@@ -5193,10 +5193,11 @@ def _brace_group(text):
     nested in it (`{a{b,c}}` is `{ab}` and `{ac}`).
 
     A backslash is not an escape here. The words arrive from `shlex` with their
-    quoting already removed, so `a\\{b,c}` reaches this as `a\{b,c}` while
-    bash still expands it; reading `\{` as escaped would pass what bash runs.
-    Treating every brace as live over-expands (`\{a,b\}` is judged as two
-    words) and a word judged too often is refused, never allowed."""
+    quoting already removed, so a brace after an escaped backslash reaches this
+    after a single backslash while bash still expands it; reading that brace
+    as escaped would pass what bash runs. Treating every brace as live
+    over-expands (an escaped pair of braces is judged as two words) and a word
+    judged too often is refused, never allowed."""
     index = 0
     while index < len(text):
         if text[index] != "{":
