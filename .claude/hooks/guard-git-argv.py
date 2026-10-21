@@ -2396,10 +2396,9 @@ def env_changes_directory(command):
     for segment in re.split(r"[;&|(){}`\n]", command):
         seen = False
         for word in segment.split():
-            if seen and re.match(r"-[A-Za-z0-9]*[CS]|--[cs][a-z]*(?:=|$)", word):
+            if seen and re.match(r"-[A-Za-z0-9]*[CS]|--[cs]", word):
                 return True
-            name = re.split(r"[\\/]", word)[-1].lower()
-            if name in ("env", "env.exe"):
+            if re.split(r"[\\/:]", word)[-1].lower().endswith(("env", "env.exe")):
                 seen = True
     return False
 
@@ -5990,7 +5989,9 @@ def _offence(command, depth, judged):
                 "runs; refusing rather than judging the text instead of that "
                 "argv (#26)."
             )
-        refusal = offence(payload, depth + 1, judged)
+        # Judged behind its `env`, so an option in the payload (`-C dir`) is
+        # still env's and moves the directory a relative target lands in (#359).
+        refusal = offence("env " + payload, depth + 1, judged)
         if refusal is not None:
             return f"inside `env -S`: {refusal}"
 

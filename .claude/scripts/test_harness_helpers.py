@@ -7129,6 +7129,8 @@ class TheGitArgvGuard(unittest.TestCase):
             "env -S'-C .claude cp /tmp/a settings.json'",
             "env --split-string='-C .claude cp /tmp/a settings.json'",
             "ENV -C .claude cp /tmp/a settings.json",
+            '"env" -C .claude cp /tmp/a settings.json',
+            "env -S '-C .claude cp /tmp/a settings.json'",
             "env.exe -C .claude cp /tmp/a settings.json",
             "find .claude/hooks -name x.py -execdir cp /tmp/a ./x.py \\;",
             "find . -name x.py -okdir cp /tmp/a ./x.py \\;",
