@@ -1,5 +1,5 @@
 import { SCREENS } from '../screens';
-import { JOB_OUTPUT, LEGACY_SCREEN, STACK_WIDGETS, WidgetType } from './widgets';
+import { JOB_OUTPUT, LEGACY_SCREEN, SCENARIO_WIDGETS, STACK_WIDGETS, WidgetType } from './widgets';
 import { Page, WidgetInstance, Workspace } from './workspace-types';
 
 /** The schema version this console writes; `WorkspaceSchema.Current` on the host. */
@@ -11,10 +11,14 @@ type Placed = [WidgetType, number, number, Record<string, unknown>?];
  * The built-in pages rebuilt from widgets so far (§10), each widget at its cell and its type's default size, in
  * roughly the arrangement the screen had. For the Stack page that is the screens table's (spec §6): in the left
  * column the doctor's rows above the buttons and the job's output directly under them, with the Compose services and
- * the alerts beside that column, and the load run beside the golden signals below. A page not listed is still its
- * screen in one legacy widget.
+ * the alerts beside that column, and the load run beside the golden signals below. The Scenario page keeps the run
+ * beside the order's state. A page not listed is still its screen in one legacy widget.
  */
 const BUILT_IN_LAYOUTS: Partial<Record<string, readonly Placed[]>> = {
+  scenario: [
+    [SCENARIO_WIDGETS.scenario, 0, 0],
+    [SCENARIO_WIDGETS.saga, 16, 0],
+  ],
   stack: [
     [STACK_WIDGETS.doctor, 0, 0],
     [STACK_WIDGETS.services, 12, 0, { services: [] }],

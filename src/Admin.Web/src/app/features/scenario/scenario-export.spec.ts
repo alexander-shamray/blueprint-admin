@@ -1,6 +1,6 @@
 import { BrokerQueue, QueuesView, TraceView } from '../../core/host/host-types';
 import { BODY_LIMIT, ExportInput, MAIL_OMITTED, buildExport } from './scenario-export';
-import { StepView } from './scenario-page';
+import { StepView } from './scenario-runner';
 
 function step(partial: Partial<StepView> & { key: StepView['key'] }): StepView {
   return {

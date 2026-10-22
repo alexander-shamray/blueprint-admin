@@ -1,0 +1,51 @@
+.saga {
+  border: 1px solid var(--app-border);
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+}
+.saga h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+.saga-status {
+  font-family: monospace;
+}
+.saga-columns {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.saga-columns caption {
+  text-align: left;
+  color: var(--app-muted);
+  padding-bottom: 0.25rem;
+}
+.saga-columns th,
+.saga-columns td {
+  border-top: 1px solid var(--app-border);
+  padding: 0.25rem 0.5rem 0.25rem 0;
+  text-align: left;
+  vertical-align: top;
+}
+.saga-state,
+.saga-status-cell {
+  font-family: monospace;
+}
+.saga-pair-differs {
+  color: var(--app-error);
+  font-weight: 700;
+}
+.saga-pair-ahead {
+  color: var(--app-warn);
+}
+.transitions {
+  padding-left: 1.25rem;
+}
+.saga-stalled {
+  color: var(--app-error);
+  font-weight: 700;
+}
+.saga-caveat {
+  color: var(--app-muted);
+  font-size: 0.875rem;
+}

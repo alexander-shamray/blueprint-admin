@@ -1,6 +1,6 @@
 import { QueuesView, TraceView } from '../../core/host/host-types';
 import { SagaStrip, pairingText, sagaText } from './scenario-run';
-import type { StepView } from './scenario-page';
+import type { StepView } from './scenario-runner';
 
 /** The most characters of one step's body the document carries; the Scenario page has the rest. */
 export const BODY_LIMIT = 4000;

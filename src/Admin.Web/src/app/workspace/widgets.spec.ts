@@ -1,7 +1,7 @@
 import { SCREENS } from '../screens';
 import { builtInTitle, builtInWidgets, defaultWorkspace, differsFromBuiltIn, withEveryBuiltIn } from './built-in-pages';
 import { SCREEN_COMPONENTS } from './screen-components';
-import { JOB_OUTPUT, LEGACY_SCREEN, STACK_WIDGETS, WIDGETS, widgetType } from './widgets';
+import { JOB_OUTPUT, LEGACY_SCREEN, SCENARIO_WIDGETS, STACK_WIDGETS, WIDGETS, widgetType } from './widgets';
 import { GRID_COLUMNS, MAX_ROWS, WidgetInstance } from './workspace-types';
 
 describe('the widget registry', () => {
@@ -44,11 +44,19 @@ describe('the built-in pages', () => {
   });
 
   it('each start as one legacy widget across the grid, until a phase builds one from widgets', () => {
-    for (const screen of SCREENS.filter((s) => s.path !== 'stack')) {
+    for (const screen of SCREENS.filter((s) => s.path !== 'stack' && s.path !== 'scenario')) {
       expect(builtInWidgets(screen.path)).toEqual([
         expect.objectContaining({ type: 'legacy', x: 0, y: 0, cols: GRID_COLUMNS, config: { screen: screen.path } }),
       ]);
     }
+  });
+
+  it('build the Scenario page from the Scenario widget and the Saga strip beside it', () => {
+    expect(builtInWidgets('scenario')).toEqual([
+      expect.objectContaining({ id: 'builtin-scenario-scenario', type: 'scenario', x: 0, y: 0, cols: 16 }),
+      expect.objectContaining({ id: 'builtin-scenario-saga-strip', type: 'saga-strip', x: 16, y: 0, cols: 8 }),
+    ]);
+    expect(Object.values(SCENARIO_WIDGETS).every((k) => k.presets.length === 1 && k.dataServices.includes('ScenarioRunner'))).toBe(true);
   });
 
   it('build the Stack page from the Stack widgets and a Job output following the page, none overlapping', () => {
