@@ -701,8 +701,8 @@ Each phase is one or more PRs and leaves the console working.
 
 | Phase | Delivers | Needs |
 |---|---|---|
-| L Languages | §5.5's foundation: `@angular/localize` with runtime-loaded translations, the shell's language picker, `messages.en-US.json` and `messages.ru-RU.json`, the shell and shared components translated, the missing-translation check and the template lint rule, locale-aware formats; the workspace note's §11 amendment | — |
-| 1 Core | `Admin.Assistant`, the protocol, the endpoints, `AssistantOptions` (off by default), the fake provider, the redactor, the shell's assistant panel, `help` on `SCREENS`, `open_screen`, locale and the language rule, panel strings under §5.5; this note's §11 amendments; e2e | L |
+| L Languages | §5.5's foundation: `@angular/localize` with runtime-loaded translations, the shell's language picker, `messages.en-US.json` and `messages.ru-RU.json`, the shell and shared components translated, the missing-translation check and the template lint rule, locale-aware formats | — |
+| 1 Core | `Admin.Assistant`, the protocol, the endpoints, `AssistantOptions` (off by default), the fake provider, the redactor, the shell's assistant panel, `help` on `SCREENS`, `open_screen`, locale and the language rule, panel strings under §5.5; e2e | L |
 | 2 Anthropic | `Admin.Assistant.Anthropic`, credential status, the notice, prompt caching and usage reporting | 1 |
 | 3a Console reads | the server tools of §6.2 and the redaction gate over each | 1 |
 | 3b Platform data | `PlatformReadTools` (§6.5): GET operations as tools, identity choice and the panel's override, `PlatformReads`, transcript marking; e2e asking a product's stock and an order's payment status on FakePlatform | 1 |
