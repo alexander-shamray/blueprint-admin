@@ -38,6 +38,17 @@ describe('WorkspaceGrid', () => {
     expect(removed).toBe('w1');
   });
 
+  it('shows a widget far below gridster’s own hundred rows', async () => {
+    const low = { ...known, id: 'low', y: 7 * 16 };
+    const fixture = render([known, low], false);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const items = [...(fixture.nativeElement as HTMLElement).querySelectorAll('gridster-item')] as HTMLElement[];
+    expect(items.length).toBe(2);
+    expect(items.map((i) => i.style.display)).not.toContain('none');
+    expect(fixture.componentInstance.items()[1].y).toBe(7 * 16);
+  });
+
   it('locks the layout unless editing', () => {
     const grid = render([known], false).componentInstance;
     expect(grid.options().draggable?.enabled).toBe(false);
