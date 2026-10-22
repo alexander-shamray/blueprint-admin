@@ -4,6 +4,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { GridsterItem } from 'angular-gridster2';
+import { SCREENS } from '../screens';
 import { WIDGET_CONTEXT } from './widget-context';
 import { WorkspaceGrid } from './workspace-grid';
 import { GRID_COLUMNS, MAX_ROWS, WidgetInstance } from './workspace-types';
@@ -52,6 +53,58 @@ describe('WorkspaceGrid', () => {
     fixture.componentInstance.removeWidget.subscribe((id) => (removed = id));
     (fixture.nativeElement.querySelector('button.ws-remove') as HTMLButtonElement).click();
     expect(removed).toBe('w1');
+  });
+
+  it('offers a type’s presets as its configure control while editing, marks the current one, and reports the choice', () => {
+    expect(render([known], false).nativeElement.querySelector('button.ws-configure')).toBeNull();
+
+    const fixture = render([known], true);
+    let chosen: { id: string; config: Record<string, unknown> } | undefined;
+    fixture.componentInstance.configureWidget.subscribe((c) => (chosen = c));
+    (fixture.nativeElement.querySelector('button.ws-configure') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    const items = [...document.querySelectorAll<HTMLElement>('.mat-mdc-menu-item')];
+    expect(items.length).toBe(SCREENS.length);
+    expect(items.filter((i) => i.getAttribute('aria-current') === 'true').map((i) => i.textContent?.trim())).toEqual([
+      'API',
+    ]);
+    items.find((i) => i.textContent?.trim() === 'Trace')?.click();
+    expect(chosen).toEqual({ id: 'w1', config: { screen: 'trace' } });
+  });
+
+  it('has no configure control for a type with nothing to choose, or one this console does not know', () => {
+    const plain: WidgetInstance = { id: 'p', type: 'stack-controls', x: 0, y: 0, cols: 12, rows: 6, config: {} };
+    expect(render([plain, unknown], true).nativeElement.querySelector('button.ws-configure')).toBeNull();
+  });
+
+  it('maximises one widget across the page and restores the grid, keeping the layout', () => {
+    const fixture = render([known, { ...known, id: 'w3', x: 12 }], false);
+    const element: HTMLElement = fixture.nativeElement;
+    expect(element.querySelectorAll('gridster-item').length).toBe(2);
+
+    (element.querySelectorAll('button.ws-maximise')[1] as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(element.querySelectorAll('gridster-item').length).toBe(0);
+    expect(element.querySelectorAll('.ws-maximised').length).toBe(1);
+    expect(element.querySelector('.ws-maximised')?.getAttribute('data-widget-id')).toBe('w3');
+    const restore = element.querySelector('button.ws-maximise') as HTMLButtonElement;
+    expect(restore.getAttribute('aria-pressed')).toBe('true');
+
+    restore.click();
+    fixture.detectChanges();
+    expect(element.querySelectorAll('gridster-item').length).toBe(2);
+    expect(element.querySelector('.ws-maximised')).toBeNull();
+  });
+
+  it('ends a maximise when the widget is removed', () => {
+    const fixture = render([known, { ...known, id: 'w3', x: 12 }], true);
+    (fixture.nativeElement.querySelectorAll('button.ws-maximise')[1] as HTMLButtonElement).click();
+    fixture.detectChanges();
+    fixture.componentRef.setInput('widgets', [known]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.ws-maximised')).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('gridster-item').length).toBe(1);
   });
 
   it('places a full-width widget far below gridster’s own hundred rows, where it was saved', async () => {

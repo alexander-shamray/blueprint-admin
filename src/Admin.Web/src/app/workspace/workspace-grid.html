@@ -1,38 +1,89 @@
-<gridster [options]="options()" [class.editing]="editing()">
-  @for (item of items(); track item.widget.id) {
-    <gridster-item [item]="item" class="widget" [attr.data-widget-id]="item.widget.id">
-      <article class="ws-frame" [attr.aria-label]="titleOf(item)">
-        <header class="ws-head" [class.widget-drag]="editing()">
-          @if (editing()) {
-            <mat-icon class="ws-grip" aria-hidden="true">drag_indicator</mat-icon>
-          }
-          <h2 class="ws-title">{{ titleOf(item) }}</h2>
-          @if (editing()) {
-            <button
-              mat-icon-button
-              type="button"
-              class="ws-remove"
-              [attr.aria-label]="removeLabel(item)"
-              (mousedown)="$event.stopPropagation()"
-              (click)="removeWidget.emit(item.widget.id)"
-            >
-              <mat-icon aria-hidden="true">close</mat-icon>
-            </button>
-          }
-        </header>
-        <div class="ws-body">
-          @if (item.kind) {
-            @if (componentOf(item); as component) {
-              <ng-container *ngComponentOutlet="component; inputs: { config: item.config }; injector: injectorOf(item)" />
-            }
-          } @else {
-            <p class="ws-unknown" i18n>
-              This console does not know the widget type <code>{{ item.widget.type }}</code>. It is kept, and saved back as
-              it was.
-            </p>
-          }
-        </div>
-      </article>
-    </gridster-item>
-  }
-</gridster>
+<ng-template #frame let-item>
+  <article class="ws-frame" [attr.aria-label]="titleOf(item)">
+    <header class="ws-head" [class.widget-drag]="editing() && !maximised()">
+      @if (editing() && !maximised()) {
+        <mat-icon class="ws-grip" aria-hidden="true">drag_indicator</mat-icon>
+      }
+      <h2 class="ws-title">{{ titleOf(item) }}</h2>
+      @if (editing() && canConfigure(item)) {
+        <button
+          mat-icon-button
+          type="button"
+          class="ws-configure"
+          [attr.aria-label]="configureLabel(item)"
+          [matMenuTriggerFor]="configureMenu"
+          [matMenuTriggerData]="{ item }"
+          (mousedown)="$event.stopPropagation()"
+        >
+          <mat-icon aria-hidden="true">tune</mat-icon>
+        </button>
+      }
+      @if (item.kind) {
+        <button
+          mat-icon-button
+          type="button"
+          class="ws-maximise"
+          [attr.aria-label]="maximiseLabel(item)"
+          [attr.aria-pressed]="isMaximised(item)"
+          (mousedown)="$event.stopPropagation()"
+          (click)="toggleMaximise(item)"
+        >
+          <mat-icon aria-hidden="true">{{ isMaximised(item) ? 'close_fullscreen' : 'open_in_full' }}</mat-icon>
+        </button>
+      }
+      @if (editing()) {
+        <button
+          mat-icon-button
+          type="button"
+          class="ws-remove"
+          [attr.aria-label]="removeLabel(item)"
+          (mousedown)="$event.stopPropagation()"
+          (click)="removeWidget.emit(item.widget.id)"
+        >
+          <mat-icon aria-hidden="true">close</mat-icon>
+        </button>
+      }
+    </header>
+    <div class="ws-body">
+      @if (item.kind) {
+        @if (componentOf(item); as component) {
+          <ng-container *ngComponentOutlet="component; inputs: { config: item.config }; injector: injectorOf(item)" />
+        }
+      } @else {
+        <p class="ws-unknown" i18n>
+          This console does not know the widget type <code>{{ item.widget.type }}</code>. It is kept, and saved back as
+          it was.
+        </p>
+      }
+    </div>
+  </article>
+</ng-template>
+
+<mat-menu #configureMenu="matMenu">
+  <ng-template matMenuContent let-item="item">
+    @for (preset of item.kind.presets; track preset.label) {
+      <button
+        mat-menu-item
+        type="button"
+        [attr.aria-current]="isCurrent(item, preset) ? 'true' : null"
+        (click)="configureWidget.emit({ id: item.widget.id, config: preset.config })"
+      >
+        {{ preset.label }}
+      </button>
+    }
+  </ng-template>
+</mat-menu>
+
+@if (maximised(); as item) {
+  <div class="widget ws-maximised" [attr.data-widget-id]="item.widget.id">
+    <ng-container *ngTemplateOutlet="frame; context: { $implicit: item }" />
+  </div>
+} @else {
+  <gridster [options]="options()" [class.editing]="editing()">
+    @for (item of items(); track item.widget.id) {
+      <gridster-item [item]="item" class="widget" [attr.data-widget-id]="item.widget.id">
+        <ng-container *ngTemplateOutlet="frame; context: { $implicit: item }" />
+      </gridster-item>
+    }
+  </gridster>
+}

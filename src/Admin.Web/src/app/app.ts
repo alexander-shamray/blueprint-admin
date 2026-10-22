@@ -1,25 +1,26 @@
 import { CdkDrag, CdkDragDrop, CdkDropList } from '@angular/cdk/drag-drop';
 import { DecimalPipe } from '@angular/common';
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatIconModule } from '@angular/material/icon';
+import { MatDividerModule } from '@angular/material/divider';
 import { MatListModule } from '@angular/material/list';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { catchError, of } from 'rxjs';
-import { HostClient } from './core/host/host-client';
+import { HostClient, WORKSPACE_EXPORT_URL } from './core/host/host-client';
 import { LanguageService } from './core/i18n/language-service';
 import { THEME_CHOICES, ThemeService } from './core/theme/theme-service';
 import { CommandPalette } from './shared/command-palette/command-palette';
 import { differsFromBuiltIn } from './workspace/built-in-pages';
 import { WIDGETS, WidgetPreset, WidgetType } from './workspace/widgets';
 import { RunningWork } from './workspace/running-work';
-import { WorkspaceService } from './workspace/workspace-service';
+import { WorkspaceService, describe } from './workspace/workspace-service';
 
 /** The icon (a Material Symbols ligature) each theme choice shows on the top bar's switch. */
 const THEME_ICONS = { system: 'brightness_auto', light: 'light_mode', dark: 'dark_mode' } as const;
@@ -47,6 +48,7 @@ const THEME_LABELS = {
     CdkDrag,
     MatButtonModule,
     MatButtonToggleModule,
+    MatDividerModule,
     MatIconModule,
     MatListModule,
     MatMenuModule,
@@ -77,6 +79,11 @@ export class App {
    * saved, or when nothing can be saved this session, the reload costs nothing.
    */
   readonly canSwitchLanguage = computed(() => ['saved', 'unavailable'].includes(this.workspace.saveState().kind));
+  readonly exportUrl = WORKSPACE_EXPORT_URL;
+  /** The download is the host's saved copy, so it waits for a layout change to be saved: it would miss it otherwise. */
+  readonly canExport = computed(() => this.workspace.saveState().kind === 'saved');
+  /** A chosen file waiting for the operator to say it may replace the workspace (spec §6.2: "after the SPA asks"). */
+  readonly pendingImport = signal<{ name: string; document: unknown } | null>(null);
   /** On error, fall back to undefined so the shell (nav, router outlet) still renders without the backend-dir hint. */
   readonly config = toSignal(this.host.config().pipe(catchError(() => of(undefined))));
 
@@ -133,6 +140,38 @@ export class App {
         this.workspace.restorePage(page, at);
         void this.router.navigate(this.workspace.pageLink(page.id));
       });
+  }
+
+  /** Reads the chosen file and asks before anything is replaced; a file that is not JSON never gets as far as the host. */
+  async chooseImport(input: HTMLInputElement): Promise<void> {
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    try {
+      this.pendingImport.set({ name: file.name, document: JSON.parse(await file.text()) });
+    } catch {
+      this.notify($localize`"${file.name}:file:" is not a workspace file: it is not JSON.`);
+    }
+  }
+
+  confirmImport(): void {
+    const pending = this.pendingImport();
+    if (!pending) return;
+    this.pendingImport.set(null);
+    this.workspace.importWorkspace(pending.document).subscribe({
+      next: () => {
+        const page = this.workspace.pages().find((p) => p.id === this.workspace.workspace().activePageId && !p.hidden);
+        const open = page ?? this.workspace.visiblePages()[0];
+        if (open) void this.router.navigate(this.workspace.pageLink(open.id));
+        this.notify($localize`Workspace replaced by "${pending.name}:file:".`);
+      },
+      error: (e: unknown) =>
+        this.notify($localize`"${pending.name}:file:" was not imported: ${describe(e)}:reason:`),
+    });
+  }
+
+  private notify(message: string): void {
+    this.snackBar.open(message, $localize`:dismisses a notice:OK`, { duration: 8000 });
   }
 
   dropped(event: CdkDragDrop<unknown>): void {

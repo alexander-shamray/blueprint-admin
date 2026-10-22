@@ -250,6 +250,19 @@ describe('HostClient', () => {
     expect(seen).toEqual({ workspace: { version: 1, pages: [], activePageId: null }, etag: '"a"' });
   });
 
+  it('imports a workspace document and reads back what is now saved', () => {
+    let seen: unknown;
+    const workspace = { version: 1, pages: [], activePageId: null };
+    client.importWorkspace(workspace).subscribe((w) => (seen = w));
+
+    const req = http.expectOne('/api/workspace/import');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual(workspace);
+    req.flush(workspace, { headers: { ETag: '"i"' } });
+
+    expect(seen).toEqual({ workspace, etag: '"i"' });
+  });
+
   it('saves the workspace over the etag it was based on', () => {
     let seen: unknown;
     const workspace = { version: 1, pages: [], activePageId: null };

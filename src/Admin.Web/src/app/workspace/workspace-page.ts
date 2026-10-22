@@ -27,6 +27,7 @@ import { WidgetInstance } from './workspace-types';
         [editing]="workspace.editing()"
         (layoutChange)="workspace.setWidgets(p.id, $event)"
         (removeWidget)="remove(p.id, $event)"
+        (configureWidget)="workspace.configureWidget(p.id, $event.id, $event.config)"
         (dragging)="workspace.setDragging($event)"
       />
     } @else if (workspace.loaded()) {

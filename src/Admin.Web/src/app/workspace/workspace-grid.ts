@@ -1,10 +1,11 @@
-import { NgComponentOutlet } from '@angular/common';
+import { NgComponentOutlet, NgTemplateOutlet } from '@angular/common';
 import { Component, Injector, Type, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
 import { Gridster, GridsterConfig, GridsterItem, GridsterItemConfig } from 'angular-gridster2';
 import { WIDGET_CONTEXT, WidgetContext } from './widget-context';
-import { WidgetType, widgetType } from './widgets';
+import { WidgetPreset, WidgetType, widgetType } from './widgets';
 import { GRID_COLUMNS, MAX_ROWS, PAGE_ROWS, WidgetInstance } from './workspace-types';
 
 /** One grid row, in pixels; the spec leaves the height to the builder (§12). */
@@ -20,11 +21,14 @@ interface GridItem extends GridsterItemConfig {
 /**
  * The page's grid (widget-workspace spec §7.3): every widget in a cell grid of GRID_COLUMNS columns, locked unless
  * `editing`. The one place `angular-gridster2` is named, so the library can be swapped for Gridstack.js behind it.
- * A move or a resize is reported once, when it ends, as the page's whole layout.
+ * A move or a resize is reported once, when it ends, as the page's whole layout. A widget's header carries its
+ * configure control (editing only; it offers the type's presets, spec §7.2) and maximise, which shows that one widget
+ * across the whole page until it is restored; the others are not rendered meanwhile, and keep what they held in the
+ * session store (§4.2).
  */
 @Component({
   selector: 'app-workspace-grid',
-  imports: [Gridster, GridsterItem, NgComponentOutlet, MatButtonModule, MatIconModule],
+  imports: [Gridster, GridsterItem, NgComponentOutlet, NgTemplateOutlet, MatButtonModule, MatIconModule, MatMenuModule],
   templateUrl: './workspace-grid.html',
   styleUrl: './workspace-grid.css',
 })
@@ -55,6 +59,9 @@ export class WorkspaceGrid {
   readonly layoutChange = output<WidgetInstance[]>();
   readonly removeWidget = output<string>();
   readonly dragging = output<boolean>();
+  readonly configureWidget = output<{ id: string; config: Record<string, unknown> }>();
+
+  private readonly maximisedId = signal<string | null>(null);
 
   /** The loaded component of each type, so `*ngComponentOutlet` has a class to render. */
   private readonly components = signal<ReadonlyMap<string, Type<unknown>>>(new Map());
@@ -81,6 +88,9 @@ export class WorkspaceGrid {
       };
     }),
   );
+
+  /** The widget shown across the page, or null; one that is removed while maximised simply ends it. */
+  readonly maximised = computed(() => this.items().find((i) => i.widget.id === this.maximisedId()) ?? null);
 
   readonly options = computed<GridsterConfig>(() => {
     const editing = this.editing();
@@ -124,6 +134,35 @@ export class WorkspaceGrid {
 
   removeLabel(item: GridItem): string {
     return $localize`Remove ${this.titleOf(item)}:title:`;
+  }
+
+  isMaximised(item: GridItem): boolean {
+    return this.maximisedId() === item.widget.id;
+  }
+
+  toggleMaximise(item: GridItem): void {
+    this.maximisedId.set(this.isMaximised(item) ? null : item.widget.id);
+  }
+
+  /** Only a type with a choice to make has anything to configure: one preset is the config it already has. */
+  canConfigure(item: GridItem): boolean {
+    return (item.kind?.presets.length ?? 0) > 1;
+  }
+
+  /** Whether `preset` is the choice `item` holds now, by the config its type accepted. */
+  isCurrent(item: GridItem, preset: WidgetPreset): boolean {
+    const kind = item.kind;
+    return !!kind && JSON.stringify(kind.config(preset.config)) === JSON.stringify(item.config);
+  }
+
+  configureLabel(item: GridItem): string {
+    return $localize`Configure ${this.titleOf(item)}:title:`;
+  }
+
+  maximiseLabel(item: GridItem): string {
+    return this.isMaximised(item)
+      ? $localize`Restore ${this.titleOf(item)}:title: to the page`
+      : $localize`Maximise ${this.titleOf(item)}:title:`;
   }
 
   private reportLayout(): void {

@@ -1,5 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
+import { Observable, map } from 'rxjs';
 import { HostClient } from '../core/host/host-client';
 import { builtInTitle, defaultWorkspace, widgetsOf, withEveryBuiltIn } from './built-in-pages';
 import { isScreenPath } from './screen-components';
@@ -50,6 +51,8 @@ export class WorkspaceService {
   private inFlight = false;
   /** Bumped by every change, so a save that returns can tell whether it carried the latest. */
   private revision = 0;
+  /** Bumped by an import, whose etag a save that was already on its way must not overwrite. */
+  private epoch = 0;
 
   load(): void {
     this.host.workspace().subscribe({
@@ -190,6 +193,36 @@ export class WorkspaceService {
     return true;
   }
 
+  /** A widget given another config, one a type's presets offer; the rest of the page is as it was. */
+  configureWidget(id: string, widgetId: string, config: Record<string, unknown>): void {
+    const page = this.pages().find((p) => p.id === id);
+    if (!page) return;
+    this.setWidgets(
+      id,
+      widgetsOf(page).map((w) => (w.id === widgetId ? { ...w, config: structuredClone(config) } : w)),
+    );
+  }
+
+  /**
+   * Replaces the whole workspace with an exported document (§6.2), which the host validates as a save is. What the
+   * old widgets kept for the session goes with them, and a save already on its way no longer counts. An error is the
+   * host's refusal, which `describe` reads; the workspace is then as it was.
+   */
+  importWorkspace(document: unknown): Observable<void> {
+    return this.host.importWorkspace(document).pipe(
+      map(({ workspace, etag }) => {
+        if (this.timer !== null) clearTimeout(this.timer);
+        this.timer = null;
+        this.epoch++;
+        this.revision++;
+        this.sessions.forget(this.pages().flatMap((p) => widgetsOf(p).map((w) => w.id)));
+        this.workspace.set(withEveryBuiltIn(workspace));
+        this.etag = etag;
+        this.saveState.set({ kind: 'saved' });
+      }),
+    );
+  }
+
   /** A widget taken off its page, and what it kept for the session with it: a remove has no undo. */
   removeWidget(id: string, widgetId: string): void {
     const page = this.pages().find((p) => p.id === id);
@@ -244,11 +277,13 @@ export class WorkspaceService {
   private save(): void {
     if (this.dragging || this.inFlight || this.etag === null) return;
     const sent = this.revision;
+    const epoch = this.epoch;
     this.inFlight = true;
     this.saveState.set({ kind: 'saving' });
     this.host.saveWorkspace(this.workspace(), this.etag).subscribe({
       next: (answer) => {
         this.inFlight = false;
+        if (epoch !== this.epoch) return;
         if (answer.kind === 'stale') {
           this.saveState.set({ kind: 'conflict', theirs: answer.workspace, etag: answer.etag });
           return;
@@ -259,13 +294,15 @@ export class WorkspaceService {
       },
       error: (e: unknown) => {
         this.inFlight = false;
+        if (epoch !== this.epoch) return;
         this.saveState.set({ kind: 'failed', message: describe(e) });
       },
     });
   }
 }
 
-function describe(e: unknown): string {
+/** What a failed host call says, for a notice: the problem's `detail`, else the status. */
+export function describe(e: unknown): string {
   if (e instanceof HttpErrorResponse) {
     const detail = (e.error as { detail?: unknown } | null)?.detail;
     return typeof detail === 'string' ? detail : e.status === 0 ? 'the host did not answer' : `HTTP ${e.status}`;
