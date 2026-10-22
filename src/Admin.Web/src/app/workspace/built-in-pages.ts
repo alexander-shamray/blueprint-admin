@@ -1,16 +1,48 @@
 import { SCREENS } from '../screens';
-import { LEGACY_SCREEN } from './widgets';
+import { JOB_OUTPUT, LEGACY_SCREEN, STACK_WIDGETS, WidgetType } from './widgets';
 import { Page, WidgetInstance, Workspace } from './workspace-types';
 
 /** The schema version this console writes; `WorkspaceSchema.Current` on the host. */
 export const WORKSPACE_VERSION = 1;
 
+type Placed = [WidgetType, number, number, Record<string, unknown>?];
+
 /**
- * A built-in page's widgets as the console ships them (widget-workspace spec §5.3): in this phase, one legacy
- * screen widget across the grid. A built-in page the operator has not changed is saved as `widgets: null` and built
- * from here, so a later phase that changes a default reaches every untouched page with no migration.
+ * The built-in pages rebuilt from widgets so far (§10), each widget at its cell and its type's default size, in
+ * roughly the arrangement the screen had. A page not listed is still its screen in one legacy widget.
+ */
+const BUILT_IN_LAYOUTS: Partial<Record<string, readonly Placed[]>> = {
+  stack: [
+    [STACK_WIDGETS.controls, 0, 0],
+    [JOB_OUTPUT, 12, 0, { jobId: null }],
+    [STACK_WIDGETS.reachability, 0, 7, { surfaces: [] }],
+    [STACK_WIDGETS.services, 0, 10, { services: [] }],
+    [STACK_WIDGETS.doctor, 12, 10],
+    [STACK_WIDGETS.signals, 0, 22, { services: [] }],
+    [STACK_WIDGETS.alerts, 14, 22, { firingOnly: false }],
+    [STACK_WIDGETS.client, 0, 30],
+    [STACK_WIDGETS.loadRun, 14, 30],
+  ],
+};
+
+/**
+ * A built-in page's widgets as the console ships them (widget-workspace spec §5.3). A built-in page the operator has
+ * not changed is saved as `widgets: null` and built from here, so a later phase that changes a default reaches every
+ * untouched page with no migration.
  */
 export function builtInWidgets(screen: string): WidgetInstance[] {
+  const layout = BUILT_IN_LAYOUTS[screen];
+  if (layout) {
+    return layout.map(([kind, x, y, config]) => ({
+      id: `builtin-${screen}-${kind.type}`,
+      type: kind.type,
+      x,
+      y,
+      cols: kind.defaultSize.cols,
+      rows: kind.defaultSize.rows,
+      config: config ?? {},
+    }));
+  }
   return [
     {
       id: `builtin-${screen}-screen`,

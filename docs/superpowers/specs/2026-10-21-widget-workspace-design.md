@@ -508,6 +508,17 @@ later phase move one screen at a time without a page ever missing.
   height is `ROW_HEIGHT_PX` in `workspace-grid.ts`, gridster's own mobile
   breakpoint stacks the widgets, and each type's default and minimum size
   live in its `WIDGETS` entry.
+- Settled in phase 2 (#385), for the Stack page and what later phases reuse:
+  - a polled source is a `PolledFeed` (`workspace/polled-feed.ts`), which a
+    data service such as `StackFeed` owns and each widget attaches to;
+  - the Compose job the Stack controls start is running work in its own
+    `ComposeRun`, followed to its exit while no widget shows it;
+  - a Job output widget's "last job started from this page" is `jobId: null`,
+    and follows `PageJobs`, which also takes a job a Show output button opens;
+  - each widget learns its instance and page from `WIDGET_CONTEXT`, which the
+    grid provides;
+  - the legacy Stack screen is those same widgets in a column, so their logic
+    has one owner until phase 6.
 - The visual design within Material 3: palette, density, spacing.
 - Whether a widget's refresh button and a page-wide refresh both exist.
 - The exact Mermaid mapping of each `TraceView` event kind in §8.2, within

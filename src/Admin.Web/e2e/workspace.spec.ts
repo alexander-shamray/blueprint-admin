@@ -4,7 +4,8 @@ import { SCREENS } from '../src/app/screens';
 // The widget workspace (#383, widget-workspace spec §11). Against the fake platform, whose workspace file lives in a
 // temp directory, so a page made here never reaches a real one; the walk deletes its page at the end all the same,
 // because every spec file shares one host.
-for (const { path, label } of SCREENS) {
+// The Stack page is built from its widgets (#385); every other built-in page is still its screen in one widget.
+for (const { path, label } of SCREENS.filter((s) => s.path !== 'stack')) {
   test(`the built-in ${label} page renders its screen`, async ({ page }) => {
     await page.goto(`/${path}`);
 
@@ -17,6 +18,24 @@ for (const { path, label } of SCREENS) {
     await expect(page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: label })).toHaveClass(/active/);
   });
 }
+
+test('the built-in Stack page renders its widgets, each with what it reads', async ({ page }) => {
+  await page.goto('/stack');
+
+  await expect(page.locator('gridster-item .ws-head .ws-title')).toHaveText([
+    'Stack controls',
+    'Job output',
+    'Reachability',
+    'Compose services',
+    'Workstation doctor',
+    'Golden signals',
+    'Alerts',
+    'Reference client',
+    'Load run',
+  ]);
+  await expect(page.locator('gridster-item .loading')).toHaveCount(0);
+  await expect(page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: 'Stack' })).toHaveClass(/active/);
+});
 
 test('a page made, filled, resized and rearranged is found as it was left after a reload', async ({ page }) => {
   // Tall enough for all three default-size widgets, so every corner and header the walk drags is on screen.

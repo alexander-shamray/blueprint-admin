@@ -1,0 +1,73 @@
+import { Component, computed, inject, input, signal } from '@angular/core';
+import { HostClient } from '../../../core/host/host-client';
+import { hostErrorText } from '../../../core/host/host-error';
+import { injectPageJob } from '../../../workspace/page-jobs';
+import { StackFeed } from '../stack-feed';
+
+/**
+ * The backend's SLO run (spec §5.3), so the golden signals are read under load. The last run is read with the stack,
+ * so a run started elsewhere or before a reload is shown; a run started here becomes the page's job.
+ */
+@Component({
+  selector: 'app-load-run-widget',
+  template: `
+    <section class="load-run" aria-label="Load run">
+      <p class="load-run-status">
+        k6 run slo.js
+        @if (loadRun(); as job) {
+          @if (job.state === 'Running') { running } @else { exited {{ job.exitCode }} }
+        } @else if (feed.stack.value()) {
+          not run
+        }
+      </p>
+      @if (!feed.stack.value() && feed.stack.error(); as e) {
+        <p class="error">The host did not answer: {{ e }}</p>
+      }
+      <p class="load-run-note">
+        The backend's SLO run, so the golden signals are read under load: it places orders and lists products through the
+        gateway for a few minutes. A local run is not a staging baseline and proves nothing about the SLO (§13.7). Its orders,
+        the slo-run client and the restocked count are left as they are (run-locally.md, Load run (k6), Afterwards).
+      </p>
+      @if (error(); as e) {
+        <p class="error">{{ e }}</p>
+      }
+      <button class="load-run-start" type="button" [disabled]="running()" (click)="start()">Run load</button>
+      <button class="load-run-stop" type="button" [disabled]="!running()" (click)="stop()"
+        title="Ends the step going at once; during k6, teardown() does not run, so there is no verdict">Stop load</button>
+      @if (loadRun(); as job) {
+        <button class="load-run-output" type="button" (click)="pageJob.show(job.id)">Show load output</button>
+      }
+    </section>
+  `,
+  styleUrl: './stack-widgets.css',
+})
+export class LoadRunWidget {
+  private readonly host = inject(HostClient);
+  readonly feed = inject(StackFeed);
+  readonly pageJob = injectPageJob();
+
+  readonly config = input<Record<string, unknown>>({});
+  readonly error = signal<string | null>(null);
+
+  readonly loadRun = computed(() => this.feed.stack.value()?.loadRun ?? null);
+  readonly running = computed(() => this.loadRun()?.state === 'Running');
+
+  constructor() {
+    this.feed.stack.attach();
+  }
+
+  start(): void {
+    this.host.loadRunStart().subscribe({
+      next: (job) => {
+        this.error.set(null);
+        this.pageJob.show(job.id);
+      },
+      error: (e: unknown) => this.error.set(hostErrorText(e, 'The host refused the request.')),
+    });
+  }
+
+  /** Stop answers once the run has ended, so its output is already showing; only a refusal needs saying. */
+  stop(): void {
+    this.host.loadRunStop().subscribe({ error: (e: unknown) => this.error.set(hostErrorText(e, 'The host refused the request.')) });
+  }
+}
