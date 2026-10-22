@@ -7718,6 +7718,7 @@ class TheGitArgvGuard(unittest.TestCase):
             "env -C .claude bash -c 'git checkout HEAD -- settings.json'",
             "env -C.claude bash <<'EOF'\ngit checkout HEAD -- settings.json\nEOF",
             "env --chdir=.claude bash <<< 'git checkout HEAD -- settings.json'",
+            "/usr/bin/fish -c 'git checkout HEAD -- notes.txt'",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command, cwd=root)
@@ -7741,6 +7742,9 @@ class TheGitArgvGuard(unittest.TestCase):
             "cmd //c dir",
             "powershell -NoProfile -Command \"Get-Process | Select-Object Id,Name\"",
             "py -3.12 -c 'print(\"`x`\")'",
+            # A startup shell's name inside a path is a path (review R3).
+            "git checkout HEAD -- docs/fish.md",
+            "git checkout HEAD -- notes/zsh.txt",
             'gh pr create --title "git checkout fix" --body x',
             "gh pr create --title t --body \"run bash -c 'git checkout x'\"",
             'git commit -m "envdir /tmp/d bash -c fails" && git checkout main',
