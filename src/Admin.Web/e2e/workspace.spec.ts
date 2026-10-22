@@ -1,23 +1,10 @@
 import { expect, test } from '@playwright/test';
+import { SCREENS } from '../src/app/screens';
 
 // The widget workspace (#383, widget-workspace spec §11). Against the fake platform, whose workspace file lives in a
 // temp directory, so a page made here never reaches a real one; the walk deletes its page at the end all the same,
 // because every spec file shares one host.
-const SCREENS = [
-  ['stack', 'Stack'],
-  ['logs', 'Logs'],
-  ['broker', 'Broker'],
-  ['map', 'Map'],
-  ['erasure', 'Erasure'],
-  ['mail', 'Mail'],
-  ['requests', 'API'],
-  ['trace', 'Trace'],
-  ['scenario', 'Scenario'],
-  ['runbooks', 'Runbooks'],
-  ['transcript', 'Transcript'],
-] as const;
-
-for (const [path, label] of SCREENS) {
+for (const { path, label } of SCREENS) {
   test(`the built-in ${label} page renders its screen`, async ({ page }) => {
     await page.goto(`/${path}`);
 
