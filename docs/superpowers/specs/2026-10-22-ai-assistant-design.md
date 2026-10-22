@@ -20,7 +20,7 @@ AI agent, reached over an API, that:
 - answers questions about what the platform is doing now, from what the
   console can already read.
 
-Two further asks shape the design more than the first version does:
+Three further asks shape the design more than the first version does:
 
 - **Other agents later.** Claude, reached through Anthropic's API, is the first
   provider; another model, a local one included, must be an adapter, not a
@@ -623,7 +623,7 @@ total, so spend is visible.
   provider), reached only by the host, carrying redacted data; the browser
   still reaches only the host.
 - Spec §13 gains: "An assistant that operates the platform, until the
-  operator decides otherwise. The assistant explains, navigates and reads; it
+  operator decides otherwise. The assistant explains, navigates and reads. It
   has no tool that changes the platform (AI assistant note §6.3, which sets
   the conditions for adding one)."
 - The workspace note gains, in §10: "From phase L of the AI assistant note on,
@@ -705,8 +705,9 @@ design, not this note's.
   placeholder, and every other widget is unchanged.
 - **Playwright (FakePlatform)**: open the panel, ask where the logs are, land
   on Logs; ask the same in Russian ("где логи?"), land on Logs, and see the
-  reply name **Logs** as labelled; switch the console to `ru-RU` and see the shell and the panel in Russian, the reply naming the screen by its Russian label, and its
-  strings change; ask about the stack and see a server tool's label.
+  reply name **Logs** as labelled; switch the console to `ru-RU` and see the
+  shell and the panel in Russian and the reply name the screen by its Russian
+  label; ask about the stack and see a server tool's label.
 
 ## 15. Phases
 
