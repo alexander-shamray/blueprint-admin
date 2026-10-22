@@ -11,7 +11,8 @@ test('the trace screen renders a correlation id timeline that crosses the outbox
   await page.goto('/trace');
 
   await page.getByLabel('Correlation id').fill('demo-trace-0001');
-  await page.getByRole('button', { name: 'Trace' }).click();
+  // Exact: the widget's own header now has a Maximise Trace button.
+  await page.getByRole('button', { name: 'Trace', exact: true }).click();
 
   await expect(page).toHaveURL(/\/trace\/demo-trace-0001$/);
   await expect(page.locator('table.timeline tbody tr')).toHaveCount(14);
