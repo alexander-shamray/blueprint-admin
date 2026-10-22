@@ -296,6 +296,25 @@ describe('WorkspaceService', () => {
       expectSave('"i1"').flush(null, { headers: { ETag: '"i2"' } });
     });
 
+    it('saves an edit made between an import and the return of the save it left behind', () => {
+      load();
+      service.renamePage('stack', 'Mine');
+      vi.advanceTimersByTime(SAVE_DELAY_MS);
+      const inFlight = expectSave('"e1"');
+      service.importWorkspace(defaultWorkspace()).subscribe();
+      http.expectOne('/api/workspace/import').flush(defaultWorkspace(), { headers: { ETag: '"i1"' } });
+
+      service.renamePage('stack', 'After');
+      vi.advanceTimersByTime(SAVE_DELAY_MS);
+      http.expectNone((r) => r.method === 'PUT');
+      expect(service.saveState().kind).toBe('pending');
+
+      inFlight.flush(null, { headers: { ETag: '"e2"' } });
+      vi.advanceTimersByTime(0);
+      expectSave('"i1"').flush(null, { headers: { ETag: '"i2"' } });
+      expect(service.saveState().kind).toBe('saved');
+    });
+
     it('leaves the workspace as it was when the host refuses an import', () => {
       load();
       let refusal: unknown;
