@@ -5512,6 +5512,41 @@ class TheGitArgvGuard(unittest.TestCase):
         self.assertAdmitted("echo 'git push origin +HEAD:main'")
         self.assertAdmitted("bash <<<'git log --oneline -5'")
 
+    def test_an_unclassified_program_handed_git_writers_on_stdin_is_refused(self):
+        # **#397's last channel: a shell under a name no list holds reads its
+        # script on stdin.** After `cp /bin/bash /tmp/x`, each of these runs the
+        # git command, and `stdin_scripts` reads stdin only for a shell it
+        # names. The owner's direction (#397, 2026-10-22): judge by content for
+        # a program the guard cannot classify, and leave a classified reader's
+        # stdin alone, so `py - <<'EOF'` with a backtick in its Python is not
+        # read as a script.
+        for command in (
+            "echo 'git push origin +HEAD:main' | /tmp/x",
+            "/tmp/x <<< 'git checkout HEAD -- settings.json'",
+            "/tmp/x <<'EOF'\ngit push origin +HEAD:main\nEOF",
+            "cat <<'EOF' | /tmp/x\ngit push origin +HEAD:main\nEOF",
+            "env /tmp/x <<<'git push origin topic'",
+            "/tmp/x < <(echo 'git push origin +HEAD:main')",
+            "fish <<<'git rm -r src'",
+            "xargs -I{} sh -c {} <<<'git push origin +HEAD:main'",
+        ):
+            with self.subTest(command=command):
+                self.assertRefused(command)
+
+        # A classified reader's stdin is data, and text that writes nothing is
+        # nothing to refuse, whoever reads it.
+        for command in (
+            "py - <<'EOF'\nprint('git push origin +HEAD:main `x`')\nEOF",
+            "python -I - <<'EOF'\nimport subprocess\nEOF",
+            "gh issue create --body-file - <<'EOF'\nrun git push origin topic\nEOF",
+            "echo 'git push origin +HEAD:main' | tee note.txt",
+            "echo 'git status' | /tmp/x",
+            "/tmp/x <<< 'hello world'",
+            "echo hi | /tmp/x",
+        ):
+            with self.subTest(command=command):
+                self.assertAdmitted(command)
+
     def test_a_redirection_ampersand_does_not_end_the_run(self):
         # **#37: every unquoted `&` was a run boundary, including the one
         # inside a redirection operator.** So `bash >&2 <<'EOF'` was read as a

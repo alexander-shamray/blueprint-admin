@@ -4975,6 +4975,19 @@ def stdin_scripts(command):
     `git commit -F - <<EOF` a filing rather than a command: the leading word of
     the run has to be a shell.
     """
+    yield from _stdin_bodies(command, _consumes_as_script)
+
+
+def _stdin_bodies(command, consumes):
+    """Every heredoc body and here-string in `command` that `consumes` says
+    its reader takes in, as `stdin_scripts` describes them.
+
+    `consumes(command, position, ordinary)` is asked about the opener at
+    `position`; `stdin_scripts` asks whether a shell runs the text, and
+    `unclassified_stdin_writer` whether a program this file cannot classify
+    reads it (#397). One walk for both, so the pairing of bodies to openers
+    and the here-string's quote removal are decided once.
+    """
     # The bodies first, for `undecodable_heredoc`'s reason: an apostrophe in
     # one used to leave this scan in quote state for everything after it.
     spans = heredoc_spans(command)
@@ -5031,7 +5044,7 @@ def stdin_scripts(command):
             break
         opener = openers[cursor]
         cursor += 1
-        if _consumes_as_script(command, opener, ordinary):
+        if consumes(command, opener, ordinary):
             yield command[start:end]
 
     index = 0
@@ -5039,7 +5052,7 @@ def stdin_scripts(command):
         if not (ordinary[index] and command.startswith("<<<", index)):
             index += 1
             continue
-        consumed = _consumes_as_script(command, index, ordinary)
+        consumed = consumes(command, index, ordinary)
         cursor = index + 3
         while cursor < len(command) and command[cursor] in " \t":
             cursor += 1
@@ -5094,6 +5107,21 @@ def substitution_fed_shells(command):
     one: `echo <(git push origin +HEAD:main)` is text, and the inner command is
     judged in its own right by `substitutions`.
     """
+    ordinary = _unquoted_positions(command)
+    for index in range(len(command) - 1):
+        if not (ordinary[index] and ordinary[index + 1]):
+            continue
+        if command[index:index + 2] not in ("<(", ">("):
+            continue
+        start, end = _run_bounds(command, index, ordinary)
+        if reads_stdin_as_script(_run_words(command, start, end, ordinary)):
+            return True
+    return False
+
+
+def _unquoted_positions(command):
+    """For each position of `command`, whether bash reads it outside quotes,
+    comments, heredoc bodies and backslash escapes."""
     ordinary = [False] * len(command)
     escaped = None
     bodies = [(start, end) for start, end, _ in heredoc_spans(command)]
@@ -5105,15 +5133,125 @@ def substitution_fed_shells(command):
             escaped = index + 1
             continue
         ordinary[index] = not in_quotes and not in_comment
+    return ordinary
 
-    for index in range(len(command) - 1):
-        if not (ordinary[index] and ordinary[index + 1]):
-            continue
-        if command[index:index + 2] not in ("<(", ">("):
-            continue
-        start, end = _run_bounds(command, index, ordinary)
-        if reads_stdin_as_script(_run_words(command, start, end, ordinary)):
+
+# The programs whose stdin is DATA to them (#397): they read it, filter it,
+# file it or send it on, and execute none of it. **The safe side only**: a
+# program on no list, and no shell, is one this file cannot classify, so what
+# its stdin carries is judged by content (`unclassified_stdin_writer`).
+# `sed`, `awk` and `xargs` are left off on purpose, because each runs commands
+# taken from its input (`sed`'s `e`, `awk`'s `system`, `xargs` itself).
+# `READING_COMMANDS`, `DATA_ONLY_COMMANDS` and the interpreters, whose code is
+# the residual `INTERPRETER` states, are classified too.
+STDIN_DATA_READERS = frozenset({
+    "base64", "clip", "column", "cut", "fmt", "fold", "gh", "iconv", "jq",
+    "less", "md5sum", "more", "nl", "od", "paste", "pbcopy", "sha1sum",
+    "sha256sum", "sort", "tac", "tee", "tr", "uniq", "xxd", "yq",
+})
+
+
+def stdin_classified(words):
+    """Whether the run made of `words` starts a program whose handling of its
+    stdin this file knows: a shell, which the stdin pass reads as one, or a
+    reader or interpreter, whose stdin is data. A run that starts nothing
+    reads nothing."""
+    start = launched_program(words)
+    if start is None:
+        return True
+    name = program_name(words[start])
+    return (name in EVALUATORS or interpreter(name) or name in STDIN_DATA_READERS
+            or name in READING_COMMANDS or name in DATA_ONLY_COMMANDS)
+
+
+def _reaches_unclassified(command, position, ordinary):
+    """Whether the text at `position` is read by an unclassified program: the
+    run that opens it, or one later in its pipeline, since only a `|` carries
+    the bytes onward (`forwards_to_evaluator`'s walk)."""
+    start, index = _run_bounds(command, position, ordinary)
+    if not stdin_classified(_run_words(command, start, index, ordinary)):
+        return True
+    while index < len(command):
+        while index < len(command) and (
+                command[index] in " \t"
+                or (ordinary[index] and command[index] == ")")):
+            index += 1
+        if not (index < len(command) and ordinary[index]
+                and command[index] == "|") or command.startswith("||", index):
+            return False
+        index += 2 if command.startswith("|&", index) else 1
+        start = index
+        while index < len(command) and not _ends_run(command, index, ordinary):
+            index += 1
+        if not stdin_classified(_run_words(command, start, index, ordinary)):
             return True
+    return False
+
+
+# A line that runs git with a subcommand that writes: the push and ref-updating
+# rules' subcommands and the path writers', each a whole word after a `git` word.
+GIT_WRITER_LINE = re.compile(
+    r"(?im)(?<![\w.-])git(?:\.exe)?(?![\w.-])[^\n]*?(?<![\w.-])(?:"
+    + "|".join(re.escape(word) for word in sorted(
+        {"push"} | GIT_PATH_WRITERS | GIT_WRITING_SUBCOMMANDS
+        | REF_UPDATING_PLUMBING | GIT_EXECUTING_SUBCOMMANDS))
+    + r")(?![\w.-])")
+
+
+def unclassified_stdin_writer(command):
+    """Whether a program this file cannot classify is handed, on its stdin,
+    text that runs git to write (#397).
+
+    **A shell is a program, not a name, and stdin is its third channel.** After
+    `cp /bin/bash /tmp/x`, `echo 'git push origin +HEAD:main' | /tmp/x` runs the
+    push, as do `/tmp/x <<<'…'` and `/tmp/x <<EOF`: `stdin_scripts` reads the
+    text only when the reader is a shell this file names. Judging every stdin
+    as a script would refuse the ordinary `py - <<'EOF'` whose Python holds a
+    backtick, and resolving the program on disk fails for a copy made on the
+    same line. **So the reader is classified first**, by `stdin_classified`,
+    and only a reader on no list has its stdin judged, by content: a heredoc
+    body, a here-string, a printer's text before it in the pipe or a process
+    substitution's body that holds a git writer line refuses. The owner's
+    direction on #397 of 2026-10-22.
+    """
+    if any(GIT_WRITER_LINE.search(body)
+           for body in _stdin_bodies(command, _reaches_unclassified)):
+        return True
+
+    ordinary = _unquoted_positions(command)
+    for match in re.finditer(r"<\(", command):
+        if not (ordinary[match.start()] and ordinary[match.start() + 1]):
+            continue
+        start, end = _run_bounds(command, match.start(), ordinary)
+        if stdin_classified(_run_words(command, start, end, ordinary)):
+            continue
+        close = _closing_paren(command, match.end())
+        body = command[match.end():len(command) if close is None else close]
+        if GIT_WRITER_LINE.search(body):
+            return True
+
+    stripped = strip_dollar_quotes(strip_redirections(
+        join_continuations(strip_comments(strip_heredocs(command)))))
+    try:
+        lexer = shlex.shlex(stripped, posix=True, punctuation_chars=True)
+        lexer.commenters = ""
+        lexer.whitespace_split = True
+        tokens = list(lexer)
+    except ValueError:
+        # Unreadable as a command line: the passes that parse it refuse it.
+        return False
+    for group in pipeline_groups(tokens):
+        readers = [position for position, run in enumerate(group)
+                   if not stdin_classified(run)]
+        if not readers:
+            continue
+        for before in group[:max(readers)]:
+            command_word = leading_command(before)
+            if program_name(command_word) not in DATA_ONLY_COMMANDS:
+                continue
+            spoken = before[before.index(command_word) + 1:]
+            if GIT_WRITER_LINE.search(" ".join(spoken)):
+                return True
     return False
 
 
@@ -6221,6 +6359,14 @@ def _offence(command, depth, judged):
             "it runs is that command's output rather than anything written "
             "here; refusing rather than judging the source instead of the "
             "result."
+        )
+
+    if unclassified_stdin_writer(command):
+        return (
+            "a program this guard cannot classify as a shell or as a reader is "
+            "handed text on its stdin that runs git to write, and under another "
+            "name a shell would run it (#397). Hand the text to a program by "
+            "its own name, or run the git command as its own command."
         )
 
     for script in stdin_scripts(command):
