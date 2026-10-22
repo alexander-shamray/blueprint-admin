@@ -72,7 +72,7 @@
     <span class="hint">{{ c.backendDir }} @if (c.fakePlatform) {<em i18n>(fake platform)</em>}</span>
   }
   <span class="palette-key"><kbd>Ctrl</kbd>+<kbd>K</kbd> <ng-container i18n="opens the command palette">commands</ng-container></span>
-  <button mat-button type="button" class="language" aria-label="Language" i18n-aria-label [matMenuTriggerFor]="languageMenu">
+  <button mat-button type="button" class="language" [attr.aria-label]="languageLabel" [matMenuTriggerFor]="languageMenu">
     <mat-icon aria-hidden="true">translate</mat-icon> {{ language.name }}
   </button>
   <mat-menu #languageMenu="matMenu">
