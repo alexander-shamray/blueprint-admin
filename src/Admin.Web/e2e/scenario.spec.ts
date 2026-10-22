@@ -277,6 +277,32 @@ test('a finished run exports as one Markdown document, scrubbed by the host, wit
   expect(md).not.toMatch(/eyJ[A-Za-z0-9_-]{10,}\./);
 });
 
+// #389, #376: the run is the console's, not the page's. The side navigation keeps the app, as switching pages does; a
+// reload would end the run, which is the one way besides Cancel and a host gone that ends it.
+test('a run goes on while another page is open, the shell says so, and it finishes and exports', async ({ page }) => {
+  await page.goto('/scenario');
+  await expect(page.getByLabel('Run as')).toHaveValue('demo');
+  await page.getByRole('button', { name: 'Run' }).click();
+  await expect(page.locator('ol.steps li.step .state', { hasText: '[running]' })).toHaveCount(1);
+
+  await page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: 'Logs' }).click();
+  await expect(page).toHaveURL(/\/logs$/);
+  const indicator = page.locator('.running-work a', { hasText: /^Scenario: step \d+\/9 running$/ });
+  await expect(indicator).toBeVisible();
+
+  await indicator.click();
+  await expect(page).toHaveURL(/\/scenario$/);
+  const steps = page.locator('ol.steps li.step');
+  await expect(steps.locator('.state', { hasText: '[ok]' })).toHaveCount(9, WATCH);
+  await expect(page.locator('.running-work a')).toHaveCount(0);
+
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Export Markdown' }).click(),
+  ]);
+  expect(download.suggestedFilename()).toMatch(/^scenario-[0-9a-f]{8}\.md$/);
+});
+
 test('the already-shipped script is refused 422 order.already_shipped and reads the order back unchanged', async ({ page }) => {
   await page.goto('/scenario');
 

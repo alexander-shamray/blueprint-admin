@@ -15,6 +15,10 @@ import {
 import { DRAIN_POLL_MS, DRAIN_WATCH_MS, UUID } from '../api/api-page';
 import { ScenarioLauncher } from './scenario-launcher';
 import { ScenarioPage } from './scenario-page';
+import { ScenarioRunner } from './scenario-runner';
+import { SagaStripWidget } from './widgets/saga-strip-widget';
+import { ScenarioWidget } from './widgets/scenario-widget';
+import { RunningWork } from '../../workspace/running-work';
 import {
   CARRIER_POLL_MS,
   CARRIER_WATCH_MS,
@@ -277,7 +281,9 @@ const heldClock: TokenClockView = {
   permissions: [],
 };
 
-describe('ScenarioPage', () => {
+// The Scenario widget, and through it the one ScenarioRunner it is a view of (#389). The screen's spec, kept under the
+// screen's name: the widget is what the screen was, less the Saga strip, which renders the same runner's strip.
+describe('ScenarioWidget', () => {
   let host: {
     operations: ReturnType<typeof vi.fn>;
     reloadOperations: ReturnType<typeof vi.fn>;
@@ -327,7 +333,7 @@ describe('ScenarioPage', () => {
       transcript: vi.fn(() => of({ entries: [{ sequence: 7 }, { sequence: 9 }], dropped: 0 })),
     };
     TestBed.configureTestingModule({
-      imports: [ScenarioPage],
+      imports: [ScenarioWidget],
       providers: [
         provideRouter([]),
         { provide: HostClient, useValue: host },
@@ -337,9 +343,9 @@ describe('ScenarioPage', () => {
   });
 
   function render() {
-    const fixture = TestBed.createComponent(ScenarioPage);
+    const fixture = TestBed.createComponent(ScenarioWidget);
     fixture.detectChanges();
-    const page = fixture.componentInstance;
+    const page = fixture.componentInstance.runner;
     const pick = page.pick.bind(page);
     page.pick = (key) => {
       sinkMail = SCRIPTS[key].mail ?? DELIVERED_MAIL;
@@ -348,12 +354,19 @@ describe('ScenarioPage', () => {
     return fixture;
   }
 
+  /** The Saga strip widget's text, rendered over the same runner the Scenario widget drives. */
+  function stripText(): string {
+    const strip = TestBed.createComponent(SagaStripWidget);
+    strip.detectChanges();
+    return (strip.nativeElement as HTMLElement).textContent ?? '';
+  }
+
   function sent(): ProxyRequest[] {
     return host.proxy.mock.calls.map(([request]) => request as ProxyRequest);
   }
 
   it('runs the deliver script in order, carrying the published product and the placed order forward', async () => {
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     await page.run();
 
@@ -393,7 +406,7 @@ describe('ScenarioPage', () => {
   });
 
   it("fills the saga strip from the watches' order reads", async () => {
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
     expect(page.strip()).toBeNull();
 
     await page.run();
@@ -411,7 +424,7 @@ describe('ScenarioPage', () => {
 
   describe('the mail count', () => {
     it('reads the sink through the host and names the event each of the run\'s messages answered', async () => {
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
 
       await page.run();
 
@@ -430,7 +443,7 @@ describe('ScenarioPage', () => {
     it('counts only the mail whose correlation id is the run\'s', async () => {
       const other = mailView(['order-placed', 'order-placed'], {}, '0199a1b2-0000-7000-8000-0000000000ff');
       host.mailMessages.mockReturnValue(of({ ...mailView(DELIVERED_MAIL), messages: [...other.messages, ...mailView(DELIVERED_MAIL).messages] }));
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
 
       await page.run();
 
@@ -439,7 +452,7 @@ describe('ScenarioPage', () => {
 
     it('fails at once on a second message for one event, naming it, and does not read the sink again', async () => {
       host.mailMessages.mockReturnValue(of(mailView([...DELIVERED_MAIL, 'order-confirmed'])));
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
 
       await page.run();
 
@@ -452,7 +465,7 @@ describe('ScenarioPage', () => {
 
     it('fails on a message for an event the run does not expect', async () => {
       host.mailMessages.mockReturnValue(of(mailView([...DELIVERED_MAIL, 'order-cancelled'])));
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
 
       await page.run();
 
@@ -462,7 +475,7 @@ describe('ScenarioPage', () => {
 
     it('fails on a sink that cannot be read, never as a run that sent nothing', async () => {
       host.mailMessages.mockReturnValue(of(mailView([], { reachable: false, error: 'connection refused' })));
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
 
       await page.run();
 
@@ -477,7 +490,7 @@ describe('ScenarioPage', () => {
         host.mailMessages
           .mockReturnValueOnce(of(mailView(DELIVERED_MAIL.slice(0, 2))))
           .mockReturnValue(of(mailView(DELIVERED_MAIL)));
-        const page = render().componentInstance;
+        const page = render().componentInstance.runner;
         const run = page.run();
 
         await vi.advanceTimersByTimeAsync(0);
@@ -499,7 +512,7 @@ describe('ScenarioPage', () => {
       vi.useFakeTimers();
       try {
         host.mailMessages.mockReturnValue(of(mailView(DELIVERED_MAIL.slice(0, 3))));
-        const page = render().componentInstance;
+        const page = render().componentInstance.runner;
         const run = page.run();
 
         await vi.advanceTimersByTimeAsync(DRAIN_WATCH_MS + DRAIN_POLL_MS);
@@ -534,7 +547,7 @@ describe('ScenarioPage', () => {
 
     it("reads the saga straight after each of the BFF's order reads and sets its word beside the buyer's", async () => {
       answerSagaWith(404, '');
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
 
       await page.run();
 
@@ -556,14 +569,14 @@ describe('ScenarioPage', () => {
         JSON.stringify({ orderId, currentState: 'AwaitingStock', startedAt: placedAt, cancelReason: null }),
       );
       const fixture = render();
-      const page = fixture.componentInstance;
+      const page = fixture.componentInstance.runner;
 
       await page.run();
       fixture.detectChanges();
 
       expect(page.strip()!.pairing).toBe('differs');
       expect(page.steps().every((s) => s.state === 'ok')).toBe(true);
-      const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+      const text = stripText();
       expect(text).toContain('Saga (Ordering)');
       expect(text).toContain('AwaitingStock');
       expect(text).toContain('[disagree]');
@@ -571,7 +584,7 @@ describe('ScenarioPage', () => {
 
     it('says the saga could not be read, and still shows the buyer, when the read is refused', async () => {
       answerSagaWith(403, '');
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
 
       await page.run();
 
@@ -583,16 +596,16 @@ describe('ScenarioPage', () => {
     it('shows only the buyer, and says why, when the catalog has no saga read', async () => {
       const fixture = render();
 
-      await fixture.componentInstance.run();
+      await fixture.componentInstance.runner.run();
       fixture.detectChanges();
 
-      expect(fixture.componentInstance.strip()!.saga).toBeNull();
-      expect((fixture.nativeElement as HTMLElement).textContent).toContain("saga's own read is not in the operation catalog");
+      expect(fixture.componentInstance.runner.strip()!.saga).toBeNull();
+      expect(stripText()).toContain("saga's own read is not in the operation catalog");
     });
   });
 
   it("empties the strip when the next run starts, so a run never shows the last one's order", async () => {
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
     await page.run();
     host.proxy.mockReturnValue(new Subject<ProxyResult>());
 
@@ -607,7 +620,7 @@ describe('ScenarioPage', () => {
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
     host.scenarioExport.mockImplementation((md: string) => of(md.replace('curl http://x', '<scrubbed>')));
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
     await page.run();
 
     await page.export();
@@ -632,7 +645,7 @@ describe('ScenarioPage', () => {
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
     host.transcript.mockReturnValue(throwError(() => new Error('no')));
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
     await page.run();
 
     await page.export();
@@ -642,7 +655,7 @@ describe('ScenarioPage', () => {
   });
 
   it('exports nothing before a run has ended', async () => {
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     await page.export();
 
@@ -654,7 +667,7 @@ describe('ScenarioPage', () => {
     const spy = vi.spyOn(URL, 'createObjectURL');
     spy.mockClear();
     host.scenarioExport.mockReturnValue(throwError(() => ({ error: { detail: 'Export too large' } })));
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
     await page.run();
 
     await page.export();
@@ -665,7 +678,7 @@ describe('ScenarioPage', () => {
 
   it('runs the cancel script: the cancel goes to the placed order and the watch reads it cancelled', async () => {
     host.mailMessages.mockReturnValue(of(mailView(CANCELLED_MAIL)));
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
     page.pick('cancel');
 
     await page.run();
@@ -692,7 +705,7 @@ describe('ScenarioPage', () => {
     host.proxy.mockImplementation((request: ProxyRequest) =>
       isRead(request) ? of(responded(200, dispatched, '')) : of(platform(request)),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
     page.pick('in-transit');
 
     await page.run();
@@ -728,7 +741,7 @@ describe('ScenarioPage', () => {
     host.proxy.mockImplementation((request: ProxyRequest) =>
       isRead(request) ? of(responded(200, dispatched, '')) : of(platform(request)),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
     page.pick('in-transit');
 
     await page.run();
@@ -744,7 +757,7 @@ describe('ScenarioPage', () => {
           ? of(responded(422, alreadyShipped, request.correlationId ?? ''))
           : of(platform(request)),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
     page.pick('already-shipped');
 
     await page.run();
@@ -768,7 +781,7 @@ describe('ScenarioPage', () => {
     host.proxy.mockImplementation((request: ProxyRequest) =>
       isRead(request) ? of(responded(200, dispatched, '')) : of(platform(request)),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
     page.pick('already-shipped');
 
     await page.run();
@@ -786,7 +799,7 @@ describe('ScenarioPage', () => {
           ? of(responded(422, '{"status":422,"code":"order.not_cancellable"}', ''))
           : of(platform(request)),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
     page.pick('already-shipped');
 
     await page.run();
@@ -807,7 +820,7 @@ describe('ScenarioPage', () => {
           ? of(responded(200, order(status, { cancelled: '2026-10-05T12:00:01Z' }), ''))
           : of(platform(request)),
       );
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick(script);
 
       await page.run();
@@ -838,7 +851,7 @@ describe('ScenarioPage', () => {
         ? of(responded(403, '', request.correlationId ?? ''))
         : of(platform(request)),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
     page.pick('out-of-stock');
 
     await page.run();
@@ -857,7 +870,7 @@ describe('ScenarioPage', () => {
   });
 
   it('stops the refusal script when the order ends some other way, saying how', async () => {
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
     page.pick('declined');
 
     await page.run();
@@ -905,7 +918,7 @@ describe('ScenarioPage', () => {
       ],
     ] as const)('runs the %s script: the order goes to %s and the simulator\'s log shows the outcome', async (script, code, bookings, detail) => {
       simulator(bookings);
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick(script);
 
       await page.run();
@@ -938,7 +951,7 @@ describe('ScenarioPage', () => {
 
     it('runs the carrier-strange script: one booking, then the feed polled again and again', async () => {
       simulator(() => [logged(2, 201)], () => [logged(5, 200, 's1', 'GET'), logged(8, 200, 's1', 'GET')]);
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('carrier-strange');
 
       await page.run();
@@ -950,7 +963,7 @@ describe('ScenarioPage', () => {
 
     it('asks for the feed of the order it placed, by that order\'s own path', async () => {
       simulator(() => [logged(2, 201)], () => [logged(5, 200, 's1', 'GET'), logged(8, 200, 's1', 'GET')]);
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('carrier-strange');
 
       await page.run();
@@ -963,7 +976,7 @@ describe('ScenarioPage', () => {
       vi.useFakeTimers();
       const answers = [[logged(2, 503)], [logged(2, 503), logged(3, 503)]];
       simulator(() => (answers.length > 1 ? answers.shift()! : answers[0]));
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('carrier-down');
 
       const done = page.run();
@@ -981,7 +994,7 @@ describe('ScenarioPage', () => {
 
     it('fails when the carrier answered what the code does not script, naming it', async () => {
       simulator(() => [logged(2, 201)]);
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('carrier-refused');
 
       await page.run();
@@ -994,7 +1007,7 @@ describe('ScenarioPage', () => {
     it('fails at the cap with what it last saw', async () => {
       vi.useFakeTimers();
       simulator(() => [logged(2, 503)]);
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('carrier-down');
 
       const done = page.run();
@@ -1014,7 +1027,7 @@ describe('ScenarioPage', () => {
             ? of(responded(200, confirmedOrder, ''))
             : of(platform(request)),
       );
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('carrier-down');
 
       await page.run();
@@ -1042,7 +1055,7 @@ describe('ScenarioPage', () => {
             ? of(responded(200, order('dispatched', { confirmed: '2026-10-05T12:00:01Z', dispatched: '2026-10-05T12:00:06Z' }), ''))
             : of(platform(request)),
       );
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('carrier-refused');
 
       await page.run();
@@ -1065,7 +1078,7 @@ describe('ScenarioPage', () => {
 
     it('names what Run will change before it is pressed, from the host\'s own table', async () => {
       const fixture = render();
-      fixture.componentInstance.pick('stock-timeout');
+      fixture.componentInstance.runner.pick('stock-timeout');
       fixture.detectChanges();
 
       expect(fixture.nativeElement.querySelector('.lease-note').textContent).toBe(
@@ -1095,7 +1108,7 @@ describe('ScenarioPage', () => {
         calls.push(`${request.method} ${request.url}`);
         return isRead(request) ? of(responded(200, outOfStock, '')) : of(platform(request));
       });
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('stock-timeout');
 
       await page.run();
@@ -1124,7 +1137,7 @@ describe('ScenarioPage', () => {
 
     it('runs the payment-timeout script at .09 under the short waits alone, with Inventory up to stock it', async () => {
       readsAs(order('declined', { cancelled: '2026-10-05T12:00:31Z' }));
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('payment-timeout');
 
       await page.run();
@@ -1146,7 +1159,7 @@ describe('ScenarioPage', () => {
 
     it('restores when a step fails, and says so', async () => {
       readsAs(delivered);
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('payment-timeout');
 
       await page.run();
@@ -1162,7 +1175,7 @@ describe('ScenarioPage', () => {
       host.leaseAcquire.mockReturnValue(
         throwError(() => ({ error: { detail: 'A Scenario already holds a lease (job 3). Restore it first.' } })),
       );
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('stock-timeout');
 
       await page.run();
@@ -1181,7 +1194,7 @@ describe('ScenarioPage', () => {
           error: { detail: 'docker exited with 1. They could not be undone: ... The lease is still held; Restore it from the Stack screen.' },
         })),
       );
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('stock-timeout');
 
       await page.run();
@@ -1194,7 +1207,7 @@ describe('ScenarioPage', () => {
 
     it('does not restore after a 409, whose lease is another run\'s', async () => {
       host.leaseAcquire.mockReturnValue(throwError(() => ({ status: 409, error: { detail: 'A Scenario already holds a lease.' } })));
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('stock-timeout');
 
       await page.run();
@@ -1206,7 +1219,7 @@ describe('ScenarioPage', () => {
     it('says plainly when the restore itself failed, and that the host will try again', async () => {
       readsAs(outOfStock);
       host.leaseRestore.mockReturnValue(throwError(() => ({ error: { detail: 'docker did not answer' } })));
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('stock-timeout');
 
       await page.run();
@@ -1222,7 +1235,7 @@ describe('ScenarioPage', () => {
       host.proxy.mockImplementation((request: ProxyRequest) =>
         isRead(request) ? read.asObservable() : of(platform(request)),
       );
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('stock-timeout');
       const running = page.run();
       await vi.waitFor(() => expect(sent().some(isRead)).toBe(true));
@@ -1246,7 +1259,7 @@ describe('ScenarioPage', () => {
     });
 
     it('does not take a lease or call the restore for a script that changes nothing', async () => {
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
 
       await page.run();
 
@@ -1266,7 +1279,7 @@ describe('ScenarioPage', () => {
 
     it('runs inside the short waits alone: the order to SIM-STRANGE, the review Ordering logged, the order still confirmed, then the restore', async () => {
       readsConfirmed();
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('despatch-timeout');
 
       await page.run();
@@ -1307,7 +1320,7 @@ describe('ScenarioPage', () => {
         flagView([flagged('stock_not_released', 40), flagged('not_despatched')]),
       ];
       host.reviewFlags.mockImplementation(() => of(answers.length > 1 ? answers.shift()! : answers[0]));
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('despatch-timeout');
 
       const done = page.run();
@@ -1332,7 +1345,7 @@ describe('ScenarioPage', () => {
       vi.useFakeTimers();
       readsConfirmed();
       host.reviewFlags.mockImplementation(() => of(flagView([])));
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('despatch-timeout');
 
       const done = page.run();
@@ -1351,7 +1364,7 @@ describe('ScenarioPage', () => {
     it('fails when Loki cannot be asked, rather than reading that as an order nobody flagged', async () => {
       readsConfirmed();
       host.reviewFlags.mockReturnValue(of(flagView([], { reachable: false, error: 'Loki answered 502: bad gateway' })));
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('despatch-timeout');
 
       await page.run();
@@ -1366,7 +1379,7 @@ describe('ScenarioPage', () => {
     it('fails when the host itself refuses the read, saying what it said', async () => {
       readsConfirmed();
       host.reviewFlags.mockReturnValue(throwError(() => ({ error: { detail: 'Invalid window' } })));
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('despatch-timeout');
 
       await page.run();
@@ -1392,7 +1405,7 @@ describe('ScenarioPage', () => {
           ),
         );
       });
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('despatch-timeout');
 
       await page.run();
@@ -1408,7 +1421,7 @@ describe('ScenarioPage', () => {
       readsConfirmed();
       const read = new Subject<ReviewFlagView>();
       host.reviewFlags.mockReturnValue(read.asObservable());
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('despatch-timeout');
       const running = page.run();
       await vi.waitFor(() => expect(host.reviewFlags).toHaveBeenCalled());
@@ -1427,7 +1440,7 @@ describe('ScenarioPage', () => {
   });
 
   describe('the release-timeout script', () => {
-    const stepsOf = (page: ScenarioPage) => page.steps().map((s) => [s.key, s.state]);
+    const stepsOf = (page: ScenarioRunner) => page.steps().map((s) => [s.key, s.state]);
 
     beforeEach(() => {
       host.reviewFlags.mockReturnValue(of(flagView([flagged('stock_not_released', 31)])));
@@ -1452,7 +1465,7 @@ describe('ScenarioPage', () => {
         if (request.url.endsWith('/cancel')) calls.push('cancel');
         return of(platform(request));
       });
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('release-timeout');
 
       await page.run();
@@ -1497,7 +1510,7 @@ describe('ScenarioPage', () => {
       host.proxy.mockImplementation((request: ProxyRequest) =>
         request.url.includes('/inventory/reservations/') ? of(answers.shift()!) : of(platform(request)),
       );
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('release-timeout');
 
       const done = page.run();
@@ -1525,7 +1538,7 @@ describe('ScenarioPage', () => {
           ? of(responded(403, '', request.correlationId ?? ''))
           : of(platform(request)),
       );
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('release-timeout');
 
       await page.run();
@@ -1548,7 +1561,7 @@ describe('ScenarioPage', () => {
           error: { detail: 'docker compose stop inventory-api exited with 1. The changes were undone.' },
         })),
       );
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('release-timeout');
 
       await page.run();
@@ -1564,7 +1577,7 @@ describe('ScenarioPage', () => {
 
     it('fails the stop step on a 409, which the host answers when no lease is held, and does not restore a lease that belongs to another run', async () => {
       host.leaseAddChange.mockReturnValue(throwError(() => ({ status: 409, error: { detail: 'No lease is held.' } })));
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('release-timeout');
 
       await page.run();
@@ -1579,7 +1592,7 @@ describe('ScenarioPage', () => {
       host.proxy.mockImplementation((request: ProxyRequest) =>
         request.url.includes('/inventory/reservations/') ? read.asObservable() : of(platform(request)),
       );
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('release-timeout');
       const running = page.run();
       await vi.waitFor(() => expect(sent().some((r) => r.url.includes('/inventory/reservations/'))).toBe(true));
@@ -1596,7 +1609,7 @@ describe('ScenarioPage', () => {
     });
 
     it('sends no cancel and reads nothing more when Cancel is pressed while the stop is made, and still restores the stack', async () => {
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       host.leaseAddChange.mockImplementation(() => {
         page.cancel();
         return of(heldLease);
@@ -1618,7 +1631,7 @@ describe('ScenarioPage', () => {
       request.url.endsWith('/catalog/products/') ? publish.asObservable() : of(platform(request)),
     );
     host.mailMessages.mockReturnValue(of(mailView(CANCELLED_MAIL)));
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
     page.pick('cancel');
     expect(page.steps().map((s) => s.key)).toContain('cancel');
 
@@ -1647,7 +1660,7 @@ describe('ScenarioPage', () => {
     host.proxy.mockImplementation((request: ProxyRequest) =>
       isRead(request) && answers.length > 0 ? of(answers.shift()!) : of(platform(request)),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     const done = page.run();
     await vi.advanceTimersByTimeAsync(0);
@@ -1674,7 +1687,7 @@ describe('ScenarioPage', () => {
         ? of(responded(401, '{"title":"Unauthorized"}', request.correlationId ?? ''))
         : of(platform(request)),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     await page.run();
 
@@ -1695,7 +1708,7 @@ describe('ScenarioPage', () => {
     host.proxy.mockImplementation((request: ProxyRequest) =>
       isRead(request) && answers.length > 0 ? of(answers.shift()!) : of(platform(request)),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     const done = page.run();
     await vi.advanceTimersByTimeAsync(0);
@@ -1716,7 +1729,7 @@ describe('ScenarioPage', () => {
     host.proxy.mockImplementation((request: ProxyRequest) =>
       isRead(request) ? of(responded(404, '{"code":"order.not_found"}', '')) : of(platform(request)),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     const done = page.run();
     await vi.advanceTimersByTimeAsync(DRAIN_WATCH_MS + DRAIN_POLL_MS);
@@ -1737,7 +1750,7 @@ describe('ScenarioPage', () => {
         ? of(responded(200, order('declined', { cancelled: '2026-10-05T12:00:02Z' }), ''))
         : of(platform(request)),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     await page.run();
 
@@ -1752,7 +1765,7 @@ describe('ScenarioPage', () => {
     host.proxy.mockImplementation((request: ProxyRequest) =>
       isRead(request) ? of(responded(200, '{"items":[]}', '')) : of(platform(request)),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     await page.run();
 
@@ -1767,7 +1780,7 @@ describe('ScenarioPage', () => {
     host.proxy.mockImplementation((request: ProxyRequest) =>
       isRead(request) ? of(responded(200, order('placed'), '')) : of(platform(request)),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     const done = page.run();
     await vi.advanceTimersByTimeAsync(DRAIN_WATCH_MS + DRAIN_POLL_MS);
@@ -1783,22 +1796,34 @@ describe('ScenarioPage', () => {
     expect(reads).toBeLessThanOrEqual(DRAIN_WATCH_MS / DRAIN_POLL_MS + 1);
   });
 
-  it('stops polling the order when the screen goes', async () => {
+  it('keeps polling the order when the screen goes, and stops once the run is cancelled', async () => {
     vi.useFakeTimers();
-    host.proxy.mockImplementation((request: ProxyRequest) =>
-      isRead(request) ? of(responded(200, order('placed'), '')) : of(platform(request)),
-    );
-    const fixture = render();
+    try {
+      host.proxy.mockImplementation((request: ProxyRequest) =>
+        isRead(request) ? of(responded(200, order('placed'), '')) : of(platform(request)),
+      );
+      const fixture = render();
+      const runner = fixture.componentInstance.runner;
 
-    const done = fixture.componentInstance.run();
-    await vi.advanceTimersByTimeAsync(0);
-    const before = sent().filter(isRead).length;
-    fixture.destroy();
-    await vi.advanceTimersByTimeAsync(DRAIN_POLL_MS * 3);
-    await done;
-    vi.useRealTimers();
+      const done = runner.run();
+      await vi.advanceTimersByTimeAsync(0);
+      const before = sent().filter(isRead).length;
+      fixture.destroy();
+      await vi.advanceTimersByTimeAsync(DRAIN_POLL_MS * 3);
+      const left = sent().filter(isRead).length;
 
-    expect(sent().filter(isRead)).toHaveLength(before);
+      expect(left).toBeGreaterThan(before);
+      expect(runner.running()).toBe(true);
+
+      runner.cancel();
+      await vi.advanceTimersByTimeAsync(DRAIN_POLL_MS * 3);
+      await done;
+
+      expect(sent().filter(isRead)).toHaveLength(left);
+      expect(runner.running()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('says so when the host is past renewing the token, and says nothing when it reuses one', async () => {
@@ -1808,7 +1833,7 @@ describe('ScenarioPage', () => {
         : of(heldClock),
     );
     const fixture = render();
-    const page = fixture.componentInstance;
+    const page = fixture.componentInstance.runner;
 
     await page.run();
     fixture.detectChanges();
@@ -1837,7 +1862,7 @@ describe('ScenarioPage', () => {
     host.proxy.mockImplementation((request: ProxyRequest) =>
       isRead(request) && answers.length > 0 ? of(answers.shift()!) : of(platform(request)),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     const done = page.run();
     await vi.advanceTimersByTimeAsync(0);
@@ -1857,7 +1882,7 @@ describe('ScenarioPage', () => {
     host.proxy.mockImplementation((request: ProxyRequest) =>
       isRead(request) && answers.length > 0 ? of(answers.shift()!) : of(platform(request)),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     const done = page.run();
     await vi.advanceTimersByTimeAsync(DRAIN_POLL_MS * 4);
@@ -1880,7 +1905,7 @@ describe('ScenarioPage', () => {
       host.proxy.mockImplementation((request: ProxyRequest) =>
         isRead(request) ? failure() : of(platform(request)),
       );
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
 
       await page.run();
 
@@ -1896,7 +1921,7 @@ describe('ScenarioPage', () => {
       // Nothing held before the first call, which mints; then nothing held again before the stock write.
       of({ ...heldClock, held: sent().length !== 0 && sent().length !== 1 }),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     await page.run();
 
@@ -1924,7 +1949,7 @@ describe('ScenarioPage', () => {
           })
         : of(platform(request)),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     await page.run();
 
@@ -1943,7 +1968,7 @@ describe('ScenarioPage', () => {
         ? of({ outcome: 'tokenRejected', status: 401, body: '{}', correlationId: request.correlationId ?? '' })
         : of(platform(request)),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     await page.run();
 
@@ -1953,7 +1978,7 @@ describe('ScenarioPage', () => {
 
   it('offers no trace for a first send the host itself did not answer, since no service logged it', async () => {
     host.proxy.mockReturnValue(throwError(() => new Error('host gone')));
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     await page.run();
 
@@ -1969,7 +1994,7 @@ describe('ScenarioPage', () => {
     host.proxy.mockImplementation((request: ProxyRequest) =>
       isRead(request) && answers.length > 0 ? of(answers.shift()!) : of(platform(request)),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     await page.run();
 
@@ -1986,7 +2011,7 @@ describe('ScenarioPage', () => {
       host.proxy.mockImplementation((request: ProxyRequest) =>
         isRead(request) && reads.length > 0 ? reads.shift()!() : of(platform(request)),
       );
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       const done = page.run();
       await vi.advanceTimersByTimeAsync(0);
       const first = page.steps()[5];
@@ -2050,7 +2075,7 @@ describe('ScenarioPage', () => {
       for (const failure of failures) {
         TestBed.resetTestingModule();
         TestBed.configureTestingModule({
-          imports: [ScenarioPage],
+          imports: [ScenarioWidget],
           providers: [
             provideRouter([]),
             { provide: HostClient, useValue: host },
@@ -2092,7 +2117,7 @@ describe('ScenarioPage', () => {
     host.proxy.mockImplementation((request: ProxyRequest) =>
       isRead(request) && answers.length > 0 ? of(answers.shift()!) : of(platform(request)),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     await page.run();
 
@@ -2111,7 +2136,7 @@ describe('ScenarioPage', () => {
     host.proxy.mockImplementation((request: ProxyRequest) =>
       isRead(request) && answers.length > 0 ? of(answers.shift()!) : of(platform(request)),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     const done = page.run();
     await vi.advanceTimersByTimeAsync(DRAIN_POLL_MS);
@@ -2144,7 +2169,7 @@ describe('ScenarioPage', () => {
           })
         : of(platform(request)),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     await page.run();
 
@@ -2153,7 +2178,7 @@ describe('ScenarioPage', () => {
   });
 
   it("waits out a new run's first 404, since the last run's answer was for another order", async () => {
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
     await page.run();
 
     const answers = [responded(404, '{"code":"order.not_found"}', '')];
@@ -2171,7 +2196,7 @@ describe('ScenarioPage', () => {
   });
 
   it('starts each run afresh, so a user never minted before is not reported as expired', async () => {
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
     await page.run();
 
     page.username.set('browser');
@@ -2186,7 +2211,7 @@ describe('ScenarioPage', () => {
 
   it('sends regardless when the token clock does not answer', async () => {
     host.tokenClock.mockReturnValue(throwError(() => new Error('host busy')));
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     await page.run();
 
@@ -2197,7 +2222,7 @@ describe('ScenarioPage', () => {
     const launcher = TestBed.inject(ScenarioLauncher);
     launcher.request();
 
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     await vi.waitFor(() => expect(page.steps().every((s) => s.state === 'ok')).toBe(true));
     expect(sent().filter((r) => r.correlationId?.endsWith('-publish'))).toHaveLength(1);
@@ -2211,7 +2236,7 @@ describe('ScenarioPage', () => {
     );
     const launcher = TestBed.inject(ScenarioLauncher);
     const fixture = render();
-    const page = fixture.componentInstance;
+    const page = fixture.componentInstance.runner;
 
     const running = page.run();
     launcher.request();
@@ -2243,7 +2268,7 @@ describe('ScenarioPage', () => {
   });
 
   it('gives each step that sends its own correlation id, and the drain step none', async () => {
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     await page.run();
 
@@ -2263,7 +2288,7 @@ describe('ScenarioPage', () => {
     host.proxy.mockImplementation((request: ProxyRequest) =>
       of(responded(403, '{"title":"Forbidden"}', request.correlationId ?? '')),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     await page.run();
 
@@ -2279,7 +2304,7 @@ describe('ScenarioPage', () => {
         projection: { ...drained.projection, found: false, messages: null, drained: false },
       }),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     await page.run();
 
@@ -2292,7 +2317,7 @@ describe('ScenarioPage', () => {
     host.proxy.mockImplementation((request: ProxyRequest) =>
       of(responded(200, '{}', request.correlationId ?? '')),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     await page.run();
 
@@ -2309,7 +2334,7 @@ describe('ScenarioPage', () => {
         correlationId: request.correlationId ?? '',
       }),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     await page.run();
 
@@ -2325,7 +2350,7 @@ describe('ScenarioPage', () => {
     host.brokerQueues
       .mockReturnValueOnce(of({ ...drained, projection: waiting }))
       .mockReturnValue(throwError(() => new Error('host gone')));
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     const done = page.run();
     await vi.advanceTimersByTimeAsync(0);
@@ -2341,7 +2366,7 @@ describe('ScenarioPage', () => {
   it('announces where the run ended for a screen reader', async () => {
     const fixture = render();
 
-    await fixture.componentInstance.run();
+    await fixture.componentInstance.runner.run();
     fixture.detectChanges();
 
     const live = fixture.nativeElement.querySelector('[aria-live="polite"]');
@@ -2353,7 +2378,7 @@ describe('ScenarioPage', () => {
     host.brokerQueues.mockReturnValue(
       of({ ...drained, projection: { ...drained.projection, messages: 3, drained: false } }),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     const done = page.run();
     await vi.advanceTimersByTimeAsync(DRAIN_WATCH_MS);
@@ -2371,7 +2396,7 @@ describe('ScenarioPage', () => {
     host.brokerQueues.mockReturnValue(
       new Observable<QueuesView>(() => () => (unsubscribed = true)),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     const done = page.run();
     await vi.advanceTimersByTimeAsync(DRAIN_WATCH_MS);
@@ -2389,7 +2414,7 @@ describe('ScenarioPage', () => {
       operations: catalog.operations.filter((o) => o.id !== 'bff:Quote'),
     };
     host.operations.mockReturnValue(of(quoteless));
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
     expect(page.canRun()).toBe(false);
 
     page.reload();
@@ -2400,15 +2425,15 @@ describe('ScenarioPage', () => {
   it('says when no realm user is known, and a reload asks for them again', () => {
     host.identityUsers.mockReturnValueOnce(throwError(() => new Error('host busy')));
     const fixture = render();
-    expect(fixture.componentInstance.canRun()).toBe(false);
+    expect(fixture.componentInstance.runner.canRun()).toBe(false);
     expect(fixture.nativeElement.querySelector('.no-users')?.textContent).toContain(
       'No realm user',
     );
 
-    fixture.componentInstance.reload();
+    fixture.componentInstance.runner.reload();
     fixture.detectChanges();
 
-    expect(fixture.componentInstance.canRun()).toBe(true);
+    expect(fixture.componentInstance.runner.canRun()).toBe(true);
     expect(fixture.nativeElement.querySelector('.no-users')).toBeNull();
   });
 
@@ -2422,7 +2447,7 @@ describe('ScenarioPage', () => {
         sent: true,
       }),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     await page.run();
 
@@ -2441,7 +2466,7 @@ describe('ScenarioPage', () => {
         sent: false,
       }),
     );
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
 
     await page.run();
 
@@ -2450,53 +2475,90 @@ describe('ScenarioPage', () => {
     expect(page.steps()[1].state).toBe('skipped');
   });
 
-  it('still cancels an order the cancel script placed while the screen was being left, and reads it no more', async () => {
+  it('goes on with a run whose screen was left, cancels the order the script placed, and finishes (#376)', async () => {
     const fixture = render();
-    fixture.componentInstance.pick('cancel');
+    const runner = fixture.componentInstance.runner;
+    runner.pick('cancel');
     const placing = new Subject<ProxyResult>();
     host.proxy.mockImplementation((request: ProxyRequest) =>
       request.url.endsWith('/orders/') ? placing : of(platform(request)),
     );
 
-    const done = fixture.componentInstance.run();
+    const done = runner.run();
     await vi.waitFor(() => expect(sent()).toHaveLength(4));
     fixture.destroy();
     placing.next(responded(200, `"${orderId}"`, 'scenario-abcdef12-order'));
     await done;
 
-    expect(sent().map((r) => r.correlationId)).toEqual([
-      'scenario-abcdef12-publish',
-      'scenario-abcdef12-stock',
-      'scenario-abcdef12-quote',
-      'scenario-abcdef12-order',
-      'scenario-abcdef12-cancel',
-    ]);
+    expect(sent().map((r) => r.correlationId)).toContain('scenario-abcdef12-cancel');
+    expect(runner.steps().map((s) => s.state)).toEqual(runner.steps().map(() => 'ok'));
+    expect(runner.finished()).toBe(true);
   });
 
-  it('does not start the drain once the screen has gone', async () => {
-    const fixture = render();
+  it('shows the same run to a Scenario widget created after the first was left', async () => {
+    const first = render();
+    const runner = first.componentInstance.runner;
     const publish = new Subject<ProxyResult>();
     host.proxy.mockReturnValue(publish);
 
-    const done = fixture.componentInstance.run();
+    const done = runner.run();
     await vi.waitFor(() => expect(sent()).toHaveLength(1));
-    fixture.destroy();
+    first.destroy();
+    const again = render();
+    again.detectChanges();
+
+    expect(again.componentInstance.runner).toBe(runner);
+    expect((again.nativeElement as HTMLElement).querySelector('.step.state-running .title')?.textContent).toBe(
+      runner.steps()[0].title,
+    );
+    expect((again.nativeElement.querySelector('button.run') as HTMLButtonElement).disabled).toBe(true);
+
+    runner.cancel();
+    publish.next(responded(200, `"${productId}"`, 'scenario-abcdef12-publish'));
+    await done;
+  });
+
+  it('tells the shell which step is running, linking to the Scenario page, until the run ends', async () => {
+    const runner = render().componentInstance.runner;
+    const work = TestBed.inject(RunningWork);
+    const publish = new Subject<ProxyResult>();
+    host.proxy.mockReturnValue(publish);
+    expect(work.items()).toEqual([]);
+
+    const done = runner.run();
+    await vi.waitFor(() => expect(sent()).toHaveLength(1));
+    expect(work.items()).toEqual([{ text: `Scenario: step 1/${runner.steps().length} running`, link: '/scenario' }]);
+
+    runner.cancel();
+    publish.next(responded(200, `"${productId}"`, 'scenario-abcdef12-publish'));
+    await done;
+    expect(work.items()).toEqual([]);
+  });
+
+  it('does not start the drain once the run is cancelled', async () => {
+    const runner = render().componentInstance.runner;
+    const publish = new Subject<ProxyResult>();
+    host.proxy.mockReturnValue(publish);
+
+    const done = runner.run();
+    await vi.waitFor(() => expect(sent()).toHaveLength(1));
+    runner.cancel();
     publish.next(responded(200, `"${productId}"`, 'scenario-abcdef12-publish'));
     await done;
 
     expect(host.brokerQueues).not.toHaveBeenCalled();
   });
 
-  it('places no order once the screen has gone', async () => {
-    const fixture = render();
+  it('places no order once the run is cancelled', async () => {
+    const runner = render().componentInstance.runner;
     const quote = new Subject<ProxyResult>();
     host.proxy.mockImplementation((request: ProxyRequest) =>
       request.url.endsWith('/checkout/quote') ? quote : of(platform(request)),
     );
 
-    const done = fixture.componentInstance.run();
+    const done = runner.run();
     await vi.waitFor(() => expect(sent()).toHaveLength(3));
-    fixture.destroy();
+    runner.cancel();
     quote.next(responded(200, '{"total":19.99,"unpriced":[]}', 'scenario-abcdef12-quote'));
     await done;
 
@@ -2505,7 +2567,7 @@ describe('ScenarioPage', () => {
 
   it('clears an earlier reload failure when a run starts', async () => {
     host.reloadOperations.mockReturnValue(throwError(() => new Error('host busy')));
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
     page.reload();
     expect(page.error()).toBe('host busy');
 
@@ -2515,7 +2577,7 @@ describe('ScenarioPage', () => {
   });
 
   it('runs as the user picked here rather than the default', async () => {
-    const page = render().componentInstance;
+    const page = render().componentInstance.runner;
     page.username.set('browser');
 
     await page.run();
@@ -2529,7 +2591,7 @@ describe('ScenarioPage', () => {
     );
     const fixture = render();
 
-    expect(fixture.componentInstance.canRun()).toBe(false);
+    expect(fixture.componentInstance.runner.canRun()).toBe(false);
     expect(fixture.nativeElement.querySelector('.missing').textContent).toContain(
       'bff:Quote is not in the operation catalog',
     );
@@ -2544,7 +2606,7 @@ describe('ScenarioPage', () => {
     }
 
     function image() {
-      const page = render().componentInstance;
+      const page = render().componentInstance.runner;
       page.pick('image');
       return page;
     }
@@ -2689,5 +2751,15 @@ describe('ScenarioPage', () => {
         'catalog:GetProduct is not in the operation catalog',
       ]);
     });
+  });
+
+  it('is the legacy Scenario screen with the Saga strip beside it, both views of one runner', () => {
+    const screen = TestBed.createComponent(ScenarioPage);
+    screen.detectChanges();
+    const element = screen.nativeElement as HTMLElement;
+
+    expect([...element.children].map((c) => c.tagName.toLowerCase())).toEqual(['app-scenario-widget', 'app-saga-strip-widget']);
+    expect(element.querySelector('.saga-none')).not.toBeNull();
+    expect(screen.debugElement.children[0].componentInstance.runner).toBe(TestBed.inject(ScenarioRunner));
   });
 });

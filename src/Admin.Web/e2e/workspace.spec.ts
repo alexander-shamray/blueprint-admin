@@ -4,8 +4,9 @@ import { SCREENS } from '../src/app/screens';
 // The widget workspace (#383, widget-workspace spec §11). Against the fake platform, whose workspace file lives in a
 // temp directory, so a page made here never reaches a real one; the walk deletes its page at the end all the same,
 // because every spec file shares one host.
-// The Stack page is built from its widgets (#385); every other built-in page is still its screen in one widget.
-for (const { path, label } of SCREENS.filter((s) => s.path !== 'stack')) {
+// The Stack (#385) and Scenario (#389) pages are built from their widgets; every other built-in page is still its
+// screen in one widget.
+for (const { path, label } of SCREENS.filter((s) => s.path !== 'stack' && s.path !== 'scenario')) {
   test(`the built-in ${label} page renders its screen`, async ({ page }) => {
     await page.goto(`/${path}`);
 
@@ -18,6 +19,15 @@ for (const { path, label } of SCREENS.filter((s) => s.path !== 'stack')) {
     await expect(page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: label })).toHaveClass(/active/);
   });
 }
+
+test('the built-in Scenario page renders the Scenario widget beside the Saga strip', async ({ page }) => {
+  await page.goto('/scenario');
+
+  await expect(page.locator('gridster-item .ws-head .ws-title')).toHaveText(['Scenario', 'Saga strip']);
+  await expect(page.locator('gridster-item .ws-body > *')).toHaveCount(2);
+  await expect(page.getByLabel('Script')).toHaveValue('deliver');
+  await expect(page.locator('.saga-none')).toBeVisible();
+});
 
 test('the built-in Stack page renders its widgets, each with what it reads', async ({ page }) => {
   await page.goto('/stack');

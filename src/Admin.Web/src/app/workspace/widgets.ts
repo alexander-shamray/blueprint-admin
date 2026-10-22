@@ -141,6 +141,26 @@ export const STACK_WIDGETS = {
   }),
 } as const;
 
+/** The Scenario page's widgets (§5.2), each a view of the one run `ScenarioRunner` in features/scenario holds. */
+export const SCENARIO_WIDGETS = {
+  scenario: plain({
+    type: 'scenario',
+    title: 'Scenario',
+    component: () => import('../features/scenario/widgets/scenario-widget').then((m) => m.ScenarioWidget),
+    defaultSize: { cols: 16, rows: 20 },
+    minSize: { cols: 8, rows: 6 },
+    dataServices: ['ScenarioRunner'],
+  }),
+  saga: plain({
+    type: 'saga-strip',
+    title: 'Saga strip',
+    component: () => import('../features/scenario/widgets/saga-strip-widget').then((m) => m.SagaStripWidget),
+    defaultSize: { cols: 8, rows: 14 },
+    minSize: { cols: 5, rows: 5 },
+    dataServices: ['ScenarioRunner'],
+  }),
+} as const;
+
 /** Every screen's output pane, as a widget of its own (§5.2): a job by id, or the job its page started last. */
 export const JOB_OUTPUT: WidgetType = {
   type: 'job-output',
@@ -158,7 +178,12 @@ export const JOB_OUTPUT: WidgetType = {
  * Every widget type, read by the "Add widget" picker, the grid and the built-in pages. A type unknown to this list is
  * rendered as "unknown widget" and saved back untouched, so a document from a newer console survives an older one (§6.3).
  */
-export const WIDGETS: readonly WidgetType[] = [...Object.values(STACK_WIDGETS), JOB_OUTPUT, LEGACY_SCREEN];
+export const WIDGETS: readonly WidgetType[] = [
+  ...Object.values(STACK_WIDGETS),
+  ...Object.values(SCENARIO_WIDGETS),
+  JOB_OUTPUT,
+  LEGACY_SCREEN,
+];
 
 export function widgetType(type: string): WidgetType | undefined {
   return WIDGETS.find((w) => w.type === type);
