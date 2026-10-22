@@ -74,12 +74,17 @@ export class App {
 
   addWidget(pageId: string, kind: WidgetType, preset: WidgetPreset): void {
     this.workspace.editing.set(true);
-    this.workspace.addWidget(pageId, {
+    const added = this.workspace.addWidget(pageId, {
       type: kind.type,
       cols: kind.defaultSize.cols,
       rows: kind.defaultSize.rows,
       config: structuredClone(preset.config),
     });
+    if (!added) {
+      this.snackBar.open('This page has no room below its last widget: remove or shrink one first.', 'OK', {
+        duration: 8000,
+      });
+    }
   }
 
   duplicate(id: string): void {

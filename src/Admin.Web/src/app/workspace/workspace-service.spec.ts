@@ -4,7 +4,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { SCREENS } from '../screens';
 import { builtInWidgets, defaultWorkspace } from './built-in-pages';
 import { SAVE_DELAY_MS, WorkspaceService } from './workspace-service';
-import { Workspace } from './workspace-types';
+import { PAGE_ROWS, Workspace } from './workspace-types';
 
 describe('WorkspaceService', () => {
   let service: WorkspaceService;
@@ -241,6 +241,14 @@ describe('WorkspaceService', () => {
       expect(widgets[1]).toMatchObject({ x: 0, y: builtInWidgets('stack')[0].rows, cols: 6, rows: 4 });
       service.removeWidget('stack', widgets[1].id);
       expect(service.pages()[0].widgets?.length).toBe(1);
+    });
+
+    it('refuses a widget that would end below the last row the grid shows', () => {
+      const tall = { type: 'legacy', cols: 24, rows: 100, config: { screen: 'logs' } };
+      const id = service.addPage();
+      for (let i = 0; i < PAGE_ROWS / 100; i++) expect(service.addWidget(id, tall)).toBe(true);
+      expect(service.addWidget(id, { ...tall, rows: 1 })).toBe(false);
+      expect(service.pages().find((p) => p.id === id)?.widgets?.length).toBe(PAGE_ROWS / 100);
     });
   });
 });
