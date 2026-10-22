@@ -163,7 +163,12 @@ export class WorkspaceService {
 
   /** A built-in page back as shipped: its default widgets and title, and saved again as a reference (§5.3). */
   resetPage(id: string): void {
-    this.changePage(id, (p) => (p.builtIn ? { ...p, title: builtInTitle(p.builtIn), widgets: null } : p));
+    const page = this.pages().find((p) => p.id === id);
+    const screen = page?.builtIn;
+    if (!page || !screen) return;
+    // The defaults reuse their `builtin-…` ids, so what those widgets kept goes too: a reset starts them afresh.
+    this.sessions.forget(widgetsOf(page).map((w) => w.id));
+    this.changePage(id, (p) => ({ ...p, title: builtInTitle(screen), widgets: null }));
   }
 
   /** The page's widgets after a drag, a resize, an add or a remove; a built-in page is saved whole from here on. */

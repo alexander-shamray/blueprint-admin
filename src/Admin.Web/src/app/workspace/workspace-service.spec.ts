@@ -235,6 +235,19 @@ describe('WorkspaceService', () => {
       expect(service.pages()[1]).toEqual({ id: 'logs', title: 'Logs', builtIn: 'logs', hidden: false, widgets: null });
     });
 
+    it('starts the widgets of a reset page afresh, its defaults and the ones the operator added alike', () => {
+      service.addWidget('stack', { type: 'reachability', cols: 24, rows: 3, config: { surfaces: [] } });
+      const [shipped, added] = [builtInWidgets('stack')[0], (service.pages()[0].widgets ?? []).at(-1)!];
+      const sessions = TestBed.inject(WidgetSessionStore);
+      sessions.state(shipped.id, 'filter', '').set('kept');
+      sessions.state(added.id, 'filter', '').set('kept');
+
+      service.resetPage('stack');
+
+      expect(sessions.state(shipped.id, 'filter', '')()).toBe('');
+      expect(sessions.state(added.id, 'filter', '')()).toBe('');
+    });
+
     it('adds a widget below the others and removes it, with what it kept for the session', () => {
       service.addWidget('logs', { type: 'legacy', cols: 6, rows: 4, config: { screen: 'mail' } });
       const widgets = service.pages()[1].widgets ?? [];
