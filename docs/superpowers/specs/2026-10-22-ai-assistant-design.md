@@ -670,7 +670,7 @@ live where both the console and the platform can use it. The operator chose
 | Piece | Lives in | How others get it |
 |---|---|---|
 | Core and Anthropic adapter, and the protocol: its C# types and §14's golden JSON files | this repository through phase 5, then `blueprint-backend` as building blocks | NuGet packages from GitHub Packages, pinned exactly |
-| Browser client (`protocol.ts`, `assistant-client.ts`) | each Angular client keeps its own | copied, cited and drift-checked against the backend's golden files, as `GatewayRoutes` and `PlatformQueues` already are |
+| Browser client (`protocol.ts`, `assistant-client.ts`, and `client-tools.ts`'s registry mechanism, not the tools it registers) | each Angular client keeps its own | copied, cited and drift-checked against the backend's golden files, as `GatewayRoutes` and `PlatformQueues` already are |
 | Tool sources, redactor, catalogue, client tools, panel, fake provider | each host and each client | not shared |
 
 The reasons for this split:
