@@ -5299,8 +5299,8 @@ def _expanded_operator(name, arguments):
     """Whether an expanded word in a `test` or `wait` argument list stands
     where an operator or option could: for `test`, not the operand of a
     literal operator before it, not the left side of a binary operator after
-    it, and not alone; for `wait`, whose flags (`-n`, `-f`) take no operand,
-    anything but the last word. `[ -d "$d" ]`, `[ "$n" != 0 ]` and
+    it, and not alone; for `wait`, whose flags (`-n`, `-f`) take no operand
+    and whose one expanded word can be a whole cluster, any expanded word. `[ -d "$d" ]`, `[ "$n" != 0 ]` and
     `wait "$pid"` are operands; `test $o 'a[x]'` and `wait -n $o 'a[x]'` are
     not."""
     words = [word for word in arguments if word not in ("]", "]]")]
@@ -5309,10 +5309,16 @@ def _expanded_operator(name, arguments):
             continue
         after = words[index + 1] if index + 1 < len(words) else None
         before = words[index - 1] if index else None
+        # `wait` takes its options anywhere, and one expanded word can be a
+        # whole cluster (`o='-pa[x]'; wait $o`), so any expanded word counts
+        # but `$!`, which is only ever a process id. A line holding
+        # `wait $pid` is held strictly; none of the 4000 replayed commands is.
+        if name == "wait":
+            if word.strip('"') == "$!":
+                continue
+            return True
         if after is None:
             continue
-        if name == "wait":
-            return True
         if after in TEST_BINARY or after in ("-a", "-o", "&&", "||", ")"):
             continue
         if (before is not None and before.startswith("-") and before not in ("-a", "-o")
