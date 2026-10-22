@@ -157,6 +157,7 @@ core's records; field names are camelCase JSON.
 | `GET /api/assistant` | Status: `enabled`, `provider`, `model`, and when disabled a `reason` (`off`, `no-credential`, `unreachable`). Never the credential or where it came from. |
 | `POST /api/assistant/conversations` | Opens a conversation. Body: `client` (name, version), `locale` (§5.4), `catalogue` (§6.1), `clientTools` (§6), and `hostOptions`, an object the core hands untouched to the host's tool sources in `ToolContext` (the admin reads its `identity`, a username, §6.5). Returns its `id`. |
 | `POST /api/assistant/conversations/{id}/turns` | Sends the operator's message and starts a turn. Body: `text`, `context` (what the operator is looking at: the page, the screen, the widgets on it), and optionally a new `locale` or `hostOptions`. `409` if a turn is running. |
+| `GET /api/assistant/conversations/{id}` | The conversation as the client shows it: each operator message, each reply's text, each tool call's `name` and `args` with its outcome, each turn's end `reason`, whether a turn is running, and `lastEventId`, the id the event stream continues from. No provider-opaque block, no tool result body. A reloaded client redraws from this and then follows `events` (§5.5). |
 | `GET /api/assistant/conversations/{id}/events` | Server-Sent Events for the conversation, with `Last-Event-ID` resume from a bounded ring, as `JobStream` does for a job. |
 | `POST /api/assistant/conversations/{id}/tool-results` | The result of a client tool call: `callId`, `ok`, `content`. |
 | `POST /api/assistant/conversations/{id}/cancel` | Ends the running turn; a provider stream in flight is cancelled. |
@@ -259,10 +260,11 @@ assistant panel is one user of a console-wide mechanism, not its owner.
   bootstraps. Switching language stores the choice and reloads the page. The
   reload is an ordinary one: the workspace is read again from the host, and
   unsent input in a widget is lost, as on any reload (workspace note §4.2).
-  The assistant's conversation is not lost: the client keeps its id in
-  `sessionStorage` for the tab, the host still holds it, and the reloaded
-  panel resumes it by `Last-Event-ID`. The picker warns before switching
-  while a turn is running. One build keeps `wwwroot`, the host's static
+  The assistant's conversation is not lost. The client keeps its id in
+  `sessionStorage` for the tab and the host still holds it. So the reloaded
+  panel reads `GET /api/assistant/conversations/{id}` (§5.1) to redraw the
+  whole conversation, then opens the event stream from the `lastEventId` that
+  read returns. The picker warns before switching while a turn is running. One build keeps `wwwroot`, the host's static
   serving and the smoke unchanged.
 - **Choice.** A language picker in the shell, defaulting to
   `navigator.language` when a translation for it exists and to `en-US`
@@ -683,7 +685,9 @@ design, not this note's.
 - **Anthropic adapter**: descriptor translation and event mapping against
   recorded stream bodies, no network.
 - **Host**: the endpoints — status with each `reason`, `409` on a second turn,
-  SSE resume, unknown conversation `404`, the `Sec-Fetch-Site` rule; the
+  SSE resume, the conversation read after more events than the ring holds
+  (every message present, `lastEventId` continuing the stream, no opaque
+  block or tool body), unknown conversation `404`, the `Sec-Fetch-Site` rule; the
   redaction gate of §10; options refusing a secret-named key; with
   `Provider=off`, on FakePlatform too: status reports `off`, every other
   route is `404`, and no provider or SDK client is resolved from the
@@ -691,7 +695,8 @@ design, not this note's.
 - **Protocol**: one golden JSON file per event and body, read by a host test
   and a Vitest spec, so the C# owner and the TypeScript mirror cannot drift.
 - **SPA (Vitest)**: the client parses events, runs a client tool and posts its
-  result, resumes; the panel streams, shows a refusal, cancels, holds no
+  result, resumes; after a reload it redraws from the conversation read and
+  follows from its `lastEventId`; the panel streams, shows a refusal, cancels, holds no
   timer when hidden; every registry entry has `help`.
 - **Languages**: the language rule and the turn's context ride in the latest
   user message, and a locale change leaves the prefix byte-identical.
