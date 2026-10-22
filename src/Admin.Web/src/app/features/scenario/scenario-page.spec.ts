@@ -13,7 +13,7 @@ import {
   TokenClockView,
 } from '../../core/host/host-types';
 import { DRAIN_POLL_MS, DRAIN_WATCH_MS, UUID } from '../api/api-page';
-import { ScenarioLauncher } from './scenario-launcher';
+import { LAUNCH_WINDOW_MS, ScenarioLauncher } from './scenario-launcher';
 import { ScenarioPage } from './scenario-page';
 import { ScenarioRunner } from './scenario-runner';
 import { SagaStripWidget } from './widgets/saga-strip-widget';
@@ -2265,6 +2265,24 @@ describe('ScenarioWidget', () => {
 
     expect(launcher.pending()).toBe(false);
     expect(host.proxy).not.toHaveBeenCalled();
+  });
+
+  it('lets a palette request no Scenario widget took lapse, so one created later does not run unasked', async () => {
+    vi.useFakeTimers();
+    try {
+      const launcher = TestBed.inject(ScenarioLauncher);
+      // The palette asked on a page whose Scenario widget the operator removed: nothing takes the request there.
+      launcher.request();
+      await vi.advanceTimersByTimeAsync(LAUNCH_WINDOW_MS);
+      expect(launcher.pending()).toBe(false);
+
+      render();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(host.proxy).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('gives each step that sends its own correlation id, and the drain step none', async () => {
