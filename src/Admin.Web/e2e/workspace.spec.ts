@@ -33,7 +33,11 @@ test('the built-in Stack page renders its widgets, each with what it reads', asy
     'Compose services',
     'Reference client',
   ]);
+  // A frame renders before its lazy component loads, so wait for every body to hold one before reading its state.
+  await expect(page.locator('gridster-item .ws-body > *')).toHaveCount(9);
   await expect(page.locator('gridster-item .loading')).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Workstation' }).locator('table.doctor tbody tr').first()).toBeVisible();
+  await expect(page.locator('table.services tbody tr').first()).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: 'Stack' })).toHaveClass(/active/);
 });
 
