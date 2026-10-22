@@ -44,6 +44,9 @@ export class ScenarioWidget {
       const running = this.runner.running();
       const canRun = this.runner.canRun();
       untracked(() => {
+        // This view is here to take the request, so it waits for the catalog and a user however long they take,
+        // whether it asked before the view was created or while it was open, rather than lapsing.
+        this.launcher.hold();
         if (running) this.launcher.take();
         else if (canRun && this.launcher.take()) void this.runner.run();
       });
