@@ -202,6 +202,38 @@ test('a widget is configured by a preset and maximised to the page, then restore
   await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
 });
 
+test('a note is added from a preset, draws its diagram, and is written in place while editing', async ({ page }) => {
+  await page.goto('/stack');
+  await page.getByRole('button', { name: 'New page' }).click();
+  await expect(page).toHaveURL(/\/page\/page-/);
+  const made = page.url();
+
+  await page.getByRole('button', { name: 'Add widget' }).click();
+  await page.getByRole('menuitem', { name: 'Note' }).click();
+  await page.getByRole('menuitem', { name: 'Architecture diagram' }).click();
+  await expect(page.locator('.cdk-overlay-backdrop')).toHaveCount(0);
+
+  // While editing, the note is its source; the title is its first heading.
+  await expect(page.locator('gridster-item .ws-head .ws-title')).toHaveText('Architecture');
+  await expect(page.getByRole('textbox', { name: 'Note text' })).toHaveValue(/flowchart LR/);
+  await page.getByRole('textbox', { name: 'Note text' }).fill('# Mine\n\nHello <script>x</script>\n\n```mermaid\nflowchart LR\n  a["one"] --> b["two"]\n```');
+  await page.getByRole('button', { name: 'Done' }).click();
+
+  // Done: the text is rendered as text, and Mermaid, loaded now, has drawn the fence.
+  await expect(page.locator('gridster-item .ws-head .ws-title')).toHaveText('Mine');
+  await expect(page.locator('gridster-item .ws-body p')).toHaveText('Hello <script>x</script>');
+  const drawing = page.locator('gridster-item app-mermaid-diagram .drawing svg');
+  await expect(drawing).toBeVisible();
+  await expect(drawing).toContainText('one');
+  await expect(drawing).toContainText('two');
+  await expect(page.locator('gridster-item script')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Page actions' }).click();
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
+  await expect(page).not.toHaveURL(made);
+  await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
+});
+
 test('the workspace is exported as a file, and an import replaces it only after the operator says so', async ({ page }) => {
   await page.goto('/stack');
   await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });

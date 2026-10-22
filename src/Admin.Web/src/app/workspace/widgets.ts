@@ -1,6 +1,7 @@
 import { Type } from '@angular/core';
 import { SCREENS } from '../screens';
 import { isScreenPath } from './screen-components';
+import { ARCHITECTURE_NOTE, BLANK_NOTE, TAB_ORDER_NOTE } from './widgets/note/note-presets';
 import { stringList } from './widget-config';
 
 /** A size in grid cells. */
@@ -30,6 +31,11 @@ export interface WidgetType {
   /** The header an instance shows, which can name what its config chose. */
   titleOf: (config: Record<string, unknown>) => string;
   presets: readonly WidgetPreset[];
+  /**
+   * False for a type whose presets are starting points rather than settings: choosing one replaces what the operator
+   * wrote, so the header's configure control does not offer them (a note edits in place instead).
+   */
+  configurable?: boolean;
   /** The data services the widget reads (§4.4); the legacy screen widget's screens own their own calls. */
   dataServices: readonly string[];
 }
@@ -174,6 +180,28 @@ export const JOB_OUTPUT: WidgetType = {
   dataServices: ['PageJobs'],
 };
 
+/** A note or a diagram (§8.3): Markdown whose mermaid fences are drawn, written in place while editing the layout. */
+export const NOTE: WidgetType = {
+  type: 'note',
+  title: 'Note',
+  component: () => import('./widgets/note/note-widget').then((m) => m.NoteWidget),
+  defaultSize: { cols: 12, rows: 12 },
+  minSize: { cols: 4, rows: 3 },
+  config: (stored) => ({ source: typeof stored['source'] === 'string' ? stored['source'] : '' }),
+  titleOf: (config) => {
+    const source = typeof config['source'] === 'string' ? config['source'] : '';
+    return /^#{1,6}[ \t]+(.+?)[ \t]*$/m.exec(source)?.[1] ?? 'Note';
+  },
+  presets: [
+    { label: 'Empty note', config: { source: '' } },
+    { label: 'Note with a diagram', config: { source: BLANK_NOTE } },
+    { label: 'Architecture diagram', config: { source: ARCHITECTURE_NOTE } },
+    { label: 'Work order of the tabs', config: { source: TAB_ORDER_NOTE } },
+  ],
+  configurable: false,
+  dataServices: [],
+};
+
 /**
  * Every widget type, read by the "Add widget" picker, the grid and the built-in pages. A type unknown to this list is
  * rendered as "unknown widget" and saved back untouched, so a document from a newer console survives an older one (§6.3).
@@ -182,6 +210,7 @@ export const WIDGETS: readonly WidgetType[] = [
   ...Object.values(STACK_WIDGETS),
   ...Object.values(SCENARIO_WIDGETS),
   JOB_OUTPUT,
+  NOTE,
   LEGACY_SCREEN,
 ];
 

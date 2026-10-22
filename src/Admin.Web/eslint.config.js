@@ -10,6 +10,8 @@ const TRANSLATED_TEMPLATES = [
   'src/app/shared/drained-indicator/drained-indicator.ts/*.html',
   'src/app/shared/output-pane/output-pane.ts/*.html',
   'src/app/workspace/workspace-grid.html',
+  'src/app/workspace/widgets/note/mermaid-diagram.ts/*.html',
+  'src/app/workspace/widgets/note/note-widget.ts/*.html',
 ];
 
 module.exports = defineConfig([

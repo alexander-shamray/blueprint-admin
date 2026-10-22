@@ -18,7 +18,7 @@ export type Block =
   | { kind: 'heading'; level: number; spans: Span[] }
   | { kind: 'paragraph'; spans: Span[] }
   | { kind: 'list'; items: ListItem[] }
-  | { kind: 'code'; text: string }
+  | { kind: 'code'; text: string; lang?: string }
   | { kind: 'table'; header: Span[][]; rows: Span[][][] }
   | { kind: 'rule' };
 
@@ -75,9 +75,10 @@ export function blocks(markdown: string): Block[] {
 
     if (line.trimStart().startsWith('```')) {
       endParagraph();
+      const lang = line.trimStart().slice(3).trim().split(/\s+/)[0].toLowerCase();
       const code: string[] = [];
       for (i++; i < lines.length && !lines[i].trimStart().startsWith('```'); i++) code.push(lines[i]);
-      out.push({ kind: 'code', text: code.join('\n') });
+      out.push(lang === '' ? { kind: 'code', text: code.join('\n') } : { kind: 'code', text: code.join('\n'), lang });
       continue;
     }
 
