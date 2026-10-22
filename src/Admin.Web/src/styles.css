@@ -1,1 +1,41 @@
-/* You can add global styles to this file, and also import other style files */
+/* The Material theme is theme.scss; this file is what the screens share. */
+
+/* The operator's choice (system, light, dark) is a data-theme attribute on <html>; without one the browser decides. */
+html[data-theme='light'] { color-scheme: light; }
+html[data-theme='dark'] { color-scheme: dark; }
+
+/* Status and text tokens the screens use, so no screen hard-codes a colour that fails in the other theme. */
+html {
+  --app-muted: var(--mat-sys-on-surface-variant);
+  --app-border: var(--mat-sys-outline-variant);
+  --app-error: light-dark(#b00, #ffb4ab);
+  --app-error-bg: light-dark(#fdd, #5c1a1a);
+  --app-ok: light-dark(#070, #7fd88a);
+  --app-ok-bg: light-dark(#dfd, #17381c);
+  --app-warn: light-dark(#8a5a00, #f0c070);
+  --app-warn-bg: light-dark(#fec, #4a3510);
+}
+
+body {
+  margin: 0;
+  background: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-large);
+}
+
+a { color: var(--mat-sys-primary); }
+
+/* Material Symbols is bundled by @fontsource (angular.json), never loaded from a CDN. */
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}

@@ -1,14 +1,38 @@
-<header class="bar">
-  <strong>blueprint-admin</strong>
-  <nav>
-    @for (screen of screens; track screen.path) {
-      <a [routerLink]="'/' + screen.path" routerLinkActive="active">{{ screen.label }}</a>
-    }
-  </nav>
-  <span class="palette-key"><kbd>Ctrl</kbd>+<kbd>K</kbd> commands</span>
+<mat-toolbar class="bar">
+  <strong class="title">blueprint-admin</strong>
+  <span class="grow"></span>
+  <!-- Where the running-work indicator (a Scenario run, a Logs follow, a job) will sit. -->
+  <span class="running-work" aria-live="polite"></span>
   @if (config(); as c) {
     <span class="hint">{{ c.backendDir }} @if (c.fakePlatform) {<em>(fake platform)</em>}</span>
   }
-</header>
-<main><router-outlet /></main>
+  <span class="palette-key"><kbd>Ctrl</kbd>+<kbd>K</kbd> commands</span>
+  <mat-button-toggle-group
+    class="theme-switch"
+    aria-label="Theme"
+    hideSingleSelectionIndicator
+    [value]="theme.choice()"
+    (change)="theme.set($event.value)"
+  >
+    @for (c of themeChoices; track c.value) {
+      <mat-button-toggle [value]="c.value" [aria-label]="c.value + ' theme'">
+        <mat-icon aria-hidden="true">{{ c.icon }}</mat-icon>
+      </mat-button-toggle>
+    }
+  </mat-button-toggle-group>
+</mat-toolbar>
+<mat-sidenav-container class="shell">
+  <mat-sidenav mode="side" opened disableClose class="side">
+    <nav aria-label="Screens">
+      <mat-nav-list>
+        @for (screen of screens; track screen.path) {
+          <a mat-list-item [routerLink]="'/' + screen.path" routerLinkActive="active" #rla="routerLinkActive" [activated]="rla.isActive">{{ screen.label }}</a>
+        }
+      </mat-nav-list>
+    </nav>
+  </mat-sidenav>
+  <mat-sidenav-content>
+    <main><router-outlet /></main>
+  </mat-sidenav-content>
+</mat-sidenav-container>
 <app-command-palette />
