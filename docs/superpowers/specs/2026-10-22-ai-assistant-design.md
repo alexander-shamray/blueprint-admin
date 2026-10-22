@@ -275,10 +275,11 @@ assistant panel is one user of a console-wide mechanism, not its owner.
   It also holds the switch while a layout change is waiting to be saved,
   since the reload would lose it. One build keeps `wwwroot`, the host's
   static serving and the smoke unchanged.
-- **Choice.** A language picker in the shell, defaulting to
-  `navigator.language` when a translation for it exists and to `en-US`
-  otherwise. The choice is kept in `localStorage`, per browser. It is not
-  part of the workspace document.
+- **Choice.** A language picker in the shell, defaulting to the first of the
+  browser's languages (`navigator.languages`) with a translation, matched by
+  language alone too (`ru-BY` takes `ru-RU`), and to `en-US` otherwise. The
+  choice is kept in `localStorage`, per browser. It is not part of the
+  workspace document.
 - **Files.** `src/Admin.Web/src/locale/messages.<locale>.json`, produced and
   checked with `ng extract-i18n`: `en-US` is the source, `ru-RU` the first
   translation. A check fails the build on a message the source has and a
