@@ -5203,6 +5203,9 @@ RESOLVING_COMMANDS = frozenset({"alias", "enable", "eval", "fc", "function",
 PATH_WRITERS = frozenset({"declare", "export", "getopts", "local", "mapfile",
                           "printf", "read", "readarray", "readonly", "typeset",
                           "unset"})
+# The builtins that take a variable name as an operand, whose subscript bash
+# evaluates as arithmetic: the writers, and `test -v`, `[[ -v`, `wait -p`.
+NAME_OPERAND_TAKERS = PATH_WRITERS | {"test", "[", "[[", "wait"}
 # The variables a command name resolves through: `PATH`, and bash's own tables
 # `BASH_CMDS` (what `hash -p` writes) and `BASH_ALIASES`. **Matched as an
 # identifier anywhere in a word, subscript or option glued on**, because a
@@ -5222,13 +5225,15 @@ RESOLVING = re.compile(
 # directory to resolve from. Any arithmetic context counts: `((`, `$((`, `$[`,
 # a subscript (`${a[i]}`, `a[i]=`), a substring offset (`${s:i}`), an
 # arithmetic test in `[[`; and so does an expansion that assigns (`${n=…}`,
-# `${n:=…}`). Raised by a security review; the expansion half verified admitted.
+# `${n:=…}`), and so does an indirect `${!n}`, whose name can carry a
+# subscript. Raised by security reviews; the expansion half verified admitted.
 # Arithmetic over literals alone reads no variable, so `${PIPESTATUS[0]}`, the
 # commonest shape in the replayed commands, is not one.
 EXPANSION_WRITES = re.compile(
     r"\$\{[^}]*="
     r"|\(\([^)]*[A-Za-z_]|\$\[[^]]*[A-Za-z_]"
     r"|\$\{[^}]*\[[^]]*[A-Za-z_]"
+    r"|\$\{!"
     r"|\$\{[^}:]*:(?![-=+?])[^}]*[A-Za-z_]"
     r"|(?<![\w-])[A-Za-z_]\w*\[[^]]*[A-Za-z_][^]]*\]"
     r"|\[\[[^]]*\s-(?:eq|ne|lt|le|gt|ge)\s")
@@ -5315,16 +5320,24 @@ def resolution_changed(command):
             continue
         # A writer's target is read after quote removal (`declare "PATH=/tmp"`),
         # and a target built by an expansion is any name (`declare "$n=/tmp"`).
-        if name in PATH_WRITERS and any(
-                RESOLUTION_VARIABLES.search(word) or re.search(r"[$`]", word)
-                for word in arguments):
+        if name in PATH_WRITERS | {"wait"} and any(
+                RESOLUTION_VARIABLES.search(word) for word in arguments):
             return True
-        # A name operand's subscript is arithmetic whether or not `=` follows
-        # and however it is quoted: `read 'a[x]'`, `unset a[x]`, `test -v
-        # a[x]`. Raised by a security review.
-        if name in PATH_WRITERS | {"test", "[", "[["} and any(
-                re.search(r"\[[^]]*[A-Za-z_]", word) for word in arguments):
-            return True
+        # **A name operand is a writer however it is spelt.** Its subscript is
+        # arithmetic whether or not `=` follows and however it is quoted
+        # (`read 'a[x]'`, `unset a[x]`, `test -v a[x]`), and one that comes
+        # from an expansion is any name and any subscript (`test -v "$x"`,
+        # `wait -p "$x"`). For `test`, `[`, `[[` and `wait` only the operand of
+        # `-v`, `-R` or `-p` is a name. Raised by two security reviews.
+        if name in NAME_OPERAND_TAKERS:
+            operands = arguments
+            if name not in PATH_WRITERS:
+                operands = [arguments[index + 1]
+                            for index, word in enumerate(arguments[:-1])
+                            if word in ("-v", "-R", "-p")]
+            if any(re.search(r"\[[^]]*[A-Za-z_$`]", word) or re.search(r"[$`]", word)
+                   for word in operands):
+                return True
         # A nameref makes another name an alias of whatever it is set to, and
         # an integer attribute makes every later assignment arithmetic.
         if name in ("declare", "local", "typeset") and any(
