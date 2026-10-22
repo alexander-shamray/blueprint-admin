@@ -428,11 +428,14 @@ as a realm identity, with `RequestProxy`.
 - **GET only, by construction.** The builder takes GET operations and nothing
   else. A tool cannot send a body. §6.3 refuses any descriptor that is not
   read-only, so a misread catalogue cannot slip a write in.
-- **Which identity.** For each operation, the realm user the API screen would
-  choose for that route: the first user in `AdminOptions.Users` whose roles
-  satisfy the route's policy in `GatewayRoutes`. Anonymous routes use no
-  identity. The panel can pin a different user for the conversation, as the
-  API screen can. Passwords and tokens stay inside `TokenService`. The model
+- **Which identity.** For each operation, the first realm user in
+  `AdminOptions.Users`, in order, whose token carries the permission the
+  route's policy in `GatewayRoutes` requires. The host reads it from the
+  token's `permission` claim, as `IdentityEndpoints.Permissions` already
+  does. An `authenticated` route takes the first user and an anonymous one
+  takes none. With no user holding the permission, the tool says so and
+  sends nothing. The panel can pin one user for the conversation instead,
+  as the API screen's identity picker holds one choice for the screen. Passwords and tokens stay inside `TokenService`. The model
   sees a username at most.
 - **What comes back.** Status, the body (cut to the size bound, with
   `truncated` set when cut), and the request's correlation id, all after
@@ -752,7 +755,8 @@ note's call and open to their review:
   so a later decision to allow actions extends the protocol without remodelling
   it (§6.3);
 - platform data as tools derived from `ApiCatalog`'s GET operations, sent as
-  the realm user the API screen would pick, transcribed, with Privacy left out
+  the first configured realm user whose token's permission claim satisfies
+  the route, transcribed, with Privacy left out
   by default (§6.5);
 - multilingual support, as the operator asked, for the whole console:
   `@angular/localize` (the web client's mechanism) with one build and
