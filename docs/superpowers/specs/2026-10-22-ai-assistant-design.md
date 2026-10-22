@@ -283,8 +283,9 @@ assistant panel is one user of a console-wide mechanism, not its owner.
   checked with `ng extract-i18n`: `en-US` is the source, `ru-RU` the first
   translation. A check fails the build on a message the source has and a
   shipped translation lacks, so a new string cannot ship half-translated. It
-  runs in `npm-checks.sh` and the `web` workflow. Adding a language is
-  adding one file and one picker entry.
+  runs in `npm-checks.sh` and the `web` workflow, as part of `npm run lint`
+  (`docs/testing.md`). Adding a language is adding one file and one entry in
+  `LOCALES`.
 - **Formats.** Dates, numbers and durations go through Angular's locale data
   for the active locale (`registerLocaleData`), never hand-formatted.
 - **What is never translated**, because it is evidence or a command, not UI
