@@ -9,19 +9,21 @@ type Placed = [WidgetType, number, number, Record<string, unknown>?];
 
 /**
  * The built-in pages rebuilt from widgets so far (§10), each widget at its cell and its type's default size, in
- * roughly the arrangement the screen had. A page not listed is still its screen in one legacy widget.
+ * roughly the arrangement the screen had. For the Stack page that is the screens table's (spec §6): the doctor
+ * before the buttons, the job's output directly under them, and the load run beside the golden signals. A page not
+ * listed is still its screen in one legacy widget.
  */
 const BUILT_IN_LAYOUTS: Partial<Record<string, readonly Placed[]>> = {
   stack: [
-    [STACK_WIDGETS.controls, 0, 0],
-    [JOB_OUTPUT, 12, 0, { jobId: null }],
-    [STACK_WIDGETS.reachability, 0, 7, { surfaces: [] }],
-    [STACK_WIDGETS.services, 0, 10, { services: [] }],
-    [STACK_WIDGETS.doctor, 12, 10],
-    [STACK_WIDGETS.signals, 0, 22, { services: [] }],
-    [STACK_WIDGETS.alerts, 14, 22, { firingOnly: false }],
-    [STACK_WIDGETS.client, 0, 30],
-    [STACK_WIDGETS.loadRun, 14, 30],
+    [STACK_WIDGETS.doctor, 0, 0],
+    [STACK_WIDGETS.controls, 12, 0],
+    [JOB_OUTPUT, 12, 7, { jobId: null }],
+    [STACK_WIDGETS.reachability, 0, 14, { surfaces: [] }],
+    [STACK_WIDGETS.signals, 0, 17, { services: [] }],
+    [STACK_WIDGETS.loadRun, 14, 17],
+    [STACK_WIDGETS.alerts, 0, 25, { firingOnly: false }],
+    [STACK_WIDGETS.services, 10, 25, { services: [] }],
+    [STACK_WIDGETS.client, 0, 37],
   ],
 };
 
