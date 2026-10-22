@@ -4454,8 +4454,15 @@ ANY_SCRIPT_FLAG = re.compile(
 # nothing: `python -c` opens `.claude/settings.json` without naming git at all,
 # which is the interpreter residual `docs/harness-boundaries.md` states. Read as
 # bash, a backtick in a string is a substitution, so it would only refuse.
-INTERPRETERS = frozenset({"bun", "deno", "node", "perl", "php", "py", "python",
-                          "python3", "ruby"})
+# Versioned and windowed names too: `python3.12`, `pythonw`, `perl5.38`.
+INTERPRETER = re.compile(
+    r"^(?:bun|deno|node(?:js)?|php[\d.]*|perl[\d.]*|py|pypy[\d.]*"
+    r"|python[\d.]*w?|ruby[\d.]*)$")
+
+
+def interpreter(word):
+    """Whether `word` names a program whose argument is code in its own language."""
+    return bool(INTERPRETER.match(program_name(word)))
 
 # Wrappers that run their command in the environment they were given, adding
 # no name to it. A shell behind one of these is started directly, and its
@@ -4563,14 +4570,14 @@ def unmodelled_shell_launch(run):
     runs git, whose startup files and environment this guard knows nothing
     of: `/tmp/x -c 'git ...'`, `pwsh -c 'git ...'`. A run led by a printer, a
     reader, a lookup (`which bash`), `gh` or an interpreter executes no shell
-    of its own here: the interpreter's code is the residual `INTERPRETERS`
+    of its own here: the interpreter's code is the residual `INTERPRETER`
     states.
     """
     start = launched_program(run)
     if start is None:
         return False
     lead = program_name(run[start])
-    if lead in DATA_ONLY_COMMANDS | READING_COMMANDS | INTERPRETERS | {
+    if interpreter(lead) or lead in DATA_ONLY_COMMANDS | READING_COMMANDS | {
             "gh", "type", "where", "whereis", "which"}:
         return False
     if lead in EVALUATORS:
@@ -5153,8 +5160,8 @@ def evaluated_scripts(tokens):
                     yield " ".join(argv)
         # Any program's script, not only a named shell's (#397).
         start = launched_program(run)
-        if start is None or program_name(run[start]) in (
-                READING_COMMANDS | INTERPRETERS):
+        if start is None or interpreter(run[start]) or program_name(
+                run[start]) in READING_COMMANDS:
             continue
         for word, script in zip(run[start + 1:], run[start + 2:]):
             if ANY_SCRIPT_FLAG.match(word):

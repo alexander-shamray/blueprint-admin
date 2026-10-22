@@ -7742,6 +7742,8 @@ class TheGitArgvGuard(unittest.TestCase):
             "cmd //c dir",
             "powershell -NoProfile -Command \"Get-Process | Select-Object Id,Name\"",
             "py -3.12 -c 'print(\"`x`\")'",
+            "python3.12 -c 'print(\"`x`\")'",
+            "pythonw -c 'print(\"`x`\")'",
             # A startup shell's name inside a path is a path (review R3).
             "git checkout HEAD -- docs/fish.md",
             "git checkout HEAD -- notes/zsh.txt",
