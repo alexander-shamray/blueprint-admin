@@ -512,7 +512,9 @@ later phase move one screen at a time without a page ever missing.
   - a polled source is a `PolledFeed` (`workspace/polled-feed.ts`), which a
     data service such as `StackFeed` owns and each widget attaches to;
   - the Compose job the Stack controls start is running work in its own
-    `ComposeRun`, followed to its exit while no widget shows it;
+    `ComposeRun`, followed to its exit while no widget shows it; the shell's
+    running-work indicator (§4.3, §7.2) comes with phase 4a (#389), which
+    reads it alongside the Scenario run;
   - a Job output widget's "last job started from this page" is `jobId: null`,
     and follows `PageJobs`, which also takes a job a Show output button opens;
   - each widget learns its instance and page from `WIDGET_CONTEXT`, which the
