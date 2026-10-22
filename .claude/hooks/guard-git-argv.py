@@ -4421,7 +4421,7 @@ def _closing_paren(command, start):
 # script unread, so no git rule judged what it held, and the startup-file
 # pattern, which takes its names from here, never saw `mksh -l` either. A
 # shell under a name no list holds is `ANY_SCRIPT_FLAG`'s and
-# `unmodelled_shell_offence`'s; this list is what the guard reads as bash.
+# `unmodelled_shell_launch`'s; this list is what the guard reads as bash.
 EVALUATORS = {"ash", "bash", "dash", "ksh", "lksh", "mksh", "oksh", "pdksh",
               "posh", "rbash", "sh", "yash", "zsh"}
 
