@@ -53,11 +53,12 @@ public static class SpanRecogniser
 
     /// <summary>
     /// The MassTransit version whose span tags these rows read: blueprint-backend <c>Directory.Packages.props</c>.
-    /// MassTransit 8.5.3's <c>LogContextActivityExtensions</c> tags every send and publish
+    /// MassTransit 8.5.12's <c>LogContextActivityExtensions</c> tags every send and publish
     /// <c>messaging.operation=send</c>, every consumer and saga step <c>process</c>, and a saga step with
-    /// <c>messaging.masstransit.saga_id</c> and its <c>begin_state</c> and <c>end_state</c>. A bump re-reads them.
+    /// <c>messaging.masstransit.saga_id</c> and its <c>begin_state</c> and <c>end_state</c>. A bump re-reads them:
+    /// from 8.5.3 to 8.5.12 that file and <c>DiagnosticHeaders</c>, which names the tags, did not change.
     /// </summary>
-    internal const string MassTransitVersion = "8.5.3";
+    internal const string MassTransitVersion = "8.5.12";
 
     public static readonly SpanRule[] Table =
     [
