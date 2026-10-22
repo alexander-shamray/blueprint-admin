@@ -349,7 +349,7 @@ endpoint it mirrors in its doc comment. The first set:
 | `stack_status` | the Stack screen's services and reachability reads |
 | `firing_alerts` | the alert strip's read |
 | `queue_depths` | the Broker screen's queues read (depth, consumers, parked) |
-| `recent_logs` | the output of the operator's running log follow, read through `GET /api/jobs/{id}` as the Logs screen reads it, with a text filter and a bounded line count. Read only: it never starts, stops or replaces a follow (the host keeps one, `LogFollower`), and with none running it says so, so the model can offer `open_screen` to Logs instead |
+| `recent_logs` | the output of the operator's running log follow, read from the follow job's buffered lines through `GET /api/jobs/{id}` (the Logs screen streams the same job over SSE), with a text filter and a bounded line count. Read only: it never starts, stops or replaces a follow (the host keeps one, `LogFollower`), and with none running it says so, so the model can offer `open_screen` to Logs instead |
 | `trace_summary` | the Trace screen's read for one correlation id |
 | `list_api_operations` | the API screen's catalogue |
 | `list_runbooks` | the Runbooks screen's list |
