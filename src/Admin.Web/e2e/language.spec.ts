@@ -9,13 +9,15 @@ test('the picker switches the shell to Russian through a reload, and back', asyn
   await expect(html).toHaveAttribute('lang', 'en-US');
   await expect(page.getByRole('navigation', { name: 'Pages' })).toBeVisible();
 
+  // The picker's name holds the language it shows, so a voice-control user can say what they see.
+  await expect(page.getByRole('button', { name: 'Language' })).toHaveAccessibleName('Language: English');
   await page.getByRole('button', { name: 'Language' }).click();
   await Promise.all([page.waitForEvent('load'), page.getByRole('menuitem', { name: 'Русский' }).click()]);
 
   await expect(html).toHaveAttribute('lang', 'ru-RU');
   await expect(page.getByRole('navigation', { name: 'Страницы' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Изменить раскладку' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Язык' })).toContainText('Русский');
+  await expect(page.getByRole('button', { name: 'Язык' })).toHaveAccessibleName('Язык: Русский');
 
   // The choice survives an ordinary reload.
   await page.reload();

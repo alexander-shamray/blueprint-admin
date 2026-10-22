@@ -64,6 +64,8 @@ export class App {
   readonly theme = inject(ThemeService);
   readonly languages = inject(LanguageService);
   readonly language = this.languages.choices.find((l) => l.id === this.languages.current) ?? this.languages.choices[0];
+  /** The picker's name holds the language it shows, so a voice-control user can say what they see. */
+  readonly languageLabel = $localize`Language: ${this.language.name}:language:`;
   readonly workspace = inject(WorkspaceService);
   readonly runningWork = inject(RunningWork);
   readonly widgetTypes = WIDGETS;
