@@ -5395,9 +5395,15 @@ def resolution_changed(command):
                 re.match(r"^-[A-Za-z]*[ni]", word) for word in arguments):
             return True
         # `set -x` prompt-expands `PS4` before every traced command; read after
-        # quote removal, so `set -o 'xtrace'` and `set -euxo pipefail` count.
-        if name == "set" and any(re.match(r"^-[A-Za-z]*x", word) or word == "xtrace"
-                                 for word in arguments):
+        # quote removal, so `set -o 'xtrace'`, `set -euxo pipefail` and
+        # `shopt -so xtrace` count, and so does an option from an expansion.
+        # Words after `--` are positional parameters, never options, which
+        # keeps the `set -- $pair` loop of the replayed commands a loop.
+        options = arguments[:arguments.index("--")] if "--" in arguments else arguments
+        if name in ("set", "shopt") and any(
+                word == "xtrace" or re.search(r"[$`]", word)
+                or (name == "set" and re.match(r"^-[A-Za-z]*x", word))
+                for word in options):
             return True
         # `mapfile -C` runs its callback string in this shell, as `eval` does.
         if name in ("mapfile", "readarray") and any(
