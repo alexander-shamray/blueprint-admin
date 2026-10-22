@@ -779,7 +779,7 @@ Each phase is one or more PRs and leaves the console working.
 | 3b Platform data | `PlatformReadTools` (§6.5): GET operations as tools, identity choice and the panel's override, `PlatformReads`, transcript marking; e2e asking a product's stock and an order's payment status on FakePlatform | 1 |
 | 4 Workspace | `help` on `WIDGETS`, the Assistant widget type, `open_page`, `highlight_widget`, `propose_widget`, `follow_correlation` | 1, #383 (and #390 for the last) |
 | 5 MCP | §12, as its own decision | 3a, 3b |
-| 6 Package | the console consumes the core from `blueprint-backend`'s package and drops its own copy; `protocol.ts` and `assistant-client.ts` become a copied, cited mirror of the backend's golden files under the `drift` job; `CLAUDE.md`'s owners table names the backend; a `nuget.config` naming the GitHub Packages feed, its token read from the environment and never committed, a CI secret for every job that restores (`host`, `drift`, `smoke`), and the spec's **Prerequisites** row gaining that token (#435) | blueprint-backend#1346 |
+| 6 Package | the console consumes the core from `blueprint-backend`'s package and drops its own copy; the browser client of §13's shared row becomes a copied, cited mirror of the backend's golden files under the `drift` job; `CLAUDE.md`'s owners table names the backend; a `nuget.config` naming the GitHub Packages feed, its token read from the environment and never committed, a CI secret for every job that restores (`host`, `drift`, `smoke`), and the spec's **Prerequisites** row gaining that token (#435) | blueprint-backend#1346 |
 
 Phases 2, 3a and 3b can run in parallel. Compaction of long conversations
 waits until use shows it is wanted.
