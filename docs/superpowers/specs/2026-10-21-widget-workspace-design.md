@@ -376,8 +376,9 @@ exactly §4.1's `x, y, cols, rows`, and push and compact behaviour. Phase 1
 proves it under zoneless change detection before anything depends on it.
 **Gridstack.js** (14.x, with its Angular wrapper) is the fallback if it
 does not hold up. Either way the grid is wrapped in one `WorkspaceGrid`
-component, so the choice is replaceable. **Proved in phase 1c (#383):**
-22.0.0 renders, drags and resizes under zoneless change detection against
+component, so the choice is replaceable. **Proved in phase 1c (#383):** the
+version `src/Admin.Web/package.json` pins renders, drags and resizes under
+zoneless change detection against
 FakePlatform, and a resize survives a reload, so the fallback was not
 needed.
 
