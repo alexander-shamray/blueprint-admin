@@ -575,9 +575,17 @@ A new residual is stated **here** and gets a row above.
   and bash exports by a closed list of routes: an assignment ahead of a
   command, `export` and `declare -x`, `allexport`, a nameref an `export` then
   follows, and code read from data. A program that sets its child's
-  environment is a further route, and no list of programs closes it. Beside
-  a writer, each of bash's routes that can export a name this guard cannot
-  read is refused, and so are three programs: an expansion anywhere in the
+  environment is a further route, and no list of launchers closes it, so the
+  list is of the wrappers that add nothing (`INERT_WRAPPERS`: `nohup`,
+  `timeout 5`, `nice -n 10`, `command`, `env` with literal assignments).
+  Beside a writer, a shell any other program starts is refused (`envdir
+  /tmp/d bash -c '...'`, `chpst -e`, `xargs bash`, `sudo bash`, by `-c`, a
+  here-string, a heredoc or a pipe, and through a shell between them), and so
+  is a program `EVALUATORS` does not name handed a script that runs git, whose
+  startup files this guard cannot know (#421, #397). A lookup (`which bash`),
+  a reader, `gh` and an interpreter start no shell here. Each of bash's
+  routes that can export a name this guard cannot read is refused too, and so
+  are three programs: an expansion anywhere in the
   words of `env`, `sudo` or `doas` (path-qualified too), or of a declaration
   builtin behind `command` or
   `builtin`, which split `X=$Y` into a second name (`export X=$Y` alone does
@@ -589,8 +597,9 @@ A new residual is stated **here** and gets a row above.
   anywhere in that shell's command, past any redirection, quoted span or
   escape, and an option word holding a quote, backslash or `$` or any
   unquoted expansion there, which fails closed and so also refuses `bash -c
-  'ls -la'`; and `exec -l` or `exec -a -bash`), `zsh` and `ZDOTDIR`, since
-  zsh reads `.zshenv` on every start, `alias`, `enable` and `mapfile -C`,
+  'ls -la'`; and `exec -l` or `exec -a -bash`), `zsh` and `ZDOTDIR`, `fish`,
+  `csh` and `tcsh`, since each reads a startup file on every start,
+  `alias`, `enable` and `mapfile -C`,
   which run code. A computed name
   that is only bound (`read`, `printf -v`, `(( $N = 5 ))`) is exported by
   none of these and reaches no git process. A script a shell runs (`bash -c`,
@@ -602,11 +611,22 @@ A new residual is stated **here** and gets a row above.
   HEAD -- settings.json'` was admitted. Still not seen: a variable already
   in the environment this command line starts with, inherited by the session
   or exported by the profile the shell sources, which relocates a plain `git
-  checkout -- settings.json` as well; any other program that builds a
-  shell's environment from data (`envdir /tmp/d bash -c '...'`, `chpst -e`,
-  an interpreter's `os.environ`), whose script is read but whose environment
-  is not (#421); and a writer inside a shell `EVALUATORS` does not name,
-  whose script the guard never reads at all (#397).
+  checkout -- settings.json` as well; an interpreter's code (`python -c`
+  setting `os.environ` and starting `bash -c`), which this guard does not
+  read as a command line, the write residual above; and a script a program
+  `EVALUATORS` does not name reads **on stdin** (`echo '...' | /tmp/x`,
+  `/tmp/x <<< '...'`), since reading every heredoc handed to an unnamed
+  program as a shell script refuses an ordinary `py - <<'EOF'` whose Python
+  holds a backtick (#397). **A shell is a program, not a name** (#397):
+  `EVALUATORS` holds the POSIX family by each name it ships under (`ash`,
+  `mksh`, `yash`, `posh`, `rbash` among them), and the word after any
+  program's script flag (`-c` and its bundles, `cmd`'s `/c` and `/k`, `-Command`)
+  is judged as a command line, so `cp /bin/bash /tmp/x; /tmp/x -c 'git push
+  origin +HEAD:main'` is refused; a reader and an interpreter are left out
+  (`grep -c`, `python -c`). Replayed over the 4000 most recent distinct
+  commands of this repository's session transcripts, that refused one the old
+  hook admitted: a PowerShell `-Command` whose `$_` stands where bash reads a
+  program name.
   `git checkout -f`, `git reset --hard`, `git stash`, `git checkout-index`,
   `git read-tree -u` and the subcommands that merge or replay (`merge`,
   `cherry-pick`, `rebase`) update the tree wholesale or by index and are not
