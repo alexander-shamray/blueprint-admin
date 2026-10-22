@@ -5194,13 +5194,23 @@ RESOLUTION_CHANGED = False
 # `read`, `declare` and `unset` reach it too. A function definition and `.`
 # in command position are read on the unquoted syntax. Raised by a second
 # security review; each verified admitted.
-# `eval` is among them because its string can hold any of the others, which no
-# word of this run shows.
-RESOLVING_COMMANDS = frozenset({"alias", "enable", "eval", "function", "hash",
-                                "source", "unalias", "."})
+# `eval`, `trap` and `fc` are among them because each runs a string in this
+# shell, and the string can hold any of the others, which no word of this run
+# shows.
+RESOLVING_COMMANDS = frozenset({"alias", "enable", "eval", "fc", "function",
+                                "hash", "source", "trap", "unalias", "."})
+# The builtins that can write a variable this shell resolves names through.
 PATH_WRITERS = frozenset({"declare", "export", "getopts", "local", "mapfile",
                           "printf", "read", "readarray", "readonly", "typeset",
                           "unset"})
+# The variables a command name resolves through: `PATH`, and bash's own tables
+# `BASH_CMDS` (what `hash -p` writes) and `BASH_ALIASES`. **Matched as an
+# identifier anywhere in a word, subscript or option glued on**, because a
+# writer spells its target many ways (`printf -vPATH`, `PATH[0]=`,
+# `BASH_CMDS[tee]=/tmp/x`): a list of spellings is the deny-list this file
+# argues against. Raised by a security review; each verified admitted.
+RESOLUTION_VARIABLES = re.compile(
+    r"(?:^-[A-Za-z]*|(?<![A-Za-z0-9_]))(?:PATH|BASH_CMDS|BASH_ALIASES)(?![A-Za-z0-9_])")
 RESOLVING = re.compile(
     r"(?<![\w.-])[A-Za-z_][\w.-]*\s*\(\s*\)"
     r"|(?:^|[;&|(){}!\n]|(?<![\w.-])(?:if|then|do|else|elif|while|until|time)(?![\w.-]))\s*\.\s")
@@ -5225,7 +5235,9 @@ def resolution_changed(command):
     except ValueError:
         return True
     for run in command_runs(tokens):
-        if any(re.match(r"PATH\+?=", word) for word in run):
+        # An assignment, as a prefix or alone: `PATH=…`, `BASH_CMDS[tee]=…`.
+        if any(ASSIGNMENT.match(word) and RESOLUTION_VARIABLES.match(word)
+               for word in run):
             return True
         program = _launched(run)
         if program is None:
@@ -5234,8 +5246,13 @@ def resolution_changed(command):
         name = program_name(program)
         if name in RESOLVING_COMMANDS:
             return True
+        arguments = run[start + 1:]
         if name in PATH_WRITERS and any(
-                re.match(r"PATH(?:\+?=|$)", word) for word in run[start + 1:]):
+                RESOLUTION_VARIABLES.search(word) for word in arguments):
+            return True
+        # A nameref makes another name an alias of whatever it is set to.
+        if name in ("declare", "local", "typeset") and any(
+                re.match(r"^-[A-Za-z]*n", word) for word in arguments):
             return True
     return False
 

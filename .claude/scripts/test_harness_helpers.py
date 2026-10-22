@@ -5581,6 +5581,14 @@ class TheGitArgvGuard(unittest.TestCase):
             "printf -v PATH %s /tmp; echo 'git push origin +HEAD:main' | sort",
             "echo 'git push origin +HEAD:main' | awk '{system($0)}'",
             "while read -r line; do $line; done <<<'git push origin +HEAD:main'",
+            # The fifth review's: bash's own name tables, a `PATH` named with
+            # an option or a subscript glued on, a nameref, and `trap`.
+            "BASH_CMDS[tee]=/tmp/x; tee <<<'git push origin +HEAD:main'",
+            "BASH_ALIASES[jq]=bash; jq <<<'git push origin +HEAD:main'",
+            "printf -vPATH %s /tmp; echo 'git push origin +HEAD:main' | sort",
+            "PATH[0]=/tmp; echo 'git push origin +HEAD:main' | sort",
+            "declare -n p=PATH; p=/tmp; echo 'git push origin +HEAD:main' | sort",
+            "trap 'hash -p /tmp/x tee' DEBUG; tee <<<'git push origin +HEAD:main'",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command)
