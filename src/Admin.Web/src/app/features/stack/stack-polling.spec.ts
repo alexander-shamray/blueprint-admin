@@ -65,7 +65,7 @@ describe('the Stack page', () => {
 
     // Past the ticks at 3, 6, 9, 12 and 15 s and short of the next, so no tick sits on the window's edge.
     await vi.advanceTimersByTimeAsync(16_500);
-    // Six widgets read the stack and share one poll, a read each 3 s; the strips read each 15 s.
+    // Five widgets read the stack and share one poll, a read each 3 s; the strips read each 15 s.
     const before = reads();
     expect(before).toEqual([shown[0] + 5, shown[1] + 1, shown[2] + 1]);
 
