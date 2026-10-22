@@ -12,7 +12,7 @@
               mat-icon-button
               type="button"
               class="ws-remove"
-              [attr.aria-label]="'Remove ' + titleOf(item)"
+              [attr.aria-label]="removeLabel(item)"
               (mousedown)="$event.stopPropagation()"
               (click)="removeWidget.emit(item.widget.id)"
             >
@@ -26,7 +26,7 @@
               <ng-container *ngComponentOutlet="component; inputs: { config: item.config }; injector: injectorOf(item)" />
             }
           } @else {
-            <p class="ws-unknown">
+            <p class="ws-unknown" i18n>
               This console does not know the widget type <code>{{ item.widget.type }}</code>. It is kept, and saved back as
               it was.
             </p>

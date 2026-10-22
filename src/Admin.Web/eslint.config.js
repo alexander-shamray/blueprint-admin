@@ -9,6 +9,7 @@ const TRANSLATED_TEMPLATES = [
   'src/app/shared/command-palette/command-palette.html',
   'src/app/shared/drained-indicator/drained-indicator.ts/*.html',
   'src/app/shared/output-pane/output-pane.ts/*.html',
+  'src/app/workspace/workspace-grid.html',
 ];
 
 module.exports = defineConfig([
