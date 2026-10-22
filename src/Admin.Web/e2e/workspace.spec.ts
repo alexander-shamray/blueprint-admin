@@ -116,6 +116,7 @@ test('a widget type with one preset is added in one press, and one with several 
   await page.goto('/stack');
   await page.getByRole('button', { name: 'New page' }).click();
   await expect(page).toHaveURL(/\/page\/page-/);
+  const made = page.url();
 
   await page.getByRole('button', { name: 'Add widget' }).click();
   await page.getByRole('menuitem', { name: 'Reachability' }).click();
@@ -129,6 +130,8 @@ test('a widget type with one preset is added in one press, and one with several 
 
   await page.getByRole('button', { name: 'Page actions' }).click();
   await page.getByRole('menuitem', { name: 'Delete' }).click();
+  // The open page moves on once the delete lands; only then is waiting for the save to settle a wait for this one.
+  await expect(page).not.toHaveURL(made);
   // The delete is saved like any change; leave the shared host without the page.
   await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
 });
