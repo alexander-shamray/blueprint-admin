@@ -113,7 +113,8 @@ Three further asks shape the design more than the first version does:
   lockfile in the same commit. The backend's own assistant packages (§13)
   are exempt from the age rule. They are first-party, built and reviewed in
   a repository the operator owns, and the rule guards against third-party
-  releases, so a core fix would gain nothing from waiting two weeks. Warnings stop the build; no `#pragma`.
+  releases, so a core fix would gain nothing from waiting two weeks.
+  Warnings stop the build; no `#pragma`.
 - Angular 22 standalone, zoneless, signals, `inject()` at field level.
 - Every fact keeps one owner: the protocol's owner is the core's C# types,
   the TypeScript mirror cites them, and a shared golden file pins the JSON
@@ -816,8 +817,9 @@ note's call and open to their review:
 - the catalogue sent by the client, its text owned by the registries (§6.1);
 - the shared core in `blueprint-backend`, not in a new repository, as the
   operator decided. It is built here until blueprint-backend#1346 publishes
-  it, frozen here from that moment, and consumed as a package. Each Angular client keeps a copied, cited and
-  drift-checked mirror of the browser client, not an npm package (§13);
+  it, frozen here from that moment, and consumed as a package. Each Angular
+  client keeps a copied, cited and drift-checked mirror of the browser
+  client, not an npm package (§13);
 - conversations in host memory only (§5.1);
 - read-only now with room for actions later: a host-supplied `ToolPolicy`,
   and a reserved `confirmation_required` event and `confirmations` resource,
