@@ -5596,13 +5596,20 @@ class TheGitArgvGuard(unittest.TestCase):
             "n=PATH; declare \"$n=/tmp\"; echo 'git push origin +HEAD:main' | sort",
             "mapfile -C 'hash -p /tmp/x tee' -c 1 a <<<x; tee <<<'git push origin +HEAD:main'",
             "for PATH in /tmp; do echo 'git push origin +HEAD:main' | sort; done",
-            "x=PATH=0; : $((x)); echo 'git push origin +HEAD:main' | sort",
-            "x=PATH=0; let x; echo 'git push origin +HEAD:main' | sort",
+            # The arithmetic cases build the name with `$'\x50'` so that only
+            # the arithmetic rule, not the name rule, can catch them.
+            "x=$'\\x50'ATH=0; : $((x)); echo 'git push origin +HEAD:main' | sort",
+            "x=$'\\x50'ATH=0; let x; echo 'git push origin +HEAD:main' | sort",
             "declare -i n; n=x; echo 'git push origin +HEAD:main' | sort",
-            # A name operand's subscript is arithmetic with no `=` after it.
-            "x=PATH=0; read 'a[x]' <<<1; echo 'git push origin +HEAD:main' | sort",
-            "x=PATH=0; unset a[x]; echo 'git push origin +HEAD:main' | sort",
-            "x=PATH=0; test -v 'a[x]'; echo 'git push origin +HEAD:main' | sort",
+            # A name operand's subscript is arithmetic with no `=` after it,
+            # and one that comes from an expansion is any subscript.
+            "x=$'\\x50'ATH=0; read 'a[x]' <<<1; echo 'git push origin +HEAD:main' | sort",
+            "x=$'\\x50'ATH=0; unset a[x]; echo 'git push origin +HEAD:main' | sort",
+            "x=$'\\x50'ATH=0; test -v 'a[x]'; echo 'git push origin +HEAD:main' | sort",
+            "x=$'\\x50'ATH=0; wait -p 'a[x]'; echo 'git push origin +HEAD:main' | sort",
+            "n=$'a[\\x50'ATH=0]; test -v \"$n\"; echo 'git push origin +HEAD:main' | sort",
+            "n=$'a[\\x50'ATH=0]; wait -p \"$n\"; echo 'git push origin +HEAD:main' | sort",
+            "n=$'a[\\x50'ATH=0]; : \"${!n}\"; echo 'git push origin +HEAD:main' | sort",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command)
