@@ -114,7 +114,8 @@ Three further asks shape the design more than the first version does:
 - Angular 22 standalone, zoneless, signals, `inject()` at field level.
 - Every fact keeps one owner: the protocol's owner is the core's C# types,
   the TypeScript mirror cites them, and a shared golden file pins the JSON
-  both sides read and write (§14).
+  both sides read and write (§14). The owner sits in this repository through
+  phase 5 and in `blueprint-backend` from phase 6 on (§13).
 
 ## 4. Shape
 
@@ -142,8 +143,9 @@ assistant-panel (Angular)                · history (append-only)               
 
 The core's names avoid the admin's vocabulary on purpose: it says "client",
 "catalogue" and "tool source", never "screen", "widget" or "stack". The
-namespace is `Admin.Assistant` because that is the repository's convention;
-renaming it on extraction (§13) is a find-and-replace, not a redesign.
+namespace is `Admin.Assistant` because that is the repository's convention.
+Renaming it when it moves to `blueprint-backend` (§13) is a find-and-replace,
+not a redesign.
 
 ## 5. The protocol
 
@@ -659,24 +661,57 @@ What it will be, so nothing now blocks it:
 - Client tools reach a browser only if one is open; whether the MCP route
   offers them at all is that phase's decision.
 
-## 13. Another client, later
+## 13. Another client, and where the shared code lives
 
-The core and the browser client are written to be lifted out:
+The second consumer is the platform's web client, so the shared code must
+live where both the console and the platform can use it. The operator chose
+**`blueprint-backend`, and no new repository** (2026-10-22):
 
-- a second host references `Admin.Assistant` (and an adapter), registers its
-  own tool sources and redactor, and serves the §5 resources;
-- a second client uses `protocol.ts` and `assistant-client.ts` unchanged,
-  registering its own client tools and sending its own catalogue.
+| Piece | Lives in | How others get it |
+|---|---|---|
+| Core and Anthropic adapter, and the protocol: its C# types and §14's golden JSON files | this repository through phase 5, then `blueprint-backend` as building blocks | NuGet packages from GitHub Packages, pinned exactly |
+| Browser client (`protocol.ts`, `assistant-client.ts`) | each Angular client keeps its own | copied, cited and drift-checked against the backend's golden files, as `GatewayRoutes` and `PlatformQueues` already are |
+| Tool sources, redactor, catalogue, client tools, panel, fake provider | each host and each client | not shared |
 
-Packaging either (a NuGet or npm package, or a shared repository) waits for a
-real second consumer. The operator has named that consumer as the platform's
-web client. Its changes are in `blueprint-backend` (the BFF hosts the core,
-maps its signed-in user to a `Caller`, and supplies tools scoped to that user)
-and in `blueprint-frontend`. Each is raised there as an issue, not made from
-here, once phase 1 has fixed the protocol. That host also needs what the
-console lacks: authentication on the §5 resources, rate limits, and a decision
-on what data a customer's conversation may send the provider. Those are its
-design, not this note's.
+The reasons for this split:
+
+- The backend owns the core's production host, the BFF, and holds the same
+  C# dialect and analysis policy (ADR-019).
+- The console is already a client of the backend. Depending on a package the
+  backend publishes points ownership the right way. A package published from
+  this repository would make a tool that is never deployed the owner of
+  production code.
+- The browser client is small, and this repository's copied-and-cited
+  pattern already exists. An npm package would add a publishing path for
+  three files.
+- A new repository would add its own CI, releases and rules, and would buy
+  nothing the backend does not already give.
+
+**When it moves.** Phases 1–5 build and change the core here, where the
+FakePlatform loop is fastest and the protocol can still move. Before the BFF
+uses it:
+
+- the backend takes the core in and publishes it
+  (alexander-shamray/blueprint-backend#1346);
+- the console then consumes the package and mirrors the browser client
+  under the drift gate (phase 6, #435).
+
+From then on, a change to the core is a backend PR and a version bump here,
+as the spec's rule against editing a sibling requires.
+
+**The web client's side**:
+
+- the BFF hosts the core for signed-in customers, maps each user to a
+  `Caller`, and calls the platform with the customer's own token
+  (alexander-shamray/blueprint-backend#1347);
+- the web client mirrors the browser client and builds its own panel, UI
+  tools and translated catalogue
+  (alexander-shamray/blueprint-frontend#326).
+
+That host also needs what the console lacks: authentication on the §5
+resources, rate limits, a credential from its secret store, and a decision,
+by ADR, on what customer data may go to the provider. Those are its design,
+not this note's.
 
 ## 14. Testing
 
@@ -730,6 +765,7 @@ Each phase is one or more PRs and leaves the console working.
 | 3b Platform data | `PlatformReadTools` (§6.5): GET operations as tools, identity choice and the panel's override, `PlatformReads`, transcript marking; e2e asking a product's stock and an order's payment status on FakePlatform | 1 |
 | 4 Workspace | `help` on `WIDGETS`, the Assistant widget type, `open_page`, `highlight_widget`, `propose_widget`, `follow_correlation` | 1, #383 (and #390 for the last) |
 | 5 MCP | §12, as its own decision | 3a, 3b |
+| 6 Package | the console consumes the core from `blueprint-backend`'s package and drops its own copy; `protocol.ts` and `assistant-client.ts` become a copied, cited mirror of the backend's golden files under the `drift` job; `CLAUDE.md`'s owners table names the backend (#435) | blueprint-backend#1346 |
 
 Phases 2, 3a and 3b can run in parallel. Compaction of long conversations
 waits until use shows it is wanted.
@@ -765,6 +801,10 @@ note's call and open to their review:
 - MCP's tool shape for every descriptor from day one, and stdio rather than a
   listener for the MCP route (§6, §12);
 - the catalogue sent by the client, its text owned by the registries (§6.1);
+- the shared core in `blueprint-backend`, not in a new repository, as the
+  operator decided. It is built here through phase 5, then moved and
+  consumed as a package. Each Angular client keeps a copied, cited and
+  drift-checked mirror of the browser client, not an npm package (§13);
 - conversations in host memory only (§5.1);
 - read-only now with room for actions later: a host-supplied `ToolPolicy`,
   and a reserved `confirmation_required` event and `confirmations` resource,
