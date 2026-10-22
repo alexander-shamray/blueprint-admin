@@ -21,7 +21,11 @@
     </button>
     <mat-menu #addMenu="matMenu">
       @for (kind of widgetTypes; track kind.type) {
-        <button mat-menu-item [matMenuTriggerFor]="presetMenu" [matMenuTriggerData]="{ kind }">{{ kind.title }}</button>
+        @if (kind.presets.length === 1) {
+          <button mat-menu-item (click)="addWidget(page.id, kind, kind.presets[0])">{{ kind.title }}</button>
+        } @else {
+          <button mat-menu-item [matMenuTriggerFor]="presetMenu" [matMenuTriggerData]="{ kind }">{{ kind.title }}</button>
+        }
       }
     </mat-menu>
     <mat-menu #presetMenu="matMenu">
