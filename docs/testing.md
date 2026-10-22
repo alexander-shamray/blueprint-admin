@@ -29,6 +29,13 @@ Commands run in `src/Admin.Web`. `bash .claude/scripts/npm-checks.sh` `cd`s
 there. `npm ci` from the lockfile, never `npm install`. A fresh worktree has
 no `node_modules`; the first check fails on a missing `ng`.
 
+`npm run lint` also runs `npm run i18n:check`: `ng extract-i18n` into
+`.i18n-check/`, then `scripts/check-translations.mjs`, which fails when
+`src/locale/messages.en-US.json` is not what the templates say or a shipped
+translation lacks a message. After changing a string, `npm run i18n:extract`
+and translate what it adds. The `@angular-eslint/template/i18n` rule runs on
+the templates `eslint.config.js` lists as translated.
+
 `npm-checks.sh` has no `e2e` mode. Playwright talks to the Host under
 `--Admin:FakePlatform=true`. Locally: build the SPA, run the Host with that
 flag, then `npm run e2e` in `src/Admin.Web`. CI's `smoke` job is the same
