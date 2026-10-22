@@ -19,6 +19,8 @@ for (const { path, label } of SCREENS) {
 }
 
 test('a page made, filled, resized and rearranged is found as it was left after a reload', async ({ page }) => {
+  // Tall enough for all three default-size widgets, so every corner and header the walk drags is on screen.
+  await page.setViewportSize({ width: 1280, height: 2600 });
   const title = `Walk ${Date.now()}`;
   await page.goto('/stack');
 
@@ -35,6 +37,8 @@ test('a page made, filled, resized and rearranged is found as it was left after 
   }
   const titles = page.locator('gridster-item .ws-head .ws-title');
   await expect(titles).toHaveText(['Logs', 'Map', 'Mail']);
+  // `page.mouse` skips the actionability checks, so a closing menu's backdrop would take the first press.
+  await expect(page.locator('.cdk-overlay-backdrop')).toHaveCount(0);
 
   const items = page.locator('gridster-item');
   const first = items.nth(0);
@@ -45,7 +49,6 @@ test('a page made, filled, resized and rearranged is found as it was left after 
   const resized = await halve(page, first);
   expect(resized.width).toBeLessThan(before.width);
   expect(resized.height).toBeLessThan(before.height);
-  await mail.scrollIntoViewIfNeeded();
   await halve(page, mail);
   const head = (await mail.locator('.ws-head').boundingBox())!;
   await page.mouse.move(head.x + 40, head.y + head.height / 2);
