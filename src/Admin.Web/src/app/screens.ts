@@ -1,6 +1,7 @@
 /**
- * The console's screens, in the order the bar shows them: one list for the bar and the command palette, so a
- * screen added to one is never missing from the other. The paths are app.routes.ts's.
+ * The console's screens, in their default order: the routes, the built-in pages, the legacy screen widget's choices
+ * and the host's `WorkspaceDefaults` (held to this list by a drift test) all follow it. The side navigation and the
+ * palette list the operator's pages instead (widget-workspace spec §7.2).
  */
 export const SCREENS = [
   { path: 'stack', label: 'Stack' },

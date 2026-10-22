@@ -1028,8 +1028,10 @@ mirrors the reference client's so a reader of one repo can read the other:
 output pane, status pill and JSON viewer.
 
 The shell's screens are one list, `SCREENS` in `src/app/screens.ts`, read by
-the bar and by the command palette. `Ctrl+K` (`Cmd+K`) opens the palette from
-any screen: go to a screen, run the Scenario, or open what was typed as a
+the routes and the built-in pages; the side navigation and the command
+palette list the operator's pages (widget-workspace spec §7.2). `Ctrl+K`
+(`Cmd+K`) opens the palette from any page: go to a page, run the Scenario, or
+open what was typed as a
 correlation id on the Trace screen. The palette does not judge the id; the
 trace endpoint refuses one `CorrelationId.IsAdoptable` would not adopt, so the
 palette is no way round the LogQL boundary of §5.9. A Scenario run is asked
