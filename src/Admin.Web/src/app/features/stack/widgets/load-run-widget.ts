@@ -40,6 +40,8 @@ import { StackFeed } from '../stack-feed';
     </section>
   `,
   styleUrl: './stack-widgets.css',
+  // The buttons are inline and spaced by the template's own whitespace, as they were on the Stack screen.
+  preserveWhitespaces: true,
 })
 export class LoadRunWidget {
   private readonly host = inject(HostClient);
