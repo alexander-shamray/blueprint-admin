@@ -47,8 +47,7 @@ export const LEGACY_SCREEN: WidgetType = {
 };
 
 /**
- * Every widget type, read by the "Add widget" picker, the grid and the built-in pages, as SCREENS is read by the
- * side navigation and the palette. A type unknown to this list is rendered as "unknown widget" and saved back
+ * Every widget type, read by the "Add widget" picker, the grid and the built-in pages. A type unknown to this list is rendered as "unknown widget" and saved back
  * untouched, so a document from a newer console survives an older one (§6.3).
  */
 export const WIDGETS: readonly WidgetType[] = [LEGACY_SCREEN];
