@@ -5212,8 +5212,13 @@ NAME_OPERAND_TAKERS = PATH_WRITERS | {"test", "[", "[[", "wait"}
 # writer spells its target many ways (`printf -vPATH`, `PATH[0]=`,
 # `BASH_CMDS[tee]=/tmp/x`): a list of spellings is the deny-list this file
 # argues against. Raised by a security review; each verified admitted.
+#
+# The prompt strings are among them because a prompt is expanded, arithmetic
+# included: `PS4` before every command `set -x` traces, the rest where a shell
+# prompts.
 RESOLUTION_VARIABLES = re.compile(
-    r"(?:^-[A-Za-z]*|(?<![A-Za-z0-9_]))(?:PATH|BASH_CMDS|BASH_ALIASES)(?![A-Za-z0-9_])")
+    r"(?:^-[A-Za-z]*|(?<![A-Za-z0-9_]))"
+    r"(?:PATH|BASH_CMDS|BASH_ALIASES|PS[0-4]|PROMPT_COMMAND)(?![A-Za-z0-9_])")
 RESOLVING = re.compile(
     r"(?<![\w.-])[A-Za-z_][\w.-]*\s*\(\s*\)"
     r"|(?:^|[;&|(){}!\n]|(?<![\w.-])(?:if|then|do|else|elif|while|until|time)(?![\w.-]))\s*\.\s")
@@ -5227,8 +5232,10 @@ RESOLVING = re.compile(
 # arithmetic test in `[[`; and so does an expansion that assigns (`${n=…}`,
 # `${n:=…}`), an indirect `${!n}`, whose name can carry a subscript, any
 # `${…@…}` transformation (`@P` prompt-expands the value, arithmetic
-# included), and a compound assignment's subscript (`a=([x]=1)`). Raised by
-# security reviews; the expansion half verified admitted.
+# included), a compound assignment's subscript (`a=([x]=1)`, read to the end
+# of the line, since an escaped `)` ends no list), and `set -x`, which
+# prompt-expands `PS4` before every traced command. Raised by security
+# reviews; the expansion half verified admitted.
 # Arithmetic over literals alone reads no variable, so `${PIPESTATUS[0]}`, the
 # commonest shape in the replayed commands, is not one.
 EXPANSION_WRITES = re.compile(
@@ -5237,7 +5244,8 @@ EXPANSION_WRITES = re.compile(
     r"|\$\{[^}]*\[[^]]*[A-Za-z_]"
     r"|\$\{!"
     r"|\$\{[^}]*@"
-    r"|\+?=\([^)]*\[[^]]*[A-Za-z_$`]"
+    r"|\+?=\([\s\S]*?\[[^]]*[A-Za-z_$`]"
+    r"|(?<![\w-])set\s+(?:-\w*x|-o\s+xtrace)"
     r"|\$\{[^}:]*:(?![-=+?])[^}]*[A-Za-z_]"
     r"|(?<![\w-])[A-Za-z_]\w*\[[^]]*[A-Za-z_][^]]*\]"
     r"|\[\[[^]]*\s-(?:eq|ne|lt|le|gt|ge)\s")
@@ -5281,6 +5289,32 @@ def _expanded_text(command):
             continue
         index += 1
     return "".join(text)
+
+
+# The binary operators of `test` and `[[`, after which a word is an operand.
+TEST_BINARY = frozenset({"=", "==", "!=", "<", ">", "=~", "-eq", "-ne", "-lt",
+                         "-le", "-gt", "-ge", "-nt", "-ot", "-ef"})
+
+
+def _expanded_operator(arguments):
+    """Whether an expanded word in a `test` or `wait` argument list stands
+    where an operator or option could: not the operand of a literal operator
+    before it, not the left side of a binary operator after it, and not alone.
+    `[ -d "$d" ]`, `[ "$n" != 0 ]` and `wait "$pid"` are operands; `test $o
+    'a[x]'` is not."""
+    words = [word for word in arguments if word not in ("]", "]]")]
+    for index, word in enumerate(words):
+        if not re.search(r"[$`]", word):
+            continue
+        after = words[index + 1] if index + 1 < len(words) else None
+        before = words[index - 1] if index else None
+        if after is None or after in TEST_BINARY or after in ("-a", "-o", "&&", "||", ")"):
+            continue
+        if (before is not None and before.startswith("-") and before not in ("-a", "-o")
+                and not re.search(r"[$`]", before)):
+            continue
+        return True
+    return False
 
 
 def resolution_changed(command):
@@ -5337,10 +5371,16 @@ def resolution_changed(command):
         # Raised by three security reviews.
         if name in NAME_OPERAND_TAKERS:
             operands = arguments
-            if name not in PATH_WRITERS:
+            # An option that comes from an expansion is any option, so a
+            # `test` or `wait` whose expanded word stands where an operator
+            # could reads every word as a name operand (`o=-v; test $o
+            # 'a[x]'`). Raised by a security review.
+            if name not in PATH_WRITERS and not _expanded_operator(arguments):
+                # `test` takes `-v` and `-R` whole; `wait` clusters its `-p`.
+                option = r"^-[vR]()$" if name != "wait" else r"^-[A-Za-z]*?p(.*)$"
                 operands = []
                 for index, word in enumerate(arguments):
-                    cluster = re.match(r"^-[A-Za-z]*?[vRp](.*)$", word)
+                    cluster = re.match(option, word)
                     if not cluster:
                         continue
                     if cluster.group(1):
