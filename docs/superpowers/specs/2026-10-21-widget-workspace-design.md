@@ -204,8 +204,7 @@ Some sources are one thing on the host however many widgets show them:
 ### 5.1 The registry
 
 One list, `WIDGETS` in `src/app/workspace/widgets.ts`, read by the "Add
-widget" picker, the grid and the built-in pages, as `SCREENS` is read by the
-bar and the palette today. Each entry: `type`, title, the component
+widget" picker, the grid and the built-in pages. Each entry: `type`, title, the component
 (lazy-loaded), default and minimum size, a config schema with its defaults,
 and the data services it reads. A widget type is not done until it renders
 against FakePlatform and the smoke covers it.
