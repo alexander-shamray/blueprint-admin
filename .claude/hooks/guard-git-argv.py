@@ -5161,8 +5161,25 @@ def _launched(words):
 
 def path_qualified(word):
     """Whether `word` names its program by a path, which a copy can give any
-    name: `cp /bin/bash /tmp/sort` makes `/tmp/sort` a shell."""
-    return "/" in word or "\\" in word
+    name: `cp /bin/bash /tmp/sort` makes `/tmp/sort` a shell. On a line that
+    changes how a bare name resolves (`RESOLUTION_CHANGED`), every name is
+    as good as a path."""
+    return RESOLUTION_CHANGED or "/" in word or "\\" in word
+
+
+# Set by `unclassified_stdin_writer` for the line it judges, and cleared on the
+# way out: whether the line changes what a bare name runs.
+RESOLUTION_CHANGED = False
+
+# What makes a bare name run something else on the line that names it: a
+# `PATH` assignment, as a prefix or exported; `hash`, `alias` and `enable`;
+# a function defined either way; and `source` or `.`, which can define one.
+# `sort() { bash; }; echo 'git push …' | sort` ran the push. Raised by a
+# security review; verified admitted.
+RESOLVING = re.compile(
+    r"(?<![\w.-])(?:PATH\+?=|hash|alias|enable|source|function)(?![\w-])"
+    r"|(?<![\w.-])[A-Za-z_][\w.-]*\s*\(\s*\)"
+    r"|(?:^|[;&|(\n]\s*)\.\s")
 
 
 def stdin_classified(words):
@@ -5328,6 +5345,19 @@ def unclassified_stdin_writer(command):
     shape, is refused any `git` word, and any stdin it is handed from a file
     or from anything but a printer, whose text alone is in the source.
     """
+    global RESOLUTION_CHANGED
+    ordinary = _unquoted_positions(command)
+    syntax = "".join(char if ordinary[index] else " "
+                     for index, char in enumerate(command))
+    RESOLUTION_CHANGED = bool(RESOLVING.search(syntax))
+    try:
+        return _unclassified_stdin_writer(command, ordinary)
+    finally:
+        RESOLUTION_CHANGED = False
+
+
+def _unclassified_stdin_writer(command, ordinary):
+    """`unclassified_stdin_writer`'s body, under the line's `RESOLUTION_CHANGED`."""
     bodies = list(_stdin_bodies(command, _reaches_unclassified))
     # **A here-string arrives quote-removed**, which loses what an escape
     # escaped: `"\\\\$(printf gi)t push …"` comes back as `\\$(…)`, which reads
@@ -5342,7 +5372,6 @@ def unclassified_stdin_writer(command):
            for body in _stdin_bodies(command, _reaches_spoofable)):
         return True
 
-    ordinary = _unquoted_positions(command)
     for words, upstream in _runs_with_feeds(command, ordinary):
         if stdin_classified(words):
             continue
@@ -5351,13 +5380,22 @@ def unclassified_stdin_writer(command):
             return True
         if upstream is None:
             continue
-        if strict and not upstream:
-            return True
+        if not upstream:
+            # **A pipe from a subshell or group the walk does not see**:
+            # `(echo 'git push …') | pwsh` ran the push while the walk skipped
+            # it. Raised by a security review; verified admitted. What the
+            # unseen runs write is not read, so the line is judged whole.
+            if strict or _offending_stdin(command, False):
+                return True
+            continue
         for before in upstream:
             program = _launched(before)
             name = program_name(program) if program else ""
             if name not in DATA_ONLY_COMMANDS:
-                if strict:
+                # Not a printer, so not its text alone: a path-named reader
+                # takes nothing from it, and a bare one is judged on what the
+                # stage itself spells (`sed 's/^/git push … /' | pwsh`).
+                if strict or _offending_stdin(" ".join(before), False):
                     return True
                 continue
             spoken = before[before.index(program) + 1:]

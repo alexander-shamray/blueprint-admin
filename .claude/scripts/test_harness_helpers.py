@@ -5555,9 +5555,21 @@ class TheGitArgvGuard(unittest.TestCase):
             "tee >(/tmp/x) <<<'git push origin +HEAD:main'",
             "echo 'git push origin +HEAD:main' > /tmp/s; /tmp/x < /tmp/s",
             "cat /tmp/s | /tmp/x",
+            # The second review's: a line that changes what a bare name runs,
+            # and a pipe the walk does not see the writer of.
+            "sort() { bash; }; echo 'git push origin +HEAD:main' | sort",
+            "PATH=/tmp:$PATH; echo 'git push origin +HEAD:main' | sort",
+            "hash -p /tmp/x tee; tee <<<'git push origin +HEAD:main'",
+            "alias jq=bash; jq <<<'git push origin +HEAD:main'",
+            "(echo 'git push origin +HEAD:main') | pwsh",
+            "sed 's/^/git push origin +HEAD:main /' <<<x | pwsh",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command)
+        # The words that change resolution count only as syntax, so a commit
+        # message naming them is still a filing.
+        self.assertAdmitted(
+            "git commit -F - <<'EOF'\nuse the hash and an alias as a function source\nEOF")
 
         # A classified reader's stdin is data, and text that writes nothing is
         # nothing to refuse from a reader named bare.

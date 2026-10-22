@@ -632,10 +632,14 @@ A new residual is stated **here** and gets a row above.
   `difftool` and `mergetool`), so `echo 'git push origin +HEAD:main' |
   /tmp/x` and `/tmp/x <<< 'git checkout HEAD -- settings.json'` are refused.
   **A program named by a path is no reader**, since a copy names it
-  anything (`cp /bin/bash /tmp/sort`): it is refused any `git` word on its
-  stdin, any stdin from a file and any piped from anything but a printer,
-  and a `>(…)` starting an unclassified program refuses a line with a `git`
-  word on it. Reading every heredoc handed to an unnamed program as a shell
+  anything (`cp /bin/bash /tmp/sort`), and nor is any name on a line that
+  changes what a bare name runs (`RESOLVING`: a `PATH` assignment, `hash`,
+  `alias`, `enable`, `source` or `.`, a function definition): it is refused
+  any `git` word on its stdin, any stdin from a file and any piped from
+  anything but a printer. A pipe from runs the walk does not see (a
+  subshell) judges the whole line, a stage that is not a printer is judged
+  on its own words, and a `>(…)` starting an unclassified program refuses a
+  line with a `git` word on it. Reading every heredoc handed to an unnamed program as a shell
   script would refuse an ordinary `py - <<'EOF'` whose Python holds a
   backtick, so a listed reader's stdin is not judged; `sed`, `awk`,
   `xargs`, `less` and `gh` are on no list, since each can run what it reads.
