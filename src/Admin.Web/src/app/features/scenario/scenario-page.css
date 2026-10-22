@@ -7,16 +7,16 @@
 }
 .run-id {
   font-family: monospace;
-  color: #555;
+  color: var(--app-muted);
 }
 .intro {
-  color: #555;
+  color: var(--app-muted);
   max-width: 48rem;
 }
 .missing,
 .no-users,
 .error {
-  color: #b00;
+  color: var(--app-error);
 }
 .steps {
   padding-left: 1.5rem;
@@ -58,14 +58,14 @@
 }
 /* Colour repeats what the [state] word already says; it never carries the state alone. */
 .state-ok .state {
-  color: #080;
+  color: var(--app-ok);
 }
 .state-failed .state,
 .state-failed .detail {
-  color: #b00;
+  color: var(--app-error);
 }
 .state-skipped {
-  color: #767676;
+  color: var(--app-muted);
 }
 .visually-hidden {
   position: absolute;
@@ -76,7 +76,7 @@
   white-space: nowrap;
 }
 .regrant {
-  color: #555;
+  color: var(--app-muted);
   font-style: italic;
 }
 
@@ -92,7 +92,7 @@
 }
 .saga {
   flex: 0 1 22rem;
-  border: 1px solid #ccc;
+  border: 1px solid var(--app-border);
   border-radius: 4px;
   padding: 0.75rem 1rem;
 }
@@ -110,12 +110,12 @@
 }
 .saga-columns caption {
   text-align: left;
-  color: #555;
+  color: var(--app-muted);
   padding-bottom: 0.25rem;
 }
 .saga-columns th,
 .saga-columns td {
-  border-top: 1px solid #ddd;
+  border-top: 1px solid var(--app-border);
   padding: 0.25rem 0.5rem 0.25rem 0;
   text-align: left;
   vertical-align: top;
@@ -125,20 +125,20 @@
   font-family: monospace;
 }
 .saga-pair-differs {
-  color: #b00;
+  color: var(--app-error);
   font-weight: 700;
 }
 .saga-pair-ahead {
-  color: #8a5a00;
+  color: var(--app-warn);
 }
 .transitions {
   padding-left: 1.25rem;
 }
 .saga-stalled {
-  color: #b00;
+  color: var(--app-error);
   font-weight: 700;
 }
 .saga-caveat {
-  color: #555;
+  color: var(--app-muted);
   font-size: 0.875rem;
 }
