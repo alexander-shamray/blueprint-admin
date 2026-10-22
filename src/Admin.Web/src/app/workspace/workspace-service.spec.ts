@@ -177,6 +177,13 @@ describe('WorkspaceService', () => {
       expect(service.pageLink('trace')).toEqual(['/', 'trace']);
     });
 
+    it('opens a built-in page a newer console added by its id, since no route here knows its screen', () => {
+      const newer = defaultWorkspace();
+      newer.pages.push({ id: 'graphs', title: 'Graphs', builtIn: 'graphs', hidden: false, widgets: null });
+      service.workspace.set(newer);
+      expect(service.pageLink('graphs')).toEqual(['/page', 'graphs']);
+    });
+
     it('renames, ignoring a blank title', () => {
       service.renamePage('logs', '  Tail  ');
       service.renamePage('logs', '   ');
