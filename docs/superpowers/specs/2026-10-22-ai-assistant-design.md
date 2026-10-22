@@ -293,7 +293,7 @@ assistant panel is one user of a console-wide mechanism, not its owner.
   the eleven screens into widgets. Translating a screen that is about to be
   replaced is wasted work and a merge conflict with the phase replacing it. So
   the foundation (§15, phase L) lands first: the mechanism, the picker, the
-  shell, shared components, the assistant panel and a lint rule that refuses
+  shell, shared components and a lint rule that refuses
   an untranslated literal in a template. The rule runs on an allow-list of
   translated files that grows with each phase, so the screens left English
   until their workspace phase do not fail it, and the final sweep makes it
