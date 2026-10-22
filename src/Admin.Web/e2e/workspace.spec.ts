@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { Locator, Page, expect, test } from '@playwright/test';
 import { SCREENS } from '../src/app/screens';
 
 // The widget workspace (#383, widget-workspace spec §11). Against the fake platform, whose workspace file lives in a
@@ -17,7 +17,7 @@ for (const { path, label } of SCREENS) {
   });
 }
 
-test('a page made, filled and resized is found as it was left after a reload', async ({ page }) => {
+test('a page made, filled, resized and rearranged is found as it was left after a reload', async ({ page }) => {
   const title = `Walk ${Date.now()}`;
   await page.goto('/stack');
 
@@ -35,17 +35,24 @@ test('a page made, filled and resized is found as it was left after a reload', a
   const titles = page.locator('gridster-item .head .title');
   await expect(titles).toHaveText(['Logs', 'Map', 'Mail']);
 
-  // Shrink the first widget from its south-east corner.
-  const first = page.locator('gridster-item').first();
+  const items = page.locator('gridster-item');
+  const first = items.nth(0);
+  const mail = items.nth(2);
+
+  // Halve the first widget from its south-east corner, then halve Mail and drag it by its header beside the first.
   const before = (await first.boundingBox())!;
-  const corner = (await first.locator('.handle-se').boundingBox())!;
-  await page.mouse.move(corner.x + corner.width / 2, corner.y + corner.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(corner.x - before.width / 3, corner.y - before.height / 3, { steps: 10 });
-  await page.mouse.up();
-  const resized = (await first.boundingBox())!;
+  const resized = await halve(page, first);
   expect(resized.width).toBeLessThan(before.width);
   expect(resized.height).toBeLessThan(before.height);
+  await mail.scrollIntoViewIfNeeded();
+  await halve(page, mail);
+  const head = (await mail.locator('.head').boundingBox())!;
+  await page.mouse.move(head.x + 40, head.y + head.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(resized.x + resized.width + 60, resized.y + 15, { steps: 25 });
+  await page.mouse.up();
+  const moved = (await mail.boundingBox())!;
+  expect(moved.x).toBeGreaterThan(resized.x + resized.width - 10);
 
   // The save is debounced; wait for the bar to stop saying it is unsaved or saving.
   await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
@@ -53,14 +60,30 @@ test('a page made, filled and resized is found as it was left after a reload', a
 
   await expect(page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: title })).toHaveClass(/active/);
   await expect(titles).toHaveText(['Logs', 'Map', 'Mail']);
-  const reloaded = (await page.locator('gridster-item').first().boundingBox())!;
+  const reloaded = (await first.boundingBox())!;
   expect(Math.abs(reloaded.height - resized.height)).toBeLessThan(2);
   expect(reloaded.width).toBeLessThan(before.width);
+  const mailReloaded = (await mail.boundingBox())!;
+  expect(mailReloaded.x).toBeGreaterThan(reloaded.x + reloaded.width - 10);
+  expect(Math.abs(mailReloaded.y - reloaded.y)).toBeLessThan(2);
 
   await page.getByRole('button', { name: 'Page actions' }).click();
   await page.getByRole('menuitem', { name: 'Delete' }).click();
   await expect(page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: title })).toHaveCount(0);
+  // The delete is saved like any change; leave the shared host without the page.
+  await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
 });
+
+/** Drags a widget's south-east corner up and left by half its size, and answers its new box. */
+async function halve(page: Page, item: Locator) {
+  const box = (await item.boundingBox())!;
+  const corner = (await item.locator('.handle-se').boundingBox())!;
+  await page.mouse.move(corner.x + corner.width / 2, corner.y + corner.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(corner.x - box.width / 2, corner.y - box.height / 2, { steps: 10 });
+  await page.mouse.up();
+  return (await item.boundingBox())!;
+}
 
 test('the layout is locked until Edit layout', async ({ page }) => {
   await page.goto('/logs');
