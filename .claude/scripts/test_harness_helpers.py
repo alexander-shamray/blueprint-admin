@@ -5626,6 +5626,8 @@ class TheGitArgvGuard(unittest.TestCase):
             "set -o 'xtrace'; echo 'git push origin +HEAD:main' | sort",
             "shopt -so xtrace; echo 'git push origin +HEAD:main' | sort",
             "o=-x; set $o; echo 'git push origin +HEAD:main' | sort",
+            "set -{x,e}; echo 'git push origin +HEAD:main' | sort",
+            "shopt -so -- xtrace; echo 'git push origin +HEAD:main' | sort",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command)
