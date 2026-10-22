@@ -3498,20 +3498,25 @@ def git_path_writer_offence(run, literals, command):
     # `export` then follows, and code read from data. Each that can export a
     # name this guard cannot read is refused here, so a name built in a
     # spelling no line names is still never exported to git (#357). A program
-    # that sets its child's environment is one more route, which no list
-    # closes: `env`, `sudo` and `doas` are refused when an expansion stands
-    # in their words, and any other is not (#421). Refused, then: `env`, and
+    # that sets its child's environment is one more route, which no list of
+    # launchers closes, so the list is of the wrappers that add nothing:
+    # a shell any other program starts is refused, and so is a program no
+    # list names handed a script that runs git (`unmodelled_shell_launch`,
+    # #397, #421). `env`, `sudo` and `doas` are refused besides when an
+    # expansion stands in their words. Refused, then: `env`, and
     # a declaration builtin behind
     # `command` or `builtin`, split `X=$Y` into a second name; any nameref,
     # which a `for` loop can point at a computed name; `allexport` however it
     # is set; and `BASH_ENV`, `ENV`, an interactive or login shell (`exec -l`
-    # and `exec -a -bash` among them), `zsh`, which reads `.zshenv` on every
-    # start, `alias`, `enable` and `mapfile -C`, which run code. Binding a
+    # and `exec -a -bash` among them), `zsh`, `fish`, `csh` and `tcsh`, which
+    # read a startup file on every start, `alias`, `enable` and `mapfile -C`,
+    # which run code. Binding a
     # name without exporting it, `(( $N = 5 ))`, reaches no git process.
     relocation = re.compile(
         r"(?i)(?<!\w)(GIT_WORK_TREE|GIT_DIR|GIT_COMMON_DIR|GIT_INDEX_FILE"
         r"|GIT_CONFIG\w*|SHELLOPTS|BASH_ENV|ZDOTDIR|allexport)\b"
-        r"|(?-i:(?<![\w$])ENV\b)|(?<![\w.-])zsh(?:\.exe)?\b"
+        r"|(?-i:(?<![\w$])ENV\b)|(?<![\w.-])(?:"
+        + "|".join(ALWAYS_STARTUP_SHELLS) + r")(?:\.exe)?\b"
         r"|(?<![\w./-])exec\b(?:\s+-\S+)*?\s+-\w*[al]"
         r"|(?<![\w./-])(?:eval|source|trap|alias|enable)(?![\w./-])"
         r"|\b(?:mapfile|readarray)\b[^;&|\n]*\s-(?-i:[A-Za-z]*C)"
@@ -3553,10 +3558,16 @@ def git_path_writer_offence(run, literals, command):
         r"|(?<=[<>])[&|]|(?<![<>])&(?=>))*?"
         r"(?:(?<!\S)['\"\\]?(?:-(?-i:[A-Za-z]*[ail])"
         r"|--(?:rcfile|init-file|login)|-[^\s'\"\\$`;&|]*['\"\\$`])|[$`])")
+    scopes = dict.fromkeys((command, *EVENT_SCOPES))
     relocated = relocated or any(
         relocation.search(text) or startup_shell.search(text)
-        for line in dict.fromkeys((command, *EVENT_SCOPES))
+        for line in scopes
         for text in command_readings(without_messages(line)))
+    # A shell another program starts, or a program no list names run as one,
+    # takes its environment from somewhere this guard cannot read: `envdir`
+    # and `chpst -e` load it from files (#397, #421).
+    relocated = relocated or any(
+        unmodelled_shell_in(without_messages(line)) for line in scopes)
     if relocated or any(
             word.startswith(("-C", "--work-tree", "--git-dir"))
             or "core.worktree" in word.lower()
@@ -3565,9 +3576,11 @@ def git_path_writer_offence(run, literals, command):
             f"{writer} runs under `-C`, `--work-tree`, `--git-dir`, "
             "`core.worktree` or a `GIT_WORK_TREE`, `GIT_DIR` or `GIT_CONFIG*` "
             "assignment, or beside a construct that can export a name this "
-            "guard cannot read, which moves the paths it writes away from the "
-            "working directory this guard judges against; run it from the "
-            "checkout (#297, #357, docs/harness-boundaries.md)."
+            "guard cannot read (a shell started by a program other than a "
+            "plain wrapper, or one this guard does not name, among them), "
+            "which moves the paths it writes away from the working directory "
+            "this guard judges against; run it from the checkout (#297, #357, "
+            "#397, #421, docs/harness-boundaries.md)."
         )
     if name in GIT_WRITING_SUBCOMMANDS:
         # `git rm` and `git mv` are judged as the verbs `rm` and `mv` by
@@ -4402,7 +4415,21 @@ def _closing_paren(command, start):
 # A shell invoked with `-c` runs its argument as a command line, and `eval` runs
 # the concatenation of its own. Both hand the guard a command it must read as
 # one rather than as data.
-EVALUATORS = {"bash", "sh", "dash", "zsh", "ksh"}
+#
+# **The POSIX family by every name it ships under, not the five a Linux host
+# installs by default (#397).** `mksh -c`, `ash -c` and `yash -c` ran their
+# script unread, so no git rule judged what it held, and the startup-file
+# pattern, which takes its names from here, never saw `mksh -l` either. A
+# shell under a name no list holds is `ANY_SCRIPT_FLAG`'s and
+# `unmodelled_shell_offence`'s; this list is what the guard reads as bash.
+EVALUATORS = {"ash", "bash", "dash", "ksh", "lksh", "mksh", "oksh", "pdksh",
+              "posh", "rbash", "sh", "yash", "zsh"}
+
+# The shells that read a startup file on every start, interactive or not: zsh
+# its `.zshenv`, fish its `config.fish`, csh and tcsh their `.cshrc`. Beside a
+# path writer the file can export a name this guard cannot read, so starting
+# one is refused there however it is started (#357, #397).
+ALWAYS_STARTUP_SHELLS = ("csh", "fish", "tcsh", "zsh")
 
 # `-c`, and the bundles that carry it — `bash -xc <script>` and `bash -cx
 # <script>` alike. **`c` need not come last**, which the first version of this
@@ -4410,6 +4437,38 @@ EVALUATORS = {"bash", "sh", "dash", "zsh", "ksh"}
 # and matched nothing. Raised in review. A long option is never the script
 # introducer, so `--` forms are left alone.
 SCRIPT_FLAG = re.compile(r"^-[A-Za-z]*c[A-Za-z]*$")
+
+# **A shell is a program, not a name** (#397): after `cp /bin/bash /tmp/x`,
+# `/tmp/x -c 'git push origin +HEAD:main'` runs the push, and so do `fish -c`,
+# `su -c`, `flock f -c`, `cmd //c` and `pwsh -Command`. So the word after any
+# script flag, in a run of any program but those below, is judged as a
+# command line. That costs a refusal only where that word is itself a command
+# this guard refuses (`grep -c 'git push origin +HEAD:main'` would be one,
+# which is why the readers are left out); `dotnet test -c Release` hands it
+# `Release`, which refuses nothing. The Windows forms are `cmd`'s `/c` and
+# `/k`, doubled by Git Bash's path conversion, and PowerShell's `-Command`.
+ANY_SCRIPT_FLAG = re.compile(
+    r"^(?:-[A-Za-z]*c[A-Za-z]*|(?i:--?command)|/{1,2}[cCkK])$")
+
+# **An interpreter's code is not a command line**, and judging it as one buys
+# nothing: `python -c` opens `.claude/settings.json` without naming git at all,
+# which is the interpreter residual `docs/harness-boundaries.md` states. Read as
+# bash, a backtick in a string is a substitution, so it would only refuse.
+INTERPRETERS = frozenset({"bun", "deno", "node", "perl", "php", "py", "python",
+                          "python3", "ruby"})
+
+# Wrappers that run their command in the environment they were given, adding
+# no name to it. A shell behind one of these is started directly, and its
+# environment is the line's; behind anything else it is the program's (#421).
+# `sudo` and `doas` are not here: `-i` starts a login shell, and the policy
+# file decides which names survive.
+INERT_WRAPPERS = frozenset({"builtin", "chrt", "command", "env", "exec",
+                            "ionice", "nice", "nohup", "setsid", "stdbuf",
+                            "time", "timeout"})
+
+# The value an inert wrapper's option or operand takes: a priority, a class,
+# a duration (`timeout 5`, `nice -n 10`, `ionice -c 2`, `timeout 1.5m`).
+WRAPPER_VALUE = re.compile(r"^[+-]?\d+(?:\.\d+)?[smhd]?$")
 
 # The helpers that read their stdin as DATA — a title and a body — named as a
 # shell's script operand, in the one spelling the grants use. No quote, `$`,
@@ -4473,6 +4532,85 @@ def leading_command(run):
         if not ASSIGNMENT.match(token):
             return token
     return ""
+
+
+def launched_program(run):
+    """The index of the program `run` starts, past assignments and inert wrappers.
+
+    `nohup`, `timeout 5`, `nice -n 10` and `env FOO=bar` start their command
+    in the environment they were handed, so the program past them is the one
+    whose environment is the line's. A word that is neither an assignment, an
+    option, a wrapper's value nor an inert wrapper is the program, whatever
+    it is, and `None` means the run holds no program at all (#421).
+    """
+    for index, token in enumerate(run):
+        if ASSIGNMENT.match(token) or token.startswith("-") or (
+                index and WRAPPER_VALUE.match(token)):
+            continue
+        if program_name(token) in INERT_WRAPPERS:
+            continue
+        return index
+    return None
+
+
+def unmodelled_shell_launch(run):
+    """Whether `run` starts a shell whose environment this guard cannot read.
+
+    Two shapes (#397, #421). A shell `EVALUATORS` names that is not the
+    program the run starts, so another program builds its environment:
+    `envdir /tmp/d bash -c ...` and `chpst -e /tmp/d bash -c ...` load it from
+    files. And a program `EVALUATORS` does not name handed a script that
+    runs git, whose startup files and environment this guard knows nothing
+    of: `/tmp/x -c 'git ...'`, `pwsh -c 'git ...'`. A run led by a printer, a
+    reader, a lookup (`which bash`), `gh` or an interpreter executes no shell
+    of its own here: the interpreter's code is the residual `INTERPRETERS`
+    states.
+    """
+    start = launched_program(run)
+    if start is None:
+        return False
+    lead = program_name(run[start])
+    if lead in DATA_ONLY_COMMANDS | READING_COMMANDS | INTERPRETERS | {
+            "gh", "type", "where", "whereis", "which"}:
+        return False
+    if lead in EVALUATORS:
+        return False
+    rest = run[start + 1:]
+    if any(program_name(word) in EVALUATORS for word in rest):
+        return True
+    return any(ANY_SCRIPT_FLAG.match(word) and GIT_WORD.search(script)
+               for word, script in zip(rest, rest[1:]))
+
+
+# `git` as a word of a script, however it is spelt to Windows.
+GIT_WORD = re.compile(r"(?i)(?<![\w.-])git(?:\.exe)?(?![\w.-])")
+
+
+def unmodelled_shell_in(text, depth=0):
+    """Whether any command in `text`, or in a script it runs, is an
+    `unmodelled_shell_launch`.
+
+    Read as `_offence` reads a command: redirections gone, `$'…'` made plain
+    quoting, then `shlex`. A text it cannot tokenise, or nested past
+    `MAX_NESTING`, answers yes, so the path writer beside it is refused
+    rather than judged on part of the line. **The scripts are read too**,
+    because the scopes a writer is judged with are the event's line and the
+    writer's own script, not the shells between them: in `bash -c 'envdir
+    /tmp/d bash -c "git ..."'` the `envdir` is in neither.
+    """
+    if depth > MAX_NESTING:
+        return True
+    stripped = strip_dollar_quotes(strip_redirections(text))
+    try:
+        lexer = shlex.shlex(stripped, posix=True, punctuation_chars=True)
+        lexer.commenters = ""
+        lexer.whitespace_split = True
+        tokens = list(lexer)
+    except ValueError:
+        return True
+    return any(unmodelled_shell_launch(run) for run in command_runs(tokens)) or any(
+        unmodelled_shell_in(script, depth + 1)
+        for script in dict.fromkeys(evaluated_scripts(tokens)))
 
 
 def reads_stdin_as_script(words):
@@ -5013,6 +5151,14 @@ def evaluated_scripts(tokens):
                 argv = run[index + 1:]
                 if argv:
                     yield " ".join(argv)
+        # Any program's script, not only a named shell's (#397).
+        start = launched_program(run)
+        if start is None or program_name(run[start]) in (
+                READING_COMMANDS | INTERPRETERS):
+            continue
+        for word, script in zip(run[start + 1:], run[start + 2:]):
+            if ANY_SCRIPT_FLAG.match(word):
+                yield script
 
     # **A shell with no script of its own reads one from the pipe**, and the
     # run before it is where that text is written: `echo 'git push origin
@@ -5201,9 +5347,8 @@ SUBSTITUTION_PROGRAMS = frozenset({
 # What runs the word after it as a script or a program, so a computed word in
 # that position is a program nobody can name from the source.
 LAUNCHERS = frozenset({
-    ".", "bash", "command", "dash", "env", "exec", "ksh", "nohup", "sh",
-    "source", "time", "xargs", "zsh",
-})
+    ".", "command", "env", "exec", "nohup", "source", "time", "xargs",
+}) | EVALUATORS
 
 
 class BraceExplosion(Exception):

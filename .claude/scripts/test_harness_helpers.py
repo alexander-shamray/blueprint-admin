@@ -7679,6 +7679,74 @@ class TheGitArgvGuard(unittest.TestCase):
             with self.subTest(admitted=command):
                 self.assertAdmitted(command, cwd=root)
 
+    def test_a_shell_no_list_names_or_another_program_starts_is_judged(self):
+        # #397: a shell is a program, not a name, so a script handed to any
+        # program's script flag is read; #421: a shell another program starts
+        # takes its environment from that program, which this guard cannot
+        # read, so a path writer beside one is refused.
+        root = self.with_branches(self.writing_checkout(), "main")
+        for command in (
+            "/tmp/x -c 'git checkout origin/main -- .claude/settings.json'",
+            "/tmp/x -c 'git push origin +HEAD:main'",
+            "/tmp/x -c 'git checkout HEAD -- settings.json'",
+            "mksh -c 'git checkout origin/main -- .claude/settings.json'",
+            "ash -c 'git checkout origin/main -- .claude/settings.json'",
+            "busybox ash -c 'git checkout origin/main -- .claude/settings.json'",
+            "C:/tools/mksh.exe -c 'git push origin +HEAD:main'",
+            "yash -c 'git push origin +HEAD:main'",
+            "mksh <<< 'git push origin +HEAD:main'",
+            "echo 'git push origin +HEAD:main' | ash",
+            "cmd //c 'git push origin +HEAD:main'",
+            "pwsh -Command 'git push origin +HEAD:main'",
+            "su -c 'git push origin +HEAD:main'",
+            "flock /tmp/l -c 'git push origin +HEAD:main'",
+            # The startup-file pattern takes its names from `EVALUATORS`.
+            "mksh -l -c 'git checkout HEAD -- settings.json'",
+            "ash -i -c 'git checkout HEAD -- settings.json'",
+            "fish -c 'git checkout HEAD -- notes.txt'",
+            "tcsh -c 'git checkout HEAD -- notes.txt'",
+            "pwsh -c 'git checkout HEAD -- settings.json'",
+            # A program that builds a shell's environment from data (#421).
+            "envdir /tmp/d bash -c 'git checkout HEAD -- settings.json'",
+            "chpst -e /tmp/d bash -c 'git checkout HEAD -- settings.json'",
+            "envdir /tmp/d bash <<< 'git checkout HEAD -- settings.json'",
+            "echo 'git checkout HEAD -- settings.json' | envdir /tmp/d bash",
+            "envdir /tmp/d bash <<'EOF'\ngit checkout HEAD -- settings.json\nEOF",
+            "bash -c 'envdir /tmp/d bash -c \"git checkout HEAD -- settings.json\"'",
+            "sudo bash -c 'git checkout HEAD -- notes.txt'",
+            "xargs bash -c 'git checkout HEAD -- notes.txt'",
+            "env -C .claude bash -c 'git checkout HEAD -- settings.json'",
+        ):
+            with self.subTest(command=command):
+                self.assertRefused(command, cwd=root)
+
+        for command in (
+            "bash -c 'git checkout HEAD -- notes.txt'",
+            "mksh -c 'git checkout HEAD -- notes.txt'",
+            "nohup bash -c 'git checkout HEAD -- notes.txt'",
+            "timeout 5 bash -c 'git checkout HEAD -- notes.txt'",
+            "nice -n 10 bash -c 'git checkout HEAD -- notes.txt'",
+            "command bash -c 'git checkout HEAD -- notes.txt'",
+            "command -v bash && git checkout main",
+            "which bash; git checkout main",
+            "ls /bin/bash && git checkout main",
+            "dotnet test -c Release && git checkout main",
+            "grep -c 'git push origin +HEAD:main' notes.txt",
+            "head -c 100 notes.txt",
+            "ionice -c 2 git status",
+            "tar -czf out.tgz src",
+            "npm exec -c 'ng build'",
+            "cmd //c dir",
+            "powershell -NoProfile -Command \"Get-Process | Select-Object Id,Name\"",
+            "py -3.12 -c 'print(\"`x`\")'",
+            'gh pr create --title "git checkout fix" --body x',
+            "gh pr create --title t --body \"run bash -c 'git checkout x'\"",
+            'git commit -m "envdir /tmp/d bash -c fails" && git checkout main',
+            "bash .claude/scripts/git-switch-existing.sh main",
+        ):
+            with self.subTest(admitted=command):
+                self.assertAdmitted(command, cwd=root)
+
     def test_the_startup_shell_pattern_answers_in_linear_time(self):
         # #357: two readings of one word doubled the startup-shell search per
         # word, and a run past the hook's time limit admits the command.
