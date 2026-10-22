@@ -1100,6 +1100,13 @@ That credential reaches the Management API only through the backend's tool;
 the console never calls that API itself. The proxy accepts only URLs on the configured surfaces, so it
 cannot be used as an open relay from a tab the developer left open.
 
+The AI assistant (`2026-10-22-ai-assistant-design.md`) is the console's one
+outbound surface beyond the platform. It is off unless
+`Admin:Assistant:Provider` names a provider, only the host reaches that
+provider, and every byte the host sends it is redacted first. The browser
+still reaches the host alone. The console stores no credential for it: the
+SDK resolves the operator's own (that note's §8.2).
+
 The mail sink is one origin more that the host reaches, and it is kept off the
 proxy's surfaces on purpose. Its API clears the sink and stages a failing
 relay (`PUT /api/v1/chaos`), so as a surface it would put a write the platform's
@@ -1252,3 +1259,7 @@ and the Playwright smoke covering the new screen.
   (§5.4), because `run-locally.md` step 4 has both. It starts no emulator,
   installs and launches no app, signs in on no device and holds no mobile
   code; the rest of step 4 stays by hand.
+- An assistant that operates the platform, until the operator decides
+  otherwise. The assistant explains, navigates and reads. It has no tool that
+  changes the platform (AI assistant note §6.3, which sets the conditions for
+  adding one).

@@ -83,7 +83,8 @@ exactly so after a reload, a host restart and a reboot.
   credential;
 - the console stops being a client of its siblings: the workspace adds no
   platform fact, no command `run-locally.md` does not have, and no new
-  surface the host reaches.
+  surface the host reaches, except the AI assistant's provider (AI assistant
+  note §11).
 
 ## 3. Constraints
 
@@ -243,6 +244,7 @@ column is the built-in page that places the widget.
 | **Live platform diagram** | new, §8.1 | services shown, layout | Map |
 | **Request sequence** | new, §8.2 | correlation id, or "follow the last Trace link" | Trace |
 | **Note / diagram** | new, §8.3 | Mermaid or Markdown source | — |
+| **Assistant** | new, AI assistant note | — (one conversation per tab, AI assistant note §2) | — |
 
 "Follow the last Trace link" lets a Trace or Sequence widget on a page
 re-point itself when another widget's correlation-id link is clicked, so a
@@ -468,6 +470,10 @@ Each phase is one or more PRs and leaves the console working and complete.
 | 5 Diagrams | Live platform diagram (§8.1), Request sequence (§8.2) | 3, 4 |
 | 6 Retire | the legacy screen widget and the screen components it wrapped, once nothing uses them; spec §6's screens table rewritten as the widget catalogue; README | 5 |
 
+From phase L of the AI assistant note on, a phase is not done until its
+widgets' strings are in every shipped language (AI assistant note §5.5). A
+legacy-screen widget stays English until the phase that replaces it.
+
 Phases 3 and 4 can run in parallel: they share the registry, but neither
 edits the other's widgets. The legacy widget of phase 1 is what lets every
 later phase move one screen at a time without a page ever missing.
@@ -484,7 +490,8 @@ later phase move one screen at a time without a page ever missing.
   timer; a hidden tab, no timer); each widget with a confirmation renders it
   empty after being destroyed and re-created; the session store keeps input
   across a destroy; the registry has a component, sizes and a FakePlatform
-  rendering for every type.
+  rendering for every type; every widget's strings pass the
+  missing-translation check (AI assistant note §5.5).
 - **Playwright (FakePlatform)**: create a page, add three widgets, resize one,
   reload, and find them as left; switch pages during a Scenario run and see it
   finish; the live diagram renders the fake map and a queue click opens it;
