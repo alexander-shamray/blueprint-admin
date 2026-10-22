@@ -112,6 +112,27 @@ async function halve(page: Page, item: Locator) {
   return (await item.boundingBox())!;
 }
 
+test('a widget type with one preset is added in one press, and one with several opens its presets', async ({ page }) => {
+  await page.goto('/stack');
+  await page.getByRole('button', { name: 'New page' }).click();
+  await expect(page).toHaveURL(/\/page\/page-/);
+
+  await page.getByRole('button', { name: 'Add widget' }).click();
+  await page.getByRole('menuitem', { name: 'Reachability' }).click();
+  await page.getByRole('button', { name: 'Add widget' }).click();
+  await page.getByRole('menuitem', { name: 'Alerts' }).click();
+  await page.getByRole('menuitem', { name: 'Firing only' }).click();
+
+  await expect(page.locator('gridster-item .ws-head .ws-title')).toHaveText(['Reachability', 'Alerts (firing)']);
+  await expect(page.locator('gridster-item .reachability span.up').first()).toBeVisible();
+  await expect(page.locator('.cdk-overlay-backdrop')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Page actions' }).click();
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
+  // The delete is saved like any change; leave the shared host without the page.
+  await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
+});
+
 test('the layout is locked until Edit layout', async ({ page }) => {
   await page.goto('/logs');
 
