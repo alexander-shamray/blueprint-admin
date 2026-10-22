@@ -119,7 +119,11 @@ export class WorkspaceGrid {
   }
 
   titleOf(item: GridItem): string {
-    return item.kind ? item.kind.titleOf(item.config) : `Unknown widget (${item.widget.type})`;
+    return item.kind ? item.kind.titleOf(item.config) : $localize`Unknown widget (${item.widget.type}:type:)`;
+  }
+
+  removeLabel(item: GridItem): string {
+    return $localize`Remove ${this.titleOf(item)}:title:`;
   }
 
   private reportLayout(): void {
