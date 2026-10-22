@@ -272,8 +272,9 @@ assistant panel is one user of a console-wide mechanism, not its owner.
   panel reads `GET /api/assistant/conversations/{id}` (§5.1) to redraw the
   whole conversation, then opens the event stream from the `lastEventId` that
   read returns. The picker warns before switching while a turn is running.
-  One build keeps `wwwroot`, the host's static serving and the smoke
-  unchanged.
+  It also holds the switch while a layout change is waiting to be saved,
+  since the reload would lose it. One build keeps `wwwroot`, the host's
+  static serving and the smoke unchanged.
 - **Choice.** A language picker in the shell, defaulting to
   `navigator.language` when a translation for it exists and to `en-US`
   otherwise. The choice is kept in `localStorage`, per browser. It is not

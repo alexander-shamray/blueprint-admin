@@ -38,12 +38,12 @@ export class CommandPalette {
   private readonly fixed = computed<PaletteCommand[]>(() => [
     ...this.workspace.pages().map((p) => ({
       id: `go-${p.id}`,
-      label: `Go to ${p.title}${p.hidden ? ' (hidden)' : ''}`,
+      label: p.hidden ? $localize`Go to ${p.title}:title: (hidden)` : $localize`Go to ${p.title}:title:`,
       run: () => void this.router.navigate(this.workspace.pageLink(p.id)),
     })),
     {
       id: 'run-scenario',
-      label: 'Run the Scenario',
+      label: $localize`Run the Scenario`,
       run: () => {
         this.launcher.request();
         void this.router.navigate(['/scenario']);
@@ -59,7 +59,11 @@ export class CommandPalette {
     if (typed === '') return matching;
     return [
       ...matching,
-      { id: 'trace', label: `Open trace for ${typed}`, run: () => void this.router.navigate(['/trace', typed]) },
+      {
+        id: 'trace',
+        label: $localize`Open trace for ${typed}:correlationId:`,
+        run: () => void this.router.navigate(['/trace', typed]),
+      },
     ];
   });
 
