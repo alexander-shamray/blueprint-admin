@@ -625,7 +625,8 @@ A new residual is stated **here** and gets a row above.
   program's script flag (`-c` and its bundles, `cmd`'s `/c` and `/k`, `-Command`)
   is judged as a command line, so `cp /bin/bash /tmp/x; /tmp/x -c 'git push
   origin +HEAD:main'` is refused; a reader and an interpreter are left out
-  (`grep -c`, `python -c`). Replayed over the 4000 most recent distinct
+  (`grep -c`, `python -c`, `python3.12 -c`, `pythonw -c`; an interpreter
+  behind a launcher such as `uv run` is not). Replayed over the 4000 most recent distinct
   commands of this repository's session transcripts, that refused one the old
   hook admitted: a PowerShell `-Command` whose `$_` stands where bash reads a
   program name.
