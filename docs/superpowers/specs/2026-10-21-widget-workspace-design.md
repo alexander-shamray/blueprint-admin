@@ -504,10 +504,10 @@ later phase move one screen at a time without a page ever missing.
 ## 12. Left to the builder
 
 - ~~Row height, the grid's breakpoint behaviour, each widget's default and
-  minimum size.~~ Settled in phase 1c (#383) for what exists so far: a row is
-  40 px (`ROW_HEIGHT_PX` in `workspace-grid.ts`), gridster's own mobile
-  breakpoint stacks the widgets, and each type's sizes live in its `WIDGETS`
-  entry (the legacy screen widget: 24 × 16 by default, 6 × 4 at least).
+  minimum size.~~ Settled in phase 1c (#383) for what exists so far: the row
+  height is `ROW_HEIGHT_PX` in `workspace-grid.ts`, gridster's own mobile
+  breakpoint stacks the widgets, and each type's default and minimum size
+  live in its `WIDGETS` entry.
 - The visual design within Material 3: palette, density, spacing.
 - Whether a widget's refresh button and a page-wide refresh both exist.
 - The exact Mermaid mapping of each `TraceView` event kind in §8.2, within
