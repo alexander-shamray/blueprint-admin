@@ -114,8 +114,9 @@ Three further asks shape the design more than the first version does:
 - Angular 22 standalone, zoneless, signals, `inject()` at field level.
 - Every fact keeps one owner: the protocol's owner is the core's C# types,
   the TypeScript mirror cites them, and a shared golden file pins the JSON
-  both sides read and write (§14). The owner sits in this repository through
-  phase 5 and in `blueprint-backend` from phase 6 on (§13).
+  both sides read and write (§14). The owner sits in this repository until
+  blueprint-backend#1346 publishes the core, and in `blueprint-backend`
+  from then on (§13).
 
 ## 4. Shape
 
@@ -669,7 +670,7 @@ live where both the console and the platform can use it. The operator chose
 
 | Piece | Lives in | How others get it |
 |---|---|---|
-| Core and Anthropic adapter, and the protocol: its C# types and §14's golden JSON files | this repository through phase 5, then `blueprint-backend` as building blocks | NuGet packages from GitHub Packages, pinned exactly |
+| Core and Anthropic adapter, and the protocol: its C# types and §14's golden JSON files | this repository until blueprint-backend#1346 publishes it, then `blueprint-backend` as building blocks | NuGet packages from GitHub Packages, pinned exactly |
 | Browser client (`protocol.ts`, `assistant-client.ts`, and `client-tools.ts`'s registry mechanism, not the tools it registers) | each Angular client keeps its own | copied, cited and drift-checked against the backend's golden files, as `GatewayRoutes` and `PlatformQueues` already are |
 | Tool sources, redactor, catalogue, client tools, panel, fake provider | each host and each client | not shared |
 
@@ -687,17 +688,23 @@ The reasons for this split:
 - A new repository would add its own CI, releases and rules, and would buy
   nothing the backend does not already give.
 
-**When it moves.** Phases 1–5 build and change the core here, where the
-FakePlatform loop is fastest and the protocol can still move. Before the BFF
-uses it:
+**When it moves.** There is one trigger: blueprint-backend#1346 publishing
+the core. That issue needs phases 1 and 2 (#428, #429), which settle the
+core's shape here, where the FakePlatform loop is fastest. It must land
+before the BFF uses the core (blueprint-backend#1347). Phases 3–5 do not
+wait for it and do not hold it back. The order:
 
 - the backend takes the core in and publishes it
   (alexander-shamray/blueprint-backend#1346);
 - the console then consumes the package and mirrors the browser client
   under the drift gate (phase 6, #435).
 
-From then on, a change to the core is a backend PR and a version bump here,
-as the spec's rule against editing a sibling requires.
+**One owner at every moment.** From the moment #1346 publishes, the
+backend's copy owns the core and the protocol. This repository's copy is
+frozen: no change lands in it except its removal by phase 6, which follows
+at once. A core change the console needs in that window goes to the
+backend. From then on, a change to the core is a backend PR and a version
+bump here, as the spec's rule against editing a sibling requires.
 
 **The web client's side**:
 
@@ -802,8 +809,8 @@ note's call and open to their review:
   listener for the MCP route (§6, §12);
 - the catalogue sent by the client, its text owned by the registries (§6.1);
 - the shared core in `blueprint-backend`, not in a new repository, as the
-  operator decided. It is built here through phase 5, then moved and
-  consumed as a package. Each Angular client keeps a copied, cited and
+  operator decided. It is built here until blueprint-backend#1346 publishes
+  it, frozen here from that moment, and consumed as a package. Each Angular client keeps a copied, cited and
   drift-checked mirror of the browser client, not an npm package (§13);
 - conversations in host memory only (§5.1);
 - read-only now with room for actions later: a host-supplied `ToolPolicy`,
