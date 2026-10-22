@@ -5610,6 +5610,13 @@ class TheGitArgvGuard(unittest.TestCase):
             "n=$'a[\\x50'ATH=0]; test -v \"$n\"; echo 'git push origin +HEAD:main' | sort",
             "n=$'a[\\x50'ATH=0]; wait -p \"$n\"; echo 'git push origin +HEAD:main' | sort",
             "n=$'a[\\x50'ATH=0]; : \"${!n}\"; echo 'git push origin +HEAD:main' | sort",
+            # A glued option cluster, a compound assignment's subscript, and
+            # prompt expansion.
+            "n=$'a[\\x50'ATH=0]; wait -fp\"$n\"; echo 'git push origin +HEAD:main' | sort",
+            "n=$'a[\\x50'ATH=0]; wait -fp \"$n\"; echo 'git push origin +HEAD:main' | sort",
+            "x=$'\\x50'ATH=0; a=([x]=1); echo 'git push origin +HEAD:main' | sort",
+            "x=$'\\x50'ATH=0; a+=([x]=1); echo 'git push origin +HEAD:main' | sort",
+            "x=$'a[\\x50'ATH=0]; : \"${x@P}\"; echo 'git push origin +HEAD:main' | sort",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command)

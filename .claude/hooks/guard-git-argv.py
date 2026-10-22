@@ -5225,8 +5225,10 @@ RESOLVING = re.compile(
 # directory to resolve from. Any arithmetic context counts: `((`, `$((`, `$[`,
 # a subscript (`${a[i]}`, `a[i]=`), a substring offset (`${s:i}`), an
 # arithmetic test in `[[`; and so does an expansion that assigns (`${n=…}`,
-# `${n:=…}`), and so does an indirect `${!n}`, whose name can carry a
-# subscript. Raised by security reviews; the expansion half verified admitted.
+# `${n:=…}`), an indirect `${!n}`, whose name can carry a subscript, any
+# `${…@…}` transformation (`@P` prompt-expands the value, arithmetic
+# included), and a compound assignment's subscript (`a=([x]=1)`). Raised by
+# security reviews; the expansion half verified admitted.
 # Arithmetic over literals alone reads no variable, so `${PIPESTATUS[0]}`, the
 # commonest shape in the replayed commands, is not one.
 EXPANSION_WRITES = re.compile(
@@ -5234,6 +5236,8 @@ EXPANSION_WRITES = re.compile(
     r"|\(\([^)]*[A-Za-z_]|\$\[[^]]*[A-Za-z_]"
     r"|\$\{[^}]*\[[^]]*[A-Za-z_]"
     r"|\$\{!"
+    r"|\$\{[^}]*@"
+    r"|\+?=\([^)]*\[[^]]*[A-Za-z_$`]"
     r"|\$\{[^}:]*:(?![-=+?])[^}]*[A-Za-z_]"
     r"|(?<![\w-])[A-Za-z_]\w*\[[^]]*[A-Za-z_][^]]*\]"
     r"|\[\[[^]]*\s-(?:eq|ne|lt|le|gt|ge)\s")
@@ -5328,13 +5332,21 @@ def resolution_changed(command):
         # (`read 'a[x]'`, `unset a[x]`, `test -v a[x]`), and one that comes
         # from an expansion is any name and any subscript (`test -v "$x"`,
         # `wait -p "$x"`). For `test`, `[`, `[[` and `wait` only the operand of
-        # `-v`, `-R` or `-p` is a name. Raised by two security reviews.
+        # `-v`, `-R` or `-p` is a name, read as bash's option parser reads a
+        # cluster: `-fpNAME` carries it glued, `-fp NAME` in the next word.
+        # Raised by three security reviews.
         if name in NAME_OPERAND_TAKERS:
             operands = arguments
             if name not in PATH_WRITERS:
-                operands = [arguments[index + 1]
-                            for index, word in enumerate(arguments[:-1])
-                            if word in ("-v", "-R", "-p")]
+                operands = []
+                for index, word in enumerate(arguments):
+                    cluster = re.match(r"^-[A-Za-z]*?[vRp](.*)$", word)
+                    if not cluster:
+                        continue
+                    if cluster.group(1):
+                        operands.append(cluster.group(1))
+                    elif index + 1 < len(arguments):
+                        operands.append(arguments[index + 1])
             if any(re.search(r"\[[^]]*[A-Za-z_$`]", word) or re.search(r"[$`]", word)
                    for word in operands):
                 return True
