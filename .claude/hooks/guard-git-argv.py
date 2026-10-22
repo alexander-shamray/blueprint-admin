@@ -5245,7 +5245,6 @@ EXPANSION_WRITES = re.compile(
     r"|\$\{!"
     r"|\$\{[^}]*@"
     r"|\+?=\([\s\S]*?\[[^]]*[A-Za-z_$`]"
-    r"|(?<![\w-])set\s+(?:-\w*x|-o\s+xtrace)"
     r"|\$\{[^}:]*:(?![-=+?])[^}]*[A-Za-z_]"
     r"|(?<![\w-])[A-Za-z_]\w*\[[^]]*[A-Za-z_][^]]*\]"
     r"|\[\[[^]]*\s-(?:eq|ne|lt|le|gt|ge)\s")
@@ -5394,6 +5393,11 @@ def resolution_changed(command):
         # an integer attribute makes every later assignment arithmetic.
         if name in ("declare", "local", "typeset") and any(
                 re.match(r"^-[A-Za-z]*[ni]", word) for word in arguments):
+            return True
+        # `set -x` prompt-expands `PS4` before every traced command; read after
+        # quote removal, so `set -o 'xtrace'` and `set -euxo pipefail` count.
+        if name == "set" and any(re.match(r"^-[A-Za-z]*x", word) or word == "xtrace"
+                                 for word in arguments):
             return True
         # `mapfile -C` runs its callback string in this shell, as `eval` does.
         if name in ("mapfile", "readarray") and any(
