@@ -512,15 +512,23 @@ later phase move one screen at a time without a page ever missing.
   - a polled source is a `PolledFeed` (`workspace/polled-feed.ts`), which a
     data service such as `StackFeed` owns and each widget attaches to;
   - the Compose job the Stack controls start is running work in its own
-    `ComposeRun`, followed to its exit while no widget shows it; the shell's
-    running-work indicator (§4.3, §7.2) comes with phase 4a (#389), which
-    reads it alongside the Scenario run;
+    `ComposeRun`, followed to its exit while no widget shows it;
   - a Job output widget's "last job started from this page" is `jobId: null`,
     and follows `PageJobs`, which also takes a job a Show output button opens;
   - each widget learns its instance and page from `WIDGET_CONTEXT`, which the
     grid provides;
   - the legacy Stack screen is those same widgets in a column, so their logic
     has one owner until phase 6.
+- Settled in phase 4a (#389):
+  - the shell's running-work indicator (§4.3, §7.2) reads `RunningWork`
+    (`workspace/running-work.ts`), to which each source of running work
+    reports itself when it is first created, so the shell loads none of their
+    code: today `ScenarioRunner` and `ComposeRun`, each linking to its page;
+  - the Scenario widget and the Saga strip are views of `ScenarioRunner`, and
+    the legacy Scenario screen is the two side by side;
+  - neither Scenario widget saves a script or an identity yet: the runner
+    holds the one run, its script and its user, and a per-instance choice
+    waits for the configure control (#437).
 - The visual design within Material 3: palette, density, spacing.
 - Whether a widget's refresh button and a page-wide refresh both exist.
 - The exact Mermaid mapping of each `TraceView` event kind in §8.2, within
