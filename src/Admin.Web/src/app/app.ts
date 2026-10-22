@@ -16,6 +16,7 @@ import { THEME_CHOICES, ThemeService } from './core/theme/theme-service';
 import { CommandPalette } from './shared/command-palette/command-palette';
 import { differsFromBuiltIn } from './workspace/built-in-pages';
 import { WIDGETS, WidgetPreset, WidgetType } from './workspace/widgets';
+import { RunningWork } from './workspace/running-work';
 import { WorkspaceService } from './workspace/workspace-service';
 
 /** The icon (a Material Symbols ligature) each theme choice shows on the top bar's switch. */
@@ -52,6 +53,7 @@ export class App {
   private readonly snackBar = inject(MatSnackBar);
   readonly theme = inject(ThemeService);
   readonly workspace = inject(WorkspaceService);
+  readonly runningWork = inject(RunningWork);
   readonly widgetTypes = WIDGETS;
   readonly differsFromBuiltIn = differsFromBuiltIn;
   readonly themeChoices = THEME_CHOICES.map((value) => ({ value, icon: THEME_ICONS[value] }));
