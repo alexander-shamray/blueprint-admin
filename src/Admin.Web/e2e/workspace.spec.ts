@@ -23,15 +23,15 @@ test('the built-in Stack page renders its widgets, each with what it reads', asy
   await page.goto('/stack');
 
   await expect(page.locator('gridster-item .ws-head .ws-title')).toHaveText([
+    'Workstation doctor',
     'Stack controls',
     'Job output',
     'Reachability',
-    'Compose services',
-    'Workstation doctor',
     'Golden signals',
-    'Alerts',
-    'Reference client',
     'Load run',
+    'Alerts',
+    'Compose services',
+    'Reference client',
   ]);
   await expect(page.locator('gridster-item .loading')).toHaveCount(0);
   await expect(page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: 'Stack' })).toHaveClass(/active/);
