@@ -5529,20 +5529,48 @@ class TheGitArgvGuard(unittest.TestCase):
             "/tmp/x < <(echo 'git push origin +HEAD:main')",
             "fish <<<'git rm -r src'",
             "xargs -I{} sh -c {} <<<'git push origin +HEAD:main'",
+            # `gh` takes a `!` alias a shell runs, so it is on no list.
+            "gh x <<<'git push origin +HEAD:main'",
+        ):
+            with self.subTest(command=command):
+                self.assertRefused(command)
+
+        # **What a security review of the first cut found**, each verified
+        # admitted by it. A path names whatever was copied there, so a reader
+        # is classified by a bare name only, and a reader named by a path is
+        # refused any `git` word and any stdin not written on the line. Text is
+        # read as a shell would join its words, and computed text is refused
+        # unread, an escaped backslash in front of a substitution included.
+        for command in (
+            "echo 'git push origin +HEAD:main' | /tmp/sort",
+            "/tmp/tee <<<'git push origin +HEAD:main'",
+            "echo 'git status' | /tmp/x",
+            "echo 'g''it push origin +HEAD:main' | /tmp/x",
+            "pwsh <<< 'g''it push origin +HEAD:main'",
+            "/tmp/x <<< 'git$IFS'\"push origin +HEAD:main\"",
+            "npx something <<< \"$(printf 'git p%ssh' u)\"",
+            "/tmp/y <<< \"\\\\$(printf gi)t push origin +HEAD:main\"",
+            "printf 'git p%ssh origin +HEAD:main' u | pwsh",
+            "echo 'git push origin +HEAD:main' > >(/tmp/x)",
+            "tee >(/tmp/x) <<<'git push origin +HEAD:main'",
+            "echo 'git push origin +HEAD:main' > /tmp/s; /tmp/x < /tmp/s",
+            "cat /tmp/s | /tmp/x",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command)
 
         # A classified reader's stdin is data, and text that writes nothing is
-        # nothing to refuse, whoever reads it.
+        # nothing to refuse from a reader named bare.
         for command in (
             "py - <<'EOF'\nprint('git push origin +HEAD:main `x`')\nEOF",
             "python -I - <<'EOF'\nimport subprocess\nEOF",
-            "gh issue create --body-file - <<'EOF'\nrun git push origin topic\nEOF",
             "echo 'git push origin +HEAD:main' | tee note.txt",
-            "echo 'git status' | /tmp/x",
+            "echo 'git push origin +HEAD:main' | sort",
             "/tmp/x <<< 'hello world'",
             "echo hi | /tmp/x",
+            "npm run build < /dev/null",
+            "printf '%s\\n' a b | sort",
+            "diff <(sort a) <(sort b)",
         ):
             with self.subTest(command=command):
                 self.assertAdmitted(command)

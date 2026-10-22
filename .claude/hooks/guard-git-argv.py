@@ -5140,36 +5140,67 @@ def _unquoted_positions(command):
 # file it or send it on, and execute none of it. **The safe side only**: a
 # program on no list, and no shell, is one this file cannot classify, so what
 # its stdin carries is judged by content (`unclassified_stdin_writer`).
-# `sed`, `awk` and `xargs` are left off on purpose, because each runs commands
-# taken from its input (`sed`'s `e`, `awk`'s `system`, `xargs` itself).
-# `READING_COMMANDS`, `DATA_ONLY_COMMANDS` and the interpreters, whose code is
-# the residual `INTERPRETER` states, are classified too.
+# `sed`, `awk`, `xargs` and `less` are left off on purpose, because each runs
+# commands taken from its input or its keys (`sed`'s `e`, `awk`'s `system`,
+# `xargs` itself, `less`'s `!`), and so is `gh`, whose `alias set` takes a
+# `!` alias that a shell runs. `READING_COMMANDS`, `DATA_ONLY_COMMANDS` and the
+# interpreters, whose code is the residual `INTERPRETER` states, are
+# classified too.
 STDIN_DATA_READERS = frozenset({
-    "base64", "clip", "column", "cut", "fmt", "fold", "gh", "iconv", "jq",
-    "less", "md5sum", "more", "nl", "od", "paste", "pbcopy", "sha1sum",
-    "sha256sum", "sort", "tac", "tee", "tr", "uniq", "xxd", "yq",
+    "base64", "clip", "column", "cut", "fmt", "fold", "iconv", "jq", "md5sum",
+    "nl", "od", "paste", "pbcopy", "sha1sum", "sha256sum", "sort", "tac", "tee",
+    "tr", "uniq", "xxd", "yq",
 })
+
+
+def _launched(words):
+    """The program word the run made of `words` starts, or None."""
+    start = launched_program(words)
+    return None if start is None else words[start]
+
+
+def path_qualified(word):
+    """Whether `word` names its program by a path, which a copy can give any
+    name: `cp /bin/bash /tmp/sort` makes `/tmp/sort` a shell."""
+    return "/" in word or "\\" in word
 
 
 def stdin_classified(words):
     """Whether the run made of `words` starts a program whose handling of its
     stdin this file knows: a shell, which the stdin pass reads as one, or a
     reader or interpreter, whose stdin is data. A run that starts nothing
-    reads nothing."""
-    start = launched_program(words)
-    if start is None:
+    reads nothing.
+
+    **A reader is classified by a bare name only.** A path names whatever was
+    copied there, so `/tmp/sort` is no `sort`; a shell by any spelling is still
+    a shell, which the stdin pass reads as one.
+    """
+    program = _launched(words)
+    if program is None:
         return True
-    name = program_name(words[start])
-    return (name in EVALUATORS or interpreter(name) or name in STDIN_DATA_READERS
+    name = program_name(program)
+    if name in EVALUATORS:
+        return True
+    if path_qualified(program):
+        return False
+    return (interpreter(name) or name in STDIN_DATA_READERS
             or name in READING_COMMANDS or name in DATA_ONLY_COMMANDS)
 
 
-def _reaches_unclassified(command, position, ordinary):
-    """Whether the text at `position` is read by an unclassified program: the
+def _spoofable_reader(words):
+    """Whether the run made of `words` starts an unclassified program named by
+    a path, the shape a copied shell takes."""
+    program = _launched(words)
+    return (program is not None and path_qualified(program)
+            and not stdin_classified(words))
+
+
+def _reaches(command, position, ordinary, reader):
+    """Whether the text at `position` is read by a run `reader` accepts: the
     run that opens it, or one later in its pipeline, since only a `|` carries
     the bytes onward (`forwards_to_evaluator`'s walk)."""
     start, index = _run_bounds(command, position, ordinary)
-    if not stdin_classified(_run_words(command, start, index, ordinary)):
+    if reader(_run_words(command, start, index, ordinary)):
         return True
     while index < len(command):
         while index < len(command) and (
@@ -5183,9 +5214,84 @@ def _reaches_unclassified(command, position, ordinary):
         start = index
         while index < len(command) and not _ends_run(command, index, ordinary):
             index += 1
-        if not stdin_classified(_run_words(command, start, index, ordinary)):
+        if reader(_run_words(command, start, index, ordinary)):
             return True
     return False
+
+
+def _reaches_unclassified(command, position, ordinary):
+    return _reaches(command, position, ordinary,
+                    lambda words: not stdin_classified(words))
+
+
+def _reaches_spoofable(command, position, ordinary):
+    return _reaches(command, position, ordinary, _spoofable_reader)
+
+
+def _as_typed(text):
+    """`text` as a shell reading it would join its words: quotes and
+    backslashes gone, `$IFS` a space. So `g''it push` and `git$IFS'push'` read
+    as the push they are; a name computed any other way is `COMPUTED_TEXT`."""
+    return re.sub(r"\$\{?IFS\}?", " ", re.sub(r"[\"'\\]", "", text))
+
+
+# Text whose words a shell would compute before running them: a command
+# substitution, either spelling, or an ANSI-C quote. What it computes is not in
+# the source, so an unclassified reader is refused it rather than having it
+# judged (`unmodelled_printer`'s argument).
+COMPUTED_TEXT = re.compile(r"\$\(|`|\$'")
+
+
+def computed_text(text):
+    """Whether `text` holds a `COMPUTED_TEXT` opener that no backslash escapes:
+    `\\`` is a literal backtick, `\\\\$(…)` an escaped backslash and a live
+    substitution, so the backslashes in front are counted, not just looked at."""
+    for match in COMPUTED_TEXT.finditer(text):
+        slashes = 0
+        while match.start() - slashes > 0 and text[match.start() - slashes - 1] == "\\":
+            slashes += 1
+        if slashes % 2 == 0:
+            return True
+    return False
+
+
+def _offending_stdin(text, strict):
+    """Whether `text`, read by an unclassified program, may run git to write:
+    computed, or holding a writing git line as typed. `strict` is a reader
+    named by a path, the copied shell's shape, which is refused any `git` word
+    at all."""
+    if computed_text(text):
+        return True
+    typed = _as_typed(text)
+    return bool((GIT_WORD if strict else GIT_WRITER_LINE).search(typed))
+
+
+def _runs_with_feeds(command, ordinary):
+    """Every run of `command` as `(words, upstream)`, where `upstream` is the
+    runs a `|` joined before it in its pipeline, or None when no `|` feeds it.
+    An empty list is a pipe from something this walk does not see as a run,
+    such as a subshell."""
+    runs, upstream, start = [], None, 0
+    for index in range(len(command) + 1):
+        if index < len(command) and not _ends_run(command, index, ordinary):
+            continue
+        words = _run_words(command, start, index, ordinary)
+        if words:
+            runs.append((words, upstream))
+        start = index + 1
+        if index == len(command):
+            break
+        char = command[index]
+        if (char == "|" and not command.startswith("||", index)
+                and not (index and command[index - 1] == "|")):
+            upstream = (upstream or []) + ([words] if words else [])
+        elif char == "&" and index and command[index - 1] == "|":
+            pass  # the `&` of `|&`, which carries the pipe its `|` opened
+        elif char != ")":
+            # A `)` ends a subshell whose output may still be piped on; its runs
+            # stay out of `upstream`, which then reads as a pipe from the unseen.
+            upstream = None
+    return runs
 
 
 # A line that runs git with a subcommand that writes: the push and ref-updating
@@ -5213,44 +5319,74 @@ def unclassified_stdin_writer(command):
     body, a here-string, a printer's text before it in the pipe or a process
     substitution's body that holds a git writer line refuses. The owner's
     direction on #397 of 2026-10-22.
+
+    **Three tightenings a security review asked for, each verified allowed
+    before them.** A reader is classified by a bare name only, so a copy at
+    `/tmp/sort` is unclassified (`stdin_classified`). Text is matched as typed
+    (`_as_typed`), so `g''it push` is the push, and computed text is refused
+    unread (`COMPUTED_TEXT`). A reader named by a path, the copied shell's
+    shape, is refused any `git` word, and any stdin it is handed from a file
+    or from anything but a printer, whose text alone is in the source.
     """
-    if any(GIT_WRITER_LINE.search(body)
-           for body in _stdin_bodies(command, _reaches_unclassified)):
+    bodies = list(_stdin_bodies(command, _reaches_unclassified))
+    # **A here-string arrives quote-removed**, which loses what an escape
+    # escaped: `"\\\\$(printf gi)t push …"` comes back as `\\$(…)`, which reads
+    # escaped, while the outer shell runs the substitution and hands the
+    # reader `\\git push …`. So a line that hands an unclassified reader
+    # anything is also read raw for computed text.
+    if bodies and computed_text(command):
+        return True
+    if any(_offending_stdin(body, False) for body in bodies):
+        return True
+    if any(_offending_stdin(body, True)
+           for body in _stdin_bodies(command, _reaches_spoofable)):
         return True
 
     ordinary = _unquoted_positions(command)
-    for match in re.finditer(r"<\(", command):
-        if not (ordinary[match.start()] and ordinary[match.start() + 1]):
+    for words, upstream in _runs_with_feeds(command, ordinary):
+        if stdin_classified(words):
             continue
-        start, end = _run_bounds(command, match.start(), ordinary)
-        if stdin_classified(_run_words(command, start, end, ordinary)):
+        strict = _spoofable_reader(words)
+        if strict and any(word in ("<", "<>") for word in words):
+            return True
+        if upstream is None:
+            continue
+        if strict and not upstream:
+            return True
+        for before in upstream:
+            program = _launched(before)
+            name = program_name(program) if program else ""
+            if name not in DATA_ONLY_COMMANDS:
+                if strict:
+                    return True
+                continue
+            spoken = before[before.index(program) + 1:]
+            # A printer whose output this file cannot reproduce writes text
+            # that is not in the source (`unmodelled_printer`).
+            if (name == "printf" and any("%" in word for word in spoken)) or (
+                    name == "echo" and any(word.startswith("-") and "e" in word
+                                           for word in spoken)):
+                return True
+            if _offending_stdin(" ".join(spoken), strict):
+                return True
+
+    for match in re.finditer(r"[<>]\(", command):
+        if not (ordinary[match.start()] and ordinary[match.start() + 1]):
             continue
         close = _closing_paren(command, match.end())
         body = command[match.end():len(command) if close is None else close]
-        if GIT_WRITER_LINE.search(body):
-            return True
-
-    stripped = strip_dollar_quotes(strip_redirections(
-        join_continuations(strip_comments(strip_heredocs(command)))))
-    try:
-        lexer = shlex.shlex(stripped, posix=True, punctuation_chars=True)
-        lexer.commenters = ""
-        lexer.whitespace_split = True
-        tokens = list(lexer)
-    except ValueError:
-        # Unreadable as a command line: the passes that parse it refuse it.
-        return False
-    for group in pipeline_groups(tokens):
-        readers = [position for position, run in enumerate(group)
-                   if not stdin_classified(run)]
-        if not readers:
-            continue
-        for before in group[:max(readers)]:
-            command_word = leading_command(before)
-            if program_name(command_word) not in DATA_ONLY_COMMANDS:
-                continue
-            spoken = before[before.index(command_word) + 1:]
-            if GIT_WRITER_LINE.search(" ".join(spoken)):
+        if command[match.start()] == "<":
+            # The body's output is the run's stdin.
+            start, end = _run_bounds(command, match.start(), ordinary)
+            run = _run_words(command, start, end, ordinary)
+            if not stdin_classified(run) and _offending_stdin(
+                    body, _spoofable_reader(run)):
+                return True
+        elif any(not stdin_classified(words) for words, _ in
+                 _runs_with_feeds(body, _unquoted_positions(body))):
+            # `>(…)`: the body reads what the run around it writes, which this
+            # walk does not trace, so a `git` word anywhere on the line refuses.
+            if GIT_WORD.search(_as_typed(command)) or computed_text(command):
                 return True
     return False
 
