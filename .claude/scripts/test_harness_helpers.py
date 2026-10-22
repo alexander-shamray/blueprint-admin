@@ -5589,6 +5589,16 @@ class TheGitArgvGuard(unittest.TestCase):
             "PATH[0]=/tmp; echo 'git push origin +HEAD:main' | sort",
             "declare -n p=PATH; p=/tmp; echo 'git push origin +HEAD:main' | sort",
             "trap 'hash -p /tmp/x tee' DEBUG; tee <<<'git push origin +HEAD:main'",
+            # The sixth review's: an assigning expansion, a target built by an
+            # expansion, `mapfile -C`, a loop variable, and arithmetic, which
+            # reads a variable's value as an expression, assignments included.
+            "echo \"${PATH:=/tmp}\"; echo 'git push origin +HEAD:main' | sort",
+            "n=PATH; declare \"$n=/tmp\"; echo 'git push origin +HEAD:main' | sort",
+            "mapfile -C 'hash -p /tmp/x tee' -c 1 a <<<x; tee <<<'git push origin +HEAD:main'",
+            "for PATH in /tmp; do echo 'git push origin +HEAD:main' | sort; done",
+            "x=PATH=0; : $((x)); echo 'git push origin +HEAD:main' | sort",
+            "x=PATH=0; let x; echo 'git push origin +HEAD:main' | sort",
+            "declare -i n; n=x; echo 'git push origin +HEAD:main' | sort",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command)
@@ -5601,6 +5611,10 @@ class TheGitArgvGuard(unittest.TestCase):
             "git commit -m 'add a hash function to the PATH source' -F - <<'EOF'\nmsg\nEOF",
             "grep -n x f | sed -n 1p | awk '{print $1}'",
             "git branch | while read b; do echo \"$b\"; done",
+            # Quoted text names nothing, and arithmetic over literals reads no
+            # variable.
+            "grep -n 'env\\[\"PATH\"\\]\\|PATH=os.pathsep' f.py | head",
+            "gh pr checks 1 --watch 2>&1 | tail -20; echo \"exit=${PIPESTATUS[0]}\"",
             "for f in a b; do bash .claude/scripts/gh-issue-create.sh bug low < $f.md; done",
         ):
             with self.subTest(command=command):
