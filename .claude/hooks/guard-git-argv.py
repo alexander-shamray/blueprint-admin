@@ -5230,7 +5230,7 @@ EXPANSION_WRITES = re.compile(
     r"|\(\([^)]*[A-Za-z_]|\$\[[^]]*[A-Za-z_]"
     r"|\$\{[^}]*\[[^]]*[A-Za-z_]"
     r"|\$\{[^}:]*:(?![-=+?])[^}]*[A-Za-z_]"
-    r"|(?<![\w-])[A-Za-z_]\w*\[[^]]*[A-Za-z_][^]]*\]\+?="
+    r"|(?<![\w-])[A-Za-z_]\w*\[[^]]*[A-Za-z_][^]]*\]"
     r"|\[\[[^]]*\s-(?:eq|ne|lt|le|gt|ge)\s")
 
 
@@ -5318,6 +5318,12 @@ def resolution_changed(command):
         if name in PATH_WRITERS and any(
                 RESOLUTION_VARIABLES.search(word) or re.search(r"[$`]", word)
                 for word in arguments):
+            return True
+        # A name operand's subscript is arithmetic whether or not `=` follows
+        # and however it is quoted: `read 'a[x]'`, `unset a[x]`, `test -v
+        # a[x]`. Raised by a security review.
+        if name in PATH_WRITERS | {"test", "[", "[["} and any(
+                re.search(r"\[[^]]*[A-Za-z_]", word) for word in arguments):
             return True
         # A nameref makes another name an alias of whatever it is set to, and
         # an integer attribute makes every later assignment arithmetic.
