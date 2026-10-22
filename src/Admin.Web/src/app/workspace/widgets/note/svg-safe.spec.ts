@@ -23,9 +23,39 @@ describe('safeSvg', () => {
     expect(svg.querySelector('rect')).not.toBeNull();
   });
 
-  it('keeps a link inside the drawing and drops one that leaves it', () => {
-    const svg = safeSvg(wrap('<use href="#a"/><a href="javascript:alert(1)"><text>x</text></a><a xlink:href="https://example.com"><text>y</text></a>'))!;
-    expect(svg.outerHTML).not.toMatch(/javascript|example\.com/);
+  it('drops a link, an animation, a use and an element it does not know, with what they hold', () => {
+    const svg = safeSvg(
+      wrap(
+        '<a href="javascript:alert(1)"><text>x</text></a><a xlink:href="https://example.com"><text>y</text></a>' +
+          '<use href="#a"/><animate attributeName="href" to="javascript:alert(2)"/><set attributeName="onclick" to="alert(3)"/>' +
+          '<image href="https://example.com/x.png"/><madeup><text>z</text></madeup><rect id="kept"/>',
+      ),
+    )!;
+    expect(svg.outerHTML).not.toMatch(/javascript|example\.com|<a|use|animate|set|image|madeup|>z</);
+    expect(svg.querySelector('#kept')).not.toBeNull();
+  });
+
+  it('judges a name by its namespace, so a prefix cannot disguise an element or an attribute', () => {
+    const svg = safeSvg(
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:x="http://www.w3.org/1999/xlink" xmlns:h="http://www.w3.org/1999/xhtml">' +
+        '<h:script>alert(1)</h:script><h:div onclick="alert(2)">no</h:div>' +
+        '<marker x:href="https://example.com" h:onclick="alert(3)" id="m"/></svg>',
+    )!;
+    expect(svg.outerHTML).not.toMatch(/script|div|onclick|example\.com|alert/);
+    expect(svg.querySelector('marker')).not.toBeNull();
+  });
+
+  it('keeps a reference to an id inside the drawing and drops css that reaches outside it', () => {
+    const svg = safeSvg(
+      wrap(
+        '<style>.a{fill:url(#g)} .b{background:url(https://example.com/x)} @import "https://example.com/y.css";</style>' +
+          '<rect id="r" style="fill:url(#g)"/><rect id="s" style="fill:url(https://example.com/z)"/><marker href="#m"/>',
+      ),
+    )!;
+    expect(svg.querySelector('style')?.textContent).toBe('');
+    expect(svg.querySelector('#r')?.getAttribute('style')).toBe('fill:url(#g)');
+    expect(svg.querySelector('#s')?.hasAttribute('style')).toBe(false);
+    expect(svg.querySelector('marker')?.getAttribute('href')).toBe('#m');
   });
 
   it('answers null for text that is not one SVG document', () => {

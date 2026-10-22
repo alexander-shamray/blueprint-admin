@@ -216,6 +216,15 @@ test('a note is added from a preset, draws its diagram, and is written in place 
   // While editing, the note is its source; the title is its first heading.
   await expect(page.locator('gridster-item .ws-head .ws-title')).toHaveText('Architecture');
   await expect(page.getByRole('textbox', { name: 'Note text' })).toHaveValue(/flowchart LR/);
+
+  // The preset's drawing survives the sanitiser whole: its text, its edges and their arrowheads.
+  await page.getByRole('button', { name: 'Done' }).click();
+  const architecture = page.locator('gridster-item app-mermaid-diagram .drawing svg');
+  await expect(architecture).toContainText('Admin.Host');
+  expect(await architecture.locator('path').count()).toBeGreaterThan(10);
+  expect(await architecture.locator('marker').count()).toBeGreaterThan(0);
+  await page.getByRole('button', { name: 'Edit layout' }).click();
+
   await page.getByRole('textbox', { name: 'Note text' }).fill('# Mine\n\nHello <script>x</script>\n\n```mermaid\nflowchart LR\n  a["one"] --> b["two"]\n```');
   await page.getByRole('button', { name: 'Done' }).click();
 
