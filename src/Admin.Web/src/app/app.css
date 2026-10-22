@@ -5,6 +5,8 @@
 .page-title.edit { width: 14rem; padding: 0.25rem 0.5rem; border: 1px solid var(--app-border); border-radius: 0.25rem; background: var(--mat-sys-surface); color: inherit; }
 .grow { flex: 1; }
 .palette-key, .hint, .save-state { font-size: 0.85rem; color: var(--app-muted); }
+.running-work { display: flex; gap: 0.75rem; }
+.running-item { font-size: 0.85rem; padding: 0.1rem 0.5rem; border-radius: 1rem; background: var(--app-warn-bg); color: var(--app-warn); text-decoration: none; }
 .notice { flex: none; display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 1rem; }
 .notice.error { color: var(--app-error); background: var(--app-error-bg); }
 .notice.warn { color: var(--app-warn); background: var(--app-warn-bg); }

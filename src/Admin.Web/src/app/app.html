@@ -55,8 +55,12 @@
     @case ('pending') { <span class="save-state" role="status">Unsaved</span> }
     @case ('saving') { <span class="save-state" role="status">Saving…</span> }
   }
-  <!-- Where the running-work indicator (a Scenario run, a Logs follow, a job) will sit. -->
-  <span class="running-work" aria-live="polite"></span>
+  <!-- Work that goes on while no page shows it (spec §4.3): each item links to the page that does. -->
+  <span class="running-work" aria-live="polite">
+    @for (item of runningWork.items(); track item.link) {
+      <a class="running-item" [routerLink]="item.link">{{ item.text }}</a>
+    }
+  </span>
   @if (config(); as c) {
     <span class="hint">{{ c.backendDir }} @if (c.fakePlatform) {<em>(fake platform)</em>}</span>
   }

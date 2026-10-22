@@ -5,6 +5,7 @@ import { OutputLine } from '../../core/host/host-types';
 import { SseClient } from '../../core/host/sse-client';
 import { composeProgress } from '../../shared/output-pane/compose-progress';
 import { PolledFeed, TabVisibility } from '../../workspace/polled-feed';
+import { RunningWork } from '../../workspace/running-work';
 
 /**
  * The Stack widgets' data (widget-workspace spec §4.2): the stack, polled every 3 seconds, and the golden-signal and
@@ -59,6 +60,10 @@ export class ComposeRun {
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.subscription?.unsubscribe());
+    inject(RunningWork).report('compose', () => {
+      const job = this.job();
+      return job && job.exitCode === null ? { text: `Stack: ${job.label} running`, link: '/stack' } : null;
+    });
   }
 
   started(id: string, label: string): void {
