@@ -292,7 +292,10 @@ assistant panel is one user of a console-wide mechanism, not its owner.
   replaced is wasted work and a merge conflict with the phase replacing it. So
   the foundation (§15, phase L) lands first: the mechanism, the picker, the
   shell, shared components, the assistant panel and a lint rule that refuses
-  an untranslated literal in a template. **After that, every workspace phase's
+  an untranslated literal in a template. The rule runs on an allow-list of
+  translated files that grows with each phase, so the screens left English
+  until their workspace phase do not fail it, and the final sweep makes it
+  repository-wide. **After that, every workspace phase's
   definition of done includes its widgets' strings in every shipped
   language** (amended into the workspace note, §11). A legacy-screen widget
   stays English until the phase that replaces it. Screens the workspace does
@@ -701,7 +704,7 @@ Each phase is one or more PRs and leaves the console working.
 
 | Phase | Delivers | Needs |
 |---|---|---|
-| L Languages | §5.5's foundation: `@angular/localize` with runtime-loaded translations, the shell's language picker, `messages.en-US.json` and `messages.ru-RU.json`, the shell and shared components translated, the missing-translation check and the template lint rule, locale-aware formats | — |
+| L Languages | §5.5's foundation: `@angular/localize` with runtime-loaded translations, the shell's language picker, `messages.en-US.json` and `messages.ru-RU.json`, the shell and shared components translated, the missing-translation check and the template lint rule on its growing allow-list, locale-aware formats | — |
 | 1 Core | `Admin.Assistant`, the protocol, the endpoints, `AssistantOptions` (off by default), the fake provider, the redactor, the shell's assistant panel, `help` on `SCREENS`, `open_screen`, locale and the language rule, panel strings under §5.5; e2e | L |
 | 2 Anthropic | `Admin.Assistant.Anthropic`, credential status, the notice, prompt caching and usage reporting | 1 |
 | 3a Console reads | the server tools of §6.2 and the redaction gate over each | 1 |
