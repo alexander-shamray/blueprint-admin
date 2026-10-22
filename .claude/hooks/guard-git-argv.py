@@ -5145,8 +5145,8 @@ def _unquoted_positions(command):
 # whose `alias set` takes a `!` alias that a shell runs; so are `awk`, whose
 # `system` and `print |` run its input (the interpreter residual on #424), and
 # `read`, whose line a command word can then run (`do $line`). Off the list a
-# bare name keeps the content judgement, which costs none of the 4000
-# replayed commands. **`sed` is on it**, because it runs its input only by a
+# bare name keeps the content judgement, at the cost measured in
+# `docs/harness-boundaries.md`. **`sed` is on it**, because it runs its input only by a
 # script that says so (`e`, the `e` flag of `s`, a script file), and the `sed`
 # script pass refuses each of those; probed. `READING_COMMANDS`,
 # `DATA_ONLY_COMMANDS` and the interpreters are classified too.
@@ -5157,16 +5157,49 @@ STDIN_DATA_READERS = frozenset({
 })
 
 
+# A redirection operator, as `_run_words` keeps it: its own word, its target
+# the next one.
+REDIRECTION_WORD = re.compile(r"^\d*(?:<<<|<<-|<<|<>|<&|>&|&>>|&>|>>|>\||<|>)$")
+
+# The redirections that give a run its stdin.
+STDIN_REDIRECTS = frozenset({"<", "<>", "<<<", "<<", "<<-"})
+
+
+def _command_words(words):
+    """`words` without its redirections: each operator and its target. A
+    target is a file, never a program or an argument the program reads."""
+    kept, target = [], False
+    for word in words:
+        if target:
+            target = False
+        elif REDIRECTION_WORD.match(word):
+            target = True
+        else:
+            kept.append(word)
+    return kept
+
+
 def _launched(words):
     """The program word the run made of `words` starts, or None. A reserved
     word in front (`do`, `while`, `then`, …) is the shell's own syntax, so the
     program is the word after it: in `… | while read line` the reader is
-    `read`, and in `do bash helper < f` it is `bash`."""
+    `read`, and in `do bash helper < f` it is `bash`. **A redirection is never
+    the program**, wherever it stands: `< /tmp/s /tmp/x` starts `/tmp/x`, and
+    took `<` for its program until a review of #447 found it (R1)."""
+    kept = _command_words(words)
     position = 0
-    while position < len(words) and words[position] in SHELL_KEYWORDS:
+    while position < len(kept) and kept[position] in SHELL_KEYWORDS:
         position += 1
-    start = launched_program(words[position:])
-    return None if start is None else words[position + start]
+    start = launched_program(kept[position:])
+    return None if start is None else kept[position + start]
+
+
+def _group_stdin(words):
+    """Whether the run made of `words` gives stdin to runs other than its own:
+    a stdin redirection with no program of its own, which feeds the compound
+    before it (`{ …; } < f`, `done < f`, `done <<<'…'`) or, on `exec`, every
+    run after it (`exec < f`). Raised in review of #447 (R1)."""
+    return _launched(words) is None and any(word in STDIN_REDIRECTS for word in words)
 
 
 def path_qualified(word):
@@ -5300,9 +5333,9 @@ def _expanded_operator(name, arguments):
     where an operator or option could: for `test`, not the operand of a
     literal operator before it, not the left side of a binary operator after
     it, and not alone; for `wait`, whose flags (`-n`, `-f`) take no operand
-    and whose one expanded word can be a whole cluster, any expanded word. `[ -d "$d" ]`, `[ "$n" != 0 ]` and
-    `wait "$pid"` are operands; `test $o 'a[x]'` and `wait -n $o 'a[x]'` are
-    not."""
+    and whose one expanded word can be a whole cluster, every expanded word
+    but `$!`. `[ -d "$d" ]` and `[ "$n" != 0 ]` are operands; `test $o
+    'a[x]'`, `wait -n $o 'a[x]'` and `wait "$pid"` are not."""
     words = [word for word in arguments if word not in ("]", "]]")]
     for index, word in enumerate(words):
         if not re.search(r"[$`]", word):
@@ -5312,7 +5345,8 @@ def _expanded_operator(name, arguments):
         # `wait` takes its options anywhere, and one expanded word can be a
         # whole cluster (`o='-pa[x]'; wait $o`), so any expanded word counts
         # but `$!`, which is only ever a process id. A line holding
-        # `wait $pid` is held strictly; none of the 4000 replayed commands is.
+        # `wait $pid` is held strictly, at the cost measured in
+        # `docs/harness-boundaries.md`.
         if name == "wait":
             if word.strip('"') == "$!":
                 continue
@@ -5462,11 +5496,29 @@ FOREIGN_SHELLS = frozenset({"cmd", "csh", "elvish", "fish", "ion", "murex", "nu"
 def _spoofable_reader(words):
     """Whether the run made of `words` starts an unclassified program this file
     must assume is a shell: one named by a path, the shape a copied shell
-    takes (or any name, on a line that changes resolution), or a shell by a
-    name `EVALUATORS` does not read (`FOREIGN_SHELLS`)."""
+    takes (or any name, on a line that changes resolution), a shell by a name
+    `EVALUATORS` does not read (`FOREIGN_SHELLS`), or a launcher of either,
+    whose stdin the program it starts inherits: a later word naming a shell
+    or a program by path (`sudo pwsh`, `flock l /tmp/x`). Raised in review
+    of #447 (R4)."""
     program = _launched(words)
-    return (program is not None and not stdin_classified(words)
-            and (path_qualified(program) or program_name(program) in FOREIGN_SHELLS))
+    if program is None or stdin_classified(words):
+        return False
+    if path_qualified(program) or program_name(program) in FOREIGN_SHELLS:
+        return True
+    # A redirection's target is a file, not a program the run launches:
+    # `mapfile -t lines < /tmp/f` launches nothing.
+    later = _command_words(words)
+    return any(program_name(word) in FOREIGN_SHELLS | EVALUATORS
+               or LAUNCHED_PATH.match(word)
+               for word in later[later.index(program) + 1:])
+
+
+# A later word that names a program by path: absolute or explicitly relative,
+# no extension and no trailing slash. So `/tmp/x` and `./bin/tool` count, and
+# `awk -F'\t'`, an awk `/regex/` and a data file `src/a.md` do not; read
+# looser, the rule refused 40 replayed `gh … | awk -F'\t'` pipelines.
+LAUNCHED_PATH = re.compile(r"^(?:/|\./|\.\./|~/)[\w./~-]*[\w~-]$(?<!\.\w)(?<!\.\w\w)(?<!\.\w\w\w)(?<!\.\w\w\w\w)")
 
 
 def _reaches(command, position, ordinary, reader):
@@ -5485,6 +5537,12 @@ def _reaches(command, position, ordinary, reader):
                 and command[index] == "|") or command.startswith("||", index):
             return False
         index += 2 if command.startswith("|&", index) else 1
+        # A pipeline goes on across a newline, and a subshell after a `|`
+        # inherits it: `echo … |<newline>pwsh`, `echo … | (pwsh)`. Raised in
+        # review of #447 (R2).
+        while index < len(command) and (command[index] in " \t\n" or (
+                ordinary[index] and command[index] == "(")):
+            index += 1
         start = index
         while index < len(command) and not _ends_run(command, index, ordinary):
             index += 1
@@ -5495,11 +5553,13 @@ def _reaches(command, position, ordinary, reader):
 
 def _reaches_unclassified(command, position, ordinary):
     return _reaches(command, position, ordinary,
-                    lambda words: not stdin_classified(words))
+                    lambda words: not stdin_classified(words) or _group_stdin(words))
 
 
 def _reaches_spoofable(command, position, ordinary):
-    return _reaches(command, position, ordinary, _spoofable_reader)
+    return _reaches(command, position, ordinary,
+                    lambda words: _spoofable_reader(words)
+                    or (_group_stdin(words) and STRICT_LINE))
 
 
 def _as_typed(text):
@@ -5529,15 +5589,22 @@ def computed_text(text):
     return False
 
 
+# A parameter expansion as the reading shell sees it.
+PARAMETER = re.compile(r"\$(?:\{[^}]*\}|[A-Za-z_]\w*|[0-9@*#?!$-])")
+
+
 def _offending_stdin(text, strict):
     """Whether `text`, read by an unclassified program, may run git to write:
     computed, or holding a writing git line as typed. `strict` is a reader
     named by a path, the copied shell's shape, which is refused any `git` word
-    at all."""
+    at all. **The text is read twice**, as typed and with every parameter
+    expansion removed, since one the reading shell resolves empty rejoins a
+    word: `g$@it push`, `g${u}it push`. Raised in review of #447 (R3)."""
     if computed_text(text):
         return True
     typed = _as_typed(text)
-    return bool((GIT_WORD if strict else GIT_WRITER_LINE).search(typed))
+    pattern = GIT_WORD if strict else GIT_WRITER_LINE
+    return bool(pattern.search(typed) or pattern.search(PARAMETER.sub("", typed)))
 
 
 def _runs_with_feeds(command, ordinary):
@@ -5545,13 +5612,14 @@ def _runs_with_feeds(command, ordinary):
     runs a `|` joined before it in its pipeline, or None when no `|` feeds it.
     An empty list is a pipe from something this walk does not see as a run,
     such as a subshell."""
-    runs, upstream, start = [], None, 0
+    runs, upstream, start, piped = [], None, 0, False
     for index in range(len(command) + 1):
         if index < len(command) and not _ends_run(command, index, ordinary):
             continue
         words = _run_words(command, start, index, ordinary)
         if words:
             runs.append((words, upstream))
+            piped = False
         start = index + 1
         if index == len(command):
             break
@@ -5559,8 +5627,11 @@ def _runs_with_feeds(command, ordinary):
         if (char == "|" and not command.startswith("||", index)
                 and not (index and command[index - 1] == "|")):
             upstream = (upstream or []) + ([words] if words else [])
+            piped = True
         elif char == "&" and index and command[index - 1] == "|":
             pass  # the `&` of `|&`, which carries the pipe its `|` opened
+        elif piped and not words and char in "(\n":
+            pass  # a pipeline goes on across a newline and into a subshell (R2)
         elif char != ")":
             # A `)` ends a subshell whose output may still be piped on; its runs
             # stay out of `upstream`, which then reads as a pipe from the unseen.
@@ -5568,13 +5639,25 @@ def _runs_with_feeds(command, ordinary):
     return runs
 
 
+# Subcommands that write or run what they are handed beyond the rule sets
+# below, which judge each by its arguments on a command line: `apply`, `am`,
+# `rebase -x`, `filter-branch`, `bisect run`, `submodule foreach`, an
+# executing `-c` key, and `config`, which writes an alias. Text on an
+# unclassified reader's stdin is judged by its words, so the word alone
+# counts. Judging that text as a command line instead refused Markdown issue
+# bodies for their code fences. Raised in review of #447 (R6).
+GIT_STDIN_WRITERS = frozenset({"-c", "am", "apply", "bisect", "config",
+                               "filter-branch", "filter-repo", "rebase",
+                               "submodule"})
+
 # A line that runs git with a subcommand that writes: the push and ref-updating
 # rules' subcommands and the path writers', each a whole word after a `git` word.
 GIT_WRITER_LINE = re.compile(
     r"(?im)(?<![\w.-])git(?:\.exe)?(?![\w.-])[^\n]*?(?<![\w.-])(?:"
     + "|".join(re.escape(word) for word in sorted(
         {"push"} | GIT_PATH_WRITERS | GIT_WRITING_SUBCOMMANDS
-        | REF_UPDATING_PLUMBING | GIT_EXECUTING_SUBCOMMANDS))
+        | REF_UPDATING_PLUMBING | GIT_EXECUTING_SUBCOMMANDS
+        | GIT_STDIN_WRITERS))
     + r")(?![\w.-])")
 
 
@@ -5602,13 +5685,26 @@ def unclassified_stdin_writer(command):
     shape, is refused any `git` word, and any stdin it is handed from a file
     or from anything but a printer, whose text alone is in the source.
     """
-    global RESOLUTION_CHANGED
+    global RESOLUTION_CHANGED, STRICT_LINE
     ordinary = _unquoted_positions(command)
-    RESOLUTION_CHANGED = resolution_changed(command)
+    # **The scopes around a nested script are where its names resolve**:
+    # `PATH=/tmp bash -c "sort <<<'…'"` changes resolution outside the script
+    # it hands on. Raised in review of #447 (R5).
+    RESOLUTION_CHANGED = any(resolution_changed(scope)
+                             for scope in dict.fromkeys((command, *EVENT_SCOPES)))
+    STRICT_LINE = any(_spoofable_reader(words)
+                      for words, _ in _runs_with_feeds(command, ordinary))
     try:
         return _unclassified_stdin_writer(command, ordinary)
     finally:
         RESOLUTION_CHANGED = False
+        STRICT_LINE = False
+
+
+# Set by `unclassified_stdin_writer` for the line it judges: whether any run
+# on it is a reader `_spoofable_reader` holds strictly, which a group's stdin
+# redirection then feeds (`_group_stdin`).
+STRICT_LINE = False
 
 
 def _unclassified_stdin_writer(command, ordinary):
@@ -5636,17 +5732,20 @@ def _unclassified_stdin_writer(command, ordinary):
     # which three security reviews of this rule converged on; `/dev/null` is
     # the one file that is no text. **For any other unclassified program, the
     # stage's own words and the unseen subshell's line are judged by content**:
-    # refusing every pipe into a program on no list refused 164 of the 4000
-    # replayed commands, PowerShell's own pipelines among them, while a
-    # program named bare is a shell only where this line or the environment
-    # made it one (`RESOLUTION_CHANGED`, and the inherited-environment
-    # residual).
+    # refusing every pipe into a program on no list refused PowerShell's own
+    # pipelines (measured in `docs/harness-boundaries.md`), and a bare-named
+    # program's stdin from a file or a command is the residual stated there.
     for words, upstream in _runs_with_feeds(command, ordinary):
+        redirected = [words[index + 1] for index, word in enumerate(words[:-1])
+                      if word in ("<", "<>")]
+        # A file a group's redirection hands every run in it (`{ …; } < f`,
+        # `done < f`, `exec < f`) reaches whatever reader is strict there (R1).
+        if (_group_stdin(words) and STRICT_LINE
+                and any(target != "/dev/null" for target in redirected)):
+            return True
         if stdin_classified(words):
             continue
         strict = _spoofable_reader(words)
-        redirected = [words[index + 1] for index, word in enumerate(words[:-1])
-                      if word in ("<", "<>")]
         if strict and any(target != "/dev/null" for target in redirected):
             return True
         if upstream is None:

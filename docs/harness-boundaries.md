@@ -617,8 +617,10 @@ A new residual is stated **here** and gets a row above.
   setting `os.environ` and starting `bash -c`), which this guard does not
   read as a command line, the write residual above; what an unclassified
   program **named bare, and not a shell this file knows**, reads on stdin when
-  the text is not on the line (a file, a command's output), since such a
-  program is a shell only where the environment made it one; a reader on the
+  the text is not on the line (a file, a command's output), unless a later
+  word on its run names a shell or an extensionless path (`sudo pwsh`,
+  `flock l /tmp/x`); such a program may run what it reads (`xargs`, `awk`), and
+  only text on the line is in the source to judge; a reader on the
   list whose own config makes it run its input (a `git` alias beginning
   `!`); and `awk`'s own program, which is code as Python's is
   (`gawk '{system("git …")}'`, the interpreter residual on #424). **The stdin
@@ -631,8 +633,8 @@ A new residual is stated **here** and gets a row above.
   substitution's body, an unseen subshell's line or a transforming stage's
   own words that are computed (`$(`, a backtick, `$'`, or a printer whose
   output this file cannot reproduce) or hold a line that runs git to write
-  once read as typed (`GIT_WRITER_LINE`: `push`, the path writers, `rm`,
-  `mv`, the ref-updating plumbing, `difftool` and `mergetool`), so `echo
+  once read as typed or with its parameter expansions removed
+  (`GIT_WRITER_LINE`, `GIT_STDIN_WRITERS` among it), so `echo
   'git push origin +HEAD:main' | /tmp/x` and `/tmp/x <<< 'git checkout HEAD
   -- settings.json'` are refused. **A program that must be taken for a shell
   is held strictly**: one named by a path, since a copy names it anything
@@ -660,8 +662,11 @@ A new residual is stated **here** and gets a row above.
   an interpreter on the line already does unjudged (`python -c` running
   git), which #424 accepts. Such a program
   is refused any `git` word on its stdin and any stdin that is not on the
-  line: a file other than `/dev/null`, a subshell the walk does not see, or
-  a stage that transforms (`base64 -d <<<… | pwsh`). A `>(…)` starting an
+  line: a file other than `/dev/null`, its own or a group's (`{ …; } < f`,
+  `done < f`, `exec < f`), a subshell the walk does not see, or a stage that
+  transforms (`base64 -d <<<… | pwsh`). A pipe reaches its reader across a
+  newline and into a subshell, and a resolution change counts from any
+  scope around a nested script (`PATH=/tmp bash -c …`). A `>(…)` starting an
   unclassified program refuses a line with a `git` word on it. Reading every
   heredoc handed to an unnamed program as a shell script would refuse an
   ordinary `py - <<'EOF'` whose Python holds a backtick, so a listed

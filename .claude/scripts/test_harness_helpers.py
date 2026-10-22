@@ -5632,6 +5632,45 @@ class TheGitArgvGuard(unittest.TestCase):
             "shopt -so -- xtrace; echo 'git push origin +HEAD:main' | sort",
         ):
             with self.subTest(command=command):
+                # The #397 rule itself refuses each, not only an older one that
+                # sees the line first, as the process-substitution rule does
+                # `>(…)` and the arithmetic-heredoc rule `BASH_CMDS[…]=`
+                # (review of #447, R8).
+                self.assertRefused(command)
+                self.assertTrue(
+                    self.judging_module().unclassified_stdin_writer(command))
+        # The arithmetic cases spell no resolution variable, so only the
+        # arithmetic rule can be what changes resolution there.
+        guard = self.judging_module()
+        for command in (
+            "x=$'\\x50'ATH=0; : $((x)); echo hi",
+            "x=$'\\x50'ATH=0; unset a[x]; echo hi",
+            "n=$'a[\\x50'ATH=0]; test -v \"$n\"; echo hi",
+        ):
+            with self.subTest(command=command):
+                self.assertIsNone(guard.RESOLUTION_VARIABLES.search(
+                    guard._expanded_text(command)))
+                self.assertTrue(guard.resolution_changed(command))
+        # Round 1 of #447's review: a redirection taken for the program, a
+        # group's redirection, a pipe across a newline or into a subshell, an
+        # expansion that rejoins a word, a launcher of a shell, a resolution
+        # change outside a nested script, and git the guard refuses typed.
+        for command in (
+            "< /tmp/s /tmp/x",
+            "{ /tmp/x; } < /tmp/s",
+            "while :; do pwsh; done < /tmp/s",
+            "exec </tmp/s; pwsh",
+            "echo 'git push origin +HEAD:main' | (pwsh)",
+            "echo 'git push origin +HEAD:main' |\npwsh",
+            "echo 'g$@it push origin +HEAD:main' | /tmp/x",
+            "npx thing <<<'g${u}it push origin +HEAD:main'",
+            "cat /tmp/s | sudo pwsh",
+            "flock /tmp/l /tmp/x < /tmp/s",
+            "PATH=/tmp bash -c \"sort <<<'git push origin +HEAD:main'\"",
+            "npx thing <<<'git -c core.hooksPath=/tmp/h commit -m x'",
+            "npx thing <<<'git apply x.patch'",
+        ):
+            with self.subTest(command=command):
                 self.assertRefused(command)
         # Resolution is read from command words after quote removal, never
         # from text, so a message naming the words is still a filing; and the
