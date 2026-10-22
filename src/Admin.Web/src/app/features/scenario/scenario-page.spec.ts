@@ -2267,6 +2267,30 @@ describe('ScenarioWidget', () => {
     expect(host.proxy).not.toHaveBeenCalled();
   });
 
+  it('keeps a palette request for a Scenario widget that is here, however long its catalog takes, and then runs', async () => {
+    vi.useFakeTimers();
+    try {
+      const catalogs = new Subject<ApiCatalogView>();
+      host.operations.mockReturnValue(catalogs);
+      const launcher = TestBed.inject(ScenarioLauncher);
+      launcher.request();
+      const fixture = render();
+
+      await vi.advanceTimersByTimeAsync(LAUNCH_WINDOW_MS * 3);
+      expect(launcher.pending()).toBe(true);
+
+      catalogs.next(catalog);
+      fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(launcher.pending()).toBe(false);
+      expect(host.proxy).toHaveBeenCalled();
+      fixture.componentInstance.runner.cancel();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('lets a palette request no Scenario widget took lapse, so one created later does not run unasked', async () => {
     vi.useFakeTimers();
     try {
