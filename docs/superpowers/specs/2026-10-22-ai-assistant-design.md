@@ -264,8 +264,9 @@ assistant panel is one user of a console-wide mechanism, not its owner.
   `sessionStorage` for the tab and the host still holds it. So the reloaded
   panel reads `GET /api/assistant/conversations/{id}` (§5.1) to redraw the
   whole conversation, then opens the event stream from the `lastEventId` that
-  read returns. The picker warns before switching while a turn is running. One build keeps `wwwroot`, the host's static
-  serving and the smoke unchanged.
+  read returns. The picker warns before switching while a turn is running.
+  One build keeps `wwwroot`, the host's static serving and the smoke
+  unchanged.
 - **Choice.** A language picker in the shell, defaulting to
   `navigator.language` when a translation for it exists and to `en-US`
   otherwise. The choice is kept in `localStorage`, per browser. It is not
@@ -689,8 +690,8 @@ design, not this note's.
 - **Host**: the endpoints — status with each `reason`, `409` on a second turn,
   SSE resume, the conversation read after more events than the ring holds
   (every message present, `lastEventId` continuing the stream, no opaque
-  block or tool body), unknown conversation `404`, the `Sec-Fetch-Site` rule; the
-  redaction gate of §10; options refusing a secret-named key; with
+  block or tool body), unknown conversation `404`, the `Sec-Fetch-Site`
+  rule; the redaction gate of §10; options refusing a secret-named key; with
   `Provider=off`, on FakePlatform too: status reports `off`, every other
   route is `404`, and no provider or SDK client is resolved from the
   container.
@@ -698,8 +699,8 @@ design, not this note's.
   and a Vitest spec, so the C# owner and the TypeScript mirror cannot drift.
 - **SPA (Vitest)**: the client parses events, runs a client tool and posts its
   result, resumes; after a reload it redraws from the conversation read and
-  follows from its `lastEventId`; the panel streams, shows a refusal, cancels, holds no
-  timer when hidden; every registry entry has `help`.
+  follows from its `lastEventId`; the panel streams, shows a refusal,
+  cancels, holds no timer when hidden; every registry entry has `help`.
 - **Languages**: the language rule and the turn's context ride in the latest
   user message, and a locale change leaves the prefix byte-identical.
   Every code a client receives has a translated message in every shipped
