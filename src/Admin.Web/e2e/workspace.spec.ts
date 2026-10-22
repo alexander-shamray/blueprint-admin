@@ -24,13 +24,13 @@ test('the built-in Stack page renders its widgets, each with what it reads', asy
 
   await expect(page.locator('gridster-item .ws-head .ws-title')).toHaveText([
     'Workstation doctor',
+    'Compose services',
     'Stack controls',
+    'Alerts',
     'Job output',
     'Reachability',
     'Golden signals',
     'Load run',
-    'Alerts',
-    'Compose services',
     'Reference client',
   ]);
   // A frame renders before its lazy component loads, so wait for every body to hold one before reading its state.
