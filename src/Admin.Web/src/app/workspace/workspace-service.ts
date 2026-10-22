@@ -2,6 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { HostClient } from '../core/host/host-client';
 import { builtInTitle, defaultWorkspace, widgetsOf, withEveryBuiltIn } from './built-in-pages';
+import { isScreenPath } from './screen-components';
 import { Page, WidgetInstance, Workspace, newId } from './workspace-types';
 
 /** How long after the last change a save waits (widget-workspace spec §6.2: "about 1 s"). */
@@ -62,10 +63,13 @@ export class WorkspaceService {
     });
   }
 
-  /** The route a page opens at: a built-in page keeps its screen's old path. */
+  /**
+   * The route a page opens at: a built-in page keeps its screen's old path. One built in by a newer console names a
+   * screen no route here knows, so it opens by id like any other, and survives this console (§6.3).
+   */
   pageLink(id: string): string[] {
     const page = this.pages().find((p) => p.id === id);
-    return page?.builtIn ? ['/', page.builtIn] : ['/page', id];
+    return page?.builtIn && isScreenPath(page.builtIn) ? ['/', page.builtIn] : ['/page', id];
   }
 
   open(id: string | null): void {
