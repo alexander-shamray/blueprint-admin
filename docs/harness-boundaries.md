@@ -620,9 +620,8 @@ A new residual is stated **here** and gets a row above.
   the text is not on the line (a file, a command's output), since such a
   program is a shell only where the environment made it one; a reader on the
   list whose own config makes it run its input (a `git` alias beginning
-  `!`); `awk`, whose program is code as Python's is (`awk '{system($0)}'`);
-  and a line read into a variable that a command word then expands (`while
-  read l; do $l; done`), the parameter-expansion residual. **The stdin
+  `!`); and `awk`'s own program, which is code as Python's is
+  (`gawk '{system("git …")}'`, the interpreter residual on #424). **The stdin
   channel is judged by content** (#397). A program is classified when it is
   a shell `EVALUATORS` names, or a reader or interpreter named bare
   (`stdin_classified`: `READING_COMMANDS`, `STDIN_DATA_READERS`, the
@@ -641,15 +640,18 @@ A new residual is stated **here** and gets a row above.
   name runs (a `PATH` write by any builtin, `hash`, `alias`, `enable`,
   `source` or `.`, read as bash reads a command word, or a function
   definition); and a shell by a name `EVALUATORS` does not read
-  (`FOREIGN_SHELLS`: `pwsh`, `cmd`, `fish`, `nu` and others). Such a program
+  (`FOREIGN_SHELLS`: `pwsh`, `cmd`, `fish`, `nu` and others). Reserved words
+  and `eval` are read through: a change behind `then` or inside an `eval`
+  string counts. Such a program
   is refused any `git` word on its stdin and any stdin that is not on the
   line: a file other than `/dev/null`, a subshell the walk does not see, or
   a stage that transforms (`base64 -d <<<… | pwsh`). A `>(…)` starting an
   unclassified program refuses a line with a `git` word on it. Reading every
   heredoc handed to an unnamed program as a shell script would refuse an
   ordinary `py - <<'EOF'` whose Python holds a backtick, so a listed
-  reader's stdin is not judged; `xargs`, `less` and `gh` are on no list,
-  since each can run what it reads, while `sed` is, because the `sed` script
+  reader's stdin is not judged; `xargs`, `less`, `gh`, `awk` and `read` are
+  on no list, since a program can run what each reads (`awk '{system($0)}'`,
+  `while read l; do $l; done`), while `sed` is, because the `sed` script
   pass refuses every script that runs its input. Replayed over the 4000 most
   recent distinct commands of this repository's session transcripts, the
   rule changed no verdict; refusing every pipe into a program on no list

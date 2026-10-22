@@ -5573,6 +5573,14 @@ class TheGitArgvGuard(unittest.TestCase):
             "{ . /tmp/f; }; echo 'git push origin +HEAD:main' | sort",
             "base64 -d <<<Z2l0IHB1c2g= | pwsh",
             "(echo 'git push origin +HEAD:main') | npx thing",
+            # The fourth review's: a resolution change behind a reserved word
+            # or inside `eval`, a `PATH` written by `printf -v`, and the two
+            # readers whose input a program can run, `awk` and `read`.
+            "if true; then hash -p /tmp/x tee; fi; tee <<<'git push origin +HEAD:main'",
+            "eval 'hash -p /tmp/x tee'; tee <<<'git push origin +HEAD:main'",
+            "printf -v PATH %s /tmp; echo 'git push origin +HEAD:main' | sort",
+            "echo 'git push origin +HEAD:main' | awk '{system($0)}'",
+            "while read -r line; do $line; done <<<'git push origin +HEAD:main'",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command)
