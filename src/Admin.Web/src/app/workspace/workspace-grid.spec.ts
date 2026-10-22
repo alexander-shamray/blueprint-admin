@@ -1,7 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
+import { GridsterItem } from 'angular-gridster2';
 import { WorkspaceGrid } from './workspace-grid';
 import { WidgetInstance } from './workspace-types';
 
@@ -38,14 +40,18 @@ describe('WorkspaceGrid', () => {
     expect(removed).toBe('w1');
   });
 
-  it('shows a widget far below gridster’s own hundred rows', async () => {
-    const low = { ...known, id: 'low', y: 7 * 16 };
-    const fixture = render([known, low], false);
+  it('places a full-width widget far below gridster’s own hundred rows, where it was saved', async () => {
+    // Full width, so gridster has nowhere else to put it. Its `notPlaced` is what hides an item; the `display` it
+    // writes from that is set only in a layout pass, which jsdom, measuring nothing, never runs.
+    const wide = { ...known, cols: 24 };
+    const low = { ...wide, id: 'low', y: 7 * 16 };
+    const fixture = render([wide, low], false);
     await fixture.whenStable();
     fixture.detectChanges();
-    const items = [...(fixture.nativeElement as HTMLElement).querySelectorAll('gridster-item')] as HTMLElement[];
-    expect(items.length).toBe(2);
-    expect(items.map((i) => i.style.display)).not.toContain('none');
+    const placed = fixture.debugElement
+      .queryAll(By.directive(GridsterItem))
+      .map((d) => !(d.componentInstance as GridsterItem).notPlaced);
+    expect(placed).toEqual([true, true]);
     expect(fixture.componentInstance.items()[1].y).toBe(7 * 16);
   });
 
