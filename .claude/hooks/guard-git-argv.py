@@ -5140,23 +5140,38 @@ def _unquoted_positions(command):
 # file it or send it on, and execute none of it. **The safe side only**: a
 # program on no list, and no shell, is one this file cannot classify, so what
 # its stdin carries is judged by content (`unclassified_stdin_writer`).
-# `sed`, `awk`, `xargs` and `less` are left off on purpose, because each runs
-# commands taken from its input or its keys (`sed`'s `e`, `awk`'s `system`,
-# `xargs` itself, `less`'s `!`), and so is `gh`, whose `alias set` takes a
-# `!` alias that a shell runs. `READING_COMMANDS`, `DATA_ONLY_COMMANDS` and the
-# interpreters, whose code is the residual `INTERPRETER` states, are
-# classified too.
+# `xargs` and `less` are left off on purpose, because each runs commands taken
+# from its input or its keys (`xargs` itself, `less`'s `!`), and so is `gh`,
+# whose `alias set` takes a `!` alias that a shell runs. **`sed` and `awk` are
+# on it, for two different reasons.** `sed` runs its input only by a script
+# that says so (`e`, the `e` flag of `s`, a script file), and the `sed` script
+# pass refuses each of those; measured. `awk`'s program is code, as Python's
+# is, and `awk '{system($0)}'` runs its input whatever this list says: that is
+# the interpreter residual `INTERPRETER` states, not a reader's stdin. Left off,
+# they were 133 of the 4000 replayed commands' piped readers.
+# `READING_COMMANDS`, `DATA_ONLY_COMMANDS` and the interpreters are classified
+# too.
 STDIN_DATA_READERS = frozenset({
-    "base64", "clip", "column", "cut", "fmt", "fold", "iconv", "jq", "md5sum",
-    "nl", "od", "paste", "pbcopy", "sha1sum", "sha256sum", "sort", "tac", "tee",
-    "tr", "uniq", "xxd", "yq",
+    "awk", "base64", "clip", "column", "comm", "cut", "fmt", "fold", "gawk",
+    "iconv", "jq", "mawk", "md5sum", "nawk", "nl", "od", "paste", "pbcopy",
+    "read", "sed", "sha1sum", "sha256sum", "sort", "tac", "tee", "tr", "uniq",
+    "xxd", "yq",
 })
+# `read` stores its input in a variable, which is data until a command word
+# expands it (`do $line`): that is the parameter-expansion residual
+# `docs/harness-boundaries.md` states for every variable, not a reader's.
 
 
 def _launched(words):
-    """The program word the run made of `words` starts, or None."""
-    start = launched_program(words)
-    return None if start is None else words[start]
+    """The program word the run made of `words` starts, or None. A reserved
+    word in front (`do`, `while`, `then`, …) is the shell's own syntax, so the
+    program is the word after it: in `… | while read line` the reader is
+    `read`, and in `do bash helper < f` it is `bash`."""
+    position = 0
+    while position < len(words) and words[position] in SHELL_KEYWORDS:
+        position += 1
+    start = launched_program(words[position:])
+    return None if start is None else words[position + start]
 
 
 def path_qualified(word):
@@ -5176,10 +5191,54 @@ RESOLUTION_CHANGED = False
 # a function defined either way; and `source` or `.`, which can define one.
 # `sort() { bash; }; echo 'git push …' | sort` ran the push. Raised by a
 # security review; verified admitted.
+#
+# **Read as bash reads a command word, not as text.** `h''ash`, `\hash` and
+# `'alias'` run the builtin all the same, so a run's program is taken after
+# quote removal; a body or a message that merely says "hash" or "PATH" is
+# none of this. Any write to `PATH` counts, not only `PATH=`: `export`,
+# `read`, `declare` and `unset` reach it too. A function definition and `.`
+# in command position are read on the unquoted syntax. Raised by a second
+# security review; each verified admitted.
+RESOLVING_COMMANDS = frozenset({"alias", "enable", "function", "hash", "source",
+                                "unalias", "."})
+PATH_WRITERS = frozenset({"declare", "export", "local", "read", "readonly",
+                          "typeset", "unset"})
 RESOLVING = re.compile(
-    r"(?<![\w.-])(?:PATH\+?=|hash|alias|enable|source|function)(?![\w-])"
-    r"|(?<![\w.-])[A-Za-z_][\w.-]*\s*\(\s*\)"
-    r"|(?:^|[;&|(\n]\s*)\.\s")
+    r"(?<![\w.-])[A-Za-z_][\w.-]*\s*\(\s*\)"
+    r"|(?:^|[;&|(){}!\n]|(?<![\w.-])(?:if|then|do|else|elif|while|until|time)(?![\w.-]))\s*\.\s")
+
+
+def resolution_changed(command):
+    """Whether `command` changes what a bare name runs (`RESOLVING_COMMANDS`,
+    a `PATH` write, a function definition, `.` in command position). A line
+    that cannot be tokenised is taken to change it."""
+    ordinary = _unquoted_positions(command)
+    syntax = "".join(char if ordinary[index] else " "
+                     for index, char in enumerate(command))
+    if RESOLVING.search(syntax):
+        return True
+    stripped = strip_dollar_quotes(strip_redirections(
+        join_continuations(strip_comments(strip_heredocs(command)))))
+    try:
+        lexer = shlex.shlex(stripped, posix=True, punctuation_chars=True)
+        lexer.commenters = ""
+        lexer.whitespace_split = True
+        tokens = list(lexer)
+    except ValueError:
+        return True
+    for run in command_runs(tokens):
+        if any(re.match(r"PATH\+?=", word) for word in run):
+            return True
+        start = launched_program(run)
+        if start is None:
+            continue
+        name = program_name(run[start])
+        if name in RESOLVING_COMMANDS:
+            return True
+        if name in PATH_WRITERS and any(
+                re.match(r"PATH(?:\+?=|$)", word) for word in run[start + 1:]):
+            return True
+    return False
 
 
 def stdin_classified(words):
@@ -5204,12 +5263,23 @@ def stdin_classified(words):
             or name in READING_COMMANDS or name in DATA_ONLY_COMMANDS)
 
 
+# Shells by their own names that `EVALUATORS` does not read as bash, each of
+# which runs what arrives on its stdin: `base64 -d <<<… | pwsh` runs whatever
+# the bytes decode to. Raised by a security review; `pwsh` and `cmd` are on
+# this host.
+FOREIGN_SHELLS = frozenset({"cmd", "csh", "elvish", "fish", "ion", "murex", "nu",
+                            "nushell", "osh", "powershell", "pwsh", "tcsh",
+                            "xonsh", "ysh"})
+
+
 def _spoofable_reader(words):
-    """Whether the run made of `words` starts an unclassified program named by
-    a path, the shape a copied shell takes."""
+    """Whether the run made of `words` starts an unclassified program this file
+    must assume is a shell: one named by a path, the shape a copied shell
+    takes (or any name, on a line that changes resolution), or a shell by a
+    name `EVALUATORS` does not read (`FOREIGN_SHELLS`)."""
     program = _launched(words)
-    return (program is not None and path_qualified(program)
-            and not stdin_classified(words))
+    return (program is not None and not stdin_classified(words)
+            and (path_qualified(program) or program_name(program) in FOREIGN_SHELLS))
 
 
 def _reaches(command, position, ordinary, reader):
@@ -5347,9 +5417,7 @@ def unclassified_stdin_writer(command):
     """
     global RESOLUTION_CHANGED
     ordinary = _unquoted_positions(command)
-    syntax = "".join(char if ordinary[index] else " "
-                     for index, char in enumerate(command))
-    RESOLUTION_CHANGED = bool(RESOLVING.search(syntax))
+    RESOLUTION_CHANGED = resolution_changed(command)
     try:
         return _unclassified_stdin_writer(command, ordinary)
     finally:
@@ -5372,19 +5440,31 @@ def _unclassified_stdin_writer(command, ordinary):
            for body in _stdin_bodies(command, _reaches_spoofable)):
         return True
 
+    # **What a reader that must be taken for a shell is handed from anywhere
+    # but the line itself is refused, not judged.** Only a printer's text, a
+    # heredoc body and a here-string are in the source; a file, a subshell the
+    # walk does not see and a stage that transforms (`base64 -d`, `tr`) write
+    # text no content match can reproduce: `(echo 'git push …') | pwsh` and
+    # `base64 -d <<<… | pwsh` ran the push. `unmodelled_printer`'s argument,
+    # which three security reviews of this rule converged on; `/dev/null` is
+    # the one file that is no text. **For any other unclassified program, the
+    # stage's own words and the unseen subshell's line are judged by content**:
+    # refusing every pipe into a program on no list refused 164 of the 4000
+    # replayed commands, PowerShell's own pipelines among them, while a
+    # program named bare is a shell only where this line or the environment
+    # made it one (`RESOLUTION_CHANGED`, and the inherited-environment
+    # residual).
     for words, upstream in _runs_with_feeds(command, ordinary):
         if stdin_classified(words):
             continue
         strict = _spoofable_reader(words)
-        if strict and any(word in ("<", "<>") for word in words):
+        redirected = [words[index + 1] for index, word in enumerate(words[:-1])
+                      if word in ("<", "<>")]
+        if strict and any(target != "/dev/null" for target in redirected):
             return True
         if upstream is None:
             continue
         if not upstream:
-            # **A pipe from a subshell or group the walk does not see**:
-            # `(echo 'git push …') | pwsh` ran the push while the walk skipped
-            # it. Raised by a security review; verified admitted. What the
-            # unseen runs write is not read, so the line is judged whole.
             if strict or _offending_stdin(command, False):
                 return True
             continue
@@ -5392,9 +5472,6 @@ def _unclassified_stdin_writer(command, ordinary):
             program = _launched(before)
             name = program_name(program) if program else ""
             if name not in DATA_ONLY_COMMANDS:
-                # Not a printer, so not its text alone: a path-named reader
-                # takes nothing from it, and a bare one is judged on what the
-                # stage itself spells (`sed 's/^/git push … /' | pwsh`).
                 if strict or _offending_stdin(" ".join(before), False):
                     return True
                 continue
