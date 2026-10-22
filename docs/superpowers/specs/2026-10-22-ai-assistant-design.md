@@ -155,12 +155,13 @@ core's records; field names are camelCase JSON.
 | Method and path | Does |
 |---|---|
 | `GET /api/assistant` | Status: `enabled`, `provider`, `model`, and when disabled a `reason` (`off`, `no-credential`, `unreachable`). Never the credential or where it came from. |
-| `POST /api/assistant/conversations` | Opens a conversation. Body: `client` (name, version), `catalogue` (§6.1), `clientTools` (§6). Returns its `id`. |
-| `POST /api/assistant/conversations/{id}/turns` | Sends the operator's message and starts a turn. Body: `text`, `context` (what the operator is looking at: the page, the screen, the widgets on it). `409` if a turn is running. |
+| `POST /api/assistant/conversations` | Opens a conversation. Body: `client` (name, version), `locale` (§5.4), `catalogue` (§6.1), `clientTools` (§6), and `hostOptions`, an object the core hands untouched to the host's tool sources in `ToolContext` (the admin reads its `identity`, a username, §6.5). Returns its `id`. |
+| `POST /api/assistant/conversations/{id}/turns` | Sends the operator's message and starts a turn. Body: `text`, `context` (what the operator is looking at: the page, the screen, the widgets on it), and optionally a new `locale` or `hostOptions`. `409` if a turn is running. |
 | `GET /api/assistant/conversations/{id}/events` | Server-Sent Events for the conversation, with `Last-Event-ID` resume from a bounded ring, as `JobStream` does for a job. |
 | `POST /api/assistant/conversations/{id}/tool-results` | The result of a client tool call: `callId`, `ok`, `content`. |
 | `POST /api/assistant/conversations/{id}/cancel` | Ends the running turn; a provider stream in flight is cancelled. |
 | `DELETE /api/assistant/conversations/{id}` | Forgets the conversation. |
+| `POST /api/assistant/conversations/{id}/confirmations` | **Reserved** (§6.3): the operator's answer to a `confirmation_required` event. Until actions are allowed it answers `404`. |
 
 Conversations live in host memory only, bounded in number and idle time (the
 limits are `AssistantOptions`', §9), and are gone after a host restart.
@@ -201,6 +202,7 @@ the core's. No security property of the core depends on loopback.
 | `client_tool_call` | `callId`, `name`, `input` — the client runs it and posts the result |
 | `turn_ended` | `reason`: `done`, `max_steps`, `budget`, `cancelled`, `refused`, `error`; and `usage` (input, output, cached tokens) |
 | `error` | an RFC 9457 problem, as the rest of `/api` answers |
+| `confirmation_required` | **Reserved** (§6.3): `callId`, `name`, `args`, and the confirmation the console demands, if any. Never emitted until actions are allowed, and a client ignores it until then |
 
 A turn that ends because the provider refused carries `refused` and the
 provider's category if one was given; the client says so plainly rather than
