@@ -1,6 +1,8 @@
-.bar { display: flex; gap: 1.5rem; align-items: baseline; padding: 0.75rem 1rem; border-bottom: 1px solid #ddd; }
-.bar nav a { margin-right: 1rem; text-decoration: none; }
-.bar nav a.active { font-weight: 600; text-decoration: underline; }
-.palette-key { margin-left: auto; font-size: 0.85rem; color: #555; }
-.hint { font-size: 0.85rem; color: #666; }
+:host { display: flex; flex-direction: column; height: 100vh; }
+.bar { flex: none; gap: 1rem; background: var(--mat-sys-surface-container); color: var(--mat-sys-on-surface); border-bottom: 1px solid var(--app-border); }
+.title { font-size: 1.1rem; }
+.grow { flex: 1; }
+.palette-key, .hint { font-size: 0.85rem; color: var(--app-muted); }
+.shell { flex: 1; min-height: 0; background: var(--mat-sys-surface); }
+.side { width: 12rem; border-right: 1px solid var(--app-border); }
 main { padding: 1rem; }

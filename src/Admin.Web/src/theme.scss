@@ -1,0 +1,24 @@
+@use '@angular/material' as mat;
+
+// Material 3 tokens from one set: `color-scheme` picks light or dark, so the theme switch is one attribute
+// on <html> (see ThemeService) and no stylesheet is loaded twice. Fonts are the system stack (spec §3: nothing
+// is fetched at run time).
+html {
+  @include mat.theme(
+    (
+      color: (
+        theme-type: color-scheme,
+        primary: mat.$azure-palette,
+        tertiary: mat.$blue-palette,
+      ),
+      typography: (
+        plain-family: (system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif),
+        brand-family: (system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif),
+        bold-weight: 700,
+        medium-weight: 600,
+        regular-weight: 400,
+      ),
+      density: 0,
+    )
+  );
+}

@@ -498,7 +498,13 @@ later phase move one screen at a time without a page ever missing.
 - Whether a widget's refresh button and a page-wide refresh both exist.
 - The exact Mermaid mapping of each `TraceView` event kind in §8.2, within
   the rule that nothing is drawn that the timeline does not hold.
-- Whether Material Symbols ships as a font or as SVGs (§7.1).
+- ~~Whether Material Symbols ships as a font or as SVGs (§7.1).~~ Settled in
+  phase 1a (#381): the npm-bundled `@fontsource/material-symbols-outlined`
+  (the Latin 400 face, a 324 kB woff2 the browser fetches from the host once),
+  because `<mat-icon>` names a ligature and a widget can then add an icon
+  without registering an SVG. The theme is `theme.scss` (azure/blue palettes,
+  `color-scheme` for light and dark), and the screens' status colours are the
+  `--app-*` tokens in `styles.css`.
 
 ## 13. Calls this note makes
 
