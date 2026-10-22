@@ -5142,24 +5142,19 @@ def _unquoted_positions(command):
 # its stdin carries is judged by content (`unclassified_stdin_writer`).
 # `xargs` and `less` are left off on purpose, because each runs commands taken
 # from its input or its keys (`xargs` itself, `less`'s `!`), and so is `gh`,
-# whose `alias set` takes a `!` alias that a shell runs. **`sed` and `awk` are
-# on it, for two different reasons.** `sed` runs its input only by a script
-# that says so (`e`, the `e` flag of `s`, a script file), and the `sed` script
-# pass refuses each of those; measured. `awk`'s program is code, as Python's
-# is, and `awk '{system($0)}'` runs its input whatever this list says: that is
-# the interpreter residual `INTERPRETER` states, not a reader's stdin. Left off,
-# they were 133 of the 4000 replayed commands' piped readers.
-# `READING_COMMANDS`, `DATA_ONLY_COMMANDS` and the interpreters are classified
-# too.
+# whose `alias set` takes a `!` alias that a shell runs; so are `awk`, whose
+# `system` and `print |` run its input (the interpreter residual on #424), and
+# `read`, whose line a command word can then run (`do $line`). Off the list a
+# bare name keeps the content judgement, which costs none of the 4000
+# replayed commands. **`sed` is on it**, because it runs its input only by a
+# script that says so (`e`, the `e` flag of `s`, a script file), and the `sed`
+# script pass refuses each of those; probed. `READING_COMMANDS`,
+# `DATA_ONLY_COMMANDS` and the interpreters are classified too.
 STDIN_DATA_READERS = frozenset({
-    "awk", "base64", "clip", "column", "comm", "cut", "fmt", "fold", "gawk",
-    "iconv", "jq", "mawk", "md5sum", "nawk", "nl", "od", "paste", "pbcopy",
-    "read", "sed", "sha1sum", "sha256sum", "sort", "tac", "tee", "tr", "uniq",
-    "xxd", "yq",
+    "base64", "clip", "column", "comm", "cut", "fmt", "fold", "iconv", "jq",
+    "md5sum", "nl", "od", "paste", "pbcopy", "sed", "sha1sum", "sha256sum",
+    "sort", "tac", "tee", "tr", "uniq", "xxd", "yq",
 })
-# `read` stores its input in a variable, which is data until a command word
-# expands it (`do $line`): that is the parameter-expansion residual
-# `docs/harness-boundaries.md` states for every variable, not a reader's.
 
 
 def _launched(words):
@@ -5199,10 +5194,13 @@ RESOLUTION_CHANGED = False
 # `read`, `declare` and `unset` reach it too. A function definition and `.`
 # in command position are read on the unquoted syntax. Raised by a second
 # security review; each verified admitted.
-RESOLVING_COMMANDS = frozenset({"alias", "enable", "function", "hash", "source",
-                                "unalias", "."})
-PATH_WRITERS = frozenset({"declare", "export", "local", "read", "readonly",
-                          "typeset", "unset"})
+# `eval` is among them because its string can hold any of the others, which no
+# word of this run shows.
+RESOLVING_COMMANDS = frozenset({"alias", "enable", "eval", "function", "hash",
+                                "source", "unalias", "."})
+PATH_WRITERS = frozenset({"declare", "export", "getopts", "local", "mapfile",
+                          "printf", "read", "readarray", "readonly", "typeset",
+                          "unset"})
 RESOLVING = re.compile(
     r"(?<![\w.-])[A-Za-z_][\w.-]*\s*\(\s*\)"
     r"|(?:^|[;&|(){}!\n]|(?<![\w.-])(?:if|then|do|else|elif|while|until|time)(?![\w.-]))\s*\.\s")
@@ -5229,10 +5227,11 @@ def resolution_changed(command):
     for run in command_runs(tokens):
         if any(re.match(r"PATH\+?=", word) for word in run):
             return True
-        start = launched_program(run)
-        if start is None:
+        program = _launched(run)
+        if program is None:
             continue
-        name = program_name(run[start])
+        start = run.index(program)
+        name = program_name(program)
         if name in RESOLVING_COMMANDS:
             return True
         if name in PATH_WRITERS and any(
