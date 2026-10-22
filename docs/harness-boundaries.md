@@ -641,10 +641,14 @@ A new residual is stated **here** and gets a row above.
   `source` or `.`, read as bash reads a command word, or a function
   definition); and a shell by a name `EVALUATORS` does not read
   (`FOREIGN_SHELLS`: `pwsh`, `cmd`, `fish`, `nu` and others). Reserved words
-  are read through, `eval`, `trap` and `fc` count because each runs a string,
-  a write to `PATH`, `BASH_CMDS` or `BASH_ALIASES` counts however the target
-  is spelt (`printf -vPATH`, `PATH[0]=`, `BASH_CMDS[tee]=`), and so does any
-  nameref (`declare -n`). Such a program
+  are read through, `eval`, `trap`, `fc` and `mapfile -C` count because each
+  runs a string, and any text bash expands that names `PATH`, `BASH_CMDS` or
+  `BASH_ALIASES` counts however it is spelt (`for PATH in`, `${PATH:=…}`,
+  `printf -vPATH`, `BASH_CMDS[tee]=`), quoted text never (`grep 'PATH='`).
+  So do a writer's target built by an expansion, a nameref, an integer
+  attribute, `let`, and arithmetic that reads a variable (`$((x))`, a
+  subscript, a substring offset), since arithmetic evaluates a value
+  holding `PATH=0` as an assignment. Such a program
   is refused any `git` word on its stdin and any stdin that is not on the
   line: a file other than `/dev/null`, a subshell the walk does not see, or
   a stage that transforms (`base64 -d <<<… | pwsh`). A `>(…)` starting an

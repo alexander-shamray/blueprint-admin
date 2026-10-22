@@ -5216,14 +5216,81 @@ RESOLVING = re.compile(
     r"|(?:^|[;&|(){}!\n]|(?<![\w.-])(?:if|then|do|else|elif|while|until|time)(?![\w.-]))\s*\.\s")
 
 
+# **Arithmetic is a writer too.** Bash reads a variable's value as an
+# expression in arithmetic, assignments in it included, so `x='PATH=0'; : $((x))`
+# writes `PATH` under no word that names it, and `0` is then a relative
+# directory to resolve from. Any arithmetic context counts: `((`, `$((`, `$[`,
+# a subscript (`${a[i]}`, `a[i]=`), a substring offset (`${s:i}`), an
+# arithmetic test in `[[`; and so does an expansion that assigns (`${n=…}`,
+# `${n:=…}`). Raised by a security review; the expansion half verified admitted.
+# Arithmetic over literals alone reads no variable, so `${PIPESTATUS[0]}`, the
+# commonest shape in the replayed commands, is not one.
+EXPANSION_WRITES = re.compile(
+    r"\$\{[^}]*="
+    r"|\(\([^)]*[A-Za-z_]|\$\[[^]]*[A-Za-z_]"
+    r"|\$\{[^}]*\[[^]]*[A-Za-z_]"
+    r"|\$\{[^}:]*:(?![-=+?])[^}]*[A-Za-z_]"
+    r"|(?<![\w-])[A-Za-z_]\w*\[[^]]*[A-Za-z_][^]]*\]\+?="
+    r"|\[\[[^]]*\s-(?:eq|ne|lt|le|gt|ge)\s")
+
+
+def _expanded_text(command):
+    """`command` with what bash neither runs nor expands blanked: comments,
+    single- and ANSI-C-quoted text, a heredoc body that does not expand, and
+    the plain text inside double quotes or an expanding body, of which only a
+    `${…}`, `$((…))` or `$[…]` stays. So `grep 'PATH=' f` names nothing, and
+    `echo "${PATH:=/tmp}"` still writes."""
+    spans = heredoc_spans(command)
+    states = ["comment"] * len(command)
+    for index, state, _escaped in _quoting(
+            command, data=[(start, end) for start, end, _ in spans]):
+        states[index] = state
+    for start, end, expands in spans:
+        for index in range(start, min(end, len(command))):
+            states[index] = "double" if expands else "single"
+    text, index = [" "] * len(command), 0
+    while index < len(command):
+        state = states[index]
+        if state not in ("single", "double", "comment", "data"):
+            text[index] = command[index]
+            index += 1
+            continue
+        if state == "double" and command.startswith(("${", "$((", "$["), index):
+            opener = command[index + 1]
+            closer = {"{": "}", "(": ")", "[": "]"}[opener]
+            depth, cursor = 0, index + 1
+            while cursor < len(command):
+                if command[cursor] == opener:
+                    depth += 1
+                elif command[cursor] == closer:
+                    depth -= 1
+                    if depth == 0:
+                        break
+                cursor += 1
+            text[index:cursor + 1] = command[index:cursor + 1]
+            index = cursor + 1
+            continue
+        index += 1
+    return "".join(text)
+
+
 def resolution_changed(command):
     """Whether `command` changes what a bare name runs (`RESOLVING_COMMANDS`,
-    a `PATH` write, a function definition, `.` in command position). A line
-    that cannot be tokenised is taken to change it."""
+    a write to a `RESOLUTION_VARIABLES` name, arithmetic, a function
+    definition, `.` in command position). A line that cannot be tokenised is
+    taken to change it."""
     ordinary = _unquoted_positions(command)
     syntax = "".join(char if ordinary[index] else " "
                      for index, char in enumerate(command))
     if RESOLVING.search(syntax):
+        return True
+    # **Fail closed on the names, not on the ways to write them.** Five reviews
+    # each found another construct that writes one (`for PATH in …`,
+    # `${PATH:=…}`, `printf -vPATH`, a subscript, a nameref), so any text bash
+    # expands that so much as names a resolution variable counts. Quoted text
+    # does not, which is what keeps `grep 'PATH=' f | head` a read.
+    expanded = _expanded_text(command)
+    if RESOLUTION_VARIABLES.search(expanded) or EXPANSION_WRITES.search(expanded):
         return True
     stripped = strip_dollar_quotes(strip_redirections(
         join_continuations(strip_comments(strip_heredocs(command)))))
@@ -5235,24 +5302,31 @@ def resolution_changed(command):
     except ValueError:
         return True
     for run in command_runs(tokens):
-        # An assignment, as a prefix or alone: `PATH=…`, `BASH_CMDS[tee]=…`.
-        if any(ASSIGNMENT.match(word) and RESOLUTION_VARIABLES.match(word)
-               for word in run):
-            return True
         program = _launched(run)
         if program is None:
             continue
         start = run.index(program)
         name = program_name(program)
-        if name in RESOLVING_COMMANDS:
+        if name in RESOLVING_COMMANDS or name == "let":
             return True
         arguments = run[start + 1:]
+        if name == "printf" and not any(re.match(r"^-[A-Za-z]*v", word)
+                                        for word in arguments):
+            continue
+        # A writer's target is read after quote removal (`declare "PATH=/tmp"`),
+        # and a target built by an expansion is any name (`declare "$n=/tmp"`).
         if name in PATH_WRITERS and any(
-                RESOLUTION_VARIABLES.search(word) for word in arguments):
+                RESOLUTION_VARIABLES.search(word) or re.search(r"[$`]", word)
+                for word in arguments):
             return True
-        # A nameref makes another name an alias of whatever it is set to.
+        # A nameref makes another name an alias of whatever it is set to, and
+        # an integer attribute makes every later assignment arithmetic.
         if name in ("declare", "local", "typeset") and any(
-                re.match(r"^-[A-Za-z]*n", word) for word in arguments):
+                re.match(r"^-[A-Za-z]*[ni]", word) for word in arguments):
+            return True
+        # `mapfile -C` runs its callback string in this shell, as `eval` does.
+        if name in ("mapfile", "readarray") and any(
+                re.match(r"^-[A-Za-z]*C", word) for word in arguments):
             return True
     return False
 
