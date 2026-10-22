@@ -274,6 +274,11 @@ export class WorkspaceService {
     }, delay);
   }
 
+  /** A save from before an import came back and is dropped; an edit made since waited behind it, so it goes now. */
+  private resumeAfterImport(): void {
+    if (this.saveState().kind === 'pending') this.schedule(0);
+  }
+
   private save(): void {
     if (this.dragging || this.inFlight || this.etag === null) return;
     const sent = this.revision;
@@ -283,7 +288,7 @@ export class WorkspaceService {
     this.host.saveWorkspace(this.workspace(), this.etag).subscribe({
       next: (answer) => {
         this.inFlight = false;
-        if (epoch !== this.epoch) return;
+        if (epoch !== this.epoch) return this.resumeAfterImport();
         if (answer.kind === 'stale') {
           this.saveState.set({ kind: 'conflict', theirs: answer.workspace, etag: answer.etag });
           return;
@@ -294,7 +299,7 @@ export class WorkspaceService {
       },
       error: (e: unknown) => {
         this.inFlight = false;
-        if (epoch !== this.epoch) return;
+        if (epoch !== this.epoch) return this.resumeAfterImport();
         this.saveState.set({ kind: 'failed', message: describe(e) });
       },
     });
