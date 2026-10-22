@@ -5563,13 +5563,32 @@ class TheGitArgvGuard(unittest.TestCase):
             "alias jq=bash; jq <<<'git push origin +HEAD:main'",
             "(echo 'git push origin +HEAD:main') | pwsh",
             "sed 's/^/git push origin +HEAD:main /' <<<x | pwsh",
+            # The third review's: a builtin named through quoting, a `PATH`
+            # write that is not `PATH=`, `.` after a brace, and stdin a stage
+            # transforms, which no content match can reproduce, so it is
+            # refused unread.
+            "h''ash -p /tmp/x tee; tee <<<'git push origin +HEAD:main'",
+            "\\alias jq=bash; jq <<<'git push origin +HEAD:main'",
+            "export PATH=/tmp; echo 'git push origin +HEAD:main' | sort",
+            "{ . /tmp/f; }; echo 'git push origin +HEAD:main' | sort",
+            "base64 -d <<<Z2l0IHB1c2g= | pwsh",
+            "(echo 'git push origin +HEAD:main') | npx thing",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command)
-        # The words that change resolution count only as syntax, so a commit
-        # message naming them is still a filing.
-        self.assertAdmitted(
-            "git commit -F - <<'EOF'\nuse the hash and an alias as a function source\nEOF")
+        # Resolution is read from command words after quote removal, never
+        # from text, so a message naming the words is still a filing; and the
+        # reader after a reserved word is the program, so a loop reading lines
+        # and a helper run inside one are what they were.
+        for command in (
+            "git commit -F - <<'EOF'\nuse the hash and an alias as a function source\nEOF",
+            "git commit -m 'add a hash function to the PATH source' -F - <<'EOF'\nmsg\nEOF",
+            "grep -n x f | sed -n 1p | awk '{print $1}'",
+            "git branch | while read b; do echo \"$b\"; done",
+            "for f in a b; do bash .claude/scripts/gh-issue-create.sh bug low < $f.md; done",
+        ):
+            with self.subTest(command=command):
+                self.assertAdmitted(command)
 
         # A classified reader's stdin is data, and text that writes nothing is
         # nothing to refuse from a reader named bare.

@@ -615,36 +615,45 @@ A new residual is stated **here** and gets a row above.
   or exported by the profile the shell sources, which relocates a plain `git
   checkout -- settings.json` as well; an interpreter's code (`python -c`
   setting `os.environ` and starting `bash -c`), which this guard does not
-  read as a command line, the write residual above; and what an unclassified
-  program **named bare** reads on stdin when the text is not on the line: a
-  file (`npm-run-x < script.sh`, `cat script.sh | pwsh`), a command's output
-  piped on, or a writing git command spelled so no `git` word precedes its
-  subcommand; and a reader on the list whose own config makes it run its
-  input (a `git` alias beginning `!`). **The stdin channel is judged by
-  content** (#397): a program on no list, neither a shell `EVALUATORS` names
-  nor a reader or interpreter named bare (`stdin_classified`:
-  `READING_COMMANDS`, `STDIN_DATA_READERS`, the interpreters, the printers),
-  is refused a heredoc body, a here-string, a printer's text earlier in its
-  pipe or a process substitution's body that is computed (`$(`, a backtick,
-  `$'`, or a printer whose output this file cannot reproduce) or holds a
-  line that runs git to write once read as typed (`GIT_WRITER_LINE`:
-  `push`, the path writers, `rm`, `mv`, the ref-updating plumbing,
-  `difftool` and `mergetool`), so `echo 'git push origin +HEAD:main' |
-  /tmp/x` and `/tmp/x <<< 'git checkout HEAD -- settings.json'` are refused.
-  **A program named by a path is no reader**, since a copy names it
-  anything (`cp /bin/bash /tmp/sort`), and nor is any name on a line that
-  changes what a bare name runs (`RESOLVING`: a `PATH` assignment, `hash`,
-  `alias`, `enable`, `source` or `.`, a function definition): it is refused
-  any `git` word on its stdin, any stdin from a file and any piped from
-  anything but a printer. A pipe from runs the walk does not see (a
-  subshell) judges the whole line, a stage that is not a printer is judged
-  on its own words, and a `>(…)` starting an unclassified program refuses a
-  line with a `git` word on it. Reading every heredoc handed to an unnamed program as a shell
-  script would refuse an ordinary `py - <<'EOF'` whose Python holds a
-  backtick, so a listed reader's stdin is not judged; `sed`, `awk`,
-  `xargs`, `less` and `gh` are on no list, since each can run what it reads.
-  Replayed over the 4000 most recent distinct commands of this repository's
-  session transcripts, the rule changed no verdict. **A shell is a program, not a name** (#397):
+  read as a command line, the write residual above; what an unclassified
+  program **named bare, and not a shell this file knows**, reads on stdin when
+  the text is not on the line (a file, a command's output), since such a
+  program is a shell only where the environment made it one; a reader on the
+  list whose own config makes it run its input (a `git` alias beginning
+  `!`); `awk`, whose program is code as Python's is (`awk '{system($0)}'`);
+  and a line read into a variable that a command word then expands (`while
+  read l; do $l; done`), the parameter-expansion residual. **The stdin
+  channel is judged by content** (#397). A program is classified when it is
+  a shell `EVALUATORS` names, or a reader or interpreter named bare
+  (`stdin_classified`: `READING_COMMANDS`, `STDIN_DATA_READERS`, the
+  interpreters, the printers; after a reserved word such as `do` or `while`
+  the next word is the program). Any other is refused a heredoc body, a
+  here-string, a printer's text earlier in its pipe, a process
+  substitution's body, an unseen subshell's line or a transforming stage's
+  own words that are computed (`$(`, a backtick, `$'`, or a printer whose
+  output this file cannot reproduce) or hold a line that runs git to write
+  once read as typed (`GIT_WRITER_LINE`: `push`, the path writers, `rm`,
+  `mv`, the ref-updating plumbing, `difftool` and `mergetool`), so `echo
+  'git push origin +HEAD:main' | /tmp/x` and `/tmp/x <<< 'git checkout HEAD
+  -- settings.json'` are refused. **A program that must be taken for a shell
+  is held strictly**: one named by a path, since a copy names it anything
+  (`cp /bin/bash /tmp/sort`); any name on a line that changes what a bare
+  name runs (a `PATH` write by any builtin, `hash`, `alias`, `enable`,
+  `source` or `.`, read as bash reads a command word, or a function
+  definition); and a shell by a name `EVALUATORS` does not read
+  (`FOREIGN_SHELLS`: `pwsh`, `cmd`, `fish`, `nu` and others). Such a program
+  is refused any `git` word on its stdin and any stdin that is not on the
+  line: a file other than `/dev/null`, a subshell the walk does not see, or
+  a stage that transforms (`base64 -d <<<… | pwsh`). A `>(…)` starting an
+  unclassified program refuses a line with a `git` word on it. Reading every
+  heredoc handed to an unnamed program as a shell script would refuse an
+  ordinary `py - <<'EOF'` whose Python holds a backtick, so a listed
+  reader's stdin is not judged; `xargs`, `less` and `gh` are on no list,
+  since each can run what it reads, while `sed` is, because the `sed` script
+  pass refuses every script that runs its input. Replayed over the 4000 most
+  recent distinct commands of this repository's session transcripts, the
+  rule changed no verdict; refusing every pipe into a program on no list
+  would have changed 164. **A shell is a program, not a name** (#397):
   `EVALUATORS` holds the POSIX family by each name it ships under (`ash`,
   `mksh`, `yash`, `posh`, `rbash` among them), and the word after any
   program's script flag (`-c` and its bundles, `cmd`'s `/c` and `/k`, `-Command`)
