@@ -3,6 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { SCREENS } from '../screens';
 import { builtInWidgets, defaultWorkspace } from './built-in-pages';
+import { WidgetSessionStore } from './widget-session-store';
 import { SAVE_DELAY_MS, WorkspaceService } from './workspace-service';
 import { PAGE_ROWS, Workspace } from './workspace-types';
 
@@ -234,13 +235,18 @@ describe('WorkspaceService', () => {
       expect(service.pages()[1]).toEqual({ id: 'logs', title: 'Logs', builtIn: 'logs', hidden: false, widgets: null });
     });
 
-    it('adds a widget below the others and removes it', () => {
-      service.addWidget('stack', { type: 'legacy', cols: 6, rows: 4, config: { screen: 'logs' } });
-      const widgets = service.pages()[0].widgets ?? [];
+    it('adds a widget below the others and removes it, with what it kept for the session', () => {
+      service.addWidget('logs', { type: 'legacy', cols: 6, rows: 4, config: { screen: 'mail' } });
+      const widgets = service.pages()[1].widgets ?? [];
       expect(widgets.length).toBe(2);
-      expect(widgets[1]).toMatchObject({ x: 0, y: builtInWidgets('stack')[0].rows, cols: 6, rows: 4 });
-      service.removeWidget('stack', widgets[1].id);
-      expect(service.pages()[0].widgets?.length).toBe(1);
+      expect(widgets[1]).toMatchObject({ x: 0, y: builtInWidgets('logs')[0].rows, cols: 6, rows: 4 });
+      const sessions = TestBed.inject(WidgetSessionStore);
+      sessions.state(widgets[1].id, 'filter', '').set('typed');
+
+      service.removeWidget('logs', widgets[1].id);
+
+      expect(service.pages()[1].widgets?.length).toBe(1);
+      expect(sessions.state(widgets[1].id, 'filter', '')()).toBe('');
     });
 
     it('refuses a widget that would end below the last row the grid shows', () => {

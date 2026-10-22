@@ -22,6 +22,7 @@ import { WidgetInstance } from './workspace-types';
       }
       <app-workspace-grid
         class="grid"
+        [pageId]="p.id"
         [widgets]="widgets()"
         [editing]="workspace.editing()"
         (layoutChange)="workspace.setWidgets(p.id, $event)"

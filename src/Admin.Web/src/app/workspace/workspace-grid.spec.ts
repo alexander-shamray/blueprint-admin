@@ -4,6 +4,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { GridsterItem } from 'angular-gridster2';
+import { WIDGET_CONTEXT } from './widget-context';
 import { WorkspaceGrid } from './workspace-grid';
 import { GRID_COLUMNS, MAX_ROWS, WidgetInstance } from './workspace-types';
 
@@ -17,6 +18,7 @@ describe('WorkspaceGrid', () => {
 
   function render(widgets: WidgetInstance[], editing: boolean) {
     const fixture = TestBed.createComponent(WorkspaceGrid);
+    fixture.componentRef.setInput('pageId', 'p1');
     fixture.componentRef.setInput('widgets', widgets);
     fixture.componentRef.setInput('editing', editing);
     fixture.detectChanges();
@@ -28,6 +30,18 @@ describe('WorkspaceGrid', () => {
     const titles = [...element.querySelectorAll('.ws-head .ws-title')].map((h) => h.textContent?.trim());
     expect(titles).toEqual(['API', 'Unknown widget (from-a-newer-console)']);
     expect(element.querySelector('.ws-unknown')?.textContent).toContain('from-a-newer-console');
+  });
+
+  it('tells each widget its instance and page, and keeps that injector while the layout moves', () => {
+    const fixture = render([known, unknown], false);
+    const grid = fixture.componentInstance;
+    const injector = grid.injectorOf(grid.items()[0]);
+    expect(injector.get(WIDGET_CONTEXT)).toEqual({ instanceId: 'w1', pageId: 'p1' });
+
+    fixture.componentRef.setInput('widgets', [{ ...known, x: 6 }, unknown]);
+    fixture.detectChanges();
+    expect(grid.injectorOf(grid.items()[0])).toBe(injector);
+    expect(grid.injectorOf(grid.items()[1]).get(WIDGET_CONTEXT).instanceId).toBe('w2');
   });
 
   it('shows the remove control only while editing, and reports which widget', () => {
