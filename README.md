@@ -198,7 +198,8 @@ are announced.
 
 The top bar's language picker switches the console between English and
 Russian, and reloads the page to do it; it waits while a layout change is
-still being saved. The first visit follows the browser's language when the
+not yet saved, including one a failed save or a conflict left behind. The
+first visit follows the browser's language when the
 console has it. So far the shell, the palette and the shared components are
 translated; each screen follows when its workspace phase replaces it. Platform
 responses, logs, command output, typed confirmations and service and queue

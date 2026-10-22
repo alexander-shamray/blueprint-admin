@@ -77,7 +77,10 @@
   </button>
   <mat-menu #languageMenu="matMenu">
     @if (!canSwitchLanguage()) {
-      <p class="menu-note" i18n>The layout is not saved yet. Switching language reloads the page, so wait for it to save.</p>
+      <p class="menu-note" i18n>
+        The layout has a change the host does not hold yet. Switching language reloads the page, so let it save first,
+        or settle the notice under the bar.
+      </p>
     }
     @for (l of languages.choices; track l.id) {
       <button
