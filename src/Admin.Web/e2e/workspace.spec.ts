@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { Locator, Page, expect, test } from '@playwright/test';
 import { openPalette } from './palette';
 import { SCREENS } from '../src/app/screens';
@@ -165,4 +166,74 @@ test('the palette lists the pages', async ({ page }) => {
   await page.keyboard.press('Enter');
 
   await expect(page).toHaveURL(/\/transcript$/);
+});
+
+test('a widget is configured by a preset and maximised to the page, then restored', async ({ page }) => {
+  await page.goto('/stack');
+  await page.getByRole('button', { name: 'New page' }).click();
+  await expect(page).toHaveURL(/\/page\/page-/);
+  const made = page.url();
+
+  await page.getByRole('button', { name: 'Add widget' }).click();
+  await page.getByRole('menuitem', { name: 'Alerts' }).click();
+  await page.getByRole('menuitem', { name: 'Every rule' }).click();
+  await page.getByRole('button', { name: 'Add widget' }).click();
+  await page.getByRole('menuitem', { name: 'Reachability' }).click();
+  await expect(page.locator('.cdk-overlay-backdrop')).toHaveCount(0);
+
+  const titles = page.locator('gridster-item .ws-head .ws-title');
+  await expect(titles).toHaveText(['Alerts', 'Reachability']);
+  // Only a type with a choice to make has a configure control, and only while editing.
+  await expect(page.getByRole('button', { name: 'Configure Alerts' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Configure Reachability/ })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Configure Alerts' }).click();
+  await page.getByRole('menuitem', { name: 'Firing only' }).click();
+  await expect(titles).toHaveText(['Alerts (firing)', 'Reachability']);
+
+  await page.getByRole('button', { name: 'Maximise Alerts (firing)' }).click();
+  await expect(page.locator('gridster-item')).toHaveCount(0);
+  await expect(page.locator('.ws-maximised .ws-title')).toHaveText('Alerts (firing)');
+  await page.getByRole('button', { name: 'Restore Alerts (firing) to the page' }).click();
+  await expect(titles).toHaveText(['Alerts (firing)', 'Reachability']);
+
+  await page.getByRole('button', { name: 'Page actions' }).click();
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
+  await expect(page).not.toHaveURL(made);
+  await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
+});
+
+test('the workspace is exported as a file, and an import replaces it only after the operator says so', async ({ page }) => {
+  await page.goto('/stack');
+  await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
+
+  await page.getByRole('button', { name: 'Page actions' }).click();
+  const download = page.waitForEvent('download');
+  await page.getByRole('menuitem', { name: 'Export workspace' }).click();
+  const file = await download;
+  expect(file.suggestedFilename()).toBe('blueprint-admin-workspace.json');
+  const text = await readFile((await file.path())!, 'utf8');
+  expect(JSON.parse(text).pages.length).toBeGreaterThan(0);
+
+  const choose = (name: string, content: string) =>
+    page.locator('input[type=file]').setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from(content) });
+
+  // Not JSON: refused in the browser, with nothing sent.
+  await choose('broken.json', '{');
+  await expect(page.getByText('"broken.json" is not a workspace file: it is not JSON.')).toBeVisible();
+
+  // JSON that is not a workspace: asked first, then the host's own validation answers.
+  await choose('nope.json', '{"nope":true}');
+  await expect(page.getByRole('alert')).toContainText('"nope.json"');
+  await page.getByRole('button', { name: 'Replace', exact: true }).click();
+  await expect(page.getByText(/"nope.json" was not imported/)).toBeVisible();
+
+  // The export, imported back, is the workspace it was; cancelling the question replaces nothing.
+  await choose('workspace.json', text);
+  await expect(page.getByRole('alert')).toContainText('"workspace.json"');
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await choose('workspace.json', text);
+  await page.getByRole('button', { name: 'Replace', exact: true }).click();
+  await expect(page.getByText('Workspace replaced by "workspace.json".')).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: 'Stack' })).toBeVisible();
 });

@@ -59,6 +59,7 @@ module.exports = defineConfig([
           checkId: false,
           ignoreTags: ['mat-icon', 'kbd'],
           ignoreAttributes: [
+            'accept',
             'aria-autocomplete',
             'aria-controls',
             'aria-describedby',

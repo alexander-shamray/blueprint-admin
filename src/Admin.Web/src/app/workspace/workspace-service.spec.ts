@@ -262,6 +262,50 @@ describe('WorkspaceService', () => {
       expect(sessions.state(widgets[1].id, 'filter', '')()).toBe('');
     });
 
+    it('gives a widget another config and leaves its neighbours alone', () => {
+      load();
+      service.configureWidget('mail', 'builtin-mail-screen', { screen: 'trace' });
+      const [widget] = service.pages().find((p) => p.id === 'mail')?.widgets ?? [];
+      expect(widget.config).toEqual({ screen: 'trace' });
+      expect(widget.id).toBe('builtin-mail-screen');
+      vi.advanceTimersByTime(SAVE_DELAY_MS);
+      expectSave('"e1"').flush(null, { headers: { ETag: '"e2"' } });
+    });
+
+    it('replaces the workspace by an import, and ignores a save that was already on its way', () => {
+      load();
+      service.renamePage('stack', 'Mine');
+      vi.advanceTimersByTime(SAVE_DELAY_MS);
+      const inFlight = expectSave('"e1"');
+
+      const imported: Workspace = { ...defaultWorkspace(), pages: defaultWorkspace().pages.slice(0, 2) };
+      let done = false;
+      service.importWorkspace(imported).subscribe(() => (done = true));
+      const req = http.expectOne('/api/workspace/import');
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body).toEqual(imported);
+      req.flush(imported, { headers: { ETag: '"i1"' } });
+      expect(done).toBe(true);
+      expect(service.pages().slice(0, 2).map((p) => p.title)).toEqual(imported.pages.map((p) => p.title));
+      expect(service.saveState().kind).toBe('saved');
+
+      // The old save returns after the import: it must not take the import's etag from it.
+      inFlight.flush(null, { headers: { ETag: '"e2"' } });
+      service.renamePage('stack', 'After');
+      vi.advanceTimersByTime(SAVE_DELAY_MS);
+      expectSave('"i1"').flush(null, { headers: { ETag: '"i2"' } });
+    });
+
+    it('leaves the workspace as it was when the host refuses an import', () => {
+      load();
+      let refusal: unknown;
+      service.importWorkspace({ nope: true }).subscribe({ error: (e: unknown) => (refusal = e) });
+      http.expectOne('/api/workspace/import').flush({ detail: 'no pages' }, { status: 400, statusText: 'Bad Request' });
+      expect(refusal).toBeTruthy();
+      expect(service.pages().length).toBe(SCREENS.length);
+      expect(service.saveState().kind).toBe('saved');
+    });
+
     it('refuses a widget that would end below the last row the grid shows', () => {
       const tall = { type: 'legacy', cols: 24, rows: 100, config: { screen: 'logs' } };
       const id = service.addPage();

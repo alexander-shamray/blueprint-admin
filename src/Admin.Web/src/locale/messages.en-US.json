@@ -13,12 +13,17 @@
     "2650085003652611242": " Reset page ",
     "8461609631969932886": "Hide",
     "7022070615528435141": "Delete",
+    "3124810464708373831": " Export workspace ",
+    "2290897790476889438": " Import workspace… ",
     "3506804875657080331": "Unsaved",
     "1314562873676673298": "Saving…",
     "192533051761111292": "(fake platform)",
     "6245389503324784803": "commands",
     "7611293255560319876": " The layout has a change the host does not hold yet. Switching language reloads the page, so let it save first, or settle the notice under the bar. ",
     "7103588127254721505": "Theme",
+    "4282548754947892852": "Replace every page and widget with the ones in \"{$INTERPOLATION}\"? What is saved now is lost.",
+    "6254459922754143568": "Replace",
+    "2159130950882492111": "Cancel",
     "762150216032614411": "The layout was not saved: {$INTERPOLATION}",
     "7934833136974560675": "Retry",
     "3119228784505097250": "Another tab saved the workspace after this one read it.",
@@ -37,6 +42,9 @@
     "8998179362936748717": "OK",
     "3310579349610954858": "Deleted \"{$title}\"",
     "5775346636203685655": "Undo",
+    "8873359993423545888": "\"{$file}\" is not a workspace file: it is not JSON.",
+    "5237774285507741392": "Workspace replaced by \"{$file}\".",
+    "4524479968386421585": "\"{$file}\" was not imported: {$reason}",
     "3916748184733269875": "Command palette",
     "1795589471045938719": "Command",
     "6303402203207533148": "Go to a screen, run the Scenario, or paste an id to trace.",
@@ -59,6 +67,9 @@
     "7700513859725473130": "The job stream failed.",
     "176608883185932417": " This console does not know the widget type {$START_TAG_CODE}{$INTERPOLATION}{$CLOSE_TAG_CODE}. It is kept, and saved back as it was. ",
     "8784071266253543659": "Unknown widget ({$type})",
-    "5698462428573691347": "Remove {$title}"
+    "5698462428573691347": "Remove {$title}",
+    "9177967145758797820": "Configure {$title}",
+    "4076428280099591386": "Restore {$title} to the page",
+    "4193263104691864882": "Maximise {$title}"
   }
 }

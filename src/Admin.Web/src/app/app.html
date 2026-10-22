@@ -55,8 +55,16 @@
       } @else {
         <button mat-menu-item (click)="remove(page.id)" i18n="deletes the operator's page">Delete</button>
       }
+      <mat-divider />
+      <a mat-menu-item [href]="exportUrl" download [disabled]="!canExport()" i18n="downloads every page as a file">
+        Export workspace
+      </a>
+      <button mat-menu-item type="button" (click)="importFile.click()" i18n="replaces every page from a file">
+        Import workspace…
+      </button>
     </mat-menu>
   }
+  <input #importFile type="file" accept=".json,application/json" hidden (change)="chooseImport(importFile)" />
   <span class="grow"></span>
   @switch (workspace.saveState().kind) {
     @case ('pending') { <span class="save-state" role="status" i18n="the layout has a change not yet saved">Unsaved</span> }
@@ -110,6 +118,13 @@
     }
   </mat-button-toggle-group>
 </mat-toolbar>
+@if (pendingImport(); as pending) {
+  <div class="notice warn" role="alert">
+    <span i18n>Replace every page and widget with the ones in "{{ pending.name }}"? What is saved now is lost.</span>
+    <button mat-button type="button" (click)="confirmImport()" i18n="confirms replacing the workspace">Replace</button>
+    <button mat-button type="button" (click)="pendingImport.set(null)" i18n="cancels replacing the workspace">Cancel</button>
+  </div>
+}
 @switch (workspace.saveState().kind) {
   @case ('failed') {
     <div class="notice error" role="alert">

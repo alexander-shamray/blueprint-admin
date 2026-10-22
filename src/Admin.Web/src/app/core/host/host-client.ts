@@ -292,6 +292,16 @@ export class HostClient {
   }
 
   /**
+   * Replaces the saved workspace with an exported document, validated as a save is. The answer is the workspace now
+   * saved, with its etag; a document that fails the schema is a 400 error whose `detail` says why.
+   */
+  importWorkspace(document: unknown): Observable<WorkspaceRead> {
+    return this.http
+      .post<Workspace>('/api/workspace/import', document, { observe: 'response' })
+      .pipe(map((r) => ({ workspace: r.body as Workspace, etag: r.headers.get('ETag') ?? '' })));
+  }
+
+  /**
    * Saves a whole workspace over the one `etag` names. A 412 is an answer, not a failure: another tab saved first,
    * and the body is what it saved, with its etag. Anything else (400, 413, 500, no host) is an error.
    */
@@ -308,6 +318,9 @@ export class HostClient {
       );
   }
 }
+
+/** Where the saved workspace downloads from: a link, not a call, so the browser saves the file the host names. */
+export const WORKSPACE_EXPORT_URL = '/api/workspace/export';
 
 export interface WorkspaceRead {
   workspace: Workspace;
