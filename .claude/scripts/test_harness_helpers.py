@@ -5628,6 +5628,7 @@ class TheGitArgvGuard(unittest.TestCase):
             "o=-x; set $o; echo 'git push origin +HEAD:main' | sort",
             "set -{x,e}; echo 'git push origin +HEAD:main' | sort",
             "x=$'\\x50'ATH=0; o=-p; wait -n $o 'a[x]'; echo 'git push origin +HEAD:main' | sort",
+            "x=$'\\x50'ATH=0; o='-pa[x]'; wait $o; echo 'git push origin +HEAD:main' | sort",
             "shopt -so -- xtrace; echo 'git push origin +HEAD:main' | sort",
         ):
             with self.subTest(command=command):
@@ -5643,6 +5644,7 @@ class TheGitArgvGuard(unittest.TestCase):
             "git branch | while read b; do echo \"$b\"; done",
             "git branch | while read b; do [ \"$b\" != main ] && echo \"$b\"; done",
             "for d in a b; do [ -d \"$d\" ] && ls \"$d\" | head -3; done",
+            "npm start & sleep 1; kill $!; wait $!; git log --oneline | head -3",
             "for p in \"a b\" \"c d\"; do set -- $p; git log --oneline \"$2\" | head -1; done",
             # Quoted text names nothing, and arithmetic over literals reads no
             # variable.
