@@ -439,8 +439,9 @@ as a realm identity, with `RequestProxy`.
   does. An `authenticated` route takes the first user and an anonymous one
   takes none. With no user holding the permission, the tool says so and
   sends nothing. The panel can pin one user for the conversation instead,
-  as the API screen's identity picker holds one choice for the screen. Passwords and tokens stay inside `TokenService`. The model
-  sees a username at most.
+  as the API screen's identity picker holds one choice for the screen.
+  Passwords and tokens stay inside `TokenService`. The model sees a username
+  at most.
 - **What comes back.** Status, the body (cut to the size bound, with
   `truncated` set when cut), and the request's correlation id, all after
   redaction (§10). Never headers. A 401/403/404/409/422 is returned as the
@@ -562,9 +563,10 @@ like a secret, as the workspace validator does (workspace note §6.4).
 ### 9.1 Off is a configuration switch
 
 The AI feature is optional, and turning it off is configuration alone:
-`Admin:Assistant:Provider=off` in `appsettings.json`, an environment variable
-(`BLUEPRINT_Admin__Assistant__Provider=off`), or `--Admin:Assistant:Provider=off` on the
-command line, as with every other `Admin:` key. Leaving it unset is off too,
+`Admin:Assistant:Provider=off` in `appsettings.json`, an environment
+variable (`BLUEPRINT_Admin__Assistant__Provider=off`), or
+`--Admin:Assistant:Provider=off` on the command line, as with every other
+`Admin:` key. Leaving it unset is off too,
 except under FakePlatform, where unset selects the fake provider (§8.3). With
 it off:
 
