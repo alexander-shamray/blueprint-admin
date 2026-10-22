@@ -6,6 +6,7 @@ import { provideRouter } from '@angular/router';
 import { GridsterItem } from 'angular-gridster2';
 import { SCREENS } from '../screens';
 import { WIDGET_CONTEXT } from './widget-context';
+import { NOTE } from './widgets';
 import { WorkspaceGrid } from './workspace-grid';
 import { GRID_COLUMNS, MAX_ROWS, WidgetInstance } from './workspace-types';
 
@@ -76,6 +77,17 @@ describe('WorkspaceGrid', () => {
   it('has no configure control for a type with nothing to choose, or one this console does not know', () => {
     const plain: WidgetInstance = { id: 'p', type: 'stack-controls', x: 0, y: 0, cols: 12, rows: 6, config: {} };
     expect(render([plain, unknown], true).nativeElement.querySelector('button.ws-configure')).toBeNull();
+  });
+
+  it('does not offer a note its presets, which would replace what was written', async () => {
+    const note: WidgetInstance = { id: 'n', type: 'note', x: 0, y: 0, cols: 12, rows: 6, config: { source: '# Mine' } };
+    const fixture = render([note], true);
+    const element: HTMLElement = fixture.nativeElement;
+    expect(element.querySelector('button.ws-configure')).toBeNull();
+    expect(element.querySelector('.ws-title')?.textContent).toBe('Mine');
+    // The note's lazy component is loading; let it land before the test ends.
+    await NOTE.component();
+    await fixture.whenStable();
   });
 
   it('maximises one widget across the page and restores the grid, keeping the layout', () => {

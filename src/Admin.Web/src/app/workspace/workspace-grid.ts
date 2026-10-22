@@ -144,9 +144,12 @@ export class WorkspaceGrid {
     this.maximisedId.set(this.isMaximised(item) ? null : item.widget.id);
   }
 
-  /** Only a type with a choice to make has anything to configure: one preset is the config it already has. */
+  /**
+   * Only a type with a choice to make has anything to configure: one preset is the config it already has. A type
+   * whose presets are starting points (a note) is not offered them again, since a choice would replace its text.
+   */
   canConfigure(item: GridItem): boolean {
-    return (item.kind?.presets.length ?? 0) > 1;
+    return item.kind?.configurable !== false && (item.kind?.presets.length ?? 0) > 1;
   }
 
   /** Whether `preset` is the choice `item` holds now, by the config its type accepted. */

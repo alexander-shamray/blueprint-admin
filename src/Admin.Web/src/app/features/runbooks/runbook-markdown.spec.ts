@@ -21,7 +21,7 @@ describe('runbook markdown', () => {
     expect(result).toEqual([
       { kind: 'heading', level: 1, spans: [{ kind: 'text', text: 'Runbook — outbox' }] },
       { kind: 'paragraph', spans: [{ kind: 'text', text: 'One line wrapped.' }] },
-      { kind: 'code', text: 'kubectl get pods\n\necho done' },
+      { kind: 'code', text: 'kubectl get pods\n\necho done', lang: 'bash' },
       { kind: 'rule' },
     ]);
   });
