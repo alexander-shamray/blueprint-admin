@@ -270,7 +270,8 @@ edited is saved whole, and is theirs.
 **Legacy widgets in a customised page.** The legacy screen widget type (§10,
 phase 1) stays registered until phase 6, so a customised page keeps working
 through every phase. Phase 6 retires the type with a `version` bump. Its
-migration replaces each remaining `legacy:<screen>` instance with that
+migration replaces each remaining legacy instance (type `legacy`, its
+screen in `config.screen`) with that
 screen's default widgets, placed inside the rectangle the legacy widget
 occupied, stacked in their default order, and the operator is told once
 which pages it changed. The old routes keep working: `/stack`, `/trace/:correlationId`,
@@ -297,7 +298,7 @@ kind of thing.
 | Method and path | Does |
 |---|---|
 | `GET /api/workspace` | the saved workspace, or the default (§5.3) when there is none, with an `etag` |
-| `PUT /api/workspace` | body: a whole `Workspace`, with `If-Match` the etag it was based on. 200 with the new etag; 412 when another tab saved first, with the current one, which the SPA merges or offers to reload; 400 for a document that fails the schema; 413 past 1 MiB |
+| `PUT /api/workspace` | body: a whole `Workspace`, with `If-Match` the etag it was based on. 200 with the new etag; 412 when another tab saved first, with the current one, which the SPA offers to load or to save this tab's over, and saves nothing until the operator chooses; 400 for a document that fails the schema; 413 past 1 MiB |
 | `GET /api/workspace/export` | the same document as a download |
 | `POST /api/workspace/import` | body: an exported document, validated as `PUT`; replaces the workspace after the SPA asks |
 
@@ -375,7 +376,10 @@ exactly §4.1's `x, y, cols, rows`, and push and compact behaviour. Phase 1
 proves it under zoneless change detection before anything depends on it.
 **Gridstack.js** (14.x, with its Angular wrapper) is the fallback if it
 does not hold up. Either way the grid is wrapped in one `WorkspaceGrid`
-component, so the choice is replaceable.
+component, so the choice is replaceable. **Proved in phase 1c (#383):**
+22.0.0 renders, drags and resizes under zoneless change detection against
+FakePlatform, and a resize survives a reload, so the fallback was not
+needed.
 
 ## 8. Diagrams
 
@@ -499,8 +503,11 @@ later phase move one screen at a time without a page ever missing.
 
 ## 12. Left to the builder
 
-- Row height, the grid's breakpoint behaviour, each widget's default and
-  minimum size.
+- ~~Row height, the grid's breakpoint behaviour, each widget's default and
+  minimum size.~~ Settled in phase 1c (#383) for what exists so far: a row is
+  40 px (`ROW_HEIGHT_PX` in `workspace-grid.ts`), gridster's own mobile
+  breakpoint stacks the widgets, and each type's sizes live in its `WIDGETS`
+  entry (the legacy screen widget: 24 × 16 by default, 6 × 4 at least).
 - The visual design within Material 3: palette, density, spacing.
 - Whether a widget's refresh button and a page-wide refresh both exist.
 - The exact Mermaid mapping of each `TraceView` event kind in §8.2, within
