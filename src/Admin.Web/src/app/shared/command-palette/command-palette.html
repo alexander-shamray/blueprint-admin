@@ -1,7 +1,7 @@
 <dialog #dialog class="palette" aria-labelledby="palette-title">
-  <h2 id="palette-title">Command palette</h2>
-  <label for="palette-input">Command</label>
-  <p id="palette-help" class="help">Go to a screen, run the Scenario, or paste an id to trace.</p>
+  <h2 id="palette-title" i18n>Command palette</h2>
+  <label for="palette-input" i18n>Command</label>
+  <p id="palette-help" class="help" i18n>Go to a screen, run the Scenario, or paste an id to trace.</p>
   <input
     #input
     id="palette-input"
@@ -17,7 +17,7 @@
     (input)="typed($any($event.target).value)"
     (keydown)="onInputKey($event)"
   />
-  <ul id="palette-list" role="listbox" aria-label="Commands">
+  <ul id="palette-list" role="listbox" aria-label="Commands" i18n-aria-label>
     @for (command of commands(); track command.id; let i = $index) {
       <li
         role="option"
@@ -28,8 +28,8 @@
         {{ command.label }}
       </li>
     } @empty {
-      <li class="none" role="presentation">Type a correlation id, or a word from a command.</li>
+      <li class="none" role="presentation" i18n>Type a correlation id, or a word from a command.</li>
     }
   </ul>
-  <p class="keys">Up and Down choose, Enter runs, Escape closes.</p>
+  <p class="keys" i18n>Up and Down choose, Enter runs, Escape closes.</p>
 </dialog>

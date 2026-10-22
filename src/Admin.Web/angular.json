@@ -13,16 +13,25 @@
       "root": "",
       "sourceRoot": "src",
       "prefix": "app",
+      "i18n": {
+        "sourceLocale": "en-US"
+      },
       "architect": {
         "build": {
           "builder": "@angular/build:application",
           "options": {
             "browser": "src/main.ts",
+            "polyfills": ["@angular/localize/init"],
             "tsConfig": "tsconfig.app.json",
             "assets": [
               {
                 "glob": "**/*",
                 "input": "public"
+              },
+              {
+                "glob": "messages.*.json",
+                "input": "src/locale",
+                "output": "locale"
               }
             ],
             "styles": [
@@ -75,6 +84,15 @@
             }
           },
           "defaultConfiguration": "development"
+        },
+        "extract-i18n": {
+          "builder": "@angular/build:extract-i18n",
+          "options": {
+            "buildTarget": "admin-web:build",
+            "format": "json",
+            "outputPath": "src/locale",
+            "outFile": "messages.en-US.json"
+          }
         },
         "test": {
           "builder": "@angular/build:unit-test"

@@ -1,5 +1,6 @@
 import { CdkDrag, CdkDragDrop, CdkDropList } from '@angular/cdk/drag-drop';
-import { Component, inject } from '@angular/core';
+import { DecimalPipe } from '@angular/common';
+import { Component, computed, inject } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
@@ -12,6 +13,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { catchError, of } from 'rxjs';
 import { HostClient } from './core/host/host-client';
+import { LanguageService } from './core/i18n/language-service';
 import { THEME_CHOICES, ThemeService } from './core/theme/theme-service';
 import { CommandPalette } from './shared/command-palette/command-palette';
 import { differsFromBuiltIn } from './workspace/built-in-pages';
@@ -22,10 +24,17 @@ import { WorkspaceService } from './workspace/workspace-service';
 /** The icon (a Material Symbols ligature) each theme choice shows on the top bar's switch. */
 const THEME_ICONS = { system: 'brightness_auto', light: 'light_mode', dark: 'dark_mode' } as const;
 
+/** What each theme choice is called to assistive technology, the switch being icons only. */
+const THEME_LABELS = {
+  system: $localize`system theme`,
+  light: $localize`light theme`,
+  dark: $localize`dark theme`,
+} as const;
+
 /**
  * The shell (widget-workspace spec §7.2): a side navigation of the operator's pages in their order, and a top bar
- * with the open page's title, Edit layout, Add widget, the page's actions, where saving stands, the theme switch, the
- * backend directory and the palette key. The workspace is read once, here, for the whole session.
+ * with the open page's title, Edit layout, Add widget, the page's actions, where saving stands, the backend directory,
+ * the palette key, the language picker and the theme switch. The workspace is read once, here, for the whole session.
  */
 @Component({
   selector: 'app-root',
@@ -33,6 +42,7 @@ const THEME_ICONS = { system: 'brightness_auto', light: 'light_mode', dark: 'dar
     RouterOutlet,
     RouterLink,
     RouterLinkActive,
+    DecimalPipe,
     CdkDropList,
     CdkDrag,
     MatButtonModule,
@@ -52,11 +62,18 @@ export class App {
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
   readonly theme = inject(ThemeService);
+  readonly languages = inject(LanguageService);
+  readonly language = this.languages.choices.find((l) => l.id === this.languages.current) ?? this.languages.choices[0];
   readonly workspace = inject(WorkspaceService);
   readonly runningWork = inject(RunningWork);
   readonly widgetTypes = WIDGETS;
   readonly differsFromBuiltIn = differsFromBuiltIn;
-  readonly themeChoices = THEME_CHOICES.map((value) => ({ value, icon: THEME_ICONS[value] }));
+  readonly themeChoices = THEME_CHOICES.map((value) => ({ value, icon: THEME_ICONS[value], label: THEME_LABELS[value] }));
+  /**
+   * Switching language reloads the page, which would lose a layout change still waiting to be saved; once saved,
+   * or when nothing can be saved this session, the reload costs nothing the host does not hold.
+   */
+  readonly canSwitchLanguage = computed(() => ['saved', 'unavailable'].includes(this.workspace.saveState().kind));
   /** On error, fall back to undefined so the shell (nav, router outlet) still renders without the backend-dir hint. */
   readonly config = toSignal(this.host.config().pipe(catchError(() => of(undefined))));
 
@@ -83,9 +100,11 @@ export class App {
       config: structuredClone(preset.config),
     });
     if (!added) {
-      this.snackBar.open('This page has no room below its last widget: remove or shrink one first.', 'OK', {
-        duration: 8000,
-      });
+      this.snackBar.open(
+        $localize`This page has no room below its last widget: remove or shrink one first.`,
+        $localize`:dismisses a notice:OK`,
+        { duration: 8000 },
+      );
     }
   }
 
@@ -105,7 +124,7 @@ export class App {
     if (next) void this.router.navigate(this.workspace.pageLink(next.id));
     if (page.builtIn) return;
     this.snackBar
-      .open(`Deleted "${page.title}"`, 'Undo', { duration: 8000 })
+      .open($localize`Deleted "${page.title}:title:"`, $localize`Undo`, { duration: 8000 })
       .onAction()
       .subscribe(() => {
         this.workspace.restorePage(page, at);

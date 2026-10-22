@@ -1,4 +1,5 @@
 import { Locator, Page, expect, test } from '@playwright/test';
+import { openPalette } from './palette';
 import { SCREENS } from '../src/app/screens';
 
 // The widget workspace (#383, widget-workspace spec §11). Against the fake platform, whose workspace file lives in a
@@ -159,7 +160,7 @@ test('the layout is locked until Edit layout', async ({ page }) => {
 test('the palette lists the pages', async ({ page }) => {
   await page.goto('/stack');
 
-  await page.keyboard.press('Control+k');
+  await openPalette(page);
   await page.keyboard.type('transcript');
   await page.keyboard.press('Enter');
 

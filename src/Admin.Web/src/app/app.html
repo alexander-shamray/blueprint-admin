@@ -1,10 +1,11 @@
 <mat-toolbar class="bar">
-  <strong class="title">blueprint-admin</strong>
+  <strong class="title" i18n="the console's name, kept as written in every language">blueprint-admin</strong>
   @if (workspace.currentPage(); as page) {
     @if (workspace.editing()) {
       <input
         class="page-title edit"
         aria-label="Page title"
+        i18n-aria-label
         [value]="page.title"
         (change)="rename(page.id, $any($event.target).value)"
         (keydown.enter)="$any($event.target).blur()"
@@ -14,10 +15,14 @@
     }
     <button mat-stroked-button type="button" class="edit-layout" (click)="workspace.editing.set(!workspace.editing())">
       <mat-icon aria-hidden="true">{{ workspace.editing() ? 'check' : 'dashboard_customize' }}</mat-icon>
-      {{ workspace.editing() ? 'Done' : 'Edit layout' }}
+      @if (workspace.editing()) {
+        <ng-container i18n="leaves layout editing">Done</ng-container>
+      } @else {
+        <ng-container i18n>Edit layout</ng-container>
+      }
     </button>
     <button mat-stroked-button type="button" [matMenuTriggerFor]="addMenu">
-      <mat-icon aria-hidden="true">add</mat-icon> Add widget
+      <mat-icon aria-hidden="true">add</mat-icon> <ng-container i18n>Add widget</ng-container>
     </button>
     <mat-menu #addMenu="matMenu">
       @for (kind of widgetTypes; track kind.type) {
@@ -35,25 +40,27 @@
         }
       </ng-template>
     </mat-menu>
-    <button mat-icon-button type="button" aria-label="Page actions" [matMenuTriggerFor]="pageMenu">
+    <button mat-icon-button type="button" aria-label="Page actions" i18n-aria-label [matMenuTriggerFor]="pageMenu">
       <mat-icon aria-hidden="true">more_vert</mat-icon>
     </button>
     <mat-menu #pageMenu="matMenu">
-      <button mat-menu-item (click)="workspace.movePageBy(page.id, -1)">Move up</button>
-      <button mat-menu-item (click)="workspace.movePageBy(page.id, 1)">Move down</button>
-      <button mat-menu-item (click)="duplicate(page.id)">Duplicate</button>
+      <button mat-menu-item (click)="workspace.movePageBy(page.id, -1)" i18n>Move up</button>
+      <button mat-menu-item (click)="workspace.movePageBy(page.id, 1)" i18n>Move down</button>
+      <button mat-menu-item (click)="duplicate(page.id)" i18n>Duplicate</button>
       @if (page.builtIn) {
-        <button mat-menu-item [disabled]="!differsFromBuiltIn(page)" (click)="workspace.resetPage(page.id)">Reset page</button>
-        <button mat-menu-item (click)="remove(page.id)">Hide</button>
+        <button mat-menu-item [disabled]="!differsFromBuiltIn(page)" (click)="workspace.resetPage(page.id)" i18n>
+          Reset page
+        </button>
+        <button mat-menu-item (click)="remove(page.id)" i18n="hides a built-in page">Hide</button>
       } @else {
-        <button mat-menu-item (click)="remove(page.id)">Delete</button>
+        <button mat-menu-item (click)="remove(page.id)" i18n="deletes the operator's page">Delete</button>
       }
     </mat-menu>
   }
   <span class="grow"></span>
   @switch (workspace.saveState().kind) {
-    @case ('pending') { <span class="save-state" role="status">Unsaved</span> }
-    @case ('saving') { <span class="save-state" role="status">Saving…</span> }
+    @case ('pending') { <span class="save-state" role="status" i18n="the layout has a change not yet saved">Unsaved</span> }
+    @case ('saving') { <span class="save-state" role="status" i18n>Saving…</span> }
   }
   <!-- Work that goes on while no page shows it (spec §4.3): each item links to the page that does. -->
   <span class="running-work" aria-live="polite">
@@ -62,18 +69,39 @@
     }
   </span>
   @if (config(); as c) {
-    <span class="hint">{{ c.backendDir }} @if (c.fakePlatform) {<em>(fake platform)</em>}</span>
+    <span class="hint">{{ c.backendDir }} @if (c.fakePlatform) {<em i18n>(fake platform)</em>}</span>
   }
-  <span class="palette-key"><kbd>Ctrl</kbd>+<kbd>K</kbd> commands</span>
+  <span class="palette-key"><kbd>Ctrl</kbd>+<kbd>K</kbd> <ng-container i18n="opens the command palette">commands</ng-container></span>
+  <button mat-button type="button" class="language" aria-label="Language" i18n-aria-label [matMenuTriggerFor]="languageMenu">
+    <mat-icon aria-hidden="true">translate</mat-icon> {{ language.name }}
+  </button>
+  <mat-menu #languageMenu="matMenu">
+    @if (!canSwitchLanguage()) {
+      <p class="menu-note" i18n>The layout is not saved yet. Switching language reloads the page, so wait for it to save.</p>
+    }
+    @for (l of languages.choices; track l.id) {
+      <button
+        mat-menu-item
+        type="button"
+        [attr.lang]="l.id"
+        [disabled]="!canSwitchLanguage() && l.id !== languages.current"
+        [attr.aria-current]="l.id === languages.current ? 'true' : null"
+        (click)="languages.switchTo(l.id)"
+      >
+        {{ l.name }}
+      </button>
+    }
+  </mat-menu>
   <mat-button-toggle-group
     class="theme-switch"
     aria-label="Theme"
+    i18n-aria-label
     hideSingleSelectionIndicator
     [value]="theme.choice()"
     (change)="theme.set($event.value)"
   >
     @for (c of themeChoices; track c.value) {
-      <mat-button-toggle [value]="c.value" [aria-label]="c.value + ' theme'">
+      <mat-button-toggle [value]="c.value" [aria-label]="c.label">
         <mat-icon aria-hidden="true">{{ c.icon }}</mat-icon>
       </mat-button-toggle>
     }
@@ -82,19 +110,19 @@
 @switch (workspace.saveState().kind) {
   @case ('failed') {
     <div class="notice error" role="alert">
-      The layout was not saved: {{ $any(workspace.saveState()).message }}
-      <button mat-button type="button" (click)="workspace.retry()">Retry</button>
+      <span i18n>The layout was not saved: {{ $any(workspace.saveState()).message }}</span>
+      <button mat-button type="button" (click)="workspace.retry()" i18n>Retry</button>
     </div>
   }
   @case ('conflict') {
     <div class="notice warn" role="alert">
-      Another tab saved the workspace after this one read it.
-      <button mat-button type="button" (click)="workspace.resolveConflict('theirs')">Load the saved one</button>
-      <button mat-button type="button" (click)="workspace.resolveConflict('mine')">Keep this tab's</button>
+      <span i18n>Another tab saved the workspace after this one read it.</span>
+      <button mat-button type="button" (click)="workspace.resolveConflict('theirs')" i18n>Load the saved one</button>
+      <button mat-button type="button" (click)="workspace.resolveConflict('mine')" i18n>Keep this tab's</button>
     </div>
   }
   @case ('unavailable') {
-    <div class="notice error" role="alert">
+    <div class="notice error" role="alert" i18n>
       The saved workspace could not be read ({{ $any(workspace.saveState()).message }}), so these are the default pages
       and nothing will be saved until the console is reloaded.
     </div>
@@ -102,7 +130,7 @@
 }
 <mat-sidenav-container class="shell">
   <mat-sidenav mode="side" opened disableClose class="side">
-    <nav aria-label="Pages">
+    <nav aria-label="Pages" i18n-aria-label>
       <mat-nav-list cdkDropList [cdkDropListDisabled]="!workspace.editing()" (cdkDropListDropped)="dropped($event)">
         @for (page of workspace.visiblePages(); track page.id) {
           <a
@@ -118,16 +146,16 @@
       </mat-nav-list>
     </nav>
     <button mat-button type="button" class="new-page" (click)="newPage()">
-      <mat-icon aria-hidden="true">add</mat-icon> New page
+      <mat-icon aria-hidden="true">add</mat-icon> <ng-container i18n>New page</ng-container>
     </button>
     @if (workspace.hiddenPages().length > 0) {
       <details class="hidden-pages">
-        <summary>Hidden pages ({{ workspace.hiddenPages().length }})</summary>
+        <summary i18n>Hidden pages ({{ workspace.hiddenPages().length | number }})</summary>
         <ul>
           @for (page of workspace.hiddenPages(); track page.id) {
             <li>
               <a [routerLink]="workspace.pageLink(page.id)">{{ page.title }}</a>
-              <button mat-button type="button" (click)="workspace.setHidden(page.id, false)">Show</button>
+              <button mat-button type="button" (click)="workspace.setHidden(page.id, false)" i18n="shows a hidden page">Show</button>
             </li>
           }
         </ul>

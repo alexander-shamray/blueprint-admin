@@ -196,6 +196,14 @@ id: …`), so a failure in the client is one paste from its timeline. Job output
 is a log a screen reader can read on demand; only a job's start and its exit
 are announced.
 
+The top bar's language picker switches the console between English and
+Russian, and reloads the page to do it; it waits while a layout change is
+still being saved. The first visit follows the browser's language when the
+console has it. So far the shell, the palette and the shared components are
+translated; each screen follows when its workspace phase replaces it. Platform
+responses, logs, command output, typed confirmations and service and queue
+names stay as written.
+
 ## Known limits
 
 - A game-day cause stays until Undo is pressed, and a host that is stopped while

@@ -15,8 +15,8 @@ const PROBLEM = /\b(error|unhealthy|failed|denied)\b/i;
   selector: 'app-output-pane',
   template: `
     <p class="visually-hidden" role="status">{{ announcement() }}</p>
-    <pre #pane class="pane" role="log" aria-live="off" aria-label="Job output" tabindex="0">@for (l of lines(); track l.sequence) {<span [class.stderr]="isProblem(l)">@if (isProblem(l)) {<span class="tag">[stderr] </span>}{{ l.text }}
-</span>}@if (exitCode() !== null) {<span class="exit">exited {{ exitCode() }}</span>}</pre>
+    <pre #pane class="pane" role="log" aria-live="off" aria-label="Job output" i18n-aria-label tabindex="0">@for (l of lines(); track l.sequence) {<span [class.stderr]="isProblem(l)">@if (isProblem(l)) {<span class="tag">{{ stderrTag }} </span>}{{ l.text }}
+</span>}@if (exitCode() !== null) {<span class="exit" i18n="a job's exit code">exited {{ exitCode() }}</span>}</pre>
     @if (error(); as e) {<p class="error" role="alert">{{ e }}</p>}
   `,
   styles: `
@@ -29,6 +29,8 @@ const PROBLEM = /\b(error|unhealthy|failed|denied)\b/i;
   `,
 })
 export class OutputPane {
+  /** The stream's own name, like the command output it marks: never translated (AI assistant design §5.5). */
+  readonly stderrTag = '[stderr]';
   readonly jobId = input<string | null>(null);
   /**
    * Set for a `docker compose` job, which writes all of its progress to stderr: a stderr line is then marked only
@@ -45,7 +47,9 @@ export class OutputPane {
   readonly announcement = computed(() => {
     if (!this.jobId()) return '';
     const code = this.exitCode();
-    return code === null ? 'A job is running; its output is in the job output log.' : `The job exited ${code}.`;
+    return code === null
+      ? $localize`A job is running; its output is in the job output log.`
+      : $localize`The job exited ${code}:exitCode:.`;
   });
 
   isProblem(line: OutputLine): boolean {
@@ -84,7 +88,7 @@ export class OutputPane {
           });
         },
         error: (err: unknown) => {
-          this.error.set(err instanceof Error ? err.message : 'The job stream failed.');
+          this.error.set(err instanceof Error ? err.message : $localize`The job stream failed.`);
           this.failed.emit();
         },
       });

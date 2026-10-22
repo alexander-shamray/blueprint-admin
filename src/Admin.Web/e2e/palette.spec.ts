@@ -1,12 +1,12 @@
 import { expect, test } from '@playwright/test';
+import { openPalette } from './palette';
 
 // The command palette, driven by the keyboard alone (#81). Against the fake platform: demo-trace-0001 is the
 // correlation id FakeGrafana's Loki recording carries, and the Scenario runs as scenario.spec.ts describes.
 test('the palette goes to a screen by keyboard alone', async ({ page }) => {
   await page.goto('/stack');
 
-  await page.keyboard.press('Control+k');
-  await expect(page.getByRole('dialog', { name: 'Command palette' })).toBeVisible();
+  await openPalette(page);
   await page.keyboard.type('broker');
   await page.keyboard.press('Enter');
 
@@ -17,7 +17,7 @@ test('the palette goes to a screen by keyboard alone', async ({ page }) => {
 test('a correlation id pasted into the palette lands on its timeline', async ({ page }) => {
   await page.goto('/stack');
 
-  await page.keyboard.press('Control+k');
+  await openPalette(page);
   await page.keyboard.type('demo-trace-0001');
   await page.keyboard.press('Enter');
 
@@ -28,7 +28,7 @@ test('a correlation id pasted into the palette lands on its timeline', async ({ 
 test('an id the platform would not adopt is refused by the trace endpoint, not let through by the palette', async ({ page }) => {
   await page.goto('/stack');
 
-  await page.keyboard.press('Control+k');
+  await openPalette(page);
   await page.keyboard.type('not an id');
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('ArrowUp');
@@ -40,7 +40,7 @@ test('an id the platform would not adopt is refused by the trace endpoint, not l
 test('the palette runs the Scenario, which is asked for and never put in the URL', async ({ page }) => {
   await page.goto('/stack');
 
-  await page.keyboard.press('Control+k');
+  await openPalette(page);
   await page.keyboard.type('run the scenario');
   await page.keyboard.press('Enter');
 
@@ -51,7 +51,7 @@ test('the palette runs the Scenario, which is asked for and never put in the URL
 test('Escape closes the palette and leaves the screen as it was', async ({ page }) => {
   await page.goto('/logs');
 
-  await page.keyboard.press('Control+k');
+  await openPalette(page);
   await page.keyboard.type('broker');
   await page.keyboard.press('Escape');
 
