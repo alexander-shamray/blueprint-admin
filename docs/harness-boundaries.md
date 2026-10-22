@@ -652,7 +652,13 @@ A new residual is stated **here** and gets a row above.
   an indirect `${!n}`, a `${…@…}` transformation, a compound assignment's
   subscript, a substring offset, a prompt string or `set -x`, which
   prompt-expands `PS4`), since arithmetic evaluates a value
-  holding `PATH=0` as an assignment. Such a program
+  holding `PATH=0` as an assignment. **What stays open there is bounded by
+  #424**: a route this list does not name, such as an unquoted expansion,
+  a glob or a brace expansion that word-splits into a `test` operator, or a
+  command word that comes from an expansion. Closing every route needs a
+  bash interpreter, not an argv guard. It would also buy nothing past what
+  an interpreter on the line already does unjudged (`python -c` running
+  git), which #424 accepts. Such a program
   is refused any `git` word on its stdin and any stdin that is not on the
   line: a file other than `/dev/null`, a subshell the walk does not see, or
   a stage that transforms (`base64 -d <<<… | pwsh`). A `>(…)` starting an

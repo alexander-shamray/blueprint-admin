@@ -5623,6 +5623,7 @@ class TheGitArgvGuard(unittest.TestCase):
             "x=$'\\x50'ATH=0; o=-v; test $o 'a[x]'; echo 'git push origin +HEAD:main' | sort",
             "PS4='$((x))'; set -x; echo 'git push origin +HEAD:main' | sort",
             "p=$'\\x50'S4; set -x; echo 'git push origin +HEAD:main' | sort",
+            "set -o 'xtrace'; echo 'git push origin +HEAD:main' | sort",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command)
