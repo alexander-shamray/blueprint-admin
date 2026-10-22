@@ -217,8 +217,8 @@ its own, only the model's reply.
   (BCP 47, e.g. `ru-RU`, `en-US`), and a turn may change it. The reply follows
   the language of the caller's latest message. `locale` decides only when
   that message has no language, such as a bare correlation id. The core adds
-  this rule to each turn's context. It sits after the cache breakpoint, so a
-  locale or language change never invalidates the cached prefix.
+  this rule to the latest user message, after the history (§7), so a locale
+  or language change never invalidates the cached prefix.
 - **Names as the caller's UI shows them.** A screen, widget or page is named
   in the reply exactly as the client labels it *in the active locale*, so the
   caller can find what the reply points at. Each catalogue entry carries its
@@ -465,8 +465,11 @@ as a realm identity, with `RequestProxy`.
 
 `AssistantSession` owns it; providers do one turn each (§8).
 
-1. Build the request: fixed system text, catalogue, the client's context for
-   this turn, every tool from every source and the client, the history.
+1. Build the request in cache order: the tools from every source and the
+   client, the fixed system text and the catalogue, then the history. This
+   turn's client context and the language rule (§5.4) ride in the latest
+   user message, after the history, so nothing that changes per turn sits in
+   front of a part that could be reused.
 2. Stream the provider's turn, relaying `text` as it arrives.
 3. If the turn asked for tools: run every server call concurrently with a
    timeout, emit every client call and wait for its result, then add **all**
@@ -519,8 +522,10 @@ vendor type.
   is omitted); `tool_choice` `auto`, since the current models refuse a forced
   one; `strict: true` on every tool.
 - A prompt-cache breakpoint after the tools, the system text and the
-  catalogue — the part that does not change between turns — and nothing that
-  varies (a time, a page id) before it. `usage.cache_read_input_tokens` is
+  catalogue (the part that does not change between turns) and a second at
+  the end of the history, so each request reuses the conversation so far.
+  Nothing that varies (a time, a page id, the turn's context) comes before
+  either. `usage.cache_read_input_tokens` is
   reported in `turn_ended`, so a broken cache shows.
 - The server-side refusal fallback on (`fallbacks: "default"`), and a
   `refusal` stop reason mapped to `End(refused)`.
@@ -688,8 +693,8 @@ design, not this note's.
 - **SPA (Vitest)**: the client parses events, runs a client tool and posts its
   result, resumes; the panel streams, shows a refusal, cancels, holds no
   timer when hidden; every registry entry has `help`.
-- **Languages**: the core's per-turn context carries the language rule after
-  the cache breakpoint, and a locale change leaves the prefix byte-identical.
+- **Languages**: the language rule and the turn's context ride in the latest
+  user message, and a locale change leaves the prefix byte-identical.
   Every code a client receives has a translated message in every shipped
   locale (a Vitest spec walks the protocol's code unions). The extraction
   check of §5.5 fails a missing translation. Each shipped locale bootstraps,
