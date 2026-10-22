@@ -70,8 +70,9 @@ export class App {
   readonly differsFromBuiltIn = differsFromBuiltIn;
   readonly themeChoices = THEME_CHOICES.map((value) => ({ value, icon: THEME_ICONS[value], label: THEME_LABELS[value] }));
   /**
-   * Switching language reloads the page, which would lose a layout change still waiting to be saved; once saved,
-   * or when nothing can be saved this session, the reload costs nothing the host does not hold.
+   * Switching language reloads the page, which would lose a layout change the host does not hold: one pending or
+   * saving, and one a failed save or a conflict left behind, neither of which saves until the operator acts. Once
+   * saved, or when nothing can be saved this session, the reload costs nothing.
    */
   readonly canSwitchLanguage = computed(() => ['saved', 'unavailable'].includes(this.workspace.saveState().kind));
   /** On error, fall back to undefined so the shell (nav, router outlet) still renders without the backend-dir hint. */
