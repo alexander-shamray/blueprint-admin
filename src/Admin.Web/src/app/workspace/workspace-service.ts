@@ -3,7 +3,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { HostClient } from '../core/host/host-client';
 import { builtInTitle, defaultWorkspace, widgetsOf, withEveryBuiltIn } from './built-in-pages';
 import { isScreenPath } from './screen-components';
-import { Page, WidgetInstance, Workspace, newId } from './workspace-types';
+import { PAGE_ROWS, Page, WidgetInstance, Workspace, newId } from './workspace-types';
 
 /** How long after the last change a save waits (widget-workspace spec §6.2: "about 1 s"). */
 export const SAVE_DELAY_MS = 1000;
@@ -169,13 +169,18 @@ export class WorkspaceService {
     this.changePage(id, (p) => ({ ...p, widgets }));
   }
 
-  addWidget(id: string, widget: Omit<WidgetInstance, 'id' | 'x' | 'y'>): void {
+  /**
+   * Puts a widget below everything already on the page: a fixed place nothing has to be pushed out of. False when it
+   * would end below PAGE_ROWS, where the grid could not show it; nothing is added then.
+   */
+  addWidget(id: string, widget: Omit<WidgetInstance, 'id' | 'x' | 'y'>): boolean {
     const page = this.pages().find((p) => p.id === id);
-    if (!page) return;
+    if (!page) return false;
     const current = widgetsOf(page);
-    // Below everything already there: a fixed place nothing has to be pushed out of.
     const y = current.reduce((bottom, w) => Math.max(bottom, w.y + w.rows), 0);
+    if (y + widget.rows > PAGE_ROWS) return false;
     this.setWidgets(id, [...current, { ...widget, id: newId('widget'), x: 0, y }]);
+    return true;
   }
 
   removeWidget(id: string, widgetId: string): void {
