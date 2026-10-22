@@ -3,6 +3,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { HostClient } from '../core/host/host-client';
 import { builtInTitle, defaultWorkspace, widgetsOf, withEveryBuiltIn } from './built-in-pages';
 import { isScreenPath } from './screen-components';
+import { WidgetSessionStore } from './widget-session-store';
 import { PAGE_ROWS, Page, WidgetInstance, Workspace, newId } from './workspace-types';
 
 /** How long after the last change a save waits (widget-workspace spec §6.2: "about 1 s"). */
@@ -28,6 +29,7 @@ export type SaveState =
 @Injectable({ providedIn: 'root' })
 export class WorkspaceService {
   private readonly host = inject(HostClient);
+  private readonly sessions = inject(WidgetSessionStore);
 
   readonly workspace = signal<Workspace>(defaultWorkspace());
   readonly loaded = signal(false);
@@ -183,9 +185,12 @@ export class WorkspaceService {
     return true;
   }
 
+  /** A widget taken off its page, and what it kept for the session with it: a remove has no undo. */
   removeWidget(id: string, widgetId: string): void {
     const page = this.pages().find((p) => p.id === id);
-    if (page) this.setWidgets(id, widgetsOf(page).filter((w) => w.id !== widgetId));
+    if (!page) return;
+    this.setWidgets(id, widgetsOf(page).filter((w) => w.id !== widgetId));
+    this.sessions.forget([widgetId]);
   }
 
   /** A drag or a resize starting or ending: nothing is saved in between, and the end saves what it left. */

@@ -23,7 +23,7 @@
         <div class="ws-body">
           @if (item.kind) {
             @if (componentOf(item); as component) {
-              <ng-container *ngComponentOutlet="component; inputs: { config: item.config }" />
+              <ng-container *ngComponentOutlet="component; inputs: { config: item.config }; injector: injectorOf(item)" />
             }
           } @else {
             <p class="ws-unknown">

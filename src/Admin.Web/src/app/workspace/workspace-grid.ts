@@ -1,8 +1,9 @@
 import { NgComponentOutlet } from '@angular/common';
-import { Component, Type, computed, effect, input, output, signal, untracked } from '@angular/core';
+import { Component, Injector, Type, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { Gridster, GridsterConfig, GridsterItem, GridsterItemConfig } from 'angular-gridster2';
+import { WIDGET_CONTEXT, WidgetContext } from './widget-context';
 import { WidgetType, widgetType } from './widgets';
 import { GRID_COLUMNS, MAX_ROWS, PAGE_ROWS, WidgetInstance } from './workspace-types';
 
@@ -28,8 +29,28 @@ interface GridItem extends GridsterItemConfig {
   styleUrl: './workspace-grid.css',
 })
 export class WorkspaceGrid {
+  private readonly injector = inject(Injector);
+
+  readonly pageId = input.required<string>();
   readonly widgets = input.required<WidgetInstance[]>();
   readonly editing = input(false);
+
+  /**
+   * Each widget's injector, which tells it its instance and page (WIDGET_CONTEXT). Kept per instance, because a new
+   * injector makes `*ngComponentOutlet` create the widget again, and a drag recomputes every item.
+   */
+  private readonly injectors = new Map<string, Injector>();
+
+  injectorOf(item: GridItem): Injector {
+    const context: WidgetContext = { instanceId: item.widget.id, pageId: this.pageId() };
+    const key = `${context.pageId}\n${context.instanceId}`;
+    let injector = this.injectors.get(key);
+    if (!injector) {
+      injector = Injector.create({ providers: [{ provide: WIDGET_CONTEXT, useValue: context }], parent: this.injector });
+      this.injectors.set(key, injector);
+    }
+    return injector;
+  }
 
   readonly layoutChange = output<WidgetInstance[]>();
   readonly removeWidget = output<string>();
