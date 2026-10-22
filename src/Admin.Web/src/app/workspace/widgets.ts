@@ -1,6 +1,7 @@
 import { Type } from '@angular/core';
 import { SCREENS } from '../screens';
 import { isScreenPath } from './screen-components';
+import { stringList } from './widget-config';
 
 /** A size in grid cells. */
 export interface CellSize {
@@ -46,11 +47,118 @@ export const LEGACY_SCREEN: WidgetType = {
   dataServices: [],
 };
 
+type Kind = Omit<WidgetType, 'config' | 'titleOf' | 'presets'>;
+
+/** A type with nothing to configure: every stored value is dropped, and its one preset adds it as it is. */
+function plain(kind: Kind): WidgetType {
+  return { ...kind, config: () => ({}), titleOf: () => kind.title, presets: [{ label: kind.title, config: {} }] };
+}
+
+/** A type configured by one list of names to show, where `[]`, its preset, is every one. */
+function listing(key: string, every: string, kind: Kind): WidgetType {
+  return {
+    ...kind,
+    config: (stored) => ({ [key]: stringList(stored[key]) }),
+    titleOf: (config) => {
+      const shown = stringList(config[key]);
+      return shown.length === 0 ? kind.title : `${kind.title} (${shown.join(', ')})`;
+    },
+    presets: [{ label: every, config: { [key]: [] } }],
+  };
+}
+
+/** The Stack page's widgets (§5.2), which read `StackFeed` and `ComposeRun` in features/stack/stack-feed.ts. */
+export const STACK_WIDGETS = {
+  doctor: plain({
+    type: 'workstation-doctor',
+    title: 'Workstation doctor',
+    component: () => import('../features/stack/widgets/workstation-doctor-widget').then((m) => m.WorkstationDoctorWidget),
+    defaultSize: { cols: 12, rows: 10 },
+    minSize: { cols: 6, rows: 4 },
+    dataServices: [],
+  }),
+  controls: plain({
+    type: 'stack-controls',
+    title: 'Stack controls',
+    component: () => import('../features/stack/widgets/stack-controls-widget').then((m) => m.StackControlsWidget),
+    defaultSize: { cols: 12, rows: 7 },
+    minSize: { cols: 6, rows: 3 },
+    dataServices: ['StackFeed', 'ComposeRun', 'PageJobs'],
+  }),
+  services: listing('services', 'All services', {
+    type: 'compose-services',
+    title: 'Compose services',
+    component: () => import('../features/stack/widgets/compose-services-widget').then((m) => m.ComposeServicesWidget),
+    defaultSize: { cols: 12, rows: 12 },
+    minSize: { cols: 6, rows: 3 },
+    dataServices: ['StackFeed'],
+  }),
+  reachability: listing('surfaces', 'All surfaces', {
+    type: 'reachability',
+    title: 'Reachability',
+    component: () => import('../features/stack/widgets/reachability-widget').then((m) => m.ReachabilityWidget),
+    defaultSize: { cols: 24, rows: 3 },
+    minSize: { cols: 4, rows: 2 },
+    dataServices: ['StackFeed'],
+  }),
+  signals: listing('services', 'All services', {
+    type: 'golden-signals',
+    title: 'Golden signals',
+    component: () => import('../features/stack/widgets/golden-signals-widget').then((m) => m.GoldenSignalsWidget),
+    defaultSize: { cols: 14, rows: 8 },
+    minSize: { cols: 6, rows: 3 },
+    dataServices: ['StackFeed'],
+  }),
+  alerts: {
+    type: 'alerts',
+    title: 'Alerts',
+    component: () => import('../features/stack/widgets/alerts-widget').then((m) => m.AlertsWidget),
+    defaultSize: { cols: 10, rows: 8 },
+    minSize: { cols: 6, rows: 3 },
+    config: (stored) => ({ firingOnly: stored['firingOnly'] === true }),
+    titleOf: (config) => (config['firingOnly'] === true ? 'Alerts (firing)' : 'Alerts'),
+    presets: [
+      { label: 'Every rule', config: { firingOnly: false } },
+      { label: 'Firing only', config: { firingOnly: true } },
+    ],
+    dataServices: ['StackFeed'],
+  } satisfies WidgetType,
+  loadRun: plain({
+    type: 'load-run',
+    title: 'Load run',
+    component: () => import('../features/stack/widgets/load-run-widget').then((m) => m.LoadRunWidget),
+    defaultSize: { cols: 10, rows: 8 },
+    minSize: { cols: 6, rows: 4 },
+    dataServices: ['StackFeed', 'PageJobs'],
+  }),
+  client: plain({
+    type: 'reference-client',
+    title: 'Reference client',
+    component: () => import('../features/stack/widgets/reference-client-widget').then((m) => m.ReferenceClientWidget),
+    defaultSize: { cols: 14, rows: 12 },
+    minSize: { cols: 6, rows: 4 },
+    dataServices: ['StackFeed', 'PageJobs'],
+  }),
+} as const;
+
+/** Every screen's output pane, as a widget of its own (§5.2): a job by id, or the job its page started last. */
+export const JOB_OUTPUT: WidgetType = {
+  type: 'job-output',
+  title: 'Job output',
+  component: () => import('./job-output-widget').then((m) => m.JobOutputWidget),
+  defaultSize: { cols: 12, rows: 7 },
+  minSize: { cols: 4, rows: 3 },
+  config: (stored) => ({ jobId: typeof stored['jobId'] === 'string' ? stored['jobId'] : null }),
+  titleOf: (config) => (typeof config['jobId'] === 'string' ? `Job output (${config['jobId']})` : 'Job output'),
+  presets: [{ label: 'The job this page started last', config: { jobId: null } }],
+  dataServices: ['PageJobs'],
+};
+
 /**
- * Every widget type, read by the "Add widget" picker, the grid and the built-in pages. A type unknown to this list is rendered as "unknown widget" and saved back
- * untouched, so a document from a newer console survives an older one (§6.3).
+ * Every widget type, read by the "Add widget" picker, the grid and the built-in pages. A type unknown to this list is
+ * rendered as "unknown widget" and saved back untouched, so a document from a newer console survives an older one (§6.3).
  */
-export const WIDGETS: readonly WidgetType[] = [LEGACY_SCREEN];
+export const WIDGETS: readonly WidgetType[] = [...Object.values(STACK_WIDGETS), JOB_OUTPUT, LEGACY_SCREEN];
 
 export function widgetType(type: string): WidgetType | undefined {
   return WIDGETS.find((w) => w.type === type);

@@ -1,8 +1,11 @@
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { Subject, delay, of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { JobEvent, SseClient } from '../../core/host/sse-client';
+import { PageJobs } from '../../workspace/page-jobs';
 import { StackPage } from './stack-page';
+import { StackControlsWidget } from './widgets/stack-controls-widget';
 
 const stack = {
   backend: {
@@ -102,6 +105,15 @@ const deviceReads = {
 
 function text(el: Element | null): string {
   return el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+}
+
+/** The job the page shows: the screen renders outside the grid, so its widgets share the page with no id. */
+function shownJob(): string | null {
+  return TestBed.inject(PageJobs).of('')();
+}
+
+function controls(fixture: ComponentFixture<StackPage>): StackControlsWidget {
+  return fixture.debugElement.query(By.directive(StackControlsWidget)).componentInstance as StackControlsWidget;
 }
 
 describe('StackPage', () => {
@@ -204,7 +216,7 @@ describe('StackPage', () => {
     fixture.detectChanges();
 
     expect(host.backendUp).toHaveBeenCalled();
-    expect(fixture.componentInstance.jobId()).toBe('up-1');
+    expect(shownJob()).toBe('up-1');
   });
 
   describe('a Compose job started from the actions', () => {
@@ -281,16 +293,18 @@ describe('StackPage', () => {
       ]);
     });
 
-    it('frees the buttons when the pane moves to another job before the Compose job exits', async () => {
+    it('holds the buttons while the page shows another job, since the Compose job is followed on its own stream', async () => {
       const fixture = await openAndPressUp();
-      expect((fixture.nativeElement.querySelector('button.up') as HTMLButtonElement).disabled).toBe(true);
 
-      fixture.componentInstance.jobId.set('other');
+      TestBed.inject(PageJobs).show('', 'other');
       fixture.detectChanges();
-
       const up = fixture.nativeElement.querySelector('button.up') as HTMLButtonElement;
+      expect(up.disabled).toBe(true);
+
+      events.next({ kind: 'exited', exitCode: 0 });
+      fixture.detectChanges();
       expect(up.disabled).toBe(false);
-      expect(text(up)).toBe('Up');
+      expect(text(fixture.nativeElement.querySelector('.job-outcome'))).toBe('Up finished: exit 0 in 0:00');
     });
 
     it('frees the buttons when the job stream fails, since no exit will come', async () => {
@@ -298,38 +312,22 @@ describe('StackPage', () => {
 
       events.error(new Error('The host closed the job stream.'));
       fixture.detectChanges();
-      fixture.detectChanges();
 
       expect((fixture.nativeElement.querySelector('button.up') as HTMLButtonElement).disabled).toBe(false);
     });
 
-    it('keeps a job started after a failed stream running, whatever the pane still says of the old one', async () => {
+    it('keeps a job started after a failed stream running', async () => {
       const fixture = await openAndPressUp();
       events.error(new Error('The host closed the job stream.'));
-      fixture.detectChanges();
       fixture.detectChanges();
 
       events = new Subject<JobEvent>();
       const up = fixture.nativeElement.querySelector('button.up') as HTMLButtonElement;
-      fixture.componentInstance.jobId.set(null);
-      fixture.detectChanges();
       up.click();
-      fixture.detectChanges();
       fixture.detectChanges();
 
       expect(up.disabled).toBe(true);
       expect(text(up)).toMatch(/^Up… /);
-    });
-
-    it('does not report a job opened with a Show output button as the Up that ended', async () => {
-      const fixture = await openAndPressUp();
-
-      fixture.componentInstance.jobId.set('other');
-      fixture.componentInstance.jobExited(0);
-      fixture.detectChanges();
-
-      expect(fixture.nativeElement.querySelector('.job-outcome')).toBeNull();
-      expect(fixture.nativeElement.querySelector('.compose-progress')).toBeNull();
     });
   });
 
@@ -342,7 +340,7 @@ describe('StackPage', () => {
     const wipe = fixture.nativeElement.querySelector('button.wipe') as HTMLButtonElement;
     expect(wipe.disabled).toBe(true);
 
-    fixture.componentInstance.confirmText.set('down -v');
+    controls(fixture).confirmText.set('down -v');
     fixture.detectChanges();
     expect(wipe.disabled).toBe(false);
 
@@ -359,15 +357,15 @@ describe('StackPage', () => {
     const reset = fixture.nativeElement.querySelector('button.reset') as HTMLButtonElement;
     expect(reset.disabled).toBe(true);
 
-    fixture.componentInstance.confirmText.set('down -v');
+    controls(fixture).confirmText.set('down -v');
     fixture.detectChanges();
     expect(reset.disabled).toBe(false);
 
     reset.click();
     fixture.detectChanges();
     expect(host.backendReset).toHaveBeenCalledWith('down -v');
-    expect(fixture.componentInstance.jobId()).toBe('reset-1');
-    expect(fixture.componentInstance.confirmText()).toBe('');
+    expect(shownJob()).toBe('reset-1');
+    expect(controls(fixture).confirmText()).toBe('');
   });
 
   it('gives the wipe confirmation input an accessible name', async () => {
@@ -601,7 +599,7 @@ describe('StackPage', () => {
     await vi.advanceTimersByTimeAsync(0);
     fixture.detectChanges();
 
-    fixture.componentInstance.confirmText.set('down -v');
+    controls(fixture).confirmText.set('down -v');
     fixture.detectChanges();
     (fixture.nativeElement.querySelector('button.wipe') as HTMLButtonElement).click();
     fixture.detectChanges();
@@ -619,11 +617,9 @@ describe('StackPage', () => {
       return { fixture, q };
     }
 
-    it('sits beside the signals, says a local run proves nothing about the SLO, and offers Run with Stop disabled', async () => {
-      const { fixture, q } = await render();
-      const section = fixture.nativeElement.querySelector('section.load-run') as HTMLElement;
+    it('says a local run proves nothing about the SLO, and offers Run with Stop disabled', async () => {
+      const { q } = await render();
 
-      expect(section.previousElementSibling?.classList).toContain('signals');
       expect(text(q('.load-run-status'))).toBe('k6 run slo.js not run');
       expect(text(q('.load-run-note'))).toContain('A local run is not a staging baseline and proves nothing about the SLO (§13.7).');
       expect(q('button.load-run-start')!.disabled).toBe(false);
@@ -638,7 +634,7 @@ describe('StackPage', () => {
       fixture.detectChanges();
 
       expect(host.loadRunStart).toHaveBeenCalled();
-      expect(fixture.componentInstance.jobId()).toBe('load-1');
+      expect(shownJob()).toBe('load-1');
     });
 
     it('disables Run and enables Stop while a run goes, and Stop calls the host', async () => {
@@ -657,14 +653,14 @@ describe('StackPage', () => {
 
     it('shows the exit code of a run that ended and opens its output', async () => {
       host.stack.mockReturnValue(of({ ...stack, loadRun: { ...loadJob, state: 'Exited', exitCode: 99 } }));
-      const { fixture, q } = await render();
+      const { q } = await render();
 
       expect(text(q('.load-run-status'))).toBe('k6 run slo.js exited 99');
       expect(q('button.load-run-start')!.disabled).toBe(false);
 
       q('button.load-run-output')!.click();
 
-      expect(fixture.componentInstance.jobId()).toBe('load-1');
+      expect(shownJob()).toBe('load-1');
     });
 
     it('shows why the host refused a Stop', async () => {
@@ -726,7 +722,7 @@ describe('StackPage', () => {
       fixture.detectChanges();
 
       expect(host.frontendStart).toHaveBeenCalled();
-      expect(fixture.componentInstance.jobId()).toBe('fe-1');
+      expect(shownJob()).toBe('fe-1');
     });
 
     it('disables Start and enables Stop while npm start runs, and Stop calls the host', async () => {
@@ -748,7 +744,7 @@ describe('StackPage', () => {
       fixture.detectChanges();
 
       expect(host.frontendStop).toHaveBeenCalled();
-      expect(fixture.componentInstance.jobId()).toBe('fe-1');
+      expect(shownJob()).toBe('fe-1');
     });
 
     it('shows the exit code of a job that ended', async () => {
@@ -761,11 +757,11 @@ describe('StackPage', () => {
 
     it('opens the output of the last job on Show output', async () => {
       host.stack.mockReturnValue(of({ ...stack, frontend: { job: runningJob, installed: true } }));
-      const { fixture, q } = await render();
+      const { q } = await render();
 
       q('button.frontend-output')!.click();
 
-      expect(fixture.componentInstance.jobId()).toBe('fe-1');
+      expect(shownJob()).toBe('fe-1');
     });
 
     it('says npm ci is needed and disables Start when node_modules is absent', async () => {
@@ -809,7 +805,7 @@ describe('StackPage', () => {
       host.stack.mockReturnValue(of({ ...stack, lease }));
       const { q } = await render();
 
-      expect(text(q('section.lease h2'))).toBe("The saga's waits shortened + Inventory stopped");
+      expect(text(q('section.lease h3'))).toBe("The saga's waits shortened + Inventory stopped");
       expect(text(q('.lease-what'))).toBe(
         'A Scenario (Stock timeout) changed ordering-api, inventory-api at 2026-10-16T08:00:00Z. It undoes it by itself at 2026-10-16T08:05:00Z.',
       );
@@ -818,13 +814,13 @@ describe('StackPage', () => {
 
     it('restores on request and opens the change\'s output', async () => {
       host.stack.mockReturnValue(of({ ...stack, lease }));
-      const { fixture, q } = await render();
+      const { q } = await render();
 
       q('button.lease-restore')!.click();
       q('button.lease-output')!.click();
 
       expect(host.leaseRestore).toHaveBeenCalledTimes(1);
-      expect(fixture.componentInstance.jobId()).toBe('job-9');
+      expect(shownJob()).toBe('job-9');
     });
 
     it('shows why a restore failed, and keeps the button for another try', async () => {
@@ -894,7 +890,7 @@ describe('StackPage', () => {
       fixture.detectChanges();
 
       expect(host.frontendDeviceBuild).toHaveBeenCalled();
-      expect(fixture.componentInstance.jobId()).toBe('dev-1');
+      expect(shownJob()).toBe('dev-1');
     });
 
     it('disables the build while it runs, and shows the exit code of one that ended', async () => {
@@ -905,8 +901,10 @@ describe('StackPage', () => {
       expect(q('button.device-build')!.disabled).toBe(true);
 
       q('button.device-output')!.click();
-      expect(fixture.componentInstance.jobId()).toBe('dev-1');
+      expect(shownJob()).toBe('dev-1');
 
+      // The poll is the page's, not the widget's: only once nothing reads the stack does a new screen read it afresh.
+      fixture.destroy();
       host.stack.mockReturnValue(of({ ...stack, frontend: { job: null, installed: true, deviceJob: { ...deviceJob, state: 'Exited', exitCode: 1 } } }));
       const ended = await render();
 

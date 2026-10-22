@@ -1,0 +1,26 @@
+<section class="doctor" aria-label="Workstation">
+  <div class="toolbar">
+    <button class="check" type="button" [disabled]="reading()" (click)="check()">Check again</button>
+  </div>
+  @if (error(); as e) {
+    <p class="error">The host did not answer for the workstation: {{ e }}</p>
+  }
+  @if (doctor(); as d) {
+    <table class="doctor">
+      <thead>
+        <tr><th scope="col">Check</th><th scope="col">Verdict</th><th scope="col">What the reads said</th></tr>
+      </thead>
+      <tbody>
+        @for (c of d.checks; track c.name) {
+          <tr [class]="'state-' + c.state">
+            <th class="name" scope="row">{{ c.name }}</th>
+            <td class="state">{{ c.state === 'Ok' ? 'ok' : c.state === 'Problem' ? 'problem' : 'could not tell' }}</td>
+            <td class="detail">{{ c.detail }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  } @else if (reading()) {
+    <p class="doctor-reading">Reading the workstation…</p>
+  }
+</section>

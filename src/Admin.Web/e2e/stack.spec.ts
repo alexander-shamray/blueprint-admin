@@ -17,9 +17,12 @@ test('the stack screen lists the fake services and runs up', async ({ page }) =>
   // The one-shot that makes the bucket is shown like a migrator: exited, with its code.
   await expect(service('object-store-init')).toContainText('exited');
 
+  // The job lands in the page's Job output widget, which follows the job the page started last.
   await page.getByRole('button', { name: 'Up' }).click();
-  await expect(page.locator('app-output-pane pre')).toContainText('commerce-gateway-1  Healthy');
-  await expect(page.locator('app-output-pane pre')).toContainText('exited 0');
+  const output = page.getByRole('article', { name: 'Job output' }).locator('app-output-pane pre');
+  await expect(output).toContainText('commerce-gateway-1  Healthy');
+  await expect(output).toContainText('exited 0');
+  await expect(page.locator('.job-outcome')).toHaveText(/^Up finished: exit 0 in /);
 });
 
 // FakeGrafana answers each dashboard query with its live recording of 2026-10-03.
@@ -79,7 +82,7 @@ test('the workstation panel and the job output read correctly to assistive techn
   await page.goto('/stack');
   const workstation = page.getByRole('region', { name: 'Workstation' });
 
-  await expect(workstation.getByRole('heading', { name: 'Workstation', level: 2 })).toBeVisible();
+  await expect(page.getByRole('article', { name: 'Workstation doctor' }).getByRole('heading', { name: 'Workstation doctor', level: 2 })).toBeVisible();
   await expect(workstation.getByRole('columnheader')).toHaveText(['Check', 'Verdict', 'What the reads said']);
   await expect(workstation.getByRole('rowheader', { name: 'Ports' })).toBeVisible();
 

@@ -1,0 +1,66 @@
+@if (feed.stack.value(); as s) {
+  <section class="frontend" aria-label="Reference client">
+    <p class="frontend-status">
+      npm start
+      @if (s.frontend.job; as job) {
+        @if (job.state === 'Running') { running } @else { exited {{ job.exitCode }} }
+      } @else {
+        not started
+      }
+      <span [class.up]="clientUp()" [class.down]="!clientUp()">client {{ clientUp() ? 'answers' : 'does not answer' }}</span>
+    </p>
+    @if (!s.frontend.installed) {
+      <p class="error">{{ s.frontend.installProblem ?? (hostConfig()?.frontendDir ?? 'The frontend clone') + ' has no node_modules. Run npm ci there; the console does not.' }}</p>
+    }
+    @if (error(); as e) {
+      <p class="error">{{ e }}</p>
+    }
+    <button class="frontend-start" [disabled]="frontendRunning() || !s.frontend.installed" (click)="startFrontend()">Start frontend</button>
+    <button class="frontend-stop" [disabled]="!frontendRunning()" (click)="stopFrontend()">Stop frontend</button>
+    <p class="frontend-stop-note">The client's own Playwright run reuses a dev server it finds running outside CI, so Stop ends it under that run too.</p>
+    @if (s.frontend.job; as job) {
+      <button class="frontend-output" (click)="showOutput(job.id)">Show output</button>
+    }
+
+    <h3>Device lane</h3>
+    <p class="device-status">
+      npm run emulator:android
+      @if (s.frontend.deviceJob; as job) {
+        @if (job.state === 'Running') { running } @else { exited {{ job.exitCode }} }
+      } @else {
+        not run
+      }
+    </p>
+    <p class="device-note">Builds the client for the emulator and syncs it. Starting the AVD, installing and starting the app are by hand (run-locally.md, step 4).</p>
+    @if (deviceReadsError(); as de) {
+      <p class="error">The host did not answer for the device reads: {{ de }}</p>
+    }
+    @if (deviceReads(); as d) {
+      <table class="device-reads">
+        <thead>
+          <tr><th scope="col">Read</th><th scope="col">Verdict</th><th scope="col">What it said</th></tr>
+        </thead>
+        <tbody>
+          @for (c of d.checks; track c.name) {
+            <tr [class]="'state-' + c.state">
+              <th class="name" scope="row">{{ c.name }}</th>
+              <td class="state">{{ c.state === 'Ok' ? 'ok' : c.state === 'Problem' ? 'problem' : 'could not tell' }}</td>
+              <td class="detail">{{ c.detail }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    } @else if (deviceReading()) {
+      <p class="device-reading">Reading the emulator, the gateway and the realm…</p>
+    }
+    <button class="device-read" type="button" [disabled]="deviceReading()" (click)="checkDevice()">Read again</button>
+    <button class="device-build" [disabled]="deviceBuildRunning() || !s.frontend.installed" (click)="buildForDevice()">Build for emulator</button>
+    @if (s.frontend.deviceJob; as job) {
+      <button class="device-output" (click)="showOutput(job.id)">Show device output</button>
+    }
+  </section>
+} @else if (feed.stack.error(); as e) {
+  <p class="error">The host did not answer: {{ e }}</p>
+} @else {
+  <p class="loading">Loading…</p>
+}
