@@ -518,8 +518,9 @@ vendor type.
 yields its recorded text and tool calls, so e2e can ask "where are the logs?"
 and see `open_screen` carried out, and a turn can exercise a server tool
 against FakePlatform. Its scripts sit with the other recordings under
-`src/Admin.Host/Fakes/`. FakePlatform selects it unless configuration names
-another provider.
+`src/Admin.Host/Fakes/`. FakePlatform selects it only when `Provider` is
+**unset**. An explicit `off` wins on FakePlatform too, so the fakes can run
+with the feature off (§9.1).
 
 ### 8.4 Another provider
 
@@ -536,6 +537,34 @@ more value `Admin:Assistant:Provider` accepts. A provider on the workstation
 `IdleTimeout`, `PlatformReads` (§6.5).
 No option holds a credential, and the options validator refuses one named
 like a secret, as the workspace validator does (workspace note §6.4).
+
+### 9.1 Off is a configuration switch
+
+The AI feature is optional, and turning it off is configuration alone:
+`Admin:Assistant:Provider=off` in `appsettings.json`, an environment variable
+(`Admin__Assistant__Provider=off`), or `--Admin:Assistant:Provider=off` on the
+command line, as with every other `Admin:` key. `off` is the default. With it
+off:
+
+- **The host reaches no provider and builds none.** No adapter is
+  constructed, no SDK client is created, and no credential is resolved. The
+  `Admin.Assistant.Anthropic` assembly is never loaded.
+- **The endpoints shrink to one.** `GET /api/assistant` answers
+  `enabled: false, reason: off`. Every other `/api/assistant/*` route answers
+  `404`, so nothing can open a conversation.
+- **The UI shows no trace of it.** The SPA reads that status once at startup
+  and renders no panel, no shell toggle, no command-palette entry, and no
+  Assistant type in the widget picker. An Assistant widget already saved in a
+  workspace is kept, not deleted, and renders a one-line "the assistant is
+  turned off in the console's configuration" placeholder. Turning the
+  feature back on restores it as it was.
+- **Nothing else changes.** No screen or widget depends on the assistant.
+  `help` in the registries stays, because it is the registries' own text.
+  Phase L's languages are a console feature, not part of the AI feature, and
+  are unaffected.
+
+Changing the setting takes a host restart, like every other `Admin:` option.
+The SPA picks up the new status on its next load.
 
 `ConversationTokenBudget` caps **context size**: the input tokens of the
 latest provider request, cached tokens included. A conversation whose next
@@ -634,7 +663,10 @@ design, not this note's.
   recorded stream bodies, no network.
 - **Host**: the endpoints — status with each `reason`, `409` on a second turn,
   SSE resume, unknown conversation `404`, the `Sec-Fetch-Site` rule; the
-  redaction gate of §10; options refusing a secret-named key.
+  redaction gate of §10; options refusing a secret-named key; with
+  `Provider=off`, on FakePlatform too: status reports `off`, every other
+  route is `404`, and no provider or SDK client is resolved from the
+  container.
 - **Protocol**: one golden JSON file per event and body, read by a host test
   and a Vitest spec, so the C# owner and the TypeScript mirror cannot drift.
 - **SPA (Vitest)**: the client parses events, runs a client tool and posts its
@@ -647,6 +679,9 @@ design, not this note's.
   check of §5.5 fails a missing translation. Each shipped locale bootstraps,
   formats a date and a number, and keeps its typed confirmations literal. The
   fake provider's scripts match Russian and English phrasings.
+- **Playwright (FakePlatform, `Provider=off`)**: no panel, toggle, palette
+  entry or picker entry; a workspace holding an Assistant widget renders its
+  placeholder, and every other widget is unchanged.
 - **Playwright (FakePlatform)**: open the panel, ask where the logs are, land
   on Logs; ask the same in Russian ("где логи?"), land on Logs, and see the
   reply name **Logs** as labelled; switch the console to `ru-RU` and see the shell and the panel in Russian, the reply naming the screen by its Russian label, and its
@@ -728,4 +763,8 @@ note's call and open to their review:
   phases land (§6.1);
 - `claude-opus-5-5` at effort `low` as the default, the operator free to pick
   another (§8.2);
-- off by default, with a one-time data notice (§9, §10).
+- off by default, with a one-time data notice (§9, §10). Off removes the
+  feature completely: no provider built, one status route, no UI. An explicit
+  `off` beats FakePlatform's default, and saved Assistant widgets are kept as
+  placeholders (§9.1), as the operator asked that the feature be optional and
+  switchable from configuration.
