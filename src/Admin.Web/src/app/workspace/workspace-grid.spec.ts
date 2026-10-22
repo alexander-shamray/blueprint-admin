@@ -5,7 +5,7 @@ import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { GridsterItem } from 'angular-gridster2';
 import { WorkspaceGrid } from './workspace-grid';
-import { WidgetInstance } from './workspace-types';
+import { GRID_COLUMNS, MAX_ROWS, WidgetInstance } from './workspace-types';
 
 const known: WidgetInstance = { id: 'w1', type: 'legacy', x: 0, y: 0, cols: 12, rows: 6, config: { screen: 'requests' } };
 const unknown: WidgetInstance = { id: 'w2', type: 'from-a-newer-console', x: 12, y: 0, cols: 6, rows: 4, config: { a: 1 } };
@@ -41,10 +41,11 @@ describe('WorkspaceGrid', () => {
   });
 
   it('places a full-width widget far below gridster’s own hundred rows, where it was saved', async () => {
-    // Full width, so gridster has nowhere else to put it. Its `notPlaced` is what hides an item; the `display` it
-    // writes from that is set only in a layout pass, which jsdom, measuring nothing, never runs.
-    const wide = { ...known, cols: 24 };
-    const low = { ...wide, id: 'low', y: 7 * 16 };
+    // The first widget fills gridster's default hundred rows, so without the grid's own row limit the second has
+    // nowhere to go and is left `notPlaced`, which is what hides an item. The `display` gridster writes from that is
+    // set only in a layout pass, which jsdom, measuring nothing, never runs.
+    const wide = { ...known, cols: GRID_COLUMNS, rows: MAX_ROWS };
+    const low = { ...known, id: 'low', cols: GRID_COLUMNS, y: 7 * 16 };
     const fixture = render([wide, low], false);
     await fixture.whenStable();
     fixture.detectChanges();
