@@ -1,6 +1,7 @@
 /**
  * The languages the console ships (AI assistant design §5.5): `en-US` is the source, and every other entry has a
- * `src/locale/messages.<id>.json` the host serves beside the app. Adding a language is one file and one entry here.
+ * `src/locale/messages.<id>.json` the host serves beside the app. Adding a language is that file, one entry here and
+ * its Angular locale data in `LOCALE_DATA` (load-locale.ts), which the compiler then asks for.
  * `name` is the language's own name for itself, so an operator who cannot read the active language can still find
  * theirs; it is never translated.
  */
@@ -12,7 +13,10 @@ export const LOCALES = [
 export type LocaleId = (typeof LOCALES)[number]['id'];
 
 /** The language the templates and `$localize` calls are written in; it needs no translation file. */
-export const SOURCE_LOCALE: LocaleId = 'en-US';
+export const SOURCE_LOCALE = 'en-US' satisfies LocaleId;
+
+/** Every shipped language but the source: each needs a translation file and its locale data. */
+export type TranslatedLocale = Exclude<LocaleId, typeof SOURCE_LOCALE>;
 
 /** The browser-local key; like the theme, the choice is per browser and not part of the workspace document. */
 export const LOCALE_STORAGE_KEY = 'admin.locale';

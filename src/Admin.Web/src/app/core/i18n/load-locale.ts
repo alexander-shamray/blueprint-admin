@@ -1,10 +1,14 @@
 import { registerLocaleData } from '@angular/common';
 import localeRu from '@angular/common/locales/ru';
 import { loadTranslations } from '@angular/localize';
-import { LocaleId, SOURCE_LOCALE } from './locales';
+import { LocaleId, SOURCE_LOCALE, TranslatedLocale } from './locales';
 
-/** Angular's formats for each shipped language; `en-US` is built in. Registered under the language, `ru` for `ru-RU`. */
-const LOCALE_DATA: Partial<Record<LocaleId, unknown[]>> = { 'ru-RU': localeRu };
+/**
+ * Angular's formats for each translated language; `en-US` is built in. Registered under the language, `ru` for
+ * `ru-RU`. A full record, so a language added to `LOCALES` without its data does not compile: without it every
+ * `number` and `date` pipe would throw once the page renders.
+ */
+const LOCALE_DATA: Record<TranslatedLocale, unknown[]> = { 'ru-RU': localeRu };
 
 /** The shape `ng extract-i18n --format json` writes, and the shape each translation file keeps. */
 export interface TranslationFile {
@@ -28,7 +32,6 @@ export async function loadLocale(locale: LocaleId, fetcher: typeof fetch = fetch
     console.error(`The ${locale} translations could not be loaded, so the console is in ${SOURCE_LOCALE}.`, e);
     return SOURCE_LOCALE;
   }
-  const data = LOCALE_DATA[locale];
-  if (data) registerLocaleData(data);
+  registerLocaleData(LOCALE_DATA[locale]);
   return locale;
 }
