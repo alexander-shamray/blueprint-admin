@@ -5295,19 +5295,25 @@ TEST_BINARY = frozenset({"=", "==", "!=", "<", ">", "=~", "-eq", "-ne", "-lt",
                          "-le", "-gt", "-ge", "-nt", "-ot", "-ef"})
 
 
-def _expanded_operator(arguments):
+def _expanded_operator(name, arguments):
     """Whether an expanded word in a `test` or `wait` argument list stands
-    where an operator or option could: not the operand of a literal operator
-    before it, not the left side of a binary operator after it, and not alone.
-    `[ -d "$d" ]`, `[ "$n" != 0 ]` and `wait "$pid"` are operands; `test $o
-    'a[x]'` is not."""
+    where an operator or option could: for `test`, not the operand of a
+    literal operator before it, not the left side of a binary operator after
+    it, and not alone; for `wait`, whose flags (`-n`, `-f`) take no operand,
+    anything but the last word. `[ -d "$d" ]`, `[ "$n" != 0 ]` and
+    `wait "$pid"` are operands; `test $o 'a[x]'` and `wait -n $o 'a[x]'` are
+    not."""
     words = [word for word in arguments if word not in ("]", "]]")]
     for index, word in enumerate(words):
         if not re.search(r"[$`]", word):
             continue
         after = words[index + 1] if index + 1 < len(words) else None
         before = words[index - 1] if index else None
-        if after is None or after in TEST_BINARY or after in ("-a", "-o", "&&", "||", ")"):
+        if after is None:
+            continue
+        if name == "wait":
+            return True
+        if after in TEST_BINARY or after in ("-a", "-o", "&&", "||", ")"):
             continue
         if (before is not None and before.startswith("-") and before not in ("-a", "-o")
                 and not re.search(r"[$`]", before)):
@@ -5374,7 +5380,7 @@ def resolution_changed(command):
             # `test` or `wait` whose expanded word stands where an operator
             # could reads every word as a name operand (`o=-v; test $o
             # 'a[x]'`). Raised by a security review.
-            if name not in PATH_WRITERS and not _expanded_operator(arguments):
+            if name not in PATH_WRITERS and not _expanded_operator(name, arguments):
                 # `test` takes `-v` and `-R` whole; `wait` clusters its `-p`.
                 option = r"^-[vR]()$" if name != "wait" else r"^-[A-Za-z]*?p(.*)$"
                 operands = []
