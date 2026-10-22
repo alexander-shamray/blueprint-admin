@@ -118,8 +118,8 @@ function initialSteps(script: ScriptKey): StepView[] {
  * run: every later one needs what it would have produced.
  *
  * The run is running work (widget-workspace spec §4.2, §4.4): it lives here, at the root, and not in a screen, so
- * leaving the page that shows it neither stops nor loses it. Only Cancel, a host that stops answering, or a page
- * reload ends a run. Every Scenario and Saga strip widget is a view of this one run.
+ * leaving the page that shows it neither stops nor loses it. Besides a step that fails, only Cancel, a host that stops
+ * answering, or a page reload ends a run. Every Scenario and Saga strip widget is a view of this one run.
  */
 @Injectable({ providedIn: 'root' })
 export class ScenarioRunner {
