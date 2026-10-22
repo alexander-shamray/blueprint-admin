@@ -9,6 +9,13 @@ import { GRID_COLUMNS, MAX_ROWS, WidgetInstance } from './workspace-types';
 /** One grid row, in pixels; the spec leaves the height to the builder (§12). */
 export const ROW_HEIGHT_PX = 40;
 
+/**
+ * How many rows a page's grid has. gridster's own default is 100, and a widget it cannot place there is hidden
+ * without a word, while "Add widget" puts each new one below the last: the seventh full-size screen would be saved
+ * and never shown. The host bounds a widget's height and not where it starts, so this is the SPA's limit.
+ */
+export const PAGE_ROWS = 2000;
+
 /** A widget as the grid holds it: gridster moves `x`, `y`, `cols` and `rows` on this object in place. */
 interface GridItem extends GridsterItemConfig {
   widget: WidgetInstance;
@@ -68,6 +75,7 @@ export class WorkspaceGrid {
       fixedRowHeight: ROW_HEIGHT_PX,
       minCols: GRID_COLUMNS,
       maxCols: GRID_COLUMNS,
+      maxRows: PAGE_ROWS,
       maxItemRows: MAX_ROWS,
       margin: 8,
       outerMargin: true,
