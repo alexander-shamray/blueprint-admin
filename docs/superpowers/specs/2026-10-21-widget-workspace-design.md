@@ -544,6 +544,20 @@ later phase move one screen at a time without a page ever missing.
     reads a file in the browser, asks, and only then posts it; the host's
     400 says why a document was refused. A saved-over workspace is not
     kept: the question is the only undo.
+- Settled in phase 1d (#384), the Note widget (§8.3):
+  - Its Markdown is read by the Runbooks screen's reader
+    (`runbook-markdown.ts`), which now keeps a fence's language, and drawn
+    as elements; a `mermaid` fence is a diagram, any other fence is code.
+  - A drawing passes through two walls: Mermaid's strict level with no HTML
+    labels (`MERMAID_CONFIG`), then `safeSvg`, which drops script,
+    `foreignObject`, event handlers and links that leave the drawing.
+  - A note edits in place as a textarea while the layout is edited, and
+    saves through the same debounce as any config. Its presets are starting
+    points, so the header's configure control does not offer them
+    (`configurable: false`); they are the two diagrams of `admin-konsol.md`,
+    copied with their Russian labels, a blank note, and an empty one.
+  - Mermaid loads on the first diagram (`mermaid-loader.ts`), which the
+    sequence diagram (§8.2) reuses.
 - The visual design within Material 3: palette, density, spacing.
 - Whether a widget's refresh button and a page-wide refresh both exist.
 - The exact Mermaid mapping of each `TraceView` event kind in §8.2, within
