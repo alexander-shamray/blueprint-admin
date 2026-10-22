@@ -1,11 +1,11 @@
 import { expect, test } from '@playwright/test';
 
-// The shell around every screen (#381): a side navigation of the screens, and a top bar whose theme switch
+// The shell around every page (#381, #383): a side navigation of the pages, and a top bar whose theme switch
 // sets data-theme on <html> and survives a reload. Against the fake platform, which only supplies the config.
-test('the side navigation reaches a screen and marks it', async ({ page }) => {
+test('the side navigation reaches a page and marks it', async ({ page }) => {
   await page.goto('/stack');
 
-  const nav = page.getByRole('navigation', { name: 'Screens' });
+  const nav = page.getByRole('navigation', { name: 'Pages' });
   await nav.getByRole('link', { name: 'Broker' }).click();
 
   await expect(page).toHaveURL(/\/broker$/);

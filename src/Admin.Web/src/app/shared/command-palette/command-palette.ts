@@ -1,7 +1,7 @@
 import { Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
 import { Router } from '@angular/router';
 import { ScenarioLauncher } from '../../features/scenario/scenario-launcher';
-import { SCREENS } from '../../screens';
+import { WorkspaceService } from '../../workspace/workspace-service';
 
 /** One thing the palette can do: its words, and what choosing it does. */
 export interface PaletteCommand {
@@ -11,7 +11,7 @@ export interface PaletteCommand {
 }
 
 /**
- * Ctrl+K (Cmd+K on a Mac) from anywhere: go to a screen, run the Scenario, or open what was typed as a correlation
+ * Ctrl+K (Cmd+K on a Mac) from anywhere: go to a page, run the Scenario, or open what was typed as a correlation
  * id on the Trace screen. The id is not judged here: the trace endpoint refuses one the platform would not adopt,
  * by the host's one copy of that rule (CorrelationId.IsAdoptable), which is the LogQL boundary the palette must not
  * be a way round. A native modal dialog keeps focus inside it and gives Escape for free. It is a keyboard tool: focus
@@ -27,14 +27,20 @@ export interface PaletteCommand {
 export class CommandPalette {
   private readonly router = inject(Router);
   private readonly launcher = inject(ScenarioLauncher);
+  private readonly workspace = inject(WorkspaceService);
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
   private readonly input = viewChild.required<ElementRef<HTMLInputElement>>('input');
 
   readonly query = signal('');
   readonly active = signal(0);
 
-  private readonly fixed: PaletteCommand[] = [
-    ...SCREENS.map((s) => ({ id: `go-${s.path}`, label: `Go to ${s.label}`, run: () => void this.router.navigate(['/', s.path]) })),
+  /** Every page in the operator's order, hidden ones too, then the built-in actions (widget-workspace spec §5.3). */
+  private readonly fixed = computed<PaletteCommand[]>(() => [
+    ...this.workspace.pages().map((p) => ({
+      id: `go-${p.id}`,
+      label: `Go to ${p.title}${p.hidden ? ' (hidden)' : ''}`,
+      run: () => void this.router.navigate(this.workspace.pageLink(p.id)),
+    })),
     {
       id: 'run-scenario',
       label: 'Run the Scenario',
@@ -43,13 +49,13 @@ export class CommandPalette {
         void this.router.navigate(['/scenario']);
       },
     },
-  ];
+  ]);
 
   /** The fixed commands whose words contain what was typed, then the typed text as a correlation id. */
   readonly commands = computed<PaletteCommand[]>(() => {
     const typed = this.query().trim();
     const words = typed.toLowerCase();
-    const matching = this.fixed.filter((c) => c.label.toLowerCase().includes(words));
+    const matching = this.fixed().filter((c) => c.label.toLowerCase().includes(words));
     if (typed === '') return matching;
     return [
       ...matching,

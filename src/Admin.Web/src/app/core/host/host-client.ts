@@ -1,6 +1,7 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, catchError, map, of, throwError } from 'rxjs';
+import { Workspace } from '../../workspace/workspace-types';
 import {
   ApiCatalogView,
   ConfigView,
@@ -282,4 +283,35 @@ export class HostClient {
   job(id: string): Observable<JobView> {
     return this.http.get<JobView>(`/api/jobs/${encodeURIComponent(id)}`);
   }
+
+  /** The saved workspace, or the default when none is saved, with the etag a save must name (widget-workspace §6.2). */
+  workspace(): Observable<WorkspaceRead> {
+    return this.http
+      .get<Workspace>('/api/workspace', { observe: 'response' })
+      .pipe(map((r) => ({ workspace: r.body as Workspace, etag: r.headers.get('ETag') ?? '' })));
+  }
+
+  /**
+   * Saves a whole workspace over the one `etag` names. A 412 is an answer, not a failure: another tab saved first,
+   * and the body is what it saved, with its etag. Anything else (400, 413, 500, no host) is an error.
+   */
+  saveWorkspace(workspace: Workspace, etag: string): Observable<WorkspaceSave> {
+    return this.http
+      .put<Workspace>('/api/workspace', workspace, { observe: 'response', headers: { 'If-Match': etag } })
+      .pipe(
+        map((r): WorkspaceSave => ({ kind: 'saved', etag: r.headers.get('ETag') ?? '' })),
+        catchError((e: unknown) =>
+          e instanceof HttpErrorResponse && e.status === 412
+            ? of<WorkspaceSave>({ kind: 'stale', workspace: e.error as Workspace, etag: e.headers.get('ETag') ?? '' })
+            : throwError(() => e),
+        ),
+      );
+  }
 }
+
+export interface WorkspaceRead {
+  workspace: Workspace;
+  etag: string;
+}
+
+export type WorkspaceSave = { kind: 'saved'; etag: string } | { kind: 'stale'; workspace: Workspace; etag: string };

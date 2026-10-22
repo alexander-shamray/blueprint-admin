@@ -1,6 +1,56 @@
 <mat-toolbar class="bar">
   <strong class="title">blueprint-admin</strong>
+  @if (workspace.currentPage(); as page) {
+    @if (workspace.editing()) {
+      <input
+        class="page-title edit"
+        aria-label="Page title"
+        [value]="page.title"
+        (change)="rename(page.id, $any($event.target).value)"
+        (keydown.enter)="$any($event.target).blur()"
+      />
+    } @else {
+      <h1 class="page-title">{{ page.title }}</h1>
+    }
+    <button mat-stroked-button type="button" class="edit-layout" (click)="workspace.editing.set(!workspace.editing())">
+      <mat-icon aria-hidden="true">{{ workspace.editing() ? 'check' : 'dashboard_customize' }}</mat-icon>
+      {{ workspace.editing() ? 'Done' : 'Edit layout' }}
+    </button>
+    <button mat-stroked-button type="button" [matMenuTriggerFor]="addMenu">
+      <mat-icon aria-hidden="true">add</mat-icon> Add widget
+    </button>
+    <mat-menu #addMenu="matMenu">
+      @for (kind of widgetTypes; track kind.type) {
+        <button mat-menu-item [matMenuTriggerFor]="presetMenu" [matMenuTriggerData]="{ kind }">{{ kind.title }}</button>
+      }
+    </mat-menu>
+    <mat-menu #presetMenu="matMenu">
+      <ng-template matMenuContent let-kind="kind">
+        @for (preset of kind.presets; track preset.label) {
+          <button mat-menu-item (click)="addWidget(page.id, kind, preset)">{{ preset.label }}</button>
+        }
+      </ng-template>
+    </mat-menu>
+    <button mat-icon-button type="button" aria-label="Page actions" [matMenuTriggerFor]="pageMenu">
+      <mat-icon aria-hidden="true">more_vert</mat-icon>
+    </button>
+    <mat-menu #pageMenu="matMenu">
+      <button mat-menu-item (click)="workspace.movePageBy(page.id, -1)">Move up</button>
+      <button mat-menu-item (click)="workspace.movePageBy(page.id, 1)">Move down</button>
+      <button mat-menu-item (click)="duplicate(page.id)">Duplicate</button>
+      @if (page.builtIn) {
+        <button mat-menu-item [disabled]="!differsFromBuiltIn(page)" (click)="workspace.resetPage(page.id)">Reset page</button>
+        <button mat-menu-item (click)="remove(page.id)">Hide</button>
+      } @else {
+        <button mat-menu-item (click)="remove(page.id)">Delete</button>
+      }
+    </mat-menu>
+  }
   <span class="grow"></span>
+  @switch (workspace.saveState().kind) {
+    @case ('pending') { <span class="save-state" role="status">Unsaved</span> }
+    @case ('saving') { <span class="save-state" role="status">Saving…</span> }
+  }
   <!-- Where the running-work indicator (a Scenario run, a Logs follow, a job) will sit. -->
   <span class="running-work" aria-live="polite"></span>
   @if (config(); as c) {
@@ -21,15 +71,60 @@
     }
   </mat-button-toggle-group>
 </mat-toolbar>
+@switch (workspace.saveState().kind) {
+  @case ('failed') {
+    <div class="notice error" role="alert">
+      The layout was not saved: {{ $any(workspace.saveState()).message }}
+      <button mat-button type="button" (click)="workspace.retry()">Retry</button>
+    </div>
+  }
+  @case ('conflict') {
+    <div class="notice warn" role="alert">
+      Another tab saved the workspace after this one read it.
+      <button mat-button type="button" (click)="workspace.resolveConflict('theirs')">Load the saved one</button>
+      <button mat-button type="button" (click)="workspace.resolveConflict('mine')">Keep this tab's</button>
+    </div>
+  }
+  @case ('unavailable') {
+    <div class="notice error" role="alert">
+      The saved workspace could not be read ({{ $any(workspace.saveState()).message }}), so these are the default pages
+      and nothing will be saved until the console is reloaded.
+    </div>
+  }
+}
 <mat-sidenav-container class="shell">
   <mat-sidenav mode="side" opened disableClose class="side">
-    <nav aria-label="Screens">
-      <mat-nav-list>
-        @for (screen of screens; track screen.path) {
-          <a mat-list-item [routerLink]="'/' + screen.path" routerLinkActive="active" #rla="routerLinkActive" [activated]="rla.isActive">{{ screen.label }}</a>
+    <nav aria-label="Pages">
+      <mat-nav-list cdkDropList [cdkDropListDisabled]="!workspace.editing()" (cdkDropListDropped)="dropped($event)">
+        @for (page of workspace.visiblePages(); track page.id) {
+          <a
+            mat-list-item
+            cdkDrag
+            [routerLink]="workspace.pageLink(page.id)"
+            routerLinkActive="active"
+            #rla="routerLinkActive"
+            [activated]="rla.isActive"
+            >{{ page.title }}</a
+          >
         }
       </mat-nav-list>
     </nav>
+    <button mat-button type="button" class="new-page" (click)="newPage()">
+      <mat-icon aria-hidden="true">add</mat-icon> New page
+    </button>
+    @if (workspace.hiddenPages().length > 0) {
+      <details class="hidden-pages">
+        <summary>Hidden pages ({{ workspace.hiddenPages().length }})</summary>
+        <ul>
+          @for (page of workspace.hiddenPages(); track page.id) {
+            <li>
+              <a [routerLink]="workspace.pageLink(page.id)">{{ page.title }}</a>
+              <button mat-button type="button" (click)="workspace.setHidden(page.id, false)">Show</button>
+            </li>
+          }
+        </ul>
+      </details>
+    }
   </mat-sidenav>
   <mat-sidenav-content>
     <main><router-outlet /></main>

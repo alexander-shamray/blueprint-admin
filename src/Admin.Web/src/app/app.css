@@ -1,8 +1,19 @@
 :host { display: flex; flex-direction: column; height: 100vh; }
-.bar { flex: none; gap: 1rem; background: var(--mat-sys-surface-container); color: var(--mat-sys-on-surface); border-bottom: 1px solid var(--app-border); }
+.bar { flex: none; gap: 0.75rem; background: var(--mat-sys-surface-container); color: var(--mat-sys-on-surface); border-bottom: 1px solid var(--app-border); }
 .title { font-size: 1.1rem; }
+.page-title { margin: 0 0 0 1rem; font: var(--mat-sys-title-medium); }
+.page-title.edit { width: 14rem; padding: 0.25rem 0.5rem; border: 1px solid var(--app-border); border-radius: 0.25rem; background: var(--mat-sys-surface); color: inherit; }
 .grow { flex: 1; }
-.palette-key, .hint { font-size: 0.85rem; color: var(--app-muted); }
+.palette-key, .hint, .save-state { font-size: 0.85rem; color: var(--app-muted); }
+.notice { flex: none; display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 1rem; }
+.notice.error { color: var(--app-error); background: var(--app-error-bg); }
+.notice.warn { color: var(--app-warn); background: var(--app-warn-bg); }
 .shell { flex: 1; min-height: 0; background: var(--mat-sys-surface); }
 .side { width: 12rem; border-right: 1px solid var(--app-border); }
-main { padding: 1rem; }
+.new-page { margin: 0.25rem 0.5rem; }
+.hidden-pages { margin: 0.5rem 1rem; font-size: 0.9rem; color: var(--app-muted); }
+.hidden-pages ul { list-style: none; margin: 0.25rem 0 0; padding: 0; }
+.hidden-pages li { display: flex; align-items: center; justify-content: space-between; }
+.cdk-drag-preview { background: var(--mat-sys-surface-container-high); }
+/* The page fills what the bar leaves, and its grid scrolls inside it: gridster takes its parent's size. */
+main { height: 100%; box-sizing: border-box; }
