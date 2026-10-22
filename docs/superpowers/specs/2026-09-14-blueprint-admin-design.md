@@ -390,7 +390,8 @@ paragraph first:
   adds `--wait`, and the lease is dropped only once `ps` shows the service
   running. The host runs it when a change fails, when the request that asked for
   one goes away mid-change, on request (a Scenario's own call at its end, and on
-  its cancellation or the page being left), and at the lease's deadline. It runs
+  its cancellation), and at the lease's deadline, which is what restores a run a
+  reload of the console ended. It runs
   again from the journal when the host starts, so a host that was killed leaves
   nothing changed past its next start. A restore that fails keeps the lease, the
   journal and the gate, and says so; it is never dropped silently, and Restore
@@ -415,8 +416,8 @@ paragraph first:
   will change, in the host's own words from `GET /stack/lease`, and the longest
   the host will hold it. A script that holds a lease has a `lease` step first and
   a `restore` step last. The `restore` step does not wait for the steps between
-  to have succeeded: a failed step, Cancel and the page being left each end the
-  run through it. Every watch shows what it waits for and what it last read, and
+  to have succeeded: a failed step and Cancel each end the run through it.
+  Leaving the page does not end the run (§9). Every watch shows what it waits for and what it last read, and
   Cancel ends the wait, sends nothing further and restores. A restore that
   failed is said on the step, with the host's retry, and the Stack screen's
   banner has Restore now. Run is the confirmation; there is no typed text, since
