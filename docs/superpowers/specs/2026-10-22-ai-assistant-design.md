@@ -531,7 +531,8 @@ more value `Admin:Assistant:Provider` accepts. A provider on the workstation
 ## 9. Configuration
 
 `AssistantOptions`, nested in `AdminOptions` as `Admin:Assistant`, owns:
-`Provider` (`off` by default; `anthropic`; `fake`), `Model`, `Effort`,
+`Provider` (`off`, `anthropic` or `fake`; unset by default, which means
+`off`, except under FakePlatform, where it means `fake`), `Model`, `Effort`,
 `MaxSteps`, `MaxOutputTokens`, `ConversationTokenBudget`,
 `ClientToolTimeout`, `ServerToolTimeout`, `MaxConversations`, `MaxCallers`,
 `IdleTimeout`, `PlatformReads` (§6.5).
@@ -543,8 +544,9 @@ like a secret, as the workspace validator does (workspace note §6.4).
 The AI feature is optional, and turning it off is configuration alone:
 `Admin:Assistant:Provider=off` in `appsettings.json`, an environment variable
 (`Admin__Assistant__Provider=off`), or `--Admin:Assistant:Provider=off` on the
-command line, as with every other `Admin:` key. `off` is the default. With it
-off:
+command line, as with every other `Admin:` key. Leaving it unset is off too,
+except under FakePlatform, where unset selects the fake provider (§8.3). With
+it off:
 
 - **The host reaches no provider and builds none.** No adapter is
   constructed, no SDK client is created, and no credential is resolved. The
@@ -599,7 +601,8 @@ total, so spend is visible.
 
 - Spec §8 gains a paragraph: the assistant is the console's one outbound
   surface beyond the platform, off unless `Admin:Assistant:Provider` names a
-  provider, reached only by the host, carrying redacted data; the browser
+  provider (or is left unset under FakePlatform, which then uses the fake
+  provider), reached only by the host, carrying redacted data; the browser
   still reaches only the host.
 - Spec §13 gains: "An assistant that operates the platform, until the
   operator decides otherwise. The assistant explains, navigates and reads; it
