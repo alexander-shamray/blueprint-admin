@@ -347,8 +347,8 @@ CSS, which is today's state and the reason for the request. Material is
 enough for an operator tool and the cheapest to keep current.
 
 Fonts and icons are bundled (§3): the system font stack for text, a
-monospace stack for output, and Material Symbols as an npm-bundled font or
-inline SVGs, whichever the build keeps smaller.
+monospace stack for output, and Material Symbols as the npm-bundled font, so
+that `<mat-icon>` can name a ligature (settled in phase 1a, §12).
 
 ### 7.2 The shell
 
