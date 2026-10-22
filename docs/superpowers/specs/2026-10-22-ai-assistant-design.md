@@ -182,8 +182,8 @@ authenticates nor stores credentials. It only keys things by caller:
 
 - a conversation is visible to its caller alone; any other caller gets `404`,
   not `403`, so ids reveal nothing;
-- `MaxConversations` and `ConversationTokenBudget` apply per caller, and
-  `MaxCallers` bounds the whole store;
+- `MaxConversations` applies per caller, `ConversationTokenBudget` per
+  conversation (§9), and `MaxCallers` bounds the whole store;
 - every tool call gets a `ToolContext` with the caller and the conversation,
   so a host's tool source can scope its results (the BFF, to the signed-in
   user's own orders) and its redactor can redact per caller.
