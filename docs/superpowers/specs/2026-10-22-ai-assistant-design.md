@@ -43,7 +43,8 @@ Two further asks shape the design more than the first version does:
    it is written. There is **one conversation per browser tab**, held by one
    app-wide service: the panel and every Assistant widget are views of it, and
    the panel stays once the widget exists. Its id is that service's state,
-   not a widget's saved configuration.
+   kept in `sessionStorage` so a reload of the tab resumes it (§5.5), and
+   never a widget's saved configuration.
 2. Explanations drawn from one place: the `help` of each entry in the screen
    and widget registries (§6.1), never from a second copy.
 3. Navigation as tool calls the browser carries out: open a page or a screen,
@@ -253,10 +254,14 @@ assistant panel is one user of a console-wide mechanism, not its owner.
   per locale. Before bootstrap, `main.ts` reads the chosen locale, fetches
   that locale's bundled translation file from the host (same origin, offline,
   as the workspace note's §3 requires) and calls `loadTranslations`, then
-  bootstraps. Switching language stores the choice and reloads the page. A
-  reload loses nothing, because the workspace and running work already
-  survive one (workspace note §4). One build keeps `wwwroot`, the host's
-  static serving and the smoke unchanged.
+  bootstraps. Switching language stores the choice and reloads the page. The
+  reload is an ordinary one: the workspace is read again from the host, and
+  unsent input in a widget is lost, as on any reload (workspace note §4.2).
+  The assistant's conversation is not lost: the client keeps its id in
+  `sessionStorage` for the tab, the host still holds it, and the reloaded
+  panel resumes it by `Last-Event-ID`. The picker warns before switching
+  while a turn is running. One build keeps `wwwroot`, the host's static
+  serving and the smoke unchanged.
 - **Choice.** A language picker in the shell, defaulting to
   `navigator.language` when a translation for it exists and to `en-US`
   otherwise. The choice is kept in `localStorage`, per browser. It is not
@@ -704,9 +709,8 @@ Each phase is one or more PRs and leaves the console working.
 | 4 Workspace | `help` on `WIDGETS`, the Assistant widget type, `open_page`, `highlight_widget`, `propose_widget`, `follow_correlation` | 1, #383 (and #390 for the last) |
 | 5 MCP | §12, as its own decision | 3a, 3b |
 
-Phases 2, 3a and 3b can run in parallel. Compaction of long conversations, and
-keeping a conversation across a page reload, wait until use shows they are
-wanted.
+Phases 2, 3a and 3b can run in parallel. Compaction of long conversations
+waits until use shows it is wanted.
 
 ## 16. Left to the builder
 
