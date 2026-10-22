@@ -240,4 +240,40 @@ describe('HostClient', () => {
     expect(req.request.params.keys()).toEqual([]);
     req.flush({ correlationId: 'demo-trace-0001', window: '15m', reachable: true, error: null, traceIds: [], tracesTruncated: false, warning: null, events: [] });
   });
+
+  it('reads the workspace with its etag', () => {
+    let seen: unknown;
+    client.workspace().subscribe((w) => (seen = w));
+
+    http.expectOne('/api/workspace').flush({ version: 1, pages: [], activePageId: null }, { headers: { ETag: '"a"' } });
+
+    expect(seen).toEqual({ workspace: { version: 1, pages: [], activePageId: null }, etag: '"a"' });
+  });
+
+  it('saves the workspace over the etag it was based on', () => {
+    let seen: unknown;
+    const workspace = { version: 1, pages: [], activePageId: null };
+    client.saveWorkspace(workspace, '"a"').subscribe((s) => (seen = s));
+
+    const req = http.expectOne('/api/workspace');
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.headers.get('If-Match')).toBe('"a"');
+    expect(req.request.body).toEqual(workspace);
+    req.flush(workspace, { headers: { ETag: '"b"' } });
+
+    expect(seen).toEqual({ kind: 'saved', etag: '"b"' });
+  });
+
+  it('answers a 412 with what the other tab saved, and lets anything else fail', () => {
+    let seen: unknown;
+    let failed: unknown;
+    const theirs = { version: 1, pages: [], activePageId: 'x' };
+    client.saveWorkspace({ version: 1, pages: [], activePageId: null }, '"a"').subscribe((s) => (seen = s));
+    http.expectOne('/api/workspace').flush(theirs, { status: 412, statusText: 'Precondition Failed', headers: { ETag: '"c"' } });
+    expect(seen).toEqual({ kind: 'stale', workspace: theirs, etag: '"c"' });
+
+    client.saveWorkspace(theirs, '"c"').subscribe({ error: (e: unknown) => (failed = e) });
+    http.expectOne('/api/workspace').flush({ detail: 'bad' }, { status: 400, statusText: 'Bad Request' });
+    expect(failed).toBeTruthy();
+  });
 });

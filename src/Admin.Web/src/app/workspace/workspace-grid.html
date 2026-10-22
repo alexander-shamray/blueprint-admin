@@ -1,0 +1,38 @@
+<gridster [options]="options()" [class.editing]="editing()">
+  @for (item of items(); track item.widget.id) {
+    <gridster-item [item]="item" class="widget" [attr.data-widget-id]="item.widget.id">
+      <section class="frame" [attr.aria-label]="titleOf(item)">
+        <header class="head" [class.widget-drag]="editing()">
+          @if (editing()) {
+            <mat-icon class="grip" aria-hidden="true">drag_indicator</mat-icon>
+          }
+          <h2 class="title">{{ titleOf(item) }}</h2>
+          @if (editing()) {
+            <button
+              mat-icon-button
+              type="button"
+              class="remove"
+              [attr.aria-label]="'Remove ' + titleOf(item)"
+              (mousedown)="$event.stopPropagation()"
+              (click)="removeWidget.emit(item.widget.id)"
+            >
+              <mat-icon aria-hidden="true">close</mat-icon>
+            </button>
+          }
+        </header>
+        <div class="body">
+          @if (item.kind) {
+            @if (componentOf(item); as component) {
+              <ng-container *ngComponentOutlet="component; inputs: { config: item.config }" />
+            }
+          } @else {
+            <p class="unknown">
+              This console does not know the widget type <code>{{ item.widget.type }}</code>. It is kept, and saved back as
+              it was.
+            </p>
+          }
+        </div>
+      </section>
+    </gridster-item>
+  }
+</gridster>

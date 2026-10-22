@@ -1,0 +1,12 @@
+:host { display: block; height: 100%; }
+/* gridster takes the size of its parent and scrolls its rows inside it. */
+gridster { background: transparent; height: 100%; }
+gridster.editing { background: var(--mat-sys-surface-container-low); }
+.widget { background: var(--mat-sys-surface-container-lowest); border: 1px solid var(--app-border); border-radius: 0.5rem; overflow: hidden; }
+.frame { display: flex; flex-direction: column; height: 100%; }
+.head { flex: none; display: flex; align-items: center; gap: 0.25rem; min-height: 2.25rem; padding: 0 0.25rem 0 0.75rem; border-bottom: 1px solid var(--app-border); background: var(--mat-sys-surface-container); }
+.head.widget-drag { cursor: move; }
+.grip { color: var(--app-muted); }
+.title { flex: 1; margin: 0; font: var(--mat-sys-title-small); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.body { flex: 1; min-height: 0; overflow: auto; padding: 0.75rem; }
+.unknown { color: var(--app-muted); }
