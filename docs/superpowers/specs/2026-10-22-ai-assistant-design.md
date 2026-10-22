@@ -110,7 +110,10 @@ Three further asks shape the design more than the first version does:
 - FakePlatform is first-class: the assistant works with no credential and no
   network against the fake provider, and the Playwright smoke covers the panel.
 - Exact pins only; each version at least two weeks old when pinned; the
-  lockfile in the same commit. Warnings stop the build; no `#pragma`.
+  lockfile in the same commit. The backend's own assistant packages (§13)
+  are exempt from the age rule. They are first-party, built and reviewed in
+  a repository the operator owns, and the rule guards against third-party
+  releases, so a core fix would gain nothing from waiting two weeks. Warnings stop the build; no `#pragma`.
 - Angular 22 standalone, zoneless, signals, `inject()` at field level.
 - Every fact keeps one owner: the protocol's owner is the core's C# types,
   the TypeScript mirror cites them, and a shared golden file pins the JSON
