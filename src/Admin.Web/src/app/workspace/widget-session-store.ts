@@ -26,7 +26,10 @@ export class WidgetSessionStore {
     return state as WritableSignal<T>;
   }
 
-  /** Drops what an instance kept, once the instance is gone from the workspace. */
+  /**
+   * Drops what instances kept, when a remove or a Reset page takes them off their page. A deleted page keeps its
+   * widgets' state while its undo is offered; a later add never reuses an id, so nothing reads that state again.
+   */
   forget(instanceIds: Iterable<string>): void {
     for (const id of instanceIds) this.instances.delete(id);
   }
