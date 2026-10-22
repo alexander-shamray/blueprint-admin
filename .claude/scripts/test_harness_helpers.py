@@ -5624,6 +5624,8 @@ class TheGitArgvGuard(unittest.TestCase):
             "PS4='$((x))'; set -x; echo 'git push origin +HEAD:main' | sort",
             "p=$'\\x50'S4; set -x; echo 'git push origin +HEAD:main' | sort",
             "set -o 'xtrace'; echo 'git push origin +HEAD:main' | sort",
+            "shopt -so xtrace; echo 'git push origin +HEAD:main' | sort",
+            "o=-x; set $o; echo 'git push origin +HEAD:main' | sort",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command)
@@ -5638,6 +5640,7 @@ class TheGitArgvGuard(unittest.TestCase):
             "git branch | while read b; do echo \"$b\"; done",
             "git branch | while read b; do [ \"$b\" != main ] && echo \"$b\"; done",
             "for d in a b; do [ -d \"$d\" ] && ls \"$d\" | head -3; done",
+            "for p in \"a b\" \"c d\"; do set -- $p; git log --oneline \"$2\" | head -1; done",
             # Quoted text names nothing, and arithmetic over literals reads no
             # variable.
             "grep -n 'env\\[\"PATH\"\\]\\|PATH=os.pathsep' f.py | head",
