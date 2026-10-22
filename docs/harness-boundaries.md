@@ -650,7 +650,8 @@ A new residual is stated **here** and gets a row above.
   subscript, a name operand's subscript such as `unset a[x]` or `wait -p`'s,
   a name operand from an expansion such as `test -v "$n"` or `wait -fp"$n"`,
   an indirect `${!n}`, a `${…@…}` transformation, a compound assignment's
-  subscript, a substring offset), since arithmetic evaluates a value
+  subscript, a substring offset, a prompt string or `set -x`, which
+  prompt-expands `PS4`), since arithmetic evaluates a value
   holding `PATH=0` as an assignment. Such a program
   is refused any `git` word on its stdin and any stdin that is not on the
   line: a file other than `/dev/null`, a subshell the walk does not see, or

@@ -5617,6 +5617,12 @@ class TheGitArgvGuard(unittest.TestCase):
             "x=$'\\x50'ATH=0; a=([x]=1); echo 'git push origin +HEAD:main' | sort",
             "x=$'\\x50'ATH=0; a+=([x]=1); echo 'git push origin +HEAD:main' | sort",
             "x=$'a[\\x50'ATH=0]; : \"${x@P}\"; echo 'git push origin +HEAD:main' | sort",
+            # A compound list an escaped `)` does not end, an option from an
+            # expansion, and `PS4` under `set -x`.
+            "x=$'\\x50'ATH=0; a=(\\) [x]=1); echo 'git push origin +HEAD:main' | sort",
+            "x=$'\\x50'ATH=0; o=-v; test $o 'a[x]'; echo 'git push origin +HEAD:main' | sort",
+            "PS4='$((x))'; set -x; echo 'git push origin +HEAD:main' | sort",
+            "p=$'\\x50'S4; set -x; echo 'git push origin +HEAD:main' | sort",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command)
@@ -5629,6 +5635,8 @@ class TheGitArgvGuard(unittest.TestCase):
             "git commit -m 'add a hash function to the PATH source' -F - <<'EOF'\nmsg\nEOF",
             "grep -n x f | sed -n 1p | awk '{print $1}'",
             "git branch | while read b; do echo \"$b\"; done",
+            "git branch | while read b; do [ \"$b\" != main ] && echo \"$b\"; done",
+            "for d in a b; do [ -d \"$d\" ] && ls \"$d\" | head -3; done",
             # Quoted text names nothing, and arithmetic over literals reads no
             # variable.
             "grep -n 'env\\[\"PATH\"\\]\\|PATH=os.pathsep' f.py | head",
