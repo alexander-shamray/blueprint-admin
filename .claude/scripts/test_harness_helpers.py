@@ -5599,6 +5599,10 @@ class TheGitArgvGuard(unittest.TestCase):
             "x=PATH=0; : $((x)); echo 'git push origin +HEAD:main' | sort",
             "x=PATH=0; let x; echo 'git push origin +HEAD:main' | sort",
             "declare -i n; n=x; echo 'git push origin +HEAD:main' | sort",
+            # A name operand's subscript is arithmetic with no `=` after it.
+            "x=PATH=0; read 'a[x]' <<<1; echo 'git push origin +HEAD:main' | sort",
+            "x=PATH=0; unset a[x]; echo 'git push origin +HEAD:main' | sort",
+            "x=PATH=0; test -v 'a[x]'; echo 'git push origin +HEAD:main' | sort",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command)

@@ -647,7 +647,8 @@ A new residual is stated **here** and gets a row above.
   `printf -vPATH`, `BASH_CMDS[tee]=`), quoted text never (`grep 'PATH='`).
   So do a writer's target built by an expansion, a nameref, an integer
   attribute, `let`, and arithmetic that reads a variable (`$((x))`, a
-  subscript, a substring offset), since arithmetic evaluates a value
+  subscript, a name operand's subscript such as `unset a[x]`, a substring
+  offset), since arithmetic evaluates a value
   holding `PATH=0` as an assignment. Such a program
   is refused any `git` word on its stdin and any stdin that is not on the
   line: a file other than `/dev/null`, a subshell the walk does not see, or
