@@ -284,8 +284,9 @@ assistant panel is one user of a console-wide mechanism, not its owner.
   translation. A check fails the build on a message the source has and a
   shipped translation lacks, so a new string cannot ship half-translated. It
   runs in `npm-checks.sh` and the `web` workflow, as part of `npm run lint`
-  (`docs/testing.md`). Adding a language is adding one file and one entry in
-  `LOCALES`.
+  (`docs/testing.md`). Adding a language is adding one file, one entry in
+  `LOCALES` and its Angular locale data in `LOCALE_DATA`, which the compiler
+  then asks for.
 - **Formats.** Dates, numbers and durations go through Angular's locale data
   for the active locale (`registerLocaleData`), never hand-formatted.
 - **What is never translated**, because it is evidence or a command, not UI
