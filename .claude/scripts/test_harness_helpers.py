@@ -7719,6 +7719,8 @@ class TheGitArgvGuard(unittest.TestCase):
             "env -C.claude bash <<'EOF'\ngit checkout HEAD -- settings.json\nEOF",
             "env --chdir=.claude bash <<< 'git checkout HEAD -- settings.json'",
             "/usr/bin/fish -c 'git checkout HEAD -- notes.txt'",
+            # zsh's own install names itself by version too (review R5).
+            "zsh-5.9 -c true; git checkout HEAD -- notes.txt",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command, cwd=root)

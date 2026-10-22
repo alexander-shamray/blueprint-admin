@@ -3516,7 +3516,7 @@ def git_path_writer_offence(run, literals, command):
         r"(?i)(?<!\w)(GIT_WORK_TREE|GIT_DIR|GIT_COMMON_DIR|GIT_INDEX_FILE"
         r"|GIT_CONFIG\w*|SHELLOPTS|BASH_ENV|ZDOTDIR|allexport)\b"
         r"|(?-i:(?<![\w$])ENV\b)|(?<![\w.-])(?:"
-        + "|".join(ALWAYS_STARTUP_SHELLS) + r")(?:\.exe)?(?![\w.-])"
+        + "|".join(ALWAYS_STARTUP_SHELLS) + r")(?:-[\d.]+)?(?:\.exe)?(?![\w.-])"
         r"|(?<![\w./-])exec\b(?:\s+-\S+)*?\s+-\w*[al]"
         r"|(?<![\w./-])(?:eval|source|trap|alias|enable)(?![\w./-])"
         r"|\b(?:mapfile|readarray)\b[^;&|\n]*\s-(?-i:[A-Za-z]*C)"
