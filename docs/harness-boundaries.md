@@ -577,7 +577,9 @@ A new residual is stated **here** and gets a row above.
   follows, and code read from data. A program that sets its child's
   environment is a further route, and no list of launchers closes it, so the
   list is of the wrappers that add nothing (`INERT_WRAPPERS`: `nohup`,
-  `timeout 5`, `nice -n 10`, `command`, `env` with literal assignments).
+  `timeout 5`, `nice -n 10`, `command`, `env`; `env`'s `-C`, `-S`,
+  quoted words and expansions are refused by its own rules, so what is left
+  to it is literal assignments).
   Beside a writer, a shell any other program starts is refused (`envdir
   /tmp/d bash -c '...'`, `chpst -e`, `xargs bash`, `sudo bash`, by `-c`, a
   here-string, a heredoc or a pipe, and through a shell between them), and so

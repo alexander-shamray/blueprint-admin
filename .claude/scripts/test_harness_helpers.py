@@ -7716,6 +7716,8 @@ class TheGitArgvGuard(unittest.TestCase):
             "sudo bash -c 'git checkout HEAD -- notes.txt'",
             "xargs bash -c 'git checkout HEAD -- notes.txt'",
             "env -C .claude bash -c 'git checkout HEAD -- settings.json'",
+            "env -C.claude bash <<'EOF'\ngit checkout HEAD -- settings.json\nEOF",
+            "env --chdir=.claude bash <<< 'git checkout HEAD -- settings.json'",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command, cwd=root)
