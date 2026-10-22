@@ -5397,11 +5397,15 @@ def resolution_changed(command):
         # `set -x` prompt-expands `PS4` before every traced command; read after
         # quote removal, so `set -o 'xtrace'`, `set -euxo pipefail` and
         # `shopt -so xtrace` count, and so does an option from an expansion.
-        # Words after `--` are positional parameters, never options, which
-        # keeps the `set -- $pair` loop of the replayed commands a loop.
-        options = arguments[:arguments.index("--")] if "--" in arguments else arguments
+        # A brace or a glob can produce any option too (`set -{x,e}`). After
+        # `--`, `set` takes positional parameters, never options, which keeps
+        # the `set -- $pair` loop of the replayed commands a loop; `shopt`
+        # still takes option names there (`shopt -so -- xtrace`).
+        options = arguments
+        if name == "set" and "--" in arguments:
+            options = arguments[:arguments.index("--")]
         if name in ("set", "shopt") and any(
-                word == "xtrace" or re.search(r"[$`]", word)
+                word == "xtrace" or re.search(r"[$`{}\[\]?*]", word)
                 or (name == "set" and re.match(r"^-[A-Za-z]*x", word))
                 for word in options):
             return True
