@@ -69,6 +69,34 @@ public sealed partial class WorkspaceStoreTests : IDisposable
     }
 
     [Fact]
+    public void The_spas_copies_of_the_schemas_bounds_and_version_are_the_hosts()
+    {
+        // The SPA saves within these, and a host that moved one alone would refuse every save with a 400.
+        string root = AppContext.BaseDirectory;
+
+        while (!File.Exists(Path.Combine(root, "BlueprintAdmin.slnx")))
+        {
+            root = Path.GetDirectoryName(root) ?? throw new InvalidOperationException("BlueprintAdmin.slnx not found above the test output.");
+        }
+
+        string workspace = Path.Combine(root, "src", "Admin.Web", "src", "app", "workspace");
+        string types = File.ReadAllText(Path.Combine(workspace, "workspace-types.ts"));
+        string builtIn = File.ReadAllText(Path.Combine(workspace, "built-in-pages.ts"));
+
+        SpaConstant(types, "GRID_COLUMNS").ShouldBe(WorkspaceSchema.GridColumns);
+        SpaConstant(types, "MAX_ROWS").ShouldBe(WorkspaceSchema.MaxRows);
+        SpaConstant(builtIn, "WORKSPACE_VERSION").ShouldBe(WorkspaceSchema.Current);
+    }
+
+    private static int SpaConstant(string source, string name)
+    {
+        Match match = Regex.Match(source, $@"export const {name} = (\d+);");
+        match.Success.ShouldBeTrue($"{name} is not an `export const {name} = <number>;` line any more.");
+
+        return int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    [Fact]
     public void A_saved_workspace_is_read_back_and_its_etag_follows_its_content()
     {
         WorkspaceStore store = Store();
