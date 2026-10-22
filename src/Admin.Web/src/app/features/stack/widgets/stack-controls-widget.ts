@@ -21,6 +21,8 @@ import { ComposeRun, StackFeed } from '../stack-feed';
   imports: [FormsModule],
   templateUrl: './stack-controls-widget.html',
   styleUrl: './stack-widgets.css',
+  // The wipe box's input and buttons are inline and spaced by the template's own whitespace, as on the Stack screen.
+  preserveWhitespaces: true,
 })
 export class StackControlsWidget {
   private readonly host = inject(HostClient);
