@@ -10,9 +10,10 @@ for (const { path, label } of SCREENS) {
 
     const widget = page.locator('gridster-item');
     await expect(widget).toHaveCount(1);
-    await expect(widget.locator('.head .title')).toHaveText(label);
-    await expect(widget.locator('.body > *').first()).toBeVisible();
-    await expect(widget.locator('.body .loading')).toHaveCount(0);
+    // The frame's own ws- classes: the screens inside have .head, .title and .loading of their own.
+    await expect(widget.locator('.ws-head .ws-title')).toHaveText(label);
+    await expect(widget.locator('.ws-body > *').first()).toBeVisible();
+    await expect(widget.locator('.ws-body > app-legacy-screen-widget > .loading')).toHaveCount(0);
     await expect(page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: label })).toHaveClass(/active/);
   });
 }
@@ -32,7 +33,7 @@ test('a page made, filled, resized and rearranged is found as it was left after 
     await page.getByRole('menuitem', { name: 'Screen' }).click();
     await page.getByRole('menuitem', { name: screen, exact: true }).click();
   }
-  const titles = page.locator('gridster-item .head .title');
+  const titles = page.locator('gridster-item .ws-head .ws-title');
   await expect(titles).toHaveText(['Logs', 'Map', 'Mail']);
 
   const items = page.locator('gridster-item');
@@ -46,7 +47,7 @@ test('a page made, filled, resized and rearranged is found as it was left after 
   expect(resized.height).toBeLessThan(before.height);
   await mail.scrollIntoViewIfNeeded();
   await halve(page, mail);
-  const head = (await mail.locator('.head').boundingBox())!;
+  const head = (await mail.locator('.ws-head').boundingBox())!;
   await page.mouse.move(head.x + 40, head.y + head.height / 2);
   await page.mouse.down();
   await page.mouse.move(resized.x + resized.width + 60, resized.y + 15, { steps: 25 });

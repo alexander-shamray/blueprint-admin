@@ -25,18 +25,18 @@ describe('WorkspaceGrid', () => {
 
   it('frames each widget under the title its type gives it, and keeps an unknown type', () => {
     const element: HTMLElement = render([known, unknown], false).nativeElement;
-    const titles = [...element.querySelectorAll('.head .title')].map((h) => h.textContent?.trim());
+    const titles = [...element.querySelectorAll('.ws-head .ws-title')].map((h) => h.textContent?.trim());
     expect(titles).toEqual(['API', 'Unknown widget (from-a-newer-console)']);
-    expect(element.querySelector('.unknown')?.textContent).toContain('from-a-newer-console');
+    expect(element.querySelector('.ws-unknown')?.textContent).toContain('from-a-newer-console');
   });
 
   it('shows the remove control only while editing, and reports which widget', () => {
-    expect(render([known], false).nativeElement.querySelector('button.remove')).toBeNull();
+    expect(render([known], false).nativeElement.querySelector('button.ws-remove')).toBeNull();
 
     const fixture = render([known], true);
     let removed: string | undefined;
     fixture.componentInstance.removeWidget.subscribe((id) => (removed = id));
-    (fixture.nativeElement.querySelector('button.remove') as HTMLButtonElement).click();
+    (fixture.nativeElement.querySelector('button.ws-remove') as HTMLButtonElement).click();
     expect(removed).toBe('w1');
   });
 
