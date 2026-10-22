@@ -561,7 +561,7 @@ like a secret, as the workspace validator does (workspace note §6.4).
 
 The AI feature is optional, and turning it off is configuration alone:
 `Admin:Assistant:Provider=off` in `appsettings.json`, an environment variable
-(`Admin__Assistant__Provider=off`), or `--Admin:Assistant:Provider=off` on the
+(`BLUEPRINT_Admin__Assistant__Provider=off`), or `--Admin:Assistant:Provider=off` on the
 command line, as with every other `Admin:` key. Leaving it unset is off too,
 except under FakePlatform, where unset selects the fake provider (§8.3). With
 it off:
