@@ -164,7 +164,7 @@ core's records; field names are camelCase JSON.
 | `GET /api/assistant` | Status: `enabled`, `provider`, `model`, and when disabled a `reason` (`off`, `no-credential`, `unreachable`). Never the credential or where it came from. |
 | `POST /api/assistant/conversations` | Opens a conversation. Body: `client` (name, version), `locale` (§5.4), `catalogue` (§6.1), `clientTools` (§6), and `hostOptions`, an object the core hands untouched to the host's tool sources in `ToolContext` (the admin reads its `identity`, a username, §6.5). Returns its `id`. |
 | `POST /api/assistant/conversations/{id}/turns` | Sends the operator's message and starts a turn. Body: `text`, `context` (what the operator is looking at: the page, the screen, the widgets on it), and optionally a new `locale` or `hostOptions`. `409` if a turn is running. |
-| `GET /api/assistant/conversations/{id}` | The conversation as the client shows it: each operator message, each reply's text, each tool call's `name` and `args` with its outcome, each turn's end `reason`, whether a turn is running, and `lastEventId`, the id the event stream continues from. No provider-opaque block, no tool result body. A reloaded client redraws from this and then follows `events` (§5.5). |
+| `GET /api/assistant/conversations/{id}` | The conversation as the client shows it: each operator message, each reply's text, each tool call's `name` and `args` with its outcome, each turn's end `reason`, whether a turn is running, `lastEventId`, the id the event stream continues from, and `pendingCalls`, the client tool calls still waiting for a result, so a client reloaded after one was emitted still answers it. No provider-opaque block, no tool result body. A reloaded client redraws from this and then follows `events` (§5.5). |
 | `GET /api/assistant/conversations/{id}/events` | Server-Sent Events for the conversation, with `Last-Event-ID` resume from a bounded ring, as `JobStream` does for a job. |
 | `POST /api/assistant/conversations/{id}/tool-results` | The result of a client tool call: `callId`, `ok`, `content`. |
 | `POST /api/assistant/conversations/{id}/cancel` | Ends the running turn; a provider stream in flight is cancelled. |
@@ -516,8 +516,10 @@ public interface IAssistantProvider
 
 `TurnRequest` carries the system text, the catalogue, the tool descriptors,
 the history and the limits. `ProviderEvent` is one of `TextDelta`,
-`ToolCall` (id, name, input as JSON), `Opaque` (blocks to replay), `Usage`
-and `End` (reason, and a refusal category if any). An adapter translates
+`ToolCall` (id, name, input as JSON), `Opaque` (blocks to replay),
+`UsageReport` and `RoundEnd` (reason, and a refusal category if any); the
+last two are not `Usage` and `End` because `End` is a reserved word in other
+.NET languages and `Usage` is the protocol's own record. An adapter translates
 descriptors to its API's tool format and back; nothing above it sees a
 vendor type.
 
