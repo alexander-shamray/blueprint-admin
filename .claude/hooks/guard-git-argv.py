@@ -5298,21 +5298,83 @@ RESOLVING = re.compile(
 # reviews; the expansion half verified admitted.
 # Arithmetic over literals alone reads no variable, so `${PIPESTATUS[0]}`, the
 # commonest shape in the replayed commands, is not one.
-# **A subscript is read up to the next bracket, never across one**: read
-# across `[`, a line of ` a[1` with no `]` backtracked through every later
-# bracket inside one match, which the watchdog cannot interrupt, and grew
-# with the cube of its length (2500 repeats, 15.6 s). A nested subscript is
-# still read, by its inner name (R1, round 5 of #447).
-EXPANSION_WRITES = re.compile(
-    r"\$\{[^}]*="
-    r"|\(\([^)]*[A-Za-z_]|\$\[[^]]*[A-Za-z_]"
-    r"|\$\{[^}]*\[[^]]*[A-Za-z_]"
-    r"|\$\{!"
-    r"|\$\{[^}]*@(?![]}])"
-    r"|\+?=\([\s\S]*?\[[^]]*[A-Za-z_$`]"
-    r"|\$\{[^}:]*:(?![-=+?])[^}]*[A-Za-z_]"
-    r"|(?<![\w-])[A-Za-z_]\w*\[(?=[^][]*\])[^][A-Za-z_]*[A-Za-z_]"
-    r"|\[\[[^]]*\s-(?:eq|ne|lt|le|gt|ge)\s")
+# **Each context is read to the bracket that closes it, in one pass, never
+# by a regular expression.** Brackets pair by kind, as bash pairs `$((…))`, a
+# subscript and `${…}`, so a name nested at any depth is read: `a[b[0]+x]=1`,
+# `(( (0)+x ))` and `${s:${#}+x}` each read `x`. Matched by regular
+# expressions, a context ended at its first closing bracket, which hid all
+# three, and two of them read across `[` in time cubic in the line's length
+# inside one match, which the watchdog cannot interrupt: `${[` repeated 2000
+# times took 30 s (rounds 5 and 6 of #447). An unclosed context runs to the
+# end of the text, which over-reads rather than under-reads.
+ARITHMETIC_OPENERS = re.compile(r"\(\(|\$\[|\[\[|(?<![\w-])[A-Za-z_]\w*\[")
+
+
+def _closing_brackets(text):
+    """Where each bracket of `text` closes, `(`, `[` and `{` each paired with
+    its own kind; an unclosed one is absent."""
+    closes, open_brackets = {}, {"(": [], "[": [], "{": []}
+    for index, char in enumerate(text):
+        if char in open_brackets:
+            open_brackets[char].append(index)
+        elif char in ")]}":
+            stack = open_brackets["([{"[")]}".index(char)]]
+            if stack:
+                closes[stack.pop()] = index
+    return closes
+
+
+def _first_from(text, pattern):
+    """For each offset of `text`, its end included, where `pattern` next
+    matches at or after it, or `len(text)` where it does not."""
+    starts = {match.start() for match in re.finditer(pattern, text)}
+    firsts, found = [len(text)] * (len(text) + 1), len(text)
+    for index in range(len(text) - 1, -1, -1):
+        if index in starts:
+            found = index
+        firsts[index] = found
+    return firsts
+
+
+def expansion_writes(expanded):
+    """Whether `expanded` (`_expanded_text`) holds an expansion that writes or
+    arithmetic that reads a name, each context read to the bracket that
+    closes it."""
+    length = len(expanded)
+    closes = _closing_brackets(expanded)
+    names = _first_from(expanded, r"[A-Za-z_]")
+    if "${" in expanded:
+        equals = _first_from(expanded, "=")
+        transforms = _first_from(expanded, r"@(?![]}])")
+        colons = _first_from(expanded, ":")
+        for match in re.finditer(r"\$\{", expanded):
+            brace = match.start() + 1
+            end = closes.get(brace, length)
+            colon = colons[brace]
+            # An indirect `${!n}`, an assignment `${n=…}`, a transformation
+            # `${n@P}`, or a substring offset `${s:i}` that is no `:-` default.
+            if (expanded.startswith("!", brace + 1) or equals[brace] < end
+                    or transforms[brace] < end
+                    or (colon < end and names[colon + 1] < end
+                        and expanded[colon + 1:colon + 2] not in ("-", "=", "+", "?"))):
+                return True
+    operators = (_first_from(expanded, r"\s(?=-(?:eq|ne|lt|le|gt|ge)\s)")
+                 if "[[" in expanded else None)
+    for match in ARITHMETIC_OPENERS.finditer(expanded):
+        opener = match.group()
+        bracket = match.start() if opener in ("((", "[[") else match.end() - 1
+        end = closes.get(bracket, length)
+        if (operators if opener == "[[" else names)[match.end()] < end:
+            return True
+    # A compound assignment's subscript, read to the end of the line, since an
+    # escaped `)` ends no list.
+    assignment = expanded.find("=(")
+    if assignment >= 0:
+        values = _first_from(expanded, r"[A-Za-z_$`]")
+        for index in range(assignment + 2, length):
+            if expanded[index] == "[" and values[index + 1] < closes.get(index, length):
+                return True
+    return False
 
 
 def _expanded_text(command):
@@ -5410,7 +5472,7 @@ def resolution_changed(command):
     # expands that so much as names a resolution variable counts. Quoted text
     # does not, which is what keeps `grep 'PATH=' f | head` a read.
     expanded = _expanded_text(command)
-    if RESOLUTION_VARIABLES.search(expanded) or EXPANSION_WRITES.search(expanded):
+    if RESOLUTION_VARIABLES.search(expanded) or expansion_writes(expanded):
         return True
     stripped = strip_dollar_quotes(strip_redirections(
         join_continuations(strip_comments(strip_heredocs(command)))))
@@ -5500,20 +5562,24 @@ def resolution_changed(command):
 
 def stdin_classified(words):
     """Whether the run made of `words` starts a program whose handling of its
-    stdin this file knows: a shell, which the stdin pass reads as one, or a
-    reader or interpreter, whose stdin is data. A run that starts nothing
-    reads nothing.
+    stdin this file knows: a shell that reads its stdin as its script, which
+    the stdin pass reads as one, or a reader or interpreter, whose stdin is
+    data. A run that starts nothing reads nothing.
 
     **A reader is classified by a bare name only.** A path names whatever was
     copied there, so `/tmp/sort` is no `sort`; a shell by any spelling is still
     a shell, which the stdin pass reads as one.
+
+    **A shell with a script of its own is not classified.** With `-c` its
+    script is its argv, and its stdin passes to whatever that script starts:
+    `bash -c pwsh <<<'git push …'` was admitted (R1, round 6 of #447).
     """
     program = _launched(words)
     if program is None:
         return True
     name = program_name(program)
     if name in EVALUATORS:
-        return True
+        return reads_stdin_as_script(words)
     if path_qualified(program):
         return False
     return (interpreter(name) or name in STDIN_DATA_READERS
@@ -5665,10 +5731,15 @@ def _reaches_spoofable(command, position, ordinary):
 
 
 def _as_typed(text):
-    """`text` as a shell reading it would join its words: quotes and
-    backslashes gone, `$IFS` a space. So `g''it push` and `git$IFS'push'` read
-    as the push they are; a name computed any other way is `COMPUTED_TEXT`."""
-    return re.sub(r"\$\{?IFS\}?", " ", re.sub(r"[\"'\\]", "", text))
+    """`text` as a shell reading it would join its words: continuations
+    joined, quotes and backslashes gone, `$IFS` a space. So `g''it push` and
+    `git$IFS'push'` read as the push they are; a name computed any other way
+    is `COMPUTED_TEXT`. **A backslash-newline goes first**, as `read` and a
+    shell join it, even in a quoted heredoc that no outer shell joined:
+    `while read l; do $l; done <<'EOF'` over `git \\<newline>push …` runs the
+    push (R5, round 6 of #447)."""
+    joined = re.sub(r"\\\r?\n", "", text)
+    return re.sub(r"\$\{?IFS\}?", " ", re.sub(r"[\"'\\]", "", joined))
 
 
 # Text whose words a shell would compute before running them: a command
@@ -5722,7 +5793,7 @@ def _offending_stdin(text, strict, computed=True):
     if strict and UNPLAIN.search(text):
         return True
     typed = _as_typed(text)
-    pattern = GIT_WORD if strict else GIT_WRITER_LINE
+    search = GIT_WORD.search if strict else git_writer_line
     # A defaulting expansion reads as its word when the name is unset
     # (`${u:-git}`), and a glob in a command word's path names whatever it
     # matches (`/usr/bin/gi? push`), which a strict reader is refused unread.
@@ -5731,8 +5802,8 @@ def _offending_stdin(text, strict, computed=True):
     if strict and re.search(r"(?m)(?:^|[;&|(])[ \t]*(?=[^\s;&|()]*/)[^\s;&|()]*[?*[]",
                             typed):
         return True
-    return bool(pattern.search(typed) or pattern.search(PARAMETER.sub("", typed))
-                or pattern.search(DEFAULTING.sub(r"\1", typed)))
+    return bool(search(typed) or search(PARAMETER.sub("", typed))
+                or search(DEFAULTING.sub(r"\1", typed)))
 
 
 def _body_starts(command):
@@ -5745,13 +5816,17 @@ def _body_starts(command):
 
 def _coprocess(words):
     """Whether the run made of `words` starts a coprocess: `coproc` first, or
-    after reserved words and `time -p`, as `{ coproc …`, `then coproc …`,
-    `time coproc …` and `! coproc …` do. Read at the first word only, each of
-    those was admitted (round 5 of #447)."""
+    after reserved words and `time`'s `-p` and `--`, as `{ coproc …`, `then
+    coproc …`, `time coproc …`, `time -p -- coproc …` and `! coproc …` do.
+    Read at the first word only, each of those was admitted (round 5 of
+    #447); `time --` was too (round 6). Bash takes `time [-p] [--]` and
+    nothing more: `time -p -p` and `time -- --` are syntax errors."""
     position = 0
     while position < len(words) and (
             words[position] in SHELL_KEYWORDS
-            or (words[position] == "-p" and words[position - 1:position] == ["time"])):
+            or (words[position] in ("-p", "--")
+                and words[position - 1:position] == ["time"])
+            or words[max(position - 2, 0):position + 1] == ["time", "-p", "--"]):
         position += 1
     return words[position:position + 1] == ["coproc"]
 
@@ -5842,15 +5917,29 @@ GIT_STDIN_WRITERS = frozenset({"-c", "am", "apply", "bisect", "config",
                                "filter-branch", "filter-repo", "rebase",
                                "submodule"})
 
-# A line that runs git with a subcommand that writes: the push and ref-updating
-# rules' subcommands and the path writers', each a whole word after a `git` word.
-GIT_WRITER_LINE = re.compile(
-    r"(?im)(?<![\w.-])git(?:\.exe)?(?![\w.-])[^\n]*?(?<![\w.-])(?:"
+# A subcommand that writes: the push and ref-updating rules' subcommands and
+# the path writers', each a whole word.
+GIT_WRITER_WORD = re.compile(
+    r"(?i)(?<![\w.-])(?:"
     + "|".join(re.escape(word) for word in sorted(
         {"push"} | GIT_PATH_WRITERS | GIT_WRITING_SUBCOMMANDS
         | REF_UPDATING_PLUMBING | GIT_EXECUTING_SUBCOMMANDS
         | GIT_STDIN_WRITERS))
     + r")(?![\w.-])")
+
+
+def git_writer_line(text):
+    """Whether a line of `text` runs git with a subcommand that writes: a
+    `GIT_WRITER_WORD` after the line's first `git` word. **Searched on from
+    the first `git` word, never as one lazy pattern**, which tried the writers
+    at every later position from every `git` word, so 8000 `git` words took
+    7.7 s inside one match, which the watchdog cannot interrupt (R3, round 6
+    of #447)."""
+    for line in text.split("\n"):
+        first = GIT_WORD.search(line)
+        if first and GIT_WRITER_WORD.search(line, first.end()):
+            return True
+    return False
 
 
 def unclassified_stdin_writer(command):
@@ -7127,9 +7216,11 @@ def _offence(command, depth, judged):
     if unclassified_stdin_writer(command):
         return (
             "a program this guard cannot classify as a shell or as a reader is "
-            "handed text on its stdin that runs git to write, and under another "
-            "name a shell would run it (#397). Hand the text to a program by "
-            "its own name, or run the git command as its own command."
+            "handed text on its stdin that runs git to write, or that this "
+            "guard cannot read (computed, built from pieces, or from a file "
+            "or a command), and under another name a shell would run it "
+            "(#397). Hand the text to a program by its own name, spell it "
+            "plainly, or run the git command as its own command."
         )
 
     for script in stdin_scripts(command):

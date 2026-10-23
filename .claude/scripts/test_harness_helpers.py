@@ -5630,6 +5630,12 @@ class TheGitArgvGuard(unittest.TestCase):
             "x=$'\\x50'ATH=0; o=-p; wait -n $o 'a[x]'; echo 'git push origin +HEAD:main' | sort",
             "x=$'\\x50'ATH=0; o='-pa[x]'; wait $o; echo 'git push origin +HEAD:main' | sort",
             "shopt -so -- xtrace; echo 'git push origin +HEAD:main' | sort",
+            # Round 6: arithmetic nested in brackets, read to its close.
+            "x=$'\\x50'ATH=0; a[b[0]+x]=1; echo 'git push origin +HEAD:main' | sort",
+            "x=$'\\x50'ATH=0; : ${a[$[0]+x]}; echo 'git push origin +HEAD:main' | sort",
+            "x=$'\\x50'ATH=0; (( (0)+x )); echo 'git push origin +HEAD:main' | sort",
+            "x=$'\\x50'ATH=0; : $[ $[0]+x ]; echo 'git push origin +HEAD:main' | sort",
+            "x=$'\\x50'ATH=0; : ${s:${#}+x}; echo 'git push origin +HEAD:main' | sort",
         ):
             with self.subTest(command=command):
                 # The #397 rule itself refuses each, not only an older one that
@@ -5675,6 +5681,14 @@ class TheGitArgvGuard(unittest.TestCase):
             "! coproc pwsh; echo 'git push origin +HEAD:main' >&63",
             "if :; then coproc pwsh; fi; echo 'git push origin +HEAD:main' >&63",
             "time -p coproc (pwsh); echo 'git push origin +HEAD:main' >&63",
+            # Round 6: `time --`, a shell whose `-c` script inherits its
+            # stdin, and a continuation `read` joins in a quoted heredoc.
+            "time -- coproc pwsh; echo 'git push origin +HEAD:main' >&63",
+            "time -p -- coproc pwsh; echo 'git push origin +HEAD:main' >&63",
+            "bash -c pwsh <<<'git push origin +HEAD:main'",
+            "sh -c /tmp/x <<<'git push origin +HEAD:main'",
+            "echo 'git push origin +HEAD:main' | bash -c pwsh",
+            "while read l; do $l; done <<'EOF'\ngit \\\npush origin +HEAD:main\nEOF",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command)
@@ -8030,20 +8044,36 @@ class TheGitArgvGuard(unittest.TestCase):
                 self.assertIsNotNone(self.judge(command))
                 self.assertLess(time.monotonic() - started, 10)
 
-    def test_a_subscript_scan_answers_in_linear_time(self):
-        # Round 5 of #447: `EXPANSION_WRITES` read a subscript across `[`, so
-        # a line of ` a[1` with no `]` backtracked through every later
-        # bracket inside one match, which the watchdog cannot interrupt:
-        # 2500 repeats took 15.6 s, growing with their cube.
+    def test_arithmetic_and_writer_lines_answer_in_linear_time(self):
+        # Rounds 5 and 6 of #447: arithmetic read by regular expressions read
+        # across `[` inside one match, which the watchdog cannot interrupt:
+        # ` a[1` 2500 times took 15.6 s and `${[` 2000 times 30 s, each
+        # growing with the cube of the length, and one lazy writer-line
+        # pattern took 7.7 s over 8000 `git` words. Each is one pass now,
+        # sized here to `LENGTH_BUDGET`.
         guard = self.judging_module()
-        for text in (" a[1" * 5000, " a[b" * 5000):
+        for text in (" a[1" * 25000, "${[" * 33000, "=([" * 33000,
+                     "${" + "[1" * 50000, "a=( " + "[1" * 50000, "[[" * 50000,
+                     "$[" * 50000, "((1+(" * 20000):
             with self.subTest(text=text[:8]):
                 started = time.monotonic()
-                self.assertIsNone(guard.EXPANSION_WRITES.search(text))
+                guard.expansion_writes(text)
                 self.assertLess(time.monotonic() - started, 10)
-        # A nested subscript is still read, by its inner name.
-        self.assertIsNotNone(guard.EXPANSION_WRITES.search(": ${a[b[i]]}"))
-        self.assertIsNotNone(guard.EXPANSION_WRITES.search("a[b[i]]=1"))
+        started = time.monotonic()
+        self.assertFalse(guard.git_writer_line("git " * 25000))
+        self.assertLess(time.monotonic() - started, 10)
+        self.assertTrue(guard.git_writer_line("git git -C x push origin"))
+        # A name nested at any depth is read; literals alone are not.
+        for text in (": ${a[b[i]]}", "a[b[i]]=1", "a[b[0]+x]=1",
+                     ": ${a[$[0]+x]}", "(( (0)+x ))", ": $[ $[0]+x ]",
+                     ": ${s:${#}+x}", "a[$[$[0]]+x]=1", "[[ a -eq 1 ]]",
+                     "a=([x]=1)"):
+            with self.subTest(text=text):
+                self.assertTrue(guard.expansion_writes(text))
+        for text in ("a[0]=1", ": ${PIPESTATUS[0]}", "ls f[0-9].txt",
+                     ": ${a:-b}", ": $((1 + (2)))", "[[ -d x ]]"):
+            with self.subTest(text=text):
+                self.assertFalse(guard.expansion_writes(text))
 
     def test_the_startup_shell_pattern_answers_in_linear_time(self):
         # #357: two readings of one word doubled the startup-shell search per
