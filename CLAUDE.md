@@ -41,12 +41,10 @@ document does not do, change that document's owner first.
 
 ```
 src/Admin.Assistant/       the AI assistant's provider-neutral core (no admin type)
-src/Admin.Assistant.Anthropic/  the one project that carries the Anthropic SDK
 src/Admin.Host/            .NET 10 minimal API: Compose, npm as children, HTTP
                            proxy, SSE. Composition root: Program.cs
 src/Admin.Web/             Angular 22 standalone SPA, built into Host/wwwroot
 tests/Admin.Assistant.Tests/  xunit, the core
-tests/Admin.Assistant.Anthropic.Tests/  xunit, the adapter against recorded streams
 tests/Admin.Host.Tests/    xunit
 src/Admin.Web/e2e/         Playwright (FakePlatform)
 tools/token-usage/         Transcript report for the token plan
@@ -74,8 +72,6 @@ tools/token-usage/         Transcript report for the token plan
 | The assistant's protocol (mirrored in `src/Admin.Web/src/app/assistant/protocol.ts`) | `src/Admin.Assistant/Protocol/` and `src/Admin.Assistant/Tools/ToolDescriptor.cs`, pinned by `Protocol/golden/` |
 | Assistant on or off, and the `Admin:Assistant` keys | `AssistantOptions` in `src/Admin.Host/Assistant/AssistantOptions.cs` |
 | The assistant's limits and their defaults | `AssistantLimits` in `src/Admin.Assistant/AssistantLimits.cs` |
-| What the Anthropic provider sends, the default model and effort, and how its stream is read | `RequestBuilder`, `AnthropicSettings` and `StreamMapper` in `src/Admin.Assistant.Anthropic/` |
-| Where the provider's credential comes from | the SDK's own resolution, built in `AnthropicProviderFactory` (`src/Admin.Host/Assistant/`); no key holds one |
 | What each screen is for, as the assistant explains it | `help` in `SCREENS` (`src/Admin.Web/src/app/screens.ts`) |
 | Which console reads the assistant may call, and the endpoint each mirrors | `AdminReadTools` in `src/Admin.Host/Assistant/AdminReadTools.cs` |
 | The fake assistant's answers | `FakeAssistantScripts` in `src/Admin.Host/Fakes/` |
