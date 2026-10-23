@@ -51,9 +51,16 @@ public sealed record ClientToolResult(string CallId, bool Ok, string Content);
 
 /// <summary>
 /// <c>GET …/{id}</c>: the conversation as the client shows it, and the event id its stream continues from. No
-/// provider-opaque block and no tool result body.
+/// provider-opaque block and no tool result body. <see cref="PendingCalls"/> are the client tool calls still waiting
+/// for a result, in the event's own shape: a client reloaded after one was emitted resumes past it, so this is how it
+/// answers them.
 /// </summary>
-public sealed record ConversationView(string Id, IReadOnlyList<ConversationItem> Items, bool Running, long LastEventId);
+public sealed record ConversationView(
+    string Id,
+    IReadOnlyList<ConversationItem> Items,
+    bool Running,
+    long LastEventId,
+    IReadOnlyList<ClientToolCallEvent> PendingCalls);
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
 [JsonDerivedType(typeof(OperatorItem), "operator")]

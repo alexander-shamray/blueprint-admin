@@ -175,6 +175,42 @@ public sealed class AssistantSessionTests
     }
 
     [Fact]
+    public async Task A_client_call_waiting_when_the_turn_is_cancelled_ends_failed_and_the_read_holds_it_until_then()
+    {
+        ScriptedProvider provider = new ScriptedProvider()
+            .Round(new ToolCall("c1", "open_screen", new JsonObject { ["path"] = "logs" }), new RoundEnd(ProviderStop.Done));
+        AssistantSession session = Open(Core(provider), clientTools: Given.ReadOnly("open_screen", ToolSide.Client));
+
+        session.TryStart(Given.Turn("open logs"));
+        Task<List<AssistantEvent>> ended = Given.UntilEnded(session);
+        _ = await NextOf<ClientToolCallEvent>(session);
+
+        // A client reloaded now resumes past the call, so the read is how it learns the call still waits.
+        ClientToolCallEvent pending = session.View().PendingCalls.ShouldHaveSingleItem();
+        pending.CallId.ShouldBe("c1");
+        pending.Input["path"]!.GetValue<string>().ShouldBe("logs");
+
+        session.Cancel();
+        List<AssistantEvent> events = await ended;
+
+        events.OfType<ToolFinishedEvent>().Single().ShouldBe(new ToolFinishedEvent("c1", false));
+        session.View().Items.OfType<ToolItem>().Single().Ok.ShouldBe(false);
+        session.View().PendingCalls.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void A_redactor_that_throws_leaves_no_turn_held()
+    {
+        AssistantSession session = Open(Core(new ScriptedProvider(), redactor: new ThrowingRedactor()));
+
+        Should.Throw<InvalidOperationException>(() => session.TryStart(Given.Turn("hello")));
+
+        session.Running.ShouldBeFalse();
+        session.View().Items.ShouldBeEmpty();
+        session.History.ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task A_refusal_ends_with_refused_and_the_providers_category()
     {
         ScriptedProvider provider = new ScriptedProvider().Round(new RoundEnd(ProviderStop.Refused, "cyber"));
@@ -407,6 +443,11 @@ public sealed class AssistantSessionTests
         time.Advance(TimeSpan.FromMinutes(6));
 
         core.Find(Operator, session.Id).ShouldBeNull();
+    }
+
+    private sealed class ThrowingRedactor : IRedactor
+    {
+        public string Redact(string text, Caller caller) => throw new InvalidOperationException("the redactor failed");
     }
 
     private static async Task<T> NextOf<T>(AssistantSession session)

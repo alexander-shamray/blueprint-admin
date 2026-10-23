@@ -25,7 +25,7 @@ public sealed class AssistantSession : IDisposable
     private readonly IReadOnlyList<CatalogueEntry> catalogue;
     private readonly List<HistoryMessage> history = [];
     private readonly List<ConversationItem> items = [];
-    private readonly Dictionary<string, TaskCompletionSource<ToolOutcome>> pending = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (ClientToolCallEvent Call, TaskCompletionSource<ToolOutcome> Answer)> pending = new(StringComparer.Ordinal);
     private readonly EventLog log;
     private bool closed;
     private CancellationTokenSource? turn;
@@ -86,19 +86,16 @@ public sealed class AssistantSession : IDisposable
                 return false;
             }
 
-            if (request.Locale is { Length: > 0 } changedLocale)
-            {
-                locale = changedLocale;
-            }
+            // The host's redactor runs before anything changes, so one that throws leaves the conversation as it was
+            // rather than holding a turn with no loop behind it.
+            string turnLocale = request.Locale is { Length: > 0 } changedLocale ? changedLocale : locale;
+            UserMessage message = new(core.Redactor.Redact(Prompt.Turn(request.Text, request.Context, turnLocale), Caller));
 
-            if (request.HostOptions is { } changedOptions)
-            {
-                hostOptions = changedOptions;
-            }
-
+            locale = turnLocale;
+            hostOptions = request.HostOptions ?? hostOptions;
             turn = new CancellationTokenSource();
             items.Add(new OperatorItem(request.Text));
-            history.Add(new UserMessage(core.Redactor.Redact(Prompt.Turn(request.Text, request.Context, locale), Caller)));
+            history.Add(message);
             LastActive = core.Time.GetUtcNow();
 
             CancellationToken token = turn.Token;
@@ -111,14 +108,16 @@ public sealed class AssistantSession : IDisposable
     /// <summary>Hands a client tool call its result; false when no call of that id is waiting.</summary>
     public bool TryAnswer(ClientToolResult result)
     {
-        TaskCompletionSource<ToolOutcome>? waiting;
+        TaskCompletionSource<ToolOutcome> waiting;
 
         lock (gate)
         {
-            if (!pending.Remove(result.CallId, out waiting))
+            if (!pending.Remove(result.CallId, out (ClientToolCallEvent Call, TaskCompletionSource<ToolOutcome> Answer) call))
             {
                 return false;
             }
+
+            waiting = call.Answer;
         }
 
         return waiting.TrySetResult(new ToolOutcome(result.Ok, result.Content));
@@ -139,7 +138,7 @@ public sealed class AssistantSession : IDisposable
         {
             LastActive = core.Time.GetUtcNow();
 
-            return new ConversationView(Id, [.. items], turn is not null, log.LastId);
+            return new ConversationView(Id, [.. items], turn is not null, log.LastId, [.. pending.Values.Select(p => p.Call)]);
         }
     }
 
@@ -372,8 +371,9 @@ public sealed class AssistantSession : IDisposable
 
         lock (gate)
         {
-            pending[call.Id] = answer;
-            log.Append(new ClientToolCallEvent(call.Id, call.Name, call.Input));
+            ClientToolCallEvent asked = new(call.Id, call.Name, call.Input);
+            pending[call.Id] = (asked, answer);
+            log.Append(asked);
         }
 
         try
@@ -404,6 +404,17 @@ public sealed class AssistantSession : IDisposable
             if (history.LastOrDefault() is AssistantMessage { Calls.Count: > 0 } asked)
             {
                 history.Add(new ToolResultsMessage([.. asked.Calls.Select(c => new ToolResult(c.Id, false, $"Not run: the turn ended ({reason})."))]));
+            }
+
+            // A call the turn ended in the middle of (a cancel, an error) has no outcome yet: it failed, and the client
+            // is told so, or it would show the call pending after the turn has ended.
+            for (int i = 0; i < items.Count; i++)
+            {
+                if (items[i] is ToolItem { Ok: null } unfinished)
+                {
+                    items[i] = unfinished with { Ok = false };
+                    log.Append(new ToolFinishedEvent(unfinished.CallId, false));
+                }
             }
 
             total += used;
