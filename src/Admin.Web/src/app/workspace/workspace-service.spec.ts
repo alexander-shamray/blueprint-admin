@@ -47,6 +47,40 @@ describe('WorkspaceService', () => {
     expect(service.pages().at(-1)?.builtIn).toBe('mail');
   });
 
+  it('replaces a legacy screen widget it reads, says which pages changed until dismissed, and saves that once', () => {
+    // Phase 6 (§5.3): a phase-1 page the operator saved, as the host hands it on at version 2.
+    const saved = defaultWorkspace();
+    saved.pages = saved.pages.map((p) =>
+      p.id === 'mail'
+        ? {
+            ...p,
+            title: 'Inbox',
+            widgets: [{ id: 'old', type: 'legacy', x: 0, y: 0, cols: 24, rows: 16, config: { screen: 'mail' } }],
+          }
+        : p,
+    );
+    load(saved);
+
+    expect(service.retired()).toEqual(['Inbox']);
+    const mail = service.pages().find((p) => p.id === 'mail')!;
+    expect(mail.widgets?.map((w) => w.type)).toEqual(builtInWidgets('mail').map((w) => w.type));
+    vi.advanceTimersByTime(SAVE_DELAY_MS);
+    const req = expectSave('"e1"');
+    const sent = req.request.body as Workspace;
+    expect(sent.pages.flatMap((p) => p.widgets ?? []).map((w) => w.type)).not.toContain('legacy');
+    req.flush(null, { headers: { ETag: '"e2"' } });
+
+    service.dismissRetired();
+    expect(service.retired()).toEqual([]);
+  });
+
+  it('reads a workspace with nothing to retire without saving it or saying anything', () => {
+    load();
+    vi.advanceTimersByTime(SAVE_DELAY_MS * 2);
+    http.expectNone((r) => r.method === 'PUT');
+    expect(service.retired()).toEqual([]);
+  });
+
   it('saves once, about a second after the last of several changes', () => {
     load();
     service.renamePage('stack', 'One');
@@ -267,7 +301,7 @@ describe('WorkspaceService', () => {
     });
 
     it('adds a widget below the others and removes it, with what it kept for the session', () => {
-      service.addWidget('logs', { type: 'legacy', cols: 6, rows: 4, config: { screen: 'mail' } });
+      service.addWidget('logs', { type: 'alerts', cols: 6, rows: 4, config: { firingOnly: false } });
       const widgets = service.pages()[1].widgets ?? [];
       expect(widgets.length).toBe(2);
       expect(widgets[1]).toMatchObject({ x: 0, y: builtInWidgets('logs')[0].rows, cols: 6, rows: 4 });
@@ -349,7 +383,7 @@ describe('WorkspaceService', () => {
     });
 
     it('refuses a widget that would end below the last row the grid shows', () => {
-      const tall = { type: 'legacy', cols: 24, rows: 100, config: { screen: 'logs' } };
+      const tall = { type: 'alerts', cols: 24, rows: 100, config: { firingOnly: false } };
       const id = service.addPage();
       for (let i = 0; i < PAGE_ROWS / 100; i++) expect(service.addWidget(id, tall)).toBe(true);
       expect(service.addWidget(id, { ...tall, rows: 1 })).toBe(false);

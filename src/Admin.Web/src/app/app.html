@@ -190,6 +190,15 @@
     </div>
   }
 }
+@if (workspace.retired().length > 0) {
+  <div class="notice warn" role="status">
+    <span i18n
+      >The Screen widget is retired: on {{ workspace.retired().join(', ') }}, each one was replaced by its screen's own
+      widgets.</span
+    >
+    <button mat-button type="button" (click)="workspace.dismissRetired()" i18n>Dismiss</button>
+  </div>
+}
 <mat-sidenav-container class="shell">
   <mat-sidenav mode="side" opened disableClose class="side">
     <nav aria-label="Pages" i18n-aria-label>

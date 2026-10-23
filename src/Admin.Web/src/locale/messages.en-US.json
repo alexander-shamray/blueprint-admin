@@ -32,6 +32,8 @@
     "4145527246109934914": "Load the saved one",
     "7172074921605631670": "Keep this tab's",
     "6407040589932049890": " The saved workspace could not be read ({$INTERPOLATION}), so these are the default pages and nothing will be saved until the console is reloaded. ",
+    "748242537876428589": "The Screen widget is retired: on {$INTERPOLATION}, each one was replaced by its screen's own widgets.",
+    "1536087519743707362": "Dismiss",
     "3817498941817715969": "Pages",
     "4946234474563978136": "New page",
     "7700791147650298833": "Hidden pages ({$INTERPOLATION})",

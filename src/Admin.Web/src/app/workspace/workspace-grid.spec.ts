@@ -4,7 +4,6 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { GridsterItem } from 'angular-gridster2';
-import { SCREENS } from '../screens';
 import { WIDGET_CONTEXT } from './widget-context';
 import { JOB_OUTPUT, NOTE } from './widgets';
 import { WorkspaceGrid } from './workspace-grid';
@@ -12,12 +11,12 @@ import { GRID_COLUMNS, MAX_ROWS, WidgetInstance } from './workspace-types';
 
 const known: WidgetInstance = {
   id: 'w1',
-  type: 'legacy',
+  type: 'alerts',
   x: 0,
   y: 0,
   cols: 12,
   rows: 6,
-  config: { screen: 'requests' },
+  config: { firingOnly: true },
 };
 const unknown: WidgetInstance = {
   id: 'w2',
@@ -46,7 +45,7 @@ describe('WorkspaceGrid', () => {
   it('frames each widget under the title its type gives it, and keeps an unknown type', () => {
     const element: HTMLElement = render([known, unknown], false).nativeElement;
     const titles = [...element.querySelectorAll('.ws-head .ws-title')].map((h) => h.textContent?.trim());
-    expect(titles).toEqual(['API', 'Unknown widget (from-a-newer-console)']);
+    expect(titles).toEqual(['Alerts (firing)', 'Unknown widget (from-a-newer-console)']);
     expect(element.querySelector('.ws-unknown')?.textContent).toContain('from-a-newer-console');
   });
 
@@ -82,12 +81,12 @@ describe('WorkspaceGrid', () => {
     fixture.detectChanges();
 
     const items = [...document.querySelectorAll<HTMLElement>('.mat-mdc-menu-item')];
-    expect(items.length).toBe(SCREENS.length);
+    expect(items.length).toBe(2);
     expect(items.filter((i) => i.getAttribute('aria-current') === 'true').map((i) => i.textContent?.trim())).toEqual([
-      'API',
+      'Firing only',
     ]);
-    items.find((i) => i.textContent?.trim() === 'Trace')?.click();
-    expect(chosen).toEqual({ id: 'w1', config: { screen: 'trace' } });
+    items.find((i) => i.textContent?.trim() === 'Every rule')?.click();
+    expect(chosen).toEqual({ id: 'w1', config: { firingOnly: false } });
   });
 
   it('edits a setting no preset holds: a list of names, written with commas, saved over what the widget held', async () => {

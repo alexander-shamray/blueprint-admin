@@ -1,10 +1,9 @@
-import { SCREENS } from '../screens';
+import { SCREENS, ScreenPath, isScreenPath } from '../screens';
 import {
   API_WIDGETS,
   BROKER_WIDGETS,
   ERASURE,
   JOB_OUTPUT,
-  LEGACY_SCREEN,
   LOGS,
   MAIL,
   MAP,
@@ -15,21 +14,21 @@ import {
   STACK_WIDGETS,
   WidgetType,
 } from './widgets';
-import { Page, WidgetInstance, Workspace } from './workspace-types';
+import { GRID_COLUMNS, Page, WidgetInstance, Workspace, newId } from './workspace-types';
 
 /** The schema version this console writes; `WorkspaceSchema.Current` on the host. */
-export const WORKSPACE_VERSION = 1;
+export const WORKSPACE_VERSION = 2;
 
 type Placed = [WidgetType, number, number, Record<string, unknown>?];
 
 /**
- * The built-in pages rebuilt from widgets so far (§10), each widget at its cell and its type's default size, in
- * roughly the arrangement the screen had. For the Stack page that is the screens table's (spec §6): in the left
- * column the doctor's rows above the buttons and the job's output directly under them, with the Compose services and
- * the alerts beside that column, and the load run beside the golden signals below. The Scenario page keeps the run
- * beside the order's state. A page not listed is still its screen in one legacy widget.
+ * Each built-in page's widgets (§5.3), each at its cell and its type's default size, in roughly the arrangement the
+ * screen had. For the Stack page that is: in the left column the doctor's rows above the buttons and the job's output
+ * directly under them, with the Compose services and the alerts beside that column, and the load run beside the golden
+ * signals below. The Scenario page keeps the run beside the order's state. Typed by SCREENS, so a screen added there
+ * without a layout here does not compile.
  */
-const BUILT_IN_LAYOUTS: Partial<Record<string, readonly Placed[]>> = {
+const BUILT_IN_LAYOUTS: Record<ScreenPath, readonly Placed[]> = {
   requests: [
     [API_WIDGETS.request, 0, 0],
     [API_WIDGETS.history, 16, 0],
@@ -72,29 +71,72 @@ const BUILT_IN_LAYOUTS: Partial<Record<string, readonly Placed[]>> = {
  * untouched page with no migration.
  */
 export function builtInWidgets(screen: string): WidgetInstance[] {
-  const layout = BUILT_IN_LAYOUTS[screen];
-  if (layout) {
-    return layout.map(([kind, x, y, config]) => ({
-      id: `builtin-${screen}-${kind.type}`,
-      type: kind.type,
-      x,
-      y,
-      cols: kind.defaultSize.cols,
-      rows: kind.defaultSize.rows,
-      config: config ?? {},
-    }));
+  // A page built in by a newer console names a screen this one does not ship, so it has no defaults here (§6.3).
+  if (!isScreenPath(screen)) return [];
+  return BUILT_IN_LAYOUTS[screen].map(([kind, x, y, config]) => ({
+    id: `builtin-${screen}-${kind.type}`,
+    type: kind.type,
+    x,
+    y,
+    cols: kind.defaultSize.cols,
+    rows: kind.defaultSize.rows,
+    config: config ?? {},
+  }));
+}
+
+/** The type phase 6 retired (§10): one of the eleven screens rendered whole, its screen in `config.screen`. */
+const LEGACY_SCREEN_TYPE = 'legacy';
+
+/** A workspace with its legacy screen widgets replaced, and the titles of the pages that changed. */
+export interface Retired {
+  workspace: Workspace;
+  pages: string[];
+}
+
+/**
+ * Every `legacy` instance a saved page still holds, replaced by its screen's default widgets (widget-workspace spec
+ * §5.3, phase 6). They go inside the rectangle it occupied, stacked in their default order at their default heights, as
+ * wide as the rectangle allows down to each type's minimum. The rectangle grows downwards as far as the stack needs,
+ * and what sat below it moves down by as much, so nothing overlaps. A screen this console does not name was rendered as
+ * the first one, so it becomes that screen's widgets. Only a page the operator saved can hold one: a built-in page as
+ * shipped is built from `BUILT_IN_LAYOUTS`.
+ */
+export function retireLegacy(workspace: Workspace): Retired {
+  const pages: string[] = [];
+  const next = workspace.pages.map((page) => {
+    if (!page.widgets?.some((w) => w.type === LEGACY_SCREEN_TYPE)) return page;
+    pages.push(page.title);
+    return { ...page, widgets: replaceLegacy(page.widgets) };
+  });
+  return { workspace: pages.length === 0 ? workspace : { ...workspace, pages: next }, pages };
+}
+
+function replaceLegacy(widgets: WidgetInstance[]): WidgetInstance[] {
+  let placed = widgets;
+  for (;;) {
+    const legacy = placed.filter((w) => w.type === LEGACY_SCREEN_TYPE).sort((a, b) => a.y - b.y || a.x - b.x)[0];
+    if (!legacy) return placed;
+    const stored = legacy.config['screen'];
+    const screen = isScreenPath(stored) ? stored : SCREENS[0].path;
+    let y = legacy.y;
+    const stacked = BUILT_IN_LAYOUTS[screen].map(([kind, , , config]): WidgetInstance => {
+      const cols = Math.min(GRID_COLUMNS, Math.max(kind.minSize.cols, Math.min(kind.defaultSize.cols, legacy.cols)));
+      const widget = {
+        id: newId('widget'),
+        type: kind.type,
+        x: Math.min(legacy.x, GRID_COLUMNS - cols),
+        y,
+        cols,
+        rows: kind.defaultSize.rows,
+        config: structuredClone(config ?? {}),
+      };
+      y += widget.rows;
+      return widget;
+    });
+    const bottom = legacy.y + legacy.rows;
+    const grown = Math.max(0, y - bottom);
+    placed = placed.flatMap((w) => (w === legacy ? stacked : [w.y >= bottom ? { ...w, y: w.y + grown } : w]));
   }
-  return [
-    {
-      id: `builtin-${screen}-screen`,
-      type: LEGACY_SCREEN.type,
-      x: 0,
-      y: 0,
-      cols: LEGACY_SCREEN.defaultSize.cols,
-      rows: LEGACY_SCREEN.defaultSize.rows,
-      config: { screen },
-    },
-  ];
 }
 
 /** The widgets a page shows: its own, or its built-in defaults while it is unchanged. */

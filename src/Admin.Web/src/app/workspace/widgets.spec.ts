@@ -1,12 +1,18 @@
 import { SCREENS } from '../screens';
-import { builtInTitle, builtInWidgets, defaultWorkspace, differsFromBuiltIn, withEveryBuiltIn } from './built-in-pages';
-import { SCREEN_COMPONENTS } from './screen-components';
+import {
+  WORKSPACE_VERSION,
+  builtInTitle,
+  builtInWidgets,
+  defaultWorkspace,
+  differsFromBuiltIn,
+  retireLegacy,
+  withEveryBuiltIn,
+} from './built-in-pages';
 import {
   API_WIDGETS,
   BROKER_WIDGETS,
   ERASURE,
   JOB_OUTPUT,
-  LEGACY_SCREEN,
   LOGS,
   MAIL,
   MAP,
@@ -20,7 +26,7 @@ import {
   WIDGETS,
   widgetType,
 } from './widgets';
-import { GRID_COLUMNS, MAX_ROWS, WidgetInstance } from './workspace-types';
+import { GRID_COLUMNS, MAX_ROWS, WidgetInstance, Workspace } from './workspace-types';
 
 describe('the widget registry', () => {
   it('gives every type a component, sizes that fit the grid and a preset', async () => {
@@ -35,20 +41,94 @@ describe('the widget registry', () => {
     expect(new Set(WIDGETS.map((w) => w.type)).size).toBe(WIDGETS.length);
   });
 
-  it('knows no type it does not list', () => {
-    expect(widgetType('legacy')).toBe(LEGACY_SCREEN);
+  it('knows no type it does not list, the retired legacy screen widget among them', () => {
+    expect(widgetType('legacy')).toBeUndefined();
     expect(widgetType('from-a-newer-console')).toBeUndefined();
   });
+});
 
-  it('offers every screen to the legacy widget, and loads each one', async () => {
-    expect(LEGACY_SCREEN.presets.map((p) => p.config['screen'])).toEqual(SCREENS.map((s) => s.path));
-    for (const screen of SCREENS) expect(await SCREEN_COMPONENTS[screen.path]()).toBeTypeOf('function');
+describe('retiring the legacy screen widget (phase 6)', () => {
+  const legacy = (id: string, screen: unknown, x: number, y: number, cols: number, rows: number): WidgetInstance => ({
+    id,
+    type: 'legacy',
+    x,
+    y,
+    cols,
+    rows,
+    config: { screen },
   });
 
-  it('falls back to its default for a screen it does not know', () => {
-    expect(LEGACY_SCREEN.config({ screen: 'nope', extra: 1 })).toEqual({ screen: SCREENS[0].path });
-    expect(LEGACY_SCREEN.config({ screen: 'mail' })).toEqual({ screen: 'mail' });
-    expect(LEGACY_SCREEN.titleOf({ screen: 'requests' })).toBe('API');
+  /** A phase-1 document as the host hands it on, stepped to version 2 with its widgets untouched. */
+  function phase1(): Workspace {
+    return {
+      version: WORKSPACE_VERSION,
+      activePageId: 'mine',
+      pages: [
+        { id: 'stack', title: 'Stack', builtIn: 'stack', hidden: false, widgets: null },
+        {
+          id: 'mine',
+          title: 'Debugging',
+          builtIn: null,
+          hidden: false,
+          widgets: [
+            legacy('old-trace', 'trace', 0, 0, 24, 16),
+            { id: 'below', type: 'note', x: 0, y: 16, cols: 6, rows: 4, config: { source: 'kept' } },
+          ],
+        },
+        {
+          id: 'mail',
+          title: 'My mail',
+          builtIn: 'mail',
+          hidden: false,
+          widgets: [legacy('old-mail', 'mail', 4, 2, 8, 6), legacy('old-other', 'not-a-screen', 0, 20, 24, 4)],
+        },
+      ],
+    };
+  }
+
+  it("replaces each legacy instance with its screen's widgets inside its rectangle and names the pages it changed", () => {
+    const { workspace, pages } = retireLegacy(phase1());
+
+    expect(pages).toEqual(['Debugging', 'My mail']);
+    const all = workspace.pages.flatMap((p) => p.widgets ?? []);
+    expect(all.map((w) => w.type)).not.toContain('legacy');
+    // An unchanged built-in page stays unsaved, so it keeps following the shipped defaults.
+    expect(workspace.pages[0].widgets).toBeNull();
+
+    const [trace, below] = workspace.pages[1].widgets!;
+    expect(trace).toMatchObject({ type: TRACE.type, x: 0, y: 0, cols: TRACE.defaultSize.cols });
+    expect(trace.config).toEqual(builtInWidgets('trace')[0].config);
+    // What sat below the rectangle moves down by as far as the stack outgrew it, and is otherwise kept.
+    expect(below).toEqual({
+      id: 'below',
+      type: 'note',
+      x: 0,
+      y: Math.max(16, TRACE.defaultSize.rows),
+      cols: 6,
+      rows: 4,
+      config: { source: 'kept' },
+    });
+  });
+
+  it('stacks a screen of several widgets in their default order, as wide as the rectangle down to each minimum', () => {
+    const { workspace } = retireLegacy(phase1());
+    const widgets = workspace.pages[2].widgets!;
+    const [mail, ...stack] = widgets;
+
+    const cols = Math.max(MAIL.minSize.cols, Math.min(MAIL.defaultSize.cols, 8));
+    expect(mail).toMatchObject({ type: MAIL.type, x: Math.min(4, GRID_COLUMNS - cols), y: 2, cols });
+    // A screen this console does not name was rendered as the first, Stack, so it becomes Stack's widgets, stacked,
+    // starting where the rectangle did once the one above it has pushed it down.
+    expect(stack.map((w) => w.type)).toEqual(builtInWidgets('stack').map((w) => w.type));
+    expect(stack[0].y).toBe(20 + Math.max(0, 2 + MAIL.defaultSize.rows - 8));
+    for (let i = 1; i < stack.length; i++) expect(stack[i].y).toBe(stack[i - 1].y + stack[i - 1].rows);
+    expect(new Set(widgets.map((w) => w.id)).size).toBe(widgets.length);
+  });
+
+  it('leaves a workspace with no legacy instance as it is', () => {
+    const workspace = defaultWorkspace();
+    expect(retireLegacy(workspace)).toEqual({ workspace, pages: [] });
+    expect(retireLegacy(workspace).workspace).toBe(workspace);
   });
 });
 
@@ -256,7 +336,7 @@ describe('the Stack widget types', () => {
 
   it('come back when a saved workspace lacks them, and an operator’s page stays', () => {
     const own = { id: 'p', title: 'Mine', builtIn: null, hidden: false, widgets: [] };
-    const restored = withEveryBuiltIn({ version: 1, pages: [own], activePageId: 'p' });
+    const restored = withEveryBuiltIn({ version: WORKSPACE_VERSION, pages: [own], activePageId: 'p' });
     expect(restored.pages[0]).toBe(own);
     expect(restored.pages.slice(1).map((p) => p.builtIn)).toEqual(SCREENS.map((s) => s.path));
   });
