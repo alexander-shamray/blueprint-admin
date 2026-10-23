@@ -2892,7 +2892,7 @@ describe('ScenarioWidget', () => {
     });
   });
 
-  it('is the legacy Scenario screen with the Saga strip beside it, both views of one runner', () => {
+  it('lays the Scenario widget and the Saga strip side by side, both views of one runner', () => {
     const screen = TestBed.createComponent(ScenarioWidgets);
     screen.detectChanges();
     const element = screen.nativeElement as HTMLElement;
