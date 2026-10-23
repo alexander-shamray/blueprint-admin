@@ -1,6 +1,6 @@
+using System.Text.RegularExpressions;
 using Admin.Host.Api;
 using Admin.Host.Broker;
-using System.Text.RegularExpressions;
 using Admin.Host.Config;
 using Shouldly;
 
