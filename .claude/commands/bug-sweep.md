@@ -161,6 +161,9 @@ or high.** Three gates:
   cites, trace the values, find the caller, reproduce the scenario, then run it
   past the test corpus.
 - **Critical or high.** Everything below the bar goes in the round summary.
+- **One cause, one issue; fifteen a run.** Sites that share one cause and
+  one fix are one issue naming every site. Past fifteen filings in a run,
+  the rest are ranked in the summary for the next run.
 - **Not already tracked.** Enumerate the **whole** issue set through
   `gh-issue-list.sh` (it spells `--state all --limit 1000` itself) and match each
   finding against it, **regardless of label**. An open issue **opened by the
