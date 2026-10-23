@@ -33,14 +33,18 @@ test('the projection panel states its limits, then runs a repair and a confirmed
 
 // The dead-letter workbench against the fake tool (src/Admin.Host/Fakes/DeadLetterRecordings.cs): the error queue holds one
 // faulted PriceChanged; each run sets the operator's password and clears it, and the real run needs the typed flag.
-test('an error queue opens into its message, dry-runs a replay, then replays it with the typed confirmation', async ({ page }) => {
+test('an error queue opens into its message, dry-runs a replay, then replays it with the typed confirmation', async ({
+  page,
+}) => {
   await page.goto('/broker');
   await page.getByRole('button', { name: 'Open the messages on ordering-catalog-events_error' }).click();
 
   const panel = page.getByRole('article', { name: 'Dead-letter workbench' });
   const message = panel.locator('article.dead-letter');
   await expect(message).toHaveCount(1);
-  await expect(message).toContainText('System.InvalidOperationException: Product 0199a3f0-4b1c-7d2e-9f10-2a3b4c5d6e7f has no row in the price projection');
+  await expect(message).toContainText(
+    'System.InvalidOperationException: Product 0199a3f0-4b1c-7d2e-9f10-2a3b4c5d6e7f has no row in the price projection',
+  );
   await expect(message).toContainText('urn:message:Common.Contracts.Catalog.V1:PriceChanged');
   await expect(message.getByRole('link', { name: 'fake-corr-0002' })).toHaveAttribute('href', '/trace/fake-corr-0002');
   await expect(panel.getByRole('button', { name: 'Replay for real' })).toHaveCount(0);
@@ -74,23 +78,33 @@ test('the broker screen lists queues, exchanges, bindings and permissions', asyn
 
   await expect(page.locator('table.queues tbody tr')).toHaveCount(20);
   await expect(page.locator('table.queues tbody tr.error-queue')).toHaveCount(1);
-  await expect(page.locator('table.queues tbody tr.error-queue')).toContainText('[error] ordering-catalog-events_error');
+  await expect(page.locator('table.queues tbody tr.error-queue')).toContainText(
+    '[error] ordering-catalog-events_error',
+  );
   await expect(page.locator('table.queues tbody tr.skipped-queue')).toHaveCount(1);
   await expect(page.locator('table.queues tbody tr.skipped-queue')).toContainText('[skipped] bff-order-events_skipped');
   await expect(page.locator('table.queues tbody tr.skipped-queue')).toContainText("the BFF's order projection");
-  await expect(page.locator('table.queues tbody tr.skipped-queue a')).toHaveAttribute('href', /\/docs\/runbooks\/skipped-queue\.md$/);
-  await expect(page.locator('table.queues tbody tr.error-queue a')).toHaveAttribute('href', /\/docs\/runbooks\/error-queue\.md$/);
+  await expect(page.locator('table.queues tbody tr.skipped-queue a')).toHaveAttribute(
+    'href',
+    /\/docs\/runbooks\/skipped-queue\.md$/,
+  );
+  await expect(page.locator('table.queues tbody tr.error-queue a')).toHaveAttribute(
+    'href',
+    /\/docs\/runbooks\/error-queue\.md$/,
+  );
   await expect(page.locator('app-drained-indicator')).toContainText('[drained] ordering-catalog-events');
   await expect(page.locator('table.exchanges tbody tr')).toHaveCount(56);
-  await expect(page.locator('table.exchanges tbody tr', { hasText: 'ordering-fulfilment-saga_delay' })).toContainText('x-delayed-message');
+  await expect(page.locator('table.exchanges tbody tr', { hasText: 'ordering-fulfilment-saga_delay' })).toContainText(
+    'x-delayed-message',
+  );
   const bindings = page.locator('table.bindings tbody tr');
   await expect(bindings).toHaveCount(102);
   await expect(bindings.filter({ hasText: 'Common.Contracts.Catalog.V1:PriceChanged' })).toHaveText(
     /Common\.Contracts\.Catalog\.V1:PriceChanged\s+ordering-catalog-events\s+exchange/,
   );
-  await expect(bindings.filter({ has: page.locator('td:first-child', { hasText: /^ordering-catalog-events$/ }) })).toHaveText(
-    /ordering-catalog-events\s+ordering-catalog-events\s+queue/,
-  );
+  await expect(
+    bindings.filter({ has: page.locator('td:first-child', { hasText: /^ordering-catalog-events$/ }) }),
+  ).toHaveText(/ordering-catalog-events\s+ordering-catalog-events\s+queue/);
   await expect(page.locator('table.permissions tbody tr')).toHaveCount(9);
 
   await page.getByRole('article', { name: 'Queues' }).getByRole('button', { name: 'Refresh' }).click();

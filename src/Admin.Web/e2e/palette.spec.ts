@@ -25,7 +25,9 @@ test('a correlation id pasted into the palette lands on its timeline', async ({ 
   await expect(page.locator('p.summary')).toContainText('for demo-trace-0001');
 });
 
-test('an id the platform would not adopt is refused by the trace endpoint, not let through by the palette', async ({ page }) => {
+test('an id the platform would not adopt is refused by the trace endpoint, not let through by the palette', async ({
+  page,
+}) => {
   await page.goto('/stack');
 
   await openPalette(page);

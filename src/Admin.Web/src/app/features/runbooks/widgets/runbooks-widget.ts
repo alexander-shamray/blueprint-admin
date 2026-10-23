@@ -4,7 +4,13 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { EMPTY, Observable, Subject, catchError, combineLatest, merge, of, switchMap, timer } from 'rxjs';
 import { HostClient } from '../../../core/host/host-client';
-import { AlertStripView, JobSummary, RunbookCatalogue, RunbookEntry, RunbookPhase } from '../../../core/host/host-types';
+import {
+  AlertStripView,
+  JobSummary,
+  RunbookCatalogue,
+  RunbookEntry,
+  RunbookPhase,
+} from '../../../core/host/host-types';
 import { OutputPane } from '../../../shared/output-pane/output-pane';
 import { TabVisibility } from '../../../workspace/polled-feed';
 import { widgetSession } from '../../../workspace/widget-session-store';
@@ -46,7 +52,9 @@ export class RunbooksWidget {
   });
 
   readonly selected = widgetSession<string | null>('selected', null);
-  readonly entry = computed<RunbookEntry | null>(() => this.catalogue()?.runbooks.find((r) => r.runbook === this.selected()) ?? null);
+  readonly entry = computed<RunbookEntry | null>(
+    () => this.catalogue()?.runbooks.find((r) => r.runbook === this.selected()) ?? null,
+  );
   /** The alert of the phase to cause; null is the first, which the tool takes when it is told none. */
   readonly phaseAlert = widgetSession<string | null>('phaseAlert', null);
   readonly phase = computed<RunbookPhase | null>(() => {
@@ -65,7 +73,12 @@ export class RunbooksWidget {
   });
   readonly canCause = computed(() => {
     const phase = this.phase();
-    return this.entry()?.script === true && phase !== null && !this.running() && (!this.needsTyping() || this.confirmText() === phase.confirmWith);
+    return (
+      this.entry()?.script === true &&
+      phase !== null &&
+      !this.running() &&
+      (!this.needsTyping() || this.confirmText() === phase.confirmWith)
+    );
   });
 
   /** The job being shown, kept so its output is attached again when the widget is re-created. */
@@ -174,7 +187,11 @@ export class RunbooksWidget {
       return;
     }
     this.start(
-      this.host.runbookCause(entry.runbook, phase.alert === entry.phases[0]?.alert ? null : phase.alert, phase.confirmWith),
+      this.host.runbookCause(
+        entry.runbook,
+        phase.alert === entry.phases[0]?.alert ? null : phase.alert,
+        phase.confirmWith,
+      ),
       `cause of ${phase.alert} (${entry.runbook})`,
     );
   }

@@ -27,8 +27,13 @@ describe('the Exchanges, Bindings and Permissions widgets', () => {
   }
 
   it('lists exchanges, naming the default exchange, and permissions per user', () => {
-    expect(rows(render(ExchangesWidget), 'exchanges')).toEqual(['(default) direct', 'ordering-fulfilment-saga_delay x-delayed-message']);
-    expect(rows(render(PermissionsWidget), 'permissions')).toEqual(['catalog-svc ^(MassTransit:) ^(MassTransit:) ^(MassTransit:)']);
+    expect(rows(render(ExchangesWidget), 'exchanges')).toEqual([
+      '(default) direct',
+      'ordering-fulfilment-saga_delay x-delayed-message',
+    ]);
+    expect(rows(render(PermissionsWidget), 'permissions')).toEqual([
+      'catalog-svc ^(MassTransit:) ^(MassTransit:) ^(MassTransit:)',
+    ]);
   });
 
   it('lists bindings by source, naming the default exchange, with the kind and routing key of each', () => {
@@ -40,7 +45,9 @@ describe('the Exchanges, Bindings and Permissions widgets', () => {
   });
 
   it('filters each by its text', () => {
-    expect(rows(render(ExchangesWidget, { filter: 'DELAY' }), 'exchanges')).toEqual(['ordering-fulfilment-saga_delay x-delayed-message']);
+    expect(rows(render(ExchangesWidget, { filter: 'DELAY' }), 'exchanges')).toEqual([
+      'ordering-fulfilment-saga_delay x-delayed-message',
+    ]);
     expect(rows(render(BindingsWidget, { filter: 'pricechanged' }), 'bindings').length).toBe(1);
     expect(rows(render(PermissionsWidget, { filter: 'nobody' }), 'permissions')).toEqual([]);
   });
@@ -59,7 +66,7 @@ describe('the Exchanges, Bindings and Permissions widgets', () => {
     }
   });
 
-  it('keeps each read\'s failure its own: a failed exchanges read is not cleared by a bindings read that succeeds', () => {
+  it("keeps each read's failure its own: a failed exchanges read is not cleared by a bindings read that succeeds", () => {
     host.brokerExchanges.mockReturnValue(throwError(() => ({ error: { detail: 'exchanges failed' } })));
     const exchanges = render(ExchangesWidget);
     const bindings = render(BindingsWidget);

@@ -212,7 +212,8 @@ export class TraceWidget {
    */
   private go(id: string): void {
     const onBuiltInPage = this.route?.snapshot.data['builtIn'] === 'trace';
-    if (onBuiltInPage && this.route?.snapshot.paramMap.get('correlationId') !== id) void this.router.navigate(['/trace', id]);
+    if (onBuiltInPage && this.route?.snapshot.paramMap.get('correlationId') !== id)
+      void this.router.navigate(['/trace', id]);
     else this.trace(id);
   }
 

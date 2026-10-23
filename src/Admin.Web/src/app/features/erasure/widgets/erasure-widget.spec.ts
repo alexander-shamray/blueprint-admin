@@ -37,7 +37,16 @@ function view(over: Partial<ErasureRequestView>): ErasureRequestView {
 }
 
 function responded(status: number, body: string): ProxyResult {
-  return { outcome: 'responded', status, headers: {}, body, bodyTruncated: false, bodyError: null, elapsedMs: 3, correlationId: 'corr-1' };
+  return {
+    outcome: 'responded',
+    status,
+    headers: {},
+    body,
+    bodyTruncated: false,
+    bodyError: null,
+    elapsedMs: 3,
+    correlationId: 'corr-1',
+  };
 }
 
 describe('ErasureWidget', () => {
@@ -51,7 +60,11 @@ describe('ErasureWidget', () => {
         provideRouter([]),
         {
           provide: HostClient,
-          useValue: { config: () => of({ urls: { gateway: 'http://gw.test/' } }), erasureHolders: () => of(holders), proxy },
+          useValue: {
+            config: () => of({ urls: { gateway: 'http://gw.test/' } }),
+            erasureHolders: () => of(holders),
+            proxy,
+          },
         },
       ],
     });
@@ -61,7 +74,9 @@ describe('ErasureWidget', () => {
   }
 
   function text(fixture: { nativeElement: HTMLElement }, selector: string): string[] {
-    return (Array.from(fixture.nativeElement.querySelectorAll(selector)) as HTMLElement[]).map((e) => e.textContent?.replace(/\s+/g, ' ').trim() ?? '');
+    return (Array.from(fixture.nativeElement.querySelectorAll(selector)) as HTMLElement[]).map(
+      (e) => e.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+    );
   }
 
   afterEach(() => vi.useRealTimers());
@@ -69,7 +84,10 @@ describe('ErasureWidget', () => {
   it('lists the backend holders with their queue depths before any request exists', () => {
     const fixture = render([]);
 
-    expect(text(fixture, 'table.holders tbody tr')).toEqual(['ordering [unasked] ordering-privacy 0', 'payments [unasked] payments-privacy 2']);
+    expect(text(fixture, 'table.holders tbody tr')).toEqual([
+      'ordering [unasked] ordering-privacy 0',
+      'payments [unasked] payments-privacy 2',
+    ]);
     expect(fixture.nativeElement.querySelector('.completions').textContent).toContain('1');
   });
 
@@ -87,8 +105,15 @@ describe('ErasureWidget', () => {
       identity: PRIVACY_IDENTITY,
       correlationId: null,
     });
-    expect(proxy.mock.calls[1][0]).toMatchObject({ method: 'GET', url: `http://gw.test/api/v1/privacy/erasure-requests/${REQUEST_ID}`, body: null });
-    expect(text(fixture, 'table.holders tbody tr')).toEqual(['ordering [answered] 1 · 2026-10-15T12:00:01Z ordering-privacy 0', 'payments [waiting] payments-privacy 2']);
+    expect(proxy.mock.calls[1][0]).toMatchObject({
+      method: 'GET',
+      url: `http://gw.test/api/v1/privacy/erasure-requests/${REQUEST_ID}`,
+      body: null,
+    });
+    expect(text(fixture, 'table.holders tbody tr')).toEqual([
+      'ordering [answered] 1 · 2026-10-15T12:00:01Z ordering-privacy 0',
+      'payments [waiting] payments-privacy 2',
+    ]);
     expect(fixture.nativeElement.querySelector('.status').textContent).toContain('[open]');
     expect(fixture.nativeElement.querySelector('button.reissue')).toBeNull();
   });
@@ -132,19 +157,31 @@ describe('ErasureWidget', () => {
         { responder: 'payments', count: 1, counted: true, receivedAt: '2026-10-15T12:05:00Z' },
       ],
     });
-    const fixture = render([responded(200, JSON.stringify(REQUEST_ID)), responded(200, JSON.stringify(overdue)), responded(204, ''), responded(200, JSON.stringify(closed))]);
+    const fixture = render([
+      responded(200, JSON.stringify(REQUEST_ID)),
+      responded(200, JSON.stringify(overdue)),
+      responded(204, ''),
+      responded(200, JSON.stringify(closed)),
+    ]);
     fixture.componentInstance.subject.set(SUBJECT);
     fixture.componentInstance.raise();
     fixture.detectChanges();
 
     expect(text(fixture, 'table.holders tbody tr')[1]).toBe('payments [overdue] payments-privacy 2');
-    expect(fixture.nativeElement.querySelector('.overdue-actions a').getAttribute('href')).toBe('https://example.test/runbooks/erasure-overdue.md');
+    expect(fixture.nativeElement.querySelector('.overdue-actions a').getAttribute('href')).toBe(
+      'https://example.test/runbooks/erasure-overdue.md',
+    );
 
     (fixture.nativeElement.querySelector('button.reissue') as HTMLButtonElement).click();
     fixture.detectChanges();
 
-    expect(proxy.mock.calls[2][0]).toMatchObject({ method: 'POST', url: `http://gw.test/api/v1/privacy/erasure-requests/${REQUEST_ID}/reissue` });
-    expect(JSON.parse(proxy.mock.calls[2][0].body as string)).toEqual({ commandId: expect.stringMatching(/^[0-9a-f-]{36}$/) });
+    expect(proxy.mock.calls[2][0]).toMatchObject({
+      method: 'POST',
+      url: `http://gw.test/api/v1/privacy/erasure-requests/${REQUEST_ID}/reissue`,
+    });
+    expect(JSON.parse(proxy.mock.calls[2][0].body as string)).toEqual({
+      commandId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+    });
     expect(fixture.nativeElement.querySelector('.status').textContent).toContain('[closed]');
     expect(fixture.nativeElement.querySelector('button.reissue')).toBeNull();
   });
@@ -202,7 +239,7 @@ describe('ErasureWidget', () => {
     expect(fixture.componentInstance.run.watch()).toBe(false);
   });
 
-  it('a watch tick does not disable Raise or clear the error shown, and waits for a call of the operator\'s', async () => {
+  it("a watch tick does not disable Raise or clear the error shown, and waits for a call of the operator's", async () => {
     vi.useFakeTimers();
     const tick = new Subject<ProxyResult>();
     const fixture = render([]);
@@ -237,7 +274,7 @@ describe('ErasureWidget', () => {
     expect(proxy.mock.calls.length).toBeGreaterThan(2);
   });
 
-  it('a failure a watch tick showed is taken away by the next tick that reads well, and an error of the operator\'s is not', async () => {
+  it("a failure a watch tick showed is taken away by the next tick that reads well, and an error of the operator's is not", async () => {
     vi.useFakeTimers();
     const fixture = render([]);
     proxy.mockReturnValueOnce(of(responded(500, 'boom'))).mockReturnValue(of(responded(200, JSON.stringify(view({})))));
@@ -251,16 +288,18 @@ describe('ErasureWidget', () => {
     await vi.advanceTimersByTimeAsync(3000);
     expect(run.error()).toBeNull();
 
-    run.error.set('the operator\'s own failure');
+    run.error.set("the operator's own failure");
     await vi.advanceTimersByTimeAsync(6000);
-    expect(run.error()).toBe('the operator\'s own failure');
+    expect(run.error()).toBe("the operator's own failure");
   });
 
-  it('a tick whose answer is not a request is cleared by the next good tick, and one that lands during an operator\'s call is not heard', async () => {
+  it("a tick whose answer is not a request is cleared by the next good tick, and one that lands during an operator's call is not heard", async () => {
     vi.useFakeTimers();
     const fixture = render([]);
     const late = new Subject<ProxyResult>();
-    proxy.mockReturnValueOnce(of(responded(200, 'not json'))).mockReturnValueOnce(of(responded(200, JSON.stringify(view({})))));
+    proxy
+      .mockReturnValueOnce(of(responded(200, 'not json')))
+      .mockReturnValueOnce(of(responded(200, JSON.stringify(view({})))));
     const run = TestBed.inject(ErasureRun);
     run.requestId.set(REQUEST_ID);
     run.setWatch(true);

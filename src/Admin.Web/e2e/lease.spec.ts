@@ -33,7 +33,9 @@ test('a held lease shows on the stack screen and Restore now undoes it', async (
 });
 
 test('a lease refuses Up with 409 naming the lease, and Up works again once it is restored', async ({ request }) => {
-  expect((await request.post('/api/stack/lease', { data: { changes: ['short-waits'], holdSeconds: 60 } })).status()).toBe(200);
+  expect(
+    (await request.post('/api/stack/lease', { data: { changes: ['short-waits'], holdSeconds: 60 } })).status(),
+  ).toBe(200);
 
   const refused = await request.post('/api/stack/backend/up');
   expect(refused.status()).toBe(409);

@@ -26,8 +26,9 @@ describe('NoteWidget', () => {
 
   beforeEach(() => {
     // What a Mermaid fault might return for the hostile fence: a drawing with script and handlers in it.
-    draw = vi.fn(async () =>
-      '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(7)</script><g onclick="alert(8)"><text>ok</text></g></svg>',
+    draw = vi.fn(
+      async () =>
+        '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(7)</script><g onclick="alert(8)"><text>ok</text></g></svg>',
     );
     TestBed.configureTestingModule({
       providers: [
@@ -64,7 +65,9 @@ describe('NoteWidget', () => {
   });
 
   it('draws a mermaid fence as a diagram and any other fence as code', async () => {
-    const element: HTMLElement = (await render(['text', '', `${FENCE}mermaid`, 'flowchart LR', FENCE, '', `${FENCE}bash`, 'ls', FENCE].join('\n'))).nativeElement;
+    const element: HTMLElement = (
+      await render(['text', '', `${FENCE}mermaid`, 'flowchart LR', FENCE, '', `${FENCE}bash`, 'ls', FENCE].join('\n'))
+    ).nativeElement;
 
     expect(draw).toHaveBeenCalledOnce();
     expect(draw).toHaveBeenCalledWith('flowchart LR');

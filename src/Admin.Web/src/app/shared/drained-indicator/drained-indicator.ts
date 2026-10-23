@@ -16,20 +16,40 @@ import { ProjectionDrain } from '../../core/host/host-types';
     @let p = projection();
     <p class="drained" role="status" [class.ok]="p.drained" [class.waiting]="!p.drained">
       @if (p.drained) {
-        <ng-container i18n>[drained] {{ p.queue }} is empty: what run-locally.md waits for before placing an order.</ng-container>
+        <ng-container i18n
+          >[drained] {{ p.queue }} is empty: what run-locally.md waits for before placing an order.</ng-container
+        >
       } @else if (!p.found) {
-        <ng-container i18n>[not declared] {{ p.queue }} does not exist: Ordering has not started, so it cannot price an order.</ng-container>
+        <ng-container i18n
+          >[not declared] {{ p.queue }} does not exist: Ordering has not started, so it cannot price an
+          order.</ng-container
+        >
       } @else if (p.messages === null) {
-        <ng-container i18n>[waiting] {{ p.queue }} holds some messages: Ordering prices orders from its projection, not from Catalog, so an order for a product just published may not find its price yet. Wait for the queue to drain.</ng-container>
+        <ng-container i18n
+          >[waiting] {{ p.queue }} holds some messages: Ordering prices orders from its projection, not from Catalog, so
+          an order for a product just published may not find its price yet. Wait for the queue to drain.</ng-container
+        >
       } @else {
-        <ng-container i18n>[waiting] {{ p.queue }} holds {p.messages, plural, =1 {1 message} other {{{ p.messages | number }} messages}}: Ordering prices orders from its projection, not from Catalog, so an order for a product just published may not find its price yet. Wait for the queue to drain.</ng-container>
+        <ng-container i18n
+          >[waiting] {{ p.queue }} holds
+          {p.messages, plural, =1 {1 message} other {{{ p.messages | number }} messages}}: Ordering prices orders from
+          its projection, not from Catalog, so an order for a product just published may not find its price yet. Wait
+          for the queue to drain.</ng-container
+        >
       }
     </p>
   `,
   styles: `
-    .drained { padding: 0.25rem 0.5rem; border-radius: 3px; }
-    .ok { background: #dfd; }
-    .waiting { background: #fec; }
+    .drained {
+      padding: 0.25rem 0.5rem;
+      border-radius: 3px;
+    }
+    .ok {
+      background: #dfd;
+    }
+    .waiting {
+      background: #fec;
+    }
   `,
 })
 export class DrainedIndicator {

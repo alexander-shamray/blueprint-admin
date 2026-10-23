@@ -24,8 +24,12 @@ describe('StackControlsWidget', () => {
     host = {
       stack: vi.fn(() => of(stack)),
       config: vi.fn(() => of(undefined)),
-      backendUp: vi.fn(() => of({ id: 'up-1', commandLine: 'docker compose up', state: 'Running', exitCode: null, startedAt: '' })),
-      backendDown: vi.fn(() => of({ id: 'down-1', commandLine: 'docker compose down', state: 'Running', exitCode: null, startedAt: '' })),
+      backendUp: vi.fn(() =>
+        of({ id: 'up-1', commandLine: 'docker compose up', state: 'Running', exitCode: null, startedAt: '' }),
+      ),
+      backendDown: vi.fn(() =>
+        of({ id: 'down-1', commandLine: 'docker compose down', state: 'Running', exitCode: null, startedAt: '' }),
+      ),
     };
     TestBed.configureTestingModule({
       providers: [

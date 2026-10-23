@@ -1,11 +1,23 @@
 <section class="controls">
   <div class="buttons">
     <button class="follow" [disabled]="follow.requestOut()" (click)="follow.follow()">Follow</button>
-    <button class="stop" [disabled]="!(follow.pending() || follow.following() || follow.hostJob())" (click)="follow.stop()">Stop</button>
+    <button
+      class="stop"
+      [disabled]="!(follow.pending() || follow.following() || follow.hostJob())"
+      (click)="follow.stop()"
+      >Stop</button
+    >
     <button (click)="follow.clear()">Clear</button>
     <input aria-label="Filter" placeholder="filter text" [ngModel]="filter()" (ngModelChange)="filter.set($event)" />
-    <input aria-label="Correlation id" placeholder="correlation id" [ngModel]="correlationId()" (ngModelChange)="correlationId.set($event)" />
-    @if (follow.following()) {<span class="live">live</span>}
+    <input
+      aria-label="Correlation id"
+      placeholder="correlation id"
+      [ngModel]="correlationId()"
+      (ngModelChange)="correlationId.set($event)"
+    />
+    @if (follow.following()) {
+      <span class="live">live</span>
+    }
   </div>
 </section>
 
@@ -24,5 +36,7 @@
   <p class="error">{{ e }}</p>
 }
 
-<pre class="log">@for (l of visible(); track l.sequence) {<span class="line" [class.hit]="isHit(l)" [class.stderr]="l.stream === 'Stderr'">@if (isHit(l)) {<span class="tag">[match] </span>}@if (l.stream === 'Stderr') {<span class="tag">[stderr] </span>}{{ l.text }}
+<pre
+  class="log"
+>@for (l of visible(); track l.sequence) {<span class="line" [class.hit]="isHit(l)" [class.stderr]="l.stream === 'Stderr'">@if (isHit(l)) {<span class="tag">[match] </span>}@if (l.stream === 'Stderr') {<span class="tag">[stderr] </span>}{{ l.text }}
 </span>}</pre>

@@ -85,7 +85,9 @@ test('show token displays the demo permissions', async ({ page }) => {
 
 // run-locally.md, "Call the BFF directly (no gateway)": Admin:BffUrl is a surface the proxy admits, and the BFF checks the
 // token itself, then answers its own routes, which are the gateway's /bff ones without the prefix (FakeBff, #136).
-test('a call sent straight to the bff port is the bff own 401, then its 404 for a path it does not serve', async ({ page }) => {
+test('a call sent straight to the bff port is the bff own 401, then its 404 for a path it does not serve', async ({
+  page,
+}) => {
   await page.goto('/requests');
 
   await page.locator('button.op', { hasText: 'GetProducts' }).click();
@@ -137,7 +139,9 @@ test("the token clock shows the held token's time left and its grants, which exp
   await page.getByLabel('Identity').selectOption('user:demo');
   await page.getByRole('button', { name: 'Send' }).click();
   await expect(page.locator('.response .status')).toHaveText('200');
-  await expect(clock).toContainText('Grants catalog:write, orders:write, orders:cancel, inventory:admin, payments:admin, orders:saga-read.');
+  await expect(clock).toContainText(
+    'Grants catalog:write, orders:write, orders:cancel, inventory:admin, payments:admin, orders:saga-read.',
+  );
   await expect(clock).not.toContainText('.ey');
 });
 
@@ -182,7 +186,9 @@ test("the carrier simulator's request log is Shipping's read, sent direct", asyn
 // FakeOpenApi: Catalog's recorded document is served until it has a baseline, and from then on it has
 // gained PublishProductCommand.description. Accepting is left to the host and unit specs: an accepted
 // baseline lasts as long as the host does, and a reused host or a CI retry would then have no change to see.
-test('a reload names what moved in a document since its baseline, with the action that accepts it', async ({ page }) => {
+test('a reload names what moved in a document since its baseline, with the action that accepts it', async ({
+  page,
+}) => {
   await page.goto('/requests');
   await expect(page.locator('button.op')).toHaveCount(36);
 

@@ -87,7 +87,10 @@ export class WorkspaceService {
 
   addPage(): string {
     const id = newId('page');
-    this.change((w) => ({ ...w, pages: [...w.pages, { id, title: 'New page', builtIn: null, hidden: false, widgets: [] }] }));
+    this.change((w) => ({
+      ...w,
+      pages: [...w.pages, { id, title: 'New page', builtIn: null, hidden: false, widgets: [] }],
+    }));
     return id;
   }
 
@@ -227,7 +230,10 @@ export class WorkspaceService {
   removeWidget(id: string, widgetId: string): void {
     const page = this.pages().find((p) => p.id === id);
     if (!page) return;
-    this.setWidgets(id, widgetsOf(page).filter((w) => w.id !== widgetId));
+    this.setWidgets(
+      id,
+      widgetsOf(page).filter((w) => w.id !== widgetId),
+    );
     this.sessions.forget([widgetId]);
   }
 

@@ -1,14 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import {
-  Subject,
-  exhaustMap,
-  firstValueFrom,
-  lastValueFrom,
-  takeUntil,
-  takeWhile,
-  tap,
-  timer,
-} from 'rxjs';
+import { Subject, exhaustMap, firstValueFrom, lastValueFrom, takeUntil, takeWhile, tap, timer } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import {
   ApiCatalogView,
@@ -208,15 +199,11 @@ export class ScenarioRunner {
     if (!lease) return '';
     const table = this.changes();
     const named = lease.changes.map((id) => table.find((c) => c.id === id)?.title ?? id);
-    const services = [
-      ...new Set(lease.changes.map((id) => table.find((c) => c.id === id)?.service ?? id)),
-    ];
+    const services = [...new Set(lease.changes.map((id) => table.find((c) => c.id === id)?.service ?? id))];
     return `Run changes the stack: ${named.join(', then ')} (${services.join(', ')}). Everything is restored when the run ends, is cancelled or fails, and the host restores it by itself after ${Math.round(lease.holdSeconds / 60)} minutes at most.`;
   });
 
-  readonly canRun = computed(
-    () => !this.running() && this.resolved()?.operations != null && this.runAs() !== '',
-  );
+  readonly canRun = computed(() => !this.running() && this.resolved()?.operations != null && this.runAs() !== '');
 
   /** One line for the polite live region, so a screen reader hears each step start and the run end. */
   readonly announcement = computed(() => {
@@ -275,9 +262,7 @@ export class ScenarioRunner {
       const [transcript, queuesAfter, ...traces] = await Promise.all([
         firstValueFrom(this.host.transcriptScript(this.transcriptAfter ?? undefined)).catch(() => null),
         firstValueFrom(this.host.brokerQueues()).catch(() => null),
-        ...ids.map((id) =>
-          firstValueFrom(this.host.trace(id)).catch((e: unknown): TraceRead => describe(e)),
-        ),
+        ...ids.map((id) => firstValueFrom(this.host.trace(id)).catch((e: unknown): TraceRead => describe(e))),
       ]);
       const read: Record<string, TraceRead> = {};
       ids.forEach((id, i) => (read[id] = traces[i]));
@@ -453,8 +438,7 @@ export class ScenarioRunner {
         case 'publish': {
           const fresh = withFreshCommandId(operations.publish!.exampleBody ?? '', this.uuid());
           // An unhappy branch's cause that is a price is set here and nowhere else.
-          const priced =
-            script.amount === undefined ? fresh : withField(fresh, 'amount', script.amount);
+          const priced = script.amount === undefined ? fresh : withField(fresh, 'amount', script.amount);
           // The key the upload returned, never a URL (run-locally.md, "Attach a product image by hand").
           const body = imageKey ? withField(priced, 'imageKey', imageKey) : priced;
           const id = await this.send(key, operations.publish!, run, identity, body, {}, true);
@@ -702,7 +686,10 @@ export class ScenarioRunner {
         return false;
       }
       if (Date.now() >= deadline) {
-        this.patch(key, { state: 'failed', detail: `Not reserved after ${RESERVATION_WATCH_MS / 1000} s. ${v.detail}` });
+        this.patch(key, {
+          state: 'failed',
+          detail: `Not reserved after ${RESERVATION_WATCH_MS / 1000} s. ${v.detail}`,
+        });
         return false;
       }
       this.patch(key, { detail: `${waiting} ${v.detail}` });
@@ -729,7 +716,10 @@ export class ScenarioRunner {
 
     try {
       const held = await firstValueFrom(this.host.leaseAddChange(change));
-      this.patch('stop', { state: 'ok', detail: `Held: ${held.title}. The host restores it by itself at ${held.expiresAt}.` });
+      this.patch('stop', {
+        state: 'ok',
+        detail: `Held: ${held.title}. The host restores it by itself at ${held.expiresAt}.`,
+      });
       return !this.cancelled;
     } catch (e: unknown) {
       // A 409 says no lease is held: the deadline already restored it, and a lease taken since is another run's, which the restore
@@ -746,7 +736,14 @@ export class ScenarioRunner {
     let result: ProxyResult;
     try {
       result = await firstValueFrom(
-        this.host.proxy({ method: operation.method, url: operation.url, headers: {}, body, identity: null, correlationId: null }),
+        this.host.proxy({
+          method: operation.method,
+          url: operation.url,
+          headers: {},
+          body,
+          identity: null,
+          correlationId: null,
+        }),
       );
     } catch (e: unknown) {
       this.patch(key, { state: 'failed', status: null, body: null, detail: describe(e) });
@@ -754,7 +751,10 @@ export class ScenarioRunner {
     }
 
     if (result.outcome !== 'responded') {
-      const why = result.outcome === 'unreached' ? `No answer from the carrier simulator: ${result.error}` : 'The request was refused.';
+      const why =
+        result.outcome === 'unreached'
+          ? `No answer from the carrier simulator: ${result.error}`
+          : 'The request was refused.';
       this.patch(key, { state: 'failed', status: null, body: null, detail: why });
       return null;
     }
@@ -825,7 +825,10 @@ export class ScenarioRunner {
       return;
     }
 
-    this.patch('restore', { state: 'running', detail: 'Asking the host to restore the stack and waiting for each service to be running.' });
+    this.patch('restore', {
+      state: 'running',
+      detail: 'Asking the host to restore the stack and waiting for each service to be running.',
+    });
 
     try {
       await firstValueFrom(this.host.leaseRestore());
@@ -844,12 +847,7 @@ export class ScenarioRunner {
    * (run-locally.md, "After despatch there is nothing to compensate"). The refusal is the pass; a cancel it accepted
    * is the failure, because it means the order was not despatched or that nothing refused it.
    */
-  private async lateCancel(
-    cancel: ApiOperation,
-    run: string,
-    identity: Identity,
-    orderId: string,
-  ): Promise<boolean> {
+  private async lateCancel(cancel: ApiOperation, run: string, identity: Identity, orderId: string): Promise<boolean> {
     if (this.cancelled) return false;
 
     const key: StepKey = 'late_cancel';
@@ -879,11 +877,7 @@ export class ScenarioRunner {
    * image to the store. Resolves to the key to publish with, and to null once a failure has been recorded on the step.
    * The second call is the host's (`POST /api/product-images/upload`), because the proxy's body is text and the image is not.
    */
-  private async upload(
-    operation: ApiOperation,
-    run: string,
-    identity: Identity,
-  ): Promise<string | null> {
+  private async upload(operation: ApiOperation, run: string, identity: Identity): Promise<string | null> {
     if (this.cancelled) return null;
 
     const key: StepKey = 'upload';
@@ -1038,10 +1032,7 @@ export class ScenarioRunner {
         state: 'failed',
         status: null,
         body: null,
-        detail:
-          head.outcome === 'unreached'
-            ? `No answer from the edge: ${head.error}`
-            : `Refused: ${head.status}.`,
+        detail: head.outcome === 'unreached' ? `No answer from the edge: ${head.error}` : `Refused: ${head.status}.`,
       });
       return false;
     }
@@ -1351,10 +1342,7 @@ export class ScenarioRunner {
             this.queuesBefore ??= view;
             this.projection.set(view.reachable ? view.projection : null);
           }),
-          takeWhile(
-            (view) => view.reachable && view.projection.found && !view.projection.drained,
-            true,
-          ),
+          takeWhile((view) => view.reachable && view.projection.found && !view.projection.drained, true),
           takeUntil(timer(DRAIN_WATCH_MS)),
           takeUntil(this.stopped),
         ),

@@ -15,21 +15,51 @@ const catalogue: RunbookCatalogue = {
       alerts: ['ErrorQueueDepth'],
       script: true,
       reason: null,
-      phases: [{ alert: 'ErrorQueueDepth', impact: 'none', confirmation: 'none', confirmWith: null, sustained: false, firesWithinSeconds: 240, clearsWithinSeconds: 240 }],
+      phases: [
+        {
+          alert: 'ErrorQueueDepth',
+          impact: 'none',
+          confirmation: 'none',
+          confirmWith: null,
+          sustained: false,
+          firesWithinSeconds: 240,
+          clearsWithinSeconds: 240,
+        },
+      ],
     },
     {
       runbook: 'outbox-growth',
       alerts: ['OutboxGrowth'],
       script: true,
       reason: null,
-      phases: [{ alert: 'OutboxGrowth', impact: 'outage', confirmation: 'confirm', confirmWith: 'cause', sustained: true, firesWithinSeconds: 780, clearsWithinSeconds: 780 }],
+      phases: [
+        {
+          alert: 'OutboxGrowth',
+          impact: 'outage',
+          confirmation: 'confirm',
+          confirmWith: 'cause',
+          sustained: true,
+          firesWithinSeconds: 780,
+          clearsWithinSeconds: 780,
+        },
+      ],
     },
     {
       runbook: 'contact-refused',
       alerts: ['ContactReadRefused'],
       script: true,
       reason: null,
-      phases: [{ alert: 'ContactReadRefused', impact: 'data', confirmation: 'typed', confirmWith: 'contact-refused', sustained: false, firesWithinSeconds: 300, clearsWithinSeconds: 1980 }],
+      phases: [
+        {
+          alert: 'ContactReadRefused',
+          impact: 'data',
+          confirmation: 'typed',
+          confirmWith: 'contact-refused',
+          sustained: false,
+          firesWithinSeconds: 300,
+          clearsWithinSeconds: 1980,
+        },
+      ],
     },
     {
       runbook: 'error-rate',
@@ -37,8 +67,24 @@ const catalogue: RunbookCatalogue = {
       script: true,
       reason: null,
       phases: [
-        { alert: 'ErrorRateGateway', impact: 'outage', confirmation: 'confirm', confirmWith: 'cause', sustained: true, firesWithinSeconds: 480, clearsWithinSeconds: 480 },
-        { alert: 'ErrorRateService', impact: 'outage', confirmation: 'confirm', confirmWith: 'cause', sustained: true, firesWithinSeconds: 480, clearsWithinSeconds: 480 },
+        {
+          alert: 'ErrorRateGateway',
+          impact: 'outage',
+          confirmation: 'confirm',
+          confirmWith: 'cause',
+          sustained: true,
+          firesWithinSeconds: 480,
+          clearsWithinSeconds: 480,
+        },
+        {
+          alert: 'ErrorRateService',
+          impact: 'outage',
+          confirmation: 'confirm',
+          confirmWith: 'cause',
+          sustained: true,
+          firesWithinSeconds: 480,
+          clearsWithinSeconds: 480,
+        },
       ],
     },
     { runbook: 'stuck-saga', alerts: ['StuckSaga'], script: false, reason: 'its rule is not loaded', phases: [] },
@@ -51,8 +97,24 @@ function strip(state: string): AlertStripView {
     error: null,
     waiting: [],
     loaded: [
-      { name: 'ErrorQueueDepth', group: 'g', state: 'inactive', health: 'ok', severity: null, summary: null, alerts: 0 },
-      { name: 'OutboxGrowth', group: 'g', state, health: 'ok', severity: null, summary: null, alerts: state === 'firing' ? 1 : 0 },
+      {
+        name: 'ErrorQueueDepth',
+        group: 'g',
+        state: 'inactive',
+        health: 'ok',
+        severity: null,
+        summary: null,
+        alerts: 0,
+      },
+      {
+        name: 'OutboxGrowth',
+        group: 'g',
+        state,
+        health: 'ok',
+        severity: null,
+        summary: null,
+        alerts: state === 'firing' ? 1 : 0,
+      },
     ],
   };
 }
@@ -110,7 +172,9 @@ describe('RunbooksPage', () => {
   }
 
   function open(fixture: ReturnType<typeof render>, name: string): void {
-    const button = Array.from(el(fixture).querySelectorAll('button.runbook')).find((b) => b.textContent?.trim().startsWith(name)) as HTMLButtonElement;
+    const button = Array.from(el(fixture).querySelectorAll('button.runbook')).find((b) =>
+      b.textContent?.trim().startsWith(name),
+    ) as HTMLButtonElement;
     button.click();
     fixture.detectChanges();
   }
@@ -122,13 +186,9 @@ describe('RunbooksPage', () => {
   it('lists every runbook the tool lists and marks one with no script in text', () => {
     const fixture = render();
 
-    expect(Array.from(el(fixture).querySelectorAll('button.runbook')).map((b) => b.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
-      'error-queue',
-      'outbox-growth',
-      'contact-refused',
-      'error-rate',
-      'stuck-saga [no script]',
-    ]);
+    expect(
+      Array.from(el(fixture).querySelectorAll('button.runbook')).map((b) => b.textContent?.replace(/\s+/g, ' ').trim()),
+    ).toEqual(['error-queue', 'outbox-growth', 'contact-refused', 'error-rate', 'stuck-saga [no script]']);
   });
 
   it('says why the listing failed instead of an empty list', () => {
@@ -139,14 +199,19 @@ describe('RunbooksPage', () => {
   });
 
   it('renders a nested list item as a list inside the item it belongs to', () => {
-    host.runbookText.mockReturnValue(of({ runbook: 'x', markdown: ['1. drain', '   - check `a`', '   - check `b`', '2. restore'].join('\n') }));
+    host.runbookText.mockReturnValue(
+      of({ runbook: 'x', markdown: ['1. drain', '   - check `a`', '   - check `b`', '2. restore'].join('\n') }),
+    );
     const fixture = render();
     open(fixture, 'outbox-growth');
 
     const outer = el(fixture).querySelectorAll('.runbook-text > ul');
     expect(outer).toHaveLength(1);
     expect(outer[0].querySelectorAll(':scope > li')).toHaveLength(2);
-    expect(Array.from(outer[0].querySelectorAll(':scope > li > ul > li')).map((li) => li.textContent?.trim())).toEqual(['check a', 'check b']);
+    expect(Array.from(outer[0].querySelectorAll(':scope > li > ul > li')).map((li) => li.textContent?.trim())).toEqual([
+      'check a',
+      'check b',
+    ]);
   });
 
   it("shows the alert's state beside the runbook rendered from the clone, and reads the alerts again on the poll", () => {
@@ -250,7 +315,9 @@ describe('RunbooksPage', () => {
     button(fixture, 'button.undo').click();
     expect(host.runbookRestore).toHaveBeenCalledWith('outbox-growth');
 
-    host.runbookRestore.mockReturnValue(throwError(() => ({ error: { detail: 'A game day cause outbox-growth is still running' } })));
+    host.runbookRestore.mockReturnValue(
+      throwError(() => ({ error: { detail: 'A game day cause outbox-growth is still running' } })),
+    );
     fixture.componentInstance.jobEnded();
     fixture.detectChanges();
     button(fixture, 'button.undo').click();
@@ -288,6 +355,8 @@ describe('RunbooksPage', () => {
     const fixture = render();
     open(fixture, 'stuck-saga');
 
-    expect(el(fixture).querySelector('.runbook-text [role="alert"]')?.textContent).toContain('not a file in docs/runbooks');
+    expect(el(fixture).querySelector('.runbook-text [role="alert"]')?.textContent).toContain(
+      'not a file in docs/runbooks',
+    );
   });
 });

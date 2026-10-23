@@ -18,7 +18,10 @@ import { injectPageJob } from './page-jobs';
     }
   `,
   styles: `
-    .idle { margin: 0; color: var(--app-muted); }
+    .idle {
+      margin: 0;
+      color: var(--app-muted);
+    }
   `,
 })
 export class JobOutputWidget {

@@ -105,8 +105,7 @@ describe('buildExport', () => {
             key: 'mail',
             title: 'Count the mail',
             state: 'failed',
-            detail:
-              'A message was sent more than once: OrderConfirmed (order-confirmed) sent 2 times.',
+            detail: 'A message was sent more than once: OrderConfirmed (order-confirmed) sent 2 times.',
           }),
         ],
       }),
@@ -132,9 +131,7 @@ describe('buildExport', () => {
       }),
     );
 
-    expect(md.slice(md.indexOf('## Mail the run caused'))).toContain(
-      'Not counted: the mail step did not run.',
-    );
+    expect(md.slice(md.indexOf('## Mail the run caused'))).toContain('Not counted: the mail step did not run.');
   });
 
   it('lists each step with its status and correlation id, and pretty-prints a JSON body', () => {
@@ -182,16 +179,12 @@ describe('buildExport', () => {
   });
 
   it("says when the transcript is the whole session because the run's start was not read", () => {
-    expect(buildExport(input({ transcriptScope: 'session' }))).toContain(
-      "The host's whole session",
-    );
+    expect(buildExport(input({ transcriptScope: 'session' }))).toContain("The host's whole session");
     expect(buildExport(input())).toContain('from when this run began');
   });
 
   it('omits the transcript with a line when the host would not render it', () => {
-    expect(buildExport(input({ transcript: null }))).toContain(
-      'Omitted: the host would not render the transcript.',
-    );
+    expect(buildExport(input({ transcript: null }))).toContain('Omitted: the host would not render the transcript.');
   });
 
   it('cuts a long body and says how much, and fences a body that holds backticks with a longer fence', () => {

@@ -14,7 +14,9 @@ import { StackFeed } from '../stack-feed';
         <p class="error">Docker did not answer: {{ s.backend.error }}</p>
       }
       <table class="services">
-        <thead><tr><th>Service</th><th>State</th><th>Health</th><th>Ports</th></tr></thead>
+        <thead
+          ><tr><th>Service</th><th>State</th><th>Health</th><th>Ports</th></tr></thead
+        >
         <tbody>
           @for (svc of services(); track svc.service) {
             <tr [class.exited]="svc.state === 'exited'">

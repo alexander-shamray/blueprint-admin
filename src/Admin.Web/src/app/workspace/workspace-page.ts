@@ -35,9 +35,21 @@ import { WidgetInstance } from './workspace-types';
     }
   `,
   styles: `
-    :host { display: flex; flex-direction: column; height: 100%; }
-    .grid { flex: 1; min-height: 0; }
-    .empty { flex: none; margin: 0; color: var(--app-muted); padding: 1rem; }
+    :host {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    .grid {
+      flex: 1;
+      min-height: 0;
+    }
+    .empty {
+      flex: none;
+      margin: 0;
+      color: var(--app-muted);
+      padding: 1rem;
+    }
   `,
 })
 export class WorkspacePage implements OnDestroy {

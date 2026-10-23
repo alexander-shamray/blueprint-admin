@@ -6,15 +6,19 @@
     <button mat-icon-button type="button" aria-label="New conversation" i18n-aria-label (click)="assistant.startOver()">
       <mat-icon aria-hidden="true">add_comment</mat-icon>
     </button>
-    <button mat-icon-button type="button" aria-label="Close the assistant" i18n-aria-label (click)="assistant.panelOpen.set(false)">
+    <button
+      mat-icon-button
+      type="button"
+      aria-label="Close the assistant"
+      i18n-aria-label
+      (click)="assistant.panelOpen.set(false)"
+    >
       <mat-icon aria-hidden="true">close</mat-icon>
     </button>
   </header>
   <ol #messages class="messages" aria-live="polite" aria-label="Conversation" i18n-aria-label>
     @if (items().length === 0) {
-      <li class="hint" i18n>
-        Ask what a screen is for, or where to find something: "where are the logs?"
-      </li>
+      <li class="hint" i18n> Ask what a screen is for, or where to find something: "where are the logs?" </li>
     }
     @for (item of items(); track $index) {
       @switch (item.kind) {
@@ -50,9 +54,16 @@
     ></textarea>
     <div class="actions">
       @if (state().running) {
-        <button mat-stroked-button type="button" (click)="assistant.cancel()" i18n="stops the assistant's answer">Stop</button>
+        <button mat-stroked-button type="button" (click)="assistant.cancel()" i18n="stops the assistant's answer"
+          >Stop</button
+        >
       }
-      <button mat-flat-button type="submit" [disabled]="state().running || draft().trim() === ''" i18n="sends a message to the assistant">
+      <button
+        mat-flat-button
+        type="submit"
+        [disabled]="state().running || draft().trim() === ''"
+        i18n="sends a message to the assistant"
+      >
         Send
       </button>
     </div>

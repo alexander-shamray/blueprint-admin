@@ -26,9 +26,19 @@ export class BrokerFeed {
   private readonly destroyRef = inject(DestroyRef);
 
   readonly queues = new PolledFeed(() => this.host.brokerQueues(), AUTO_REFRESH_MS, this.visible, this.destroyRef);
-  readonly exchanges = new PolledFeed(() => this.host.brokerExchanges(), AUTO_REFRESH_MS, this.visible, this.destroyRef);
+  readonly exchanges = new PolledFeed(
+    () => this.host.brokerExchanges(),
+    AUTO_REFRESH_MS,
+    this.visible,
+    this.destroyRef,
+  );
   readonly bindings = new PolledFeed(() => this.host.brokerBindings(), AUTO_REFRESH_MS, this.visible, this.destroyRef);
-  readonly permissions = new PolledFeed(() => this.host.brokerPermissions(), AUTO_REFRESH_MS, this.visible, this.destroyRef);
+  readonly permissions = new PolledFeed(
+    () => this.host.brokerPermissions(),
+    AUTO_REFRESH_MS,
+    this.visible,
+    this.destroyRef,
+  );
 
   /**
    * The projection tool's plan: undefined while the host has not answered, null when it did not (the widget then has

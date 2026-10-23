@@ -26,10 +26,12 @@ import { BrokerFeed, describeError } from '../broker-feed';
         <p class="empty">The host did not give the dead-letter tool's plan.</p>
       } @else if (openQueue(); as queue) {
         <p>
-          Dead letters on <code>{{ queue }}</code>. The first {{ feed.deadLetterPlan()?.inspectLimit }} messages, read with the backend's <code>tools/dead-letters</code>,
-          which puts each back, flagged redelivered; a deeper queue holds more than this shows. Each
-          replay or discard is a dry run first; the real run writes every message it takes to a record file under
-          <code>{{ feed.deadLetterPlan()?.recordDir }}</code> before it moves it. The runbook says when to do either.
+          Dead letters on <code>{{ queue }}</code
+          >. The first {{ feed.deadLetterPlan()?.inspectLimit }} messages, read with the backend's
+          <code>tools/dead-letters</code>, which puts each back, flagged redelivered; a deeper queue holds more than
+          this shows. Each replay or discard is a dry run first; the real run writes every message it takes to a record
+          file under <code>{{ feed.deadLetterPlan()?.recordDir }}</code> before it moves it. The runbook says when to do
+          either.
           <button class="close-dead-letters" (click)="close()">Close</button>
         </p>
         @if (inspecting()) {
@@ -40,8 +42,8 @@ import { BrokerFeed, describeError } from '../broker-feed';
         }
         @if (moved(); as id) {
           <p class="moved" role="status">
-            <code>{{ id }}</code> went to the real run, so the listing is dropped; any other message read is still on the
-            queue. Read the queue again once the run's output says it has ended.
+            <code>{{ id }}</code> went to the real run, so the listing is dropped; any other message read is still on
+            the queue. Read the queue again once the run's output says it has ended.
             <button class="reread" [disabled]="inspecting()" (click)="open(queue)">Read again</button>
           </p>
         }
@@ -55,24 +57,60 @@ import { BrokerFeed, describeError } from '../broker-feed';
           @for (message of view.messages; track $index) {
             <article class="dead-letter">
               <dl>
-                <dt>Message</dt><dd><code>{{ message.messageId ?? '(no message id)' }}</code></dd>
+                <dt>Message</dt
+                ><dd
+                  ><code>{{ message.messageId ?? '(no message id)' }}</code></dd
+                >
                 @if (message.correlationId; as c) {
-                  <dt>Correlation</dt><dd><a [appTraceLink]="c">{{ c }}</a></dd>
+                  <dt>Correlation</dt
+                  ><dd
+                    ><a [appTraceLink]="c">{{ c }}</a></dd
+                  >
                 }
-                @if (message.messageType; as t) {<dt>Type</dt><dd><code>{{ t }}</code></dd>}
+                @if (message.messageType; as t) {
+                  <dt>Type</dt
+                  ><dd
+                    ><code>{{ t }}</code></dd
+                  >
+                }
+                <!-- prettier-ignore -->
                 @if (message.faultExceptionType; as f) {<dt>Fault</dt><dd><code>{{ f }}</code>@if (message.faultMessage; as m) {: {{ m }}}</dd>}
-                @if (message.reason; as r) {<dt>Reason</dt><dd>{{ r }}</dd>}
-                <dt>Body</dt><dd><code class="body">{{ message.body ?? '(binary)' }}</code></dd>
+                @if (message.reason; as r) {
+                  <dt>Reason</dt><dd>{{ r }}</dd>
+                }
+                <dt>Body</dt
+                ><dd
+                  ><code class="body">{{ message.body ?? '(binary)' }}</code></dd
+                >
               </dl>
               @if (message.messageId; as id) {
                 <div class="dead-letter-actions">
-                  <button class="dry-replay" (click)="dryRun(id, 'replay')" [title]="'Say what a replay of ' + id + ' would do; nothing moves'">Dry-run replay</button>
-                  <button class="dry-discard" (click)="dryRun(id, 'discard')" [title]="'Say what a discard of ' + id + ' would do; nothing moves'">Dry-run discard</button>
+                  <button
+                    class="dry-replay"
+                    (click)="dryRun(id, 'replay')"
+                    [title]="'Say what a replay of ' + id + ' would do; nothing moves'"
+                    >Dry-run replay</button
+                  >
+                  <button
+                    class="dry-discard"
+                    (click)="dryRun(id, 'discard')"
+                    [title]="'Say what a discard of ' + id + ' would do; nothing moves'"
+                    >Dry-run discard</button
+                  >
                   @if (armed(); as a) {
                     @if (a.messageId === id) {
                       <span class="execute-box">
-                        <input [attr.aria-label]="'Type ' + feed.deadLetterPlan()?.executeConfirm + ' to ' + a.verb + ' for real'" [placeholder]="'type: ' + feed.deadLetterPlan()?.executeConfirm" [ngModel]="executeText()" (ngModelChange)="executeText.set($event)" />
-                        <button class="execute" [disabled]="!canExecute()" (click)="execute()">{{ a.verb === 'replay' ? 'Replay' : 'Discard' }} for real</button>
+                        <input
+                          [attr.aria-label]="
+                            'Type ' + feed.deadLetterPlan()?.executeConfirm + ' to ' + a.verb + ' for real'
+                          "
+                          [placeholder]="'type: ' + feed.deadLetterPlan()?.executeConfirm"
+                          [ngModel]="executeText()"
+                          (ngModelChange)="executeText.set($event)"
+                        />
+                        <button class="execute" [disabled]="!canExecute()" (click)="execute()"
+                          >{{ a.verb === 'replay' ? 'Replay' : 'Discard' }} for real</button
+                        >
                       </span>
                     }
                   }

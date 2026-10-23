@@ -17,7 +17,13 @@ export const queues: QueuesView = {
   reachable: true,
   error: null,
   queues: [
-    { name: 'ordering-catalog-events', messages: 2, consumer: "Ordering's price projection", parked: null, runbook: null },
+    {
+      name: 'ordering-catalog-events',
+      messages: 2,
+      consumer: "Ordering's price projection",
+      parked: null,
+      runbook: null,
+    },
     {
       name: 'ordering-catalog-events_error',
       messages: 1,
@@ -51,7 +57,11 @@ export const plan: ProjectionPlan = {
   limits: ['A replay reaches back one outbox window and no further.', 'A rebuild deletes the projection first.'],
 };
 
-export const deadLetterPlan: DeadLetterPlan = { executeConfirm: '--execute', inspectLimit: 20, recordDir: '/data/dead-letters' };
+export const deadLetterPlan: DeadLetterPlan = {
+  executeConfirm: '--execute',
+  inspectLimit: 20,
+  recordDir: '/data/dead-letters',
+};
 
 export const inspection: DeadLetterInspection = {
   queue: 'ordering-catalog-events_error',
@@ -84,12 +94,21 @@ export const inspection: DeadLetterInspection = {
   ],
 };
 
-export const job: JobSummary = { id: 'job-7', commandLine: 'bff-replay', state: 'Running', exitCode: null, startedAt: '2026-10-15T00:00:00Z' };
+export const job: JobSummary = {
+  id: 'job-7',
+  commandLine: 'bff-replay',
+  state: 'Running',
+  exitCode: null,
+  startedAt: '2026-10-15T00:00:00Z',
+};
 
 export const exchanges: ExchangesView = {
   reachable: true,
   error: null,
-  exchanges: [{ name: '', type: 'direct' }, { name: 'ordering-fulfilment-saga_delay', type: 'x-delayed-message' }],
+  exchanges: [
+    { name: '', type: 'direct' },
+    { name: 'ordering-fulfilment-saga_delay', type: 'x-delayed-message' },
+  ],
 };
 
 // run-locally.md's two bindings for Catalog's price changes reaching Ordering, and the default exchange's to the queue.
@@ -97,16 +116,36 @@ export const bindings: BindingsView = {
   reachable: true,
   error: null,
   bindings: [
-    { source: '', sourceKind: 'exchange', destination: 'ordering-catalog-events', destinationKind: 'queue', routingKey: 'ordering-catalog-events' },
-    { source: 'Common.Contracts.Catalog.V1:PriceChanged', sourceKind: 'exchange', destination: 'ordering-catalog-events', destinationKind: 'exchange', routingKey: '' },
-    { source: 'ordering-catalog-events', sourceKind: 'exchange', destination: 'ordering-catalog-events', destinationKind: 'queue', routingKey: '' },
+    {
+      source: '',
+      sourceKind: 'exchange',
+      destination: 'ordering-catalog-events',
+      destinationKind: 'queue',
+      routingKey: 'ordering-catalog-events',
+    },
+    {
+      source: 'Common.Contracts.Catalog.V1:PriceChanged',
+      sourceKind: 'exchange',
+      destination: 'ordering-catalog-events',
+      destinationKind: 'exchange',
+      routingKey: '',
+    },
+    {
+      source: 'ordering-catalog-events',
+      sourceKind: 'exchange',
+      destination: 'ordering-catalog-events',
+      destinationKind: 'queue',
+      routingKey: '',
+    },
   ],
 };
 
 export const permissions: PermissionsView = {
   reachable: true,
   error: null,
-  permissions: [{ user: 'catalog-svc', configure: '^(MassTransit:)', write: '^(MassTransit:)', read: '^(MassTransit:)' }],
+  permissions: [
+    { user: 'catalog-svc', configure: '^(MassTransit:)', write: '^(MassTransit:)', read: '^(MassTransit:)' },
+  ],
 };
 
 /** A HostClient whose every broker read answers at once; a test swaps one with `mockReturnValue`. */

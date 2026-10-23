@@ -36,7 +36,15 @@ const signal = (service: string) => ({
   queryP95Seconds: null,
 });
 
-const rule = (name: string, state: string) => ({ name, group: 'g', state, health: 'ok', severity: 'page', summary: null, alerts: state === 'firing' ? 1 : 0 });
+const rule = (name: string, state: string) => ({
+  name,
+  group: 'g',
+  state,
+  health: 'ok',
+  severity: 'page',
+  summary: null,
+  alerts: state === 'firing' ? 1 : 0,
+});
 
 function text(el: Element): string {
   return el.textContent?.replace(/\s+/g, ' ').trim() ?? '';
@@ -48,14 +56,20 @@ describe('a Stack widget with a config', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
-    alerts = { reachable: true, error: null, loaded: [rule('ErrorQueueDepth', 'firing'), rule('Latency', 'pending')], waiting: [] };
+    alerts = {
+      reachable: true,
+      error: null,
+      loaded: [rule('ErrorQueueDepth', 'firing'), rule('Latency', 'pending')],
+      waiting: [],
+    };
     TestBed.configureTestingModule({
       providers: [
         {
           provide: HostClient,
           useValue: {
             stack: () => of(stack),
-            telemetryHealth: () => of({ reachable: true, error: null, services: [signal('Catalog.Api'), signal('Gateway.Api')] }),
+            telemetryHealth: () =>
+              of({ reachable: true, error: null, services: [signal('Catalog.Api'), signal('Gateway.Api')] }),
             telemetryAlerts: () => of(alerts),
           },
         },

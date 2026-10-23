@@ -45,7 +45,11 @@
       }
     </header>
     @if (editing() && isEditingSettings(item)) {
-      <form class="ws-settings" [attr.aria-label]="settingsLabel(item)" (submit)="$event.preventDefault(); applySettings(item)">
+      <form
+        class="ws-settings"
+        [attr.aria-label]="settingsLabel(item)"
+        (submit)="$event.preventDefault(); applySettings(item)"
+      >
         @for (field of item.kind.fields; track field.key) {
           @if (field.kind === 'flag') {
             <label class="ws-field">
@@ -71,7 +75,9 @@
           }
         }
         @if (hasNames(item)) {
-          <span class="ws-field-hint" [id]="'ws-hint-' + item.widget.id" i18n>Names are separated by commas; leave a field empty for the default.</span>
+          <span class="ws-field-hint" [id]="'ws-hint-' + item.widget.id" i18n
+            >Names are separated by commas; leave a field empty for the default.</span
+          >
         }
         <button mat-button type="submit" i18n>Apply</button>
         <button mat-button type="button" (click)="closeSettings(item)" i18n>Cancel</button>
@@ -84,8 +90,8 @@
         }
       } @else {
         <p class="ws-unknown" i18n>
-          This console does not know the widget type <code>{{ item.widget.type }}</code>. It is kept, and saved back as
-          it was.
+          This console does not know the widget type <code>{{ item.widget.type }}</code
+          >. It is kept, and saved back as it was.
         </p>
       }
     </div>
@@ -105,7 +111,9 @@
       </button>
     }
     @if (hasFields(item)) {
-      <button mat-menu-item type="button" class="ws-edit-settings" (click)="openSettings(item)" i18n>Edit settings…</button>
+      <button mat-menu-item type="button" class="ws-edit-settings" (click)="openSettings(item)" i18n
+        >Edit settings…</button
+      >
     }
   </ng-template>
 </mat-menu>

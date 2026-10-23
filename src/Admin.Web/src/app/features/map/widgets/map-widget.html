@@ -24,10 +24,14 @@
   }
   @for (service of m.services; track service.name) {
     <section class="service" [attr.aria-label]="'Service ' + service.name">
-      <h2>{{ service.name }} <small>{{ service.url ?? 'worker, no API of its own' }}</small></h2>
+      <h2
+        >{{ service.name }} <small>{{ service.url ?? 'worker, no API of its own' }}</small></h2
+      >
       @if (service.routes.length > 0) {
         <table class="routes">
-          <thead><tr><th>Gateway route</th><th>Policy</th></tr></thead>
+          <thead
+            ><tr><th>Gateway route</th><th>Policy</th></tr></thead
+          >
           <tbody>
             @for (route of service.routes; track route.method + route.prefix) {
               <tr>
@@ -40,11 +44,18 @@
       }
       @if (service.queues.length > 0) {
         <table class="queues">
-          <thead><tr><th>Queue</th><th>Consumes</th><th>Messages</th><th>Change</th><th>Bound from</th></tr></thead>
+          <thead
+            ><tr><th>Queue</th><th>Consumes</th><th>Messages</th><th>Change</th><th>Bound from</th></tr></thead
+          >
           <tbody>
             @for (queue of service.queues; track queue.name) {
               <tr [class.error-queue]="queue.parked === 'error'" [class.skipped-queue]="queue.parked === 'skipped'">
-                <td>@if (queue.parked; as kind) {<span class="marker">[{{ kind }}]</span> }{{ queue.name }}</td>
+                <td>
+                  @if (queue.parked; as kind) {
+                    <span class="marker">[{{ kind }}]</span>
+                  }
+                  {{ queue.name }}</td
+                >
                 <td>{{ queue.consumer }}</td>
                 <td class="depth">{{ queue.messages ?? '—' }}</td>
                 <td class="rate">{{ feed.rateOf(queue.name) }}</td>

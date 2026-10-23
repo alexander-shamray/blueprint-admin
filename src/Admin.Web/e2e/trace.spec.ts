@@ -24,7 +24,9 @@ test('the trace screen renders a correlation id timeline that crosses the outbox
 
   const last = page.locator('table.timeline tbody tr').last();
   await expect(last.locator('td.kind')).toHaveText('[queued]');
-  await expect(last).toContainText('ordering-catalog-events: 0 messages (drained), 1 parked in ordering-catalog-events_error.');
+  await expect(last).toContainText(
+    'ordering-catalog-events: 0 messages (drained), 1 parked in ordering-catalog-events_error.',
+  );
 
   // The failed first attempt's trace 404s, and the screen says so rather than quietly showing fewer spans.
   await expect(page.locator('p.warning')).toContainText('1 of 2 traces could not be read from Tempo');

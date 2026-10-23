@@ -74,7 +74,8 @@ export class ApiHistory {
   /** A short line for one entry: how it ended, what it was, and who sent it. */
   label(entry: HistoryEntry): string {
     const r = entry.result;
-    const outcome = r.outcome === 'responded' ? String(r.status) : r.outcome === 'tokenRejected' ? `token ${r.status}` : 'unreached';
+    const outcome =
+      r.outcome === 'responded' ? String(r.status) : r.outcome === 'tokenRejected' ? `token ${r.status}` : 'unreached';
     return `${outcome} ${entry.name} as ${entry.identity}`;
   }
 }
@@ -85,7 +86,8 @@ export class ApiHistory {
  */
 export function clockText(clock: TokenClockView | null, now: number): string | null {
   if (!clock?.username) return null;
-  if (!clock.held || !clock.expiresAt || !clock.renewsAt) return `No token held for ${clock.username}; the next call mints one.`;
+  if (!clock.held || !clock.expiresAt || !clock.renewsAt)
+    return `No token held for ${clock.username}; the next call mints one.`;
   const left = Date.parse(clock.expiresAt) - now;
   const renews = Date.parse(clock.renewsAt) - now;
   const grants = clock.permissions.length ? `Grants ${clock.permissions.join(', ')}.` : 'Grants no permission.';

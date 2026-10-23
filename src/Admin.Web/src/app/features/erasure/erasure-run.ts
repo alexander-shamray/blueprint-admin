@@ -73,7 +73,15 @@ export class ErasureRun {
     const depth = (name: string) => listed.find((h) => h.name === name);
 
     if (request === null) {
-      return listed.map((h) => ({ name: h.name, state: 'unasked', count: null, receivedAt: null, counted: true, queue: h.queue, pending: h.pending }));
+      return listed.map((h) => ({
+        name: h.name,
+        state: 'unasked',
+        count: null,
+        receivedAt: null,
+        counted: true,
+        queue: h.queue,
+        pending: h.pending,
+      }));
     }
 
     const expected = request.responders.map((name): HolderRow => {
@@ -90,7 +98,15 @@ export class ErasureRun {
     });
     const extra = request.answers
       .filter((a) => !request.responders.includes(a.responder))
-      .map((a): HolderRow => ({ name: a.responder, state: 'answered', count: a.count, receivedAt: a.receivedAt, counted: a.counted, queue: null, pending: null }));
+      .map((a): HolderRow => ({
+        name: a.responder,
+        state: 'answered',
+        count: a.count,
+        receivedAt: a.receivedAt,
+        counted: a.counted,
+        queue: null,
+        pending: null,
+      }));
 
     return [...expected, ...extra];
   });
@@ -100,27 +116,32 @@ export class ErasureRun {
   constructor() {
     this.host
       .erasureHolders()
-      .pipe(takeUntilDestroyed(this.destroyRef), catchError(() => of(null)))
+      .pipe(
+        takeUntilDestroyed(this.destroyRef),
+        catchError(() => of(null)),
+      )
       .subscribe((view) => this.holders.set(view));
   }
 
   /** `POST /api/v1/privacy/erasure-requests`: asking again for a subject with a request open answers that request. */
   raise(subject: string): void {
     if (!GUID.test(subject.trim()) || this.busy()) return;
-    this.send('POST', '/api/v1/privacy/erasure-requests', JSON.stringify({ subjectId: subject.trim() })).subscribe((result) => {
-      const body = this.expect(result, 'Raising the request');
-      if (body === null) return;
-      try {
-        const id = JSON.parse(body) as unknown;
-        if (typeof id !== 'string') throw new Error('not an id');
-        this.requestId.set(id);
-        this.raisedUnder.set(result.correlationId);
-        this.request.set(null);
-        this.read();
-      } catch {
-        this.error.set(`Privacy accepted the request but answered no request id: ${body}`);
-      }
-    });
+    this.send('POST', '/api/v1/privacy/erasure-requests', JSON.stringify({ subjectId: subject.trim() })).subscribe(
+      (result) => {
+        const body = this.expect(result, 'Raising the request');
+        if (body === null) return;
+        try {
+          const id = JSON.parse(body) as unknown;
+          if (typeof id !== 'string') throw new Error('not an id');
+          this.requestId.set(id);
+          this.raisedUnder.set(result.correlationId);
+          this.request.set(null);
+          this.read();
+        } catch {
+          this.error.set(`Privacy accepted the request but answered no request id: ${body}`);
+        }
+      },
+    );
   }
 
   /** `GET .../{id}`: one holder row per responder the request was raised with. */
@@ -133,7 +154,11 @@ export class ErasureRun {
   reissue(): void {
     const request = this.request();
     if (!request || !this.overdue() || this.busy()) return;
-    this.send('POST', `/api/v1/privacy/erasure-requests/${request.requestId}/reissue`, JSON.stringify({ commandId: crypto.randomUUID() })).subscribe((result) => {
+    this.send(
+      'POST',
+      `/api/v1/privacy/erasure-requests/${request.requestId}/reissue`,
+      JSON.stringify({ commandId: crypto.randomUUID() }),
+    ).subscribe((result) => {
       if (this.expect(result, 'Reissuing the request') !== null) this.read();
     });
   }
@@ -176,7 +201,10 @@ export class ErasureRun {
   private refreshDepths(): void {
     this.host
       .erasureHolders()
-      .pipe(takeUntilDestroyed(this.destroyRef), catchError(() => of(null)))
+      .pipe(
+        takeUntilDestroyed(this.destroyRef),
+        catchError(() => of(null)),
+      )
       .subscribe((view) => view && this.holders.set(view));
   }
 
@@ -188,7 +216,14 @@ export class ErasureRun {
       this.quietFailure = false;
     }
     return this.host
-      .proxy({ method, url: gateway.replace(/\/+$/, '') + path, headers: body ? { 'Content-Type': 'application/json' } : {}, body, identity: PRIVACY_IDENTITY, correlationId: null })
+      .proxy({
+        method,
+        url: gateway.replace(/\/+$/, '') + path,
+        headers: body ? { 'Content-Type': 'application/json' } : {},
+        body,
+        identity: PRIVACY_IDENTITY,
+        correlationId: null,
+      })
       .pipe(
         takeUntilDestroyed(this.destroyRef),
         catchError((e: unknown) => {
@@ -210,7 +245,9 @@ export class ErasureRun {
       return null;
     }
     if (result.outcome === 'tokenRejected') {
-      this.error.set(`${what}: Keycloak refused the privacy login (${result.status}). A realm imported before it existed needs docker compose down -v.`);
+      this.error.set(
+        `${what}: Keycloak refused the privacy login (${result.status}). A realm imported before it existed needs docker compose down -v.`,
+      );
       return null;
     }
     if (result.status < 200 || result.status >= 300) {

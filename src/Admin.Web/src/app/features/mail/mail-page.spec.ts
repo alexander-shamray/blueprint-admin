@@ -12,7 +12,10 @@ describe('MailPage', () => {
         { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap(query) } } },
         {
           provide: HostClient,
-          useValue: { mailMessages: () => of({ reachable: true, error: null, total: 0, messages: [], sinkUrl: 'http://localhost:8025' }) },
+          useValue: {
+            mailMessages: () =>
+              of({ reachable: true, error: null, total: 0, messages: [], sinkUrl: 'http://localhost:8025' }),
+          },
         },
       ],
     });

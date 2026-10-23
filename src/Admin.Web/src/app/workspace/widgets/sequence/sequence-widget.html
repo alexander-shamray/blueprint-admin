@@ -29,7 +29,8 @@
 
 @if (view(); as v) {
   <p class="summary" role="status">
-    {{ v.events.length }} event{{ v.events.length === 1 ? '' : 's' }} for {{ v.correlationId }} over the last {{ v.window }}.
+    {{ v.events.length }} event{{ v.events.length === 1 ? '' : 's' }} for {{ v.correlationId }} over the last
+    {{ v.window }}.
     @if (v.tracesTruncated) {
       <span class="truncated">Only the {{ v.traceIds.length }} newest traces were fetched.</span>
     }
@@ -45,8 +46,8 @@
       <p class="changes" role="status">Nothing changed since the read at {{ d.previousAt | date: 'HH:mm:ss' }}.</p>
     } @else {
       <p class="changes" role="status">
-        Since the read at {{ d.previousAt | date: 'HH:mm:ss' }}: {{ d.arrived.length }} new, {{ d.gone.length }} no longer
-        in the timeline.
+        Since the read at {{ d.previousAt | date: 'HH:mm:ss' }}: {{ d.arrived.length }} new, {{ d.gone.length }} no
+        longer in the timeline.
       </p>
     }
   }
@@ -76,7 +77,8 @@
     </ol>
   } @else {
     <p class="empty">
-      The timeline for {{ v.correlationId }} holds no hop to draw: no log line, span or message of the last {{ v.window }}
+      The timeline for {{ v.correlationId }} holds no hop to draw: no log line, span or message of the last
+      {{ v.window }}
       names a service call. The id may be older than the window, or the request may never have reached the platform.
     </p>
   }

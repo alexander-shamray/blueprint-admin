@@ -257,7 +257,13 @@ function isRead(request: ProxyRequest): boolean {
 /** The host's `ScenarioControl.Table` as `GET /api/stack/lease` lists it. */
 const leaseChanges = [
   { id: 'stop-inventory', title: 'Inventory stopped', service: 'inventory-api', description: '', maxHoldSeconds: 600 },
-  { id: 'short-waits', title: "The saga's waits shortened", service: 'ordering-api', description: '', maxHoldSeconds: 600 },
+  {
+    id: 'short-waits',
+    title: "The saga's waits shortened",
+    service: 'ordering-api',
+    description: '',
+    maxHoldSeconds: 600,
+  },
 ];
 
 const heldLease = {
@@ -327,7 +333,16 @@ describe('ScenarioWidget', () => {
       mailMessages: vi.fn(() => of(mailView([...sinkMail]))),
       transcriptScript: vi.fn(() => of('curl http://x')),
       trace: vi.fn((id: string) =>
-        of({ correlationId: id, window: '30m', reachable: true, error: null, traceIds: [], tracesTruncated: false, warning: null, events: [] }),
+        of({
+          correlationId: id,
+          window: '30m',
+          reachable: true,
+          error: null,
+          traceIds: [],
+          tracesTruncated: false,
+          warning: null,
+          events: [],
+        }),
       ),
       scenarioExport: vi.fn((markdown: string) => of(markdown)),
       transcript: vi.fn(() => of({ entries: [{ sequence: 7 }, { sequence: 9 }], dropped: 0 })),
@@ -399,10 +414,13 @@ describe('ScenarioWidget', () => {
       'The order read shows delivered at 2026-10-05T12:00:40Z, 40 s after it was placed.',
     );
     // Each watch keeps the read that reached its step.
-    expect(page.steps().slice(5, 8).map((s) => [s.status, s.body])).toEqual(Array(3).fill([200, delivered]));
     expect(
-      sent().every((r) => r.identity?.username === 'demo' && r.identity.password === null),
-    ).toBe(true);
+      page
+        .steps()
+        .slice(5, 8)
+        .map((s) => [s.status, s.body]),
+    ).toEqual(Array(3).fill([200, delivered]));
+    expect(sent().every((r) => r.identity?.username === 'demo' && r.identity.password === null)).toBe(true);
   });
 
   it("fills the saga strip from the watches' order reads", async () => {
@@ -423,7 +441,7 @@ describe('ScenarioWidget', () => {
   });
 
   describe('the mail count', () => {
-    it('reads the sink through the host and names the event each of the run\'s messages answered', async () => {
+    it("reads the sink through the host and names the event each of the run's messages answered", async () => {
       const page = render().componentInstance.runner;
 
       await page.run();
@@ -440,9 +458,11 @@ describe('ScenarioWidget', () => {
       expect(sent().some((r) => r.url.includes('/api/mail/'))).toBe(false);
     });
 
-    it('counts only the mail whose correlation id is the run\'s', async () => {
+    it("counts only the mail whose correlation id is the run's", async () => {
       const other = mailView(['order-placed', 'order-placed'], {}, '0199a1b2-0000-7000-8000-0000000000ff');
-      host.mailMessages.mockReturnValue(of({ ...mailView(DELIVERED_MAIL), messages: [...other.messages, ...mailView(DELIVERED_MAIL).messages] }));
+      host.mailMessages.mockReturnValue(
+        of({ ...mailView(DELIVERED_MAIL), messages: [...other.messages, ...mailView(DELIVERED_MAIL).messages] }),
+      );
       const page = render().componentInstance.runner;
 
       await page.run();
@@ -458,7 +478,9 @@ describe('ScenarioWidget', () => {
 
       const step = page.steps()[8];
       expect(step.state).toBe('failed');
-      expect(step.detail).toContain('A message was sent more than once: OrderConfirmed (order-confirmed) sent 2 times.');
+      expect(step.detail).toContain(
+        'A message was sent more than once: OrderConfirmed (order-confirmed) sent 2 times.',
+      );
       expect(step.detail).toContain('ShipmentDelivered (shipment-delivered) ×1');
       expect(host.mailMessages).toHaveBeenCalledTimes(1);
     });
@@ -496,7 +518,9 @@ describe('ScenarioWidget', () => {
         await vi.advanceTimersByTimeAsync(0);
         await vi.waitFor(() => expect(host.mailMessages).toHaveBeenCalledTimes(1));
         expect(page.steps()[8].state).toBe('running');
-        expect(page.steps()[8].detail).toContain('Not sent yet: ShipmentDispatched (shipment-dispatched), ShipmentDelivered (shipment-delivered).');
+        expect(page.steps()[8].detail).toContain(
+          'Not sent yet: ShipmentDispatched (shipment-dispatched), ShipmentDelivered (shipment-delivered).',
+        );
 
         await vi.advanceTimersByTimeAsync(DRAIN_POLL_MS);
         await run;
@@ -519,7 +543,9 @@ describe('ScenarioWidget', () => {
         await run;
 
         expect(page.steps()[8].state).toBe('failed');
-        expect(page.steps()[8].detail).toContain(`Not all sent after ${DRAIN_WATCH_MS / 1000} s. Not sent yet: ShipmentDelivered (shipment-delivered).`);
+        expect(page.steps()[8].detail).toContain(
+          `Not all sent after ${DRAIN_WATCH_MS / 1000} s. Not sent yet: ShipmentDelivered (shipment-delivered).`,
+        );
       } finally {
         vi.useRealTimers();
       }
@@ -734,7 +760,9 @@ describe('ScenarioWidget', () => {
       of({
         ...catalog,
         operations: catalog.operations.map((o) =>
-          o.id === 'ordering:PlaceOrder' ? { ...o, exampleBody: `{"commandId":"${zero}","items":[{"productId":"${zero}","quantity":1}]}` } : o,
+          o.id === 'ordering:PlaceOrder'
+            ? { ...o, exampleBody: `{"commandId":"${zero}","items":[{"productId":"${zero}","quantity":1}]}` }
+            : o,
         ),
       }),
     );
@@ -774,7 +802,9 @@ describe('ScenarioWidget', () => {
       ['unchanged', 'ok'],
     ]);
     expect(page.steps()[7].status).toBe(422);
-    expect(page.steps()[7].detail).toBe('Refused with 422 order.already_shipped, as an order the carrier has collected is.');
+    expect(page.steps()[7].detail).toBe(
+      'Refused with 422 order.already_shipped, as an order the carrier has collected is.',
+    );
   });
 
   it('fails the already-shipped script when the cancel is taken, and does not read the order back', async () => {
@@ -805,7 +835,9 @@ describe('ScenarioWidget', () => {
     await page.run();
 
     expect(page.steps()[7].state).toBe('failed');
-    expect(page.steps()[7].detail).toBe('Answered 422, not the 422 order.already_shipped a despatched order is refused with.');
+    expect(page.steps()[7].detail).toBe(
+      'Answered 422, not the 422 order.already_shipped a despatched order is refused with.',
+    );
   });
 
   it.each([
@@ -916,59 +948,76 @@ describe('ScenarioWidget', () => {
         () => [logged(2, 201), logged(4, 201)],
         'The carrier saw 2 attempts at the same booking, each answered 201 after Shipping had stopped waiting.',
       ],
-    ] as const)('runs the %s script: the order goes to %s and the simulator\'s log shows the outcome', async (script, code, bookings, detail) => {
-      simulator(bookings);
-      const page = render().componentInstance.runner;
-      page.pick(script);
+    ] as const)(
+      "runs the %s script: the order goes to %s and the simulator's log shows the outcome",
+      async (script, code, bookings, detail) => {
+        simulator(bookings);
+        const page = render().componentInstance.runner;
+        page.pick(script);
 
-      await page.run();
+        await page.run();
 
-      expect(page.steps().map((s) => [s.key, s.state])).toEqual([
-        ['publish', 'ok'],
-        ['drain', 'ok'],
-        ['stock', 'ok'],
-        ['quote', 'ok'],
-        ['order', 'ok'],
-        ['confirmed', 'ok'],
-        ['carrier', 'ok'],
-        ['held', 'ok'],
-        ['mail', 'ok'],
-      ]);
-      expect(JSON.parse(sent()[3].body!).shippingAddress.postalCode).toBe(code);
-      const find = sent().find((r) => r.url.endsWith('/__admin/requests/find'))!;
-      expect(JSON.parse(find.body!).Body.Matchers[0].Pattern).toBe(`*${code}*`);
-      // Only this run's bookings are asked for: the order's address carries a mark and the filter requires it too.
-      const mark = JSON.parse(sent()[3].body!).shippingAddress.line1 as string;
-      expect(mark).toMatch(/^1 Test Street scenario-[0-9a-f]{8}$/);
-      expect(JSON.parse(find.body!).Body.MatchOperator).toBe('And');
-      expect(JSON.parse(find.body!).Body.Matchers[1].Pattern).toBe(`*${mark.split(' ').pop()}*`);
-      // The simulator is anonymous and untraced: nothing is sent as the user.
-      expect(find.identity).toBeNull();
-      expect(find.correlationId).toBeNull();
-      expect(page.steps()[6].detail).toBe(detail);
-      expect(page.steps()[6].correlationId).toBeNull();
-    });
+        expect(page.steps().map((s) => [s.key, s.state])).toEqual([
+          ['publish', 'ok'],
+          ['drain', 'ok'],
+          ['stock', 'ok'],
+          ['quote', 'ok'],
+          ['order', 'ok'],
+          ['confirmed', 'ok'],
+          ['carrier', 'ok'],
+          ['held', 'ok'],
+          ['mail', 'ok'],
+        ]);
+        expect(JSON.parse(sent()[3].body!).shippingAddress.postalCode).toBe(code);
+        const find = sent().find((r) => r.url.endsWith('/__admin/requests/find'))!;
+        expect(JSON.parse(find.body!).Body.Matchers[0].Pattern).toBe(`*${code}*`);
+        // Only this run's bookings are asked for: the order's address carries a mark and the filter requires it too.
+        const mark = JSON.parse(sent()[3].body!).shippingAddress.line1 as string;
+        expect(mark).toMatch(/^1 Test Street scenario-[0-9a-f]{8}$/);
+        expect(JSON.parse(find.body!).Body.MatchOperator).toBe('And');
+        expect(JSON.parse(find.body!).Body.Matchers[1].Pattern).toBe(`*${mark.split(' ').pop()}*`);
+        // The simulator is anonymous and untraced: nothing is sent as the user.
+        expect(find.identity).toBeNull();
+        expect(find.correlationId).toBeNull();
+        expect(page.steps()[6].detail).toBe(detail);
+        expect(page.steps()[6].correlationId).toBeNull();
+      },
+    );
 
     it('runs the carrier-strange script: one booking, then the feed polled again and again', async () => {
-      simulator(() => [logged(2, 201)], () => [logged(5, 200, 's1', 'GET'), logged(8, 200, 's1', 'GET')]);
+      simulator(
+        () => [logged(2, 201)],
+        () => [logged(5, 200, 's1', 'GET'), logged(8, 200, 's1', 'GET')],
+      );
       const page = render().componentInstance.runner;
       page.pick('carrier-strange');
 
       await page.run();
 
       expect(page.steps().map((s) => s.state)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok']);
-      expect(page.steps()[6].detail).toBe('The carrier booked the parcel once (201) and its feed has been polled 2 times since.');
-      expect(sent().filter((r) => r.url.endsWith('/__admin/requests/find')).map((r) => JSON.parse(r.body!).Methods[0])).toEqual(['POST', 'GET']);
+      expect(page.steps()[6].detail).toBe(
+        'The carrier booked the parcel once (201) and its feed has been polled 2 times since.',
+      );
+      expect(
+        sent()
+          .filter((r) => r.url.endsWith('/__admin/requests/find'))
+          .map((r) => JSON.parse(r.body!).Methods[0]),
+      ).toEqual(['POST', 'GET']);
     });
 
-    it('asks for the feed of the order it placed, by that order\'s own path', async () => {
-      simulator(() => [logged(2, 201)], () => [logged(5, 200, 's1', 'GET'), logged(8, 200, 's1', 'GET')]);
+    it("asks for the feed of the order it placed, by that order's own path", async () => {
+      simulator(
+        () => [logged(2, 201)],
+        () => [logged(5, 200, 's1', 'GET'), logged(8, 200, 's1', 'GET')],
+      );
       const page = render().componentInstance.runner;
       page.pick('carrier-strange');
 
       await page.run();
 
-      const feed = sent().find((r) => r.url.endsWith('/__admin/requests/find') && JSON.parse(r.body!).Methods[0] === 'GET')!;
+      const feed = sent().find(
+        (r) => r.url.endsWith('/__admin/requests/find') && JSON.parse(r.body!).Methods[0] === 'GET',
+      )!;
       expect(JSON.parse(feed.body!).Path.Matchers[0].Pattern).toBe(`/v1/shipments/crr_SIM-STRANGE-${orderId}/events`);
     });
 
@@ -1016,7 +1065,9 @@ describe('ScenarioWidget', () => {
       vi.useRealTimers();
 
       expect(page.steps()[6].state).toBe('failed');
-      expect(page.steps()[6].detail).toContain(`Not shown after ${CARRIER_WATCH_MS / 1000} s. The carrier has seen 1 attempt`);
+      expect(page.steps()[6].detail).toContain(
+        `Not shown after ${CARRIER_WATCH_MS / 1000} s. The carrier has seen 1 attempt`,
+      );
     });
 
     it('never reads a truncated log, or an answer that is not a list, as an empty one', async () => {
@@ -1033,7 +1084,9 @@ describe('ScenarioWidget', () => {
       await page.run();
 
       expect(page.steps()[6].state).toBe('failed');
-      expect(page.steps()[6].detail).toContain("The simulator's answer was longer than the proxy reads, so the log cannot be judged");
+      expect(page.steps()[6].detail).toContain(
+        "The simulator's answer was longer than the proxy reads, so the log cannot be judged",
+      );
 
       host.proxy.mockImplementation((request: ProxyRequest) =>
         request.url.endsWith('/__admin/requests/find')
@@ -1052,7 +1105,13 @@ describe('ScenarioWidget', () => {
         request.url.endsWith('/__admin/requests/find')
           ? of(responded(200, JSON.stringify([logged(2, 422)]), ''))
           : isRead(request)
-            ? of(responded(200, order('dispatched', { confirmed: '2026-10-05T12:00:01Z', dispatched: '2026-10-05T12:00:06Z' }), ''))
+            ? of(
+                responded(
+                  200,
+                  order('dispatched', { confirmed: '2026-10-05T12:00:01Z', dispatched: '2026-10-05T12:00:06Z' }),
+                  '',
+                ),
+              )
             : of(platform(request)),
       );
       const page = render().componentInstance.runner;
@@ -1063,7 +1122,9 @@ describe('ScenarioWidget', () => {
       expect(page.steps()[5].state).toBe('ok');
       expect(page.steps()[6].state).toBe('ok');
       expect(page.steps()[7].state).toBe('failed');
-      expect(page.steps()[7].detail).toBe("The order reads dispatched, not confirmed: this script's cause should leave it there.");
+      expect(page.steps()[7].detail).toBe(
+        "The order reads dispatched, not confirmed: this script's cause should leave it there.",
+      );
     });
   });
 
@@ -1076,7 +1137,7 @@ describe('ScenarioWidget', () => {
       );
     }
 
-    it('names what Run will change before it is pressed, from the host\'s own table', async () => {
+    it("names what Run will change before it is pressed, from the host's own table", async () => {
       const fixture = render();
       fixture.componentInstance.runner.pick('stock-timeout');
       fixture.detectChanges();
@@ -1129,7 +1190,9 @@ describe('ScenarioWidget', () => {
       });
       expect(calls[0]).toBe('acquire');
       expect(calls[calls.length - 1]).toBe('restore');
-      expect(page.steps()[0].detail).toBe("Held: The saga's waits shortened + Inventory stopped. The host restores it by itself at 2026-10-16T09:07:00Z.");
+      expect(page.steps()[0].detail).toBe(
+        "Held: The saga's waits shortened + Inventory stopped. The host restores it by itself at 2026-10-16T09:07:00Z.",
+      );
       expect(page.steps()[6].detail).toBe('The stack is as the run found it.');
       // No stock write and no quote: Inventory is stopped, and the cause is that nothing answers the reservation.
       expect(sent().some((r) => r.url.includes('/inventory/stock/'))).toBe(false);
@@ -1153,7 +1216,11 @@ describe('ScenarioWidget', () => {
         ['mail', 'ok'],
         ['restore', 'ok'],
       ]);
-      expect(host.leaseAcquire).toHaveBeenCalledWith({ changes: ['short-waits'], holdSeconds: 360, label: 'Payment timeout' });
+      expect(host.leaseAcquire).toHaveBeenCalledWith({
+        changes: ['short-waits'],
+        holdSeconds: 360,
+        label: 'Payment timeout',
+      });
       expect(JSON.parse(sent()[0].body!).amount).toBe(10.09);
     });
 
@@ -1180,7 +1247,15 @@ describe('ScenarioWidget', () => {
 
       await page.run();
 
-      expect(page.steps().map((s) => s.state)).toEqual(['failed', 'skipped', 'skipped', 'skipped', 'skipped', 'skipped', 'skipped']);
+      expect(page.steps().map((s) => s.state)).toEqual([
+        'failed',
+        'skipped',
+        'skipped',
+        'skipped',
+        'skipped',
+        'skipped',
+        'skipped',
+      ]);
       expect(page.steps()[0].detail).toBe('A Scenario already holds a lease (job 3). Restore it first.');
       expect(page.steps()[6].detail).toBe('No lease was taken, so nothing was changed.');
       expect(host.leaseRestore).not.toHaveBeenCalled();
@@ -1191,7 +1266,10 @@ describe('ScenarioWidget', () => {
       host.leaseAcquire.mockReturnValue(
         throwError(() => ({
           status: 500,
-          error: { detail: 'docker exited with 1. They could not be undone: ... The lease is still held; Restore it from the Stack screen.' },
+          error: {
+            detail:
+              'docker exited with 1. They could not be undone: ... The lease is still held; Restore it from the Stack screen.',
+          },
         })),
       );
       const page = render().componentInstance.runner;
@@ -1205,8 +1283,10 @@ describe('ScenarioWidget', () => {
       expect(host.proxy).not.toHaveBeenCalled();
     });
 
-    it('does not restore after a 409, whose lease is another run\'s', async () => {
-      host.leaseAcquire.mockReturnValue(throwError(() => ({ status: 409, error: { detail: 'A Scenario already holds a lease.' } })));
+    it("does not restore after a 409, whose lease is another run's", async () => {
+      host.leaseAcquire.mockReturnValue(
+        throwError(() => ({ status: 409, error: { detail: 'A Scenario already holds a lease.' } })),
+      );
       const page = render().componentInstance.runner;
       page.pick('stock-timeout');
 
@@ -1297,7 +1377,11 @@ describe('ScenarioWidget', () => {
         ['mail', 'ok'],
         ['restore', 'ok'],
       ]);
-      expect(host.leaseAcquire).toHaveBeenCalledWith({ changes: ['short-waits'], holdSeconds: 420, label: 'Despatch timeout' });
+      expect(host.leaseAcquire).toHaveBeenCalledWith({
+        changes: ['short-waits'],
+        holdSeconds: 420,
+        label: 'Despatch timeout',
+      });
       expect(JSON.parse(sent()[3].body!).shippingAddress.postalCode).toBe('SIM-STRANGE');
       expect(host.reviewFlags).toHaveBeenCalledWith(orderId);
       const step = page.steps()[7];
@@ -1486,7 +1570,11 @@ describe('ScenarioWidget', () => {
         ['restore', 'ok'],
       ]);
       // The lease takes the short waits alone; Inventory is added only once its stock is reserved, and before the cancel.
-      expect(host.leaseAcquire).toHaveBeenCalledWith({ changes: ['short-waits'], holdSeconds: 420, label: 'Release timeout' });
+      expect(host.leaseAcquire).toHaveBeenCalledWith({
+        changes: ['short-waits'],
+        holdSeconds: 420,
+        label: 'Release timeout',
+      });
       expect(host.leaseAddChange).toHaveBeenCalledWith('stop-inventory');
       expect(calls).toEqual(['acquire', 'read reservation', 'add stop-inventory', 'cancel', 'restore']);
       expect(JSON.parse(sent()[0].body!).amount).toBe(10.09);
@@ -1696,15 +1784,17 @@ describe('ScenarioWidget', () => {
     expect(page.steps()[5].body).toBe('{"title":"Unauthorized"}');
     expect(page.steps()[5].detail).toBe('Answered 401.');
     expect(sent().filter(isRead)).toHaveLength(1);
-    expect(page.steps().slice(6).map((s) => s.state)).toEqual(['skipped', 'skipped', 'skipped']);
+    expect(
+      page
+        .steps()
+        .slice(6)
+        .map((s) => s.state),
+    ).toEqual(['skipped', 'skipped', 'skipped']);
   });
 
   it('fails a 404 that follows an answer, since the BFF had already learned of the order', async () => {
     vi.useFakeTimers();
-    const answers = [
-      responded(200, order('placed'), ''),
-      responded(404, '{"code":"order.not_found"}', ''),
-    ];
+    const answers = [responded(200, order('placed'), ''), responded(404, '{"code":"order.not_found"}', '')];
     host.proxy.mockImplementation((request: ProxyRequest) =>
       isRead(request) && answers.length > 0 ? of(answers.shift()!) : of(platform(request)),
     );
@@ -1840,7 +1930,12 @@ describe('ScenarioWidget', () => {
 
     const note =
       'The token held for demo was due to renew at 2026-01-01T00:00:00Z, so the host minted a new one for this call.';
-    expect(page.steps().slice(0, 5).map((s) => s.regrant)).toEqual([null, null, null, null, null]);
+    expect(
+      page
+        .steps()
+        .slice(0, 5)
+        .map((s) => s.regrant),
+    ).toEqual([null, null, null, null, null]);
     expect(page.steps()[5].regrant).toBe(note);
     // The note is for the operator, so it is on the page and not only in the step's state.
     const items = fixture.nativeElement.querySelectorAll('ol.steps li.step');
@@ -1851,9 +1946,7 @@ describe('ScenarioWidget', () => {
   it("clears a watch's note when a later read is answered without a mint, so it names the last call", async () => {
     vi.useFakeTimers();
     host.tokenClock.mockImplementation(() =>
-      sent().filter(isRead).length === 0
-        ? of({ ...heldClock, renewsAt: '2026-01-01T00:00:00Z' })
-        : of(heldClock),
+      sent().filter(isRead).length === 0 ? of({ ...heldClock, renewsAt: '2026-01-01T00:00:00Z' }) : of(heldClock),
     );
     const answers = [
       responded(200, order('placed'), ''),
@@ -1899,12 +1992,8 @@ describe('ScenarioWidget', () => {
       () => throwError(() => new Error('host gone')),
     ];
     for (const failure of failures) {
-      host.tokenClock.mockImplementation(() =>
-        of({ ...heldClock, renewsAt: '2026-01-01T00:00:00Z' }),
-      );
-      host.proxy.mockImplementation((request: ProxyRequest) =>
-        isRead(request) ? failure() : of(platform(request)),
-      );
+      host.tokenClock.mockImplementation(() => of({ ...heldClock, renewsAt: '2026-01-01T00:00:00Z' }));
+      host.proxy.mockImplementation((request: ProxyRequest) => (isRead(request) ? failure() : of(platform(request))));
       const page = render().componentInstance.runner;
 
       await page.run();
@@ -1926,9 +2015,7 @@ describe('ScenarioWidget', () => {
     await page.run();
 
     expect(page.steps()[0].regrant).toBeNull();
-    expect(page.steps()[2].regrant).toBe(
-      'The token for demo had expired, so the host minted a new one for this call.',
-    );
+    expect(page.steps()[2].regrant).toBe('The token for demo had expired, so the host minted a new one for this call.');
     expect(page.steps()[3].regrant).toBeNull();
   });
 
@@ -1957,9 +2044,7 @@ describe('ScenarioWidget', () => {
     expect(page.steps()[5].regrant).toBeNull();
     // Its first read never left the console, so no service logged the id and there is no trace to offer.
     expect(page.steps()[5].correlationId).toBeNull();
-    expect(page.steps()[5].detail).toBe(
-      'No answer from the platform: Keycloak did not answer: connection refused',
-    );
+    expect(page.steps()[5].detail).toBe('No answer from the platform: Keycloak did not answer: connection refused');
   });
 
   it('offers no trace for a watch whose first read Keycloak refused, and says nothing was sent', async () => {
@@ -1988,9 +2073,7 @@ describe('ScenarioWidget', () => {
   });
 
   it('says when a step was reached without timing it, where the read has no placed time', async () => {
-    const answers = [
-      responded(200, order('confirmed', { placed: null, confirmed: '2026-10-05T12:00:01Z' }), ''),
-    ];
+    const answers = [responded(200, order('confirmed', { placed: null, confirmed: '2026-10-05T12:00:01Z' }), '')];
     host.proxy.mockImplementation((request: ProxyRequest) =>
       isRead(request) && answers.length > 0 ? of(answers.shift()!) : of(platform(request)),
     );
@@ -2033,9 +2116,7 @@ describe('ScenarioWidget', () => {
 
     it('keeps the trace when Keycloak did not answer, and says no token was minted', async () => {
       host.tokenClock.mockImplementation(() =>
-        sent().filter(isRead).length > 0
-          ? of({ ...heldClock, renewsAt: '2026-01-01T00:00:00Z' })
-          : of(heldClock),
+        sent().filter(isRead).length > 0 ? of({ ...heldClock, renewsAt: '2026-01-01T00:00:00Z' }) : of(heldClock),
       );
       const { first, confirmed } = await watchWith(
         () => of(responded(200, order('placed'), '')),
@@ -2062,15 +2143,12 @@ describe('ScenarioWidget', () => {
 
     it("does not leave an earlier read's mint on the step beside a read that got no answer", async () => {
       host.tokenClock.mockImplementation(() =>
-        sent().filter(isRead).length === 0
-          ? of({ ...heldClock, renewsAt: '2026-01-01T00:00:00Z' })
-          : of(heldClock),
+        sent().filter(isRead).length === 0 ? of({ ...heldClock, renewsAt: '2026-01-01T00:00:00Z' }) : of(heldClock),
       );
       const failures: (() => Observable<ProxyResult>)[] = [
         () => throwError(() => new Error('host gone')),
         () => of({ outcome: 'tokenRejected', status: 401, body: '{}', correlationId: '' }),
-        () =>
-          of({ outcome: 'unreached', error: 'refused', elapsedMs: 5, correlationId: '', sent: false }),
+        () => of({ outcome: 'unreached', error: 'refused', elapsedMs: 5, correlationId: '', sent: false }),
       ];
       for (const failure of failures) {
         TestBed.resetTestingModule();
@@ -2083,10 +2161,7 @@ describe('ScenarioWidget', () => {
           ],
         });
         host.proxy.mockClear();
-        const { confirmed } = await watchWith(
-          () => of(responded(200, order('placed'), '')),
-          failure,
-        );
+        const { confirmed } = await watchWith(() => of(responded(200, order('placed'), '')), failure);
 
         expect(confirmed.state).toBe('failed');
         expect(confirmed.regrant).toBeNull();
@@ -2356,9 +2431,7 @@ describe('ScenarioWidget', () => {
   });
 
   it('reads a publish that answers without an id as a failure, since nothing after it can proceed', async () => {
-    host.proxy.mockImplementation((request: ProxyRequest) =>
-      of(responded(200, '{}', request.correlationId ?? '')),
-    );
+    host.proxy.mockImplementation((request: ProxyRequest) => of(responded(200, '{}', request.correlationId ?? '')));
     const page = render().componentInstance.runner;
 
     await page.run();
@@ -2435,9 +2508,7 @@ describe('ScenarioWidget', () => {
   it('drops a broker read still in flight when the cap runs out', async () => {
     vi.useFakeTimers();
     let unsubscribed = false;
-    host.brokerQueues.mockReturnValue(
-      new Observable<QueuesView>(() => () => (unsubscribed = true)),
-    );
+    host.brokerQueues.mockReturnValue(new Observable<QueuesView>(() => () => (unsubscribed = true)));
     const page = render().componentInstance.runner;
 
     const done = page.run();
@@ -2468,9 +2539,7 @@ describe('ScenarioWidget', () => {
     host.identityUsers.mockReturnValueOnce(throwError(() => new Error('host busy')));
     const fixture = render();
     expect(fixture.componentInstance.runner.canRun()).toBe(false);
-    expect(fixture.nativeElement.querySelector('.no-users')?.textContent).toContain(
-      'No realm user',
-    );
+    expect(fixture.nativeElement.querySelector('.no-users')?.textContent).toContain('No realm user');
 
     fixture.componentInstance.runner.reload();
     fixture.detectChanges();
@@ -2642,9 +2711,7 @@ describe('ScenarioWidget', () => {
   describe('the image script', () => {
     /** The platform as it answers for the image script, with one answer replaced by `override` where it returns a result. */
     function answering(override: (request: ProxyRequest) => ProxyResult | undefined): void {
-      host.proxy.mockImplementation((request: ProxyRequest) =>
-        of(override(request) ?? platform(request)),
-      );
+      host.proxy.mockImplementation((request: ProxyRequest) => of(override(request) ?? platform(request)));
     }
 
     function image() {
@@ -2697,7 +2764,13 @@ describe('ScenarioWidget', () => {
 
     it('says so when the store did not answer, or the host refused to send', async () => {
       host.uploadProductImage.mockReturnValue(
-        of({ outcome: 'unreached', error: 'connection refused', elapsedMs: 3, correlationId: 'x', sent: true } as ProxyResult),
+        of({
+          outcome: 'unreached',
+          error: 'connection refused',
+          elapsedMs: 3,
+          correlationId: 'x',
+          sent: true,
+        } as ProxyResult),
       );
       const page = image();
       await page.run();
@@ -2716,7 +2789,9 @@ describe('ScenarioWidget', () => {
       expect(page.steps()[0].detail).toBe('Answered 403.');
       expect(host.uploadProductImage).not.toHaveBeenCalled();
 
-      answering((r) => (r.url.endsWith('/product-images') ? responded(200, '{"key":"k"}', r.correlationId ?? '') : undefined));
+      answering((r) =>
+        r.url.endsWith('/product-images') ? responded(200, '{"key":"k"}', r.correlationId ?? '') : undefined,
+      );
       await page.run();
       expect(page.steps()[0].detail).toBe('Answered 200, but not with the upload URL and key the next steps need.');
       expect(host.uploadProductImage).not.toHaveBeenCalled();
@@ -2724,7 +2799,9 @@ describe('ScenarioWidget', () => {
 
     it('fails the thumbnail when the product carries none, since the publish dropped the image', async () => {
       answering((r) =>
-        r.url.endsWith(`/catalog/products/${productId}`) ? responded(200, '{"thumbnailUrl":null}', r.correlationId ?? '') : undefined,
+        r.url.endsWith(`/catalog/products/${productId}`)
+          ? responded(200, '{"thumbnailUrl":null}', r.correlationId ?? '')
+          : undefined,
       );
       const page = image();
 
@@ -2735,9 +2812,17 @@ describe('ScenarioWidget', () => {
     });
 
     it.each([
-      [404, { 'Content-Type': ['image/png'], 'X-Content-Type-Options': ['nosniff'] }, 'The edge answered 404, not the image.'],
+      [
+        404,
+        { 'Content-Type': ['image/png'], 'X-Content-Type-Options': ['nosniff'] },
+        'The edge answered 404, not the image.',
+      ],
       [200, { 'x-content-type-options': ['nosniff'] }, 'The edge served no content type, not an image.'],
-      [200, { 'Content-Type': ['text/html'], 'X-Content-Type-Options': ['nosniff'] }, 'The edge served text/html, not an image.'],
+      [
+        200,
+        { 'Content-Type': ['text/html'], 'X-Content-Type-Options': ['nosniff'] },
+        'The edge served text/html, not an image.',
+      ],
       [200, { 'Content-Type': ['image/png'] }, 'The edge did not set X-Content-Type-Options: nosniff.'],
     ])('fails the thumbnail when the edge answers %s with %o', async (status, headers, detail) => {
       answering((r) => (r.url === thumbnailUrl ? responded(status, '', r.correlationId ?? '', headers) : undefined));
@@ -2782,7 +2867,9 @@ describe('ScenarioWidget', () => {
       host.operations.mockReturnValue(
         of({
           ...catalog,
-          operations: catalog.operations.filter((o) => o.id !== 'bff:IssueProductImageUpload' && o.id !== 'catalog:GetProduct'),
+          operations: catalog.operations.filter(
+            (o) => o.id !== 'bff:IssueProductImageUpload' && o.id !== 'catalog:GetProduct',
+          ),
         }),
       );
       const page = image();
@@ -2800,7 +2887,10 @@ describe('ScenarioWidget', () => {
     screen.detectChanges();
     const element = screen.nativeElement as HTMLElement;
 
-    expect([...element.children].map((c) => c.tagName.toLowerCase())).toEqual(['app-scenario-widget', 'app-saga-strip-widget']);
+    expect([...element.children].map((c) => c.tagName.toLowerCase())).toEqual([
+      'app-scenario-widget',
+      'app-saga-strip-widget',
+    ]);
     expect(element.querySelector('.saga-none')).not.toBeNull();
     expect(screen.debugElement.children[0].componentInstance.runner).toBe(TestBed.inject(ScenarioRunner));
   });

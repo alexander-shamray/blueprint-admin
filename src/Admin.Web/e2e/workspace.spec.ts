@@ -21,7 +21,11 @@ for (const [path, title, body] of [
     await expect(page.locator('gridster-item')).toHaveCount(1);
     await expect(page.locator('gridster-item .ws-head .ws-title')).toHaveText(title);
     await expect(page.locator(`gridster-item ${body}`).first()).toBeVisible();
-    await expect(page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: SCREENS.find((s) => s.path === path)?.label ?? path })).toHaveClass(/active/);
+    await expect(
+      page
+        .getByRole('navigation', { name: 'Pages' })
+        .getByRole('link', { name: SCREENS.find((s) => s.path === path)?.label ?? path }),
+    ).toHaveClass(/active/);
   });
 }
 
@@ -164,9 +168,13 @@ test('the built-in Stack page renders its widgets, each with what it reads', asy
   // A frame renders before its lazy component loads, so wait for every body to hold one before reading its state.
   await expect(page.locator('gridster-item .ws-body > *')).toHaveCount(9);
   await expect(page.locator('gridster-item .loading')).toHaveCount(0);
-  await expect(page.getByRole('region', { name: 'Workstation' }).locator('table.doctor tbody tr').first()).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Workstation' }).locator('table.doctor tbody tr').first(),
+  ).toBeVisible();
   await expect(page.locator('table.services tbody tr').first()).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: 'Stack' })).toHaveClass(/active/);
+  await expect(page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: 'Stack' })).toHaveClass(
+    /active/,
+  );
 });
 
 test('a page made, filled, resized and rearranged is found as it was left after a reload', async ({ page }) => {
@@ -214,7 +222,9 @@ test('a page made, filled, resized and rearranged is found as it was left after 
   await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
   await page.reload();
 
-  await expect(page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: title })).toHaveClass(/active/);
+  await expect(page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: title })).toHaveClass(
+    /active/,
+  );
   await expect(titles).toHaveText(['Logs', 'Map', 'Mail']);
   const reloaded = (await first.boundingBox())!;
   expect(Math.abs(reloaded.height - resized.height)).toBeLessThan(2);
@@ -241,7 +251,9 @@ async function halve(page: Page, item: Locator) {
   return (await item.boundingBox())!;
 }
 
-test('a widget type with one preset is added in one press, and one with several opens its presets', async ({ page }) => {
+test('a widget type with one preset is added in one press, and one with several opens its presets', async ({
+  page,
+}) => {
   await page.goto('/stack');
   await page.getByRole('button', { name: 'New page' }).click();
   await expect(page).toHaveURL(/\/page\/page-/);
@@ -353,7 +365,9 @@ test('a note is added from a preset, draws its diagram, and is written in place 
   expect(await architecture.locator('marker').count()).toBeGreaterThan(0);
   await page.getByRole('button', { name: 'Edit layout' }).click();
 
-  await page.getByRole('textbox', { name: 'Note text' }).fill('# Mine\n\nHello <script>x</script>\n\n```mermaid\nflowchart LR\n  a["one"] --> b["two"]\n```');
+  await page
+    .getByRole('textbox', { name: 'Note text' })
+    .fill('# Mine\n\nHello <script>x</script>\n\n```mermaid\nflowchart LR\n  a["one"] --> b["two"]\n```');
   await page.getByRole('button', { name: 'Done' }).click();
 
   // Done: the text is rendered as text, and Mermaid, loaded now, has drawn the fence.
@@ -433,8 +447,12 @@ test('a platform diagram widget draws the fake map and a queue click opens the B
   await expect(widget.locator('.auto')).toContainText('Refreshes every 5 s');
   const nodes = widget.getByRole('list', { name: 'Nodes of the diagram' });
   await expect(nodes.getByRole('button', { name: 'ordering', exact: true })).toBeVisible();
-  await expect(nodes.locator('li', { has: page.getByRole('button', { name: 'ordering-catalog-events_error' }) })).toHaveCount(0);
-  await expect(nodes.locator('li', { has: page.getByRole('button', { name: 'ordering-catalog-events', exact: true }) })).toContainText('parked: error 1');
+  await expect(
+    nodes.locator('li', { has: page.getByRole('button', { name: 'ordering-catalog-events_error' }) }),
+  ).toHaveCount(0);
+  await expect(
+    nodes.locator('li', { has: page.getByRole('button', { name: 'ordering-catalog-events', exact: true }) }),
+  ).toContainText('parked: error 1');
   await expect(widget.getByRole('region', { name: 'Disagreements' })).toHaveCount(0);
 
   await nodes.getByRole('button', { name: 'ordering-catalog-events', exact: true }).click();
@@ -451,7 +469,9 @@ test('a platform diagram widget draws the fake map and a queue click opens the B
 
 // §8.1: a click on a service points the Logs widget on the page at its Compose service as session state, so the saved
 // page is not written (no save indicator appears) and the Logs widget says so and offers the way back.
-test('a click on a service in the platform diagram points the Logs widget on the page at it without saving the page', async ({ page }) => {
+test('a click on a service in the platform diagram points the Logs widget on the page at it without saving the page', async ({
+  page,
+}) => {
   await page.goto('/stack');
   await page.getByRole('button', { name: 'New page' }).click();
   await expect(page).toHaveURL(/\/page\/page-/);
@@ -477,7 +497,9 @@ test('a click on a service in the platform diagram points the Logs widget on the
   await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
 });
 
-test('the workspace is exported as a file, and an import replaces it only after the operator says so', async ({ page }) => {
+test('the workspace is exported as a file, and an import replaces it only after the operator says so', async ({
+  page,
+}) => {
   await page.goto('/stack');
   await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
 
@@ -490,7 +512,9 @@ test('the workspace is exported as a file, and an import replaces it only after 
   expect(JSON.parse(text).pages.length).toBeGreaterThan(0);
 
   const choose = (name: string, content: string) =>
-    page.locator('input[type=file]').setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from(content) });
+    page
+      .locator('input[type=file]')
+      .setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from(content) });
 
   // Not JSON: refused in the browser, with nothing sent.
   await choose('broken.json', '{');

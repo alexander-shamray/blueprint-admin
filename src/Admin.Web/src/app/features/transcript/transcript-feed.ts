@@ -16,5 +16,10 @@ export const TRANSCRIPT_POLL_MS = 3000;
 export class TranscriptFeed {
   private readonly host = inject(HostClient);
 
-  readonly transcript = new PolledFeed(() => this.host.transcript(), TRANSCRIPT_POLL_MS, inject(TabVisibility).visible$, inject(DestroyRef));
+  readonly transcript = new PolledFeed(
+    () => this.host.transcript(),
+    TRANSCRIPT_POLL_MS,
+    inject(TabVisibility).visible$,
+    inject(DestroyRef),
+  );
 }

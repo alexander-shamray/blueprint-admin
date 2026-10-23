@@ -5,7 +5,13 @@ import { SCREENS } from '../screens';
 import { builtInWidgets } from '../workspace/built-in-pages';
 import { RunningWork } from '../workspace/running-work';
 import { WorkspaceService } from '../workspace/workspace-service';
-import { AssistantClient, AssistantConversation, ConversationState, EMPTY_CONVERSATION, IdStore } from './assistant-client';
+import {
+  AssistantClient,
+  AssistantConversation,
+  ConversationState,
+  EMPTY_CONVERSATION,
+  IdStore,
+} from './assistant-client';
 import { ClientToolRegistry, viewTool } from './client-tools';
 import { AssistantStatus, CatalogueEntry, OpenConversation } from './protocol';
 
@@ -60,26 +66,39 @@ export class AssistantService {
 
   constructor() {
     this.tools.register({
-      descriptor: viewTool('open_screen', 'Open a screen', "Routes the console to a screen, by the catalogue entry's id.", {
-        type: 'object',
-        properties: { path: { type: 'string', enum: SCREENS.map((s) => s.path), description: "The screen's id." } },
-        required: ['path'],
-        additionalProperties: false,
-      }),
+      descriptor: viewTool(
+        'open_screen',
+        'Open a screen',
+        "Routes the console to a screen, by the catalogue entry's id.",
+        {
+          type: 'object',
+          properties: { path: { type: 'string', enum: SCREENS.map((s) => s.path), description: "The screen's id." } },
+          required: ['path'],
+          additionalProperties: false,
+        },
+      ),
       run: async (input) => {
         const screen = SCREENS.find((s) => s.path === input['path']);
         if (!screen) return { ok: false, content: `There is no screen ${String(input['path'])}.` };
         const opened = await this.router.navigate(['/', screen.path]);
-        return opened ? { ok: true, content: `Opened ${screen.label} at /${screen.path}.` } : { ok: false, content: 'The console did not navigate.' };
+        return opened
+          ? { ok: true, content: `Opened ${screen.label} at /${screen.path}.` }
+          : { ok: false, content: 'The console did not navigate.' };
       },
     });
-    this.conversation = new AssistantConversation(this.client, this.tools, () => this.opening(), tabStore, (s) =>
-      this.state.set(s),
+    this.conversation = new AssistantConversation(
+      this.client,
+      this.tools,
+      () => this.opening(),
+      tabStore,
+      (s) => this.state.set(s),
     );
     // Shown means the panel is open in a tab the operator can see (widget-workspace spec §4.3): a hidden tab holds no
     // stream for an idle conversation, though a running turn keeps its own.
     const tabVisible = signal(this.document.visibilityState !== 'hidden');
-    this.document.addEventListener('visibilitychange', () => tabVisible.set(this.document.visibilityState !== 'hidden'));
+    this.document.addEventListener('visibilitychange', () =>
+      tabVisible.set(this.document.visibilityState !== 'hidden'),
+    );
     effect(() => this.conversation.setVisible(this.panelOpen() && tabVisible()));
     // What shows a turn is the panel, not a page, so the item opens it; the link is where the question was asked.
     this.runningWork.report('assistant', () =>

@@ -1,46 +1,169 @@
 /* What the Stack widgets share: each names this file, so a widget alone on a page looks as it does on the Stack page. */
-.actions { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
-.links { margin-left: auto; display: flex; gap: 0.75rem; }
-.reachability span { display: inline-block; margin-right: 0.75rem; padding: 0.1rem 0.4rem; border-radius: 3px; }
-.reachability .up { background: var(--app-ok-bg); }
-.reachability .down { background: var(--app-error-bg); }
-table.signals td:not(:first-child), table.signals th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
-.signals-empty, .alerts-empty { color: var(--app-muted); }
-.alerts-waiting { color: var(--app-muted); margin-bottom: 0.25rem; }
-table.alerts tr.state-firing td { color: var(--app-error); font-weight: 600; }
-table.alerts tr.state-pending td { color: var(--app-warn); }
-table.alerts tr.state-inactive td { color: var(--app-muted); }
-table.waiting td:last-child { font-family: monospace; }
-table { border-collapse: collapse; margin-bottom: 1rem; }
-td, th { padding: 0.25rem 0.75rem; border-bottom: 1px solid var(--app-border); text-align: left; }
-tr.exited td { color: var(--app-muted); }
-.error { color: var(--app-error); }
-.toolbar { display: flex; gap: 0.75rem; align-items: center; margin: 0 0 0.5rem; }
-table.doctor th { text-align: left; }
-table.doctor th.name { font-weight: normal; }
-table.doctor td.state { font-weight: 600; white-space: nowrap; }
-table.doctor tr.state-Ok td.state { color: var(--app-ok); }
-table.doctor tr.state-Problem td.state { color: var(--app-error); }
-table.doctor tr.state-Unknown td.state { color: var(--app-muted); }
-table.device-reads th { text-align: left; }
-table.device-reads th.name { font-weight: normal; }
-table.device-reads td.state { font-weight: 600; white-space: nowrap; }
-table.device-reads tr.state-Ok td.state { color: var(--app-ok); }
-table.device-reads tr.state-Problem td.state { color: var(--app-error); }
-table.device-reads tr.state-Unknown td.state { color: var(--app-muted); }
-.lease { margin-bottom: 1rem; padding: 0.5rem 0.75rem; border: 1px solid var(--app-warn); background: var(--app-warn-bg); }
-.lease h3 { font-size: 1rem; margin: 0 0 0.25rem; }
-.lease button { margin-right: 0.5rem; }
-.frontend h3 { font-size: 0.95rem; margin: 1rem 0 0.5rem; }
-.loading { color: var(--app-muted); }
-.frontend { margin-bottom: 1rem; }
-.frontend-status span { margin-left: 0.75rem; padding: 0.1rem 0.4rem; border-radius: 3px; }
-.frontend-status .up { background: var(--app-ok-bg); }
-.frontend-status .down { background: var(--app-error-bg); }
-.frontend button { margin-right: 0.5rem; }
-.job-outcome { font-weight: 600; }
-.job-outcome.ok { color: var(--app-ok); }
-.job-outcome.failed { color: var(--app-error); }
-.compose-progress { margin-bottom: 1rem; }
-.compose-progress ul { columns: 2; margin: 0; padding-left: 1.25rem; font-family: monospace; }
-.compose-progress li.settled { color: var(--app-ok); }
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+.links {
+  margin-left: auto;
+  display: flex;
+  gap: 0.75rem;
+}
+.reachability span {
+  display: inline-block;
+  margin-right: 0.75rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+}
+.reachability .up {
+  background: var(--app-ok-bg);
+}
+.reachability .down {
+  background: var(--app-error-bg);
+}
+table.signals td:not(:first-child),
+table.signals th:not(:first-child) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.signals-empty,
+.alerts-empty {
+  color: var(--app-muted);
+}
+.alerts-waiting {
+  color: var(--app-muted);
+  margin-bottom: 0.25rem;
+}
+table.alerts tr.state-firing td {
+  color: var(--app-error);
+  font-weight: 600;
+}
+table.alerts tr.state-pending td {
+  color: var(--app-warn);
+}
+table.alerts tr.state-inactive td {
+  color: var(--app-muted);
+}
+table.waiting td:last-child {
+  font-family: monospace;
+}
+table {
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+}
+td,
+th {
+  padding: 0.25rem 0.75rem;
+  border-bottom: 1px solid var(--app-border);
+  text-align: left;
+}
+tr.exited td {
+  color: var(--app-muted);
+}
+.error {
+  color: var(--app-error);
+}
+.toolbar {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin: 0 0 0.5rem;
+}
+table.doctor th {
+  text-align: left;
+}
+table.doctor th.name {
+  font-weight: normal;
+}
+table.doctor td.state {
+  font-weight: 600;
+  white-space: nowrap;
+}
+table.doctor tr.state-Ok td.state {
+  color: var(--app-ok);
+}
+table.doctor tr.state-Problem td.state {
+  color: var(--app-error);
+}
+table.doctor tr.state-Unknown td.state {
+  color: var(--app-muted);
+}
+table.device-reads th {
+  text-align: left;
+}
+table.device-reads th.name {
+  font-weight: normal;
+}
+table.device-reads td.state {
+  font-weight: 600;
+  white-space: nowrap;
+}
+table.device-reads tr.state-Ok td.state {
+  color: var(--app-ok);
+}
+table.device-reads tr.state-Problem td.state {
+  color: var(--app-error);
+}
+table.device-reads tr.state-Unknown td.state {
+  color: var(--app-muted);
+}
+.lease {
+  margin-bottom: 1rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--app-warn);
+  background: var(--app-warn-bg);
+}
+.lease h3 {
+  font-size: 1rem;
+  margin: 0 0 0.25rem;
+}
+.lease button {
+  margin-right: 0.5rem;
+}
+.frontend h3 {
+  font-size: 0.95rem;
+  margin: 1rem 0 0.5rem;
+}
+.loading {
+  color: var(--app-muted);
+}
+.frontend {
+  margin-bottom: 1rem;
+}
+.frontend-status span {
+  margin-left: 0.75rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+}
+.frontend-status .up {
+  background: var(--app-ok-bg);
+}
+.frontend-status .down {
+  background: var(--app-error-bg);
+}
+.frontend button {
+  margin-right: 0.5rem;
+}
+.job-outcome {
+  font-weight: 600;
+}
+.job-outcome.ok {
+  color: var(--app-ok);
+}
+.job-outcome.failed {
+  color: var(--app-error);
+}
+.compose-progress {
+  margin-bottom: 1rem;
+}
+.compose-progress ul {
+  columns: 2;
+  margin: 0;
+  padding-left: 1.25rem;
+  font-family: monospace;
+}
+.compose-progress li.settled {
+  color: var(--app-ok);
+}

@@ -41,7 +41,13 @@ describe('HostClient', () => {
     const req = http.expectOne('/api/stack/backend/reset');
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual({ confirm: 'down -v' });
-    req.flush({ id: 'r1', commandLine: 'reset down -v up -d --wait readiness', state: 'Running', exitCode: null, startedAt: '' });
+    req.flush({
+      id: 'r1',
+      commandLine: 'reset down -v up -d --wait readiness',
+      state: 'Running',
+      exitCode: null,
+      startedAt: '',
+    });
   });
 
   it('follows logs for the named services', () => {
@@ -81,7 +87,13 @@ describe('HostClient', () => {
 
     const req = http.expectOne('/api/stack/frontend/device-build');
     expect(req.request.method).toBe('POST');
-    req.flush({ id: 'dev-1', commandLine: 'npm run emulator:android', state: 'Running', exitCode: null, startedAt: '' });
+    req.flush({
+      id: 'dev-1',
+      commandLine: 'npm run emulator:android',
+      state: 'Running',
+      exitCode: null,
+      startedAt: '',
+    });
   });
 
   it('starts a load run', () => {
@@ -89,7 +101,13 @@ describe('HostClient', () => {
 
     const req = http.expectOne('/api/stack/load-run');
     expect(req.request.method).toBe('POST');
-    req.flush({ id: 'load-1', commandLine: 'load-run k6 prometheus slo-run token product restock run', state: 'Running', exitCode: null, startedAt: '' });
+    req.flush({
+      id: 'load-1',
+      commandLine: 'load-run k6 prometheus slo-run token product restock run',
+      state: 'Running',
+      exitCode: null,
+      startedAt: '',
+    });
   });
 
   it('stops the load run', () => {
@@ -97,7 +115,13 @@ describe('HostClient', () => {
 
     const req = http.expectOne('/api/stack/load-run/stop');
     expect(req.request.method).toBe('POST');
-    req.flush({ id: 'load-1', commandLine: 'load-run k6 prometheus slo-run token product restock run', state: 'Exited', exitCode: -1, startedAt: '' });
+    req.flush({
+      id: 'load-1',
+      commandLine: 'load-run k6 prometheus slo-run token product restock run',
+      state: 'Exited',
+      exitCode: -1,
+      startedAt: '',
+    });
   });
 
   it('reads the device lane', () => {
@@ -200,7 +224,12 @@ describe('HostClient', () => {
     client.brokerQueues().subscribe();
     const queues = http.expectOne('/api/broker/queues');
     expect(queues.request.method).toBe('GET');
-    queues.flush({ reachable: true, error: null, queues: [], projection: { queue: 'ordering-catalog-events', found: false, messages: null, drained: false } });
+    queues.flush({
+      reachable: true,
+      error: null,
+      queues: [],
+      projection: { queue: 'ordering-catalog-events', found: false, messages: null, drained: false },
+    });
 
     client.brokerExchanges().subscribe();
     const exchanges = http.expectOne('/api/broker/exchanges');
@@ -217,7 +246,16 @@ describe('HostClient', () => {
     const req = http.expectOne((r) => r.url === '/api/trace/demo%20trace%2F0001');
     expect(req.request.method).toBe('GET');
     expect(req.request.params.get('window')).toBe('2h');
-    req.flush({ correlationId: 'demo trace/0001', window: '2h', reachable: true, error: null, traceIds: [], tracesTruncated: false, warning: null, events: [] });
+    req.flush({
+      correlationId: 'demo trace/0001',
+      window: '2h',
+      reachable: true,
+      error: null,
+      traceIds: [],
+      tracesTruncated: false,
+      warning: null,
+      events: [],
+    });
   });
 
   it('reads the golden-signal strip', () => {
@@ -238,7 +276,16 @@ describe('HostClient', () => {
     client.trace('demo-trace-0001').subscribe();
     const req = http.expectOne('/api/trace/demo-trace-0001');
     expect(req.request.params.keys()).toEqual([]);
-    req.flush({ correlationId: 'demo-trace-0001', window: '15m', reachable: true, error: null, traceIds: [], tracesTruncated: false, warning: null, events: [] });
+    req.flush({
+      correlationId: 'demo-trace-0001',
+      window: '15m',
+      reachable: true,
+      error: null,
+      traceIds: [],
+      tracesTruncated: false,
+      warning: null,
+      events: [],
+    });
   });
 
   it('reads the workspace with its etag', () => {
@@ -282,7 +329,9 @@ describe('HostClient', () => {
     let failed: unknown;
     const theirs = { version: 1, pages: [], activePageId: 'x' };
     client.saveWorkspace({ version: 1, pages: [], activePageId: null }, '"a"').subscribe((s) => (seen = s));
-    http.expectOne('/api/workspace').flush(theirs, { status: 412, statusText: 'Precondition Failed', headers: { ETag: '"c"' } });
+    http
+      .expectOne('/api/workspace')
+      .flush(theirs, { status: 412, statusText: 'Precondition Failed', headers: { ETag: '"c"' } });
     expect(seen).toEqual({ kind: 'stale', workspace: theirs, etag: '"c"' });
 
     client.saveWorkspace(theirs, '"c"').subscribe({ error: (e: unknown) => (failed = e) });

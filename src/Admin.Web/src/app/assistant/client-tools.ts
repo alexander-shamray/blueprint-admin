@@ -41,7 +41,12 @@ export class ClientToolRegistry {
 }
 
 /** A client tool's descriptor: read-only in the platform's sense, since a client tool changes only the view (§6.3). */
-export function viewTool(name: string, title: string, description: string, inputSchema: Record<string, unknown>): ToolDescriptor {
+export function viewTool(
+  name: string,
+  title: string,
+  description: string,
+  inputSchema: Record<string, unknown>,
+): ToolDescriptor {
   return {
     name,
     title,

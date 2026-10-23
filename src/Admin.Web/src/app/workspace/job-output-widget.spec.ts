@@ -25,7 +25,8 @@ describe('JobOutputWidget', () => {
     const fixture = TestBed.createComponent(JobOutputWidget);
     fixture.componentRef.setInput('config', config);
     fixture.detectChanges();
-    const pane = () => fixture.debugElement.query(By.directive(OutputPane))?.componentInstance as OutputPane | undefined;
+    const pane = () =>
+      fixture.debugElement.query(By.directive(OutputPane))?.componentInstance as OutputPane | undefined;
     return { fixture, pane };
   }
 

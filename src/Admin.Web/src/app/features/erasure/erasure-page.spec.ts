@@ -13,7 +13,14 @@ describe('ErasurePage', () => {
           provide: HostClient,
           useValue: {
             config: () => of({ urls: { gateway: 'http://gw.test/' } }),
-            erasureHolders: () => of({ reachable: true, error: null, holders: [{ name: 'ordering', queue: 'q', pending: 0 }], completionsPending: 0, runbookUrl: 'x' }),
+            erasureHolders: () =>
+              of({
+                reachable: true,
+                error: null,
+                holders: [{ name: 'ordering', queue: 'q', pending: 0 }],
+                completionsPending: 0,
+                runbookUrl: 'x',
+              }),
             proxy: vi.fn(),
           },
         },

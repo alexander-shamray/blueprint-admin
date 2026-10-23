@@ -84,7 +84,9 @@ describe('TranscriptPage', () => {
     expect(entries).toHaveLength(3);
     expect(text(entries[0].querySelector('.outcome'))).toBe('exit 0');
     expect(text(entries[0].querySelector('.directory'))).toBe('in /work/blueprint-backend');
-    expect(text(entries[0].querySelector('.command'))).toBe('docker compose -f deploy/compose/docker-compose.yml up -d --wait');
+    expect(text(entries[0].querySelector('.command'))).toBe(
+      'docker compose -f deploy/compose/docker-compose.yml up -d --wait',
+    );
     expect(text(entries[1].querySelector('.outcome'))).toBe('HTTP 403');
     expect(text(entries[1].querySelector('.identity'))).toBe('as demo');
     expect(text(entries[2].querySelector('.outcome'))).toBe('no answer');

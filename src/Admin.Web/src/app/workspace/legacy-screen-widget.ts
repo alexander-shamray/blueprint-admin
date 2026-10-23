@@ -18,7 +18,9 @@ import { SCREEN_COMPONENTS, isScreenPath } from './screen-components';
     }
   `,
   styles: `
-    .loading { color: var(--app-muted); }
+    .loading {
+      color: var(--app-muted);
+    }
   `,
 })
 export class LegacyScreenWidget {

@@ -76,7 +76,11 @@ export class App {
   readonly runningWork = inject(RunningWork);
   readonly widgetTypes = WIDGETS;
   readonly differsFromBuiltIn = differsFromBuiltIn;
-  readonly themeChoices = THEME_CHOICES.map((value) => ({ value, icon: THEME_ICONS[value], label: THEME_LABELS[value] }));
+  readonly themeChoices = THEME_CHOICES.map((value) => ({
+    value,
+    icon: THEME_ICONS[value],
+    label: THEME_LABELS[value],
+  }));
   /**
    * Switching language reloads the page, which would lose a layout change the host does not hold: one pending or
    * saving, and one a failed save or a conflict left behind, neither of which saves until the operator acts. Once
@@ -170,8 +174,7 @@ export class App {
         if (open) void this.router.navigate(this.workspace.pageLink(open.id));
         this.notify($localize`Workspace replaced by "${pending.name}:file:".`);
       },
-      error: (e: unknown) =>
-        this.notify($localize`"${pending.name}:file:" was not imported: ${describe(e)}:reason:`),
+      error: (e: unknown) => this.notify($localize`"${pending.name}:file:" was not imported: ${describe(e)}:reason:`),
     });
   }
 

@@ -1,5 +1,7 @@
 <section class="actions">
-  <button class="copy" [disabled]="!feed.transcript.value()?.entries?.length" (click)="copy()">Copy as shell script</button>
+  <button class="copy" [disabled]="!feed.transcript.value()?.entries?.length" (click)="copy()"
+    >Copy as shell script</button
+  >
   @if (copied()) {
     <span class="copied" role="status">Copied.</span>
   }
@@ -9,8 +11,8 @@
 </section>
 
 <p class="note">
-  Each command the console ran and each request it sent, in order. Polls are left out, and tokens, passwords,
-  cookies and Authorization values read <code>&lt;scrubbed&gt;</code>. Kept in memory until the host stops.
+  Each command the console ran and each request it sent, in order. Polls are left out, and tokens, passwords, cookies
+  and Authorization values read <code>&lt;scrubbed&gt;</code>. Kept in memory until the host stops.
 </p>
 
 @if (feed.transcript.error(); as e) {
@@ -32,7 +34,9 @@
               <span class="identity">{{ entry.identity ? 'as ' + entry.identity : 'anonymous' }}</span>
             }
             @if (entry.workingDirectory) {
-              <span class="directory">in <code>{{ entry.workingDirectory }}</code></span>
+              <span class="directory"
+                >in <code>{{ entry.workingDirectory }}</code></span
+              >
             }
           </div>
           <pre class="command">{{ entry.command }}</pre>

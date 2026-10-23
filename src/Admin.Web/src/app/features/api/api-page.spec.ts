@@ -11,42 +11,85 @@ import { ApiRequestWidget } from './widgets/api-request-widget';
 
 function op(partial: Partial<ApiOperation>): ApiOperation {
   return {
-    id: 'catalog:GetProducts', source: 'catalog', name: 'GetProducts', method: 'GET',
-    url: 'http://localhost:5000/api/v1/catalog/products/', pathParameters: [], queryParameters: [],
-    exampleBody: null, hasCommandId: false, edgePolicy: 'anonymous', available: true, ...partial,
+    id: 'catalog:GetProducts',
+    source: 'catalog',
+    name: 'GetProducts',
+    method: 'GET',
+    url: 'http://localhost:5000/api/v1/catalog/products/',
+    pathParameters: [],
+    queryParameters: [],
+    exampleBody: null,
+    hasCommandId: false,
+    edgePolicy: 'anonymous',
+    available: true,
+    ...partial,
   };
 }
 
 const catalog: ApiCatalogView = {
   sources: [
-    { name: 'catalog', documentUrl: 'http://localhost:5102/openapi/v1.json', available: true, error: null, changes: null },
-    { name: 'ordering', documentUrl: 'http://localhost:5101/openapi/v1.json', available: false, error: 'answered 503.', changes: null },
+    {
+      name: 'catalog',
+      documentUrl: 'http://localhost:5102/openapi/v1.json',
+      available: true,
+      error: null,
+      changes: null,
+    },
+    {
+      name: 'ordering',
+      documentUrl: 'http://localhost:5101/openapi/v1.json',
+      available: false,
+      error: 'answered 503.',
+      changes: null,
+    },
   ],
   operations: [
     op({}),
     op({
-      id: 'catalog:PublishProduct', name: 'PublishProduct', method: 'POST', edgePolicy: 'authenticated',
-      exampleBody: '{"commandId":"00000000-0000-0000-0000-000000000000","name":"Walnut desk"}', hasCommandId: true,
+      id: 'catalog:PublishProduct',
+      name: 'PublishProduct',
+      method: 'POST',
+      edgePolicy: 'authenticated',
+      exampleBody: '{"commandId":"00000000-0000-0000-0000-000000000000","name":"Walnut desk"}',
+      hasCommandId: true,
     }),
     op({
-      id: 'ordering:CancelOrder', source: 'ordering', name: 'CancelOrder', method: 'POST', available: false,
-      url: 'http://localhost:5000/api/v1/orders/{id}/cancel', pathParameters: [{ name: 'id', required: true, type: 'string' }],
+      id: 'ordering:CancelOrder',
+      source: 'ordering',
+      name: 'CancelOrder',
+      method: 'POST',
+      available: false,
+      url: 'http://localhost:5000/api/v1/orders/{id}/cancel',
+      pathParameters: [{ name: 'id', required: true, type: 'string' }],
     }),
     op({
-      id: 'carrier:FindFeedPolls', source: 'carrier', name: 'FindFeedPolls', method: 'POST',
-      url: 'http://localhost:5191/__admin/requests/find', pathParameters: [{ name: 'orderId', required: true, type: 'string' }],
-      exampleBody: '{"Methods":["GET"],"Path":{"Matchers":[{"Name":"ExactMatcher","Pattern":"/v1/shipments/crr_SIM-STRANGE-{orderId}/events"}]}}',
+      id: 'carrier:FindFeedPolls',
+      source: 'carrier',
+      name: 'FindFeedPolls',
+      method: 'POST',
+      url: 'http://localhost:5191/__admin/requests/find',
+      pathParameters: [{ name: 'orderId', required: true, type: 'string' }],
+      exampleBody:
+        '{"Methods":["GET"],"Path":{"Matchers":[{"Name":"ExactMatcher","Pattern":"/v1/shipments/crr_SIM-STRANGE-{orderId}/events"}]}}',
     }),
   ],
 };
 
 const responded: ProxyResult = {
-  outcome: 'responded', status: 200, headers: { 'Content-Type': ['application/json'] },
-  body: '{"items":[]}', bodyTruncated: false, bodyError: null, elapsedMs: 12, correlationId: 'corr-1',
+  outcome: 'responded',
+  status: 200,
+  headers: { 'Content-Type': ['application/json'] },
+  body: '{"items":[]}',
+  bodyTruncated: false,
+  bodyError: null,
+  elapsedMs: 12,
+  correlationId: 'corr-1',
 };
 
 const drainedView: QueuesView = {
-  reachable: true, error: null, queues: [],
+  reachable: true,
+  error: null,
+  queues: [],
   projection: { queue: 'ordering-catalog-events', found: true, messages: 0, drained: true },
 };
 
@@ -73,14 +116,27 @@ describe('ApiPage', () => {
       reloadOperations: vi.fn(() => of(catalog)),
       acceptBaseline: vi.fn(() => of(catalog)),
       proxy: vi.fn(() => of(responded)),
-      token: vi.fn(() => of({ username: 'demo', accessToken: 'a.b.c', expiresAt: '2026-09-15T08:05:00Z', claims: { permission: ['catalog:write'] } })),
-      tokenClock: vi.fn((identity: { username: string }) => of({ username: identity.username, held: false, expiresAt: null, renewsAt: null, permissions: [] })),
+      token: vi.fn(() =>
+        of({
+          username: 'demo',
+          accessToken: 'a.b.c',
+          expiresAt: '2026-09-15T08:05:00Z',
+          claims: { permission: ['catalog:write'] },
+        }),
+      ),
+      tokenClock: vi.fn((identity: { username: string }) =>
+        of({ username: identity.username, held: false, expiresAt: null, renewsAt: null, permissions: [] }),
+      ),
       identityUsers: vi.fn(() => of([{ username: 'demo' }, { username: 'browser' }])),
       brokerQueues: vi.fn(() => of(drainedView)),
     };
     TestBed.configureTestingModule({
       imports: [ApiPage],
-      providers: [provideRouter([]), { provide: HostClient, useValue: host }, { provide: UUID, useValue: () => 'fresh-uuid' }],
+      providers: [
+        provideRouter([]),
+        { provide: HostClient, useValue: host },
+        { provide: UUID, useValue: () => 'fresh-uuid' },
+      ],
     });
   });
 
@@ -100,17 +156,27 @@ describe('ApiPage', () => {
   }
 
   function click(fixture: ReturnType<typeof render>, name: string): void {
-    const button = (Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[]).find((b) => b.textContent?.trim().startsWith(name));
+    const button = (Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[]).find((b) =>
+      b.textContent?.trim().startsWith(name),
+    );
     button!.click();
     fixture.detectChanges();
   }
 
   describe('token clock', () => {
     const now = Date.parse('2026-10-04T08:00:00Z');
-    const held = { username: 'demo', held: true, expiresAt: '2026-10-04T08:04:32Z', renewsAt: '2026-10-04T08:04:02Z', permissions: ['catalog:write', 'orders:write'] };
+    const held = {
+      username: 'demo',
+      held: true,
+      expiresAt: '2026-10-04T08:04:32Z',
+      renewsAt: '2026-10-04T08:04:02Z',
+      permissions: ['catalog:write', 'orders:write'],
+    };
 
     it('says how long the held token has left, how long it is reused for, and what it grants', () => {
-      expect(clockText(held, now)).toBe("demo's token: 4:32 left, and the next call reuses it for 4:02 more. Grants catalog:write, orders:write.");
+      expect(clockText(held, now)).toBe(
+        "demo's token: 4:32 left, and the next call reuses it for 4:02 more. Grants catalog:write, orders:write.",
+      );
     });
 
     it('says the next call mints a new one once the host stops reusing it, before it expires', () => {
@@ -120,8 +186,12 @@ describe('ApiPage', () => {
     });
 
     it('says an expired token, a token never minted and a token with no grants plainly', () => {
-      expect(clockText(held, Date.parse('2026-10-04T08:05:00Z'))).toBe("demo's token has expired; the next call mints one. Grants catalog:write, orders:write.");
-      expect(clockText({ ...held, held: false, expiresAt: null, renewsAt: null, permissions: [] }, now)).toBe('No token held for demo; the next call mints one.');
+      expect(clockText(held, Date.parse('2026-10-04T08:05:00Z'))).toBe(
+        "demo's token has expired; the next call mints one. Grants catalog:write, orders:write.",
+      );
+      expect(clockText({ ...held, held: false, expiresAt: null, renewsAt: null, permissions: [] }, now)).toBe(
+        'No token held for demo; the next call mints one.',
+      );
       expect(clockText({ ...held, username: 'browser', permissions: [] }, now)).toContain('Grants no permission.');
       expect(clockText(null, now)).toBeNull();
     });
@@ -130,7 +200,9 @@ describe('ApiPage', () => {
       host.tokenClock.mockReturnValue(of(held));
       const fixture = render();
       expect(host.tokenClock).toHaveBeenLastCalledWith({ username: 'demo', password: null });
-      expect(fixture.nativeElement.querySelector('.token-clock')?.textContent).toContain('Grants catalog:write, orders:write.');
+      expect(fixture.nativeElement.querySelector('.token-clock')?.textContent).toContain(
+        'Grants catalog:write, orders:write.',
+      );
       const reads = host.tokenClock.mock.calls.length;
 
       click(fixture, 'Send');
@@ -157,8 +229,16 @@ describe('ApiPage', () => {
     const fixture = render();
     const text = fixture.nativeElement.textContent as string;
 
-    expect(Array.from(fixture.nativeElement.querySelectorAll('button.op')).map((b) => (b as HTMLElement).textContent?.trim()))
-      .toEqual([expect.stringContaining('GetProducts'), expect.stringContaining('PublishProduct'), expect.stringContaining('CancelOrder'), expect.stringContaining('FindFeedPolls')]);
+    expect(
+      Array.from(fixture.nativeElement.querySelectorAll('button.op')).map((b) =>
+        (b as HTMLElement).textContent?.trim(),
+      ),
+    ).toEqual([
+      expect.stringContaining('GetProducts'),
+      expect.stringContaining('PublishProduct'),
+      expect.stringContaining('CancelOrder'),
+      expect.stringContaining('FindFeedPolls'),
+    ]);
     expect(text).toContain('answered 503.');
     expect(fixture.nativeElement.querySelector('button.op.unavailable')).not.toBeNull();
   });
@@ -170,7 +250,10 @@ describe('ApiPage', () => {
     page.headersText.set('Accept: application/json\nauthorization: Bearer pasted.jwt.token');
     click(fixture, 'Send');
 
-    expect(host.proxy.mock.calls[0][0].headers).toEqual({ Accept: 'application/json', authorization: 'Bearer pasted.jwt.token' });
+    expect(host.proxy.mock.calls[0][0].headers).toEqual({
+      Accept: 'application/json',
+      authorization: 'Bearer pasted.jwt.token',
+    });
     expect(JSON.stringify(TestBed.inject(ApiHistory).entries())).not.toContain('pasted.jwt.token');
     page.headersText.set('');
     (fixture.nativeElement.querySelector('.history li button') as HTMLButtonElement).click();
@@ -179,7 +262,9 @@ describe('ApiPage', () => {
   });
 
   it('history keeps no Cookie sent or Set-Cookie received, while the live response still shows it', () => {
-    host.proxy.mockReturnValue(of({ ...responded, headers: { 'Set-Cookie': ['sid=received-secret'], 'Content-Type': ['application/json'] } }));
+    host.proxy.mockReturnValue(
+      of({ ...responded, headers: { 'Set-Cookie': ['sid=received-secret'], 'Content-Type': ['application/json'] } }),
+    );
     const fixture = render();
     const page = fixture.componentInstance;
     page.headersText.set('Cookie: session=sent-secret');
@@ -207,7 +292,9 @@ describe('ApiPage', () => {
   it('a restored command gets a fresh commandId even after a reload dropped its operation from the catalog', () => {
     let n = 0;
     TestBed.overrideProvider(UUID, { useValue: () => `uuid-${++n}` });
-    host.reloadOperations.mockReturnValue(of({ ...catalog, operations: catalog.operations.filter((o) => o.id !== 'catalog:PublishProduct') }));
+    host.reloadOperations.mockReturnValue(
+      of({ ...catalog, operations: catalog.operations.filter((o) => o.id !== 'catalog:PublishProduct') }),
+    );
     const fixture = render();
     const page = fixture.componentInstance;
     click(fixture, 'POST PublishProduct');
@@ -240,7 +327,9 @@ describe('ApiPage', () => {
     const fixture = render();
     click(fixture, 'POST PublishProduct');
 
-    const current = Array.from(fixture.nativeElement.querySelectorAll('button.op[aria-current="true"]')) as HTMLElement[];
+    const current = Array.from(
+      fixture.nativeElement.querySelectorAll('button.op[aria-current="true"]'),
+    ) as HTMLElement[];
     expect(current.map((b) => b.textContent?.trim())).toEqual([expect.stringContaining('PublishProduct')]);
   });
 
@@ -290,7 +379,9 @@ describe('ApiPage', () => {
     page.setPathValue('orderId', 'ord-1');
     click(fixture, 'Send');
 
-    expect(JSON.parse(host.proxy.mock.calls[0][0].body).Path.Matchers[0].Pattern).toBe('/v1/shipments/crr_SIM-STRANGE-ord-1/events');
+    expect(JSON.parse(host.proxy.mock.calls[0][0].body).Path.Matchers[0].Pattern).toBe(
+      '/v1/shipments/crr_SIM-STRANGE-ord-1/events',
+    );
     expect(page.body()).toContain('{orderId}');
 
     (fixture.nativeElement.querySelectorAll('.history li button')[0] as HTMLButtonElement).click();
@@ -298,11 +389,15 @@ describe('ApiPage', () => {
     expect(page.body()).toContain('{orderId}');
     page.setPathValue('orderId', 'ord-2');
     click(fixture, 'Send');
-    expect(JSON.parse(host.proxy.mock.calls[1][0].body).Path.Matchers[0].Pattern).toBe('/v1/shipments/crr_SIM-STRANGE-ord-2/events');
+    expect(JSON.parse(host.proxy.mock.calls[1][0].body).Path.Matchers[0].Pattern).toBe(
+      '/v1/shipments/crr_SIM-STRANGE-ord-2/events',
+    );
   });
 
   it('renders an unreached result differently from a response', () => {
-    host.proxy.mockReturnValue(of({ outcome: 'unreached', error: 'Connection refused', elapsedMs: 3, correlationId: 'c' }));
+    host.proxy.mockReturnValue(
+      of({ outcome: 'unreached', error: 'Connection refused', elapsedMs: 3, correlationId: 'c' }),
+    );
     const fixture = render();
     click(fixture, 'Send');
 
@@ -311,15 +406,21 @@ describe('ApiPage', () => {
   });
 
   it('shows the problem detail when the host refuses to send', () => {
-    host.proxy.mockReturnValue(throwError(() => ({ error: { title: 'Request not sent', detail: 'not one of the configured API surfaces' } })));
+    host.proxy.mockReturnValue(
+      throwError(() => ({ error: { title: 'Request not sent', detail: 'not one of the configured API surfaces' } })),
+    );
     const fixture = render();
     click(fixture, 'Send');
 
-    expect(fixture.nativeElement.querySelector('.error')?.textContent).toContain('not one of the configured API surfaces');
+    expect(fixture.nativeElement.querySelector('.error')?.textContent).toContain(
+      'not one of the configured API surfaces',
+    );
   });
 
   it('keeps a history, newest first, and restores a past response when clicked', () => {
-    host.proxy.mockReturnValueOnce(of(responded)).mockReturnValueOnce(of({ ...responded, status: 403, body: '', correlationId: 'corr-2' }));
+    host.proxy
+      .mockReturnValueOnce(of(responded))
+      .mockReturnValueOnce(of({ ...responded, status: 403, body: '', correlationId: 'corr-2' }));
     const fixture = render();
     click(fixture, 'Send');
     click(fixture, 'Send');
@@ -446,7 +547,12 @@ describe('ApiPage', () => {
     click(fixture, 'Show token');
 
     fixture.componentInstance.chooseIdentity('user:browser');
-    pending.next({ username: 'demo', accessToken: 'a.b.c', expiresAt: '2026-09-15T08:05:00Z', claims: { permission: ['catalog:write'] } });
+    pending.next({
+      username: 'demo',
+      accessToken: 'a.b.c',
+      expiresAt: '2026-09-15T08:05:00Z',
+      claims: { permission: ['catalog:write'] },
+    });
     fixture.detectChanges();
 
     expect(fixture.componentInstance.token()).toBeNull();
@@ -460,20 +566,29 @@ describe('ApiPage', () => {
     click(fixture, 'Send');
 
     expect(host.proxy).not.toHaveBeenCalled();
-    expect(fixture.nativeElement.querySelector('.error')?.textContent).toContain('Enter a username for the custom identity.');
+    expect(fixture.nativeElement.querySelector('.error')?.textContent).toContain(
+      'Enter a username for the custom identity.',
+    );
 
     page.error.set(null);
     click(fixture, 'Show token');
     expect(host.token).not.toHaveBeenCalled();
-    expect(fixture.nativeElement.querySelector('.error')?.textContent).toContain('Enter a username for the custom identity.');
+    expect(fixture.nativeElement.querySelector('.error')?.textContent).toContain(
+      'Enter a username for the custom identity.',
+    );
   });
 
   it('shows a repeated response header as one line per value', () => {
-    host.proxy.mockReturnValue(of({ ...responded, headers: { 'Set-Cookie': ['a=1; Expires=Wed, 16 Sep 2026 08:00:00 GMT', 'b=2'] } }));
+    host.proxy.mockReturnValue(
+      of({ ...responded, headers: { 'Set-Cookie': ['a=1; Expires=Wed, 16 Sep 2026 08:00:00 GMT', 'b=2'] } }),
+    );
     const fixture = render();
     click(fixture, 'Send');
 
-    expect(fixture.componentInstance.headerLines()).toEqual(['Set-Cookie: a=1; Expires=Wed, 16 Sep 2026 08:00:00 GMT', 'Set-Cookie: b=2']);
+    expect(fixture.componentInstance.headerLines()).toEqual([
+      'Set-Cookie: a=1; Expires=Wed, 16 Sep 2026 08:00:00 GMT',
+      'Set-Cookie: b=2',
+    ]);
   });
 
   it('a new send clears the previous response, so a refused one is not shown beside it', () => {
@@ -498,7 +613,9 @@ describe('ApiPage', () => {
     const fixture = render();
     click(fixture, 'Send');
 
-    expect(fixture.nativeElement.querySelector('.response .body-error')?.textContent).toContain('The response ended prematurely.');
+    expect(fixture.nativeElement.querySelector('.response .body-error')?.textContent).toContain(
+      'The response ended prematurely.',
+    );
   });
 
   it('shows the token claims for the chosen identity', () => {
@@ -512,21 +629,48 @@ describe('ApiPage', () => {
   });
 
   describe('document changes since the kept baseline', () => {
-    const none = { operationsAdded: [], operationsRemoved: [], statusesAdded: [], statusesRemoved: [], fieldsAdded: [], fieldsRemoved: [], error: null };
+    const none = {
+      operationsAdded: [],
+      operationsRemoved: [],
+      statusesAdded: [],
+      statusesRemoved: [],
+      fieldsAdded: [],
+      fieldsRemoved: [],
+      error: null,
+    };
     const withChanges = (changes: object): ApiCatalogView => ({
       ...catalog,
-      sources: [{ ...catalog.sources[0], changes: { baselineAt: '2026-10-01T09:30:00Z', baselineTaken: false, ...none, ...changes } }, catalog.sources[1]],
+      sources: [
+        {
+          ...catalog.sources[0],
+          changes: { baselineAt: '2026-10-01T09:30:00Z', baselineTaken: false, ...none, ...changes },
+        },
+        catalog.sources[1],
+      ],
     });
-    const contract = (fixture: { nativeElement: HTMLElement }) => (fixture.nativeElement.querySelector('.tree section') as HTMLElement).textContent?.replace(/\s+/g, ' ') ?? '';
+    const contract = (fixture: { nativeElement: HTMLElement }) =>
+      (fixture.nativeElement.querySelector('.tree section') as HTMLElement).textContent?.replace(/\s+/g, ' ') ?? '';
 
     it('lists what moved, in words, with an action that accepts the current document', () => {
-      host.operations.mockReturnValue(of(withChanges({ fieldsAdded: ['ProductSummaryDto.quantityAvailable'], operationsRemoved: ['DELETE /v1/catalog/products/'] })));
+      host.operations.mockReturnValue(
+        of(
+          withChanges({
+            fieldsAdded: ['ProductSummaryDto.quantityAvailable'],
+            operationsRemoved: ['DELETE /v1/catalog/products/'],
+          }),
+        ),
+      );
       host.acceptBaseline.mockReturnValue(of(withChanges({})));
       const fixture = render();
 
       expect(contract(fixture)).toContain('changed since 2026-10-01');
-      const lines = Array.from(fixture.nativeElement.querySelectorAll('.contract-changes li') as NodeListOf<HTMLElement>).map((l) => l.textContent);
-      expect(lines).toEqual(['removed operation DELETE /v1/catalog/products/', 'added field ProductSummaryDto.quantityAvailable']);
+      const lines = Array.from(
+        fixture.nativeElement.querySelectorAll('.contract-changes li') as NodeListOf<HTMLElement>,
+      ).map((l) => l.textContent);
+      expect(lines).toEqual([
+        'removed operation DELETE /v1/catalog/products/',
+        'added field ProductSummaryDto.quantityAvailable',
+      ]);
 
       click(fixture, 'Accept as baseline');
 
@@ -544,10 +688,19 @@ describe('ApiPage', () => {
     });
 
     it('shows a baseline it could not read as an error rather than as unchanged', () => {
-      host.operations.mockReturnValue(of(withChanges({ baselineAt: null, error: 'The kept document for catalog could not be read or written: denied' })));
+      host.operations.mockReturnValue(
+        of(
+          withChanges({
+            baselineAt: null,
+            error: 'The kept document for catalog could not be read or written: denied',
+          }),
+        ),
+      );
       const fixture = render();
 
-      expect(fixture.nativeElement.querySelector('.contract-error')?.textContent).toContain('could not be read or written');
+      expect(fixture.nativeElement.querySelector('.contract-error')?.textContent).toContain(
+        'could not be read or written',
+      );
       expect(contract(fixture)).not.toContain('unchanged');
     });
   });
@@ -695,7 +848,9 @@ describe('ApiPage', () => {
 
   it('says so when the broker cannot be read after a publish, and polls no more', async () => {
     vi.useFakeTimers();
-    host.brokerQueues.mockReturnValue(of({ ...drainedView, reachable: false, error: 'service "rabbitmq" is not running' }));
+    host.brokerQueues.mockReturnValue(
+      of({ ...drainedView, reachable: false, error: 'service "rabbitmq" is not running' }),
+    );
     const fixture = render();
     fixture.componentInstance.select(catalog.operations[1]);
 
@@ -703,7 +858,9 @@ describe('ApiPage', () => {
     await vi.advanceTimersByTimeAsync(0);
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('.response')?.textContent).toContain('Could not read the broker to say whether ordering-catalog-events has drained: service "rabbitmq" is not running');
+    expect(fixture.nativeElement.querySelector('.response')?.textContent).toContain(
+      'Could not read the broker to say whether ordering-catalog-events has drained: service "rabbitmq" is not running',
+    );
     expect(fixture.nativeElement.querySelector('app-drained-indicator')).toBeNull();
     expect(fixture.nativeElement.querySelector('.response .note')?.getAttribute('role')).toBe('alert');
 
@@ -714,7 +871,10 @@ describe('ApiPage', () => {
 
   it('stops after an undeclared-queue answer, leaving the indicator on screen', async () => {
     vi.useFakeTimers();
-    const notFoundView: QueuesView = { ...drainedView, projection: { queue: 'ordering-catalog-events', found: false, messages: null, drained: false } };
+    const notFoundView: QueuesView = {
+      ...drainedView,
+      projection: { queue: 'ordering-catalog-events', found: false, messages: null, drained: false },
+    };
     host.brokerQueues.mockReturnValue(of(notFoundView));
     const fixture = render();
     fixture.componentInstance.select(catalog.operations[1]);
@@ -740,7 +900,9 @@ describe('ApiPage', () => {
     await vi.advanceTimersByTimeAsync(120_000);
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('.response')?.textContent).toContain('Stopped watching after 2 minutes; the Broker screen shows the queue.');
+    expect(fixture.nativeElement.querySelector('.response')?.textContent).toContain(
+      'Stopped watching after 2 minutes; the Broker screen shows the queue.',
+    );
     expect(fixture.nativeElement.querySelector('.response .note')?.getAttribute('role')).toBe('status');
 
     host.brokerQueues.mockClear();
@@ -765,7 +927,9 @@ describe('ApiPage', () => {
     fixture.detectChanges();
 
     expect(openPoll.observed).toBe(false);
-    expect(fixture.nativeElement.querySelector('.response')?.textContent).toContain('Stopped watching after 2 minutes; the Broker screen shows the queue.');
+    expect(fixture.nativeElement.querySelector('.response')?.textContent).toContain(
+      'Stopped watching after 2 minutes; the Broker screen shows the queue.',
+    );
 
     openPoll.next(drainedView);
     fixture.detectChanges();
@@ -783,12 +947,16 @@ describe('ApiPage', () => {
     await vi.advanceTimersByTimeAsync(2000);
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('.response')?.textContent).not.toContain('Stopped watching after 2 minutes');
+    expect(fixture.nativeElement.querySelector('.response')?.textContent).not.toContain(
+      'Stopped watching after 2 minutes',
+    );
   });
 
   it('a host error while watching clears the old indicator', async () => {
     vi.useFakeTimers();
-    host.brokerQueues.mockReturnValueOnce(of(waitingView)).mockReturnValueOnce(throwError(() => ({ error: { detail: 'boom' } })));
+    host.brokerQueues
+      .mockReturnValueOnce(of(waitingView))
+      .mockReturnValueOnce(throwError(() => ({ error: { detail: 'boom' } })));
     const fixture = render();
     fixture.componentInstance.select(catalog.operations[1]);
     fixture.componentInstance.send();
@@ -799,13 +967,20 @@ describe('ApiPage', () => {
     await vi.advanceTimersByTimeAsync(2000);
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('.response')?.textContent).toContain('Could not read the broker to say whether ordering-catalog-events has drained: boom');
+    expect(fixture.nativeElement.querySelector('.response')?.textContent).toContain(
+      'Could not read the broker to say whether ordering-catalog-events has drained: boom',
+    );
     expect(fixture.nativeElement.querySelector('app-drained-indicator')).toBeNull();
   });
 
   it('reads no broker after a PublishProduct sent from another source', async () => {
     vi.useFakeTimers();
-    const otherSource = op({ id: 'ordering:PublishProduct', source: 'ordering', name: 'PublishProduct', method: 'POST' });
+    const otherSource = op({
+      id: 'ordering:PublishProduct',
+      source: 'ordering',
+      name: 'PublishProduct',
+      method: 'POST',
+    });
     host.operations.mockReturnValue(of({ ...catalog, operations: [...catalog.operations, otherSource] }));
     const fixture = render();
     fixture.componentInstance.selectedId.set(otherSource.id);
@@ -830,7 +1005,9 @@ describe('ApiPage', () => {
   });
 
   it('offers Trace this call when the platform never answered, because the request still went out', () => {
-    host.proxy.mockReturnValue(of({ outcome: 'unreached', error: 'Connection refused', elapsedMs: 3, correlationId: 'corr-9', sent: true }));
+    host.proxy.mockReturnValue(
+      of({ outcome: 'unreached', error: 'Connection refused', elapsedMs: 3, correlationId: 'corr-9', sent: true }),
+    );
     const fixture = render();
     fixture.componentInstance.chooseIdentity('anonymous');
     click(fixture, 'Send');
@@ -848,7 +1025,15 @@ describe('ApiPage', () => {
     expect(fixture.nativeElement.querySelector('button.trace-call')).toBeNull();
   });
   it('offers no Trace this call when Keycloak was unreachable, because the request never went out', () => {
-    host.proxy.mockReturnValue(of({ outcome: 'unreached', error: 'Keycloak did not answer: refused', elapsedMs: 3, correlationId: 'corr-8', sent: false }));
+    host.proxy.mockReturnValue(
+      of({
+        outcome: 'unreached',
+        error: 'Keycloak did not answer: refused',
+        elapsedMs: 3,
+        correlationId: 'corr-8',
+        sent: false,
+      }),
+    );
     const fixture = render();
     fixture.componentInstance.chooseIdentity('anonymous');
     click(fixture, 'Send');

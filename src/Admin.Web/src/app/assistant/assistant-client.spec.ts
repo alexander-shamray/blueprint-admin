@@ -39,7 +39,13 @@ function setup(ids = memoryIds()) {
   });
   const states: ConversationState[] = [];
   const client = new AssistantClient('/api/assistant', host.fetch, host.openStream);
-  const conversation = new AssistantConversation(client, tools, () => OPENING, ids, (s) => states.push(s));
+  const conversation = new AssistantConversation(
+    client,
+    tools,
+    () => OPENING,
+    ids,
+    (s) => states.push(s),
+  );
   return { host, conversation, states, opened, ids };
 }
 
@@ -89,7 +95,11 @@ describe('AssistantConversation', () => {
     await settle();
 
     expect(opened).toEqual(['logs']);
-    expect(host.requests.find((r) => r.url.endsWith('/tool-results'))?.body).toEqual({ callId: 'k1', ok: true, content: 'opened /logs' });
+    expect(host.requests.find((r) => r.url.endsWith('/tool-results'))?.body).toEqual({
+      callId: 'k1',
+      ok: true,
+      content: 'opened /logs',
+    });
     expect(conversation.current.items.slice(1)).toEqual([
       { kind: 'reply', text: 'Opening Logs. ' },
       { kind: 'tool', callId: 'k1', name: 'open_screen', side: 'client', args: { path: 'logs' }, ok: null },
@@ -97,7 +107,16 @@ describe('AssistantConversation', () => {
 
     stream.emit('tool_finished', { callId: 'k1', ok: true }, 5);
     stream.emit('text', { delta: 'Logs is open.' }, 6);
-    stream.emit('turn_ended', { reason: 'done', category: null, usage: { input: 1, output: 1, cached: 0 }, total: { input: 1, output: 1, cached: 0 } }, 7);
+    stream.emit(
+      'turn_ended',
+      {
+        reason: 'done',
+        category: null,
+        usage: { input: 1, output: 1, cached: 0 },
+        total: { input: 1, output: 1, cached: 0 },
+      },
+      7,
+    );
     await settle();
 
     expect(conversation.current.running).toBe(false);
@@ -134,16 +153,31 @@ describe('AssistantConversation', () => {
     await settle();
 
     expect(opened).toEqual(['logs']);
-    expect(host.requests.find((r) => r.url.endsWith('/tool-results'))?.body).toEqual({ callId: 'k1', ok: true, content: 'opened /logs' });
+    expect(host.requests.find((r) => r.url.endsWith('/tool-results'))?.body).toEqual({
+      callId: 'k1',
+      ok: true,
+      content: 'opened /logs',
+    });
   });
 
   it('a read begun before a new message never undoes it', async () => {
     const { host, conversation } = setup();
     // The read a turn's end starts answers as the host stood then: idle, and without the next message.
-    host.on('GET', /\/conversations\/c1$/, () => json({ id: 'c1', items: [], running: false, lastEventId: 1, pendingCalls: [] }));
+    host.on('GET', /\/conversations\/c1$/, () =>
+      json({ id: 'c1', items: [], running: false, lastEventId: 1, pendingCalls: [] }),
+    );
     await conversation.send('one', null, 'en-US');
 
-    host.stream.emit('turn_ended', { reason: 'done', category: null, usage: { input: 0, output: 0, cached: 0 }, total: { input: 0, output: 0, cached: 0 } }, 1);
+    host.stream.emit(
+      'turn_ended',
+      {
+        reason: 'done',
+        category: null,
+        usage: { input: 0, output: 0, cached: 0 },
+        total: { input: 0, output: 0, cached: 0 },
+      },
+      1,
+    );
     // Sent before that read has come back.
     await conversation.send('two', null, 'en-US');
     await settle();
@@ -171,7 +205,14 @@ describe('AssistantConversation', () => {
     host.stream.lose();
     await settle();
 
-    expect(conversation.current.items.at(-1)).toEqual({ kind: 'tool', callId: 'k1', name: 'open_screen', side: 'client', args: { path: 'logs' }, ok: null });
+    expect(conversation.current.items.at(-1)).toEqual({
+      kind: 'tool',
+      callId: 'k1',
+      name: 'open_screen',
+      side: 'client',
+      args: { path: 'logs' },
+      ok: null,
+    });
     expect(host.stream.url).toBe('/api/assistant/conversations/c1/events?after=5');
     expect(opened).toEqual(['logs']);
   });
@@ -207,7 +248,16 @@ describe('AssistantConversation', () => {
     const ids = memoryIds('c1');
     const { host, conversation } = setup(ids);
     host.on('GET', /\/conversations\/c1$/, () =>
-      json({ id: 'c1', items: [{ kind: 'operator', text: 'where?' }, { kind: 'reply', text: 'Open' }], running: true, lastEventId: 12, pendingCalls: [] }),
+      json({
+        id: 'c1',
+        items: [
+          { kind: 'operator', text: 'where?' },
+          { kind: 'reply', text: 'Open' },
+        ],
+        running: true,
+        lastEventId: 12,
+        pendingCalls: [],
+      }),
     );
 
     await conversation.resume();
@@ -236,7 +286,9 @@ describe('AssistantConversation', () => {
   it('holds no stream while idle and hidden, and opens one while visible', async () => {
     const ids = memoryIds('c1');
     const { host, conversation } = setup(ids);
-    host.on('GET', /\/conversations\/c1$/, () => json({ id: 'c1', items: [], running: false, lastEventId: 3, pendingCalls: [] }));
+    host.on('GET', /\/conversations\/c1$/, () =>
+      json({ id: 'c1', items: [], running: false, lastEventId: 3, pendingCalls: [] }),
+    );
     await conversation.resume();
     expect(host.streams).toEqual([]);
 
@@ -271,7 +323,16 @@ describe('AssistantConversation', () => {
     const ids = memoryIds();
     const { host, conversation } = setup(ids);
     await conversation.send('one', null, 'en-US');
-    host.stream.emit('turn_ended', { reason: 'done', category: null, usage: { input: 0, output: 0, cached: 0 }, total: { input: 0, output: 0, cached: 0 } }, 1);
+    host.stream.emit(
+      'turn_ended',
+      {
+        reason: 'done',
+        category: null,
+        usage: { input: 0, output: 0, cached: 0 },
+        total: { input: 0, output: 0, cached: 0 },
+      },
+      1,
+    );
     await settle();
 
     let turns = 0;
@@ -293,7 +354,16 @@ describe('AssistantConversation', () => {
     const { host, conversation } = setup();
     await conversation.send('help', null, 'en-US');
 
-    host.stream.emit('turn_ended', { reason: 'refused', category: 'cyber', usage: { input: 0, output: 0, cached: 0 }, total: { input: 0, output: 0, cached: 0 } }, 1);
+    host.stream.emit(
+      'turn_ended',
+      {
+        reason: 'refused',
+        category: 'cyber',
+        usage: { input: 0, output: 0, cached: 0 },
+        total: { input: 0, output: 0, cached: 0 },
+      },
+      1,
+    );
 
     expect(conversation.current.items.at(-1)).toEqual({ kind: 'end', reason: 'refused', category: 'cyber' });
   });
@@ -304,7 +374,11 @@ describe('AssistantConversation', () => {
 
     await conversation.cancel();
 
-    expect(host.requests.at(-1)).toEqual({ method: 'POST', url: '/api/assistant/conversations/c1/cancel', body: undefined });
+    expect(host.requests.at(-1)).toEqual({
+      method: 'POST',
+      url: '/api/assistant/conversations/c1/cancel',
+      body: undefined,
+    });
   });
 
   it('starting over forgets the conversation on the host and in the tab', async () => {
@@ -322,8 +396,15 @@ describe('AssistantConversation', () => {
 
 describe('AssistantClient', () => {
   it('reads the status, and null when the host cannot say', async () => {
-    const host = new FakeHost().on('GET', /\/api\/assistant$/, () => json({ enabled: false, provider: null, model: null, reason: 'off' }));
-    expect(await new AssistantClient('/api/assistant', host.fetch).status()).toEqual({ enabled: false, provider: null, model: null, reason: 'off' });
+    const host = new FakeHost().on('GET', /\/api\/assistant$/, () =>
+      json({ enabled: false, provider: null, model: null, reason: 'off' }),
+    );
+    expect(await new AssistantClient('/api/assistant', host.fetch).status()).toEqual({
+      enabled: false,
+      provider: null,
+      model: null,
+      reason: 'off',
+    });
 
     const failing = new AssistantClient('/api/assistant', () => Promise.reject(new Error('offline')));
     expect(await failing.status()).toBeNull();

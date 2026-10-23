@@ -1,23 +1,89 @@
-.actions { margin-bottom: 1rem; }
-.actions form { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
-.actions input { min-width: 22rem; font-family: inherit; }
-.following { color: var(--app-muted); font-size: 0.85em; }
-table { border-collapse: collapse; margin-bottom: 1rem; width: 100%; }
-td, th { padding: 0.25rem 0.75rem; border-bottom: 1px solid var(--app-border); text-align: left; vertical-align: top; }
-td.at, td.kind { white-space: nowrap; font-variant-numeric: tabular-nums; }
-td.kind { color: var(--app-muted); }
-td.summary { word-break: break-word; }
+.actions {
+  margin-bottom: 1rem;
+}
+.actions form {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.actions input {
+  min-width: 22rem;
+  font-family: inherit;
+}
+.following {
+  color: var(--app-muted);
+  font-size: 0.85em;
+}
+table {
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+  width: 100%;
+}
+td,
+th {
+  padding: 0.25rem 0.75rem;
+  border-bottom: 1px solid var(--app-border);
+  text-align: left;
+  vertical-align: top;
+}
+td.at,
+td.kind {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+td.kind {
+  color: var(--app-muted);
+}
+td.summary {
+  word-break: break-word;
+}
 /* Colour repeats what the [kind] column already says in words; it never carries the state alone. */
-tr.kind-Error td { color: var(--app-error); font-weight: 600; }
-tr.kind-Queued td { background: var(--mat-sys-surface-container); font-style: italic; }
-tr.kind-Outbox td.kind, tr.kind-Publish td.kind, tr.kind-Consume td.kind, tr.kind-Saga td.kind { font-weight: 600; }
-a.explore { margin-left: 0.5rem; font-size: 0.85em; }
-.summary .truncated { margin-left: 0.5rem; color: var(--app-muted); }
-.warning { color: var(--app-muted); max-width: 48rem; }
-.empty { color: var(--app-muted); max-width: 48rem; }
-.error { color: var(--app-error); }
+tr.kind-Error td {
+  color: var(--app-error);
+  font-weight: 600;
+}
+tr.kind-Queued td {
+  background: var(--mat-sys-surface-container);
+  font-style: italic;
+}
+tr.kind-Outbox td.kind,
+tr.kind-Publish td.kind,
+tr.kind-Consume td.kind,
+tr.kind-Saga td.kind {
+  font-weight: 600;
+}
+a.explore {
+  margin-left: 0.5rem;
+  font-size: 0.85em;
+}
+.summary .truncated {
+  margin-left: 0.5rem;
+  color: var(--app-muted);
+}
+.warning {
+  color: var(--app-muted);
+  max-width: 48rem;
+}
+.empty {
+  color: var(--app-muted);
+  max-width: 48rem;
+}
+.error {
+  color: var(--app-error);
+}
 /* The [new] and [gone] words carry the change; the shading only repeats it. */
-.changes { max-width: 60rem; margin-bottom: 1rem; }
-.change-list { margin: 0.25rem 0 0; padding-left: 1.25rem; }
-.change-list .gone { color: var(--app-muted); }
-tr.arrived td { background: var(--app-ok-bg); }
+.changes {
+  max-width: 60rem;
+  margin-bottom: 1rem;
+}
+.change-list {
+  margin: 0.25rem 0 0;
+  padding-left: 1.25rem;
+}
+.change-list .gone {
+  color: var(--app-muted);
+}
+tr.arrived td {
+  background: var(--app-ok-bg);
+}

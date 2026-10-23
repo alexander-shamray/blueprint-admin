@@ -50,7 +50,10 @@ test('an overdue request is reissued and then closes', async ({ page }) => {
 
   await expect(page.locator('.status')).toContainText('[overdue]');
   await expect(page.locator('table.holders tbody tr.holder-overdue')).toHaveCount(2);
-  await expect(page.getByRole('link', { name: 'erasure-overdue runbook' })).toHaveAttribute('href', /\/docs\/runbooks\/erasure-overdue\.md$/);
+  await expect(page.getByRole('link', { name: 'erasure-overdue runbook' })).toHaveAttribute(
+    'href',
+    /\/docs\/runbooks\/erasure-overdue\.md$/,
+  );
 
   await page.getByRole('button', { name: 'Reissue' }).click();
 

@@ -38,8 +38,23 @@ const lease = {
 };
 
 const config = {
-  backendDir: '', frontendDir: '/work/blueprint-frontend', composeFile: '', fakePlatform: true,
-  urls: { gateway: 'http://localhost:5000', catalog: '', ordering: '', bff: '', inventory: '', payments: '', paymentSimulator: '', carrierSimulator: '', keycloak: 'http://localhost:8080', grafana: 'http://localhost:3000', client: 'http://localhost:5173' },
+  backendDir: '',
+  frontendDir: '/work/blueprint-frontend',
+  composeFile: '',
+  fakePlatform: true,
+  urls: {
+    gateway: 'http://localhost:5000',
+    catalog: '',
+    ordering: '',
+    bff: '',
+    inventory: '',
+    payments: '',
+    paymentSimulator: '',
+    carrierSimulator: '',
+    keycloak: 'http://localhost:8080',
+    grafana: 'http://localhost:3000',
+    client: 'http://localhost:5173',
+  },
 };
 
 const health = {
@@ -73,9 +88,33 @@ const alerts = {
   reachable: true,
   error: null,
   loaded: [
-    { name: 'ErrorQueueDepth', group: 'platform-infrastructure', state: 'firing', health: 'ok', severity: 'page', summary: 'Messages in error queue', alerts: 1 },
-    { name: 'Latency', group: 'platform-golden-signals', state: 'pending', health: 'ok', severity: 'page', summary: null, alerts: 1 },
-    { name: 'OutboxGrowth', group: 'platform-messaging', state: 'inactive', health: 'err', severity: null, summary: null, alerts: 0 },
+    {
+      name: 'ErrorQueueDepth',
+      group: 'platform-infrastructure',
+      state: 'firing',
+      health: 'ok',
+      severity: 'page',
+      summary: 'Messages in error queue',
+      alerts: 1,
+    },
+    {
+      name: 'Latency',
+      group: 'platform-golden-signals',
+      state: 'pending',
+      health: 'ok',
+      severity: 'page',
+      summary: null,
+      alerts: 1,
+    },
+    {
+      name: 'OutboxGrowth',
+      group: 'platform-messaging',
+      state: 'inactive',
+      health: 'err',
+      severity: null,
+      summary: null,
+      alerts: 0,
+    },
   ],
   waiting: [
     { name: 'StuckSaga', instruments: ['ordering_saga_oldest_unfinalised_age_seconds'] },
@@ -86,20 +125,44 @@ const alerts = {
 const doctor = {
   checks: [
     { name: 'Docker', state: 'Ok', detail: 'Docker 29.7.2 is answering.' },
-    { name: 'Ports', state: 'Problem', detail: 'Held by another program, so Up cannot publish them: 5672, 15672 by erl (pid 7376).' },
-    { name: 'Node', state: 'Unknown', detail: 'Node 22.23.2; the frontend clone\'s .nvmrc could not be read: not found' },
+    {
+      name: 'Ports',
+      state: 'Problem',
+      detail: 'Held by another program, so Up cannot publish them: 5672, 15672 by erl (pid 7376).',
+    },
+    {
+      name: 'Node',
+      state: 'Unknown',
+      detail: "Node 22.23.2; the frontend clone's .nvmrc could not be read: not found",
+    },
   ],
 };
 
 const runningJob = { id: 'fe-1', commandLine: 'npm start', state: 'Running', exitCode: null, startedAt: '' };
-const deviceJob = { id: 'dev-1', commandLine: 'npm run emulator:android', state: 'Running', exitCode: null, startedAt: '' };
-const loadJob = { id: 'load-1', commandLine: 'load-run k6 prometheus slo-run token product restock run', state: 'Running', exitCode: null, startedAt: '' };
+const deviceJob = {
+  id: 'dev-1',
+  commandLine: 'npm run emulator:android',
+  state: 'Running',
+  exitCode: null,
+  startedAt: '',
+};
+const loadJob = {
+  id: 'load-1',
+  commandLine: 'load-run k6 prometheus slo-run token product restock run',
+  state: 'Running',
+  exitCode: null,
+  startedAt: '',
+};
 
 const deviceReads = {
   checks: [
-    { name: 'Emulator attached', state: 'Problem', detail: 'No emulator is attached. Start the AVD from Android Studio\'s Device Manager; the console does not.' },
-    { name: 'Gateway admits the app\'s origin', state: 'Ok', detail: 'The gateway admits https://localhost.' },
-    { name: 'Realm redirect for mobile-app', state: 'Unknown', detail: 'Keycloak\'s admin API did not answer: refused' },
+    {
+      name: 'Emulator attached',
+      state: 'Problem',
+      detail: "No emulator is attached. Start the AVD from Android Studio's Device Manager; the console does not.",
+    },
+    { name: "Gateway admits the app's origin", state: 'Ok', detail: 'The gateway admits https://localhost.' },
+    { name: 'Realm redirect for mobile-app', state: 'Unknown', detail: "Keycloak's admin API did not answer: refused" },
   ],
 };
 
@@ -146,11 +209,27 @@ describe('StackPage', () => {
     host = {
       stack: vi.fn(() => of(stack)),
       config: vi.fn(() => of(config)),
-      backendUp: vi.fn(() => of({ id: 'up-1', commandLine: 'docker compose up', state: 'Running', exitCode: null, startedAt: '' })),
-      backendDown: vi.fn(() => of({ id: 'down-1', commandLine: 'docker compose down', state: 'Running', exitCode: null, startedAt: '' })),
-      backendReset: vi.fn(() => of({ id: 'reset-1', commandLine: 'reset down -v up -d --wait readiness', state: 'Running', exitCode: null, startedAt: '' })),
-      frontendStart: vi.fn(() => of({ id: 'fe-1', commandLine: 'npm start', state: 'Running', exitCode: null, startedAt: '' })),
-      frontendStop: vi.fn(() => of({ id: 'fe-1', commandLine: 'npm start', state: 'Exited', exitCode: -1, startedAt: '' })),
+      backendUp: vi.fn(() =>
+        of({ id: 'up-1', commandLine: 'docker compose up', state: 'Running', exitCode: null, startedAt: '' }),
+      ),
+      backendDown: vi.fn(() =>
+        of({ id: 'down-1', commandLine: 'docker compose down', state: 'Running', exitCode: null, startedAt: '' }),
+      ),
+      backendReset: vi.fn(() =>
+        of({
+          id: 'reset-1',
+          commandLine: 'reset down -v up -d --wait readiness',
+          state: 'Running',
+          exitCode: null,
+          startedAt: '',
+        }),
+      ),
+      frontendStart: vi.fn(() =>
+        of({ id: 'fe-1', commandLine: 'npm start', state: 'Running', exitCode: null, startedAt: '' }),
+      ),
+      frontendStop: vi.fn(() =>
+        of({ id: 'fe-1', commandLine: 'npm start', state: 'Exited', exitCode: -1, startedAt: '' }),
+      ),
       frontendDeviceBuild: vi.fn(() => of(deviceJob)),
       frontendDeviceReads: vi.fn(() => of(deviceReads)),
       leaseRestore: vi.fn(() => of({ lease: null, changes: [] })),
@@ -222,7 +301,10 @@ describe('StackPage', () => {
   describe('a Compose job started from the actions', () => {
     let events: Subject<JobEvent>;
 
-    const line = (sequence: number, stream: 'Stdout' | 'Stderr', t: string): JobEvent => ({ kind: 'line', line: { sequence, at: '', stream, text: t } });
+    const line = (sequence: number, stream: 'Stdout' | 'Stderr', t: string): JobEvent => ({
+      kind: 'line',
+      line: { sequence, at: '', stream, text: t },
+    });
 
     async function openAndPressUp() {
       events = new Subject<JobEvent>();
@@ -287,10 +369,9 @@ describe('StackPage', () => {
       const marked = Array.from(fixture.nativeElement.querySelectorAll('pre .stderr')) as HTMLElement[];
       expect(marked.map((m) => text(m))).toEqual(['[stderr] Container commerce-gateway-1 is unhealthy']);
       expect(text(fixture.nativeElement.querySelector('.compose-count'))).toBe('1 of 2 services settled');
-      expect(Array.from(fixture.nativeElement.querySelectorAll('.compose-progress li')).map((li) => text(li as Element))).toEqual([
-        'commerce-sql-1 Healthy',
-        'commerce-gateway-1 Waiting',
-      ]);
+      expect(
+        Array.from(fixture.nativeElement.querySelectorAll('.compose-progress li')).map((li) => text(li as Element)),
+      ).toEqual(['commerce-sql-1 Healthy', 'commerce-gateway-1 Waiting']);
     });
 
     it('holds the buttons while the page shows another job, since the Compose job is followed on its own stream', async () => {
@@ -419,7 +500,9 @@ describe('StackPage', () => {
       await vi.advanceTimersByTimeAsync(0);
       fixture.detectChanges();
 
-      expect(text(fixture.nativeElement.querySelector('section.doctor'))).toContain('The host did not answer for the workstation: network down');
+      expect(text(fixture.nativeElement.querySelector('section.doctor'))).toContain(
+        'The host did not answer for the workstation: network down',
+      );
       expect(fixture.nativeElement.querySelectorAll('table.doctor tbody tr').length).toBe(3);
     });
   });
@@ -455,10 +538,14 @@ describe('StackPage', () => {
     });
 
     it('says the signals are unavailable, with the reason, when the host reports them unreachable', async () => {
-      host.telemetryHealth.mockReturnValue(of({ reachable: false, error: 'Prometheus answered 400: parse error', services: [] }));
+      host.telemetryHealth.mockReturnValue(
+        of({ reachable: false, error: 'Prometheus answered 400: parse error', services: [] }),
+      );
       const fixture = await render();
 
-      expect(text(fixture.nativeElement.querySelector('.signals'))).toBe('Golden signals unavailable: Prometheus answered 400: parse error');
+      expect(text(fixture.nativeElement.querySelector('.signals'))).toBe(
+        'Golden signals unavailable: Prometheus answered 400: parse error',
+      );
     });
 
     it('says no requests are recorded rather than showing an empty strip', async () => {
@@ -524,10 +611,14 @@ describe('StackPage', () => {
     });
 
     it('says the rules are unavailable, with the reason, and still lists the waiting rules', async () => {
-      host.telemetryAlerts.mockReturnValue(of({ ...alerts, reachable: false, error: 'Prometheus answered 502: bad gateway', loaded: [] }));
+      host.telemetryAlerts.mockReturnValue(
+        of({ ...alerts, reachable: false, error: 'Prometheus answered 502: bad gateway', loaded: [] }),
+      );
       const fixture = await render();
 
-      expect(text(fixture.nativeElement.querySelector('.alerts .error'))).toBe('Alert rules unavailable: Prometheus answered 502: bad gateway');
+      expect(text(fixture.nativeElement.querySelector('.alerts .error'))).toBe(
+        'Alert rules unavailable: Prometheus answered 502: bad gateway',
+      );
       expect(fixture.nativeElement.querySelector('table.alerts')).toBeNull();
       expect(fixture.nativeElement.querySelectorAll('table.waiting tbody tr').length).toBe(2);
     });
@@ -621,7 +712,9 @@ describe('StackPage', () => {
       const { q } = await render();
 
       expect(text(q('.load-run-status'))).toBe('k6 run slo.js not run');
-      expect(text(q('.load-run-note'))).toContain('A local run is not a staging baseline and proves nothing about the SLO (§13.7).');
+      expect(text(q('.load-run-note'))).toContain(
+        'A local run is not a staging baseline and proves nothing about the SLO (§13.7).',
+      );
       expect(q('button.load-run-start')!.disabled).toBe(false);
       expect(q('button.load-run-stop')!.disabled).toBe(true);
       expect(q('button.load-run-output')).toBeNull();
@@ -665,7 +758,9 @@ describe('StackPage', () => {
 
     it('shows why the host refused a Stop', async () => {
       host.stack.mockReturnValue(of({ ...stack, loadRun: loadJob }));
-      host.loadRunStop.mockReturnValue(throwError(() => ({ error: { title: 'No load run going', detail: 'There is no load run to stop.' } })));
+      host.loadRunStop.mockReturnValue(
+        throwError(() => ({ error: { title: 'No load run going', detail: 'There is no load run to stop.' } })),
+      );
       const { fixture, q } = await render();
 
       q('button.load-run-stop')!.click();
@@ -695,11 +790,13 @@ describe('StackPage', () => {
       expect(fixture.nativeElement.textContent).not.toContain('npm ci');
     });
 
-    it('says why Start is off when node_modules differs from the lock, in the host\'s words (#369)', async () => {
+    it("says why Start is off when node_modules differs from the lock, in the host's words (#369)", async () => {
       const problem =
         'node_modules does not match package-lock.json (installed 2026-09-12, lock changed 2026-10-20): ' +
         '@angular/core 22.1.6 is installed (the lock has 22.2.3). Run npm ci in C:/dev/blueprint-frontend; the console does not.';
-      host.stack.mockReturnValue(of({ ...stack, frontend: { job: null, installed: false, deviceJob: null, installProblem: problem } }));
+      host.stack.mockReturnValue(
+        of({ ...stack, frontend: { job: null, installed: false, deviceJob: null, installProblem: problem } }),
+      );
       const { fixture, q } = await render();
 
       expect(text(q('p.error'))).toBe(problem);
@@ -748,7 +845,9 @@ describe('StackPage', () => {
     });
 
     it('shows the exit code of a job that ended', async () => {
-      host.stack.mockReturnValue(of({ ...stack, frontend: { job: { ...runningJob, state: 'Exited', exitCode: 1 }, installed: true } }));
+      host.stack.mockReturnValue(
+        of({ ...stack, frontend: { job: { ...runningJob, state: 'Exited', exitCode: 1 }, installed: true } }),
+      );
       const { q } = await render();
 
       expect(text(q('.frontend-status'))).toContain('npm start exited 1');
@@ -768,13 +867,17 @@ describe('StackPage', () => {
       host.stack.mockReturnValue(of({ ...stack, frontend: { job: null, installed: false } }));
       const { fixture, q } = await render();
 
-      expect(fixture.nativeElement.textContent).toContain('/work/blueprint-frontend has no node_modules. Run npm ci there; the console does not.');
+      expect(fixture.nativeElement.textContent).toContain(
+        '/work/blueprint-frontend has no node_modules. Run npm ci there; the console does not.',
+      );
       expect(q('button.frontend-start')!.disabled).toBe(true);
     });
 
     it("shows the host's refusal when a start conflicts", async () => {
       host.frontendStart.mockReturnValueOnce(
-        throwError(() => ({ error: { title: 'Frontend already running', detail: 'npm start is job fe-0. Stop it first.' } })),
+        throwError(() => ({
+          error: { title: 'Frontend already running', detail: 'npm start is job fe-0. Stop it first.' },
+        })),
       );
       const { fixture, q } = await render();
 
@@ -812,7 +915,7 @@ describe('StackPage', () => {
       expect(q('button.lease-restore')!.disabled).toBe(false);
     });
 
-    it('restores on request and opens the change\'s output', async () => {
+    it("restores on request and opens the change's output", async () => {
       host.stack.mockReturnValue(of({ ...stack, lease }));
       const { q } = await render();
 
@@ -824,11 +927,15 @@ describe('StackPage', () => {
     });
 
     it('shows why a restore failed, and keeps the button for another try', async () => {
-      host.stack.mockReturnValue(of({ ...stack, lease: { ...lease, restoreError: 'inventory-api is not running after the restore.' } }));
+      host.stack.mockReturnValue(
+        of({ ...stack, lease: { ...lease, restoreError: 'inventory-api is not running after the restore.' } }),
+      );
       host.leaseRestore.mockReturnValueOnce(throwError(() => ({ error: { detail: 'docker did not answer' } })));
       const { fixture, q } = await render();
 
-      expect(text(q('section.lease .error'))).toBe('The last restore failed: inventory-api is not running after the restore.');
+      expect(text(q('section.lease .error'))).toBe(
+        'The last restore failed: inventory-api is not running after the restore.',
+      );
 
       q('button.lease-restore')!.click();
       fixture.detectChanges();
@@ -876,7 +983,9 @@ describe('StackPage', () => {
       q('button.device-read')!.click();
       fixture.detectChanges();
 
-      expect(text(fixture.nativeElement.querySelector('.frontend'))).toContain('The host did not answer for the device reads: network down');
+      expect(text(fixture.nativeElement.querySelector('.frontend'))).toContain(
+        'The host did not answer for the device reads: network down',
+      );
       expect(fixture.nativeElement.querySelectorAll('table.device-reads tbody tr').length).toBe(3);
     });
 
@@ -905,7 +1014,12 @@ describe('StackPage', () => {
 
       // The poll is the page's, not the widget's: only once nothing reads the stack does a new screen read it afresh.
       fixture.destroy();
-      host.stack.mockReturnValue(of({ ...stack, frontend: { job: null, installed: true, deviceJob: { ...deviceJob, state: 'Exited', exitCode: 1 } } }));
+      host.stack.mockReturnValue(
+        of({
+          ...stack,
+          frontend: { job: null, installed: true, deviceJob: { ...deviceJob, state: 'Exited', exitCode: 1 } },
+        }),
+      );
       const ended = await render();
 
       expect(text(ended.q('.device-status'))).toBe('npm run emulator:android exited 1');

@@ -1,4 +1,15 @@
-import { Component, ElementRef, computed, effect, inject, input, output, signal, viewChild, DestroyRef } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+  viewChild,
+  DestroyRef,
+} from '@angular/core';
 import { Subscription } from 'rxjs';
 import { OutputLine } from '../../core/host/host-types';
 import { SseClient } from '../../core/host/sse-client';
@@ -15,17 +26,49 @@ const PROBLEM = /\b(error|unhealthy|failed|denied)\b/i;
   selector: 'app-output-pane',
   template: `
     <p class="visually-hidden" role="status">{{ announcement() }}</p>
-    <pre #pane class="pane" role="log" aria-live="off" aria-label="Job output" i18n-aria-label tabindex="0">@for (l of lines(); track l.sequence) {<span [class.stderr]="isProblem(l)">@if (isProblem(l)) {<span class="tag">{{ stderrTag }} </span>}{{ l.text }}
+    <pre
+      #pane
+      class="pane"
+      role="log"
+      aria-live="off"
+      aria-label="Job output"
+      i18n-aria-label
+      tabindex="0"
+    >@for (l of lines(); track l.sequence) {<span [class.stderr]="isProblem(l)">@if (isProblem(l)) {<span class="tag">{{ stderrTag }} </span>}{{ l.text }}
 </span>}@if (exitCode() !== null) {<span class="exit" i18n="a job's exit code">exited {{ exitCode() }}</span>}</pre>
-    @if (error(); as e) {<p class="error" role="alert">{{ e }}</p>}
+    @if (error(); as e) {
+      <p class="error" role="alert">{{ e }}</p>
+    }
   `,
   styles: `
-    .pane { max-height: 24rem; overflow: auto; background: #111; color: #ddd; padding: 0.75rem; font-size: 0.8rem; }
-    .stderr { color: #f88; }
-    .tag { font-weight: 600; }
-    .exit { color: #8cf; }
-    .error { color: #b00; }
-    .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .pane {
+      max-height: 24rem;
+      overflow: auto;
+      background: #111;
+      color: #ddd;
+      padding: 0.75rem;
+      font-size: 0.8rem;
+    }
+    .stderr {
+      color: #f88;
+    }
+    .tag {
+      font-weight: 600;
+    }
+    .exit {
+      color: #8cf;
+    }
+    .error {
+      color: #b00;
+    }
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
   `,
 })
 export class OutputPane {

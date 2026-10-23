@@ -31,13 +31,23 @@ describe('the assistant protocol mirror', () => {
     name: 'open_screen',
     title: 'Open a screen',
     description: 'Routes the console to a screen by its id.',
-    inputSchema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'], additionalProperties: false },
+    inputSchema: {
+      type: 'object',
+      properties: { path: { type: 'string' } },
+      required: ['path'],
+      additionalProperties: false,
+    },
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     side: 'client',
   } as const;
 
   it('reads every body the host writes', () => {
-    expect(statusEnabled).toEqual({ enabled: true, provider: 'fake', model: 'scripted', reason: null } satisfies AssistantStatus);
+    expect(statusEnabled).toEqual({
+      enabled: true,
+      provider: 'fake',
+      model: 'scripted',
+      reason: null,
+    } satisfies AssistantStatus);
     expect(statusOff).toEqual({ enabled: false, provider: null, model: null, reason: 'off' } satisfies AssistantStatus);
     expect(conversationOpened).toEqual({ id: '0123456789abcdef0123456789abcdef' } satisfies ConversationOpened);
     expect(conversationView).toEqual({
@@ -63,22 +73,45 @@ describe('the assistant protocol mirror', () => {
       clientTools: [tool],
       hostOptions: { identity: 'demo' },
     } satisfies OpenConversation);
-    expect(startTurn).toEqual({ text: 'где логи?', context: { page: 'stack' }, locale: 'ru-RU', hostOptions: null } satisfies StartTurn);
-    expect(clientToolResult).toEqual({ callId: 'call-1', ok: true, content: 'Opened /logs.' } satisfies ClientToolResult);
+    expect(startTurn).toEqual({
+      text: 'где логи?',
+      context: { page: 'stack' },
+      locale: 'ru-RU',
+      hostOptions: null,
+    } satisfies StartTurn);
+    expect(clientToolResult).toEqual({
+      callId: 'call-1',
+      ok: true,
+      content: 'Opened /logs.',
+    } satisfies ClientToolResult);
   });
 
   it('reads every event', () => {
     const events: { [K in keyof AssistantEvents]: [unknown, AssistantEvents[K]] } = {
       text: [eventText, { delta: 'Открываю «Logs». ' }],
-      tool_started: [eventToolStarted, { callId: 'call-1', name: 'open_screen', side: 'client', args: { path: 'logs' } }],
+      tool_started: [
+        eventToolStarted,
+        { callId: 'call-1', name: 'open_screen', side: 'client', args: { path: 'logs' } },
+      ],
       tool_finished: [eventToolFinished, { callId: 'call-1', ok: true }],
       client_tool_call: [eventClientToolCall, { callId: 'call-1', name: 'open_screen', input: { path: 'logs' } }],
       turn_ended: [
         eventTurnEnded,
-        { reason: 'refused', category: 'cyber', usage: { input: 120, output: 8, cached: 100 }, total: { input: 240, output: 30, cached: 100 } },
+        {
+          reason: 'refused',
+          category: 'cyber',
+          usage: { input: 120, output: 8, cached: 100 },
+          total: { input: 240, output: 30, cached: 100 },
+        },
       ],
-      error: [eventError, { type: 'provider-error', title: "The assistant's provider failed", status: 502, detail: 'connection reset' }],
-      confirmation_required: [eventConfirmationRequired, { callId: 'call-2', name: 'stack_down', args: { wipe: true }, confirmation: 'down -v' }],
+      error: [
+        eventError,
+        { type: 'provider-error', title: "The assistant's provider failed", status: 502, detail: 'connection reset' },
+      ],
+      confirmation_required: [
+        eventConfirmationRequired,
+        { callId: 'call-2', name: 'stack_down', args: { wipe: true }, confirmation: 'down -v' },
+      ],
     };
     for (const [golden, typed] of Object.values(events)) expect(golden).toEqual(typed);
   });

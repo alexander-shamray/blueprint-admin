@@ -130,9 +130,7 @@ describe('resolveOperations', () => {
 
   it("names the source's own error for an unavailable operation", () => {
     const view: ApiCatalogView = {
-      sources: [
-        { name: 'ordering', documentUrl: 'u', available: false, error: 'connection refused', changes: null },
-      ],
+      sources: [{ name: 'ordering', documentUrl: 'u', available: false, error: 'connection refused', changes: null }],
       operations: Object.values(SCENARIO_OPERATIONS).map((id) => op(id, !id.startsWith('ordering'))),
     };
 
@@ -144,9 +142,7 @@ describe('resolveOperations', () => {
 
 describe('idFrom', () => {
   it('reads the bare JSON string a Result<Guid> answers with', () => {
-    expect(idFrom('"0199a1b2-0000-7000-8000-000000000001"')).toBe(
-      '0199a1b2-0000-7000-8000-000000000001',
-    );
+    expect(idFrom('"0199a1b2-0000-7000-8000-000000000001"')).toBe('0199a1b2-0000-7000-8000-000000000001');
   });
 
   it('reads nothing else as an id', () => {
@@ -159,14 +155,9 @@ describe('idFrom', () => {
 
 describe('withProductId', () => {
   it('sets the product on every line of a quote and every item of an order', () => {
-    const quote = JSON.parse(
-      withProductId('{"currency":"EUR","lines":[{"productId":"0","quantity":1}]}', 'p-1'),
-    );
+    const quote = JSON.parse(withProductId('{"currency":"EUR","lines":[{"productId":"0","quantity":1}]}', 'p-1'));
     const order = JSON.parse(
-      withProductId(
-        '{"commandId":"c","items":[{"productId":"0","quantity":1}],"currency":"EUR"}',
-        'p-1',
-      ),
+      withProductId('{"commandId":"c","items":[{"productId":"0","quantity":1}],"currency":"EUR"}', 'p-1'),
     );
 
     expect(quote).toEqual({ currency: 'EUR', lines: [{ productId: 'p-1', quantity: 1 }] });
@@ -223,9 +214,7 @@ describe('orderRead', () => {
     expect(orderRead(JSON.stringify({ status: 1, timeline, asOf: 'x' }))).toBeNull();
     // Without asOf a waiting read would say "as the BFF knew it at undefined" for the whole cap.
     expect(orderRead(JSON.stringify({ status: 'placed', timeline }))).toBeNull();
-    expect(
-      orderRead(JSON.stringify({ status: 'placed', timeline: { ...timeline, placed: 5 }, asOf: 'x' })),
-    ).toBeNull();
+    expect(orderRead(JSON.stringify({ status: 'placed', timeline: { ...timeline, placed: 5 }, asOf: 'x' }))).toBeNull();
   });
 });
 
@@ -514,10 +503,22 @@ describe('the despatch-timeout script', () => {
     expect(script.lease).toEqual({ changes: ['short-waits'], holdSeconds: 420 });
     expect(script.onHand).toBeGreaterThan(0);
     expect(script.review).toEqual({ reason: 'not_despatched' });
-    expect(script.steps).toEqual(['lease', 'publish', 'drain', 'stock', 'quote', 'order', 'confirmed', 'flagged', 'held', 'mail', 'restore']);
+    expect(script.steps).toEqual([
+      'lease',
+      'publish',
+      'drain',
+      'stock',
+      'quote',
+      'order',
+      'confirmed',
+      'flagged',
+      'held',
+      'mail',
+      'restore',
+    ]);
   });
 
-  it('sends nothing as a step of its own for the review read, which is the host\'s, so the catalog is asked for no more than the order scripts need', () => {
+  it("sends nothing as a step of its own for the review read, which is the host's, so the catalog is asked for no more than the order scripts need", () => {
     const view: ApiCatalogView = {
       sources: [],
       operations: Object.values(SCENARIO_OPERATIONS).map((id) => op(id)),
@@ -554,7 +555,8 @@ describe('the despatch-timeout script', () => {
     it('is reached by the line for the reason, saying when it was logged and how long after the place', () => {
       expect(reviewVerdict(view([flag('not_despatched')]), 'not_despatched', placed)).toEqual({
         kind: 'reached',
-        detail: 'Ordering logged "Order o1 flagged for review: not_despatched." at 2026-10-05T12:01:02.000Z, 62 s after the order was placed.',
+        detail:
+          'Ordering logged "Order o1 flagged for review: not_despatched." at 2026-10-05T12:01:02.000Z, 62 s after the order was placed.',
       });
     });
 
@@ -566,7 +568,11 @@ describe('the despatch-timeout script', () => {
     });
 
     it('is reached by the right reason among others, and by the first of a redelivered line', () => {
-      const flags = [flag('stock_not_released', '2026-10-05T12:00:40.000Z'), flag('not_despatched'), flag('not_despatched', '2026-10-05T12:03:00.000Z')];
+      const flags = [
+        flag('stock_not_released', '2026-10-05T12:00:40.000Z'),
+        flag('not_despatched'),
+        flag('not_despatched', '2026-10-05T12:03:00.000Z'),
+      ];
 
       const v = reviewVerdict(view(flags), 'not_despatched', placed);
 
@@ -582,14 +588,23 @@ describe('the despatch-timeout script', () => {
     });
 
     it('waits, and says what else it saw, when the order was flagged for another reason only', () => {
-      expect(reviewVerdict(view([flag('stock_not_released'), flag('not_confirmed'), flag('not_confirmed')]), 'not_despatched', placed)).toEqual({
+      expect(
+        reviewVerdict(
+          view([flag('stock_not_released'), flag('not_confirmed'), flag('not_confirmed')]),
+          'not_despatched',
+          placed,
+        ),
+      ).toEqual({
         kind: 'waiting',
-        detail: 'Ordering has flagged it for review as stock_not_released, not_confirmed, not not_despatched; still waiting for not_despatched.',
+        detail:
+          'Ordering has flagged it for review as stock_not_released, not_confirmed, not not_despatched; still waiting for not_despatched.',
       });
     });
 
     it('fails only when Loki could not be asked, with what it said or that it said nothing', () => {
-      expect(reviewVerdict(view([], { reachable: false, error: 'Loki answered 502' }), 'not_despatched', placed)).toEqual({
+      expect(
+        reviewVerdict(view([], { reachable: false, error: 'Loki answered 502' }), 'not_despatched', placed),
+      ).toEqual({
         kind: 'failed',
         reason: 'Loki could not be read: Loki answered 502.',
       });
@@ -600,10 +615,16 @@ describe('the despatch-timeout script', () => {
     });
   });
 
-  it('judges the held read by the script\'s own cause, not by a carrier outcome', () => {
+  it("judges the held read by the script's own cause, not by a carrier outcome", () => {
     const read: OrderRead = {
       status: 'dispatched',
-      timeline: { placed: null, confirmed: '2026-10-05T12:00:01Z', dispatched: '2026-10-05T12:00:06Z', delivered: null, cancelled: null },
+      timeline: {
+        placed: null,
+        confirmed: '2026-10-05T12:00:01Z',
+        dispatched: '2026-10-05T12:00:06Z',
+        delivered: null,
+        cancelled: null,
+      },
       asOf: '2026-10-05T12:00:09Z',
     };
 
@@ -616,7 +637,12 @@ describe('the despatch-timeout script', () => {
 
 describe('the carrier log scripts', () => {
   const placed = Date.parse('2026-10-05T12:00:00Z');
-  const entry = (secondsAfter: number, status: number, shipmentId: string | null = 's1', method = 'POST'): CarrierEntry => ({
+  const entry = (
+    secondsAfter: number,
+    status: number,
+    shipmentId: string | null = 's1',
+    method = 'POST',
+  ): CarrierEntry => ({
     at: placed + secondsAfter * 1000,
     method,
     path: method === 'POST' ? '/v1/shipments' : '/v1/shipments/crr_SIM-STRANGE-o1/events',
@@ -674,28 +700,47 @@ describe('the carrier log scripts', () => {
     expect(withCarrierCode('{"Methods":["GET"]}', 'SIM-SLOW', 'scenario-ab12cd34')).toBe('{"Methods":["GET"]}');
   });
 
-  it('put the order in the feed filter\'s path and leave any other body as it was', () => {
-    const filter = '{"Methods":["GET"],"Path":{"Matchers":[{"Name":"ExactMatcher","Pattern":"/v1/shipments/crr_SIM-STRANGE-{orderId}/events"}]}}';
+  it("put the order in the feed filter's path and leave any other body as it was", () => {
+    const filter =
+      '{"Methods":["GET"],"Path":{"Matchers":[{"Name":"ExactMatcher","Pattern":"/v1/shipments/crr_SIM-STRANGE-{orderId}/events"}]}}';
 
-    expect(JSON.parse(withFeedOrder(filter, 'ord-1')).Path.Matchers[0].Pattern).toBe('/v1/shipments/crr_SIM-STRANGE-ord-1/events');
+    expect(JSON.parse(withFeedOrder(filter, 'ord-1')).Path.Matchers[0].Pattern).toBe(
+      '/v1/shipments/crr_SIM-STRANGE-ord-1/events',
+    );
     expect(JSON.parse(withFeedOrder(filter, 'ord-1')).Methods).toEqual(['GET']);
-    expect(JSON.parse(withFeedOrder(filter, 'a$&b')).Path.Matchers[0].Pattern).toBe('/v1/shipments/crr_SIM-STRANGE-a$&b/events');
+    expect(JSON.parse(withFeedOrder(filter, 'a$&b')).Path.Matchers[0].Pattern).toBe(
+      '/v1/shipments/crr_SIM-STRANGE-a$&b/events',
+    );
     expect(withFeedOrder('{"Methods":["GET"]}', 'ord-1')).toBe('{"Methods":["GET"]}');
     expect(withFeedOrder('not json', 'ord-1')).toBe('not json');
   });
 
-  it('read the simulator\'s entries, and nothing that is not a list of them', () => {
+  it("read the simulator's entries, and nothing that is not a list of them", () => {
     const body = JSON.stringify([
       {
-        Request: { DateTime: '2026-10-05T12:00:03Z', Method: 'POST', Path: '/v1/shipments', Body: '{"shipmentId":"s1"}' },
+        Request: {
+          DateTime: '2026-10-05T12:00:03Z',
+          Method: 'POST',
+          Path: '/v1/shipments',
+          Body: '{"shipmentId":"s1"}',
+        },
         Response: { StatusCode: 503 },
       },
-      { Request: { DateTime: '2026-10-05T12:00:04Z', Method: 'GET', Path: '/v1/shipments/x/events', Body: null }, Response: { StatusCode: 200 } },
+      {
+        Request: { DateTime: '2026-10-05T12:00:04Z', Method: 'GET', Path: '/v1/shipments/x/events', Body: null },
+        Response: { StatusCode: 200 },
+      },
     ]);
 
     expect(carrierEntries(body)).toEqual([
       { at: Date.parse('2026-10-05T12:00:03Z'), method: 'POST', path: '/v1/shipments', status: 503, shipmentId: 's1' },
-      { at: Date.parse('2026-10-05T12:00:04Z'), method: 'GET', path: '/v1/shipments/x/events', status: 200, shipmentId: null },
+      {
+        at: Date.parse('2026-10-05T12:00:04Z'),
+        method: 'GET',
+        path: '/v1/shipments/x/events',
+        status: 200,
+        shipmentId: null,
+      },
     ]);
     expect(carrierEntries('[]')).toEqual([]);
     expect(carrierEntries('{"Status":"Bad JSON escape sequence"}')).toBeNull();
@@ -722,10 +767,12 @@ describe('the carrier log scripts', () => {
     expect(carrierVerdict('down', [entry(2, 503), entry(3, 201)], [], placed).kind).toBe('failed');
   });
 
-  it('count only the attempts of this order\'s own booking, by its shipment id', () => {
+  it("count only the attempts of this order's own booking, by its shipment id", () => {
     // A later booking of another shipment is not a retry of this one.
     expect(carrierVerdict('down', [entry(2, 503, 'a'), entry(9, 503, 'b')], [], placed).kind).toBe('waiting');
-    expect(carrierVerdict('down', [entry(2, 503, 'a'), entry(9, 503, 'b'), entry(10, 503, 'a')], [], placed).kind).toBe('reached');
+    expect(carrierVerdict('down', [entry(2, 503, 'a'), entry(9, 503, 'b'), entry(10, 503, 'a')], [], placed).kind).toBe(
+      'reached',
+    );
   });
 
   it('read a slow carrier as repeated 201s of one booking', () => {
@@ -748,7 +795,13 @@ describe('the carrier log scripts', () => {
   it('hold the order read at confirmed and nothing past it', () => {
     const read = (status: string, dispatched: string | null): OrderRead => ({
       status,
-      timeline: { placed: '2026-10-05T12:00:00Z', confirmed: '2026-10-05T12:00:01Z', dispatched, delivered: null, cancelled: null },
+      timeline: {
+        placed: '2026-10-05T12:00:00Z',
+        confirmed: '2026-10-05T12:00:01Z',
+        dispatched,
+        delivered: null,
+        cancelled: null,
+      },
       asOf: '2026-10-05T12:00:09Z',
     });
 
@@ -759,7 +812,10 @@ describe('the carrier log scripts', () => {
 });
 
 describe('the carrier scripts', () => {
-  const order = JSON.stringify({ items: [{ productId: 'p' }], shippingAddress: { line1: '1 Test Street', postalCode: '050000' } });
+  const order = JSON.stringify({
+    items: [{ productId: 'p' }],
+    shippingAddress: { line1: '1 Test Street', postalCode: '050000' },
+  });
 
   it('state their cause the way run-locally.md does: the SIM-TRANSIT postal code', () => {
     expect(SCRIPTS['in-transit'].postalCode).toBe('SIM-TRANSIT');
@@ -803,7 +859,13 @@ describe('the carrier scripts', () => {
     const at = '2026-10-05T12:00:02Z';
     const read = (status: string, cancelled: string | null): OrderRead => ({
       status,
-      timeline: { placed: '2026-10-05T12:00:00Z', confirmed: '2026-10-05T12:00:01Z', dispatched: at, delivered: null, cancelled },
+      timeline: {
+        placed: '2026-10-05T12:00:00Z',
+        confirmed: '2026-10-05T12:00:01Z',
+        dispatched: at,
+        delivered: null,
+        cancelled,
+      },
       asOf: at,
     });
 
@@ -824,14 +886,24 @@ describe('the image steps', () => {
   });
 
   it('reads the upload the BFF issued, and nothing that is not one', () => {
-    const body = '{"uploadUrl":"http://127.0.0.1:8333/b/k?X-Amz-Signature=s","headers":{"Content-Type":"image/png","n":1},"key":"uploads/a/b.png","expiresAt":"x"}';
+    const body =
+      '{"uploadUrl":"http://127.0.0.1:8333/b/k?X-Amz-Signature=s","headers":{"Content-Type":"image/png","n":1},"key":"uploads/a/b.png","expiresAt":"x"}';
 
     expect(uploadFrom(body)).toEqual({
       uploadUrl: 'http://127.0.0.1:8333/b/k?X-Amz-Signature=s',
       headers: { 'Content-Type': 'image/png' },
       key: 'uploads/a/b.png',
     });
-    for (const bad of ['', 'nope', '[]', '"x"', '{}', '{"uploadUrl":"u"}', '{"key":"k"}', '{"uploadUrl":"","key":"k"}']) {
+    for (const bad of [
+      '',
+      'nope',
+      '[]',
+      '"x"',
+      '{}',
+      '{"uploadUrl":"u"}',
+      '{"key":"k"}',
+      '{"uploadUrl":"","key":"k"}',
+    ]) {
       expect(uploadFrom(bad), bad).toBeNull();
     }
     expect(uploadFrom('{"uploadUrl":"u","key":"k"}')?.headers).toEqual({});
@@ -852,11 +924,16 @@ describe('the image steps', () => {
     expect(imageFault(200, ok)).toBeNull();
     expect(imageFault(204, ok)).toBeNull();
     expect(imageFault(301, ok)).toBe('The edge answered 301, not the image.');
-    expect(imageFault(200, { 'Content-Type': ['image/png'] })).toBe('The edge did not set X-Content-Type-Options: nosniff.');
+    expect(imageFault(200, { 'Content-Type': ['image/png'] })).toBe(
+      'The edge did not set X-Content-Type-Options: nosniff.',
+    );
   });
 
   it('puts a string into a body as it puts a number', () => {
-    expect(JSON.parse(withField('{"name":"x"}', 'imageKey', 'uploads/a/b.png'))).toEqual({ name: 'x', imageKey: 'uploads/a/b.png' });
+    expect(JSON.parse(withField('{"name":"x"}', 'imageKey', 'uploads/a/b.png'))).toEqual({
+      name: 'x',
+      imageKey: 'uploads/a/b.png',
+    });
   });
 });
 
@@ -896,7 +973,12 @@ describe('sagaStrip', () => {
     };
   }
 
-  const row = (state: string): SagaWord => ({ kind: 'row', state, startedAt: '2026-10-05T12:00:00Z', cancelReason: null });
+  const row = (state: string): SagaWord => ({
+    kind: 'row',
+    state,
+    startedAt: '2026-10-05T12:00:00Z',
+    cancelReason: null,
+  });
   const noRow: SagaWord = { kind: 'none' };
 
   it('has nothing to show before the first read', () => {
@@ -1013,7 +1095,9 @@ describe('sagaWord', () => {
       startedAt: '2026-10-05T12:00:00Z',
       cancelReason: null,
     });
-    expect(sagaWord(200, body.replace('null', '"payment_declined"'))).toMatchObject({ cancelReason: 'payment_declined' });
+    expect(sagaWord(200, body.replace('null', '"payment_declined"'))).toMatchObject({
+      cancelReason: 'payment_declined',
+    });
   });
 
   it('takes a 404 for no row, and anything else that is not a readable state for unreadable', () => {
@@ -1094,7 +1178,16 @@ describe('the mail count', () => {
   });
 
   it("counts the order's messages by the event in each Message-ID, and not another order's", () => {
-    const tally = tallyMail(mail([['x.order-placed@commerce.test', OTHER_ORDER], ['y.order-placed@commerce.test', null], confirmed(), placed(), placed()]), ORDER);
+    const tally = tallyMail(
+      mail([
+        ['x.order-placed@commerce.test', OTHER_ORDER],
+        ['y.order-placed@commerce.test', null],
+        confirmed(),
+        placed(),
+        placed(),
+      ]),
+      ORDER,
+    );
 
     expect(tally.map((t) => [t.event, t.messages])).toEqual([
       ['OrderPlaced', 2],
@@ -1113,7 +1206,8 @@ describe('the mail count', () => {
 
     expect(v).toEqual({
       kind: 'reached',
-      detail: 'One message for each event the order raised: OrderPlaced (order-placed) ×1, OrderConfirmed (order-confirmed) ×1.',
+      detail:
+        'One message for each event the order raised: OrderPlaced (order-placed) ×1, OrderConfirmed (order-confirmed) ×1.',
     });
   });
 
@@ -1122,7 +1216,10 @@ describe('the mail count', () => {
       kind: 'waiting',
       detail: 'Not sent yet: OrderConfirmed (order-confirmed). Counted: OrderPlaced (order-placed) ×1.',
     });
-    expect(mailVerdict(mail([]), ORDER, EXPECTED)).toMatchObject({ kind: 'waiting', detail: expect.stringContaining('no message for this run yet') });
+    expect(mailVerdict(mail([]), ORDER, EXPECTED)).toMatchObject({
+      kind: 'waiting',
+      detail: expect.stringContaining('no message for this run yet'),
+    });
   });
 
   it('fails a second message for one event as two, which cannot be read as success', () => {
@@ -1130,7 +1227,8 @@ describe('the mail count', () => {
 
     expect(v).toEqual({
       kind: 'failed',
-      reason: 'A message was sent more than once: OrderPlaced (order-placed) sent 2 times. Counted: OrderPlaced (order-placed) ×2, OrderConfirmed (order-confirmed) ×1.',
+      reason:
+        'A message was sent more than once: OrderPlaced (order-placed) sent 2 times. Counted: OrderPlaced (order-placed) ×2, OrderConfirmed (order-confirmed) ×1.',
     });
   });
 
@@ -1156,11 +1254,22 @@ describe('the mail count', () => {
   });
 
   it("is asked of the scripts whose order's mail was read live to be the same each run, for the events it raises", () => {
-    expect(SCRIPTS.deliver.mail).toEqual(['order-placed', 'order-confirmed', 'shipment-dispatched', 'shipment-delivered']);
+    expect(SCRIPTS.deliver.mail).toEqual([
+      'order-placed',
+      'order-confirmed',
+      'shipment-dispatched',
+      'shipment-delivered',
+    ]);
     expect(SCRIPTS.cancel.mail).toEqual(['order-placed', 'order-cancelled']);
     expect(SCRIPTS['out-of-stock'].mail).toEqual(['order-placed', 'order-cancelled']);
     expect(SCRIPTS.declined.mail).toEqual(['order-placed', 'order-cancelled', 'payment-declined']);
-    for (const key of ['carrier-refused', 'carrier-down', 'carrier-slow', 'carrier-strange', 'despatch-timeout'] as const) {
+    for (const key of [
+      'carrier-refused',
+      'carrier-down',
+      'carrier-slow',
+      'carrier-strange',
+      'despatch-timeout',
+    ] as const) {
       expect(SCRIPTS[key].mail).toEqual(['order-placed', 'order-confirmed']);
     }
     for (const key of ['stock-timeout', 'release-timeout'] as const) {

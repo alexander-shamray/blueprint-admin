@@ -69,7 +69,10 @@ describe('TracePage', () => {
         provideRouter([]),
         { provide: HostClient, useValue: host },
         // The built-in Trace page's route: the id in the URL drives the load, and Trace navigates.
-        { provide: ActivatedRoute, useValue: { paramMap, snapshot: { paramMap: paramMap.value, data: { builtIn: 'trace' } } } },
+        {
+          provide: ActivatedRoute,
+          useValue: { paramMap, snapshot: { paramMap: paramMap.value, data: { builtIn: 'trace' } } },
+        },
       ],
     });
   }
@@ -130,7 +133,7 @@ describe('TracePage', () => {
     const fixture = render();
 
     const status = fixture.nativeElement.querySelector('[role="status"]') as HTMLElement;
-    expect(status.textContent).toContain('3 events for demo-trace-0001 over the last 15m');
+    expect(status.textContent?.replace(/\s+/g, ' ')).toContain('3 events for demo-trace-0001 over the last 15m');
   });
 
   it('explains an empty result rather than showing a bare table', () => {
@@ -138,7 +141,10 @@ describe('TracePage', () => {
     configure('nothing-here');
     const fixture = render();
 
-    const text = ((fixture.nativeElement.querySelector('.empty') as HTMLElement).textContent ?? '').replace(/\s+/g, ' ');
+    const text = ((fixture.nativeElement.querySelector('.empty') as HTMLElement).textContent ?? '').replace(
+      /\s+/g,
+      ' ',
+    );
     expect(text).toContain('No log line carries correlation id');
     expect(text).toContain('may be older than the window');
     // The terminal marker still renders: the broker's state is worth knowing even with no lines.
@@ -174,7 +180,9 @@ describe('TracePage', () => {
     const fixture = render();
 
     expect(host.trace).not.toHaveBeenCalled();
-    expect((fixture.nativeElement.querySelector('.empty') as HTMLElement).textContent).toContain('Enter a correlation id');
+    expect((fixture.nativeElement.querySelector('.empty') as HTMLElement).textContent).toContain(
+      'Enter a correlation id',
+    );
   });
 
   it('navigates to the id rather than loading it, so the URL is shareable', () => {
@@ -200,7 +208,9 @@ describe('TracePage', () => {
   });
   it('abandons an in-flight read when the route moves to another id, rather than dropping the new one', () => {
     const first = new Subject<TraceView>();
-    host.trace = vi.fn((id: string) => (id === 'demo-trace-0001' ? first : of({ ...view, correlationId: 'second-id' })));
+    host.trace = vi.fn((id: string) =>
+      id === 'demo-trace-0001' ? first : of({ ...view, correlationId: 'second-id' }),
+    );
     configure('demo-trace-0001');
     const fixture = render();
 
@@ -219,7 +229,9 @@ describe('TracePage', () => {
     expect(fixture.componentInstance.loading()).toBe(false);
   });
   it('shows a 400 as the host answered it, not as the host failing to answer', () => {
-    host.trace = vi.fn(() => throwError(() => ({ error: { title: 'Invalid window', detail: 'A window is a whole number and a unit.' } })));
+    host.trace = vi.fn(() =>
+      throwError(() => ({ error: { title: 'Invalid window', detail: 'A window is a whole number and a unit.' } })),
+    );
     configure('demo-trace-0001');
     const fixture = render();
 
@@ -286,7 +298,9 @@ describe('TracePage', () => {
     expect(fixture.nativeElement.querySelector('[role="alert"]')).toBeNull();
   });
   it('shows a partial Tempo failure as a warning, with the timeline it did get', () => {
-    host.trace = vi.fn(() => of({ ...view, warning: '1 of 2 traces could not be read from Tempo: Tempo answered 404' }));
+    host.trace = vi.fn(() =>
+      of({ ...view, warning: '1 of 2 traces could not be read from Tempo: Tempo answered 404' }),
+    );
     configure('demo-trace-0001');
     const fixture = render();
 
@@ -314,7 +328,9 @@ describe('TracePage', () => {
     fixture.detectChanges();
 
     // The same event, whether it arrives thrown or as reachable:false, is shown the same way.
-    expect((fixture.nativeElement.querySelector('[role="alert"]') as HTMLElement).textContent).toContain('Loki answered 503');
+    expect((fixture.nativeElement.querySelector('[role="alert"]') as HTMLElement).textContent).toContain(
+      'Loki answered 503',
+    );
     expect(rows(fixture).length).toBe(3);
     // An outage is not history: there is nothing to compare it with, and nothing was recorded.
     expect(fixture.nativeElement.querySelector('.changes')).toBeNull();
@@ -333,7 +349,9 @@ describe('TracePage', () => {
     const later: TraceView = { ...view, events: [view.events[0], view.events[1], consume, queued] };
 
     function text(fixture: { nativeElement: HTMLElement }, selector: string): string {
-      return ((fixture.nativeElement.querySelector(selector) as HTMLElement | null)?.textContent ?? '').replace(/\s+/g, ' ').trim();
+      return ((fixture.nativeElement.querySelector(selector) as HTMLElement | null)?.textContent ?? '')
+        .replace(/\s+/g, ' ')
+        .trim();
     }
 
     it('says nothing about changes on the first fetch of an id', () => {
@@ -352,8 +370,12 @@ describe('TracePage', () => {
       fixture.detectChanges();
 
       expect(text(fixture, '.changes .changed')).toContain('1 new, 0 no longer in the timeline');
-      expect(text(fixture, '.change-list .arrived')).toBe('[new] Ordering.Api [consume] Consumed PriceChanged on ordering-catalog-events');
-      const arrivedRows = fixture.nativeElement.querySelectorAll('table.timeline tr.arrived') as NodeListOf<HTMLElement>;
+      expect(text(fixture, '.change-list .arrived')).toBe(
+        '[new] Ordering.Api [consume] Consumed PriceChanged on ordering-catalog-events',
+      );
+      const arrivedRows = fixture.nativeElement.querySelectorAll(
+        'table.timeline tr.arrived',
+      ) as NodeListOf<HTMLElement>;
       expect(arrivedRows.length).toBe(1);
       expect(arrivedRows[0].textContent).toContain('[new] [consume]');
     });
@@ -377,7 +399,9 @@ describe('TracePage', () => {
       fixture.componentInstance.reload();
       fixture.detectChanges();
 
-      expect(text(fixture, '.changes .unchanged')).toMatch(/^Nothing changed between the fetch at \d\d:\d\d:\d\d and this one at \d\d:\d\d:\d\d\.$/);
+      expect(text(fixture, '.changes .unchanged')).toMatch(
+        /^Nothing changed between the fetch at \d\d:\d\d:\d\d and this one at \d\d:\d\d:\d\d\.$/,
+      );
     });
 
     it('does not compare fetches over different windows', () => {

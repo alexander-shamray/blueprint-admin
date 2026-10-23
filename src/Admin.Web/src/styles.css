@@ -1,8 +1,12 @@
 /* The Material theme is theme.scss; this file is what the screens share. */
 
 /* The operator's choice (system, light, dark) is a data-theme attribute on <html>; without one the browser decides. */
-html[data-theme='light'] { color-scheme: light; }
-html[data-theme='dark'] { color-scheme: dark; }
+html[data-theme='light'] {
+  color-scheme: light;
+}
+html[data-theme='dark'] {
+  color-scheme: dark;
+}
 
 /* Status and text tokens the screens use, so no screen hard-codes a colour that fails in the other theme. */
 html {
@@ -23,7 +27,9 @@ body {
   font: var(--mat-sys-body-large);
 }
 
-a { color: var(--mat-sys-primary); }
+a {
+  color: var(--mat-sys-primary);
+}
 
 /* Material Symbols is bundled by @fontsource (angular.json), never loaded from a CDN. */
 .material-symbols-outlined {

@@ -15,10 +15,27 @@ describe('App', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
 
-    TestBed.inject(HttpTestingController).expectOne('/api/config').flush({
-      backendDir: 'C:/dev/blueprint-backend', frontendDir: '', composeFile: '', fakePlatform: true,
-      urls: { gateway: '', catalog: '', ordering: '', bff: '', inventory: '', payments: '', paymentSimulator: '', carrierSimulator: '', keycloak: '', grafana: '', client: '' },
-    });
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/config')
+      .flush({
+        backendDir: 'C:/dev/blueprint-backend',
+        frontendDir: '',
+        composeFile: '',
+        fakePlatform: true,
+        urls: {
+          gateway: '',
+          catalog: '',
+          ordering: '',
+          bff: '',
+          inventory: '',
+          payments: '',
+          paymentSimulator: '',
+          carrierSimulator: '',
+          keycloak: '',
+          grafana: '',
+          client: '',
+        },
+      });
     await fixture.whenStable();
     fixture.detectChanges();
 

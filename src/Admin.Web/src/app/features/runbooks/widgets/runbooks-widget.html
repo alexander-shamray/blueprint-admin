@@ -1,6 +1,6 @@
 <p>
-  The backend's runbooks, each with the script that causes its alert. Cause it, watch the alert fire, follow the runbook beside it, then undo it.
-  A cause is destructive to the local stack and stays until you undo it.
+  The backend's runbooks, each with the script that causes its alert. Cause it, watch the alert fire, follow the runbook
+  beside it, then undo it. A cause is destructive to the local stack and stays until you undo it.
 </p>
 
 <div class="actions">
@@ -17,9 +17,16 @@
       <ul class="runbooks">
         @for (r of c.runbooks; track r.runbook) {
           <li>
-            <button class="runbook" [class.selected]="r.runbook === selected()" [attr.aria-current]="r.runbook === selected() ? 'true' : null" (click)="select(r.runbook)">
+            <button
+              class="runbook"
+              [class.selected]="r.runbook === selected()"
+              [attr.aria-current]="r.runbook === selected() ? 'true' : null"
+              (click)="select(r.runbook)"
+            >
               {{ r.runbook }}
-              @if (!r.script) {<span class="tag">[no script]</span>}
+              @if (!r.script) {
+                <span class="tag">[no script]</span>
+              }
             </button>
           </li>
         }
@@ -36,7 +43,12 @@
 
         <table>
           <thead>
-            <tr><th>Alert</th><th>State</th>@if (e.script) {<th>Cost</th><th>Fires within</th><th>Clears within</th>}</tr>
+            <tr
+              ><th>Alert</th><th>State</th>
+              @if (e.script) {
+                <th>Cost</th><th>Fires within</th><th>Clears within</th>
+              }
+            </tr>
           </thead>
           <tbody>
             @for (a of e.alerts; track a) {
@@ -77,24 +89,49 @@
             }
             @if (phase(); as p) {
               @if (needsTyping()) {
-                <input [attr.aria-label]="'Type ' + p.confirmWith + ' to confirm the cause'" [placeholder]="'type: ' + p.confirmWith" [ngModel]="confirmText()" (ngModelChange)="confirmText.set($event)" />
+                <input
+                  [attr.aria-label]="'Type ' + p.confirmWith + ' to confirm the cause'"
+                  [placeholder]="'type: ' + p.confirmWith"
+                  [ngModel]="confirmText()"
+                  (ngModelChange)="confirmText.set($event)"
+                />
               }
               <button class="cause" [class.armed]="armed()" [disabled]="!canCause()" (click)="cause()">
-                @if (armed()) {Confirm: cause {{ p.alert }} ({{ p.impact }})} @else {Cause {{ p.alert }}}
+                @if (armed()) {
+                  Confirm: cause {{ p.alert }} ({{ p.impact }})
+                } @else {
+                  Cause {{ p.alert }}
+                }
               </button>
-              @if (armed()) {<button (click)="armed.set(false)">Cancel</button>}
+              @if (armed()) {
+                <button (click)="armed.set(false)">Cancel</button>
+              }
             }
-            <button class="undo" [disabled]="running()" (click)="restore()" title="Put the stack back; safe to press twice">Undo</button>
+            <button
+              class="undo"
+              [disabled]="running()"
+              (click)="restore()"
+              title="Put the stack back; safe to press twice"
+              >Undo</button
+            >
           </div>
           @if (phase(); as p) {
             @if (p.sustained) {
-              <p class="note">This cause is held by a background process until you undo it; its output is in <code>artifacts/game-day/{{ e.runbook }}.log</code> in the backend clone.</p>
+              <p class="note"
+                >This cause is held by a background process until you undo it; its output is in
+                <code>artifacts/game-day/{{ e.runbook }}.log</code> in the backend clone.</p
+              >
             }
             @if (p.confirmation !== 'none') {
-              <p class="note">This cause costs the stack ({{ p.impact }}): {{ p.confirmation === 'confirm' ? 'press Cause twice' : 'type ' + p.confirmWith + ' to run it' }}.</p>
+              <p class="note"
+                >This cause costs the stack ({{ p.impact }}):
+                {{ p.confirmation === 'confirm' ? 'press Cause twice' : 'type ' + p.confirmWith + ' to run it' }}.</p
+              >
             }
           }
-          <p class="note">Undo returns when the stack is back, not when the alert has cleared; the table above shows when it does.</p>
+          <p class="note"
+            >Undo returns when the stack is back, not when the alert has cleared; the table above shows when it does.</p
+          >
           @if (jobError(); as err) {
             <p class="error" role="alert">{{ err }}</p>
           }
@@ -109,9 +146,15 @@
             @switch (b.kind) {
               @case ('heading') {
                 @switch (b.level) {
-                  @case (1) {<h3><app-runbook-spans [spans]="b.spans" /></h3>}
-                  @case (2) {<h4><app-runbook-spans [spans]="b.spans" /></h4>}
-                  @default {<h5><app-runbook-spans [spans]="b.spans" /></h5>}
+                  @case (1) {
+                    <h3><app-runbook-spans [spans]="b.spans" /></h3>
+                  }
+                  @case (2) {
+                    <h4><app-runbook-spans [spans]="b.spans" /></h4>
+                  }
+                  @default {
+                    <h5><app-runbook-spans [spans]="b.spans" /></h5>
+                  }
                 }
               }
               @case ('paragraph') {

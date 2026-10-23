@@ -7,7 +7,9 @@ import { BrokerFeed, exchangeName, filterOf } from '../broker-feed';
   selector: 'app-exchanges-widget',
   template: `
     <section class="actions">
-      <button class="refresh" [disabled]="feed.exchanges.refreshing()" (click)="feed.exchanges.refresh()">Refresh</button>
+      <button class="refresh" [disabled]="feed.exchanges.refreshing()" (click)="feed.exchanges.refresh()"
+        >Refresh</button
+      >
       @if (autoRefresh()) {
         <span class="auto">Refreshes every 5 s</span>
       }
@@ -18,7 +20,9 @@ import { BrokerFeed, exchangeName, filterOf } from '../broker-feed';
     @if (feed.exchanges.value(); as x) {
       @if (x.reachable) {
         <table class="exchanges">
-          <thead><tr><th>Exchange</th><th>Type</th></tr></thead>
+          <thead
+            ><tr><th>Exchange</th><th>Type</th></tr></thead
+          >
           <tbody>
             @for (exchange of shown(); track exchange.name) {
               <tr>

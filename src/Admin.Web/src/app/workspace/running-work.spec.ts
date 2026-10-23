@@ -20,7 +20,9 @@ describe('RunningWork', () => {
 
   it('says a Compose job the Stack controls started is running until it exits, linking to the Stack page', () => {
     const events = new Subject<JobEvent>();
-    TestBed.configureTestingModule({ providers: [{ provide: SseClient, useValue: { follow: () => events.asObservable() } }] });
+    TestBed.configureTestingModule({
+      providers: [{ provide: SseClient, useValue: { follow: () => events.asObservable() } }],
+    });
     const run = TestBed.inject(ComposeRun);
     const work = TestBed.inject(RunningWork);
     expect(work.items()).toEqual([]);

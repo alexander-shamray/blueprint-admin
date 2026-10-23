@@ -1,19 +1,84 @@
-:host { display: block; height: 100%; }
+:host {
+  display: block;
+  height: 100%;
+}
 /* gridster takes the size of its parent and scrolls its rows inside it. */
-gridster { background: transparent; height: 100%; }
-gridster.editing { background: var(--mat-sys-surface-container-low); }
+gridster {
+  background: transparent;
+  height: 100%;
+}
+gridster.editing {
+  background: var(--mat-sys-surface-container-low);
+}
 /* The frame's classes carry a ws- prefix: the screens inside use .head, .title and .body of their own. */
-.widget { background: var(--mat-sys-surface-container-lowest); border: 1px solid var(--app-border); border-radius: 0.5rem; overflow: hidden; }
+.widget {
+  background: var(--mat-sys-surface-container-lowest);
+  border: 1px solid var(--app-border);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
 /* A maximised widget takes the page the grid had, with the same frame. */
-.ws-maximised { height: 100%; box-sizing: border-box; }
-.ws-frame { display: flex; flex-direction: column; height: 100%; }
-.ws-head { flex: none; display: flex; align-items: center; gap: 0.25rem; min-height: 2.25rem; padding: 0 0.25rem 0 0.75rem; border-bottom: 1px solid var(--app-border); background: var(--mat-sys-surface-container); }
-.ws-head.widget-drag { cursor: move; }
-.ws-grip { color: var(--app-muted); }
-.ws-title { flex: 1; margin: 0; font: var(--mat-sys-title-small); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ws-settings { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--app-border); background: var(--mat-sys-surface-container-low); }
-.ws-field { display: flex; align-items: center; gap: 0.5rem; }
-.ws-field input { min-width: 14rem; }
-.ws-field-hint { color: var(--app-muted); font: var(--mat-sys-body-small); }
-.ws-body { flex: 1; min-height: 0; overflow: auto; padding: 0.75rem; }
-.ws-unknown { color: var(--app-muted); }
+.ws-maximised {
+  height: 100%;
+  box-sizing: border-box;
+}
+.ws-frame {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.ws-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 2.25rem;
+  padding: 0 0.25rem 0 0.75rem;
+  border-bottom: 1px solid var(--app-border);
+  background: var(--mat-sys-surface-container);
+}
+.ws-head.widget-drag {
+  cursor: move;
+}
+.ws-grip {
+  color: var(--app-muted);
+}
+.ws-title {
+  flex: 1;
+  margin: 0;
+  font: var(--mat-sys-title-small);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ws-settings {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--app-border);
+  background: var(--mat-sys-surface-container-low);
+}
+.ws-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.ws-field input {
+  min-width: 14rem;
+}
+.ws-field-hint {
+  color: var(--app-muted);
+  font: var(--mat-sys-body-small);
+}
+.ws-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.75rem;
+}
+.ws-unknown {
+  color: var(--app-muted);
+}

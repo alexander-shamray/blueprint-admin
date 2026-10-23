@@ -9,7 +9,12 @@ import { StackFeed } from '../stack-feed';
     @if (feed.stack.value()) {
       <p class="reachability">
         @for (r of surfaces(); track r.name) {
-          <span [class.up]="r.up" [class.down]="!r.up" [title]="r.url">{{ r.name }} {{ r.up ? 'up' : 'down' }}@if (r.status !== null) { {{ r.status }} }</span>
+          <span [class.up]="r.up" [class.down]="!r.up" [title]="r.url"
+            >{{ r.name }} {{ r.up ? 'up' : 'down' }}
+            @if (r.status !== null) {
+              {{ r.status }}
+            }
+          </span>
         }
       </p>
     } @else if (feed.stack.error(); as e) {

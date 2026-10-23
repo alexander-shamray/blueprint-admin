@@ -29,13 +29,19 @@ describe('MapWidget', () => {
   it('draws a section per service with its routes and queues, and names a worker as having no API', () => {
     const el: HTMLElement = render().nativeElement;
 
-    expect(Array.from(el.querySelectorAll('section.service h2')).map((h) => h.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
+    expect(
+      Array.from(el.querySelectorAll('section.service h2')).map((h) => h.textContent?.replace(/\s+/g, ' ').trim()),
+    ).toEqual([
       'gateway http://localhost:5000',
       'ordering http://localhost:5101',
       'shipping worker, no API of its own',
     ]);
-    expect(el.querySelector('table.routes tbody tr')?.textContent?.replace(/\s+/g, ' ').trim()).toBe('ANY /api/v1/orders/ authenticated');
-    expect(Array.from(el.querySelectorAll('table.queues tbody tr')).map((r) => r.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
+    expect(el.querySelector('table.routes tbody tr')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      'ANY /api/v1/orders/ authenticated',
+    );
+    expect(
+      Array.from(el.querySelectorAll('table.queues tbody tr')).map((r) => r.textContent?.replace(/\s+/g, ' ').trim()),
+    ).toEqual([
       "ordering-catalog-events Ordering's price projection 2 — Common.Contracts.Catalog.V1:PriceChanged",
       "[error] ordering-catalog-events_error Ordering's price projection 1 —",
     ]);
@@ -49,10 +55,14 @@ describe('MapWidget', () => {
   });
 
   it('says the broker did not answer and still shows the routes', () => {
-    host.platformMap.mockReturnValue(of({ ...view, brokerReachable: false, error: 'docker is not running', disagreements: [] }));
+    host.platformMap.mockReturnValue(
+      of({ ...view, brokerReachable: false, error: 'docker is not running', disagreements: [] }),
+    );
     const el: HTMLElement = render().nativeElement;
 
-    expect(el.querySelector('[role="alert"]')?.textContent).toContain('The broker did not answer: docker is not running');
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain(
+      'The broker did not answer: docker is not running',
+    );
     expect(el.querySelector('table.routes')).not.toBeNull();
   });
 
@@ -93,7 +103,9 @@ describe('MapWidget', () => {
     const feed = TestBed.inject(MapFeed);
     const busier = of({
       ...view,
-      services: view.services.map((s) => (s.name === 'ordering' ? { ...s, queues: s.queues.map((q) => ({ ...q, messages: 62 })) } : s)),
+      services: view.services.map((s) =>
+        s.name === 'ordering' ? { ...s, queues: s.queues.map((q) => ({ ...q, messages: 62 })) } : s,
+      ),
     });
 
     vi.setSystemTime(new Date('2026-10-20T10:01:00Z'));

@@ -10,8 +10,24 @@ import { JOB_OUTPUT, NOTE } from './widgets';
 import { WorkspaceGrid } from './workspace-grid';
 import { GRID_COLUMNS, MAX_ROWS, WidgetInstance } from './workspace-types';
 
-const known: WidgetInstance = { id: 'w1', type: 'legacy', x: 0, y: 0, cols: 12, rows: 6, config: { screen: 'requests' } };
-const unknown: WidgetInstance = { id: 'w2', type: 'from-a-newer-console', x: 12, y: 0, cols: 6, rows: 4, config: { a: 1 } };
+const known: WidgetInstance = {
+  id: 'w1',
+  type: 'legacy',
+  x: 0,
+  y: 0,
+  cols: 12,
+  rows: 6,
+  config: { screen: 'requests' },
+};
+const unknown: WidgetInstance = {
+  id: 'w2',
+  type: 'from-a-newer-console',
+  x: 12,
+  y: 0,
+  cols: 6,
+  rows: 4,
+  config: { a: 1 },
+};
 
 describe('WorkspaceGrid', () => {
   beforeEach(() =>
@@ -75,7 +91,15 @@ describe('WorkspaceGrid', () => {
   });
 
   it('edits a setting no preset holds: a list of names, written with commas, saved over what the widget held', async () => {
-    const services: WidgetInstance = { id: 's', type: 'compose-services', x: 0, y: 0, cols: 12, rows: 6, config: { services: ['a'] } };
+    const services: WidgetInstance = {
+      id: 's',
+      type: 'compose-services',
+      x: 0,
+      y: 0,
+      cols: 12,
+      rows: 6,
+      config: { services: ['a'] },
+    };
     const fixture = render([services], true);
     const element: HTMLElement = fixture.nativeElement;
     let chosen: { id: string; config: Record<string, unknown> } | undefined;

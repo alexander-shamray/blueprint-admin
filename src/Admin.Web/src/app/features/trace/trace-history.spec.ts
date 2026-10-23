@@ -68,11 +68,28 @@ describe('diffTimelines', () => {
   });
 
   it('reads the broker snapshot by what it says, since its time is new on every fetch', () => {
-    const queued = (at: string, summary: string) => ({ at, source: 'broker', service: 'rabbitmq', kind: 'Queued' as const, summary, traceId: null, link: null });
-    const fetch = (at: string, summary: string, n: number) => ({ fetchedAt: new Date(n), view: { ...view('a', ['one']), events: [queued(at, summary)] } });
+    const queued = (at: string, summary: string) => ({
+      at,
+      source: 'broker',
+      service: 'rabbitmq',
+      kind: 'Queued' as const,
+      summary,
+      traceId: null,
+      link: null,
+    });
+    const fetch = (at: string, summary: string, n: number) => ({
+      fetchedAt: new Date(n),
+      view: { ...view('a', ['one']), events: [queued(at, summary)] },
+    });
 
-    const same = diffTimelines(fetch('2026-09-16T09:43:03Z', 'ordering-catalog-events: 0 messages', 1), fetch('2026-09-16T09:43:13Z', 'ordering-catalog-events: 0 messages', 2));
-    const drained = diffTimelines(fetch('2026-09-16T09:43:03Z', 'ordering-catalog-events: 2 messages', 1), fetch('2026-09-16T09:43:13Z', 'ordering-catalog-events: 0 messages', 2));
+    const same = diffTimelines(
+      fetch('2026-09-16T09:43:03Z', 'ordering-catalog-events: 0 messages', 1),
+      fetch('2026-09-16T09:43:13Z', 'ordering-catalog-events: 0 messages', 2),
+    );
+    const drained = diffTimelines(
+      fetch('2026-09-16T09:43:03Z', 'ordering-catalog-events: 2 messages', 1),
+      fetch('2026-09-16T09:43:13Z', 'ordering-catalog-events: 0 messages', 2),
+    );
 
     expect(same.arrived).toEqual([]);
     expect(same.gone).toEqual([]);

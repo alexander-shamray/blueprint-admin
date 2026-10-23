@@ -1,3 +1,4 @@
+<!-- prettier-ignore -->
 <p class="lede">
   What Notifications sent, as the mail sink holds it: newest first, each message with the correlation id it carries as a link into
   its trace. The widget only reads; clearing the sink is done in
@@ -5,7 +6,10 @@
 </p>
 
 <div class="row">
-  <label>Correlation id <input class="filter" [ngModel]="filter()" (ngModelChange)="setFilter($event)" placeholder="one order's messages" /></label>
+  <label
+    >Correlation id
+    <input class="filter" [ngModel]="filter()" (ngModelChange)="setFilter($event)" placeholder="one order's messages"
+  /></label>
   <button class="refresh" [disabled]="loading()" (click)="refresh()">Refresh</button>
 </div>
 
@@ -15,16 +19,21 @@
 
 @if (list(); as l) {
   @if (l.reachable) {
+    <!-- prettier-ignore -->
     <p class="count" role="status">
       @if (filter().trim()) {{{ messages().length }} of the {{ l.messages.length }} listed carry this correlation id.}
       @else {{{ l.messages.length }} listed@if (l.total > l.messages.length) {, the newest of {{ l.total }} the sink holds}.}
     </p>
     @if (noneCorrelated()) {
-      <p class="no-correlation">No message here carries an <code>X-Correlation-Id</code>, so none links to its trace.</p>
+      <p class="no-correlation"
+        >No message here carries an <code>X-Correlation-Id</code>, so none links to its trace.</p
+      >
     }
     @if (messages().length > 0) {
       <table class="messages">
-        <thead><tr><th>Received</th><th>To</th><th>Subject</th><th>Correlation id</th><th></th></tr></thead>
+        <thead
+          ><tr><th>Received</th><th>To</th><th>Subject</th><th>Correlation id</th><th></th></tr
+        ></thead>
         <tbody>
           @for (m of messages(); track m.id) {
             <tr [class.unread]="!m.read" [class.opened]="opened()?.id === m.id">
@@ -32,7 +41,11 @@
               <td class="to">{{ mailboxes(m.to) }}</td>
               <td class="subject">{{ m.subject }}</td>
               <td class="correlation">
-                @if (m.correlationId; as c) {<a [appTraceLink]="c">{{ c }}</a>} @else {<span class="none">none</span>}
+                @if (m.correlationId; as c) {
+                  <a [appTraceLink]="c">{{ c }}</a>
+                } @else {
+                  <span class="none">none</span>
+                }
               </td>
               <td><button class="open" (click)="open(m.id)">Open</button></td>
             </tr>
@@ -54,13 +67,25 @@
     <h2>{{ m.subject }}</h2>
     <p class="facts">
       From {{ mailboxes([m.from]) }} · to {{ mailboxes(m.to) }}
-      @if (m.cc.length > 0) {· cc {{ mailboxes(m.cc) }}}
+      @if (m.cc.length > 0) {
+        · cc {{ mailboxes(m.cc) }}
+      }
       · {{ m.date }}
-      @if (m.correlationId; as c) {· <a [appTraceLink]="c">trace {{ c }}</a>} @else {· no correlation id}
+      @if (m.correlationId; as c) {
+        · <a [appTraceLink]="c">trace {{ c }}</a>
+      } @else {
+        · no correlation id
+      }
       <button class="close" (click)="close()">Close</button>
     </p>
     @if (html(); as h) {
-      <iframe class="body-html" title="The message's HTML part" sandbox="" referrerpolicy="no-referrer" [srcdoc]="h"></iframe>
+      <iframe
+        class="body-html"
+        title="The message's HTML part"
+        sandbox=""
+        referrerpolicy="no-referrer"
+        [srcdoc]="h"
+      ></iframe>
     } @else {
       <pre class="body-text">{{ m.text }}</pre>
     }

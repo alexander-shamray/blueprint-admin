@@ -9,11 +9,35 @@ import { DIAGRAM_RENDERER } from '../note/mermaid-diagram';
 import { SequenceWidget } from './sequence-widget';
 
 function event(partial: Partial<TraceEvent>): TraceEvent {
-  return { at: '2026-09-16T09:43:00.000Z', source: 'tempo', service: 'Gateway.Api', kind: 'HttpIn', summary: 'GET /x (5 ms)', traceId: 't1', link: null, ...partial };
+  return {
+    at: '2026-09-16T09:43:00.000Z',
+    source: 'tempo',
+    service: 'Gateway.Api',
+    kind: 'HttpIn',
+    summary: 'GET /x (5 ms)',
+    traceId: 't1',
+    link: null,
+    ...partial,
+  };
 }
 
-function viewOf(id: string, events: TraceEvent[] = [event({ link: `http://grafana/explore?${id}` }), event({ kind: 'Publish', service: 'Ordering.Api', summary: 'send (1 ms)' })]): TraceView {
-  return { correlationId: id, window: '15m', reachable: true, error: null, traceIds: ['t1'], tracesTruncated: false, warning: null, events };
+function viewOf(
+  id: string,
+  events: TraceEvent[] = [
+    event({ link: `http://grafana/explore?${id}` }),
+    event({ kind: 'Publish', service: 'Ordering.Api', summary: 'send (1 ms)' }),
+  ],
+): TraceView {
+  return {
+    correlationId: id,
+    window: '15m',
+    reachable: true,
+    error: null,
+    traceIds: ['t1'],
+    tracesTruncated: false,
+    warning: null,
+    events,
+  };
 }
 
 describe('SequenceWidget', () => {
@@ -27,7 +51,10 @@ describe('SequenceWidget', () => {
       providers: [
         provideRouter([]),
         { provide: HostClient, useValue: host },
-        { provide: DIAGRAM_RENDERER, useValue: (source: string) => (drawn.push(source), Promise.resolve('<svg><text>drawn</text></svg>')) },
+        {
+          provide: DIAGRAM_RENDERER,
+          useValue: (source: string) => (drawn.push(source), Promise.resolve('<svg><text>drawn</text></svg>')),
+        },
         { provide: WIDGET_CONTEXT, useValue: { instanceId: 'w1', pageId: 'p1' } },
       ],
     });
@@ -83,12 +110,21 @@ describe('SequenceWidget', () => {
     const fixture = render({ correlationId: 'c1' });
     expect(host.trace).toHaveBeenCalledTimes(1);
 
-    host.trace.mockReturnValue(of(viewOf('c1', [...viewOf('c1').events, event({ kind: 'Consume', service: 'Inventory.Api', summary: 'process (2 ms)' })])));
+    host.trace.mockReturnValue(
+      of(
+        viewOf('c1', [
+          ...viewOf('c1').events,
+          event({ kind: 'Consume', service: 'Inventory.Api', summary: 'process (2 ms)' }),
+        ]),
+      ),
+    );
     fixture.componentInstance.reload();
     fixture.detectChanges();
 
     expect(host.trace).toHaveBeenCalledTimes(2);
-    expect(fixture.nativeElement.querySelector('p.changes').textContent).toContain('1 new, 0 no longer in the timeline');
+    expect(fixture.nativeElement.querySelector('p.changes').textContent).toContain(
+      '1 new, 0 no longer in the timeline',
+    );
   });
 
   describe('following the last Trace link', () => {

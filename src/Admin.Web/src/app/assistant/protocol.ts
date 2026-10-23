@@ -64,7 +64,14 @@ export interface ClientToolResult {
 export type TurnEndReason = 'done' | 'max_steps' | 'budget' | 'cancelled' | 'refused' | 'error';
 
 /** Every end reason, so a spec can walk them and hold each to a translated message. */
-export const TURN_END_REASONS: readonly TurnEndReason[] = ['done', 'max_steps', 'budget', 'cancelled', 'refused', 'error'];
+export const TURN_END_REASONS: readonly TurnEndReason[] = [
+  'done',
+  'max_steps',
+  'budget',
+  'cancelled',
+  'refused',
+  'error',
+];
 
 /** Every status reason, for the same walk. */
 export const STATUS_REASONS: readonly StatusReason[] = ['off', 'no-credential', 'unreachable'];
@@ -114,4 +121,6 @@ export const EVENT_NAMES: readonly AssistantEventName[] = [
   'error',
 ];
 
-export type AssistantEvent = { [K in AssistantEventName]: { name: K; data: AssistantEvents[K]; id: number } }[AssistantEventName];
+export type AssistantEvent = {
+  [K in AssistantEventName]: { name: K; data: AssistantEvents[K]; id: number };
+}[AssistantEventName];

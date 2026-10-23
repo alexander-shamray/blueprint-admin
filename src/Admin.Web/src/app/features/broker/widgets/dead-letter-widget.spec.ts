@@ -88,7 +88,9 @@ describe('DeadLetterWidget', () => {
   });
 
   it('says the reason the tool gave when it read nothing', () => {
-    host.deadLetters.mockReturnValue(of({ ...inspection, messages: [], error: 'dead_letters: the broker refused the credential' }));
+    host.deadLetters.mockReturnValue(
+      of({ ...inspection, messages: [], error: 'dead_letters: the broker refused the credential' }),
+    );
     const fixture = render();
     open(fixture);
 
@@ -120,7 +122,12 @@ describe('DeadLetterWidget', () => {
     expect(execute().disabled).toBe(false);
 
     click(fixture, 'button.execute');
-    expect(host.deadLetterMove).toHaveBeenLastCalledWith('ordering-catalog-events_error', 'replay', ['m-1'], '--execute');
+    expect(host.deadLetterMove).toHaveBeenLastCalledWith(
+      'ordering-catalog-events_error',
+      'replay',
+      ['m-1'],
+      '--execute',
+    );
     expect(fixture.nativeElement.querySelector('button.execute')).toBeNull();
   });
 
@@ -158,7 +165,9 @@ describe('DeadLetterWidget', () => {
     click(fixture, 'button.dry-replay');
     click(fixture, 'button.dry-discard');
 
-    expect((fixture.nativeElement.querySelector('button.execute') as HTMLButtonElement).textContent?.trim()).toBe('Discard for real');
+    expect((fixture.nativeElement.querySelector('button.execute') as HTMLButtonElement).textContent?.trim()).toBe(
+      'Discard for real',
+    );
   });
 
   it('a dry run that lands after the listing was closed or replaced arms nothing', () => {
@@ -215,7 +224,9 @@ describe('DeadLetterWidget', () => {
   });
 
   it('says why the host refused a move, and arms nothing', () => {
-    host.deadLetterMove.mockReturnValue(throwError(() => ({ error: { detail: "The operator's password is set for one run at a time." } })));
+    host.deadLetterMove.mockReturnValue(
+      throwError(() => ({ error: { detail: "The operator's password is set for one run at a time." } })),
+    );
     const fixture = render();
     open(fixture);
     click(fixture, 'button.dry-replay');

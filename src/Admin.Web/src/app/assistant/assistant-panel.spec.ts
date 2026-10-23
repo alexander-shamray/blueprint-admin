@@ -98,7 +98,8 @@ describe('AssistantPanel', () => {
     const ours: string[] = [];
     const intervals = vi.spyOn(globalThis, 'setInterval').mockImplementation(((handler: TimerHandler, ms?: number) => {
       const stack = new Error().stack ?? '';
-      if (stack.split('\n').some((frame) => frame.includes('/src/app/') && !frame.includes('.spec.ts'))) ours.push(stack);
+      if (stack.split('\n').some((frame) => frame.includes('/src/app/') && !frame.includes('.spec.ts')))
+        ours.push(stack);
       return original(handler, ms);
     }) as typeof setInterval);
     try {

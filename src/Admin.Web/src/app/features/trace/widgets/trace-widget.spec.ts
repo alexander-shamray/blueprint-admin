@@ -16,7 +16,17 @@ function viewOf(id: string): TraceView {
     traceIds: ['t1'],
     tracesTruncated: false,
     warning: null,
-    events: [{ at: '2026-09-16T09:43:00.000Z', source: 'loki', service: 'Gateway.Api', kind: 'Log', summary: `a line for ${id}`, traceId: 't1', link: null }],
+    events: [
+      {
+        at: '2026-09-16T09:43:00.000Z',
+        source: 'loki',
+        service: 'Gateway.Api',
+        kind: 'Log',
+        summary: `a line for ${id}`,
+        traceId: 't1',
+        link: null,
+      },
+    ],
   };
 }
 
@@ -161,7 +171,10 @@ describe('TraceWidget', () => {
         providers: [
           provideRouter([]),
           { provide: HostClient, useValue: host },
-          { provide: ActivatedRoute, useValue: { paramMap, snapshot: { paramMap: paramMap.value, data: { builtIn: 'trace' } } } },
+          {
+            provide: ActivatedRoute,
+            useValue: { paramMap, snapshot: { paramMap: paramMap.value, data: { builtIn: 'trace' } } },
+          },
         ],
       });
       return TestBed.inject(Router);

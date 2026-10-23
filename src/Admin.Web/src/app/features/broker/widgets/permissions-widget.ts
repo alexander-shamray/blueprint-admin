@@ -7,7 +7,9 @@ import { BrokerFeed, filterOf } from '../broker-feed';
   selector: 'app-permissions-widget',
   template: `
     <section class="actions">
-      <button class="refresh" [disabled]="feed.permissions.refreshing()" (click)="feed.permissions.refresh()">Refresh</button>
+      <button class="refresh" [disabled]="feed.permissions.refreshing()" (click)="feed.permissions.refresh()"
+        >Refresh</button
+      >
       @if (autoRefresh()) {
         <span class="auto">Refreshes every 5 s</span>
       }
@@ -18,14 +20,22 @@ import { BrokerFeed, filterOf } from '../broker-feed';
     @if (feed.permissions.value(); as p) {
       @if (p.reachable) {
         <table class="permissions">
-          <thead><tr><th>User</th><th>Configure</th><th>Write</th><th>Read</th></tr></thead>
+          <thead
+            ><tr><th>User</th><th>Configure</th><th>Write</th><th>Read</th></tr></thead
+          >
           <tbody>
             @for (permission of shown(); track permission.user) {
               <tr>
                 <td>{{ permission.user }}</td>
-                <td><code>{{ permission.configure }}</code></td>
-                <td><code>{{ permission.write }}</code></td>
-                <td><code>{{ permission.read }}</code></td>
+                <td
+                  ><code>{{ permission.configure }}</code></td
+                >
+                <td
+                  ><code>{{ permission.write }}</code></td
+                >
+                <td
+                  ><code>{{ permission.read }}</code></td
+                >
               </tr>
             }
           </tbody>
@@ -48,7 +58,9 @@ export class PermissionsWidget {
 
   readonly shown = computed(() => {
     const needle = filterOf(this.config());
-    return (this.feed.permissions.value()?.permissions ?? []).filter((p) => !needle || p.user.toLowerCase().includes(needle));
+    return (this.feed.permissions.value()?.permissions ?? []).filter(
+      (p) => !needle || p.user.toLowerCase().includes(needle),
+    );
   });
 
   constructor() {

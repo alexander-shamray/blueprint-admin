@@ -121,67 +121,71 @@ export class LogFollowService {
     // answer, and its subscription is the one `detach` must find afterwards.
     const subscription = new Subscription();
     this.subscription = subscription;
-    subscription.add(this.host
-      .followLogs(services)
-      .pipe(
-        switchMap((job) => {
-          this.hostJob.set(job.id);
-          this.requestOut.set(false);
-          this.pending.set(false);
-          if (this.stopOnArrival) {
-            this.stopOnHost();
-            return EMPTY;
-          }
-          // A change that has since been undone needs no restart, and the flag does not outlive the answer.
-          const restart = this.restartOnArrival && this.services().join('\n') !== this.followedKey;
-          this.restartOnArrival = false;
-          if (restart) {
-            this.restarting = true;
-            this.stopOnHost();
-            return EMPTY;
-          }
-          this.following.set(true);
-          return this.sse.follow(job.id);
-        }),
-      )
-      .subscribe({
-        next: (event) => {
-          if (event.kind === 'line') {
-            this.lines.update((all) => (all.length >= MAX_LINES ? [...all.slice(1), event.line] : [...all, event.line]));
-          } else {
-            this.hostJob.set(null);
+    subscription.add(
+      this.host
+        .followLogs(services)
+        .pipe(
+          switchMap((job) => {
+            this.hostJob.set(job.id);
+            this.requestOut.set(false);
+            this.pending.set(false);
+            if (this.stopOnArrival) {
+              this.stopOnHost();
+              return EMPTY;
+            }
+            // A change that has since been undone needs no restart, and the flag does not outlive the answer.
+            const restart = this.restartOnArrival && this.services().join('\n') !== this.followedKey;
+            this.restartOnArrival = false;
+            if (restart) {
+              this.restarting = true;
+              this.stopOnHost();
+              return EMPTY;
+            }
+            this.following.set(true);
+            return this.sse.follow(job.id);
+          }),
+        )
+        .subscribe({
+          next: (event) => {
+            if (event.kind === 'line') {
+              this.lines.update((all) =>
+                all.length >= MAX_LINES ? [...all.slice(1), event.line] : [...all, event.line],
+              );
+            } else {
+              this.hostJob.set(null);
+              this.pending.set(false);
+              this.following.set(false);
+            }
+          },
+          error: (e: unknown) => {
+            // Not yet following means the POST itself failed; already following means the SSE stream did.
+            const fallback = this.following() ? undefined : 'The host refused the request.';
+            this.error.set(this.describeError(e, fallback));
+            this.restartOnArrival = false;
+            this.requestOut.set(false);
             this.pending.set(false);
             this.following.set(false);
-          }
-        },
-        error: (e: unknown) => {
-          // Not yet following means the POST itself failed; already following means the SSE stream did.
-          const fallback = this.following() ? undefined : 'The host refused the request.';
-          this.error.set(this.describeError(e, fallback));
-          this.restartOnArrival = false;
-          this.requestOut.set(false);
-          this.pending.set(false);
-          this.following.set(false);
-          // A stream that failed leaves a job this service can neither show nor, with Stop disabled, end: it is
-          // the unread logs -f of old, and ends the same way.
-          this.stopOnHost();
-        },
-        complete: () => {
-          this.requestOut.set(false);
-          this.pending.set(false);
-          this.following.set(false);
-          // A stream that ended leaves its job to stop. The stop-on-arrival path has already sent that stop and
-          // completes through EMPTY at once: a second here would follow a first that failed synchronously, after
-          // it released its claim. The same holds for the stop a restart sends.
-          if (!this.stopOnArrival && !this.restarting) {
+            // A stream that failed leaves a job this service can neither show nor, with Stop disabled, end: it is
+            // the unread logs -f of old, and ends the same way.
             this.stopOnHost();
-          }
-          if (this.restarting) {
-            this.restarting = false;
-            this.follow();
-          }
-        },
-      }));
+          },
+          complete: () => {
+            this.requestOut.set(false);
+            this.pending.set(false);
+            this.following.set(false);
+            // A stream that ended leaves its job to stop. The stop-on-arrival path has already sent that stop and
+            // completes through EMPTY at once: a second here would follow a first that failed synchronously, after
+            // it released its claim. The same holds for the stop a restart sends.
+            if (!this.stopOnArrival && !this.restarting) {
+              this.stopOnHost();
+            }
+            if (this.restarting) {
+              this.restarting = false;
+              this.follow();
+            }
+          },
+        }),
+    );
   }
 
   /**

@@ -17,7 +17,12 @@ const BROKER = 'B';
  * code and `%%` a comment, and a newline ends the line, so none of them survives; what is left is only ever a label.
  */
 export function label(text: string): string {
-  const flat = text.replace(/[\r\n\t]+/g, ' ').replace(/[;#]/g, ',').replace(/%%/g, '%').replace(/\s+/g, ' ').trim();
+  const flat = text
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/[;#]/g, ',')
+    .replace(/%%/g, '%')
+    .replace(/\s+/g, ' ')
+    .trim();
   return flat.length > LABEL_MAX ? `${flat.slice(0, LABEL_MAX - 1)}…` : flat;
 }
 

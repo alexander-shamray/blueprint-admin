@@ -6,7 +6,9 @@ test('the stack screen lists the fake services and runs up', async ({ page }) =>
   await expect(page.locator('table.services tbody tr')).toHaveCount(32);
   // As recorded: SQL Server has a healthcheck and the carrier simulator has none, so ps gives it a state and no health.
   const service = (name: string) =>
-    page.locator('table.services tbody tr').filter({ has: page.locator('td:first-child', { hasText: new RegExp(`^${name}$`) }) });
+    page
+      .locator('table.services tbody tr')
+      .filter({ has: page.locator('td:first-child', { hasText: new RegExp(`^${name}$`) }) });
   await expect(service('sql')).toContainText('healthy');
   await expect(service('carrier-simulator')).toContainText('running');
   await expect(service('carrier-simulator')).not.toContainText('healthy');
@@ -32,9 +34,27 @@ test('the stack screen shows every recorded golden signal per service', async ({
 
   await expect(rows).toHaveCount(8);
   // The gateway answered 401s and 422s and no 5xx, which is a zero share, not a dash; it runs no commands.
-  await expect(rows.filter({ hasText: 'Gateway.Api' }).locator('td')).toHaveText(['Gateway.Api', '0.22', '0.0 %', '523 ms', '0.032', '0.033', '—', '—']);
+  await expect(rows.filter({ hasText: 'Gateway.Api' }).locator('td')).toHaveText([
+    'Gateway.Api',
+    '0.22',
+    '0.0 %',
+    '523 ms',
+    '0.032',
+    '0.033',
+    '—',
+    '—',
+  ]);
   // Payments served no HTTP in the window, so its share is undefined and its refusals are zeros.
-  await expect(rows.filter({ hasText: 'Payments.Api' }).locator('td')).toHaveText(['Payments.Api', '0', '—', '29 ms', '0', '0', '4750 ms', '—']);
+  await expect(rows.filter({ hasText: 'Payments.Api' }).locator('td')).toHaveText([
+    'Payments.Api',
+    '0',
+    '—',
+    '29 ms',
+    '0',
+    '0',
+    '4750 ms',
+    '—',
+  ]);
 });
 
 // FakeGrafana answers the rules read with a hand-shaped recording: one rule firing, one pending, the rest quiet.
@@ -52,7 +72,10 @@ test('the stack screen lists a firing, a pending and a quiet rule, and the waiti
 
   const waiting = alerts.locator('table.waiting tbody tr');
   await expect(waiting).toHaveCount(3);
-  await expect(waiting.filter({ hasText: 'StuckSaga' }).locator('td')).toHaveText(['StuckSaga', 'ordering_saga_oldest_unfinalised_age_seconds']);
+  await expect(waiting.filter({ hasText: 'StuckSaga' }).locator('td')).toHaveText([
+    'StuckSaga',
+    'ordering_saga_oldest_unfinalised_age_seconds',
+  ]);
   await expect(alerts.locator('table.alerts')).not.toContainText('StuckSaga');
 });
 
@@ -82,7 +105,11 @@ test('the workstation panel and the job output read correctly to assistive techn
   await page.goto('/stack');
   const workstation = page.getByRole('region', { name: 'Workstation' });
 
-  await expect(page.getByRole('article', { name: 'Workstation doctor' }).getByRole('heading', { name: 'Workstation doctor', level: 2 })).toBeVisible();
+  await expect(
+    page
+      .getByRole('article', { name: 'Workstation doctor' })
+      .getByRole('heading', { name: 'Workstation doctor', level: 2 }),
+  ).toBeVisible();
   await expect(workstation.getByRole('columnheader')).toHaveText(['Check', 'Verdict', 'What the reads said']);
   await expect(workstation.getByRole('rowheader', { name: 'Ports' })).toBeVisible();
 
@@ -106,7 +133,9 @@ test('wiping volumes needs the typed confirmation', async ({ page }) => {
   await expect(page.locator('app-output-pane pre')).toContainText('Volume commerce_sql-data  Removed');
 });
 
-test('reset needs the typed confirmation, then runs down -v, up and the readiness wait as one job', async ({ page }) => {
+test('reset needs the typed confirmation, then runs down -v, up and the readiness wait as one job', async ({
+  page,
+}) => {
   await page.goto('/stack');
   const reset = page.getByRole('button', { name: 'Reset' });
 
@@ -117,7 +146,9 @@ test('reset needs the typed confirmation, then runs down -v, up and the readines
   const output = page.locator('app-output-pane pre');
   await expect(output).toContainText('Volume commerce_sql-data  Removed');
   await expect(output).toContainText('commerce-gateway-1  Healthy');
-  await expect(output).toContainText('ready: gateway, catalog, ordering, bff, inventory, payments, privacy, object-store, image-edge, keycloak, grafana');
+  await expect(output).toContainText(
+    'ready: gateway, catalog, ordering, bff, inventory, payments, privacy, object-store, image-edge, keycloak, grafana',
+  );
   await expect(output).toContainText('exited 0');
 });
 
@@ -133,7 +164,9 @@ test.describe('the load run', () => {
     }
   });
 
-  test('a load run runs the backend SLO run as one job, the strip beside it reads the load, and a Down ends it', async ({ page }) => {
+  test('a load run runs the backend SLO run as one job, the strip beside it reads the load, and a Down ends it', async ({
+    page,
+  }) => {
     test.setTimeout(45_000);
     await page.goto('/stack');
     const load = page.getByRole('region', { name: 'Load run' });
@@ -149,7 +182,10 @@ test.describe('the load run', () => {
     await expect(load.locator('.load-run-status')).toHaveText(/exited 0/);
 
     // The strip reads on its own 15-second timer, so the load arrives at its next tick.
-    const gateway = page.getByRole('region', { name: 'Golden signals' }).locator('table.signals tbody tr').filter({ hasText: 'Gateway.Api' });
+    const gateway = page
+      .getByRole('region', { name: 'Golden signals' })
+      .locator('table.signals tbody tr')
+      .filter({ hasText: 'Gateway.Api' });
     await expect(gateway.locator('td').nth(1)).toHaveText('2.3', { timeout: 20_000 });
 
     await page.getByRole('button', { name: 'Down', exact: true }).click();

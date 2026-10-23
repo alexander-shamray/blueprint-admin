@@ -2,11 +2,29 @@ import { TraceEvent, TraceEventKind, TraceView } from '../../../core/host/host-t
 import { label, sequenceOf } from './sequence-source';
 
 function event(kind: TraceEventKind, service: string, summary: string, extra: Partial<TraceEvent> = {}): TraceEvent {
-  return { at: '2026-09-16T09:43:00.000Z', source: 'tempo', service, kind, summary, traceId: 't1', link: null, ...extra };
+  return {
+    at: '2026-09-16T09:43:00.000Z',
+    source: 'tempo',
+    service,
+    kind,
+    summary,
+    traceId: 't1',
+    link: null,
+    ...extra,
+  };
 }
 
 function view(events: TraceEvent[]): TraceView {
-  return { correlationId: 'c1', window: '15m', reachable: true, error: null, traceIds: ['t1'], tracesTruncated: false, warning: null, events };
+  return {
+    correlationId: 'c1',
+    window: '15m',
+    reachable: true,
+    error: null,
+    traceIds: ['t1'],
+    tracesTruncated: false,
+    warning: null,
+    events,
+  };
 }
 
 describe('sequenceOf', () => {
@@ -51,7 +69,9 @@ describe('sequenceOf', () => {
   });
 
   it('draws a failed event as a note that says so in words, on a band', () => {
-    const drawn = sequenceOf(view([event('HttpIn', 'Gateway.Api', 'GET /x (1 ms)'), event('Error', 'Ordering.Api', 'boom (3 ms)')]));
+    const drawn = sequenceOf(
+      view([event('HttpIn', 'Gateway.Api', 'GET /x (1 ms)'), event('Error', 'Ordering.Api', 'boom (3 ms)')]),
+    );
 
     expect(drawn?.source).toContain('rect rgb(255, 224, 224)\nNote over S1: failed: boom (3 ms)\nend');
     expect(drawn?.arrows).toHaveLength(1);
@@ -62,13 +82,20 @@ describe('sequenceOf', () => {
 
     expect(drawn?.source).not.toContain('Caller');
     expect(drawn?.source).not.toContain('participant B');
-    expect(drawn?.source).toBe(['sequenceDiagram', 'autonumber', 'participant S0 as Catalog.Api', 'S0->>S0: SELECT (2 ms)'].join('\n'));
+    expect(drawn?.source).toBe(
+      ['sequenceDiagram', 'autonumber', 'participant S0 as Catalog.Api', 'S0->>S0: SELECT (2 ms)'].join('\n'),
+    );
   });
 
   it('draws a service only a log names as nothing, and has no diagram for logs and the broker line alone', () => {
     expect(sequenceOf(view([event('Log', 'Gateway.Api', 'a line', { source: 'loki' })]))).toBeNull();
     expect(
-      sequenceOf(view([event('Log', 'Gateway.Api', 'a line', { source: 'loki' }), event('Queued', 'RabbitMQ', 'depth', { source: 'broker' })])),
+      sequenceOf(
+        view([
+          event('Log', 'Gateway.Api', 'a line', { source: 'loki' }),
+          event('Queued', 'RabbitMQ', 'depth', { source: 'broker' }),
+        ]),
+      ),
     ).toBeNull();
     expect(sequenceOf(view([]))).toBeNull();
   });
