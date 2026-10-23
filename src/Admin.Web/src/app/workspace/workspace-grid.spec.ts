@@ -6,7 +6,7 @@ import { provideRouter } from '@angular/router';
 import { GridsterItem } from 'angular-gridster2';
 import { SCREENS } from '../screens';
 import { WIDGET_CONTEXT } from './widget-context';
-import { NOTE } from './widgets';
+import { JOB_OUTPUT, NOTE } from './widgets';
 import { WorkspaceGrid } from './workspace-grid';
 import { GRID_COLUMNS, MAX_ROWS, WidgetInstance } from './workspace-types';
 
@@ -98,6 +98,36 @@ describe('WorkspaceGrid', () => {
     expect(chosen).toEqual({ id: 's', config: { services: ['x', 'y'] } });
     expect(element.querySelector('.ws-settings')).toBeNull();
     await fixture.whenStable();
+  });
+
+  it('drops an open draft when a preset is chosen, the widget is removed, or the page changes', () => {
+    const job: WidgetInstance = { id: 'j', type: 'job-output', x: 0, y: 0, cols: 12, rows: 6, config: { jobId: 'x' } };
+    const fixture = render([job], true);
+    const open = (): void => {
+      (fixture.nativeElement.querySelector('button.ws-configure') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      document.querySelector<HTMLElement>('.ws-edit-settings')?.click();
+      fixture.detectChanges();
+    };
+    const panel = (): Element | null => fixture.nativeElement.querySelector('.ws-settings');
+
+    open();
+    expect(panel()).not.toBeNull();
+    fixture.componentInstance.choosePreset(fixture.componentInstance.items()[0], JOB_OUTPUT.presets[0]);
+    fixture.detectChanges();
+    expect(panel()).toBeNull();
+
+    open();
+    fixture.componentRef.setInput('widgets', []);
+    fixture.detectChanges();
+    fixture.componentRef.setInput('widgets', [job]);
+    fixture.detectChanges();
+    expect(panel()).toBeNull();
+
+    open();
+    fixture.componentRef.setInput('pageId', 'p2');
+    fixture.detectChanges();
+    expect(panel()).toBeNull();
   });
 
   it('closes an open settings panel when the layout editor is left', () => {
