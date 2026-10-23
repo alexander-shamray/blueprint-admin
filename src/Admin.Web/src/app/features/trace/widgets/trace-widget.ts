@@ -157,6 +157,17 @@ export class TraceWidget {
       }
     });
 
+    // A window the config comes to name later (the settings editor, a preset) outranks the one the operator chose
+    // before it, as a configured operation does in the API widget. The next read uses it; the id on screen is not
+    // fetched again for a window alone.
+    let seenWindow: string | undefined;
+    effect(() => {
+      const configured = this.configuredWindow();
+      const changed = seenWindow !== undefined && configured !== seenWindow;
+      seenWindow = configured;
+      if (changed) untracked(() => this.window.set(''));
+    });
+
     this.route?.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
       const id = params.get('correlationId') ?? '';
       if (id === '') return;

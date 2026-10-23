@@ -204,6 +204,17 @@ describe('TraceWidget', () => {
     expect(again.componentInstance.shownWindow()).toBe('24h');
   });
 
+  it('takes a window the config comes to name later over the one the operator chose', () => {
+    configure([{ provide: WIDGET_CONTEXT, useValue: { instanceId: 'w1', pageId: 'p1' } }]);
+    const fixture = render({ correlationId: 'a', window: '1h' });
+    fixture.componentInstance.window.set('24h');
+
+    fixture.componentRef.setInput('config', { correlationId: 'a', window: '6h' });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.shownWindow()).toBe('6h');
+  });
+
   it('takes the id from the built-in Trace route over any configured one', () => {
     configure([], { correlationId: 'from-route' });
     render({ correlationId: 'configured' });
