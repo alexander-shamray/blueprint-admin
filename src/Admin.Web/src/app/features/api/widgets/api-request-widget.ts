@@ -166,9 +166,10 @@ export class ApiRequestWidget {
       this.fetchingToken?.unsubscribe();
       this.readingClock?.unsubscribe();
       // The choice outlives the widget, a custom password does not stay in the shared identity state: it is in this
-      // widget's session state, for the tab, and nowhere else.
+      // widget's session state, for the tab, and nowhere else. Another request widget still showing is using it, so
+      // only the last one to go takes it out.
       const c = this.identity.choice();
-      if (c.kind === CUSTOM) this.identity.select({ ...c, password: '' });
+      if (c.kind === CUSTOM && this.apiHistory.editors() === 0) this.identity.select({ ...c, password: '' });
     });
     // Refill the inputs from a retained custom choice, so they show what will be sent.
     const chosen = this.identity.choice();
@@ -200,12 +201,13 @@ export class ApiRequestWidget {
         }
       });
     });
-    // The operation the config names is selected once the catalog has it, if the operator has not chosen another.
+    // The operation the config names is selected once the catalog has it, and again when the config comes to name
+    // another (the settings editor, a preset). One the operator picked here is already in the config, so it is a no-op.
     effect(() => {
       const view = this.catalog();
       const wanted = this.configuredOperation();
       untracked(() => {
-        const operation = wanted && this.selectedId() === null ? view?.operations.find((o) => o.id === wanted) : undefined;
+        const operation = wanted && this.selectedId() !== wanted ? view?.operations.find((o) => o.id === wanted) : undefined;
         if (operation) this.select(operation, false);
       });
     });
@@ -270,7 +272,7 @@ export class ApiRequestWidget {
     this.pathValues.set({});
     this.queryValues.set({});
     this.body.set(operation.exampleBody ?? '');
-    if (save) this.saveConfig();
+    if (save) this.saveConfig(false);
   }
 
   setPathValue(name: string, value: string): void {
@@ -290,7 +292,7 @@ export class ApiRequestWidget {
     } else {
       this.identity.select({ kind: 'user', username: value.slice('user:'.length) });
     }
-    this.saveConfig();
+    this.saveConfig(true);
   }
 
   setCustom(username: string, password: string): void {
@@ -299,19 +301,22 @@ export class ApiRequestWidget {
     this.customPassword.set(password);
     this.savedPassword.set(password);
     this.identity.select({ kind: 'custom', username, password });
-    this.saveConfig();
+    this.saveConfig(true);
   }
 
   /**
    * Saves what the config holds of this widget: the operation, and the identity by username. Never the password, which
    * is not a key of what is written (and the host refuses a config with a key named like one, §6.4).
    */
-  private saveConfig(): void {
+  private saveConfig(identityChosen: boolean): void {
     if (!this.context) return;
-    this.workspace.configureWidget(this.context.pageId, this.context.instanceId, {
-      operation: this.selectedId(),
-      identity: this.identityConfigValue(),
-    });
+    const operation = this.selectedId();
+    // The identity is written only when the operator chose one here: the one in use may be a default, or one the
+    // Scenario widget picked, and freezing that into this widget would take it back over a later choice.
+    const identity = identityChosen ? this.identityConfigValue() : this.configuredIdentity();
+    // Nothing is saved that the config already says: a password typed a letter at a time saves nothing, for one.
+    if (operation === this.configuredOperation() && identity === this.configuredIdentity()) return;
+    this.workspace.configureWidget(this.context.pageId, this.context.instanceId, { operation, identity });
   }
 
   /** Takes up an identity the config names: `anonymous`, `user:<name>` or `custom:<name>` with the tab's password. */

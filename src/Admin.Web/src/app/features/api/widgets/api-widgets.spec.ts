@@ -89,6 +89,35 @@ describe('the API request and API history widgets', () => {
       expect(fixture.componentInstance.selectedId()).toBe('catalog:GetProducts');
     });
 
+    it('saves nothing the config already says, so typing a password a letter at a time saves nothing more', () => {
+      const fixture = request({ operation: 'catalog:GetProducts', identity: 'custom:alice' });
+      configured.length = 0;
+
+      fixture.componentInstance.setCustom('alice', 's');
+      fixture.componentInstance.setCustom('alice', 's3');
+
+      expect(configured).toEqual([]);
+      fixture.componentInstance.setCustom('alicia', 's3');
+      expect(configured).toEqual([{ operation: 'catalog:GetProducts', identity: 'custom:alicia' }]);
+    });
+
+    it('does not freeze the identity in use into the config when the operator only picked an operation', () => {
+      const fixture = request();
+      fixture.componentInstance.select(catalog.operations[1]);
+
+      expect(configured.at(-1)).toEqual({ operation: 'catalog:PublishProduct', identity: null });
+    });
+
+    it('takes up another operation the settings editor configures, once one was chosen', () => {
+      const fixture = request({ operation: 'catalog:GetProducts' });
+      expect(fixture.componentInstance.selectedId()).toBe('catalog:GetProducts');
+
+      fixture.componentRef.setInput('config', { operation: 'catalog:PublishProduct' });
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.selectedId()).toBe('catalog:PublishProduct');
+    });
+
     it('takes up the identity it names, and saves the operator\'s choice of identity and operation by username', () => {
       const fixture = request({ identity: 'user:browser' });
       expect(TestBed.inject(IdentityState).choice()).toEqual({ kind: 'user', username: 'browser' });
@@ -126,6 +155,18 @@ describe('the API request and API history widgets', () => {
 
       expect(again.componentInstance.customPassword()).toBe('s3cret-password');
       expect(host['proxy'].mock.calls.at(-1)?.[0].identity).toEqual({ username: 'alice', password: 's3cret-password' });
+    });
+
+    it('stays in the shared identity until the last request widget goes, so removing one does not empty another\'s', () => {
+      const first = request({ identity: 'custom:alice' });
+      const second = request({ identity: 'custom:alice' });
+      first.componentInstance.setCustom('alice', 's3cret-password');
+
+      first.destroy();
+      expect(TestBed.inject(IdentityState).choice()).toEqual({ kind: 'custom', username: 'alice', password: 's3cret-password' });
+
+      second.destroy();
+      expect(TestBed.inject(IdentityState).choice()).toEqual({ kind: 'custom', username: 'alice', password: '' });
     });
 
     it('is not in what the history keeps', () => {
