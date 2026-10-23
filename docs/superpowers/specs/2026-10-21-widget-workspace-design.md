@@ -564,6 +564,27 @@ later phase move one screen at a time without a page ever missing.
   with fields is configurable even with one preset; the `listing` types and
   Job output declare theirs, and the Scenario widget's script and identity
   declare theirs when they exist.
+- Settled in phase 3a (#386), the Logs widget and `LogFollowService`
+  (`features/logs`, with the Logs half of #376):
+  - the follow state machine of the old Logs screen moved into the root
+    service unchanged; what ended it changed. A follow is ended by Stop and
+    by nothing else: leaving the page, or destroying every Logs widget,
+    leaves it following, and the shell's running-work indicator ("Logs:
+    following", linking to the Logs page) says so. A page reload forgets the
+    job, and the host's one-follow rule ends it at the next Follow;
+  - a Logs widget tells the service which services it shows (`ask`, and
+    `withdraw` when destroyed). The follow covers the union, or every
+    service when any widget asks for every one; a change to the union while
+    a follow runs, or is being asked for, replaces it, as §4.4 says. With no
+    widget left the follow keeps the set it had;
+  - a line belongs to the service named before its first `|` (without
+    Compose's `-1` suffix); a line with no prefix is shown only by a widget
+    over every service. Clear empties the one shared buffer, not a widget's
+    view;
+  - the Logs built-in page is one Logs widget over every service; the
+    legacy Logs screen is that widget in a thin component, kept until the
+    legacy screens retire (phase 6). A widget's services are edited with the
+    settings editor (#446).
 - The visual design within Material 3: palette, density, spacing.
 - Whether a widget's refresh button and a page-wide refresh both exist.
 - The exact Mermaid mapping of each `TraceView` event kind in §8.2, within
