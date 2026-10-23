@@ -146,6 +146,8 @@ export class ErasureRun {
   private fetchRequest(quiet = false): Observable<void> {
     return this.send('GET', `/api/v1/privacy/erasure-requests/${this.requestId().trim()}`, null, quiet).pipe(
       tap((result) => {
+        // A tick whose answer lands after an operator's call has begun is not heard: that call's own read follows it.
+        if (quiet && this.busy()) return;
         const body = this.expect(result, 'Reading the request');
         if (body === null) {
           if (quiet) this.quietFailure = true;
@@ -163,6 +165,7 @@ export class ErasureRun {
           if (view.status === 'Closed') this.setWatch(false);
           this.refreshDepths();
         } catch {
+          if (quiet) this.quietFailure = true;
           this.error.set(`Privacy answered something that is not an erasure request: ${body}`);
         }
       }),
@@ -189,6 +192,7 @@ export class ErasureRun {
       .pipe(
         takeUntilDestroyed(this.destroyRef),
         catchError((e: unknown) => {
+          if (quiet && this.busy()) return EMPTY;
           if (quiet) this.quietFailure = true;
           this.error.set(this.describe(e));
           return EMPTY;

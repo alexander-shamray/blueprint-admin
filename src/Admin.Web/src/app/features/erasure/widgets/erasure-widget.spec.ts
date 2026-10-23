@@ -256,6 +256,31 @@ describe('ErasureWidget', () => {
     expect(run.error()).toBe('the operator\'s own failure');
   });
 
+  it('a tick whose answer is not a request is cleared by the next good tick, and one that lands during an operator\'s call is not heard', async () => {
+    vi.useFakeTimers();
+    const fixture = render([]);
+    const late = new Subject<ProxyResult>();
+    proxy.mockReturnValueOnce(of(responded(200, 'not json'))).mockReturnValueOnce(of(responded(200, JSON.stringify(view({})))));
+    const run = TestBed.inject(ErasureRun);
+    run.requestId.set(REQUEST_ID);
+    run.setWatch(true);
+    fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(run.error()).toContain('not an erasure request');
+
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(run.error()).toBeNull();
+
+    // A tick out when the operator's call begins answers badly: its failure is not shown over theirs.
+    proxy.mockReset();
+    proxy.mockReturnValueOnce(late).mockReturnValueOnce(new Subject<ProxyResult>());
+    await vi.advanceTimersByTimeAsync(3000);
+    run.read();
+    late.next(responded(500, 'boom'));
+    late.complete();
+    expect(run.error()).toBeNull();
+  });
+
   it('reads nothing once the widget is gone, though the watch stays on for the next one', async () => {
     vi.useFakeTimers();
     const fixture = render([responded(200, JSON.stringify(view({})))]);
