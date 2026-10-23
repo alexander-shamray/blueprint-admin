@@ -2,6 +2,7 @@ using Admin.Assistant;
 using Admin.Assistant.Providers;
 using Admin.Assistant.Tools;
 using Admin.Host.Config;
+using Admin.Host.Fakes;
 
 namespace Admin.Host.Assistant;
 
@@ -30,6 +31,9 @@ public sealed partial class AssistantRuntime
 
     private readonly ILogger<AssistantRuntime> logger;
 
+    // The model the provider is configured with, for the turn log (§10); the host, not the core, knows it.
+    private readonly string model;
+
     public AssistantRuntime(
         AdminOptions options,
         IConfiguration configuration,
@@ -43,10 +47,10 @@ public sealed partial class AssistantRuntime
         ProviderId = AssistantOptions.ProviderOf(options);
         AssistantLimits limits = options.Assistant.Limits();
 
-        Core = ProviderId switch
+        (Core, model) = ProviderId switch
         {
-            AssistantOptions.Fake => new AssistantCore(fake(), [], ToolPolicy.ReadOnly, redactor(), Instructions, limits, time, Logged),
-            _ => null,
+            AssistantOptions.Fake => (new AssistantCore(fake(), [], ToolPolicy.ReadOnly, redactor(), Instructions, limits, time, Logged), FakeAssistantProvider.Model),
+            _ => ((AssistantCore?)null, ""),
         };
     }
 
@@ -71,10 +75,10 @@ public sealed partial class AssistantRuntime
         }
     }
 
-    // Each turn's provider, usage and end reason, never its text (§10).
+    // Each turn's provider, model, usage and end reason, never its text (§10).
     private void Logged(TurnSummary turn) =>
-        TurnEnded(logger, turn.Provider, turn.ConversationId, turn.Reason, turn.Usage.Input, turn.Usage.Output, turn.Usage.Cached);
+        TurnEnded(logger, turn.Provider, model, turn.ConversationId, turn.Reason, turn.Usage.Input, turn.Usage.Output, turn.Usage.Cached);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Assistant turn ended: provider {Provider}, conversation {Conversation}, {Reason}; tokens in {Input}, out {Output}, cached {Cached}")]
-    private static partial void TurnEnded(ILogger logger, string provider, string conversation, string reason, long input, long output, long cached);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Assistant turn ended: provider {Provider}, model {Model}, conversation {Conversation}, {Reason}; tokens in {Input}, out {Output}, cached {Cached}")]
+    private static partial void TurnEnded(ILogger logger, string provider, string model, string conversation, string reason, long input, long output, long cached);
 }

@@ -3,12 +3,17 @@ using System.Net.Http.Json;
 using System.Net.ServerSentEvents;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Admin.Assistant;
 using Admin.Assistant.Protocol;
 using Admin.Assistant.Providers;
 using Admin.Host.Assistant;
+using Admin.Host.Config;
+using Admin.Host.Fakes;
 using Admin.Host.Tests.TestSupport;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 
 namespace Admin.Host.Tests.Assistant;
@@ -245,7 +250,41 @@ public sealed class AssistantEndpointsTests : IClassFixture<AdminHostFactory>
         AssistantRuntime runtime = off.Services.GetRequiredService<AssistantRuntime>();
         runtime.ProviderId.ShouldBe("off");
         runtime.Core.ShouldBeNull();
-        off.Services.GetService<IAssistantProvider>().ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData("off", false)]
+    [InlineData("", true)]
+    public void Off_never_builds_a_provider_or_a_redactor_and_on_builds_each_once(string provider, bool on)
+    {
+        int providers = 0;
+        int redactors = 0;
+        AdminOptions options = new() { FakePlatform = true, Assistant = { Provider = provider } };
+
+        AssistantRuntime runtime = new(
+            options,
+            new ConfigurationBuilder().Build(),
+            () =>
+            {
+                providers++;
+                return new FakeAssistantProvider();
+            },
+            () =>
+            {
+                redactors++;
+                return new Unredacted();
+            },
+            TimeProvider.System,
+            NullLogger<AssistantRuntime>.Instance);
+
+        (runtime.Core is not null).ShouldBe(on);
+        providers.ShouldBe(on ? 1 : 0);
+        redactors.ShouldBe(on ? 1 : 0);
+    }
+
+    private sealed class Unredacted : IRedactor
+    {
+        public string Redact(string text, Caller caller) => text;
     }
 
     private async Task Ended(string id)
