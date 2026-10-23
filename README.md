@@ -53,12 +53,30 @@ passwords before they were written. To re-record them against a running stack:
 
     dotnet run --project src/Admin.Host -- --Admin:Record=true
 
-then open the screens that read them and review the diff;
+then open the pages that read them and review the diff;
 [`docs/testing.md`](docs/testing.md) has the walk.
 
 ## What it does today
 
-Phases 0 to 6 of the spec: the Stack screen (a workstation doctor read before
+The console is pages of widgets. It ships the eleven built-in pages
+`SCREENS` in `src/Admin.Web/src/app/screens.ts` names, each built from the
+widgets its screen became; the side navigation lists them in the operator's
+order, beside any page the operator made with **New page**. **Edit layout**
+unlocks a page's grid: move and resize a widget, **Add widget** from the
+registry, remove one, and set what it shows from its header. Any widget can go
+on any page, and two can show the same source. A built-in page can be renamed,
+hidden or put back with **Reset page**, but not deleted. The layout is saved on
+the host as `workspace.json` under `Admin:DataDir` (a temp directory against
+FakePlatform), and exported or imported as one document. Work a page starts —
+a Scenario run, a log follow, a job — goes on when the page is left, and the
+top bar says what is running. Besides each screen's own widgets there are a
+live Platform diagram, a Request sequence drawn from a trace, and a Note that
+holds Markdown or a Mermaid diagram. A layout saved while one of the eleven
+screens still sat whole in a page as a single Screen widget gets that
+screen's widgets in its place, inside the rectangle it occupied, the first
+time this console reads it, and is told once which pages changed.
+
+Phases 0 to 6 of the spec: the Stack page (a workstation doctor read before
 Up: Docker, the published ports and what holds them, the gateway's CORS
 origins, Node against the client's `.nvmrc`, `py -3.12` for the dead-letter
 workbench, k6 for the load run, both clones against their last
@@ -74,16 +92,16 @@ backend golden-signals dashboard: request rate, 5xx share, p99 latency, the
 loaded, firing first, and the backend's `awaiting-signal.yaml` rules listed apart
 as waiting, each with the metric it lacks; and the load run, the backend's
 §13.7 SLO run as one job, block by block as `run-locally.md`'s "Load run
-(k6)" runs it, with Stop, so the strip is read under load), the Logs screen
+(k6)" runs it, with Stop, so the strip is read under load), the Logs page
 (follow, service filter, text filter, correlation-id highlight) and the API
-screen (Catalog's, Ordering's, Inventory's, Payments' and Privacy's OpenAPI operations
+page (Catalog's, Ordering's, Inventory's, Payments' and Privacy's OpenAPI operations
 through the gateway, the BFF quote, its product-image upload and saved address,
 a stored image read back through the image edge, every host's readiness and the payment
 and carrier simulators' request logs; send as anonymous, a realm user, with
 the held token's time left and grants beside the picker, or a custom username
 and password, with a correlation id; status, timing, headers
 and body as the platform returned them; a history of this visit's calls).
-The Broker screen lists queues (`_error` and `_skipped` queues marked, each named
+The Broker page lists queues (`_error` and `_skipped` queues marked, each named
 with what consumes it, and a non-empty one linking the backend runbook that owns
 it), exchanges, bindings (what each exchange feeds, a queue or another
 exchange, with its routing key) and permissions through `rabbitmqctl` in the
@@ -92,8 +110,8 @@ a BFF projection panel says what `tools/bff-replay` cannot restore and runs it
 as a repair, or as a rebuild behind a typed confirmation that stops the BFF,
 deletes its order projection, replays the outbox window and starts it again
 (the commands are `run-locally.md`'s); and the API
-screen shows whether `ordering-catalog-events` has drained after a publish.
-The Broker screen's dead-letter workbench opens on a parked queue that holds a
+page shows whether `ordering-catalog-events` has drained after a publish.
+The Broker page's dead-letter workbench opens on a parked queue that holds a
 message and lists each message with its fault, type, body and a link on its
 correlation id. Replay or Discard runs dry first, its output in the job pane
 below the messages, and the real run is offered only for the message and verb
@@ -103,19 +121,19 @@ account has none between runs; the record and audit files land under
 `Admin:DataDir`'s `dead-letters/` (the temp directory against FakePlatform).
 The tool is the backend's; spec §5.5 and `run-locally.md`'s "Replay or discard
 a dead letter" say how it is run.
-The Erasure screen raises an erasure request for a subject id as the realm's
+The Erasure page raises an erasure request for a subject id as the realm's
 `privacy` login (the one that holds `privacy:erase`; `demo` does not, and a stack
 whose realm was imported before that login needs `docker compose down -v`), then
 shows one row per holder Privacy asked, answered, waiting or overdue, with the
 depth of its `*-privacy` queue and of `privacy-completions` beside it; an overdue
-request is reissued from the screen and links the backend's `erasure-overdue`
+request is reissued from the page and links the backend's `erasure-overdue`
 runbook. Against FakePlatform the subject ending `dead` is the one that goes
 overdue, so the reissue has something to do.
-The Map screen shows each service of the platform with the gateway routes that reach it and the queues it consumes,
+The Map page shows each service of the platform with the gateway routes that reach it and the queues it consumes,
 each queue's depth, its change per second between two reads (Refresh, or every 5 s once the Platform map widget's auto-refresh is switched on in its settings) and the exchanges bound to it. It
 is built from the host's own tables and the broker's `rabbitmqctl` reads at view time; where they differ it lists the
 disagreement and resolves nothing.
-The Runbooks screen lists the backend's `docs/runbooks/` as its `tools/game-day`
+The Runbooks page lists the backend's `docs/runbooks/` as its `tools/game-day`
 lists them (`py -3.12 tools/game-day/game_day.py --list --json`, read on every
 request, so a new runbook appears without a console change). For one with a
 script it shows each alert's state beside the runbook's text, read from the
@@ -126,20 +144,20 @@ gate as Up and Down. A cause the tool lists as `confirm` takes a second press of
 the button, and one it lists as `typed` takes the runbook's name typed, as the
 wipe takes `down -v`. Against FakePlatform four runbooks are listed and a cause
 fires its alert in the alert read until Undo. Spec §5.14 has the rest.
-The Mail screen lists what Notifications sent, newest first, as the mail sink
+The Mail page lists what Notifications sent, newest first, as the mail sink
 (Mailpit) holds it: when, to whom, the subject, and the message's
 `X-Correlation-Id` as a link into its Trace timeline; a correlation id typed
 into its filter leaves one order's messages alone. Opening a message shows
 its body: the HTML part in a frame sandboxed with no scripts, or the plain
 text. It only reads: clearing the sink is done in the sink's own UI, which it
 links, and the sink's chaos API is never called.
-The Trace screen joins a correlation id's Loki lines and Tempo spans into one
+The Trace page joins a correlation id's Loki lines and Tempo spans into one
 timeline that follows the request across the broker into each consume, naming
 the fulfilment saga's steps, Inventory's reservation, Payments' authorisation
 and Shipping's despatch; each row links into Grafana Explore, closing with a
 snapshot of the projection queue and every other queue the spans crossed; the
-API screen's "Trace this call" opens it on the
-response's own correlation id. The Scenario screen runs `run-locally.md`'s
+API page's "Trace this call" opens it on the
+response's own correlation id. The Scenario page runs `run-locally.md`'s
 calls end to end as a realm user, in one of a library of scripts: publish, wait for
 the projection to drain, set its stock on hand, quote, order, and then either read the order back
 through the BFF until it is confirmed, despatched and delivered and then count the mail it sent
@@ -172,24 +190,24 @@ last state read and the only stuck-saga detector a workstation has (the backend'
 fire locally); **Export Markdown** writes a finished run, with its transcript, steps, correlation ids, trace
 timelines and queue depths, as one document scrubbed by the host, to paste into an issue.
 
-The Transcript screen shows what the operator did this session as a person
+The Transcript page shows what the operator did this session as a person
 would type it: each command the host ran, with its directory and exit code, and
 each request the proxy sent, as the `curl` that sends it with the identity it
-went as and the status that came back. The `ps` and `exec` reads the screens
+went as and the status that came back. The `ps` and `exec` reads the widgets
 poll are left out. "Copy as shell script" copies it as one bash script. Tokens,
 passwords and Authorization values pass through the scrubber the fixtures are
 held to and read `<scrubbed>`.
 
-The API screen also says what each service's OpenAPI document changed since
+The API page also says what each service's OpenAPI document changed since
 the console last kept it: operations, response codes and schema fields added
 or removed, and since when. The first document seen for a service is kept as
 its baseline under `Admin:DataDir`, and "Accept as baseline" keeps the current
-one. It reads only the documents the screen already fetches. The Trace screen
+one. It reads only the documents the API request widget already fetches. The Trace page
 keeps the last few timelines per correlation id for the browser session, and a
 reload says what arrived or left since the previous fetch, or that nothing
 changed between the two.
 
-Ctrl+K (Cmd+K) opens a command palette from any screen: go to a screen, run
+Ctrl+K (Cmd+K) opens a command palette from any page: go to a page, run
 the Scenario, or paste a correlation id to land on its Trace timeline. The
 reference client's error banner prints the id of a failed call (`Correlation
 id: …`), so a failure in the client is one paste from its timeline. Job output
@@ -200,14 +218,15 @@ The top bar's language picker switches the console between English and
 Russian, and reloads the page to do it; it waits while a layout change is
 not yet saved, including one a failed save or a conflict left behind. The
 first visit follows the browser's language when the
-console has it. So far the shell, the palette and the shared components are
-translated; each screen follows when its workspace phase replaces it. Platform
+console has it. So far the shell, the palette, the shared components, the
+assistant and the Note widget are translated; the other widgets are still
+English. Platform
 responses, logs, command output, typed confirmations and service and queue
 names stay as written.
 
 An assistant answers questions about the console in a panel the top bar's
-toggle opens (or "Ask the assistant" in the palette): what a screen is for,
-and where to find something, which it opens. It reads each screen's `help` in
+toggle opens (or "Ask the assistant" in the palette): what a page is for,
+and where to find something, which it opens. It reads each built-in page's `help` in
 `src/Admin.Web/src/app/screens.ts` and never changes the platform. It is off
 unless `Admin:Assistant:Provider` names a provider; under FakePlatform, left
 unset, it plays scripted answers, so "where are the logs?" or "где логи?"
@@ -231,7 +250,7 @@ arrives with #429.
   which the next Follow then ends.
 - The console runs `npm start` but never `npm ci`: with no `node_modules` in
   the frontend clone, or one whose installed versions differ from its
-  `package-lock.json`, Start is refused and the screen says which (the doctor's
+  `package-lock.json`, Start is refused and the Stack page says which (the doctor's
   "Frontend install" row reads the same). A lock file it cannot read does not
   block Start.
 - The device lane builds the client for the emulator (`npm run emulator:android`)
@@ -245,7 +264,7 @@ arrives with #429.
   rebuild: stopping `inventory-api`, or recreating `ordering-api` with the backend's
   short-timeouts override. It is journaled under `Admin:DataDir` before it is made and
   undone by Restore, at its deadline (10 minutes at most), and at the next host start. The Stack
-  screen shows a lease in force and refuses Up, Down and the reset while it is held. A host
+  page shows a lease in force and refuses Up, Down and the reset while it is held. A host
   killed outright cannot undo it: the service stays as the run left it until the next
   start, or until Restore is pressed on a host that is running.
 - The release and despatch scripts read the line Ordering logs when it flags an order for review. The review line is a
@@ -269,7 +288,12 @@ arrives with #429.
 - Operation examples are the bodies `run-locally.md` sends where there is one,
   otherwise the document's own `example`; only a body the document declares
   without one falls back to placeholders built from the schema.
-- API history is kept only while the screen is open.
+- API history is kept for the browser tab: it survives leaving the page, and a reload
+  forgets it.
+- The workspace is one document for every tab on this host. A tab that saves after
+  another tab's save is refused until it loads the saved layout or keeps its own over
+  it. A widget type this console does not know, written by a newer one, shows as
+  unknown and is saved back as it was.
 - OpenAPI baselines live under `Admin:DataDir`, which defaults to a directory
   inside `/artifacts/`; deleting it starts every service's baseline again.
 - Trace history lasts as long as the browser tab, and a refetch over a
@@ -302,7 +326,7 @@ arrives with #429.
   its `teardown()`, so that run has no verdict. A run leaves its
   orders, the `slo-run` client and the restocked count as they are, and a
   local run proves nothing about the SLO (§13.7).
-- The Mail screen lists the sink's newest `MailSinkClient.Limit` messages and
+- The Mail page lists the sink's newest `MailSinkClient.Limit` messages and
   says how many it holds in all. Opening a message marks it read in the sink,
   as opening it in the sink's own UI does. A message with no
   `X-Correlation-Id`, or one the backend would not adopt, has no Trace link.

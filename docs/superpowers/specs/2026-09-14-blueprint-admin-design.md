@@ -1030,20 +1030,24 @@ fake broker agree.
 Angular 22 standalone components, signals, the router, no Ionic. The layout
 mirrors the reference client's so a reader of one repo can read the other:
 `src/app/core/` (config, the host client, the SSE client, identity state),
-`src/app/features/` one directory per screen, `src/app/shared/` for the
-output pane, status pill and JSON viewer.
+`src/app/features/` one directory per built-in page, holding its widgets and
+the data services they read, `src/app/workspace/` for the pages, the grid and
+the widget registry, `src/app/shared/` for the output pane, status pill and
+JSON viewer. The screen components of phases 0 to 5 are gone: each screen
+was rebuilt from widgets and the last of them retired in widget-workspace
+phase 6.
 
 The shell's screens are one list, `SCREENS` in `src/app/screens.ts`, read by
 the routes and the built-in pages; the side navigation and the command
 palette list the operator's pages (widget-workspace spec §7.2). `Ctrl+K`
 (`Cmd+K`) opens the palette from any page: go to a page, run the Scenario, or
 open what was typed as a
-correlation id on the Trace screen. The palette does not judge the id; the
+correlation id on the Trace page. The palette does not judge the id; the
 trace endpoint refuses one `CorrelationId.IsAdoptable` would not adopt, so the
 palette is no way round the LogQL boundary of §5.9. A Scenario run is asked
 for through `ScenarioLauncher`, never the URL, so a link or a reload never
-publishes and orders; a request the screen did not act on is dropped when it
-goes. The palette is a keyboard tool: a modal dialog whose input keeps focus
+publishes and orders; a request the Scenario widget did not act on is dropped
+when it goes. The palette is a keyboard tool: a modal dialog whose input keeps focus
 and names the active option through `aria-activedescendant`.
 
 With the assistant on (AI assistant note §9), the top bar has its toggle, the
@@ -1053,21 +1057,28 @@ it. What it explains each screen from is that screen's `help` in `SCREENS`;
 it navigates through the client tool `open_screen`. Off, none of the three
 exists.
 
-| Screen | Shows | Does |
+The table is the widget catalogue by built-in page: what each page shows and
+does as it ships. A page is the widgets `BUILT_IN_LAYOUTS` in
+`src/app/workspace/built-in-pages.ts` places, and the types are the registry
+`WIDGETS` in `src/app/workspace/widgets.ts`; which widget is on which page is
+widget-workspace spec §5.2's. A widget shows and does its share of a row
+wherever an operator puts it.
+
+| Built-in page | Shows | Does |
 |---|---|---|
-| **Stack** | the workstation doctor's rows above the buttons, read when the screen opens; one row per Compose service with state, health and port; the frontend job; a reachability strip; the load run's state beside the golden signals (§5.3); quick links to the client, Grafana, Keycloak | Check the workstation again; Up, Down, Down and wipe, Reset (both behind one typed confirmation), each disabled while a Compose job runs, the one pressed counting the job up (`Up… 0:42`) and the outcome left beside the buttons (`Up finished: exit 0 in 1:05`); Start and Stop frontend; Run load and Stop load; opens the job's output pane directly under the actions, where a Compose job's stderr is marked only on a line that says it failed, and a per-container list with a settled count is read from its `Container <name>  <Verb>` lines |
-| **Logs** | a follow stream with service filter, text search and correlation-id highlight | start, stop (the host's follow job too; leaving the screen does not stop it, `LogFollowService` keeps following until Stop, and the shell's running-work indicator says so), clear |
+| **Stack** | the workstation doctor's rows above the buttons, read when the page opens; one row per Compose service with state, health and port; the frontend job; a reachability strip; the load run's state beside the golden signals (§5.3); quick links to the client, Grafana, Keycloak | Check the workstation again; Up, Down, Down and wipe, Reset (both behind one typed confirmation), each disabled while a Compose job runs, the one pressed counting the job up (`Up… 0:42`) and the outcome left beside the buttons (`Up finished: exit 0 in 1:05`); Start and Stop frontend; Run load and Stop load; opens the job's output pane directly under the actions, where a Compose job's stderr is marked only on a line that says it failed, and a per-container list with a settled count is read from its `Container <name>  <Verb>` lines |
+| **Logs** | a follow stream with service filter, text search and correlation-id highlight | start, stop (the host's follow job too; leaving the page does not stop it, `LogFollowService` keeps following until Stop, and the shell's running-work indicator says so), clear |
 | **Broker** | queues with depth, `_error` and `_skipped` queues marked with the runbook of one that holds a message, a BFF projection panel (what the rebuild tool cannot restore, the depth of `bff-order-events`), exchanges, bindings, permissions; a drained indicator for `ordering-catalog-events`; an opened parked queue's messages, each with its fault, type, body and correlation id as a link into Trace | refresh, and an auto-refresh each of the four listing widgets has of its own (off until switched on in the widget's settings, saved with it; widget-workspace spec §4.3); Repair, and Rebuild behind a typed confirmation, each opening the job's output pane and reading the queues again when it starts and when it ends; Open on a parked queue that holds a message; per message a dry-run Replay or Discard, then, once a dry run of that message and verb is started, that one for real behind a typed confirmation, each opening the job's output pane |
 | **Map** | each service of `PlatformServices.All` with the gateway routes that reach it and the queues it consumes (parked twins included), each queue's depth, its change per second between two reads and the exchanges bound to it; the places where the broker and the console's tables disagree | Refresh, and an auto-refresh of the widget's own every 5 s (off until switched on in its settings, saved with it; widget-workspace spec §4.3) |
 | **Erasure** | one row per holder of an erasure request (the backend's `Privacy__Responders__n`), each answered, waiting or overdue as the request reads, with its `*-privacy` queue's depth and `privacy-completions`' beside them; the request's status, dates and reissue count; an answer from outside the request's set marked not counted; the overdue runbook's link | Raise a request for a subject id, as the `privacy` login; read one by id, or every 3 s until it closes; Reissue an overdue one. Nothing here grants the role: the realm's owner does (§13) |
 | **Mail** | §5.12's list, newest first: when, to whom, the subject, and the correlation id as a link into Trace, or `none`; how many the sink holds when that is more than listed; a line saying so when no message carries a correlation id; an opened message's addresses, date and body | Refresh; filter by correlation id (also `?correlationId=`), leaving one order's messages; Open a message; follow its Trace link; open the sink's own UI, where clearing is done |
-| **API** | operation tree on the left, each source with what its document changed since the kept baseline; request editor (path params, headers, body pre-filled from the schema example, `commandId` generated per send) and identity picker with its token clock (§5.6); response pane with status, timing, headers, body; a history list | Send; accept a changed document as the new baseline; "Trace this call" opens the Trace screen with the response's correlation id |
-| **Trace** | the §5.9 timeline for a correlation id, grouped by service, with Grafana deep links, and on a refetch what arrived or left since the last one | enter an id or arrive from the API screen; reload |
+| **API** | operation tree on the left, each source with what its document changed since the kept baseline; request editor (path params, headers, body pre-filled from the schema example, `commandId` generated per send) and identity picker with its token clock (§5.6); response pane with status, timing, headers, body; a history list | Send; accept a changed document as the new baseline; "Trace this call" opens the Trace page with the response's correlation id |
+| **Trace** | the §5.9 timeline for a correlation id, grouped by service, with Grafana deep links, and on a refetch what arrived or left since the last one | enter an id or arrive from the API page; reload |
 | **Scenario** | `run-locally.md`'s calls as one script of a library (`SCRIPTS` in `scenario-run.ts` owns the list; `docs/superpowers/specs/2026-10-15-scenario-scripts.md` the causes and the fakes' rules) — publish, wait for the drain, set the product's stock (a product published a moment ago has none, and the order would end out of stock), quote, order, then either watch the order to confirmed, despatched and delivered and count the mail it sent (§5.13), cancel it and watch it to cancelled, or apply a cause `run-locally.md` names (a price ending `.01`, stock set to 0) and watch the saga refuse the order, or order to the delivery postal code `SIM-TRANSIT` and watch it stay despatched, and ask to cancel it and see the platform refuse with 422 `order.already_shipped`, or order to one of the delivery postal codes whose carrier outcome the order read cannot tell apart (`SIM-REFUSED`, `SIM-DOWN`, `SIM-SLOW`, `SIM-STRANGE`) and read the carrier simulator's own request log, filtered by the simulator, for what the carrier saw, with the order read held at confirmed, or hold a lease on the stack (§5.3) so the saga's stock or payment wait lapses in seconds and read the order end `out_of_stock` or `declined`, or, with the despatch wait shortened too, order to `SIM-STRANGE` and read the review flag it raises (§5.9) while the order stays confirmed, or order a `.09` total, wait for its stock to reserve, stop Inventory, cancel the order and read the review flag its unanswered release raises while the order read says cancelled, with the stack restored whatever happens and a Cancel that ends the wait — each step with its status, body and own correlation id, each watch saying what it waits for and what it last read; beside the steps the saga strip of §5.13, and a finished run exports as one scrubbed Markdown document | Pick the script; run as a realm user; each step that sent links to its trace; the first step that does not succeed ends the run. The run is the console's (`ScenarioRunner`, widget-workspace spec §4.4), not the page's: leaving the page leaves it going, and besides a step that fails only Cancel, a host that stops answering or a page reload ends it, while the shell's running-work indicator says which step runs and links back (widget-workspace spec §4.3, §7.2) |
 | **Runbooks** | the backend's runbooks as the tool lists them, one with no script marked and its reason given; for the one opened, each alert's state from §5.8's read (`inactive`, `pending`, `firing`, `not loaded` for a rule Prometheus does not list, `unknown` where Grafana did not answer), what causing it costs and the tool's deadlines for it to fire and to clear, and the runbook's text beside, rendered from the clone as elements and never as HTML | Pick a runbook; Cause its alert (the second alert of a runbook with two, named); Undo; the confirmation §5.14 maps, pressed twice or typed; Refresh |
 | **Transcript** | §5.11's entries in order: each process with its directory and exit code, each request as its `curl` with the identity and status, polled | Copy as shell script, which copies the host's rendered script rather than one built in the page, so the scrubber has the last word |
 
-The API screen keeps one behaviour from `run-locally.md` explicit: after a
+The API page keeps one behaviour from `run-locally.md` explicit: after a
 successful publish it shows the drained indicator and says why an order for
 that product should wait.
 
@@ -1176,9 +1187,9 @@ there is what its UI does when a message is opened: mark it read.
 
 **SPA** (Vitest, Playwright):
 - Vitest for the host client, the SSE client, the identity state and each
-  screen's component against a mocked host client.
+  widget against a mocked host client.
 - Playwright smoke against the host started with `FakePlatform=true`, which
-  swaps in the fakes above: every screen renders, Up produces a job with
+  swaps in the fakes above: every built-in page renders, Up produces a job with
   output, a proxied call shows a response, a trace renders a timeline. CI
   runs this without Docker.
 

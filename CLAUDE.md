@@ -64,7 +64,7 @@ tools/token-usage/         Transcript report for the token plan
 | Example request bodies | `src/Admin.Host/Api/RunLocallyExamples.cs` — change when `run-locally.md` does |
 | Broker service | `src/Admin.Host/Broker/BrokerService.cs` |
 | Platform queues, projection queue (copied, cited) | `PlatformQueues.Table` in `src/Admin.Host/Broker/PlatformQueues.cs` |
-| Drain watch after publish | `PUBLISH_OPERATION` in `src/Admin.Web/src/app/features/api/api-page.ts` |
+| Drain watch after publish | `PUBLISH_OPERATION` in `src/Admin.Web/src/app/features/api/api-client.ts` |
 | Grafana / Loki / Explore | `GrafanaClient.cs`, `ExploreLink.cs` |
 | Golden-signal queries (copied, cited) | `GoldenSignals.cs` |
 | What a Tempo span is | `SpanRecogniser.Table` in `SpanRecogniser.cs` |
