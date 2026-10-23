@@ -69,7 +69,8 @@ export class ApiRequestWidget {
   readonly catalog = signal<ApiCatalogView | null>(null);
   // The editor is session state (§4.2): what the operator set up and the last answer outlive the component, so leaving
   // the page and coming back finds the request as it was. A send in flight does not (the platform may have acted on it;
-  // its answer reaches the history), and nothing here holds a credential: the headers are as typed, the password is not.
+  // its answer reaches the history). The headers are kept as typed, an Authorization line included, in the tab's memory
+  // only (the history strips such lines before it keeps a request); the custom password is held apart and never saved.
   readonly selectedId = widgetSession<string | null>('selectedId', null);
   readonly method = widgetSession('method', 'GET');
   readonly url = widgetSession('url', '');
@@ -211,7 +212,7 @@ export class ApiRequestWidget {
     let applied: string | null = null;
     // An editor found in session state when the widget appeared is the operator's own work: the configured operation
     // does not replace it, though a config that later names another does.
-    let found = this.selectedId() !== null;
+    let found = this.selectedId() !== null || this.url() !== '' || this.body() !== '' || this.result() !== null;
     effect(() => {
       const view = this.catalog();
       const wanted = this.configuredOperation();
