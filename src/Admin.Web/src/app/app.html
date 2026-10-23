@@ -80,6 +80,19 @@
     <span class="hint">{{ c.backendDir }} @if (c.fakePlatform) {<em i18n>(fake platform)</em>}</span>
   }
   <span class="palette-key"><kbd>Ctrl</kbd>+<kbd>K</kbd> <ng-container i18n="opens the command palette">commands</ng-container></span>
+  @if (assistant.enabled()) {
+    <button
+      mat-icon-button
+      type="button"
+      class="assistant-toggle"
+      aria-label="Assistant"
+      i18n-aria-label
+      [attr.aria-pressed]="assistant.panelOpen()"
+      (click)="assistant.toggle()"
+    >
+      <mat-icon aria-hidden="true">assistant</mat-icon>
+    </button>
+  }
   <button mat-button type="button" class="language" [attr.aria-label]="languageLabel" [matMenuTriggerFor]="languageMenu">
     <mat-icon aria-hidden="true">translate</mat-icon> {{ language.name }}
   </button>
@@ -183,5 +196,10 @@
   <mat-sidenav-content>
     <main><router-outlet /></main>
   </mat-sidenav-content>
+  @if (assistant.enabled()) {
+    <mat-sidenav position="end" mode="side" class="assistant-side" [opened]="assistant.panelOpen()" disableClose>
+      <app-assistant-panel />
+    </mat-sidenav>
+  }
 </mat-sidenav-container>
 <app-command-palette />

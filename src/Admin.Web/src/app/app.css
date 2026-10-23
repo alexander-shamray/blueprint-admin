@@ -13,6 +13,7 @@
 .notice.warn { color: var(--app-warn); background: var(--app-warn-bg); }
 .shell { flex: 1; min-height: 0; background: var(--mat-sys-surface); }
 .side { width: 12rem; border-right: 1px solid var(--app-border); }
+.assistant-side { width: 24rem; border-left: 1px solid var(--app-border); }
 .new-page { margin: 0.25rem 0.5rem; }
 .hidden-pages { margin: 0.5rem 1rem; font-size: 0.9rem; color: var(--app-muted); }
 .hidden-pages ul { list-style: none; margin: 0.25rem 0 0; padding: 0; }

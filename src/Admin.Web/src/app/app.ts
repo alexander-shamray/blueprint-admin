@@ -13,6 +13,8 @@ import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { catchError, of } from 'rxjs';
+import { AssistantPanel } from './assistant/assistant-panel';
+import { AssistantService } from './assistant/assistant-service';
 import { HostClient, WORKSPACE_EXPORT_URL } from './core/host/host-client';
 import { LanguageService } from './core/i18n/language-service';
 import { THEME_CHOICES, ThemeService } from './core/theme/theme-service';
@@ -35,7 +37,7 @@ const THEME_LABELS = {
 /**
  * The shell (widget-workspace spec §7.2): a side navigation of the operator's pages in their order, and a top bar
  * with the open page's title, Edit layout, Add widget, the page's actions, where saving stands, the backend directory,
- * the palette key, the language picker and the theme switch. The workspace is read once, here, for the whole session.
+ * the palette key, the assistant's toggle when it is on, the language picker and the theme switch. The workspace is read once, here, for the whole session.
  */
 @Component({
   selector: 'app-root',
@@ -55,6 +57,7 @@ const THEME_LABELS = {
     MatSidenavModule,
     MatToolbarModule,
     CommandPalette,
+    AssistantPanel,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',
@@ -69,6 +72,7 @@ export class App {
   /** The picker's name holds the language it shows, so a voice-control user can say what they see. */
   readonly languageLabel = $localize`Language: ${this.language.name}:language:`;
   readonly workspace = inject(WorkspaceService);
+  readonly assistant = inject(AssistantService);
   readonly runningWork = inject(RunningWork);
   readonly widgetTypes = WIDGETS;
   readonly differsFromBuiltIn = differsFromBuiltIn;
@@ -89,6 +93,7 @@ export class App {
 
   constructor() {
     this.workspace.load();
+    void this.assistant.load();
   }
 
   newPage(): void {

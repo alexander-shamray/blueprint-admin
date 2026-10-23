@@ -393,7 +393,7 @@ public sealed partial class WorkspaceStoreTests : IDisposable
         File.Exists(Path.Combine(directory, "workspace.json")).ShouldBeFalse();
     }
 
-    [GeneratedRegex(@"\{ path: '([a-z]+)', label: '([^']+)' \}")]
+    [GeneratedRegex(@"path: '([a-z]+)',\s+label: '([^']+)',")]
     private static partial Regex ScreenRow();
 }
 
