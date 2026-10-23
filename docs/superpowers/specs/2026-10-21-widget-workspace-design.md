@@ -190,8 +190,9 @@ Some sources are one thing on the host however many widgets show them:
   services its visible-or-following widgets ask for. Each Logs widget
   filters that one stream to its own services, text and correlation id in
   the browser. When the union changes, the service restarts the follow with
-  the new set: a new follow replaces the old, as today, and the buffer of
-  lines already received is kept.
+  the new set: a new follow replaces the old, as today. Its `--tail 200`
+  replays the last lines of each service, so the buffer starts afresh;
+  keeping the old lines would show up to 200 of them twice.
 - **Scenario.** One `ScenarioRunner` holds the run, because the stack has one
   lease. Every Scenario and Saga strip widget is a view of that one run, and
   Run is refused while it is going, as the palette's second request is
@@ -575,8 +576,8 @@ later phase move one screen at a time without a page ever missing.
   - a Logs widget tells the service which services it shows (`ask`, and
     `withdraw` when destroyed). The follow covers the union, or every
     service when any widget asks for every one; a change to the union while
-    a follow runs, or is being asked for, replaces it and keeps the lines
-    already received, as §4.4 says (only a Follow starts the buffer afresh).
+    a follow runs, or is being asked for, replaces it, as §4.4 says; the new
+    follow replays each service's last 200 lines, so the buffer starts afresh.
     With no widget left the follow keeps the set it had;
   - a line belongs to the service named before its first `|` (without
     Compose's `-1` suffix); a line with no prefix is shown only by a widget
