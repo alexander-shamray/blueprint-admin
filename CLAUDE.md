@@ -40,11 +40,9 @@ runs is a line from `run-locally.md`; if the console needs something that
 document does not do, change that document's owner first.
 
 ```
-src/Admin.Assistant/       the AI assistant's provider-neutral core (no admin type)
 src/Admin.Host/            .NET 10 minimal API: Compose, npm as children, HTTP
                            proxy, SSE. Composition root: Program.cs
 src/Admin.Web/             Angular 22 standalone SPA, built into Host/wwwroot
-tests/Admin.Assistant.Tests/  xunit, the core
 tests/Admin.Host.Tests/    xunit
 src/Admin.Web/e2e/         Playwright (FakePlatform)
 tools/token-usage/         Transcript report for the token plan
@@ -69,10 +67,6 @@ tools/token-usage/         Transcript report for the token plan
 | Golden-signal queries (copied, cited) | `GoldenSignals.cs` |
 | What a Tempo span is | `SpanRecogniser.Table` in `SpanRecogniser.cs` |
 | OS (tree kill, job object, `npm.cmd`) | `ProcessRunner.cs`, `WindowsJobObject.cs`, `ExecutableResolver.cs` |
-| The assistant's protocol (mirrored in `src/app/assistant/protocol.ts`) | `src/Admin.Assistant/Protocol/`, pinned by its `golden/` files |
-| Assistant on or off, and its limits | `AssistantOptions` in `src/Admin.Host/Assistant/AssistantOptions.cs` |
-| What each screen is for, as the assistant explains it | `help` in `SCREENS` (`src/Admin.Web/src/app/screens.ts`) |
-| The fake assistant's answers | `FakeAssistantScripts` in `src/Admin.Host/Fakes/` |
 | Token figures | `docs/token-usage.md` |
 
 ## The one rule that matters

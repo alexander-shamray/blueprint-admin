@@ -205,16 +205,6 @@ translated; each screen follows when its workspace phase replaces it. Platform
 responses, logs, command output, typed confirmations and service and queue
 names stay as written.
 
-An assistant answers questions about the console in a panel the top bar's
-toggle opens (or "Ask the assistant" in the palette): what a screen is for,
-and where to find something, which it opens. It reads each screen's `help` in
-`src/Admin.Web/src/app/screens.ts` and never changes the platform. It is off
-unless `Admin:Assistant:Provider` names a provider; under FakePlatform, left
-unset, it plays scripted answers, so "where are the logs?" or "где логи?"
-opens Logs with no network. `--Admin:Assistant:Provider=off` turns it off
-there too, and with it off the console shows no trace of it. A real provider
-arrives with #429.
-
 ## Known limits
 
 - A game-day cause stays until Undo is pressed, and a host that is stopped while
