@@ -31,6 +31,17 @@ test('one order, one screen, every message it caused, each linked to its trace',
   await expect(page).toHaveURL(new RegExp(`/trace/${ORDER}$`));
 });
 
+// §5.3: an old link keeps working. A trace's link to its order's mail lands on the built-in page with the filter set.
+test('a link carrying a correlation id opens the mail already filtered to it', async ({ page }) => {
+  await page.goto(`/mail?correlationId=${ORDER}`);
+  await expect(page.getByLabel('Correlation id')).toHaveValue(ORDER);
+  await expect(page.locator('table.messages tbody tr')).toHaveCount(4);
+
+  await page.goto('/mail?correlationId=another-order');
+  await expect(page.getByLabel('Correlation id')).toHaveValue('another-order');
+  await expect(page.locator('table.messages tbody tr')).toHaveCount(0);
+});
+
 // §4.2: the message that is open and the filter typed are the widget's session state, so a page left and returned to finds them.
 test('the message that is open and the filter typed survive leaving the page', async ({ page }) => {
   await page.goto('/mail');

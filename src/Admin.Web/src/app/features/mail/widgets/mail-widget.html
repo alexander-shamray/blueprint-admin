@@ -50,8 +50,8 @@
 }
 
 @if (opened(); as m) {
-  <section class="message" aria-labelledby="message-heading">
-    <h2 id="message-heading">{{ m.subject }}</h2>
+  <section class="message" aria-label="Message">
+    <h2>{{ m.subject }}</h2>
     <p class="facts">
       From {{ mailboxes([m.from]) }} · to {{ mailboxes(m.to) }}
       @if (m.cc.length > 0) {· cc {{ mailboxes(m.cc) }}}
