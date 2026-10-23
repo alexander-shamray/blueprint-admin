@@ -439,7 +439,8 @@ A new residual is stated **here** and gets a row above.
   `SCAN_BUDGET` or `LENGTH_BUDGET`; a watchdog thread answers with a refusal
   after `WATCHDOG_SECONDS` and ends the process, which covers a Python loop that
   runs long and not a single regular-expression match, which holds the
-  interpreter and is bounded by the two budgets instead. The event is read as
+  interpreter and is bounded by the two budgets instead, or by reading no
+  further than the next bracket (`EXPANSION_WRITES`). The event is read as
   bytes and decoded as UTF-8 with replacement, never with the locale's code
   page, which on Windows raised on `Á` and let the handler allow the event
   unjudged. A malformed event that is not JSON is still allowed, and says so on
