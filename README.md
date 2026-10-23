@@ -58,7 +58,7 @@ then open the pages that read them and review the diff;
 
 ## What it does today
 
-The console is pages of widgets. It ships the eleven built-in pages
+The console is pages of widgets. It ships the built-in pages that
 `SCREENS` in `src/Admin.Web/src/app/screens.ts` names, each built from the
 widgets its screen became; the side navigation lists them in the operator's
 order, beside any page the operator made with **New page**. **Edit layout**
@@ -71,10 +71,12 @@ FakePlatform), and exported or imported as one document. Work a page starts —
 a Scenario run, a log follow, a job — goes on when the page is left, and the
 top bar says what is running. Besides each screen's own widgets there are a
 live Platform diagram, a Request sequence drawn from a trace, and a Note that
-holds Markdown or a Mermaid diagram. A layout saved while one of the eleven
-screens still sat whole in a page as a single Screen widget gets that
-screen's widgets in its place, inside the rectangle it occupied, the first
-time this console reads it, and is told once which pages changed.
+holds Markdown or a Mermaid diagram. A layout saved, or exported, while a
+screen still sat whole in a page as a single Screen widget gets that screen's
+widgets in its place the first time this console reads or imports it: inside
+the rectangle it occupied, or under the rest of the page where a widget needs
+more width than the rectangle had. The operator is told once which pages
+changed.
 
 Phases 0 to 6 of the spec: the Stack page (a workstation doctor read before
 Up: Docker, the published ports and what holds them, the gateway's CORS

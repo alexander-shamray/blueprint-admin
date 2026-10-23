@@ -346,9 +346,12 @@ Each feature has one `help`, and the owner moves as the workspace grows:
 - **Once a screen's widgets replace it** (workspace phases 2–4), each widget
   owns its own `help`. The screen's text narrows to "this page holds …",
   naming the widgets and not describing them.
-- **At workspace phase 6 (#394)**, `SCREENS` goes. Its remaining text moves
-  to the built-in pages' definitions, and `open_screen` becomes an alias of
-  `open_page` for the built-in page of the same name.
+- **Workspace phase 6 (#394)** retired the screen components but kept
+  `SCREENS`: it is the list of built-in pages, and `BUILT_IN_LAYOUTS` is keyed
+  by its paths. **With assistant phase 4 (#432)**, which adds `open_page`,
+  `SCREENS`' remaining text moves to the built-in pages' definitions, and
+  `open_screen` becomes an alias of `open_page` for the built-in page of the
+  same name.
 
 Phase 1 builds on `SCREENS` knowing it will go: everything it builds there is
 the `help` field and one tool name.
