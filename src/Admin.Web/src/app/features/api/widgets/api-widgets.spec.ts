@@ -12,19 +12,46 @@ import { ApiRequestWidget } from './api-request-widget';
 
 function op(partial: Partial<ApiOperation>): ApiOperation {
   return {
-    id: 'catalog:GetProducts', source: 'catalog', name: 'GetProducts', method: 'GET',
-    url: 'http://localhost:5000/api/v1/catalog/products/', pathParameters: [], queryParameters: [],
-    exampleBody: null, hasCommandId: false, edgePolicy: 'anonymous', available: true, ...partial,
+    id: 'catalog:GetProducts',
+    source: 'catalog',
+    name: 'GetProducts',
+    method: 'GET',
+    url: 'http://localhost:5000/api/v1/catalog/products/',
+    pathParameters: [],
+    queryParameters: [],
+    exampleBody: null,
+    hasCommandId: false,
+    edgePolicy: 'anonymous',
+    available: true,
+    ...partial,
   };
 }
 
 const catalog: ApiCatalogView = {
-  sources: [{ name: 'catalog', documentUrl: 'http://localhost:5102/openapi/v1.json', available: true, error: null, changes: null }],
-  operations: [op({}), op({ id: 'catalog:PublishProduct', name: 'PublishProduct', method: 'POST', exampleBody: '{"name":"Walnut desk"}' })],
+  sources: [
+    {
+      name: 'catalog',
+      documentUrl: 'http://localhost:5102/openapi/v1.json',
+      available: true,
+      error: null,
+      changes: null,
+    },
+  ],
+  operations: [
+    op({}),
+    op({ id: 'catalog:PublishProduct', name: 'PublishProduct', method: 'POST', exampleBody: '{"name":"Walnut desk"}' }),
+  ],
 };
 
 const responded: ProxyResult = {
-  outcome: 'responded', status: 200, headers: {}, body: '{}', bodyTruncated: false, bodyError: null, elapsedMs: 5, correlationId: 'corr-1',
+  outcome: 'responded',
+  status: 200,
+  headers: {},
+  body: '{}',
+  bodyTruncated: false,
+  bodyError: null,
+  elapsedMs: 5,
+  correlationId: 'corr-1',
 };
 
 describe('the API request and API history widgets', () => {
@@ -39,7 +66,9 @@ describe('the API request and API history widgets', () => {
       acceptBaseline: vi.fn(() => of(catalog)),
       proxy: vi.fn(() => of(responded)),
       token: vi.fn(),
-      tokenClock: vi.fn((identity: { username: string }) => of({ username: identity.username, held: false, expiresAt: null, renewsAt: null, permissions: [] })),
+      tokenClock: vi.fn((identity: { username: string }) =>
+        of({ username: identity.username, held: false, expiresAt: null, renewsAt: null, permissions: [] }),
+      ),
       identityUsers: vi.fn(() => of([{ username: 'demo' }, { username: 'browser' }])),
       brokerQueues: vi.fn(),
     };
@@ -134,7 +163,7 @@ describe('the API request and API history widgets', () => {
       expect(fixture.componentInstance.selectedId()).toBe('catalog:PublishProduct');
     });
 
-    it('takes up the identity it names, and saves the operator\'s choice of identity and operation by username', () => {
+    it("takes up the identity it names, and saves the operator's choice of identity and operation by username", () => {
       const fixture = request({ identity: 'user:browser' });
       expect(TestBed.inject(IdentityState).choice()).toEqual({ kind: 'user', username: 'browser' });
       expect(configured).toEqual([]);
@@ -146,7 +175,7 @@ describe('the API request and API history widgets', () => {
     });
   });
 
-  describe('a custom identity\'s password', () => {
+  describe("a custom identity's password", () => {
     it('never reaches a saved config: only the username does, however often it is typed', () => {
       const fixture = request();
       fixture.componentInstance.chooseIdentity('custom');
@@ -173,13 +202,17 @@ describe('the API request and API history widgets', () => {
       expect(host['proxy'].mock.calls.at(-1)?.[0].identity).toEqual({ username: 'alice', password: 's3cret-password' });
     });
 
-    it('stays in the shared identity until the last request widget goes, so removing one does not empty another\'s', () => {
+    it("stays in the shared identity until the last request widget goes, so removing one does not empty another's", () => {
       const first = request({ identity: 'custom:alice' });
       const second = request({ identity: 'custom:alice' });
       first.componentInstance.setCustom('alice', 's3cret-password');
 
       first.destroy();
-      expect(TestBed.inject(IdentityState).choice()).toEqual({ kind: 'custom', username: 'alice', password: 's3cret-password' });
+      expect(TestBed.inject(IdentityState).choice()).toEqual({
+        kind: 'custom',
+        username: 'alice',
+        password: 's3cret-password',
+      });
 
       second.destroy();
       expect(TestBed.inject(IdentityState).choice()).toEqual({ kind: 'custom', username: 'alice', password: '' });
@@ -286,7 +319,20 @@ describe('the API request and API history widgets', () => {
     it('keeps the newest fifty', () => {
       const api = TestBed.inject(ApiHistory);
       for (let i = 0; i < 55; i++) {
-        api.add({ name: `call ${i}`, operationId: null, hasCommandId: false, headersText: '', urlTemplate: '', pathValues: {}, queryValues: {}, bodyTemplate: '', identity: 'anonymous', sentAs: { kind: 'anonymous' }, request: { method: 'GET', url: '', headers: {}, body: null, identity: null, correlationId: null }, result: responded });
+        api.add({
+          name: `call ${i}`,
+          operationId: null,
+          hasCommandId: false,
+          headersText: '',
+          urlTemplate: '',
+          pathValues: {},
+          queryValues: {},
+          bodyTemplate: '',
+          identity: 'anonymous',
+          sentAs: { kind: 'anonymous' },
+          request: { method: 'GET', url: '', headers: {}, body: null, identity: null, correlationId: null },
+          result: responded,
+        });
       }
 
       expect(api.entries().length).toBe(50);

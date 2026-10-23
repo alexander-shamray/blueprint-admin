@@ -50,8 +50,8 @@
 }
 
 <p class="intro">
-  {{ runner.intro() }} As run-locally.md does it by hand: each step carries its own correlation id, so each
-  call that leaves the console has its own trace.
+  {{ runner.intro() }} As run-locally.md does it by hand: each step carries its own correlation id, so each call that
+  leaves the console has its own trace.
 </p>
 
 @if (runner.leaseNote(); as note) {
@@ -65,8 +65,7 @@
 @if (runner.resolved(); as r) {
   @if (runner.identity.users().length === 0) {
     <p class="no-users" role="status">
-      No realm user is known yet, so there is nobody to run as: the host did not list them. Reload
-      asks again.
+      No realm user is known yet, so there is nobody to run as: the host did not list them. Reload asks again.
     </p>
   }
   @if (r.missing.length > 0) {
@@ -90,9 +89,7 @@
           <span class="status">{{ step.status }}</span>
         }
         @if (step.correlationId && step.state !== 'running') {
-          <a class="trace-step" [appTraceLink]="step.correlationId"
-            >Trace {{ step.correlationId }}</a
-          >
+          <a class="trace-step" [appTraceLink]="step.correlationId">Trace {{ step.correlationId }}</a>
         }
       </div>
       @if (step.request) {

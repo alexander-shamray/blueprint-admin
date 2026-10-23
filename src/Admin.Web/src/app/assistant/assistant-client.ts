@@ -37,7 +37,8 @@ export class AssistantProblem extends Error {
 export class AssistantClient {
   constructor(
     private readonly base = '/api/assistant',
-    private readonly http: (input: string, init?: RequestInit) => Promise<Response> = (input, init) => fetch(input, init),
+    private readonly http: (input: string, init?: RequestInit) => Promise<Response> = (input, init) =>
+      fetch(input, init),
     private readonly openStream: (url: string) => EventSourceLike = (url) => new EventSource(url),
   ) {}
 
@@ -141,7 +142,13 @@ export interface ConversationState {
   problem: { code: 'turn-running' | 'failed' | 'provider' | 'gone'; detail: string | null } | null;
 }
 
-export const EMPTY_CONVERSATION: ConversationState = { id: null, items: [], running: false, lastEventId: 0, problem: null };
+export const EMPTY_CONVERSATION: ConversationState = {
+  id: null,
+  items: [],
+  running: false,
+  lastEventId: 0,
+  problem: null,
+};
 
 /** Where a client keeps its conversation's id between reloads of one tab (§5.5). */
 export interface IdStore {
@@ -213,10 +220,18 @@ export class AssistantConversation {
         outcome = await this.client.send(id, { text, context, locale, hostOptions: null });
       }
       if (outcome === 'running') {
-        this.update({ ...this.state, items: this.state.items.slice(0, -1), problem: { code: 'turn-running', detail: null } });
+        this.update({
+          ...this.state,
+          items: this.state.items.slice(0, -1),
+          problem: { code: 'turn-running', detail: null },
+        });
       }
     } catch (e) {
-      this.update({ ...this.state, running: false, problem: { code: 'failed', detail: e instanceof Error ? e.message : String(e) } });
+      this.update({
+        ...this.state,
+        running: false,
+        problem: { code: 'failed', detail: e instanceof Error ? e.message : String(e) },
+      });
       this.settleStream();
     }
   }
@@ -245,7 +260,12 @@ export class AssistantConversation {
   private settleStream(): void {
     const wanted = this.state.id !== null && (this.state.running || this.visible);
     if (wanted && !this.close && this.state.id) {
-      this.close = this.client.follow(this.state.id, this.state.lastEventId, (e) => this.receive(e), () => void this.lost());
+      this.close = this.client.follow(
+        this.state.id,
+        this.state.lastEventId,
+        (e) => this.receive(e),
+        () => void this.lost(),
+      );
     } else if (!wanted) {
       this.stopStream();
     }

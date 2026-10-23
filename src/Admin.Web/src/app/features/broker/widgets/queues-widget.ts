@@ -32,15 +32,37 @@ import { BrokerFeed, filterOf } from '../broker-feed';
       @if (q.reachable) {
         <app-drained-indicator [projection]="q.projection" />
         <table class="queues">
-          <thead><tr><th>Queue</th><th>Messages</th><th>Consumed by</th><th>Runbook</th><th>Dead letters</th></tr></thead>
+          <thead
+            ><tr><th>Queue</th><th>Messages</th><th>Consumed by</th><th>Runbook</th><th>Dead letters</th></tr></thead
+          >
           <tbody>
             @for (queue of shown(); track queue.name) {
               <tr [class.error-queue]="queue.parked === 'error'" [class.skipped-queue]="queue.parked === 'skipped'">
-                <td>@if (queue.parked; as kind) {<span class="marker">[{{ kind }}]</span> }{{ queue.name }}</td>
+                <td>
+                  @if (queue.parked; as kind) {
+                    <span class="marker">[{{ kind }}]</span>
+                  }
+                  {{ queue.name }}</td
+                >
                 <td>{{ queue.messages ?? '—' }}</td>
                 <td class="consumer">{{ queue.consumer ?? '' }}</td>
-                <td class="runbook">@if (queue.runbook && (queue.messages ?? 0) > 0) {<a [href]="queue.runbook" target="_blank" rel="noopener noreferrer">{{ queue.parked }}-queue runbook</a>}</td>
-                <td class="open">@if (queue.parked && feed.deadLetterPlan() && feed.workbenches() > 0 && (queue.messages ?? 0) > 0) {<button class="open-dead-letters" (click)="feed.requestOpen(queue.name)" [attr.aria-label]="'Open the messages on ' + queue.name">Open</button>}</td>
+                <td class="runbook">
+                  @if (queue.runbook && (queue.messages ?? 0) > 0) {
+                    <a [href]="queue.runbook" target="_blank" rel="noopener noreferrer"
+                      >{{ queue.parked }}-queue runbook</a
+                    >
+                  }
+                </td>
+                <td class="open">
+                  @if (queue.parked && feed.deadLetterPlan() && feed.workbenches() > 0 && (queue.messages ?? 0) > 0) {
+                    <button
+                      class="open-dead-letters"
+                      (click)="feed.requestOpen(queue.name)"
+                      [attr.aria-label]="'Open the messages on ' + queue.name"
+                      >Open</button
+                    >
+                  }
+                </td>
               </tr>
             }
           </tbody>

@@ -45,7 +45,9 @@ describe('QueuesWidget', () => {
 
   it('links the runbook of a parked queue that holds a message, and of an empty one not', () => {
     const fixture = render();
-    const links = Array.from(fixture.nativeElement.querySelectorAll('table.queues td.runbook a')) as HTMLAnchorElement[];
+    const links = Array.from(
+      fixture.nativeElement.querySelectorAll('table.queues td.runbook a'),
+    ) as HTMLAnchorElement[];
 
     expect(links.map((a) => a.getAttribute('href'))).toEqual([
       'https://example.test/runbooks/error-queue.md',
@@ -55,7 +57,10 @@ describe('QueuesWidget', () => {
   });
 
   it('filters by name and shows parked queues only, as its config says', () => {
-    expect(rows(render({ filter: 'BFF' }), 'queues').map((r) => r.split(' ')[0] === '[skipped]')).toEqual([true, false]);
+    expect(rows(render({ filter: 'BFF' }), 'queues').map((r) => r.split(' ')[0] === '[skipped]')).toEqual([
+      true,
+      false,
+    ]);
 
     const parked = render({ parkedOnly: true });
     expect(rows(parked, 'queues').length).toBe(3);
@@ -164,7 +169,9 @@ describe('QueuesWidget', () => {
 
       TestBed.createComponent(Bench);
       const fixture = render();
-      const buttons = Array.from(fixture.nativeElement.querySelectorAll('button.open-dead-letters')) as HTMLButtonElement[];
+      const buttons = Array.from(
+        fixture.nativeElement.querySelectorAll('button.open-dead-letters'),
+      ) as HTMLButtonElement[];
 
       expect(buttons.map((b) => b.getAttribute('aria-label'))).toEqual([
         'Open the messages on ordering-catalog-events_error',

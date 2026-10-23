@@ -22,13 +22,32 @@ export const DIAGRAM_RENDERER = new InjectionToken<(source: string) => Promise<s
     <div class="drawing" #drawing></div>
   `,
   styles: `
-    :host { display: block; }
+    :host {
+      display: block;
+    }
     /* Mermaid's neutral theme is drawn for a light page, whatever the console's theme. */
-    .drawing { background: #fff; color: #000; border-radius: 0.25rem; padding: 0.5rem; overflow: auto; }
-    .drawing:empty { display: none; }
-    .drawing :is(svg) { max-width: 100%; height: auto; }
-    .error { color: var(--mat-sys-error); margin: 0 0 0.5rem; }
-    .source { margin: 0; overflow: auto; }
+    .drawing {
+      background: #fff;
+      color: #000;
+      border-radius: 0.25rem;
+      padding: 0.5rem;
+      overflow: auto;
+    }
+    .drawing:empty {
+      display: none;
+    }
+    .drawing :is(svg) {
+      max-width: 100%;
+      height: auto;
+    }
+    .error {
+      color: var(--mat-sys-error);
+      margin: 0 0 0.5rem;
+    }
+    .source {
+      margin: 0;
+      overflow: auto;
+    }
   `,
 })
 export class MermaidDiagram {

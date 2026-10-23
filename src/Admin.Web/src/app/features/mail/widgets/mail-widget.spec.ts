@@ -58,7 +58,11 @@ describe('MailWidget', () => {
   ) {
     const mailMessage = vi.fn().mockReturnValue(of(opened));
     TestBed.configureTestingModule({
-      providers: [provideRouter([]), { provide: HostClient, useValue: { mailMessages: () => list, mailMessage } }, ...(extraProviders as [])],
+      providers: [
+        provideRouter([]),
+        { provide: HostClient, useValue: { mailMessages: () => list, mailMessage } },
+        ...(extraProviders as []),
+      ],
     });
     seed(TestBed.inject(WidgetSessionStore));
     const fixture = TestBed.createComponent(MailWidget);
@@ -72,7 +76,9 @@ describe('MailWidget', () => {
   }
 
   function rows(fixture: { nativeElement: HTMLElement }): string[] {
-    return (Array.from(el(fixture).querySelectorAll('table.messages tbody tr')) as HTMLElement[]).map((r) => r.textContent?.replace(/\s+/g, ' ').trim() ?? '');
+    return (Array.from(el(fixture).querySelectorAll('table.messages tbody tr')) as HTMLElement[]).map(
+      (r) => r.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+    );
   }
 
   it('lists each message with its correlation id as a link into its trace, and links the sink', () => {
@@ -95,9 +101,13 @@ describe('MailWidget', () => {
   });
 
   it('narrows the list to the correlation id its config names', async () => {
-    const { fixture } = render(of(listed([summary({ id: 'a' }), summary({ id: 'b', correlationId: 'other-order' })])), read({}), {
-      correlationId: 'other-order',
-    });
+    const { fixture } = render(
+      of(listed([summary({ id: 'a' }), summary({ id: 'b', correlationId: 'other-order' })])),
+      read({}),
+      {
+        correlationId: 'other-order',
+      },
+    );
     await fixture.whenStable();
     fixture.detectChanges();
 
@@ -107,9 +117,13 @@ describe('MailWidget', () => {
   });
 
   it('shows what the operator types over the configured filter', async () => {
-    const { fixture } = render(of(listed([summary({ id: 'a' }), summary({ id: 'b', correlationId: 'other-order' })])), read({}), {
-      correlationId: 'other-order',
-    });
+    const { fixture } = render(
+      of(listed([summary({ id: 'a' }), summary({ id: 'b', correlationId: 'other-order' })])),
+      read({}),
+      {
+        correlationId: 'other-order',
+      },
+    );
     const input = el(fixture).querySelector('input.filter') as HTMLInputElement;
 
     input.value = '';
@@ -129,7 +143,9 @@ describe('MailWidget', () => {
   it('says why the sink did not answer', () => {
     const { fixture } = render(of(listed([], { reachable: false, error: 'connection refused' })));
 
-    expect(el(fixture).querySelector('.error')?.textContent).toContain('The mail sink did not answer: connection refused');
+    expect(el(fixture).querySelector('.error')?.textContent).toContain(
+      'The mail sink did not answer: connection refused',
+    );
     expect(el(fixture).querySelector('table.messages')).toBeNull();
   });
 
@@ -165,7 +181,11 @@ describe('MailWidget', () => {
   });
 
   it("shows the sink's own answer when a message is gone", () => {
-    const { fixture } = render(of(listed([summary({})])), { reachable: true, error: 'The mail sink answered 404 for message m1.', message: null });
+    const { fixture } = render(of(listed([summary({})])), {
+      reachable: true,
+      error: 'The mail sink answered 404 for message m1.',
+      message: null,
+    });
 
     (el(fixture).querySelector('button.open') as HTMLButtonElement).click();
     fixture.detectChanges();
@@ -198,7 +218,10 @@ describe('MailWidget', () => {
   });
 
   it('starts at the correlation id an old link carries in its route, over the configured one', async () => {
-    const route = { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap({ correlationId: 'from-link' }) } } };
+    const route = {
+      provide: ActivatedRoute,
+      useValue: { snapshot: { queryParamMap: convertToParamMap({ correlationId: 'from-link' }) } },
+    };
     const { fixture } = render(
       of(listed([summary({ id: 'a', correlationId: 'from-link' }), summary({ id: 'b', correlationId: 'configured' })])),
       read({}),
@@ -214,9 +237,16 @@ describe('MailWidget', () => {
 
   it('lets an old link win over a filter typed earlier in the tab', async () => {
     const context = { provide: WIDGET_CONTEXT, useValue: { instanceId: 'w1', pageId: 'p1' } };
-    const route = { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap({ correlationId: 'from-link' }) } } };
-    const { fixture } = render(of(listed([summary({ id: 'a', correlationId: 'from-link' }), summary({ id: 'b' })])), read({}), {}, [context, route], (store) =>
-      store.state<string | null>('w1', 'filter', null).set('typed-earlier'),
+    const route = {
+      provide: ActivatedRoute,
+      useValue: { snapshot: { queryParamMap: convertToParamMap({ correlationId: 'from-link' }) } },
+    };
+    const { fixture } = render(
+      of(listed([summary({ id: 'a', correlationId: 'from-link' }), summary({ id: 'b' })])),
+      read({}),
+      {},
+      [context, route],
+      (store) => store.state<string | null>('w1', 'filter', null).set('typed-earlier'),
     );
     await fixture.whenStable();
     fixture.detectChanges();
@@ -249,7 +279,9 @@ describe('MailWidget', () => {
     fixture.detectChanges();
     expect(openedId()).toBe('m1');
 
-    mailMessage.mockReturnValue(of({ reachable: true, error: 'The mail sink answered 404 for message m1.', message: null }));
+    mailMessage.mockReturnValue(
+      of({ reachable: true, error: 'The mail sink answered 404 for message m1.', message: null }),
+    );
     el(fixture).querySelector<HTMLButtonElement>('button.open')?.click();
     fixture.detectChanges();
     expect(openedId()).toBeNull();

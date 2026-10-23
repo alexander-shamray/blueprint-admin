@@ -18,10 +18,16 @@ import { BrokerFeed, describeError } from '../broker-feed';
     @if (feed.projectionPlan(); as p) {
       <section class="projection">
         <p>
-          The buyer's order list is built from the events on <code>{{ p.queue }}</code>.
+          The buyer's order list is built from the events on <code>{{ p.queue }}</code
+          >.
           @if (depth(); as d) {
             <span class="depth" role="status" [class.drained]="d.messages === 0">
-              @if (d.messages === 0) {[drained] {{ p.queue }} is empty.} @else {[waiting] {{ p.queue }} holds {{ d.messages ?? 'some' }} {{ d.messages === 1 ? 'message' : 'messages' }}.}
+              @if (d.messages === 0) {
+                [drained] {{ p.queue }} is empty.
+              } @else {
+                [waiting] {{ p.queue }} holds {{ d.messages ?? 'some' }}
+                {{ d.messages === 1 ? 'message' : 'messages' }}.
+              }
             </span>
           }
         </p>
@@ -31,10 +37,26 @@ import { BrokerFeed, describeError } from '../broker-feed';
           }
         </ul>
         <div class="projection-actions">
-          <button class="repair" (click)="repair()" title="Send what the BFF's inbox has not recorded; nothing is deleted">Repair</button>
+          <button
+            class="repair"
+            (click)="repair()"
+            title="Send what the BFF's inbox has not recorded; nothing is deleted"
+            >Repair</button
+          >
           <span class="rebuild-box">
-            <input [attr.aria-label]="'Type ' + p.rebuildConfirm + ' to confirm a rebuild'" [placeholder]="'type: ' + p.rebuildConfirm" [ngModel]="confirmText()" (ngModelChange)="confirmText.set($event)" />
-            <button class="rebuild" [disabled]="!canRebuild()" (click)="rebuild()" title="Stop the BFF, delete its order projection, replay the outbox window, start the BFF again">Rebuild</button>
+            <input
+              [attr.aria-label]="'Type ' + p.rebuildConfirm + ' to confirm a rebuild'"
+              [placeholder]="'type: ' + p.rebuildConfirm"
+              [ngModel]="confirmText()"
+              (ngModelChange)="confirmText.set($event)"
+            />
+            <button
+              class="rebuild"
+              [disabled]="!canRebuild()"
+              (click)="rebuild()"
+              title="Stop the BFF, delete its order projection, replay the outbox window, start the BFF again"
+              >Rebuild</button
+            >
           </span>
         </div>
         @if (error(); as e) {
@@ -90,7 +112,9 @@ export class BffProjectionWidget {
 
   /** The tool with no argument: sends what the BFF's inbox has not recorded and deletes nothing. */
   repair(): void {
-    this.host.projectionRepair().subscribe({ next: (job) => this.started(job), error: (e: unknown) => this.error.set(describeError(e)) });
+    this.host
+      .projectionRepair()
+      .subscribe({ next: (job) => this.started(job), error: (e: unknown) => this.error.set(describeError(e)) });
   }
 
   /** The tool with `--reset` between a stop and a start of the BFF; only with the typed confirmation, which a refusal leaves in the box so a retry is not retyped. */

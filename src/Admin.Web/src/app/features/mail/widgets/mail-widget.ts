@@ -35,7 +35,8 @@ export class MailWidget {
   readonly error = signal<string | null>(null);
 
   /** The `?correlationId=` the route carries, which an old link (a trace's, or a bookmark) hands the widget (§5.3). */
-  private readonly fromRoute = inject(ActivatedRoute, { optional: true })?.snapshot.queryParamMap.get('correlationId') ?? '';
+  private readonly fromRoute =
+    inject(ActivatedRoute, { optional: true })?.snapshot.queryParamMap.get('correlationId') ?? '';
   private readonly configured = computed(() => {
     const configured = this.config()['correlationId'];
     return typeof configured === 'string' ? configured : '';

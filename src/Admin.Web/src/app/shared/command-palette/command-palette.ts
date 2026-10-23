@@ -52,7 +52,9 @@ export class CommandPalette {
       },
     },
     // Only while the assistant is on: off, the palette has no trace of it (AI assistant design §9.1).
-    ...(this.assistant.enabled() ? [{ id: 'assistant', label: $localize`Ask the assistant`, run: () => this.assistant.open() }] : []),
+    ...(this.assistant.enabled()
+      ? [{ id: 'assistant', label: $localize`Ask the assistant`, run: () => this.assistant.open() }]
+      : []),
   ]);
 
   /** The fixed commands whose words contain what was typed, then the typed text as a correlation id. */

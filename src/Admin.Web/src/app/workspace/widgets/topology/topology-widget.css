@@ -1,15 +1,70 @@
-:host { display: block; }
-.actions { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; }
-.auto { color: var(--app-muted); font-size: 0.85em; }
+:host {
+  display: block;
+}
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+.auto {
+  color: var(--app-muted);
+  font-size: 0.85em;
+}
 /* Cytoscape draws on a canvas for a white page, whatever the console's theme (as the Mermaid drawings are). */
-.graph { background: #fff; border-radius: 0.25rem; height: 28rem; min-height: 12rem; }
-.notice { color: var(--app-muted); margin: 0.5rem 0 0; }
-.nodes { list-style: none; margin: 0.75rem 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: 0.25rem 1rem; }
-.nodes li { display: flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap; }
-.nodes .state, .nodes .flow { color: var(--app-muted); font-size: 0.85em; }
-.nodes li.state-down .state, .nodes li.state-parked .state { color: var(--app-error); font-weight: 600; }
-.nodes li.state-starting .state, .nodes li.state-growing .state { color: var(--app-warn); font-weight: 600; }
-.disagreements { background: var(--app-warn-bg); padding: 0.25rem 1rem; border-radius: 3px; margin-top: 0.75rem; }
-h2 { font-size: 1rem; margin: 1rem 0 0.5rem; }
-.error { color: var(--app-error); }
-.loading { color: var(--app-muted); }
+.graph {
+  background: #fff;
+  border-radius: 0.25rem;
+  height: 28rem;
+  min-height: 12rem;
+}
+.notice {
+  color: var(--app-muted);
+  margin: 0.5rem 0 0;
+}
+.nodes {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: 0.25rem 1rem;
+}
+.nodes li {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.nodes .state,
+.nodes .flow {
+  color: var(--app-muted);
+  font-size: 0.85em;
+}
+.nodes li.state-down .state,
+.nodes li.state-parked .state {
+  color: var(--app-error);
+  font-weight: 600;
+}
+.nodes li.state-starting .state,
+.nodes li.state-growing .state {
+  color: var(--app-warn);
+  font-weight: 600;
+}
+.disagreements {
+  background: var(--app-warn-bg);
+  padding: 0.25rem 1rem;
+  border-radius: 3px;
+  margin-top: 0.75rem;
+}
+h2 {
+  font-size: 1rem;
+  margin: 1rem 0 0.5rem;
+}
+.error {
+  color: var(--app-error);
+}
+.loading {
+  color: var(--app-muted);
+}

@@ -32,9 +32,15 @@ import { MermaidDiagram } from './mermaid-diagram';
         @switch (b.kind) {
           @case ('heading') {
             @switch (b.level) {
-              @case (1) {<h3><app-runbook-spans [spans]="b.spans" /></h3>}
-              @case (2) {<h4><app-runbook-spans [spans]="b.spans" /></h4>}
-              @default {<h5><app-runbook-spans [spans]="b.spans" /></h5>}
+              @case (1) {
+                <h3><app-runbook-spans [spans]="b.spans" /></h3>
+              }
+              @case (2) {
+                <h4><app-runbook-spans [spans]="b.spans" /></h4>
+              }
+              @default {
+                <h5><app-runbook-spans [spans]="b.spans" /></h5>
+              }
             }
           }
           @case ('paragraph') {
@@ -91,14 +97,44 @@ import { MermaidDiagram } from './mermaid-diagram';
     </ng-template>
   `,
   styles: `
-    :host { display: block; height: 100%; }
-    .source { box-sizing: border-box; width: 100%; height: 100%; min-height: 6rem; resize: none; font: var(--mat-sys-body-medium); font-family: monospace; }
-    .empty { margin: 0; color: var(--app-muted); }
-    h3, h4, h5 { margin: 0.5rem 0 0.25rem; }
-    p { margin: 0 0 0.5rem; }
-    .code { overflow: auto; margin: 0 0 0.5rem; }
-    table.md { border-collapse: collapse; margin-bottom: 0.5rem; }
-    table.md :is(th, td) { border: 1px solid var(--app-border); padding: 0.25rem 0.5rem; text-align: left; }
+    :host {
+      display: block;
+      height: 100%;
+    }
+    .source {
+      box-sizing: border-box;
+      width: 100%;
+      height: 100%;
+      min-height: 6rem;
+      resize: none;
+      font: var(--mat-sys-body-medium);
+      font-family: monospace;
+    }
+    .empty {
+      margin: 0;
+      color: var(--app-muted);
+    }
+    h3,
+    h4,
+    h5 {
+      margin: 0.5rem 0 0.25rem;
+    }
+    p {
+      margin: 0 0 0.5rem;
+    }
+    .code {
+      overflow: auto;
+      margin: 0 0 0.5rem;
+    }
+    table.md {
+      border-collapse: collapse;
+      margin-bottom: 0.5rem;
+    }
+    table.md :is(th, td) {
+      border: 1px solid var(--app-border);
+      padding: 0.25rem 0.5rem;
+      text-align: left;
+    }
   `,
 })
 export class NoteWidget {

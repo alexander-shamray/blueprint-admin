@@ -19,8 +19,8 @@ import { StackFeed } from '../stack-feed';
           <table class="signals">
             <thead>
               <tr>
-                <th>Service</th><th>Requests (req/s)</th><th>5xx share</th><th>Latency p99</th>
-                <th>422 (req/s)</th><th>401 (req/s)</th><th>Command p95</th><th>Query p95</th>
+                <th>Service</th><th>Requests (req/s)</th><th>5xx share</th><th>Latency p99</th> <th>422 (req/s)</th
+                ><th>401 (req/s)</th><th>Command p95</th><th>Query p95</th>
               </tr>
             </thead>
             <tbody>

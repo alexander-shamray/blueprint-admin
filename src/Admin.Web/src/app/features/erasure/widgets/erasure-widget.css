@@ -1,14 +1,60 @@
-.lede { max-width: 60rem; }
-h2 { font-size: 1rem; margin: 1rem 0 0.5rem; }
-.row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.5rem; }
-input.subject, input.request-id { width: 22rem; font-family: monospace; }
-table { border-collapse: collapse; margin-bottom: 1rem; }
-td, th { padding: 0.25rem 0.75rem; border-bottom: 1px solid var(--app-border); text-align: left; vertical-align: top; }
-tr.holder-overdue td { color: var(--app-error); font-weight: 600; }
-tr.holder-waiting td { color: var(--app-warn); }
-.status { padding: 0.125rem 0.5rem; border-radius: 3px; background: var(--app-warn-bg); display: inline-block; }
-.status.closed { background: var(--app-ok-bg); }
-.status.overdue { background: var(--app-error-bg); }
-.overdue-actions { display: flex; gap: 0.75rem; align-items: center; }
-code { word-break: break-all; }
-.error { color: var(--app-error); }
+.lede {
+  max-width: 60rem;
+}
+h2 {
+  font-size: 1rem;
+  margin: 1rem 0 0.5rem;
+}
+.row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+input.subject,
+input.request-id {
+  width: 22rem;
+  font-family: monospace;
+}
+table {
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+}
+td,
+th {
+  padding: 0.25rem 0.75rem;
+  border-bottom: 1px solid var(--app-border);
+  text-align: left;
+  vertical-align: top;
+}
+tr.holder-overdue td {
+  color: var(--app-error);
+  font-weight: 600;
+}
+tr.holder-waiting td {
+  color: var(--app-warn);
+}
+.status {
+  padding: 0.125rem 0.5rem;
+  border-radius: 3px;
+  background: var(--app-warn-bg);
+  display: inline-block;
+}
+.status.closed {
+  background: var(--app-ok-bg);
+}
+.status.overdue {
+  background: var(--app-error-bg);
+}
+.overdue-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+code {
+  word-break: break-all;
+}
+.error {
+  color: var(--app-error);
+}

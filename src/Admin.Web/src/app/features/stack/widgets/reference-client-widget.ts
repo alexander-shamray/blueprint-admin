@@ -29,7 +29,9 @@ export class ReferenceClientWidget {
   readonly hostConfig = toSignal(this.host.config().pipe(catchError(() => of(undefined))));
 
   /** Whether the client's port answers: the `client` reachability entry, which is how spec §5.4's port check reaches here. */
-  readonly clientUp = computed(() => this.feed.stack.value()?.reachability.find((r) => r.name === 'client')?.up ?? false);
+  readonly clientUp = computed(
+    () => this.feed.stack.value()?.reachability.find((r) => r.name === 'client')?.up ?? false,
+  );
   readonly frontendRunning = computed(() => this.feed.stack.value()?.frontend.job?.state === 'Running');
   readonly deviceBuildRunning = computed(() => this.feed.stack.value()?.frontend.deviceJob?.state === 'Running');
 

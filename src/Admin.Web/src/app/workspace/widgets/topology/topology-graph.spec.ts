@@ -19,7 +19,13 @@ const map: PlatformMapView = {
           parked: null,
           bindings: [{ source: 'Common.Contracts.Catalog.V1:PriceChanged', routingKey: '' }],
         },
-        { name: 'ordering-catalog-events_error', consumer: "Ordering's price projection", messages: 1, parked: 'error', bindings: [] },
+        {
+          name: 'ordering-catalog-events_error',
+          consumer: "Ordering's price projection",
+          messages: 1,
+          parked: 'error',
+          bindings: [],
+        },
       ],
     },
     {
@@ -34,7 +40,11 @@ const map: PlatformMapView = {
 };
 
 const stack = {
-  backend: { reachable: true, error: null, services: [{ service: 'shipping-worker', state: 'running', health: null, exitCode: null, publishedPorts: [] }] },
+  backend: {
+    reachable: true,
+    error: null,
+    services: [{ service: 'shipping-worker', state: 'running', health: null, exitCode: null, publishedPorts: [] }],
+  },
   reachability: [
     { name: 'gateway', url: 'http://localhost:5000/health/ready', up: true, status: 200 },
     { name: 'ordering', url: 'http://localhost:5101/health/ready', up: false, status: 503 },
@@ -86,7 +96,9 @@ describe('topologyOf', () => {
     const two = {
       ...map,
       services: map.services.map((s) =>
-        s.name === 'ordering' ? { ...s, routes: [...s.routes, { method: 'POST', prefix: '/api/v1/orders/place', policy: 'authenticated' }] } : s,
+        s.name === 'ordering'
+          ? { ...s, routes: [...s.routes, { method: 'POST', prefix: '/api/v1/orders/place', policy: 'authenticated' }] }
+          : s,
       ),
     };
 
@@ -94,24 +106,30 @@ describe('topologyOf', () => {
   });
 
   it('colours a probed service by its reachability and says why in words', () => {
-    expect([node('s:gateway'), node('s:ordering'), node('s:catalog')].map((n) => `${n.state}: ${n.stateText}`)).toEqual([
-      'up: reachable',
-      'down: answers 503',
-      'down: refuses connections',
-    ]);
+    expect([node('s:gateway'), node('s:ordering'), node('s:catalog')].map((n) => `${n.state}: ${n.stateText}`)).toEqual(
+      ['up: reachable', 'down: answers 503', 'down: refuses connections'],
+    );
   });
 
   it('colours a worker by its Compose state and health, and never green without a state to read', () => {
     const states = (service: object | null) =>
-      node('s:shipping', undefined, { ...stack, backend: { ...stack.backend, services: service ? [service] : [] } } as StackView);
+      node('s:shipping', undefined, {
+        ...stack,
+        backend: { ...stack.backend, services: service ? [service] : [] },
+      } as StackView);
     const compose = { service: 'shipping-worker', state: 'running', health: null, exitCode: null, publishedPorts: [] };
 
     expect(states(compose).state).toBe('up');
     expect(states({ ...compose, health: 'starting' }).state).toBe('starting');
-    expect(states({ ...compose, health: 'unhealthy' })).toMatchObject({ state: 'down', stateText: 'Compose: unhealthy' });
+    expect(states({ ...compose, health: 'unhealthy' })).toMatchObject({
+      state: 'down',
+      stateText: 'Compose: unhealthy',
+    });
     expect(states({ ...compose, state: 'exited' })).toMatchObject({ state: 'down', stateText: 'Compose: exited' });
     expect(states(null)).toMatchObject({ state: 'unknown', stateText: 'no Compose service' });
-    expect(node('s:shipping', undefined, { ...stack, backend: { ...stack.backend, reachable: false } } as StackView).state).toBe('unknown');
+    expect(
+      node('s:shipping', undefined, { ...stack, backend: { ...stack.backend, reachable: false } } as StackView).state,
+    ).toBe('unknown');
     expect(node('s:shipping', undefined, null)).toMatchObject({ state: 'unknown', stateText: 'not read yet' });
   });
 
@@ -128,14 +146,20 @@ describe('topologyOf', () => {
       parkedQueue: 'ordering-catalog-events_error',
       label: 'ordering-catalog-events\nparked 1',
     });
-    const quiet = { ...map, services: map.services.map((s) => ({ ...s, queues: s.queues.filter((q) => q.parked === null) })) };
+    const quiet = {
+      ...map,
+      services: map.services.map((s) => ({ ...s, queues: s.queues.filter((q) => q.parked === null) })),
+    };
     const state = (m: PlatformMapView, rates: Record<string, number> = {}) =>
       topologyOf(m, reads(rates)).nodes.find((n) => n.id === 'q:ordering-catalog-events')?.state;
     expect(state(quiet, { 'ordering-catalog-events': 0.2 })).toBe('growing');
     expect(state(quiet, { 'ordering-catalog-events': -1 })).toBe('holding');
     expect(state(quiet)).toBe('holding');
     expect(node('q:shipping-orders').state).toBe('empty');
-    const unlisted = { ...quiet, services: quiet.services.map((s) => ({ ...s, queues: s.queues.map((q) => ({ ...q, messages: null })) })) };
+    const unlisted = {
+      ...quiet,
+      services: quiet.services.map((s) => ({ ...s, queues: s.queues.map((q) => ({ ...q, messages: null })) })),
+    };
     expect(state(unlisted)).toBe('unknown');
   });
 
@@ -144,7 +168,10 @@ describe('topologyOf', () => {
       ...map,
       services: map.services.map((s) =>
         s.name === 'shipping'
-          ? { ...s, queues: [{ name: 'lost_skipped', consumer: 'Shipping', messages: 3, parked: 'skipped', bindings: [] }] }
+          ? {
+              ...s,
+              queues: [{ name: 'lost_skipped', consumer: 'Shipping', messages: 3, parked: 'skipped', bindings: [] }],
+            }
           : s,
       ),
     };
@@ -164,7 +191,13 @@ describe('topologyOf', () => {
               ...s,
               queues: [
                 ...s.queues,
-                { name: 'ordering-catalog-events_skipped', consumer: 'x', messages: 4, parked: 'skipped', bindings: [] },
+                {
+                  name: 'ordering-catalog-events_skipped',
+                  consumer: 'x',
+                  messages: 4,
+                  parked: 'skipped',
+                  bindings: [],
+                },
               ],
             }
           : s,

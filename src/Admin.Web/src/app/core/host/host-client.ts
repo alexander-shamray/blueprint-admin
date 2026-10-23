@@ -224,7 +224,12 @@ export class HostClient {
   }
 
   /** A replay or discard of the named messages: a dry run, or with `confirm` the real run, as one job. */
-  deadLetterMove(queue: string, verb: DeadLetterVerb, messageIds: string[], confirm: string | null): Observable<JobSummary> {
+  deadLetterMove(
+    queue: string,
+    verb: DeadLetterVerb,
+    messageIds: string[],
+    confirm: string | null,
+  ): Observable<JobSummary> {
     return this.http.post<JobSummary>(`/api/broker/dead-letters/${encodeURIComponent(queue)}/${verb}`, {
       messageIds,
       execute: confirm !== null,

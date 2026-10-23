@@ -89,7 +89,8 @@ export const STACK_WIDGETS = {
   doctor: plain({
     type: 'workstation-doctor',
     title: 'Workstation doctor',
-    component: () => import('../features/stack/widgets/workstation-doctor-widget').then((m) => m.WorkstationDoctorWidget),
+    component: () =>
+      import('../features/stack/widgets/workstation-doctor-widget').then((m) => m.WorkstationDoctorWidget),
     defaultSize: { cols: 12, rows: 10 },
     minSize: { cols: 6, rows: 4 },
     dataServices: [],
@@ -189,12 +190,18 @@ function brokerListing(kind: Kind, flags: readonly WidgetField[] = []): WidgetTy
   const fields = [FILTER, ...flags, AUTO_REFRESH];
   const config = (stored: Record<string, unknown>): Record<string, unknown> =>
     Object.fromEntries(
-      fields.map((f) => [f.key, f.kind === 'flag' ? stored[f.key] === true : typeof stored[f.key] === 'string' ? stored[f.key] : '']),
+      fields.map((f) => [
+        f.key,
+        f.kind === 'flag' ? stored[f.key] === true : typeof stored[f.key] === 'string' ? stored[f.key] : '',
+      ]),
     );
   return {
     ...kind,
     config,
-    titleOf: (stored) => (typeof stored['filter'] === 'string' && stored['filter'] !== '' ? `${kind.title} (${stored['filter']})` : kind.title),
+    titleOf: (stored) =>
+      typeof stored['filter'] === 'string' && stored['filter'] !== ''
+        ? `${kind.title} (${stored['filter']})`
+        : kind.title,
     presets: [{ label: kind.title, config: config({}) }],
     fields,
   };
@@ -251,8 +258,11 @@ export const BROKER_WIDGETS = {
     component: () => import('../features/broker/widgets/dead-letter-widget').then((m) => m.DeadLetterWidget),
     defaultSize: { cols: 24, rows: 12 },
     minSize: { cols: 8, rows: 4 },
-    config: (stored) => ({ queue: typeof stored['queue'] === 'string' && stored['queue'] !== '' ? stored['queue'] : null }),
-    titleOf: (config) => (typeof config['queue'] === 'string' ? `Dead letters (${config['queue']})` : 'Dead-letter workbench'),
+    config: (stored) => ({
+      queue: typeof stored['queue'] === 'string' && stored['queue'] !== '' ? stored['queue'] : null,
+    }),
+    titleOf: (config) =>
+      typeof config['queue'] === 'string' ? `Dead letters (${config['queue']})` : 'Dead-letter workbench',
     presets: [{ label: 'Opened from a Queues widget', config: { queue: null } }],
     fields: [{ key: 'queue', label: 'Queue', kind: 'text' }],
     dataServices: ['BrokerFeed'],
@@ -299,7 +309,10 @@ export const MAIL: WidgetType = {
   defaultSize: { cols: 24, rows: 18 },
   minSize: { cols: 8, rows: 5 },
   config: (stored) => ({ correlationId: typeof stored['correlationId'] === 'string' ? stored['correlationId'] : '' }),
-  titleOf: (config) => (typeof config['correlationId'] === 'string' && config['correlationId'] !== '' ? `Mail (${config['correlationId']})` : 'Mail'),
+  titleOf: (config) =>
+    typeof config['correlationId'] === 'string' && config['correlationId'] !== ''
+      ? `Mail (${config['correlationId']})`
+      : 'Mail',
   presets: [{ label: 'Every message', config: { correlationId: '' } }],
   fields: [{ key: 'correlationId', label: 'Correlation id', kind: 'text' }],
   dataServices: [],
@@ -330,7 +343,9 @@ export const API_WIDGETS = {
     config: (stored) => ({
       operation: typeof stored['operation'] === 'string' && stored['operation'] !== '' ? stored['operation'] : null,
       identity:
-        typeof stored['identity'] === 'string' && /^(anonymous|user:.+|custom:.*)$/.test(stored['identity']) ? stored['identity'] : null,
+        typeof stored['identity'] === 'string' && /^(anonymous|user:.+|custom:.*)$/.test(stored['identity'])
+          ? stored['identity']
+          : null,
     }),
     titleOf: () => 'API request',
     presets: [{ label: 'API request', config: { operation: null, identity: null } }],
@@ -366,7 +381,10 @@ export const TRACE: WidgetType = {
     window: ['15m', '1h', '6h', '24h'].includes(stored['window'] as string) ? stored['window'] : '15m',
     follow: stored['follow'] === true,
   }),
-  titleOf: (config) => (typeof config['correlationId'] === 'string' && config['correlationId'] !== '' ? `Trace (${config['correlationId']})` : 'Trace'),
+  titleOf: (config) =>
+    typeof config['correlationId'] === 'string' && config['correlationId'] !== ''
+      ? `Trace (${config['correlationId']})`
+      : 'Trace',
   presets: [
     { label: 'Trace', config: { correlationId: '', window: '15m', follow: false } },
     { label: 'Follows the last Trace link', config: { correlationId: '', window: '15m', follow: true } },
@@ -395,7 +413,9 @@ export const SEQUENCE: WidgetType = {
     follow: stored['follow'] === true,
   }),
   titleOf: (config) =>
-    typeof config['correlationId'] === 'string' && config['correlationId'] !== '' ? `Request sequence (${config['correlationId']})` : 'Request sequence',
+    typeof config['correlationId'] === 'string' && config['correlationId'] !== ''
+      ? `Request sequence (${config['correlationId']})`
+      : 'Request sequence',
   presets: [
     { label: 'Request sequence', config: { correlationId: '', window: '15m', follow: false } },
     { label: 'Follows the last Trace link', config: { correlationId: '', window: '15m', follow: true } },
@@ -419,7 +439,9 @@ export const RUNBOOKS: WidgetType = {
   component: () => import('../features/runbooks/widgets/runbooks-widget').then((m) => m.RunbooksWidget),
   defaultSize: { cols: 24, rows: 26 },
   minSize: { cols: 10, rows: 8 },
-  config: (stored) => ({ runbook: typeof stored['runbook'] === 'string' && stored['runbook'] !== '' ? stored['runbook'] : null }),
+  config: (stored) => ({
+    runbook: typeof stored['runbook'] === 'string' && stored['runbook'] !== '' ? stored['runbook'] : null,
+  }),
   titleOf: (config) => (typeof config['runbook'] === 'string' ? `Runbooks (${config['runbook']})` : 'Runbooks'),
   presets: [{ label: 'Runbooks', config: { runbook: null } }],
   fields: [{ key: 'runbook', label: 'Runbook to open on', kind: 'text' }],

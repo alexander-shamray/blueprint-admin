@@ -70,7 +70,10 @@ describe('WorkspaceService', () => {
   it('never saves while a widget is being dragged, and saves what the drag left', () => {
     load();
     service.setDragging(true);
-    service.setWidgets('stack', builtInWidgets('stack').map((w) => ({ ...w, cols: 12 })));
+    service.setWidgets(
+      'stack',
+      builtInWidgets('stack').map((w) => ({ ...w, cols: 12 })),
+    );
     vi.advanceTimersByTime(SAVE_DELAY_MS * 5);
     http.expectNone((r) => r.method === 'PUT');
 
@@ -135,7 +138,11 @@ describe('WorkspaceService', () => {
     load();
     service.renamePage('stack', 'Mine');
     vi.advanceTimersByTime(SAVE_DELAY_MS);
-    expectSave('"e1"').flush(defaultWorkspace(), { status: 412, statusText: 'Precondition Failed', headers: { ETag: '"e9"' } });
+    expectSave('"e1"').flush(defaultWorkspace(), {
+      status: 412,
+      statusText: 'Precondition Failed',
+      headers: { ETag: '"e9"' },
+    });
 
     service.resolveConflict('mine');
     vi.advanceTimersByTime(0);
@@ -193,10 +200,20 @@ describe('WorkspaceService', () => {
 
     it('moves a page among the visible ones and to a named place', () => {
       service.movePageBy('stack', 1);
-      expect(service.pages().slice(0, 2).map((p) => p.id)).toEqual(['logs', 'stack']);
+      expect(
+        service
+          .pages()
+          .slice(0, 2)
+          .map((p) => p.id),
+      ).toEqual(['logs', 'stack']);
       service.setHidden('stack', true);
       service.movePageBy('logs', 1);
-      expect(service.visiblePages().slice(0, 2).map((p) => p.id)).toEqual(['broker', 'logs']);
+      expect(
+        service
+          .visiblePages()
+          .slice(0, 2)
+          .map((p) => p.id),
+      ).toEqual(['broker', 'logs']);
       service.movePage('transcript', 'broker');
       expect(service.visiblePages()[0].id).toBe('transcript');
     });
@@ -287,7 +304,12 @@ describe('WorkspaceService', () => {
       expect(req.request.body).toEqual(imported);
       req.flush(imported, { headers: { ETag: '"i1"' } });
       expect(done).toBe(true);
-      expect(service.pages().slice(0, 2).map((p) => p.title)).toEqual(imported.pages.map((p) => p.title));
+      expect(
+        service
+          .pages()
+          .slice(0, 2)
+          .map((p) => p.title),
+      ).toEqual(imported.pages.map((p) => p.title));
       expect(service.saveState().kind).toBe('saved');
 
       // The old save returns after the import: it must not take the import's etag from it.

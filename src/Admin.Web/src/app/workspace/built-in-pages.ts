@@ -1,5 +1,20 @@
 import { SCREENS } from '../screens';
-import { API_WIDGETS, BROKER_WIDGETS, ERASURE, JOB_OUTPUT, LEGACY_SCREEN, LOGS, MAIL, MAP, RUNBOOKS, TRACE, TRANSCRIPT, SCENARIO_WIDGETS, STACK_WIDGETS, WidgetType } from './widgets';
+import {
+  API_WIDGETS,
+  BROKER_WIDGETS,
+  ERASURE,
+  JOB_OUTPUT,
+  LEGACY_SCREEN,
+  LOGS,
+  MAIL,
+  MAP,
+  RUNBOOKS,
+  TRACE,
+  TRANSCRIPT,
+  SCENARIO_WIDGETS,
+  STACK_WIDGETS,
+  WidgetType,
+} from './widgets';
 import { Page, WidgetInstance, Workspace } from './workspace-types';
 
 /** The schema version this console writes; `WorkspaceSchema.Current` on the host. */

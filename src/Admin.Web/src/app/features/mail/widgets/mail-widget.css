@@ -1,15 +1,67 @@
-.lede { max-width: 60rem; }
-h2 { font-size: 1rem; margin: 1rem 0 0.5rem; }
-.row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.5rem; }
-input.filter { width: 22rem; font-family: monospace; }
-table { border-collapse: collapse; margin-bottom: 1rem; }
-td, th { padding: 0.25rem 0.75rem; border-bottom: 1px solid var(--app-border); text-align: left; vertical-align: top; }
-tr.unread td.subject { font-weight: 600; }
-tr.opened td { background: var(--mat-sys-primary-container); }
-td.created, td.correlation { font-family: monospace; white-space: nowrap; }
-.none { color: var(--app-muted); }
-.facts { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-iframe.body-html { width: 100%; min-height: 32rem; border: 1px solid var(--app-border); background: #fff; }
-pre.body-text { white-space: pre-wrap; border: 1px solid var(--app-border); padding: 0.75rem; max-width: 60rem; }
-code { word-break: break-all; }
-.error { color: var(--app-error); }
+.lede {
+  max-width: 60rem;
+}
+h2 {
+  font-size: 1rem;
+  margin: 1rem 0 0.5rem;
+}
+.row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+input.filter {
+  width: 22rem;
+  font-family: monospace;
+}
+table {
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+}
+td,
+th {
+  padding: 0.25rem 0.75rem;
+  border-bottom: 1px solid var(--app-border);
+  text-align: left;
+  vertical-align: top;
+}
+tr.unread td.subject {
+  font-weight: 600;
+}
+tr.opened td {
+  background: var(--mat-sys-primary-container);
+}
+td.created,
+td.correlation {
+  font-family: monospace;
+  white-space: nowrap;
+}
+.none {
+  color: var(--app-muted);
+}
+.facts {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+iframe.body-html {
+  width: 100%;
+  min-height: 32rem;
+  border: 1px solid var(--app-border);
+  background: #fff;
+}
+pre.body-text {
+  white-space: pre-wrap;
+  border: 1px solid var(--app-border);
+  padding: 0.75rem;
+  max-width: 60rem;
+}
+code {
+  word-break: break-all;
+}
+.error {
+  color: var(--app-error);
+}

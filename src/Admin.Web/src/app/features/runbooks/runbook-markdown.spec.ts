@@ -16,7 +16,22 @@ describe('runbook markdown', () => {
   });
 
   it('reads headings, paragraphs that wrap, fenced commands and rules', () => {
-    const result = blocks(['# Runbook — outbox', '', 'One line', 'wrapped.', '', '```bash', 'kubectl get pods', '', 'echo done', '```', '', '---'].join('\n'));
+    const result = blocks(
+      [
+        '# Runbook — outbox',
+        '',
+        'One line',
+        'wrapped.',
+        '',
+        '```bash',
+        'kubectl get pods',
+        '',
+        'echo done',
+        '```',
+        '',
+        '---',
+      ].join('\n'),
+    );
 
     expect(result).toEqual([
       { kind: 'heading', level: 1, spans: [{ kind: 'text', text: 'Runbook — outbox' }] },
@@ -36,7 +51,9 @@ describe('runbook markdown', () => {
   });
 
   it('keeps an indented item under the item before it, to any depth, and returns to the outer list after it', () => {
-    const result = blocks(['1. drain', '   - check `a`', '   - check `b`', '     - deeper', '2. restore', '   continued'].join('\n'));
+    const result = blocks(
+      ['1. drain', '   - check `a`', '   - check `b`', '     - deeper', '2. restore', '   continued'].join('\n'),
+    );
 
     expect(result).toHaveLength(1);
     const [list] = result as { kind: 'list'; items: ListItem[] }[];
@@ -47,7 +64,9 @@ describe('runbook markdown', () => {
   });
 
   it('reads a pipe table into a header and rows, and a leading pipe line with no rule under it as a paragraph', () => {
-    const table = blocks(['| | |', '|---|---|', '| Alert | `OutboxGrowth` |', '| Owner | The service team |'].join('\n'));
+    const table = blocks(
+      ['| | |', '|---|---|', '| Alert | `OutboxGrowth` |', '| Owner | The service team |'].join('\n'),
+    );
 
     expect(table).toHaveLength(1);
     const first = table[0] as { kind: 'table'; header: unknown[]; rows: { text: string }[][][] };

@@ -34,8 +34,10 @@ export function inline(text: string): Span[] {
     .split(INLINE)
     .filter((part) => part !== '')
     .map((part): Span => {
-      if (part.length > 2 && part.startsWith('`') && part.endsWith('`')) return { kind: 'code', text: part.slice(1, -1) };
-      if (part.length > 4 && part.startsWith('**') && part.endsWith('**')) return { kind: 'strong', text: part.slice(2, -2) };
+      if (part.length > 2 && part.startsWith('`') && part.endsWith('`'))
+        return { kind: 'code', text: part.slice(1, -1) };
+      if (part.length > 4 && part.startsWith('**') && part.endsWith('**'))
+        return { kind: 'strong', text: part.slice(2, -2) };
       const link = LINK.exec(part);
       return { kind: 'text', text: link ? link[1] : part };
     });
@@ -104,7 +106,8 @@ export function blocks(markdown: string): Block[] {
       endParagraph();
       const header = cells(line).map(inline);
       const rows: Span[][][] = [];
-      for (i += 2; i < lines.length && lines[i].trimStart().startsWith('|'); i++) rows.push(cells(lines[i]).map(inline));
+      for (i += 2; i < lines.length && lines[i].trimStart().startsWith('|'); i++)
+        rows.push(cells(lines[i]).map(inline));
       i--;
       out.push({ kind: 'table', header, rows });
       continue;

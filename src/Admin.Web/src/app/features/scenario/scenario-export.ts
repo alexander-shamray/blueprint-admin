@@ -9,8 +9,7 @@ export const BODY_LIMIT = 4000;
 export const EVENT_LIMIT = 60;
 
 /** What the section says of a script with no `mail` step: the export's own line, not a guess at the sink's contents (spec §5.13). */
-export const MAIL_OMITTED =
-  'Omitted: this script has no `mail` step, so it does not count the mail the run caused.';
+export const MAIL_OMITTED = 'Omitted: this script has no `mail` step, so it does not count the mail the run caused.';
 
 /** Why a trace could not be read, in place of its timeline, or the view that was. */
 export type TraceRead = TraceView | string;
@@ -75,12 +74,7 @@ function outcome(steps: readonly StepView[]): string {
 }
 
 function stepsSection(steps: readonly StepView[]): string[] {
-  const lines = [
-    '## Steps',
-    '',
-    '| # | Step | State | HTTP | Correlation id |',
-    '|---|---|---|---|---|',
-  ];
+  const lines = ['## Steps', '', '| # | Step | State | HTTP | Correlation id |', '|---|---|---|---|---|'];
   steps.forEach((s, i) => {
     lines.push(
       `| ${i + 1} | ${cell(s.title)} | ${s.state} | ${s.status ?? ''} | ${s.correlationId ? `\`${s.correlationId}\`` : ''} |`,
@@ -120,8 +114,7 @@ function sagaSection(strip: SagaStrip | null): string[] {
   }
   if (strip.transitions.length > 0) {
     lines.push('', '| From | To | Seconds |', '|---|---|---|');
-    for (const t of strip.transitions)
-      lines.push(`| ${t.from} | ${t.to} | ${t.seconds ?? 'unreadable'} |`);
+    for (const t of strip.transitions) lines.push(`| ${t.from} | ${t.to} | ${t.seconds ?? 'unreadable'} |`);
   }
   if (strip.stalled) {
     lines.push(
@@ -132,14 +125,10 @@ function sagaSection(strip: SagaStrip | null): string[] {
   return lines;
 }
 
-function traceSection(
-  steps: readonly StepView[],
-  traces: Readonly<Record<string, TraceRead>>,
-): string[] {
+function traceSection(steps: readonly StepView[], traces: Readonly<Record<string, TraceRead>>): string[] {
   const lines = ['## Trace timeline', ''];
   const ids = [...new Set(steps.flatMap((s) => (s.correlationId ? [s.correlationId] : [])))];
-  if (ids.length === 0)
-    return [...lines, 'No step sent a request, so there is no correlation id to read.'];
+  if (ids.length === 0) return [...lines, 'No step sent a request, so there is no correlation id to read.'];
   for (const id of ids) {
     const read = traces[id];
     lines.push(`### \`${id}\``, '');
@@ -174,16 +163,10 @@ function queueSection(before: QueuesView | null, after: QueuesView | null): stri
     const q = view.queues.find((x) => x.name === name);
     return q === undefined ? 'absent' : (q.messages?.toString() ?? 'unknown');
   };
-  const names = [
-    ...new Set([...(before?.queues ?? []), ...(after?.queues ?? [])].map((q) => q.name)),
-  ].sort();
-  lines.push(
-    'Before is the first read of the drain step; after is the read made when this document was written.',
-    '',
-  );
+  const names = [...new Set([...(before?.queues ?? []), ...(after?.queues ?? [])].map((q) => q.name))].sort();
+  lines.push('Before is the first read of the drain step; after is the read made when this document was written.', '');
   lines.push('| Queue | Before | After |', '|---|---|---|');
-  for (const name of names)
-    lines.push(`| \`${name}\` | ${depth(before, name)} | ${depth(after, name)} |`);
+  for (const name of names) lines.push(`| \`${name}\` | ${depth(before, name)} | ${depth(after, name)} |`);
   return lines;
 }
 
@@ -220,9 +203,7 @@ export function buildExport(input: ExportInput): string {
     '## Correlation ids',
     '',
     ...(input.steps.some((s) => s.correlationId)
-      ? input.steps
-          .filter((s) => s.correlationId)
-          .map((s) => `- \`${s.correlationId}\` — ${s.title}`)
+      ? input.steps.filter((s) => s.correlationId).map((s) => `- \`${s.correlationId}\` — ${s.title}`)
       : ['No step sent a request.']),
     '',
     ...traceSection(input.steps, input.traces),

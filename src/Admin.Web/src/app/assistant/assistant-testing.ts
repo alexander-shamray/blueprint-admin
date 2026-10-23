@@ -18,7 +18,8 @@ export class FakeStream implements EventSourceLike {
   }
 
   emit(type: string, data: unknown, id: number): void {
-    for (const listener of this.listeners.get(type) ?? []) listener(new MessageEvent(type, { data: JSON.stringify(data), lastEventId: String(id) }));
+    for (const listener of this.listeners.get(type) ?? [])
+      listener(new MessageEvent(type, { data: JSON.stringify(data), lastEventId: String(id) }));
   }
 
   /** What the browser does once it gives up: CLOSED, then a plain error. */

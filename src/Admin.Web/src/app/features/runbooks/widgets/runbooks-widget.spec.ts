@@ -14,7 +14,17 @@ const catalogue: RunbookCatalogue = {
       alerts: ['ErrorQueueDepth'],
       script: true,
       reason: null,
-      phases: [{ alert: 'ErrorQueueDepth', impact: 'none', confirmation: 'none', confirmWith: null, sustained: false, firesWithinSeconds: 240, clearsWithinSeconds: 240 }],
+      phases: [
+        {
+          alert: 'ErrorQueueDepth',
+          impact: 'none',
+          confirmation: 'none',
+          confirmWith: null,
+          sustained: false,
+          firesWithinSeconds: 240,
+          clearsWithinSeconds: 240,
+        },
+      ],
     },
     {
       runbook: 'outbox-growth',
@@ -22,8 +32,24 @@ const catalogue: RunbookCatalogue = {
       script: true,
       reason: null,
       phases: [
-        { alert: 'OutboxGrowth', impact: 'stops the broker', confirmation: 'confirm', confirmWith: null, sustained: true, firesWithinSeconds: 300, clearsWithinSeconds: 300 },
-        { alert: 'OutboxStuck', impact: 'takes the stack down', confirmation: 'down -v', confirmWith: 'down -v', sustained: false, firesWithinSeconds: 300, clearsWithinSeconds: 300 },
+        {
+          alert: 'OutboxGrowth',
+          impact: 'stops the broker',
+          confirmation: 'confirm',
+          confirmWith: null,
+          sustained: true,
+          firesWithinSeconds: 300,
+          clearsWithinSeconds: 300,
+        },
+        {
+          alert: 'OutboxStuck',
+          impact: 'takes the stack down',
+          confirmation: 'down -v',
+          confirmWith: 'down -v',
+          sustained: false,
+          firesWithinSeconds: 300,
+          clearsWithinSeconds: 300,
+        },
       ],
     },
   ],
@@ -66,7 +92,9 @@ describe('RunbooksWidget', () => {
   }
 
   function open(fixture: ReturnType<typeof render>, name: string): void {
-    const button = (Array.from(fixture.nativeElement.querySelectorAll('button.runbook')) as HTMLButtonElement[]).find((b) => b.textContent?.includes(name));
+    const button = (Array.from(fixture.nativeElement.querySelectorAll('button.runbook')) as HTMLButtonElement[]).find(
+      (b) => b.textContent?.includes(name),
+    );
     button!.click();
     fixture.detectChanges();
   }

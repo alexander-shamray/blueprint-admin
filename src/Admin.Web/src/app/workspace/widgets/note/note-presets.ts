@@ -95,4 +95,13 @@ export const TAB_ORDER_NOTE = [
   FENCE,
 ].join('\n');
 
-export const BLANK_NOTE = ['# Note', '', 'Write Markdown here. A mermaid fence draws a diagram:', '', `${FENCE}mermaid`, 'flowchart LR', '  a --> b', FENCE].join('\n');
+export const BLANK_NOTE = [
+  '# Note',
+  '',
+  'Write Markdown here. A mermaid fence draws a diagram:',
+  '',
+  `${FENCE}mermaid`,
+  'flowchart LR',
+  '  a --> b',
+  FENCE,
+].join('\n');

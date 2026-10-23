@@ -29,7 +29,7 @@ describe('BrokerFeed', () => {
     expect(host.brokerPermissions).not.toHaveBeenCalled();
   });
 
-  it('holds the two tools\' plans: undefined while pending, null for one the host does not answer', () => {
+  it("holds the two tools' plans: undefined while pending, null for one the host does not answer", () => {
     const pending = new Subject<never>();
     host.projectionPlan.mockReturnValue(pending);
     host.deadLetterPlan.mockReturnValue(throwError(() => new Error('down')));

@@ -24,7 +24,13 @@ describe('LogsWidget', () => {
 
   beforeEach(() => {
     events = new Subject<JobEvent>();
-    const summary: JobSummary = { id: 'logs-1', commandLine: 'docker compose logs -f', state: 'Running', exitCode: null, startedAt: '' };
+    const summary: JobSummary = {
+      id: 'logs-1',
+      commandLine: 'docker compose logs -f',
+      state: 'Running',
+      exitCode: null,
+      startedAt: '',
+    };
     host = { followLogs: vi.fn(() => of(summary)), stopFollow: vi.fn(() => of(undefined)) };
     TestBed.configureTestingModule({
       providers: [
@@ -42,7 +48,9 @@ describe('LogsWidget', () => {
     fixture.detectChanges();
 
     expect(host.followLogs).toHaveBeenCalledWith(['gateway']);
-    const rows = [...fixture.nativeElement.querySelectorAll('.line')].map((r) => (r as HTMLElement).textContent?.trim());
+    const rows = [...fixture.nativeElement.querySelectorAll('.line')].map((r) =>
+      (r as HTMLElement).textContent?.trim(),
+    );
     expect(rows).toEqual(['gateway       | started']);
     expect(fixture.nativeElement.querySelector('.live')).not.toBeNull();
   });
@@ -59,7 +67,8 @@ describe('LogsWidget', () => {
 
     expect(host.followLogs).toHaveBeenCalledTimes(1);
     expect(host.followLogs).toHaveBeenCalledWith(['catalog-api', 'gateway']);
-    const texts = (f: typeof one) => [...f.nativeElement.querySelectorAll('.line')].map((r) => (r as HTMLElement).textContent?.trim());
+    const texts = (f: typeof one) =>
+      [...f.nativeElement.querySelectorAll('.line')].map((r) => (r as HTMLElement).textContent?.trim());
     expect(texts(one)).toEqual(['gateway       | proxying']);
     expect(texts(two)).toEqual(['catalog-api   | listed']);
   });
@@ -73,7 +82,8 @@ describe('LogsWidget', () => {
     fixture.componentInstance.correlationId.set('abc');
     fixture.detectChanges();
 
-    const rows = () => [...fixture.nativeElement.querySelectorAll('.line')].map((r) => (r as HTMLElement).textContent?.trim());
+    const rows = () =>
+      [...fixture.nativeElement.querySelectorAll('.line')].map((r) => (r as HTMLElement).textContent?.trim());
     expect(rows()).toEqual([
       '[match] gateway | proxying CorrelationId=abc',
       '[stderr] catalog-api | failed',
@@ -121,7 +131,9 @@ describe('LogsWidget', () => {
   });
 
   it('shows the services the platform diagram pointed it at over the configured ones until they are taken off, and keeps them for the tab', () => {
-    TestBed.configureTestingModule({ providers: [{ provide: WIDGET_CONTEXT, useValue: { instanceId: 'logs', pageId: 'p' } }] });
+    TestBed.configureTestingModule({
+      providers: [{ provide: WIDGET_CONTEXT, useValue: { instanceId: 'logs', pageId: 'p' } }],
+    });
     const first = render(['gateway']);
     first.componentInstance.pointed.set(['ordering-api']);
     first.detectChanges();
@@ -139,7 +151,9 @@ describe('LogsWidget', () => {
   });
 
   it('keeps the text filter and the correlation id typed, for the tab, when it is re-created (session state, §4.2)', () => {
-    TestBed.configureTestingModule({ providers: [{ provide: WIDGET_CONTEXT, useValue: { instanceId: 'logs', pageId: 'p' } }] });
+    TestBed.configureTestingModule({
+      providers: [{ provide: WIDGET_CONTEXT, useValue: { instanceId: 'logs', pageId: 'p' } }],
+    });
     const first = render([]);
     first.componentInstance.filter.set('proxying');
     first.componentInstance.correlationId.set('fake-corr-0001');

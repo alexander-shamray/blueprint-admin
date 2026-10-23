@@ -29,7 +29,9 @@
         @if (kind.presets.length === 1) {
           <button mat-menu-item (click)="addWidget(page.id, kind, kind.presets[0])">{{ kind.title }}</button>
         } @else {
-          <button mat-menu-item [matMenuTriggerFor]="presetMenu" [matMenuTriggerData]="{ kind }">{{ kind.title }}</button>
+          <button mat-menu-item [matMenuTriggerFor]="presetMenu" [matMenuTriggerData]="{ kind }">{{
+            kind.title
+          }}</button>
         }
       }
     </mat-menu>
@@ -67,8 +69,12 @@
   <input #importFile type="file" accept=".json,application/json" hidden (change)="chooseImport(importFile)" />
   <span class="grow"></span>
   @switch (workspace.saveState().kind) {
-    @case ('pending') { <span class="save-state" role="status" i18n="the layout has a change not yet saved">Unsaved</span> }
-    @case ('saving') { <span class="save-state" role="status" i18n>Saving…</span> }
+    @case ('pending') {
+      <span class="save-state" role="status" i18n="the layout has a change not yet saved">Unsaved</span>
+    }
+    @case ('saving') {
+      <span class="save-state" role="status" i18n>Saving…</span>
+    }
   }
   <!-- Work that goes on while no page shows it (spec §4.3): each item links to the page that does, or opens what shows
        it when that is not a page (the assistant's panel, AI assistant note §5.1). -->
@@ -82,9 +88,16 @@
     }
   </span>
   @if (config(); as c) {
-    <span class="hint">{{ c.backendDir }} @if (c.fakePlatform) {<em i18n>(fake platform)</em>}</span>
+    <span class="hint"
+      >{{ c.backendDir }}
+      @if (c.fakePlatform) {
+        <em i18n>(fake platform)</em>
+      }
+    </span>
   }
-  <span class="palette-key"><kbd>Ctrl</kbd>+<kbd>K</kbd> <ng-container i18n="opens the command palette">commands</ng-container></span>
+  <span class="palette-key"
+    ><kbd>Ctrl</kbd>+<kbd>K</kbd> <ng-container i18n="opens the command palette">commands</ng-container></span
+  >
   @if (assistant.enabled()) {
     <button
       mat-icon-button
@@ -98,7 +111,13 @@
       <mat-icon aria-hidden="true">assistant</mat-icon>
     </button>
   }
-  <button mat-button type="button" class="language" [attr.aria-label]="languageLabel" [matMenuTriggerFor]="languageMenu">
+  <button
+    mat-button
+    type="button"
+    class="language"
+    [attr.aria-label]="languageLabel"
+    [matMenuTriggerFor]="languageMenu"
+  >
     <mat-icon aria-hidden="true">translate</mat-icon> {{ language.name }}
   </button>
   <mat-menu #languageMenu="matMenu">
@@ -145,7 +164,9 @@
   <div class="notice warn" role="alert">
     <span i18n>Replace every page and widget with the ones in "{{ pending.name }}"? What is saved now is lost.</span>
     <button mat-button type="button" (click)="confirmImport()" i18n="confirms replacing the workspace">Replace</button>
-    <button mat-button type="button" (click)="pendingImport.set(null)" i18n="cancels replacing the workspace">Cancel</button>
+    <button mat-button type="button" (click)="pendingImport.set(null)" i18n="cancels replacing the workspace"
+      >Cancel</button
+    >
   </div>
 }
 @switch (workspace.saveState().kind) {
@@ -196,7 +217,9 @@
           @for (page of workspace.hiddenPages(); track page.id) {
             <li>
               <a [routerLink]="workspace.pageLink(page.id)">{{ page.title }}</a>
-              <button mat-button type="button" (click)="workspace.setHidden(page.id, false)" i18n="shows a hidden page">Show</button>
+              <button mat-button type="button" (click)="workspace.setHidden(page.id, false)" i18n="shows a hidden page"
+                >Show</button
+              >
             </li>
           }
         </ul>

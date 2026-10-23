@@ -18,14 +18,18 @@ import { BrokerFeed, exchangeName, filterOf } from '../broker-feed';
     @if (feed.bindings.value(); as b) {
       @if (b.reachable) {
         <table class="bindings">
-          <thead><tr><th>Source</th><th>Destination</th><th>Kind</th><th>Routing key</th></tr></thead>
+          <thead
+            ><tr><th>Source</th><th>Destination</th><th>Kind</th><th>Routing key</th></tr></thead
+          >
           <tbody>
             @for (binding of shown(); track $index) {
               <tr>
                 <td>{{ name(binding.source) }}</td>
                 <td>{{ binding.destination }}</td>
                 <td>{{ binding.destinationKind }}</td>
-                <td><code>{{ binding.routingKey }}</code></td>
+                <td
+                  ><code>{{ binding.routingKey }}</code></td
+                >
               </tr>
             }
           </tbody>
@@ -52,7 +56,9 @@ export class BindingsWidget {
     return (this.feed.bindings.value()?.bindings ?? []).filter(
       (b) =>
         !needle ||
-        [exchangeName(b.source), b.destination, b.destinationKind, b.routingKey].some((cell) => cell.toLowerCase().includes(needle)),
+        [exchangeName(b.source), b.destination, b.destinationKind, b.routingKey].some((cell) =>
+          cell.toLowerCase().includes(needle),
+        ),
     );
   });
 

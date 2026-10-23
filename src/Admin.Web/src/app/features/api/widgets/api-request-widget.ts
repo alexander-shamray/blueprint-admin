@@ -31,7 +31,16 @@ import {
   clockText,
   redact,
 } from '../api-client';
-import { buildUrl, parseHeaders, pretty, withFreshCommandId, withoutCredentialHeaders, withoutCredentialLines, withoutSetCookie, withPathValues } from '../request-builder';
+import {
+  buildUrl,
+  parseHeaders,
+  pretty,
+  withFreshCommandId,
+  withoutCredentialHeaders,
+  withoutCredentialLines,
+  withoutSetCookie,
+  withPathValues,
+} from '../request-builder';
 
 /**
  * One API request (spec §5.5; widget-workspace spec §5.2): the catalog of the platform's operations, an editor, the
@@ -157,7 +166,9 @@ export class ApiRequestWidget {
   readonly headerLines = computed(() => {
     const r = this.result();
     // One line per value: fields such as Set-Cookie cannot be joined with commas.
-    return r?.outcome === 'responded' ? Object.entries(r.headers).flatMap(([name, values]) => values.map((value) => `${name}: ${value}`)) : [];
+    return r?.outcome === 'responded'
+      ? Object.entries(r.headers).flatMap(([name, values]) => values.map((value) => `${name}: ${value}`))
+      : [];
   });
 
   constructor() {
@@ -419,7 +430,13 @@ export class ApiRequestWidget {
           this.pending.set(false);
           // The send may have minted or renewed the token, so the clock is read again.
           this.readClock();
-          if (operation?.source === 'catalog' && operation.name === PUBLISH_OPERATION && result.outcome === 'responded' && result.status >= 200 && result.status < 300) {
+          if (
+            operation?.source === 'catalog' &&
+            operation.name === PUBLISH_OPERATION &&
+            result.outcome === 'responded' &&
+            result.status >= 200 &&
+            result.status < 300
+          ) {
             this.watchProjection();
           }
         }
@@ -565,7 +582,16 @@ export class ApiRequestWidget {
 
   /** A problem's `detail`/`title`, Keycloak's `error_description`, else the error's message. */
   private describe(e: unknown): string {
-    const err = e as { error?: { detail?: string; title?: string; error_description?: string }; message?: string } | null;
-    return err?.error?.detail ?? err?.error?.error_description ?? err?.error?.title ?? err?.message ?? 'The host did not answer.';
+    const err = e as {
+      error?: { detail?: string; title?: string; error_description?: string };
+      message?: string;
+    } | null;
+    return (
+      err?.error?.detail ??
+      err?.error?.error_description ??
+      err?.error?.title ??
+      err?.message ??
+      'The host did not answer.'
+    );
   }
 }

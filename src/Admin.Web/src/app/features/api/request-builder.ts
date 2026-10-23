@@ -137,5 +137,8 @@ export function withoutCredentialHeaders(headers: Record<string, string>): Recor
 /** The result without the cookies it set, for history; the live response pane keeps them. */
 export function withoutSetCookie(result: ProxyResult): ProxyResult {
   if (result.outcome !== 'responded') return result;
-  return { ...result, headers: Object.fromEntries(Object.entries(result.headers).filter(([name]) => name.toLowerCase() !== 'set-cookie')) };
+  return {
+    ...result,
+    headers: Object.fromEntries(Object.entries(result.headers).filter(([name]) => name.toLowerCase() !== 'set-cookie')),
+  };
 }

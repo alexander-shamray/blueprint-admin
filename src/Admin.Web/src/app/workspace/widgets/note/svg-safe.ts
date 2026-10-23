@@ -5,9 +5,29 @@ const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
  * element of another namespace, a name this list has never heard of) is dropped with what it holds.
  */
 const ALLOWED = new Set([
-  'svg', 'g', 'defs', 'title', 'desc', 'style', 'symbol', 'marker', 'clippath', 'mask', 'pattern',
-  'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon',
-  'text', 'tspan', 'lineargradient', 'radialgradient', 'stop',
+  'svg',
+  'g',
+  'defs',
+  'title',
+  'desc',
+  'style',
+  'symbol',
+  'marker',
+  'clippath',
+  'mask',
+  'pattern',
+  'path',
+  'rect',
+  'circle',
+  'ellipse',
+  'line',
+  'polyline',
+  'polygon',
+  'text',
+  'tspan',
+  'lineargradient',
+  'radialgradient',
+  'stop',
 ]);
 
 /** An attribute that points somewhere is kept only when it points inside the drawing, as a marker or a gradient does. */
@@ -20,7 +40,11 @@ const IMAGE_SET = /image-set\(/i;
 
 /** CSS read the way a browser reads it: `u\72l(` is `url(`. Applied before any of the tests above. */
 function unescapeCss(value: string): string {
-  return value.replace(/\\([0-9a-f]{1,6})[ \t\r\n\f]?/gi, (_, hex: string) => String.fromCodePoint(Math.min(parseInt(hex, 16), 0x10ffff))).replace(/\\(.)/g, '$1');
+  return value
+    .replace(/\\([0-9a-f]{1,6})[ \t\r\n\f]?/gi, (_, hex: string) =>
+      String.fromCodePoint(Math.min(parseInt(hex, 16), 0x10ffff)),
+    )
+    .replace(/\\(.)/g, '$1');
 }
 
 /** Whether a value, as CSS, would fetch or import something from outside the drawing. */
@@ -39,14 +63,16 @@ function reachesOutside(value: string): boolean {
 export function safeSvg(svg: string): SVGElement | null {
   const parsed = new DOMParser().parseFromString(svg, 'image/svg+xml');
   const root = parsed.documentElement;
-  if (root.localName !== 'svg' || root.namespaceURI !== SVG_NAMESPACE || parsed.querySelector('parsererror')) return null;
+  if (root.localName !== 'svg' || root.namespaceURI !== SVG_NAMESPACE || parsed.querySelector('parsererror'))
+    return null;
 
   const walk = (element: Element): void => {
     for (const child of [...element.children]) {
       if (child.namespaceURI !== SVG_NAMESPACE || !ALLOWED.has(child.localName.toLowerCase())) child.remove();
       else walk(child);
     }
-    if (element.localName.toLowerCase() === 'style' && reachesOutside(element.textContent ?? '')) element.textContent = '';
+    if (element.localName.toLowerCase() === 'style' && reachesOutside(element.textContent ?? ''))
+      element.textContent = '';
     for (const attribute of [...element.attributes]) {
       const name = attribute.localName.toLowerCase();
       const outside = !attribute.value.trim().startsWith('#');

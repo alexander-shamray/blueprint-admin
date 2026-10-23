@@ -2,23 +2,29 @@ import { buildUrl, parseHeaders, pretty, withFreshCommandId, withPathValues } fr
 
 describe('request-builder', () => {
   it('fills path placeholders encoded and appends only non-empty query values', () => {
-    expect(
-      buildUrl('http://localhost:5000/api/v1/orders/{id}/cancel', { id: 'a b' }, {}),
-    ).toBe('http://localhost:5000/api/v1/orders/a%20b/cancel');
-    expect(
-      buildUrl('http://localhost:5000/api/v1/catalog/products/', {}, { cursor: '', limit: '5' }),
-    ).toBe('http://localhost:5000/api/v1/catalog/products/?limit=5');
+    expect(buildUrl('http://localhost:5000/api/v1/orders/{id}/cancel', { id: 'a b' }, {})).toBe(
+      'http://localhost:5000/api/v1/orders/a%20b/cancel',
+    );
+    expect(buildUrl('http://localhost:5000/api/v1/catalog/products/', {}, { cursor: '', limit: '5' })).toBe(
+      'http://localhost:5000/api/v1/catalog/products/?limit=5',
+    );
   });
 
   it('fills a body placeholder from the path values as a JSON string, and leaves one with no value in place', () => {
     const body = '{"Path":{"Matchers":[{"Pattern":"/v1/shipments/crr_SIM-STRANGE-{orderId}/events"}]}}';
 
-    expect(JSON.parse(withPathValues(body, { orderId: 'ab-12' })).Path.Matchers[0].Pattern).toBe('/v1/shipments/crr_SIM-STRANGE-ab-12/events');
-    expect(JSON.parse(withPathValues(body, { orderId: 'a"b\\c$&' })).Path.Matchers[0].Pattern).toBe('/v1/shipments/crr_SIM-STRANGE-a"b\\c$&/events');
+    expect(JSON.parse(withPathValues(body, { orderId: 'ab-12' })).Path.Matchers[0].Pattern).toBe(
+      '/v1/shipments/crr_SIM-STRANGE-ab-12/events',
+    );
+    expect(JSON.parse(withPathValues(body, { orderId: 'a"b\\c$&' })).Path.Matchers[0].Pattern).toBe(
+      '/v1/shipments/crr_SIM-STRANGE-a"b\\c$&/events',
+    );
     expect(withPathValues(body, {})).toBe(body);
     expect(withPathValues(body, { id: 'x' })).toBe(body);
     expect(withPathValues('{"a":1}', { orderId: 'x' })).toBe('{"a":1}');
-    expect(withPathValues('{"note":"{constructor} {toString}"}', { orderId: 'x' })).toBe('{"note":"{constructor} {toString}"}');
+    expect(withPathValues('{"note":"{constructor} {toString}"}', { orderId: 'x' })).toBe(
+      '{"note":"{constructor} {toString}"}',
+    );
   });
 
   it('leaves an unfilled placeholder in place so the platform answers for it', () => {
@@ -40,7 +46,9 @@ describe('request-builder', () => {
   });
 
   it('replaces commandId in a JSON object body and leaves anything else untouched', () => {
-    expect(withFreshCommandId('{"commandId":"0","name":"x"}', 'new-id')).toBe('{\n  "commandId": "new-id",\n  "name": "x"\n}');
+    expect(withFreshCommandId('{"commandId":"0","name":"x"}', 'new-id')).toBe(
+      '{\n  "commandId": "new-id",\n  "name": "x"\n}',
+    );
     expect(withFreshCommandId('{"name":"x"}', 'new-id')).toBe('{"name":"x"}');
     expect(withFreshCommandId('not json', 'new-id')).toBe('not json');
   });
@@ -52,7 +60,11 @@ describe('request-builder', () => {
   });
 
   it('pretty-printing re-indents without rewriting a value: big numbers, escapes and repeated keys stay as sent', () => {
-    expect(pretty('{"id":90071992547409931,"n":1.50,"s":"caf\\u00e9 \\"q\\" {,:}","a":1,"a":2,"e":[],"o":{ },"l":[true,null]}')).toBe(
+    expect(
+      pretty(
+        '{"id":90071992547409931,"n":1.50,"s":"caf\\u00e9 \\"q\\" {,:}","a":1,"a":2,"e":[],"o":{ },"l":[true,null]}',
+      ),
+    ).toBe(
       '{\n  "id": 90071992547409931,\n  "n": 1.50,\n  "s": "caf\\u00e9 \\"q\\" {,:}",\n  "a": 1,\n  "a": 2,\n  "e": [],\n  "o": {},\n  "l": [\n    true,\n    null\n  ]\n}',
     );
     expect(pretty('"just a string"')).toBe('"just a string"');

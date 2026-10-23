@@ -1,4 +1,15 @@
-import { Component, DestroyRef, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  ElementRef,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+  untracked,
+  viewChild,
+} from '@angular/core';
 import { Router } from '@angular/router';
 import { BrokerFeed } from '../../../features/broker/broker-feed';
 import { MapFeed } from '../../../features/map/map-feed';
@@ -48,7 +59,11 @@ export class TopologyWidget {
     const map = this.feed.map.value();
     if (!map) return null;
     const rates = this.feed.rates();
-    return topologyOf(map, { stack: this.stack.stack.value(), rate: (q) => rates.get(q), rateText: (q) => this.feed.rateOf(q) });
+    return topologyOf(map, {
+      stack: this.stack.stack.value(),
+      rate: (q) => rates.get(q),
+      rateText: (q) => this.feed.rateOf(q),
+    });
   });
 
   /** The nodes the operator can click, each with the state in words. */
@@ -159,13 +174,17 @@ export class TopologyWidget {
   /** A node was dropped: kept in this widget's config, so the arrangement outlives the tab. */
   private moved(id: string, at: Position): void {
     if (this.context) {
-      this.workspace.configureWidget(this.context.pageId, this.context.instanceId, { ...this.config(), positions: { ...this.positions(), [id]: at } });
+      this.workspace.configureWidget(this.context.pageId, this.context.instanceId, {
+        ...this.config(),
+        positions: { ...this.positions(), [id]: at },
+      });
     }
   }
 
   /** Forgets where the operator put things and lays everything out again. */
   relayout(): void {
-    if (this.context) this.workspace.configureWidget(this.context.pageId, this.context.instanceId, { ...this.config(), positions: {} });
+    if (this.context)
+      this.workspace.configureWidget(this.context.pageId, this.context.instanceId, { ...this.config(), positions: {} });
     this.view?.relayout();
   }
 }

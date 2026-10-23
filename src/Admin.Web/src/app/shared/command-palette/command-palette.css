@@ -1,12 +1,52 @@
-.palette { width: min(36rem, 90vw); padding: 1rem; border: 1px solid var(--app-border); border-radius: 4px; background: var(--mat-sys-surface-container-high); color: var(--mat-sys-on-surface); }
-.palette::backdrop { background: rgb(0 0 0 / 30%); }
-h2 { margin: 0 0 0.5rem; font-size: 1rem; }
-label { display: block; font-weight: 600; }
-.help { margin: 0 0 0.25rem; font-size: 0.85rem; color: var(--app-muted); }
-input { width: 100%; box-sizing: border-box; padding: 0.4rem; font: inherit; }
-ul { list-style: none; margin: 0.5rem 0 0; padding: 0; }
-li { padding: 0.3rem 0.5rem; }
+.palette {
+  width: min(36rem, 90vw);
+  padding: 1rem;
+  border: 1px solid var(--app-border);
+  border-radius: 4px;
+  background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-surface);
+}
+.palette::backdrop {
+  background: rgb(0 0 0 / 30%);
+}
+h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+label {
+  display: block;
+  font-weight: 600;
+}
+.help {
+  margin: 0 0 0.25rem;
+  font-size: 0.85rem;
+  color: var(--app-muted);
+}
+input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.4rem;
+  font: inherit;
+}
+ul {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+li {
+  padding: 0.3rem 0.5rem;
+}
 /* The active row is marked by an outline and weight as well as colour, so it never rests on colour alone. */
-li.active { outline: 2px solid var(--mat-sys-primary); font-weight: 600; background: var(--mat-sys-primary-container); }
-li.none { color: var(--app-muted); }
-.keys { margin: 0.5rem 0 0; font-size: 0.8rem; color: var(--app-muted); }
+li.active {
+  outline: 2px solid var(--mat-sys-primary);
+  font-weight: 600;
+  background: var(--mat-sys-primary-container);
+}
+li.none {
+  color: var(--app-muted);
+}
+.keys {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  color: var(--app-muted);
+}

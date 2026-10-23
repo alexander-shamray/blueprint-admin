@@ -26,7 +26,11 @@ function widget(id: string, type: string, config: Record<string, unknown>): Widg
 
 describe('TopologyWidget', () => {
   let host: { platformMap: ReturnType<typeof vi.fn> };
-  let drawing: { show: ReturnType<typeof vi.fn>; relayout: ReturnType<typeof vi.fn>; destroy: ReturnType<typeof vi.fn> };
+  let drawing: {
+    show: ReturnType<typeof vi.fn>;
+    relayout: ReturnType<typeof vi.fn>;
+    destroy: ReturnType<typeof vi.fn>;
+  };
   let events: GraphEvents;
   let create: ReturnType<typeof vi.fn>;
   let workspace: { currentPage: ReturnType<typeof vi.fn>; configureWidget: ReturnType<typeof vi.fn> };
@@ -82,7 +86,7 @@ describe('TopologyWidget', () => {
       .click();
   };
 
-  it('draws the map into the canvas, with the operator\'s positions', async () => {
+  it("draws the map into the canvas, with the operator's positions", async () => {
     const fixture = await render({ positions: { 's:gateway': { x: 5, y: 6 } } });
 
     expect(create).toHaveBeenCalledTimes(1);
@@ -94,7 +98,9 @@ describe('TopologyWidget', () => {
   it('lists every service and queue in words, with the state a colour would say', async () => {
     const el: HTMLElement = (await render()).nativeElement;
 
-    expect(Array.from(el.querySelectorAll('ul.nodes li')).map((li) => li.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
+    expect(
+      Array.from(el.querySelectorAll('ul.nodes li')).map((li) => li.textContent?.replace(/\s+/g, ' ').trim()),
+    ).toEqual([
       'gateway reachable',
       'ordering not probed',
       'shipping no Compose service',
@@ -123,15 +129,26 @@ describe('TopologyWidget', () => {
   });
 
   it('says the broker did not answer, and the host did not', async () => {
-    host.platformMap.mockReturnValue(of({ ...map, brokerReachable: false, error: 'docker is not running', disagreements: [] } satisfies PlatformMapView));
+    host.platformMap.mockReturnValue(
+      of({
+        ...map,
+        brokerReachable: false,
+        error: 'docker is not running',
+        disagreements: [],
+      } satisfies PlatformMapView),
+    );
 
     const el: HTMLElement = (await render()).nativeElement;
 
-    expect(el.querySelector('[role="alert"]')?.textContent).toContain('The broker did not answer: docker is not running');
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain(
+      'The broker did not answer: docker is not running',
+    );
   });
 
   it('refreshes every 5 s from the start, and says so only until the settings switch it off', async () => {
-    expect(((await render()).nativeElement as HTMLElement).querySelector('.auto')?.textContent).toContain('Refreshes every 5 s');
+    expect(((await render()).nativeElement as HTMLElement).querySelector('.auto')?.textContent).toContain(
+      'Refreshes every 5 s',
+    );
     expect(((await render({ autoRefresh: false })).nativeElement as HTMLElement).querySelector('.auto')).toBeNull();
   });
 
@@ -140,7 +157,9 @@ describe('TopologyWidget', () => {
 
     const el: HTMLElement = (await render()).nativeElement;
 
-    expect(el.querySelector('[role="alert"]')?.textContent).toContain('The diagram could not be drawn: Failed to fetch');
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain(
+      'The diagram could not be drawn: Failed to fetch',
+    );
     expect(el.querySelectorAll('ul.nodes li').length).toBeGreaterThan(0);
   });
 
@@ -176,7 +195,9 @@ describe('TopologyWidget', () => {
     });
 
     it('says so when the service has no Compose service to follow', async () => {
-      host.platformMap.mockReturnValue(of({ ...map, services: [...map.services, { name: 'ghost', url: null, routes: [], queues: [] }] }));
+      host.platformMap.mockReturnValue(
+        of({ ...map, services: [...map.services, { name: 'ghost', url: null, routes: [], queues: [] }] }),
+      );
       const fixture = await render();
       const el: HTMLElement = fixture.nativeElement;
 
@@ -243,7 +264,7 @@ describe('TopologyWidget', () => {
   });
 
   describe('where the operator puts a node', () => {
-    it('is kept in the widget\'s own config, beside the nodes moved before', async () => {
+    it("is kept in the widget's own config, beside the nodes moved before", async () => {
       await render({ autoRefresh: true, positions: { 's:gateway': { x: 1, y: 2 } } });
 
       events.moved('q:ordering-catalog-events', { x: 30, y: 40 });

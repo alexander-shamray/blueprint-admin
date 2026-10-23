@@ -30,7 +30,10 @@ describe('BffProjectionWidget', () => {
     return { ...queues, queues: queues.queues.map((q) => (q.name === 'bff-order-events' ? { ...q, messages } : q)) };
   }
 
-  function type(fixture: { nativeElement: HTMLElement; whenStable: () => Promise<unknown>; detectChanges: () => void }, value: string) {
+  function type(
+    fixture: { nativeElement: HTMLElement; whenStable: () => Promise<unknown>; detectChanges: () => void },
+    value: string,
+  ) {
     const input = fixture.nativeElement.querySelector('.rebuild-box input') as HTMLInputElement;
     input.value = value;
     input.dispatchEvent(new Event('input'));
@@ -50,7 +53,9 @@ describe('BffProjectionWidget', () => {
     host.brokerQueues.mockReturnValue(of(withBffDepth(3)));
     const fixture = render();
 
-    expect(fixture.nativeElement.querySelector('.depth')?.textContent?.trim()).toBe('[waiting] bff-order-events holds 3 messages.');
+    expect(fixture.nativeElement.querySelector('.depth')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      '[waiting] bff-order-events holds 3 messages.',
+    );
   });
 
   it('repair starts the job without a confirmation, shows its output and reads the queues again', () => {
@@ -80,7 +85,9 @@ describe('BffProjectionWidget', () => {
     fixture.detectChanges();
 
     expect(host.brokerQueues).toHaveBeenCalledTimes(1);
-    expect(fixture.nativeElement.querySelector('.depth')?.textContent?.trim()).toBe('[drained] bff-order-events is empty.');
+    expect(fixture.nativeElement.querySelector('.depth')?.textContent?.trim()).toBe(
+      '[drained] bff-order-events is empty.',
+    );
   });
 
   it('polls the queues while its run goes, so the depth line follows it, and stops when the run ends', async () => {
@@ -108,7 +115,7 @@ describe('BffProjectionWidget', () => {
     }
   });
 
-  it('stops polling when the run\'s stream fails, since no exit will come', async () => {
+  it("stops polling when the run's stream fails, since no exit will come", async () => {
     vi.useFakeTimers();
     try {
       const events = new Subject<JobEvent>();
@@ -203,7 +210,9 @@ describe('BffProjectionWidget', () => {
   });
 
   it('is re-created with the confirmation empty, and its job still shown', async () => {
-    TestBed.configureTestingModule({ providers: [{ provide: WIDGET_CONTEXT, useValue: { instanceId: 'w1', pageId: 'p1' } }] });
+    TestBed.configureTestingModule({
+      providers: [{ provide: WIDGET_CONTEXT, useValue: { instanceId: 'w1', pageId: 'p1' } }],
+    });
     const first = render();
     await type(first, 'bff-replay --reset');
     (first.nativeElement.querySelector('button.repair') as HTMLButtonElement).click();

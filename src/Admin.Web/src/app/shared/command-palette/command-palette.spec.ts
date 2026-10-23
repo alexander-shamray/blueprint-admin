@@ -19,7 +19,9 @@ describe('CommandPalette', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({ imports: [CommandPalette], providers: [provideRouter([])] });
-    navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true) as unknown as ReturnType<typeof vi.fn>;
+    navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true) as unknown as ReturnType<
+      typeof vi.fn
+    >;
   });
 
   function render() {

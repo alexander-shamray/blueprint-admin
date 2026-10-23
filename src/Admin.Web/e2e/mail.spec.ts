@@ -27,7 +27,10 @@ test('one order, one screen, every message it caused, each linked to its trace',
   await expect(page.locator('pre.body-text')).toContainText(`Order: ${ORDER}`);
   await expect(page.locator('iframe.body-html')).toHaveCount(0);
 
-  await page.locator('section.message .facts').getByRole('link', { name: `trace ${ORDER}` }).click();
+  await page
+    .locator('section.message .facts')
+    .getByRole('link', { name: `trace ${ORDER}` })
+    .click();
   await expect(page).toHaveURL(new RegExp(`/trace/${ORDER}$`));
 });
 

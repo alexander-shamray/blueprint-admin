@@ -161,9 +161,14 @@ export function topologyOf(map: PlatformMapView, reads: TopologyReads): Topology
   for (const { service, queue } of queues) {
     // A twin with no queue of its own to fold into stands as a node, so a parked queue is never left out.
     if (queue.parked !== null && mains.has(baseOf(queue))) continue;
-    const twins = queue.parked === null ? queues.filter((q) => q.queue.parked !== null && baseOf(q.queue) === queue.name).map((q) => q.queue) : [queue];
+    const twins =
+      queue.parked === null
+        ? queues.filter((q) => q.queue.parked !== null && baseOf(q.queue) === queue.name).map((q) => q.queue)
+        : [queue];
     const parkedMessages = twins.reduce((n, t) => n + (t.messages ?? 0), 0);
-    const holding = twins.filter((t) => (t.messages ?? 0) > 0).sort((a, b) => (a.parked === 'error' ? -1 : b.parked === 'error' ? 1 : 0));
+    const holding = twins
+      .filter((t) => (t.messages ?? 0) > 0)
+      .sort((a, b) => (a.parked === 'error' ? -1 : b.parked === 'error' ? 1 : 0));
     const rate = reads.rate(queue.name);
     const depth = queue.messages === null ? '—' : String(queue.messages);
 
@@ -203,13 +208,35 @@ export function topologyOf(map: PlatformMapView, reads: TopologyReads): Topology
     const bindings = queue.parked === null ? queue.bindings : [];
     for (const b of bindings) {
       exchanges.add(b.source);
-      edges.push({ id: `bind:${b.source}>${queue.name}:${b.routingKey}`, source: `x:${b.source}`, target: id, kind: 'binding', label: flow });
+      edges.push({
+        id: `bind:${b.source}>${queue.name}:${b.routingKey}`,
+        source: `x:${b.source}`,
+        target: id,
+        kind: 'binding',
+        label: flow,
+      });
     }
-    edges.push({ id: `consume:${queue.name}`, source: id, target: `s:${service.name}`, kind: 'consume', label: bindings.length === 0 ? flow : '' });
+    edges.push({
+      id: `consume:${queue.name}`,
+      source: id,
+      target: `s:${service.name}`,
+      kind: 'consume',
+      label: bindings.length === 0 ? flow : '',
+    });
   }
 
   for (const name of exchanges) {
-    nodes.push({ id: `x:${name}`, kind: 'exchange', name, label: name, state: 'neutral', stateText: 'exchange', compose: null, parkedQueue: null, flow: null });
+    nodes.push({
+      id: `x:${name}`,
+      kind: 'exchange',
+      name,
+      label: name,
+      state: 'neutral',
+      stateText: 'exchange',
+      compose: null,
+      parkedQueue: null,
+      flow: null,
+    });
   }
   return { nodes, edges };
 }

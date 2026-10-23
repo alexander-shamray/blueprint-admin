@@ -1,5 +1,17 @@
 import { NgComponentOutlet, NgTemplateOutlet } from '@angular/common';
-import { Component, ElementRef, Injector, Type, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  Injector,
+  Type,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+  untracked,
+} from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -52,7 +64,10 @@ export class WorkspaceGrid {
     const key = `${context.pageId}\n${context.instanceId}`;
     let injector = this.injectors.get(key);
     if (!injector) {
-      injector = Injector.create({ providers: [{ provide: WIDGET_CONTEXT, useValue: context }], parent: this.injector });
+      injector = Injector.create({
+        providers: [{ provide: WIDGET_CONTEXT, useValue: context }],
+        parent: this.injector,
+      });
       this.injectors.set(key, injector);
     }
     return injector;
@@ -268,8 +283,8 @@ export class WorkspaceGrid {
 
   private loadComponent(kind: WidgetType): void {
     if (untracked(this.components).has(kind.type)) return;
-    void kind.component().then((component) =>
-      this.components.update((loaded) => new Map(loaded).set(kind.type, component)),
-    );
+    void kind
+      .component()
+      .then((component) => this.components.update((loaded) => new Map(loaded).set(kind.type, component)));
   }
 }

@@ -114,7 +114,10 @@ const STYLE: StylesheetJson = [
 const LAYOUT = { name: 'dagre', rankDir: 'LR', nodeSep: 24, rankSep: 90, animate: false, padding: 16 } as const;
 
 function elementOf(node: Topology['nodes'][number]): ElementDefinition {
-  return { group: 'nodes', data: { id: node.id, kind: node.kind, label: node.label, state: node.state, fill: FILL[node.state] } };
+  return {
+    group: 'nodes',
+    data: { id: node.id, kind: node.kind, label: node.label, state: node.state, fill: FILL[node.state] },
+  };
 }
 
 /** The drawing on Cytoscape: a canvas, so a refresh changes data on elements already there and moves nothing. */
@@ -161,7 +164,10 @@ async function cytoscapeGraph(container: HTMLElement, events: GraphEvents): Prom
         for (const edge of topology.edges) {
           const el = cy.getElementById(edge.id);
           if (el.empty()) {
-            cy.add({ group: 'edges', data: { id: edge.id, source: edge.source, target: edge.target, kind: edge.kind, label: edge.label } });
+            cy.add({
+              group: 'edges',
+              data: { id: edge.id, source: edge.source, target: edge.target, kind: edge.kind, label: edge.label },
+            });
             added = true;
           } else {
             el.data('label', edge.label);
@@ -179,7 +185,8 @@ async function cytoscapeGraph(container: HTMLElement, events: GraphEvents): Prom
         for (const [id, at] of Object.entries(positions)) {
           const el = cy.getElementById(id);
           // A node under the operator's hand is theirs until they let go: a refresh must not snap it back mid-drag.
-          if (el.nonempty() && !el.grabbed() && (el.position('x') !== at.x || el.position('y') !== at.y)) el.position(at);
+          if (el.nonempty() && !el.grabbed() && (el.position('x') !== at.x || el.position('y') !== at.y))
+            el.position(at);
         }
       });
       if (first && added) cy.fit(undefined, LAYOUT.padding);

@@ -31,10 +31,27 @@ import { ApiHistory } from '../api-client';
     }
   `,
   styles: `
-    .history ul { list-style: none; margin: 0; padding: 0; }
-    .history button { background: none; border: 0; cursor: pointer; font-family: monospace; padding: 0.1rem 0; color: inherit; text-align: left; }
-    .entry { font-family: monospace; }
-    .empty, .note { color: var(--app-muted); }
+    .history ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .history button {
+      background: none;
+      border: 0;
+      cursor: pointer;
+      font-family: monospace;
+      padding: 0.1rem 0;
+      color: inherit;
+      text-align: left;
+    }
+    .entry {
+      font-family: monospace;
+    }
+    .empty,
+    .note {
+      color: var(--app-muted);
+    }
   `,
 })
 export class ApiHistoryWidget {

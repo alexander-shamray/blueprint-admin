@@ -34,14 +34,7 @@ export type StepKey =
 /** The steps that wait on the order read rather than send once. */
 export type WatchKey = Extract<
   StepKey,
-  | 'confirmed'
-  | 'dispatched'
-  | 'delivered'
-  | 'cancelled'
-  | 'declined'
-  | 'out_of_stock'
-  | 'unchanged'
-  | 'held'
+  'confirmed' | 'dispatched' | 'delivered' | 'cancelled' | 'declined' | 'out_of_stock' | 'unchanged' | 'held'
 >;
 
 const WATCHES: readonly StepKey[] = [
@@ -171,7 +164,17 @@ export const RESERVATION_POLL_MS = 1000;
 export const RESERVATION_WATCH_MS = 60_000;
 
 /** run-locally.md's carrier table: the postal code each outcome is scripted by. */
-const CARRIER_STEPS: readonly StepKey[] = ['publish', 'drain', 'stock', 'quote', 'order', 'confirmed', 'carrier', 'held', 'mail'];
+const CARRIER_STEPS: readonly StepKey[] = [
+  'publish',
+  'drain',
+  'stock',
+  'quote',
+  'order',
+  'confirmed',
+  'carrier',
+  'held',
+  'mail',
+];
 
 /** The host's `ScenarioControl` change ids (ids, not copies of what they do: the host's table owns that). */
 const SHORT_WAITS = 'short-waits';
@@ -228,7 +231,7 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
   image: {
     title: 'Product with an image',
     intro:
-      'Ask the BFF for a pre-signed upload, PUT an image to the object store, publish a product with the key it returned, read the product back, and fetch its thumbnail from image-edge as a buyer\'s browser would.',
+      "Ask the BFF for a pre-signed upload, PUT an image to the object store, publish a product with the key it returned, read the product back, and fetch its thumbnail from image-edge as a buyer's browser would.",
     steps: ['upload', 'publish', 'thumbnail'],
   },
   'out-of-stock': {
@@ -336,7 +339,7 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
     'Carrier feed is strange',
     STRANGE_CODE,
     'strange',
-    "the carrier books the parcel and then serves a feed Shipping refuses whole, so it is polled again and again",
+    'the carrier books the parcel and then serves a feed Shipping refuses whole, so it is polled again and again',
   ),
 };
 
@@ -445,7 +448,8 @@ export const SCENARIO_OPERATIONS: Record<OperationRole, string> = {
 
 /** The role a step sends as; the drain asks the broker and sends none. */
 export function roleOf(key: StepKey): OperationRole | null {
-  if (key === 'drain' || key === 'lease' || key === 'restore' || key === 'flagged' || key === 'stop' || key === 'mail') return null;
+  if (key === 'drain' || key === 'lease' || key === 'restore' || key === 'flagged' || key === 'stop' || key === 'mail')
+    return null;
   if (key === 'upload') return 'image';
   if (key === 'thumbnail') return 'product';
   if (key === 'late_cancel') return 'cancel';
@@ -554,9 +558,7 @@ export function withProductId(body: string, productId: string): string {
     const list = object[key];
     if (Array.isArray(list)) {
       result[key] = list.map((line: unknown) =>
-        line && typeof line === 'object' && !Array.isArray(line) && 'productId' in line
-          ? { ...line, productId }
-          : line,
+        line && typeof line === 'object' && !Array.isArray(line) && 'productId' in line ? { ...line, productId } : line,
       );
     }
   }
@@ -616,7 +618,9 @@ export function withCarrierCode(body: string, code: string, marker?: string): st
   } catch {
     return body;
   }
-  const filter = parsed as { Body?: { MatchOperator?: string; Matchers?: { Name?: unknown; Pattern?: unknown }[] } } | null;
+  const filter = parsed as {
+    Body?: { MatchOperator?: string; Matchers?: { Name?: unknown; Pattern?: unknown }[] };
+  } | null;
   const matcher = filter?.Body?.Matchers?.[0];
   if (!filter?.Body?.Matchers || !matcher || typeof matcher.Pattern !== 'string') return body;
   matcher.Pattern = `*${code}*`;
@@ -755,9 +759,7 @@ export function tallyMail(view: MailListView, orderId: string): MailTally[] {
 }
 
 export type MailVerdict =
-  | { kind: 'reached'; detail: string }
-  | { kind: 'waiting'; detail: string }
-  | { kind: 'failed'; reason: string };
+  { kind: 'reached'; detail: string } | { kind: 'waiting'; detail: string } | { kind: 'failed'; reason: string };
 
 /**
  * Whether the sink holds exactly one message for each event the script expects. A second message for an event is the
@@ -783,7 +785,10 @@ export function mailVerdict(view: MailListView, orderId: string, expected: reado
   const unexpected = tallies.filter((t) => !expected.includes(t.template));
   if (unexpected.length > 0) {
     const list = unexpected.map((t) => (t.template ? `${t.event} (${t.template})` : t.eventId)).join(', ');
-    return { kind: 'failed', reason: `A message answered an event this run does not expect: ${list}. Counted: ${said}.` };
+    return {
+      kind: 'failed',
+      reason: `A message answered an event this run does not expect: ${list}. Counted: ${said}.`,
+    };
   }
 
   const missing = expected.filter((template) => !tallies.some((t) => t.template === template));
@@ -796,9 +801,7 @@ export function mailVerdict(view: MailListView, orderId: string, expected: reado
 }
 
 export type ReviewVerdict =
-  | { kind: 'reached'; detail: string }
-  | { kind: 'waiting'; detail: string }
-  | { kind: 'failed'; reason: string };
+  { kind: 'reached'; detail: string } | { kind: 'waiting'; detail: string } | { kind: 'failed'; reason: string };
 
 /**
  * Whether Ordering has logged the order as flagged for review for `reason` (run-locally.md: `Order <id> flagged for review:
@@ -826,13 +829,14 @@ export function reviewVerdict(view: ReviewFlagView, reason: string, placedAt: nu
   }
 
   const others = [...new Set(view.flags.map((f) => f.reason))].join(', ');
-  return { kind: 'waiting', detail: `Ordering has flagged it for review as ${others}, not ${reason}; still waiting for ${reason}.` };
+  return {
+    kind: 'waiting',
+    detail: `Ordering has flagged it for review as ${others}, not ${reason}; still waiting for ${reason}.`,
+  };
 }
 
 export type ReservationVerdict =
-  | { kind: 'reached'; detail: string }
-  | { kind: 'waiting'; detail: string }
-  | { kind: 'failed'; reason: string };
+  { kind: 'reached'; detail: string } | { kind: 'waiting'; detail: string } | { kind: 'failed'; reason: string };
 
 /**
  * Whether Inventory holds the stock for the order (run-locally.md: the reservation read, `status: Reserved`). A 404 is the
@@ -852,7 +856,10 @@ export function reservationVerdict(status: number, body: string): ReservationVer
   } catch {
     parsed = null;
   }
-  const seen = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>)['status'] : undefined;
+  const seen =
+    parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)['status']
+      : undefined;
   if (typeof seen !== 'string') {
     return { kind: 'failed', reason: 'Answered 200, but not with a reservation the step can follow.' };
   }
@@ -863,9 +870,7 @@ export function reservationVerdict(status: number, body: string): ReservationVer
 }
 
 export type CarrierVerdict =
-  | { kind: 'reached'; detail: string }
-  | { kind: 'waiting'; detail: string }
-  | { kind: 'failed'; reason: string };
+  { kind: 'reached'; detail: string } | { kind: 'waiting'; detail: string } | { kind: 'failed'; reason: string };
 
 /**
  * What the simulator's log must show of an order placed since `since` (ms), by the outcome its code scripts (run-locally.md):
@@ -904,13 +909,22 @@ export function carrierVerdict(
       const said = outcome === 'down' ? 'answered 503' : 'answered 201 after Shipping had stopped waiting';
       return count >= 2
         ? { kind: 'reached', detail: `The carrier saw ${count} attempts at the same booking, each ${said}.` }
-        : { kind: 'waiting', detail: `The carrier has seen ${count} attempt, ${said}; Shipping backs off before it tries again.` };
+        : {
+            kind: 'waiting',
+            detail: `The carrier has seen ${count} attempt, ${said}; Shipping backs off before it tries again.`,
+          };
     }
     default: {
       const after = polls.filter((p) => p.at > first.at).length;
       return after >= 2
-        ? { kind: 'reached', detail: `The carrier booked the parcel once (201) and its feed has been polled ${after} times since.` }
-        : { kind: 'waiting', detail: `The carrier booked the parcel (201); its feed has been polled ${after} time(s) since.` };
+        ? {
+            kind: 'reached',
+            detail: `The carrier booked the parcel once (201) and its feed has been polled ${after} times since.`,
+          }
+        : {
+            kind: 'waiting',
+            detail: `The carrier booked the parcel (201); its feed has been polled ${after} time(s) since.`,
+          };
     }
   }
 }
@@ -929,9 +943,7 @@ export function isAlreadyShipped(status: number, body: string): boolean {
   try {
     const parsed: unknown = JSON.parse(body);
     return (
-      !!parsed &&
-      typeof parsed === 'object' &&
-      (parsed as Record<string, unknown>)['code'] === ALREADY_SHIPPED.code
+      !!parsed && typeof parsed === 'object' && (parsed as Record<string, unknown>)['code'] === ALREADY_SHIPPED.code
     );
   } catch {
     return false;
@@ -963,13 +975,7 @@ export interface OrderRead {
   asOf: string;
 }
 
-const TIMELINE_STEPS: readonly TimelineStep[] = [
-  'placed',
-  'confirmed',
-  'dispatched',
-  'delivered',
-  'cancelled',
-];
+const TIMELINE_STEPS: readonly TimelineStep[] = ['placed', 'confirmed', 'dispatched', 'delivered', 'cancelled'];
 
 /** The order read's answer, or null for a body that is not one, so a malformed answer fails its step. */
 export function orderRead(body: string): OrderRead | null {
@@ -993,10 +999,7 @@ export function orderRead(body: string): OrderRead | null {
   return { status: o['status'], timeline, asOf: o['asOf'] };
 }
 
-export type WatchVerdict =
-  | { kind: 'reached'; at: string }
-  | { kind: 'waiting' }
-  | { kind: 'failed'; reason: string };
+export type WatchVerdict = { kind: 'reached'; at: string } | { kind: 'waiting' } | { kind: 'failed'; reason: string };
 
 /**
  * Whether one read shows the step a watch waits for. A forward step is read from the timeline, so a
@@ -1011,14 +1014,20 @@ export function verdict(key: WatchKey, read: OrderRead): WatchVerdict {
     // Not a wait: the order is read once the carrier has been seen, and it is confirmed and not despatched or it is not.
     return read.status === 'confirmed' && read.timeline.dispatched === null
       ? { kind: 'reached', at: read.timeline.confirmed ?? read.asOf }
-      : { kind: 'failed', reason: `The order reads ${read.status}, not confirmed: this script's cause should leave it there.` };
+      : {
+          kind: 'failed',
+          reason: `The order reads ${read.status}, not confirmed: this script's cause should leave it there.`,
+        };
   }
 
   if (key === 'unchanged') {
     // Not a wait: the cancel was refused, so the order is still where the script left it, despatched and never cancelled.
     return read.status === 'dispatched' && read.timeline.cancelled === null
       ? { kind: 'reached', at: read.timeline.dispatched ?? read.asOf }
-      : { kind: 'failed', reason: `The order reads ${read.status}, not dispatched: the refused cancel should have moved nothing.` };
+      : {
+          kind: 'failed',
+          reason: `The order reads ${read.status}, not dispatched: the refused cancel should have moved nothing.`,
+        };
   }
 
   if (key === 'declined' || key === 'out_of_stock') {
@@ -1094,7 +1103,8 @@ export function sagaWord(status: number, body: string): SagaWord {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { kind: 'unreadable', status };
     const o = parsed as Record<string, unknown>;
     const reason = o['cancelReason'];
-    if (typeof o['currentState'] !== 'string' || typeof o['startedAt'] !== 'string') return { kind: 'unreadable', status };
+    if (typeof o['currentState'] !== 'string' || typeof o['startedAt'] !== 'string')
+      return { kind: 'unreadable', status };
     if (reason !== null && reason !== undefined && typeof reason !== 'string') return { kind: 'unreadable', status };
     return { kind: 'row', state: o['currentState'], startedAt: o['startedAt'], cancelReason: reason ?? null };
   } catch {

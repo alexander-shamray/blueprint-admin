@@ -1,7 +1,25 @@
 import { SCREENS } from '../screens';
 import { builtInTitle, builtInWidgets, defaultWorkspace, differsFromBuiltIn, withEveryBuiltIn } from './built-in-pages';
 import { SCREEN_COMPONENTS } from './screen-components';
-import { API_WIDGETS, BROKER_WIDGETS, ERASURE, JOB_OUTPUT, LEGACY_SCREEN, LOGS, MAIL, MAP, NOTE, RUNBOOKS, SEQUENCE, TRACE, TRANSCRIPT, SCENARIO_WIDGETS, STACK_WIDGETS, WIDGETS, widgetType } from './widgets';
+import {
+  API_WIDGETS,
+  BROKER_WIDGETS,
+  ERASURE,
+  JOB_OUTPUT,
+  LEGACY_SCREEN,
+  LOGS,
+  MAIL,
+  MAP,
+  NOTE,
+  RUNBOOKS,
+  SEQUENCE,
+  TRACE,
+  TRANSCRIPT,
+  SCENARIO_WIDGETS,
+  STACK_WIDGETS,
+  WIDGETS,
+  widgetType,
+} from './widgets';
 import { GRID_COLUMNS, MAX_ROWS, WidgetInstance } from './workspace-types';
 
 describe('the widget registry', () => {
@@ -47,7 +65,10 @@ describe('the built-in pages', () => {
     for (const screen of SCREENS) {
       const widgets = builtInWidgets(screen.path);
       expect(widgets.length, screen.path).toBeGreaterThan(0);
-      expect(widgets.map((w) => w.type), screen.path).not.toContain('legacy');
+      expect(
+        widgets.map((w) => w.type),
+        screen.path,
+      ).not.toContain('legacy');
       // Every widget a page ships with is one the registry knows, with its components loadable.
       for (const w of widgets) expect(widgetType(w.type), `${screen.path}: ${w.type}`).toBeDefined();
     }
@@ -55,16 +76,33 @@ describe('the built-in pages', () => {
 
   it('offer the request sequence as a registered widget that reads the Trace history and follow services, and sits on no built-in page', () => {
     expect(widgetType('sequence')).toBe(SEQUENCE);
-    expect(SEQUENCE.config({ correlationId: 7, window: '9h', follow: 'yes' })).toEqual({ correlationId: '', window: '15m', follow: false });
+    expect(SEQUENCE.config({ correlationId: 7, window: '9h', follow: 'yes' })).toEqual({
+      correlationId: '',
+      window: '15m',
+      follow: false,
+    });
     expect(SEQUENCE.titleOf({ correlationId: 'abc' })).toBe('Request sequence (abc)');
     expect(SEQUENCE.presets.map((p) => p.config['follow'])).toEqual([false, true]);
     expect(SEQUENCE.dataServices).toEqual(['TraceHistory', 'TraceFollow']);
-    for (const screen of SCREENS) expect(builtInWidgets(screen.path).map((w) => w.type), screen.path).not.toContain('sequence');
+    for (const screen of SCREENS)
+      expect(
+        builtInWidgets(screen.path).map((w) => w.type),
+        screen.path,
+      ).not.toContain('sequence');
   });
 
   it('build the Runbooks and Transcript pages from one widget each', () => {
-    expect(builtInWidgets('runbooks')).toEqual([expect.objectContaining({ id: 'builtin-runbooks-runbooks', type: 'runbooks', cols: 24, config: { runbook: null } })]);
-    expect(builtInWidgets('transcript')).toEqual([expect.objectContaining({ id: 'builtin-transcript-transcript', type: 'transcript', config: {} })]);
+    expect(builtInWidgets('runbooks')).toEqual([
+      expect.objectContaining({
+        id: 'builtin-runbooks-runbooks',
+        type: 'runbooks',
+        cols: 24,
+        config: { runbook: null },
+      }),
+    ]);
+    expect(builtInWidgets('transcript')).toEqual([
+      expect.objectContaining({ id: 'builtin-transcript-transcript', type: 'transcript', config: {} }),
+    ]);
     expect(RUNBOOKS.config({ runbook: 7 })).toEqual({ runbook: null });
     expect(RUNBOOKS.titleOf({ runbook: 'error-queue' })).toBe('Runbooks (error-queue)');
     expect(TRANSCRIPT.dataServices).toEqual(['TranscriptFeed']);
@@ -73,7 +111,14 @@ describe('the built-in pages', () => {
   it('build the Broker page from its six widgets, each reading BrokerFeed and none polling until switched on', () => {
     const widgets = builtInWidgets('broker');
 
-    expect(widgets.map((w) => w.type)).toEqual(['queues', 'bff-projection', 'dead-letters', 'exchanges', 'permissions', 'bindings']);
+    expect(widgets.map((w) => w.type)).toEqual([
+      'queues',
+      'bff-projection',
+      'dead-letters',
+      'exchanges',
+      'permissions',
+      'bindings',
+    ]);
     expect(Object.values(BROKER_WIDGETS).every((k) => k.dataServices.includes('BrokerFeed'))).toBe(true);
     for (const type of ['queues', 'exchanges', 'bindings', 'permissions']) {
       expect(widgetType(type)?.config({})).toMatchObject({ autoRefresh: false, filter: '' });
@@ -93,9 +138,15 @@ describe('the built-in pages', () => {
   });
 
   it('build the Map, Mail and Erasure pages from one widget each, none polling until switched on', () => {
-    expect(builtInWidgets('map')).toEqual([expect.objectContaining({ id: 'builtin-map-platform-map', type: 'platform-map', config: { autoRefresh: false } })]);
-    expect(builtInWidgets('mail')).toEqual([expect.objectContaining({ id: 'builtin-mail-mail', type: 'mail', config: { correlationId: '' } })]);
-    expect(builtInWidgets('erasure')).toEqual([expect.objectContaining({ id: 'builtin-erasure-erasure', type: 'erasure', config: {} })]);
+    expect(builtInWidgets('map')).toEqual([
+      expect.objectContaining({ id: 'builtin-map-platform-map', type: 'platform-map', config: { autoRefresh: false } }),
+    ]);
+    expect(builtInWidgets('mail')).toEqual([
+      expect.objectContaining({ id: 'builtin-mail-mail', type: 'mail', config: { correlationId: '' } }),
+    ]);
+    expect(builtInWidgets('erasure')).toEqual([
+      expect.objectContaining({ id: 'builtin-erasure-erasure', type: 'erasure', config: {} }),
+    ]);
     expect(MAP.config({ autoRefresh: 'yes' })).toEqual({ autoRefresh: false });
     expect(MAIL.config({ correlationId: 7 })).toEqual({ correlationId: '' });
     expect(MAIL.titleOf({ correlationId: 'abc' })).toBe('Mail (abc)');
@@ -109,21 +160,36 @@ describe('the built-in pages', () => {
       expect.objectContaining({ id: 'builtin-requests-api-history', type: 'api-history', x: 16, config: {} }),
     ]);
     expect(builtInWidgets('trace')).toEqual([
-      expect.objectContaining({ id: 'builtin-trace-trace', type: 'trace', config: { correlationId: '', window: '15m', follow: true } }),
+      expect.objectContaining({
+        id: 'builtin-trace-trace',
+        type: 'trace',
+        config: { correlationId: '', window: '15m', follow: true },
+      }),
     ]);
     expect(API_WIDGETS.request.config({ operation: 7, identity: 'root' })).toEqual({ operation: null, identity: null });
     expect(API_WIDGETS.request.config({ operation: 'catalog:GetProducts', identity: 'custom:alice' })).toEqual({
       operation: 'catalog:GetProducts',
       identity: 'custom:alice',
     });
-    expect(TRACE.config({ correlationId: 7, window: '9h', follow: 'yes' })).toEqual({ correlationId: '', window: '15m', follow: false });
+    expect(TRACE.config({ correlationId: 7, window: '9h', follow: 'yes' })).toEqual({
+      correlationId: '',
+      window: '15m',
+      follow: false,
+    });
     expect(TRACE.titleOf({ correlationId: 'abc' })).toBe('Trace (abc)');
     expect(TRACE.presets.map((p) => p.config['follow'])).toEqual([false, true]);
   });
 
   it('build the Logs page from one Logs widget over every service', () => {
     expect(builtInWidgets('logs')).toEqual([
-      expect.objectContaining({ id: 'builtin-logs-logs', type: 'logs', x: 0, y: 0, cols: 24, config: { services: [] } }),
+      expect.objectContaining({
+        id: 'builtin-logs-logs',
+        type: 'logs',
+        x: 0,
+        y: 0,
+        cols: 24,
+        config: { services: [] },
+      }),
     ]);
     expect(LOGS.dataServices).toEqual(['LogFollowService']);
   });
@@ -133,13 +199,17 @@ describe('the built-in pages', () => {
       expect.objectContaining({ id: 'builtin-scenario-scenario', type: 'scenario', x: 0, y: 0, cols: 16 }),
       expect.objectContaining({ id: 'builtin-scenario-saga-strip', type: 'saga-strip', x: 16, y: 0, cols: 8 }),
     ]);
-    expect(Object.values(SCENARIO_WIDGETS).every((k) => k.presets.length === 1 && k.dataServices.includes('ScenarioRunner'))).toBe(true);
+    expect(
+      Object.values(SCENARIO_WIDGETS).every((k) => k.presets.length === 1 && k.dataServices.includes('ScenarioRunner')),
+    ).toBe(true);
   });
 
   it('build the Stack page from the Stack widgets and a Job output following the page, none overlapping', () => {
     const widgets = builtInWidgets('stack');
 
-    expect(widgets.map((w) => w.type).sort()).toEqual([...Object.values(STACK_WIDGETS).map((k) => k.type), JOB_OUTPUT.type].sort());
+    expect(widgets.map((w) => w.type).sort()).toEqual(
+      [...Object.values(STACK_WIDGETS).map((k) => k.type), JOB_OUTPUT.type].sort(),
+    );
     expect(widgets.find((w) => w.type === JOB_OUTPUT.type)?.config).toEqual({ jobId: null });
     expect(new Set(widgets.map((w) => w.id)).size).toBe(widgets.length);
     for (const w of widgets) {
@@ -149,7 +219,8 @@ describe('the built-in pages', () => {
     }
     const overlap = (a: WidgetInstance, b: WidgetInstance) =>
       a.x < b.x + b.cols && b.x < a.x + a.cols && a.y < b.y + b.rows && b.y < a.y + a.rows;
-    for (const a of widgets) for (const b of widgets) if (a !== b) expect(overlap(a, b), `${a.id} / ${b.id}`).toBe(false);
+    for (const a of widgets)
+      for (const b of widgets) if (a !== b) expect(overlap(a, b), `${a.id} / ${b.id}`).toBe(false);
   });
 });
 

@@ -35,8 +35,8 @@
   <!-- Only ever a reachable view: an unreachable answer is surfaced through error() above, leaving
        the last good timeline in place. -->
   <p class="summary" role="status">
-    {{ v.events.length }} event{{ v.events.length === 1 ? '' : 's' }} for {{ v.correlationId }} over the last {{ v.window }},
-    across {{ v.traceIds.length }} trace{{ v.traceIds.length === 1 ? '' : 's' }}.
+    {{ v.events.length }} event{{ v.events.length === 1 ? '' : 's' }} for {{ v.correlationId }} over the last
+    {{ v.window }}, across {{ v.traceIds.length }} trace{{ v.traceIds.length === 1 ? '' : 's' }}.
     @if (v.tracesTruncated) {
       <span class="truncated">Only the {{ v.traceIds.length }} newest traces were fetched.</span>
     }
@@ -46,8 +46,8 @@
     <section class="changes" aria-label="Since the last fetch">
       @if (!d.comparable) {
         <p class="not-compared" role="status">
-          The window changed from {{ d.previousWindow }} to {{ v.window }}, so this fetch is not compared with the one at
-          {{ d.previousAt | date: 'HH:mm:ss' }}.
+          The window changed from {{ d.previousWindow }} to {{ v.window }}, so this fetch is not compared with the one
+          at {{ d.previousAt | date: 'HH:mm:ss' }}.
         </p>
       } @else if (d.arrived.length === 0 && d.gone.length === 0) {
         <p class="unchanged" role="status">

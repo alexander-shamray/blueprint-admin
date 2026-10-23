@@ -3,9 +3,7 @@ import { HostClient } from '../host/host-client';
 import { Identity, RealmUserView } from '../host/host-types';
 
 export type IdentityChoice =
-  | { kind: 'anonymous' }
-  | { kind: 'user'; username: string }
-  | { kind: 'custom'; username: string; password: string };
+  { kind: 'anonymous' } | { kind: 'user'; username: string } | { kind: 'custom'; username: string; password: string };
 
 /** Who the API screen sends as. Root-scoped so the choice survives leaving and returning to the screen. */
 @Injectable({ providedIn: 'root' })

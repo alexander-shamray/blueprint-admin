@@ -23,7 +23,9 @@ test('the deliver script orders and reads the order back until it is delivered, 
   await expect(steps.nth(0).locator('.detail')).toContainText(/Answered 200 with id [0-9a-f-]{36}\./);
   await expect(steps.nth(1).locator('app-drained-indicator')).toContainText('[drained]');
   // The order the run placed, which the fake numbers apart from any other run's.
-  await expect(steps.nth(2).locator('.request')).toHaveText(/^PUT http:\/\/localhost:5000\/api\/v1\/inventory\/stock\/[0-9a-f-]{36}$/);
+  await expect(steps.nth(2).locator('.request')).toHaveText(
+    /^PUT http:\/\/localhost:5000\/api\/v1\/inventory\/stock\/[0-9a-f-]{36}$/,
+  );
   await expect(steps.nth(2).locator('.detail')).toContainText('stock on hand set to 10');
   const placed = (await steps.nth(4).locator('.detail').textContent())!.match(/with id ([0-9a-f-]{36})/)![1];
   await expect(steps.nth(5).locator('.request')).toHaveText(`GET http://localhost:5000/bff/v1/orders/${placed}`);
@@ -80,14 +82,26 @@ test('the cancel script cancels the placed order and reads it back cancelled', a
   );
   await expect(steps.nth(6).locator('.detail')).toContainText('The order read shows cancelled at');
   // Cancelled before the confirmation, so none is mailed (FakeOrders.Mail); read the same from the live stack.
-  await expect(steps.nth(7).locator('.detail')).toContainText('OrderPlaced (order-placed) ×1, OrderCancelled (order-cancelled) ×1');
+  await expect(steps.nth(7).locator('.detail')).toContainText(
+    'OrderPlaced (order-placed) ×1, OrderCancelled (order-cancelled) ×1',
+  );
 });
 
 // The fake scripts the end from the request, as the platform does from run-locally.md's cause
 // (FakeOrders.EndOf): a price ending .01 is declined, stock never set or below one is out of stock, a second after the place.
 for (const [script, ended, stock, mailed] of [
-  ['declined', 'declined', 'set to 10', ['OrderPlaced (order-placed) ×1', 'OrderCancelled (order-cancelled) ×1', 'PaymentDeclined (payment-declined) ×1']],
-  ['out-of-stock', 'out_of_stock', 'set to 0', ['OrderPlaced (order-placed) ×1', 'OrderCancelled (order-cancelled) ×1']],
+  [
+    'declined',
+    'declined',
+    'set to 10',
+    ['OrderPlaced (order-placed) ×1', 'OrderCancelled (order-cancelled) ×1', 'PaymentDeclined (payment-declined) ×1'],
+  ],
+  [
+    'out-of-stock',
+    'out_of_stock',
+    'set to 0',
+    ['OrderPlaced (order-placed) ×1', 'OrderCancelled (order-cancelled) ×1'],
+  ],
 ] as const) {
   test(`the ${script} script sets its cause and reads the order back ${ended}`, async ({ page }) => {
     await page.goto('/scenario');
@@ -149,7 +163,9 @@ test('the saga strip follows a saga that advances to delivered and says it is th
 
 // The platform has no fake saga that lies, so the saga read is answered by the route: Ordering still waiting on stock while
 // the BFF's read has the order delivered is a pair §9.6 does not allow, and the strip says so in words, not by colour alone.
-test('the saga strip shows a saga still awaiting stock beside a delivered order as a disagreement', async ({ page }) => {
+test('the saga strip shows a saga still awaiting stock beside a delivered order as a disagreement', async ({
+  page,
+}) => {
   await page.route('**/api/proxy', async (route) => {
     const sent = route.request().postDataJSON() as { method?: string; url?: string; correlationId?: string };
     if (sent.method === 'GET' && /\/api\/v1\/orders\/[0-9a-f-]{36}\/saga$/.test(sent.url ?? '')) {
@@ -187,7 +203,9 @@ test('the saga strip shows a saga still awaiting stock beside a delivered order 
   await expect(page.locator('ol.steps li.step .state', { hasText: '[ok]' })).toHaveCount(9, WATCH);
 });
 
-test('the saga strip shows a saga that stops at despatched as despatched, with no delivery it never read', async ({ page }) => {
+test('the saga strip shows a saga that stops at despatched as despatched, with no delivery it never read', async ({
+  page,
+}) => {
   await page.goto('/scenario');
 
   await page.getByLabel('Script').selectOption('in-transit');
@@ -303,7 +321,9 @@ test('a run goes on while another page is open, the shell says so, and it finish
   expect(download.suggestedFilename()).toMatch(/^scenario-[0-9a-f]{8}\.md$/);
 });
 
-test('the already-shipped script is refused 422 order.already_shipped and reads the order back unchanged', async ({ page }) => {
+test('the already-shipped script is refused 422 order.already_shipped and reads the order back unchanged', async ({
+  page,
+}) => {
   await page.goto('/scenario');
 
   await page.getByLabel('Script').selectOption('already-shipped');
@@ -340,7 +360,9 @@ for (const [script, code, saw] of [
     await expect(steps.nth(6).locator('.detail')).toContainText(saw);
     await expect(steps.nth(7).locator('.detail')).toContainText('The order read shows held at');
     // Confirmed and never despatched, whatever the carrier did (read live, #235).
-    await expect(steps.nth(8).locator('.detail')).toContainText('OrderPlaced (order-placed) ×1, OrderConfirmed (order-confirmed) ×1');
+    await expect(steps.nth(8).locator('.detail')).toContainText(
+      'OrderPlaced (order-placed) ×1, OrderConfirmed (order-confirmed) ×1',
+    );
   });
 }
 
@@ -349,9 +371,17 @@ for (const [script, code, saw] of [
 // each a few seconds with the short waits and minutes without. Every run ends with the lease restored.
 for (const [script, ended, steps, mailed] of [
   ['stock-timeout', 'out_of_stock', 7, 'OrderPlaced (order-placed) ×1, OrderCancelled (order-cancelled) ×1'],
-  ['payment-timeout', 'declined', 9, 'OrderPlaced (order-placed) ×1, PaymentDeclined (payment-declined) ×1, OrderCancelled (order-cancelled) ×1'],
+  [
+    'payment-timeout',
+    'declined',
+    9,
+    'OrderPlaced (order-placed) ×1, PaymentDeclined (payment-declined) ×1, OrderCancelled (order-cancelled) ×1',
+  ],
 ] as const) {
-  test(`the ${script} script holds its lease, reads the order back ${ended}, and restores the stack`, async ({ page, request }) => {
+  test(`the ${script} script holds its lease, reads the order back ${ended}, and restores the stack`, async ({
+    page,
+    request,
+  }) => {
     await page.goto('/scenario');
 
     await page.getByLabel('Script').selectOption(script);
@@ -375,7 +405,10 @@ for (const [script, ended, steps, mailed] of [
 // The despatch timeout ends in a review row no order read shows, so the script reads the line Ordering logs when it raises one
 // (FakeOrders.ReviewFlags, answered by FakeGrafana.Loki): an order to SIM-STRANGE under the short waits is flagged a few seconds
 // after the place, and the order read is still confirmed.
-test('the despatch-timeout script reads the review Ordering raised, finds the order still confirmed, and restores the stack', async ({ page, request }) => {
+test('the despatch-timeout script reads the review Ordering raised, finds the order still confirmed, and restores the stack', async ({
+  page,
+  request,
+}) => {
   await page.goto('/scenario');
 
   await page.getByLabel('Script').selectOption('despatch-timeout');
@@ -387,7 +420,9 @@ test('the despatch-timeout script reads the review Ordering raised, finds the or
   await expect(list.nth(7).locator('.request')).toHaveText(/^GET \/api\/review\/[0-9a-f-]{36}$/);
   await expect(list.nth(7).locator('.detail')).toContainText('flagged for review: not_despatched');
   await expect(list.nth(8).locator('.detail')).toContainText('The order read shows held at');
-  await expect(list.nth(9).locator('.detail')).toContainText('OrderPlaced (order-placed) ×1, OrderConfirmed (order-confirmed) ×1');
+  await expect(list.nth(9).locator('.detail')).toContainText(
+    'OrderPlaced (order-placed) ×1, OrderConfirmed (order-confirmed) ×1',
+  );
   await expect(list.last().locator('.detail')).toHaveText('The stack is as the run found it.');
 
   const state = await (await request.get('/api/stack/lease')).json();
@@ -397,7 +432,10 @@ test('the despatch-timeout script reads the review Ordering raised, finds the or
 // The release timeout needs Inventory stopped after its stock has reserved, so the lease takes that change while it is held
 // (POST /api/stack/lease/changes). A .09 order cancelled before its payment wait lapses is cancelled by the customer, and with
 // Inventory stopped it is flagged stock_not_released (FakeOrders.Cancel, ReviewFlags).
-test('the release-timeout script stops Inventory once the stock is reserved, cancels, reads the review, and restores the stack', async ({ page, request }) => {
+test('the release-timeout script stops Inventory once the stock is reserved, cancels, reads the review, and restores the stack', async ({
+  page,
+  request,
+}) => {
   await page.goto('/scenario');
 
   await page.getByLabel('Script').selectOption('release-timeout');
@@ -409,7 +447,9 @@ test('the release-timeout script stops Inventory once the stock is reserved, can
   await expect(list.nth(6).locator('.detail')).toContainText('Reserved');
   await expect(list.nth(9).locator('.detail')).toContainText('The order read shows cancelled at');
   await expect(list.nth(10).locator('.detail')).toContainText('flagged for review: stock_not_released');
-  await expect(list.nth(11).locator('.detail')).toContainText('OrderPlaced (order-placed) ×1, OrderCancelled (order-cancelled) ×1');
+  await expect(list.nth(11).locator('.detail')).toContainText(
+    'OrderPlaced (order-placed) ×1, OrderCancelled (order-cancelled) ×1',
+  );
   await expect(list.last().locator('.detail')).toHaveText('The stack is as the run found it.');
 
   const state = await (await request.get('/api/stack/lease')).json();
@@ -447,7 +487,9 @@ test('a user without the permissions stops the run at the publish', async ({ pag
 
 // The fake store and edge (src/Admin.Host/Fakes/FakeObjectStore.cs) follow the platform's rules: the BFF signs a PUT, the
 // store keeps what is signed, the publish attaches it, and the edge serves what was published, with nosniff.
-test('the image script uploads, publishes with the key and reads the thumbnail back through the edge', async ({ page }) => {
+test('the image script uploads, publishes with the key and reads the thumbnail back through the edge', async ({
+  page,
+}) => {
   await page.goto('/scenario');
 
   await page.getByLabel('Script').selectOption('image');
