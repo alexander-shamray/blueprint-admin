@@ -37,8 +37,9 @@ signals for state. [`style-guide.md`](style-guide.md) points at both
 dialects.
 
 - **Prose wraps at 80 columns** (tables, links and code may exceed it),
-  **C# at 120**, **TypeScript at the SPA formatter's width**, in **British
-  spelling** with literal dashes. **Identifiers keep their real spelling**:
+  **C# at 120**, **TypeScript at the SPA formatter's width** (Prettier,
+  checked by `npm run lint`; see [`style-guide.md`](style-guide.md)), in
+  **British spelling** with literal dashes. **Identifiers keep their real spelling**:
   `IHttpClientFactory`, never "corrected" or Americanised.
 - **File-scoped namespaces**, blank line after. **Explicit types for locals**,
   with the backend's `var` carve-outs only.
