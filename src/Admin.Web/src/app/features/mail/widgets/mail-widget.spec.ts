@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { Observable, of, throwError } from 'rxjs';
 import { HostClient } from '../../../core/host/host-client';
 import { MailListView, MailMessageRead, MailSummary } from '../../../core/host/host-types';
@@ -189,6 +189,38 @@ describe('MailWidget', () => {
 
     expect(el(again).querySelector('section.message h2')?.textContent).toContain('Your order is confirmed');
     expect((el(again).querySelector('input.filter') as HTMLInputElement).value).toBe(ORDER);
-    expect(mailMessage).toHaveBeenCalledTimes(1);
+    // Only the id was kept: the message is read again, so a sink cleared meanwhile is not shown from memory.
+    expect(mailMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it('starts at the correlation id an old link carries in its route, over the configured one', async () => {
+    const route = { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap({ correlationId: 'from-link' }) } } };
+    const { fixture } = render(
+      of(listed([summary({ id: 'a', correlationId: 'from-link' }), summary({ id: 'b', correlationId: 'configured' })])),
+      read({}),
+      { correlationId: 'configured' },
+      [route],
+    );
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(rows(fixture)).toHaveLength(1);
+    expect((el(fixture).querySelector('input.filter') as HTMLInputElement).value).toBe('from-link');
+  });
+
+  it('takes away what was typed when another configured filter is chosen', async () => {
+    const { fixture } = render(of(listed([summary({ id: 'a' }), summary({ id: 'b', correlationId: 'other-order' })])));
+    const input = el(fixture).querySelector('input.filter') as HTMLInputElement;
+    input.value = 'other-order';
+    input.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(rows(fixture)).toHaveLength(1);
+
+    fixture.componentRef.setInput('config', { correlationId: ORDER });
+    fixture.detectChanges();
+
+    expect(rows(fixture)).toHaveLength(1);
+    expect(el(fixture).querySelector('td.correlation a')?.getAttribute('href')).toBe(`/trace/${ORDER}`);
   });
 });
