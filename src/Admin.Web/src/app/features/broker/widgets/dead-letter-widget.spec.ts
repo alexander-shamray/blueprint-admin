@@ -1,10 +1,11 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
 import { HostClient } from '../../../core/host/host-client';
+import { DeadLetterInspection, JobSummary } from '../../../core/host/host-types';
 import { SseClient } from '../../../core/host/sse-client';
 import { BrokerFeed } from '../broker-feed';
-import { brokerHost, inspection } from '../broker-testing';
+import { brokerHost, inspection, job } from '../broker-testing';
 import { DeadLetterWidget } from './dead-letter-widget';
 
 describe('DeadLetterWidget', () => {
@@ -158,6 +159,39 @@ describe('DeadLetterWidget', () => {
     click(fixture, 'button.dry-discard');
 
     expect((fixture.nativeElement.querySelector('button.execute') as HTMLButtonElement).textContent?.trim()).toBe('Discard for real');
+  });
+
+  it('a dry run that lands after the listing was closed or replaced arms nothing', () => {
+    const late = new Subject<JobSummary>();
+    host.deadLetterMove.mockReturnValueOnce(late.asObservable());
+    const fixture = render();
+    open(fixture);
+    click(fixture, 'button.dry-replay');
+
+    click(fixture, 'button.close-dead-letters');
+    open(fixture, 'bff-order-events_skipped');
+    late.next(job);
+    late.complete();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('button.execute')).toBeNull();
+    expect(fixture.nativeElement.querySelector('app-output-pane')).toBeNull();
+  });
+
+  it('keeps the latest request made while a queue is being read, and opens it when that read ends', () => {
+    const first = new Subject<DeadLetterInspection>();
+    host.deadLetters.mockReturnValueOnce(first.asObservable());
+    const fixture = render();
+    open(fixture, 'ordering-catalog-events_error');
+
+    open(fixture, 'bff-order-events_skipped');
+    expect(host.deadLetters).toHaveBeenCalledTimes(1);
+    first.next(inspection);
+    first.complete();
+    fixture.detectChanges();
+
+    expect(host.deadLetters).toHaveBeenLastCalledWith('bff-order-events_skipped');
+    expect(fixture.nativeElement.querySelector('.dead-letters code')?.textContent).toBe('bff-order-events_skipped');
   });
 
   it('says why the host refused a move, and arms nothing', () => {

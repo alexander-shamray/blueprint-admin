@@ -121,6 +121,11 @@ export class DeadLetterWidget {
   /** The last dry run: the real run is offered only for that message and verb, so it is always a dry run first. */
   readonly armed = signal<{ messageId: string; verb: DeadLetterVerb } | null>(null);
   readonly executeText = signal('');
+  /** Which listing is open: counted up by every Open, Close and real run, so a late answer can tell it is stale. */
+  private generation = 0;
+  /** The queue asked for while a read was out. */
+  private waiting: string | null = null;
+  private destroyed = false;
   readonly canExecute = computed(() => {
     const confirm = this.feed.deadLetterPlan()?.executeConfirm;
     return this.armed() !== null && confirm !== undefined && this.executeText() === confirm;
@@ -128,7 +133,10 @@ export class DeadLetterWidget {
 
   constructor() {
     this.feed.workbenches.update((n) => n + 1);
-    this.destroyRef.onDestroy(() => this.feed.workbenches.update((n) => n - 1));
+    this.destroyRef.onDestroy(() => {
+      this.destroyed = true;
+      this.feed.workbenches.update((n) => n - 1);
+    });
     // Only a request made after this workbench appeared opens it: a re-created one starts closed.
     let handled = this.feed.openRequest()?.n ?? 0;
     effect(() => {
@@ -142,7 +150,12 @@ export class DeadLetterWidget {
 
   /** Reads a parked queue's messages with the backend's tool, which puts each back flagged redelivered. */
   open(queue: string): void {
-    if (this.inspecting()) return;
+    // A read is out: remember the latest request and open it when that read ends, rather than drop it.
+    if (this.inspecting()) {
+      this.waiting = queue;
+      return;
+    }
+    this.generation++;
     this.openQueue.set(queue);
     this.inspection.set(null);
     this.armed.set(null);
@@ -155,7 +168,12 @@ export class DeadLetterWidget {
       .deadLetters(queue)
       .pipe(
         takeUntilDestroyed(this.destroyRef),
-        finalize(() => this.inspecting.set(false)),
+        finalize(() => {
+          this.inspecting.set(false);
+          const next = this.waiting;
+          this.waiting = null;
+          if (next !== null && !this.destroyed) this.open(next);
+        }),
       )
       .subscribe({
         next: (view) => this.inspection.set(view),
@@ -164,6 +182,8 @@ export class DeadLetterWidget {
   }
 
   close(): void {
+    this.generation++;
+    this.waiting = null;
     this.openQueue.set(null);
     this.inspection.set(null);
     this.armed.set(null);
@@ -177,8 +197,12 @@ export class DeadLetterWidget {
     const queue = this.openQueue();
     if (!queue) return;
     this.executeText.set('');
+    // The answer arms the real run only for the listing it was sent against: a Close, another Open or a real run
+    // since has made a new one, and a late dry run must not arm that.
+    const listing = this.generation;
     this.host.deadLetterMove(queue, verb, [messageId], null).subscribe({
       next: (job) => {
+        if (listing !== this.generation) return;
         this.error.set(null);
         this.jobId.set(job.id);
         this.armed.set({ messageId, verb });
@@ -194,6 +218,7 @@ export class DeadLetterWidget {
     if (!queue || !armed || !this.canExecute()) return;
     this.host.deadLetterMove(queue, armed.verb, [armed.messageId], this.executeText()).subscribe({
       next: (job) => {
+        this.generation++;
         this.error.set(null);
         this.jobId.set(job.id);
         this.armed.set(null);
