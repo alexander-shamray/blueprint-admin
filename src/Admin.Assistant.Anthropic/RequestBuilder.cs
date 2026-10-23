@@ -43,10 +43,12 @@ internal static class RequestBuilder
 
     private static BetaToolUnion Tool(ToolDescriptor descriptor)
     {
-        Dictionary<string, JsonElement> schema = descriptor.InputSchema.ToDictionary(p => p.Key, p => JsonSerializer.SerializeToElement(p.Value));
+        // `strict` makes the model's arguments validate against the schema, which asks for every object in it to be closed.
+        JsonObject closed = (JsonObject)descriptor.InputSchema.DeepClone();
+        closed.TryAdd("type", "object");
+        Close(closed);
 
-        // `strict` makes the model's arguments validate against the schema, which asks for a closed object.
-        schema.TryAdd("additionalProperties", JsonSerializer.SerializeToElement(false));
+        Dictionary<string, JsonElement> schema = closed.ToDictionary(p => p.Key, p => JsonSerializer.SerializeToElement(p.Value));
 
         return new BetaTool
         {
@@ -55,6 +57,35 @@ internal static class RequestBuilder
             Strict = true,
             InputSchema = InputSchema.FromRawUnchecked(schema),
         };
+    }
+
+    // Closes every object schema in the tree, the root and those under `properties`, `items`, `$defs` and the combinators,
+    // without overruling one that already names `additionalProperties`. Only a string `type` marks a schema, so a property
+    // called `type` in a `properties` map, which holds a schema, is not mistaken for one.
+    private static void Close(JsonNode? node)
+    {
+        switch (node)
+        {
+            case JsonObject schema:
+                if (schema["type"] is JsonValue type && type.TryGetValue(out string? name) && name == "object")
+                {
+                    schema.TryAdd("additionalProperties", false);
+                }
+
+                foreach (KeyValuePair<string, JsonNode?> entry in schema.ToList())
+                {
+                    Close(entry.Value);
+                }
+
+                break;
+            case JsonArray array:
+                foreach (JsonNode? item in array)
+                {
+                    Close(item);
+                }
+
+                break;
+        }
     }
 
     // A block is built with the cache mark or without it, because the SDK's blocks cannot be changed once made; the
