@@ -1119,7 +1119,8 @@ The AI assistant (`2026-10-22-ai-assistant-design.md`) is the console's one
 outbound surface beyond the platform. It is off unless
 `Admin:Assistant:Provider` names a provider, or is left unset under
 FakePlatform, which then uses the fake provider. Only the host reaches that
-provider, and every byte the host sends it is redacted first. The browser
+provider, and the operator's text and every tool result pass the host's
+redactor before they go (that note's §10). The browser
 still reaches the host alone. The console stores no credential for it: the
 SDK resolves the operator's own (that note's §8.2).
 

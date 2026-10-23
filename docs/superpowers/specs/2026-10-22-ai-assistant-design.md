@@ -606,8 +606,10 @@ Changing the setting takes a host restart, like every other `Admin:` option.
 The SPA picks up the new status on its next load.
 
 `ConversationTokenBudget` caps **context size**: the input tokens of the
-latest provider request, cached tokens included. A conversation whose next
-request would pass it ends with `budget`. It is not a spend cap: spend per turn
+latest provider request, cached tokens included. Once a request has
+reached it, the conversation ends with `budget` before the next one; the
+size of a request is known only from the usage its answer reports, so the
+request that crosses the cap is still sent. It is not a spend cap: spend per turn
 is bounded by `MaxSteps` × `MaxOutputTokens` and by the context cap, and
 `turn_ended` reports both the turn's usage and the conversation's running
 total, so spend is visible.
@@ -620,7 +622,13 @@ total, so spend is visible.
   the host knows: each realm user's password, `SqlPassword`, the password in
   `BffBrokerConnection`, and the dead-letter operator's password while one is
   minted. A gate test runs every server tool against FakePlatform with known
-  secrets planted and fails if one survives.
+  secrets planted and fails if one survives. Exact values fail closed, at a
+  cost: the local realm's default users have their names for passwords
+  (`demo`, `browser`, `privacy`), so those words are redacted wherever they
+  appear, the Privacy service's name among them, though §5.4 passes service
+  names through. Whether to exempt a published development default is #465's
+  decision. The catalogue and the client's tool descriptors are the client's
+  own text and are not redacted.
 - **Untrusted results.** Logs, traces and API bodies are data an attacker may
   have written; a seller's product description is exactly that. The system
   text says so, and §6.3 makes the worst a steered model can do a wrong answer
