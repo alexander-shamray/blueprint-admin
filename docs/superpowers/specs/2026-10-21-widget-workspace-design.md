@@ -640,6 +640,39 @@ later phase move one screen at a time without a page ever missing.
   - the Map, Mail and Erasure built-in pages are one widget each; the legacy
     screens are those widgets in thin components, the Map's without polling,
     until phase 6.
+- Settled in phase 4b (#390), the API and Trace widgets:
+  - **API request** (`api-request`) is the old API screen's editor, catalog,
+    identity picker, token and drain watch in one widget; **API history**
+    (`api-history`) lists what the tab sent. The calls are `ApiHistory`'s, a
+    root service, in memory: a restore is asked of an editor on the page
+    through it, so the history widget offers Restore only while an API
+    request widget is showing, and a restore asked before one appeared is not
+    replayed into it. No entry holds a credential header, a Set-Cookie or a
+    password;
+  - the request widget's config is `operation` (the operation id it starts
+    on) and `identity` (`anonymous`, `user:<name>` or `custom:<name>`): the
+    username, never the password. A custom identity's password is session
+    state (`widgetSession`), refilled into the shared identity state when the
+    widget is re-created and forgotten from it when the widget goes. The
+    widget saves its config when the operator picks an operation or an
+    identity; a config that names an identity takes it up when it differs
+    from the one in use, so the identity is the last widget's to have been
+    created (it is the one `IdentityState` the Scenario widget also reads);
+  - **Trace** (`trace`) takes a correlation id and a window, from its config,
+    from the built-in Trace route's `:correlationId` (which drives the load,
+    so `/trace/:correlationId` still works and Trace there navigates), or
+    from a link; the id it last traced is session state and is traced again
+    when it is re-created. Its config's `follow` flag makes it a follower;
+  - **follow the last Trace link** is `TraceFollow`: a link made with
+    `appTraceLink` (the Mail, Erasure, Dead-letter, Scenario widgets and the
+    API's Trace this call use it) re-points the Trace widgets that follow on
+    the page, which is the page showing, because a page that is not showing
+    has no widgets; with none it opens the built-in Trace page. A link is an
+    ordinary link to that page too, so a modified click opens it in a new
+    tab. A point made before a follower appeared is not replayed into it;
+  - the API and Trace built-in pages are the request widget beside the
+    history widget, and one Trace widget that follows; the legacy screens are
+    those widgets in thin components.
 - The visual design within Material 3: palette, density, spacing.
 - Whether a widget's refresh button and a page-wide refresh both exist.
 - The exact Mermaid mapping of each `TraceView` event kind in §8.2, within
