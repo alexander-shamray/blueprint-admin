@@ -139,6 +139,7 @@ class TheRealTree(unittest.TestCase):
 # way this one does; a clone of this one checks out every file per test.
 SMALL_TREE = {
     "src/Admin.Host/a.cs": "x\n", "src/Admin.Host/Admin.Host.csproj": "x\n",
+    "src/Admin.Assistant/h.cs": "x\n", "src/Admin.Assistant/Admin.Assistant.csproj": "x\n",
     "src/Admin.Web/src/app/b.ts": "x\n", "src/Admin.Web/src/app/b.spec.ts": "x\n",
     "src/Admin.Web/e2e/c.spec.ts": "x\n", "src/Admin.Web/package.json": "x\n",
     "tests/Admin.Host.Tests/d.cs": "x\n", "tools/e.py": "x\n", ".github/f.yml": "x\n",
@@ -215,7 +216,7 @@ class ASmallRepository(unittest.TestCase):
             by_row.setdefault(row, []).extend(listed([(row, 0, 0, listing)]))
         self.assertEqual(
             {
-                "host": ["src/Admin.Host/a.cs"],
+                "host": ["src/Admin.Assistant/h.cs", "src/Admin.Host/a.cs"],
                 "spa": ["src/Admin.Web/src/app/b.ts"],
                 "suites": [
                     "src/Admin.Web/e2e/c.spec.ts", "src/Admin.Web/src/app/b.spec.ts",
@@ -223,7 +224,8 @@ class ASmallRepository(unittest.TestCase):
                 ],
                 "tooling": [".claude/g.md", ".github/f.yml", "tools/e.py"],
                 "config": [
-                    "README.md", "src/Admin.Host/Admin.Host.csproj", "src/Admin.Web/package.json",
+                    "README.md", "src/Admin.Assistant/Admin.Assistant.csproj",
+                    "src/Admin.Host/Admin.Host.csproj", "src/Admin.Web/package.json",
                 ],
                 "samples": ["docs/i.md"],
             },
