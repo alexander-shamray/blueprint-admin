@@ -4,6 +4,8 @@ import { Injectable, computed, signal } from '@angular/core';
 export interface RunningItem {
   text: string;
   link: string;
+  /** What the item does instead of following its link, for work a panel rather than a page shows. */
+  open?: () => void;
 }
 
 /**

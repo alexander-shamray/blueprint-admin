@@ -152,7 +152,46 @@ describe('AssistantConversation', () => {
     expect(conversation.current.items.at(-1)).toEqual({ kind: 'operator', text: 'two' });
   });
 
-  it('when the browser gives the stream up, redraws from the read, or starts over once the host has forgotten it', async () => {
+  it('when the browser gives the stream up and the host still holds the conversation, redraws and follows on', async () => {
+    const { host, conversation, opened } = setup();
+    await conversation.send('logs?', null, 'en-US');
+    host.on('GET', /\/conversations\/c1$/, () =>
+      json({
+        id: 'c1',
+        items: [
+          { kind: 'operator', text: 'logs?' },
+          { kind: 'tool', callId: 'k1', name: 'open_screen', side: 'client', args: { path: 'logs' }, ok: null },
+        ],
+        running: true,
+        lastEventId: 5,
+        pendingCalls: [{ callId: 'k1', name: 'open_screen', input: { path: 'logs' } }],
+      } satisfies ConversationView),
+    );
+
+    host.stream.lose();
+    await settle();
+
+    expect(conversation.current.items.at(-1)).toEqual({ kind: 'tool', callId: 'k1', name: 'open_screen', side: 'client', args: { path: 'logs' }, ok: null });
+    expect(host.stream.url).toBe('/api/assistant/conversations/c1/events?after=5');
+    expect(opened).toEqual(['logs']);
+  });
+
+  it('a read of a conversation started over since is dropped', async () => {
+    const { host, conversation, ids } = setup();
+    await conversation.send('logs?', null, 'en-US');
+    host.on('GET', /\/conversations\/c1$/, () =>
+      json({ id: 'c1', items: [{ kind: 'operator', text: 'logs?' }], running: true, lastEventId: 5, pendingCalls: [] }),
+    );
+
+    host.stream.lose();
+    await conversation.startOver();
+    await settle();
+
+    expect(ids.id).toBeNull();
+    expect(conversation.current.items).toEqual([]);
+  });
+
+  it('when the browser gives the stream up and the host has forgotten the conversation, the next message starts a new one', async () => {
     const { host, conversation, ids } = setup();
     await conversation.send('logs?', null, 'en-US');
 
