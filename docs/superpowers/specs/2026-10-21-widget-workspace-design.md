@@ -615,6 +615,29 @@ later phase move one screen at a time without a page ever missing.
     is the same six one under another, until phase 6, with a Refresh on each
     and no polling, since auto-refresh is a setting of a widget on a
     workspace page.
+- Settled in phase 3c (#388), the Platform map, Mail and Erasure widgets:
+  - **Platform map** (`platform-map`) reads `MapFeed`, one `PolledFeed` of
+    the host's join, with the rate a queue's depth changes at read off two
+    successive reads and kept there, so it does not depend on which widget
+    asked. Its `autoRefresh` is a settings-editor flag, off by default and
+    saved; with it off it reads once on appearing and on Refresh;
+  - **Mail** (`mail`): `correlationId` is its config (a settings-editor
+    text field). What the operator types over it, and the message that is
+    open, are session state (`widgetSession`), so they survive leaving the
+    page and end with the tab; the legacy Mail screen starts its widget at
+    the `?correlationId=` the route carries;
+  - **Erasure** (`erasure`): the request being watched, what it last read,
+    the holders' depths and the every-3-seconds watch belong to `ErasureRun`;
+    the subject being typed is the widget's session state. The watch is a
+    `PolledFeed` the widget attaches while the watch is on, so it reads only
+    while a widget shows it and the tab is visible (§4.3); the watch flag
+    stays set across a page change and a closed request clears it;
+  - `PolledFeed`'s opt-in helper (`pollWhenOn`) moved from the Broker feed
+    to the workspace, where the Map shares it; the drift gate's
+    `PRIVACY_IDENTITY` check now reads `erasure-run.ts`;
+  - the Map, Mail and Erasure built-in pages are one widget each; the legacy
+    screens are those widgets in thin components, the Map's without polling,
+    until phase 6.
 - The visual design within Material 3: palette, density, spacing.
 - Whether a widget's refresh button and a page-wide refresh both exist.
 - The exact Mermaid mapping of each `TraceView` event kind in §8.2, within
