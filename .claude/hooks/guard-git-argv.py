@@ -4938,23 +4938,25 @@ def unmodelled_printer(tokens):
                 continue
             name = program_name(command_word)
             arguments = run[run.index(command_word) + 1:]
-            if unreproducible_print(name, arguments, tokens):
+            if unreproducible_print(name, arguments):
                 return True
     return False
 
 
-def unreproducible_print(name, arguments, line):
+def unreproducible_print(name, arguments):
     """Whether `name` run with `arguments` writes bytes other than its joined
     words: `printf` with a conversion, or with a backslash escape, which its
     format decodes without any `%` (`printf 'gi\\164 push'` writes `git
-    push`), and `echo` with `-e`, or with a backslash where a word of `line`
-    sets `xpg_echo`. Raised in review of #447 (R2, round 3)."""
+    push`), and `echo` with `-e` or with any backslash. Raised in review of
+    #447 (R2, round 3). **Any backslash, not only under `xpg_echo`**: `dash`
+    and macOS `sh` decode an `echo` escape unasked, so `dash -c "echo
+    'gi\\0164 push …' | sh"` ran the push, and `shopt -s xpg_''echo` set the
+    option under a spelling no substring match reads (round 4)."""
     if name == "printf":
         return any("%" in word or "\\" in word for word in arguments)
     if name == "echo":
-        return (any(word.startswith("-") and "e" in word for word in arguments)
-                or (any("xpg_echo" in word for word in line)
-                    and any("\\" in word for word in arguments)))
+        return any("\\" in word or (word.startswith("-") and "e" in word)
+                   for word in arguments)
     return False
 
 
@@ -5735,6 +5737,20 @@ def _body_starts(command):
     return {start for start, _, _ in heredoc_spans(command)}
 
 
+def _opens_function_substitution(command, index, ordinary):
+    """Whether the `|` at `index` opens bash 5.3's function substitution
+    `${| …; }`. Only an ordinary `$` and `{` open one, and a `$` that a `$`
+    before it pairs into `$$` does not: `\\${|` and `$${|` are text and a
+    pipe, and skipping that pipe hid the reader after it (round 4 of
+    #447)."""
+    if index < 2 or command[index - 2:index] != "${" or not ordinary[index - 1]:
+        return False
+    first = index - 2
+    while first > 0 and command[first - 1] == "$" and ordinary[first - 1]:
+        first -= 1
+    return ordinary[index - 2] and (index - 2 - first) % 2 == 0
+
+
 def _runs_with_feeds(command, ordinary):
     """Every run of `command` as `(words, upstream)`, where `upstream` is the
     runs a `|` joined before it in its pipeline, or None when no `|` feeds it.
@@ -5749,9 +5765,16 @@ def _runs_with_feeds(command, ordinary):
             continue
         words = [] if start in bodies else _run_words(command, start, index, ordinary)
         if words:
+            # **A coprocess reads what the line writes to its descriptors**, by
+            # number (`>&63`) as well as through `${COPROC[1]}`, a channel this
+            # walk does not see: it reads as a pipe from the unseen, and so
+            # does every run in a group it opens (R2, round 4 of #447).
+            coprocess = words[0] == "coproc"
+            if coprocess:
+                upstream = []
             runs.append((words, upstream))
             piped = False
-            if words[0] in GROUP_OPENERS:
+            if words[0] in GROUP_OPENERS or (coprocess and "{" in words):
                 groups.append(upstream)
             elif words[0] in GROUP_CLOSERS and groups:
                 groups.pop()
@@ -5764,13 +5787,13 @@ def _runs_with_feeds(command, ordinary):
         # answered before the substitution rule could name the shape.
         if (char == "|" and not command.startswith("||", index)
                 and not (index and command[index - 1] == "|")
-                and not command.endswith("${", 0, index)):
+                and not _opens_function_substitution(command, index, ordinary)):
             upstream = (upstream or []) + ([words] if words else [])
             piped = True
         elif char == "&" and index and command[index - 1] == "|":
             pass  # the `&` of `|&`, which carries the pipe its `|` opened
         elif char == "(":
-            fed = piped and not words
+            fed = (piped and not words) or words[:1] == ["coproc"]
             groups.append(upstream if fed else None)
             if not fed:
                 upstream = None
@@ -5950,7 +5973,7 @@ def _unclassified_stdin_writer(command, ordinary):
             spoken = before[before.index(program) + 1:]
             # A printer whose output this file cannot reproduce writes text
             # that is not in the source (`unmodelled_printer`).
-            if unreproducible_print(name, spoken, [command]):
+            if unreproducible_print(name, spoken):
                 return True
             if _offending_stdin(" ".join(spoken), strict):
                 return True
