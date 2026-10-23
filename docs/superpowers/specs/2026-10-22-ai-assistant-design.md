@@ -573,7 +573,8 @@ more value `Admin:Assistant:Provider` accepts. A provider on the workstation
 `off`, except under FakePlatform, where it means `fake`), `Model`, `Effort`,
 `MaxSteps`, `MaxOutputTokens`, `ConversationTokenBudget`,
 `ClientToolTimeout`, `ServerToolTimeout`, `MaxConversations`, `MaxCallers`,
-`IdleTimeout`, `PlatformReads` (§6.5).
+`IdleTimeout`, `PlatformReads` (§6.5). The limits' defaults are the core's,
+in `AssistantLimits`; the options only let configuration move them.
 No option holds a credential, and the options validator refuses one named
 like a secret, as the workspace validator does (workspace note §6.4).
 
@@ -804,7 +805,7 @@ waits until use shows it is wanted.
 ## 16. Left to the builder
 
 - The fixed system text, within §10's rule on untrusted data.
-- The default limits in `AssistantOptions`, and the size bound on a tool result.
+- The default limits in `AssistantLimits`, and the size bound on a tool result.
 - The panel's look within Material 3, and where its toggle sits in the shell
   and the command palette.
 - The exact read each server tool wraps, within §6.2's rule that it is one the

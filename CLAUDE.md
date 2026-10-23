@@ -69,8 +69,9 @@ tools/token-usage/         Transcript report for the token plan
 | Golden-signal queries (copied, cited) | `GoldenSignals.cs` |
 | What a Tempo span is | `SpanRecogniser.Table` in `SpanRecogniser.cs` |
 | OS (tree kill, job object, `npm.cmd`) | `ProcessRunner.cs`, `WindowsJobObject.cs`, `ExecutableResolver.cs` |
-| The assistant's protocol (mirrored in `src/app/assistant/protocol.ts`) | `src/Admin.Assistant/Protocol/`, pinned by its `golden/` files |
-| Assistant on or off, and its limits | `AssistantOptions` in `src/Admin.Host/Assistant/AssistantOptions.cs` |
+| The assistant's protocol (mirrored in `src/Admin.Web/src/app/assistant/protocol.ts`) | `src/Admin.Assistant/Protocol/` and `src/Admin.Assistant/Tools/ToolDescriptor.cs`, pinned by `Protocol/golden/` |
+| Assistant on or off, and the `Admin:Assistant` keys | `AssistantOptions` in `src/Admin.Host/Assistant/AssistantOptions.cs` |
+| The assistant's limits and their defaults | `AssistantLimits` in `src/Admin.Assistant/AssistantLimits.cs` |
 | What each screen is for, as the assistant explains it | `help` in `SCREENS` (`src/Admin.Web/src/app/screens.ts`) |
 | The fake assistant's answers | `FakeAssistantScripts` in `src/Admin.Host/Fakes/` |
 | Token figures | `docs/token-usage.md` |
