@@ -107,7 +107,7 @@ exactly so after a reload, a host restart and a reboot.
 
 ```ts
 interface Workspace {
-  version: 1;                 // the schema; §6.3 migrates older ones
+  version: number;            // the schema; §6.3 migrates older ones
   pages: Page[];              // in the operator's order
   activePageId: string | null;
 }
@@ -268,13 +268,20 @@ up, and no migration is needed for it. A built-in page the operator has
 edited is saved whole, and is theirs.
 
 **Legacy widgets in a customised page.** The legacy screen widget type (§10,
-phase 1) stays registered until phase 6, so a customised page keeps working
-through every phase. Phase 6 retires the type with a `version` bump. Its
+phase 1) stayed registered until phase 6, so a customised page kept working
+through every phase. Phase 6 retires the type with a `version` bump to 2. Its
 migration replaces each remaining legacy instance (type `legacy`, its
 screen in `config.screen`) with that
 screen's default widgets, placed inside the rectangle the legacy widget
-occupied, stacked in their default order, and the operator is told once
-which pages it changed. The old routes keep working: `/stack`, `/trace/:correlationId`,
+occupied, stacked in their default order at their default heights, and the
+operator is told once which pages it changed. The rectangle grows down as
+far as the stack needs, and whatever sat below it moves down by as much. A
+screen the console does not name was rendered as the first screen, so it
+becomes Stack's widgets. **The SPA runs this replacement, not the host**
+(§6.3): the defaults are the SPA's (`BUILT_IN_LAYOUTS` in
+`built-in-pages.ts`), and the host knows no widget types. The host's step to
+version 2 keeps the document as it is. The SPA replaces what it reads, and
+saves at once, so the notice is not repeated. The old routes keep working: `/stack`, `/trace/:correlationId`,
 `/mail?correlationId=`, … open the built-in page and hand the parameter to
 its widgets. The palette (Ctrl+K) lists every page and every built-in
 action.
@@ -321,7 +328,10 @@ rendered by the SPA as "unknown widget", and saved back untouched. A
 document written by a newer console is therefore not destroyed by an older
 one. Each widget type validates its own `config` when it renders, and falls
 back to its defaults for anything it does not accept. A change to the schema bumps `version` and adds
-a migration the host runs on read; a test holds each migration.
+a migration the host runs on read; a test holds each migration. A
+migration that needs widget types is the SPA's half of one: the host's step
+moves the version, and the SPA rewrites what it reads, as phase 6's
+retirement of the legacy widget does (§5.3).
 
 ### 6.4 What is never saved
 
@@ -760,6 +770,17 @@ later phase move one screen at a time without a page ever missing.
   without registering an SVG. The theme is `theme.scss` (azure/blue palettes,
   `color-scheme` for light and dark), and the screens' status colours are the
   `--app-*` tokens in `styles.css`.
+- Settled in phase 6 (#394), the retirement:
+  - the legacy screen widget, `screen-components.ts` and the eleven screen
+    components with their specs are deleted; `ScreenPath` and `isScreenPath`
+    moved to `screens.ts`, and `BUILT_IN_LAYOUTS` is typed by every screen, so
+    a screen added without a layout does not compile;
+  - the migration is the SPA's `retireLegacy` in `built-in-pages.ts`, applied
+    wherever a document from the host is adopted (a read, an import, a
+    conflict settled for the saved one), and saved at once. The shell says
+    which pages it changed in a notice the operator dismisses;
+  - a legacy instance of a screen the console does not name becomes Stack's
+    widgets, because that is what the widget rendered for one.
 
 ## 13. Calls this note makes
 
