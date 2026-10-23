@@ -5654,6 +5654,26 @@ class TheGitArgvGuard(unittest.TestCase):
         # A printer that decodes an escape writes bytes its words do not
         # spell, into a named shell too (R2, round 3 of #447).
         self.assertRefused("printf 'gi\\164 push origin +HEAD:main' | bash")
+        # Round 4: `dash` and macOS `sh` decode an `echo` escape unasked.
+        self.assertRefused("dash -c \"echo 'gi\\0164 push origin +HEAD:main' | sh\"")
+        # An `xpg_echo` no substring match reads; a coprocess, which reads
+        # what the line writes to its descriptors; and an escaped or paired
+        # `$`, which opens no function substitution, so the pipe after it is
+        # one.
+        for command in (
+            "shopt -s xpg_''echo; echo 'gi\\0164 push origin +HEAD:main' | awk '{system($0)}'",
+            "coproc /tmp/x; echo 'git push origin +HEAD:main' >&63",
+            "coproc pwsh; cat /tmp/s >&63",
+            "coproc C { pwsh; }; printf 'g=gi; ${g}t push origin +HEAD:main' >&63",
+            "coproc (pwsh); echo 'git push origin +HEAD:main' >&63",
+            "coproc awk '{system($0)}'; echo 'git push origin +HEAD:main' >&63",
+            "echo git push origin +HEAD:main \\${| /tmp/x",
+            "echo git push origin +HEAD:main $${| /tmp/x",
+        ):
+            with self.subTest(command=command):
+                self.assertRefused(command)
+                self.assertTrue(
+                    self.judging_module().unclassified_stdin_writer(command))
         # Round 1 of #447's review: a redirection taken for the program, a
         # group's redirection, a pipe across a newline or into a subshell, an
         # expansion that rejoins a word, a launcher of a shell, a resolution

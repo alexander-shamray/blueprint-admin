@@ -617,7 +617,8 @@ A new residual is stated **here** and gets a row above.
   setting `os.environ` and starting `bash -c`), which this guard does not
   read as a command line, the write residual above; what an unclassified
   program **named bare, and not a shell this file knows**, reads on stdin when
-  the text is not on the line (a file, a command's output), unless a later
+  the text is not on the line (a file, a command's output, an expansion's
+  value: `x='git push …'; echo "$x" | awk '{system($0)}'`), unless a later
   word on its run names a shell or an extensionless path (`sudo pwsh`,
   `flock l /tmp/x`); such a program may run what it reads (`xargs`, `awk`), and
   only text on the line is in the source to judge; a reader on the
@@ -633,7 +634,8 @@ A new residual is stated **here** and gets a row above.
   substitution's body, an unseen subshell's line or a transforming stage's
   own words that are computed (`$(`, a backtick, `$'`, or a printer whose
   output this file cannot reproduce, such as `printf` with a `%` or a
-  backslash escape; a quoted heredoc body is computed by no outer shell, so
+  backslash escape, or `echo` with any backslash, which `dash` and macOS
+  `sh` decode unasked; a quoted heredoc body is computed by no outer shell, so
   `gh issue comment 1 --body-file - <<'EOF'` with a code span is admitted)
   or hold a line that runs git to write
   once read as typed or with its parameter expansions removed
@@ -672,8 +674,9 @@ A new residual is stated **here** and gets a row above.
   PowerShell's `& ("gi"+"t") push`, cmd's `g^it push`), as is any `git`
   word, and so is any stdin that is not on the line: a file other than
   `/dev/null`, its own or a group's (`{ …; } < f`,
-  `done < f`, `exec < f`), a subshell the walk does not see, or a stage that
-  transforms (`base64 -d <<<… | pwsh`). A pipe reaches its reader across a
+  `done < f`, `exec < f`), a subshell the walk does not see, a coprocess,
+  which reads what the line writes to its descriptors (`coproc pwsh; echo …
+  >&63`), or a stage that transforms (`base64 -d <<<… | pwsh`). A pipe reaches its reader across a
   newline and into a subshell, and a resolution change counts from any
   scope around a nested script (`PATH=/tmp bash -c …`). A `>(…)` starting an
   unclassified program refuses a line with a `git` word on it. Reading every
