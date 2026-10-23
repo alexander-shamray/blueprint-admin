@@ -39,6 +39,7 @@ public sealed partial class AssistantRuntime
         AdminOptions options,
         IConfiguration configuration,
         Func<IAssistantProvider> fake,
+        Func<IAssistantProvider> anthropic,
         Func<IRedactor> redactor,
         Func<IReadOnlyList<IToolSource>> sources,
         TimeProvider time,
@@ -52,6 +53,7 @@ public sealed partial class AssistantRuntime
         (Core, model) = ProviderId switch
         {
             AssistantOptions.Fake => (new AssistantCore(fake(), sources(), ToolPolicy.ReadOnly, redactor(), Instructions, limits, time, Logged), FakeAssistantProvider.Model),
+            AssistantOptions.Anthropic => (new AssistantCore(anthropic(), sources(), ToolPolicy.ReadOnly, redactor(), Instructions, limits, time, Logged), options.Assistant.Model),
             _ => ((AssistantCore?)null, ""),
         };
     }

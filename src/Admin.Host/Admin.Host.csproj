@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Admin.Assistant\Admin.Assistant.csproj" />
+    <ProjectReference Include="..\Admin.Assistant.Anthropic\Admin.Assistant.Anthropic.csproj" />
   </ItemGroup>
 
   <ItemGroup>

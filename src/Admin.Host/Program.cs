@@ -259,12 +259,13 @@ builder.Services.AddSingleton(sp => new AdminReadTools(
     sp.GetRequiredService<GameDayService>()));
 
 // The assistant is decided once, from options: off builds no provider and resolves no credential (AI assistant design
-// §9.1), so the fake provider, the redactor and the read tools are handed over as factories the runtime calls only when
-// it is on.
+// §9.1), so the providers, the redactor and the read tools are handed over as factories the runtime calls only when it
+// is on, and the Anthropic provider only when the provider is `anthropic`.
 builder.Services.AddSingleton(sp => new AssistantRuntime(
     sp.GetRequiredService<IOptions<AdminOptions>>().Value,
     sp.GetRequiredService<IConfiguration>(),
     () => new FakeAssistantProvider(),
+    () => AnthropicProviderFactory.Create(sp.GetRequiredService<IOptions<AdminOptions>>().Value.Assistant, sp.GetRequiredService<TimeProvider>()),
     () => new AdminRedactor(sp.GetRequiredService<IOptions<AdminOptions>>().Value, sp.GetRequiredService<DeadLetterService>()),
     () => [sp.GetRequiredService<AdminReadTools>()],
     sp.GetRequiredService<TimeProvider>(),

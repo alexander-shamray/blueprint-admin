@@ -258,6 +258,7 @@ public sealed class AssistantEndpointsTests : IClassFixture<AdminHostFactory>
     public void Off_never_builds_a_provider_a_redactor_or_the_tools_and_on_builds_each_once(string provider, bool on)
     {
         int providers = 0;
+        int anthropics = 0;
         int redactors = 0;
         int tools = 0;
         AdminOptions options = new() { FakePlatform = true, Assistant = { Provider = provider } };
@@ -268,6 +269,11 @@ public sealed class AssistantEndpointsTests : IClassFixture<AdminHostFactory>
             () =>
             {
                 providers++;
+                return new FakeAssistantProvider();
+            },
+            () =>
+            {
+                anthropics++;
                 return new FakeAssistantProvider();
             },
             () =>
@@ -287,6 +293,81 @@ public sealed class AssistantEndpointsTests : IClassFixture<AdminHostFactory>
         providers.ShouldBe(on ? 1 : 0);
         redactors.ShouldBe(on ? 1 : 0);
         tools.ShouldBe(on ? 1 : 0);
+
+        // Whatever the provider is, the Anthropic one is not built unless it is the one named.
+        anthropics.ShouldBe(0);
+    }
+
+    [Fact]
+    public void The_anthropic_provider_is_built_once_when_it_is_named_and_the_fake_is_not_built_beside_it()
+    {
+        int fakes = 0;
+        int anthropics = 0;
+        AdminOptions options = new() { Assistant = { Provider = "Anthropic", Model = "claude-haiku-5-5" } };
+
+        AssistantRuntime runtime = new(
+            options,
+            new ConfigurationBuilder().Build(),
+            () =>
+            {
+                fakes++;
+                return new FakeAssistantProvider();
+            },
+            () =>
+            {
+                anthropics++;
+                return new FakeAssistantProvider();
+            },
+            () => new Unredacted(),
+            () => [],
+            TimeProvider.System,
+            NullLogger<AssistantRuntime>.Instance);
+
+        runtime.ProviderId.ShouldBe("anthropic");
+        runtime.Core.ShouldNotBeNull();
+        anthropics.ShouldBe(1);
+        fakes.ShouldBe(0);
+    }
+
+    [Fact]
+    public void A_provider_that_is_none_of_the_three_is_refused_naming_the_key()
+    {
+        AdminOptions options = new() { Assistant = { Provider = "openai" } };
+
+        InvalidOperationException refused = Should.Throw<InvalidOperationException>(() => AssistantOptions.ProviderOf(options));
+
+        refused.Message.ShouldContain("Admin:Assistant:Provider");
+        refused.Message.ShouldContain("'anthropic'");
+    }
+
+    [Theory]
+    [InlineData("", "low", "Admin:Assistant:Model")]
+    [InlineData("claude-opus-5-5", "extreme", "Admin:Assistant:Effort")]
+    public void The_anthropic_provider_refuses_a_model_or_an_effort_it_cannot_use_at_startup_naming_the_key(string model, string effort, string key)
+    {
+        AssistantOptions options = new() { Model = model, Effort = effort };
+
+        Should.Throw<InvalidOperationException>(() => AnthropicProviderFactory.Create(options, TimeProvider.System)).Message.ShouldContain(key);
+    }
+
+    [Fact]
+    public void The_anthropic_defaults_are_the_ones_the_design_names()
+    {
+        AssistantOptions options = new();
+
+        options.Model.ShouldBe("claude-opus-5-5");
+        options.Effort.ShouldBe("low");
+    }
+
+    [Fact]
+    public void An_option_named_for_a_credential_is_still_refused_with_the_anthropic_provider_on()
+    {
+        IConfiguration configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Admin:Assistant:ApiKey"] = "sk-ant-nope" }).Build();
+        AdminOptions options = new() { Assistant = { Provider = "anthropic" } };
+
+        Should.Throw<InvalidOperationException>(() =>
+            new AssistantRuntime(options, configuration, () => new FakeAssistantProvider(), () => new FakeAssistantProvider(), () => new Unredacted(), () => [], TimeProvider.System, NullLogger<AssistantRuntime>.Instance))
+            .Message.ShouldContain("Admin:Assistant:ApiKey");
     }
 
     private sealed class Unredacted : IRedactor
