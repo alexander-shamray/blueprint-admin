@@ -1,5 +1,5 @@
 import { SCREENS } from '../screens';
-import { BROKER_WIDGETS, ERASURE, JOB_OUTPUT, LEGACY_SCREEN, LOGS, MAIL, MAP, SCENARIO_WIDGETS, STACK_WIDGETS, WidgetType } from './widgets';
+import { API_WIDGETS, BROKER_WIDGETS, ERASURE, JOB_OUTPUT, LEGACY_SCREEN, LOGS, MAIL, MAP, TRACE, SCENARIO_WIDGETS, STACK_WIDGETS, WidgetType } from './widgets';
 import { Page, WidgetInstance, Workspace } from './workspace-types';
 
 /** The schema version this console writes; `WorkspaceSchema.Current` on the host. */
@@ -15,6 +15,11 @@ type Placed = [WidgetType, number, number, Record<string, unknown>?];
  * beside the order's state. A page not listed is still its screen in one legacy widget.
  */
 const BUILT_IN_LAYOUTS: Partial<Record<string, readonly Placed[]>> = {
+  requests: [
+    [API_WIDGETS.request, 0, 0],
+    [API_WIDGETS.history, 16, 0],
+  ],
+  trace: [[TRACE, 0, 0, { correlationId: '', window: '15m', follow: true }]],
   broker: [
     [BROKER_WIDGETS.queues, 0, 0],
     [BROKER_WIDGETS.projection, 14, 0],

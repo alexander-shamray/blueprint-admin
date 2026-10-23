@@ -1,7 +1,7 @@
 import { SCREENS } from '../screens';
 import { builtInTitle, builtInWidgets, defaultWorkspace, differsFromBuiltIn, withEveryBuiltIn } from './built-in-pages';
 import { SCREEN_COMPONENTS } from './screen-components';
-import { BROKER_WIDGETS, ERASURE, JOB_OUTPUT, LEGACY_SCREEN, LOGS, MAIL, MAP, NOTE, SCENARIO_WIDGETS, STACK_WIDGETS, WIDGETS, widgetType } from './widgets';
+import { API_WIDGETS, BROKER_WIDGETS, ERASURE, JOB_OUTPUT, LEGACY_SCREEN, LOGS, MAIL, MAP, NOTE, TRACE, SCENARIO_WIDGETS, STACK_WIDGETS, WIDGETS, widgetType } from './widgets';
 import { GRID_COLUMNS, MAX_ROWS, WidgetInstance } from './workspace-types';
 
 describe('the widget registry', () => {
@@ -44,7 +44,7 @@ describe('the built-in pages', () => {
   });
 
   it('each start as one legacy widget across the grid, until a phase builds one from widgets', () => {
-    for (const screen of SCREENS.filter((s) => !['stack', 'scenario', 'logs', 'broker', 'map', 'mail', 'erasure'].includes(s.path))) {
+    for (const screen of SCREENS.filter((s) => !['stack', 'scenario', 'logs', 'broker', 'map', 'mail', 'erasure', 'requests', 'trace'].includes(s.path))) {
       expect(builtInWidgets(screen.path)).toEqual([
         expect.objectContaining({ type: 'legacy', x: 0, y: 0, cols: GRID_COLUMNS, config: { screen: screen.path } }),
       ]);
@@ -82,6 +82,24 @@ describe('the built-in pages', () => {
     expect(MAIL.titleOf({ correlationId: 'abc' })).toBe('Mail (abc)');
     expect(MAIL.titleOf({ correlationId: '' })).toBe('Mail');
     expect([MAP.dataServices, ERASURE.dataServices]).toEqual([['MapFeed'], ['ErasureRun']]);
+  });
+
+  it('build the API page from a request widget beside a history widget, and the Trace page from one that follows', () => {
+    expect(builtInWidgets('requests')).toEqual([
+      expect.objectContaining({ id: 'builtin-requests-api-request', type: 'api-request', x: 0, config: {} }),
+      expect.objectContaining({ id: 'builtin-requests-api-history', type: 'api-history', x: 16, config: {} }),
+    ]);
+    expect(builtInWidgets('trace')).toEqual([
+      expect.objectContaining({ id: 'builtin-trace-trace', type: 'trace', config: { correlationId: '', window: '15m', follow: true } }),
+    ]);
+    expect(API_WIDGETS.request.config({ operation: 7, identity: 'root' })).toEqual({ operation: null, identity: null });
+    expect(API_WIDGETS.request.config({ operation: 'catalog:GetProducts', identity: 'custom:alice' })).toEqual({
+      operation: 'catalog:GetProducts',
+      identity: 'custom:alice',
+    });
+    expect(TRACE.config({ correlationId: 7, window: '9h', follow: 'yes' })).toEqual({ correlationId: '', window: '15m', follow: false });
+    expect(TRACE.titleOf({ correlationId: 'abc' })).toBe('Trace (abc)');
+    expect(TRACE.presets.map((p) => p.config['follow'])).toEqual([false, true]);
   });
 
   it('build the Logs page from one Logs widget over every service', () => {

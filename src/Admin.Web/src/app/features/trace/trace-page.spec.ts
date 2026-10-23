@@ -1,9 +1,11 @@
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { ActivatedRoute, Router, convertToParamMap, provideRouter } from '@angular/router';
 import { BehaviorSubject, Subject, of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { TraceView } from '../../core/host/host-types';
 import { TracePage } from './trace-page';
+import { TraceWidget } from './widgets/trace-widget';
 
 const queued = {
   at: '2026-09-16T09:43:03.000Z',
@@ -66,15 +68,23 @@ describe('TracePage', () => {
       providers: [
         provideRouter([]),
         { provide: HostClient, useValue: host },
-        { provide: ActivatedRoute, useValue: { paramMap } },
+        // The built-in Trace page's route: the id in the URL drives the load, and Trace navigates.
+        { provide: ActivatedRoute, useValue: { paramMap, snapshot: { paramMap: paramMap.value, data: { builtIn: 'trace' } } } },
       ],
     });
   }
 
+  /**
+   * The Trace screen as the legacy screen widget renders it: the Trace widget. The tests below are the screen's, from
+   * before it was split, so `componentInstance` is the widget they drive.
+   */
   function render() {
     const fixture = TestBed.createComponent(TracePage);
     fixture.detectChanges();
-    return fixture;
+    const widget = fixture.debugElement.query(By.directive(TraceWidget)).componentInstance as TraceWidget;
+    return Object.defineProperty(fixture, 'componentInstance', { value: widget }) as unknown as ReturnType<
+      typeof TestBed.createComponent<TraceWidget>
+    >;
   }
 
   beforeEach(() => {
@@ -150,7 +160,7 @@ describe('TracePage', () => {
     expect(rows(fixture).length).toBe(3);
 
     host.trace = vi.fn(() => throwError(() => ({ error: { detail: 'the host fell over' } })));
-    (fixture.componentInstance as TracePage).reload();
+    fixture.componentInstance.reload();
     fixture.detectChanges();
 
     expect((fixture.nativeElement.querySelector('[role="alert"]') as HTMLElement).textContent).toContain(
