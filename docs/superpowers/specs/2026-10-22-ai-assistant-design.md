@@ -176,7 +176,9 @@ limits are `AssistantOptions`', §9), and are gone after a host restart.
 
 **A turn is running work, not polling** (the workspace note's §4.3). It goes
 on when the panel or the browser tab is hidden, and the shell's running-work
-indicator shows it. The client keeps the event stream open while a turn runs,
+indicator shows it. What shows a turn is the panel, not a page, so its item
+opens the panel rather than linking to a page as the workspace note's other
+items do. The client keeps the event stream open while a turn runs,
 so client tool calls are still answered (they only route the SPA, which is
 still loaded), and closes it once the conversation is idle and nothing showing
 it is visible. A stream reopened later resumes by `Last-Event-ID`. An idle,
@@ -616,8 +618,8 @@ total, so spend is visible.
 
 ## 10. Privacy and trust
 
-- **Redaction.** Every byte the core sends a provider — the operator's text and
-  every tool result — passes `IRedactor` first. The admin's redactor applies
+- **Redaction.** The operator's text and every tool result pass `IRedactor`
+  before the core sends them to a provider. The admin's redactor applies
   `FixtureScrubber`'s rules and then replaces, as exact values, every secret
   the host knows: each realm user's password, `SqlPassword`, the password in
   `BffBrokerConnection`, and the dead-letter operator's password while one is
