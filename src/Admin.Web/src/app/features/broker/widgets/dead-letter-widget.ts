@@ -216,15 +216,19 @@ export class DeadLetterWidget {
     const queue = this.openQueue();
     const armed = this.armed();
     if (!queue || !armed || !this.canExecute()) return;
+    const listing = this.generation;
     this.host.deadLetterMove(queue, armed.verb, [armed.messageId], this.executeText()).subscribe({
       next: (job) => {
+        // The move was sent whatever the operator did since, so the queues are read; but a listing that was closed
+        // or replaced meanwhile is not told the old message's job.
+        this.feed.readQueuesAgain();
+        if (listing !== this.generation) return;
         this.generation++;
         this.error.set(null);
         this.jobId.set(job.id);
         this.armed.set(null);
         this.inspection.set(null);
         this.moved.set(armed.messageId);
-        this.feed.readQueuesAgain();
       },
       error: (e: unknown) => this.error.set(describeError(e)),
     });

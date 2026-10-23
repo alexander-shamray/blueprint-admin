@@ -178,6 +178,26 @@ describe('DeadLetterWidget', () => {
     expect(fixture.nativeElement.querySelector('app-output-pane')).toBeNull();
   });
 
+  it('a real run answered after the listing was closed reads the queues but shows its job nowhere', () => {
+    const late = new Subject<JobSummary>();
+    const fixture = render();
+    open(fixture);
+    click(fixture, 'button.dry-replay');
+    type(fixture, '--execute');
+    host.deadLetterMove.mockReturnValueOnce(late.asObservable());
+    host.brokerQueues.mockClear();
+    click(fixture, 'button.execute');
+
+    click(fixture, 'button.close-dead-letters');
+    late.next(job);
+    late.complete();
+    fixture.detectChanges();
+
+    expect(host.brokerQueues).toHaveBeenCalledTimes(1);
+    expect(fixture.nativeElement.querySelector('.moved')).toBeNull();
+    expect(fixture.nativeElement.querySelector('app-output-pane')).toBeNull();
+  });
+
   it('keeps the latest request made while a queue is being read, and opens it when that read ends', () => {
     const first = new Subject<DeadLetterInspection>();
     host.deadLetters.mockReturnValueOnce(first.asObservable());
