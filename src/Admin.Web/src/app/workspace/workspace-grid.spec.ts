@@ -74,6 +74,48 @@ describe('WorkspaceGrid', () => {
     expect(chosen).toEqual({ id: 'w1', config: { screen: 'trace' } });
   });
 
+  it('edits a setting no preset holds: a list of names, written with commas, saved over what the widget held', async () => {
+    const services: WidgetInstance = { id: 's', type: 'compose-services', x: 0, y: 0, cols: 12, rows: 6, config: { services: ['a'] } };
+    const fixture = render([services], true);
+    const element: HTMLElement = fixture.nativeElement;
+    let chosen: { id: string; config: Record<string, unknown> } | undefined;
+    fixture.componentInstance.configureWidget.subscribe((c) => (chosen = c));
+
+    (element.querySelector('button.ws-configure') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const items = [...document.querySelectorAll<HTMLElement>('.mat-mdc-menu-item')];
+    expect(items.map((i) => i.textContent?.trim())).toContain('Edit settings…');
+    document.querySelector<HTMLElement>('.ws-edit-settings')?.click();
+    fixture.detectChanges();
+
+    const input = element.querySelector<HTMLInputElement>('.ws-settings input')!;
+    expect(input.value).toBe('a');
+    input.value = ' x, y ,, ';
+    input.dispatchEvent(new Event('input'));
+    element.querySelector('.ws-settings')!.dispatchEvent(new Event('submit'));
+    fixture.detectChanges();
+
+    expect(chosen).toEqual({ id: 's', config: { services: ['x', 'y'] } });
+    expect(element.querySelector('.ws-settings')).toBeNull();
+    await fixture.whenStable();
+  });
+
+  it('closes an open settings panel when the layout editor is left', () => {
+    const job: WidgetInstance = { id: 'j', type: 'job-output', x: 0, y: 0, cols: 12, rows: 6, config: { jobId: null } };
+    const fixture = render([job], true);
+    (fixture.nativeElement.querySelector('button.ws-configure') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    document.querySelector<HTMLElement>('.ws-edit-settings')?.click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.ws-settings')).not.toBeNull();
+
+    fixture.componentRef.setInput('editing', false);
+    fixture.detectChanges();
+    fixture.componentRef.setInput('editing', true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.ws-settings')).toBeNull();
+  });
+
   it('has no configure control for a type with nothing to choose, or one this console does not know', () => {
     const plain: WidgetInstance = { id: 'p', type: 'stack-controls', x: 0, y: 0, cols: 12, rows: 6, config: {} };
     expect(render([plain, unknown], true).nativeElement.querySelector('button.ws-configure')).toBeNull();
