@@ -16,6 +16,18 @@ const LINKING = new Set(['href', 'src']);
 /** A `url(...)` in CSS that is not a reference to an id inside the drawing, which would fetch or run something. */
 const OUTSIDE_URL = /url\(\s*(?!['"]?#)/i;
 const OUTSIDE_IMPORT = /@import/i;
+const IMAGE_SET = /image-set\(/i;
+
+/** CSS read the way a browser reads it: `u\72l(` is `url(`. Applied before any of the tests above. */
+function unescapeCss(value: string): string {
+  return value.replace(/\\([0-9a-f]{1,6})[ \t\r\n\f]?/gi, (_, hex: string) => String.fromCodePoint(Math.min(parseInt(hex, 16), 0x10ffff))).replace(/\\(.)/g, '$1');
+}
+
+/** Whether a value, as CSS, would fetch or import something from outside the drawing. */
+function reachesOutside(value: string): boolean {
+  const css = unescapeCss(value);
+  return OUTSIDE_URL.test(css) || OUTSIDE_IMPORT.test(css) || IMAGE_SET.test(css);
+}
 
 /**
  * The SVG Mermaid drew, parsed and reduced to an allow-list of shapes and text: no script, no `foreignObject`, no
@@ -34,15 +46,13 @@ export function safeSvg(svg: string): SVGElement | null {
       if (child.namespaceURI !== SVG_NAMESPACE || !ALLOWED.has(child.localName.toLowerCase())) child.remove();
       else walk(child);
     }
-    if (element.localName.toLowerCase() === 'style' && (OUTSIDE_URL.test(element.textContent ?? '') || OUTSIDE_IMPORT.test(element.textContent ?? ''))) {
-      element.textContent = '';
-    }
+    if (element.localName.toLowerCase() === 'style' && reachesOutside(element.textContent ?? '')) element.textContent = '';
     for (const attribute of [...element.attributes]) {
       const name = attribute.localName.toLowerCase();
       const outside = !attribute.value.trim().startsWith('#');
       if (name.startsWith('on')) element.removeAttributeNode(attribute);
       else if (LINKING.has(name) && outside) element.removeAttributeNode(attribute);
-      else if (name === 'style' && (OUTSIDE_URL.test(attribute.value) || OUTSIDE_IMPORT.test(attribute.value))) element.removeAttributeNode(attribute);
+      else if (reachesOutside(attribute.value)) element.removeAttributeNode(attribute);
     }
   };
   walk(root);

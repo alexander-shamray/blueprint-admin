@@ -58,6 +58,19 @@ describe('safeSvg', () => {
     expect(svg.querySelector('marker')?.getAttribute('href')).toBe('#m');
   });
 
+  it('drops a reference that leaves the drawing from any attribute, and from CSS written with escapes', () => {
+    const svg = safeSvg(
+      wrap(
+        '<rect id="a" fill="url(https://example.com/x)"/><rect id="b" filter="url(#f)"/>' +
+          '<rect id="c" style="fill:u\\72l(https://example.com/y)"/><rect id="d" style="background:image-set(\'https://example.com/z\' 1x)"/>' +
+          '<style>.a{fill:\\75rl(https://example.com/w)}</style>',
+      ),
+    )!;
+    expect(svg.outerHTML).not.toMatch(/example\.com/);
+    expect(svg.querySelector('#a')?.hasAttribute('fill')).toBe(false);
+    expect(svg.querySelector('#b')?.getAttribute('filter')).toBe('url(#f)');
+  });
+
   it('answers null for text that is not one SVG document', () => {
     expect(safeSvg('<div>no</div>')).toBeNull();
     expect(safeSvg('<svg')).toBeNull();
