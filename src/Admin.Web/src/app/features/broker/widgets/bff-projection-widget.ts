@@ -44,7 +44,7 @@ import { BrokerFeed, describeError } from '../broker-feed';
           <app-output-pane [jobId]="id" (exited)="feed.readQueuesAgain()" />
         }
       </section>
-    } @else {
+    } @else if (feed.projectionPlan() === null) {
       <p class="empty">The host did not give the projection tool's plan.</p>
     }
   `,

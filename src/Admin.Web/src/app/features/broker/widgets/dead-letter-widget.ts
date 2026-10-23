@@ -22,7 +22,7 @@ import { BrokerFeed, describeError } from '../broker-feed';
   imports: [FormsModule, RouterLink, OutputPane],
   template: `
     <section class="dead-letters">
-      @if (!feed.deadLetterPlan()) {
+      @if (feed.deadLetterPlan() === null) {
         <p class="empty">The host did not give the dead-letter tool's plan.</p>
       } @else if (openQueue(); as queue) {
         <p>

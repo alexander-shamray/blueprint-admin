@@ -30,11 +30,14 @@ export class BrokerFeed {
   readonly bindings = new PolledFeed(() => this.host.brokerBindings(), AUTO_REFRESH_MS, this.visible, this.destroyRef);
   readonly permissions = new PolledFeed(() => this.host.brokerPermissions(), AUTO_REFRESH_MS, this.visible, this.destroyRef);
 
-  /** On error, undefined, so the projection widget simply has no actions: the host did not answer, and the queues say so. */
-  readonly projectionPlan = toSignal(this.host.projectionPlan().pipe(catchError(() => of(undefined))));
+  /**
+   * The projection tool's plan: undefined while the host has not answered, null when it did not (the widget then has
+   * no actions, and the queues say why).
+   */
+  readonly projectionPlan = toSignal(this.host.projectionPlan().pipe(catchError(() => of(null))));
 
-  /** On error, undefined, so no queue offers to open: the host did not answer, and the queues say so. */
-  readonly deadLetterPlan = toSignal(this.host.deadLetterPlan().pipe(catchError(() => of(undefined))));
+  /** The dead-letter tool's plan: undefined while pending, null when the host did not answer (no queue offers to open). */
+  readonly deadLetterPlan = toSignal(this.host.deadLetterPlan().pipe(catchError(() => of(null))));
 
   /** A queue read owed because something happened while a read was out: that read may predate it. */
   private readonly queuesOwed = signal(false);
