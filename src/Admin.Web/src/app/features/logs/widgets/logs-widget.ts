@@ -1,8 +1,9 @@
-import { Component, DestroyRef, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, input, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { OutputLine } from '../../../core/host/host-types';
 import { injectWidgetContext } from '../../../workspace/widget-context';
 import { shows, stringList } from '../../../workspace/widget-config';
+import { widgetSession } from '../../../workspace/widget-session-store';
 import { COMPOSE_SERVICES } from '../compose-services';
 import { LogFollowService, lineService } from '../log-follow';
 
@@ -24,8 +25,9 @@ export class LogsWidget {
   readonly follow = inject(LogFollowService);
   readonly config = input<Record<string, unknown>>({});
 
-  readonly filter = signal('');
-  readonly correlationId = signal('');
+  /** What the operator typed into the two boxes: session state (§4.2), found again when the widget is re-created. */
+  readonly filter = widgetSession('filter', '');
+  readonly correlationId = widgetSession('correlationId', '');
 
   /** The services this widget shows; `[]` is every one. */
   readonly services = computed(() => stringList(this.config()['services']));

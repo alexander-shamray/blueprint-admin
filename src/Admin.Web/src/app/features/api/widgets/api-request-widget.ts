@@ -67,18 +67,21 @@ export class ApiRequestWidget {
   private readonly savedPassword = widgetSession('customPassword', '');
 
   readonly catalog = signal<ApiCatalogView | null>(null);
-  readonly selectedId = signal<string | null>(null);
-  readonly method = signal('GET');
-  readonly url = signal('');
-  readonly pathValues = signal<Record<string, string>>({});
-  readonly queryValues = signal<Record<string, string>>({});
-  readonly headersText = signal('');
-  readonly body = signal('');
-  readonly correlationId = signal('');
+  // The editor is session state (§4.2): what the operator set up and the last answer outlive the component, so leaving
+  // the page and coming back finds the request as it was. A send in flight does not (the platform may have acted on it;
+  // its answer reaches the history), and nothing here holds a credential: the headers are as typed, the password is not.
+  readonly selectedId = widgetSession<string | null>('selectedId', null);
+  readonly method = widgetSession('method', 'GET');
+  readonly url = widgetSession('url', '');
+  readonly pathValues = widgetSession<Record<string, string>>('pathValues', {});
+  readonly queryValues = widgetSession<Record<string, string>>('queryValues', {});
+  readonly headersText = widgetSession('headersText', '');
+  readonly body = widgetSession('body', '');
+  readonly correlationId = widgetSession('correlationId', '');
   readonly pending = signal(false);
-  readonly result = signal<ProxyResult | null>(null);
+  readonly result = widgetSession<ProxyResult | null>('result', null);
   /** The request the shown result answers (method, URL, identity), since the inputs may have changed since. */
-  readonly answered = signal('');
+  readonly answered = widgetSession('answered', '');
   readonly token = signal<TokenView | null>(null);
   /** The selected identity's token as the host holds it, read without minting (spec §5.6); null for anonymous. */
   readonly clock = signal<TokenClockView | null>(null);
@@ -206,10 +209,18 @@ export class ApiRequestWidget {
     // Taken up once per operation the config names: a catalog reload, or a restore that moved the editor elsewhere,
     // does not take the editor back to the configured one.
     let applied: string | null = null;
+    // An editor found in session state when the widget appeared is the operator's own work: the configured operation
+    // does not replace it, though a config that later names another does.
+    let found = this.selectedId() !== null;
     effect(() => {
       const view = this.catalog();
       const wanted = this.configuredOperation();
       untracked(() => {
+        if (found) {
+          found = false;
+          applied = wanted;
+          return;
+        }
         if (!wanted || wanted === applied) return;
         if (this.selectedId() === wanted) {
           applied = wanted;
