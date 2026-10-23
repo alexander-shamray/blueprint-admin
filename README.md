@@ -112,7 +112,7 @@ request is reissued from the screen and links the backend's `erasure-overdue`
 runbook. Against FakePlatform the subject ending `dead` is the one that goes
 overdue, so the reissue has something to do.
 The Map screen shows each service of the platform with the gateway routes that reach it and the queues it consumes,
-each queue's depth, its change per second between two reads (Refresh, or every 5 s) and the exchanges bound to it. It
+each queue's depth, its change per second between two reads (Refresh, or every 5 s once the Platform map widget's auto-refresh is switched on in its settings) and the exchanges bound to it. It
 is built from the host's own tables and the broker's `rabbitmqctl` reads at view time; where they differ it lists the
 disagreement and resolves nothing.
 The Runbooks screen lists the backend's `docs/runbooks/` as its `tools/game-day`
