@@ -58,6 +58,7 @@ public sealed class DriftCoverageTests
     {
         ["src/Admin.Host/Api/OpenApiReader.cs"] = "names where a document's example comes from, and reads the documents live",
         ["src/Admin.Web/src/app/features/scenario/scenario-runner.ts"] = "says a product-specific signal would be a backend change",
+        ["src/Admin.Web/src/app/workspace/widgets/note/note-presets.ts"] = "its diagrams label a box with the repository's name; no value is copied from it",
     };
 
     [Fact]
