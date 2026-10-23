@@ -1,7 +1,7 @@
 import { SCREENS } from '../screens';
 import { builtInTitle, builtInWidgets, defaultWorkspace, differsFromBuiltIn, withEveryBuiltIn } from './built-in-pages';
 import { SCREEN_COMPONENTS } from './screen-components';
-import { API_WIDGETS, BROKER_WIDGETS, ERASURE, JOB_OUTPUT, LEGACY_SCREEN, LOGS, MAIL, MAP, NOTE, RUNBOOKS, TRACE, TRANSCRIPT, SCENARIO_WIDGETS, STACK_WIDGETS, WIDGETS, widgetType } from './widgets';
+import { API_WIDGETS, BROKER_WIDGETS, ERASURE, JOB_OUTPUT, LEGACY_SCREEN, LOGS, MAIL, MAP, NOTE, RUNBOOKS, SEQUENCE, TRACE, TRANSCRIPT, SCENARIO_WIDGETS, STACK_WIDGETS, WIDGETS, widgetType } from './widgets';
 import { GRID_COLUMNS, MAX_ROWS, WidgetInstance } from './workspace-types';
 
 describe('the widget registry', () => {
@@ -51,6 +51,15 @@ describe('the built-in pages', () => {
       // Every widget a page ships with is one the registry knows, with its components loadable.
       for (const w of widgets) expect(widgetType(w.type), `${screen.path}: ${w.type}`).toBeDefined();
     }
+  });
+
+  it('offer the request sequence as a registered widget that reads the Trace history and follow services, and sits on no built-in page', () => {
+    expect(widgetType('sequence')).toBe(SEQUENCE);
+    expect(SEQUENCE.config({ correlationId: 7, window: '9h', follow: 'yes' })).toEqual({ correlationId: '', window: '15m', follow: false });
+    expect(SEQUENCE.titleOf({ correlationId: 'abc' })).toBe('Request sequence (abc)');
+    expect(SEQUENCE.presets.map((p) => p.config['follow'])).toEqual([false, true]);
+    expect(SEQUENCE.dataServices).toEqual(['TraceHistory', 'TraceFollow']);
+    for (const screen of SCREENS) expect(builtInWidgets(screen.path).map((w) => w.type), screen.path).not.toContain('sequence');
   });
 
   it('build the Runbooks and Transcript pages from one widget each', () => {
