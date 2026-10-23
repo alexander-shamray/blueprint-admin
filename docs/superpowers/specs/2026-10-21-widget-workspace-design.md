@@ -417,10 +417,12 @@ The question it answers: *what is happening now, and where is it stuck?*
 - **Interaction**: click a service to point a Logs widget on the page at it,
   or open the Logs page filtered to it; click a queue to open it in a Queues
   widget, or the Broker page; a parked queue opens the dead-letter workbench.
-  - "Point a widget at it" is a write to that widget's saved config (a Logs
-    widget's `services`, a Queues widget's `filter`), on the first one of the
-    type on the page being shown; the page has none, the click opens the
-    built-in page instead, which shows every service or queue.
+  - "Point a widget at it" sets session state (§4.2) of the first widget of
+    the type on the page being shown: a Logs widget's services, a Queues
+    widget's name filter (which sets "parked only" aside). The widget says it
+    was pointed and offers the way back to its configured view; the saved page
+    is not written. When the page has none, the click opens the built-in page
+    instead, which shows every service or queue.
   - A parked queue opens in a dead-letter workbench that is showing, in the
     parked twin that holds messages (`error` before `skipped`); with none
     showing it opens the Broker page.
