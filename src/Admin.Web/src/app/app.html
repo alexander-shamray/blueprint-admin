@@ -70,7 +70,8 @@
     @case ('pending') { <span class="save-state" role="status" i18n="the layout has a change not yet saved">Unsaved</span> }
     @case ('saving') { <span class="save-state" role="status" i18n>Saving…</span> }
   }
-  <!-- Work that goes on while no page shows it (spec §4.3): each item links to the page that does. -->
+  <!-- Work that goes on while no page shows it (spec §4.3): each item links to the page that does, or opens what shows
+       it when that is not a page (the assistant's panel, AI assistant note §5.1). -->
   <span class="running-work" aria-live="polite">
     @for (item of runningWork.items(); track item.text + item.link) {
       @if (item.open) {
