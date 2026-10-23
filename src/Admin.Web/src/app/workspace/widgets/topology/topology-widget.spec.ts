@@ -225,7 +225,7 @@ describe('TopologyWidget', () => {
 
       click(el, 'ordering-catalog-events');
 
-      expect(workspace.configureWidget).toHaveBeenCalledWith('p1', 'w-queues', { filter: 'ordering-catalog-events', parkedOnly: true, autoRefresh: true });
+      expect(workspace.configureWidget).toHaveBeenCalledWith('p1', 'w-queues', { filter: 'ordering-catalog-events', parkedOnly: false, autoRefresh: true });
     });
 
     it('opens the Broker page for a queue that is not parked when the page has no Queues widget', async () => {
