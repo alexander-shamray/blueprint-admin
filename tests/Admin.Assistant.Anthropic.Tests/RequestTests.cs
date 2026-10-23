@@ -72,6 +72,32 @@ public sealed class RequestTests
     }
 
     [Fact]
+    public async Task Objects_nested_in_a_schema_are_closed_too_and_a_root_without_a_type_is_given_one()
+    {
+        TurnRequest request = Given.Request(new UserMessage("hi")) with
+        {
+            Tools =
+            [
+                Given.Tool("nested") with
+                {
+                    InputSchema = JsonNode.Parse("""
+                        {"properties":{"filter":{"type":"object","properties":{"type":{"type":"object","properties":{}}}},
+                        "rows":{"type":"array","items":{"type":"object","properties":{}}}}}
+                        """)!.AsObject(),
+                },
+            ],
+        };
+
+        JsonObject schema = (await SentFor(request)).Body!["tools"]![0]!["input_schema"]!.AsObject();
+
+        schema["type"]!.GetValue<string>().ShouldBe("object");
+        schema["additionalProperties"]!.GetValue<bool>().ShouldBeFalse();
+        schema["properties"]!["filter"]!["additionalProperties"]!.GetValue<bool>().ShouldBeFalse();
+        schema["properties"]!["filter"]!["properties"]!["type"]!["additionalProperties"]!.GetValue<bool>().ShouldBeFalse();
+        schema["properties"]!["rows"]!["items"]!["additionalProperties"]!.GetValue<bool>().ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task The_system_text_and_catalogue_are_cached_and_nothing_that_varies_comes_before_the_breakpoint()
     {
         JsonObject body = (await SentFor(Given.Request(new UserMessage("hi")))).Body!.AsObject();
