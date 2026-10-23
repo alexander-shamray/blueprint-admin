@@ -587,6 +587,30 @@ later phase move one screen at a time without a page ever missing.
     legacy Logs screen is that widget in a thin component, kept until the
     legacy screens retire (phase 6). A widget's services are edited with the
     settings editor (#446).
+- Settled in phase 3b (#387), the Broker widgets (`features/broker`):
+  - `BrokerFeed` holds the four reads (queues, exchanges, bindings,
+    permissions), each its own `PolledFeed` with its own error, and the two
+    tools' plans. `PolledFeed` gained `refresh()` (one read now, none while
+    one is out) and `attach()` now returns the function that ends the
+    subscription, so a widget polls only while its own `autoRefresh` is on;
+    a widget with it off reads once when it appears and on Refresh;
+  - Queues, Exchanges, Bindings and Permissions each have a text `filter`
+    and `autoRefresh` (off by default, saved); Queues also `parkedOnly`.
+    These are `fields` of the settings editor (#446), whose kinds gain
+    `flag`, a switch;
+  - a Queues widget's Open on a parked queue is offered only while a
+    Dead-letter workbench is on the page, and asks it to open the queue
+    through `BrokerFeed.openRequest`; the workbench's own `queue` setting
+    shows an Open button and reads nothing by itself, since the tool puts
+    each message back flagged redelivered. A re-created workbench starts
+    closed: the messages, the "dry run started" gate and the typed
+    `--execute` live in the component and are empty on every render, and so
+    is the BFF projection's typed rebuild confirmation (§4.2);
+  - an event that changes the queues (a projection run starting or ending, a
+    real move sent) reads them again, owing the read when one is out;
+  - the Broker built-in page is the six widgets (Queues, BFF projection,
+    Dead letters, Exchanges, Permissions, Bindings); the legacy Broker screen
+    is the same six one under another, until phase 6.
 - The visual design within Material 3: palette, density, spacing.
 - Whether a widget's refresh button and a page-wide refresh both exist.
 - The exact Mermaid mapping of each `TraceView` event kind in §8.2, within
