@@ -54,6 +54,8 @@
     "301369497628259179": "Close the assistant",
     "4717491147966397069": "Conversation",
     "1256460476848243743": " Ask what a screen is for, or where to find something: \"where are the logs?\" ",
+    "7989594522969559545": " Your questions, and the console data the assistant reads to answer them, go to {$INTERPOLATION}. ",
+    "4265737487839810018": " I understand ",
     "4272041418876129428": "Message to the assistant",
     "3133539296286953705": "Stop",
     "7563035552061651664": " Send ",

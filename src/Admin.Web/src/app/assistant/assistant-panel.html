@@ -43,6 +43,16 @@
   @if (problem(); as text) {
     <p class="problem" role="alert">{{ text }}</p>
   }
+  @if (assistant.needsNotice()) {
+    <div class="notice" role="note">
+      <p i18n="what the assistant sends to its provider">
+        Your questions, and the console data the assistant reads to answer them, go to {{ provider() }}.
+      </p>
+      <button mat-stroked-button type="button" (click)="assistant.acknowledge()" i18n="accepts that notice">
+        I understand
+      </button>
+    </div>
+  }
   <form class="compose" (submit)="$event.preventDefault(); send()">
     <textarea
       aria-label="Message to the assistant"
@@ -61,7 +71,7 @@
       <button
         mat-flat-button
         type="submit"
-        [disabled]="state().running || draft().trim() === ''"
+        [disabled]="state().running || draft().trim() === '' || assistant.needsNotice()"
         i18n="sends a message to the assistant"
       >
         Send

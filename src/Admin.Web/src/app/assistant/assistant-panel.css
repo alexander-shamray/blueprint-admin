@@ -27,6 +27,21 @@ h2 {
   flex: 1;
 }
 
+.notice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  font: var(--mat-sys-body-medium);
+}
+
+.notice p {
+  margin: 0;
+}
+
 .messages {
   flex: 1;
   overflow-y: auto;

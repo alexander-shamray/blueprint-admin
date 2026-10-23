@@ -23,6 +23,21 @@ export function catalogue(): CatalogueEntry[] {
   return SCREENS.map((s) => ({ id: s.path, label: s.label, where: `/${s.path}`, help: s.help }));
 }
 
+/** Where the browser keeps the providers whose notice the operator accepted (§10): a JSON list of provider ids. */
+export const ACKNOWLEDGED_KEY = 'admin.assistant.acknowledged';
+
+/** The provider that sends nothing out of the console, so it needs no notice: `AssistantOptions.Fake` on the host. */
+const LOCAL_PROVIDER = 'fake';
+
+function acknowledgedProviders(): string[] {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(ACKNOWLEDGED_KEY) ?? '[]');
+    return Array.isArray(stored) ? stored.filter((p): p is string => typeof p === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
 const tabStore: IdStore = {
   get: () => {
     try {
@@ -63,6 +78,22 @@ export class AssistantService {
   readonly enabled = computed(() => this.status()?.enabled === true);
   readonly panelOpen = signal(false);
   readonly state = signal<ConversationState>(EMPTY_CONVERSATION);
+
+  private readonly acknowledged = signal<string[]>(acknowledgedProviders());
+
+  /**
+   * The first message of a browser waits on a one-time notice that questions and the console data the assistant reads
+   * go to the provider (§10). A provider that sends nothing out needs none, and an unknown one is treated as sending.
+   */
+  readonly needsNotice = computed(() => {
+    const status = this.status();
+    return (
+      status?.enabled === true &&
+      status.provider !== null &&
+      status.provider !== LOCAL_PROVIDER &&
+      !this.acknowledged().includes(status.provider)
+    );
+  });
 
   constructor() {
     this.tools.register({
@@ -123,7 +154,22 @@ export class AssistantService {
     if (this.enabled()) this.panelOpen.set(true);
   }
 
-  send(text: string): Promise<void> {
+  /** The operator accepted that this provider is sent their questions; kept for the browser, per provider. */
+  acknowledge(): void {
+    const provider = this.status()?.provider;
+    if (!provider || this.acknowledged().includes(provider)) return;
+    const accepted = [...this.acknowledged(), provider];
+    this.acknowledged.set(accepted);
+    try {
+      localStorage.setItem(ACKNOWLEDGED_KEY, JSON.stringify(accepted));
+    } catch {
+      // A browser that cannot store asks again at the next load.
+    }
+  }
+
+  async send(text: string): Promise<void> {
+    // The panel does not offer Send before the notice is accepted; this is the guard behind it.
+    if (this.needsNotice()) return;
     this.askedFrom.set(this.router.url);
     return this.conversation.send(text, this.context(), this.locale);
   }
