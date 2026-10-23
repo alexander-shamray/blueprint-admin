@@ -21,6 +21,7 @@ import { MermaidDiagram } from './mermaid-diagram';
         aria-label="Note text"
         i18n-aria-label
         spellcheck="false"
+        [attr.maxlength]="maxLength"
         [value]="source()"
         (input)="write($any($event.target).value)"
       ></textarea>
@@ -103,6 +104,12 @@ import { MermaidDiagram } from './mermaid-diagram';
 export class NoteWidget {
   private readonly workspace = inject(WorkspaceService);
   private readonly context = injectWidgetContext();
+
+  /**
+   * Characters a note may hold. The host refuses a widget config over `WorkspaceSchema.MaxConfigBytes` (64 KiB of
+   * UTF-8) and the whole workspace travels in one PUT, so the bound is a quarter of that: four bytes a character at worst.
+   */
+  readonly maxLength = 16000;
 
   readonly config = input<Record<string, unknown>>({ source: '' });
 
