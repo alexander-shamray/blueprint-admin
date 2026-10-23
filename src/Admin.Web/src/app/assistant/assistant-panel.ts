@@ -98,7 +98,7 @@ export class AssistantPanel {
 
   async send(): Promise<void> {
     const text = this.draft().trim();
-    if (!text || this.state().running) return;
+    if (!text || this.state().running || this.assistant.needsNotice()) return;
     this.draft.set('');
     await this.assistant.send(text);
   }

@@ -57,6 +57,21 @@ describe('AssistantPanel', () => {
     expect((element.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it('keeps the draft when Enter is pressed before the notice is accepted', async () => {
+    const assistant = stub();
+    assistant.needsNotice.set(true);
+    const { fixture, element } = await render(assistant);
+    const box = element.querySelector('textarea')!;
+
+    box.value = 'where are the logs?';
+    box.dispatchEvent(new Event('input'));
+    box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await fixture.whenStable();
+
+    expect(assistant.send).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.draft()).toBe('where are the logs?');
+  });
+
   it('shows the reply as it streams, and each tool call by its label', async () => {
     const { fixture, assistant, element } = await render();
 
