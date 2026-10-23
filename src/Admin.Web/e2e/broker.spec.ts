@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test';
 // row already in the BFF's inbox, and the rebuild stops the BFF, replays the 24 events, starts it, and sees the queue empty.
 test('the projection panel states its limits, then runs a repair and a confirmed rebuild', async ({ page }) => {
   await page.goto('/broker');
-  const panel = page.getByRole('region', { name: 'BFF order projection' });
+  const panel = page.getByRole('article', { name: 'BFF projection' });
 
   await expect(panel.locator('ul.limits li')).toHaveCount(4);
   await expect(panel.locator('ul.limits')).toContainText('A replay reaches back one outbox window and no further');
@@ -37,7 +37,7 @@ test('an error queue opens into its message, dry-runs a replay, then replays it 
   await page.goto('/broker');
   await page.getByRole('button', { name: 'Open the messages on ordering-catalog-events_error' }).click();
 
-  const panel = page.getByRole('region', { name: 'Dead letters on ordering-catalog-events_error' });
+  const panel = page.getByRole('article', { name: 'Dead-letter workbench' });
   const message = panel.locator('article.dead-letter');
   await expect(message).toHaveCount(1);
   await expect(message).toContainText('System.InvalidOperationException: Product 0199a3f0-4b1c-7d2e-9f10-2a3b4c5d6e7f has no row in the price projection');
@@ -93,10 +93,37 @@ test('the broker screen lists queues, exchanges, bindings and permissions', asyn
   );
   await expect(page.locator('table.permissions tbody tr')).toHaveCount(9);
 
-  await page.getByRole('button', { name: 'Refresh' }).click();
+  await page.getByRole('article', { name: 'Queues' }).getByRole('button', { name: 'Refresh' }).click();
   await expect(page.locator('table.queues tbody tr')).toHaveCount(20);
 
+  // Auto-refresh is each widget's own, off until switched on in its settings: here the Permissions widget's.
   const reread = page.waitForRequest('**/api/broker/permissions');
-  await page.getByLabel('Refresh every 5 s').check();
+  await page.getByRole('button', { name: 'Edit layout' }).click();
+  await page.getByRole('button', { name: 'Configure Permissions' }).click();
+  await page.getByRole('menuitem', { name: 'Edit settings…' }).click();
+  const settings = page.getByRole('form', { name: 'Settings of Permissions' });
+  await settings.getByLabel('Refresh every 5 s').check();
+  await settings.getByRole('button', { name: 'Apply' }).click();
   await reread;
+});
+
+// §4.2: nothing that unlocks a real run outlives the widget. A dry run armed the real run, and leaving the page and coming
+// back finds the workbench closed, the gate empty, and the typed confirmation gone.
+test('a page left and returned to finds the dead-letter gates empty', async ({ page }) => {
+  await page.goto('/broker');
+  await page.getByRole('button', { name: 'Open the messages on ordering-catalog-events_error' }).click();
+  const panel = page.getByRole('article', { name: 'Dead-letter workbench' });
+  await panel.getByRole('button', { name: 'Dry-run replay' }).click();
+  await panel.getByLabel('Type --execute to replay for real').fill('--execute');
+  await expect(panel.getByRole('button', { name: 'Replay for real' })).toBeEnabled();
+
+  // The shell's link, not page.goto: a reload would empty everything and prove nothing.
+  await page.getByRole('link', { name: 'Stack' }).click();
+  await expect(page).toHaveURL(/\/stack$/);
+  await page.getByRole('link', { name: 'Broker' }).click();
+  await expect(page).toHaveURL(/\/broker$/);
+
+  await expect(panel.locator('article.dead-letter')).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: 'Replay for real' })).toHaveCount(0);
+  await expect(panel.getByLabel('Type --execute to replay for real')).toHaveCount(0);
 });
