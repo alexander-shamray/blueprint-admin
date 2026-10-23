@@ -80,18 +80,6 @@ export class BrokerFeed {
   }
 }
 
-/**
- * What a listing widget does with its feed: one read when it appears, then a poll only while its own `autoRefresh`
- * is on (§4.3). Call it from the widget's constructor.
- */
-export function listFeed(feed: Pick<PolledFeed<unknown>, 'attach' | 'refresh'>, autoRefresh: () => boolean): void {
-  const destroyRef = inject(DestroyRef);
-  untracked(() => feed.refresh());
-  effect((onCleanup) => {
-    if (autoRefresh()) onCleanup(feed.attach(destroyRef));
-  });
-}
-
 /** Prefers a problem-detail body's `detail`/`title`, else the HttpErrorResponse's own `message`. */
 export function describeError(e: unknown): string {
   const err = e as { error?: { detail?: string; title?: string }; message?: string } | null;

@@ -1,5 +1,6 @@
 import { Component, computed, inject, input } from '@angular/core';
-import { BrokerFeed, exchangeName, filterOf, listFeed } from '../broker-feed';
+import { pollWhenOn } from '../../../workspace/polled-feed';
+import { BrokerFeed, exchangeName, filterOf } from '../broker-feed';
 
 /** Bindings (widget-workspace spec §5.2). Config: a filter on any column, and the widget's own opt-in auto-refresh. */
 @Component({
@@ -56,6 +57,6 @@ export class BindingsWidget {
   });
 
   constructor() {
-    listFeed(this.feed.bindings, this.autoRefresh);
+    pollWhenOn(this.feed.bindings, this.autoRefresh);
   }
 }

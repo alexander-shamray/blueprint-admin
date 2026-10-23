@@ -1,5 +1,5 @@
 import { DOCUMENT } from '@angular/common';
-import { DestroyRef, Injectable, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, effect, inject, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   BehaviorSubject,
@@ -115,4 +115,16 @@ export class PolledFeed<T> {
     destroyRef.onDestroy(release);
     return release;
   }
+}
+
+/**
+ * What a widget with an opt-in auto-refresh does with its feed: one read when it appears, then a poll only while its
+ * own `autoRefresh` setting is on (§4.3). Call it from the widget's constructor.
+ */
+export function pollWhenOn(feed: Pick<PolledFeed<unknown>, 'attach' | 'refresh'>, autoRefresh: () => boolean): void {
+  const destroyRef = inject(DestroyRef);
+  untracked(() => feed.refresh());
+  effect((onCleanup) => {
+    if (autoRefresh()) onCleanup(feed.attach(destroyRef));
+  });
 }
