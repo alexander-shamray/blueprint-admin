@@ -52,13 +52,15 @@ jobs:
           fetch-depth: 0
 
       # Dependabot's own pull requests declare no class or touch set and carry
-      # no PR trailer, so the gate stands down for one whose every commit
-      # Dependabot authored, and runs for a commit anyone else adds to its
-      # branch: docs/change-locality.md section 6. Keyed on the commits, not on
-      # who opened the pull request or triggered the run. The author alone let
-      # a human's push ride the exemption (#400), and the actor is the owner
-      # when the owner rebases a Dependabot branch onto main, which keeps
-      # Dependabot as the author. commit-gate.yml makes the same decision.
+      # no PR trailer, so the gate stands down for one that Dependabot opened
+      # and whose every commit Dependabot made, and runs for any commit made
+      # elsewhere: docs/change-locality.md section 6. The commits decide, by
+      # author and committer together. Who opened the pull request does not
+      # say who pushed to it. Neither does the run's actor, which is the
+      # human who rebased a Dependabot branch. And a local amend or rebase
+      # keeps Dependabot as the author, but makes the human the committer
+      # where Dependabot's own commits and rebases have GitHub's.
+      # commit-gate.yml makes the same decision.
       - name: Decide whether this is Dependabot's own pull request
         id: dependabot
         shell: bash
@@ -66,13 +68,13 @@ jobs:
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          DEPENDABOT: 49699333+dependabot[bot]@users.noreply.github.com
+          DEPENDABOT: 49699333+dependabot[bot]@users.noreply.github.com noreply@github.com
         run: |
           set -euo pipefail
           own=false
           if [ "$PR_AUTHOR" = 'dependabot[bot]' ]; then
-            authors=$(git log --format=%ae "$BASE_SHA..$HEAD_SHA")
-            if [ -n "$authors" ] && ! grep -qvxF "$DEPENDABOT" <<<"$authors"; then
+            makers=$(git log --format='%ae %ce' "$BASE_SHA..$HEAD_SHA")
+            if [ -n "$makers" ] && ! grep -qvxF "$DEPENDABOT" <<<"$makers"; then
               own=true
             fi
           fi
