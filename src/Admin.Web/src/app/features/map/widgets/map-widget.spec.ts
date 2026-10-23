@@ -86,6 +86,20 @@ describe('MapWidget', () => {
     expect((fixture.nativeElement.querySelector('table.queues td.rate') as HTMLElement).textContent).toBe('+2.0/s');
   });
 
+  it('gives no rate against a read from long ago, such as one made before the page was left', () => {
+    vi.setSystemTime(new Date('2026-10-20T10:00:00Z'));
+    const fixture = render();
+    const feed = TestBed.inject(MapFeed);
+
+    vi.setSystemTime(new Date('2026-10-20T10:10:00Z'));
+    host.platformMap.mockReturnValue(
+      of({ ...view, services: view.services.map((s) => (s.name === 'ordering' ? { ...s, queues: s.queues.map((q) => ({ ...q, messages: 60 })) } : s)) }),
+    );
+    (fixture.nativeElement.querySelector('button.refresh') as HTMLButtonElement).click();
+
+    expect(feed.rateOf('ordering-catalog-events')).toBe('—');
+  });
+
   it('reads once when it appears and polls nothing while its auto-refresh is off', async () => {
     render();
     expect(host.platformMap).toHaveBeenCalledTimes(1);

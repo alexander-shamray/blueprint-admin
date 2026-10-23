@@ -7,6 +7,9 @@ import { PolledFeed, TabVisibility } from '../../workspace/polled-feed';
 /** Each read is a `docker compose exec` the host does not keep among its jobs (spec §5.2), so a tick costs two short processes. */
 export const AUTO_REFRESH_MS = 5000;
 
+/** A previous read older than this is not a baseline for a rate. */
+const STALE_AFTER_MS = 3 * AUTO_REFRESH_MS;
+
 /**
  * The Platform map widget's data (widget-workspace spec §4.2, §4.3): the host's join of its own tables with the broker's
  * answer, in a `PolledFeed` that polls only while a widget with auto-refresh on is showing (off by default). The rate a
@@ -40,13 +43,16 @@ export class MapFeed {
     const now = Date.now();
     const depths = new Map<string, number>();
     const rates = new Map<string, number>();
+    // A read that is old by several poll periods (the page was left and returned to) is no baseline: a rate averaged
+    // over minutes would read as the change between two adjacent reads.
+    const previous = this.previous && now - this.previous.at <= STALE_AFTER_MS ? this.previous : null;
     for (const service of view.services) {
       for (const queue of service.queues) {
         if (queue.messages === null) continue;
         depths.set(queue.name, queue.messages);
-        const before = this.previous?.depths.get(queue.name);
-        if (this.previous && before !== undefined && now > this.previous.at) {
-          rates.set(queue.name, (queue.messages - before) / ((now - this.previous.at) / 1000));
+        const before = previous?.depths.get(queue.name);
+        if (previous && before !== undefined && now > previous.at) {
+          rates.set(queue.name, (queue.messages - before) / ((now - previous.at) / 1000));
         }
       }
     }
