@@ -72,8 +72,12 @@
   }
   <!-- Work that goes on while no page shows it (spec §4.3): each item links to the page that does. -->
   <span class="running-work" aria-live="polite">
-    @for (item of runningWork.items(); track item.link) {
-      <a class="running-item" [routerLink]="item.link">{{ item.text }}</a>
+    @for (item of runningWork.items(); track item.text + item.link) {
+      @if (item.open) {
+        <button type="button" class="running-item" (click)="item.open()">{{ item.text }}</button>
+      } @else {
+        <a class="running-item" [routerLink]="item.link">{{ item.text }}</a>
+      }
     }
   </span>
   @if (config(); as c) {
@@ -101,6 +105,11 @@
       <p class="menu-note" i18n>
         The layout has a change the host does not hold yet. Switching language reloads the page, so let it save first,
         or settle the notice under the bar.
+      </p>
+    }
+    @if (assistant.state().running) {
+      <p class="menu-note" i18n>
+        The assistant is still answering. Switching language reloads the page; the conversation and its answer go on.
       </p>
     }
     @for (l of languages.choices; track l.id) {

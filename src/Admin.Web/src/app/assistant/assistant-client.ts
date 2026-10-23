@@ -318,7 +318,8 @@ export class AssistantConversation {
     const id = this.state.id;
     const sent = this.sends;
     const view = id ? await this.client.read(id).catch(() => null) : null;
-    if (sent !== this.sends) return;
+    // A send, a new conversation or a start-over since the read began makes its answer someone else's.
+    if (sent !== this.sends || id !== this.state.id) return;
     if (view) {
       this.update({ ...this.state, items: view.items, running: view.running, lastEventId: view.lastEventId });
       this.settleStream();

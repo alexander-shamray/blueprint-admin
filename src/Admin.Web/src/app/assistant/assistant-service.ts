@@ -45,6 +45,8 @@ export class AssistantService {
   private readonly router = inject(Router);
   private readonly locale = inject(LOCALE_ID);
   private readonly workspace = inject(WorkspaceService);
+  private readonly document = inject(DOCUMENT);
+  private readonly runningWork = inject(RunningWork);
   private readonly client = new AssistantClient();
   private readonly tools = new ClientToolRegistry();
   private readonly conversation: AssistantConversation;
@@ -76,12 +78,14 @@ export class AssistantService {
     );
     // Shown means the panel is open in a tab the operator can see (widget-workspace spec §4.3): a hidden tab holds no
     // stream for an idle conversation, though a running turn keeps its own.
-    const document = inject(DOCUMENT);
-    const tabVisible = signal(document.visibilityState !== 'hidden');
-    document.addEventListener('visibilitychange', () => tabVisible.set(document.visibilityState !== 'hidden'));
+    const tabVisible = signal(this.document.visibilityState !== 'hidden');
+    this.document.addEventListener('visibilitychange', () => tabVisible.set(this.document.visibilityState !== 'hidden'));
     effect(() => this.conversation.setVisible(this.panelOpen() && tabVisible()));
-    inject(RunningWork).report('assistant', () =>
-      this.state().running ? { text: $localize`The assistant is answering`, link: this.askedFrom() } : null,
+    // What shows a turn is the panel, not a page, so the item opens it; the link is where the question was asked.
+    this.runningWork.report('assistant', () =>
+      this.state().running
+        ? { text: $localize`The assistant is answering`, link: this.askedFrom(), open: () => this.open() }
+        : null,
     );
   }
 
