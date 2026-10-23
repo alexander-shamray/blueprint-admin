@@ -192,6 +192,18 @@ describe('TraceWidget', () => {
     });
   });
 
+  it('keeps the window the operator chose for the tab, over the configured one, when it is re-created', () => {
+    configure([{ provide: WIDGET_CONTEXT, useValue: { instanceId: 'w1', pageId: 'p1' } }]);
+    const first = render({ window: '1h' });
+    expect(first.componentInstance.shownWindow()).toBe('1h');
+    first.componentInstance.window.set('24h');
+    first.destroy();
+
+    const again = render({ window: '1h' });
+
+    expect(again.componentInstance.shownWindow()).toBe('24h');
+  });
+
   it('takes the id from the built-in Trace route over any configured one', () => {
     configure([], { correlationId: 'from-route' });
     render({ correlationId: 'configured' });

@@ -225,16 +225,37 @@ describe('the API request and API history widgets', () => {
     });
 
     it('does not replay a restore into a request widget that appears afterwards', () => {
+      const restore = vi.spyOn(ApiRequestWidget.prototype, 'restore');
       const first = request();
       first.componentInstance.chooseIdentity('anonymous');
       first.componentInstance.send();
       const fixture = history();
       (fixture.nativeElement.querySelector('li button') as HTMLButtonElement).click();
+      first.detectChanges();
+      first.destroy();
+      expect(restore).toHaveBeenCalledTimes(1);
+
+      request();
+
+      expect(restore).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the editor and the last answer for the tab (session state), and takes the configured operation as no reason to replace them', () => {
+      const first = request({ operation: 'catalog:GetProducts' });
+      first.componentInstance.select(catalog.operations[1], false);
+      first.componentInstance.headersText.set('Accept-Language: en');
+      first.componentInstance.correlationId.set('mine');
+      first.componentInstance.chooseIdentity('anonymous');
+      first.componentInstance.send();
       first.destroy();
 
-      const later = request();
+      const again = request({ operation: 'catalog:GetProducts' });
 
-      expect(later.componentInstance.result()).toBeNull();
+      expect(again.componentInstance.selectedId()).toBe('catalog:PublishProduct');
+      expect(again.componentInstance.method()).toBe('POST');
+      expect(again.componentInstance.headersText()).toBe('Accept-Language: en');
+      expect(again.componentInstance.correlationId()).toBe('mine');
+      expect(again.componentInstance.result()).not.toBeNull();
     });
 
     it('counts the request widgets showing, so a restore is offered only while there is one', () => {

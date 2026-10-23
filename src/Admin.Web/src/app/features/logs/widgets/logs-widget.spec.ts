@@ -3,6 +3,7 @@ import { Subject, of } from 'rxjs';
 import { HostClient } from '../../../core/host/host-client';
 import { JobSummary } from '../../../core/host/host-types';
 import { JobEvent, SseClient } from '../../../core/host/sse-client';
+import { WIDGET_CONTEXT } from '../../../workspace/widget-context';
 import { LogFollowService } from '../log-follow';
 import { LogsWidget } from './logs-widget';
 
@@ -117,6 +118,19 @@ describe('LogsWidget', () => {
     expect(host.stopFollow).not.toHaveBeenCalled();
     expect(service.following()).toBe(true);
     expect(service.services()).toEqual([]);
+  });
+
+  it('keeps the text filter and the correlation id typed, for the tab, when it is re-created (session state, §4.2)', () => {
+    TestBed.configureTestingModule({ providers: [{ provide: WIDGET_CONTEXT, useValue: { instanceId: 'logs', pageId: 'p' } }] });
+    const first = render([]);
+    first.componentInstance.filter.set('proxying');
+    first.componentInstance.correlationId.set('fake-corr-0001');
+    first.destroy();
+
+    const again = render([]);
+
+    expect(again.componentInstance.filter()).toBe('proxying');
+    expect(again.componentInstance.correlationId()).toBe('fake-corr-0001');
   });
 
   it('a second widget created later keeps showing lines already received', () => {

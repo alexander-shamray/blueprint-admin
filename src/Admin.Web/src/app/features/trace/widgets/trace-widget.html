@@ -9,7 +9,7 @@
     />
     <label>
       Window
-      <select name="window" aria-label="Window" [ngModel]="window()" (ngModelChange)="window.set($event)">
+      <select name="window" aria-label="Window" [ngModel]="shownWindow()" (ngModelChange)="window.set($event)">
         @for (w of windows; track w) {
           <option [value]="w">{{ w }}</option>
         }

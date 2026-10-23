@@ -59,7 +59,9 @@ export class TraceWidget {
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly correlationId = signal('');
-  readonly window = signal<string>(WINDOWS[0]);
+  /** The window the operator chose, or '' while they have not: session state (§4.2), over the configured one. */
+  readonly window = widgetSession('window', '');
+  readonly shownWindow = computed(() => this.window() || this.configuredWindow());
 
   /** The id last traced, kept for the tab so a re-created widget reads it again. */
   private readonly traced = widgetSession('traced', '');
@@ -105,7 +107,7 @@ export class TraceWidget {
               this.setDiff(null);
             }
 
-            return this.host.trace(id, this.window());
+            return this.host.trace(id, this.shownWindow());
           }).pipe(
             catchError((e: unknown) => {
               this.error.set(this.describeError(e));
@@ -135,9 +137,6 @@ export class TraceWidget {
         this.setDiff(previous ? diffTimelines(previous, current) : null);
         this.view.set(view);
       });
-
-    // The window the widget starts with, and again whenever its configured one changes.
-    effect(() => this.window.set(this.configuredWindow()));
 
     const fromRoute = this.route?.snapshot.paramMap.get('correlationId') ?? '';
     // Where there is no route id, the widget starts at the id it last traced, else the one it is configured with.
