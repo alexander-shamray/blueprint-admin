@@ -23,7 +23,7 @@ interface GridItem extends GridsterItemConfig {
  * The page's grid (widget-workspace spec §7.3): every widget in a cell grid of GRID_COLUMNS columns, locked unless
  * `editing`. The one place `angular-gridster2` is named, so the library can be swapped for Gridstack.js behind it.
  * A move or a resize is reported once, when it ends, as the page's whole layout. A widget's header carries its
- * configure control (editing only; it offers the type's presets, spec §7.2) and maximise, which shows that one widget
+ * configure control (editing only; it offers the type's presets and a form for its `fields`, spec §7.2) and maximise, which shows that one widget
  * across the whole page until it is restored; the others are not rendered meanwhile, and keep what they held in the
  * session store (§4.2).
  */
@@ -161,8 +161,9 @@ export class WorkspaceGrid {
   }
 
   /**
-   * Only a type with a choice to make has anything to configure: one preset is the config it already has. A type
-   * whose presets are starting points (a note) is not offered them again, since a choice would replace its text.
+   * Only a type with a choice to make, or a setting to write (`fields`), has anything to configure: one preset is the
+   * config it already has. A type whose presets are starting points (a note) is not offered them again, since a choice
+   * would replace its text.
    */
   canConfigure(item: GridItem): boolean {
     return item.kind?.configurable !== false && ((item.kind?.presets.length ?? 0) > 1 || this.hasFields(item));
