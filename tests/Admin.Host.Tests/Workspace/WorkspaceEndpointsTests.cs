@@ -18,7 +18,7 @@ public sealed class WorkspaceEndpointsTests : IClassFixture<AdminHostFactory>
 
     private static JsonObject Doc(string widgetId, string type = "note", JsonObject? config = null) => new()
     {
-        ["version"] = 1,
+        ["version"] = WorkspaceSchema.Current,
         ["activePageId"] = "mine",
         ["pages"] = new JsonArray(new JsonObject
         {
@@ -66,7 +66,7 @@ public sealed class WorkspaceEndpointsTests : IClassFixture<AdminHostFactory>
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         response.Content.Headers.ContentType!.MediaType.ShouldBe("application/json");
         response.Headers.ETag.ShouldNotBeNull();
-        JsonNode.Parse(await response.Content.ReadAsStringAsync(Ct))!["version"]!.GetValue<int>().ShouldBe(1);
+        JsonNode.Parse(await response.Content.ReadAsStringAsync(Ct))!["version"]!.GetValue<int>().ShouldBe(WorkspaceSchema.Current);
     }
 
     [Fact]

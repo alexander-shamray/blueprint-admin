@@ -17,7 +17,7 @@ public sealed partial class WorkspaceStoreTests : IDisposable
 
     private static JsonObject Valid(string widgetId = "w1", string type = "note", JsonObject? config = null) => new()
     {
-        ["version"] = 1,
+        ["version"] = WorkspaceSchema.Current,
         ["activePageId"] = "p1",
         ["pages"] = new JsonArray(new JsonObject
         {
@@ -44,10 +44,10 @@ public sealed partial class WorkspaceStoreTests : IDisposable
         WorkspaceSnapshot snapshot = Store().Read();
 
         JsonNode doc = JsonNode.Parse(snapshot.Json)!;
-        doc["version"]!.GetValue<int>().ShouldBe(1);
+        doc["version"]!.GetValue<int>().ShouldBe(WorkspaceSchema.Current);
         doc["pages"]!.AsArray().Count.ShouldBe(11);
         doc["pages"]!.AsArray().ShouldAllBe(page => page!["widgets"] == null && page["builtIn"] != null);
-        WorkspaceSchema.Validate(doc, 1).ShouldBeNull();
+        WorkspaceSchema.Validate(doc, WorkspaceSchema.Current).ShouldBeNull();
         snapshot.KeptAside.ShouldBeNull();
         File.Exists(Path.Combine(directory, "workspace.json")).ShouldBeFalse();
     }
@@ -164,7 +164,7 @@ public sealed partial class WorkspaceStoreTests : IDisposable
     [InlineData("not json {")]
     [InlineData("[]")]
     [InlineData("{\"version\":1}")]
-    [InlineData("{\"version\":2,\"activePageId\":null,\"pages\":[]}")]
+    [InlineData("{\"version\":3,\"activePageId\":null,\"pages\":[]}")]
     public void A_file_this_console_cannot_use_reads_as_the_default_and_is_kept_aside(string content)
     {
         File.WriteAllText(Path.Combine(directory, "workspace.json"), content);
@@ -206,7 +206,9 @@ public sealed partial class WorkspaceStoreTests : IDisposable
     [Fact]
     public void An_older_document_is_stepped_up_by_each_migration_on_read()
     {
-        File.WriteAllText(Path.Combine(directory, "workspace.json"), Valid().ToJsonString());
+        JsonObject first = Valid();
+        first["version"] = 1;
+        File.WriteAllText(Path.Combine(directory, "workspace.json"), first.ToJsonString());
         List<Func<JsonObject, JsonObject>> steps =
         [
             doc => { doc["migratedBy"] = "one"; return doc; },
@@ -225,7 +227,7 @@ public sealed partial class WorkspaceStoreTests : IDisposable
     public void A_newer_document_than_this_console_knows_is_kept_aside_not_rewritten()
     {
         JsonObject newer = Valid();
-        newer["version"] = 2;
+        newer["version"] = WorkspaceSchema.Current + 1;
         File.WriteAllText(Path.Combine(directory, "workspace.json"), newer.ToJsonString());
 
         WorkspaceSnapshot snapshot = Store().Read();
@@ -235,27 +237,45 @@ public sealed partial class WorkspaceStoreTests : IDisposable
     }
 
     [Fact]
-    public void The_current_schema_has_no_migrations_yet()
+    public void Each_schema_after_the_first_has_its_migration()
     {
-        WorkspaceSchema.Current.ShouldBe(1);
+        WorkspaceSchema.Current.ShouldBe(2);
         WorkspaceMigrations.All.Count.ShouldBe(WorkspaceSchema.Current - 1);
+    }
+
+    [Fact]
+    public void A_phase_1_document_reads_as_version_2_with_its_legacy_screen_widgets_left_for_the_spa()
+    {
+        // Phase 6 (§5.3): the host knows no widget types, so the step to 2 keeps every page and widget as it was, and
+        // the SPA, which owns each screen's defaults, replaces the `legacy` instance it reads.
+        JsonObject phase1 = Valid(widgetId: "old", type: "legacy", config: new JsonObject { ["screen"] = "mail" });
+        phase1["version"] = 1;
+        File.WriteAllText(Path.Combine(directory, "workspace.json"), phase1.ToJsonString());
+
+        WorkspaceSnapshot snapshot = Store().Read();
+
+        JsonNode read = JsonNode.Parse(snapshot.Json)!;
+        snapshot.KeptAside.ShouldBeNull();
+        read["version"]!.GetValue<int>().ShouldBe(2);
+        read["pages"]!.ToJsonString().ShouldBe(phase1["pages"]!.ToJsonString());
+        WorkspaceSchema.Validate(read, WorkspaceSchema.Current).ShouldBeNull();
     }
 
     [Fact]
     public void A_valid_document_has_no_problem()
     {
-        WorkspaceSchema.Validate(Valid(), 1).ShouldBeNull();
+        WorkspaceSchema.Validate(Valid(), WorkspaceSchema.Current).ShouldBeNull();
     }
 
     [Theory]
-    [InlineData("version", 2)]
+    [InlineData("version", 3)]
     [InlineData("version", "1")]
     public void A_wrong_version_is_refused(string key, object value)
     {
         JsonObject doc = Valid();
         doc[key] = JsonValue.Create(value);
 
-        WorkspaceSchema.Validate(doc, 1).ShouldNotBeNull();
+        WorkspaceSchema.Validate(doc, WorkspaceSchema.Current).ShouldNotBeNull();
     }
 
     [Fact]
@@ -265,7 +285,7 @@ public sealed partial class WorkspaceStoreTests : IDisposable
         JsonArray pages = doc["pages"]!.AsArray();
         pages.Add(JsonNode.Parse(pages[0]!.ToJsonString())!.AsObject().Also(p => p["widgets"] = null));
 
-        WorkspaceSchema.Validate(doc, 1)!.ShouldContain("used by another page");
+        WorkspaceSchema.Validate(doc, WorkspaceSchema.Current)!.ShouldContain("used by another page");
     }
 
     [Fact]
@@ -277,7 +297,7 @@ public sealed partial class WorkspaceStoreTests : IDisposable
         second["id"] = "p2";
         pages.Add(second);
 
-        WorkspaceSchema.Validate(doc, 1)!.ShouldContain("used by another widget");
+        WorkspaceSchema.Validate(doc, WorkspaceSchema.Current)!.ShouldContain("used by another widget");
     }
 
     [Theory]
@@ -292,7 +312,7 @@ public sealed partial class WorkspaceStoreTests : IDisposable
         JsonObject doc = Valid();
         doc["pages"]![0]!["widgets"]![0]![cell] = value;
 
-        WorkspaceSchema.Validate(doc, 1).ShouldNotBeNull();
+        WorkspaceSchema.Validate(doc, WorkspaceSchema.Current).ShouldNotBeNull();
     }
 
     [Fact]
@@ -301,7 +321,7 @@ public sealed partial class WorkspaceStoreTests : IDisposable
         JsonObject doc = Valid();
         doc["pages"]![0]!["widgets"]![0]!["x"] = 20;
 
-        WorkspaceSchema.Validate(doc, 1).ShouldNotBeNull();
+        WorkspaceSchema.Validate(doc, WorkspaceSchema.Current).ShouldNotBeNull();
     }
 
     [Fact]
@@ -310,7 +330,7 @@ public sealed partial class WorkspaceStoreTests : IDisposable
         JsonObject doc = Valid();
         doc["pages"]![0]!["widgets"]![0]!["x"] = 18;
 
-        WorkspaceSchema.Validate(doc, 1).ShouldBeNull();
+        WorkspaceSchema.Validate(doc, WorkspaceSchema.Current).ShouldBeNull();
     }
 
     [Theory]
@@ -322,7 +342,7 @@ public sealed partial class WorkspaceStoreTests : IDisposable
         doc["pages"]![0]!["widgets"]![0]!["x"] = x;
         doc["pages"]![0]!["widgets"]![0]!["cols"] = cols;
 
-        WorkspaceSchema.Validate(doc, 1).ShouldNotBeNull();
+        WorkspaceSchema.Validate(doc, WorkspaceSchema.Current).ShouldNotBeNull();
     }
 
     [Fact]
@@ -347,7 +367,7 @@ public sealed partial class WorkspaceStoreTests : IDisposable
         JsonObject doc = Valid();
         doc["pages"]![0]!["widgets"]![0]![cell] = JsonValue.Create(value);
 
-        WorkspaceSchema.Validate(doc, 1).ShouldNotBeNull();
+        WorkspaceSchema.Validate(doc, WorkspaceSchema.Current).ShouldNotBeNull();
     }
 
     [Theory]
@@ -360,14 +380,14 @@ public sealed partial class WorkspaceStoreTests : IDisposable
         JsonObject top = Valid(config: new JsonObject { [key] = "x" });
         JsonObject nested = Valid(config: new JsonObject { ["a"] = new JsonArray(new JsonObject { [key] = "x" }) });
 
-        WorkspaceSchema.Validate(top, 1)!.ShouldContain("named like a secret");
-        WorkspaceSchema.Validate(nested, 1)!.ShouldContain("named like a secret");
+        WorkspaceSchema.Validate(top, WorkspaceSchema.Current)!.ShouldContain("named like a secret");
+        WorkspaceSchema.Validate(nested, WorkspaceSchema.Current)!.ShouldContain("named like a secret");
     }
 
     [Fact]
     public void A_secret_word_in_a_value_is_not_a_secret_key()
     {
-        WorkspaceSchema.Validate(Valid(config: new JsonObject { ["text"] = "the password is in the vault" }), 1).ShouldBeNull();
+        WorkspaceSchema.Validate(Valid(config: new JsonObject { ["text"] = "the password is in the vault" }), WorkspaceSchema.Current).ShouldBeNull();
     }
 
     [Fact]
@@ -375,7 +395,7 @@ public sealed partial class WorkspaceStoreTests : IDisposable
     {
         JsonObject big = Valid(config: new JsonObject { ["text"] = new string('x', WorkspaceSchema.MaxConfigBytes) });
 
-        WorkspaceSchema.Validate(big, 1)!.ShouldContain("config is larger");
+        WorkspaceSchema.Validate(big, WorkspaceSchema.Current)!.ShouldContain("config is larger");
     }
 
     [Fact]

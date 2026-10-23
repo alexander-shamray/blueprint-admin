@@ -11,7 +11,7 @@ namespace Admin.Host.Workspace;
 public static class WorkspaceSchema
 {
     /// <summary>The schema this console writes. A change bumps it and adds a step to <see cref="WorkspaceMigrations.All"/>.</summary>
-    public const int Current = 1;
+    public const int Current = 2;
 
     /// <summary>The grid's width in cells (spec §4.1).</summary>
     public const int GridColumns = 24;
