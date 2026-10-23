@@ -707,8 +707,32 @@ later phase move one screen at a time without a page ever missing.
     mail, logs lines past the shared buffer, the doctor, the trace timeline.
 - The visual design within Material 3: palette, density, spacing.
 - Whether a widget's refresh button and a page-wide refresh both exist.
-- The exact Mermaid mapping of each `TraceView` event kind in §8.2, within
-  the rule that nothing is drawn that the timeline does not hold.
+- ~~The exact Mermaid mapping of each `TraceView` event kind in §8.2.~~
+  Settled in phase 5b (#393), the Request sequence widget (`sequence`, in
+  `workspace/widgets/sequence`; `sequenceOf` owns the mapping):
+  - `HttpIn` is an arrow from a `Caller` participant, which is all the
+    timeline says about who called; `Span` is an arrow of the service to
+    itself; `Publish` is an arrow to the broker and `Consume` one from it;
+    `Saga` and `Outbox` are notes over the service; `Queued` is a note over
+    the broker; `Error` is a note beginning "failed:" on a shaded band, so
+    the state is in words and not only colour; `Log` is not a hop and is
+    not drawn. The span's duration is in the arrow's words because the
+    timeline's summary already carries it. A timeline of logs and the
+    broker's closing line draws nothing and says so;
+  - the timeline holds no parent span, so no arrow is drawn from one service
+    to another that the events do not state: a service-to-service call is
+    its inbound request on the callee and its span on the caller, as they
+    stand in time order;
+  - participants are declared in order of first appearance with ids of their
+    own and a label cut to 90 characters with `;`, `#`, `%%` and newlines
+    removed, so a service name or summary cannot add a line to the source;
+  - Mermaid's sequence diagram links a participant and not an arrow, so the
+    arrows are numbered (`autonumber`) and the numbered list under the
+    diagram carries each arrow's Explore link;
+  - it reads the Trace widget's endpoint and records into `TraceHistory`,
+    so a refetch says how many events arrived or went; it is drawn on Draw,
+    Reload, a configured id or a followed link, and never polled. No
+    built-in page carries it: it is added from the picker.
 - ~~Whether Material Symbols ships as a font or as SVGs (§7.1).~~ Settled in
   phase 1a (#381): the npm-bundled `@fontsource/material-symbols-outlined`
   (the Latin 400 face, a 324 kB woff2 the browser fetches from the host once),

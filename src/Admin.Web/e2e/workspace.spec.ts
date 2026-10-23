@@ -371,6 +371,37 @@ test('a note is added from a preset, draws its diagram, and is written in place 
   await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
 });
 
+// §8.2 against the fake Grafana's recording of demo-trace-0001: two inbound requests, the dispatcher's send and two
+// consumes across the broker are arrows, and every arrow is listed with its own Explore link.
+test('a request sequence widget draws the trace of a correlation id as a sequence diagram', async ({ page }) => {
+  await page.goto('/stack');
+  await page.getByRole('button', { name: 'New page' }).click();
+  await expect(page).toHaveURL(/\/page\/page-/);
+  const made = page.url();
+
+  await page.getByRole('button', { name: 'Add widget' }).click();
+  await page.getByRole('menuitem', { name: 'Request sequence' }).click();
+  await page.getByRole('menuitem', { name: 'Request sequence' }).last().click();
+  await expect(page.locator('.cdk-overlay-backdrop')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Done' }).click();
+
+  await page.getByLabel('Correlation id').fill('demo-trace-0001');
+  await page.getByRole('button', { name: 'Draw', exact: true }).click();
+
+  const drawing = page.locator('gridster-item app-mermaid-diagram .drawing svg');
+  await expect(drawing).toBeVisible();
+  await expect(drawing).toContainText('Caller');
+  await expect(drawing).toContainText('Gateway.Api');
+  const arrows = page.locator('gridster-item ol.arrows li');
+  expect(await arrows.count()).toBeGreaterThanOrEqual(5);
+  await expect(arrows.first().locator('a.explore')).toHaveAttribute('href', /^http:\/\/localhost:3000\/explore\?/);
+
+  await page.getByRole('button', { name: 'Page actions' }).click();
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
+  await expect(page).not.toHaveURL(made);
+  await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
+});
+
 test('the workspace is exported as a file, and an import replaces it only after the operator says so', async ({ page }) => {
   await page.goto('/stack');
   await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });

@@ -361,6 +361,35 @@ export const TRACE: WidgetType = {
 };
 
 /**
+ * Where one request went (§8.2): a Mermaid sequence diagram of a correlation id's Trace timeline. Config as the Trace
+ * widget's: the id and window it starts with, and `follow`. It is drawn when asked and never polled.
+ */
+export const SEQUENCE: WidgetType = {
+  type: 'sequence',
+  title: 'Request sequence',
+  component: () => import('./widgets/sequence/sequence-widget').then((m) => m.SequenceWidget),
+  defaultSize: { cols: 16, rows: 24 },
+  minSize: { cols: 8, rows: 8 },
+  config: (stored) => ({
+    correlationId: typeof stored['correlationId'] === 'string' ? stored['correlationId'] : '',
+    window: ['15m', '1h', '6h', '24h'].includes(stored['window'] as string) ? stored['window'] : '15m',
+    follow: stored['follow'] === true,
+  }),
+  titleOf: (config) =>
+    typeof config['correlationId'] === 'string' && config['correlationId'] !== '' ? `Request sequence (${config['correlationId']})` : 'Request sequence',
+  presets: [
+    { label: 'Request sequence', config: { correlationId: '', window: '15m', follow: false } },
+    { label: 'Follows the last Trace link', config: { correlationId: '', window: '15m', follow: true } },
+  ],
+  fields: [
+    { key: 'correlationId', label: 'Correlation id, drawn when the widget appears or this changes', kind: 'text' },
+    { key: 'window', label: 'Window: 15m, 1h, 6h or 24h', kind: 'text' },
+    { key: 'follow', label: 'Follow the last Trace link', kind: 'flag' },
+  ],
+  dataServices: ['TraceHistory', 'TraceFollow'],
+};
+
+/**
  * The Runbooks page's widget (§5.2): the backend's runbooks with the script that causes each alert. Config: `runbook`,
  * the one it opens on. Which is open, the alert to cause and the job being shown are session state; the first press of
  * a cause and the typed name that unlocks one are never kept (§4.2).
@@ -453,6 +482,7 @@ export const WIDGETS: readonly WidgetType[] = [
   ...Object.values(BROKER_WIDGETS),
   ...Object.values(API_WIDGETS),
   TRACE,
+  SEQUENCE,
   RUNBOOKS,
   TRANSCRIPT,
   MAP,

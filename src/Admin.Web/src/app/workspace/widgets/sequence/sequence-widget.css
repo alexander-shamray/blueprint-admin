@@ -1,0 +1,10 @@
+.actions { margin-bottom: 1rem; }
+.actions form { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+.actions input { min-width: 22rem; font-family: inherit; }
+.following { color: var(--app-muted); font-size: 0.85em; }
+.summary .truncated { margin-left: 0.5rem; color: var(--app-muted); }
+.changes, .warning, .empty { color: var(--app-muted); max-width: 48rem; }
+.error { color: var(--app-error); }
+.arrows { margin: 1rem 0 0; padding-left: 1.5rem; }
+.arrows li { word-break: break-word; }
+a.explore { margin-left: 0.5rem; font-size: 0.85em; }
