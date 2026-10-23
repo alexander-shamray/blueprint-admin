@@ -56,7 +56,9 @@ export class ErasureRun {
 
   /** Reads the request every `WATCH_MS` while a widget that switched the watch on is showing. */
   readonly watchFeed = new PolledFeed<void>(
-    () => (this.canRead() ? this.fetchRequest() : EMPTY),
+    // Quiet, and not while a call of the operator's is out: a tick must not disable Raise and Reissue, clear an
+    // error being read, or read the request a second time beside the read its caller is about to make.
+    () => (this.canRead() && !this.busy() ? this.fetchRequest(true) : EMPTY),
     WATCH_MS,
     inject(TabVisibility).visible$,
     this.destroyRef,
@@ -138,8 +140,9 @@ export class ErasureRun {
     this.watch.set(on);
   }
 
-  private fetchRequest(): Observable<void> {
-    return this.send('GET', `/api/v1/privacy/erasure-requests/${this.requestId().trim()}`).pipe(
+  /** `quiet` is the watch's read: it is not a call of the operator's, so it neither counts as busy nor clears an error. */
+  private fetchRequest(quiet = false): Observable<void> {
+    return this.send('GET', `/api/v1/privacy/erasure-requests/${this.requestId().trim()}`, null, quiet).pipe(
       tap((result) => {
         const body = this.expect(result, 'Reading the request');
         if (body === null) return;
@@ -163,10 +166,12 @@ export class ErasureRun {
       .subscribe((view) => view && this.holders.set(view));
   }
 
-  private send(method: string, path: string, body: string | null = null): Observable<ProxyResult> {
+  private send(method: string, path: string, body: string | null = null, quiet = false): Observable<ProxyResult> {
     const gateway = this.config()?.urls.gateway ?? '';
-    this.inFlight.update((n) => n + 1);
-    this.error.set(null);
+    if (!quiet) {
+      this.inFlight.update((n) => n + 1);
+      this.error.set(null);
+    }
     return this.host
       .proxy({ method, url: gateway.replace(/\/+$/, '') + path, headers: body ? { 'Content-Type': 'application/json' } : {}, body, identity: PRIVACY_IDENTITY, correlationId: null })
       .pipe(
@@ -175,7 +180,9 @@ export class ErasureRun {
           this.error.set(this.describe(e));
           return EMPTY;
         }),
-        finalize(() => this.inFlight.update((n) => n - 1)),
+        finalize(() => {
+          if (!quiet) this.inFlight.update((n) => n - 1);
+        }),
       );
   }
 

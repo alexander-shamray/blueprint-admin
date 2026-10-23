@@ -3,8 +3,8 @@
   then shows each holder answering it. Erasing replaces the subject's id with its hash in every holder; there is no undo.
 </p>
 
-<section class="raise" aria-labelledby="raise-heading">
-  <h2 id="raise-heading">Raise a request</h2>
+<section class="raise" aria-label="Raise a request">
+  <h2>Raise a request</h2>
   <div class="row">
     <label>Subject id <input class="subject" [ngModel]="subject()" (ngModelChange)="subject.set($event)" placeholder="a GUID" /></label>
     <button class="new-subject" (click)="newSubject()">New subject</button>
@@ -21,8 +21,8 @@
 </section>
 
 @if (run.request(); as r) {
-  <section class="request" aria-labelledby="request-heading">
-    <h2 id="request-heading">Request <code>{{ r.requestId }}</code></h2>
+  <section class="request" aria-label="Request">
+    <h2>Request <code>{{ r.requestId }}</code></h2>
     <p class="status" role="status" [class.closed]="r.status === 'Closed'" [class.overdue]="r.status === 'Overdue'">
       [{{ r.status.toLowerCase() }}]
       @switch (r.status) {
