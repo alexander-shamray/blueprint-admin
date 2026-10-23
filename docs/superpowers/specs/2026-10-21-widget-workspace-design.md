@@ -675,6 +675,11 @@ later phase move one screen at a time without a page ever missing.
     those widgets in thin components.
 - Settled in phase 4c (#391, with #375), the Runbooks and Transcript widgets and
   session state everywhere:
+  - the Trace window the operator chose outranks the configured one for the tab,
+    until the config comes to name another; the API request editor found in
+    session state (an operation, a URL, a body or an answer) is not replaced by
+    the configured operation, and its typed headers are kept in the tab's memory
+    as typed;
   - every built-in page is now built from widgets of its own, so the legacy
     screen widget is used only by an operator's page that still holds one;
     the legacy screens are thin components over the widgets until phase 6;

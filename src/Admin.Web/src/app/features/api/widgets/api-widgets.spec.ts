@@ -258,6 +258,20 @@ describe('the API request and API history widgets', () => {
       expect(again.componentInstance.result()).not.toBeNull();
     });
 
+    it('keeps a custom request built with no operation selected, over the configured operation', () => {
+      const first = request({ operation: 'catalog:GetProducts' });
+      first.componentInstance.selectedId.set(null);
+      first.componentInstance.url.set('http://localhost:5000/api/v1/custom');
+      first.componentInstance.body.set('{"mine":true}');
+      first.destroy();
+
+      const again = request({ operation: 'catalog:GetProducts' });
+
+      expect(again.componentInstance.selectedId()).toBeNull();
+      expect(again.componentInstance.url()).toBe('http://localhost:5000/api/v1/custom');
+      expect(again.componentInstance.body()).toBe('{"mine":true}');
+    });
+
     it('counts the request widgets showing, so a restore is offered only while there is one', () => {
       const api = TestBed.inject(ApiHistory);
       expect(api.canRestore()).toBe(false);
