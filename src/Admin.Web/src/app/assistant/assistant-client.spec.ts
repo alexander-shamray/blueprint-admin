@@ -76,6 +76,7 @@ describe('AssistantConversation', () => {
         ],
         running: false,
         lastEventId: 7,
+        pendingCalls: [],
       } satisfies ConversationView),
     );
     await conversation.send('logs?', null, 'en-US');
@@ -106,22 +107,68 @@ describe('AssistantConversation', () => {
     expect(stream.closed).toBe(true);
   });
 
-  it('answers a client tool call once, even when a reopened stream replays it', async () => {
+  it('answers a client tool call once, even when it arrives again under a later id', async () => {
     const { host, conversation, opened } = setup();
     await conversation.send('logs?', null, 'en-US');
 
     host.stream.emit('client_tool_call', { callId: 'k1', name: 'open_screen', input: { path: 'logs' } }, 1);
-    host.stream.emit('client_tool_call', { callId: 'k1', name: 'open_screen', input: { path: 'logs' } }, 1);
+    host.stream.emit('client_tool_call', { callId: 'k1', name: 'open_screen', input: { path: 'logs' } }, 2);
     await settle();
 
     expect(opened).toEqual(['logs']);
+  });
+
+  it('after a reload answers a client call the read says is still waiting', async () => {
+    const { host, conversation, opened } = setup(memoryIds('c1'));
+    host.on('GET', /\/conversations\/c1$/, () =>
+      json({
+        id: 'c1',
+        items: [{ kind: 'tool', callId: 'k1', name: 'open_screen', side: 'client', args: { path: 'logs' }, ok: null }],
+        running: true,
+        lastEventId: 3,
+        pendingCalls: [{ callId: 'k1', name: 'open_screen', input: { path: 'logs' } }],
+      } satisfies ConversationView),
+    );
+
+    await conversation.resume();
+    await settle();
+
+    expect(opened).toEqual(['logs']);
+    expect(host.requests.find((r) => r.url.endsWith('/tool-results'))?.body).toEqual({ callId: 'k1', ok: true, content: 'opened /logs' });
+  });
+
+  it('a read begun before a new message never undoes it', async () => {
+    const { host, conversation } = setup();
+    // The read a turn's end starts answers as the host stood then: idle, and without the next message.
+    host.on('GET', /\/conversations\/c1$/, () => json({ id: 'c1', items: [], running: false, lastEventId: 1, pendingCalls: [] }));
+    await conversation.send('one', null, 'en-US');
+
+    host.stream.emit('turn_ended', { reason: 'done', category: null, usage: { input: 0, output: 0, cached: 0 }, total: { input: 0, output: 0, cached: 0 } }, 1);
+    // Sent before that read has come back.
+    await conversation.send('two', null, 'en-US');
+    await settle();
+
+    expect(conversation.current.running).toBe(true);
+    expect(conversation.current.items.at(-1)).toEqual({ kind: 'operator', text: 'two' });
+  });
+
+  it('when the browser gives the stream up, redraws from the read, or starts over once the host has forgotten it', async () => {
+    const { host, conversation, ids } = setup();
+    await conversation.send('logs?', null, 'en-US');
+
+    host.stream.lose();
+    await settle();
+
+    expect(ids.id).toBeNull();
+    expect(conversation.current.running).toBe(false);
+    expect(conversation.current.problem).toEqual({ code: 'gone', detail: null });
   });
 
   it('after a reload redraws from the conversation read and follows on from its lastEventId', async () => {
     const ids = memoryIds('c1');
     const { host, conversation } = setup(ids);
     host.on('GET', /\/conversations\/c1$/, () =>
-      json({ id: 'c1', items: [{ kind: 'operator', text: 'where?' }, { kind: 'reply', text: 'Open' }], running: true, lastEventId: 12 }),
+      json({ id: 'c1', items: [{ kind: 'operator', text: 'where?' }, { kind: 'reply', text: 'Open' }], running: true, lastEventId: 12, pendingCalls: [] }),
     );
 
     await conversation.resume();
@@ -150,7 +197,7 @@ describe('AssistantConversation', () => {
   it('holds no stream while idle and hidden, and opens one while visible', async () => {
     const ids = memoryIds('c1');
     const { host, conversation } = setup(ids);
-    host.on('GET', /\/conversations\/c1$/, () => json({ id: 'c1', items: [], running: false, lastEventId: 3 }));
+    host.on('GET', /\/conversations\/c1$/, () => json({ id: 'c1', items: [], running: false, lastEventId: 3, pendingCalls: [] }));
     await conversation.resume();
     expect(host.streams).toEqual([]);
 

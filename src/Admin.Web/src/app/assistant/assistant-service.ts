@@ -1,3 +1,4 @@
+import { DOCUMENT } from '@angular/common';
 import { Injectable, LOCALE_ID, computed, effect, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { SCREENS } from '../screens';
@@ -73,7 +74,12 @@ export class AssistantService {
     this.conversation = new AssistantConversation(this.client, this.tools, () => this.opening(), tabStore, (s) =>
       this.state.set(s),
     );
-    effect(() => this.conversation.setVisible(this.panelOpen()));
+    // Shown means the panel is open in a tab the operator can see (widget-workspace spec §4.3): a hidden tab holds no
+    // stream for an idle conversation, though a running turn keeps its own.
+    const document = inject(DOCUMENT);
+    const tabVisible = signal(document.visibilityState !== 'hidden');
+    document.addEventListener('visibilitychange', () => tabVisible.set(document.visibilityState !== 'hidden'));
+    effect(() => this.conversation.setVisible(this.panelOpen() && tabVisible()));
     inject(RunningWork).report('assistant', () =>
       this.state().running ? { text: $localize`The assistant is answering`, link: this.askedFrom() } : null,
     );

@@ -51,6 +51,7 @@ describe('the assistant protocol mirror', () => {
       ],
       running: false,
       lastEventId: 7,
+      pendingCalls: [],
     } satisfies ConversationView);
   });
 
