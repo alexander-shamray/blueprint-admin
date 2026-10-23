@@ -90,7 +90,7 @@
           <span class="status">{{ step.status }}</span>
         }
         @if (step.correlationId && step.state !== 'running') {
-          <a class="trace-step" [routerLink]="['/trace', step.correlationId]"
+          <a class="trace-step" [appTraceLink]="step.correlationId"
             >Trace {{ step.correlationId }}</a
           >
         }

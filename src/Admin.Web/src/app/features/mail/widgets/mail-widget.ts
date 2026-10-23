@@ -2,11 +2,12 @@ import { Component, DestroyRef, computed, effect, inject, input, signal, untrack
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { catchError, of } from 'rxjs';
 import { HostClient } from '../../../core/host/host-client';
 import { Mailbox, MailListView, MailMessageView } from '../../../core/host/host-types';
 import { widgetSession } from '../../../workspace/widget-session-store';
+import { TraceLink } from '../../trace/trace-follow';
 
 /**
  * What the platform sent, read from the mail sink through the host (spec §5.12). The widget only reads: clearing the
@@ -17,7 +18,7 @@ import { widgetSession } from '../../../workspace/widget-session-store';
  */
 @Component({
   selector: 'app-mail-widget',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, TraceLink],
   templateUrl: './mail-widget.html',
   styleUrl: './mail-widget.css',
   preserveWhitespaces: true,
