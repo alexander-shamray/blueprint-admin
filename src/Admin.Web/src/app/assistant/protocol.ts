@@ -80,6 +80,8 @@ export interface ConversationView {
   items: ConversationItem[];
   running: boolean;
   lastEventId: number;
+  /** Client tool calls still waiting for a result, in the `client_tool_call` event's shape: a reloaded client answers them. */
+  pendingCalls: AssistantEvents['client_tool_call'][];
 }
 
 export interface Usage {

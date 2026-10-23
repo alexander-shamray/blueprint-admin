@@ -58,6 +58,8 @@ export class AssistantPanel {
         return $localize`The assistant is still answering the last question.`;
       case 'gone':
         return $localize`The console no longer holds this conversation; the next message starts a new one.`;
+      case 'provider':
+        return $localize`The assistant's provider failed: ${problem.detail ?? ''}:reason:`;
       default:
         return $localize`The message was not sent: ${problem.detail ?? ''}:reason:`;
     }

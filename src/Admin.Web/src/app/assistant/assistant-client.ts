@@ -94,9 +94,12 @@ export class AssistantClient {
   follow(id: string, afterId: number, onEvent: (event: AssistantEvent) => void, onLost: () => void): () => void {
     const source = this.openStream(`${this.conversation(id)}/events?after=${afterId}`);
     for (const name of EVENT_NAMES) {
-      source.addEventListener(name, (e: MessageEvent) =>
-        onEvent({ name, data: JSON.parse(e.data as string), id: Number(e.lastEventId) } as AssistantEvent),
-      );
+      source.addEventListener(name, (e: MessageEvent) => {
+        // The protocol's `error` shares its name with EventSource's own, which a dropped connection fires with no
+        // data; only an event the host sent carries any.
+        if (typeof e.data !== 'string') return;
+        onEvent({ name, data: JSON.parse(e.data), id: Number(e.lastEventId) } as AssistantEvent);
+      });
     }
     source.addEventListener('error', () => {
       if (source.readyState === 2) onLost();
@@ -135,7 +138,7 @@ export interface ConversationState {
   running: boolean;
   lastEventId: number;
   /** Why the last action failed, as a code the client words, with the host's detail when it gave one. */
-  problem: { code: 'turn-running' | 'failed' | 'gone'; detail: string | null } | null;
+  problem: { code: 'turn-running' | 'failed' | 'provider' | 'gone'; detail: string | null } | null;
 }
 
 export const EMPTY_CONVERSATION: ConversationState = { id: null, items: [], running: false, lastEventId: 0, problem: null };
@@ -158,6 +161,8 @@ export class AssistantConversation {
   private visible = false;
   private close: (() => void) | null = null;
   private readonly answered = new Set<string>();
+  /** Counts messages sent, so a read begun before the latest one never overwrites what it started. */
+  private sends = 0;
 
   constructor(
     private readonly client: AssistantClient,
@@ -182,6 +187,8 @@ export class AssistantConversation {
     }
     this.update({ id, items: view.items, running: view.running, lastEventId: view.lastEventId, problem: null });
     this.settleStream();
+    // The stream follows on after the read, so a call emitted before the reload is answered from the read.
+    for (const call of view.pendingCalls) this.run(call);
   }
 
   setVisible(visible: boolean): void {
@@ -191,6 +198,7 @@ export class AssistantConversation {
 
   async send(text: string, context: Record<string, unknown> | null, locale: string): Promise<void> {
     if (this.state.running || text.trim() === '') return;
+    this.sends++;
     const items: ConversationItem[] = [...this.state.items, { kind: 'operator', text }];
     this.update({ ...this.state, items, running: true, problem: null });
     try {
@@ -277,7 +285,7 @@ export class AssistantConversation {
         running = false;
         break;
       case 'error':
-        this.update({ ...this.state, problem: { code: 'failed', detail: event.data.detail ?? event.data.title } });
+        this.update({ ...this.state, problem: { code: 'provider', detail: event.data.detail ?? event.data.title } });
         break;
     }
     this.update({ ...this.state, items, running, lastEventId: event.id });
@@ -297,8 +305,9 @@ export class AssistantConversation {
   /** Once a turn ends, the read settles anything the stream missed (a ring overrun), then the stream closes if unwanted. */
   private async settle(): Promise<void> {
     const id = this.state.id;
+    const sent = this.sends;
     const view = id ? await this.client.read(id).catch(() => null) : null;
-    if (view && view.id === this.state.id && view.lastEventId >= this.state.lastEventId) {
+    if (view && sent === this.sends && view.id === this.state.id && view.lastEventId >= this.state.lastEventId) {
       this.update({ ...this.state, items: view.items, running: view.running, lastEventId: view.lastEventId });
     }
     this.settleStream();
@@ -307,10 +316,13 @@ export class AssistantConversation {
   private async lost(): Promise<void> {
     this.stopStream();
     const id = this.state.id;
+    const sent = this.sends;
     const view = id ? await this.client.read(id).catch(() => null) : null;
+    if (sent !== this.sends) return;
     if (view) {
       this.update({ ...this.state, items: view.items, running: view.running, lastEventId: view.lastEventId });
       this.settleStream();
+      for (const call of view.pendingCalls) this.run(call);
       return;
     }
     this.ids.set(null);
