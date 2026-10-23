@@ -62,12 +62,15 @@ public sealed partial class WorkspaceStore(
         }
     }
 
-    /// <summary>Replaces the workspace with <paramref name="document"/>, whatever it was (spec §6.2's import).</summary>
+    /// <summary>
+    /// Replaces the workspace with <paramref name="document"/>, whatever it was (spec §6.2's import). A file exported by an
+    /// older console is stepped up first, as a saved one is on read, so an export outlives the version it was made at.
+    /// </summary>
     public SaveResult Replace(JsonNode? document)
     {
         lock (gate)
         {
-            return SaveUnlocked(document, ifMatch: null);
+            return SaveUnlocked(Migrate(document), ifMatch: null);
         }
     }
 
