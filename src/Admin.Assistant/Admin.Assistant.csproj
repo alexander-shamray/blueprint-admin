@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The provider-neutral core (AI assistant design §4): the protocol, the tools, the provider interface and the loop.
+       It holds no admin type and no package beyond the BCL, so another host can take it whole (design §13). Settings
+       come from Directory.Build.props. -->
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Admin.Assistant.Tests" />
+  </ItemGroup>
+
+</Project>
