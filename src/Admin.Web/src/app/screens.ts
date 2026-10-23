@@ -1,7 +1,7 @@
 /**
- * The console's screens, in their default order: the routes, the built-in pages, the legacy screen widget's choices
- * and the host's `WorkspaceDefaults` (held to this list by a drift test) all follow it. The side navigation and the
- * palette list the operator's pages instead (widget-workspace spec §7.2).
+ * The console's screens, in their default order: the routes, the built-in pages and the host's `WorkspaceDefaults`
+ * (held to this list by a drift test) all follow it. The side navigation and the palette list the operator's pages
+ * instead (widget-workspace spec §7.2).
  *
  * `help` is what the assistant explains each screen from (AI assistant design §6.1): what it shows, what it can do and
  * what it is not for. It is this registry's own text, sent in the source language; the model translates it as it
@@ -92,3 +92,9 @@ export const SCREENS = [
       'for each platform request. Use it to see or copy what was done. It changes nothing.',
   },
 ] as const;
+
+export type ScreenPath = (typeof SCREENS)[number]['path'];
+
+export function isScreenPath(value: unknown): value is ScreenPath {
+  return typeof value === 'string' && SCREENS.some((s) => s.path === value);
+}

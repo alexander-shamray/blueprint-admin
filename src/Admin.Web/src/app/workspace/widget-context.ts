@@ -8,10 +8,7 @@ export interface WidgetContext {
 
 export const WIDGET_CONTEXT = new InjectionToken<WidgetContext>('WIDGET_CONTEXT');
 
-/**
- * The calling widget's context, or null for a component rendered outside the grid. A widget inside a legacy screen
- * widget reads that widget's context, so it shares its page.
- */
+/** The calling widget's context, or null for a component rendered outside the grid. */
 export function injectWidgetContext(): WidgetContext | null {
   return inject(WIDGET_CONTEXT, { optional: true });
 }

@@ -2,8 +2,8 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { HostClient } from '../core/host/host-client';
-import { builtInTitle, defaultWorkspace, widgetsOf, withEveryBuiltIn } from './built-in-pages';
-import { isScreenPath } from './screen-components';
+import { isScreenPath } from '../screens';
+import { builtInTitle, defaultWorkspace, retireLegacy, widgetsOf, withEveryBuiltIn } from './built-in-pages';
 import { WidgetSessionStore } from './widget-session-store';
 import { PAGE_ROWS, Page, WidgetInstance, Workspace, newId } from './workspace-types';
 
@@ -39,6 +39,11 @@ export class WorkspaceService {
   readonly editing = signal(false);
   /** The page the router has open; the shell's title and page actions follow it. */
   readonly currentPageId = signal<string | null>(null);
+  /**
+   * The titles of the pages whose legacy screen widgets the last read replaced (§5.3, phase 6), which the shell says
+   * until it is dismissed. The replacement is saved at once, so it is said once.
+   */
+  readonly retired = signal<string[]>([]);
 
   readonly pages = computed(() => this.workspace().pages);
   readonly visiblePages = computed(() => this.pages().filter((p) => !p.hidden));
@@ -57,9 +62,10 @@ export class WorkspaceService {
   load(): void {
     this.host.workspace().subscribe({
       next: ({ workspace, etag }) => {
-        this.workspace.set(withEveryBuiltIn(workspace));
+        const migrated = this.adopt(workspace);
         this.etag = etag;
         this.loaded.set(true);
+        if (migrated) this.saveMigration();
       },
       error: (e: unknown) => {
         this.loaded.set(true);
@@ -219,9 +225,10 @@ export class WorkspaceService {
         this.epoch++;
         this.revision++;
         this.sessions.forget(this.pages().flatMap((p) => widgetsOf(p).map((w) => w.id)));
-        this.workspace.set(withEveryBuiltIn(workspace));
+        const migrated = this.adopt(workspace);
         this.etag = etag;
         this.saveState.set({ kind: 'saved' });
+        if (migrated) this.saveMigration();
       }),
     );
   }
@@ -254,8 +261,30 @@ export class WorkspaceService {
     this.etag = state.etag;
     // Settled before scheduling: `schedule` refuses to save over an unsettled conflict.
     this.saveState.set({ kind: 'saved' });
-    if (take === 'theirs') this.workspace.set(withEveryBuiltIn(state.theirs));
-    else this.schedule(0);
+    if (take === 'mine') this.schedule(0);
+    else if (this.adopt(state.theirs)) this.saveMigration();
+  }
+
+  /** The retired-widget notice, read. */
+  dismissRetired(): void {
+    this.retired.set([]);
+  }
+
+  /**
+   * A document from the host made this tab's workspace: its legacy screen widgets replaced, then every built-in page
+   * in place. True when the replacement changed a page, which the caller then saves.
+   */
+  private adopt(workspace: Workspace): boolean {
+    const { workspace: current, pages } = retireLegacy(workspace);
+    this.workspace.set(withEveryBuiltIn(current));
+    if (pages.length > 0) this.retired.set(pages);
+    return pages.length > 0;
+  }
+
+  /** The replacement saved like any change, so the notice is not said again on the next read. */
+  private saveMigration(): void {
+    this.revision++;
+    this.schedule();
   }
 
   private changePage(id: string, edit: (page: Page) => Page): void {

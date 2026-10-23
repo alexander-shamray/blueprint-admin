@@ -1,6 +1,4 @@
 import { Type } from '@angular/core';
-import { SCREENS } from '../screens';
-import { isScreenPath } from './screen-components';
 import { ARCHITECTURE_NOTE, BLANK_NOTE, TAB_ORDER_NOTE } from './widgets/note/note-presets';
 import { positionsOf } from './widgets/topology/topology-graph';
 import { FieldKind, stringList } from './widget-config';
@@ -46,22 +44,9 @@ export interface WidgetType {
   configurable?: boolean;
   /** Settings the presets cannot hold; the configure control edits them beside the presets. */
   fields?: readonly WidgetField[];
-  /** The data services the widget reads (§4.4); the legacy screen widget's screens own their own calls. */
+  /** The data services the widget reads (§4.4). */
   dataServices: readonly string[];
 }
-
-/** The type that renders one of today's screens whole, so every built-in page exists from the first phase (§10). */
-export const LEGACY_SCREEN: WidgetType = {
-  type: 'legacy',
-  title: 'Screen',
-  component: () => import('./legacy-screen-widget').then((m) => m.LegacyScreenWidget),
-  defaultSize: { cols: 24, rows: 16 },
-  minSize: { cols: 6, rows: 4 },
-  config: (stored) => ({ screen: isScreenPath(stored['screen']) ? stored['screen'] : SCREENS[0].path }),
-  titleOf: (config) => SCREENS.find((s) => s.path === config['screen'])?.label ?? 'Screen',
-  presets: SCREENS.map((s) => ({ label: s.label, config: { screen: s.path } })),
-  dataServices: [],
-};
 
 type Kind = Omit<WidgetType, 'config' | 'titleOf' | 'presets'>;
 
@@ -533,7 +518,6 @@ export const WIDGETS: readonly WidgetType[] = [
   LOGS,
   JOB_OUTPUT,
   NOTE,
-  LEGACY_SCREEN,
 ];
 
 export function widgetType(type: string): WidgetType | undefined {

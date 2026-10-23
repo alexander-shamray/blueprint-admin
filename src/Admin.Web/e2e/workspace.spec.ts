@@ -179,7 +179,7 @@ test('the built-in Stack page renders its widgets, each with what it reads', asy
 
 test('a page made, filled, resized and rearranged is found as it was left after a reload', async ({ page }) => {
   // Tall enough for all three default-size widgets, so every corner and header the walk drags is on screen.
-  await page.setViewportSize({ width: 1280, height: 2600 });
+  await page.setViewportSize({ width: 1280, height: 3000 });
   const title = `Walk ${Date.now()}`;
   await page.goto('/stack');
 
@@ -189,14 +189,12 @@ test('a page made, filled, resized and rearranged is found as it was left after 
   await name.fill(title);
   await name.press('Enter');
 
-  for (const screen of ['Logs', 'Map', 'Mail']) {
+  for (const widget of ['Logs', 'Platform map', 'Mail']) {
     await page.getByRole('button', { name: 'Add widget' }).click();
-    await page.getByRole('menuitem', { name: 'Screen' }).click();
-    // The Logs widget has an entry of its own in the menu beside the Logs screen's; the screens' menu opened last.
-    await page.getByRole('menuitem', { name: screen, exact: true }).last().click();
+    await page.getByRole('menuitem', { name: widget, exact: true }).click();
   }
   const titles = page.locator('gridster-item .ws-head .ws-title');
-  await expect(titles).toHaveText(['Logs', 'Map', 'Mail']);
+  await expect(titles).toHaveText(['Logs', 'Platform map', 'Mail']);
   // `page.mouse` skips the actionability checks, so a closing menu's backdrop would take the first press.
   await expect(page.locator('.cdk-overlay-backdrop')).toHaveCount(0);
 
@@ -225,7 +223,7 @@ test('a page made, filled, resized and rearranged is found as it was left after 
   await expect(page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: title })).toHaveClass(
     /active/,
   );
-  await expect(titles).toHaveText(['Logs', 'Map', 'Mail']);
+  await expect(titles).toHaveText(['Logs', 'Platform map', 'Mail']);
   const reloaded = (await first.boundingBox())!;
   expect(Math.abs(reloaded.height - resized.height)).toBeLessThan(2);
   expect(reloaded.width).toBeLessThan(before.width);
