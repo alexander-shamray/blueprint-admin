@@ -1,10 +1,13 @@
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { Router, provideRouter } from '@angular/router';
 import { Subject, of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { ApiCatalogView, ApiOperation, ProxyResult, QueuesView, TokenView } from '../../core/host/host-types';
 import { IdentityState } from '../../core/identity/identity-state';
 import { ApiPage, UUID, clockText } from './api-page';
+import { ApiHistory } from './api-client';
+import { ApiRequestWidget } from './widgets/api-request-widget';
 
 function op(partial: Partial<ApiOperation>): ApiOperation {
   return {
@@ -83,10 +86,17 @@ describe('ApiPage', () => {
 
   afterEach(() => vi.useRealTimers());
 
+  /**
+   * The API screen as the legacy screen widget renders it: the request widget with the history widget under it. The
+   * tests below are the screen's, from before it was split, so `componentInstance` is the request widget they drive.
+   */
   function render() {
     const fixture = TestBed.createComponent(ApiPage);
     fixture.detectChanges();
-    return fixture;
+    const widget = fixture.debugElement.query(By.directive(ApiRequestWidget)).componentInstance as ApiRequestWidget;
+    return Object.defineProperty(fixture, 'componentInstance', { value: widget }) as unknown as ReturnType<
+      typeof TestBed.createComponent<ApiRequestWidget>
+    >;
   }
 
   function click(fixture: ReturnType<typeof render>, name: string): void {
@@ -161,7 +171,7 @@ describe('ApiPage', () => {
     click(fixture, 'Send');
 
     expect(host.proxy.mock.calls[0][0].headers).toEqual({ Accept: 'application/json', authorization: 'Bearer pasted.jwt.token' });
-    expect(JSON.stringify(page.history())).not.toContain('pasted.jwt.token');
+    expect(JSON.stringify(TestBed.inject(ApiHistory).entries())).not.toContain('pasted.jwt.token');
     page.headersText.set('');
     (fixture.nativeElement.querySelector('.history li button') as HTMLButtonElement).click();
     fixture.detectChanges();
@@ -176,7 +186,7 @@ describe('ApiPage', () => {
     click(fixture, 'Send');
 
     expect(page.headerLines()).toContain('Set-Cookie: sid=received-secret');
-    const stored = JSON.stringify(page.history());
+    const stored = JSON.stringify(TestBed.inject(ApiHistory).entries());
     expect(stored).not.toContain('sent-secret');
     expect(stored).not.toContain('received-secret');
     expect(stored).toContain('application/json');
@@ -421,7 +431,7 @@ describe('ApiPage', () => {
     click(fixture, 'Send');
     expect(host.proxy.mock.calls[2][0].identity).toBeNull();
 
-    expect(JSON.stringify(page.history())).not.toContain('s3cret');
+    expect(JSON.stringify(TestBed.inject(ApiHistory).entries())).not.toContain('s3cret');
     (fixture.nativeElement.querySelectorAll('.history li button')[1] as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(page.identity.choice()).toEqual({ kind: 'custom', username: 'alice', password: '' });

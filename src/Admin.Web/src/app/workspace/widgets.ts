@@ -296,6 +296,70 @@ export const ERASURE: WidgetType = plain({
   dataServices: ['ErasureRun'],
 });
 
+/**
+ * The API page's widgets (§5.2). The request widget saves the operation it is on and the identity by username only
+ * (`anonymous`, `user:<name>`, `custom:<name>`): a custom identity's password is session state and is never in a config
+ * (§6.4). The history widget lists what the tab sent, from `ApiHistory`.
+ */
+export const API_WIDGETS = {
+  request: {
+    type: 'api-request',
+    title: 'API request',
+    component: () => import('../features/api/widgets/api-request-widget').then((m) => m.ApiRequestWidget),
+    defaultSize: { cols: 16, rows: 30 },
+    minSize: { cols: 8, rows: 8 },
+    config: (stored) => ({
+      operation: typeof stored['operation'] === 'string' && stored['operation'] !== '' ? stored['operation'] : null,
+      identity:
+        typeof stored['identity'] === 'string' && /^(anonymous|user:.+|custom:.*)$/.test(stored['identity']) ? stored['identity'] : null,
+    }),
+    titleOf: () => 'API request',
+    presets: [{ label: 'API request', config: { operation: null, identity: null } }],
+    fields: [
+      { key: 'operation', label: 'Operation id', kind: 'text' },
+      { key: 'identity', label: 'Identity: anonymous, user:<name> or custom:<name>', kind: 'text' },
+    ],
+    dataServices: ['ApiHistory'],
+  } satisfies WidgetType,
+  history: plain({
+    type: 'api-history',
+    title: 'API history',
+    component: () => import('../features/api/widgets/api-history-widget').then((m) => m.ApiHistoryWidget),
+    defaultSize: { cols: 8, rows: 30 },
+    minSize: { cols: 4, rows: 4 },
+    dataServices: ['ApiHistory'],
+  }),
+} as const;
+
+/**
+ * One correlation id's timeline (§5.2, §5.9). Config: the id and window it starts with, and `follow`, which makes a
+ * correlation-id link anywhere on the page re-point it (`TraceFollow`) instead of opening the Trace page. The built-in
+ * Trace page's widget follows and reads the route's id.
+ */
+export const TRACE: WidgetType = {
+  type: 'trace',
+  title: 'Trace',
+  component: () => import('../features/trace/widgets/trace-widget').then((m) => m.TraceWidget),
+  defaultSize: { cols: 24, rows: 20 },
+  minSize: { cols: 8, rows: 6 },
+  config: (stored) => ({
+    correlationId: typeof stored['correlationId'] === 'string' ? stored['correlationId'] : '',
+    window: ['15m', '1h', '6h', '24h'].includes(stored['window'] as string) ? stored['window'] : '15m',
+    follow: stored['follow'] === true,
+  }),
+  titleOf: (config) => (typeof config['correlationId'] === 'string' && config['correlationId'] !== '' ? `Trace (${config['correlationId']})` : 'Trace'),
+  presets: [
+    { label: 'Trace', config: { correlationId: '', window: '15m', follow: false } },
+    { label: 'Follows the last Trace link', config: { correlationId: '', window: '15m', follow: true } },
+  ],
+  fields: [
+    { key: 'correlationId', label: 'Correlation id', kind: 'text' },
+    { key: 'window', label: 'Window: 15m, 1h, 6h or 24h', kind: 'text' },
+    { key: 'follow', label: 'Follow the last Trace link', kind: 'flag' },
+  ],
+  dataServices: ['TraceHistory', 'TraceFollow'],
+};
+
 /** The Logs page's widget (§5.2), a view of the one follow `LogFollowService` in features/logs runs. */
 export const LOGS: WidgetType = listing('services', 'All services', {
   type: 'logs',
@@ -359,6 +423,8 @@ export const WIDGETS: readonly WidgetType[] = [
   ...Object.values(STACK_WIDGETS),
   ...Object.values(SCENARIO_WIDGETS),
   ...Object.values(BROKER_WIDGETS),
+  ...Object.values(API_WIDGETS),
+  TRACE,
   MAP,
   MAIL,
   ERASURE,

@@ -219,13 +219,13 @@ describe('WorkspaceService', () => {
     });
 
     it('duplicates a built-in page as the operator’s own, every widget with a new id', () => {
-      const id = service.duplicatePage('trace');
+      const id = service.duplicatePage('runbooks');
       const copy = service.pages().find((p) => p.id === id);
-      expect(copy?.title).toBe('Trace (copy)');
+      expect(copy?.title).toBe('Runbooks (copy)');
       expect(copy?.builtIn).toBeNull();
       const [widget] = copy?.widgets ?? [];
-      expect(widget.config).toEqual({ screen: 'trace' });
-      expect(widget.id).not.toBe(builtInWidgets('trace')[0].id);
+      expect(widget.config).toEqual({ screen: 'runbooks' });
+      expect(widget.id).not.toBe(builtInWidgets('runbooks')[0].id);
     });
 
     it('resets a built-in page to its shipped widgets and title', () => {

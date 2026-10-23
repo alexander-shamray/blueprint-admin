@@ -8,7 +8,7 @@ import { SCREENS } from '../src/app/screens';
 // because every spec file shares one host.
 // The Stack (#385), Scenario (#389) and Broker (#387) pages are built from their widgets, and the Logs page (#386) is one
 // widget of its own; every other built-in page is still its screen in one widget.
-for (const { path, label } of SCREENS.filter((s) => !['stack', 'scenario', 'broker', 'map', 'mail', 'erasure'].includes(s.path))) {
+for (const { path, label } of SCREENS.filter((s) => !['stack', 'scenario', 'broker', 'map', 'mail', 'erasure', 'requests', 'trace'].includes(s.path))) {
   test(`the built-in ${label} page renders its screen`, async ({ page }) => {
     await page.goto(`/${path}`);
 
@@ -37,6 +37,49 @@ for (const [path, title, body] of [
     await expect(page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: SCREENS.find((s) => s.path === path)?.label ?? path })).toHaveClass(/active/);
   });
 }
+
+test('the built-in API page renders the request widget beside the history widget', async ({ page }) => {
+  await page.goto('/requests');
+
+  await expect(page.locator('gridster-item .ws-head .ws-title')).toHaveText(['API request', 'API history']);
+  await expect(page.locator('button.op').first()).toBeVisible();
+  await expect(page.getByText('Nothing has been sent from this tab yet.')).toBeVisible();
+});
+
+test('the built-in Trace page follows the last Trace link, and loads the id in its route', async ({ page }) => {
+  await page.goto('/trace/e2e-route-1');
+
+  await expect(page.locator('gridster-item .ws-head .ws-title')).toHaveText('Trace');
+  await expect(page.locator('p.summary')).toContainText('for e2e-route-1');
+  await expect(page.getByText('Follows the last Trace link')).toBeVisible();
+});
+
+// §5.2: a correlation-id link in any widget re-points a Trace widget that follows, on the page it is on, instead of
+// opening the Trace page. This page has a Mail widget, whose messages carry a correlation id each.
+test('a correlation-id link re-points a Trace widget that follows on the same page', async ({ page }) => {
+  await page.goto('/stack');
+  await page.getByRole('button', { name: 'New page' }).click();
+  await expect(page).toHaveURL(/\/page\/page-/);
+  const here = page.url();
+
+  await page.getByRole('button', { name: 'Add widget' }).click();
+  await page.getByRole('menuitem', { name: 'Trace', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Follows the last Trace link' }).click();
+  await page.getByRole('button', { name: 'Add widget' }).click();
+  await page.getByRole('menuitem', { name: 'Mail', exact: true }).click();
+  await expect(page.locator('td.correlation a').first()).toBeVisible();
+  const id = (await page.locator('td.correlation a').first().textContent())?.trim() ?? '';
+  await expect(page.locator('p.summary')).toHaveCount(0);
+
+  await page.locator('td.correlation a').first().click();
+
+  await expect(page).toHaveURL(here);
+  await expect(page.locator('p.summary')).toContainText(`for ${id}`);
+
+  await page.getByRole('button', { name: 'Page actions' }).click();
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
+  await expect(page).not.toHaveURL(here);
+});
 
 test('the Platform map polls nothing until its auto-refresh is switched on in its settings', async ({ page }) => {
   const reads: string[] = [];
