@@ -203,12 +203,23 @@ export class ApiRequestWidget {
     });
     // The operation the config names is selected once the catalog has it, and again when the config comes to name
     // another (the settings editor, a preset). One the operator picked here is already in the config, so it is a no-op.
+    // Taken up once per operation the config names: a catalog reload, or a restore that moved the editor elsewhere,
+    // does not take the editor back to the configured one.
+    let applied: string | null = null;
     effect(() => {
       const view = this.catalog();
       const wanted = this.configuredOperation();
       untracked(() => {
-        const operation = wanted && this.selectedId() !== wanted ? view?.operations.find((o) => o.id === wanted) : undefined;
-        if (operation) this.select(operation, false);
+        if (!wanted || wanted === applied) return;
+        if (this.selectedId() === wanted) {
+          applied = wanted;
+          return;
+        }
+        const operation = view?.operations.find((o) => o.id === wanted);
+        if (operation) {
+          applied = wanted;
+          this.select(operation, false);
+        }
       });
     });
     // A history entry asked back after this editor appeared; one asked before is not replayed into it.
