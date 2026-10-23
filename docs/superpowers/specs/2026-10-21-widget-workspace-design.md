@@ -275,7 +275,10 @@ screen in `config.screen`) with that
 screen's default widgets, placed inside the rectangle the legacy widget
 occupied, stacked in their default order at their default heights, and the
 operator is told once which pages it changed. The rectangle grows down as
-far as the stack needs, and whatever sat below it moves down by as much. A
+far as the stack needs, and whatever sat below it moves down by as much.
+Where a type's minimum width is more than the rectangle had, and the stack
+would then reach a widget beside it, the stack goes under every widget on the
+page instead, so the migration never overlaps two widgets. A
 screen the console does not name was rendered as the first screen, so it
 becomes Stack's widgets. **The SPA runs this replacement, not the host**
 (§6.3): the defaults are the SPA's (`BUILT_IN_LAYOUTS` in
@@ -307,7 +310,7 @@ kind of thing.
 | `GET /api/workspace` | the saved workspace, or the default (§5.3) when there is none, with an `etag` |
 | `PUT /api/workspace` | body: a whole `Workspace`, with `If-Match` the etag it was based on. 200 with the new etag; 412 when another tab saved first, with the current one, which the SPA offers to load or to save this tab's over, and saves nothing until the operator chooses; 400 for a document that fails the schema; 413 past 1 MiB |
 | `GET /api/workspace/export` | the same document as a download |
-| `POST /api/workspace/import` | body: an exported document, validated as `PUT`; replaces the workspace after the SPA asks |
+| `POST /api/workspace/import` | body: an exported document, stepped up to the current version as a saved file is on read (§6.3), then validated as `PUT`; replaces the workspace after the SPA asks |
 
 The SPA saves on change, debounced (about 1 s after the last drag or edit),
 and says when a save failed. Nothing is saved while a drag is in progress.
@@ -772,7 +775,10 @@ later phase move one screen at a time without a page ever missing.
   `--app-*` tokens in `styles.css`.
 - Settled in phase 6 (#394), the retirement:
   - the legacy screen widget, `screen-components.ts` and the eleven screen
-    components with their specs are deleted; `ScreenPath` and `isScreenPath`
+    components are deleted. Six of their specs held the widgets' behaviour
+    tests and are kept as `<feature>-widgets.spec.ts`, driven through a
+    test-local host laying out the same widgets; the five that only checked
+    a screen rendered its widget went with it. `ScreenPath` and `isScreenPath`
     moved to `screens.ts`, and `BUILT_IN_LAYOUTS` is typed by every screen, so
     a screen added without a layout does not compile;
   - the migration is the SPA's `retireLegacy` in `built-in-pages.ts`, applied
