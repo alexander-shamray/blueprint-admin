@@ -174,7 +174,8 @@ async function cytoscapeGraph(container: HTMLElement, events: GraphEvents): Prom
       cy.batch(() => {
         for (const [id, at] of Object.entries(positions)) {
           const el = cy.getElementById(id);
-          if (el.nonempty() && (el.position('x') !== at.x || el.position('y') !== at.y)) el.position(at);
+          // A node under the operator's hand is theirs until they let go: a refresh must not snap it back mid-drag.
+          if (el.nonempty() && !el.grabbed() && (el.position('x') !== at.x || el.position('y') !== at.y)) el.position(at);
         }
       });
     },
