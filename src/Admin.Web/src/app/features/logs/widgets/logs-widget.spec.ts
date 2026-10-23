@@ -84,6 +84,13 @@ describe('LogsWidget', () => {
     expect(rows()).toEqual(['catalog-api | listed products']);
   });
 
+  it('says which of its configured services Compose has none of', () => {
+    const fixture = render(['gateway', 'gatway']);
+
+    expect(fixture.nativeElement.querySelector('.error')?.textContent).toContain('Not a Compose service: gatway');
+    expect(render(['gateway']).nativeElement.querySelector('.error')).toBeNull();
+  });
+
   it('enables Stop only while there is something to stop, and disables Follow while the request is out', () => {
     const post = new Subject<JobSummary>();
     host.followLogs.mockReturnValueOnce(post.asObservable());

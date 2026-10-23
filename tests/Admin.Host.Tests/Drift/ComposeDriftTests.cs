@@ -107,9 +107,9 @@ public sealed partial class ComposeDriftTests
     }
 
     [Fact]
-    public void The_logs_screen_lists_every_compose_service_and_no_other()
+    public void The_logs_widget_knows_every_compose_service_and_no_other()
     {
-        string source = File.ReadAllText(Path.Combine(Backend.AdminRoot, "src", "Admin.Web", "src", "app", "features", "logs", "logs-page.ts"));
+        string source = File.ReadAllText(Path.Combine(Backend.AdminRoot, "src", "Admin.Web", "src", "app", "features", "logs", "compose-services.ts"));
         Match list = ComposeServicesLiteral().Match(source);
         list.Success.ShouldBeTrue("COMPOSE_SERVICES is no longer an array literal this test can read");
 

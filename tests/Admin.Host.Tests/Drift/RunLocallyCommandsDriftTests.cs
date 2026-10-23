@@ -155,7 +155,7 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
 
     /// <summary>
     /// The host's own argv for each command it runs, built by the host's own code. Logs follows every
-    /// Compose service, the widest selection the Logs screen offers.
+    /// Compose service, the widest selection a Logs widget can be set to.
     /// </summary>
     private async Task<IReadOnlyList<string[]>> HostCommandsAsync()
     {
