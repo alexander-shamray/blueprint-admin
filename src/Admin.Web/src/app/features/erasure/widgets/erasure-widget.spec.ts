@@ -202,6 +202,33 @@ describe('ErasureWidget', () => {
     expect(fixture.componentInstance.run.watch()).toBe(false);
   });
 
+  it('a watch tick does not disable Raise or clear the error shown, and waits for a call of the operator\'s', async () => {
+    vi.useFakeTimers();
+    const tick = new Subject<ProxyResult>();
+    const fixture = render([]);
+    proxy.mockReturnValueOnce(tick);
+    const run = TestBed.inject(ErasureRun);
+    run.requestId.set(REQUEST_ID);
+    run.error.set('an earlier failure');
+    run.setWatch(true);
+    fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(proxy).toHaveBeenCalledTimes(1);
+    expect(run.busy()).toBe(false);
+    expect(run.error()).toBe('an earlier failure');
+
+    // An operator's call is out: the next tick reads nothing.
+    const call = new Subject<ProxyResult>();
+    proxy.mockReturnValueOnce(call);
+    run.read();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(proxy).toHaveBeenCalledTimes(2);
+    expect(run.busy()).toBe(true);
+    tick.complete();
+    call.complete();
+  });
+
   it('reads nothing once the widget is gone, though the watch stays on for the next one', async () => {
     vi.useFakeTimers();
     const fixture = render([responded(200, JSON.stringify(view({})))]);
