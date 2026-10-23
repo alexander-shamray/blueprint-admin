@@ -6,7 +6,10 @@ import { openPalette } from './palette';
 test.use({ baseURL: OFF_URL });
 
 test('with the assistant off there is no panel, no toggle and no palette entry', async ({ page }) => {
+  // The shell reads the status once, after it renders: the absences below mean something only once it has.
+  const status = page.waitForResponse((r) => new URL(r.url()).pathname === '/api/assistant');
   await page.goto('/stack');
+  expect(await (await status).json()).toEqual({ enabled: false, provider: null, model: null, reason: 'off' });
   await expect(page.getByRole('navigation', { name: 'Pages' })).toBeVisible();
 
   await expect(page.getByRole('button', { name: 'Assistant', exact: true })).toHaveCount(0);
