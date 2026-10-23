@@ -4,10 +4,10 @@ using Admin.Host.Jobs;
 namespace Admin.Host.Stack;
 
 /// <summary>
-/// The Logs screen's one <c>docker compose logs -f</c>. Each Follow starts a new
-/// long-running job, so starting a follow stops the previous one if it is still
-/// running and the host keeps at most one. Stop, and leaving the Logs screen, end
-/// it by name through <see cref="StopAsync"/>.
+/// The console's one <c>docker compose logs -f</c>, which the SPA's <c>LogFollowService</c> starts. Each
+/// Follow starts a new long-running job, so starting a follow stops the previous one if it is still
+/// running and the host keeps at most one. Stop ends it by name through <see cref="StopAsync"/>;
+/// leaving the Logs page does not.
 /// </summary>
 public sealed class LogFollower(ComposeService compose, IProcessRunner runner) : IDisposable
 {
