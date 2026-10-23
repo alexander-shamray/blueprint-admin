@@ -1,5 +1,4 @@
 import { MapQueue, MapService, PlatformMapView, StackView } from '../../../core/host/host-types';
-import { COMPOSE_SERVICES } from '../../../features/logs/compose-services';
 
 /** What a service node is coloured by (widget-workspace spec §8.1); `unknown` is drawn neutral, never green. */
 export type ServiceState = 'up' | 'down' | 'starting' | 'unknown';
@@ -76,13 +75,25 @@ export function positionsOf(value: unknown): Positions {
 }
 
 /**
- * The Compose service of a platform service, which a Logs widget follows. The owner is `PlatformServices.All` on the
- * host (its `ComposeService` column); the names are read off the drift-gated `COMPOSE_SERVICES` by the conventions
- * that list follows, so a name it does not hold comes back null rather than as a widget that waits for lines.
+ * The Compose service of each platform service, which a Logs widget follows. Copied from `PlatformServices.All` on the
+ * host (its `Name` and `ComposeService`); `PlatformServiceDriftTests` reads this literal against it, so a service added,
+ * renamed or recomposed fails there. Keep it a plain `name: 'compose-service'` literal, which that test parses.
  */
-export function composeOf(service: Pick<MapService, 'name' | 'url'>): string | null {
-  const candidates = service.url === null ? [`${service.name}-worker`] : [`${service.name}-api`, `web-${service.name}`, service.name];
-  return candidates.find((c) => COMPOSE_SERVICES.includes(c)) ?? null;
+export const COMPOSE_OF: Readonly<Record<string, string>> = {
+  gateway: 'gateway',
+  catalog: 'catalog-api',
+  ordering: 'ordering-api',
+  bff: 'web-bff',
+  inventory: 'inventory-api',
+  payments: 'payments-api',
+  privacy: 'privacy-api',
+  shipping: 'shipping-worker',
+  notifications: 'notifications-worker',
+};
+
+/** The Compose service of a platform service, or null for a name the table does not hold. */
+export function composeOf(service: Pick<MapService, 'name'>): string | null {
+  return COMPOSE_OF[service.name] ?? null;
 }
 
 /** The two words a service node is coloured by: a probed service by reachability, a worker by its Compose state. */

@@ -1,5 +1,6 @@
 import { PlatformMapView, StackView } from '../../../core/host/host-types';
-import { composeOf, positionsOf, topologyOf } from './topology-graph';
+import { COMPOSE_SERVICES } from '../../../features/logs/compose-services';
+import { COMPOSE_OF, composeOf, positionsOf, topologyOf } from './topology-graph';
 
 const map: PlatformMapView = {
   brokerReachable: true,
@@ -177,15 +178,18 @@ describe('topologyOf', () => {
 });
 
 describe('composeOf', () => {
-  it('finds the Compose service of every service of the map, from the drift-gated list', () => {
-    const named = (name: string, url: string | null) => composeOf({ name, url });
+  it('finds the Compose service of a platform service, and none for a name the table does not hold', () => {
+    expect(['gateway', 'bff', 'shipping', 'notifications'].map((name) => composeOf({ name }))).toEqual([
+      'gateway',
+      'web-bff',
+      'shipping-worker',
+      'notifications-worker',
+    ]);
+    expect(composeOf({ name: 'nothing-like-it' })).toBeNull();
+  });
 
-    expect(
-      ['gateway', 'catalog', 'ordering', 'bff', 'inventory', 'payments', 'privacy'].map((n) => named(n, 'http://x')),
-    ).toEqual(['gateway', 'catalog-api', 'ordering-api', 'web-bff', 'inventory-api', 'payments-api', 'privacy-api']);
-    // The workers, which notifications has a separate api beside.
-    expect([named('shipping', null), named('notifications', null)]).toEqual(['shipping-worker', 'notifications-worker']);
-    expect(named('nothing-like-it', null)).toBeNull();
+  it('names only Compose services the Logs widget knows', () => {
+    expect(Object.values(COMPOSE_OF).filter((c) => !COMPOSE_SERVICES.includes(c))).toEqual([]);
   });
 });
 
