@@ -14,7 +14,9 @@ public sealed record AssistantLimits
 
     /// <summary>
     /// The context size a conversation may reach: the input tokens of its latest provider request, cached ones included.
-    /// Not a spend cap; spend per turn is bounded by <see cref="MaxSteps"/> × <see cref="MaxOutputTokens"/> and by this.
+    /// Once a request has reached it the turn ends with <c>budget</c> before the next; the request that crosses it is still
+    /// sent, since its size is known only from its answer's usage. Not a spend cap; spend per turn is bounded by
+    /// <see cref="MaxSteps"/> × <see cref="MaxOutputTokens"/> and by this.
     /// </summary>
     public long ConversationTokenBudget { get; init; } = 150_000;
 

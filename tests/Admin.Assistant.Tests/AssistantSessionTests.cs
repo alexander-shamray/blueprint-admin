@@ -445,9 +445,31 @@ public sealed class AssistantSessionTests
         core.Find(Operator, session.Id).ShouldBeNull();
     }
 
-    private sealed class ThrowingRedactor : IRedactor
+    [Fact]
+    public async Task A_redactor_that_throws_on_a_tool_result_ends_the_turn_with_error_and_frees_it()
     {
-        public string Redact(string text, Caller caller) => throw new InvalidOperationException("the redactor failed");
+        ScriptedTools tools = new(("stack_status", (_, _, _) => Task.FromResult(new ToolOutcome(true, "UNREDACTABLE output"))));
+        ScriptedProvider provider = new ScriptedProvider()
+            .Round(new ToolCall("c1", "stack_status", []), new RoundEnd(ProviderStop.Done));
+        AssistantSession session = Open(Core(provider, redactor: new ThrowingRedactor("UNREDACTABLE"), sources: tools));
+
+        session.TryStart(Given.Turn("status"));
+        List<AssistantEvent> events = await Given.UntilEnded(session);
+
+        events.OfType<TurnEndedEvent>().Single().Reason.ShouldBe(TurnEndReason.Error);
+        session.Running.ShouldBeFalse();
+        session.View().Items.OfType<ToolItem>().Single().Ok.ShouldBe(false);
+        session.History[^1].ShouldBeOfType<ToolResultsMessage>().Results.Single().Ok.ShouldBeFalse();
+    }
+
+    /// <summary>
+    /// Throws on any text holding <paramref name="trigger"/>, with none on every text, naming the text it could not
+    /// redact, so the failure's own message trips it again.
+    /// </summary>
+    private sealed class ThrowingRedactor(string? trigger = null) : IRedactor
+    {
+        public string Redact(string text, Caller caller) =>
+            trigger is null || text.Contains(trigger, StringComparison.Ordinal) ? throw new InvalidOperationException($"could not redact: {text}") : text;
     }
 
     private static async Task<T> NextOf<T>(AssistantSession session)
