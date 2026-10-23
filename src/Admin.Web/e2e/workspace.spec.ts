@@ -68,7 +68,8 @@ test('a page made, filled, resized and rearranged is found as it was left after 
   for (const screen of ['Logs', 'Map', 'Mail']) {
     await page.getByRole('button', { name: 'Add widget' }).click();
     await page.getByRole('menuitem', { name: 'Screen' }).click();
-    await page.getByRole('menuitem', { name: screen, exact: true }).click();
+    // The Logs widget has an entry of its own in the menu beside the Logs screen's; the screens' menu opened last.
+    await page.getByRole('menuitem', { name: screen, exact: true }).last().click();
   }
   const titles = page.locator('gridster-item .ws-head .ws-title');
   await expect(titles).toHaveText(['Logs', 'Map', 'Mail']);
