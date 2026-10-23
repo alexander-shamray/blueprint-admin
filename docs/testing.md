@@ -39,15 +39,7 @@ the templates `eslint.config.js` lists as translated.
 `npm-checks.sh` has no `e2e` mode. Playwright talks to the Host under
 `--Admin:FakePlatform=true`. Locally: build the SPA, run the Host with that
 flag, then `npm run e2e` in `src/Admin.Web`. CI's `smoke` job is the same
-path. A green unit suite is not a green smoke. `playwright.config.ts` starts
-a second fake host, with the assistant off, on the port `e2e/hosts.ts` names;
-only `assistant-off.spec.ts` reads it.
-
-The assistant's protocol is pinned by golden JSON files under
-`src/Admin.Assistant/Protocol/golden/`: `ProtocolGoldenTests` holds the C#
-records to them and `protocol.spec.ts` the TypeScript mirror, so a field
-changed on one side alone fails. A new body or event is a new golden file,
-and the C# test fails one no test pins.
+path. A green unit suite is not a green smoke.
 
 Most of FakePlatform's fixtures are recordings; `FixtureRecordings` names
 which, and why each of the rest is written by hand. To re-record, bring the stack up,
