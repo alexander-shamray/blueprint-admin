@@ -83,6 +83,31 @@ describe('BffProjectionWidget', () => {
     expect(fixture.nativeElement.querySelector('.depth')?.textContent?.trim()).toBe('[drained] bff-order-events is empty.');
   });
 
+  it('polls the queues while its run goes, so the depth line follows it, and stops when the run ends', async () => {
+    vi.useFakeTimers();
+    try {
+      const events = new Subject<JobEvent>();
+      TestBed.overrideProvider(SseClient, { useValue: { follow: () => events } });
+      const fixture = render();
+      (fixture.nativeElement.querySelector('button.repair') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(0);
+      host.brokerQueues.mockClear();
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(host.brokerQueues.mock.calls.length).toBe(2);
+
+      events.next({ kind: 'exited', exitCode: 0 });
+      fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(0);
+      host.brokerQueues.mockClear();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(host.brokerQueues).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('a start while a read is still out reads again once that read lands, since it may have read before the start', () => {
     const fixture = render();
     const inFlight = new Subject<QueuesView>();

@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { HostClient } from '../../../core/host/host-client';
 import { JobSummary } from '../../../core/host/host-types';
@@ -41,7 +41,7 @@ import { BrokerFeed, describeError } from '../broker-feed';
           <p class="error" role="alert">The host did not answer: {{ e }}</p>
         }
         @if (jobId(); as id) {
-          <app-output-pane [jobId]="id" (exited)="feed.readQueuesAgain()" />
+          <app-output-pane [jobId]="id" (exited)="ended()" />
         }
       </section>
     } @else if (feed.projectionPlan() === null) {
@@ -71,8 +71,21 @@ export class BffProjectionWidget {
     return queue ? (this.feed.queues.value()?.queues.find((q) => q.name === queue) ?? null) : null;
   });
 
+  /** A run started here and not seen to end: while it goes the queue's depth changes, so the depth line follows it. */
+  private readonly running = signal(false);
+
   constructor() {
     this.feed.queues.refresh();
+    const destroyRef = inject(DestroyRef);
+    effect((onCleanup) => {
+      if (this.running()) onCleanup(this.feed.queues.attach(destroyRef));
+    });
+  }
+
+  /** The run has ended, so read the queues again: otherwise the depth line keeps the queue as the run found it. */
+  ended(): void {
+    this.running.set(false);
+    this.feed.readQueuesAgain();
   }
 
   /** The tool with no argument: sends what the BFF's inbox has not recorded and deletes nothing. */
@@ -96,6 +109,7 @@ export class BffProjectionWidget {
   private started(job: JobSummary): void {
     this.error.set(null);
     this.jobId.set(job.id);
+    this.running.set(true);
     this.feed.readQueuesAgain();
   }
 }
