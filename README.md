@@ -75,7 +75,7 @@ holds Markdown or a Mermaid diagram. A layout saved, or exported, while a
 screen still sat whole in a page as a single Screen widget gets that screen's
 widgets in its place the first time this console reads or imports it: inside
 the rectangle it occupied, or under the rest of the page where a widget needs
-more width than the rectangle had. The operator is told once which pages
+more width than the rectangle had and would then reach a widget beside it. The operator is told once which pages
 changed.
 
 Phases 0 to 6 of the spec: the Stack page (a workstation doctor read before
