@@ -180,6 +180,16 @@ export const SCENARIO_WIDGETS = {
   }),
 } as const;
 
+/** The Logs page's widget (§5.2), a view of the one follow `LogFollowService` in features/logs runs. */
+export const LOGS: WidgetType = listing('services', 'All services', {
+  type: 'logs',
+  title: 'Logs',
+  component: () => import('../features/logs/widgets/logs-widget').then((m) => m.LogsWidget),
+  defaultSize: { cols: 24, rows: 18 },
+  minSize: { cols: 8, rows: 6 },
+  dataServices: ['LogFollowService'],
+});
+
 /** Every screen's output pane, as a widget of its own (§5.2): a job by id, or the job its page started last. */
 export const JOB_OUTPUT: WidgetType = {
   type: 'job-output',
@@ -232,6 +242,7 @@ export const NOTE: WidgetType = {
 export const WIDGETS: readonly WidgetType[] = [
   ...Object.values(STACK_WIDGETS),
   ...Object.values(SCENARIO_WIDGETS),
+  LOGS,
   JOB_OUTPUT,
   NOTE,
   LEGACY_SCREEN,

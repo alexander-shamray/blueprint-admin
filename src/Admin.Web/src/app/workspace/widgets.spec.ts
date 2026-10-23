@@ -1,7 +1,7 @@
 import { SCREENS } from '../screens';
 import { builtInTitle, builtInWidgets, defaultWorkspace, differsFromBuiltIn, withEveryBuiltIn } from './built-in-pages';
 import { SCREEN_COMPONENTS } from './screen-components';
-import { JOB_OUTPUT, LEGACY_SCREEN, NOTE, SCENARIO_WIDGETS, STACK_WIDGETS, WIDGETS, widgetType } from './widgets';
+import { JOB_OUTPUT, LEGACY_SCREEN, LOGS, NOTE, SCENARIO_WIDGETS, STACK_WIDGETS, WIDGETS, widgetType } from './widgets';
 import { GRID_COLUMNS, MAX_ROWS, WidgetInstance } from './workspace-types';
 
 describe('the widget registry', () => {
@@ -44,11 +44,18 @@ describe('the built-in pages', () => {
   });
 
   it('each start as one legacy widget across the grid, until a phase builds one from widgets', () => {
-    for (const screen of SCREENS.filter((s) => s.path !== 'stack' && s.path !== 'scenario')) {
+    for (const screen of SCREENS.filter((s) => !['stack', 'scenario', 'logs'].includes(s.path))) {
       expect(builtInWidgets(screen.path)).toEqual([
         expect.objectContaining({ type: 'legacy', x: 0, y: 0, cols: GRID_COLUMNS, config: { screen: screen.path } }),
       ]);
     }
+  });
+
+  it('build the Logs page from one Logs widget over every service', () => {
+    expect(builtInWidgets('logs')).toEqual([
+      expect.objectContaining({ id: 'builtin-logs-logs', type: 'logs', x: 0, y: 0, cols: 24, config: { services: [] } }),
+    ]);
+    expect(LOGS.dataServices).toEqual(['LogFollowService']);
   });
 
   it('build the Scenario page from the Scenario widget and the Saga strip beside it', () => {
