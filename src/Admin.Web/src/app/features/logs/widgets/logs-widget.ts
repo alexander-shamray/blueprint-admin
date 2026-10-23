@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { OutputLine } from '../../../core/host/host-types';
 import { injectWidgetContext } from '../../../workspace/widget-context';
 import { shows, stringList } from '../../../workspace/widget-config';
+import { COMPOSE_SERVICES } from '../compose-services';
 import { LogFollowService, lineService } from '../log-follow';
 
 let anonymous = 0;
@@ -28,6 +29,9 @@ export class LogsWidget {
 
   /** The services this widget shows; `[]` is every one. */
   readonly services = computed(() => stringList(this.config()['services']));
+
+  /** Configured services Compose has none of: said, because such a widget would wait for lines that never come. */
+  readonly unknown = computed(() => this.services().filter((s) => !COMPOSE_SERVICES.includes(s)));
 
   readonly visible = computed(() => {
     const services = this.services();

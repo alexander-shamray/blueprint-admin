@@ -9,6 +9,10 @@
   </div>
 </section>
 
+@if (unknown().length > 0) {
+  <p class="error">Not a Compose service: {{ unknown().join(', ') }}</p>
+}
+
 @if (follow.error(); as e) {
   <p class="error">{{ e }}</p>
 }

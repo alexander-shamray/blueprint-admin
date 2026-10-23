@@ -49,7 +49,7 @@ public sealed class DriftCoverageTests
         ["src/Admin.Host/Trace/EventTraceService.cs"] = typeof(LiteralDriftTests),
         ["src/Admin.Host/Trace/SpanRecogniser.cs"] = typeof(LiteralDriftTests),
         ["src/Admin.Web/src/app/features/erasure/erasure-page.ts"] = typeof(LiteralDriftTests),
-        ["src/Admin.Web/src/app/features/logs/logs-page.ts"] = typeof(ComposeDriftTests),
+        ["src/Admin.Web/src/app/features/logs/compose-services.ts"] = typeof(ComposeDriftTests),
         ["src/Admin.Web/src/app/features/scenario/scenario-run.ts"] = typeof(LiteralDriftTests),
     };
 
