@@ -43,9 +43,6 @@ concurrency:
 # `main`.
 jobs:
   locality-gate:
-    # Dependabot's pull requests declare no class or touch set and carry no
-    # PR trailer; docs/change-locality.md section 6.
-    if: github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -54,7 +51,38 @@ jobs:
           # checkout does not have.
           fetch-depth: 0
 
+      # Dependabot's own pull requests declare no class or touch set and carry
+      # no PR trailer, so the gate stands down for one whose every commit
+      # Dependabot authored, and runs for a commit anyone else adds to its
+      # branch: docs/change-locality.md section 6. Keyed on the commits, not on
+      # who opened the pull request or triggered the run. The author alone let
+      # a human's push ride the exemption (#400), and the actor is the owner
+      # when the owner rebases a Dependabot branch onto main, which keeps
+      # Dependabot as the author. commit-gate.yml makes the same decision.
+      - name: Decide whether this is Dependabot's own pull request
+        id: dependabot
+        shell: bash
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          DEPENDABOT: 49699333+dependabot[bot]@users.noreply.github.com
+        run: |
+          set -euo pipefail
+          own=false
+          if [ "$PR_AUTHOR" = 'dependabot[bot]' ]; then
+            authors=$(git log --format=%ae "$BASE_SHA..$HEAD_SHA")
+            if [ -n "$authors" ] && ! grep -qvxF "$DEPENDABOT" <<<"$authors"; then
+              own=true
+            fi
+          fi
+          echo "own=$own" >> "$GITHUB_OUTPUT"
+          if [ "$own" = true ]; then
+            echo "::notice::every commit in this pull request is Dependabot's; the gate stands down"
+          fi
+
       - uses: actions/setup-python@v7
+        if: steps.dependabot.outputs.own != 'true'
         with:
           python-version: '3.12'
 
@@ -64,12 +92,14 @@ jobs:
       # match — plus reads of the shipped map, so a proposal that fails its own
       # suite belongs red here.
       - name: Test the proposed gate
+        if: steps.dependabot.outputs.own != 'true'
         working-directory: .github/locality-gate
         run: python -m unittest
 
       # The base copy — gate and map together — for the reason above, with the
       # one bootstrap branch argued there.
       - name: Take the enforcing gate and map from the base commit
+        if: steps.dependabot.outputs.own != 'true'
         shell: bash
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -120,6 +150,7 @@ jobs:
       # `bash -e` with no pipefail, so a failing `gh` would be masked by
       # whatever the right-hand side exited with.
       - name: Every changed path is inside the declared class and touch set
+        if: steps.dependabot.outputs.own != 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}

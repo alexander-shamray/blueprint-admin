@@ -120,11 +120,16 @@ Directory.Packages.props        BlueprintAdmin.slnx
 - Exact pins, both toolchains.
 - A Dependabot pull request (`.github/dependabot.yml`) declares no class and
   no touch set and carries no `PR:` trailer, so `locality-gate.yml` and
-  `commit-gate.yml` skip their job when the author is `dependabot[bot]`. The
-  other jobs in `ci.yml` run on it as on any pull request, and the owner
-  merges it. The exemption is by pull request author, so a human who pushes
-  to a Dependabot branch rides on it; review such a push as you would a
-  gate bypass.
+  `commit-gate.yml` stand down when `dependabot[bot]` opened it **and every
+  commit in it is authored by Dependabot**. The other jobs in `ci.yml` run on
+  it as on any pull request, and the owner merges it. Rebasing a Dependabot
+  branch onto `main` keeps Dependabot as the author, so the gates still stand
+  down. A commit anyone else pushes to the branch, or a merge commit from
+  *Update branch*, runs both gates, and the pull request then needs the rows
+  and the trailers like any other. To drop such a commit,
+  `@dependabot recreate`. A commit that only claims Dependabot's address as
+  its author is a deliberate bypass: branch protection and the owner's review
+  bound that, not this check (#400).
 - The dialect in [`style-guide.md`](style-guide.md).
 - `main` stays green.
 - `Closes #n` as a bare line when a change closes an issue.

@@ -17,9 +17,6 @@ concurrency:
 
 jobs:
   commit-gate:
-    # Dependabot's pull requests declare no class or touch set and carry no
-    # PR trailer; docs/change-locality.md section 6.
-    if: github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -28,11 +25,38 @@ jobs:
           # base commit, so history is needed (locality-gate.yml's reasoning).
           fetch-depth: 0
 
+      # The same decision as locality-gate.yml's step of this name, which
+      # argues it: the gate stands down only when every commit in the pull
+      # request is Dependabot's (docs/change-locality.md section 6).
+      - name: Decide whether this is Dependabot's own pull request
+        id: dependabot
+        shell: bash
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          DEPENDABOT: 49699333+dependabot[bot]@users.noreply.github.com
+        run: |
+          set -euo pipefail
+          own=false
+          if [ "$PR_AUTHOR" = 'dependabot[bot]' ]; then
+            authors=$(git log --format=%ae "$BASE_SHA..$HEAD_SHA")
+            if [ -n "$authors" ] && ! grep -qvxF "$DEPENDABOT" <<<"$authors"; then
+              own=true
+            fi
+          fi
+          echo "own=$own" >> "$GITHUB_OUTPUT"
+          if [ "$own" = true ]; then
+            echo "::notice::every commit in this pull request is Dependabot's; the gate stands down"
+          fi
+
       - uses: actions/setup-python@v7
+        if: steps.dependabot.outputs.own != 'true'
         with:
           python-version: '3.12'
 
       - name: Test the proposed gate
+        if: steps.dependabot.outputs.own != 'true'
         working-directory: .github/commit-gate
         run: python -m unittest
 
@@ -41,6 +65,7 @@ jobs:
       # it is judged by its own copy, with a notice. A base that predates the
       # gate while the head also lacks it still fails.
       - name: Take the enforcing gate from the base commit
+        if: steps.dependabot.outputs.own != 'true'
         shell: bash
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -64,6 +89,7 @@ jobs:
           fi
 
       - name: Every commit names this pull request and keeps the form
+        if: steps.dependabot.outputs.own != 'true'
         shell: bash
         run: |
           python "$RUNNER_TEMP/commit-gate/commit_gate.py" \
