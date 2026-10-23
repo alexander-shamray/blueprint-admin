@@ -227,7 +227,7 @@ public sealed class AssistantSession : IDisposable
         catch (Exception e)
         {
             reason = TurnEndReason.Error;
-            Emit(new ErrorEvent("provider-error", "The assistant's provider failed", 502, core.Redactor.Redact(e.Message, Caller)));
+            Emit(new ErrorEvent("provider-error", "The assistant's provider failed", 502, Detail(e)));
         }
 
         End(reason, category, used);
@@ -427,6 +427,20 @@ public sealed class AssistantSession : IDisposable
         }
 
         core.TurnEnded?.Invoke(summary);
+    }
+
+    // The failure's message may hold what a tool or the provider returned, so it is redacted too; a redactor that is
+    // itself what failed gets no second call, or the turn would never reach its end.
+    private string? Detail(Exception failure)
+    {
+        try
+        {
+            return core.Redactor.Redact(failure.Message, Caller);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     private void Emit(AssistantEvent value)
