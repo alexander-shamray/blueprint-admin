@@ -6,6 +6,7 @@ const angular = require('angular-eslint');
 
 const TRANSLATED_TEMPLATES = [
   'src/app/app.html',
+  'src/app/assistant/assistant-panel.html',
   'src/app/shared/command-palette/command-palette.html',
   'src/app/shared/drained-indicator/drained-indicator.ts/*.html',
   'src/app/shared/output-pane/output-pane.ts/*.html',
@@ -68,6 +69,7 @@ module.exports = defineConfig([
             'aria-labelledby',
             'aria-live',
             'mode',
+            'position',
           ],
         },
       ],
