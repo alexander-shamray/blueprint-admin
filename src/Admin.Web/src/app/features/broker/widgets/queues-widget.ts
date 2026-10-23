@@ -1,6 +1,7 @@
 import { Component, computed, inject, input } from '@angular/core';
 import { DrainedIndicator } from '../../../shared/drained-indicator/drained-indicator';
-import { BrokerFeed, filterOf, listFeed } from '../broker-feed';
+import { pollWhenOn } from '../../../workspace/polled-feed';
+import { BrokerFeed, filterOf } from '../broker-feed';
 
 /**
  * Queues (widget-workspace spec §5.2): each queue's depth, the parked ones marked in words with the runbook of one
@@ -64,6 +65,6 @@ export class QueuesWidget {
   });
 
   constructor() {
-    listFeed(this.feed.queues, this.autoRefresh);
+    pollWhenOn(this.feed.queues, this.autoRefresh);
   }
 }

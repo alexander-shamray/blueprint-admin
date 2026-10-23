@@ -1,5 +1,6 @@
 import { Component, computed, inject, input } from '@angular/core';
-import { BrokerFeed, filterOf, listFeed } from '../broker-feed';
+import { pollWhenOn } from '../../../workspace/polled-feed';
+import { BrokerFeed, filterOf } from '../broker-feed';
 
 /** Permissions (widget-workspace spec §5.2). Config: a user filter, and the widget's own opt-in auto-refresh. */
 @Component({
@@ -51,6 +52,6 @@ export class PermissionsWidget {
   });
 
   constructor() {
-    listFeed(this.feed.permissions, this.autoRefresh);
+    pollWhenOn(this.feed.permissions, this.autoRefresh);
   }
 }

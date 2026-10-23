@@ -1,5 +1,6 @@
 import { Component, computed, inject, input } from '@angular/core';
-import { BrokerFeed, exchangeName, filterOf, listFeed } from '../broker-feed';
+import { pollWhenOn } from '../../../workspace/polled-feed';
+import { BrokerFeed, exchangeName, filterOf } from '../broker-feed';
 
 /** Exchanges (widget-workspace spec §5.2). Config: a name filter, and the widget's own opt-in auto-refresh. */
 @Component({
@@ -52,6 +53,6 @@ export class ExchangesWidget {
   });
 
   constructor() {
-    listFeed(this.feed.exchanges, this.autoRefresh);
+    pollWhenOn(this.feed.exchanges, this.autoRefresh);
   }
 }
