@@ -7,9 +7,6 @@ import { PolledFeed, TabVisibility } from '../../workspace/polled-feed';
 /** Each read is a `docker compose exec` the host does not keep among its jobs (spec §5.2), so a tick costs two short processes. */
 export const AUTO_REFRESH_MS = 5000;
 
-/** A previous read older than this is not a baseline for a rate. */
-const STALE_AFTER_MS = 3 * AUTO_REFRESH_MS;
-
 /**
  * The Platform map widget's data (widget-workspace spec §4.2, §4.3): the host's join of its own tables with the broker's
  * answer, in a `PolledFeed` that polls only while a widget with auto-refresh on is showing (off by default). The rate a
@@ -32,6 +29,24 @@ export class MapFeed {
     inject(DestroyRef),
   );
 
+  /** How many Map widgets are showing. */
+  private showing = 0;
+
+  /**
+   * A widget is showing. The baseline for a rate lives while one is: when the last goes (the page was left), so does
+   * the previous read, and a widget that returns reads a rate only between two reads it was there for, not one
+   * averaged over the minutes it was away.
+   */
+  show(destroyRef: DestroyRef): void {
+    this.showing++;
+    destroyRef.onDestroy(() => {
+      if (--this.showing === 0) {
+        this.previous = null;
+        this.rates.set(new Map());
+      }
+    });
+  }
+
   /** `+0.4/s`, `0/s` or an em dash for a queue with no earlier depth to compare. */
   rateOf(queue: string): string {
     const rate = this.rates().get(queue);
@@ -43,16 +58,13 @@ export class MapFeed {
     const now = Date.now();
     const depths = new Map<string, number>();
     const rates = new Map<string, number>();
-    // A read that is old by several poll periods (the page was left and returned to) is no baseline: a rate averaged
-    // over minutes would read as the change between two adjacent reads.
-    const previous = this.previous && now - this.previous.at <= STALE_AFTER_MS ? this.previous : null;
     for (const service of view.services) {
       for (const queue of service.queues) {
         if (queue.messages === null) continue;
         depths.set(queue.name, queue.messages);
-        const before = previous?.depths.get(queue.name);
-        if (previous && before !== undefined && now > previous.at) {
-          rates.set(queue.name, (queue.messages - before) / ((now - previous.at) / 1000));
+        const before = this.previous?.depths.get(queue.name);
+        if (this.previous && before !== undefined && now > this.previous.at) {
+          rates.set(queue.name, (queue.messages - before) / ((now - this.previous.at) / 1000));
         }
       }
     }

@@ -86,18 +86,27 @@ describe('MapWidget', () => {
     expect((fixture.nativeElement.querySelector('table.queues td.rate') as HTMLElement).textContent).toBe('+2.0/s');
   });
 
-  it('gives no rate against a read from long ago, such as one made before the page was left', () => {
+  it('gives a rate between manual refreshes however far apart, but none against a read from before the page was left', () => {
     vi.setSystemTime(new Date('2026-10-20T10:00:00Z'));
-    const fixture = render();
+    const first = render();
     const feed = TestBed.inject(MapFeed);
+    const busier = of({
+      ...view,
+      services: view.services.map((s) => (s.name === 'ordering' ? { ...s, queues: s.queues.map((q) => ({ ...q, messages: 62 })) } : s)),
+    });
+
+    vi.setSystemTime(new Date('2026-10-20T10:01:00Z'));
+    host.platformMap.mockReturnValue(busier);
+    (first.nativeElement.querySelector('button.refresh') as HTMLButtonElement).click();
+    expect(feed.rateOf('ordering-catalog-events')).toBe('+1.0/s');
+
+    first.destroy();
+    expect(feed.rateOf('ordering-catalog-events')).toBe('—');
 
     vi.setSystemTime(new Date('2026-10-20T10:10:00Z'));
-    host.platformMap.mockReturnValue(
-      of({ ...view, services: view.services.map((s) => (s.name === 'ordering' ? { ...s, queues: s.queues.map((q) => ({ ...q, messages: 60 })) } : s)) }),
-    );
-    (fixture.nativeElement.querySelector('button.refresh') as HTMLButtonElement).click();
-
+    const again = render();
     expect(feed.rateOf('ordering-catalog-events')).toBe('—');
+    expect(again.nativeElement.querySelector('table.queues td.rate')?.textContent).toBe('—');
   });
 
   it('reads once when it appears and polls nothing while its auto-refresh is off', async () => {

@@ -1,4 +1,4 @@
-import { Component, computed, inject, input } from '@angular/core';
+import { Component, DestroyRef, computed, inject, input } from '@angular/core';
 import { pollWhenOn } from '../../../workspace/polled-feed';
 import { MapFeed } from '../map-feed';
 
@@ -21,6 +21,7 @@ export class MapWidget {
   readonly autoRefresh = computed(() => this.config()['autoRefresh'] === true);
 
   constructor() {
+    this.feed.show(inject(DestroyRef));
     pollWhenOn(this.feed.map, this.autoRefresh);
   }
 }
