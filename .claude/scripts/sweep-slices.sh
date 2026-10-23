@@ -45,8 +45,8 @@ fi
 # a tenth of a second each under MSYS, 52 s over this tree (#321).
 row_of() {
   case "$kind:$1" in
-    bug:src/Admin.Host/*.csproj|bug:src/Admin.Assistant/*.csproj) REPLY=config ;;
-    bug:src/Admin.Host/*|bug:src/Admin.Assistant/*) REPLY=host ;;
+    bug:src/Admin.Host/*.csproj|bug:src/Admin.Assistant/*.csproj|bug:src/Admin.Assistant.Anthropic/*.csproj) REPLY=config ;;
+    bug:src/Admin.Host/*|bug:src/Admin.Assistant/*|bug:src/Admin.Assistant.Anthropic/*) REPLY=host ;;
     bug:src/Admin.Web/*.spec.ts|bug:src/Admin.Web/e2e/*|bug:tests/*) REPLY=suites ;;
     bug:src/Admin.Web/src/*) REPLY=spa ;;
     bug:src/Admin.Web/*) REPLY=config ;;
