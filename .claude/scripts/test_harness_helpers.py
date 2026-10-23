@@ -5669,6 +5669,12 @@ class TheGitArgvGuard(unittest.TestCase):
             "coproc awk '{system($0)}'; echo 'git push origin +HEAD:main' >&63",
             "echo git push origin +HEAD:main \\${| /tmp/x",
             "echo git push origin +HEAD:main $${| /tmp/x",
+            # Round 5: a coprocess after a reserved word.
+            "{ coproc pwsh; }; echo 'git push origin +HEAD:main' >&63",
+            "time coproc pwsh; echo 'git push origin +HEAD:main' >&63",
+            "! coproc pwsh; echo 'git push origin +HEAD:main' >&63",
+            "if :; then coproc pwsh; fi; echo 'git push origin +HEAD:main' >&63",
+            "time -p coproc (pwsh); echo 'git push origin +HEAD:main' >&63",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command)
@@ -8013,16 +8019,31 @@ class TheGitArgvGuard(unittest.TestCase):
         # Round 3 of #447: each here-string piped into a group re-walked the
         # rest of the line, each built a mask as long as the line, and each
         # run piped from the unseen re-read the whole of it, so the work was
-        # openers times length and a long line ran past the hook's time
-        # limit, which admits: 200 repeats of the first took 3.8 s, growing
-        # with their square. Neither shape spends a bracket `scan_budget`
-        # counts.
+        # openers times length and a long ordinary line ran into the
+        # watchdog, which refuses it: 200 repeats of the first took 3.8 s,
+        # growing with their square. Neither shape spends a bracket
+        # `scan_budget` counts.
         for unit in ("cat <<<a | { :; }; ", "{ :; } | npx x; "):
             with self.subTest(unit=unit):
                 command = unit * 2000 + "git push origin +HEAD:main"
                 started = time.monotonic()
                 self.assertIsNotNone(self.judge(command))
                 self.assertLess(time.monotonic() - started, 10)
+
+    def test_a_subscript_scan_answers_in_linear_time(self):
+        # Round 5 of #447: `EXPANSION_WRITES` read a subscript across `[`, so
+        # a line of ` a[1` with no `]` backtracked through every later
+        # bracket inside one match, which the watchdog cannot interrupt:
+        # 2500 repeats took 15.6 s, growing with their cube.
+        guard = self.judging_module()
+        for text in (" a[1" * 5000, " a[b" * 5000):
+            with self.subTest(text=text[:8]):
+                started = time.monotonic()
+                self.assertIsNone(guard.EXPANSION_WRITES.search(text))
+                self.assertLess(time.monotonic() - started, 10)
+        # A nested subscript is still read, by its inner name.
+        self.assertIsNotNone(guard.EXPANSION_WRITES.search(": ${a[b[i]]}"))
+        self.assertIsNotNone(guard.EXPANSION_WRITES.search("a[b[i]]=1"))
 
     def test_the_startup_shell_pattern_answers_in_linear_time(self):
         # #357: two readings of one word doubled the startup-shell search per

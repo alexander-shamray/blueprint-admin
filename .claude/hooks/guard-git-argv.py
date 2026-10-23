@@ -5062,8 +5062,8 @@ def _stdin_bodies(command, consumes):
             yield command[start:end]
 
     # Built once, not per here-string: per opener it made the walk openers
-    # times length, past the hook's time limit, which admits (R3, round 3 of
-    # #447).
+    # times length, so a long ordinary line ran into `WATCHDOG_SECONDS`,
+    # which refuses it (R3, round 3 of #447).
     unescaped = [not literal[position] and value
                  for position, value in enumerate(ordinary)]
     index = 0
@@ -5298,6 +5298,11 @@ RESOLVING = re.compile(
 # reviews; the expansion half verified admitted.
 # Arithmetic over literals alone reads no variable, so `${PIPESTATUS[0]}`, the
 # commonest shape in the replayed commands, is not one.
+# **A subscript is read up to the next bracket, never across one**: read
+# across `[`, a line of ` a[1` with no `]` backtracked through every later
+# bracket inside one match, which the watchdog cannot interrupt, and grew
+# with the cube of its length (2500 repeats, 15.6 s). A nested subscript is
+# still read, by its inner name (R1, round 5 of #447).
 EXPANSION_WRITES = re.compile(
     r"\$\{[^}]*="
     r"|\(\([^)]*[A-Za-z_]|\$\[[^]]*[A-Za-z_]"
@@ -5306,7 +5311,7 @@ EXPANSION_WRITES = re.compile(
     r"|\$\{[^}]*@(?![]}])"
     r"|\+?=\([\s\S]*?\[[^]]*[A-Za-z_$`]"
     r"|\$\{[^}:]*:(?![-=+?])[^}]*[A-Za-z_]"
-    r"|(?<![\w-])[A-Za-z_]\w*\[[^]]*[A-Za-z_][^]]*\]"
+    r"|(?<![\w-])[A-Za-z_]\w*\[(?=[^][]*\])[^][A-Za-z_]*[A-Za-z_]"
     r"|\[\[[^]]*\s-(?:eq|ne|lt|le|gt|ge)\s")
 
 
@@ -5574,8 +5579,9 @@ def _reaches(command, position, ordinary, reader):
         return True
     # **Each answer is kept, per line, mask and reader, by the run end it
     # walks on from**: asked afresh per opener, the walk was openers times
-    # length, past the hook's time limit, which admits (R3, round 3 of
-    # #447). The mask is held beside its answers, so its `id` stays its own.
+    # length, so a long ordinary line ran into `WATCHDOG_SECONDS`, which
+    # refuses it (R3, round 3 of #447). The mask is held beside its answers,
+    # so its `id` stays its own.
     _, answers = REACH_CACHE.setdefault((command, reader, id(ordinary)),
                                         (ordinary, {}))
     walked, answer = [], False
@@ -5737,6 +5743,19 @@ def _body_starts(command):
     return {start for start, _, _ in heredoc_spans(command)}
 
 
+def _coprocess(words):
+    """Whether the run made of `words` starts a coprocess: `coproc` first, or
+    after reserved words and `time -p`, as `{ coproc …`, `then coproc …`,
+    `time coproc …` and `! coproc …` do. Read at the first word only, each of
+    those was admitted (round 5 of #447)."""
+    position = 0
+    while position < len(words) and (
+            words[position] in SHELL_KEYWORDS
+            or (words[position] == "-p" and words[position - 1:position] == ["time"])):
+        position += 1
+    return words[position:position + 1] == ["coproc"]
+
+
 def _opens_function_substitution(command, index, ordinary):
     """Whether the `|` at `index` opens bash 5.3's function substitution
     `${| …; }`. Only an ordinary `$` and `{` open one, and a `$` that a `$`
@@ -5769,7 +5788,7 @@ def _runs_with_feeds(command, ordinary):
             # number (`>&63`) as well as through `${COPROC[1]}`, a channel this
             # walk does not see: it reads as a pipe from the unseen, and so
             # does every run in a group it opens (R2, round 4 of #447).
-            coprocess = words[0] == "coproc"
+            coprocess = _coprocess(words)
             if coprocess:
                 upstream = []
             runs.append((words, upstream))
@@ -5793,7 +5812,7 @@ def _runs_with_feeds(command, ordinary):
         elif char == "&" and index and command[index - 1] == "|":
             pass  # the `&` of `|&`, which carries the pipe its `|` opened
         elif char == "(":
-            fed = (piped and not words) or words[:1] == ["coproc"]
+            fed = (piped and not words) or _coprocess(words)
             groups.append(upstream if fed else None)
             if not fed:
                 upstream = None
