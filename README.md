@@ -216,8 +216,9 @@ names stay as written.
 
 - The host keeps at most one `logs -f` job, so a Follow in a second browser
   tab ends the first tab's. A follow whose answer never reached the page,
-  or whose stop failed as the Logs screen was left, runs until the next
-  Follow.
+  or whose stop failed, runs until the next Follow. Leaving the Logs page
+  does not stop a follow: only Stop does, and a page reload forgets the job,
+  which the next Follow then ends.
 - The console runs `npm start` but never `npm ci`: with no `node_modules` in
   the frontend clone, or one whose installed versions differ from its
   `package-lock.json`, Start is refused and the screen says which (the doctor's
