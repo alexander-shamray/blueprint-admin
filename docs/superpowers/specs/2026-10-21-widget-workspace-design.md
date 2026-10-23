@@ -528,14 +528,12 @@ later phase move one screen at a time without a page ever missing.
     the legacy Scenario screen is the two side by side;
   - neither Scenario widget saves a script or an identity yet: the runner
     holds the one run, its script and its user, and a per-instance choice
-    waits for a configure control that edits more than presets (below).
+    waits for its `fields` (the #446 bullet below).
 - Settled in #437, the shell's controls (§6.2, §7.2):
   - **Configure** (edit mode only) offers a type's `presets` as a menu and
     marks the one the widget holds; it shows only for a type with more than
-    one. A type whose setting is not a preset (a Logs widget's services, a
-    Scenario widget's script, a Job output's id) has no editor yet, so its
-    row waits for the phase that needs it, and the Note widget (§8.3) edits
-    in place.
+    one, or with `fields` (the #446 bullet below). The Note widget (§8.3)
+    edits in place.
   - **Maximise** shows one widget across the page it was on, and restore
     brings the grid back. The other widgets are not rendered meanwhile, so
     what they keep is what `WidgetSessionStore` holds (§4.2).
