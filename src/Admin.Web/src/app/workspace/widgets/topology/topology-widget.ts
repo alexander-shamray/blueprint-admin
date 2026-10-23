@@ -135,7 +135,7 @@ export class TopologyWidget {
     if (node.parkedQueue !== null && this.broker.workbenches() > 0) {
       this.broker.requestOpen(node.parkedQueue);
       this.notice.set(`The dead-letter workbench on this page opened ${node.parkedQueue}.`);
-    } else if (node.parkedQueue === null && this.point('queues', { filter: node.name })) {
+    } else if (node.parkedQueue === null && this.point('queues', { filter: node.name, parkedOnly: false })) {
       this.notice.set(`The Queues widget on this page shows ${node.name}.`);
     } else {
       void this.router.navigateByUrl('/broker');
