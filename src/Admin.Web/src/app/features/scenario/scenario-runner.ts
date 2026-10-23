@@ -24,7 +24,7 @@ import {
 } from '../../core/host/host-types';
 import { IdentityState } from '../../core/identity/identity-state';
 import { RunningWork } from '../../workspace/running-work';
-import { DRAIN_POLL_MS, DRAIN_WATCH_MS, UUID } from '../api/api-page';
+import { DRAIN_POLL_MS, DRAIN_WATCH_MS, UUID } from '../api/api-client';
 import { TraceRead, buildExport } from './scenario-export';
 import { buildUrl, withFreshCommandId } from '../api/request-builder';
 import {

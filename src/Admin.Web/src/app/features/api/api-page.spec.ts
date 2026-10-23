@@ -5,8 +5,8 @@ import { Subject, of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { ApiCatalogView, ApiOperation, ProxyResult, QueuesView, TokenView } from '../../core/host/host-types';
 import { IdentityState } from '../../core/identity/identity-state';
-import { ApiPage, UUID, clockText } from './api-page';
-import { ApiHistory } from './api-client';
+import { ApiPage } from './api-page';
+import { ApiHistory, UUID, clockText } from './api-client';
 import { ApiRequestWidget } from './widgets/api-request-widget';
 
 function op(partial: Partial<ApiOperation>): ApiOperation {
