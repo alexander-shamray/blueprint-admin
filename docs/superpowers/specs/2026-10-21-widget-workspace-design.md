@@ -622,10 +622,12 @@ later phase move one screen at a time without a page ever missing.
     asked. Its `autoRefresh` is a settings-editor flag, off by default and
     saved; with it off it reads once on appearing and on Refresh;
   - **Mail** (`mail`): `correlationId` is its config (a settings-editor
-    text field). What the operator types over it, and the message that is
-    open, are session state (`widgetSession`), so they survive leaving the
-    page and end with the tab; the legacy Mail screen starts its widget at
-    the `?correlationId=` the route carries;
+    text field), and an old link's `?correlationId=` wins over it, which the
+    widget reads from the route itself (§5.3). What the operator types over
+    it, and the id of the message that is open, are session state
+    (`widgetSession`), so they survive leaving the page and end with the tab;
+    the message is read again when the widget is re-created, and choosing
+    another configured filter takes a typed one away;
   - **Erasure** (`erasure`): the request being watched, what it last read,
     the holders' depths and the every-3-seconds watch belong to `ErasureRun`;
     the subject being typed is the widget's session state. The watch is a
