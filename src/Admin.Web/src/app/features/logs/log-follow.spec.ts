@@ -84,10 +84,7 @@ describe('LogFollowService', () => {
     expect(host.stopFollow).toHaveBeenCalledWith('job-a');
     expect(host.followLogs).toHaveBeenLastCalledWith(['gateway', 'web-bff']);
     expect(service.hostJob()).toBe('job-b');
-    // The lines already received are kept across a restart (§4.4); only a Follow starts them afresh.
-    expect(service.lines().map((l) => l.text)).toEqual(['gateway | before']);
-    service.stop();
-    service.follow();
+    // The new follow replays the last lines of each service (`--tail 200`), so the buffer starts afresh.
     expect(service.lines()).toEqual([]);
   });
 

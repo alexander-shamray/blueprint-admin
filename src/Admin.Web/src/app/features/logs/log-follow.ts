@@ -102,11 +102,6 @@ export class LogFollowService {
    * By name, a stop that lands after the next follow has started ends nothing, because that follow already ended it.
    */
   follow(): void {
-    this.start(false);
-  }
-
-  /** `keepLines` is a restart for a changed set of services (§4.4): the lines already received stay. */
-  private start(keepLines: boolean): void {
     if (this.requestOut()) {
       return;
     }
@@ -115,7 +110,9 @@ export class LogFollowService {
     this.stopOnArrival = false;
     this.restartOnArrival = false;
     this.error.set(null);
-    if (!keepLines) this.lines.set([]);
+    // Also on a restart: the new `logs -f --tail 200` replays the last lines of each service, so keeping the old
+    // ones would show up to 200 of them twice.
+    this.lines.set([]);
     this.pending.set(true);
     this.requestOut.set(true);
     const services = this.services();
@@ -181,7 +178,7 @@ export class LogFollowService {
           }
           if (this.restarting) {
             this.restarting = false;
-            this.start(true);
+            this.follow();
           }
         },
       }));
@@ -217,7 +214,7 @@ export class LogFollowService {
     if (this.requestOut()) {
       this.restartOnArrival = true;
     } else {
-      this.start(true);
+      this.follow();
     }
   }
 
