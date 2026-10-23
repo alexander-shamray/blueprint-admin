@@ -162,6 +162,11 @@ export class WorkspaceGrid {
     return (item.kind?.fields?.length ?? 0) > 0;
   }
 
+  /** Whether a field is a list of names, which is the one kind the panel's comma hint is about. */
+  hasNames(item: GridItem): boolean {
+    return item.kind?.fields?.some((f) => f.kind === 'names') ?? false;
+  }
+
   /** The widget whose settings are open, with the text of each field as it is being written. */
   readonly settings = signal<{ id: string; draft: Record<string, string> } | null>(null);
 

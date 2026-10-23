@@ -108,6 +108,8 @@ describe('WorkspaceGrid', () => {
     document.querySelector<HTMLElement>('.ws-edit-settings')?.click();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.ws-settings')).not.toBeNull();
+    // A job id is not a list of names, so the comma hint is not shown for it.
+    expect(fixture.nativeElement.querySelector('.ws-field-hint')).toBeNull();
 
     fixture.componentRef.setInput('editing', false);
     fixture.detectChanges();

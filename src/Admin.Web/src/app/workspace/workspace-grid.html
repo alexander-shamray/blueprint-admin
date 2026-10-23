@@ -57,7 +57,9 @@
             />
           </label>
         }
-        <span class="ws-field-hint" i18n>Names are separated by commas; leave a field empty for the default.</span>
+        @if (hasNames(item)) {
+          <span class="ws-field-hint" i18n>Names are separated by commas; leave a field empty for the default.</span>
+        }
         <button mat-button type="submit" i18n>Apply</button>
         <button mat-button type="button" (click)="closeSettings()" i18n>Cancel</button>
       </form>
