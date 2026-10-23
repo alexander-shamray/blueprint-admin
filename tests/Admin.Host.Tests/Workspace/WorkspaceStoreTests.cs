@@ -262,6 +262,33 @@ public sealed partial class WorkspaceStoreTests : IDisposable
     }
 
     [Fact]
+    public void A_phase_1_export_is_imported_as_version_2_with_its_legacy_screen_widgets_left_for_the_spa()
+    {
+        JsonObject phase1 = Valid(widgetId: "old", type: "legacy", config: new JsonObject { ["screen"] = "mail" });
+        phase1["version"] = 1;
+        string pages = phase1["pages"]!.ToJsonString();
+
+        SaveResult imported = Store().Replace(phase1);
+
+        imported.Outcome.ShouldBe(SaveOutcome.Saved);
+        JsonNode read = JsonNode.Parse(Store().Read().Json)!;
+        read["version"]!.GetValue<int>().ShouldBe(2);
+        read["pages"]!.ToJsonString().ShouldBe(pages);
+    }
+
+    [Fact]
+    public void A_save_at_an_older_version_is_refused_not_stepped_up()
+    {
+        // Only an import is stepped up: a save comes from a tab whose SPA writes the current version, so an older one is a
+        // tab built before the bump, and its document is refused rather than read as current.
+        JsonObject old = Valid();
+        old["version"] = 1;
+        WorkspaceStore store = Store();
+
+        store.Save(old, store.Read().Etag).Outcome.ShouldBe(SaveOutcome.Invalid);
+    }
+
+    [Fact]
     public void A_valid_document_has_no_problem()
     {
         WorkspaceSchema.Validate(Valid(), WorkspaceSchema.Current).ShouldBeNull();
