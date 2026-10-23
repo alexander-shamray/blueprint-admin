@@ -241,7 +241,7 @@ column is the built-in page that places the widget.
 | Saga strip | Scenario | — | Scenario |
 | Runbooks | Runbooks | runbook | Runbooks |
 | Transcript | Transcript | — | Transcript |
-| **Live platform diagram** | new, §8.1 | services shown, layout | Map |
+| **Live platform diagram** | new, §8.1 | auto-refresh, node positions | Map |
 | **Request sequence** | new, §8.2 | correlation id, or "follow the last Trace link" | Trace |
 | **Note / diagram** | new, §8.3 | Mermaid or Markdown source | — |
 | **Assistant** | new, AI assistant note | — (one conversation per tab, AI assistant note §2) | — |
@@ -396,7 +396,16 @@ The question it answers: *what is happening now, and where is it stuck?*
   each service, each queue; parked twins are folded into their queue's node
   and shown as a badge. Edges: gateway route → service; queue → consuming
   service; exchange binding → queue, labelled with the exchange.
-- **Live**: refreshed on the Map's 5 s, while visible (§4.3).
+  - **Exchanges are nodes too**, drawn neutral, so a binding has a source to
+    start from; the edge into a queue carries the queue's depth and rate. A
+    queue nothing is bound to carries them on its edge out to its consumer.
+  - The same nodes are listed in words under the drawing, state included:
+    colour alone is not the state, and the list is how a keyboard reaches a
+    node.
+- **Live**: refreshed on the Map's 5 s, while visible (§4.3), and on by
+  default: the one widget whose auto-refresh is. Each map answer starts a
+  `GET /api/stack` read, so the colours and the depths come from the same
+  moment and the Stack's own 3 s tick runs only while a Stack widget shows.
   - **Service nodes.** A service with a probed URL is coloured by its
     reachability (`PlatformProbe`, which covers `PlatformServices.WithUrl`
     only). A worker with no URL, such as Shipping or Notifications, is
@@ -408,8 +417,17 @@ The question it answers: *what is happening now, and where is it stuck?*
 - **Interaction**: click a service to point a Logs widget on the page at it,
   or open the Logs page filtered to it; click a queue to open it in a Queues
   widget, or the Broker page; a parked queue opens the dead-letter workbench.
+  - "Point a widget at it" is a write to that widget's saved config (a Logs
+    widget's `services`, a Queues widget's `filter`), on the first one of the
+    type on the page being shown; the page has none, the click opens the
+    built-in page instead, which shows every service or queue.
+  - A parked queue opens in a dead-letter workbench that is showing, in the
+    parked twin that holds messages (`error` before `skipped`); with none
+    showing it opens the Broker page.
   Nodes can be dragged; positions are part of the widget's config, so the
-  operator's arrangement persists, and **Re-layout** discards it.
+  operator's arrangement persists, and **Re-layout** discards it. Only a node
+  the operator moved is kept: the layout places the rest, and a queue that
+  appears later is placed by it.
 - **Disagreements** (spec §5.15) are listed under the diagram, as on the Map
   screen, and never drawn as if resolved.
 
