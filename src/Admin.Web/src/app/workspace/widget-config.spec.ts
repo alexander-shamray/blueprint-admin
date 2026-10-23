@@ -8,6 +8,14 @@ describe('a settings field', () => {
     expect(fieldText('text', null)).toBe('');
   });
 
+  it('shows a switch as true or false, off unless stored as true, and reads it back', () => {
+    expect(fieldText('flag', true)).toBe('true');
+    expect(fieldText('flag', undefined)).toBe('false');
+    expect(fieldText('flag', 'true')).toBe('false');
+    expect(fieldValue('flag', 'true')).toBe(true);
+    expect(fieldValue('flag', 'false')).toBe(false);
+  });
+
   it('reads names split on commas, and text trimmed, with nothing written as every one or none', () => {
     expect(fieldValue('names', ' a, b ,, c')).toEqual(['a', 'b', 'c']);
     expect(fieldValue('names', '  ')).toEqual([]);

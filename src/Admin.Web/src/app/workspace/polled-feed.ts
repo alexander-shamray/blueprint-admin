@@ -7,8 +7,10 @@ import {
   Observable,
   catchError,
   combineLatest,
+  defer,
   distinctUntilChanged,
   exhaustMap,
+  finalize,
   fromEvent,
   map,
   startWith,
@@ -45,37 +47,72 @@ export class PolledFeed<T> {
   readonly value = signal<T | undefined>(undefined);
   /** Set when a read fails at the transport, cleared on the next answer. */
   readonly error = signal<string | null>(null);
+  /** A read is out, whether the timer's or a `refresh()`'s. */
+  readonly refreshing = signal(false);
 
   private readonly subscribers = new BehaviorSubject(0);
 
-  constructor(read: () => Observable<T>, periodMs: number, visible: Observable<boolean>, destroyRef: DestroyRef) {
+  constructor(
+    private readonly read: () => Observable<T>,
+    periodMs: number,
+    visible: Observable<boolean>,
+    private readonly destroyRef: DestroyRef,
+  ) {
     combineLatest([this.subscribers.pipe(map((n) => n > 0)), visible])
       .pipe(
         map(([wanted, showing]) => wanted && showing),
         distinctUntilChanged(),
         switchMap((on) =>
-          on
-            ? timer(0, periodMs).pipe(
-                exhaustMap(() =>
-                  read().pipe(
-                    tap(() => this.error.set(null)),
-                    catchError((e: unknown) => {
-                      this.error.set(hostErrorText(e));
-                      return EMPTY;
-                    }),
-                  ),
-                ),
-              )
-            : EMPTY,
+          // A tick is skipped while a manual read is out, as it is while its own is: one read at a time.
+          on ? timer(0, periodMs).pipe(exhaustMap(() => (this.refreshing() ? EMPTY : this.fetch()))) : EMPTY,
         ),
         takeUntilDestroyed(destroyRef),
       )
-      .subscribe((value) => this.value.set(value));
+      .subscribe();
   }
 
-  /** Subscribes the calling widget until it is destroyed; call it from the widget's constructor. */
-  attach(destroyRef = inject(DestroyRef)): void {
+  /**
+   * One read now, for a widget whose own auto-refresh is off or that has just done something the feed should show.
+   * Nothing is started while a read is out: it may have been asked before what the caller is asking about, so
+   * callers that must read afterwards watch `refreshing` and ask again.
+   */
+  refresh(): void {
+    if (this.refreshing()) return;
+    this.fetch().pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
+  }
+
+  /** A read, with its answer and its failure recorded; a failure ends this read and not the poll. */
+  private fetch(): Observable<T> {
+    return defer(() => {
+      this.refreshing.set(true);
+      return this.read().pipe(
+        tap((value) => {
+          this.error.set(null);
+          this.value.set(value);
+        }),
+        catchError((e: unknown) => {
+          this.error.set(hostErrorText(e));
+          return EMPTY;
+        }),
+        finalize(() => this.refreshing.set(false)),
+      );
+    });
+  }
+
+  /**
+   * Subscribes the calling widget until it is destroyed; call it from the widget's constructor. The function it
+   * returns ends the subscription sooner, for a widget that polls only while a setting is on; ending it twice, or
+   * again at destruction, counts once.
+   */
+  attach(destroyRef = inject(DestroyRef)): () => void {
     this.subscribers.next(this.subscribers.value + 1);
-    destroyRef.onDestroy(() => this.subscribers.next(this.subscribers.value - 1));
+    let released = false;
+    const release = (): void => {
+      if (released) return;
+      released = true;
+      this.subscribers.next(this.subscribers.value - 1);
+    };
+    destroyRef.onDestroy(release);
+    return release;
   }
 }
