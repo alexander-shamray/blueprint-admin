@@ -5689,6 +5689,18 @@ class TheGitArgvGuard(unittest.TestCase):
             "sh -c /tmp/x <<<'git push origin +HEAD:main'",
             "echo 'git push origin +HEAD:main' | bash -c pwsh",
             "while read l; do $l; done <<'EOF'\ngit \\\npush origin +HEAD:main\nEOF",
+            # Round 7: a shell handed a script file or a startup file, whose
+            # stdin that file can hand to `pwsh` (#459), and an escaped `|`
+            # straight before a pipe, which hid the pipe (#461).
+            "bash /tmp/s.sh <<<'& (\"gi\"+\"t\") push origin +HEAD:main'",
+            "sh ./run.sh <<'EOF'\ng^it push origin +HEAD:main\nEOF",
+            "bash -e -- /tmp/s <<<'& (\"gi\"+\"t\") push origin +HEAD:main'",
+            "bash /tmp/s.sh < /tmp/input",
+            "bash --rcfile /tmp/r -i <<<'& (\"gi\"+\"t\") push origin +HEAD:main'",
+            "BASH_ENV=/tmp/r bash <<<'& (\"gi\"+\"t\") push origin +HEAD:main'",
+            "export BASH_ENV=/tmp/r; bash <<<'& (\"gi\"+\"t\") push origin +HEAD:main'",
+            "echo 'git push origin +HEAD:main' \\||/tmp/x",
+            "echo 'git push origin +HEAD:main' \\||pwsh",
         ):
             with self.subTest(command=command):
                 self.assertRefused(command)
@@ -5702,6 +5714,8 @@ class TheGitArgvGuard(unittest.TestCase):
             "< /tmp/s /tmp/x",
             "{ /tmp/x; } < /tmp/s",
             "while :; do pwsh; done < /tmp/s",
+            # `esac` is a closer as `done` is (#460).
+            "case a in *) pwsh;; esac < /tmp/s",
             "exec </tmp/s; pwsh",
             "echo 'git push origin +HEAD:main' | (pwsh)",
             "echo 'git push origin +HEAD:main' |\npwsh",
@@ -5764,6 +5778,16 @@ class TheGitArgvGuard(unittest.TestCase):
             "grep -n 'env\\[\"PATH\"\\]\\|PATH=os.pathsep' f.py | head",
             "gh pr checks 1 --watch 2>&1 | tail -20; echo \"exit=${PIPESTATUS[0]}\"",
             "for f in a b; do bash .claude/scripts/gh-issue-create.sh bug low < $f.md; done",
+            # Round 7: the issue helpers are the script file whose stdin is
+            # known to be data, `-s` keeps a shell's script on its stdin, and
+            # an escaped `|` beside nothing is a word (#459, #461).
+            "bash .claude/scripts/gh-issue-create.sh bug low <<'EOF'\nt\n\nRun `git push origin +HEAD:main`.\nEOF",
+            # After a `cd` the body is read as a script too (so a backtick in
+            # it is still refused as a substitution), and what it says
+            # (`run()`, `ENV`) is the helper's data, not its line's.
+            "cd /tmp/w && bash .claude/scripts/gh-issue-create.sh bug low <<'EOF'\nt\n\nCall run() with ENV set.\nEOF",
+            "bash -s arg <<'EOF'\necho hi\nEOF",
+            "echo a \\| b; git log --oneline | head -3 || true",
         ):
             with self.subTest(command=command):
                 self.assertAdmitted(command)
@@ -5780,6 +5804,38 @@ class TheGitArgvGuard(unittest.TestCase):
             "npm run build < /dev/null",
             "printf '%s\\n' a b | sort",
             "diff <(sort a) <(sort b)",
+        ):
+            with self.subTest(command=command):
+                self.assertAdmitted(command)
+
+    def test_a_prompt_string_is_refused(self):
+        # #444: bash expands a prompt string as a command line, command
+        # substitutions included, so a push held as quoted data ran through
+        # `${x@P}` and through `PS4` under `set -x`, each spelt so `git` is
+        # typed nowhere too, and through a name only a writer computes.
+        for command in (
+            "x='$(git push origin +HEAD:main)'; echo \"${x@P}\"",
+            "x=$'$(g\\x69t push origin +HEAD:main)'; echo \"${x@P}\"",
+            "x='$(git push origin +HEAD:main)'; echo \"${x[0]@P}\"",
+            "PS4='$(git push origin +HEAD:main)'; set -x; true",
+            "PS4=$'$(g\\x69t push origin +HEAD:main)'; set -x; true",
+            "PROMPT_COMMAND='git push origin +HEAD:main' bash -i <<<''",
+            "p=P; declare \"${p}S4=\\$(git push origin +HEAD:main)\"; set -x; true",
+            "p=P; export \"${p}S4=\\$(git push origin +HEAD:main)\"; bash -x -c true",
+            "declare -n r=\"${p}S4\"; r='$(git push origin +HEAD:main)'; set -x; true",
+            "bash -c 'PS4=\"\\$(git push origin +HEAD:main)\"; set -x; true'",
+        ):
+            with self.subTest(command=command):
+                self.assertIn("#444", self.assertRefused(command))
+        # `@Q` quotes and `[@]` is a subscript, neither a transformation that
+        # expands; a default holding `@` is a word; and `set -e` traces
+        # nothing.
+        for command in (
+            "files=(a b); printf '%s\\n' \"${files[@]}\" \"${files[@]@Q}\"",
+            "files=(a b); echo \"${#files[@]}\" \"${@}\" \"${@:2}\" \"${x@Q}\"",
+            "x=${EMAIL:-user@example.com}; echo \"$x\"",
+            "set -euo pipefail; git status --short",
+            "git commit -F - <<'EOF'\nfix: PS4 under set -x\nEOF",
         ):
             with self.subTest(command=command):
                 self.assertAdmitted(command)
@@ -8036,8 +8092,9 @@ class TheGitArgvGuard(unittest.TestCase):
         # openers times length and a long ordinary line ran into the
         # watchdog, which refuses it: 200 repeats of the first took 3.8 s,
         # growing with their square. Neither shape spends a bracket
-        # `scan_budget` counts.
-        for unit in ("cat <<<a | { :; }; ", "{ :; } | npx x; "):
+        # `scan_budget` counts. The third is the shell pass's own walk,
+        # `forwards_to_evaluator`: 800 repeats took 7.3 s (#451).
+        for unit in ("cat <<<a | { :; }; ", "{ :; } | npx x; ", "cat <<<a | "):
             with self.subTest(unit=unit):
                 command = unit * 2000 + "git push origin +HEAD:main"
                 started = time.monotonic()

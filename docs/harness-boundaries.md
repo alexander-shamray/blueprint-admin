@@ -442,7 +442,9 @@ A new residual is stated **here** and gets a row above.
   interpreter until it returns and is bounded by the two budgets instead.
   Within them a pattern may still grow with the square of the line, so the
   two that grew faster are not patterns: arithmetic and a git writer line are
-  each read in one pass (`expansion_writes`, `git_writer_line`), and every
+  each read in one pass (`expansion_writes`, `git_writer_line`), a pipeline
+  walk keeps each answer by the run end it walks on from (`_reaches`,
+  `forwards_to_evaluator`, #451), and every
   shape measured on #447 answers within a few seconds at `LENGTH_BUDGET`,
   where `[[` repeated took 40 s and 24,000 `git` words 173 s. The event is read as
   bytes and decoded as UTF-8 with replacement, never with the locale's code
@@ -632,7 +634,11 @@ A new residual is stated **here** and gets a row above.
   (`gawk '{system("git …")}'`, the interpreter residual on #424). **The stdin
   channel is judged by content** (#397). A program is classified when it is
   a shell `EVALUATORS` names that reads its stdin as its script (not one
-  given `-c`, whose script inherits that stdin: `bash -c pwsh <<<…`), or a
+  given `-c`, whose script inherits that stdin: `bash -c pwsh <<<…`, nor one
+  handed a script file or a startup file, which can hand that stdin to
+  `pwsh`: `bash /tmp/s.sh`, `--rcfile`, `--init-file`, or `BASH_ENV` or
+  `ENV` named on the line, #459; the issue helpers, run as `bash` or `sh`
+  with nothing in front, are the one script file whose stdin is data), or a
   reader or interpreter named bare
   (`stdin_classified`: `READING_COMMANDS`, `STDIN_DATA_READERS`, the
   interpreters, the printers; after a reserved word such as `do` or `while`
@@ -656,7 +662,7 @@ A new residual is stated **here** and gets a row above.
   definition); and a shell by a name `EVALUATORS` does not read
   (`FOREIGN_SHELLS`: `pwsh`, `cmd`, `fish`, `nu` and others), or a shell of
   either list under a packaged or versioned name (`ksh93`, `bash-static`:
-  `SHELL_VARIANT`). Reserved words
+  `SHELL_VARIANT`), and a shell handed a script or startup file. Reserved words
   are read through, `eval`, `trap`, `fc` and `mapfile -C` count because each
   runs a string, and any text bash expands that names `PATH`, `BASH_CMDS` or
   `BASH_ALIASES` counts however it is spelt (`for PATH in`, `${PATH:=…}`,
@@ -668,7 +674,16 @@ A new residual is stated **here** and gets a row above.
   an indirect `${!n}`, a `${…@…}` transformation, a compound assignment's
   subscript, a substring offset, a prompt string or `set -x`, which
   prompt-expands `PS4`), since arithmetic evaluates a value
-  holding `PATH=0` as an assignment. **What stays open there is bounded by
+  holding `PATH=0` as an assignment. **A prompt string is refused outright**,
+  since bash expands one as a command line, command substitutions included
+  (`prompt_expansion`, #444): a `${…@…}` transformation other than `@Q`, a
+  prompt variable's name (`PS0` to `PS4`, `PROMPT_COMMAND`) anywhere outside
+  a heredoc body or a comment, quoted or not, and a name a writer computes
+  when it is exported or on a line that turns on `set -x`, where so are a
+  nameref and an indirect `${!…}`. The cost is a line that merely mentions
+  `PS4` outside a heredoc, such as `git commit -m 'fix PS4'`. Replayed over
+  the 4000 most recent distinct commands, this and #459's script-file rule
+  changed no verdict. **What stays open there is bounded by
   #424**: a route this list does not name, such as an unquoted expansion,
   a glob or a brace expansion that word-splits into a `test` operator, or a
   command word that comes from an expansion. Closing every route needs a
@@ -681,7 +696,7 @@ A new residual is stated **here** and gets a row above.
   PowerShell's `& ("gi"+"t") push`, cmd's `g^it push`), as is any `git`
   word, and so is any stdin that is not on the line: a file other than
   `/dev/null`, its own or a group's (`{ …; } < f`,
-  `done < f`, `exec < f`), a subshell the walk does not see, a coprocess,
+  `done < f`, `esac < f`, `exec < f`), a subshell the walk does not see, a coprocess,
   which reads what the line writes to its descriptors (`coproc pwsh; echo …
   >&63`), or a stage that transforms (`base64 -d <<<… | pwsh`). A pipe reaches its reader across a
   newline and into a subshell, and a resolution change counts from any

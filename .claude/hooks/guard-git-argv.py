@@ -4803,23 +4803,46 @@ def forwards_to_evaluator(command, position, ordinary):
     Only a `|` carries stdout onward, so `||` ends the walk rather than
     continuing it, and a `)` between the run and the pipe is stepped over
     because a subshell writes into the pipe exactly as a bare run does.
+
+    **Each answer is kept by the run end it walks on from**, per mask
+    (`FORWARD_CACHE`): asked afresh per opener, the walk was openers times
+    length, so `cat <<<a | ` repeated 2000 times ran into `WATCHDOG_SECONDS`,
+    which refuses it (#451). `_reaches` keeps its answers the same way.
     """
     _, index = _run_bounds(command, position, ordinary)
-    while index < len(command):
+    held = FORWARD_CACHE.setdefault(id(ordinary), (ordinary, {}))
+    answers = held[1] if held[0] is ordinary else {}
+    walked, answer = [], False
+    while index not in answers:
+        end = index
         while index < len(command) and (
                 command[index] in " 	"
                 or (ordinary[index] and command[index] == ")")):
             index += 1
         if not (index < len(command) and ordinary[index]
                 and command[index] == "|") or command.startswith("||", index):
-            return False
+            answers[end] = False
+            break
         index += 2 if command.startswith("|&", index) else 1
         start = index
         while index < len(command) and not _ends_run(command, index, ordinary):
             index += 1
-        if reads_stdin_as_script(_run_words(command, start, index, ordinary)):
-            return True
-    return False
+        accepted = reads_stdin_as_script(_run_words(command, start, index, ordinary))
+        walked.append((end, accepted))
+        if accepted:
+            break
+    else:
+        answer = answers[index]
+    for end, accepted in reversed(walked):
+        answer = answer or accepted
+        answers[end] = answer
+    return answer
+
+
+# What `forwards_to_evaluator` has answered, by the id of the mask it was
+# asked with, which the outermost `offence` empties. The mask is held beside
+# its answers, so its `id` stays its own.
+FORWARD_CACHE = {}
 
 
 def _helper_reads_stdin_as_data(command, start, words):
@@ -5212,10 +5235,14 @@ def _launched(words):
     program is the word after it: in `… | while read line` the reader is
     `read`, and in `do bash helper < f` it is `bash`. **A redirection is never
     the program**, wherever it stands: `< /tmp/s /tmp/x` starts `/tmp/x`, and
-    took `<` for its program until a review of #447 found it (R1)."""
+    took `<` for its program until a review of #447 found it (R1). **A
+    group's closer is syntax too**: `esac` is in no `SHELL_KEYWORDS`, so
+    `case a in *) pwsh;; esac < /tmp/s` read `esac` as the program and the
+    file reached `pwsh` unjudged, where `done < /tmp/s` was refused (#460)."""
     kept = _command_words(words)
     position = 0
-    while position < len(kept) and kept[position] in SHELL_KEYWORDS:
+    while position < len(kept) and (kept[position] in SHELL_KEYWORDS
+                                    or kept[position] in GROUP_CLOSERS):
         position += 1
     start = launched_program(kept[position:])
     return None if start is None else kept[position + start]
@@ -5456,6 +5483,24 @@ def _expanded_operator(name, arguments):
     return False
 
 
+def _traces(name, arguments):
+    """Whether `name` run with `arguments` turns on `set -x`, which
+    prompt-expands `PS4` before every traced command. Read after quote
+    removal, so `set -o 'xtrace'`, `set -euxo pipefail` and `shopt -so xtrace`
+    count, and so does an option from an expansion. A brace or a glob can
+    produce any option too (`set -{x,e}`). After `--`, `set` takes positional
+    parameters, never options, which keeps the `set -- $pair` loop of the
+    replayed commands a loop; `shopt` still takes option names there
+    (`shopt -so -- xtrace`)."""
+    options = arguments
+    if name == "set" and "--" in arguments:
+        options = arguments[:arguments.index("--")]
+    return name in ("set", "shopt") and any(
+        word == "xtrace" or re.search(r"[$`{}\[\]?*]", word)
+        or (name == "set" and re.match(r"^-[A-Za-z]*x", word))
+        for word in options)
+
+
 def resolution_changed(command):
     """Whether `command` changes what a bare name runs (`RESOLVING_COMMANDS`,
     a write to a `RESOLUTION_VARIABLES` name, arithmetic, a function
@@ -5538,26 +5583,104 @@ def resolution_changed(command):
         if name in ("declare", "local", "typeset") and any(
                 re.match(r"^-[A-Za-z]*[ni]", word) for word in arguments):
             return True
-        # `set -x` prompt-expands `PS4` before every traced command; read after
-        # quote removal, so `set -o 'xtrace'`, `set -euxo pipefail` and
-        # `shopt -so xtrace` count, and so does an option from an expansion.
-        # A brace or a glob can produce any option too (`set -{x,e}`). After
-        # `--`, `set` takes positional parameters, never options, which keeps
-        # the `set -- $pair` loop of the replayed commands a loop; `shopt`
-        # still takes option names there (`shopt -so -- xtrace`).
-        options = arguments
-        if name == "set" and "--" in arguments:
-            options = arguments[:arguments.index("--")]
-        if name in ("set", "shopt") and any(
-                word == "xtrace" or re.search(r"[$`{}\[\]?*]", word)
-                or (name == "set" and re.match(r"^-[A-Za-z]*x", word))
-                for word in options):
+        if _traces(name, arguments):
             return True
         # `mapfile -C` runs its callback string in this shell, as `eval` does.
         if name in ("mapfile", "readarray") and any(
                 re.match(r"^-[A-Za-z]*C", word) for word in arguments):
             return True
     return False
+
+
+# The variables bash expands as a prompt string: `PS4` before every command
+# `set -x` traces, the rest where an interactive shell prompts.
+PROMPT_VARIABLES = re.compile(
+    r"(?<![A-Za-z0-9_])(?:PS[0-4]|PROMPT_COMMAND)(?![A-Za-z0-9_])")
+
+# What can stand between `${` and a transformation's `@`: the name, after an
+# indirection or a length, and a subscript after it.
+TRANSFORMED = re.compile(r"[!#]?(?:[A-Za-z_]\w*|[0-9]+|[@*#?$!-])")
+
+# The builtins that declare a name, and so may export it.
+DECLARATION_BUILTINS = frozenset({"declare", "export", "local", "readonly",
+                                  "typeset"})
+
+
+def prompt_expansion(command):
+    """Whether `command` expands text as a prompt string, or writes text a
+    prompt string expands (#444).
+
+    **A prompt is expanded as a command line is, command substitutions
+    included**, so a push held as quoted data runs: `x='$(git push origin
+    +HEAD:main)'; echo "${x@P}"`, and `PS4='$(git push …)'; set -x; true`.
+    Both were admitted, the value being data to every reading here. So the
+    line is refused:
+
+    * a `${…@…}` transformation other than `@Q` where bash expands it (`@P`
+      runs the value; the others are refused rather than told apart);
+    * a prompt variable's name anywhere outside a heredoc body or a comment,
+      quoted or not, `$'…'` decoded (`p=$'\\x50'S4`), failing closed on the
+      names as `resolution_changed` does;
+    * a name a writer computes, which can be a prompt string's: exported
+      (`export "${n}S4=…"`), since a shell started later traces with it, or
+      on a line that turns on `set -x`, as is a nameref or an indirect
+      `${!…}` there.
+
+    A body a shell runs is judged as its own line, where the same holds. What
+    stays open is a prompt variable this command line starts with, inherited
+    from the session or a profile: the environment residual stated in
+    `docs/harness-boundaries.md`."""
+    expanded = _expanded_text(command)
+    if "${" in expanded:
+        closes = _closing_brackets(expanded)
+        for match in re.finditer(r"\$\{", expanded):
+            name = TRANSFORMED.match(expanded, match.end())
+            if name is None:
+                continue
+            index = name.end()
+            if expanded.startswith("[", index):
+                index = closes.get(index, len(expanded)) + 1
+            if (expanded.startswith("@", index)
+                    and not expanded.startswith(("@}", "@Q}"), index)):
+                return True
+    typed = _as_typed(strip_dollar_quotes(strip_comments(strip_heredocs(command))))
+    if PROMPT_VARIABLES.search(typed):
+        return True
+    stripped = strip_dollar_quotes(strip_redirections(
+        join_continuations(strip_comments(strip_heredocs(command)))))
+    try:
+        lexer = shlex.shlex(stripped, posix=True, punctuation_chars=True)
+        lexer.commenters = ""
+        lexer.whitespace_split = True
+        tokens = list(lexer)
+    except ValueError:
+        # Text `shlex` cannot read is judged by its words, refused where a
+        # writer and a tracer both stand: a reading that leaves a quote
+        # unbalanced (`echo "` out of `echo "${#a[@]}"`) is no prompt.
+        words = set(re.findall(r"[\w-]+", stripped))
+        return bool(words & (PATH_WRITERS | {"printf"})) and bool(
+            words & {"set", "shopt"})
+    traced, computed = False, "${!" in expanded
+    for run in command_runs(tokens):
+        program = _launched(run)
+        if program is None:
+            continue
+        name = program_name(program)
+        arguments = run[run.index(program) + 1:]
+        traced = traced or _traces(name, arguments)
+        if name == "printf" and not any(re.match(r"^-[A-Za-z]*v", word)
+                                        for word in arguments):
+            continue
+        if name not in PATH_WRITERS:
+            continue
+        built = any(re.search(r"[$`]", word.split("=", 1)[0]) for word in arguments)
+        if built and (name == "export" or (name in DECLARATION_BUILTINS and any(
+                re.match(r"^-[A-Za-z]*x", word) for word in arguments))):
+            return True
+        computed = computed or built or (
+            name in ("declare", "local", "typeset")
+            and any(re.match(r"^-[A-Za-z]*n", word) for word in arguments))
+    return traced and computed
 
 
 def stdin_classified(words):
@@ -5572,18 +5695,87 @@ def stdin_classified(words):
 
     **A shell with a script of its own is not classified.** With `-c` its
     script is its argv, and its stdin passes to whatever that script starts:
-    `bash -c pwsh <<<'git push …'` was admitted (R1, round 6 of #447).
+    `bash -c pwsh <<<'git push …'` was admitted (R1, round 6 of #447). A
+    script file is the same channel (`_script_file`): `bash /tmp/s.sh
+    <<<'& ("gi"+"t") push …'` was admitted, and the file can run `pwsh` (#459).
+    The issue helpers are the one script file whose stdin is known to be data.
     """
     program = _launched(words)
     if program is None:
         return True
     name = program_name(program)
     if name in EVALUATORS:
-        return reads_stdin_as_script(words)
+        return reads_stdin_as_script(words) and (
+            not _script_file(words, program) or _issue_helper(words, program))
     if path_qualified(program):
         return False
     return (interpreter(name) or name in STDIN_DATA_READERS
             or name in READING_COMMANDS or name in DATA_ONLY_COMMANDS)
+
+
+def _script_file(words, program):
+    """Whether the shell `program` starts in the run made of `words` runs a
+    file this guard is not given, which inherits the run's stdin (#459): a
+    script operand after its options (`bash /tmp/s.sh`, `sh -e -- ./run.sh`),
+    or a startup file, named on its run (`--rcfile`, `--init-file`,
+    `BASH_ENV=`, `ENV=`) or anywhere on the line, where an export reaches it
+    (`STARTUP_NAMED`). `-s` keeps the script on stdin, a script flag puts it
+    in the argv, and each option holding `o` or `O` takes the next word as a
+    name, as bash's parser reads a cluster (`-eo pipefail`)."""
+    if STARTUP_NAMED:
+        return True
+    kept = _command_words(words)
+    position = kept.index(program)
+    if any(re.match(r"^(?:BASH_ENV|ENV)=", word) for word in kept[:position]):
+        return True
+    rest, index = kept[position + 1:], 0
+    while index < len(rest):
+        word = rest[index]
+        if word in ("--", "-"):
+            return index + 1 < len(rest)
+        if word.startswith(("--rcfile", "--init-file")):
+            return True
+        if word.startswith("--"):
+            index += 1
+            continue
+        if len(word) > 1 and word[0] in "-+":
+            if SCRIPT_FLAG.match(word) or (word[0] == "-" and "s" in word):
+                return False
+            index += 1 + word.count("o") + word.count("O")
+            continue
+        return True
+    return False
+
+
+def _issue_helper(words, program):
+    """Whether the run made of `words` is `bash` or `sh` handed an issue helper
+    as its script, whose stdin is the issue's title and body
+    (`_helper_reads_stdin_as_data`): no assignment in front, on a line that
+    changes no resolution and names no startup file, either of which can put
+    something else where the shell or the helper runs (`HELPER_LINE_CHANGED`).
+    **The line and the event's, never the body**: after a `cd` the stdin pass
+    reads the helper's body as a script, and its Markdown read as a
+    resolution change refused the filing, though the body is read only after
+    the helper starts. Replayed over the 4000 most recent commands, that
+    filing was the one verdict #459's rule changed until the body was set
+    aside here; none changes now."""
+    kept = _command_words(words)
+    position = kept.index(program)
+    return (program in ("bash", "sh") and not HELPER_LINE_CHANGED
+            and position + 1 < len(kept)
+            and HELPER_SCRIPT.match(kept[position + 1]) is not None
+            and not any(ASSIGNMENT.match(word) for word in kept[:position]))
+
+
+# Set by `unclassified_stdin_writer` for the line it judges: whether it, or a
+# script around it, names a startup file's variable, which a shell started
+# later on it sources; and whether the line or the event's line changes
+# resolution or names one, which is what `_issue_helper` reads.
+STARTUP_NAMED = False
+HELPER_LINE_CHANGED = False
+
+# The variables that name a file bash or a POSIX `sh` sources on starting.
+STARTUP_VARIABLES = re.compile(r"(?<![A-Za-z0-9_])(?:BASH_ENV|ENV)(?![A-Za-z0-9_])")
 
 
 # Shells by their own names that `EVALUATORS` does not read as bash, each of
@@ -5619,6 +5811,10 @@ def _spoofable_reader(words):
     if program is None or stdin_classified(words):
         return False
     if path_qualified(program) or _foreign_shell(program_name(program)):
+        return True
+    # A shell running a file this guard is not given hands its stdin to
+    # whatever that file starts, so it is taken for any shell (#459).
+    if program_name(program) in EVALUATORS and _script_file(words, program):
         return True
     # A redirection's target is a file, not a program the run launches:
     # `mapfile -t lines < /tmp/f` launches nothing.
@@ -5879,12 +6075,18 @@ def _runs_with_feeds(command, ordinary):
         # `${|` opens bash 5.3's function substitution, not a pipe: read as
         # one, `echo ${| git push …; }` was `git` reading `${`, and this rule
         # answered before the substitution rule could name the shape.
+        # **Only a `|` that is syntax pairs with the one after it**: an
+        # escaped `\|` is a word character, so in `echo '…' \||pwsh` the
+        # second `|` is a pipe, and read as the end of `||` it fed `pwsh`
+        # unjudged (#461). The `&` of `|&` likewise.
+        paired = index and command[index - 1] == "|" and _unescaped(
+            command, index - 1, ordinary)
         if (char == "|" and not command.startswith("||", index)
-                and not (index and command[index - 1] == "|")
+                and not paired
                 and not _opens_function_substitution(command, index, ordinary)):
             upstream = (upstream or []) + ([words] if words else [])
             piped = True
-        elif char == "&" and index and command[index - 1] == "|":
+        elif char == "&" and paired:
             pass  # the `&` of `|&`, which carries the pipe its `|` opened
         elif char == "(":
             fed = (piped and not words) or _coprocess(words)
@@ -5966,13 +6168,21 @@ def unclassified_stdin_writer(command):
     shape, is refused any `git` word, and any stdin it is handed from a file
     or from anything but a printer, whose text alone is in the source.
     """
-    global RESOLUTION_CHANGED, STRICT_LINE
+    global RESOLUTION_CHANGED, STARTUP_NAMED, HELPER_LINE_CHANGED, STRICT_LINE
     ordinary = _unquoted_positions(command)
     # **The scopes around a nested script are where its names resolve**:
     # `PATH=/tmp bash -c "sort <<<'…'"` changes resolution outside the script
-    # it hands on. Raised in review of #447 (R5).
-    RESOLUTION_CHANGED = any(resolution_changed(scope)
-                             for scope in dict.fromkeys((command, *EVENT_SCOPES)))
+    # it hands on. Raised in review of #447 (R5). A startup file's variable
+    # is read on the names as typed, quoted or not, since an `export` of it
+    # can be spelt any way (#459).
+    scopes = dict.fromkeys((command, *EVENT_SCOPES))
+    changed = {scope: resolution_changed(scope) for scope in scopes}
+    named = {scope: bool(STARTUP_VARIABLES.search(_as_typed(strip_dollar_quotes(
+        strip_comments(strip_heredocs(scope)))))) for scope in scopes}
+    RESOLUTION_CHANGED = any(changed.values())
+    STARTUP_NAMED = any(named.values())
+    HELPER_LINE_CHANGED = any(changed[scope] or named[scope]
+                              for scope in dict.fromkeys((command, *EVENT_SCOPES[:1])))
     STRICT_LINE = any(_spoofable_reader(words)
                       for words, _ in _runs_with_feeds(command, ordinary))
     REACH_CACHE.clear()
@@ -5980,6 +6190,8 @@ def unclassified_stdin_writer(command):
         return _unclassified_stdin_writer(command, ordinary)
     finally:
         RESOLUTION_CHANGED = False
+        STARTUP_NAMED = False
+        HELPER_LINE_CHANGED = False
         STRICT_LINE = False
         REACH_CACHE.clear()
 
@@ -7132,6 +7344,7 @@ def offence(command, depth=0, judged=None):
     finally:
         if outermost:
             EVENT_SCOPES = ()
+            FORWARD_CACHE.clear()
     judged[command] = verdict
     return verdict
 
@@ -7168,6 +7381,14 @@ def _offence(command, depth, judged):
             "delimiter, and this guard cannot tell which without parsing "
             "bash's arithmetic. Run the arithmetic and the heredoc as "
             "separate commands."
+        )
+    if any(prompt_expansion(text) for text in spellings):
+        return (
+            "a prompt string, which bash expands as a command line, command "
+            "substitutions included: a `${...@...}` transformation other than "
+            "`@Q`, a prompt variable (`PS0` to `PS4`, `PROMPT_COMMAND`), or a "
+            "name a writer computes, exported or beside `set -x` (#444). Run "
+            "the command itself rather than a value expanded as a prompt."
         )
 
 
