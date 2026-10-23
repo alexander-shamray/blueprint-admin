@@ -142,7 +142,7 @@ Each round is the review done once, end to end:
    | | |
    |---|---|
    | `tooling` | CI, `tools/`, the harness, and the command and agent definitions |
-   | `source` | the Host, the SPA and the suites that cover them |
+   | `source` | the Host, the assistant's core, the SPA and the suites that cover them |
    | `config` | every tracked file at the repository root |
    | `samples` | `docs/**` fenced code — a credential or an unsafe default an adopter copies; the plans are owned, not read |
 
