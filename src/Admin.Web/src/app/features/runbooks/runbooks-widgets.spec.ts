@@ -4,8 +4,18 @@ import { HostClient } from '../../core/host/host-client';
 import { AlertStripView, JobSummary, RunbookCatalogue } from '../../core/host/host-types';
 import { SseClient } from '../../core/host/sse-client';
 import { By } from '@angular/platform-browser';
-import { RunbooksPage } from './runbooks-page';
 import { ALERT_POLL_MS, RunbooksWidget } from './widgets/runbooks-widget';
+import { Component } from '@angular/core';
+
+/** The page's widgets laid out as the retired screen component laid them out, so these tests keep their fixture. */
+@Component({
+  imports: [RunbooksWidget],
+  template: `
+    <h1>Runbooks</h1>
+    <app-runbooks-widget />
+  `,
+})
+class RunbooksWidgets {}
 
 const catalogue: RunbookCatalogue = {
   error: null,
@@ -121,7 +131,7 @@ function strip(state: string): AlertStripView {
 
 const job: JobSummary = { id: 'j-1', command: 'py', state: 'Running', exitCode: null } as unknown as JobSummary;
 
-describe('RunbooksPage', () => {
+describe('RunbooksWidgets', () => {
   let host: {
     runbooks: ReturnType<typeof vi.fn>;
     runbookText: ReturnType<typeof vi.fn>;
@@ -140,7 +150,7 @@ describe('RunbooksPage', () => {
       telemetryAlerts: vi.fn(() => of(strip('inactive'))),
     };
     TestBed.configureTestingModule({
-      imports: [RunbooksPage],
+      imports: [RunbooksWidgets],
       providers: [
         { provide: HostClient, useValue: host },
         { provide: SseClient, useValue: { follow: () => of() } },
@@ -153,11 +163,11 @@ describe('RunbooksPage', () => {
   });
 
   /**
-   * The Runbooks screen as the legacy screen widget renders it: the Runbooks widget. The tests below are the screen's,
-   * from before it was a widget, so `componentInstance` is the widget they drive.
+   * The Runbooks widget, as the retired Runbooks screen held it. The tests below are the screen's, from before it was
+   * a widget, so `componentInstance` is the widget they drive.
    */
   function render() {
-    const fixture = TestBed.createComponent(RunbooksPage);
+    const fixture = TestBed.createComponent(RunbooksWidgets);
     fixture.detectChanges();
     vi.advanceTimersByTime(0);
     fixture.detectChanges();
