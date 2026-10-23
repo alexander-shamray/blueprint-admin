@@ -46,8 +46,9 @@ only `assistant-off.spec.ts` reads it.
 The assistant's protocol is pinned by golden JSON files under
 `src/Admin.Assistant/Protocol/golden/`: `ProtocolGoldenTests` holds the C#
 records to them and `protocol.spec.ts` the TypeScript mirror, so a field
-changed on one side alone fails. A new body or event is a new golden file,
-and the C# test fails one no test pins.
+changed on one side alone fails. A new body or event is a new golden file:
+the C# test fails one no C# test pins, but `protocol.spec.ts` imports each
+file by name, so the new one is added there by hand.
 
 Most of FakePlatform's fixtures are recordings; `FixtureRecordings` names
 which, and why each of the rest is written by hand. To re-record, bring the stack up,
