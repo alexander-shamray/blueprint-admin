@@ -449,6 +449,34 @@ test('a platform diagram widget draws the fake map and a queue click opens the B
   await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
 });
 
+// §8.1: a click on a service points the Logs widget on the page at its Compose service as session state, so the saved
+// page is not written (no save indicator appears) and the Logs widget says so and offers the way back.
+test('a click on a service in the platform diagram points the Logs widget on the page at it without saving the page', async ({ page }) => {
+  await page.goto('/stack');
+  await page.getByRole('button', { name: 'New page' }).click();
+  await expect(page).toHaveURL(/\/page\/page-/);
+
+  await page.getByRole('button', { name: 'Add widget' }).click();
+  await page.getByRole('menuitem', { name: 'Platform diagram' }).click();
+  await page.getByRole('button', { name: 'Add widget' }).click();
+  await page.getByRole('menuitem', { name: 'Logs', exact: true }).click();
+  await page.getByRole('button', { name: 'Done' }).click();
+  await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
+
+  const nodes = page.getByRole('list', { name: 'Nodes of the diagram' });
+  await nodes.getByRole('button', { name: 'ordering', exact: true }).click();
+
+  await expect(page.locator('app-logs-widget .pointed')).toContainText('Pointed at ordering-api');
+  await expect(page.locator('.save-state')).toHaveCount(0);
+
+  await page.locator('app-logs-widget button.unpoint').click();
+  await expect(page.locator('app-logs-widget .pointed')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Page actions' }).click();
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
+  await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
+});
+
 test('the workspace is exported as a file, and an import replaces it only after the operator says so', async ({ page }) => {
   await page.goto('/stack');
   await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });

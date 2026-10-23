@@ -7,7 +7,7 @@ import { widgetsOf } from '../../built-in-pages';
 import { pollWhenOn } from '../../polled-feed';
 import { injectWidgetContext } from '../../widget-context';
 import { WorkspaceService } from '../../workspace-service';
-import { widgetType } from '../../widgets';
+import { WidgetSessionStore } from '../../widget-session-store';
 import { GRAPH_FACTORY, GraphView } from './graph-loader';
 import { Position, TopologyNode, positionsOf, topologyOf } from './topology-graph';
 
@@ -32,6 +32,7 @@ export class TopologyWidget {
   private readonly stack = inject(StackFeed);
   private readonly broker = inject(BrokerFeed);
   private readonly workspace = inject(WorkspaceService);
+  private readonly sessions = inject(WidgetSessionStore);
   private readonly router = inject(Router);
   private readonly context = injectWidgetContext();
   private readonly createGraph = inject(GRAPH_FACTORY);
@@ -126,7 +127,7 @@ export class TopologyWidget {
       this.notice.set(`${node.name} has no Compose service to follow.`);
       return;
     }
-    if (this.point('logs', { services: [node.compose] })) this.notice.set(`The Logs widget on this page follows ${node.compose}.`);
+    if (this.point('logs', [node.compose])) this.notice.set(`The Logs widget on this page now shows ${node.compose}.`);
     else void this.router.navigateByUrl('/logs');
   }
 
@@ -135,20 +136,23 @@ export class TopologyWidget {
     if (node.parkedQueue !== null && this.broker.workbenches() > 0) {
       this.broker.requestOpen(node.parkedQueue);
       this.notice.set(`The dead-letter workbench on this page opened ${node.parkedQueue}.`);
-    } else if (node.parkedQueue === null && this.point('queues', { filter: node.name, parkedOnly: false })) {
+    } else if (node.parkedQueue === null && this.point('queues', node.name)) {
       this.notice.set(`The Queues widget on this page shows ${node.name}.`);
     } else {
       void this.router.navigateByUrl('/broker');
     }
   }
 
-  /** Sets `change` on the first widget of `type` on the page being shown; false when there is none. */
-  private point(type: string, change: Record<string, unknown>): boolean {
+  /**
+   * Points the first widget of `type` on the page being shown at `value`, which that widget keeps as session state and
+   * shows over its configured view until the operator takes it off (§4.2): the saved page is not touched. False when the
+   * page has no such widget.
+   */
+  private point(type: string, value: string | string[]): boolean {
     const page = this.workspace.currentPage();
-    const kind = widgetType(type);
-    const target = page && kind ? widgetsOf(page).find((w) => w.type === type) : undefined;
-    if (!page || !kind || !target) return false;
-    this.workspace.configureWidget(page.id, target.id, kind.config({ ...target.config, ...change }));
+    const target = page ? widgetsOf(page).find((w) => w.type === type) : undefined;
+    if (!target) return false;
+    this.sessions.state<string | string[] | null>(target.id, 'pointed', null).set(value);
     return true;
   }
 

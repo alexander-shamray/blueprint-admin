@@ -8,6 +8,7 @@ import { BrokerFeed } from '../../../features/broker/broker-feed';
 import { view as map } from '../../../features/map/map-testing';
 import { StackFeed } from '../../../features/stack/stack-feed';
 import { WIDGET_CONTEXT } from '../../widget-context';
+import { WidgetSessionStore } from '../../widget-session-store';
 import { WorkspaceService } from '../../workspace-service';
 import { WidgetInstance } from '../../workspace-types';
 import { GRAPH_FACTORY, GraphEvents } from './graph-loader';
@@ -159,8 +160,10 @@ describe('TopologyWidget', () => {
       click(el, 'ordering');
       fixture.detectChanges();
 
-      expect(workspace.configureWidget).toHaveBeenCalledWith('p1', 'w-logs', { services: ['ordering-api'] });
-      expect(el.querySelector('.notice')?.textContent).toContain('follows ordering-api');
+      // Session state of the Logs widget: the saved page is not written.
+      expect(TestBed.inject(WidgetSessionStore).state('w-logs', 'pointed', null)()).toEqual(['ordering-api']);
+      expect(workspace.configureWidget).not.toHaveBeenCalled();
+      expect(el.querySelector('.notice')?.textContent).toContain('now shows ordering-api');
     });
 
     it('opens the Logs page when the page has no Logs widget', async () => {
@@ -225,7 +228,8 @@ describe('TopologyWidget', () => {
 
       click(el, 'ordering-catalog-events');
 
-      expect(workspace.configureWidget).toHaveBeenCalledWith('p1', 'w-queues', { filter: 'ordering-catalog-events', parkedOnly: false, autoRefresh: true });
+      expect(TestBed.inject(WidgetSessionStore).state('w-queues', 'pointed', null)()).toBe('ordering-catalog-events');
+      expect(workspace.configureWidget).not.toHaveBeenCalled();
     });
 
     it('opens the Broker page for a queue that is not parked when the page has no Queues widget', async () => {

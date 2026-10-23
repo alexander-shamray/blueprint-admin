@@ -1,6 +1,7 @@
 import { Component, computed, inject, input } from '@angular/core';
 import { DrainedIndicator } from '../../../shared/drained-indicator/drained-indicator';
 import { pollWhenOn } from '../../../workspace/polled-feed';
+import { widgetSession } from '../../../workspace/widget-session-store';
 import { BrokerFeed, filterOf } from '../broker-feed';
 
 /**
@@ -18,6 +19,12 @@ import { BrokerFeed, filterOf } from '../broker-feed';
         <span class="auto">Refreshes every 5 s</span>
       }
     </section>
+    @if (pointed(); as name) {
+      <p class="pointed" role="status">
+        Pointed at {{ name }} from the platform diagram.
+        <button class="unpoint" type="button" (click)="pointed.set(null)">Show the configured queues</button>
+      </p>
+    }
     @if (feed.queues.error(); as e) {
       <p class="error" role="alert">The host did not answer: {{ e }}</p>
     }
@@ -55,10 +62,18 @@ export class QueuesWidget {
 
   readonly autoRefresh = computed(() => this.config()['autoRefresh'] === true);
 
+  /**
+   * The queue the platform diagram pointed this widget at (spec §8.1): a name filter over the configured one, and
+   * "parked only" is set aside, since the queue asked for may not be parked. Session state (§4.2): pointing is not a
+   * change to the saved page, and the operator takes it off to get the configured view back.
+   */
+  readonly pointed = widgetSession<string | null>('pointed', null);
+
   /** The queues the filter and "parked only" leave. */
   readonly shown = computed(() => {
-    const needle = filterOf(this.config());
-    const parkedOnly = this.config()['parkedOnly'] === true;
+    const pointed = this.pointed();
+    const needle = pointed === null ? filterOf(this.config()) : pointed.toLowerCase();
+    const parkedOnly = pointed === null && this.config()['parkedOnly'] === true;
     return (this.feed.queues.value()?.queues ?? []).filter(
       (q) => (!needle || q.name.toLowerCase().includes(needle)) && (!parkedOnly || q.parked !== null),
     );

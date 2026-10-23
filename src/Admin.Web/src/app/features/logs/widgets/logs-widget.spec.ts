@@ -120,6 +120,24 @@ describe('LogsWidget', () => {
     expect(service.services()).toEqual([]);
   });
 
+  it('shows the services the platform diagram pointed it at over the configured ones until they are taken off, and keeps them for the tab', () => {
+    TestBed.configureTestingModule({ providers: [{ provide: WIDGET_CONTEXT, useValue: { instanceId: 'logs', pageId: 'p' } }] });
+    const first = render(['gateway']);
+    first.componentInstance.pointed.set(['ordering-api']);
+    first.detectChanges();
+
+    expect(first.componentInstance.services()).toEqual(['ordering-api']);
+    expect(first.nativeElement.querySelector('.pointed')?.textContent).toContain('Pointed at ordering-api');
+    first.destroy();
+
+    const again = render(['gateway']);
+    expect(again.componentInstance.services()).toEqual(['ordering-api']);
+    (again.nativeElement.querySelector('button.unpoint') as HTMLButtonElement).click();
+    again.detectChanges();
+    expect(again.componentInstance.services()).toEqual(['gateway']);
+    expect(again.nativeElement.querySelector('.pointed')).toBeNull();
+  });
+
   it('keeps the text filter and the correlation id typed, for the tab, when it is re-created (session state, §4.2)', () => {
     TestBed.configureTestingModule({ providers: [{ provide: WIDGET_CONTEXT, useValue: { instanceId: 'logs', pageId: 'p' } }] });
     const first = render([]);
