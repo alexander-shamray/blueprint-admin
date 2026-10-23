@@ -41,7 +41,7 @@ import { BrokerFeed, describeError } from '../broker-feed';
           <p class="error" role="alert">The host did not answer: {{ e }}</p>
         }
         @if (jobId(); as id) {
-          <app-output-pane [jobId]="id" (exited)="ended()" />
+          <app-output-pane [jobId]="id" (exited)="ended()" (failed)="ended()" />
         }
       </section>
     } @else if (feed.projectionPlan() === null) {

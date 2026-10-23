@@ -108,6 +108,28 @@ describe('BffProjectionWidget', () => {
     }
   });
 
+  it('stops polling when the run\'s stream fails, since no exit will come', async () => {
+    vi.useFakeTimers();
+    try {
+      const events = new Subject<JobEvent>();
+      TestBed.overrideProvider(SseClient, { useValue: { follow: () => events } });
+      const fixture = render();
+      (fixture.nativeElement.querySelector('button.repair') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(0);
+
+      events.error(new Error('stream dropped'));
+      fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(0);
+      host.brokerQueues.mockClear();
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(host.brokerQueues).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('a start while a read is still out reads again once that read lands, since it may have read before the start', () => {
     const fixture = render();
     const inFlight = new Subject<QueuesView>();
