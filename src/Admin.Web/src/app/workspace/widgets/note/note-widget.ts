@@ -107,9 +107,10 @@ export class NoteWidget {
 
   /**
    * Characters a note may hold. The host refuses a widget config over `WorkspaceSchema.MaxConfigBytes` (64 KiB of
-   * UTF-8) and the whole workspace travels in one PUT, so the bound is a quarter of that: four bytes a character at worst.
+   * UTF-8, measured on the JSON the host writes, which escapes a non-ASCII character as a six-byte \uXXXX) and the whole
+   * workspace travels in one PUT, so the bound is a sixth of that: six bytes a character at worst.
    */
-  readonly maxLength = 16000;
+  readonly maxLength = 10000;
 
   readonly config = input<Record<string, unknown>>({ source: '' });
 
