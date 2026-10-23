@@ -10,6 +10,8 @@ function stub() {
     status: signal<AssistantStatus | null>({ enabled: true, provider: 'fake', model: 'scripted', reason: null }),
     state: signal<ConversationState>(EMPTY_CONVERSATION),
     panelOpen: signal(true),
+    needsNotice: signal(false),
+    acknowledge: vi.fn(),
     send: vi.fn(() => Promise.resolve()),
     cancel: vi.fn(() => Promise.resolve()),
     startOver: vi.fn(() => Promise.resolve()),
@@ -27,6 +29,32 @@ describe('AssistantPanel', () => {
   it('names the provider the questions go to', async () => {
     const { element } = await render();
     expect(element.querySelector('.provider')?.textContent).toContain('fake');
+  });
+
+  it('shows no notice for a provider that sends nothing out', async () => {
+    const { element } = await render();
+    expect(element.querySelector('.notice')).toBeNull();
+  });
+
+  it('holds the first message behind a notice that says where the questions go, until it is accepted', async () => {
+    const assistant = stub();
+    assistant.status.set({ enabled: true, provider: 'anthropic', model: 'claude-opus-5-5', reason: null });
+    assistant.needsNotice.set(true);
+    const { fixture, element } = await render(assistant);
+    fixture.componentInstance.draft.set('where are the logs?');
+    await fixture.whenStable();
+
+    expect(element.querySelector('.notice')?.textContent).toContain('go to anthropic');
+    expect((element.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(true);
+
+    (element.querySelector('.notice button') as HTMLButtonElement).click();
+    expect(assistant.acknowledge).toHaveBeenCalledTimes(1);
+
+    assistant.needsNotice.set(false);
+    await fixture.whenStable();
+
+    expect(element.querySelector('.notice')).toBeNull();
+    expect((element.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('shows the reply as it streams, and each tool call by its label', async () => {
