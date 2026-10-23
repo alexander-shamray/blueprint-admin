@@ -21,6 +21,8 @@ function mermaid(): Promise<typeof import('mermaid').default> {
     m.default.initialize(MERMAID_CONFIG);
     return m.default;
   });
+  // A chunk that failed to load is tried again by the next diagram, not remembered as failed until a reload.
+  loaded.catch(() => (loaded = undefined));
   return loaded;
 }
 
