@@ -87,6 +87,25 @@ public sealed class StreamTests
     }
 
     [Fact]
+    public async Task A_delta_that_repeats_the_cache_figures_does_not_count_a_cache_write_twice()
+    {
+        FakeHttp http = new FakeHttp().Stream("cumulative-usage");
+
+        List<ProviderEvent> events = await Provider(http).Played(Given.Request(new UserMessage("hello")));
+
+        // The delta repeats the write and the read but leaves input_tokens out: the start's 12 and the 100 written, once.
+        events.OfType<UsageReport>().Single().Usage.ShouldBe(new Usage(Input: 112, Output: 25, Cached: 300));
+    }
+
+    [Fact]
+    public async Task A_stream_that_ends_before_message_stop_is_a_failed_round_not_a_finished_one()
+    {
+        FakeHttp http = new FakeHttp().Stream("truncated");
+
+        await Should.ThrowAsync<IOException>(() => Provider(http).Played(Given.Request(new UserMessage("hello"))));
+    }
+
+    [Fact]
     public async Task A_rejected_request_surfaces_as_the_exception_the_session_turns_into_an_error_event()
     {
         FakeHttp http = new FakeHttp().Status(System.Net.HttpStatusCode.TooManyRequests, """{"type":"error","error":{"type":"rate_limit_error","message":"slow down"}}""");
