@@ -1,7 +1,7 @@
 import { SCREENS } from '../screens';
 import { builtInTitle, builtInWidgets, defaultWorkspace, differsFromBuiltIn, withEveryBuiltIn } from './built-in-pages';
 import { SCREEN_COMPONENTS } from './screen-components';
-import { JOB_OUTPUT, LEGACY_SCREEN, SCENARIO_WIDGETS, STACK_WIDGETS, WIDGETS, widgetType } from './widgets';
+import { JOB_OUTPUT, LEGACY_SCREEN, NOTE, SCENARIO_WIDGETS, STACK_WIDGETS, WIDGETS, widgetType } from './widgets';
 import { GRID_COLUMNS, MAX_ROWS, WidgetInstance } from './workspace-types';
 
 describe('the widget registry', () => {
@@ -99,6 +99,11 @@ describe('the Stack widget types', () => {
     expect(JOB_OUTPUT.config({ jobId: 'job-1' })).toEqual({ jobId: 'job-1' });
     expect(JOB_OUTPUT.config({ jobId: 7 })).toEqual({ jobId: null });
     expect(JOB_OUTPUT.titleOf({ jobId: null })).toBe('Job output');
+  });
+
+  it('title a Note by its first shown heading, not a # line inside a code fence', () => {
+    expect(NOTE.titleOf({ source: '```bash\n# not a heading\n```\n\n## Real one\ntext' })).toBe('Real one');
+    expect(NOTE.titleOf({ source: 'text only' })).toBe('Note');
   });
 
   it('come back when a saved workspace lacks them, and an operator’s page stays', () => {

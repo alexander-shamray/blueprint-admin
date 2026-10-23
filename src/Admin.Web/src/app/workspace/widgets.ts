@@ -190,7 +190,16 @@ export const NOTE: WidgetType = {
   config: (stored) => ({ source: typeof stored['source'] === 'string' ? stored['source'] : '' }),
   titleOf: (config) => {
     const source = typeof config['source'] === 'string' ? config['source'] : '';
-    return /^#{1,6}[ \t]+(.+?)[ \t]*$/m.exec(source)?.[1] ?? 'Note';
+    // The first heading the note shows: a `#` line inside a code fence is code, as `blocks` reads it.
+    let fenced = false;
+    for (const line of source.split(/\r?\n/)) {
+      if (line.trimStart().startsWith('```')) fenced = !fenced;
+      else if (!fenced) {
+        const heading = /^#{1,6}[ \t]+(.+?)[ \t]*$/.exec(line);
+        if (heading) return heading[1];
+      }
+    }
+    return 'Note';
   },
   presets: [
     { label: 'Empty note', config: { source: '' } },
