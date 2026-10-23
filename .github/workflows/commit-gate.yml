@@ -26,8 +26,9 @@ jobs:
           fetch-depth: 0
 
       # The same decision as locality-gate.yml's step of this name, which
-      # argues it: the gate stands down only when every commit in the pull
-      # request is Dependabot's (docs/change-locality.md section 6).
+      # argues it: the gate stands down only when Dependabot opened the pull
+      # request and made every commit in it, as author and through GitHub as
+      # committer (docs/change-locality.md section 6).
       - name: Decide whether this is Dependabot's own pull request
         id: dependabot
         shell: bash
@@ -35,13 +36,13 @@ jobs:
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          DEPENDABOT: 49699333+dependabot[bot]@users.noreply.github.com
+          DEPENDABOT: 49699333+dependabot[bot]@users.noreply.github.com noreply@github.com
         run: |
           set -euo pipefail
           own=false
           if [ "$PR_AUTHOR" = 'dependabot[bot]' ]; then
-            authors=$(git log --format=%ae "$BASE_SHA..$HEAD_SHA")
-            if [ -n "$authors" ] && ! grep -qvxF "$DEPENDABOT" <<<"$authors"; then
+            makers=$(git log --format='%ae %ce' "$BASE_SHA..$HEAD_SHA")
+            if [ -n "$makers" ] && ! grep -qvxF "$DEPENDABOT" <<<"$makers"; then
               own=true
             fi
           fi
