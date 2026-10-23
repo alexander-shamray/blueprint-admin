@@ -439,8 +439,12 @@ A new residual is stated **here** and gets a row above.
   `SCAN_BUDGET` or `LENGTH_BUDGET`; a watchdog thread answers with a refusal
   after `WATCHDOG_SECONDS` and ends the process, which covers a Python loop that
   runs long and not a single regular-expression match, which holds the
-  interpreter and is bounded by the two budgets instead, or by reading no
-  further than the next bracket (`EXPANSION_WRITES`). The event is read as
+  interpreter until it returns and is bounded by the two budgets instead.
+  Within them a pattern may still grow with the square of the line, so the
+  two that grew faster are not patterns: arithmetic and a git writer line are
+  each read in one pass (`expansion_writes`, `git_writer_line`), and every
+  shape measured on #447 answers within a few seconds at `LENGTH_BUDGET`,
+  where `[[` repeated took 40 s and 24,000 `git` words 173 s. The event is read as
   bytes and decoded as UTF-8 with replacement, never with the locale's code
   page, which on Windows raised on `Á` and let the handler allow the event
   unjudged. A malformed event that is not JSON is still allowed, and says so on
@@ -627,7 +631,9 @@ A new residual is stated **here** and gets a row above.
   `!`); and `awk`'s own program, which is code as Python's is
   (`gawk '{system("git …")}'`, the interpreter residual on #424). **The stdin
   channel is judged by content** (#397). A program is classified when it is
-  a shell `EVALUATORS` names, or a reader or interpreter named bare
+  a shell `EVALUATORS` names that reads its stdin as its script (not one
+  given `-c`, whose script inherits that stdin: `bash -c pwsh <<<…`), or a
+  reader or interpreter named bare
   (`stdin_classified`: `READING_COMMANDS`, `STDIN_DATA_READERS`, the
   interpreters, the printers; after a reserved word such as `do` or `while`
   the next word is the program). Any other is refused a heredoc body, a
@@ -639,8 +645,8 @@ A new residual is stated **here** and gets a row above.
   `sh` decode unasked; a quoted heredoc body is computed by no outer shell, so
   `gh issue comment 1 --body-file - <<'EOF'` with a code span is admitted)
   or hold a line that runs git to write
-  once read as typed or with its parameter expansions removed
-  (`GIT_WRITER_LINE`, `GIT_STDIN_WRITERS` among it), so `echo
+  once read as typed, continuations joined, or with its parameter expansions
+  removed (`git_writer_line`, `GIT_STDIN_WRITERS` among it), so `echo
   'git push origin +HEAD:main' | /tmp/x` and `/tmp/x <<< 'git checkout HEAD
   -- settings.json'` are refused. **A program that must be taken for a shell
   is held strictly**: one named by a path, since a copy names it anything
