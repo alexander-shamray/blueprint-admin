@@ -4,8 +4,15 @@ import { ActivatedRoute, Router, convertToParamMap, provideRouter } from '@angul
 import { BehaviorSubject, Subject, of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { TraceView } from '../../core/host/host-types';
-import { TracePage } from './trace-page';
 import { TraceWidget } from './widgets/trace-widget';
+import { Component } from '@angular/core';
+
+/** The page's widgets laid out as the retired screen component laid them out, so these tests keep their fixture. */
+@Component({
+  imports: [TraceWidget],
+  template: ` <app-trace-widget /> `,
+})
+class TraceWidgets {}
 
 const queued = {
   at: '2026-09-16T09:43:03.000Z',
@@ -57,14 +64,14 @@ function rows(fixture: { nativeElement: HTMLElement }): string[] {
   );
 }
 
-describe('TracePage', () => {
+describe('TraceWidgets', () => {
   let host: { trace: ReturnType<typeof vi.fn> };
   let paramMap: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
 
   function configure(correlationId: string | null) {
     paramMap = new BehaviorSubject(convertToParamMap(correlationId === null ? {} : { correlationId }));
     TestBed.configureTestingModule({
-      imports: [TracePage],
+      imports: [TraceWidgets],
       providers: [
         provideRouter([]),
         { provide: HostClient, useValue: host },
@@ -78,11 +85,11 @@ describe('TracePage', () => {
   }
 
   /**
-   * The Trace screen as the legacy screen widget renders it: the Trace widget. The tests below are the screen's, from
-   * before it was split, so `componentInstance` is the widget they drive.
+   * The Trace widget, as the retired Trace screen held it. The tests below are the screen's, from before it was split,
+   * so `componentInstance` is the widget they drive.
    */
   function render() {
-    const fixture = TestBed.createComponent(TracePage);
+    const fixture = TestBed.createComponent(TraceWidgets);
     fixture.detectChanges();
     const widget = fixture.debugElement.query(By.directive(TraceWidget)).componentInstance as TraceWidget;
     return Object.defineProperty(fixture, 'componentInstance', { value: widget }) as unknown as ReturnType<

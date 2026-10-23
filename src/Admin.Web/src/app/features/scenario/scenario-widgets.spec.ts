@@ -14,7 +14,6 @@ import {
 } from '../../core/host/host-types';
 import { DRAIN_POLL_MS, DRAIN_WATCH_MS, UUID } from '../api/api-client';
 import { LAUNCH_WINDOW_MS, ScenarioLauncher } from './scenario-launcher';
-import { ScenarioPage } from './scenario-page';
 import { ScenarioRunner } from './scenario-runner';
 import { SagaStripWidget } from './widgets/saga-strip-widget';
 import { ScenarioWidget } from './widgets/scenario-widget';
@@ -27,6 +26,17 @@ import {
   REVIEW_WATCH_MS,
   SCRIPTS,
 } from './scenario-run';
+import { Component } from '@angular/core';
+
+/** The page's widgets laid out as the retired screen component laid them out, so these tests keep their fixture. */
+@Component({
+  imports: [ScenarioWidget, SagaStripWidget],
+  template: `
+    <app-scenario-widget class="steps-view" />
+    <app-saga-strip-widget class="strip-view" />
+  `,
+})
+class ScenarioWidgets {}
 
 function op(partial: Partial<ApiOperation> & { id: string }): ApiOperation {
   const [source, name] = partial.id.split(':');
@@ -2883,7 +2893,7 @@ describe('ScenarioWidget', () => {
   });
 
   it('is the legacy Scenario screen with the Saga strip beside it, both views of one runner', () => {
-    const screen = TestBed.createComponent(ScenarioPage);
+    const screen = TestBed.createComponent(ScenarioWidgets);
     screen.detectChanges();
     const element = screen.nativeElement as HTMLElement;
 

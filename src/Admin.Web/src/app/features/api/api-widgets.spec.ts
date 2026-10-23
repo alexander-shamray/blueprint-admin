@@ -5,9 +5,21 @@ import { Subject, of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { ApiCatalogView, ApiOperation, ProxyResult, QueuesView, TokenView } from '../../core/host/host-types';
 import { IdentityState } from '../../core/identity/identity-state';
-import { ApiPage } from './api-page';
 import { ApiHistory, UUID, clockText } from './api-client';
 import { ApiRequestWidget } from './widgets/api-request-widget';
+import { Component } from '@angular/core';
+import { ApiHistoryWidget } from './widgets/api-history-widget';
+
+/** The page's widgets laid out as the retired screen component laid them out, so these tests keep their fixture. */
+@Component({
+  imports: [ApiRequestWidget, ApiHistoryWidget],
+  template: `
+    <app-api-request-widget />
+    <h3 class="history-heading">History</h3>
+    <app-api-history-widget />
+  `,
+})
+class ApiWidgets {}
 
 function op(partial: Partial<ApiOperation>): ApiOperation {
   return {
@@ -98,7 +110,7 @@ const waitingView: QueuesView = {
   projection: { queue: 'ordering-catalog-events', found: true, messages: 2, drained: false },
 };
 
-describe('ApiPage', () => {
+describe('ApiWidgets', () => {
   let host: {
     operations: ReturnType<typeof vi.fn>;
     reloadOperations: ReturnType<typeof vi.fn>;
@@ -131,7 +143,7 @@ describe('ApiPage', () => {
       brokerQueues: vi.fn(() => of(drainedView)),
     };
     TestBed.configureTestingModule({
-      imports: [ApiPage],
+      imports: [ApiWidgets],
       providers: [
         provideRouter([]),
         { provide: HostClient, useValue: host },
@@ -143,11 +155,11 @@ describe('ApiPage', () => {
   afterEach(() => vi.useRealTimers());
 
   /**
-   * The API screen as the legacy screen widget renders it: the request widget with the history widget under it. The
-   * tests below are the screen's, from before it was split, so `componentInstance` is the request widget they drive.
+   * The request widget with the history widget under it, as the retired API screen laid them out. The tests below
+   * are the screen's, from before it was split, so `componentInstance` is the request widget they drive.
    */
   function render() {
-    const fixture = TestBed.createComponent(ApiPage);
+    const fixture = TestBed.createComponent(ApiWidgets);
     fixture.detectChanges();
     const widget = fixture.debugElement.query(By.directive(ApiRequestWidget)).componentInstance as ApiRequestWidget;
     return Object.defineProperty(fixture, 'componentInstance', { value: widget }) as unknown as ReturnType<

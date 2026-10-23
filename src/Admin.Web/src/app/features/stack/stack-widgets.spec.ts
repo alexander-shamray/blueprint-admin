@@ -4,8 +4,49 @@ import { Subject, delay, of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { JobEvent, SseClient } from '../../core/host/sse-client';
 import { PageJobs } from '../../workspace/page-jobs';
-import { StackPage } from './stack-page';
 import { StackControlsWidget } from './widgets/stack-controls-widget';
+import { Component } from '@angular/core';
+import { AlertsWidget } from './widgets/alerts-widget';
+import { ComposeServicesWidget } from './widgets/compose-services-widget';
+import { GoldenSignalsWidget } from './widgets/golden-signals-widget';
+import { JobOutputWidget } from '../../workspace/job-output-widget';
+import { LoadRunWidget } from './widgets/load-run-widget';
+import { ReachabilityWidget } from './widgets/reachability-widget';
+import { ReferenceClientWidget } from './widgets/reference-client-widget';
+import { WorkstationDoctorWidget } from './widgets/workstation-doctor-widget';
+
+/** The page's widgets laid out as the retired screen component laid them out, so these tests keep their fixture. */
+@Component({
+  imports: [
+    AlertsWidget,
+    ComposeServicesWidget,
+    GoldenSignalsWidget,
+    JobOutputWidget,
+    LoadRunWidget,
+    ReachabilityWidget,
+    ReferenceClientWidget,
+    StackControlsWidget,
+    WorkstationDoctorWidget,
+  ],
+  template: `
+    <h2>Workstation</h2>
+    <app-workstation-doctor-widget />
+    <app-stack-controls-widget />
+    <app-job-output-widget />
+    <app-reachability-widget />
+    <h2>Golden signals</h2>
+    <app-golden-signals-widget />
+    <h2>Load run</h2>
+    <app-load-run-widget />
+    <h2>Alerts</h2>
+    <app-alerts-widget />
+    <h2>Compose services</h2>
+    <app-compose-services-widget />
+    <h2>Reference client</h2>
+    <app-reference-client-widget />
+  `,
+})
+class StackWidgets {}
 
 const stack = {
   backend: {
@@ -175,11 +216,11 @@ function shownJob(): string | null {
   return TestBed.inject(PageJobs).of('')();
 }
 
-function controls(fixture: ComponentFixture<StackPage>): StackControlsWidget {
+function controls(fixture: ComponentFixture<StackWidgets>): StackControlsWidget {
   return fixture.debugElement.query(By.directive(StackControlsWidget)).componentInstance as StackControlsWidget;
 }
 
-describe('StackPage', () => {
+describe('StackWidgets', () => {
   let host: {
     stack: ReturnType<typeof vi.fn>;
     config: ReturnType<typeof vi.fn>;
@@ -240,7 +281,7 @@ describe('StackPage', () => {
       doctor: vi.fn(() => of(doctor)),
     };
     TestBed.configureTestingModule({
-      imports: [StackPage],
+      imports: [StackWidgets],
       providers: [
         { provide: HostClient, useValue: host },
         { provide: SseClient, useValue: { follow: () => of() } },
@@ -253,7 +294,7 @@ describe('StackPage', () => {
   });
 
   it('lists services with state, health and ports, and the reachability strip', async () => {
-    const fixture = TestBed.createComponent(StackPage);
+    const fixture = TestBed.createComponent(StackWidgets);
     fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(0);
     fixture.detectChanges();
@@ -277,7 +318,7 @@ describe('StackPage', () => {
       }),
     );
 
-    const fixture = TestBed.createComponent(StackPage);
+    const fixture = TestBed.createComponent(StackWidgets);
     fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(0);
     fixture.detectChanges();
@@ -287,7 +328,7 @@ describe('StackPage', () => {
   });
 
   it('starts an up job and hands its id to the output pane', async () => {
-    const fixture = TestBed.createComponent(StackPage);
+    const fixture = TestBed.createComponent(StackWidgets);
     fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(0);
 
@@ -309,7 +350,7 @@ describe('StackPage', () => {
     async function openAndPressUp() {
       events = new Subject<JobEvent>();
       TestBed.overrideProvider(SseClient, { useValue: { follow: () => events.asObservable() } });
-      const fixture = TestBed.createComponent(StackPage);
+      const fixture = TestBed.createComponent(StackWidgets);
       fixture.detectChanges();
       await vi.advanceTimersByTimeAsync(0);
       (fixture.nativeElement.querySelector('button.up') as HTMLButtonElement).click();
@@ -413,7 +454,7 @@ describe('StackPage', () => {
   });
 
   it('keeps the wipe button disabled until the confirmation is typed', async () => {
-    const fixture = TestBed.createComponent(StackPage);
+    const fixture = TestBed.createComponent(StackWidgets);
     fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(0);
     fixture.detectChanges();
@@ -430,7 +471,7 @@ describe('StackPage', () => {
   });
 
   it('keeps Reset behind the same typed confirmation and hands its job to the output pane', async () => {
-    const fixture = TestBed.createComponent(StackPage);
+    const fixture = TestBed.createComponent(StackWidgets);
     fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(0);
     fixture.detectChanges();
@@ -450,7 +491,7 @@ describe('StackPage', () => {
   });
 
   it('gives the wipe confirmation input an accessible name', async () => {
-    const fixture = TestBed.createComponent(StackPage);
+    const fixture = TestBed.createComponent(StackWidgets);
     fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(0);
     fixture.detectChanges();
@@ -461,7 +502,7 @@ describe('StackPage', () => {
 
   describe('workstation doctor', () => {
     async function render() {
-      const fixture = TestBed.createComponent(StackPage);
+      const fixture = TestBed.createComponent(StackWidgets);
       fixture.detectChanges();
       await vi.advanceTimersByTimeAsync(0);
       fixture.detectChanges();
@@ -509,7 +550,7 @@ describe('StackPage', () => {
 
   describe('golden signals', () => {
     async function render() {
-      const fixture = TestBed.createComponent(StackPage);
+      const fixture = TestBed.createComponent(StackWidgets);
       fixture.detectChanges();
       await vi.advanceTimersByTimeAsync(0);
       fixture.detectChanges();
@@ -575,7 +616,7 @@ describe('StackPage', () => {
 
   describe('alert strip', () => {
     async function render() {
-      const fixture = TestBed.createComponent(StackPage);
+      const fixture = TestBed.createComponent(StackWidgets);
       fixture.detectChanges();
       await vi.advanceTimersByTimeAsync(0);
       fixture.detectChanges();
@@ -641,7 +682,7 @@ describe('StackPage', () => {
   it('keeps polling after a failed request', async () => {
     host.stack.mockReturnValueOnce(throwError(() => new Error('network down')));
 
-    const fixture = TestBed.createComponent(StackPage);
+    const fixture = TestBed.createComponent(StackWidgets);
     fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(0);
     fixture.detectChanges();
@@ -662,7 +703,7 @@ describe('StackPage', () => {
     // the host, so if each tick replaced the last one no answer would ever arrive.
     host.stack.mockImplementation(() => of(stack).pipe(delay(5000)));
 
-    const fixture = TestBed.createComponent(StackPage);
+    const fixture = TestBed.createComponent(StackWidgets);
     fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(3000);
     fixture.detectChanges();
@@ -685,7 +726,7 @@ describe('StackPage', () => {
       })),
     );
 
-    const fixture = TestBed.createComponent(StackPage);
+    const fixture = TestBed.createComponent(StackWidgets);
     fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(0);
     fixture.detectChanges();
@@ -700,7 +741,7 @@ describe('StackPage', () => {
 
   describe('load run', () => {
     async function render() {
-      const fixture = TestBed.createComponent(StackPage);
+      const fixture = TestBed.createComponent(StackWidgets);
       fixture.detectChanges();
       await vi.advanceTimersByTimeAsync(0);
       fixture.detectChanges();
@@ -772,7 +813,7 @@ describe('StackPage', () => {
 
   describe('reference client', () => {
     async function render() {
-      const fixture = TestBed.createComponent(StackPage);
+      const fixture = TestBed.createComponent(StackWidgets);
       fixture.detectChanges();
       await vi.advanceTimersByTimeAsync(0);
       fixture.detectChanges();
@@ -890,7 +931,7 @@ describe('StackPage', () => {
 
   describe('scenario lease', () => {
     async function render() {
-      const fixture = TestBed.createComponent(StackPage);
+      const fixture = TestBed.createComponent(StackWidgets);
       fixture.detectChanges();
       await vi.advanceTimersByTimeAsync(0);
       fixture.detectChanges();
@@ -947,7 +988,7 @@ describe('StackPage', () => {
 
   describe('device lane', () => {
     async function render() {
-      const fixture = TestBed.createComponent(StackPage);
+      const fixture = TestBed.createComponent(StackWidgets);
       fixture.detectChanges();
       await vi.advanceTimersByTimeAsync(0);
       fixture.detectChanges();

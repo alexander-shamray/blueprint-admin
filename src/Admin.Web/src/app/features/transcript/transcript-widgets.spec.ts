@@ -2,8 +2,16 @@ import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { TranscriptView } from '../../core/host/host-types';
-import { TranscriptPage } from './transcript-page';
 import { TRANSCRIPT_POLL_MS } from './transcript-feed';
+import { Component } from '@angular/core';
+import { TranscriptWidget } from './widgets/transcript-widget';
+
+/** The page's widgets laid out as the retired screen component laid them out, so these tests keep their fixture. */
+@Component({
+  imports: [TranscriptWidget],
+  template: ` <app-transcript-widget /> `,
+})
+class TranscriptWidgets {}
 
 const view: TranscriptView = {
   dropped: 0,
@@ -48,7 +56,7 @@ function text(el: Element | null): string {
   return el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
 }
 
-describe('TranscriptPage', () => {
+describe('TranscriptWidgets', () => {
   let host: { transcript: ReturnType<typeof vi.fn>; transcriptScript: ReturnType<typeof vi.fn> };
   let writeText: ReturnType<typeof vi.fn>;
 
@@ -61,7 +69,10 @@ describe('TranscriptPage', () => {
     };
     writeText = vi.fn(() => Promise.resolve());
     vi.stubGlobal('navigator', { clipboard: { writeText } });
-    TestBed.configureTestingModule({ imports: [TranscriptPage], providers: [{ provide: HostClient, useValue: host }] });
+    TestBed.configureTestingModule({
+      imports: [TranscriptWidgets],
+      providers: [{ provide: HostClient, useValue: host }],
+    });
   });
 
   afterEach(() => {
@@ -70,7 +81,7 @@ describe('TranscriptPage', () => {
   });
 
   async function render() {
-    const fixture = TestBed.createComponent(TranscriptPage);
+    const fixture = TestBed.createComponent(TranscriptWidgets);
     fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(0);
     fixture.detectChanges();
