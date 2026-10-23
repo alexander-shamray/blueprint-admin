@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
-import { of, throwError } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
+import { PlatformMapView } from '../../../core/host/host-types';
 import { HostClient } from '../../../core/host/host-client';
 import { MapFeed } from '../map-feed';
 import { view } from '../map-testing';
@@ -106,6 +107,22 @@ describe('MapWidget', () => {
     vi.setSystemTime(new Date('2026-10-20T10:10:00Z'));
     const again = render();
     expect(feed.rateOf('ordering-catalog-events')).toBe('—');
+    expect(again.nativeElement.querySelector('table.queues td.rate')?.textContent).toBe('—');
+  });
+
+  it('makes no baseline of a read that lands after the last widget has gone', () => {
+    const late = new Subject<PlatformMapView>();
+    const fixture = render();
+    const feed = TestBed.inject(MapFeed);
+    host.platformMap.mockReturnValueOnce(late.asObservable());
+    feed.map.refresh();
+
+    fixture.destroy();
+    late.next(view);
+    late.complete();
+    host.platformMap.mockReturnValue(of(view));
+    const again = render();
+
     expect(again.nativeElement.querySelector('table.queues td.rate')?.textContent).toBe('—');
   });
 

@@ -55,6 +55,9 @@ export class MapFeed {
   }
 
   private noteRates(view: PlatformMapView): void {
+    // A read still out when the last widget went (the feed's reads end with the app, not the widget) lands after the
+    // baseline was dropped; it must not make a new one for a widget that returns later.
+    if (this.showing === 0) return;
     const now = Date.now();
     const depths = new Map<string, number>();
     const rates = new Map<string, number>();
