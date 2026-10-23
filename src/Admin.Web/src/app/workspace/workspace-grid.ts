@@ -5,7 +5,8 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { Gridster, GridsterConfig, GridsterItem, GridsterItemConfig } from 'angular-gridster2';
 import { WIDGET_CONTEXT, WidgetContext } from './widget-context';
-import { WidgetPreset, WidgetType, widgetType } from './widgets';
+import { fieldText, fieldValue } from './widget-config';
+import { WidgetField, WidgetPreset, WidgetType, widgetType } from './widgets';
 import { GRID_COLUMNS, MAX_ROWS, PAGE_ROWS, WidgetInstance } from './workspace-types';
 
 /** One grid row, in pixels; the spec leaves the height to the builder (§12). */
@@ -69,6 +70,10 @@ export class WorkspaceGrid {
   constructor() {
     effect(() => {
       for (const item of this.items()) if (item.kind) this.loadComponent(item.kind);
+    });
+    // Leaving the layout editor closes an open settings panel, so the next edit starts without a stale draft.
+    effect(() => {
+      if (!this.editing()) untracked(() => this.settings.set(null));
     });
   }
 
@@ -149,7 +154,52 @@ export class WorkspaceGrid {
    * whose presets are starting points (a note) is not offered them again, since a choice would replace its text.
    */
   canConfigure(item: GridItem): boolean {
-    return item.kind?.configurable !== false && (item.kind?.presets.length ?? 0) > 1;
+    return item.kind?.configurable !== false && ((item.kind?.presets.length ?? 0) > 1 || this.hasFields(item));
+  }
+
+  /** Whether the type has settings a preset cannot hold, which the menu's "Edit settings" opens. */
+  hasFields(item: GridItem): boolean {
+    return (item.kind?.fields?.length ?? 0) > 0;
+  }
+
+  /** The widget whose settings are open, with the text of each field as it is being written. */
+  readonly settings = signal<{ id: string; draft: Record<string, string> } | null>(null);
+
+  openSettings(item: GridItem): void {
+    const draft: Record<string, string> = {};
+    for (const field of item.kind?.fields ?? []) draft[field.key] = fieldText(field.kind, item.config[field.key]);
+    this.settings.set({ id: item.widget.id, draft });
+  }
+
+  isEditingSettings(item: GridItem): boolean {
+    return this.settings()?.id === item.widget.id;
+  }
+
+  draftOf(field: WidgetField): string {
+    return this.settings()?.draft[field.key] ?? '';
+  }
+
+  setDraft(field: WidgetField, text: string): void {
+    this.settings.update((s) => (s ? { ...s, draft: { ...s.draft, [field.key]: text } } : s));
+  }
+
+  closeSettings(): void {
+    this.settings.set(null);
+  }
+
+  /** Saves the written fields over the config the widget holds, through the type's own `config`, then closes. */
+  applySettings(item: GridItem): void {
+    const open = this.settings();
+    const kind = item.kind;
+    if (!open || !kind || open.id !== item.widget.id) return;
+    const config: Record<string, unknown> = { ...item.config };
+    for (const field of kind.fields ?? []) config[field.key] = fieldValue(field.kind, open.draft[field.key] ?? '');
+    this.configureWidget.emit({ id: item.widget.id, config: kind.config(config) });
+    this.closeSettings();
+  }
+
+  settingsLabel(item: GridItem): string {
+    return $localize`Settings of ${this.titleOf(item)}:title:`;
   }
 
   /** Whether `preset` is the choice `item` holds now, by the config its type accepted. */

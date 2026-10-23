@@ -17,6 +17,16 @@ export interface WidgetPreset {
 }
 
 /**
+ * A setting a preset list cannot hold, edited as text by the header's configure control: `names` is a list written
+ * with commas (empty is "every one"), `text` is one value (empty is none).
+ */
+export interface WidgetField {
+  key: string;
+  label: string;
+  kind: 'names' | 'text';
+}
+
+/**
  * One widget type (widget-workspace spec §5.1). Its component takes one input, `config`, already through `config`
  * below; a stored value the type does not accept falls back to its default rather than failing the page (§6.3).
  */
@@ -36,6 +46,8 @@ export interface WidgetType {
    * wrote, so the header's configure control does not offer them (a note edits in place instead).
    */
   configurable?: boolean;
+  /** Settings the presets cannot hold; the configure control edits them beside the presets. */
+  fields?: readonly WidgetField[];
   /** The data services the widget reads (§4.4); the legacy screen widget's screens own their own calls. */
   dataServices: readonly string[];
 }
@@ -70,6 +82,7 @@ function listing(key: string, every: string, kind: Kind): WidgetType {
       return shown.length === 0 ? kind.title : `${kind.title} (${shown.join(', ')})`;
     },
     presets: [{ label: every, config: { [key]: [] } }],
+    fields: [{ key, label: `${key[0].toUpperCase()}${key.slice(1)}`, kind: 'names' }],
   };
 }
 
@@ -177,6 +190,7 @@ export const JOB_OUTPUT: WidgetType = {
   config: (stored) => ({ jobId: typeof stored['jobId'] === 'string' ? stored['jobId'] : null }),
   titleOf: (config) => (typeof config['jobId'] === 'string' ? `Job output (${config['jobId']})` : 'Job output'),
   presets: [{ label: 'The job this page started last', config: { jobId: null } }],
+  fields: [{ key: 'jobId', label: 'Job id', kind: 'text' }],
   dataServices: ['PageJobs'],
 };
 

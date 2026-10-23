@@ -11,5 +11,9 @@ gridster.editing { background: var(--mat-sys-surface-container-low); }
 .ws-head.widget-drag { cursor: move; }
 .ws-grip { color: var(--app-muted); }
 .ws-title { flex: 1; margin: 0; font: var(--mat-sys-title-small); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ws-settings { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--app-border); background: var(--mat-sys-surface-container-low); }
+.ws-field { display: flex; align-items: center; gap: 0.5rem; }
+.ws-field input { min-width: 14rem; }
+.ws-field-hint { color: var(--app-muted); font: var(--mat-sys-body-small); }
 .ws-body { flex: 1; min-height: 0; overflow: auto; padding: 0.75rem; }
 .ws-unknown { color: var(--app-muted); }

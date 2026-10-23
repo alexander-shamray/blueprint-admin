@@ -44,6 +44,24 @@
         </button>
       }
     </header>
+    @if (editing() && isEditingSettings(item)) {
+      <form class="ws-settings" [attr.aria-label]="settingsLabel(item)" (submit)="$event.preventDefault(); applySettings(item)">
+        @for (field of item.kind.fields; track field.key) {
+          <label class="ws-field">
+            <span>{{ field.label }}</span>
+            <input
+              type="text"
+              [value]="draftOf(field)"
+              (input)="setDraft(field, $any($event.target).value)"
+              (mousedown)="$event.stopPropagation()"
+            />
+          </label>
+        }
+        <span class="ws-field-hint" i18n>Names are separated by commas; leave a field empty for the default.</span>
+        <button mat-button type="submit" i18n>Apply</button>
+        <button mat-button type="button" (click)="closeSettings()" i18n>Cancel</button>
+      </form>
+    }
     <div class="ws-body">
       @if (item.kind) {
         @if (componentOf(item); as component) {
@@ -70,6 +88,9 @@
       >
         {{ preset.label }}
       </button>
+    }
+    @if (hasFields(item)) {
+      <button mat-menu-item type="button" class="ws-edit-settings" (click)="openSettings(item)" i18n>Edit settings…</button>
     }
   </ng-template>
 </mat-menu>

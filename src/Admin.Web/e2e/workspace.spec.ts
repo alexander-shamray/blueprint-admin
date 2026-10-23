@@ -183,18 +183,26 @@ test('a widget is configured by a preset and maximised to the page, then restore
 
   const titles = page.locator('gridster-item .ws-head .ws-title');
   await expect(titles).toHaveText(['Alerts', 'Reachability']);
-  // Only a type with a choice to make has a configure control, and only while editing.
+  // A type with a choice to make, or a setting to write, has a configure control, and only while editing.
   await expect(page.getByRole('button', { name: 'Configure Alerts' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Configure Reachability/ })).toHaveCount(0);
   await page.getByRole('button', { name: 'Configure Alerts' }).click();
   await page.getByRole('menuitem', { name: 'Firing only' }).click();
   await expect(titles).toHaveText(['Alerts (firing)', 'Reachability']);
+
+  // A setting no preset holds is written in the settings panel the menu opens.
+  await page.getByRole('button', { name: 'Configure Reachability' }).click();
+  await page.getByRole('menuitem', { name: 'Edit settings…' }).click();
+  const settings = page.getByRole('form', { name: 'Settings of Reachability' });
+  await settings.getByRole('textbox').fill('gateway, grafana');
+  await settings.getByRole('button', { name: 'Apply' }).click();
+  await expect(settings).toHaveCount(0);
+  await expect(titles).toHaveText(['Alerts (firing)', 'Reachability (gateway, grafana)']);
 
   await page.getByRole('button', { name: 'Maximise Alerts (firing)' }).click();
   await expect(page.locator('gridster-item')).toHaveCount(0);
   await expect(page.locator('.ws-maximised .ws-title')).toHaveText('Alerts (firing)');
   await page.getByRole('button', { name: 'Restore Alerts (firing) to the page' }).click();
-  await expect(titles).toHaveText(['Alerts (firing)', 'Reachability']);
+  await expect(titles).toHaveText(['Alerts (firing)', 'Reachability (gateway, grafana)']);
 
   await page.getByRole('button', { name: 'Page actions' }).click();
   await page.getByRole('menuitem', { name: 'Delete' }).click();
