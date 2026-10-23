@@ -86,7 +86,7 @@
         mat-menu-item
         type="button"
         [attr.aria-current]="isCurrent(item, preset) ? 'true' : null"
-        (click)="configureWidget.emit({ id: item.widget.id, config: preset.config })"
+        (click)="choosePreset(item, preset)"
       >
         {{ preset.label }}
       </button>

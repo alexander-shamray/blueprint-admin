@@ -75,6 +75,15 @@ export class WorkspaceGrid {
     effect(() => {
       if (!this.editing()) untracked(() => this.settings.set(null));
     });
+    // A page switch or a removed widget leaves no draft behind to reappear under another widget or page.
+    effect(() => {
+      this.pageId();
+      untracked(() => this.settings.set(null));
+    });
+    effect(() => {
+      const open = untracked(this.settings);
+      if (open && !this.items().some((i) => i.widget.id === open.id)) untracked(() => this.settings.set(null));
+    });
   }
 
   readonly items = computed<GridItem[]>(() =>
@@ -186,6 +195,12 @@ export class WorkspaceGrid {
 
   setDraft(field: WidgetField, text: string): void {
     this.settings.update((s) => (s ? { ...s, draft: { ...s.draft, [field.key]: text } } : s));
+  }
+
+  /** A preset replaces the config, so a draft written against the old one is dropped rather than applied over it. */
+  choosePreset(item: GridItem, preset: WidgetPreset): void {
+    this.closeSettings();
+    this.configureWidget.emit({ id: item.widget.id, config: preset.config });
   }
 
   closeSettings(): void {
