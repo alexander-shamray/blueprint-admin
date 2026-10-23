@@ -4938,11 +4938,23 @@ def unmodelled_printer(tokens):
                 continue
             name = program_name(command_word)
             arguments = run[run.index(command_word) + 1:]
-            if name == "printf" and any("%" in element for element in arguments):
+            if unreproducible_print(name, arguments, tokens):
                 return True
-            if name == "echo" and any(element.startswith("-") and "e" in element
-                                      for element in arguments):
-                return True
+    return False
+
+
+def unreproducible_print(name, arguments, line):
+    """Whether `name` run with `arguments` writes bytes other than its joined
+    words: `printf` with a conversion, or with a backslash escape, which its
+    format decodes without any `%` (`printf 'gi\\164 push'` writes `git
+    push`), and `echo` with `-e`, or with a backslash where a word of `line`
+    sets `xpg_echo`. Raised in review of #447 (R2, round 3)."""
+    if name == "printf":
+        return any("%" in word or "\\" in word for word in arguments)
+    if name == "echo":
+        return (any(word.startswith("-") and "e" in word for word in arguments)
+                or (any("xpg_echo" in word for word in line)
+                    and any("\\" in word for word in arguments)))
     return False
 
 
@@ -5047,6 +5059,11 @@ def _stdin_bodies(command, consumes):
         if consumes(command, opener, ordinary):
             yield command[start:end]
 
+    # Built once, not per here-string: per opener it made the walk openers
+    # times length, past the hook's time limit, which admits (R3, round 3 of
+    # #447).
+    unescaped = [not literal[position] and value
+                 for position, value in enumerate(ordinary)]
     index = 0
     while index < len(command):
         if not (ordinary[index] and command.startswith("<<<", index)):
@@ -5056,9 +5073,7 @@ def _stdin_bodies(command, consumes):
         cursor = index + 3
         while cursor < len(command) and command[cursor] in " \t":
             cursor += 1
-        word = word_end(command, cursor, [not literal[position] and value
-                                          for position, value
-                                          in enumerate(ordinary)])
+        word = word_end(command, cursor, unescaped)
         if consumed:
             # **A here-string is quote-removed before the shell runs it, and
             # `shlex` has no rule for either dollar quote.** So
@@ -5502,9 +5517,21 @@ def stdin_classified(words):
 # which runs what arrives on its stdin: `base64 -d <<<… | pwsh` runs whatever
 # the bytes decode to. Raised by a security review; `pwsh` and `cmd` are on
 # this host.
-FOREIGN_SHELLS = frozenset({"cmd", "csh", "elvish", "fish", "ion", "murex", "nu",
-                            "nushell", "osh", "powershell", "pwsh", "tcsh",
-                            "xonsh", "ysh"})
+FOREIGN_SHELLS = frozenset({"cmd", "csh", "elvish", "fish", "hush", "ion",
+                            "murex", "nu", "nushell", "osh", "powershell",
+                            "pwsh", "sash", "tcsh", "xonsh", "ysh"})
+
+# A shell under a packaged or versioned name, `ksh93`, `bash-static` or
+# `zsh-5.9`, which no list holds and which runs its stdin as the shell it
+# names does (R4, round 3 of #447).
+SHELL_VARIANT = re.compile(
+    r"^(?:" + "|".join(sorted(EVALUATORS | FOREIGN_SHELLS, key=len, reverse=True))
+    + r")(?:[\d.]+|-[\w.]+)$")
+
+
+def _foreign_shell(name):
+    """Whether `name` is a shell `EVALUATORS` does not read as bash."""
+    return name in FOREIGN_SHELLS or bool(SHELL_VARIANT.match(name))
 
 
 def _spoofable_reader(words):
@@ -5518,12 +5545,13 @@ def _spoofable_reader(words):
     program = _launched(words)
     if program is None or stdin_classified(words):
         return False
-    if path_qualified(program) or program_name(program) in FOREIGN_SHELLS:
+    if path_qualified(program) or _foreign_shell(program_name(program)):
         return True
     # A redirection's target is a file, not a program the run launches:
     # `mapfile -t lines < /tmp/f` launches nothing.
     later = _command_words(words)
-    return any(program_name(word) in FOREIGN_SHELLS | EVALUATORS
+    return any(_foreign_shell(program_name(word))
+               or program_name(word) in EVALUATORS
                or LAUNCHED_PATH.match(word)
                for word in later[later.index(program) + 1:])
 
@@ -5542,14 +5570,23 @@ def _reaches(command, position, ordinary, reader):
     start, index = _run_bounds(command, position, ordinary)
     if reader(_run_words(command, start, index, ordinary)):
         return True
-    while index < len(command):
+    # **Each answer is kept, per line, mask and reader, by the run end it
+    # walks on from**: asked afresh per opener, the walk was openers times
+    # length, past the hook's time limit, which admits (R3, round 3 of
+    # #447). The mask is held beside its answers, so its `id` stays its own.
+    _, answers = REACH_CACHE.setdefault((command, reader, id(ordinary)),
+                                        (ordinary, {}))
+    walked, answer = [], False
+    while index not in answers:
+        end = index
         while index < len(command) and (
                 command[index] in " \t"
                 or (ordinary[index] and command[index] == ")")):
             index += 1
         if not (index < len(command) and ordinary[index]
                 and command[index] == "|") or command.startswith("||", index):
-            return False
+            answers[end] = False
+            break
         index += 2 if command.startswith("|&", index) else 1
         # A pipeline goes on across a newline, and a subshell after a `|`
         # inherits it: `echo … |<newline>pwsh`, `echo … | (pwsh)`. Raised in
@@ -5568,23 +5605,55 @@ def _reaches(command, position, ordinary, reader):
         # asked. Reading past the group's close over-reaches, and only for
         # text a reader is then refused for (R2, round 2 of #447).
         if grouped or (words and words[0] in GROUP_OPENERS):
-            rest = command[start:]
-            return any(reader(run) for run, _ in
-                       _runs_with_feeds(rest, _unquoted_positions(rest)))
-        if reader(words):
-            return True
-    return False
+            walked.append((end, reader(words)
+                           or _last_accepted(command, reader) >= start))
+            break
+        walked.append((end, reader(words)))
+    else:
+        answer = answers[index]
+    for end, accepted in reversed(walked):
+        answer = answer or accepted
+        answers[end] = answer
+    return answer
+
+
+# What `_reaches` has answered on the line `unclassified_stdin_writer` is
+# judging, which empties it for each line.
+REACH_CACHE = {}
+
+
+def _last_accepted(command, reader):
+    """The offset of the last run of `command` that `reader` accepts, or -1:
+    a pipe into a group at `start` reaches it when it is at or past `start`.
+    One walk per line and reader, as `_reaches` keeps its answers."""
+    if ("last", command, reader) not in REACH_CACHE:
+        ordinary = _unquoted_positions(command)
+        last, start, bodies = -1, 0, _body_starts(command)
+        for index in range(len(command) + 1):
+            if index < len(command) and not _ends_run(command, index, ordinary):
+                continue
+            words = [] if start in bodies else _run_words(command, start, index, ordinary)
+            if words and reader(words):
+                last = start
+            start = index + 1
+        REACH_CACHE["last", command, reader] = last
+    return REACH_CACHE["last", command, reader]
+
+
+def _unclassified_run(words):
+    return not stdin_classified(words) or _group_stdin(words)
+
+
+def _spoofable_run(words):
+    return _spoofable_reader(words) or (_group_stdin(words) and STRICT_LINE)
 
 
 def _reaches_unclassified(command, position, ordinary):
-    return _reaches(command, position, ordinary,
-                    lambda words: not stdin_classified(words) or _group_stdin(words))
+    return _reaches(command, position, ordinary, _unclassified_run)
 
 
 def _reaches_spoofable(command, position, ordinary):
-    return _reaches(command, position, ordinary,
-                    lambda words: _spoofable_reader(words)
-                    or (_group_stdin(words) and STRICT_LINE))
+    return _reaches(command, position, ordinary, _spoofable_run)
 
 
 def _as_typed(text):
@@ -5621,14 +5690,28 @@ PARAMETER = re.compile(r"\$(?:\{[^}]*\}|[A-Za-z_]\w*|[0-9@*#?!$-])")
 DEFAULTING = re.compile(r"\$\{[^}:=+?-]*:?[-=+?]([^}]*)\}")
 
 
-def _offending_stdin(text, strict):
+# Characters with which a shell builds a word from pieces: expansion, quoting,
+# escape, grouping, joining, globbing and cmd's caret.
+UNPLAIN = re.compile(r"""[$%(){}\[\]+&^'"`\\*?]""")
+
+
+def _offending_stdin(text, strict, computed=True):
     """Whether `text`, read by an unclassified program, may run git to write:
-    computed, or holding a writing git line as typed. `strict` is a reader
-    named by a path, the copied shell's shape, which is refused any `git` word
-    at all. **The text is read twice**, as typed and with every parameter
-    expansion removed, since one the reading shell resolves empty rejoins a
-    word: `g$@it push`, `g${u}it push`. Raised in review of #447 (R3)."""
-    if computed_text(text):
+    computed (unless `computed` is false, for text no outer shell computes),
+    or holding a writing git line as typed. `strict` is a reader named by a
+    path, the copied shell's shape, which is refused any `git` word at all.
+    **The text is read twice**, as typed and with every parameter expansion
+    removed, since one the reading shell resolves empty rejoins a word:
+    `g$@it push`, `g${u}it push`. Raised in review of #447 (R3).
+
+    **A strict reader is handed plain words only.** It is taken for a shell
+    this file does not read, and a shell builds a word from pieces no match
+    can join: `g=gi; ${g}t push`, PowerShell's `& ("gi"+"t") push`, cmd's
+    `g^it push`. So text holding any `UNPLAIN` character is refused it
+    unread (R1, round 3 of #447)."""
+    if computed_text(text) and (computed or strict):
+        return True
+    if strict and UNPLAIN.search(text):
         return True
     typed = _as_typed(text)
     pattern = GIT_WORD if strict else GIT_WRITER_LINE
@@ -5644,6 +5727,14 @@ def _offending_stdin(text, strict):
                 or pattern.search(DEFAULTING.sub(r"\1", typed)))
 
 
+def _body_starts(command):
+    """Where each heredoc body of `command` starts. A body is the text a run
+    reads, not a run: read as one, an issue body's Markdown made a program
+    named by a path, so its whole line was held strictly (round 3 of
+    #447)."""
+    return {start for start, _, _ in heredoc_spans(command)}
+
+
 def _runs_with_feeds(command, ordinary):
     """Every run of `command` as `(words, upstream)`, where `upstream` is the
     runs a `|` joined before it in its pipeline, or None when no `|` feeds it.
@@ -5652,10 +5743,11 @@ def _runs_with_feeds(command, ordinary):
     # `groups` holds, for each group open here, the stdin a pipe gave it:
     # every run inside reads it, not only the first (R2, round 2 of #447).
     runs, upstream, start, piped, groups = [], None, 0, False, []
+    bodies = _body_starts(command)
     for index in range(len(command) + 1):
         if index < len(command) and not _ends_run(command, index, ordinary):
             continue
-        words = _run_words(command, start, index, ordinary)
+        words = [] if start in bodies else _run_words(command, start, index, ordinary)
         if words:
             runs.append((words, upstream))
             piped = False
@@ -5667,8 +5759,12 @@ def _runs_with_feeds(command, ordinary):
         if index == len(command):
             break
         char = command[index]
+        # `${|` opens bash 5.3's function substitution, not a pipe: read as
+        # one, `echo ${| git push …; }` was `git` reading `${`, and this rule
+        # answered before the substitution rule could name the shape.
         if (char == "|" and not command.startswith("||", index)
-                and not (index and command[index - 1] == "|")):
+                and not (index and command[index - 1] == "|")
+                and not command.endswith("${", 0, index)):
             upstream = (upstream or []) + ([words] if words else [])
             piped = True
         elif char == "&" and index and command[index - 1] == "|":
@@ -5748,11 +5844,13 @@ def unclassified_stdin_writer(command):
                              for scope in dict.fromkeys((command, *EVENT_SCOPES)))
     STRICT_LINE = any(_spoofable_reader(words)
                       for words, _ in _runs_with_feeds(command, ordinary))
+    REACH_CACHE.clear()
     try:
         return _unclassified_stdin_writer(command, ordinary)
     finally:
         RESOLUTION_CHANGED = False
         STRICT_LINE = False
+        REACH_CACHE.clear()
 
 
 # Set by `unclassified_stdin_writer` for the line it judges: whether any run
@@ -5764,6 +5862,9 @@ STRICT_LINE = False
 def _unclassified_stdin_writer(command, ordinary):
     """`unclassified_stdin_writer`'s body, under the line's `RESOLUTION_CHANGED`."""
     bodies = list(_stdin_bodies(command, _reaches_unclassified))
+    # The whole line's verdict, asked once: asked per run, it grew as runs
+    # times length (R3, round 3 of #447).
+    whole = functools.cache(lambda: _offending_stdin(command, False))
     # **A here-string arrives quote-removed**, which loses what an escape
     # escaped: `"\\\\$(printf gi)t push …"` comes back as `\\$(…)`, which reads
     # escaped, while the outer shell runs the substitution and hands the
@@ -5784,7 +5885,18 @@ def _unclassified_stdin_writer(command, ordinary):
             end += 1
         if computed_text(command[cursor:end]):
             return True
-    if any(_offending_stdin(body, False) for body in bodies):
+    # **A quoted heredoc body reaches its reader as written**: no outer shell
+    # computes it, and a bare-named reader is taken to be the program it says
+    # (the residual `docs/harness-boundaries.md` states), so its backticks are
+    # Markdown: `gh issue comment 1 --body-file - <<'EOF'` with a code span.
+    # An expanding body and a here-string are still refused computed, and a
+    # strict reader any (R5, round 3 of #447).
+    spans = heredoc_spans(command)
+    expanding = {command[start:end] for start, end, expands in spans if expands}
+    quoted = {command[start:end] for start, end, expands in spans if not expands}
+    if any(_offending_stdin(body, False,
+                            computed=body in expanding or body not in quoted)
+           for body in bodies):
         return True
     if any(_offending_stdin(body, True)
            for body in _stdin_bodies(command, _reaches_spoofable)):
@@ -5818,7 +5930,7 @@ def _unclassified_stdin_writer(command, ordinary):
         if upstream is None:
             continue
         if not upstream:
-            if strict or _offending_stdin(command, False):
+            if strict or whole():
                 return True
             continue
         for before in upstream:
@@ -5828,7 +5940,7 @@ def _unclassified_stdin_writer(command, ordinary):
                 # A compound's closer (`}`, `done`, `fi`) pipes what its runs
                 # wrote, which this walk does not see, so the line is judged
                 # whole, as a subshell's is (R3, round 2 of #447).
-                if strict or _offending_stdin(command, False):
+                if strict or whole():
                     return True
                 continue
             if name not in DATA_ONLY_COMMANDS:
@@ -5838,9 +5950,7 @@ def _unclassified_stdin_writer(command, ordinary):
             spoken = before[before.index(program) + 1:]
             # A printer whose output this file cannot reproduce writes text
             # that is not in the source (`unmodelled_printer`).
-            if (name == "printf" and any("%" in word for word in spoken)) or (
-                    name == "echo" and any(word.startswith("-") and "e" in word
-                                           for word in spoken)):
+            if unreproducible_print(name, spoken, [command]):
                 return True
             if _offending_stdin(" ".join(spoken), strict):
                 return True

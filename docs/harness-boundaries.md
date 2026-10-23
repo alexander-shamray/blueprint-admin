@@ -632,7 +632,10 @@ A new residual is stated **here** and gets a row above.
   here-string, a printer's text earlier in its pipe, a process
   substitution's body, an unseen subshell's line or a transforming stage's
   own words that are computed (`$(`, a backtick, `$'`, or a printer whose
-  output this file cannot reproduce) or hold a line that runs git to write
+  output this file cannot reproduce, such as `printf` with a `%` or a
+  backslash escape; a quoted heredoc body is computed by no outer shell, so
+  `gh issue comment 1 --body-file - <<'EOF'` with a code span is admitted)
+  or hold a line that runs git to write
   once read as typed or with its parameter expansions removed
   (`GIT_WRITER_LINE`, `GIT_STDIN_WRITERS` among it), so `echo
   'git push origin +HEAD:main' | /tmp/x` and `/tmp/x <<< 'git checkout HEAD
@@ -642,7 +645,9 @@ A new residual is stated **here** and gets a row above.
   name runs (a `PATH` write by any builtin, `hash`, `alias`, `enable`,
   `source` or `.`, read as bash reads a command word, or a function
   definition); and a shell by a name `EVALUATORS` does not read
-  (`FOREIGN_SHELLS`: `pwsh`, `cmd`, `fish`, `nu` and others). Reserved words
+  (`FOREIGN_SHELLS`: `pwsh`, `cmd`, `fish`, `nu` and others), or a shell of
+  either list under a packaged or versioned name (`ksh93`, `bash-static`:
+  `SHELL_VARIANT`). Reserved words
   are read through, `eval`, `trap`, `fc` and `mapfile -C` count because each
   runs a string, and any text bash expands that names `PATH`, `BASH_CMDS` or
   `BASH_ALIASES` counts however it is spelt (`for PATH in`, `${PATH:=…}`,
@@ -661,8 +666,12 @@ A new residual is stated **here** and gets a row above.
   bash interpreter, not an argv guard. It would also buy nothing past what
   an interpreter on the line already does unjudged (`python -c` running
   git), which #424 accepts. Such a program
-  is refused any `git` word on its stdin and any stdin that is not on the
-  line: a file other than `/dev/null`, its own or a group's (`{ …; } < f`,
+  is handed plain words only: stdin text holding a quote, an escape, an
+  expansion, a bracket, a join or a glob character (`UNPLAIN`) is refused
+  unread, since a shell builds a word from those pieces (`g=gi; ${g}t push`,
+  PowerShell's `& ("gi"+"t") push`, cmd's `g^it push`), as is any `git`
+  word, and so is any stdin that is not on the line: a file other than
+  `/dev/null`, its own or a group's (`{ …; } < f`,
   `done < f`, `exec < f`), a subshell the walk does not see, or a stage that
   transforms (`base64 -d <<<… | pwsh`). A pipe reaches its reader across a
   newline and into a subshell, and a resolution change counts from any
@@ -675,9 +684,11 @@ A new residual is stated **here** and gets a row above.
   `while read l; do $l; done`), while `sed` is, because the `sed` script
   pass refuses every script that runs its input. Replayed over the 4000 most
   recent distinct commands of this repository's session transcripts, the
-  rule changed one verdict, an environment-variable probe that declares a
-  nameref; refusing every pipe into a program on no list would have changed
-  164. One shape is held strictly at a cost that measured nothing there: a
+  rule changed three verdicts: an environment-variable probe that declares a
+  nameref, and two issue bodies handed to a function defined on the same
+  line, which makes every name as good as a path and Markdown no plain text
+  (calling the filing helper directly is admitted). Refusing every pipe into
+  a program on no list would have changed 164. One shape is held strictly at a cost that measured nothing there: a
   line holding `wait $pid` and a pipe into a reader (`wait $!` is admitted).
   **A shell is a program, not a name** (#397):
   `EVALUATORS` holds the POSIX family by each name it ships under (`ash`,

@@ -5651,6 +5651,9 @@ class TheGitArgvGuard(unittest.TestCase):
                 self.assertIsNone(guard.RESOLUTION_VARIABLES.search(
                     guard._expanded_text(command)))
                 self.assertTrue(guard.resolution_changed(command))
+        # A printer that decodes an escape writes bytes its words do not
+        # spell, into a named shell too (R2, round 3 of #447).
+        self.assertRefused("printf 'gi\\164 push origin +HEAD:main' | bash")
         # Round 1 of #447's review: a redirection taken for the program, a
         # group's redirection, a pipe across a newline or into a subshell, an
         # expansion that rejoins a word, a launcher of a shell, a resolution
@@ -5679,6 +5682,15 @@ class TheGitArgvGuard(unittest.TestCase):
             "{ echo 'git push origin +HEAD:main'; } | awk '{system($0)}'",
             "/tmp/x <<<'${u:-git} push origin +HEAD:main'",
             "/tmp/x <<<'/usr/bin/gi? push origin +HEAD:main'",
+            # Round 3: a word a strict reader's shell builds from pieces, a
+            # printer's escape, and a shell under a versioned name.
+            "/tmp/x <<<'g=gi; ${g}t push origin +HEAD:main'",
+            "pwsh <<<'& (\"gi\"+\"t\") push origin +HEAD:main'",
+            "cmd <<<'g^it push origin +HEAD:main'",
+            "printf 'gi\\164 push origin +HEAD:main' | /tmp/x",
+            "printf 'gi\\164 push origin +HEAD:main' | pwsh",
+            "ksh93 <<<'g=gi; ${g}t push origin +HEAD:main'",
+            "bash-static <<<'g=gi; ${g}t push origin +HEAD:main'",
         ):
             with self.subTest(command=command):
                 # Refused by #397's rule, which names itself (R9, round 2).
@@ -5702,6 +5714,11 @@ class TheGitArgvGuard(unittest.TestCase):
             "npx x <<<hi; echo $(date)",
             "files=(a b); printf '%s\\n' \"${files[@]}\"; git log --oneline | head -3",
             "export X=\"$HOME/bin\"; git log --oneline | head -3",
+            # Round 3: a quoted heredoc body is no outer shell's to compute,
+            # and a body is no run, so a path in it names no program.
+            "gh issue comment 1 --body-file - <<'EOF'\nRun `npm ci` first.\nEOF",
+            "cat <<'EOF'\nsee docs/x.md\nEOF\nwhile read l; do echo \"$l\"; done < /tmp/f",
+            "cat <<'EOF' >/tmp/n.md\nsee docs/x.md\nEOF\n{ read a; read b; } < /tmp/n.md",
             # Quoted text names nothing, and arithmetic over literals reads no
             # variable.
             "grep -n 'env\\[\"PATH\"\\]\\|PATH=os.pathsep' f.py | head",
@@ -7971,6 +7988,21 @@ class TheGitArgvGuard(unittest.TestCase):
         ):
             with self.subTest(admitted=command):
                 self.assertAdmitted(command, cwd=root)
+
+    def test_a_pipe_into_a_group_answers_in_linear_time(self):
+        # Round 3 of #447: each here-string piped into a group re-walked the
+        # rest of the line, each built a mask as long as the line, and each
+        # run piped from the unseen re-read the whole of it, so the work was
+        # openers times length and a long line ran past the hook's time
+        # limit, which admits: 200 repeats of the first took 3.8 s, growing
+        # with their square. Neither shape spends a bracket `scan_budget`
+        # counts.
+        for unit in ("cat <<<a | { :; }; ", "{ :; } | npx x; "):
+            with self.subTest(unit=unit):
+                command = unit * 2000 + "git push origin +HEAD:main"
+                started = time.monotonic()
+                self.assertIsNotNone(self.judge(command))
+                self.assertLess(time.monotonic() - started, 10)
 
     def test_the_startup_shell_pattern_answers_in_linear_time(self):
         # #357: two readings of one word doubled the startup-shell search per
