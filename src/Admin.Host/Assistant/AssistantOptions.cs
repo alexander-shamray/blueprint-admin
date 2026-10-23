@@ -1,4 +1,5 @@
 using Admin.Assistant;
+using Admin.Assistant.Anthropic;
 using Admin.Host.Config;
 
 namespace Admin.Host.Assistant;
@@ -6,21 +7,32 @@ namespace Admin.Host.Assistant;
 /// <summary>
 /// <c>Admin:Assistant</c> (AI assistant design §9): which provider the assistant uses and the core's limits. No option
 /// holds a credential, and <see cref="AssistantRuntime"/> refuses to start on a key under this section named like one.
-/// Phase 2 adds the model and effort a real provider takes, and phase 3b the services whose reads become tools.
+/// Phase 3b adds the services whose reads become tools.
 /// </summary>
 public sealed class AssistantOptions
 {
     public const string Off = "off";
     public const string Fake = "fake";
+    public const string Anthropic = "anthropic";
 
     // The core owns the defaults; these options only let configuration move them.
     private static readonly AssistantLimits Defaults = new();
 
     /// <summary>
-    /// <c>off</c> or <c>fake</c>. Unset is off, except under FakePlatform, where it is the fake provider; an explicit
-    /// <c>off</c> wins there too (§9.1). Changing it takes a host restart, like every other <c>Admin:</c> key.
+    /// <c>off</c>, <c>fake</c> or <c>anthropic</c>. Unset is off, except under FakePlatform, where it is the fake provider;
+    /// an explicit <c>off</c> wins there too (§9.1). Changing it takes a host restart, like every other <c>Admin:</c> key.
     /// </summary>
     public string? Provider { get; set; }
+
+    /// <summary>
+    /// The model the Anthropic provider asks (§8.2); a cheaper one such as <c>claude-haiku-5-5</c> is this setting, the
+    /// operator's to change. The defaults are the adapter's own constants, which the compiler copies in, so reading them
+    /// loads nothing of the adapter.
+    /// </summary>
+    public string Model { get; set; } = AnthropicSettings.DefaultModel;
+
+    /// <summary>The effort the Anthropic provider asks for (§8.2); <c>low</c> for chat. Refused at startup if the SDK has no such level.</summary>
+    public string Effort { get; set; } = AnthropicSettings.DefaultEffort;
 
     public int MaxSteps { get; set; } = Defaults.MaxSteps;
 
@@ -52,8 +64,8 @@ public sealed class AssistantOptions
         {
             Off => Off,
             Fake => Fake,
-            _ => throw new InvalidOperationException(
-                $"Admin:Assistant:Provider is '{configured}'; it takes 'off' or 'fake'. The Anthropic provider arrives with #429."),
+            Anthropic => Anthropic,
+            _ => throw new InvalidOperationException($"Admin:Assistant:Provider is '{configured}'; it takes 'off', 'fake' or 'anthropic'."),
         };
     }
 
