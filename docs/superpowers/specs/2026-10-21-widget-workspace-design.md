@@ -607,10 +607,14 @@ later phase move one screen at a time without a page ever missing.
     `--execute` live in the component and are empty on every render, and so
     is the BFF projection's typed rebuild confirmation (§4.2);
   - an event that changes the queues (a projection run starting or ending, a
-    real move sent) reads them again, owing the read when one is out;
+    real move sent) reads them again, owing the read when one is out, and the
+    BFF projection polls the queues while its own run goes, so its depth line
+    follows the run;
   - the Broker built-in page is the six widgets (Queues, BFF projection,
     Dead letters, Exchanges, Permissions, Bindings); the legacy Broker screen
-    is the same six one under another, until phase 6.
+    is the same six one under another, until phase 6, with a Refresh on each
+    and no polling, since auto-refresh is a setting of a widget on a
+    workspace page.
 - The visual design within Material 3: palette, density, spacing.
 - Whether a widget's refresh button and a page-wide refresh both exist.
 - The exact Mermaid mapping of each `TraceView` event kind in §8.2, within
