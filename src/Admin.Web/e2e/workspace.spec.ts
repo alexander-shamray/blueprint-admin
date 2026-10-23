@@ -193,9 +193,12 @@ test('a widget is configured by a preset and maximised to the page, then restore
   await page.getByRole('button', { name: 'Configure Reachability' }).click();
   await page.getByRole('menuitem', { name: 'Edit settings…' }).click();
   const settings = page.getByRole('form', { name: 'Settings of Reachability' });
+  // Focus moves into the panel when it opens and back to the configure button when it closes.
+  await expect(settings.getByRole('textbox')).toBeFocused();
   await settings.getByRole('textbox').fill('gateway, grafana');
   await settings.getByRole('button', { name: 'Apply' }).click();
   await expect(settings).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Configure Reachability (gateway, grafana)' })).toBeFocused();
   await expect(titles).toHaveText(['Alerts (firing)', 'Reachability (gateway, grafana)']);
 
   await page.getByRole('button', { name: 'Maximise Alerts (firing)' }).click();
