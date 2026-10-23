@@ -84,7 +84,7 @@ export function builtInWidgets(screen: string): WidgetInstance[] {
   }));
 }
 
-/** The type phase 6 retired (§10): one of the eleven screens rendered whole, its screen in `config.screen`. */
+/** The type phase 6 retired (§10): one screen rendered whole, its screen in `config.screen`. */
 const LEGACY_SCREEN_TYPE = 'legacy';
 
 /** A workspace with its legacy screen widgets replaced, and the titles of the pages that changed. */
@@ -97,7 +97,9 @@ export interface Retired {
  * Every `legacy` instance a saved page still holds, replaced by its screen's default widgets (widget-workspace spec
  * §5.3, phase 6). They go inside the rectangle it occupied, stacked in their default order at their default heights, as
  * wide as the rectangle allows down to each type's minimum. The rectangle grows downwards as far as the stack needs,
- * and what sat below it moves down by as much, so nothing overlaps. A screen this console does not name was rendered as
+ * and what sat below it moves down by as much. Where a type's minimum is wider than the rectangle and the stack would
+ * then reach a neighbour beside it, the stack goes under every widget on the page instead, so nothing overlaps either
+ * way. A screen this console does not name was rendered as
  * the first one, so it becomes that screen's widgets. Only a page the operator saved can hold one: a built-in page as
  * shipped is built from `BUILT_IN_LAYOUTS`.
  */
@@ -118,25 +120,40 @@ function replaceLegacy(widgets: WidgetInstance[]): WidgetInstance[] {
     if (!legacy) return placed;
     const stored = legacy.config['screen'];
     const screen = isScreenPath(stored) ? stored : SCREENS[0].path;
-    let y = legacy.y;
-    const stacked = BUILT_IN_LAYOUTS[screen].map(([kind, , , config]): WidgetInstance => {
-      const cols = Math.min(GRID_COLUMNS, Math.max(kind.minSize.cols, Math.min(kind.defaultSize.cols, legacy.cols)));
-      const widget = {
-        id: newId('widget'),
-        type: kind.type,
-        x: Math.min(legacy.x, GRID_COLUMNS - cols),
-        y,
-        cols,
-        rows: kind.defaultSize.rows,
-        config: structuredClone(config ?? {}),
-      };
-      y += widget.rows;
-      return widget;
-    });
+    const stack = (top: number): WidgetInstance[] => {
+      let y = top;
+      return BUILT_IN_LAYOUTS[screen].map(([kind, , , config]): WidgetInstance => {
+        const cols = Math.min(GRID_COLUMNS, Math.max(kind.minSize.cols, Math.min(kind.defaultSize.cols, legacy.cols)));
+        const widget = {
+          id: newId('widget'),
+          type: kind.type,
+          x: Math.min(legacy.x, GRID_COLUMNS - cols),
+          y,
+          cols,
+          rows: kind.defaultSize.rows,
+          config: structuredClone(config ?? {}),
+        };
+        y += widget.rows;
+        return widget;
+      });
+    };
+    const others = placed.filter((w) => w !== legacy);
+    const inPlace = stack(legacy.y);
     const bottom = legacy.y + legacy.rows;
-    const grown = Math.max(0, y - bottom);
-    placed = placed.flatMap((w) => (w === legacy ? stacked : [w.y >= bottom ? { ...w, y: w.y + grown } : w]));
+    const grown = Math.max(0, Math.max(...inPlace.map((w) => w.y + w.rows)) - bottom);
+    const moved = new Map(others.map((w) => [w, w.y >= bottom ? { ...w, y: w.y + grown } : w]));
+    if (inPlace.every((s) => others.every((w) => !overlaps(s, moved.get(w)!)))) {
+      placed = placed.flatMap((w) => (w === legacy ? inPlace : [moved.get(w)!]));
+    } else {
+      // A type wider than the rectangle would reach a neighbour beside it, so the stack goes under everything instead.
+      const below = stack(Math.max(0, ...others.map((w) => w.y + w.rows)));
+      placed = placed.flatMap((w) => (w === legacy ? below : [w]));
+    }
   }
+}
+
+function overlaps(a: WidgetInstance, b: WidgetInstance): boolean {
+  return a.x < b.x + b.cols && b.x < a.x + a.cols && a.y < b.y + b.rows && b.y < a.y + a.rows;
 }
 
 /** The widgets a page shows: its own, or its built-in defaults while it is unchanged. */

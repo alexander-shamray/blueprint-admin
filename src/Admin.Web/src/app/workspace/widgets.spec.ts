@@ -125,6 +125,45 @@ describe('retiring the legacy screen widget (phase 6)', () => {
     expect(new Set(widgets.map((w) => w.id)).size).toBe(widgets.length);
   });
 
+  it('puts a stack wider than its rectangle under the whole page rather than over a neighbour beside it', () => {
+    // Runbooks' minimum is wider than this six-column rectangle, so in place it would reach the note to its right.
+    expect(RUNBOOKS.minSize.cols).toBeGreaterThan(6);
+    const beside: WidgetInstance = { id: 'beside', type: 'note', x: 6, y: 0, cols: 6, rows: 4, config: {} };
+    const lower: WidgetInstance = { id: 'lower', type: 'note', x: 12, y: 10, cols: 6, rows: 3, config: {} };
+    const workspace: Workspace = {
+      version: WORKSPACE_VERSION,
+      activePageId: 'p',
+      pages: [
+        {
+          id: 'p',
+          title: 'Narrow',
+          builtIn: null,
+          hidden: false,
+          widgets: [legacy('old', 'runbooks', 0, 0, 6, 4), beside, lower],
+        },
+      ],
+    };
+
+    const widgets = retireLegacy(workspace).workspace.pages[0].widgets!;
+
+    const [runbooks, ...kept] = widgets;
+    expect(runbooks).toMatchObject({ type: RUNBOOKS.type, x: 0, y: 13, cols: RUNBOOKS.minSize.cols });
+    expect(kept).toEqual([beside, lower]);
+  });
+
+  it('leaves no two widgets overlapping on any page it changed', () => {
+    for (const page of retireLegacy(phase1()).workspace.pages) {
+      const widgets = page.widgets ?? [];
+      for (const a of widgets) {
+        for (const b of widgets) {
+          if (a === b) continue;
+          const apart = a.x + a.cols <= b.x || b.x + b.cols <= a.x || a.y + a.rows <= b.y || b.y + b.rows <= a.y;
+          expect(apart, `${page.title}: ${a.id} and ${b.id}`).toBe(true);
+        }
+      }
+    }
+  });
+
   it('leaves a workspace with no legacy instance as it is', () => {
     const workspace = defaultWorkspace();
     expect(retireLegacy(workspace)).toEqual({ workspace, pages: [] });
