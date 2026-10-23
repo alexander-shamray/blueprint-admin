@@ -2,7 +2,7 @@ import { Type } from '@angular/core';
 import { SCREENS } from '../screens';
 import { isScreenPath } from './screen-components';
 import { ARCHITECTURE_NOTE, BLANK_NOTE, TAB_ORDER_NOTE } from './widgets/note/note-presets';
-import { stringList } from './widget-config';
+import { FieldKind, stringList } from './widget-config';
 
 /** A size in grid cells. */
 export interface CellSize {
@@ -16,14 +16,11 @@ export interface WidgetPreset {
   config: Record<string, unknown>;
 }
 
-/**
- * A setting a preset list cannot hold, edited as text by the header's configure control: `names` is a list written
- * with commas (empty is "every one"), `text` is one value (empty is none).
- */
+/** A setting a preset list cannot hold, edited by the header's configure control (see `FieldKind`). */
 export interface WidgetField {
   key: string;
   label: string;
-  kind: 'names' | 'text';
+  kind: FieldKind;
 }
 
 /**
@@ -180,6 +177,87 @@ export const SCENARIO_WIDGETS = {
   }),
 } as const;
 
+const FILTER: WidgetField = { key: 'filter', label: 'Filter', kind: 'text' };
+const AUTO_REFRESH: WidgetField = { key: 'autoRefresh', label: 'Refresh every 5 s', kind: 'flag' };
+
+/**
+ * A Broker listing (§5.2): a text filter, any flags of its own, and the opt-in auto-refresh, which is off until
+ * switched on and saved with the widget (§4.3). Its one preset adds it as it is; the settings editor changes the rest.
+ */
+function brokerListing(kind: Kind, flags: readonly WidgetField[] = []): WidgetType {
+  const fields = [FILTER, ...flags, AUTO_REFRESH];
+  const config = (stored: Record<string, unknown>): Record<string, unknown> =>
+    Object.fromEntries(
+      fields.map((f) => [f.key, f.kind === 'flag' ? stored[f.key] === true : typeof stored[f.key] === 'string' ? stored[f.key] : '']),
+    );
+  return {
+    ...kind,
+    config,
+    titleOf: (stored) => (typeof stored['filter'] === 'string' && stored['filter'] !== '' ? `${kind.title} (${stored['filter']})` : kind.title),
+    presets: [{ label: kind.title, config: config({}) }],
+    fields,
+  };
+}
+
+/** The Broker page's widgets (§5.2), which read `BrokerFeed` in features/broker/broker-feed.ts. */
+export const BROKER_WIDGETS = {
+  queues: brokerListing(
+    {
+      type: 'queues',
+      title: 'Queues',
+      component: () => import('../features/broker/widgets/queues-widget').then((m) => m.QueuesWidget),
+      defaultSize: { cols: 14, rows: 12 },
+      minSize: { cols: 8, rows: 4 },
+      dataServices: ['BrokerFeed'],
+    },
+    [{ key: 'parkedOnly', label: 'Parked queues only', kind: 'flag' }],
+  ),
+  exchanges: brokerListing({
+    type: 'exchanges',
+    title: 'Exchanges',
+    component: () => import('../features/broker/widgets/exchanges-widget').then((m) => m.ExchangesWidget),
+    defaultSize: { cols: 10, rows: 8 },
+    minSize: { cols: 5, rows: 3 },
+    dataServices: ['BrokerFeed'],
+  }),
+  bindings: brokerListing({
+    type: 'bindings',
+    title: 'Bindings',
+    component: () => import('../features/broker/widgets/bindings-widget').then((m) => m.BindingsWidget),
+    defaultSize: { cols: 14, rows: 10 },
+    minSize: { cols: 8, rows: 3 },
+    dataServices: ['BrokerFeed'],
+  }),
+  permissions: brokerListing({
+    type: 'permissions',
+    title: 'Permissions',
+    component: () => import('../features/broker/widgets/permissions-widget').then((m) => m.PermissionsWidget),
+    defaultSize: { cols: 10, rows: 6 },
+    minSize: { cols: 6, rows: 3 },
+    dataServices: ['BrokerFeed'],
+  }),
+  projection: plain({
+    type: 'bff-projection',
+    title: 'BFF projection',
+    component: () => import('../features/broker/widgets/bff-projection-widget').then((m) => m.BffProjectionWidget),
+    defaultSize: { cols: 10, rows: 12 },
+    minSize: { cols: 6, rows: 5 },
+    dataServices: ['BrokerFeed'],
+  }),
+  deadLetters: {
+    type: 'dead-letters',
+    title: 'Dead-letter workbench',
+    component: () => import('../features/broker/widgets/dead-letter-widget').then((m) => m.DeadLetterWidget),
+    defaultSize: { cols: 24, rows: 12 },
+    minSize: { cols: 8, rows: 4 },
+    config: (stored) => ({ queue: typeof stored['queue'] === 'string' && stored['queue'] !== '' ? stored['queue'] : null }),
+    titleOf: (config) => (typeof config['queue'] === 'string' ? `Dead letters (${config['queue']})` : 'Dead-letter workbench'),
+    presets: [{ label: 'Opened from a Queues widget', config: { queue: null } }],
+    fields: [{ key: 'queue', label: 'Queue', kind: 'text' }],
+    dataServices: ['BrokerFeed'],
+  } satisfies WidgetType,
+} as const;
+
 /** The Logs page's widget (§5.2), a view of the one follow `LogFollowService` in features/logs runs. */
 export const LOGS: WidgetType = listing('services', 'All services', {
   type: 'logs',
@@ -242,6 +320,7 @@ export const NOTE: WidgetType = {
 export const WIDGETS: readonly WidgetType[] = [
   ...Object.values(STACK_WIDGETS),
   ...Object.values(SCENARIO_WIDGETS),
+  ...Object.values(BROKER_WIDGETS),
   LOGS,
   JOB_OUTPUT,
   NOTE,

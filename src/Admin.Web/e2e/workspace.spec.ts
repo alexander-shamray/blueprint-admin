@@ -6,9 +6,9 @@ import { SCREENS } from '../src/app/screens';
 // The widget workspace (#383, widget-workspace spec §11). Against the fake platform, whose workspace file lives in a
 // temp directory, so a page made here never reaches a real one; the walk deletes its page at the end all the same,
 // because every spec file shares one host.
-// The Stack (#385) and Scenario (#389) pages are built from their widgets; every other built-in page is still its
-// screen in one widget.
-for (const { path, label } of SCREENS.filter((s) => s.path !== 'stack' && s.path !== 'scenario')) {
+// The Stack (#385), Scenario (#389) and Broker (#387) pages are built from their widgets, and the Logs page (#386) is one
+// widget of its own; every other built-in page is still its screen in one widget.
+for (const { path, label } of SCREENS.filter((s) => !['stack', 'scenario', 'broker'].includes(s.path))) {
   test(`the built-in ${label} page renders its screen`, async ({ page }) => {
     await page.goto(`/${path}`);
 
@@ -21,6 +21,28 @@ for (const { path, label } of SCREENS.filter((s) => s.path !== 'stack' && s.path
     await expect(page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: label })).toHaveClass(/active/);
   });
 }
+
+test('the built-in Broker page renders its six widgets, none polling until switched on', async ({ page }) => {
+  const polled: string[] = [];
+  page.on('request', (r) => {
+    if (r.url().includes('/api/broker/queues')) polled.push(r.url());
+  });
+  await page.goto('/broker');
+
+  await expect(page.locator('gridster-item .ws-head .ws-title')).toHaveText([
+    'Queues',
+    'BFF projection',
+    'Dead-letter workbench',
+    'Exchanges',
+    'Permissions',
+    'Bindings',
+  ]);
+  await expect(page.locator('table.queues tbody tr').first()).toBeVisible();
+  // Read when the widgets appeared, and not again: each widget's auto-refresh is off by default.
+  const reads = polled.length;
+  await page.waitForTimeout(6000);
+  expect(polled.length).toBe(reads);
+});
 
 test('the built-in Scenario page renders the Scenario widget beside the Saga strip', async ({ page }) => {
   await page.goto('/scenario');
