@@ -1,0 +1,98 @@
+.assistant {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 8px 12px;
+  box-sizing: border-box;
+  gap: 8px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+h2 {
+  margin: 0;
+  font: var(--mat-sys-title-medium);
+}
+
+.provider {
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.grow {
+  flex: 1;
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.messages li {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: var(--mat-sys-body-medium);
+}
+
+.operator {
+  align-self: flex-end;
+  max-width: 85%;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: var(--mat-sys-primary-container);
+  color: var(--mat-sys-on-primary-container);
+}
+
+.reply {
+  max-width: 95%;
+}
+
+.tool,
+.end,
+.hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.tool mat-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+}
+
+.failed,
+.refused,
+.problem {
+  color: var(--mat-sys-error);
+}
+
+.problem {
+  margin: 0;
+  font: var(--mat-sys-body-small);
+}
+
+.compose textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font: var(--mat-sys-body-medium);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

@@ -1,5 +1,6 @@
 import { Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
 import { Router } from '@angular/router';
+import { AssistantService } from '../../assistant/assistant-service';
 import { ScenarioLauncher } from '../../features/scenario/scenario-launcher';
 import { WorkspaceService } from '../../workspace/workspace-service';
 
@@ -28,6 +29,7 @@ export class CommandPalette {
   private readonly router = inject(Router);
   private readonly launcher = inject(ScenarioLauncher);
   private readonly workspace = inject(WorkspaceService);
+  private readonly assistant = inject(AssistantService);
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
   private readonly input = viewChild.required<ElementRef<HTMLInputElement>>('input');
 
@@ -49,6 +51,8 @@ export class CommandPalette {
         void this.router.navigate(['/scenario']);
       },
     },
+    // Only while the assistant is on: off, the palette has no trace of it (AI assistant design §9.1).
+    ...(this.assistant.enabled() ? [{ id: 'assistant', label: $localize`Ask the assistant`, run: () => this.assistant.open() }] : []),
   ]);
 
   /** The fixed commands whose words contain what was typed, then the typed text as a correlation id. */
