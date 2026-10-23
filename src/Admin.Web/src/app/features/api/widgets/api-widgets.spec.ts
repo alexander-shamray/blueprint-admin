@@ -101,6 +101,22 @@ describe('the API request and API history widgets', () => {
       expect(configured).toEqual([{ operation: 'catalog:GetProducts', identity: 'custom:alicia' }]);
     });
 
+    it('does not take the editor back to the configured operation after a restore moved it, when the catalog is reloaded', () => {
+      const fixture = request({ operation: 'catalog:GetProducts' });
+      fixture.componentInstance.select(catalog.operations[1], false);
+      fixture.componentInstance.chooseIdentity('anonymous');
+      fixture.componentInstance.send();
+      fixture.componentInstance.select(catalog.operations[0], false);
+      const entry = TestBed.inject(ApiHistory).entries()[0];
+
+      fixture.componentInstance.restore(entry);
+      fixture.componentInstance.reload();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.selectedId()).toBe('catalog:PublishProduct');
+      expect(fixture.componentInstance.result()).not.toBeNull();
+    });
+
     it('does not freeze the identity in use into the config when the operator only picked an operation', () => {
       const fixture = request();
       fixture.componentInstance.select(catalog.operations[1]);
