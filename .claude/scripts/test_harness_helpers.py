@@ -5669,9 +5669,20 @@ class TheGitArgvGuard(unittest.TestCase):
             "PATH=/tmp bash -c \"sort <<<'git push origin +HEAD:main'\"",
             "npx thing <<<'git -c core.hooksPath=/tmp/h commit -m x'",
             "npx thing <<<'git apply x.patch'",
+            # Round 2: a file descriptor's number, a pipe into a group, a
+            # group piped out, and a default or a glob a strict reader spells.
+            "{ pwsh; } 0</tmp/s",
+            "while :; do /tmp/x; done 0</tmp/s",
+            "echo 'git push origin +HEAD:main' | (:; pwsh)",
+            "echo 'git push origin +HEAD:main' | { :; /tmp/x; }",
+            "cat <<'EOF' | (:; /tmp/x)\ngit push origin +HEAD:main\nEOF",
+            "{ echo 'git push origin +HEAD:main'; } | awk '{system($0)}'",
+            "/tmp/x <<<'${u:-git} push origin +HEAD:main'",
+            "/tmp/x <<<'/usr/bin/gi? push origin +HEAD:main'",
         ):
             with self.subTest(command=command):
-                self.assertRefused(command)
+                # Refused by #397's rule, which names itself (R9, round 2).
+                self.assertIn("#397", self.assertRefused(command))
         # Resolution is read from command words after quote removal, never
         # from text, so a message naming the words is still a filing; and the
         # reader after a reserved word is the program, so a loop reading lines
@@ -5685,6 +5696,12 @@ class TheGitArgvGuard(unittest.TestCase):
             "for d in a b; do [ -d \"$d\" ] && ls \"$d\" | head -3; done",
             "npm start & sleep 1; kill $!; wait $!; git log --oneline | head -3",
             "for p in \"a b\" \"c d\"; do set -- $p; git log --oneline \"$2\" | head -1; done",
+            # Round 2: computed text elsewhere on the line is not the handed
+            # text, `${a[@]}` is no transformation, and a declaration's value
+            # is read, not written.
+            "npx x <<<hi; echo $(date)",
+            "files=(a b); printf '%s\\n' \"${files[@]}\"; git log --oneline | head -3",
+            "export X=\"$HOME/bin\"; git log --oneline | head -3",
             # Quoted text names nothing, and arithmetic over literals reads no
             # variable.
             "grep -n 'env\\[\"PATH\"\\]\\|PATH=os.pathsep' f.py | head",
