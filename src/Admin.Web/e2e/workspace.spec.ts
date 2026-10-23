@@ -402,6 +402,53 @@ test('a request sequence widget draws the trace of a correlation id as a sequenc
   await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
 });
 
+// §8.1 against the fake map: Cytoscape draws a canvas, so the nodes are read from the list under it, which is also the
+// operator's keyboard route to a node. The fake broker lists ordering-catalog-events with a parked twin, and a click on
+// a queue opens the Broker page, since this page has no Queues widget or dead-letter workbench to open it in.
+test('a platform diagram widget draws the fake map and a queue click opens the Broker page', async ({ page }) => {
+  await page.goto('/stack');
+  await page.getByRole('button', { name: 'New page' }).click();
+  await expect(page).toHaveURL(/\/page\/page-/);
+  const made = page.url();
+
+  await page.getByRole('button', { name: 'Add widget' }).click();
+  await page.getByRole('menuitem', { name: 'Platform diagram' }).click();
+  await expect(page.locator('.cdk-overlay-backdrop')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Done' }).click();
+
+  const widget = page.locator('gridster-item app-topology-widget');
+  await expect(widget.locator('.graph canvas').first()).toBeVisible();
+  // A canvas is blank until Cytoscape has laid the nodes out and painted them: some layer must hold a painted pixel.
+  await expect
+    .poll(() =>
+      widget.locator('.graph canvas').evaluateAll((canvases) =>
+        canvases.some((c) => {
+          const canvas = c as HTMLCanvasElement;
+          const pixels = canvas.getContext('2d')?.getImageData(0, 0, canvas.width, canvas.height).data;
+          return pixels !== undefined && pixels.some((value, i) => i % 4 === 3 && value > 0);
+        }),
+      ),
+    )
+    .toBe(true);
+  await expect(widget.locator('.auto')).toContainText('Refreshes every 5 s');
+  const nodes = widget.getByRole('list', { name: 'Nodes of the diagram' });
+  await expect(nodes.getByRole('button', { name: 'ordering', exact: true })).toBeVisible();
+  await expect(nodes.locator('li', { has: page.getByRole('button', { name: 'ordering-catalog-events_error' }) })).toHaveCount(0);
+  await expect(nodes.locator('li', { has: page.getByRole('button', { name: 'ordering-catalog-events', exact: true }) })).toContainText('parked: error 1');
+  await expect(widget.getByRole('region', { name: 'Disagreements' })).toHaveCount(0);
+
+  await nodes.getByRole('button', { name: 'ordering-catalog-events', exact: true }).click();
+  await expect(page).toHaveURL(/\/broker$/);
+
+  // Back by history, not a reload: the page is still the unsaved one, and is deleted from where it was made.
+  await page.goBack();
+  await expect(page).toHaveURL(made);
+  await page.getByRole('button', { name: 'Page actions' }).click();
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
+  await expect(page).not.toHaveURL(made);
+  await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
+});
+
 test('the workspace is exported as a file, and an import replaces it only after the operator says so', async ({ page }) => {
   await page.goto('/stack');
   await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
