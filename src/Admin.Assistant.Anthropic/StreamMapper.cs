@@ -16,11 +16,15 @@ internal sealed class StreamMapper
 {
     private readonly Dictionary<long, Pending> blocks = [];
 
-    private long input;
+    private long fresh;
+    private long created;
     private long output;
     private long cached;
     private string? stop;
     private string? category;
+
+    /// <summary>Whether the stream reached its <c>message_stop</c>; one that ends without it was cut off.</summary>
+    public bool Stopped { get; private set; }
 
     public IEnumerable<ProviderEvent> On(BetaRawMessageStreamEvent streamEvent)
     {
@@ -55,25 +59,20 @@ internal sealed class StreamMapper
         }
         else if (streamEvent.TryPickStop(out _))
         {
-            yield return new UsageReport(new Usage(input, output, cached));
+            Stopped = true;
+
+            yield return new UsageReport(new Usage(fresh + created, output, cached));
             yield return stop == "refusal" ? new RoundEnd(ProviderStop.Refused, category) : new RoundEnd(ProviderStop.Done);
         }
     }
 
     // `input_tokens` leaves out what was read from or written to the cache, and the core counts both toward the context, so
     // a cache write is input and a cache read is reported on its own. The delta carries totals; a field it leaves out
-    // keeps the start's figure.
+    // keeps the start's figure, so each is kept apart and summed once, at the end.
     private void Take(long? inputTokens, long? written, long? read, long? outputTokens)
     {
-        if (inputTokens is { } fresh)
-        {
-            input = fresh + (written ?? 0);
-        }
-        else if (written is { } created)
-        {
-            input += created;
-        }
-
+        fresh = inputTokens ?? fresh;
+        created = written ?? created;
         cached = read ?? cached;
         output = outputTokens ?? output;
     }

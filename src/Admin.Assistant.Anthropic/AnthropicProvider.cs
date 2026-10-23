@@ -95,6 +95,13 @@ public sealed class AnthropicProvider : IAssistantProvider
                 yield return value;
             }
         }
+
+        // A stream that ends without `message_stop` was cut off: a half reply must not be taken for a finished one, and the
+        // core ends a turn it is told failed.
+        if (!mapper.Stopped)
+        {
+            throw new IOException("The provider's stream ended before the reply was complete.");
+        }
     }
 
     private async Task<ProviderStatus> ProbeAsync()
