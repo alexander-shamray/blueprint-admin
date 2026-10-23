@@ -558,6 +558,14 @@ later phase move one screen at a time without a page ever missing.
     copied with their Russian labels, a blank note, and an empty one.
   - Mermaid loads on the first diagram (`mermaid-loader.ts`), which the
     sequence diagram (§8.2) reuses.
+- Settled in #446, the configure control's settings editor (§7.2): a type
+  whose settings a preset list cannot hold declares `fields` in its
+  `WidgetType` (`names`, a list written with commas, or `text`), and the
+  configure menu then ends in "Edit settings…", which opens a form under the
+  header. It saves through the type's own `config`, like a preset. A type
+  with fields is configurable even with one preset; the `listing` types and
+  Job output declare theirs, and the Scenario widget's script and identity
+  declare theirs when they exist.
 - The visual design within Material 3: palette, density, spacing.
 - Whether a widget's refresh button and a page-wide refresh both exist.
 - The exact Mermaid mapping of each `TraceView` event kind in §8.2, within
