@@ -53,7 +53,7 @@ public sealed partial class AssistantRuntime
         (Core, model) = ProviderId switch
         {
             AssistantOptions.Fake => (new AssistantCore(fake(), sources(), ToolPolicy.ReadOnly, redactor(), Instructions, limits, time, Logged), FakeAssistantProvider.Model),
-            AssistantOptions.Anthropic => (new AssistantCore(anthropic(), sources(), ToolPolicy.ReadOnly, redactor(), Instructions, limits, time, Logged), options.Assistant.Model),
+            AssistantOptions.Anthropic => (new AssistantCore(anthropic(), sources(), ToolPolicy.ReadOnly, redactor(), Instructions, limits, time, Logged), options.Assistant.Model.Trim()),
             _ => ((AssistantCore?)null, ""),
         };
     }
