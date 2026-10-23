@@ -1,9 +1,11 @@
+import { WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { Observable, of, throwError } from 'rxjs';
 import { HostClient } from '../../../core/host/host-client';
 import { MailListView, MailMessageRead, MailSummary } from '../../../core/host/host-types';
 import { WIDGET_CONTEXT } from '../../../workspace/widget-context';
+import { WidgetSessionStore } from '../../../workspace/widget-session-store';
 import { MailWidget } from './mail-widget';
 
 const ORDER = '01a13f79-2194-77a5-bbad-eaf2d69eacd6';
@@ -52,11 +54,13 @@ describe('MailWidget', () => {
     opened: MailMessageRead = read({}),
     config: Record<string, unknown> = {},
     extraProviders: unknown[] = [],
+    seed: (store: WidgetSessionStore) => void = () => undefined,
   ) {
     const mailMessage = vi.fn().mockReturnValue(of(opened));
     TestBed.configureTestingModule({
       providers: [provideRouter([]), { provide: HostClient, useValue: { mailMessages: () => list, mailMessage } }, ...(extraProviders as [])],
     });
+    seed(TestBed.inject(WidgetSessionStore));
     const fixture = TestBed.createComponent(MailWidget);
     fixture.componentRef.setInput('config', config);
     fixture.detectChanges();
@@ -206,6 +210,49 @@ describe('MailWidget', () => {
 
     expect(rows(fixture)).toHaveLength(1);
     expect((el(fixture).querySelector('input.filter') as HTMLInputElement).value).toBe('from-link');
+  });
+
+  it('lets an old link win over a filter typed earlier in the tab', async () => {
+    const context = { provide: WIDGET_CONTEXT, useValue: { instanceId: 'w1', pageId: 'p1' } };
+    const route = { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap({ correlationId: 'from-link' }) } } };
+    const { fixture } = render(of(listed([summary({ id: 'a', correlationId: 'from-link' }), summary({ id: 'b' })])), read({}), {}, [context, route], (store) =>
+      store.state<string | null>('w1', 'filter', null).set('typed-earlier'),
+    );
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect((el(fixture).querySelector('input.filter') as HTMLInputElement).value).toBe('from-link');
+    expect(rows(fixture)).toHaveLength(1);
+  });
+
+  it('takes away what was typed when the configured filter was changed while the widget was gone', async () => {
+    const context = { provide: WIDGET_CONTEXT, useValue: { instanceId: 'w1', pageId: 'p1' } };
+    const { fixture } = render(of(listed([summary({})])), read({}), { correlationId: ORDER }, [context], (store) => {
+      store.state<string | null>('w1', 'filter', null).set('typed-earlier');
+      store.state<string>('w1', 'filterAgainst', '').set('old-config');
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect((el(fixture).querySelector('input.filter') as HTMLInputElement).value).toBe(ORDER);
+  });
+
+  it('keeps the open message through a read that failed in transit, and drops it when the sink says it is gone', () => {
+    const context = { provide: WIDGET_CONTEXT, useValue: { instanceId: 'w1', pageId: 'p1' } };
+    let openedId!: WritableSignal<string | null>;
+    const { fixture, mailMessage } = render(of(listed([summary({})])), read({}), {}, [context], (store) => {
+      openedId = store.state<string | null>('w1', 'openedId', null);
+      openedId.set('m1');
+    });
+    mailMessage.mockReturnValue(throwError(() => new Error('down')));
+    el(fixture).querySelector<HTMLButtonElement>('button.open')?.click();
+    fixture.detectChanges();
+    expect(openedId()).toBe('m1');
+
+    mailMessage.mockReturnValue(of({ reachable: true, error: 'The mail sink answered 404 for message m1.', message: null }));
+    el(fixture).querySelector<HTMLButtonElement>('button.open')?.click();
+    fixture.detectChanges();
+    expect(openedId()).toBeNull();
   });
 
   it('takes away what was typed when another configured filter is chosen', async () => {
