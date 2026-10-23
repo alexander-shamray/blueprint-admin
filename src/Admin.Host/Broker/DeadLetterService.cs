@@ -55,6 +55,7 @@ public sealed partial class DeadLetterService(
 
     private readonly Lock gate = new();
     private bool running;
+    private string? minted;
 
     public DeadLetterPlan Plan() => new(ExecuteConfirm, InspectLimit, recordDir);
 
@@ -288,6 +289,22 @@ public sealed partial class DeadLetterService(
         lock (gate)
         {
             running = false;
+            minted = null;
+        }
+    }
+
+    /// <summary>
+    /// The password minted for the run under way, until that run leaves; null between runs. The assistant's redactor
+    /// reads it, so the password never reaches a provider while one exists (AI assistant design §10).
+    /// </summary>
+    public string? MintedPassword
+    {
+        get
+        {
+            lock (gate)
+            {
+                return minted;
+            }
         }
     }
 
@@ -300,7 +317,17 @@ public sealed partial class DeadLetterService(
 
     private static HashSet<string> Secret(string password) => new(StringComparer.Ordinal) { password };
 
-    private static string NewPassword() => RandomNumberGenerator.GetHexString(32, lowercase: true);
+    private string NewPassword()
+    {
+        string password = RandomNumberGenerator.GetHexString(32, lowercase: true);
+
+        lock (gate)
+        {
+            minted = password;
+        }
+
+        return password;
+    }
 
     private static string StillSet(string error) =>
         $"The operator's password could not be cleared ({error}); if it was set, it still is, so clear it with: docker compose exec rabbitmq {string.Join(' ', ClearPasswordArguments)}";

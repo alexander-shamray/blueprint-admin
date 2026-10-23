@@ -1,3 +1,4 @@
+using Admin.Host.Assistant;
 using Admin.Host.Identity;
 
 namespace Admin.Host.Config;
@@ -142,4 +143,11 @@ public sealed class AdminOptions
 
     /// <summary>Where <see cref="Record"/> writes, resolved against the repository root as <see cref="WebRoot"/> is.</summary>
     public string RecordDir { get; set; } = "src/Admin.Host/Fakes/fixtures";
+
+    /// <summary>
+    /// The AI assistant (<c>Admin:Assistant</c>, AI assistant design §9): off unless a provider is named, or left unset
+    /// under <see cref="FakePlatform"/>, which then plays the fake provider's scripts. The console's one outbound surface
+    /// beyond the platform, reached by the host alone (spec §8).
+    /// </summary>
+    public AssistantOptions Assistant { get; set; } = new();
 }
