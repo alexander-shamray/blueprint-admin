@@ -29,12 +29,19 @@ describe('BrokerFeed', () => {
     expect(host.brokerPermissions).not.toHaveBeenCalled();
   });
 
-  it('holds the two tools\' plans, and undefined for one the host does not answer', () => {
+  it('holds the two tools\' plans: undefined while pending, null for one the host does not answer', () => {
+    const pending = new Subject<never>();
+    host.projectionPlan.mockReturnValue(pending);
     host.deadLetterPlan.mockReturnValue(throwError(() => new Error('down')));
     const feed = TestBed.inject(BrokerFeed);
 
-    expect(feed.projectionPlan()).toEqual(plan);
-    expect(feed.deadLetterPlan()).toBeUndefined();
+    expect(feed.projectionPlan()).toBeUndefined();
+    expect(feed.deadLetterPlan()).toBeNull();
+    pending.complete();
+  });
+
+  it('holds the plan the host gave', () => {
+    expect(TestBed.inject(BrokerFeed).projectionPlan()).toEqual(plan);
   });
 
   it('reads the queues at once for something that happened, and owes a read when one is out', () => {
