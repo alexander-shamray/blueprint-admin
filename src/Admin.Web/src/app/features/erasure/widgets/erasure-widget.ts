@@ -1,7 +1,7 @@
 import { Component, DestroyRef, computed, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 import { widgetSession } from '../../../workspace/widget-session-store';
+import { TraceLink } from '../../trace/trace-follow';
 import { ErasureRun, GUID } from '../erasure-run';
 
 /**
@@ -11,7 +11,7 @@ import { ErasureRun, GUID } from '../erasure-run';
  */
 @Component({
   selector: 'app-erasure-widget',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, TraceLink],
   templateUrl: './erasure-widget.html',
   styleUrl: './erasure-widget.css',
   preserveWhitespaces: true,

@@ -1,11 +1,11 @@
 import { Component, DestroyRef, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import { HostClient } from '../../../core/host/host-client';
 import { DeadLetterInspection, DeadLetterVerb } from '../../../core/host/host-types';
 import { OutputPane } from '../../../shared/output-pane/output-pane';
+import { TraceLink } from '../../trace/trace-follow';
 import { BrokerFeed, describeError } from '../broker-feed';
 
 /**
@@ -19,7 +19,7 @@ import { BrokerFeed, describeError } from '../broker-feed';
  */
 @Component({
   selector: 'app-dead-letter-widget',
-  imports: [FormsModule, RouterLink, OutputPane],
+  imports: [FormsModule, TraceLink, OutputPane],
   template: `
     <section class="dead-letters">
       @if (feed.deadLetterPlan() === null) {
@@ -57,7 +57,7 @@ import { BrokerFeed, describeError } from '../broker-feed';
               <dl>
                 <dt>Message</dt><dd><code>{{ message.messageId ?? '(no message id)' }}</code></dd>
                 @if (message.correlationId; as c) {
-                  <dt>Correlation</dt><dd><a [routerLink]="['/trace', c]">{{ c }}</a></dd>
+                  <dt>Correlation</dt><dd><a [appTraceLink]="c">{{ c }}</a></dd>
                 }
                 @if (message.messageType; as t) {<dt>Type</dt><dd><code>{{ t }}</code></dd>}
                 @if (message.faultExceptionType; as f) {<dt>Fault</dt><dd><code>{{ f }}</code>@if (message.faultMessage; as m) {: {{ m }}}</dd>}

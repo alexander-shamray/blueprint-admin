@@ -1,8 +1,8 @@
 import { Component, DestroyRef, effect, inject, input, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 import { DrainedIndicator } from '../../../shared/drained-indicator/drained-indicator';
 import { pretty } from '../../api/request-builder';
+import { TraceLink } from '../../trace/trace-follow';
 import { ScenarioLauncher } from '../scenario-launcher';
 import { ScenarioRunner, StepState } from '../scenario-runner';
 
@@ -22,7 +22,7 @@ const STATE_WORDS: Record<StepState, string> = {
  */
 @Component({
   selector: 'app-scenario-widget',
-  imports: [FormsModule, RouterLink, DrainedIndicator],
+  imports: [FormsModule, TraceLink, DrainedIndicator],
   templateUrl: './scenario-widget.html',
   styleUrl: './scenario-widget.css',
   preserveWhitespaces: true,

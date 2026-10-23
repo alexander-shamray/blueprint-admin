@@ -35,7 +35,7 @@
       Raised {{ r.raisedAt }} · due {{ r.dueAt }}
       @if (r.closedAt) {· closed {{ r.closedAt }}}
       · reissued {{ r.reissues }} {{ r.reissues === 1 ? 'time' : 'times' }}
-      @if (run.raisedUnder(); as c) {· <a [routerLink]="['/trace', c]">trace the raise</a>}
+      @if (run.raisedUnder(); as c) {· <a [appTraceLink]="c">trace the raise</a>}
     </p>
     @if (run.overdue()) {
       <p class="overdue-actions">
