@@ -1,5 +1,5 @@
 import { SCREENS } from '../screens';
-import { API_WIDGETS, BROKER_WIDGETS, ERASURE, JOB_OUTPUT, LEGACY_SCREEN, LOGS, MAIL, MAP, TRACE, SCENARIO_WIDGETS, STACK_WIDGETS, WidgetType } from './widgets';
+import { API_WIDGETS, BROKER_WIDGETS, ERASURE, JOB_OUTPUT, LEGACY_SCREEN, LOGS, MAIL, MAP, RUNBOOKS, TRACE, TRANSCRIPT, SCENARIO_WIDGETS, STACK_WIDGETS, WidgetType } from './widgets';
 import { Page, WidgetInstance, Workspace } from './workspace-types';
 
 /** The schema version this console writes; `WorkspaceSchema.Current` on the host. */
@@ -20,6 +20,8 @@ const BUILT_IN_LAYOUTS: Partial<Record<string, readonly Placed[]>> = {
     [API_WIDGETS.history, 16, 0],
   ],
   trace: [[TRACE, 0, 0, { correlationId: '', window: '15m', follow: true }]],
+  runbooks: [[RUNBOOKS, 0, 0, { runbook: null }]],
+  transcript: [[TRANSCRIPT, 0, 0]],
   broker: [
     [BROKER_WIDGETS.queues, 0, 0],
     [BROKER_WIDGETS.projection, 14, 0],

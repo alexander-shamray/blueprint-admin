@@ -673,6 +673,33 @@ later phase move one screen at a time without a page ever missing.
   - the API and Trace built-in pages are the request widget beside the
     history widget, and one Trace widget that follows; the legacy screens are
     those widgets in thin components.
+- Settled in phase 4c (#391, with #375), the Runbooks and Transcript widgets and
+  session state everywhere:
+  - every built-in page is now built from widgets of its own, so the legacy
+    screen widget is used only by an operator's page that still holds one;
+    the legacy screens are thin components over the widgets until phase 6;
+  - **Runbooks** (`runbooks`) has `runbook` as its config, the one it opens on
+    (taken up when it appears with none open, and when the config comes to
+    name another). Which runbook is open, the alert to cause and the job
+    being shown are session state, and the job's output is attached again on
+    return, taken to be running until its output says it ended so that no
+    second cause starts on top of it. The first press of a `confirm` cause
+    and the typed name of a costly one are component state, empty on every
+    render. Its 5-second alert read follows tab visibility (§4.3);
+  - **Transcript** (`transcript`) reads `TranscriptFeed`, a `PolledFeed` of
+    the host's scrubbed transcript every 3 seconds while a widget shows it;
+    it has no input to keep;
+  - the remaining widgets keep their input in flight in `WidgetSessionStore`:
+    the Logs text filter and correlation id; the API request widget's whole
+    editor (operation, method, URL, parameter values, headers, body,
+    correlation id) and its last answer; the Trace widget's window. An editor
+    found in session state is the operator's own work, so the operation the
+    config names does not replace it, though a config that later names
+    another does. A typed confirmation, or any step that unlocks one (a
+    dry-run gate, an armed button), is never kept, and each widget with one
+    has a test that says so;
+  - what is not kept, because it is data and is read again: queues, the map,
+    mail, logs lines past the shared buffer, the doctor, the trace timeline.
 - The visual design within Material 3: palette, density, spacing.
 - Whether a widget's refresh button and a page-wide refresh both exist.
 - The exact Mermaid mapping of each `TraceView` event kind in §8.2, within

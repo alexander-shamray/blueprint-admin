@@ -224,7 +224,8 @@ describe('WorkspaceService', () => {
       expect(copy?.title).toBe('Runbooks (copy)');
       expect(copy?.builtIn).toBeNull();
       const [widget] = copy?.widgets ?? [];
-      expect(widget.config).toEqual({ screen: 'runbooks' });
+      expect(widget.type).toBe('runbooks');
+      expect(widget.config).toEqual({ runbook: null });
       expect(widget.id).not.toBe(builtInWidgets('runbooks')[0].id);
     });
 
@@ -264,10 +265,10 @@ describe('WorkspaceService', () => {
 
     it('gives a widget another config and leaves its neighbours alone', () => {
       load();
-      service.configureWidget('runbooks', 'builtin-runbooks-screen', { screen: 'trace' });
+      service.configureWidget('runbooks', 'builtin-runbooks-runbooks', { runbook: 'error-queue' });
       const [widget] = service.pages().find((p) => p.id === 'runbooks')?.widgets ?? [];
-      expect(widget.config).toEqual({ screen: 'trace' });
-      expect(widget.id).toBe('builtin-runbooks-screen');
+      expect(widget.config).toEqual({ runbook: 'error-queue' });
+      expect(widget.id).toBe('builtin-runbooks-runbooks');
       vi.advanceTimersByTime(SAVE_DELAY_MS);
       expectSave('"e1"').flush(null, { headers: { ETag: '"e2"' } });
     });

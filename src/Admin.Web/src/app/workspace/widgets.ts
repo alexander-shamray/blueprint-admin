@@ -360,6 +360,34 @@ export const TRACE: WidgetType = {
   dataServices: ['TraceHistory', 'TraceFollow'],
 };
 
+/**
+ * The Runbooks page's widget (§5.2): the backend's runbooks with the script that causes each alert. Config: `runbook`,
+ * the one it opens on. Which is open, the alert to cause and the job being shown are session state; the first press of
+ * a cause and the typed name that unlocks one are never kept (§4.2).
+ */
+export const RUNBOOKS: WidgetType = {
+  type: 'runbooks',
+  title: 'Runbooks',
+  component: () => import('../features/runbooks/widgets/runbooks-widget').then((m) => m.RunbooksWidget),
+  defaultSize: { cols: 24, rows: 26 },
+  minSize: { cols: 10, rows: 8 },
+  config: (stored) => ({ runbook: typeof stored['runbook'] === 'string' && stored['runbook'] !== '' ? stored['runbook'] : null }),
+  titleOf: (config) => (typeof config['runbook'] === 'string' ? `Runbooks (${config['runbook']})` : 'Runbooks'),
+  presets: [{ label: 'Runbooks', config: { runbook: null } }],
+  fields: [{ key: 'runbook', label: 'Runbook to open on', kind: 'text' }],
+  dataServices: [],
+};
+
+/** What the operator did this session (§5.2): the host's scrubbed transcript, read from `TranscriptFeed`. */
+export const TRANSCRIPT: WidgetType = plain({
+  type: 'transcript',
+  title: 'Transcript',
+  component: () => import('../features/transcript/widgets/transcript-widget').then((m) => m.TranscriptWidget),
+  defaultSize: { cols: 24, rows: 20 },
+  minSize: { cols: 8, rows: 5 },
+  dataServices: ['TranscriptFeed'],
+});
+
 /** The Logs page's widget (§5.2), a view of the one follow `LogFollowService` in features/logs runs. */
 export const LOGS: WidgetType = listing('services', 'All services', {
   type: 'logs',
@@ -425,6 +453,8 @@ export const WIDGETS: readonly WidgetType[] = [
   ...Object.values(BROKER_WIDGETS),
   ...Object.values(API_WIDGETS),
   TRACE,
+  RUNBOOKS,
+  TRANSCRIPT,
   MAP,
   MAIL,
   ERASURE,
