@@ -45,6 +45,8 @@ export class MailWidget {
    * shows until then. Choosing another configured filter (the settings editor, a preset) takes the typed one away.
    */
   private readonly typed = widgetSession<string | null>('filter', null);
+  /** The configured filter that was showing when it was typed over, so a change made while the widget was gone is seen. */
+  private readonly typedAgainst = widgetSession<string>('filterAgainst', '');
   /** One order's messages: those whose `X-Correlation-Id` is this. Empty shows every message. */
   readonly filter = computed(() => this.typed() ?? (this.fromRoute || this.configured()));
   /** The message that is open: its id is session state, and it is read again when the widget is re-created. */
@@ -76,18 +78,22 @@ export class MailWidget {
 
   constructor() {
     this.refresh();
+    // An old link's filter wins over one typed earlier in the tab: the link is the newest thing the operator asked for.
+    if (this.fromRoute) this.typed.set(null);
     const id = this.openedId();
     if (id !== null) this.open(id);
-    // The first run only notes the filter the widget was created with (its inputs arrive after the constructor).
-    let seen: string | undefined;
+    // Choosing another configured filter takes a typed one away, whether it is chosen while the widget shows or while it
+    // is gone (its inputs arrive after the constructor, so the effect is where the configured filter is first known).
     effect(() => {
       const now = this.configured();
-      if (seen !== undefined && now !== seen) untracked(() => this.typed.set(null));
-      seen = now;
+      untracked(() => {
+        if (this.typed() !== null && this.typedAgainst() !== now) this.typed.set(null);
+      });
     });
   }
 
   setFilter(value: string): void {
+    this.typedAgainst.set(this.configured());
     this.typed.set(value);
   }
 
@@ -121,9 +127,13 @@ export class MailWidget {
         catchError(() => of({ reachable: false, error: 'The host did not answer.', message: null })),
       )
       .subscribe((read) => {
+        // The answer is for the message last asked for: a Close, or another Open, since has made it stale.
+        if (this.openedId() !== id) return;
         this.opened.set(read.message);
         if (read.message === null) {
-          this.openedId.set(null);
+          // The id is dropped only when the sink answered that the message is gone; a read that failed in transit
+          // leaves it, so the next time the widget is created it tries again.
+          if (read.reachable) this.openedId.set(null);
           this.openError.set(read.reachable ? read.error : `The mail sink did not answer: ${read.error}`);
         }
       });
