@@ -47,6 +47,8 @@ export class ErasureRun {
   /** Calls out, counted: a raise or reissue reads from inside its own call, so a flag would clear while that read is still out. */
   private readonly inFlight = signal(0);
   readonly busy = computed(() => this.inFlight() > 0);
+  /** The error showing was set by a watch tick, which the next good tick clears; the operator's own errors stay. */
+  private quietFailure = false;
   readonly watch = signal(false);
   /** The correlation id of the raise, which Trace reads the whole fan-out under. */
   readonly raisedUnder = signal<string | null>(null);
@@ -145,7 +147,16 @@ export class ErasureRun {
     return this.send('GET', `/api/v1/privacy/erasure-requests/${this.requestId().trim()}`, null, quiet).pipe(
       tap((result) => {
         const body = this.expect(result, 'Reading the request');
-        if (body === null) return;
+        if (body === null) {
+          if (quiet) this.quietFailure = true;
+          return;
+        }
+        // A tick that reads well takes away the failure an earlier tick showed; an error of the operator's own call
+        // is not the tick's to clear.
+        if (quiet && this.quietFailure) {
+          this.quietFailure = false;
+          this.error.set(null);
+        }
         try {
           const view = JSON.parse(body) as ErasureRequestView;
           this.request.set(view);
@@ -171,12 +182,14 @@ export class ErasureRun {
     if (!quiet) {
       this.inFlight.update((n) => n + 1);
       this.error.set(null);
+      this.quietFailure = false;
     }
     return this.host
       .proxy({ method, url: gateway.replace(/\/+$/, '') + path, headers: body ? { 'Content-Type': 'application/json' } : {}, body, identity: PRIVACY_IDENTITY, correlationId: null })
       .pipe(
         takeUntilDestroyed(this.destroyRef),
         catchError((e: unknown) => {
+          if (quiet) this.quietFailure = true;
           this.error.set(this.describe(e));
           return EMPTY;
         }),

@@ -214,19 +214,46 @@ describe('ErasureWidget', () => {
     fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(0);
 
+    // The tick is out: it is not busy, and the error already showing is not its to clear.
     expect(proxy).toHaveBeenCalledTimes(1);
     expect(run.busy()).toBe(false);
     expect(run.error()).toBe('an earlier failure');
+    tick.next(responded(200, JSON.stringify(view({}))));
+    tick.complete();
+    expect(run.error()).toBe('an earlier failure');
 
-    // An operator's call is out: the next tick reads nothing.
+    // An operator's call is out: the ticks that fall due read nothing, and the first one after it ends reads again.
     const call = new Subject<ProxyResult>();
     proxy.mockReturnValueOnce(call);
     run.read();
     await vi.advanceTimersByTimeAsync(30_000);
     expect(proxy).toHaveBeenCalledTimes(2);
     expect(run.busy()).toBe(true);
-    tick.complete();
+
+    call.next(responded(200, JSON.stringify(view({}))));
     call.complete();
+    proxy.mockReturnValue(of(responded(200, JSON.stringify(view({})))));
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(proxy.mock.calls.length).toBeGreaterThan(2);
+  });
+
+  it('a failure a watch tick showed is taken away by the next tick that reads well, and an error of the operator\'s is not', async () => {
+    vi.useFakeTimers();
+    const fixture = render([]);
+    proxy.mockReturnValueOnce(of(responded(500, 'boom'))).mockReturnValue(of(responded(200, JSON.stringify(view({})))));
+    const run = TestBed.inject(ErasureRun);
+    run.requestId.set(REQUEST_ID);
+    run.setWatch(true);
+    fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(run.error()).toContain('the gateway answered 500');
+
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(run.error()).toBeNull();
+
+    run.error.set('the operator\'s own failure');
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(run.error()).toBe('the operator\'s own failure');
   });
 
   it('reads nothing once the widget is gone, though the watch stays on for the next one', async () => {
