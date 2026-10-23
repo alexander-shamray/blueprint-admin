@@ -61,6 +61,21 @@ describe('QueuesWidget', () => {
     expect(rows(parked, 'queues').length).toBe(3);
   });
 
+  it('shows the queue the platform diagram pointed it at, parked or not, over its configured view, until that is taken off', () => {
+    const fixture = render({ filter: 'BFF', parkedOnly: true });
+    fixture.componentInstance.pointed.set('something-else');
+    fixture.detectChanges();
+
+    expect(rows(fixture, 'queues')).toEqual(['something-else 0']);
+    expect(fixture.nativeElement.querySelector('.pointed')?.textContent).toContain('Pointed at something-else');
+
+    (fixture.nativeElement.querySelector('button.unpoint') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(rows(fixture, 'queues').length).toBe(1);
+    expect(fixture.nativeElement.querySelector('.pointed')).toBeNull();
+  });
+
   it('reads once when it appears and polls nothing while its auto-refresh is off', async () => {
     render();
     expect(host.brokerQueues).toHaveBeenCalledTimes(1);

@@ -11,7 +11,7 @@ code { word-break: break-all; }
 .depth.drained { background: var(--app-ok-bg); }
 .limits { margin: 0.5rem 0; padding-left: 1.25rem; }
 .error { color: var(--app-error); }
-.empty, .loading { color: var(--app-muted); }
+.empty, .loading, .pointed { color: var(--app-muted); }
 .dead-letter { border: 1px solid var(--app-border); border-radius: 3px; padding: 0.5rem 0.75rem; margin: 0.5rem 0; }
 .dead-letter dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 0.75rem; margin: 0; }
 .dead-letter dt { font-weight: 600; }

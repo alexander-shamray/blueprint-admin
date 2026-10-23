@@ -9,6 +9,13 @@
   </div>
 </section>
 
+@if (pointed(); as names) {
+  <p class="pointed" role="status">
+    Pointed at {{ names.join(', ') }} from the platform diagram.
+    <button class="unpoint" type="button" (click)="pointed.set(null)">Show the configured services</button>
+  </p>
+}
+
 @if (unknown().length > 0) {
   <p class="error">Not a Compose service: {{ unknown().join(', ') }}</p>
 }

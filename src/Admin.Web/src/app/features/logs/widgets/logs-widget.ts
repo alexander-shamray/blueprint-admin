@@ -29,8 +29,14 @@ export class LogsWidget {
   readonly filter = widgetSession('filter', '');
   readonly correlationId = widgetSession('correlationId', '');
 
+  /**
+   * The services the platform diagram pointed this widget at (spec §8.1), over the configured ones until the operator
+   * takes them off. Session state (§4.2): pointing is not a change to the saved page.
+   */
+  readonly pointed = widgetSession<string[] | null>('pointed', null);
+
   /** The services this widget shows; `[]` is every one. */
-  readonly services = computed(() => stringList(this.config()['services']));
+  readonly services = computed(() => this.pointed() ?? stringList(this.config()['services']));
 
   /** Configured services Compose has none of: said, because such a widget would wait for lines that never come. */
   readonly unknown = computed(() => this.services().filter((s) => !COMPOSE_SERVICES.includes(s)));
