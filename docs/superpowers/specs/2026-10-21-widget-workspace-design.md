@@ -575,8 +575,9 @@ later phase move one screen at a time without a page ever missing.
   - a Logs widget tells the service which services it shows (`ask`, and
     `withdraw` when destroyed). The follow covers the union, or every
     service when any widget asks for every one; a change to the union while
-    a follow runs, or is being asked for, replaces it, as §4.4 says. With no
-    widget left the follow keeps the set it had;
+    a follow runs, or is being asked for, replaces it and keeps the lines
+    already received, as §4.4 says (only a Follow starts the buffer afresh).
+    With no widget left the follow keeps the set it had;
   - a line belongs to the service named before its first `|` (without
     Compose's `-1` suffix); a line with no prefix is shown only by a widget
     over every service. Clear empties the one shared buffer, not a widget's

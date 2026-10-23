@@ -77,12 +77,33 @@ describe('LogFollowService', () => {
     service.ask('a', ['gateway']);
     service.follow();
     expect(host.followLogs).toHaveBeenLastCalledWith(['gateway']);
+    streams['job-a'].next(line(0, 'gateway | before'));
 
     service.ask('b', ['web-bff']);
 
     expect(host.stopFollow).toHaveBeenCalledWith('job-a');
     expect(host.followLogs).toHaveBeenLastCalledWith(['gateway', 'web-bff']);
     expect(service.hostJob()).toBe('job-b');
+    // The lines already received are kept across a restart (§4.4); only a Follow starts them afresh.
+    expect(service.lines().map((l) => l.text)).toEqual(['gateway | before']);
+    service.stop();
+    service.follow();
+    expect(service.lines()).toEqual([]);
+  });
+
+  it('a change undone before the request answers restarts nothing', () => {
+    const post = new Subject<JobSummary>();
+    host.followLogs.mockReturnValueOnce(post.asObservable());
+    service.ask('a', ['gateway']);
+    service.follow();
+
+    service.ask('b', ['web-bff']);
+    service.withdraw('b');
+    post.next(summary('job-a'));
+
+    expect(host.followLogs).toHaveBeenCalledTimes(1);
+    expect(sseFollow).toHaveBeenCalledWith('job-a');
+    expect(service.following()).toBe(true);
   });
 
   it('does not restart for a change that leaves the union as it was, or when nothing follows', () => {

@@ -102,6 +102,11 @@ export class LogFollowService {
    * By name, a stop that lands after the next follow has started ends nothing, because that follow already ended it.
    */
   follow(): void {
+    this.start(false);
+  }
+
+  /** `keepLines` is a restart for a changed set of services (§4.4): the lines already received stay. */
+  private start(keepLines: boolean): void {
     if (this.requestOut()) {
       return;
     }
@@ -110,12 +115,16 @@ export class LogFollowService {
     this.stopOnArrival = false;
     this.restartOnArrival = false;
     this.error.set(null);
-    this.lines.set([]);
+    if (!keepLines) this.lines.set([]);
     this.pending.set(true);
     this.requestOut.set(true);
     const services = this.services();
     this.followedKey = services.join('\n');
-    this.subscription = this.host
+    // Held before the callbacks can run: a restart re-enters this method from the completion of a synchronous
+    // answer, and its subscription is the one `detach` must find afterwards.
+    const subscription = new Subscription();
+    this.subscription = subscription;
+    subscription.add(this.host
       .followLogs(services)
       .pipe(
         switchMap((job) => {
@@ -126,8 +135,10 @@ export class LogFollowService {
             this.stopOnHost();
             return EMPTY;
           }
-          if (this.restartOnArrival) {
-            this.restartOnArrival = false;
+          // A change that has since been undone needs no restart, and the flag does not outlive the answer.
+          const restart = this.restartOnArrival && this.services().join('\n') !== this.followedKey;
+          this.restartOnArrival = false;
+          if (restart) {
             this.restarting = true;
             this.stopOnHost();
             return EMPTY;
@@ -150,6 +161,7 @@ export class LogFollowService {
           // Not yet following means the POST itself failed; already following means the SSE stream did.
           const fallback = this.following() ? undefined : 'The host refused the request.';
           this.error.set(this.describeError(e, fallback));
+          this.restartOnArrival = false;
           this.requestOut.set(false);
           this.pending.set(false);
           this.following.set(false);
@@ -169,10 +181,10 @@ export class LogFollowService {
           }
           if (this.restarting) {
             this.restarting = false;
-            this.follow();
+            this.start(true);
           }
         },
-      });
+      }));
   }
 
   /**
@@ -205,7 +217,7 @@ export class LogFollowService {
     if (this.requestOut()) {
       this.restartOnArrival = true;
     } else {
-      this.follow();
+      this.start(true);
     }
   }
 
