@@ -1,7 +1,7 @@
 import { SCREENS } from '../screens';
 import { builtInTitle, builtInWidgets, defaultWorkspace, differsFromBuiltIn, withEveryBuiltIn } from './built-in-pages';
 import { SCREEN_COMPONENTS } from './screen-components';
-import { API_WIDGETS, BROKER_WIDGETS, ERASURE, JOB_OUTPUT, LEGACY_SCREEN, LOGS, MAIL, MAP, NOTE, TRACE, SCENARIO_WIDGETS, STACK_WIDGETS, WIDGETS, widgetType } from './widgets';
+import { API_WIDGETS, BROKER_WIDGETS, ERASURE, JOB_OUTPUT, LEGACY_SCREEN, LOGS, MAIL, MAP, NOTE, RUNBOOKS, TRACE, TRANSCRIPT, SCENARIO_WIDGETS, STACK_WIDGETS, WIDGETS, widgetType } from './widgets';
 import { GRID_COLUMNS, MAX_ROWS, WidgetInstance } from './workspace-types';
 
 describe('the widget registry', () => {
@@ -43,12 +43,22 @@ describe('the built-in pages', () => {
     expect(workspace.activePageId).toBe(SCREENS[0].path);
   });
 
-  it('each start as one legacy widget across the grid, until a phase builds one from widgets', () => {
-    for (const screen of SCREENS.filter((s) => !['stack', 'scenario', 'logs', 'broker', 'map', 'mail', 'erasure', 'requests', 'trace'].includes(s.path))) {
-      expect(builtInWidgets(screen.path)).toEqual([
-        expect.objectContaining({ type: 'legacy', x: 0, y: 0, cols: GRID_COLUMNS, config: { screen: screen.path } }),
-      ]);
+  it('are every one built from widgets of their own: no built-in page is a legacy screen widget any more', () => {
+    for (const screen of SCREENS) {
+      const widgets = builtInWidgets(screen.path);
+      expect(widgets.length, screen.path).toBeGreaterThan(0);
+      expect(widgets.map((w) => w.type), screen.path).not.toContain('legacy');
+      // Every widget a page ships with is one the registry knows, with its components loadable.
+      for (const w of widgets) expect(widgetType(w.type), `${screen.path}: ${w.type}`).toBeDefined();
     }
+  });
+
+  it('build the Runbooks and Transcript pages from one widget each', () => {
+    expect(builtInWidgets('runbooks')).toEqual([expect.objectContaining({ id: 'builtin-runbooks-runbooks', type: 'runbooks', cols: 24, config: { runbook: null } })]);
+    expect(builtInWidgets('transcript')).toEqual([expect.objectContaining({ id: 'builtin-transcript-transcript', type: 'transcript', config: {} })]);
+    expect(RUNBOOKS.config({ runbook: 7 })).toEqual({ runbook: null });
+    expect(RUNBOOKS.titleOf({ runbook: 'error-queue' })).toBe('Runbooks (error-queue)');
+    expect(TRANSCRIPT.dataServices).toEqual(['TranscriptFeed']);
   });
 
   it('build the Broker page from its six widgets, each reading BrokerFeed and none polling until switched on', () => {

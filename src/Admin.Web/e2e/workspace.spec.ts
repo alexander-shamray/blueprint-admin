@@ -6,27 +6,14 @@ import { SCREENS } from '../src/app/screens';
 // The widget workspace (#383, widget-workspace spec §11). Against the fake platform, whose workspace file lives in a
 // temp directory, so a page made here never reaches a real one; the walk deletes its page at the end all the same,
 // because every spec file shares one host.
-// The Stack (#385), Scenario (#389) and Broker (#387) pages are built from their widgets, and the Logs page (#386) is one
-// widget of its own; every other built-in page is still its screen in one widget.
-for (const { path, label } of SCREENS.filter((s) => !['stack', 'scenario', 'broker', 'map', 'mail', 'erasure', 'requests', 'trace'].includes(s.path))) {
-  test(`the built-in ${label} page renders its screen`, async ({ page }) => {
-    await page.goto(`/${path}`);
-
-    const widget = page.locator('gridster-item');
-    await expect(widget).toHaveCount(1);
-    // The frame's own ws- classes: the screens inside have .head, .title and .loading of their own.
-    await expect(widget.locator('.ws-head .ws-title')).toHaveText(label);
-    await expect(widget.locator('.ws-body > *').first()).toBeVisible();
-    await expect(widget.locator('.ws-body > app-legacy-screen-widget > .loading')).toHaveCount(0);
-    await expect(page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: label })).toHaveClass(/active/);
-  });
-}
-
-// The Map (#388), Mail and Erasure pages are one widget each, titled for what they show.
+// Every built-in page is built from widgets (#391 was the last): the single-widget pages are titled for what they show.
 for (const [path, title, body] of [
+  ['logs', 'Logs', 'button.follow'],
   ['map', 'Platform map', 'section.service'],
   ['mail', 'Mail', 'table.messages'],
   ['erasure', 'Erasure', 'table.holders'],
+  ['runbooks', 'Runbooks', 'button.runbook'],
+  ['transcript', 'Transcript', 'button.copy'],
 ] as const) {
   test(`the built-in ${title} page renders its widget`, async ({ page }) => {
     await page.goto(`/${path}`);
@@ -37,6 +24,33 @@ for (const [path, title, body] of [
     await expect(page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: SCREENS.find((s) => s.path === path)?.label ?? path })).toHaveClass(/active/);
   });
 }
+
+// §4.2 (#375): what the operator was in the middle of survives a switch of page within the tab, and what unlocks a
+// destructive step does not. The shell's links, not page.goto: a reload would empty everything and prove nothing.
+test('input in flight survives leaving a page and coming back, and a pressed-once cause does not', async ({ page }) => {
+  await page.goto('/logs');
+  await page.getByPlaceholder('filter text').fill('proxying');
+  await page.getByPlaceholder('correlation id').fill('fake-corr-0001');
+
+  const nav = page.getByRole('navigation', { name: 'Pages' });
+  await nav.getByRole('link', { name: 'Runbooks' }).click();
+  await expect(page).toHaveURL(/\/runbooks$/);
+  await page.getByRole('button', { name: /^outbox-growth/ }).click();
+  const detail = page.getByRole('region', { name: 'outbox-growth' });
+  await detail.getByRole('button', { name: /^Cause OutboxGrowth/ }).click();
+  await expect(detail.getByRole('button', { name: 'Confirm: cause OutboxGrowth (outage)' })).toBeVisible();
+
+  await nav.getByRole('link', { name: 'Logs' }).click();
+  await expect(page).toHaveURL(/\/logs$/);
+  await expect(page.getByPlaceholder('filter text')).toHaveValue('proxying');
+  await expect(page.getByPlaceholder('correlation id')).toHaveValue('fake-corr-0001');
+
+  await nav.getByRole('link', { name: 'Runbooks' }).click();
+  // The runbook is still open; the first press of its cause is not kept, so the button asks to be pressed again.
+  await expect(page.getByRole('region', { name: 'outbox-growth' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Cause OutboxGrowth/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Confirm: cause OutboxGrowth (outage)' })).toHaveCount(0);
+});
 
 test('the built-in API page renders the request widget beside the history widget', async ({ page }) => {
   await page.goto('/requests');

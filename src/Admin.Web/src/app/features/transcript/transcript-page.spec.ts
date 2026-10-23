@@ -2,7 +2,8 @@ import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { TranscriptView } from '../../core/host/host-types';
-import { TRANSCRIPT_POLL_MS, TranscriptPage } from './transcript-page';
+import { TranscriptPage } from './transcript-page';
+import { TRANSCRIPT_POLL_MS } from './transcript-feed';
 
 const view: TranscriptView = {
   dropped: 0,

@@ -3,7 +3,9 @@ import { of, throwError } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
 import { AlertStripView, JobSummary, RunbookCatalogue } from '../../core/host/host-types';
 import { SseClient } from '../../core/host/sse-client';
-import { ALERT_POLL_MS, RunbooksPage } from './runbooks-page';
+import { By } from '@angular/platform-browser';
+import { RunbooksPage } from './runbooks-page';
+import { ALERT_POLL_MS, RunbooksWidget } from './widgets/runbooks-widget';
 
 const catalogue: RunbookCatalogue = {
   error: null,
@@ -88,12 +90,19 @@ describe('RunbooksPage', () => {
     vi.useRealTimers();
   });
 
+  /**
+   * The Runbooks screen as the legacy screen widget renders it: the Runbooks widget. The tests below are the screen's,
+   * from before it was a widget, so `componentInstance` is the widget they drive.
+   */
   function render() {
     const fixture = TestBed.createComponent(RunbooksPage);
     fixture.detectChanges();
     vi.advanceTimersByTime(0);
     fixture.detectChanges();
-    return fixture;
+    const widget = fixture.debugElement.query(By.directive(RunbooksWidget)).componentInstance as RunbooksWidget;
+    return Object.defineProperty(fixture, 'componentInstance', { value: widget }) as unknown as ReturnType<
+      typeof TestBed.createComponent<RunbooksWidget>
+    >;
   }
 
   function el(fixture: ReturnType<typeof render>): HTMLElement {
