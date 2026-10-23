@@ -5165,15 +5165,25 @@ REDIRECTION_WORD = re.compile(r"^\d*(?:<<<|<<-|<<|<>|<&|>&|&>>|&>|>>|>\||<|>)$")
 STDIN_REDIRECTS = frozenset({"<", "<>", "<<<", "<<", "<<-"})
 
 
+# The words that open and close a group whose runs share one stdin.
+GROUP_OPENERS = frozenset({"{", "case", "for", "if", "select", "until", "while"})
+GROUP_CLOSERS = frozenset({"}", "done", "esac", "fi"})
+
+
 def _command_words(words):
     """`words` without its redirections: each operator and its target. A
     target is a file, never a program or an argument the program reads."""
     kept, target = [], False
-    for word in words:
+    for position, word in enumerate(words):
         if target:
             target = False
         elif REDIRECTION_WORD.match(word):
             target = True
+        elif (word.isdigit() and position + 1 < len(words)
+              and REDIRECTION_WORD.match(words[position + 1])):
+            # A file descriptor's number, which `_run_words` keeps apart from
+            # its operator: `} 0< f` has no program (R1, round 2 of #447).
+            continue
         else:
             kept.append(word)
     return kept
@@ -5276,7 +5286,7 @@ EXPANSION_WRITES = re.compile(
     r"|\(\([^)]*[A-Za-z_]|\$\[[^]]*[A-Za-z_]"
     r"|\$\{[^}]*\[[^]]*[A-Za-z_]"
     r"|\$\{!"
-    r"|\$\{[^}]*@"
+    r"|\$\{[^}]*@(?![]}])"
     r"|\+?=\([\s\S]*?\[[^]]*[A-Za-z_$`]"
     r"|\$\{[^}:]*:(?![-=+?])[^}]*[A-Za-z_]"
     r"|(?<![\w-])[A-Za-z_]\w*\[[^]]*[A-Za-z_][^]]*\]"
@@ -5403,8 +5413,12 @@ def resolution_changed(command):
             continue
         # A writer's target is read after quote removal (`declare "PATH=/tmp"`),
         # and a target built by an expansion is any name (`declare "$n=/tmp"`).
+        # A declaration writer's target is the part of a word before `=`; the
+        # value is read, not written: `export X="$HOME/bin"` writes `X` (R7,
+        # round 2 of #447).
+        targets = [word.split("=", 1)[0] for word in arguments]
         if name in PATH_WRITERS | {"wait"} and any(
-                RESOLUTION_VARIABLES.search(word) for word in arguments):
+                RESOLUTION_VARIABLES.search(word) for word in targets):
             return True
         # **A name operand is a writer however it is spelt.** Its subscript is
         # arithmetic whether or not `=` follows and however it is quoted
@@ -5415,7 +5429,7 @@ def resolution_changed(command):
         # cluster: `-fpNAME` carries it glued, `-fp NAME` in the next word.
         # Raised by three security reviews.
         if name in NAME_OPERAND_TAKERS:
-            operands = arguments
+            operands = targets
             # An option that comes from an expansion is any option, so a
             # `test` or `wait` whose expanded word stands where an operator
             # could reads every word as a name operand (`o=-v; test $o
@@ -5540,13 +5554,24 @@ def _reaches(command, position, ordinary, reader):
         # A pipeline goes on across a newline, and a subshell after a `|`
         # inherits it: `echo … |<newline>pwsh`, `echo … | (pwsh)`. Raised in
         # review of #447 (R2).
+        grouped = False
         while index < len(command) and (command[index] in " \t\n" or (
                 ordinary[index] and command[index] == "(")):
+            grouped = grouped or command[index] == "("
             index += 1
         start = index
         while index < len(command) and not _ends_run(command, index, ordinary):
             index += 1
-        if reader(_run_words(command, start, index, ordinary)):
+        words = _run_words(command, start, index, ordinary)
+        # **A pipe into a group feeds every run in it** (`| (:; pwsh)`,
+        # `| { :; /tmp/x; }`), so each run from here to the line's end is
+        # asked. Reading past the group's close over-reaches, and only for
+        # text a reader is then refused for (R2, round 2 of #447).
+        if grouped or (words and words[0] in GROUP_OPENERS):
+            rest = command[start:]
+            return any(reader(run) for run, _ in
+                       _runs_with_feeds(rest, _unquoted_positions(rest)))
+        if reader(words):
             return True
     return False
 
@@ -5592,6 +5617,9 @@ def computed_text(text):
 # A parameter expansion as the reading shell sees it.
 PARAMETER = re.compile(r"\$(?:\{[^}]*\}|[A-Za-z_]\w*|[0-9@*#?!$-])")
 
+# An expansion with a default or alternate word, captured.
+DEFAULTING = re.compile(r"\$\{[^}:=+?-]*:?[-=+?]([^}]*)\}")
+
 
 def _offending_stdin(text, strict):
     """Whether `text`, read by an unclassified program, may run git to write:
@@ -5604,7 +5632,16 @@ def _offending_stdin(text, strict):
         return True
     typed = _as_typed(text)
     pattern = GIT_WORD if strict else GIT_WRITER_LINE
-    return bool(pattern.search(typed) or pattern.search(PARAMETER.sub("", typed)))
+    # A defaulting expansion reads as its word when the name is unset
+    # (`${u:-git}`), and a glob in a command word's path names whatever it
+    # matches (`/usr/bin/gi? push`), which a strict reader is refused unread.
+    # Only the command word: a Markdown link mid-line is no program (R4,
+    # round 2 of #447).
+    if strict and re.search(r"(?m)(?:^|[;&|(])[ \t]*(?=[^\s;&|()]*/)[^\s;&|()]*[?*[]",
+                            typed):
+        return True
+    return bool(pattern.search(typed) or pattern.search(PARAMETER.sub("", typed))
+                or pattern.search(DEFAULTING.sub(r"\1", typed)))
 
 
 def _runs_with_feeds(command, ordinary):
@@ -5612,7 +5649,9 @@ def _runs_with_feeds(command, ordinary):
     runs a `|` joined before it in its pipeline, or None when no `|` feeds it.
     An empty list is a pipe from something this walk does not see as a run,
     such as a subshell."""
-    runs, upstream, start, piped = [], None, 0, False
+    # `groups` holds, for each group open here, the stdin a pipe gave it:
+    # every run inside reads it, not only the first (R2, round 2 of #447).
+    runs, upstream, start, piped, groups = [], None, 0, False, []
     for index in range(len(command) + 1):
         if index < len(command) and not _ends_run(command, index, ordinary):
             continue
@@ -5620,6 +5659,10 @@ def _runs_with_feeds(command, ordinary):
         if words:
             runs.append((words, upstream))
             piped = False
+            if words[0] in GROUP_OPENERS:
+                groups.append(upstream)
+            elif words[0] in GROUP_CLOSERS and groups:
+                groups.pop()
         start = index + 1
         if index == len(command):
             break
@@ -5630,12 +5673,23 @@ def _runs_with_feeds(command, ordinary):
             piped = True
         elif char == "&" and index and command[index - 1] == "|":
             pass  # the `&` of `|&`, which carries the pipe its `|` opened
-        elif piped and not words and char in "(\n":
-            pass  # a pipeline goes on across a newline and into a subshell (R2)
-        elif char != ")":
-            # A `)` ends a subshell whose output may still be piped on; its runs
-            # stay out of `upstream`, which then reads as a pipe from the unseen.
-            upstream = None
+        elif char == "(":
+            fed = piped and not words
+            groups.append(upstream if fed else None)
+            if not fed:
+                upstream = None
+        elif char == ")":
+            # A `)` ends a subshell whose output may still be piped on; its
+            # runs stay out of `upstream`, which then reads as a pipe from the
+            # unseen. A subshell a pipe fed must not hand that stdin on as its
+            # own output, so it reads as unseen at once; any other `)` (`f()`,
+            # `<(…)`, `feat(x)/y`) leaves `upstream` as it was.
+            if groups and groups.pop() is not None:
+                upstream = []
+        elif piped and not words and char == "\n":
+            pass  # a pipeline goes on across a newline (R2)
+        else:
+            upstream = groups[-1] if groups else None
     return runs
 
 
@@ -5713,10 +5767,23 @@ def _unclassified_stdin_writer(command, ordinary):
     # **A here-string arrives quote-removed**, which loses what an escape
     # escaped: `"\\\\$(printf gi)t push …"` comes back as `\\$(…)`, which reads
     # escaped, while the outer shell runs the substitution and hands the
-    # reader `\\git push …`. So a line that hands an unclassified reader
-    # anything is also read raw for computed text.
-    if bodies and computed_text(command):
-        return True
+    # reader `\\git push …`. So each here-string handed to an unclassified
+    # reader is also read raw for computed text, its own word and not the
+    # line around it: `npx x <<<hi; echo $(date)` hands `hi` (R5, round 2 of
+    # #447).
+    for match in re.finditer(r"<<<", command):
+        if not (ordinary[match.start()]
+                and _reaches_unclassified(command, match.start(), ordinary)):
+            continue
+        cursor = match.end()
+        while cursor < len(command) and command[cursor] in " \t":
+            cursor += 1
+        end = cursor
+        while end < len(command) and not (
+                ordinary[end] and command[end] in " \t\n;&|()<>"):
+            end += 1
+        if computed_text(command[cursor:end]):
+            return True
     if any(_offending_stdin(body, False) for body in bodies):
         return True
     if any(_offending_stdin(body, True)
@@ -5757,6 +5824,13 @@ def _unclassified_stdin_writer(command, ordinary):
         for before in upstream:
             program = _launched(before)
             name = program_name(program) if program else ""
+            if program is None:
+                # A compound's closer (`}`, `done`, `fi`) pipes what its runs
+                # wrote, which this walk does not see, so the line is judged
+                # whole, as a subshell's is (R3, round 2 of #447).
+                if strict or _offending_stdin(command, False):
+                    return True
+                continue
             if name not in DATA_ONLY_COMMANDS:
                 if strict or _offending_stdin(" ".join(before), False):
                     return True

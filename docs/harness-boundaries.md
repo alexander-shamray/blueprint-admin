@@ -675,8 +675,11 @@ A new residual is stated **here** and gets a row above.
   `while read l; do $l; done`), while `sed` is, because the `sed` script
   pass refuses every script that runs its input. Replayed over the 4000 most
   recent distinct commands of this repository's session transcripts, the
-  rule changed no verdict; refusing every pipe into a program on no list
-  would have changed 164. **A shell is a program, not a name** (#397):
+  rule changed one verdict, an environment-variable probe that declares a
+  nameref; refusing every pipe into a program on no list would have changed
+  164. One shape is held strictly at a cost that measured nothing there: a
+  line holding `wait $pid` and a pipe into a reader (`wait $!` is admitted).
+  **A shell is a program, not a name** (#397):
   `EVALUATORS` holds the POSIX family by each name it ships under (`ash`,
   `mksh`, `yash`, `posh`, `rbash` among them), and the word after any
   program's script flag (`-c` and its bundles, `cmd`'s `/c` and `/k`, `-Command`)
