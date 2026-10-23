@@ -8,7 +8,7 @@ import { SCREENS } from '../src/app/screens';
 // because every spec file shares one host.
 // The Stack (#385), Scenario (#389) and Broker (#387) pages are built from their widgets, and the Logs page (#386) is one
 // widget of its own; every other built-in page is still its screen in one widget.
-for (const { path, label } of SCREENS.filter((s) => !['stack', 'scenario', 'broker'].includes(s.path))) {
+for (const { path, label } of SCREENS.filter((s) => !['stack', 'scenario', 'broker', 'map', 'mail', 'erasure'].includes(s.path))) {
   test(`the built-in ${label} page renders its screen`, async ({ page }) => {
     await page.goto(`/${path}`);
 
@@ -21,6 +21,43 @@ for (const { path, label } of SCREENS.filter((s) => !['stack', 'scenario', 'brok
     await expect(page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: label })).toHaveClass(/active/);
   });
 }
+
+// The Map (#388), Mail and Erasure pages are one widget each, titled for what they show.
+for (const [path, title, body] of [
+  ['map', 'Platform map', 'section.service'],
+  ['mail', 'Mail', 'table.messages'],
+  ['erasure', 'Erasure', 'table.holders'],
+] as const) {
+  test(`the built-in ${title} page renders its widget`, async ({ page }) => {
+    await page.goto(`/${path}`);
+
+    await expect(page.locator('gridster-item')).toHaveCount(1);
+    await expect(page.locator('gridster-item .ws-head .ws-title')).toHaveText(title);
+    await expect(page.locator(`gridster-item ${body}`).first()).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: SCREENS.find((s) => s.path === path)?.label ?? path })).toHaveClass(/active/);
+  });
+}
+
+test('the Platform map polls nothing until its auto-refresh is switched on in its settings', async ({ page }) => {
+  const reads: string[] = [];
+  page.on('request', (r) => {
+    if (r.url().endsWith('/api/platform/map')) reads.push(r.url());
+  });
+  await page.goto('/map');
+  await expect(page.locator('section.service').first()).toBeVisible();
+  const first = reads.length;
+  await page.waitForTimeout(6000);
+  expect(reads.length).toBe(first);
+
+  await page.getByRole('button', { name: 'Edit layout' }).click();
+  await page.getByRole('button', { name: 'Configure Platform map' }).click();
+  await page.getByRole('menuitem', { name: 'Edit settings…' }).click();
+  const settings = page.getByRole('form', { name: 'Settings of Platform map' });
+  await settings.getByLabel('Refresh every 5 s').check();
+  await settings.getByRole('button', { name: 'Apply' }).click();
+
+  await expect.poll(() => reads.length, { timeout: 12_000 }).toBeGreaterThan(first + 1);
+});
 
 test('the built-in Broker page renders its six widgets, none polling until switched on', async ({ page }) => {
   const polled: string[] = [];

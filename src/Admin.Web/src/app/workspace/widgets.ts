@@ -258,6 +258,44 @@ export const BROKER_WIDGETS = {
   } satisfies WidgetType,
 } as const;
 
+/** The Platform map's widget (§5.2): the table of services, routes and queues, in `MapFeed`; its auto-refresh is opt-in (§4.3). */
+export const MAP: WidgetType = {
+  type: 'platform-map',
+  title: 'Platform map',
+  component: () => import('../features/map/widgets/map-widget').then((m) => m.MapWidget),
+  defaultSize: { cols: 24, rows: 22 },
+  minSize: { cols: 8, rows: 5 },
+  config: (stored) => ({ autoRefresh: stored['autoRefresh'] === true }),
+  titleOf: () => 'Platform map',
+  presets: [{ label: 'Platform map', config: { autoRefresh: false } }],
+  fields: [AUTO_REFRESH],
+  dataServices: ['MapFeed'],
+};
+
+/** What the platform sent (§5.2): the mail sink's messages, filtered by a correlation id the widget starts with. */
+export const MAIL: WidgetType = {
+  type: 'mail',
+  title: 'Mail',
+  component: () => import('../features/mail/widgets/mail-widget').then((m) => m.MailWidget),
+  defaultSize: { cols: 24, rows: 18 },
+  minSize: { cols: 8, rows: 5 },
+  config: (stored) => ({ correlationId: typeof stored['correlationId'] === 'string' ? stored['correlationId'] : '' }),
+  titleOf: (config) => (typeof config['correlationId'] === 'string' && config['correlationId'] !== '' ? `Mail (${config['correlationId']})` : 'Mail'),
+  presets: [{ label: 'Every message', config: { correlationId: '' } }],
+  fields: [{ key: 'correlationId', label: 'Correlation id', kind: 'text' }],
+  dataServices: [],
+};
+
+/** An erasure request raised and watched (§5.2); the request is held by `ErasureRun`, the subject being typed is session state. */
+export const ERASURE: WidgetType = plain({
+  type: 'erasure',
+  title: 'Erasure',
+  component: () => import('../features/erasure/widgets/erasure-widget').then((m) => m.ErasureWidget),
+  defaultSize: { cols: 24, rows: 20 },
+  minSize: { cols: 10, rows: 6 },
+  dataServices: ['ErasureRun'],
+});
+
 /** The Logs page's widget (§5.2), a view of the one follow `LogFollowService` in features/logs runs. */
 export const LOGS: WidgetType = listing('services', 'All services', {
   type: 'logs',
@@ -321,6 +359,9 @@ export const WIDGETS: readonly WidgetType[] = [
   ...Object.values(STACK_WIDGETS),
   ...Object.values(SCENARIO_WIDGETS),
   ...Object.values(BROKER_WIDGETS),
+  MAP,
+  MAIL,
+  ERASURE,
   LOGS,
   JOB_OUTPUT,
   NOTE,

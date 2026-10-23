@@ -1,0 +1,65 @@
+<section class="actions">
+  <button class="refresh" [disabled]="feed.map.refreshing()" (click)="feed.map.refresh()">Refresh</button>
+  @if (autoRefresh()) {
+    <span class="auto">Refreshes every 5 s</span>
+  }
+</section>
+
+@if (feed.map.error(); as e) {
+  <p class="error" role="alert">The host did not answer: {{ e }}</p>
+}
+@if (feed.map.value(); as m) {
+  @if (!m.brokerReachable) {
+    <p class="error" role="alert">The broker did not answer: {{ m.error }}. Routes are shown; queue depths are not.</p>
+  }
+  @if (m.disagreements.length > 0) {
+    <section class="disagreements" aria-label="Disagreements">
+      <h2>Where the map and the tables disagree</h2>
+      <ul>
+        @for (d of m.disagreements; track d) {
+          <li>{{ d }}</li>
+        }
+      </ul>
+    </section>
+  }
+  @for (service of m.services; track service.name) {
+    <section class="service" [attr.aria-label]="'Service ' + service.name">
+      <h2>{{ service.name }} <small>{{ service.url ?? 'worker, no API of its own' }}</small></h2>
+      @if (service.routes.length > 0) {
+        <table class="routes">
+          <thead><tr><th>Gateway route</th><th>Policy</th></tr></thead>
+          <tbody>
+            @for (route of service.routes; track route.method + route.prefix) {
+              <tr>
+                <td>{{ route.method ?? 'ANY' }} {{ route.prefix }}</td>
+                <td>{{ route.policy }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+      @if (service.queues.length > 0) {
+        <table class="queues">
+          <thead><tr><th>Queue</th><th>Consumes</th><th>Messages</th><th>Change</th><th>Bound from</th></tr></thead>
+          <tbody>
+            @for (queue of service.queues; track queue.name) {
+              <tr [class.error-queue]="queue.parked === 'error'" [class.skipped-queue]="queue.parked === 'skipped'">
+                <td>@if (queue.parked; as kind) {<span class="marker">[{{ kind }}]</span> }{{ queue.name }}</td>
+                <td>{{ queue.consumer }}</td>
+                <td class="depth">{{ queue.messages ?? '—' }}</td>
+                <td class="rate">{{ feed.rateOf(queue.name) }}</td>
+                <td class="bindings">
+                  @for (b of queue.bindings; track b.source + b.routingKey) {
+                    <code>{{ b.source }}{{ b.routingKey ? ' · ' + b.routingKey : '' }}</code>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    </section>
+  }
+} @else if (!feed.map.error()) {
+  <p class="loading">Reading the platform…</p>
+}
