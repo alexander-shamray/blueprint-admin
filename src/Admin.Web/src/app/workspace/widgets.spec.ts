@@ -1,7 +1,7 @@
 import { SCREENS } from '../screens';
 import { builtInTitle, builtInWidgets, defaultWorkspace, differsFromBuiltIn, withEveryBuiltIn } from './built-in-pages';
 import { SCREEN_COMPONENTS } from './screen-components';
-import { BROKER_WIDGETS, JOB_OUTPUT, LEGACY_SCREEN, LOGS, NOTE, SCENARIO_WIDGETS, STACK_WIDGETS, WIDGETS, widgetType } from './widgets';
+import { BROKER_WIDGETS, ERASURE, JOB_OUTPUT, LEGACY_SCREEN, LOGS, MAIL, MAP, NOTE, SCENARIO_WIDGETS, STACK_WIDGETS, WIDGETS, widgetType } from './widgets';
 import { GRID_COLUMNS, MAX_ROWS, WidgetInstance } from './workspace-types';
 
 describe('the widget registry', () => {
@@ -44,7 +44,7 @@ describe('the built-in pages', () => {
   });
 
   it('each start as one legacy widget across the grid, until a phase builds one from widgets', () => {
-    for (const screen of SCREENS.filter((s) => !['stack', 'scenario', 'logs', 'broker'].includes(s.path))) {
+    for (const screen of SCREENS.filter((s) => !['stack', 'scenario', 'logs', 'broker', 'map', 'mail', 'erasure'].includes(s.path))) {
       expect(builtInWidgets(screen.path)).toEqual([
         expect.objectContaining({ type: 'legacy', x: 0, y: 0, cols: GRID_COLUMNS, config: { screen: screen.path } }),
       ]);
@@ -71,6 +71,17 @@ describe('the built-in pages', () => {
     expect(BROKER_WIDGETS.deadLetters.titleOf({ queue: null })).toBe('Dead-letter workbench');
     expect(BROKER_WIDGETS.queues.titleOf({ filter: 'bff' })).toBe('Queues (bff)');
     expect(BROKER_WIDGETS.queues.titleOf({ filter: '' })).toBe('Queues');
+  });
+
+  it('build the Map, Mail and Erasure pages from one widget each, none polling until switched on', () => {
+    expect(builtInWidgets('map')).toEqual([expect.objectContaining({ id: 'builtin-map-platform-map', type: 'platform-map', config: { autoRefresh: false } })]);
+    expect(builtInWidgets('mail')).toEqual([expect.objectContaining({ id: 'builtin-mail-mail', type: 'mail', config: { correlationId: '' } })]);
+    expect(builtInWidgets('erasure')).toEqual([expect.objectContaining({ id: 'builtin-erasure-erasure', type: 'erasure', config: {} })]);
+    expect(MAP.config({ autoRefresh: 'yes' })).toEqual({ autoRefresh: false });
+    expect(MAIL.config({ correlationId: 7 })).toEqual({ correlationId: '' });
+    expect(MAIL.titleOf({ correlationId: 'abc' })).toBe('Mail (abc)');
+    expect(MAIL.titleOf({ correlationId: '' })).toBe('Mail');
+    expect([MAP.dataServices, ERASURE.dataServices]).toEqual([['MapFeed'], ['ErasureRun']]);
   });
 
   it('build the Logs page from one Logs widget over every service', () => {

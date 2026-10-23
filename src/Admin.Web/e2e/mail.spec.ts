@@ -30,3 +30,20 @@ test('one order, one screen, every message it caused, each linked to its trace',
   await page.locator('section.message .facts').getByRole('link', { name: `trace ${ORDER}` }).click();
   await expect(page).toHaveURL(new RegExp(`/trace/${ORDER}$`));
 });
+
+// §4.2: the message that is open and the filter typed are the widget's session state, so a page left and returned to finds them.
+test('the message that is open and the filter typed survive leaving the page', async ({ page }) => {
+  await page.goto('/mail');
+  await page.getByLabel('Correlation id').fill(ORDER);
+  await page.locator('table.messages tbody tr').first().getByRole('button', { name: 'Open' }).click();
+  await expect(page.locator('section.message h2')).toContainText('Your order has been delivered');
+
+  // The shell's link, not page.goto: a reload would empty everything and prove nothing.
+  await page.getByRole('link', { name: 'Stack' }).click();
+  await expect(page).toHaveURL(/\/stack$/);
+  await page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: 'Mail' }).click();
+  await expect(page).toHaveURL(/\/mail$/);
+
+  await expect(page.locator('section.message h2')).toContainText('Your order has been delivered');
+  await expect(page.getByLabel('Correlation id')).toHaveValue(ORDER);
+});

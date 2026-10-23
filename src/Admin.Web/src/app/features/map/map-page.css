@@ -1,11 +1,1 @@
-.actions { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
-h2 { font-size: 1rem; margin: 1rem 0 0.5rem; }
-h2 small { font-weight: 400; color: var(--app-muted); margin-left: 0.5rem; }
-table { border-collapse: collapse; margin-bottom: 0.75rem; }
-td, th { padding: 0.25rem 0.75rem; border-bottom: 1px solid var(--app-border); text-align: left; vertical-align: top; }
-tr.error-queue td { color: var(--app-error); font-weight: 600; }
-tr.skipped-queue td { color: var(--app-warn); font-weight: 600; }
-code { word-break: break-all; margin-right: 0.5rem; }
-.service { border-top: 1px solid var(--app-border); }
-.disagreements { background: var(--app-warn-bg); padding: 0.25rem 1rem; border-radius: 3px; }
-.error { color: var(--app-error); }
+:host { display: block; }

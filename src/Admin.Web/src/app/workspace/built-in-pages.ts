@@ -1,5 +1,5 @@
 import { SCREENS } from '../screens';
-import { BROKER_WIDGETS, JOB_OUTPUT, LEGACY_SCREEN, LOGS, SCENARIO_WIDGETS, STACK_WIDGETS, WidgetType } from './widgets';
+import { BROKER_WIDGETS, ERASURE, JOB_OUTPUT, LEGACY_SCREEN, LOGS, MAIL, MAP, SCENARIO_WIDGETS, STACK_WIDGETS, WidgetType } from './widgets';
 import { Page, WidgetInstance, Workspace } from './workspace-types';
 
 /** The schema version this console writes; `WorkspaceSchema.Current` on the host. */
@@ -23,7 +23,10 @@ const BUILT_IN_LAYOUTS: Partial<Record<string, readonly Placed[]>> = {
     [BROKER_WIDGETS.permissions, 10, 24],
     [BROKER_WIDGETS.bindings, 0, 32],
   ],
+  erasure: [[ERASURE, 0, 0]],
   logs: [[LOGS, 0, 0, { services: [] }]],
+  mail: [[MAIL, 0, 0, { correlationId: '' }]],
+  map: [[MAP, 0, 0, { autoRefresh: false }]],
   scenario: [
     [SCENARIO_WIDGETS.scenario, 0, 0],
     [SCENARIO_WIDGETS.saga, 16, 0],

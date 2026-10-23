@@ -26,6 +26,23 @@ test('a raised request is read until every holder has answered', async ({ page }
   await expect(page.locator('table.holders tbody tr.holder-answered')).toHaveCount(5);
 });
 
+// §4.2: the request being watched is the service's and the subject being typed is the widget's session state, so a page left
+// and returned to finds both.
+test('the request being watched and the subject typed survive leaving the page', async ({ page }) => {
+  await page.goto('/erasure');
+  await page.getByLabel('Subject id').fill(OVERDUE_SUBJECT);
+  await page.getByRole('button', { name: 'Raise' }).click();
+  await expect(page.locator('.status')).toContainText('[overdue]');
+
+  await page.getByRole('link', { name: 'Stack' }).click();
+  await expect(page).toHaveURL(/\/stack$/);
+  await page.getByRole('navigation', { name: 'Pages' }).getByRole('link', { name: 'Erasure' }).click();
+  await expect(page).toHaveURL(/\/erasure$/);
+
+  await expect(page.getByLabel('Subject id')).toHaveValue(OVERDUE_SUBJECT);
+  await expect(page.locator('.status')).toContainText('[overdue]');
+});
+
 test('an overdue request is reissued and then closes', async ({ page }) => {
   await page.goto('/erasure');
   await page.getByLabel('Subject id').fill(OVERDUE_SUBJECT);
