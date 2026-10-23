@@ -1,5 +1,5 @@
 import { NgComponentOutlet, NgTemplateOutlet } from '@angular/common';
-import { Component, Injector, Type, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { Component, ElementRef, Injector, Type, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -35,6 +35,7 @@ interface GridItem extends GridsterItemConfig {
 })
 export class WorkspaceGrid {
   private readonly injector = inject(Injector);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   readonly pageId = input.required<string>();
   readonly widgets = input.required<WidgetInstance[]>();
@@ -81,8 +82,9 @@ export class WorkspaceGrid {
       untracked(() => this.settings.set(null));
     });
     effect(() => {
+      const items = this.items();
       const open = untracked(this.settings);
-      if (open && !this.items().some((i) => i.widget.id === open.id)) untracked(() => this.settings.set(null));
+      if (open && !items.some((i) => i.widget.id === open.id)) untracked(() => this.settings.set(null));
     });
   }
 
@@ -183,7 +185,17 @@ export class WorkspaceGrid {
     const draft: Record<string, string> = {};
     for (const field of item.kind?.fields ?? []) draft[field.key] = fieldText(field.kind, item.config[field.key]);
     this.settings.set({ id: item.widget.id, draft });
+    this.focusWanted = true;
   }
+
+  /** The menu has closed and handed focus back to its button: a panel just opened takes it for its first field. */
+  focusSettings(): void {
+    if (!this.focusWanted) return;
+    this.focusWanted = false;
+    setTimeout(() => this.host.nativeElement.querySelector<HTMLInputElement>('.ws-settings input')?.focus());
+  }
+
+  private focusWanted = false;
 
   isEditingSettings(item: GridItem): boolean {
     return this.settings()?.id === item.widget.id;
@@ -203,8 +215,16 @@ export class WorkspaceGrid {
     this.configureWidget.emit({ id: item.widget.id, config: preset.config });
   }
 
-  closeSettings(): void {
+  /** Closes the panel; given the widget it was for, focus goes back to that widget's configure button. */
+  closeSettings(item?: GridItem): void {
     this.settings.set(null);
+    if (!item) return;
+    setTimeout(() => {
+      const frame = [...this.host.nativeElement.querySelectorAll('[data-widget-id]')].find(
+        (e) => e.getAttribute('data-widget-id') === item.widget.id,
+      );
+      frame?.querySelector<HTMLElement>('button.ws-configure')?.focus();
+    });
   }
 
   /** Saves the written fields over the config the widget holds, through the type's own `config`, then closes. */
@@ -215,7 +235,7 @@ export class WorkspaceGrid {
     const config: Record<string, unknown> = { ...item.config };
     for (const field of kind.fields ?? []) config[field.key] = fieldValue(field.kind, open.draft[field.key] ?? '');
     this.configureWidget.emit({ id: item.widget.id, config: kind.config(config) });
-    this.closeSettings();
+    this.closeSettings(item);
   }
 
   settingsLabel(item: GridItem): string {
