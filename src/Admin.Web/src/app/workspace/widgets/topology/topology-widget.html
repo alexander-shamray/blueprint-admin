@@ -1,0 +1,54 @@
+<section class="actions">
+  <button class="refresh" [disabled]="feed.map.refreshing()" (click)="feed.map.refresh()">Refresh</button>
+  <button class="relayout" (click)="relayout()">Re-layout</button>
+  @if (autoRefresh()) {
+    <span class="auto">Refreshes every 5 s</span>
+  }
+</section>
+
+@if (feed.map.error(); as e) {
+  <p class="error" role="alert">The host did not answer: {{ e }}</p>
+}
+@if (drawError(); as e) {
+  <p class="error" role="alert">The diagram could not be drawn: {{ e }}</p>
+}
+@if (feed.map.value(); as m) {
+  @if (!m.brokerReachable) {
+    <p class="error" role="alert">The broker did not answer: {{ m.error }}. Routes are shown; queue depths are not.</p>
+  }
+} @else if (!feed.map.error()) {
+  <p class="loading">Reading the platform…</p>
+}
+
+<div class="graph" #canvas role="img" [attr.aria-label]="summary()"></div>
+
+@if (notice(); as n) {
+  <p class="notice" role="status">{{ n }}</p>
+}
+
+@if (listed().length > 0) {
+  <ul class="nodes" aria-label="Nodes of the diagram">
+    @for (node of listed(); track node.id) {
+      <li [class]="'state-' + node.state">
+        <button type="button" (click)="activate(node.id)">{{ node.name }}</button>
+        <span class="state">{{ node.stateText }}</span>
+        @if (node.flow; as flow) {
+          <span class="flow">{{ flow }}</span>
+        }
+      </li>
+    }
+  </ul>
+}
+
+@if (feed.map.value(); as m) {
+  @if (m.disagreements.length > 0) {
+    <section class="disagreements" aria-label="Disagreements">
+      <h2>Where the map and the tables disagree</h2>
+      <ul>
+        @for (d of m.disagreements; track d) {
+          <li>{{ d }}</li>
+        }
+      </ul>
+    </section>
+  }
+}

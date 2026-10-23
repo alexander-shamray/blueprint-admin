@@ -2,6 +2,7 @@ import { Type } from '@angular/core';
 import { SCREENS } from '../screens';
 import { isScreenPath } from './screen-components';
 import { ARCHITECTURE_NOTE, BLANK_NOTE, TAB_ORDER_NOTE } from './widgets/note/note-presets';
+import { positionsOf } from './widgets/topology/topology-graph';
 import { FieldKind, stringList } from './widget-config';
 
 /** A size in grid cells. */
@@ -272,6 +273,24 @@ export const MAP: WidgetType = {
   dataServices: ['MapFeed'],
 };
 
+/**
+ * The platform drawn as a graph (§8.1), from `MapFeed` and `StackFeed`, with no built-in page. Config: `autoRefresh`, on
+ * until switched off (the one widget whose refresh is on by default, as the spec asks), and `positions`, where the operator
+ * dragged a node to, which the widget writes and Re-layout empties.
+ */
+export const TOPOLOGY: WidgetType = {
+  type: 'platform-diagram',
+  title: 'Platform diagram',
+  component: () => import('./widgets/topology/topology-widget').then((m) => m.TopologyWidget),
+  defaultSize: { cols: 24, rows: 26 },
+  minSize: { cols: 10, rows: 10 },
+  config: (stored) => ({ autoRefresh: stored['autoRefresh'] !== false, positions: positionsOf(stored['positions']) }),
+  titleOf: () => 'Platform diagram',
+  presets: [{ label: 'Platform diagram', config: { autoRefresh: true, positions: {} } }],
+  fields: [AUTO_REFRESH],
+  dataServices: ['MapFeed', 'StackFeed', 'BrokerFeed'],
+};
+
 /** What the platform sent (§5.2): the mail sink's messages, filtered by a correlation id the widget starts with. */
 export const MAIL: WidgetType = {
   type: 'mail',
@@ -486,6 +505,7 @@ export const WIDGETS: readonly WidgetType[] = [
   RUNBOOKS,
   TRANSCRIPT,
   MAP,
+  TOPOLOGY,
   MAIL,
   ERASURE,
   LOGS,
