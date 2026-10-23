@@ -20,6 +20,7 @@ line names one residual below by the words it opens with.
 |---|---|
 | The check helpers, e2e, code the session writes | `Two toolchains`, `runs unjudged through a granted check helper` |
 | `settings.json` or a permission rule | `File permission rules take`, `self-locks`, `The global deny list names` |
+| Whether a guard finding is filed | `The guards catch honest mistakes` |
 | A guard hook or its launcher | `Every guard hook uses`, `The git-argv hook answers` |
 | The index: refresh, query or search hints, MCP approval, timeout | `Two hooks guard nothing`, `The second is the query hint`, `The search hint asks`, `A session started in a worktree`, `The CLI's skill rewrite`, `The MCP startup timeout` |
 | A command's `allowed-tools` or `disallowed-tools` | `grant the index commands`, `runs before it pushes never denies push`, `is a grant surface`, `A command that holds` |
@@ -31,6 +32,14 @@ line names one residual below by the words it opens with.
 | MSBuild/NuGet auto-imports, agent types, `/style-pass` and its linter | `The files MSBuild and NuGet`, `is denied beside the built-in agent types`, `runs the linter it configures` |
 
 A new residual is stated **here** and gets a row above.
+
+**The guards catch honest mistakes, not a session that sets out to defeat
+them.** Which guard findings are filed is
+`alexander-shamray/blueprint-backend`'s `docs/harness-boundaries.md`,
+*The guards' threat model*, and it holds here unchanged: a spelling an agent types in
+ordinary work, a guard failing open on good-faith input, or a false refusal is
+a finding; a spelling built only to hide a command from the hook is recorded
+as out of scope, never filed.
 
 **What this repository adds, and is therefore the only residual stated here:**
 

@@ -284,6 +284,24 @@ or above.** Three gates, and each drops candidates the round must not file:
   caveat under *Where it stops* is a different set — issues still **open** are a
   live-risk signal, not the de-duplication test.)
 
+**One issue per cause, and fifteen a run.** Filing every confirmed site on
+its own turns one missing check repeated across six charts into six issues
+and six pull requests, though one change closes them all; blueprint-backend's
+run of 2026-10-21 filed 101 issues in a day. Sites that share a cause and a
+fix are one issue naming every site, at the highest severity among them. A
+run files at most fifteen and ranks the rest in its summary, where the next
+run meets them again if they still hold: nothing is lost, and the queue stays
+one that can be worked through.
+
+**A guard bypass is filed only inside the guards' threat model.** The guard
+hooks catch an agent's honest mistakes; they are not a sandbox against a
+session that sets out to defeat them. Closing each spelling built only to
+hide a command from a hook exposed the next one, and none of them is how an
+agent doing ordinary work goes wrong, so such a spelling is recorded in the
+summary as outside the model rather than filed. What the model admits as a
+finding, and why, is the section *The guards' threat model* in
+blueprint-backend's `docs/harness-boundaries.md`.
+
 ### Who decides whether an issue suppresses
 
 **Who wrote the suppressing issue decides whether it suppresses (#57).** This
