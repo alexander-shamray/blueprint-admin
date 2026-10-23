@@ -9,6 +9,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Admin.Assistant\Admin.Assistant.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <EmbeddedResource Include="Fakes\fixtures\compose-ps.jsonl" LogicalName="compose-ps.jsonl" />
     <EmbeddedResource Include="Fakes\fixtures\openapi-catalog.json" LogicalName="openapi-catalog.json" />
     <EmbeddedResource Include="Fakes\fixtures\openapi-ordering.json" LogicalName="openapi-ordering.json" />

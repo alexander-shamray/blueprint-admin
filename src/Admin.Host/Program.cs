@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json.Serialization;
 using Admin.Host.Api;
+using Admin.Host.Assistant;
 using Admin.Host.Broker;
 using Admin.Host.Compose;
 using Admin.Host.Config;
@@ -242,12 +243,23 @@ builder.Services.AddSingleton(sp =>
     return new WorkspaceStore(workspaceDir, sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<ILogger<WorkspaceStore>>());
 });
 
+// The assistant is decided once, from options: off builds no provider and resolves no credential (AI assistant design
+// §9.1), so the fake provider and the redactor are handed over as factories the runtime calls only when it is on.
+builder.Services.AddSingleton(sp => new AssistantRuntime(
+    sp.GetRequiredService<IOptions<AdminOptions>>().Value,
+    sp.GetRequiredService<IConfiguration>(),
+    () => new FakeAssistantProvider(),
+    () => new AdminRedactor(sp.GetRequiredService<IOptions<AdminOptions>>().Value, sp.GetRequiredService<DeadLetterService>()),
+    sp.GetRequiredService<TimeProvider>(),
+    sp.GetRequiredService<ILogger<AssistantRuntime>>()));
+
 WebApplication app = builder.Build();
 
 // Resolve once so a wrong directory, or a recording of the fakes, fails
 // startup with the key to fix.
 _ = app.Services.GetRequiredService<RepoPaths>();
 _ = app.Services.GetRequiredService<FixtureRecorder>();
+_ = app.Services.GetRequiredService<AssistantRuntime>();
 
 // First, so every response carries them, an error page included: no page may frame the console (spec §8).
 app.UseFramingProtection();
@@ -293,6 +305,7 @@ app.MapScenarioExport();
 app.MapTelemetry();
 app.MapTranscript();
 app.MapWorkspace();
+app.MapAssistant();
 
 // MapFallbackToFile's route has no literal segments, so without this it
 // would also catch an unmatched /api/nope (it has no dot, so it passes the
