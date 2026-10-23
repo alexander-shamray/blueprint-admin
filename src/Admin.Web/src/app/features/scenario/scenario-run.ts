@@ -1,5 +1,5 @@
 import { ApiCatalogView, ApiOperation, MailListView, ReviewFlagView } from '../../core/host/host-types';
-import { PUBLISH_OPERATION } from '../api/api-page';
+import { PUBLISH_OPERATION } from '../api/api-client';
 
 /**
  * Every step a script can take: run-locally.md's calls, in the order that document gives them, and

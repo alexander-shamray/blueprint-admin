@@ -12,7 +12,7 @@ import {
   ReviewFlagView,
   TokenClockView,
 } from '../../core/host/host-types';
-import { DRAIN_POLL_MS, DRAIN_WATCH_MS, UUID } from '../api/api-page';
+import { DRAIN_POLL_MS, DRAIN_WATCH_MS, UUID } from '../api/api-client';
 import { LAUNCH_WINDOW_MS, ScenarioLauncher } from './scenario-launcher';
 import { ScenarioPage } from './scenario-page';
 import { ScenarioRunner } from './scenario-runner';
