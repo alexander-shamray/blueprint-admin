@@ -168,9 +168,13 @@ async function cytoscapeGraph(container: HTMLElement, events: GraphEvents): Prom
           }
         }
       });
-      // The first layout fits the drawing to its element; a later one, for a queue that appeared, leaves the zoom alone.
-      if (added) layout(!cy.scratch('laidOut'));
-      cy.scratch('laidOut', true);
+      // The first drawing is fitted to its element once the operator's positions are in, so a node they dragged outside the
+      // layout's bounds is in view; a later layout, for a queue that appeared, leaves the zoom alone.
+      const first = !cy.scratch('laidOut');
+      if (added) {
+        layout(false);
+        cy.scratch('laidOut', true);
+      }
       cy.batch(() => {
         for (const [id, at] of Object.entries(positions)) {
           const el = cy.getElementById(id);
@@ -178,6 +182,7 @@ async function cytoscapeGraph(container: HTMLElement, events: GraphEvents): Prom
           if (el.nonempty() && !el.grabbed() && (el.position('x') !== at.x || el.position('y') !== at.y)) el.position(at);
         }
       });
+      if (first && added) cy.fit(undefined, LAYOUT.padding);
     },
     relayout() {
       layout(true);
