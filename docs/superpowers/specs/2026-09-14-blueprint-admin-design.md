@@ -180,8 +180,10 @@ blueprint-admin/
   Directory.Packages.props         central package versions
   .editorconfig, .gitattributes    CRLF for .cs, LF for everything else, as the siblings do
   BlueprintAdmin.slnx
+  src/Admin.Assistant/             the AI assistant's provider-neutral core, no admin type in it (AI assistant note §4)
   src/Admin.Host/                  the .NET 10 minimal API host (§5)
   src/Admin.Web/                   the Angular 22 SPA (§6); its build lands in Admin.Host/wwwroot
+  tests/Admin.Assistant.Tests/     xunit, the core's loop, registry and protocol goldens
   tests/Admin.Host.Tests/          xunit
   .github/workflows/ci.yml         dotnet build and test; npm ci, lint, test, build
   docs/superpowers/specs/          this document
@@ -195,7 +197,9 @@ one URL. Neither port is used by the platform.
 
 The host is a single project. Its modules (§5) are namespaces with one
 public service each and an interface where a test needs a fake; they are not
-separate assemblies until one of them has a second consumer.
+separate assemblies until one of them has a second consumer. The assistant's
+core is the one that has: the backend's BFF is to host it too, so it is a
+library of its own from the start (AI assistant note §13).
 
 ## 5. The host
 
@@ -792,6 +796,7 @@ All under `/api`, JSON, loopback only.
 | `POST /scenario/export` | §5.13; body `{ markdown }`, answered as `text/markdown` after `FixtureScrubber.Scrub`; 400 for no document, 413 past `ExportEndpoints.MaxCharacters`; nothing is stored |
 | `GET /runbooks`, `GET /runbooks/{name}`, `POST /runbooks/{name}/cause`, `POST /runbooks/{name}/restore` | §5.14; the game day's catalogue read from the tool each time (200 with `error` when it could not be, never a thrown 500), one runbook's Markdown from the backend clone (404 for a name that is no file there), then a listed job. A cause is 400 for an alert its script does not cause, or without the confirmation its phase takes; the restore takes none. Both are 400 for a runbook with no script or a name that is no runbook's, 404 for a runbook the tool does not list, 502 when the listing they check against could not be read, and 409 while another `ComposeGate` job (§5.3) runs, a game-day job included |
 | `GET /workspace`, `PUT /workspace` | the widget workspace design's §6.2: the operator's pages, one document kept in `workspace.json` under `Admin:DataDir` (a temp directory under FakePlatform), served with its `ETag`, the default's eleven built-in pages when nothing is saved. `PUT` takes the whole document and `If-Match` the etag it was based on: 200 with the new `ETag`, 412 with the current document and etag when another tab saved first, 428 without `If-Match`, 400 for a document that fails the structural schema (the §4.1 shape, unique ids, grid bounds, a `config` over 64 KiB, a configuration key named like a secret), 413 past 1 MiB. A widget type this console does not know is kept and saved back untouched. A file the console cannot read, or one a newer console wrote, is set aside as `workspace.unreadable-*.json` and the default served |
+| `GET /assistant`, `/assistant/conversations…` | the AI assistant note's §5.1: the status, always; and only while `Admin:Assistant:Provider` names a provider (or is unset under FakePlatform), a conversation opened, read, followed as Server-Sent Events that resume by `Last-Event-ID`, a turn started (409 while one runs), a client tool's result posted, a turn cancelled, a conversation forgotten. Off, every route but the status is the catch-all's 404 (§9.1) |
 | `GET /workspace/export`, `POST /workspace/import` | the same document as a download; and the replacement of the workspace by an exported document, validated as `PUT` is and needing no `If-Match`, since the SPA asks the operator first |
 
 Streams use Server-Sent Events rather than WebSockets because every stream is
@@ -1040,6 +1045,13 @@ for through `ScenarioLauncher`, never the URL, so a link or a reload never
 publishes and orders; a request the screen did not act on is dropped when it
 goes. The palette is a keyboard tool: a modal dialog whose input keeps focus
 and names the active option through `aria-activedescendant`.
+
+With the assistant on (AI assistant note §9), the top bar has its toggle, the
+palette an "Ask the assistant" entry, and the shell a panel at its end: one
+conversation per browser tab, its id in `sessionStorage`, so a reload redraws
+it. What it explains each screen from is that screen's `help` in `SCREENS`;
+it navigates through the client tool `open_screen`. Off, none of the three
+exists.
 
 | Screen | Shows | Does |
 |---|---|---|
