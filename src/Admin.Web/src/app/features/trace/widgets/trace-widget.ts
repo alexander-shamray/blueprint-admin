@@ -142,13 +142,20 @@ export class TraceWidget {
     const fromRoute = this.route?.snapshot.paramMap.get('correlationId') ?? '';
     // Where there is no route id, the widget starts at the id it last traced, else the one it is configured with.
     // Its config arrives after the constructor, so that first load waits for the effect below.
-    let started = false;
+    // A configured id changed later (the settings editor, a preset) is traced when it appears.
+    let seen: string | undefined;
     effect(() => {
       const configured = this.configuredId();
-      if (started || fromRoute) return;
-      started = true;
-      const id = untracked(() => this.traced()) || configured;
-      if (id) untracked(() => this.trace(id));
+      const first = seen === undefined;
+      const changed = !first && configured !== seen;
+      seen = configured;
+      if (fromRoute) return;
+      if (first) {
+        const id = untracked(() => this.traced()) || configured;
+        if (id) untracked(() => this.trace(id));
+      } else if (changed && configured) {
+        untracked(() => this.trace(configured));
+      }
     });
 
     this.route?.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
@@ -167,7 +174,7 @@ export class TraceWidget {
       const pointed = this.follow.pointed();
       if (pointed && pointed.n > handled) {
         handled = pointed.n;
-        if (untracked(() => this.following())) untracked(() => this.trace(pointed.id));
+        if (untracked(() => this.following())) untracked(() => this.go(pointed.id));
       }
     });
   }
@@ -185,8 +192,17 @@ export class TraceWidget {
    */
   submit(): void {
     const id = this.correlationId().trim();
-    if (id === '') return;
-    if (this.route?.snapshot.data['builtIn'] === 'trace') void this.router.navigate(['/trace', id]);
+    if (id !== '') this.go(id);
+  }
+
+  /**
+   * Shows `id`: on the built-in Trace page by navigating to it, so the address says what is on screen (a link that
+   * re-points a follower there does the same), anywhere else by loading it. Navigating to the address already showing
+   * does nothing, so the id on screen is loaded directly.
+   */
+  private go(id: string): void {
+    const onBuiltInPage = this.route?.snapshot.data['builtIn'] === 'trace';
+    if (onBuiltInPage && this.route?.snapshot.paramMap.get('correlationId') !== id) void this.router.navigate(['/trace', id]);
     else this.trace(id);
   }
 

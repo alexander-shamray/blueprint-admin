@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
+import { ActivatedRoute, Router, convertToParamMap, provideRouter } from '@angular/router';
 import { BehaviorSubject, of } from 'rxjs';
 import { HostClient } from '../../../core/host/host-client';
 import { TraceView } from '../../../core/host/host-types';
@@ -138,6 +138,58 @@ describe('TraceWidget', () => {
 
     expect(host.trace).toHaveBeenCalledWith('b', '15m');
     expect(again.nativeElement.querySelector('p.summary')?.textContent).toContain('for b');
+  });
+
+  it('traces an id the settings editor configures later, and not one it leaves as it was', () => {
+    configure();
+    const fixture = render({ correlationId: 'first' });
+    host.trace.mockClear();
+
+    fixture.componentRef.setInput('config', { correlationId: 'first', window: '1h' });
+    fixture.detectChanges();
+    expect(host.trace).not.toHaveBeenCalledWith('first', expect.anything());
+
+    fixture.componentRef.setInput('config', { correlationId: 'second' });
+    fixture.detectChanges();
+    expect(host.trace).toHaveBeenCalledWith('second', '15m');
+  });
+
+  describe('on the built-in Trace page', () => {
+    function configureBuiltIn(id: string) {
+      const paramMap = new BehaviorSubject(convertToParamMap({ correlationId: id }));
+      TestBed.configureTestingModule({
+        providers: [
+          provideRouter([]),
+          { provide: HostClient, useValue: host },
+          { provide: ActivatedRoute, useValue: { paramMap, snapshot: { paramMap: paramMap.value, data: { builtIn: 'trace' } } } },
+        ],
+      });
+      return TestBed.inject(Router);
+    }
+
+    it('a link that re-points it navigates to the id, so the address says what is on screen', () => {
+      const navigate = vi.spyOn(configureBuiltIn('old-id'), 'navigate').mockResolvedValue(true);
+      const fixture = render({ follow: true });
+      host.trace.mockClear();
+
+      TestBed.inject(TraceFollow).point('new-id');
+      fixture.detectChanges();
+
+      expect(navigate).toHaveBeenCalledWith(['/trace', 'new-id']);
+      expect(host.trace).not.toHaveBeenCalled();
+    });
+
+    it('Trace on the id already in the address loads it, since navigating to where it already is does nothing', () => {
+      const navigate = vi.spyOn(configureBuiltIn('same-id'), 'navigate').mockResolvedValue(true);
+      const fixture = render();
+      host.trace.mockClear();
+
+      fixture.componentInstance.correlationId.set('same-id');
+      fixture.componentInstance.submit();
+
+      expect(navigate).not.toHaveBeenCalled();
+      expect(host.trace).toHaveBeenCalledWith('same-id', '15m');
+    });
   });
 
   it('takes the id from the built-in Trace route over any configured one', () => {

@@ -353,7 +353,7 @@ export const TRACE: WidgetType = {
     { label: 'Follows the last Trace link', config: { correlationId: '', window: '15m', follow: true } },
   ],
   fields: [
-    { key: 'correlationId', label: 'Correlation id', kind: 'text' },
+    { key: 'correlationId', label: 'Correlation id, traced when the widget appears or this changes', kind: 'text' },
     { key: 'window', label: 'Window: 15m, 1h, 6h or 24h', kind: 'text' },
     { key: 'follow', label: 'Follow the last Trace link', kind: 'flag' },
   ],
