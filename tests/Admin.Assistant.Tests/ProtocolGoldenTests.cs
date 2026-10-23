@@ -35,7 +35,8 @@ public sealed class ProtocolGoldenTests
                     new EndItem(TurnEndReason.Done, null),
                 ],
                 false,
-                7)
+                7,
+                [])
         },
         { "event-text", new TextEvent("Открываю «Logs». ") },
         { "event-tool-started", new ToolStartedEvent("call-1", "open_screen", ToolSide.Client, Logs.DeepClone().AsObject()) },

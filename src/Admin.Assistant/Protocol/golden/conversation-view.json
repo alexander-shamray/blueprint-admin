@@ -30,5 +30,6 @@
     }
   ],
   "running": false,
-  "lastEventId": 7
+  "lastEventId": 7,
+  "pendingCalls": []
 }
