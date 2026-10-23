@@ -47,16 +47,28 @@
     @if (editing() && isEditingSettings(item)) {
       <form class="ws-settings" [attr.aria-label]="settingsLabel(item)" (submit)="$event.preventDefault(); applySettings(item)">
         @for (field of item.kind.fields; track field.key) {
-          <label class="ws-field">
-            <span>{{ field.label }}</span>
-            <input
-              type="text"
-              [attr.aria-describedby]="hasNames(item) ? 'ws-hint-' + item.widget.id : null"
-              [value]="draftOf(field)"
-              (input)="setDraft(field, $any($event.target).value)"
-              (mousedown)="$event.stopPropagation()"
-            />
-          </label>
+          @if (field.kind === 'flag') {
+            <label class="ws-field">
+              <input
+                type="checkbox"
+                [checked]="draftOf(field) === 'true'"
+                (change)="setDraft(field, $any($event.target).checked ? 'true' : 'false')"
+                (mousedown)="$event.stopPropagation()"
+              />
+              <span>{{ field.label }}</span>
+            </label>
+          } @else {
+            <label class="ws-field">
+              <span>{{ field.label }}</span>
+              <input
+                type="text"
+                [attr.aria-describedby]="field.kind === 'names' ? 'ws-hint-' + item.widget.id : null"
+                [value]="draftOf(field)"
+                (input)="setDraft(field, $any($event.target).value)"
+                (mousedown)="$event.stopPropagation()"
+              />
+            </label>
+          }
         }
         @if (hasNames(item)) {
           <span class="ws-field-hint" [id]="'ws-hint-' + item.widget.id" i18n>Names are separated by commas; leave a field empty for the default.</span>

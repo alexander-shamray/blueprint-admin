@@ -1,6 +1,6 @@
 import { Component, DestroyRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { BehaviorSubject, Observable, delay, of, throwError } from 'rxjs';
+import { BehaviorSubject, Observable, Subject, delay, of, throwError } from 'rxjs';
 import { PolledFeed, TabVisibility } from './polled-feed';
 
 describe('PolledFeed', () => {
@@ -63,6 +63,50 @@ describe('PolledFeed', () => {
     second.destroy();
     await vi.advanceTimersByTimeAsync(3000);
     expect(read).toHaveBeenCalledTimes(3);
+  });
+
+  it('reads once on refresh with no widget attached, and not again while that read is out', async () => {
+    const answer = new Subject<string>();
+    read.mockReturnValueOnce(answer.asObservable());
+
+    feed.refresh();
+    feed.refresh();
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(feed.refreshing()).toBe(true);
+
+    answer.next('late');
+    answer.complete();
+    expect(feed.value()).toBe('late');
+    expect(feed.refreshing()).toBe(false);
+
+    feed.refresh();
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it('a failed refresh says why, keeps the last value and frees the next read', () => {
+    feed.refresh();
+    read.mockReturnValueOnce(throwError(() => new Error('host gone')));
+
+    feed.refresh();
+
+    expect(feed.error()).toBe('host gone');
+    expect(feed.value()).toBe('answer');
+    expect(feed.refreshing()).toBe(false);
+  });
+
+  it('skips a tick while a manual read is out', async () => {
+    const answer = new Subject<string>();
+    read.mockReturnValueOnce(answer.asObservable());
+    feed.refresh();
+
+    TestBed.createComponent(Reader);
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(read).toHaveBeenCalledTimes(1);
+
+    answer.next('manual');
+    answer.complete();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(read).toHaveBeenCalledTimes(2);
   });
 
   it('polls nothing while the tab is hidden, and reads at once when it shows again', async () => {
