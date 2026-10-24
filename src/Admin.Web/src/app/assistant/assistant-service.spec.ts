@@ -98,7 +98,28 @@ describe('AssistantService notice (AI assistant design §10)', () => {
     const automatic = service();
     automatic.status.set({ enabled: true, provider: 'fake', model: 'scripted', reason: null });
     await automatic.send('is the stack running?');
-    expect(JSON.parse(fetched.mock.calls[0][1].body as string).hostOptions).toBeNull();
+    // Not null: the host keeps an open conversation's options from the turn before when a turn sends none.
+    expect(JSON.parse(fetched.mock.calls[0][1].body as string).hostOptions).toEqual({});
+  });
+
+  it('drops a pin the host no longer lists once the users arrive', () => {
+    sessionStorage.setItem(IDENTITY_KEY, 'mallory');
+    const assistant = service();
+    expect(assistant.identity()).toBe('mallory');
+
+    assistant.loadUsers();
+
+    expect(assistant.identity()).toBeNull();
+    expect(sessionStorage.getItem(IDENTITY_KEY)).toBeNull();
+  });
+
+  it('keeps a pin the host lists', () => {
+    sessionStorage.setItem(IDENTITY_KEY, 'browser');
+    const assistant = service();
+
+    assistant.loadUsers();
+
+    expect(assistant.identity()).toBe('browser');
   });
 
   it('lists the realm users the host names, usernames only', () => {
