@@ -83,6 +83,8 @@ public sealed class RequestTests
         StrictOf(tools).Count(s => s).ShouldBe(RequestBuilder.MaxStrictTools);
         StrictOf(tools).Take(RequestBuilder.MaxStrictTools).ShouldAllBe(s => s);
         StrictOf(tools).Skip(RequestBuilder.MaxStrictTools).ShouldAllBe(s => !s);
+        // Absent on the wire, not `"strict":null`, which the API might refuse whole.
+        tools.Skip(RequestBuilder.MaxStrictTools).ShouldAllBe(t => !t!.AsObject().ContainsKey("strict"));
         // Still closed, so the model reads the same schema either way.
         tools.ShouldAllBe(t => t!["input_schema"]!["additionalProperties"]!.GetValue<bool>() == false);
     }
@@ -114,6 +116,27 @@ public sealed class RequestTests
 
         // Two nested optional parameters per tool: twelve tools reach 24, and `z`, with none, is the thirteenth strict one.
         StrictOf(tools).ShouldAllBe(s => s);
+    }
+
+    [Fact]
+    public async Task Optional_parameters_are_counted_under_a_type_list_and_an_anyOf_branch_too()
+    {
+        // Two optional parameters hide behind `["object","null"]` and three behind an anyOf branch with no `type`.
+        JsonObject hidden = JsonNode.Parse("""
+            {"type":"object","properties":{
+              "a":{"type":["object","null"],"properties":{"x":{"type":"string"},"y":{"type":"string"}}},
+              "b":{"anyOf":[{"properties":{"p":{"type":"string"},"q":{"type":"string"},"r":{"type":"string"}}},{"type":"null"}]}
+            },"required":["a","b"]}
+            """)!.AsObject();
+        TurnRequest request = Given.Request(new UserMessage("hi")) with
+        {
+            Tools = [.. Enumerable.Range(0, 6).Select(i => Given.Tool($"h{i:00}") with { InputSchema = (JsonObject)hidden.DeepClone() })],
+        };
+
+        JsonArray tools = (await SentFor(request)).Body!["tools"]!.AsArray();
+
+        // Five optional parameters each: four tools reach 20, the fifth would make 25.
+        StrictOf(tools).ShouldBe([true, true, true, true, false, false]);
     }
 
     [Fact]
