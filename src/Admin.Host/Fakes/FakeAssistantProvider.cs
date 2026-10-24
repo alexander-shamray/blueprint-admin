@@ -114,7 +114,7 @@ public sealed class FakeAssistantProvider : IAssistantProvider
             read = null;
         }
 
-        if (read?["status"]?.GetValue<int>() is not { } status)
+        if (read?["status"] is not JsonValue statusValue || !statusValue.TryGetValue(out int status))
         {
             return FakeAssistantScripts.PlatformNotRead(result.Content, russian);
         }
