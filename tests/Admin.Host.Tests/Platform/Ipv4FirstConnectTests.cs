@@ -111,9 +111,9 @@ public sealed class Ipv4FirstConnectTests
 
         // The probe's deadline is two seconds and an IPv6 fallback on Windows costs about that (#371), so
         // without the fix the targets land at the deadline and read down: the Up assertion is what fails
-        // there. It carries the whole claim, so no wall-clock bound sits beside it: one failed on a loaded
-        // runner with a correct probe (#420). On a runner that refuses ::1 at once the assertion cannot tell
-        // the two orders apart, which is what the ordering test above is for.
+        // there. A fallback that finished just under the deadline would pass it, but no wall-clock bound sits
+        // beside it: one failed on a loaded runner with a correct probe (#420). On a runner that refuses ::1
+        // at once the assertion cannot tell the two orders apart, which is what the ordering test above is for.
         result.ShouldAllBe(r => r.Up);
     }
 
