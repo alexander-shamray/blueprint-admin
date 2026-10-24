@@ -229,10 +229,14 @@ names stay as written.
 An assistant answers questions about the console in a panel the top bar's
 toggle opens (or "Ask the assistant" in the palette): what a page is for,
 and where to find something, which it opens. It reads each built-in page's `help` in
-`src/Admin.Web/src/app/screens.ts` and never changes the platform. It is off
+`src/Admin.Web/src/app/screens.ts` and never changes the platform. It answers
+what the platform is doing now from the console's own reads, which
+`AdminReadTools` in `src/Admin.Host/Assistant/` lists. Each read is redacted
+before the provider sees it, and it never starts or stops a log follow. It is off
 unless `Admin:Assistant:Provider` names a provider; under FakePlatform, left
 unset, it plays scripted answers, so "where are the logs?" or "где логи?"
-opens Logs with no network. `--Admin:Assistant:Provider=off` turns it off
+opens Logs and "is the stack running?" reads the stack, with no network.
+`--Admin:Assistant:Provider=off` turns it off
 there too, and with it off the console shows no trace of it. A real provider
 arrives with #429.
 

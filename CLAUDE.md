@@ -73,6 +73,7 @@ tools/token-usage/         Transcript report for the token plan
 | Assistant on or off, and the `Admin:Assistant` keys | `AssistantOptions` in `src/Admin.Host/Assistant/AssistantOptions.cs` |
 | The assistant's limits and their defaults | `AssistantLimits` in `src/Admin.Assistant/AssistantLimits.cs` |
 | What each screen is for, as the assistant explains it | `help` in `SCREENS` (`src/Admin.Web/src/app/screens.ts`) |
+| Which console reads the assistant may call, and the endpoint each mirrors | `AdminReadTools` in `src/Admin.Host/Assistant/AdminReadTools.cs` |
 | The fake assistant's answers | `FakeAssistantScripts` in `src/Admin.Host/Fakes/` |
 | Token figures | `docs/token-usage.md` |
 
