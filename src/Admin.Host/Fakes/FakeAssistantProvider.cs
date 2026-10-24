@@ -119,23 +119,22 @@ public sealed class FakeAssistantProvider : IAssistantProvider
             return FakeAssistantScripts.PlatformNotRead(result.Content, russian);
         }
 
-        JsonNode? body = null;
-
         try
         {
-            body = status == 200 && read["body"]?.GetValue<string>() is { } text ? JsonNode.Parse(text) : null;
-        }
-        catch (JsonException)
-        {
-            // A body that is not JSON is still the platform's answer: the status is what is said.
-        }
+            JsonNode? body = status == 200 && read["body"]?.GetValue<string>() is { } text ? JsonNode.Parse(text) : null;
 
-        return (tool, body) switch
+            return (tool, body) switch
+            {
+                ("get_stock", { } b) => FakeAssistantScripts.StockRead(b["available"]?.GetValue<long>() ?? 0, b["reserved"]?.GetValue<long>() ?? 0, russian),
+                ("get_payment", { } b) => FakeAssistantScripts.PaymentRead(b["intent"]?["status"]?.GetValue<string>() ?? "?", russian),
+                _ => FakeAssistantScripts.PlatformAnswered(status, russian),
+            };
+        }
+        catch (Exception e) when (e is JsonException or InvalidOperationException or FormatException)
         {
-            ("get_stock", { } b) => FakeAssistantScripts.StockRead(b["available"]?.GetValue<long>() ?? 0, b["reserved"]?.GetValue<long>() ?? 0, russian),
-            ("get_payment", { } b) => FakeAssistantScripts.PaymentRead(b["intent"]?["status"]?.GetValue<string>() ?? "?", russian),
-            _ => FakeAssistantScripts.PlatformAnswered(status, russian),
-        };
+            // A body that is not the JSON the script expects is still the platform's answer: the status is what is said.
+            return FakeAssistantScripts.PlatformAnswered(status, russian);
+        }
     }
 
     // Read from the result as the model would read it: the stack view's backend services, by state.
