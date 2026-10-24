@@ -1,8 +1,5 @@
-<section
-  class="assistant"
-  [attr.aria-labelledby]="embedded() ? null : 'assistant-title'"
-  [attr.aria-label]="embedded() ? title : null"
->
+<!-- Embedded, the widget's frame names it, and a second landmark of the same name would only repeat it. -->
+<section class="assistant" [attr.aria-labelledby]="embedded() ? null : 'assistant-title'">
   <header>
     @if (!embedded()) {
       <h2 id="assistant-title" i18n>Assistant</h2>

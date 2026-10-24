@@ -1,4 +1,4 @@
-import { Component, DestroyRef, inject } from '@angular/core';
+import { Component, DestroyRef, inject, input } from '@angular/core';
 import { AssistantPanel, STATUS_REASON_TEXT } from './assistant-panel';
 import { AssistantService } from './assistant-service';
 
@@ -30,6 +30,8 @@ import { AssistantService } from './assistant-service';
   `,
 })
 export class AssistantWidget {
+  /** Every widget is given its saved config (§6.3); this one has none to read. */
+  readonly config = input<Record<string, unknown>>({});
   readonly assistant = inject(AssistantService);
   readonly off = STATUS_REASON_TEXT.off;
 
