@@ -7,14 +7,14 @@ helper, `settings.json`, a hook — and inert for every other kind of change.
 
 **This harness was ported from `alexander-shamray/blueprint-frontend`, which
 ported it from `alexander-shamray/blueprint-backend`.** A bare `#NN` under
-`.claude/` or in a copied helper comment is an issue in **this** repository. A
-citation that names a sibling says so (`blueprint-frontend#20`,
-`blueprint-backend#1086`). A port that left a sibling's number bare still means
-the sibling's, and the numbers collide: this repository's #26 is an
-index-refresh issue, and the sibling's #26 is ported, so a bare number that is
-not this repository's own is a defect to qualify, not a convention to read
-around. The arguments for the grants, the deny lists, the
-git-argv hook and the edit-target hook live in those two
+`.claude/` or in a copied helper comment is an issue in **this** repository,
+and reads that way. A citation to a sibling names it (`blueprint-frontend#20`,
+`blueprint-backend#1086`). A number a port left bare is a defect to qualify,
+not a second meaning: the ported guard hook still cites the sibling's
+writing-verb issue as a bare `#26`, which here means "Index never refreshes on
+edits", a different and closed issue. The bare ported numbers are owed under
+#448. The arguments for the grants, the deny lists, the git-argv hook and the
+edit-target hook live in those two
 `docs/harness-boundaries.md` files and are not restated here; a summary of an
 argument is how a rule gets "corrected" back.
 
