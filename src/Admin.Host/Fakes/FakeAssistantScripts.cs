@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace Admin.Host.Fakes;
 
 /// <summary>
@@ -8,13 +10,55 @@ namespace Admin.Host.Fakes;
 /// both open Logs, and "is the stack running?" reads the stack. The screen's name in a reply is its catalogue label, as
 /// the client sent it.
 /// </summary>
-public static class FakeAssistantScripts
+public static partial class FakeAssistantScripts
 {
     /// <summary>The words that ask how the platform is doing, which <c>stack_status</c> answers.</summary>
     public static readonly string[] StatusWords = ["status", "running", "healthy", "состояни", "работает", "запущен"];
 
     /// <summary>Whether a message asks how the platform is doing, before which screen it names.</summary>
     public static bool AsksStatus(string text) => StatusWords.Any(w => text.Contains(w, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// The platform reads the script knows (§6.5): a message that names an id and asks for the product's stock or the
+    /// order's payment. The tool is the one the host derives from the operation of that name.
+    /// </summary>
+    public static readonly IReadOnlyList<(string Tool, string[] Words)> PlatformReads =
+    [
+        ("get_stock", ["stock", "остат", "наличи", "склад"]),
+        ("get_payment", ["payment", "оплат", "платеж", "платёж"]),
+    ];
+
+    /// <summary>The read a message asks for and the id it names, or null when it names no id or asks for none.</summary>
+    public static (string Tool, string Id)? PlatformAsk(string text)
+    {
+        Match id = IdShape().Match(text);
+
+        if (!id.Success)
+        {
+            return null;
+        }
+
+        string tool = PlatformReads.FirstOrDefault(r => r.Words.Any(w => text.Contains(w, StringComparison.OrdinalIgnoreCase))).Tool;
+
+        return tool is null ? null : (tool, id.Value);
+    }
+
+    public static string Fetching(bool russian) => russian ? "Запрашиваю платформу. " : "Asking the platform. ";
+
+    public static string StockRead(long available, long reserved, bool russian) =>
+        russian ? $"В наличии: {available}, в резерве: {reserved}." : $"{available} in stock, {reserved} reserved.";
+
+    public static string PaymentRead(string status, bool russian) =>
+        russian ? $"Статус оплаты: {status}." : $"The payment is {status}.";
+
+    public static string PlatformAnswered(int status, bool russian) =>
+        russian ? $"Платформа ответила {status}." : $"The platform answered {status}.";
+
+    public static string PlatformNotRead(string why, bool russian) =>
+        russian ? $"Не удалось прочитать данные платформы: {why}" : $"The platform could not be read: {why}";
+
+    [GeneratedRegex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")]
+    private static partial Regex IdShape();
 
     public static string Reading(bool russian) => russian ? "Смотрю состояние стека. " : "Reading the stack. ";
 

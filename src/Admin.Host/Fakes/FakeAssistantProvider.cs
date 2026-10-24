@@ -34,10 +34,28 @@ public sealed class FakeAssistantProvider : IAssistantProvider
 
         if (request.History is [.., AssistantMessage { Calls: [ToolCall call, ..] }, ToolResultsMessage { Results: [ToolResult result, ..] }])
         {
-            string reply = call.Name == StackStatus ? StackReply(result, russian) : OpenReply(request, call, result, russian);
+            string reply = call.Name switch
+            {
+                StackStatus => StackReply(result, russian),
+                "get_stock" or "get_payment" => PlatformReply(call.Name, result, russian),
+                _ => OpenReply(request, call, result, russian),
+            };
 
             yield return new TextDelta(reply);
             yield return new UsageReport(new Usage(input, reply.Length / 4, 0));
+            yield return new RoundEnd(ProviderStop.Done);
+            yield break;
+        }
+
+        // An id and a word for stock or payment: the platform read, before "status" is taken for the stack's.
+        if (FakeAssistantScripts.PlatformAsk(question) is (string tool, string id)
+            && request.Tools.FirstOrDefault(t => t.Name == tool)?.InputSchema["required"]?[0]?.GetValue<string>() is { } parameter)
+        {
+            string fetching = FakeAssistantScripts.Fetching(russian);
+
+            yield return new TextDelta(fetching);
+            yield return new ToolCall($"fake-{Guid.NewGuid():N}", tool, new JsonObject { [parameter] = id });
+            yield return new UsageReport(new Usage(input, fetching.Length / 4, 0));
             yield return new RoundEnd(ProviderStop.Done);
             yield break;
         }
@@ -79,6 +97,24 @@ public sealed class FakeAssistantProvider : IAssistantProvider
         string label = Label(request, call.Input["path"]?.GetValue<string>());
 
         return result.Ok ? FakeAssistantScripts.Opened(label, russian) : FakeAssistantScripts.NotOpened(label, result.Content, russian);
+    }
+
+    // Read from the result as the model would read it: the status the platform answered, and for a 200 the body's fields.
+    private static string PlatformReply(string tool, ToolResult result, bool russian)
+    {
+        if (!result.Ok || JsonNode.Parse(result.Content) is not JsonObject read || read["status"]?.GetValue<int>() is not { } status)
+        {
+            return FakeAssistantScripts.PlatformNotRead(result.Content, russian);
+        }
+
+        JsonNode? body = status == 200 && read["body"]?.GetValue<string>() is { } text ? JsonNode.Parse(text) : null;
+
+        return (tool, body) switch
+        {
+            ("get_stock", { } b) => FakeAssistantScripts.StockRead(b["available"]?.GetValue<long>() ?? 0, b["reserved"]?.GetValue<long>() ?? 0, russian),
+            ("get_payment", { } b) => FakeAssistantScripts.PaymentRead(b["intent"]?["status"]?.GetValue<string>() ?? "?", russian),
+            _ => FakeAssistantScripts.PlatformAnswered(status, russian),
+        };
     }
 
     // Read from the result as the model would read it: the stack view's backend services, by state.
