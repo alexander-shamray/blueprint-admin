@@ -59,17 +59,28 @@ internal static class RequestBuilder
         };
     }
 
+    // The bounds a strict schema may not carry, which the SDK's own schema helper moves into the description
+    // (SchemaPropertyAttribute in the pinned Anthropic package): numeric limits and string lengths, and minItems above 1.
+    // The tool still checks its input, so the model reads the bound and the host enforces it.
+    private static readonly string[] UnsupportedBounds = ["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf", "minLength", "maxLength"];
+
     // Closes every object schema in the tree, the root and those under `properties`, `items`, `$defs` and the combinators,
-    // without overruling one that already names `additionalProperties`. Only a string `type` marks a schema, so a property
-    // called `type` in a `properties` map, which holds a schema, is not mistaken for one.
+    // without overruling one that already names `additionalProperties`, and moves each schema's unsupported bounds into its
+    // description. Only a string `type` marks a schema, so a property called `type` in a `properties` map, which holds a
+    // schema, is not mistaken for one, and nor is a property called `minimum`.
     private static void Close(JsonNode? node)
     {
         switch (node)
         {
             case JsonObject schema:
-                if (schema["type"] is JsonValue type && type.TryGetValue(out string? name) && name == "object")
+                if (schema["type"] is JsonValue type && type.TryGetValue(out string? name))
                 {
-                    schema.TryAdd("additionalProperties", false);
+                    if (name == "object")
+                    {
+                        schema.TryAdd("additionalProperties", false);
+                    }
+
+                    MoveBoundsToDescription(schema);
                 }
 
                 foreach (KeyValuePair<string, JsonNode?> entry in schema.ToList())
@@ -85,6 +96,32 @@ internal static class RequestBuilder
                 }
 
                 break;
+        }
+    }
+
+    private static void MoveBoundsToDescription(JsonObject schema)
+    {
+        JsonObject moved = [];
+
+        foreach (string bound in UnsupportedBounds)
+        {
+            if (schema[bound] is JsonValue value)
+            {
+                schema.Remove(bound);
+                moved[bound] = value;
+            }
+        }
+
+        if (schema["minItems"] is JsonValue minItems && minItems.TryGetValue(out int least) && least > 1)
+        {
+            schema.Remove("minItems");
+            moved["minItems"] = least;
+        }
+
+        if (moved.Count > 0)
+        {
+            string described = schema["description"] is JsonValue d && d.TryGetValue(out string? text) ? $"{text} " : "";
+            schema["description"] = $"{described}{moved.ToJsonString()}";
         }
     }
 
