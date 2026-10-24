@@ -41,12 +41,15 @@ public static class AssistantEndpoints
 
         Caller caller = AssistantRuntime.Operator;
 
-        app.MapPost("/api/assistant/conversations", Results<Ok<ConversationOpened>, ProblemHttpResult> (OpenConversation? request) =>
+        app.MapPost("/api/assistant/conversations", async Task<Results<Ok<ConversationOpened>, ProblemHttpResult>> (OpenConversation? request, CancellationToken cancellationToken) =>
         {
             if (Invalid(request) is { } problem)
             {
                 return problem;
             }
+
+            // The platform tools are listed from the API catalogue, which a conversation's tools are fixed from (§6.5).
+            await runtime.PrepareAsync(cancellationToken);
 
             try
             {
