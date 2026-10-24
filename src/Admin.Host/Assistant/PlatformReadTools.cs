@@ -136,7 +136,9 @@ public sealed class PlatformReadTools(ApiCatalog catalog, RequestProxy proxy, To
 
         foreach (ApiParameter path in operation.PathParameters)
         {
-            if (Text(input[path.Name]) is not { Length: > 0 } value)
+            // A dot segment survives escaping and is resolved away by the URL, which would send a different route than the
+            // one whose policy picked the identity.
+            if (Text(input[path.Name]) is not { Length: > 0 } value || value is "." or "..")
             {
                 return null;
             }
