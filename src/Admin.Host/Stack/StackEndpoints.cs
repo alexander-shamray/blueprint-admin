@@ -17,13 +17,7 @@ public static partial class StackEndpoints
     public static IEndpointRouteBuilder MapStack(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/stack", async (ComposeService compose, FrontendSupervisor frontend, PlatformProbe probe, ScenarioLeaseService leases, LoadRunService loadRun, CancellationToken cancellationToken) =>
-        {
-            Task<ComposeStatus> backend = compose.PsAsync(cancellationToken);
-            Task<IReadOnlyList<Reachability>> reachability = probe.ProbeAsync(cancellationToken);
-            JobSummary? lastRun = loadRun.Current is { } run ? JobSummary.Of(run) : null;
-
-            return TypedResults.Ok(new StackView(await backend, frontend.Status(), await reachability, leases.Current, lastRun));
-        });
+            TypedResults.Ok(await ReadAsync(compose, frontend, probe, leases, loadRun, cancellationToken)));
 
         // The backend's SLO run as one job (spec §5.3): a run still going answers a second Run with itself, as an Up does, and
         // Stop ends it at the step it is in.
@@ -137,6 +131,25 @@ public static partial class StackEndpoints
         });
 
         return app;
+    }
+
+    /// <summary>
+    /// The Stack screen's read: the backend's services, the frontend, what answers on its port, the lease and the last load
+    /// run. <c>GET /api/stack</c> and the assistant's <c>stack_status</c> both call it, so the tool reads what the screen reads.
+    /// </summary>
+    public static async Task<StackView> ReadAsync(
+        ComposeService compose,
+        FrontendSupervisor frontend,
+        PlatformProbe probe,
+        ScenarioLeaseService leases,
+        LoadRunService loadRun,
+        CancellationToken cancellationToken)
+    {
+        Task<ComposeStatus> backend = compose.PsAsync(cancellationToken);
+        Task<IReadOnlyList<Reachability>> reachability = probe.ProbeAsync(cancellationToken);
+        JobSummary? lastRun = loadRun.Current is { } run ? JobSummary.Of(run) : null;
+
+        return new StackView(await backend, frontend.Status(), await reachability, leases.Current, lastRun);
     }
 
     [GeneratedRegex(@"\A[A-Za-z0-9][A-Za-z0-9._-]*\z")]
