@@ -138,6 +138,20 @@ public sealed partial class AdminReadToolsTests(AdminHostFactory factory) : ICla
         sent.Content.ShouldContain(FixtureScrubber.Scrubbed);
     }
 
+    [Fact]
+    public void A_secret_with_a_quote_is_redacted_as_the_load_runs_command_line_writes_it_too()
+    {
+        // LoadRunService doubles a quote when it writes the sa password into a PowerShell single-quoted string, and
+        // stack_status carries the last load run's command line.
+        using WebApplicationFactory<Program> host = factory.WithWebHostBuilder(b => b.UseSetting("Admin:SqlPassword", "it's-a-pa55"));
+        IRedactor redactor = host.Services.GetRequiredService<AssistantRuntime>().Core!.Redactor;
+
+        string redacted = redactor.Redact("$p = 'it''s-a-pa55'; also it's-a-pa55", AssistantRuntime.Operator);
+
+        redacted.ShouldNotContain("pa55");
+        redacted.ShouldBe($"$p = '{FixtureScrubber.Scrubbed}'; also {FixtureScrubber.Scrubbed}");
+    }
+
     private static AdminReadTools Tools(WebApplicationFactory<Program> host) => host.Services.GetRequiredService<AdminReadTools>();
 
     private static JsonObject Input(string name) =>
