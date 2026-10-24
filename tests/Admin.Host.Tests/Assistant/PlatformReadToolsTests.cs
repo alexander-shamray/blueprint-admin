@@ -193,6 +193,8 @@ public sealed class PlatformReadToolsTests(AdminHostFactory factory) : IClassFix
     [InlineData("""{}""")]
     [InlineData("""{"productId":""}""")]
     [InlineData("""{"productId":{"a":1}}""")]
+    [InlineData("""{"productId":".."}""")]
+    [InlineData("""{"productId":"."}""")]
     [InlineData("""{"productId":"0199a1b2-0000-7000-8000-00000000000a","extra":1}""")]
     public async Task Input_the_operation_does_not_take_is_an_error_the_model_reads_and_sends_nothing(string input)
     {
