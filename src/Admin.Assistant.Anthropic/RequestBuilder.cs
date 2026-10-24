@@ -31,7 +31,7 @@ internal static class RequestBuilder
             // refuse a forced tool choice.
             ToolChoice = new BetaToolChoiceAuto(),
             OutputConfig = new BetaOutputConfig { Effort = EffortOf(settings.Effort) },
-            Tools = [.. request.Tools.Select(Tool)],
+            Tools = Tools(request.Tools),
             System = new List<BetaTextBlockParam>
             {
                 new() { Text = request.System },
@@ -41,23 +41,91 @@ internal static class RequestBuilder
         };
     }
 
-    private static BetaToolUnion Tool(ToolDescriptor descriptor)
-    {
-        // `strict` makes the model's arguments validate against the schema, which asks for every object in it to be closed.
-        JsonObject closed = (JsonObject)descriptor.InputSchema.DeepClone();
-        closed.TryAdd("type", "object");
-        Close(closed);
+    // The API's complexity limits for strict schemas, per request, across all of them ("Schema complexity limits" in the
+    // structured outputs documentation). A request over any of them is refused whole, so every turn would fail.
+    internal const int MaxStrictTools = 20;
 
+    internal const int MaxOptionalParameters = 24;
+
+    internal const int MaxUnionParameters = 16;
+
+    // Strict while the request stays inside the limits, in the order the core gave (sorted by name, so the same tools are
+    // strict from one request to the next and the cached prefix does not move). A tool past the budget is sent without
+    // `strict`: its host or client checks the input anyway, and the model still reads the closed schema.
+    private static List<BetaToolUnion> Tools(IReadOnlyList<ToolDescriptor> descriptors)
+    {
+        List<BetaToolUnion> tools = [];
+        int strictTools = 0;
+        int optional = 0;
+        int unions = 0;
+
+        foreach (ToolDescriptor descriptor in descriptors)
+        {
+            // Closed objects are what a strict schema asks for, and cost nothing on a tool that is not.
+            JsonObject closed = (JsonObject)descriptor.InputSchema.DeepClone();
+            closed.TryAdd("type", "object");
+            Close(closed);
+
+            (int tool, int union) = (Optional(closed), Unions(closed));
+            bool strict = strictTools < MaxStrictTools && optional + tool <= MaxOptionalParameters && unions + union <= MaxUnionParameters;
+
+            if (strict)
+            {
+                strictTools++;
+                optional += tool;
+                unions += union;
+            }
+
+            tools.Add(Tool(descriptor, closed, strict));
+        }
+
+        return tools;
+    }
+
+    private static BetaToolUnion Tool(ToolDescriptor descriptor, JsonObject closed, bool strict)
+    {
         Dictionary<string, JsonElement> schema = closed.ToDictionary(p => p.Key, p => JsonSerializer.SerializeToElement(p.Value));
 
         return new BetaTool
         {
             Name = descriptor.Name,
             Description = descriptor.Description,
-            Strict = true,
+            Strict = strict ? true : null,
             InputSchema = InputSchema.FromRawUnchecked(schema),
         };
     }
+
+    // Each property of a schema object that its `required` leaves out, at any depth.
+    private static int Optional(JsonNode? node)
+    {
+        switch (node)
+        {
+            case JsonObject schema:
+                int count = 0;
+
+                if (schema["type"] is JsonValue && schema["properties"] is JsonObject properties)
+                {
+                    HashSet<string> required = schema["required"] is JsonArray list
+                        ? [.. list.OfType<JsonValue>().Select(v => v.TryGetValue(out string? name) ? name : "")]
+                        : [];
+                    count += properties.Count(p => !required.Contains(p.Key));
+                }
+
+                return count + schema.Sum(e => Optional(e.Value));
+            case JsonArray array:
+                return array.Sum(Optional);
+            default:
+                return 0;
+        }
+    }
+
+    // Each schema that is an `anyOf` or has a type list, at any depth.
+    private static int Unions(JsonNode? node) => node switch
+    {
+        JsonObject schema => ((schema["anyOf"] is JsonArray || schema["type"] is JsonArray) ? 1 : 0) + schema.Sum(e => Unions(e.Value)),
+        JsonArray array => array.Sum(Unions),
+        _ => 0,
+    };
 
     // The bounds a strict schema may not carry, which the SDK's own schema helper moves into the description
     // (SchemaPropertyAttribute in the pinned Anthropic package): numeric limits and string lengths, and minItems above 1.
