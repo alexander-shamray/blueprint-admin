@@ -71,14 +71,15 @@ public sealed class PlatformReadTools(ApiCatalog catalog, RequestProxy proxy, To
 
         try
         {
-            Snapshot next = Snapshot.Of(await catalog.GetAsync(cancellationToken), services, reserved);
+            ApiCatalogView view = await catalog.GetAsync(cancellationToken);
+            Snapshot next = Snapshot.Of(view, services, reserved);
 
             // The catalogue keeps its first load for the host's lifetime, even one made with a service down, so a chosen
-            // service with no read in it is asked for again.
-            int missing = services.Count(s => !next.Operations.Values.Any(o => o.Source == s));
+            // service the view holds no available operation of is asked for again. Judged on every operation, not on the
+            // tools: a service whose GETs are all refused as tools is not a service that is down.
             long now = Environment.TickCount64;
 
-            if (ShouldReload(missing, lastReload, now))
+            if (ShouldReload(Missing(view, services), lastReload, now))
             {
                 lastReload = now;
                 next = Snapshot.Of(await catalog.ReloadAsync(cancellationToken), services, reserved);
@@ -99,6 +100,10 @@ public sealed class PlatformReadTools(ApiCatalog catalog, RequestProxy proxy, To
             preparing.Release();
         }
     }
+
+    /// <summary>How many of the chosen services the view holds no available operation of: not loaded, or down.</summary>
+    internal static int Missing(ApiCatalogView view, IReadOnlySet<string> services) =>
+        services.Count(s => !view.Operations.Any(o => o.Source == s && o.Available));
 
     /// <summary>Whether a catalogue lacking a read for <paramref name="missing"/> of the chosen services is asked for again.</summary>
     internal static bool ShouldReload(int missing, long lastReload, long now) =>
@@ -138,7 +143,7 @@ public sealed class PlatformReadTools(ApiCatalog catalog, RequestProxy proxy, To
     /// order, whose token carries the permission the route's policy asks for: an <c>authenticated</c> route takes the
     /// first, an anonymous one none, and a policy no user satisfies sends nothing.
     /// </summary>
-    private async Task<(IdentityRequest? Identity, string? Refusal)> IdentityAsync(ApiOperation operation, ToolContext context, CancellationToken cancellationToken)
+    internal async Task<(IdentityRequest? Identity, string? Refusal)> IdentityAsync(ApiOperation operation, ToolContext context, CancellationToken cancellationToken)
     {
         IReadOnlyList<RealmUser> users = RealmUsers.Of(options.Value);
 
