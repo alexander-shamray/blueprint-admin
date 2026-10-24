@@ -56,6 +56,8 @@
     "1256460476848243743": " Ask what a screen is for, or where to find something: \"where are the logs?\" ",
     "7989594522969559545": " Your questions, and the console data the assistant reads to answer them, go to {$INTERPOLATION}. ",
     "4265737487839810018": " I understand ",
+    "4249187606711189370": "Read the platform as",
+    "810888510148304696": "Automatic",
     "4272041418876129428": "Message to the assistant",
     "3133539296286953705": "Stop",
     "7563035552061651664": " Send ",

@@ -80,6 +80,7 @@ export class AssistantPanel {
   });
 
   constructor() {
+    this.assistant.loadUsers();
     // Keeps the newest line in view as the reply streams in.
     effect(() => {
       this.state();
@@ -94,6 +95,11 @@ export class AssistantPanel {
 
   endText(item: ConversationItem & { kind: 'end' }): string {
     return END_REASON_TEXT[item.reason];
+  }
+
+  /** The picker's choice; the empty option is the host's own choice by each route's permission. */
+  pin(username: string): void {
+    this.assistant.pin(username === '' ? null : username);
   }
 
   async send(): Promise<void> {

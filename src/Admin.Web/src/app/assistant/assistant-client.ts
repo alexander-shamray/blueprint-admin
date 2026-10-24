@@ -203,7 +203,13 @@ export class AssistantConversation {
     this.settleStream();
   }
 
-  async send(text: string, context: Record<string, unknown> | null, locale: string): Promise<void> {
+  /** `hostOptions` ride with the turn (§5.1): the host's tools read them, here which realm user the platform reads are made as. */
+  async send(
+    text: string,
+    context: Record<string, unknown> | null,
+    locale: string,
+    hostOptions: Record<string, unknown> | null = null,
+  ): Promise<void> {
     if (this.state.running || text.trim() === '') return;
     this.sends++;
     const items: ConversationItem[] = [...this.state.items, { kind: 'operator', text }];
@@ -211,13 +217,13 @@ export class AssistantConversation {
     try {
       let id = this.state.id ?? (await this.openNew());
       this.settleStream();
-      let outcome = await this.client.send(id, { text, context, locale, hostOptions: null });
+      let outcome = await this.client.send(id, { text, context, locale, hostOptions });
       if (outcome === 'gone') {
         // The host was restarted, or forgot the conversation: the same words go to a new one.
         this.stopStream();
         id = await this.openNew();
         this.settleStream();
-        outcome = await this.client.send(id, { text, context, locale, hostOptions: null });
+        outcome = await this.client.send(id, { text, context, locale, hostOptions });
       }
       if (outcome === 'running') {
         this.update({

@@ -12,6 +12,10 @@ function stub() {
     panelOpen: signal(true),
     needsNotice: signal(false),
     acknowledge: vi.fn(),
+    identity: signal<string | null>(null),
+    users: signal<string[]>([]),
+    loadUsers: vi.fn(),
+    pin: vi.fn(),
     send: vi.fn(() => Promise.resolve()),
     cancel: vi.fn(() => Promise.resolve()),
     startOver: vi.fn(() => Promise.resolve()),
@@ -55,6 +59,33 @@ describe('AssistantPanel', () => {
 
     expect(element.querySelector('.notice')).toBeNull();
     expect((element.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('offers no identity choice until the host has named the realm users', async () => {
+    const { element } = await render();
+
+    expect(element.querySelector('select')).toBeNull();
+  });
+
+  it('pins the realm user the platform reads are made as, and takes the pin off again', async () => {
+    const assistant = stub();
+    assistant.users.set(['demo', 'browser']);
+    assistant.identity.set('demo');
+    const { fixture, element } = await render(assistant);
+    const select = element.querySelector('select')!;
+
+    expect(Array.from(select.options).map((o) => o.value)).toEqual(['', 'demo', 'browser']);
+    expect(select.value).toBe('demo');
+
+    select.value = 'browser';
+    select.dispatchEvent(new Event('change'));
+    expect(assistant.pin).toHaveBeenLastCalledWith('browser');
+
+    select.value = '';
+    select.dispatchEvent(new Event('change'));
+    expect(assistant.pin).toHaveBeenLastCalledWith(null);
+    expect(assistant.loadUsers).toHaveBeenCalledTimes(1);
+    await fixture.whenStable();
   });
 
   it('keeps the draft when Enter is pressed before the notice is accepted', async () => {

@@ -62,6 +62,22 @@ test("asked a product's stock and an order's payment, it answers from the platfo
   await expect(asked.filter({ hasText: `/api/v1/payments/${PLACED_ORDER}` }).first()).toBeVisible();
 });
 
+test("a realm user pinned in the panel is who the platform reads are made as, and the platform's refusal is the answer", async ({
+  page,
+}) => {
+  await page.goto('/stack');
+  await page.getByRole('button', { name: 'Assistant', exact: true }).click();
+
+  // `privacy` holds no inventory permission, so the gateway refuses the stock read as it would the API screen's.
+  await page.getByRole('combobox', { name: /Read the platform as/ }).selectOption('privacy');
+  await ask(page, `how many are in stock for product ${STOCKED_PRODUCT}?`);
+  await expect(page.locator('app-assistant-panel .reply').last()).toHaveText('The platform answered 403.');
+
+  await page.goto('/transcript');
+  const refused = page.locator('li.entry', { hasText: 'asked by the assistant' }).filter({ hasText: 'as privacy' });
+  await expect(refused.first()).toContainText('HTTP 403');
+});
+
 test('asked in Russian, it opens Logs and names it as labelled', async ({ page }) => {
   await page.goto('/stack');
   await page.getByRole('button', { name: 'Assistant', exact: true }).click();

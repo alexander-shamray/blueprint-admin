@@ -53,6 +53,17 @@
       </button>
     </div>
   }
+  @if (assistant.users().length > 0) {
+    <label class="identity">
+      <span i18n="the realm user the assistant reads the platform as">Read the platform as</span>
+      <select [value]="assistant.identity() ?? ''" (change)="pin($any($event.target).value)">
+        <option value="" i18n="the host picks the realm user by each route's permission">Automatic</option>
+        @for (user of assistant.users(); track user) {
+          <option [value]="user" [selected]="user === assistant.identity()">{{ user }}</option>
+        }
+      </select>
+    </label>
+  }
   <form class="compose" (submit)="$event.preventDefault(); send()">
     <textarea
       aria-label="Message to the assistant"
