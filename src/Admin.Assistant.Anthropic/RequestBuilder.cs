@@ -103,7 +103,9 @@ internal static class RequestBuilder
             case JsonObject schema:
                 int count = 0;
 
-                if (schema["type"] is JsonValue && schema["properties"] is JsonObject properties)
+                // Any schema with a `properties` map, whatever its `type` (a type list, or an `anyOf` branch with none). The map
+                // is told from a property that is itself called `properties` by holding only schemas.
+                if (schema["properties"] is JsonObject properties && properties.All(p => p.Value is JsonObject))
                 {
                     HashSet<string> required = schema["required"] is JsonArray list
                         ? [.. list.OfType<JsonValue>().Select(v => v.TryGetValue(out string? name) ? name : "")]
