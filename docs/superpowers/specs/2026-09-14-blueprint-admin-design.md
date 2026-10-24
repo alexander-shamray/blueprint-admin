@@ -1054,8 +1054,10 @@ With the assistant on (AI assistant note §9), the top bar has its toggle, the
 palette an "Ask the assistant" entry, and the shell a panel at its end: one
 conversation per browser tab, its id in `sessionStorage`, so a reload redraws
 it. What it explains each screen from is that screen's `help` in `SCREENS`;
-it navigates through the client tool `open_screen`. Off, none of the three
-exists.
+it navigates through the client tool `open_screen`, and answers what the
+platform is doing now from the console's own reads, the server tools
+`AdminReadTools` lists (AI assistant note §6.2), each redacted before the
+provider sees it. Off, none of the three exists.
 
 The table is the widget catalogue by built-in page: what each page shows and
 does as it ships. A page is the widgets `BUILT_IN_LAYOUTS` in

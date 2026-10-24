@@ -643,9 +643,12 @@ total, so spend is visible.
   first message of a session waits on a one-time "questions and the console
   data the assistant reads go to *provider*" acknowledgement, kept in
   `localStorage` per browser.
-- **Transcript.** The assistant runs no command. Its platform reads (§6.5)
-  pass through `RequestProxy`, which transcribes them as the API screen's are,
-  marked as the assistant's. Host logs record each turn's provider, model,
+- **Transcript.** The assistant runs no command of its own. A console read
+  (§6.2) calls the service its screen's endpoint calls, so the reads a screen
+  runs untranscribed (`docker compose ps` behind `stack_status`, `game_day
+  --list` behind `list_runbooks`) stay untranscribed when the assistant asks.
+  Its platform reads (§6.5) pass through `RequestProxy`, which transcribes
+  them as the API screen's are, marked as the assistant's. Host logs record each turn's provider, model,
   usage and end reason, never its text.
 
 ## 11. Changes to the spec and the workspace note
