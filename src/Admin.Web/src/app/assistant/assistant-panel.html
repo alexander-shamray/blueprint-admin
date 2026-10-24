@@ -32,6 +32,17 @@
           <li class="tool" [class.failed]="item.ok === false">
             <mat-icon aria-hidden="true">{{ item.ok === null ? 'pending' : item.ok ? 'check' : 'error' }}</mat-icon>
             {{ label(item) }}
+            @if (proposes(item)) {
+              <button
+                mat-stroked-button
+                type="button"
+                class="propose"
+                [disabled]="proposals()[item.callId] !== undefined"
+                (click)="add(item)"
+              >
+                {{ addLabel(item) }}
+              </button>
+            }
           </li>
         }
         @case ('end') {

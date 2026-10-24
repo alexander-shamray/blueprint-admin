@@ -4,6 +4,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { SCREENS } from '../screens';
 import { AssistantService } from './assistant-service';
 import { ConversationItem, StatusReason, TurnEndReason } from './protocol';
+import { findWidgetType } from './workspace-tools';
 
 /** Each end reason in the console's words; `done` says nothing, since the reply is the answer (§5.3, §5.4). */
 export const END_REASON_TEXT: Record<TurnEndReason, string> = {
@@ -42,7 +43,17 @@ export function toolLabel(name: string, args: Record<string, unknown>): string {
     const screen = SCREENS.find((s) => s.path === args['path']);
     return $localize`Opening ${screen?.label ?? String(args['path'])}:screen:`;
   }
+  if (name === 'open_page') return $localize`Opening ${String(args['page'])}:page:`;
+  if (name === 'highlight_widget') return $localize`Showing ${widgetName(args['widget'])}:widget:`;
+  if (name === 'propose_widget') return $localize`Offering ${widgetName(args['type'])}:widget:`;
+  if (name === 'follow_correlation') return $localize`Following ${String(args['correlationId'])}:id:`;
   return Object.hasOwn(READ_TOOL_TEXT, name) ? READ_TOOL_TEXT[name] : $localize`Using ${name}:tool:`;
+}
+
+/** A widget type the model named, by its title as shown, else as it was named. */
+function widgetName(value: unknown): string {
+  const named = String(value);
+  return findWidgetType(named)?.title ?? named;
 }
 
 /**
@@ -91,6 +102,32 @@ export class AssistantPanel {
 
   label(item: ConversationItem & { kind: 'tool' }): string {
     return toolLabel(item.name, item.args);
+  }
+
+  /** What became of each Add button the operator pressed, by the tool call that offered it. */
+  readonly proposals = signal<Record<string, 'added' | 'no-room'>>({});
+
+  /** Whether a tool call is an offer of a widget the operator can accept: a finished `propose_widget` that named a type. */
+  proposes(item: ConversationItem & { kind: 'tool' }): boolean {
+    return item.name === 'propose_widget' && item.ok === true;
+  }
+
+  addLabel(item: ConversationItem & { kind: 'tool' }): string {
+    const title = widgetName(item.args['type']);
+    switch (this.proposals()[item.callId]) {
+      case 'added':
+        return $localize`Added ${title}:widget:`;
+      case 'no-room':
+        return $localize`No room on this page for ${title}:widget:`;
+      default:
+        return $localize`Add ${title}:widget:`;
+    }
+  }
+
+  /** The operator's click: the widget joins the page being shown, if the page has room. */
+  add(item: ConversationItem & { kind: 'tool' }): void {
+    const added = this.assistant.addProposed(String(item.args['type']));
+    this.proposals.update((p) => ({ ...p, [item.callId]: added ? 'added' : 'no-room' }));
   }
 
   endText(item: ConversationItem & { kind: 'end' }): string {

@@ -20,6 +20,12 @@ html {
   --app-warn-bg: light-dark(#fec, #4a3510);
 }
 
+/* A widget the assistant pointed at (highlight_widget): outlined inside its frame, which clips what is outside. */
+.assistant-highlight {
+  outline: 3px solid var(--mat-sys-primary);
+  outline-offset: -3px;
+}
+
 body {
   margin: 0;
   background: var(--mat-sys-surface);

@@ -16,6 +16,7 @@ function stub() {
     users: signal<string[]>([]),
     loadUsers: vi.fn(),
     pin: vi.fn(),
+    addProposed: vi.fn(() => true),
     send: vi.fn(() => Promise.resolve()),
     cancel: vi.fn(() => Promise.resolve()),
     startOver: vi.fn(() => Promise.resolve()),
@@ -144,6 +145,63 @@ describe('AssistantPanel', () => {
     expect(element.querySelector('.tool')?.textContent).toContain('Opening Logs');
   });
 
+  const offered = {
+    kind: 'tool',
+    callId: 'k-note',
+    name: 'propose_widget',
+    side: 'client',
+    args: { type: 'note' },
+    ok: true,
+  } as const;
+
+  it('offers an Add button for a widget the assistant proposed, and adds it only on the click', async () => {
+    const assistant = stub();
+    assistant.state.set({
+      ...EMPTY_CONVERSATION,
+      id: 'c1',
+      items: [{ kind: 'operator', text: 'a scratch pad?' }, offered],
+    });
+    const { fixture, element } = await render(assistant);
+    const button = element.querySelector<HTMLButtonElement>('.propose')!;
+
+    expect(button.textContent).toContain('Add Note');
+    expect(assistant.addProposed).not.toHaveBeenCalled();
+
+    button.click();
+    await fixture.whenStable();
+
+    expect(assistant.addProposed).toHaveBeenCalledWith('note');
+    expect(element.querySelector<HTMLButtonElement>('.propose')!.textContent).toContain('Added Note');
+    expect(element.querySelector<HTMLButtonElement>('.propose')!.disabled).toBe(true);
+  });
+
+  it('says when the page has no room for a proposed widget', async () => {
+    const assistant = stub();
+    assistant.addProposed.mockReturnValue(false);
+    assistant.state.set({ ...EMPTY_CONVERSATION, id: 'c1', items: [offered] });
+    const { fixture, element } = await render(assistant);
+
+    element.querySelector<HTMLButtonElement>('.propose')!.click();
+    await fixture.whenStable();
+
+    expect(element.querySelector('.propose')!.textContent).toContain('No room on this page for Note');
+  });
+
+  it('offers no button for a proposal that failed, or for any other tool', async () => {
+    const assistant = stub();
+    assistant.state.set({
+      ...EMPTY_CONVERSATION,
+      id: 'c1',
+      items: [
+        { ...offered, callId: 'k-bad', args: { type: 'hologram' }, ok: false },
+        { kind: 'tool', callId: 'k-open', name: 'open_page', side: 'client', args: { page: 'Broker' }, ok: true },
+      ],
+    });
+    const { element } = await render(assistant);
+
+    expect(element.querySelector('.propose')).toBeNull();
+  });
+
   it('says plainly that a turn was refused rather than showing an empty reply', async () => {
     const { fixture, assistant, element } = await render();
 
@@ -214,6 +272,13 @@ describe('the assistant codes', () => {
 
   it('labels a screen opening by the screen as labelled', () => {
     expect(toolLabel('open_screen', { path: 'requests' })).toBe('Opening API');
+  });
+
+  it('labels the workspace tools by the page, widget or id they name', () => {
+    expect(toolLabel('open_page', { page: 'Broker' })).toBe('Opening Broker');
+    expect(toolLabel('highlight_widget', { widget: 'widget:queues' })).toBe('Showing Queues');
+    expect(toolLabel('propose_widget', { type: 'note' })).toBe('Offering Note');
+    expect(toolLabel('follow_correlation', { correlationId: 'order-1' })).toBe('Following order-1');
   });
 
   it("labels a call to one of the host's reads in the console's words, and any other tool by its name", () => {
