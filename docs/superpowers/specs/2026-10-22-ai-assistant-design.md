@@ -543,7 +543,11 @@ vendor type.
   is a configuration change, the operator's to make.
 - Streaming always; adaptive thinking (the model's default, so the parameter
   is omitted); `tool_choice` `auto`, since the current models refuse a forced
-  one; `strict: true` on every tool.
+  one; `strict: true` on the tools that fit the API's limits for strict schemas
+  (20 tools, 24 optional parameters and 16 union-typed parameters across a
+  request), in the order the core gave, sorted by name. A tool past the budget
+  is sent without `strict` and with the same closed schema: its host or client
+  checks the input, and a request over a limit is refused whole.
 - A prompt-cache breakpoint after the tools, the system text and the
   catalogue (the part that does not change between turns) and a second at
   the end of the history, so each request reuses the conversation so far.
