@@ -8,6 +8,7 @@ using Admin.Host.Api;
 using Admin.Host.Assistant;
 using Admin.Host.Config;
 using Admin.Host.Fakes;
+using Admin.Host.Identity;
 using Admin.Host.Tests.TestSupport;
 using Admin.Host.Transcript;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -329,6 +330,34 @@ public sealed class PlatformReadToolsTests(AdminHostFactory factory) : IClassFix
         quoted.ShouldStartWith(read["body"]!.GetValue<string>());
         read.AsObject().First().Key.ShouldBe("status");
         read.AsObject().Last().Key.ShouldBe("body");
+    }
+
+    [Fact]
+    public async Task A_route_the_gateway_does_not_have_is_not_sent_to_whoever_the_conversation_pins()
+    {
+        using WebApplicationFactory<Program> host = factory.WithWebHostBuilder(_ => { });
+        PlatformReadTools tools = await Prepared(host);
+        ApiOperation noRoute = Get("catalog", "GetNowhere", policy: GatewayRoutes.NoRoute);
+
+        (IdentityRequest? identity, string? refusal) = await tools.IdentityAsync(noRoute, Context(new JsonObject { ["identity"] = "demo" }), Ct);
+
+        identity.ShouldBeNull();
+        refusal.ShouldNotBeNull().ShouldContain("no route");
+    }
+
+    [Fact]
+    public void A_service_is_missing_when_the_view_holds_no_available_operation_of_it_however_many_it_holds_that_are_not_tools()
+    {
+        ApiCatalogView view = new(
+            [],
+            [
+                Get("catalog", "GetItem"),
+                Get("inventory", "GetStock", available: false),
+                Get("payments", "PublishPayment", method: "POST"),
+            ]);
+
+        // Inventory is down; payments holds an operation, only not a GET, so it is not down; ordering was never loaded.
+        PlatformReadTools.Missing(view, new HashSet<string> { "catalog", "inventory", "payments", "ordering" }).ShouldBe(2);
     }
 
     [Fact]
