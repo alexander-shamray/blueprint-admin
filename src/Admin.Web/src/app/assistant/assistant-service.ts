@@ -1,6 +1,7 @@
 import { DOCUMENT } from '@angular/common';
 import { Injectable, LOCALE_ID, computed, effect, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
+import { HostClient } from '../core/host/host-client';
 import { SCREENS } from '../screens';
 import { builtInWidgets } from '../workspace/built-in-pages';
 import { RunningWork } from '../workspace/running-work';
@@ -28,6 +29,17 @@ export const ACKNOWLEDGED_KEY = 'admin.assistant.acknowledged';
 
 /** The provider that sends nothing out of the console, so it needs no notice: `AssistantOptions.Fake` on the host. */
 const LOCAL_PROVIDER = 'fake';
+
+/** Where the tab keeps the realm user the operator pinned for the assistant's platform reads (§6.5); absent is automatic. */
+export const IDENTITY_KEY = 'admin.assistant.identity';
+
+function pinnedIdentity(): string | null {
+  try {
+    return sessionStorage.getItem(IDENTITY_KEY);
+  } catch {
+    return null;
+  }
+}
 
 function acknowledgedProviders(): string[] {
   try {
@@ -67,6 +79,7 @@ export class AssistantService {
   private readonly locale = inject(LOCALE_ID);
   private readonly workspace = inject(WorkspaceService);
   private readonly document = inject(DOCUMENT);
+  private readonly host = inject(HostClient);
   private readonly runningWork = inject(RunningWork);
   private readonly client = new AssistantClient();
   private readonly tools = new ClientToolRegistry();
@@ -80,6 +93,15 @@ export class AssistantService {
   readonly state = signal<ConversationState>(EMPTY_CONVERSATION);
 
   private readonly acknowledged = signal<string[]>(acknowledgedProviders());
+
+  /**
+   * The realm user the platform reads are made as (§6.5), or null for the host's choice by each route's policy. Kept for
+   * the tab, and sent as `hostOptions.identity` with every turn.
+   */
+  readonly identity = signal<string | null>(pinnedIdentity());
+
+  /** The realm users the console can read as: usernames only, from the host, loaded when the panel first shows. */
+  readonly users = signal<string[]>([]);
 
   /**
    * The first message of a browser waits on a one-time notice that questions and the console data the assistant reads
@@ -171,7 +193,31 @@ export class AssistantService {
     // The panel does not offer Send before the notice is accepted; this is the guard behind it.
     if (this.needsNotice()) return;
     this.askedFrom.set(this.router.url);
-    return this.conversation.send(text, this.context(), this.locale);
+    return this.conversation.send(text, this.context(), this.locale, this.hostOptions());
+  }
+
+  /** Pins the realm user for the platform reads, or null to leave it to the host. */
+  pin(username: string | null): void {
+    this.identity.set(username);
+    try {
+      if (username) sessionStorage.setItem(IDENTITY_KEY, username);
+      else sessionStorage.removeItem(IDENTITY_KEY);
+    } catch {
+      // A tab that cannot store keeps the choice until it reloads.
+    }
+  }
+
+  /** The usernames the host offers; the last list is kept if the host does not answer. */
+  loadUsers(): void {
+    this.host.identityUsers().subscribe({
+      next: (users) => this.users.set(users.map((u) => u.username)),
+      error: () => undefined,
+    });
+  }
+
+  private hostOptions(): Record<string, unknown> | null {
+    const identity = this.identity();
+    return identity ? { identity } : null;
   }
 
   cancel(): Promise<void> {
@@ -188,7 +234,7 @@ export class AssistantService {
       locale: this.locale,
       catalogue: catalogue(),
       clientTools: this.tools.descriptors(),
-      hostOptions: null,
+      hostOptions: this.hostOptions(),
     };
   }
 

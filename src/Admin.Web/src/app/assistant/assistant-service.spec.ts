@@ -1,7 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
+import { of } from 'rxjs';
+import { HostClient } from '../core/host/host-client';
 import { WorkspaceService } from '../workspace/workspace-service';
-import { ACKNOWLEDGED_KEY, AssistantService } from './assistant-service';
+import { ACKNOWLEDGED_KEY, AssistantService, IDENTITY_KEY } from './assistant-service';
 import { AssistantStatus } from './protocol';
 
 const anthropic: AssistantStatus = { enabled: true, provider: 'anthropic', model: 'claude-opus-5-5', reason: null };
@@ -12,6 +14,10 @@ function service(): AssistantService {
     providers: [
       { provide: Router, useValue: { url: '/', navigate: vi.fn(() => Promise.resolve(true)) } },
       { provide: WorkspaceService, useValue: { currentPage: () => null } },
+      {
+        provide: HostClient,
+        useValue: { identityUsers: vi.fn(() => of([{ username: 'demo' }, { username: 'browser' }])) },
+      },
     ],
   });
   return TestBed.inject(AssistantService);
@@ -70,6 +76,37 @@ describe('AssistantService notice (AI assistant design §10)', () => {
 
     expect(assistant.needsNotice()).toBe(false);
     expect(fetched).toHaveBeenCalled();
+  });
+
+  it('pins the realm user for the tab, sends it as hostOptions.identity, and lets the host choose again once it is taken off', async () => {
+    sessionStorage.clear();
+    const assistant = service();
+    assistant.status.set({ enabled: true, provider: 'fake', model: 'scripted', reason: null });
+
+    assistant.pin('browser');
+    expect(sessionStorage.getItem(IDENTITY_KEY)).toBe('browser');
+    expect(service().identity()).toBe('browser');
+
+    const pinned = service();
+    pinned.status.set({ enabled: true, provider: 'fake', model: 'scripted', reason: null });
+    await pinned.send('is the stack running?');
+    expect(JSON.parse(fetched.mock.calls[0][1].body as string).hostOptions).toEqual({ identity: 'browser' });
+
+    pinned.pin(null);
+    expect(sessionStorage.getItem(IDENTITY_KEY)).toBeNull();
+    fetched.mockClear();
+    const automatic = service();
+    automatic.status.set({ enabled: true, provider: 'fake', model: 'scripted', reason: null });
+    await automatic.send('is the stack running?');
+    expect(JSON.parse(fetched.mock.calls[0][1].body as string).hostOptions).toBeNull();
+  });
+
+  it('lists the realm users the host names, usernames only', () => {
+    const assistant = service();
+
+    assistant.loadUsers();
+
+    expect(assistant.users()).toEqual(['demo', 'browser']);
   });
 
   it('keeps the acceptance for the browser and per provider', () => {

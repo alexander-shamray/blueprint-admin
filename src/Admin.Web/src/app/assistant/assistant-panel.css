@@ -42,6 +42,14 @@ h2 {
   margin: 0;
 }
 
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+}
+
 .messages {
   flex: 1;
   overflow-y: auto;
