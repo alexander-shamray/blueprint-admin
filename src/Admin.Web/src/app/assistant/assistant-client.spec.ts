@@ -68,6 +68,20 @@ describe('AssistantConversation', () => {
     expect(conversation.current.items).toEqual([{ kind: 'operator', text: 'where are the logs?' }]);
   });
 
+  it('sends the host options with each turn, an empty object once nothing is pinned', async () => {
+    const { host, conversation } = setup();
+
+    await conversation.send('one', null, 'en-US', { identity: 'browser' });
+    host.stream.emit('turn_ended', { reason: 'done', category: null }, 1);
+    await settle();
+    await conversation.send('two', null, 'en-US', {});
+
+    const turns = host.requests
+      .filter((r) => r.url.endsWith('/turns'))
+      .map((r) => (r.body as { hostOptions: unknown }).hostOptions);
+    expect(turns).toEqual([{ identity: 'browser' }, {}]);
+  });
+
   it('streams the reply, runs a client tool, posts its result and ends', async () => {
     const { host, conversation, opened } = setup();
     host.on('GET', /\/conversations\/c1$/, () =>

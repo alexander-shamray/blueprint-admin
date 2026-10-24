@@ -28,6 +28,7 @@ describe('AssistantService notice (AI assistant design §10)', () => {
 
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
     fetched = vi.fn(() => Promise.resolve(new Response(null, { status: 404 })));
     vi.stubGlobal('fetch', fetched);
   });
@@ -111,6 +112,17 @@ describe('AssistantService notice (AI assistant design §10)', () => {
 
     expect(assistant.identity()).toBeNull();
     expect(sessionStorage.getItem(IDENTITY_KEY)).toBeNull();
+  });
+
+  it('does not send a pin the host has said it does not list, while the panel has not yet dropped it', async () => {
+    const assistant = service();
+    assistant.status.set({ enabled: true, provider: 'fake', model: 'scripted', reason: null });
+    assistant.pin('mallory');
+    assistant.users.set(['demo', 'browser']);
+
+    await assistant.send('is the stack running?');
+
+    expect(JSON.parse(fetched.mock.calls[0][1].body as string).hostOptions).toEqual({});
   });
 
   it('keeps a pin the host lists', () => {

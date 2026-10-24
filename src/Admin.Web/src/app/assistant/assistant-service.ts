@@ -227,7 +227,10 @@ export class AssistantService {
    */
   private hostOptions(): Record<string, unknown> {
     const identity = this.identity();
-    return identity ? { identity } : {};
+    const listed = this.users();
+    // Once the host has named its users, a pin it does not list is not sent. Before that, or if it never answers, the pin
+    // goes as it is and the host refuses an unknown name, saying so.
+    return identity && (listed.length === 0 || listed.includes(identity)) ? { identity } : {};
   }
 
   cancel(): Promise<void> {
