@@ -9,7 +9,7 @@ namespace Admin.Host.Assistant;
 /// <summary>
 /// The assistant as this host runs it (AI assistant design §9.1), decided once at startup. Off, no provider is built,
 /// no credential is resolved and <see cref="Core"/> is null, so only the status route is mapped. On, the core is built
-/// with the admin's caller, policy, redactor and instructions. A wrong provider value, a limit that is not positive or a
+/// with the admin's caller, policy, redactor, read tools and instructions. A wrong provider value, a limit that is not positive or a
 /// key under <c>Admin:Assistant</c> named like a secret fails startup with the key to fix.
 /// </summary>
 public sealed partial class AssistantRuntime
@@ -20,7 +20,8 @@ public sealed partial class AssistantRuntime
     /// <summary>The admin's own instructions, after the core's: what the catalogue is and how the console is reached.</summary>
     public const string Instructions = """
         The client is blueprint-admin, the local console a developer runs the blueprint platform from. Its catalogue
-        entries are screens: open one with open_screen, passing its id as the path.
+        entries are screens: open one with open_screen, passing its id as the path. The host's tools read what those
+        screens show now; answer from them, and offer the screen when the user wants more than a tool returns.
         """;
 
     // A word that marks a credential, as the workspace refuses one in a widget's config (widget-workspace spec §6.4).
@@ -39,6 +40,7 @@ public sealed partial class AssistantRuntime
         IConfiguration configuration,
         Func<IAssistantProvider> fake,
         Func<IRedactor> redactor,
+        Func<IReadOnlyList<IToolSource>> sources,
         TimeProvider time,
         ILogger<AssistantRuntime> logger)
     {
@@ -49,7 +51,7 @@ public sealed partial class AssistantRuntime
 
         (Core, model) = ProviderId switch
         {
-            AssistantOptions.Fake => (new AssistantCore(fake(), [], ToolPolicy.ReadOnly, redactor(), Instructions, limits, time, Logged), FakeAssistantProvider.Model),
+            AssistantOptions.Fake => (new AssistantCore(fake(), sources(), ToolPolicy.ReadOnly, redactor(), Instructions, limits, time, Logged), FakeAssistantProvider.Model),
             _ => ((AssistantCore?)null, ""),
         };
     }

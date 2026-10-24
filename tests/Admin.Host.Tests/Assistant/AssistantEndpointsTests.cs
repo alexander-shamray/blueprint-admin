@@ -255,10 +255,11 @@ public sealed class AssistantEndpointsTests : IClassFixture<AdminHostFactory>
     [Theory]
     [InlineData("off", false)]
     [InlineData("", true)]
-    public void Off_never_builds_a_provider_or_a_redactor_and_on_builds_each_once(string provider, bool on)
+    public void Off_never_builds_a_provider_a_redactor_or_the_tools_and_on_builds_each_once(string provider, bool on)
     {
         int providers = 0;
         int redactors = 0;
+        int tools = 0;
         AdminOptions options = new() { FakePlatform = true, Assistant = { Provider = provider } };
 
         AssistantRuntime runtime = new(
@@ -274,12 +275,18 @@ public sealed class AssistantEndpointsTests : IClassFixture<AdminHostFactory>
                 redactors++;
                 return new Unredacted();
             },
+            () =>
+            {
+                tools++;
+                return [];
+            },
             TimeProvider.System,
             NullLogger<AssistantRuntime>.Instance);
 
         (runtime.Core is not null).ShouldBe(on);
         providers.ShouldBe(on ? 1 : 0);
         redactors.ShouldBe(on ? 1 : 0);
+        tools.ShouldBe(on ? 1 : 0);
     }
 
     private sealed class Unredacted : IRedactor
