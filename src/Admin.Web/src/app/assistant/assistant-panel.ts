@@ -71,7 +71,7 @@ export class AssistantPanel {
   readonly assistant = inject(AssistantService);
   /** In a widget rather than the side panel: it has no panel to close, and the widget's frame carries the title. */
   readonly embedded = input(false);
-  readonly title = $localize`Assistant`;
+  /** What is being typed is this view's own: the conversation is shared between views, a half-written message is not. */
   readonly draft = signal('');
   private readonly messages = viewChild<ElementRef<HTMLElement>>('messages');
 

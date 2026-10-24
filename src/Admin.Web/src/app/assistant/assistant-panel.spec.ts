@@ -67,6 +67,25 @@ describe('AssistantPanel', () => {
     expect((element.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it('embedded in a widget, drops its title and its close button and keeps the rest', async () => {
+    const full = await render();
+    expect(full.element.querySelector('#assistant-title')).not.toBeNull();
+    expect(full.element.querySelector('button[aria-label="Close the assistant"]')).not.toBeNull();
+    TestBed.resetTestingModule();
+
+    TestBed.configureTestingModule({ providers: [{ provide: AssistantService, useValue: stub() }] });
+    const fixture = TestBed.createComponent(AssistantPanel);
+    fixture.componentRef.setInput('embedded', true);
+    await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+
+    expect(element.querySelector('#assistant-title')).toBeNull();
+    expect(element.querySelector('section')!.getAttribute('aria-labelledby')).toBeNull();
+    expect(element.querySelector('button[aria-label="Close the assistant"]')).toBeNull();
+    expect(element.querySelector('button[aria-label="New conversation"]')).not.toBeNull();
+    expect(element.querySelector('textarea')).not.toBeNull();
+  });
+
   it('offers no identity choice until the host has named the realm users', async () => {
     const { element } = await render();
 
