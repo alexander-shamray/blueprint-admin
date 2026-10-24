@@ -6,9 +6,14 @@ Load-bearing whenever you touch `.claude/` — a command's frontmatter, a
 helper, `settings.json`, a hook — and inert for every other kind of change.
 
 **This harness was ported from `alexander-shamray/blueprint-frontend`, which
-ported it from `alexander-shamray/blueprint-backend`.** A bare `#NN` anywhere
-under `.claude/` or in a copied helper comment is an issue in **that**
-repository, not one here. The arguments for the grants, the deny lists, the
+ported it from `alexander-shamray/blueprint-backend`.** A bare `#NN` under
+`.claude/` or in a copied helper comment is an issue in **this** repository. A
+citation that names a sibling says so (`blueprint-frontend#20`,
+`blueprint-backend#1086`). A port that left a sibling's number bare still means
+the sibling's, and the numbers collide: this repository's #26 is an
+index-refresh issue, and the sibling's #26 is ported, so a bare number that is
+not this repository's own is a defect to qualify, not a convention to read
+around. The arguments for the grants, the deny lists, the
 git-argv hook and the edit-target hook live in those two
 `docs/harness-boundaries.md` files and are not restated here; a summary of an
 argument is how a rule gets "corrected" back.
@@ -376,8 +381,9 @@ as out of scope, never filed.
   that has the trailer is skipped. `git-revert-pr.sh` writes no remote; it
   reads trailers off `origin/main` and reverts on the current branch, and no
   command grants it yet. Ported from `alexander-shamray/blueprint-backend`
-  (#1086, PR 1098), which owns the argument; here the helper reads the pull
-  request with a plain `gh pr view`, this tree having no bounded reader.
+  (`blueprint-backend#1086`, PR 1098 there), which owns the argument; here the
+  helper reads the pull request with a plain `gh pr view`, this tree having no
+  bounded reader.
 - **`/branch`'s worktrees sit inside the checkout, under
   `.claude/worktrees/`, and three residuals follow from it.** Once a session
   has entered one, `settings.json`'s denies anchor at the worktree and refuse
