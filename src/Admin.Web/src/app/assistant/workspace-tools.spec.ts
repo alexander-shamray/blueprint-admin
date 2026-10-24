@@ -25,8 +25,9 @@ const PAGES: Page[] = [
   page('p-other', 'Daily notes', null, []),
 ];
 
-function setup(current: Page | null = PAGES[2]) {
+function setup(start: Page | null = PAGES[2], settleMs = 0) {
   const calls = { opened: [] as string[], highlighted: [] as string[], followed: [] as string[] };
+  let current = start;
   const host: WorkspaceToolsHost = {
     pages: () => PAGES,
     currentPage: () => current,
@@ -42,8 +43,8 @@ function setup(current: Page | null = PAGES[2]) {
     followTrace: (id) => calls.followed.push(id),
   };
   const tools = new ClientToolRegistry();
-  registerWorkspaceTools(tools, host);
-  return { tools, host, calls };
+  registerWorkspaceTools(tools, host, settleMs);
+  return { tools, host, calls, show: (p: Page | null) => (current = p) };
 }
 
 describe('findPage', () => {
@@ -54,7 +55,7 @@ describe('findPage', () => {
   });
 
   it('takes a part of a title only when exactly one page has it', () => {
-    expect(findPage(PAGES, 'checks')).toEqual({ page: PAGES[2] });
+    expect(findPage(PAGES, 'checks')).toEqual({ page: PAGES[2], partial: true });
     expect(findPage(PAGES, 'daily')).toEqual({ error: expect.stringContaining('more than one page') });
   });
 
@@ -109,6 +110,20 @@ describe('the workspace client tools (AI assistant design §6.4)', () => {
     expect(missing.content).toContain('"Daily checks"');
   });
 
+  it('says when a page was matched by part of its title, and when it is hidden from the navigation', async () => {
+    const { tools } = setup();
+    PAGES[3].hidden = true;
+    try {
+      const near = await tools.run('open_page', { page: 'checks' });
+      const hidden = await tools.run('open_page', { page: 'Daily notes' });
+
+      expect(near.content).toBe('Opened Daily checks (the only page whose title contains "checks").');
+      expect(hidden.content).toBe('Opened Daily notes. It is hidden from the navigation.');
+    } finally {
+      PAGES[3].hidden = false;
+    }
+  });
+
   it('keeps open_screen as the alias of open_page for the built-in page of that name', async () => {
     const { tools, calls } = setup();
 
@@ -136,6 +151,38 @@ describe('the workspace client tools (AI assistant design §6.4)', () => {
     const hidden = await tools.run('highlight_widget', { widget: 'queues' });
     expect(hidden.ok).toBe(false);
     expect(hidden.content).toContain('open the page');
+  });
+
+  it('waits, with no page named, for the page being shown to change when open_page was asked in the same round', async () => {
+    vi.useFakeTimers();
+    try {
+      const { tools, calls, show } = setup(PAGES[0], 3000);
+
+      // The navigation lands a little after highlight_widget starts, as the client starts each call as it arrives.
+      const outcome = tools.run('highlight_widget', { widget: 'widget:queues' });
+      await vi.advanceTimersByTimeAsync(250);
+      show(PAGES[1]);
+      await vi.advanceTimersByTimeAsync(200);
+
+      expect((await outcome).ok).toBe(true);
+      expect(calls.highlighted).toEqual(['builtin-broker-queues']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives up after the wait when the page being shown never holds the widget', async () => {
+    vi.useFakeTimers();
+    try {
+      const { tools } = setup(PAGES[0], 500);
+
+      const outcome = tools.run('highlight_widget', { widget: 'widget:queues' });
+      await vi.advanceTimersByTimeAsync(700);
+
+      expect((await outcome).content).toContain('holds no widget');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('has nothing to highlight when no page is showing', async () => {

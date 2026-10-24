@@ -26,6 +26,21 @@ describe('highlightWidget', () => {
     expect(el.classList.contains(HIGHLIGHT_CLASS)).toBe(false);
   });
 
+  it('keeps the outline for the full time after a repeated call, not to the first call timer', async () => {
+    vi.useFakeTimers();
+    const el = frame('w1');
+
+    await highlightWidget(document, 'w1', 100, 500);
+    vi.advanceTimersByTime(300);
+    await highlightWidget(document, 'w1', 100, 500);
+    vi.advanceTimersByTime(300);
+
+    // 600 ms after the first call, but only 300 after the second.
+    expect(el.classList.contains(HIGHLIGHT_CLASS)).toBe(true);
+    vi.advanceTimersByTime(200);
+    expect(el.classList.contains(HIGHLIGHT_CLASS)).toBe(false);
+  });
+
   it('waits for a frame that is drawn a little later, as a page that is still opening draws it', async () => {
     vi.useFakeTimers();
     const outcome = highlightWidget(document, 'late', 1000, 500);

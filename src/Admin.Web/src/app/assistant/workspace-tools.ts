@@ -20,6 +20,10 @@ export interface WorkspaceToolsHost {
 /** The backend's adoption rule for a correlation id (`CorrelationId.IsAdoptable` on the host). */
 const CORRELATION_ID = /^[A-Za-z0-9_-]{1,128}$/;
 
+/** How long a pageless `highlight_widget` waits for the page being shown to hold the widget, and how often it looks. */
+export const SETTLE_MS = 3000;
+const SETTLE_POLL_MS = 100;
+
 /** The prefix a widget type's catalogue id carries, which a tool accepts so the model can pass the id it was given. */
 const WIDGET_PREFIX = 'widget:';
 
@@ -31,7 +35,7 @@ function same(a: string, b: string): boolean {
  * A page by what the model names: its id, its title as shown, or the screen path of a built-in page. An unknown or an
  * ambiguous name is an error that lists the titles, so the model can say what exists instead of guessing.
  */
-export function findPage(pages: readonly Page[], query: string): { page: Page } | { error: string } {
+export function findPage(pages: readonly Page[], query: string): { page: Page; partial?: true } | { error: string } {
   const wanted = query.trim();
   const found =
     pages.find((p) => p.id === wanted) ??
@@ -39,7 +43,7 @@ export function findPage(pages: readonly Page[], query: string): { page: Page } 
     pages.find((p) => p.builtIn !== null && same(p.builtIn, wanted));
   if (found) return { page: found };
   const partial = pages.filter((p) => wanted !== '' && p.title.toLowerCase().includes(wanted.toLowerCase()));
-  if (partial.length === 1) return { page: partial[0] };
+  if (partial.length === 1) return { page: partial[0], partial: true };
   const titles = pages.map((p) => `"${p.title}"`).join(', ');
   return {
     error:
@@ -70,13 +74,15 @@ const text = (description: string): Record<string, unknown> => ({ type: 'string'
  * The client's tools for the workspace (AI assistant design §6.4). Each changes only the view, never the platform:
  * routing, outlining and offering a widget the operator then adds with a click.
  */
-export function registerWorkspaceTools(tools: ClientToolRegistry, host: WorkspaceToolsHost): void {
-  const openPage = async (query: string): Promise<{ page: Page } | ToolOutcome> => {
+export function registerWorkspaceTools(
+  tools: ClientToolRegistry,
+  host: WorkspaceToolsHost,
+  settleMs = SETTLE_MS,
+): void {
+  const openPage = async (query: string): Promise<{ page: Page; partial?: true } | ToolOutcome> => {
     const found = findPage(host.pages(), query);
     if ('error' in found) return { ok: false, content: found.error };
-    return (await host.open(found.page))
-      ? { page: found.page }
-      : { ok: false, content: 'The console did not navigate.' };
+    return (await host.open(found.page)) ? found : { ok: false, content: 'The console did not navigate.' };
   };
 
   tools.register({
@@ -93,7 +99,11 @@ export function registerWorkspaceTools(tools: ClientToolRegistry, host: Workspac
     ),
     run: async (input) => {
       const opened = await openPage(String(input['page'] ?? ''));
-      return 'page' in opened ? { ok: true, content: `Opened ${opened.page.title}.` } : opened;
+      if (!('page' in opened)) return opened;
+      // What the model should not have to guess: that the name was a near match, or that the page is out of the navigation.
+      const near = opened.partial ? ` (the only page whose title contains "${String(input['page'])}")` : '';
+      const hidden = opened.page.hidden ? ' It is hidden from the navigation.' : '';
+      return { ok: true, content: `Opened ${opened.page.title}${near}.${hidden}` };
     },
   });
 
@@ -140,14 +150,26 @@ export function registerWorkspaceTools(tools: ClientToolRegistry, host: Workspac
     ),
     run: async (input) => {
       const pageQuery = typeof input['page'] === 'string' && input['page'].trim() !== '' ? input['page'] : null;
-      let page = host.currentPage();
+      const query = String(input['widget'] ?? '');
+      let page: Page | null;
+      let widget: WidgetInstance | undefined;
       if (pageQuery !== null) {
         const found = findPage(host.pages(), pageQuery);
         if ('error' in found) return { ok: false, content: found.error };
         page = found.page;
+        widget = findWidget(host.widgetsOf(page), query);
+      } else {
+        // The page being shown, which a navigation asked for in the same round may not have reached yet: the client
+        // starts each call as it arrives, so a miss waits for the page to settle before it is one.
+        const deadline = Date.now() + settleMs;
+        for (;;) {
+          page = host.currentPage();
+          widget = page ? findWidget(host.widgetsOf(page), query) : undefined;
+          if (widget || Date.now() >= deadline) break;
+          await new Promise<void>((resolve) => setTimeout(resolve, SETTLE_POLL_MS));
+        }
       }
       if (!page) return { ok: false, content: 'No page is being shown.' };
-      const widget = findWidget(host.widgetsOf(page), String(input['widget'] ?? ''));
       if (!widget)
         return { ok: false, content: `The page "${page.title}" holds no widget "${String(input['widget'])}".` };
       return (await host.highlight(widget.id))

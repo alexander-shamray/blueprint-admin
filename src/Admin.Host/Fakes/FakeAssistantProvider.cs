@@ -78,7 +78,9 @@ public sealed class FakeAssistantProvider : IAssistantProvider
             else
             {
                 yield return new ToolCall($"fake-{Guid.NewGuid():N}", "open_page", new JsonObject { ["page"] = page });
-                yield return new ToolCall($"fake-{Guid.NewGuid():N}", "highlight_widget", new JsonObject { ["widget"] = widget.Id, ["page"] = page });
+                // No page: the widget is on the page open_page is taking the console to, as a model that trusts the
+                // navigation would ask, so the client has to wait for it.
+                yield return new ToolCall($"fake-{Guid.NewGuid():N}", "highlight_widget", new JsonObject { ["widget"] = widget.Id });
             }
 
             yield return new UsageReport(new Usage(input, said.Length / 4, 0));
@@ -140,8 +142,10 @@ public sealed class FakeAssistantProvider : IAssistantProvider
         string? id = (last.Input["widget"] ?? last.Input["type"])?.GetValue<string>();
         string label = request.Catalogue.FirstOrDefault(c => c.Id == id)?.Label ?? id ?? "?";
 
+        string? page = calls.Calls.FirstOrDefault(c => c.Name == "open_page")?.Input["page"]?.GetValue<string>();
+
         return last.Name == "highlight_widget"
-            ? FakeAssistantScripts.WidgetFound(label, last.Input["page"]?.GetValue<string>() ?? "?", russian)
+            ? FakeAssistantScripts.WidgetFound(label, page ?? "?", russian)
             : FakeAssistantScripts.WidgetOffered(label, russian);
     }
 
