@@ -434,8 +434,10 @@ The question it answers: *what is happening now, and where is it stuck?*
     the type on the page being shown: a Logs widget's services, a Queues
     widget's name filter (which sets "parked only" aside). The widget says it
     was pointed and offers the way back to its configured view; the saved page
-    is not written. When the page has none, the click opens the built-in page
-    instead, which shows every service or queue.
+    is not written. When the page has none, the click points the same kind of
+    widget on the built-in Logs or Broker page and opens that page, so it
+    opens filtered; only a workspace with no such page or widget opens the
+    plain page, which shows every service or queue.
   - A parked queue opens in a dead-letter workbench that is showing, in the
     parked twin that holds messages (`error` before `skipped`); with none
     showing it opens the Broker page.
