@@ -295,7 +295,7 @@ export const BROKER_WIDGETS = {
       "The BFF's read-model projection: whether its queue has drained, a Repair that sends what the BFF inbox has " +
       'not recorded, and a Rebuild that stops the BFF, deletes its order projection, replays the outbox and ' +
       'restarts it. Use Repair first when the BFF shows stale data; Rebuild is destructive and asks for a typed ' +
-      "confirmation. The job's output shows in the page's Job output widget.",
+      "confirmation. The job's output shows in the widget itself.",
     component: () => import('../features/broker/widgets/bff-projection-widget').then((m) => m.BffProjectionWidget),
     defaultSize: { cols: 10, rows: 12 },
     minSize: { cols: 6, rows: 5 },
