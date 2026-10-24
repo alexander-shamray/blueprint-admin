@@ -20,7 +20,7 @@ import { LanguageService } from './core/i18n/language-service';
 import { THEME_CHOICES, ThemeService } from './core/theme/theme-service';
 import { CommandPalette } from './shared/command-palette/command-palette';
 import { differsFromBuiltIn } from './workspace/built-in-pages';
-import { WIDGETS, WidgetPreset, WidgetType } from './workspace/widgets';
+import { ASSISTANT, WIDGETS, WidgetPreset, WidgetType } from './workspace/widgets';
 import { RunningWork } from './workspace/running-work';
 import { WorkspaceService, describe } from './workspace/workspace-service';
 
@@ -74,7 +74,8 @@ export class App {
   readonly workspace = inject(WorkspaceService);
   readonly assistant = inject(AssistantService);
   readonly runningWork = inject(RunningWork);
-  readonly widgetTypes = WIDGETS;
+  /** The Add widget picker: with the assistant off, no Assistant type (AI assistant design §9.1); a saved one still renders. */
+  readonly widgetTypes = computed(() => WIDGETS.filter((w) => w.type !== ASSISTANT.type || this.assistant.enabled()));
   readonly differsFromBuiltIn = differsFromBuiltIn;
   readonly themeChoices = THEME_CHOICES.map((value) => ({
     value,

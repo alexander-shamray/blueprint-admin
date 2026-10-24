@@ -25,7 +25,7 @@
       <mat-icon aria-hidden="true">add</mat-icon> <ng-container i18n>Add widget</ng-container>
     </button>
     <mat-menu #addMenu="matMenu">
-      @for (kind of widgetTypes; track kind.type) {
+      @for (kind of widgetTypes(); track kind.type) {
         @if (kind.presets.length === 1) {
           <button mat-menu-item (click)="addWidget(page.id, kind, kind.presets[0])">{{ kind.title }}</button>
         } @else {

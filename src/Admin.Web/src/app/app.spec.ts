@@ -4,6 +4,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { provideRouter } from '@angular/router';
 import { clearTranslations, loadTranslations } from '@angular/localize';
 import { App } from './app';
+import { AssistantService } from './assistant/assistant-service';
 import { SCREENS } from './screens';
 
 describe('App', () => {
@@ -61,6 +62,23 @@ describe('App', () => {
     expect(nav.length).toBe(SCREENS.length);
     expect(fixture.nativeElement.querySelector('router-outlet')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.hint')).toBeFalsy();
+  });
+
+  it('offers the Assistant widget type in the picker only while the assistant is on (AI assistant design §9.1)', () => {
+    TestBed.configureTestingModule({
+      imports: [App],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
+    });
+    const fixture = TestBed.createComponent(App);
+    const assistant = TestBed.inject(AssistantService);
+    const types = (): string[] => fixture.componentInstance.widgetTypes().map((w) => w.type);
+
+    assistant.status.set({ enabled: false, provider: null, model: null, reason: 'off' });
+    expect(types()).not.toContain('assistant');
+    expect(types()).toContain('note');
+
+    assistant.status.set({ enabled: true, provider: 'fake', model: 'scripted', reason: null });
+    expect(types()).toContain('assistant');
   });
 
   it('reads in the language whose translations loaded before it rendered', () => {
