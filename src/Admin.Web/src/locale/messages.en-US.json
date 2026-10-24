@@ -88,6 +88,7 @@
     "2891460305713405808": "The message was not sent: {$reason}",
     "8008978763544016156": "Added {$widget}",
     "1718299646396976644": "No room on this page for {$widget}",
+    "8918523225206988134": "Open a workspace page to add {$widget}",
     "6077710320374098029": "Add {$widget}",
     "1203886590346757252": "The assistant is answering",
     "3916748184733269875": "Command palette",

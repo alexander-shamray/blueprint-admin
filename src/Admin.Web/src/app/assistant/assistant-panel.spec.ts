@@ -6,7 +6,9 @@ import { AssistantService } from './assistant-service';
 import { AssistantStatus, STATUS_REASONS, TURN_END_REASONS } from './protocol';
 
 function stub() {
+  const added = signal<string[]>([]);
   return {
+    added,
     status: signal<AssistantStatus | null>({ enabled: true, provider: 'fake', model: 'scripted', reason: null }),
     state: signal<ConversationState>(EMPTY_CONVERSATION),
     panelOpen: signal(true),
@@ -16,7 +18,10 @@ function stub() {
     users: signal<string[]>([]),
     loadUsers: vi.fn(),
     pin: vi.fn(),
-    addProposed: vi.fn(() => true),
+    addProposed: vi.fn((_type: string, callId: string): 'added' | 'no-room' | 'no-page' => {
+      added.update((a) => [...a, callId]);
+      return 'added';
+    }),
     send: vi.fn(() => Promise.resolve()),
     cancel: vi.fn(() => Promise.resolve()),
     startOver: vi.fn(() => Promise.resolve()),
@@ -170,21 +175,45 @@ describe('AssistantPanel', () => {
     button.click();
     await fixture.whenStable();
 
-    expect(assistant.addProposed).toHaveBeenCalledWith('note');
+    expect(assistant.addProposed).toHaveBeenCalledWith('note', 'k-note');
     expect(element.querySelector<HTMLButtonElement>('.propose')!.textContent).toContain('Added Note');
     expect(element.querySelector<HTMLButtonElement>('.propose')!.disabled).toBe(true);
   });
 
   it('says when the page has no room for a proposed widget', async () => {
     const assistant = stub();
-    assistant.addProposed.mockReturnValue(false);
+    assistant.addProposed.mockReturnValue('no-room');
     assistant.state.set({ ...EMPTY_CONVERSATION, id: 'c1', items: [offered] });
     const { fixture, element } = await render(assistant);
 
     element.querySelector<HTMLButtonElement>('.propose')!.click();
     await fixture.whenStable();
 
+    // Refused, not taken: the button stays live to be pressed again once there is room.
     expect(element.querySelector('.propose')!.textContent).toContain('No room on this page for Note');
+    expect(element.querySelector<HTMLButtonElement>('.propose')!.disabled).toBe(false);
+  });
+
+  it('says to open a workspace page when none is showing, which is not the same as no room', async () => {
+    const assistant = stub();
+    assistant.addProposed.mockReturnValue('no-page');
+    assistant.state.set({ ...EMPTY_CONVERSATION, id: 'c1', items: [offered] });
+    const { fixture, element } = await render(assistant);
+
+    element.querySelector<HTMLButtonElement>('.propose')!.click();
+    await fixture.whenStable();
+
+    expect(element.querySelector('.propose')!.textContent).toContain('Open a workspace page to add Note');
+  });
+
+  it('does not offer again a widget the operator already added, as when the conversation is redrawn after a reload', async () => {
+    const assistant = stub();
+    assistant.added.set(['k-note']);
+    assistant.state.set({ ...EMPTY_CONVERSATION, id: 'c1', items: [offered] });
+    const { element } = await render(assistant);
+
+    expect(element.querySelector('.propose')!.textContent).toContain('Added Note');
+    expect(element.querySelector<HTMLButtonElement>('.propose')!.disabled).toBe(true);
   });
 
   it('offers no button for a proposal that failed, or for any other tool', async () => {
