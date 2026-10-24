@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Admin.Assistant.Protocol;
 
 namespace Admin.Host.Fakes;
 
@@ -42,6 +43,53 @@ public static partial class FakeAssistantScripts
 
         return tool is null ? null : (tool, id.Value);
     }
+
+    /// <summary>Words that make a message about a widget (§6.4); without one the widget's name alone is not enough, since "logs" names a screen too.</summary>
+    public static readonly string[] WidgetWords = ["widget", "виджет"];
+
+    /// <summary>Words that ask for a widget to be added rather than found.</summary>
+    public static readonly string[] AddWords = ["add", "propose", "добав", "предлож"];
+
+    /// <summary>The catalogue's id prefix for a widget type (the SPA's <c>WIDGET_ID_PREFIX</c>).</summary>
+    public const string WidgetIdPrefix = "widget:";
+
+    /// <summary>
+    /// The widget a message names, by the catalogue's widget entries (the longest label that appears in it wins), and
+    /// whether it asks to add one. Null unless the message says "widget" and names one.
+    /// </summary>
+    public static (CatalogueEntry Widget, bool Add)? WidgetAsk(string text, IReadOnlyList<CatalogueEntry> catalogue)
+    {
+        if (!WidgetWords.Any(w => text.Contains(w, StringComparison.OrdinalIgnoreCase)))
+        {
+            return null;
+        }
+
+        CatalogueEntry? named = catalogue
+            .Where(e => e.Id.StartsWith(WidgetIdPrefix, StringComparison.Ordinal) && text.Contains(e.Label, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(e => e.Label.Length)
+            .FirstOrDefault();
+
+        return named is null ? null : (named, AddWords.Any(w => text.Contains(w, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    /// <summary>The label of the screen whose path starts a widget's <c>where</c>, or null for a widget no built-in page holds.</summary>
+    public static string? PageOf(CatalogueEntry widget, IReadOnlyList<CatalogueEntry> catalogue)
+    {
+        string first = widget.Where.Split(',')[0].Trim();
+
+        return first.StartsWith('/') ? catalogue.FirstOrDefault(e => e.Id == first[1..])?.Label : null;
+    }
+
+    public static string Locating(string label, bool russian) => russian ? $"Ищу виджет «{label}». " : $"Looking for the {label} widget. ";
+
+    public static string WidgetFound(string label, string page, bool russian) =>
+        russian ? $"Виджет «{label}» на странице «{page}»; я его выделил." : $"The {label} widget is on the {page} page; I outlined it.";
+
+    public static string WidgetOffered(string label, bool russian) =>
+        russian ? $"Нажмите кнопку под ответом, чтобы добавить виджет «{label}»." : $"Press the button under this reply to add the {label} widget.";
+
+    public static string WidgetNotShown(string why, bool russian) =>
+        russian ? $"Не получилось показать виджет: {why}" : $"The widget could not be shown: {why}";
 
     public static string Fetching(bool russian) => russian ? "Запрашиваю платформу. " : "Asking the platform. ";
 

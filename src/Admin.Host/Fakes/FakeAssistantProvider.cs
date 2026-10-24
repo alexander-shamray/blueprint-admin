@@ -39,6 +39,7 @@ public sealed class FakeAssistantProvider : IAssistantProvider
             {
                 StackStatus => StackReply(result, russian),
                 "get_stock" or "get_payment" => PlatformReply(call.Name, result, russian),
+                "open_page" or "propose_widget" => WidgetReply(request, russian),
                 _ => OpenReply(request, call, result, russian),
             };
 
@@ -57,6 +58,30 @@ public sealed class FakeAssistantProvider : IAssistantProvider
             yield return new TextDelta(fetching);
             yield return new ToolCall($"fake-{Guid.NewGuid():N}", tool, new JsonObject { [parameter] = id });
             yield return new UsageReport(new Usage(input, fetching.Length / 4, 0));
+            yield return new RoundEnd(ProviderStop.Done);
+            yield break;
+        }
+
+        // A message about a widget by name (§6.4): find it on its page and outline it, or offer to add it.
+        if (FakeAssistantScripts.WidgetAsk(question, request.Catalogue) is var (widget, add) && widget is not null
+            && request.Tools.Any(t => t.Name == "open_page") && request.Tools.Any(t => t.Name == "highlight_widget") && request.Tools.Any(t => t.Name == "propose_widget"))
+        {
+            string? page = add ? null : FakeAssistantScripts.PageOf(widget, request.Catalogue);
+            string said = FakeAssistantScripts.Locating(widget.Label, russian);
+
+            yield return new TextDelta(said);
+
+            if (page is null)
+            {
+                yield return new ToolCall($"fake-{Guid.NewGuid():N}", "propose_widget", new JsonObject { ["type"] = widget.Id });
+            }
+            else
+            {
+                yield return new ToolCall($"fake-{Guid.NewGuid():N}", "open_page", new JsonObject { ["page"] = page });
+                yield return new ToolCall($"fake-{Guid.NewGuid():N}", "highlight_widget", new JsonObject { ["widget"] = widget.Id, ["page"] = page });
+            }
+
+            yield return new UsageReport(new Usage(input, said.Length / 4, 0));
             yield return new RoundEnd(ProviderStop.Done);
             yield break;
         }
@@ -98,6 +123,26 @@ public sealed class FakeAssistantProvider : IAssistantProvider
         string label = Label(request, call.Input["path"]?.GetValue<string>());
 
         return result.Ok ? FakeAssistantScripts.Opened(label, russian) : FakeAssistantScripts.NotOpened(label, result.Content, russian);
+    }
+
+    // The round's results, read together: a widget found on its page, an offer made, or the first thing that went wrong.
+    private static string WidgetReply(TurnRequest request, bool russian)
+    {
+        AssistantMessage calls = request.History.OfType<AssistantMessage>().Last();
+        ToolResultsMessage results = request.History.OfType<ToolResultsMessage>().Last();
+
+        if (results.Results.FirstOrDefault(r => !r.Ok) is { } failed)
+        {
+            return FakeAssistantScripts.WidgetNotShown(failed.Content, russian);
+        }
+
+        ToolCall last = calls.Calls[^1];
+        string? id = (last.Input["widget"] ?? last.Input["type"])?.GetValue<string>();
+        string label = request.Catalogue.FirstOrDefault(c => c.Id == id)?.Label ?? id ?? "?";
+
+        return last.Name == "highlight_widget"
+            ? FakeAssistantScripts.WidgetFound(label, last.Input["page"]?.GetValue<string>() ?? "?", russian)
+            : FakeAssistantScripts.WidgetOffered(label, russian);
     }
 
     // Read from the result as the model would read it: the status the platform answered, and for a 200 the body's fields.
