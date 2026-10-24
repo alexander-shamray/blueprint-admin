@@ -12,7 +12,13 @@ namespace Admin.Host.Stack;
 public sealed class LogFollower(ComposeService compose, IProcessRunner runner) : IDisposable
 {
     private readonly SemaphoreSlim gate = new(1, 1);
-    private Job? current;
+    private volatile Job? current;
+
+    /// <summary>
+    /// The follow last started, running or not, or null before the first. Read without the gate: a reader only wants
+    /// the latest job, and through this it can never start, stop or replace one.
+    /// </summary>
+    public Job? Current => current;
 
     public async Task<Job> StartAsync(IReadOnlyList<string> services, CancellationToken cancellationToken)
     {
