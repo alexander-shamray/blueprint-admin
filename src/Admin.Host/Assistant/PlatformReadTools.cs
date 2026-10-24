@@ -44,7 +44,10 @@ public sealed class PlatformReadTools(ApiCatalog catalog, RequestProxy proxy, To
     // opened before the stack was up would otherwise keep no platform tools until someone reloaded the API screen.
     private static readonly TimeSpan ReloadAfter = TimeSpan.FromSeconds(30);
 
-    private long lastReload = long.MinValue;
+    // Milliseconds of Environment.TickCount64 at the last reload; negative until there has been one.
+    private long lastReload = -1;
+
+    private readonly Lock gate = new();
 
     /// <summary>The conversation's <c>hostOptions</c> key that pins one realm user for every read (§6.5).</summary>
     public const string IdentityOption = "identity";
@@ -63,22 +66,32 @@ public sealed class PlatformReadTools(ApiCatalog catalog, RequestProxy proxy, To
         Snapshot next = Snapshot.Of(await catalog.GetAsync(cancellationToken), services, reserved);
 
         // The catalogue keeps its first load for the host's lifetime, even one made with the stack down.
-        if (next.Tools.Count == 0 && services.Count > 0 && Environment.TickCount64 - Interlocked.Read(ref lastReload) > ReloadAfter.TotalMilliseconds)
+        long now = Environment.TickCount64;
+        long last = Interlocked.Read(ref lastReload);
+
+        // Claimed by exchange, so two opens at once reload once.
+        if (ShouldReload(next.Tools.Count, services.Count, last, now) && Interlocked.CompareExchange(ref lastReload, now, last) == last)
         {
-            Interlocked.Exchange(ref lastReload, Environment.TickCount64);
             next = Snapshot.Of(await catalog.ReloadAsync(cancellationToken), services, reserved);
         }
 
-        // A conversation already open keeps the names it was given, so a name an earlier read held still resolves.
-        Dictionary<string, ApiOperation> known = new(current.Operations, StringComparer.Ordinal);
-
-        foreach ((string name, ApiOperation operation) in next.Operations)
+        lock (gate)
         {
-            known[name] = operation;
-        }
+            // A conversation already open keeps the names it was given, so a name an earlier read held still resolves.
+            Dictionary<string, ApiOperation> known = new(current.Operations, StringComparer.Ordinal);
 
-        current = next with { Operations = known };
+            foreach ((string name, ApiOperation operation) in next.Operations)
+            {
+                known[name] = operation;
+            }
+
+            current = next with { Operations = known };
+        }
     }
+
+    /// <summary>Whether a catalogue with <paramref name="tools"/> reads for <paramref name="services"/> chosen services is asked for again.</summary>
+    internal static bool ShouldReload(int tools, int services, long lastReload, long now) =>
+        tools == 0 && services > 0 && (lastReload < 0 || now - lastReload > ReloadAfter.TotalMilliseconds);
 
     public async ValueTask<ToolOutcome> InvokeAsync(string name, JsonObject input, ToolContext context, CancellationToken cancellationToken)
     {
