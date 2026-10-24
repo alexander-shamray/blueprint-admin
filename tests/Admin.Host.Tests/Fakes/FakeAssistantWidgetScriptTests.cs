@@ -75,7 +75,8 @@ public sealed class FakeAssistantWidgetScriptTests
         events.OfType<ToolCall>().Select(c => c.Name).ShouldBe(["open_page", "highlight_widget"]);
         events.OfType<ToolCall>().First().Input["page"]!.GetValue<string>().ShouldBe("Broker");
         events.OfType<ToolCall>().Last().Input["widget"]!.GetValue<string>().ShouldBe("widget:queues");
-        events.OfType<ToolCall>().Last().Input["page"]!.GetValue<string>().ShouldBe("Broker");
+        // No page on the second call: the client waits for the first to land (workspace-tools.ts).
+        events.OfType<ToolCall>().Last().Input.ContainsKey("page").ShouldBeFalse();
     }
 
     [Fact]
@@ -93,7 +94,7 @@ public sealed class FakeAssistantWidgetScriptTests
     public async Task The_replies_say_what_was_found_what_was_offered_or_what_went_wrong()
     {
         ToolCall open = new("c1", "open_page", new JsonObject { ["page"] = "Broker" });
-        ToolCall highlight = new("c2", "highlight_widget", new JsonObject { ["widget"] = "widget:queues", ["page"] = "Broker" });
+        ToolCall highlight = new("c2", "highlight_widget", new JsonObject { ["widget"] = "widget:queues" });
         ToolCall propose = new("c3", "propose_widget", new JsonObject { ["type"] = "widget:note" });
 
         string found = Reply(await Played(Following(open, highlight, new ToolResult("c1", true, "ok"), new ToolResult("c2", true, "ok"))));

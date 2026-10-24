@@ -9,6 +9,8 @@ export const HIGHLIGHT_WAIT_MS = 3000;
 
 const POLL_MS = 50;
 
+const timers = new WeakMap<Element, ReturnType<typeof setTimeout>>();
+
 function frameOf(document: Document, instanceId: string): Element | null {
   return (
     [...document.querySelectorAll('[data-widget-id]')].find((e) => e.getAttribute('data-widget-id') === instanceId) ??
@@ -35,6 +37,11 @@ export async function highlightWidget(
   if (!frame) return false;
   frame.scrollIntoView({ block: 'center', behavior: 'smooth' });
   frame.classList.add(HIGHLIGHT_CLASS);
-  setTimeout(() => frame.classList.remove(HIGHLIGHT_CLASS), showMs);
+  // One timer per frame: a repeated call restarts the outline instead of losing it to the first call's timer.
+  clearTimeout(timers.get(frame));
+  timers.set(
+    frame,
+    setTimeout(() => frame.classList.remove(HIGHLIGHT_CLASS), showMs),
+  );
   return true;
 }
