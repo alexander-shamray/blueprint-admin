@@ -274,6 +274,30 @@ public sealed class PlatformReadToolsTests(AdminHostFactory factory) : IClassFix
         Listed(operations, ["catalog"], reserved: ["stack_status"]).ShouldBe(["get_fine"]);
     }
 
+    [Theory]
+    [InlineData(0, 5, -1, 100, true)]
+    [InlineData(0, 5, 1_000, 20_000, false)]
+    [InlineData(0, 5, 1_000, 31_001, true)]
+    [InlineData(0, 0, -1, 100, false)]
+    [InlineData(7, 5, -1, 100, false)]
+    public void An_empty_catalogue_is_asked_for_again_no_oftener_than_every_thirty_seconds_and_the_first_time_at_once(int tools, int services, long last, long now, bool reload)
+    {
+        PlatformReadTools.ShouldReload(tools, services, last, now).ShouldBe(reload);
+    }
+
+    [Fact]
+    public void A_cut_never_splits_a_surrogate_pair()
+    {
+        // 11999 ASCII characters then an astral one, so the 12000-character cut would land between its halves.
+        string body = new string('a', PlatformReadTools.MaxBodyChars - 1) + "\U0001F600" + "tail";
+        ProxyResponded responded = new(200, new Dictionary<string, string[]>(), body, false, null, 5, "corr-2");
+
+        string kept = JsonNode.Parse(PlatformReadTools.Outcome(responded, null).Content)!["body"]!.GetValue<string>();
+
+        kept.Length.ShouldBe(PlatformReadTools.MaxBodyChars - 1);
+        char.IsHighSurrogate(kept[^1]).ShouldBeFalse();
+    }
+
     [Fact]
     public void A_body_whose_quotes_double_its_length_is_cut_until_the_whole_result_fits_the_core_bound_with_its_flags_first()
     {
