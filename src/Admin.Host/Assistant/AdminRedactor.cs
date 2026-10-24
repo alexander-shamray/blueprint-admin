@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Admin.Assistant;
 using Admin.Host.Broker;
 using Admin.Host.Config;
@@ -10,8 +11,9 @@ namespace Admin.Host.Assistant;
 /// The admin's redactor (AI assistant design §10): <see cref="FixtureScrubber"/>'s rules first, then every secret the
 /// host knows, as exact values, longest first: each realm user's password, <see cref="AdminOptions.SqlPassword"/>, the
 /// password in <see cref="AdminOptions.BffBrokerConnection"/>, and the dead-letter operator's password while a run holds
-/// one, each also in the quoted form the host writes it into a command line. Exact values fail closed: the local realm's default users have their names for passwords, so those names are
-/// redacted too, wherever they appear.
+/// one. Each is also matched in the forms the host writes it in: quoted into a command line, and escaped inside a read
+/// tool's JSON. Exact values fail closed: the local realm's default users have their names for passwords, so those
+/// names are redacted too, wherever they appear.
 /// </summary>
 public sealed class AdminRedactor(AdminOptions options, DeadLetterService deadLetters) : IRedactor
 {
@@ -43,10 +45,12 @@ public sealed class AdminRedactor(AdminOptions options, DeadLetterService deadLe
             secrets.Add(minted);
         }
 
-        // Each also as the host writes it into a PowerShell single-quoted string (LoadRunService's blocks), which a
-        // command line in a read carries: a quote in the secret is doubled there, so the exact value would not match.
+        // Each also as the host writes it elsewhere, where the exact value would not match: in a PowerShell single-quoted
+        // string, a quote doubled (a load run step's command line, LoadRunService), and inside a read tool's JSON
+        // result, escaped by the encoder AdminReadTools serializes with.
         return secrets
             .SelectMany(s => new[] { s, s.Replace("'", "''", StringComparison.Ordinal) })
+            .SelectMany(s => new[] { s, JsonEncodedText.Encode(s, AdminReadTools.Json.Encoder).Value })
             .Where(s => s.Length > 0)
             .Distinct(StringComparer.Ordinal);
     }
