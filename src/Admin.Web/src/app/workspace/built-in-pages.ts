@@ -65,6 +65,11 @@ const BUILT_IN_LAYOUTS: Record<ScreenPath, readonly Placed[]> = {
   ],
 };
 
+/** The screens whose built-in page holds a widget of `type` by default, in `SCREENS`' order; none for a type added by hand. */
+export function builtInScreensHolding(type: string): ScreenPath[] {
+  return SCREENS.map((s) => s.path).filter((path) => BUILT_IN_LAYOUTS[path].some(([kind]) => kind.type === type));
+}
+
 /**
  * A built-in page's widgets as the console ships them (widget-workspace spec §5.3). A built-in page the operator has
  * not changed is saved as `widgets: null` and built from here, so a later phase that changes a default reaches every
