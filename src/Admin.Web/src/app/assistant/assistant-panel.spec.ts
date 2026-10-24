@@ -67,6 +67,18 @@ describe('AssistantPanel', () => {
     expect(element.querySelector('select')).toBeNull();
   });
 
+  it('shows the pinned user chosen when the list arrives after the pin was set', async () => {
+    const assistant = stub();
+    assistant.identity.set('browser');
+    const { fixture, element } = await render(assistant);
+    expect(element.querySelector('select')).toBeNull();
+
+    assistant.users.set(['demo', 'browser']);
+    await fixture.whenStable();
+
+    expect(element.querySelector('select')!.value).toBe('browser');
+  });
+
   it('pins the realm user the platform reads are made as, and takes the pin off again', async () => {
     const assistant = stub();
     assistant.users.set(['demo', 'browser']);

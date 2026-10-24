@@ -210,14 +210,24 @@ export class AssistantService {
   /** The usernames the host offers; the last list is kept if the host does not answer. */
   loadUsers(): void {
     this.host.identityUsers().subscribe({
-      next: (users) => this.users.set(users.map((u) => u.username)),
+      next: (users) => {
+        const names = users.map((u) => u.username);
+        this.users.set(names);
+        // A pin the host no longer lists would be refused by every read, behind a picker that shows nothing chosen.
+        const pinned = this.identity();
+        if (pinned !== null && !names.includes(pinned)) this.pin(null);
+      },
       error: () => undefined,
     });
   }
 
-  private hostOptions(): Record<string, unknown> | null {
+  /**
+   * An empty object, not null, when nothing is pinned: the host keeps a conversation's options from the turn before when a
+   * turn sends none, so taking the pin off has to say so.
+   */
+  private hostOptions(): Record<string, unknown> {
     const identity = this.identity();
-    return identity ? { identity } : null;
+    return identity ? { identity } : {};
   }
 
   cancel(): Promise<void> {
