@@ -294,8 +294,10 @@ public sealed class AssistantSessionTests
 
         session.TryStart(Given.Turn("one"));
         await Given.UntilEnded(session);
+        // Read before the turn starts: a scripted round is one text delta, so the turn can end before the read.
+        long after = session.View().LastEventId;
         session.TryStart(Given.Turn("two"));
-        await Given.UntilEnded(session, session.View().LastEventId);
+        await Given.UntilEnded(session, after);
 
         IReadOnlyList<HistoryMessage> first = provider.Requests[0].History;
         IReadOnlyList<HistoryMessage> second = provider.Requests[1].History;
@@ -315,8 +317,10 @@ public sealed class AssistantSessionTests
 
         session.TryStart(Given.Turn("where are the logs?"));
         await Given.UntilEnded(session);
+        // Read before the turn starts, as above.
+        long after = session.View().LastEventId;
         session.TryStart(Given.Turn("ORD-1", locale: "ru-RU"));
-        await Given.UntilEnded(session, session.View().LastEventId);
+        await Given.UntilEnded(session, after);
 
         TurnRequest first = provider.Requests[0];
         TurnRequest second = provider.Requests[1];
