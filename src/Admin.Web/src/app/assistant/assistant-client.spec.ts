@@ -155,15 +155,97 @@ describe('AssistantConversation', () => {
     ).toEqual(['a']);
   });
 
-  it('gives each answer a deadline, so one that hangs cannot hold the calls behind it', async () => {
-    const { host, conversation } = setup();
-    await conversation.send('logs?', null, 'en-US');
-
-    host.stream.emit('client_tool_call', { callId: 'k1', name: 'open_screen', input: { path: 'logs' } }, 1);
+  it('does not run a queued call of an ended turn once a new message has made the conversation run again', async () => {
+    const { host, conversation, tools } = setup();
+    const order: string[] = [];
+    let release = (): void => undefined;
+    tools.register({
+      descriptor: viewTool('slow', 'Slow', 'Takes a while.', { type: 'object' }),
+      run: () =>
+        new Promise((resolve) => {
+          order.push('slow:start');
+          release = () => resolve({ ok: true, content: '' });
+        }),
+    });
+    tools.register({
+      descriptor: viewTool('quick', 'Quick', 'Does not.', { type: 'object' }),
+      run: () => {
+        order.push('quick');
+        return { ok: true, content: '' };
+      },
+    });
+    await conversation.send('go', null, 'en-US');
+    host.stream.emit('client_tool_call', { callId: 'a', name: 'slow', input: {} }, 1);
+    host.stream.emit('client_tool_call', { callId: 'b', name: 'quick', input: {} }, 2);
+    await settle();
+    host.stream.emit('turn_ended', { reason: 'cancelled', category: null }, 3);
     await settle();
 
-    const answer = host.requests.find((r) => r.url.endsWith('/tool-results'));
-    expect(answer?.signal).toBeInstanceOf(AbortSignal);
+    // The operator sends again before `slow` returns, so the conversation is running, but another turn.
+    await conversation.send('again', null, 'en-US');
+    release();
+    await settle();
+
+    expect(order).toEqual(['slow:start']);
+  });
+
+  it('does not run a queued call after the conversation is started over', async () => {
+    const { host, conversation, tools } = setup();
+    const order: string[] = [];
+    let release = (): void => undefined;
+    tools.register({
+      descriptor: viewTool('slow', 'Slow', 'Takes a while.', { type: 'object' }),
+      run: () =>
+        new Promise((resolve) => {
+          order.push('slow:start');
+          release = () => resolve({ ok: true, content: '' });
+        }),
+    });
+    tools.register({
+      descriptor: viewTool('quick', 'Quick', 'Does not.', { type: 'object' }),
+      run: () => {
+        order.push('quick');
+        return { ok: true, content: '' };
+      },
+    });
+    host.on('DELETE', /\/conversations\/c1$/, () => new Response(null, { status: 204 }));
+    await conversation.send('go', null, 'en-US');
+    host.stream.emit('client_tool_call', { callId: 'a', name: 'slow', input: {} }, 1);
+    host.stream.emit('client_tool_call', { callId: 'b', name: 'quick', input: {} }, 2);
+    await settle();
+
+    await conversation.startOver();
+    release();
+    await settle();
+
+    expect(order).toEqual(['slow:start']);
+  });
+
+  it('gives each answer a deadline, and a call behind one whose answer fails still runs', async () => {
+    const { host, conversation, tools } = setup();
+    const order: string[] = [];
+    tools.register({
+      descriptor: viewTool('quick', 'Quick', 'Does not.', { type: 'object' }),
+      run: (input) => {
+        order.push(String(input['n']));
+        return { ok: true, content: '' };
+      },
+    });
+    // The first answer never lands, as when the host stops responding: the deadline aborts it.
+    host.on('POST', /\/tool-results$/, (body) => {
+      if ((body as { callId: string }).callId === 'a') throw new DOMException('timed out', 'TimeoutError');
+      return new Response(null, { status: 204 });
+    });
+    await conversation.send('go', null, 'en-US');
+
+    host.stream.emit('client_tool_call', { callId: 'a', name: 'quick', input: { n: 1 } }, 1);
+    host.stream.emit('client_tool_call', { callId: 'b', name: 'quick', input: { n: 2 } }, 2);
+    await settle();
+
+    const answers = host.requests.filter((r) => r.url.endsWith('/tool-results'));
+    expect(answers.map((r) => (r.body as { callId: string }).callId)).toEqual(['a', 'b']);
+    expect(answers.every((r) => r.signal instanceof AbortSignal)).toBe(true);
+    expect(order).toEqual(['1', '2']);
   });
 
   it('streams the reply, runs a client tool, posts its result and ends', async () => {
