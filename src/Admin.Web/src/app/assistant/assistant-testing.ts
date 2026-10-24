@@ -31,7 +31,7 @@ export class FakeStream implements EventSourceLike {
 
 /** A host that answers each request by method and path, and keeps every request it was sent. */
 export class FakeHost {
-  readonly requests: { method: string; url: string; body: unknown }[] = [];
+  readonly requests: { method: string; url: string; body: unknown; signal?: AbortSignal }[] = [];
   readonly streams: FakeStream[] = [];
   private readonly routes: { method: string; url: RegExp; answer: (body: unknown) => Response }[] = [];
 
@@ -43,7 +43,8 @@ export class FakeHost {
   readonly fetch = (input: string, init?: RequestInit): Promise<Response> => {
     const method = init?.method ?? 'GET';
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
-    this.requests.push({ method, url: input, body });
+    // Only a request that carries a deadline or a cancel has a signal, so a spec that compares a whole request is unchanged.
+    this.requests.push({ method, url: input, body, ...(init?.signal ? { signal: init.signal } : {}) });
     const route = this.routes.find((r) => r.method === method && r.url.test(input));
     return Promise.resolve(route ? route.answer(body) : new Response(null, { status: 404 }));
   };

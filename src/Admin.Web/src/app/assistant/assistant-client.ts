@@ -76,7 +76,11 @@ export class AssistantClient {
 
   async answer(id: string, result: ClientToolResult): Promise<void> {
     // A 404 is a call the host already gave up on (its timeout, a cancel); there is nothing left to tell it.
-    const response = await this.http(`${this.conversation(id)}/tool-results`, json('POST', result));
+    // With a deadline: client calls are answered one after another, so one POST that hangs would hold the rest.
+    const response = await this.http(`${this.conversation(id)}/tool-results`, {
+      ...json('POST', result),
+      signal: AbortSignal.timeout(ANSWER_TIMEOUT_MS),
+    });
     if (!response.ok && response.status !== 404) throw await problem(response);
   }
 
@@ -118,6 +122,9 @@ export class AssistantClient {
     return response;
   }
 }
+
+/** How long the host is given to take a client tool's answer before the client gives up on that one call. */
+const ANSWER_TIMEOUT_MS = 15_000;
 
 function json(method: string, body: unknown): RequestInit {
   return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
@@ -327,8 +334,13 @@ export class AssistantConversation {
     // One at a time, in the order they came: a round that opens a page and then points at a widget on it must not
     // start the second before the first has landed.
     this.running = this.running
-      .then(() => this.tools.run(call.name, call.input))
-      .then((outcome) => this.client.answer(id, { callId: call.callId, ...outcome }))
+      .then(() => {
+        // A call that waited behind a slow one runs only if its turn is still the conversation's running turn: after a
+        // cancel or a start over, it would navigate or offer a widget for a turn nobody is waiting on.
+        if (this.state.id !== id || !this.state.running) return null;
+        return this.tools.run(call.name, call.input);
+      })
+      .then((outcome) => (outcome ? this.client.answer(id, { callId: call.callId, ...outcome }) : undefined))
       .catch(() => undefined);
   }
 
