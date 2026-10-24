@@ -2,8 +2,9 @@ import { DOCUMENT } from '@angular/common';
 import { Injectable, LOCALE_ID, computed, effect, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { HostClient } from '../core/host/host-client';
+import { TraceFollow } from '../features/trace/trace-follow';
 import { SCREENS } from '../screens';
-import { builtInScreensHolding, builtInWidgets } from '../workspace/built-in-pages';
+import { builtInScreensHolding, builtInWidgets, widgetsOf } from '../workspace/built-in-pages';
 import { WIDGETS } from '../workspace/widgets';
 import { RunningWork } from '../workspace/running-work';
 import { WorkspaceService } from '../workspace/workspace-service';
@@ -14,8 +15,10 @@ import {
   EMPTY_CONVERSATION,
   IdStore,
 } from './assistant-client';
-import { ClientToolRegistry, viewTool } from './client-tools';
+import { ClientToolRegistry } from './client-tools';
+import { highlightWidget } from './highlight';
 import { AssistantStatus, CatalogueEntry, OpenConversation } from './protocol';
+import { findWidgetType, registerWorkspaceTools } from './workspace-tools';
 
 /** Where the tab keeps its conversation's id, so a reload (a language switch among them) resumes it (§5.5). */
 export const CONVERSATION_KEY = 'admin.assistant.conversation';
@@ -101,6 +104,7 @@ export class AssistantService {
   private readonly workspace = inject(WorkspaceService);
   private readonly document = inject(DOCUMENT);
   private readonly host = inject(HostClient);
+  private readonly traceFollow = inject(TraceFollow);
   private readonly runningWork = inject(RunningWork);
   private readonly client = new AssistantClient();
   private readonly tools = new ClientToolRegistry();
@@ -139,26 +143,13 @@ export class AssistantService {
   });
 
   constructor() {
-    this.tools.register({
-      descriptor: viewTool(
-        'open_screen',
-        'Open a screen',
-        "Routes the console to a screen, by the catalogue entry's id.",
-        {
-          type: 'object',
-          properties: { path: { type: 'string', enum: SCREENS.map((s) => s.path), description: "The screen's id." } },
-          required: ['path'],
-          additionalProperties: false,
-        },
-      ),
-      run: async (input) => {
-        const screen = SCREENS.find((s) => s.path === input['path']);
-        if (!screen) return { ok: false, content: `There is no screen ${String(input['path'])}.` };
-        const opened = await this.router.navigate(['/', screen.path]);
-        return opened
-          ? { ok: true, content: `Opened ${screen.label} at /${screen.path}.` }
-          : { ok: false, content: 'The console did not navigate.' };
-      },
+    registerWorkspaceTools(this.tools, {
+      pages: () => this.workspace.pages(),
+      currentPage: () => this.workspace.currentPage(),
+      widgetsOf: (page) => widgetsOf(page),
+      open: (page) => this.router.navigate(this.workspace.pageLink(page.id)),
+      highlight: (instanceId) => highlightWidget(this.document, instanceId),
+      followTrace: (correlationId) => this.traceFollow.open(correlationId),
     });
     this.conversation = new AssistantConversation(
       this.client,
@@ -215,6 +206,24 @@ export class AssistantService {
     if (this.needsNotice()) return;
     this.askedFrom.set(this.router.url);
     return this.conversation.send(text, this.context(), this.locale, this.hostOptions());
+  }
+
+  /**
+   * The operator's click on a proposed widget (`propose_widget`, §6.4): adds it to the page being shown by the workspace's
+   * own add path, as the Add widget menu does. False when there is no such type, no page, or no room below the page's
+   * last widget.
+   */
+  addProposed(type: string): boolean {
+    const kind = findWidgetType(type);
+    const pageId = this.workspace.currentPageId();
+    if (!kind || !pageId) return false;
+    this.workspace.editing.set(true);
+    return this.workspace.addWidget(pageId, {
+      type: kind.type,
+      cols: kind.defaultSize.cols,
+      rows: kind.defaultSize.rows,
+      config: structuredClone(kind.presets[0].config),
+    });
   }
 
   /** Pins the realm user for the platform reads, or null to leave it to the host. */

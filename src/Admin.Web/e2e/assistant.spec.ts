@@ -78,6 +78,42 @@ test("a realm user pinned in the panel is who the platform reads are made as, an
   await expect(refused.first()).toContainText('HTTP 403');
 });
 
+test('asked where a widget lives, it opens the page that holds it and outlines the widget', async ({ page }) => {
+  await page.goto('/stack');
+  await page.getByRole('button', { name: 'Assistant', exact: true }).click();
+
+  await ask(page, 'where is the Queues widget?');
+
+  await expect(page).toHaveURL(/\/broker$/);
+  await expect(page.locator('[data-widget-id="builtin-broker-queues"]')).toHaveClass(/assistant-highlight/);
+  await expect(page.locator('app-assistant-panel .reply').last()).toHaveText(
+    'The Queues widget is on the Broker page; I outlined it.',
+  );
+  await expect(page.locator('app-assistant-panel .tool').first()).toContainText('Opening Broker');
+  // The outline is for a few seconds, not for good.
+  await expect(page.locator('[data-widget-id="builtin-broker-queues"]')).not.toHaveClass(/assistant-highlight/);
+});
+
+test("a widget the assistant proposes is added by the operator's click and by nothing else", async ({ page }) => {
+  await page.goto('/stack');
+  await page.getByRole('button', { name: 'Assistant', exact: true }).click();
+
+  await ask(page, 'please add a Note widget');
+
+  await expect(page.locator('app-assistant-panel .reply').last()).toHaveText(
+    'Press the button under this reply to add the Note widget.',
+  );
+  const add = page.getByRole('button', { name: 'Add Note' });
+  await expect(add).toBeVisible();
+  // Offered, not added: no Note on the page yet.
+  await expect(page.getByRole('article', { name: 'Note', exact: true })).toHaveCount(0);
+
+  await add.click();
+
+  await expect(page.getByRole('article', { name: 'Note', exact: true })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Added Note' })).toBeDisabled();
+});
+
 test('asked in Russian, it opens Logs and names it as labelled', async ({ page }) => {
   await page.goto('/stack');
   await page.getByRole('button', { name: 'Assistant', exact: true }).click();
