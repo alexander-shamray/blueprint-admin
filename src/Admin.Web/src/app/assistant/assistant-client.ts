@@ -168,6 +168,8 @@ export class AssistantConversation {
   private visible = false;
   private close: (() => void) | null = null;
   private readonly answered = new Set<string>();
+  /** The client calls being run, one after another. */
+  private running: Promise<unknown> = Promise.resolve();
   /** Counts messages sent, so a read begun before the latest one never overwrites what it started. */
   private sends = 0;
 
@@ -322,8 +324,10 @@ export class AssistantConversation {
     const id = this.state.id;
     if (!id || this.answered.has(call.callId)) return;
     this.answered.add(call.callId);
-    void this.tools
-      .run(call.name, call.input)
+    // One at a time, in the order they came: a round that opens a page and then points at a widget on it must not
+    // start the second before the first has landed.
+    this.running = this.running
+      .then(() => this.tools.run(call.name, call.input))
       .then((outcome) => this.client.answer(id, { callId: call.callId, ...outcome }))
       .catch(() => undefined);
   }
