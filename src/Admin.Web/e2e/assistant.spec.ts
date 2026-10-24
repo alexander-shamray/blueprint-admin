@@ -2,8 +2,9 @@ import { Page, expect, test } from '@playwright/test';
 import { openPalette } from './palette';
 
 // The assistant panel on FakePlatform (AI assistant design §14, "Playwright"): with no provider set, the fake one plays
-// its scripts, which open a screen named in English or in Russian through the client tool open_screen, and answer a
-// question about the stack from the host's read tool stack_status.
+// its scripts: open a screen named in English or in Russian (open_screen), find a widget on its page and outline it or
+// propose it (open_page, highlight_widget, propose_widget), and answer from the host's reads (stack_status) and the
+// platform's (get_stock, get_payment).
 
 async function ask(page: Page, question: string): Promise<void> {
   await page.getByRole('textbox', { name: 'Message to the assistant' }).fill(question);

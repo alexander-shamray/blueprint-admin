@@ -46,7 +46,7 @@ function setup(ids = memoryIds()) {
     ids,
     (s) => states.push(s),
   );
-  return { host, conversation, states, opened, ids };
+  return { host, conversation, states, opened, ids, tools };
 }
 
 describe('AssistantConversation', () => {
@@ -80,6 +80,43 @@ describe('AssistantConversation', () => {
       .filter((r) => r.url.endsWith('/turns'))
       .map((r) => (r.body as { hostOptions: unknown }).hostOptions);
     expect(turns).toEqual([{ identity: 'browser' }, {}]);
+  });
+
+  it('runs the client calls of a round one after another, in the order they came', async () => {
+    const { host, conversation, tools } = setup();
+    const order: string[] = [];
+    let release = (): void => undefined;
+    tools.register({
+      descriptor: viewTool('slow', 'Slow', 'Takes a while.', { type: 'object' }),
+      run: () =>
+        new Promise((resolve) => {
+          order.push('slow:start');
+          release = () => {
+            order.push('slow:end');
+            resolve({ ok: true, content: '' });
+          };
+        }),
+    });
+    tools.register({
+      descriptor: viewTool('quick', 'Quick', 'Does not.', { type: 'object' }),
+      run: () => {
+        order.push('quick');
+        return { ok: true, content: '' };
+      },
+    });
+    await conversation.send('go', null, 'en-US');
+
+    host.stream.emit('client_tool_call', { callId: 'a', name: 'slow', input: {} }, 1);
+    host.stream.emit('client_tool_call', { callId: 'b', name: 'quick', input: {} }, 2);
+    await settle();
+    expect(order).toEqual(['slow:start']);
+
+    release();
+    await settle();
+    expect(order).toEqual(['slow:start', 'slow:end', 'quick']);
+    expect(
+      host.requests.filter((r) => r.url.endsWith('/tool-results')).map((r) => (r.body as { callId: string }).callId),
+    ).toEqual(['a', 'b']);
   });
 
   it('streams the reply, runs a client tool, posts its result and ends', async () => {
