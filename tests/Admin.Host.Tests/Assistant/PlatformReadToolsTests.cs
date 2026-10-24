@@ -275,14 +275,29 @@ public sealed class PlatformReadToolsTests(AdminHostFactory factory) : IClassFix
     }
 
     [Theory]
-    [InlineData(0, 5, -1, 100, true)]
-    [InlineData(0, 5, 1_000, 20_000, false)]
-    [InlineData(0, 5, 1_000, 31_001, true)]
-    [InlineData(0, 0, -1, 100, false)]
-    [InlineData(7, 5, -1, 100, false)]
-    public void An_empty_catalogue_is_asked_for_again_no_oftener_than_every_thirty_seconds_and_the_first_time_at_once(int tools, int services, long last, long now, bool reload)
+    [InlineData(5, -1, 100, true)]
+    [InlineData(1, -1, 100, true)]
+    [InlineData(1, 1_000, 20_000, false)]
+    [InlineData(1, 1_000, 31_001, true)]
+    [InlineData(0, -1, 100, false)]
+    public void A_catalogue_lacking_a_chosen_service_is_asked_for_again_no_oftener_than_every_thirty_seconds_and_the_first_time_at_once(int missing, long last, long now, bool reload)
     {
-        PlatformReadTools.ShouldReload(tools, services, last, now).ShouldBe(reload);
+        PlatformReadTools.ShouldReload(missing, last, now).ShouldBe(reload);
+    }
+
+    [Theory]
+    [InlineData("""{"identity":{"a":1}}""")]
+    [InlineData("""{"identity":["demo"]}""")]
+    [InlineData("""{"identity":7}""")]
+    public async Task A_pin_that_is_not_a_name_is_refused_and_does_not_fall_back_to_the_first_user(string hostOptions)
+    {
+        using WebApplicationFactory<Program> host = factory.WithWebHostBuilder(_ => { });
+        PlatformReadTools tools = await Prepared(host);
+
+        ToolOutcome outcome = await tools.InvokeAsync("get_stock", new JsonObject { ["productId"] = StockedProduct }, Context(JsonNode.Parse(hostOptions)!.AsObject()), Ct);
+
+        outcome.Ok.ShouldBeFalse();
+        host.Services.GetRequiredService<OperatorTranscript>().Read().Entries.ShouldBeEmpty();
     }
 
     [Fact]

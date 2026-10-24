@@ -28,7 +28,7 @@ public interface IPreparedToolSource : IToolSource
 /// correlation id come back, never headers.
 /// </summary>
 public sealed class PlatformReadTools(ApiCatalog catalog, RequestProxy proxy, TokenService tokens, IOptions<AdminOptions> options, AdminReadTools consoleReads)
-    : IPreparedToolSource
+    : IPreparedToolSource, IDisposable
 {
     /// <summary>
     /// The most characters of a response body a result carries. The whole result, escaped, has to fit the core's
@@ -47,7 +47,8 @@ public sealed class PlatformReadTools(ApiCatalog catalog, RequestProxy proxy, To
     // Milliseconds of Environment.TickCount64 at the last reload; negative until there has been one.
     private long lastReload = -1;
 
-    private readonly Lock gate = new();
+    // One open at a time lists the tools: a slower one must not publish an older read over a newer.
+    private readonly SemaphoreSlim preparing = new(1, 1);
 
     /// <summary>The conversation's <c>hostOptions</c> key that pins one realm user for every read (§6.5).</summary>
     public const string IdentityOption = "identity";
@@ -58,25 +59,31 @@ public sealed class PlatformReadTools(ApiCatalog catalog, RequestProxy proxy, To
 
     public IReadOnlyList<ToolDescriptor> Tools => current.Tools;
 
+    public void Dispose() => preparing.Dispose();
+
     /// <summary>Reads the catalogue (cached by <see cref="ApiCatalog"/> until it is reloaded) and lists its GETs as tools.</summary>
     public async ValueTask PrepareAsync(CancellationToken cancellationToken)
     {
         IReadOnlySet<string> services = options.Value.Assistant.PlatformReadServices();
         HashSet<string> reserved = [.. consoleReads.Tools.Select(t => t.Name)];
-        Snapshot next = Snapshot.Of(await catalog.GetAsync(cancellationToken), services, reserved);
 
-        // The catalogue keeps its first load for the host's lifetime, even one made with the stack down.
-        long now = Environment.TickCount64;
-        long last = Interlocked.Read(ref lastReload);
+        await preparing.WaitAsync(cancellationToken);
 
-        // Claimed by exchange, so two opens at once reload once.
-        if (ShouldReload(next.Tools.Count, services.Count, last, now) && Interlocked.CompareExchange(ref lastReload, now, last) == last)
+        try
         {
-            next = Snapshot.Of(await catalog.ReloadAsync(cancellationToken), services, reserved);
-        }
+            Snapshot next = Snapshot.Of(await catalog.GetAsync(cancellationToken), services, reserved);
 
-        lock (gate)
-        {
+            // The catalogue keeps its first load for the host's lifetime, even one made with a service down, so a chosen
+            // service with no read in it is asked for again.
+            int missing = services.Count(s => !next.Operations.Values.Any(o => o.Source == s));
+            long now = Environment.TickCount64;
+
+            if (ShouldReload(missing, lastReload, now))
+            {
+                lastReload = now;
+                next = Snapshot.Of(await catalog.ReloadAsync(cancellationToken), services, reserved);
+            }
+
             // A conversation already open keeps the names it was given, so a name an earlier read held still resolves.
             Dictionary<string, ApiOperation> known = new(current.Operations, StringComparer.Ordinal);
 
@@ -87,11 +94,15 @@ public sealed class PlatformReadTools(ApiCatalog catalog, RequestProxy proxy, To
 
             current = next with { Operations = known };
         }
+        finally
+        {
+            preparing.Release();
+        }
     }
 
-    /// <summary>Whether a catalogue with <paramref name="tools"/> reads for <paramref name="services"/> chosen services is asked for again.</summary>
-    internal static bool ShouldReload(int tools, int services, long lastReload, long now) =>
-        tools == 0 && services > 0 && (lastReload < 0 || now - lastReload > ReloadAfter.TotalMilliseconds);
+    /// <summary>Whether a catalogue lacking a read for <paramref name="missing"/> of the chosen services is asked for again.</summary>
+    internal static bool ShouldReload(int missing, long lastReload, long now) =>
+        missing > 0 && (lastReload < 0 || now - lastReload > ReloadAfter.TotalMilliseconds);
 
     public async ValueTask<ToolOutcome> InvokeAsync(string name, JsonObject input, ToolContext context, CancellationToken cancellationToken)
     {
@@ -137,13 +148,14 @@ public sealed class PlatformReadTools(ApiCatalog catalog, RequestProxy proxy, To
             return (null, "The gateway has no route for this operation; nothing was sent.");
         }
 
-        if (context.HostOptions[IdentityOption] is JsonValue pinned)
+        // A pin that is not a name is refused, never read as no pin: it must not degrade to the first user.
+        if (context.HostOptions[IdentityOption] is { } pinned)
         {
-            string? username = pinned.TryGetValue(out string? text) ? text : null;
+            string? username = pinned is JsonValue value && value.TryGetValue(out string? text) ? text : null;
 
             return users.Any(u => u.Username == username)
                 ? (new IdentityRequest(username, null), null)
-                : (null, $"hostOptions.identity names '{username}', which is not a configured realm user; nothing was sent.");
+                : (null, $"hostOptions.identity must name a configured realm user, and '{username ?? pinned.ToJsonString()}' is not one; nothing was sent.");
         }
 
         switch (operation.EdgePolicy)
