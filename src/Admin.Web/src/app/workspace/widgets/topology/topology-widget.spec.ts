@@ -33,8 +33,13 @@ describe('TopologyWidget', () => {
   };
   let events: GraphEvents;
   let create: ReturnType<typeof vi.fn>;
-  let workspace: { currentPage: ReturnType<typeof vi.fn>; configureWidget: ReturnType<typeof vi.fn> };
-  let router: { navigateByUrl: ReturnType<typeof vi.fn> };
+  let workspace: {
+    currentPage: ReturnType<typeof vi.fn>;
+    configureWidget: ReturnType<typeof vi.fn>;
+    pages: ReturnType<typeof vi.fn>;
+    pageLink: ReturnType<typeof vi.fn>;
+  };
+  let router: { navigateByUrl: ReturnType<typeof vi.fn>; navigate: ReturnType<typeof vi.fn> };
   let broker: { workbenches: ReturnType<typeof signal<number>>; requestOpen: ReturnType<typeof vi.fn> };
   let onPage: WidgetInstance[];
 
@@ -50,8 +55,10 @@ describe('TopologyWidget', () => {
     workspace = {
       currentPage: vi.fn(() => ({ id: 'p1', title: 'Page', builtIn: null, hidden: false, widgets: onPage })),
       configureWidget: vi.fn(),
+      pages: vi.fn(() => []),
+      pageLink: vi.fn((id: string) => ['/', id]),
     };
-    router = { navigateByUrl: vi.fn(() => Promise.resolve(true)) };
+    router = { navigateByUrl: vi.fn(() => Promise.resolve(true)), navigate: vi.fn(() => Promise.resolve(true)) };
     broker = { workbenches: signal(0), requestOpen: vi.fn() };
     TestBed.configureTestingModule({
       providers: [
@@ -194,6 +201,25 @@ describe('TopologyWidget', () => {
       expect(router.navigateByUrl).toHaveBeenCalledWith('/logs');
     });
 
+    it("points the built-in Logs page's widget and opens that page when this page has no Logs widget", async () => {
+      workspace.pages.mockReturnValue([
+        {
+          id: 'pg-logs',
+          title: 'Logs',
+          builtIn: 'logs',
+          hidden: false,
+          widgets: [widget('w-builtin-logs', 'logs', {})],
+        },
+      ]);
+      const el: HTMLElement = (await render()).nativeElement;
+
+      click(el, 'ordering');
+
+      expect(TestBed.inject(WidgetSessionStore).state('w-builtin-logs', 'pointed', null)()).toEqual(['ordering-api']);
+      expect(router.navigate).toHaveBeenCalledWith(['/', 'pg-logs']);
+      expect(router.navigateByUrl).not.toHaveBeenCalled();
+    });
+
     it('says so when the service has no Compose service to follow', async () => {
       host.platformMap.mockReturnValue(
         of({ ...map, services: [...map.services, { name: 'ghost', url: null, routes: [], queues: [] }] }),
@@ -251,6 +277,27 @@ describe('TopologyWidget', () => {
 
       expect(TestBed.inject(WidgetSessionStore).state('w-queues', 'pointed', null)()).toBe('ordering-catalog-events');
       expect(workspace.configureWidget).not.toHaveBeenCalled();
+    });
+
+    it("points the built-in Broker page's Queues widget and opens that page when this page has none", async () => {
+      host.platformMap.mockReturnValue(of(quiet));
+      workspace.pages.mockReturnValue([
+        {
+          id: 'pg-broker',
+          title: 'Broker',
+          builtIn: 'broker',
+          hidden: false,
+          widgets: [widget('w-builtin-queues', 'queues', {})],
+        },
+      ]);
+      const el: HTMLElement = (await render()).nativeElement;
+
+      click(el, 'ordering-catalog-events');
+
+      expect(TestBed.inject(WidgetSessionStore).state('w-builtin-queues', 'pointed', null)()).toBe(
+        'ordering-catalog-events',
+      );
+      expect(router.navigate).toHaveBeenCalledWith(['/', 'pg-broker']);
     });
 
     it('opens the Broker page for a queue that is not parked when the page has no Queues widget', async () => {

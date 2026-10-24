@@ -142,8 +142,9 @@ export class TopologyWidget {
       this.notice.set(`${node.name} has no Compose service to follow.`);
       return;
     }
-    if (this.point('logs', [node.compose])) this.notice.set(`The Logs widget on this page now shows ${node.compose}.`);
-    else void this.router.navigateByUrl('/logs');
+    const pointed = this.point('logs', 'logs', [node.compose]);
+    if (pointed === 'here') this.notice.set(`The Logs widget on this page now shows ${node.compose}.`);
+    else if (pointed === null) void this.router.navigateByUrl('/logs');
   }
 
   /** A parked queue opens in the dead-letter workbench; any other points a Queues widget at it, or opens the Broker page. */
@@ -151,24 +152,32 @@ export class TopologyWidget {
     if (node.parkedQueue !== null && this.broker.workbenches() > 0) {
       this.broker.requestOpen(node.parkedQueue);
       this.notice.set(`The dead-letter workbench on this page opened ${node.parkedQueue}.`);
-    } else if (node.parkedQueue === null && this.point('queues', node.name)) {
-      this.notice.set(`The Queues widget on this page shows ${node.name}.`);
     } else {
-      void this.router.navigateByUrl('/broker');
+      const pointed = node.parkedQueue === null ? this.point('queues', 'broker', node.name) : null;
+      if (pointed === 'here') this.notice.set(`The Queues widget on this page shows ${node.name}.`);
+      else if (pointed === null) void this.router.navigateByUrl('/broker');
     }
   }
 
   /**
    * Points the first widget of `type` on the page being shown at `value`, which that widget keeps as session state and
-   * shows over its configured view until the operator takes it off (§4.2): the saved page is not touched. False when the
-   * page has no such widget.
+   * shows over its configured view until the operator takes it off (§4.2): the saved page is not touched. A page with
+   * no such widget sends the click to the `screen` built-in page and points the widget there, so it opens filtered
+   * rather than showing everything. `'here'` and `'there'` say which; null when neither page has the widget.
    */
-  private point(type: string, value: string | string[]): boolean {
-    const page = this.workspace.currentPage();
-    const target = page ? widgetsOf(page).find((w) => w.type === type) : undefined;
-    if (!target) return false;
-    this.sessions.state<string | string[] | null>(target.id, 'pointed', null).set(value);
-    return true;
+  private point(type: string, screen: string, value: string | string[]): 'here' | 'there' | null {
+    const current = this.workspace.currentPage();
+    const here = current ? widgetsOf(current).find((w) => w.type === type) : undefined;
+    if (here) {
+      this.sessions.state<string | string[] | null>(here.id, 'pointed', null).set(value);
+      return 'here';
+    }
+    const page = this.workspace.pages().find((p) => p.builtIn === screen);
+    const there = page ? widgetsOf(page).find((w) => w.type === type) : undefined;
+    if (!page || !there) return null;
+    this.sessions.state<string | string[] | null>(there.id, 'pointed', null).set(value);
+    void this.router.navigate(this.workspace.pageLink(page.id));
+    return 'there';
   }
 
   /** A node was dropped: kept in this widget's config, so the arrangement outlives the tab. */
