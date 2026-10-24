@@ -628,13 +628,15 @@ total, so spend is visible.
   the host knows: each realm user's password, `SqlPassword`, the password in
   `BffBrokerConnection`, and the dead-letter operator's password while one is
   minted. A gate test runs every server tool against FakePlatform with known
-  secrets planted and fails if one survives. Exact values fail closed, at a
-  cost: the local realm's default users have their names for passwords
-  (`demo`, `browser`, `privacy`), so those words are redacted wherever they
-  appear, the Privacy service's name among them, though §5.4 passes service
-  names through. Whether to exempt a published development default is #465's
-  decision. The catalogue and the client's tool descriptors are the client's
-  own text and are not redacted.
+  secrets planted and fails if one survives. Exact values fail closed, with
+  one exemption (#465): a realm user still on the password the realm export
+  publishes for it (`RealmUsers.HasPublishedPassword`). Those defaults are
+  each user's own name (`demo`, `browser`, `privacy`) and sit in the
+  backend's public repository, so redacting them protected nothing and took
+  those words out of every question and read, the Privacy service's name
+  among them, though §5.4 passes service names through. A password changed
+  from its default is redacted as any other. The catalogue and the client's
+  tool descriptors are the client's own text and are not redacted.
 - **Untrusted results.** Logs, traces and API bodies are data an attacker may
   have written; a seller's product description is exactly that. The system
   text says so, and §6.3 makes the worst a steered model can do a wrong answer
