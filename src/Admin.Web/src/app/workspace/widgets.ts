@@ -614,6 +614,23 @@ export const NOTE: WidgetType = {
 };
 
 /**
+ * The assistant as a widget (AI assistant design §6.4): a view of the tab's one conversation, the same as the side panel,
+ * with no built-in page. Off, a saved instance renders a notice. It reads and keeps nothing of its own.
+ */
+export const ASSISTANT: WidgetType = plain({
+  type: 'assistant',
+  title: 'Assistant',
+  help:
+    "A view of this tab's one conversation with the assistant, the same as the side panel, so a page can hold it " +
+    'beside what it asks about. Ask what a screen or widget is for, or where to find something. With the ' +
+    "assistant switched off in the console's configuration it shows a notice instead; it never changes the platform.",
+  component: () => import('../assistant/assistant-widget').then((m) => m.AssistantWidget),
+  defaultSize: { cols: 10, rows: 20 },
+  minSize: { cols: 6, rows: 8 },
+  dataServices: [],
+});
+
+/**
  * Every widget type, read by the "Add widget" picker, the grid and the built-in pages. A type unknown to this list is
  * rendered as "unknown widget" and saved back untouched, so a document from a newer console survives an older one (§6.3).
  */
@@ -633,6 +650,7 @@ export const WIDGETS: readonly WidgetType[] = [
   LOGS,
   JOB_OUTPUT,
   NOTE,
+  ASSISTANT,
 ];
 
 export function widgetType(type: string): WidgetType | undefined {

@@ -1,4 +1,4 @@
-import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, input, signal, viewChild } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { SCREENS } from '../screens';
@@ -69,6 +69,9 @@ function widgetName(value: unknown): string {
 })
 export class AssistantPanel {
   readonly assistant = inject(AssistantService);
+  /** In a widget rather than the side panel: it has no panel to close, and the widget's frame carries the title. */
+  readonly embedded = input(false);
+  readonly title = $localize`Assistant`;
   readonly draft = signal('');
   private readonly messages = viewChild<ElementRef<HTMLElement>>('messages');
 
