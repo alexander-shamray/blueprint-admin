@@ -29,7 +29,7 @@ export const SCREENS = [
     label: 'Broker',
     help:
       'The page for the RabbitMQ broker. It holds the Queues, BFF projection, Dead-letter workbench, Exchanges, ' +
-      'Permissions and Bindings widgets. It publishes no message of its own.',
+      'Permissions and Bindings widgets. It has no way to publish a new message.',
   },
   {
     path: 'map',

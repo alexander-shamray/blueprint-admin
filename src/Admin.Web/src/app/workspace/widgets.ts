@@ -93,9 +93,9 @@ export const STACK_WIDGETS = {
     type: 'stack-controls',
     title: 'Stack controls',
     help:
-      'The buttons that start, stop and reset the backend as run-locally.md does: Up, Down, and Down with the ' +
-      'volumes wiped, which asks for a typed confirmation. It also says when a Scenario has changed a service and ' +
-      'will undo it. It shows no logs; Logs does.',
+      'The buttons that start, stop and reset the backend as run-locally.md does: Up, Down, Down with the volumes ' +
+      'wiped and Reset, the last two behind a typed confirmation. They are refused while a Scenario holds the stack, ' +
+      'and the widget says when a Scenario has changed a service and will undo it. It shows no logs; Logs does.',
     component: () => import('../features/stack/widgets/stack-controls-widget').then((m) => m.StackControlsWidget),
     defaultSize: { cols: 12, rows: 7 },
     minSize: { cols: 6, rows: 3 },
@@ -128,8 +128,9 @@ export const STACK_WIDGETS = {
     type: 'golden-signals',
     title: 'Golden signals',
     help:
-      "Each service's request rate, errors and latency from Grafana, for the services chosen. Use it to see which " +
-      'service is slow or failing. It shows trends, not individual requests; Trace follows one request.',
+      "Each service's request rate, error rates (the 401 and 422 among them) and command and query p95 latency from " +
+      'Grafana, for the services chosen. Use it to see which service is slow or failing. It shows trends, not ' +
+      'individual requests; Trace follows one request.',
     component: () => import('../features/stack/widgets/golden-signals-widget').then((m) => m.GoldenSignalsWidget),
     defaultSize: { cols: 14, rows: 8 },
     minSize: { cols: 6, rows: 3 },
@@ -140,8 +141,8 @@ export const STACK_WIDGETS = {
     title: 'Alerts',
     help:
       "The platform's Prometheus alert rules and which are firing, pending or quiet, with the rules that cannot fire " +
-      'because nothing records their metrics yet. It can show only the firing ones. It does not silence or cause ' +
-      'an alert; Runbooks covers that.',
+      'because nothing records their metrics yet. It can show only the firing ones. It does not silence an alert; ' +
+      'the Runbooks widget can cause one.',
     component: () => import('../features/stack/widgets/alerts-widget').then((m) => m.AlertsWidget),
     defaultSize: { cols: 10, rows: 8 },
     minSize: { cols: 6, rows: 3 },
@@ -157,9 +158,9 @@ export const STACK_WIDGETS = {
     type: 'load-run',
     title: 'Load run',
     help:
-      "Runs the backend's k6 SLO load run, the steps of run-locally.md's load run, and shows its output and the last " +
-      'run. Use it to put the stack under traffic and watch the golden signals. It generates real load, so it is ' +
-      'for the local stack only.',
+      "Runs the backend's k6 SLO load run, the steps of run-locally.md's load run, and shows its status and the last " +
+      "run; the output opens in the page's Job output widget, and Stop load stops it. Use it to put the stack under " +
+      'traffic and watch the golden signals. It generates real load, so it is for the local stack only.',
     component: () => import('../features/stack/widgets/load-run-widget').then((m) => m.LoadRunWidget),
     defaultSize: { cols: 10, rows: 8 },
     minSize: { cols: 6, rows: 4 },
@@ -169,9 +170,10 @@ export const STACK_WIDGETS = {
     type: 'reference-client',
     title: 'Reference client',
     help:
-      'Starts and stops the frontend dev server (npm start in the sibling blueprint-frontend clone), shows its output ' +
-      'and whether the client answers. Use it to run the web client against the local backend. It does not edit ' +
-      'the frontend.',
+      'Starts and stops the frontend dev server (npm start in the sibling blueprint-frontend clone) and says whether ' +
+      "the client answers; its output opens in the page's Job output widget. It also builds the app for the " +
+      'emulator and reads the device. Use it to run the web client against the local backend. It does not edit the ' +
+      'frontend.',
     component: () => import('../features/stack/widgets/reference-client-widget').then((m) => m.ReferenceClientWidget),
     defaultSize: { cols: 14, rows: 12 },
     minSize: { cols: 6, rows: 4 },
@@ -185,9 +187,10 @@ export const SCENARIO_WIDGETS = {
     type: 'scenario',
     title: 'Scenario',
     help:
-      'Runs the end-to-end scenario: places an order and follows it through the saga, payment, stock and shipping, ' +
-      'checking each step. Use it to check the platform works as a whole. It holds the stack while it runs and can ' +
-      'change a service to cause a failure, which it undoes itself.',
+      'Runs an end-to-end scenario script (an order delivered, cancelled or refused) as a chosen realm user: places ' +
+      'an order and follows it through the saga, payment, stock and shipping, checking each step. It can be ' +
+      'cancelled and exported as Markdown. Use it to check the platform works as a whole. It holds the stack while ' +
+      'it runs and can change a service to cause a failure, which it undoes itself.',
     component: () => import('../features/scenario/widgets/scenario-widget').then((m) => m.ScenarioWidget),
     defaultSize: { cols: 16, rows: 20 },
     minSize: { cols: 8, rows: 6 },
@@ -289,9 +292,10 @@ export const BROKER_WIDGETS = {
     type: 'bff-projection',
     title: 'BFF projection',
     help:
-      "The BFF's read-model projection: whether its queue has drained, and a rebuild of the projection when it has " +
-      'fallen behind. Use it when the BFF shows stale data. A rebuild changes the running stack, so it is not a ' +
-      'read.',
+      "The BFF's read-model projection: whether its queue has drained, a Repair that sends what the BFF inbox has " +
+      'not recorded, and a Rebuild that stops the BFF, deletes its order projection, replays the outbox and ' +
+      'restarts it. Use Repair first when the BFF shows stale data; Rebuild is destructive and asks for a typed ' +
+      "confirmation. The job's output shows in the page's Job output widget.",
     component: () => import('../features/broker/widgets/bff-projection-widget').then((m) => m.BffProjectionWidget),
     defaultSize: { cols: 10, rows: 12 },
     minSize: { cols: 6, rows: 5 },
@@ -301,8 +305,9 @@ export const BROKER_WIDGETS = {
     type: 'dead-letters',
     title: 'Dead-letter workbench',
     help:
-      'Inspects a parked (dead-letter) queue and replays or discards its messages. Use it to recover from a poison ' +
-      'message. Replay and discard change the platform; it publishes no message of its own.',
+      'Inspects a parked (dead-letter) queue, reading its first messages, and replays or discards them one message ' +
+      'at a time. A dry run comes first, and the real run asks for a typed word and writes a record file. Use it to ' +
+      'recover from a poison message: replay sends the message back to be handled again, and discard drops it.',
     component: () => import('../features/broker/widgets/dead-letter-widget').then((m) => m.DeadLetterWidget),
     defaultSize: { cols: 24, rows: 12 },
     minSize: { cols: 8, rows: 4 },
@@ -425,8 +430,8 @@ export const API_WIDGETS = {
     type: 'api-history',
     title: 'API history',
     help:
-      'The requests this tab sent from the API request widget, newest first, to look at again. It keeps them for the ' +
-      'tab only. It sends nothing.',
+      'The requests this tab sent from the API request widget, newest first, which can be restored into an API ' +
+      'request widget on the page. It keeps them for the tab only. It sends nothing.',
     component: () => import('../features/api/widgets/api-history-widget').then((m) => m.ApiHistoryWidget),
     defaultSize: { cols: 8, rows: 30 },
     minSize: { cols: 4, rows: 4 },
@@ -514,8 +519,9 @@ export const RUNBOOKS: WidgetType = {
   type: 'runbooks',
   title: 'Runbooks',
   help:
-    "The backend's runbooks, read from its clone, each with the alerts it covers and the script that causes them. " +
-    'Use it during an incident or a game day. A step that changes the platform asks to be confirmed first.',
+    "The backend's runbooks, read from its clone, each with the alerts it covers and, for some, a script that " +
+    'causes some of them, with an Undo that restores the stack. Use it during an incident or a game day. A costly ' +
+    'cause asks for a second press or a typed word first.',
   component: () => import('../features/runbooks/widgets/runbooks-widget').then((m) => m.RunbooksWidget),
   defaultSize: { cols: 24, rows: 26 },
   minSize: { cols: 10, rows: 8 },
@@ -533,9 +539,9 @@ export const TRANSCRIPT: WidgetType = plain({
   type: 'transcript',
   title: 'Transcript',
   help:
-    'Every command and request the console ran, as the line that would repeat it: docker compose, npm, and a curl ' +
-    "for each platform request, with the assistant's requests marked. Use it to see or copy what was done. It " +
-    'changes nothing.',
+    'Each command and request the console ran, except polls, as the line that would repeat it: docker compose, npm ' +
+    "and a curl for each platform request, with the assistant's requests marked and secrets scrubbed. It is kept in " +
+    'memory until the host stops. Use it to see or copy what was done; it changes nothing.',
   component: () => import('../features/transcript/widgets/transcript-widget').then((m) => m.TranscriptWidget),
   defaultSize: { cols: 24, rows: 20 },
   minSize: { cols: 8, rows: 5 },
@@ -548,8 +554,8 @@ export const LOGS: WidgetType = listing('services', 'All services', {
   title: 'Logs',
   help:
     "Follows the services' log output live, as docker compose logs prints it, for the services chosen, with a text " +
-    'filter. Use it to watch what the platform is doing now. To follow one request across services, use Trace ' +
-    'with its correlation id instead.',
+    'filter and a correlation-id filter. Use it to watch what the platform is doing now. To follow one request ' +
+    'across services, use Trace with its correlation id instead.',
   component: () => import('../features/logs/widgets/logs-widget').then((m) => m.LogsWidget),
   defaultSize: { cols: 24, rows: 18 },
   minSize: { cols: 8, rows: 6 },
