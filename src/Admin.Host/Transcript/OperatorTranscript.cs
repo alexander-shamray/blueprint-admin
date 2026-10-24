@@ -40,10 +40,12 @@ public sealed class OperatorTranscript(TimeProvider time)
     /// A request the proxy is about to send, as <see cref="ShellLine.Curl"/> rendered it. It takes its place in the
     /// order now, before the answer, and the returned callback settles it with the status, null for no answer: the
     /// proxy calls it whatever became of the send, so a request abandoned in flight is still on the record.
+    /// <paramref name="byAssistant"/> marks a read the assistant asked for (AI assistant design §6.5, §10), so the
+    /// operator can tell it from one they sent.
     /// </summary>
-    public Action<int?> Request(string curl, string? identity)
+    public Action<int?> Request(string curl, string? identity, bool byAssistant = false)
     {
-        Kept entry = Keep(TranscriptKind.Request, curl, null, identity);
+        Kept entry = Keep(TranscriptKind.Request, curl, null, identity, byAssistant);
 
         return status =>
         {
@@ -100,7 +102,7 @@ public sealed class OperatorTranscript(TimeProvider time)
     private static string Outcome(TranscriptEntry entry) => entry.Kind switch
     {
         TranscriptKind.Process => entry.Settled ? string.Create(CultureInfo.InvariantCulture, $"exit {entry.ExitCode}") : "still running",
-        _ => $"{(entry.Identity is { } user ? $"as {user}" : "anonymous")} · "
+        _ => $"{(entry.Assistant ? "asked by the assistant · " : "")}{(entry.Identity is { } user ? $"as {user}" : "anonymous")} · "
             + (!entry.Settled ? "awaiting an answer" : entry.Status is { } status ? $"HTTP {status}" : "no answer"),
     };
 
@@ -114,7 +116,7 @@ public sealed class OperatorTranscript(TimeProvider time)
             k.Job = null;
         }
 
-        return new(k.Sequence, k.At, k.Kind, k.Command, k.WorkingDirectory, k.Identity, k.ExitCode, k.Status, k.Settled);
+        return new(k.Sequence, k.At, k.Kind, k.Command, k.WorkingDirectory, k.Identity, k.ExitCode, k.Status, k.Settled, k.Assistant);
     }
 
     private void Settle(Kept entry)
@@ -125,11 +127,11 @@ public sealed class OperatorTranscript(TimeProvider time)
         }
     }
 
-    private Kept Keep(TranscriptKind kind, string command, string? workingDirectory, string? identity)
+    private Kept Keep(TranscriptKind kind, string command, string? workingDirectory, string? identity, bool assistant = false)
     {
         lock (gate)
         {
-            Kept entry = new(++next, time.GetUtcNow(), kind, command, workingDirectory, identity);
+            Kept entry = new(++next, time.GetUtcNow(), kind, command, workingDirectory, identity, assistant);
             kept.Enqueue(entry);
 
             if (kept.Count > Capacity)
@@ -143,7 +145,7 @@ public sealed class OperatorTranscript(TimeProvider time)
     }
 
     /// <summary>The fixed half is set once; the settled half is written and read under the gate only.</summary>
-    private sealed class Kept(long sequence, DateTimeOffset at, TranscriptKind kind, string command, string? workingDirectory, string? identity)
+    private sealed class Kept(long sequence, DateTimeOffset at, TranscriptKind kind, string command, string? workingDirectory, string? identity, bool assistant)
     {
         public long Sequence { get; } = sequence;
 
@@ -156,6 +158,8 @@ public sealed class OperatorTranscript(TimeProvider time)
         public string? WorkingDirectory { get; } = workingDirectory;
 
         public string? Identity { get; } = identity;
+
+        public bool Assistant { get; } = assistant;
 
         public Job? Job { get; set; }
 
@@ -176,7 +180,8 @@ public enum TranscriptKind
 /// <summary>
 /// One thing the operator did. A process carries its working directory and, once it has exited, its exit code; a
 /// request carries the identity it was sent as (null for anonymous) and the status, null when nothing answered.
-/// <c>Settled</c> is false while the process runs or the request awaits its answer.
+/// <c>Settled</c> is false while the process runs or the request awaits its answer. <c>Assistant</c> is true for a
+/// request the assistant asked for, which the operator did not send themselves.
 /// </summary>
 public sealed record TranscriptEntry(
     long Sequence,
@@ -187,6 +192,7 @@ public sealed record TranscriptEntry(
     string? Identity,
     int? ExitCode,
     int? Status,
-    bool Settled);
+    bool Settled,
+    bool Assistant = false);
 
 public sealed record TranscriptView(IReadOnlyList<TranscriptEntry> Entries, long Dropped);
