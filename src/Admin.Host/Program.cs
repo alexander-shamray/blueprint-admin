@@ -258,6 +258,13 @@ builder.Services.AddSingleton(sp => new AdminReadTools(
     sp.GetRequiredService<ApiCatalog>(),
     sp.GetRequiredService<GameDayService>()));
 
+// The platform's GET operations as tools (AI assistant design §6.5), read through the same proxy and tokens as the API screen.
+builder.Services.AddSingleton(sp => new PlatformReadTools(
+    sp.GetRequiredService<ApiCatalog>(),
+    sp.GetRequiredService<RequestProxy>(),
+    sp.GetRequiredService<TokenService>(),
+    sp.GetRequiredService<IOptions<AdminOptions>>()));
+
 // The assistant is decided once, from options: off builds no provider and resolves no credential (AI assistant design
 // §9.1), so the providers, the redactor and the read tools are handed over as factories the runtime calls only when it
 // is on, and the Anthropic provider only when the provider is `anthropic`.
@@ -267,7 +274,7 @@ builder.Services.AddSingleton(sp => new AssistantRuntime(
     () => new FakeAssistantProvider(),
     () => AnthropicProviderFactory.Create(sp.GetRequiredService<IOptions<AdminOptions>>().Value.Assistant, sp.GetRequiredService<TimeProvider>()),
     () => new AdminRedactor(sp.GetRequiredService<IOptions<AdminOptions>>().Value, sp.GetRequiredService<DeadLetterService>()),
-    () => [sp.GetRequiredService<AdminReadTools>()],
+    () => [sp.GetRequiredService<AdminReadTools>(), sp.GetRequiredService<PlatformReadTools>()],
     sp.GetRequiredService<TimeProvider>(),
     sp.GetRequiredService<ILogger<AssistantRuntime>>()));
 

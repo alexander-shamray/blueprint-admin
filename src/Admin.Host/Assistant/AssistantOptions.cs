@@ -7,7 +7,6 @@ namespace Admin.Host.Assistant;
 /// <summary>
 /// <c>Admin:Assistant</c> (AI assistant design §9): which provider the assistant uses and the core's limits. No option
 /// holds a credential, and <see cref="AssistantRuntime"/> refuses to start on a key under this section named like one.
-/// Phase 3b adds the services whose reads become tools.
 /// </summary>
 public sealed class AssistantOptions
 {
@@ -17,6 +16,9 @@ public sealed class AssistantOptions
 
     // The core owns the defaults; these options only let configuration move them.
     private static readonly AssistantLimits Defaults = new();
+
+    /// <summary>Catalog, Inventory, Ordering, Payments and the BFF (§6.5, §9).</summary>
+    public static readonly IReadOnlyList<string> DefaultPlatformReads = ["catalog", "inventory", "ordering", "payments", "bff"];
 
     /// <summary>
     /// <c>off</c>, <c>fake</c> or <c>anthropic</c>. Unset is off, except under FakePlatform, where it is the fake provider;
@@ -33,6 +35,14 @@ public sealed class AssistantOptions
 
     /// <summary>The effort the Anthropic provider asks for (§8.2); <c>low</c> for chat. Refused at startup if the SDK has no such level.</summary>
     public string Effort { get; set; } = AnthropicSettings.DefaultEffort;
+
+    /// <summary>
+    /// The services whose GET operations become the assistant's platform-data tools (§6.5), by <see cref="PlatformService.Name"/>.
+    /// Null is <see cref="DefaultPlatformReads"/>; a list names exactly the services it holds, and an empty one offers
+    /// none. Privacy is left out of the default: its reads are about erasure subjects, and sending them to a provider is
+    /// the operator's explicit choice. Not a list initializer, because the configuration binder appends to one.
+    /// </summary>
+    public string[]? PlatformReads { get; set; }
 
     public int MaxSteps { get; set; } = Defaults.MaxSteps;
 
@@ -67,6 +77,30 @@ public sealed class AssistantOptions
             Anthropic => Anthropic,
             _ => throw new InvalidOperationException($"Admin:Assistant:Provider is '{configured}'; it takes 'off', 'fake' or 'anthropic'."),
         };
+    }
+
+    /// <summary>
+    /// The services in <see cref="PlatformReads"/>, or the defaults; an exception naming the key when one is no service
+    /// whose operations the API catalogue holds (the OpenAPI services and the BFF's curated reads).
+    /// </summary>
+    public IReadOnlySet<string> PlatformReadServices()
+    {
+        string[] known = [.. PlatformServices.All.Where(s => s.OpenApi || s.Name == "bff").Select(s => s.Name)];
+        HashSet<string> chosen = new(StringComparer.Ordinal);
+
+        foreach (string raw in PlatformReads ?? [.. DefaultPlatformReads])
+        {
+            string name = raw.Trim().ToLowerInvariant();
+
+            if (!known.Contains(name, StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException($"Admin:Assistant:PlatformReads names '{raw}'; it takes {string.Join(", ", known)}.");
+            }
+
+            chosen.Add(name);
+        }
+
+        return chosen;
     }
 
     public AssistantLimits Limits()
