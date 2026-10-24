@@ -243,13 +243,30 @@ builder.Services.AddSingleton(sp =>
     return new WorkspaceStore(workspaceDir, sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<ILogger<WorkspaceStore>>());
 });
 
+// The read tools are the assistant's view of the console's reads (AI assistant design §6.2). PlatformProbe is a typed
+// client, so each read resolves a fresh one, as ResetService's polls do.
+builder.Services.AddSingleton(sp => new AdminReadTools(
+    sp.GetRequiredService<ComposeService>(),
+    sp.GetRequiredService<FrontendSupervisor>(),
+    () => sp.GetRequiredService<PlatformProbe>(),
+    sp.GetRequiredService<ScenarioLeaseService>(),
+    sp.GetRequiredService<LoadRunService>(),
+    sp.GetRequiredService<AlertStripService>(),
+    sp.GetRequiredService<BrokerService>(),
+    sp.GetRequiredService<LogFollower>(),
+    sp.GetRequiredService<EventTraceService>(),
+    sp.GetRequiredService<ApiCatalog>(),
+    sp.GetRequiredService<GameDayService>()));
+
 // The assistant is decided once, from options: off builds no provider and resolves no credential (AI assistant design
-// §9.1), so the fake provider and the redactor are handed over as factories the runtime calls only when it is on.
+// §9.1), so the fake provider, the redactor and the read tools are handed over as factories the runtime calls only when
+// it is on.
 builder.Services.AddSingleton(sp => new AssistantRuntime(
     sp.GetRequiredService<IOptions<AdminOptions>>().Value,
     sp.GetRequiredService<IConfiguration>(),
     () => new FakeAssistantProvider(),
     () => new AdminRedactor(sp.GetRequiredService<IOptions<AdminOptions>>().Value, sp.GetRequiredService<DeadLetterService>()),
+    () => [sp.GetRequiredService<AdminReadTools>()],
     sp.GetRequiredService<TimeProvider>(),
     sp.GetRequiredService<ILogger<AssistantRuntime>>()));
 
