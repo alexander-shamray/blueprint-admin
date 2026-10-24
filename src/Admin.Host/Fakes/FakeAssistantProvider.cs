@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Admin.Assistant;
 using Admin.Assistant.Protocol;
@@ -102,12 +103,32 @@ public sealed class FakeAssistantProvider : IAssistantProvider
     // Read from the result as the model would read it: the status the platform answered, and for a 200 the body's fields.
     private static string PlatformReply(string tool, ToolResult result, bool russian)
     {
-        if (!result.Ok || JsonNode.Parse(result.Content) is not JsonObject read || read["status"]?.GetValue<int>() is not { } status)
+        JsonObject? read;
+
+        try
+        {
+            read = result.Ok ? JsonNode.Parse(result.Content) as JsonObject : null;
+        }
+        catch (JsonException)
+        {
+            read = null;
+        }
+
+        if (read?["status"]?.GetValue<int>() is not { } status)
         {
             return FakeAssistantScripts.PlatformNotRead(result.Content, russian);
         }
 
-        JsonNode? body = status == 200 && read["body"]?.GetValue<string>() is { } text ? JsonNode.Parse(text) : null;
+        JsonNode? body = null;
+
+        try
+        {
+            body = status == 200 && read["body"]?.GetValue<string>() is { } text ? JsonNode.Parse(text) : null;
+        }
+        catch (JsonException)
+        {
+            // A body that is not JSON is still the platform's answer: the status is what is said.
+        }
 
         return (tool, body) switch
         {
