@@ -3,7 +3,8 @@ import { Injectable, LOCALE_ID, computed, effect, inject, signal } from '@angula
 import { Router } from '@angular/router';
 import { HostClient } from '../core/host/host-client';
 import { SCREENS } from '../screens';
-import { builtInWidgets } from '../workspace/built-in-pages';
+import { builtInScreensHolding, builtInWidgets } from '../workspace/built-in-pages';
+import { WIDGETS } from '../workspace/widgets';
 import { RunningWork } from '../workspace/running-work';
 import { WorkspaceService } from '../workspace/workspace-service';
 import {
@@ -19,9 +20,29 @@ import { AssistantStatus, CatalogueEntry, OpenConversation } from './protocol';
 /** Where the tab keeps its conversation's id, so a reload (a language switch among them) resumes it (§5.5). */
 export const CONVERSATION_KEY = 'admin.assistant.conversation';
 
-/** The catalogue the assistant explains (§6.1): each screen, its label as shown and its `help`, from `SCREENS`. */
+/** Where a widget type is found when no built-in page holds it. */
+const ADD_WIDGET = 'on no built-in page: add it to a page with Add widget in the layout editor';
+
+/** The prefix of a widget type's catalogue id, so it never meets a screen's. */
+export const WIDGET_ID_PREFIX = 'widget:';
+
+/**
+ * The catalogue the assistant explains (§6.1): each screen, then each widget type, with its label as shown, where it
+ * lives and its `help`. A screen's `help` is from `SCREENS` and names the widgets its page holds; a widget's is its own,
+ * from `WIDGETS`, and its place is the built-in pages that hold it.
+ */
 export function catalogue(): CatalogueEntry[] {
-  return SCREENS.map((s) => ({ id: s.path, label: s.label, where: `/${s.path}`, help: s.help }));
+  const screens = SCREENS.map((s) => ({ id: s.path, label: s.label, where: `/${s.path}`, help: s.help }));
+  const widgets = WIDGETS.map((w) => {
+    const holding = builtInScreensHolding(w.type);
+    return {
+      id: `${WIDGET_ID_PREFIX}${w.type}`,
+      label: w.title,
+      where: holding.length === 0 ? ADD_WIDGET : holding.map((path) => `/${path}`).join(', '),
+      help: w.help,
+    };
+  });
+  return [...screens, ...widgets];
 }
 
 /** Where the browser keeps the providers whose notice the operator accepted (§10): a JSON list of provider ids. */

@@ -41,6 +41,13 @@ describe('the widget registry', () => {
     expect(new Set(WIDGETS.map((w) => w.type)).size).toBe(WIDGETS.length);
   });
 
+  // What the assistant explains each widget from (AI assistant design §6.1): two to five sentences, on every type.
+  it.each(WIDGETS.map((w) => [w.type, w.help] as const))('%s has help of two to five sentences', (_, help) => {
+    const sentences = help.split(/[.!?](?:\s|$)/).filter((s) => s.trim() !== '');
+    expect(sentences.length).toBeGreaterThanOrEqual(2);
+    expect(sentences.length).toBeLessThanOrEqual(5);
+  });
+
   it('knows no type it does not list, the retired legacy screen widget among them', () => {
     expect(widgetType('legacy')).toBeUndefined();
     expect(widgetType('from-a-newer-console')).toBeUndefined();

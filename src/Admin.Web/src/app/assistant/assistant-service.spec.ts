@@ -3,7 +3,9 @@ import { Router } from '@angular/router';
 import { of } from 'rxjs';
 import { HostClient } from '../core/host/host-client';
 import { WorkspaceService } from '../workspace/workspace-service';
-import { ACKNOWLEDGED_KEY, AssistantService, IDENTITY_KEY } from './assistant-service';
+import { SCREENS } from '../screens';
+import { WIDGETS } from '../workspace/widgets';
+import { ACKNOWLEDGED_KEY, AssistantService, IDENTITY_KEY, catalogue } from './assistant-service';
 import { AssistantStatus } from './protocol';
 
 const anthropic: AssistantStatus = { enabled: true, provider: 'anthropic', model: 'claude-opus-5-5', reason: null };
@@ -180,5 +182,27 @@ describe('AssistantService notice (AI assistant design §10)', () => {
     assistant.status.set(anthropic);
 
     expect(assistant.needsNotice()).toBe(true);
+  });
+});
+
+describe('the catalogue the assistant explains (AI assistant design §6.1)', () => {
+  it('lists every screen, then every widget type, each once, with the text its owner wrote', () => {
+    const entries = catalogue();
+
+    expect(entries).toHaveLength(SCREENS.length + WIDGETS.length);
+    expect(new Set(entries.map((e) => e.id)).size).toBe(entries.length);
+    expect(entries.slice(0, SCREENS.length).map((e) => e.id)).toEqual(SCREENS.map((s) => s.path));
+    expect(entries.every((e) => e.label !== '' && e.where !== '' && e.help !== '')).toBe(true);
+    for (const widget of WIDGETS) {
+      expect(entries.find((e) => e.id === `widget:${widget.type}`)?.help).toBe(widget.help);
+    }
+  });
+
+  it('says which built-in page holds a widget, and that one no page holds is added by hand', () => {
+    const entries = catalogue();
+
+    expect(entries.find((e) => e.id === 'widget:queues')?.where).toBe('/broker');
+    expect(entries.find((e) => e.id === 'widget:job-output')?.where).toBe('/stack');
+    expect(entries.find((e) => e.id === 'widget:platform-diagram')?.where).toContain('Add widget');
   });
 });

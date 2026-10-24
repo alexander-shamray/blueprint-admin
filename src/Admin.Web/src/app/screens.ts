@@ -3,93 +3,87 @@
  * (held to this list by a drift test) all follow it. The side navigation and the palette list the operator's pages
  * instead (widget-workspace spec §7.2).
  *
- * `help` is what the assistant explains each screen from (AI assistant design §6.1): what it shows, what it can do and
- * what it is not for. It is this registry's own text, sent in the source language; the model translates it as it
- * answers. A spec fails an entry without it.
+ * `help` is what the assistant explains each screen from (AI assistant design §6.1). The widgets own what each one shows
+ * and does (`WidgetType.help`), so a screen's text says what its page is for and names the widgets it holds, which a
+ * spec holds to the page's built-in layout. It is this registry's own text, sent in the source language; the model
+ * translates it as it answers. A spec fails an entry without it.
  */
 export const SCREENS = [
   {
     path: 'stack',
     label: 'Stack',
     help:
-      'Runs the platform as run-locally.md does: the workstation doctor, the Compose services and their health, Up, ' +
-      'Down and Reset, the frontend dev server, the golden signals, the firing alerts and a load run. Start, stop or ' +
-      'wipe the backend here. It shows no log lines or traces; Logs and Trace do.',
+      'The page that runs the platform as run-locally.md does. It holds the Workstation doctor, Compose services, ' +
+      'Stack controls, Alerts, Job output, Reachability, Golden signals, Load run and Reference client widgets. It ' +
+      'shows no log lines or traces; the Logs and Trace pages do.',
   },
   {
     path: 'logs',
     label: 'Logs',
     help:
-      "Follows the services' log output live, as docker compose logs prints it, for the services chosen, with a text " +
-      'filter. Use it to watch what the platform is doing now. To follow one request across services, open Trace ' +
-      'with its correlation id instead.',
+      "The page for the services' live log output. It holds the Logs widget. To follow one request across services, " +
+      'open the Trace page with its correlation id instead.',
   },
   {
     path: 'broker',
     label: 'Broker',
     help:
-      "The RabbitMQ broker: each queue's depth, consumers and parked messages, the exchanges, bindings and " +
-      "permissions, the dead letters, and the BFF projection's rebuild. Inspect a dead-letter queue and replay or " +
-      'discard its messages here. It publishes no message of its own.',
+      'The page for the RabbitMQ broker. It holds the Queues, BFF projection, Dead-letter workbench, Exchanges, ' +
+      'Permissions and Bindings widgets. It publishes no message of its own.',
   },
   {
     path: 'map',
     label: 'Map',
     help:
-      'A map of the platform: its services and what each one reaches through the gateway, the broker and its ' +
-      'stores. Use it to see what talks to what. It shows structure, not live traffic; Trace follows one request.',
+      'The page that shows the platform as a table of services, routes and queues. It holds the Platform map widget. ' +
+      'It shows structure, not live traffic; the Trace page follows one request.',
   },
   {
     path: 'erasure',
     label: 'Erasure',
     help:
-      "Raises a privacy erasure request for a customer and follows each personal-data holder's answer to it. Use it " +
-      'to check that every holder erased the subject. It does not read the customer data itself.',
+      'The page for privacy erasure requests. It holds the Erasure widget. It does not read the customer data ' +
+      'itself.',
   },
   {
     path: 'mail',
     label: 'Mail',
-    help:
-      'The mail Notifications sent, as the local mail sink caught it: the list, each message, and a filter by ' +
-      "correlation id. Use it to see an order's mail. It sends nothing.",
+    help: 'The page for the mail Notifications sent. It holds the Mail widget. It sends nothing.',
   },
   {
     path: 'requests',
     label: 'API',
     help:
-      "Sends a request to the platform through the gateway as a realm user, from each service's OpenAPI " +
-      'operations, and keeps a history of them. Pick an operation, an identity and a body, and see the status and the ' +
-      'response exactly as the gateway returned them. This is how to call the platform by hand.',
+      'The page for calling the platform by hand through the gateway. It holds the API request and API history ' +
+      'widgets.',
   },
   {
     path: 'trace',
     label: 'Trace',
     help:
-      "Follows one request across the services by its correlation id: Tempo's spans, the log lines and the events " +
-      'on one timeline, and the same trace as a sequence diagram. Start from a correlation id, from a response, a ' +
-      'log line or a mail. It does not list traces.',
+      'The page for following one request across the services by its correlation id. It holds the Trace widget, and ' +
+      'a correlation id in a response, a log line or a mail opens it here. It does not list traces.',
   },
   {
     path: 'scenario',
     label: 'Scenario',
     help:
-      'Runs the end-to-end scenario: places an order and follows it through the saga, payment, stock and shipping, ' +
-      'checking each step, and shows the order saga as it moves. Use it to check the platform works as a whole. It ' +
-      'holds the stack while it runs.',
+      'The page for the end-to-end scenario. It holds the Scenario and Saga strip widgets, and it holds the stack ' +
+      'while the scenario runs.',
   },
   {
     path: 'runbooks',
     label: 'Runbooks',
     help:
-      "The backend's runbooks, read from its clone, each step with its command and the console's way to run it. " +
-      'Use it during an incident or a game day. A step that changes the platform asks to be confirmed first.',
+      "The page for the backend's runbooks, for an incident or a game day. It holds the Runbooks widget. A step " +
+      'that changes the platform asks to be confirmed first.',
   },
   {
     path: 'transcript',
     label: 'Transcript',
     help:
-      'Every command and request the console ran, as the line that would repeat it: docker compose, npm, and a curl ' +
-      'for each platform request. Use it to see or copy what was done. It changes nothing.',
+      'The page for what the console ran, as the lines that would repeat it. It holds the Transcript widget. It ' +
+      'changes nothing.',
   },
 ] as const;
 

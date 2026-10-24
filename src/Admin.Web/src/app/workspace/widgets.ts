@@ -29,6 +29,12 @@ export interface WidgetField {
 export interface WidgetType {
   type: string;
   title: string;
+  /**
+   * What the assistant explains this widget from (AI assistant design §6.1): two to five sentences on what it shows, what
+   * it can do and what it is not for. The widget owns this text; the screen it sits on only names it. Sent in the source
+   * language, which the model translates as it answers. A spec fails a type without it.
+   */
+  help: string;
   component: () => Promise<Type<unknown>>;
   defaultSize: CellSize;
   minSize: CellSize;
@@ -74,6 +80,9 @@ export const STACK_WIDGETS = {
   doctor: plain({
     type: 'workstation-doctor',
     title: 'Workstation doctor',
+    help:
+      "Checks the developer's workstation against what run-locally.md needs before the stack can run, and says what " +
+      'is missing or wrong. Use it first when the stack will not start. It reports; it installs or changes nothing.',
     component: () =>
       import('../features/stack/widgets/workstation-doctor-widget').then((m) => m.WorkstationDoctorWidget),
     defaultSize: { cols: 12, rows: 10 },
@@ -83,6 +92,10 @@ export const STACK_WIDGETS = {
   controls: plain({
     type: 'stack-controls',
     title: 'Stack controls',
+    help:
+      'The buttons that start, stop and reset the backend as run-locally.md does: Up, Down, and Down with the ' +
+      'volumes wiped, which asks for a typed confirmation. It also says when a Scenario has changed a service and ' +
+      'will undo it. It shows no logs; Logs does.',
     component: () => import('../features/stack/widgets/stack-controls-widget').then((m) => m.StackControlsWidget),
     defaultSize: { cols: 12, rows: 7 },
     minSize: { cols: 6, rows: 3 },
@@ -91,6 +104,9 @@ export const STACK_WIDGETS = {
   services: listing('services', 'All services', {
     type: 'compose-services',
     title: 'Compose services',
+    help:
+      'Each backend Compose service with its state, its health and its ports, for the services chosen. Use it to see ' +
+      'what is running and what is unhealthy. It starts and stops nothing; Stack controls does.',
     component: () => import('../features/stack/widgets/compose-services-widget').then((m) => m.ComposeServicesWidget),
     defaultSize: { cols: 12, rows: 12 },
     minSize: { cols: 6, rows: 3 },
@@ -99,6 +115,10 @@ export const STACK_WIDGETS = {
   reachability: listing('surfaces', 'All surfaces', {
     type: 'reachability',
     title: 'Reachability',
+    help:
+      "Whether each platform surface answers: every service's readiness endpoint, the object store, the image edge, " +
+      'Keycloak, Grafana and the reference client. Use it to tell a service that is down from one that is up but ' +
+      'misbehaving. It checks that a URL answers, not that the service is correct.',
     component: () => import('../features/stack/widgets/reachability-widget').then((m) => m.ReachabilityWidget),
     defaultSize: { cols: 24, rows: 3 },
     minSize: { cols: 4, rows: 2 },
@@ -107,6 +127,9 @@ export const STACK_WIDGETS = {
   signals: listing('services', 'All services', {
     type: 'golden-signals',
     title: 'Golden signals',
+    help:
+      "Each service's request rate, errors and latency from Grafana, for the services chosen. Use it to see which " +
+      'service is slow or failing. It shows trends, not individual requests; Trace follows one request.',
     component: () => import('../features/stack/widgets/golden-signals-widget').then((m) => m.GoldenSignalsWidget),
     defaultSize: { cols: 14, rows: 8 },
     minSize: { cols: 6, rows: 3 },
@@ -115,6 +138,10 @@ export const STACK_WIDGETS = {
   alerts: {
     type: 'alerts',
     title: 'Alerts',
+    help:
+      "The platform's Prometheus alert rules and which are firing, pending or quiet, with the rules that cannot fire " +
+      'because nothing records their metrics yet. It can show only the firing ones. It does not silence or cause ' +
+      'an alert; Runbooks covers that.',
     component: () => import('../features/stack/widgets/alerts-widget').then((m) => m.AlertsWidget),
     defaultSize: { cols: 10, rows: 8 },
     minSize: { cols: 6, rows: 3 },
@@ -129,6 +156,10 @@ export const STACK_WIDGETS = {
   loadRun: plain({
     type: 'load-run',
     title: 'Load run',
+    help:
+      "Runs the backend's k6 SLO load run, the steps of run-locally.md's load run, and shows its output and the last " +
+      'run. Use it to put the stack under traffic and watch the golden signals. It generates real load, so it is ' +
+      'for the local stack only.',
     component: () => import('../features/stack/widgets/load-run-widget').then((m) => m.LoadRunWidget),
     defaultSize: { cols: 10, rows: 8 },
     minSize: { cols: 6, rows: 4 },
@@ -137,6 +168,10 @@ export const STACK_WIDGETS = {
   client: plain({
     type: 'reference-client',
     title: 'Reference client',
+    help:
+      'Starts and stops the frontend dev server (npm start in the sibling blueprint-frontend clone), shows its output ' +
+      'and whether the client answers. Use it to run the web client against the local backend. It does not edit ' +
+      'the frontend.',
     component: () => import('../features/stack/widgets/reference-client-widget').then((m) => m.ReferenceClientWidget),
     defaultSize: { cols: 14, rows: 12 },
     minSize: { cols: 6, rows: 4 },
@@ -149,6 +184,10 @@ export const SCENARIO_WIDGETS = {
   scenario: plain({
     type: 'scenario',
     title: 'Scenario',
+    help:
+      'Runs the end-to-end scenario: places an order and follows it through the saga, payment, stock and shipping, ' +
+      'checking each step. Use it to check the platform works as a whole. It holds the stack while it runs and can ' +
+      'change a service to cause a failure, which it undoes itself.',
     component: () => import('../features/scenario/widgets/scenario-widget').then((m) => m.ScenarioWidget),
     defaultSize: { cols: 16, rows: 20 },
     minSize: { cols: 8, rows: 6 },
@@ -157,6 +196,10 @@ export const SCENARIO_WIDGETS = {
   saga: plain({
     type: 'saga-strip',
     title: 'Saga strip',
+    help:
+      "The order saga of the Scenario's run as it moves, with the state it reads now and when the console first saw it " +
+      "so. It reads the run's order and starts nothing. When it stops reading it shows the last state read, not the " +
+      "order's state at this moment.",
     component: () => import('../features/scenario/widgets/saga-strip-widget').then((m) => m.SagaStripWidget),
     defaultSize: { cols: 8, rows: 14 },
     minSize: { cols: 5, rows: 5 },
@@ -198,6 +241,10 @@ export const BROKER_WIDGETS = {
     {
       type: 'queues',
       title: 'Queues',
+      help:
+        "Each RabbitMQ queue's depth, the service that consumes it, whether it is a parked (dead-letter) queue, with a " +
+        'text filter and an option to show only parked queues. Use it to see where messages are waiting. It publishes ' +
+        'or deletes nothing; the Dead-letter workbench replays or discards parked messages.',
       component: () => import('../features/broker/widgets/queues-widget').then((m) => m.QueuesWidget),
       defaultSize: { cols: 14, rows: 12 },
       minSize: { cols: 8, rows: 4 },
@@ -208,6 +255,9 @@ export const BROKER_WIDGETS = {
   exchanges: brokerListing({
     type: 'exchanges',
     title: 'Exchanges',
+    help:
+      "The broker's exchanges, with a text filter. Use it to see how messages are routed in. It lists them; it " +
+      'changes none.',
     component: () => import('../features/broker/widgets/exchanges-widget').then((m) => m.ExchangesWidget),
     defaultSize: { cols: 10, rows: 8 },
     minSize: { cols: 5, rows: 3 },
@@ -216,6 +266,9 @@ export const BROKER_WIDGETS = {
   bindings: brokerListing({
     type: 'bindings',
     title: 'Bindings',
+    help:
+      'The bindings that connect exchanges to queues, with a text filter. Use it to see which queue a message ' +
+      'published to an exchange reaches. It lists them; it changes none.',
     component: () => import('../features/broker/widgets/bindings-widget').then((m) => m.BindingsWidget),
     defaultSize: { cols: 14, rows: 10 },
     minSize: { cols: 8, rows: 3 },
@@ -224,6 +277,9 @@ export const BROKER_WIDGETS = {
   permissions: brokerListing({
     type: 'permissions',
     title: 'Permissions',
+    help:
+      "The broker's users and what each may configure, write and read, with a text filter. Use it when a service " +
+      'cannot connect or publish. It lists them; it changes none.',
     component: () => import('../features/broker/widgets/permissions-widget').then((m) => m.PermissionsWidget),
     defaultSize: { cols: 10, rows: 6 },
     minSize: { cols: 6, rows: 3 },
@@ -232,6 +288,10 @@ export const BROKER_WIDGETS = {
   projection: plain({
     type: 'bff-projection',
     title: 'BFF projection',
+    help:
+      "The BFF's read-model projection: whether its queue has drained, and a rebuild of the projection when it has " +
+      'fallen behind. Use it when the BFF shows stale data. A rebuild changes the running stack, so it is not a ' +
+      'read.',
     component: () => import('../features/broker/widgets/bff-projection-widget').then((m) => m.BffProjectionWidget),
     defaultSize: { cols: 10, rows: 12 },
     minSize: { cols: 6, rows: 5 },
@@ -240,6 +300,9 @@ export const BROKER_WIDGETS = {
   deadLetters: {
     type: 'dead-letters',
     title: 'Dead-letter workbench',
+    help:
+      'Inspects a parked (dead-letter) queue and replays or discards its messages. Use it to recover from a poison ' +
+      'message. Replay and discard change the platform; it publishes no message of its own.',
     component: () => import('../features/broker/widgets/dead-letter-widget').then((m) => m.DeadLetterWidget),
     defaultSize: { cols: 24, rows: 12 },
     minSize: { cols: 8, rows: 4 },
@@ -258,6 +321,9 @@ export const BROKER_WIDGETS = {
 export const MAP: WidgetType = {
   type: 'platform-map',
   title: 'Platform map',
+  help:
+    'A table of the platform: each service with its URL, the gateway routes in front of it and its policy, and its ' +
+    'queues with what consumes them. Use it to see what talks to what. It shows structure, not live traffic.',
   component: () => import('../features/map/widgets/map-widget').then((m) => m.MapWidget),
   defaultSize: { cols: 24, rows: 22 },
   minSize: { cols: 8, rows: 5 },
@@ -276,6 +342,10 @@ export const MAP: WidgetType = {
 export const TOPOLOGY: WidgetType = {
   type: 'platform-diagram',
   title: 'Platform diagram',
+  help:
+    'The platform drawn as a graph of services and queues, coloured by state, with nodes that can be dragged. A ' +
+    'click on a service points a Logs widget at it, and a click on a queue points a Queues widget at it or opens ' +
+    'the dead-letter workbench. It is not on a built-in page; add it from Add widget.',
   component: () => import('./widgets/topology/topology-widget').then((m) => m.TopologyWidget),
   defaultSize: { cols: 24, rows: 26 },
   minSize: { cols: 10, rows: 10 },
@@ -290,6 +360,9 @@ export const TOPOLOGY: WidgetType = {
 export const MAIL: WidgetType = {
   type: 'mail',
   title: 'Mail',
+  help:
+    'The mail Notifications sent, as the local mail sink caught it: the list, each message, and a filter by ' +
+    "correlation id. Use it to see an order's mail. It sends nothing.",
   component: () => import('../features/mail/widgets/mail-widget').then((m) => m.MailWidget),
   defaultSize: { cols: 24, rows: 18 },
   minSize: { cols: 8, rows: 5 },
@@ -307,6 +380,10 @@ export const MAIL: WidgetType = {
 export const ERASURE: WidgetType = plain({
   type: 'erasure',
   title: 'Erasure',
+  help:
+    "Raises a privacy erasure request for a subject id and follows each personal-data holder's answer to it. Use it " +
+    'to check that every holder erased the subject. Raising a request changes data and has no undo; it does not read ' +
+    'the customer data itself.',
   component: () => import('../features/erasure/widgets/erasure-widget').then((m) => m.ErasureWidget),
   defaultSize: { cols: 24, rows: 20 },
   minSize: { cols: 10, rows: 6 },
@@ -322,6 +399,10 @@ export const API_WIDGETS = {
   request: {
     type: 'api-request',
     title: 'API request',
+    help:
+      "Sends a request to the platform through the gateway as a realm user, from each service's OpenAPI operations. " +
+      'Pick an operation, an identity and a body, and see the status and the response exactly as the gateway ' +
+      'returned them. This is how to call the platform by hand.',
     component: () => import('../features/api/widgets/api-request-widget').then((m) => m.ApiRequestWidget),
     defaultSize: { cols: 16, rows: 30 },
     minSize: { cols: 8, rows: 8 },
@@ -343,6 +424,9 @@ export const API_WIDGETS = {
   history: plain({
     type: 'api-history',
     title: 'API history',
+    help:
+      'The requests this tab sent from the API request widget, newest first, to look at again. It keeps them for the ' +
+      'tab only. It sends nothing.',
     component: () => import('../features/api/widgets/api-history-widget').then((m) => m.ApiHistoryWidget),
     defaultSize: { cols: 8, rows: 30 },
     minSize: { cols: 4, rows: 4 },
@@ -358,6 +442,10 @@ export const API_WIDGETS = {
 export const TRACE: WidgetType = {
   type: 'trace',
   title: 'Trace',
+  help:
+    "Follows one request across the services by its correlation id: Tempo's spans, the log lines and the events on " +
+    'one timeline. Start from a correlation id from a response, a log line or a mail; it can follow the last Trace ' +
+    'link. It does not list traces.',
   component: () => import('../features/trace/widgets/trace-widget').then((m) => m.TraceWidget),
   defaultSize: { cols: 24, rows: 20 },
   minSize: { cols: 8, rows: 6 },
@@ -389,6 +477,10 @@ export const TRACE: WidgetType = {
 export const SEQUENCE: WidgetType = {
   type: 'sequence',
   title: 'Request sequence',
+  help:
+    'The same timeline as the Trace widget drawn as a sequence diagram: where one request went, service to service. ' +
+    'It is drawn when asked, not polled, and can follow the last Trace link. Use it to see the shape of a ' +
+    'request; Trace has the detail.',
   component: () => import('./widgets/sequence/sequence-widget').then((m) => m.SequenceWidget),
   defaultSize: { cols: 16, rows: 24 },
   minSize: { cols: 8, rows: 8 },
@@ -421,6 +513,9 @@ export const SEQUENCE: WidgetType = {
 export const RUNBOOKS: WidgetType = {
   type: 'runbooks',
   title: 'Runbooks',
+  help:
+    "The backend's runbooks, read from its clone, each with the alerts it covers and the script that causes them. " +
+    'Use it during an incident or a game day. A step that changes the platform asks to be confirmed first.',
   component: () => import('../features/runbooks/widgets/runbooks-widget').then((m) => m.RunbooksWidget),
   defaultSize: { cols: 24, rows: 26 },
   minSize: { cols: 10, rows: 8 },
@@ -437,6 +532,10 @@ export const RUNBOOKS: WidgetType = {
 export const TRANSCRIPT: WidgetType = plain({
   type: 'transcript',
   title: 'Transcript',
+  help:
+    'Every command and request the console ran, as the line that would repeat it: docker compose, npm, and a curl ' +
+    "for each platform request, with the assistant's requests marked. Use it to see or copy what was done. It " +
+    'changes nothing.',
   component: () => import('../features/transcript/widgets/transcript-widget').then((m) => m.TranscriptWidget),
   defaultSize: { cols: 24, rows: 20 },
   minSize: { cols: 8, rows: 5 },
@@ -447,6 +546,10 @@ export const TRANSCRIPT: WidgetType = plain({
 export const LOGS: WidgetType = listing('services', 'All services', {
   type: 'logs',
   title: 'Logs',
+  help:
+    "Follows the services' log output live, as docker compose logs prints it, for the services chosen, with a text " +
+    'filter. Use it to watch what the platform is doing now. To follow one request across services, use Trace ' +
+    'with its correlation id instead.',
   component: () => import('../features/logs/widgets/logs-widget').then((m) => m.LogsWidget),
   defaultSize: { cols: 24, rows: 18 },
   minSize: { cols: 8, rows: 6 },
@@ -457,6 +560,9 @@ export const LOGS: WidgetType = listing('services', 'All services', {
 export const JOB_OUTPUT: WidgetType = {
   type: 'job-output',
   title: 'Job output',
+  help:
+    'The output of a job the console started, live: by job id, or the job its page started last. Use it to watch a ' +
+    'command that is running or read how one ended. It starts nothing.',
   component: () => import('./job-output-widget').then((m) => m.JobOutputWidget),
   defaultSize: { cols: 12, rows: 7 },
   minSize: { cols: 4, rows: 3 },
@@ -471,6 +577,9 @@ export const JOB_OUTPUT: WidgetType = {
 export const NOTE: WidgetType = {
   type: 'note',
   title: 'Note',
+  help:
+    'A note or a diagram: Markdown whose mermaid blocks are drawn, written in place while the layout is being ' +
+    'edited. Use it for your own reminders and sketches. It reads no platform data.',
   component: () => import('./widgets/note/note-widget').then((m) => m.NoteWidget),
   defaultSize: { cols: 12, rows: 12 },
   minSize: { cols: 4, rows: 3 },
