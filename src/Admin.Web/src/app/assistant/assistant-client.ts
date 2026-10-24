@@ -331,13 +331,15 @@ export class AssistantConversation {
     const id = this.state.id;
     if (!id || this.answered.has(call.callId)) return;
     this.answered.add(call.callId);
+    const sent = this.sends;
     // One at a time, in the order they came: a round that opens a page and then points at a widget on it must not
     // start the second before the first has landed.
     this.running = this.running
       .then(() => {
         // A call that waited behind a slow one runs only if its turn is still the conversation's running turn: after a
-        // cancel or a start over, it would navigate or offer a widget for a turn nobody is waiting on.
-        if (this.state.id !== id || !this.state.running) return null;
+        // cancel, a start over, or a new message since it was queued, it would navigate or offer a widget for a turn
+        // nobody is waiting on.
+        if (this.state.id !== id || !this.state.running || this.sends !== sent) return null;
         return this.tools.run(call.name, call.input);
       })
       .then((outcome) => (outcome ? this.client.answer(id, { callId: call.callId, ...outcome }) : undefined))
