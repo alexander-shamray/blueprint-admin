@@ -57,6 +57,20 @@ const LOCAL_PROVIDER = 'fake';
 /** Where the tab keeps the realm user the operator pinned for the assistant's platform reads (§6.5); absent is automatic. */
 export const IDENTITY_KEY = 'admin.assistant.identity';
 
+/** Where the tab keeps the ids of the offered widgets the operator added (`propose_widget`, §6.4). */
+export const ADDED_KEY = 'admin.assistant.added';
+
+const MAX_ADDED = 100;
+
+function storedAdded(): string[] {
+  try {
+    const stored: unknown = JSON.parse(sessionStorage.getItem(ADDED_KEY) ?? '[]');
+    return Array.isArray(stored) ? stored.filter((id): id is string => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
 function pinnedIdentity(): string | null {
   try {
     return sessionStorage.getItem(IDENTITY_KEY);
@@ -124,6 +138,12 @@ export class AssistantService {
    * the tab, and sent as `hostOptions.identity` with every turn.
    */
   readonly identity = signal<string | null>(pinnedIdentity());
+
+  /**
+   * The tool calls whose offered widget the operator added, kept for the tab: the conversation is redrawn from the host
+   * after a reload, and an offer already taken must not be offered again.
+   */
+  readonly added = signal<string[]>(storedAdded());
 
   /** The realm users the console can read as: usernames only, from the host, loaded when the panel first shows. */
   readonly users = signal<string[]>([]);
@@ -213,17 +233,31 @@ export class AssistantService {
    * own add path, as the Add widget menu does. False when there is no such type, no page, or no room below the page's
    * last widget.
    */
-  addProposed(type: string): boolean {
+  addProposed(type: string, callId: string): 'added' | 'no-room' | 'no-page' {
     const kind = findWidgetType(type);
     const pageId = this.workspace.currentPageId();
-    if (!kind || !pageId) return false;
-    this.workspace.editing.set(true);
-    return this.workspace.addWidget(pageId, {
+    if (!kind || !pageId) return 'no-page';
+    const added = this.workspace.addWidget(pageId, {
       type: kind.type,
       cols: kind.defaultSize.cols,
       rows: kind.defaultSize.rows,
       config: structuredClone(kind.presets[0].config),
     });
+    if (!added) return 'no-room';
+    // As the Add widget menu does, once the widget is on the page: the layout editor opens so it can be moved.
+    this.workspace.editing.set(true);
+    this.rememberAdded(callId);
+    return 'added';
+  }
+
+  private rememberAdded(callId: string): void {
+    const added = [...this.added(), callId].slice(-MAX_ADDED);
+    this.added.set(added);
+    try {
+      sessionStorage.setItem(ADDED_KEY, JSON.stringify(added));
+    } catch {
+      // A tab that cannot store forgets which offers it took when it reloads.
+    }
   }
 
   /** Pins the realm user for the platform reads, or null to leave it to the host. */

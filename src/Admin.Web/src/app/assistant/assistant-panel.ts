@@ -104,30 +104,39 @@ export class AssistantPanel {
     return toolLabel(item.name, item.args);
   }
 
-  /** What became of each Add button the operator pressed, by the tool call that offered it. */
-  readonly proposals = signal<Record<string, 'added' | 'no-room'>>({});
+  /** Why an Add button the operator pressed added nothing, by the tool call that offered it; a press can be tried again. */
+  private readonly refused = signal<Record<string, 'no-room' | 'no-page'>>({});
 
   /** Whether a tool call is an offer of a widget the operator can accept: a finished `propose_widget` that named a type. */
   proposes(item: ConversationItem & { kind: 'tool' }): boolean {
     return item.name === 'propose_widget' && item.ok === true;
   }
 
+  /** An offer already taken: kept by the service for the tab, so it survives the reload that redraws the conversation. */
+  taken(item: ConversationItem & { kind: 'tool' }): boolean {
+    return this.assistant.added().includes(item.callId);
+  }
+
   addLabel(item: ConversationItem & { kind: 'tool' }): string {
     const title = widgetName(item.args['type']);
-    switch (this.proposals()[item.callId]) {
-      case 'added':
-        return $localize`Added ${title}:widget:`;
+    if (this.taken(item)) return $localize`Added ${title}:widget:`;
+    switch (this.refused()[item.callId]) {
       case 'no-room':
         return $localize`No room on this page for ${title}:widget:`;
+      case 'no-page':
+        return $localize`Open a workspace page to add ${title}:widget:`;
       default:
         return $localize`Add ${title}:widget:`;
     }
   }
 
-  /** The operator's click: the widget joins the page being shown, if the page has room. */
+  /** The operator's click: the widget joins the page being shown, if there is one and it has room. */
   add(item: ConversationItem & { kind: 'tool' }): void {
-    const added = this.assistant.addProposed(String(item.args['type']));
-    this.proposals.update((p) => ({ ...p, [item.callId]: added ? 'added' : 'no-room' }));
+    const outcome = this.assistant.addProposed(String(item.args['type']), item.callId);
+    this.refused.update((r) => {
+      const rest = Object.fromEntries(Object.entries(r).filter(([id]) => id !== item.callId));
+      return outcome === 'added' ? rest : { ...rest, [item.callId]: outcome };
+    });
   }
 
   endText(item: ConversationItem & { kind: 'end' }): string {

@@ -1,3 +1,4 @@
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { of } from 'rxjs';
@@ -10,12 +11,21 @@ import { AssistantStatus } from './protocol';
 
 const anthropic: AssistantStatus = { enabled: true, provider: 'anthropic', model: 'claude-opus-5-5', reason: null };
 
-function service(): AssistantService {
+function service(workspace: Record<string, unknown> = {}): AssistantService {
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
     providers: [
       { provide: Router, useValue: { url: '/', navigate: vi.fn(() => Promise.resolve(true)) } },
-      { provide: WorkspaceService, useValue: { currentPage: () => null } },
+      {
+        provide: WorkspaceService,
+        useValue: {
+          currentPage: () => null,
+          currentPageId: () => 'p1',
+          editing: signal(false),
+          addWidget: () => true,
+          ...workspace,
+        },
+      },
       {
         provide: HostClient,
         useValue: { identityUsers: vi.fn(() => of([{ username: 'demo' }, { username: 'browser' }])) },
@@ -182,6 +192,46 @@ describe('AssistantService notice (AI assistant design §10)', () => {
     assistant.status.set(anthropic);
 
     expect(assistant.needsNotice()).toBe(true);
+  });
+});
+
+describe('AssistantService.addProposed (the operator accepts a proposed widget)', () => {
+  beforeEach(() => sessionStorage.clear());
+
+  it('adds the widget at its default size and preset to the page being shown, and remembers the offer was taken', () => {
+    const addWidget = vi.fn(() => true);
+    const editing = signal(false);
+    const assistant = service({ addWidget, editing });
+
+    expect(assistant.addProposed('widget:note', 'k1')).toBe('added');
+
+    expect(addWidget).toHaveBeenCalledWith('p1', {
+      type: 'note',
+      cols: 12,
+      rows: 12,
+      config: { source: '' },
+    });
+    expect(editing()).toBe(true);
+    expect(assistant.added()).toEqual(['k1']);
+    expect(service().added()).toEqual(['k1']);
+  });
+
+  it('says there is no room, leaves the layout editor off and does not count the offer as taken', () => {
+    const editing = signal(false);
+    const assistant = service({ addWidget: () => false, editing });
+
+    expect(assistant.addProposed('note', 'k1')).toBe('no-room');
+
+    expect(editing()).toBe(false);
+    expect(assistant.added()).toEqual([]);
+  });
+
+  it('says there is no page when none is showing or the type is none the console knows', () => {
+    const addWidget = vi.fn(() => true);
+
+    expect(service({ currentPageId: () => null, addWidget }).addProposed('note', 'k1')).toBe('no-page');
+    expect(service({ addWidget }).addProposed('hologram', 'k2')).toBe('no-page');
+    expect(addWidget).not.toHaveBeenCalled();
   });
 });
 
