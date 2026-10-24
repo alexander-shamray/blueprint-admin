@@ -21,7 +21,7 @@ export interface WorkspaceToolsHost {
 const CORRELATION_ID = /^[A-Za-z0-9_-]{1,128}$/;
 
 /** How long a pageless `highlight_widget` waits for the page being shown to hold the widget, and how often it looks. */
-export const SETTLE_MS = 3000;
+export const SETTLE_MS = 1000;
 const SETTLE_POLL_MS = 100;
 
 /** The prefix a widget type's catalogue id carries, which a tool accepts so the model can pass the id it was given. */

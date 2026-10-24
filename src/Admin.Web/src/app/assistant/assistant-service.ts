@@ -311,6 +311,13 @@ export class AssistantService {
   }
 
   startOver(): Promise<void> {
+    // The offers of the conversation being left are gone with it, so their ids are not kept (and do not crowd out newer ones).
+    this.added.set([]);
+    try {
+      sessionStorage.removeItem(ADDED_KEY);
+    } catch {
+      // A tab that cannot store keeps nothing.
+    }
     return this.conversation.startOver();
   }
 

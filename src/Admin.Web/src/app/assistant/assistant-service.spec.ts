@@ -6,7 +6,7 @@ import { HostClient } from '../core/host/host-client';
 import { WorkspaceService } from '../workspace/workspace-service';
 import { SCREENS } from '../screens';
 import { WIDGETS } from '../workspace/widgets';
-import { ACKNOWLEDGED_KEY, AssistantService, IDENTITY_KEY, catalogue } from './assistant-service';
+import { ACKNOWLEDGED_KEY, ADDED_KEY, AssistantService, IDENTITY_KEY, catalogue } from './assistant-service';
 import { AssistantStatus } from './protocol';
 
 const anthropic: AssistantStatus = { enabled: true, provider: 'anthropic', model: 'claude-opus-5-5', reason: null };
@@ -234,6 +234,17 @@ describe('AssistantService.addProposed (the operator accepts a proposed widget)'
     expect(editing()).toBe(true);
     expect(assistant.added()).toEqual(['k1']);
     expect(service().added()).toEqual(['k1']);
+  });
+
+  it('forgets the offers taken when the conversation is started over', async () => {
+    const assistant = service();
+    assistant.addProposed('note', 'k1');
+    expect(assistant.added()).toEqual(['k1']);
+
+    await assistant.startOver();
+
+    expect(assistant.added()).toEqual([]);
+    expect(sessionStorage.getItem(ADDED_KEY)).toBeNull();
   });
 
   it('says there is no room, leaves the layout editor off and does not count the offer as taken', () => {

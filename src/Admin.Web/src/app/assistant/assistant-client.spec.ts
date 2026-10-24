@@ -119,6 +119,53 @@ describe('AssistantConversation', () => {
     ).toEqual(['a', 'b']);
   });
 
+  it('does not run a queued call whose turn has ended while it waited, and answers the call that was running', async () => {
+    const { host, conversation, tools } = setup();
+    const order: string[] = [];
+    let release = (): void => undefined;
+    tools.register({
+      descriptor: viewTool('slow', 'Slow', 'Takes a while.', { type: 'object' }),
+      run: () =>
+        new Promise((resolve) => {
+          order.push('slow:start');
+          release = () => resolve({ ok: true, content: '' });
+        }),
+    });
+    tools.register({
+      descriptor: viewTool('quick', 'Quick', 'Does not.', { type: 'object' }),
+      run: () => {
+        order.push('quick');
+        return { ok: true, content: '' };
+      },
+    });
+    await conversation.send('go', null, 'en-US');
+    host.stream.emit('client_tool_call', { callId: 'a', name: 'slow', input: {} }, 1);
+    host.stream.emit('client_tool_call', { callId: 'b', name: 'quick', input: {} }, 2);
+    await settle();
+
+    // The turn is cancelled while `quick` waits behind `slow`.
+    host.stream.emit('turn_ended', { reason: 'cancelled', category: null }, 3);
+    await settle();
+    release();
+    await settle();
+
+    expect(order).toEqual(['slow:start']);
+    expect(
+      host.requests.filter((r) => r.url.endsWith('/tool-results')).map((r) => (r.body as { callId: string }).callId),
+    ).toEqual(['a']);
+  });
+
+  it('gives each answer a deadline, so one that hangs cannot hold the calls behind it', async () => {
+    const { host, conversation } = setup();
+    await conversation.send('logs?', null, 'en-US');
+
+    host.stream.emit('client_tool_call', { callId: 'k1', name: 'open_screen', input: { path: 'logs' } }, 1);
+    await settle();
+
+    const answer = host.requests.find((r) => r.url.endsWith('/tool-results'));
+    expect(answer?.signal).toBeInstanceOf(AbortSignal);
+  });
+
   it('streams the reply, runs a client tool, posts its result and ends', async () => {
     const { host, conversation, opened } = setup();
     host.on('GET', /\/conversations\/c1$/, () =>
