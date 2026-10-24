@@ -37,6 +37,31 @@ test('asked whether the stack is running, it answers from the stack read and say
   await expect(page).toHaveURL(/\/logs$/);
 });
 
+// The ids FakePlatform's gateway holds: a stocked product and the order whose payment it recorded.
+const STOCKED_PRODUCT = '0199a1b2-0000-7000-8000-00000000000a';
+const PLACED_ORDER = '0199a1b2-0000-7000-8000-000000000002';
+
+test("asked a product's stock and an order's payment, it answers from the platform reads and the transcript shows its curls", async ({
+  page,
+}) => {
+  await page.goto('/stack');
+  await page.getByRole('button', { name: 'Assistant', exact: true }).click();
+
+  await ask(page, `how many are in stock for product ${STOCKED_PRODUCT}?`);
+  await expect(page.locator('app-assistant-panel .reply').last()).toHaveText('10 in stock, 0 reserved.');
+  await expect(page.locator('app-assistant-panel .tool').last()).toContainText('get_stock');
+
+  await ask(page, `what is the payment status of order ${PLACED_ORDER}?`);
+  await expect(page.locator('app-assistant-panel .reply').last()).toHaveText('The payment is Authorised.');
+  await expect(page.locator('app-assistant-panel .tool').last()).toContainText('get_payment');
+
+  // The assistant's reads are the transcript's, marked as such, and repeat as the curl the operator would type.
+  await page.goto('/transcript');
+  const asked = page.locator('li.entry', { hasText: 'asked by the assistant' });
+  await expect(asked.filter({ hasText: `/api/v1/inventory/stock/${STOCKED_PRODUCT}` }).first()).toBeVisible();
+  await expect(asked.filter({ hasText: `/api/v1/payments/${PLACED_ORDER}` }).first()).toBeVisible();
+});
+
 test('asked in Russian, it opens Logs and names it as labelled', async ({ page }) => {
   await page.goto('/stack');
   await page.getByRole('button', { name: 'Assistant', exact: true }).click();
