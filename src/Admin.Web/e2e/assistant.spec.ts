@@ -115,6 +115,26 @@ test("a widget the assistant proposes is added by the operator's click and by no
   await expect(page.getByRole('button', { name: 'Added Note' })).toBeDisabled();
 });
 
+test('an Assistant widget on a page is a view of the same conversation as the panel', async ({ page }) => {
+  await page.goto('/stack');
+  await page.getByRole('button', { name: 'Assistant', exact: true }).click();
+  await ask(page, 'please add an Assistant widget');
+  await page.getByRole('button', { name: 'Add Assistant' }).click();
+
+  const widget = page.getByRole('article', { name: 'Assistant', exact: true });
+  await expect(widget).toBeVisible();
+  await expect(widget.getByText('Answers from: fake')).toBeVisible();
+  // The widget has no panel to close, and the frame carries its title.
+  await expect(widget.getByRole('button', { name: 'Close the assistant' })).toHaveCount(0);
+
+  await widget.getByRole('textbox', { name: 'Message to the assistant' }).fill('where are the logs?');
+  await widget.getByRole('button', { name: 'Send' }).click();
+
+  await expect(page).toHaveURL(/\/logs$/);
+  // The side panel shows what was asked in the widget: one conversation, two views of it.
+  await expect(page.locator('app-assistant-panel .operator').last()).toHaveText('where are the logs?');
+});
+
 test('asked in Russian, it opens Logs and names it as labelled', async ({ page }) => {
   await page.goto('/stack');
   await page.getByRole('button', { name: 'Assistant', exact: true }).click();
