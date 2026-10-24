@@ -106,6 +106,25 @@ public sealed class StreamTests
     }
 
     [Fact]
+    public async Task A_reply_stopped_at_the_output_limit_fails_the_round_after_its_text_rather_than_ending_done()
+    {
+        FakeHttp http = new FakeHttp().Stream("max-tokens");
+        List<ProviderEvent> events = [];
+
+        IOException cut = await Should.ThrowAsync<IOException>(async () =>
+        {
+            await foreach (ProviderEvent value in Provider(http).TurnAsync(Given.Request(new UserMessage("how is the stack?")), TestContext.Current.CancellationToken))
+            {
+                events.Add(value);
+            }
+        });
+
+        cut.Message.ShouldContain("max_tokens");
+        events.OfType<TextDelta>().ShouldNotBeEmpty();
+        events.OfType<RoundEnd>().ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task A_rejected_request_surfaces_as_the_exception_the_session_turns_into_an_error_event()
     {
         FakeHttp http = new FakeHttp().Status(System.Net.HttpStatusCode.TooManyRequests, """{"type":"error","error":{"type":"rate_limit_error","message":"slow down"}}""");

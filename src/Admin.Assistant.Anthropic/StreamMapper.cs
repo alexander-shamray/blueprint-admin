@@ -62,6 +62,14 @@ internal sealed class StreamMapper
             Stopped = true;
 
             yield return new UsageReport(new Usage(fresh + created, output, cached));
+
+            // A reply stopped by a limit is incomplete, and ending it `done` would let the operator take it for whole. It
+            // fails the round as a stream cut short does, so the core keeps the text it had and reports the cause.
+            if (stop is "max_tokens" or "model_context_window_exceeded")
+            {
+                throw new IOException($"The reply was cut off before it finished ({stop}).");
+            }
+
             yield return stop == "refusal" ? new RoundEnd(ProviderStop.Refused, category) : new RoundEnd(ProviderStop.Done);
         }
     }
