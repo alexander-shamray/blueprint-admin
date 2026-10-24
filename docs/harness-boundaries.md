@@ -12,9 +12,8 @@ and reads that way. A citation to a sibling names it (`blueprint-frontend#20`,
 `blueprint-backend#1086`). A number a port left bare is a defect to qualify,
 not a second meaning: the redirection-target comment in
 `.claude/hooks/guard-git-argv.py` (near line 192) cites the sibling's
-writing-verb issue as a bare `#26`, while this repository's #26 is the
-index-refresh issue (`gh issue view 26`). The bare ported numbers are owed under
-#448. The arguments for the grants, the deny lists, the git-argv hook and the
+writing-verb issue as a bare `#26`, so resolving that bare number to this
+repository is wrong. The bare ported numbers are owed under #448. The arguments for the grants, the deny lists, the git-argv hook and the
 edit-target hook live in those two
 `docs/harness-boundaries.md` files and are not restated here; a summary of an
 argument is how a rule gets "corrected" back.
