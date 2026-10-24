@@ -191,6 +191,19 @@ public sealed class RequestTests
     }
 
     [Fact]
+    public async Task A_rounds_whitespace_only_text_is_left_out_of_the_replay_and_its_tool_call_kept()
+    {
+        TurnRequest request = Given.Request(
+            new UserMessage("status?"),
+            new AssistantMessage("\n\n", [new ToolCall("toolu_1", "stack_status", [])], []),
+            new ToolResultsMessage([new ToolResult("toolu_1", true, "up")]));
+
+        JsonArray assistant = (await SentFor(request)).Body!["messages"]![1]!["content"]!.AsArray();
+
+        assistant.Select(b => b!["type"]!.GetValue<string>()).ShouldBe(["tool_use"]);
+    }
+
+    [Fact]
     public async Task A_payload_this_adapter_did_not_write_is_left_out_of_the_replay()
     {
         TurnRequest request = Given.Request(

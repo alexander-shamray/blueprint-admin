@@ -167,7 +167,9 @@ internal static class RequestBuilder
     {
         List<Block> blocks = [.. message.Opaque.Select(OpaqueBlocks.ToParam).OfType<BetaContentBlockParam>().Select<BetaContentBlockParam, Block>(b => _ => b)];
 
-        if (message.Text.Length > 0)
+        // The API refuses a text block of whitespace alone, and the history keeps a round's text as it came, a lone newline
+        // before a tool call included; replaying that block would fail every later request of the conversation.
+        if (!string.IsNullOrWhiteSpace(message.Text))
         {
             blocks.Add(mark => TextBlock(message.Text, mark));
         }
