@@ -218,6 +218,20 @@ public sealed class OperatorTranscriptTests
     }
 
     [Fact]
+    public void A_request_the_assistant_asked_for_is_marked_so_in_the_view_and_the_script_and_one_the_operator_sent_is_not()
+    {
+        transcript.Request("curl -i http://localhost:5000/api/v1/inventory/stock/p1", "demo", byAssistant: true)(200);
+        transcript.Request("curl -i http://localhost:5000/api/v1/orders", "demo")(200);
+
+        TranscriptView view = transcript.Read();
+
+        view.Entries.Select(e => e.Assistant).ShouldBe([true, false]);
+        string script = transcript.Script();
+        script.ShouldContain("asked by the assistant · as demo · HTTP 200");
+        script.Split('\n').Count(l => l.Contains("asked by the assistant", StringComparison.Ordinal)).ShouldBe(1);
+    }
+
+    [Fact]
     public void A_script_after_a_sequence_keeps_only_the_later_entries()
     {
         transcript.Request("curl -i http://localhost:5000/before", null)(200);

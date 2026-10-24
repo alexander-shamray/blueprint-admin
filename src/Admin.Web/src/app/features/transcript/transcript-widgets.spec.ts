@@ -26,6 +26,7 @@ const view: TranscriptView = {
       exitCode: 0,
       status: null,
       settled: true,
+      assistant: false,
     },
     {
       sequence: 2,
@@ -37,6 +38,7 @@ const view: TranscriptView = {
       exitCode: null,
       status: 403,
       settled: true,
+      assistant: false,
     },
     {
       sequence: 3,
@@ -48,6 +50,7 @@ const view: TranscriptView = {
       exitCode: null,
       status: null,
       settled: true,
+      assistant: true,
     },
   ],
 };
@@ -102,6 +105,13 @@ describe('TranscriptWidgets', () => {
     expect(text(entries[1].querySelector('.identity'))).toBe('as demo');
     expect(text(entries[2].querySelector('.outcome'))).toBe('no answer');
     expect(text(entries[2].querySelector('.identity'))).toBe('anonymous');
+  });
+
+  it('marks a request the assistant asked for, and no other', async () => {
+    const fixture = await render();
+
+    const entries = Array.from(fixture.nativeElement.querySelectorAll('li.entry')) as HTMLElement[];
+    expect(entries.map((e) => text(e.querySelector('.assistant')))).toEqual(['', '', 'asked by the assistant']);
   });
 
   it('says a process is running and a request is waiting until each is settled', async () => {

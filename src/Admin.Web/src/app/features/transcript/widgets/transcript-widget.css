@@ -29,6 +29,9 @@
   font-weight: 600;
   color: var(--mat-sys-on-surface);
 }
+.assistant {
+  font-style: italic;
+}
 .command {
   margin: 0.25rem 0 0;
   white-space: pre-wrap;

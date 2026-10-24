@@ -33,6 +33,9 @@
             @if (entry.kind === 'Request') {
               <span class="identity">{{ entry.identity ? 'as ' + entry.identity : 'anonymous' }}</span>
             }
+            @if (entry.assistant) {
+              <span class="assistant">asked by the assistant</span>
+            }
             @if (entry.workingDirectory) {
               <span class="directory"
                 >in <code>{{ entry.workingDirectory }}</code></span

@@ -111,7 +111,11 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
         return null;
     }
 
-    public async Task<ProxyResult> SendAsync(ProxyRequest request, CancellationToken cancellationToken)
+    /// <param name="byAssistant">
+    /// The assistant asked for this read (AI assistant design §6.5): the transcript marks it, and the API screen's
+    /// route never sets it, because the request body has no field for it.
+    /// </param>
+    public async Task<ProxyResult> SendAsync(ProxyRequest request, CancellationToken cancellationToken, bool byAssistant = false)
     {
         string correlationId = request.CorrelationId is { Length: > 0 } given ? given : Guid.NewGuid().ToString("N");
         TokenOutcome? token = await tokens.ForAsync(request.Identity, cancellationToken);
@@ -135,7 +139,7 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
                     // was sent. Settled whatever became of it, a caller who went away mid-send included, with the
                     // status as soon as the headers carried one, since a body cut off later does not unsay it.
                     Action<int?> answered = transcript.Request(
-                        ShellLine.Curl(message, request.Body), request.Identity?.Username is { Length: > 0 } user ? user : null);
+                        ShellLine.Curl(message, request.Body), request.Identity?.Username is { Length: > 0 } user ? user : null, byAssistant);
                     int? status = null;
 
                     try

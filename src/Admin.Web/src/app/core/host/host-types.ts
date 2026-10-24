@@ -631,6 +631,8 @@ export interface TranscriptEntry {
   exitCode: number | null;
   status: number | null;
   settled: boolean;
+  /** True for a request the assistant asked for (AI assistant design §6.5), which the operator did not send. */
+  assistant: boolean;
 }
 
 export interface TranscriptView {
