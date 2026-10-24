@@ -128,6 +128,12 @@ describe('the assistant codes', () => {
 
   it('labels a screen opening by the screen as labelled', () => {
     expect(toolLabel('open_screen', { path: 'requests' })).toBe('Opening API');
-    expect(toolLabel('stack_status', {})).toBe('Using stack_status');
+  });
+
+  it("labels a call to one of the host's reads in the console's words, and any other tool by its name", () => {
+    expect(toolLabel('stack_status', {})).toBe('Reading the stack');
+    expect(toolLabel('list_runbooks', {})).toBe('Reading the runbooks');
+    expect(toolLabel('from_a_newer_host', {})).toBe('Using from_a_newer_host');
+    expect(toolLabel('toString', {})).toBe('Using toString');
   });
 });
