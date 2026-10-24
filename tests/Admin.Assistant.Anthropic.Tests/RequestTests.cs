@@ -98,6 +98,39 @@ public sealed class RequestTests
     }
 
     [Fact]
+    public async Task Bounds_a_strict_schema_may_not_carry_move_into_the_description_and_a_property_named_like_one_stays()
+    {
+        // recent_logs' schema as the host's AdminReadTools declares it, plus a string length, an array floor, and a
+        // property called `minimum` that is a name, not a bound.
+        TurnRequest request = Given.Request(new UserMessage("hi")) with
+        {
+            Tools =
+            [
+                Given.Tool("recent_logs") with
+                {
+                    InputSchema = JsonNode.Parse("""
+                        {"type":"object","properties":{
+                          "lines":{"type":"integer","minimum":1,"maximum":200,"description":"How many lines."},
+                          "filter":{"type":"string","maxLength":80},
+                          "ids":{"type":"array","minItems":2,"items":{"type":"string"}},
+                          "minimum":{"type":"integer","minItems":1}}}
+                        """)!.AsObject(),
+                },
+            ],
+        };
+
+        JsonObject properties = (await SentFor(request)).Body!["tools"]![0]!["input_schema"]!["properties"]!.AsObject();
+
+        properties["lines"]!.AsObject().ContainsKey("minimum").ShouldBeFalse();
+        properties["lines"]!.AsObject().ContainsKey("maximum").ShouldBeFalse();
+        properties["lines"]!["description"]!.GetValue<string>().ShouldBe("""How many lines. {"minimum":1,"maximum":200}""");
+        properties["filter"]!["description"]!.GetValue<string>().ShouldBe("""{"maxLength":80}""");
+        properties["ids"]!.AsObject().ContainsKey("minItems").ShouldBeFalse();
+        properties.ContainsKey("minimum").ShouldBeTrue();
+        properties["minimum"]!["minItems"]!.GetValue<int>().ShouldBe(1);
+    }
+
+    [Fact]
     public async Task The_system_text_and_catalogue_are_cached_and_nothing_that_varies_comes_before_the_breakpoint()
     {
         JsonObject body = (await SentFor(Given.Request(new UserMessage("hi")))).Body!.AsObject();
