@@ -12,8 +12,11 @@ namespace Admin.Host.Assistant;
 /// host knows, as exact values, longest first: each realm user's password, <see cref="AdminOptions.SqlPassword"/>, the
 /// password in <see cref="AdminOptions.BffBrokerConnection"/>, and the dead-letter operator's password while a run holds
 /// one. Each is also matched in the forms the host writes it in: quoted into a command line, and escaped inside a read
-/// tool's JSON. Exact values fail closed: the local realm's default users have their names for passwords, so those
-/// names are redacted too, wherever they appear.
+/// tool's JSON. Exact values fail closed, with one exemption (#465): a realm user whose password is still the one the
+/// realm export publishes for it (<see cref="RealmUsers.HasPublishedPassword"/>). Those defaults are each user's own
+/// name, so redacting them would take <c>demo</c>, <c>browser</c> and <c>privacy</c> out of every question and read,
+/// the Privacy service's name among them, and protect nothing, since they are in the backend's public repository. A
+/// password changed from its default is redacted as any other.
 /// </summary>
 public sealed class AdminRedactor(AdminOptions options, DeadLetterService deadLetters) : IRedactor
 {
@@ -31,7 +34,7 @@ public sealed class AdminRedactor(AdminOptions options, DeadLetterService deadLe
 
     private IEnumerable<string> Secrets()
     {
-        List<string> secrets = [.. RealmUsers.Of(options).Select(u => u.Password), options.SqlPassword];
+        List<string> secrets = [.. RealmUsers.Of(options).Where(u => !RealmUsers.HasPublishedPassword(u)).Select(u => u.Password), options.SqlPassword];
 
         if (Uri.TryCreate(options.BffBrokerConnection, UriKind.Absolute, out Uri? broker) && broker.UserInfo.IndexOf(':', StringComparison.Ordinal) is int colon and >= 0)
         {

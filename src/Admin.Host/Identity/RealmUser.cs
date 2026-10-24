@@ -26,4 +26,11 @@ public static class RealmUsers
     /// binder appends to an existing list instead of replacing it.
     /// </summary>
     public static IReadOnlyList<RealmUser> Of(AdminOptions options) => options.Users.Count > 0 ? options.Users : Defaults;
+
+    /// <summary>
+    /// Whether <paramref name="user"/> holds the password the realm export publishes for that username. It is in the
+    /// backend's public repository and its run-locally.md, so it is a development default, not a secret.
+    /// </summary>
+    public static bool HasPublishedPassword(RealmUser user) =>
+        Defaults.Any(d => d.Username == user.Username && d.Password == user.Password);
 }
