@@ -263,7 +263,8 @@ builder.Services.AddSingleton(sp => new PlatformReadTools(
     sp.GetRequiredService<ApiCatalog>(),
     sp.GetRequiredService<RequestProxy>(),
     sp.GetRequiredService<TokenService>(),
-    sp.GetRequiredService<IOptions<AdminOptions>>()));
+    sp.GetRequiredService<IOptions<AdminOptions>>(),
+    sp.GetRequiredService<AdminReadTools>()));
 
 // The assistant is decided once, from options: off builds no provider and resolves no credential (AI assistant design
 // §9.1), so the providers, the redactor and the read tools are handed over as factories the runtime calls only when it

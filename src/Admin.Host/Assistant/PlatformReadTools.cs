@@ -27,11 +27,24 @@ public interface IPreparedToolSource : IToolSource
 /// transcript as the curl that repeats it, marked as the assistant's. Only the status, the body (cut) and the
 /// correlation id come back, never headers.
 /// </summary>
-public sealed class PlatformReadTools(ApiCatalog catalog, RequestProxy proxy, TokenService tokens, IOptions<AdminOptions> options)
+public sealed class PlatformReadTools(ApiCatalog catalog, RequestProxy proxy, TokenService tokens, IOptions<AdminOptions> options, AdminReadTools consoleReads)
     : IPreparedToolSource
 {
-    /// <summary>The most characters of a response body a result carries, under the core's own bound on a whole result.</summary>
+    /// <summary>
+    /// The most characters of a response body a result carries. The whole result, escaped, has to fit the core's
+    /// <c>MaxToolResultChars</c> (16000), or the core cuts it mid-JSON; a body whose quotes double its length is cut again
+    /// until the result fits <see cref="MaxResultChars"/>.
+    /// </summary>
     public const int MaxBodyChars = 12_000;
+
+    /// <summary>A margin under the core's default bound on a result.</summary>
+    public const int MaxResultChars = 15_000;
+
+    // A catalogue with none of the chosen services' reads is asked for again, no oftener than this: a conversation
+    // opened before the stack was up would otherwise keep no platform tools until someone reloaded the API screen.
+    private static readonly TimeSpan ReloadAfter = TimeSpan.FromSeconds(30);
+
+    private long lastReload = long.MinValue;
 
     /// <summary>The conversation's <c>hostOptions</c> key that pins one realm user for every read (§6.5).</summary>
     public const string IdentityOption = "identity";
@@ -45,8 +58,26 @@ public sealed class PlatformReadTools(ApiCatalog catalog, RequestProxy proxy, To
     /// <summary>Reads the catalogue (cached by <see cref="ApiCatalog"/> until it is reloaded) and lists its GETs as tools.</summary>
     public async ValueTask PrepareAsync(CancellationToken cancellationToken)
     {
-        ApiCatalogView view = await catalog.GetAsync(cancellationToken);
-        current = Snapshot.Of(view, options.Value.Assistant.PlatformReadServices());
+        IReadOnlySet<string> services = options.Value.Assistant.PlatformReadServices();
+        HashSet<string> reserved = [.. consoleReads.Tools.Select(t => t.Name)];
+        Snapshot next = Snapshot.Of(await catalog.GetAsync(cancellationToken), services, reserved);
+
+        // The catalogue keeps its first load for the host's lifetime, even one made with the stack down.
+        if (next.Tools.Count == 0 && services.Count > 0 && Environment.TickCount64 - Interlocked.Read(ref lastReload) > ReloadAfter.TotalMilliseconds)
+        {
+            Interlocked.Exchange(ref lastReload, Environment.TickCount64);
+            next = Snapshot.Of(await catalog.ReloadAsync(cancellationToken), services, reserved);
+        }
+
+        // A conversation already open keeps the names it was given, so a name an earlier read held still resolves.
+        Dictionary<string, ApiOperation> known = new(current.Operations, StringComparer.Ordinal);
+
+        foreach ((string name, ApiOperation operation) in next.Operations)
+        {
+            known[name] = operation;
+        }
+
+        current = next with { Operations = known };
     }
 
     public async ValueTask<ToolOutcome> InvokeAsync(string name, JsonObject input, ToolContext context, CancellationToken cancellationToken)
@@ -87,6 +118,12 @@ public sealed class PlatformReadTools(ApiCatalog catalog, RequestProxy proxy, To
     {
         IReadOnlyList<RealmUser> users = RealmUsers.Of(options.Value);
 
+        // Whoever it is sent as, a route the gateway does not have is not sent to.
+        if (operation.EdgePolicy == GatewayRoutes.NoRoute)
+        {
+            return (null, "The gateway has no route for this operation; nothing was sent.");
+        }
+
         if (context.HostOptions[IdentityOption] is JsonValue pinned)
         {
             string? username = pinned.TryGetValue(out string? text) ? text : null;
@@ -100,8 +137,6 @@ public sealed class PlatformReadTools(ApiCatalog catalog, RequestProxy proxy, To
         {
             case "anonymous" or GatewayRoutes.Direct:
                 return (null, null);
-            case GatewayRoutes.NoRoute:
-                return (null, "The gateway has no route for this operation; nothing was sent.");
             case "authenticated":
                 return users.Count > 0
                     ? (new IdentityRequest(users[0].Username, null), null)
@@ -181,24 +216,35 @@ public sealed class PlatformReadTools(ApiCatalog catalog, RequestProxy proxy, To
         _ => null,
     };
 
-    private static ToolOutcome Outcome(ProxyResult result, string? identity)
+    internal static ToolOutcome Outcome(ProxyResult result, string? identity)
     {
         switch (result)
         {
             case ProxyResponded responded:
-                bool cut = responded.Body.Length > MaxBodyChars;
+                int keep = Math.Min(responded.Body.Length, MaxBodyChars);
 
-                return new ToolOutcome(
-                    true,
-                    JsonSerializer.Serialize(
+                while (true)
+                {
+                    // Not through a surrogate pair: half of one is not text.
+                    int end = keep > 0 && char.IsHighSurrogate(responded.Body[keep - 1]) ? keep - 1 : keep;
+                    string json = JsonSerializer.Serialize(
                         new Read(
                             responded.Status,
-                            cut ? responded.Body[..MaxBodyChars] : responded.Body,
-                            cut || responded.BodyTruncated,
+                            end < responded.Body.Length || responded.BodyTruncated,
                             responded.BodyError,
                             responded.CorrelationId,
-                            identity),
-                        AdminReadTools.Json));
+                            identity,
+                            responded.Body[..end]),
+                        AdminReadTools.Json);
+
+                    // Escaping can lengthen a body (every quote of a JSON one), so the cut is made until the result fits.
+                    if (json.Length <= MaxResultChars || keep == 0)
+                    {
+                        return new ToolOutcome(true, json);
+                    }
+
+                    keep = Math.Max(0, keep - Math.Max(256, (json.Length - MaxResultChars) / 2));
+                }
             case ProxyTokenRejected rejected:
                 return new ToolOutcome(false, $"Keycloak refused to issue a token for {identity} (HTTP {rejected.Status}); nothing was sent.");
             case ProxyUnreached unreached:
@@ -217,14 +263,16 @@ public sealed class PlatformReadTools(ApiCatalog catalog, RequestProxy proxy, To
             : $"only {string.Join(", ", parameters)}, with {string.Join(", ", operation.PathParameters.Select(p => p.Name))} required";
     }
 
-    private sealed record Read(int Status, string Body, bool Truncated, string? BodyError, string CorrelationId, string? Identity);
+    // The body is last: if the core ever cuts a result, it is the body that goes, not the status and the flags.
+    private sealed record Read(int Status, bool Truncated, string? BodyError, string CorrelationId, string? Identity, string Body);
 
     /// <summary>The tools of one read of the catalogue, with the operation each name stands for.</summary>
-    private sealed record Snapshot(IReadOnlyList<ToolDescriptor> Tools, IReadOnlyDictionary<string, ApiOperation> Operations)
+    internal sealed record Snapshot(IReadOnlyList<ToolDescriptor> Tools, IReadOnlyDictionary<string, ApiOperation> Operations)
     {
         public static readonly Snapshot Empty = new([], new Dictionary<string, ApiOperation>());
 
-        public static Snapshot Of(ApiCatalogView view, IReadOnlySet<string> services)
+        /// <param name="reserved">Names other host sources hold, which a derived tool does not take.</param>
+        public static Snapshot Of(ApiCatalogView view, IReadOnlySet<string> services, IReadOnlySet<string> reserved)
         {
             ApiOperation[] gets = [.. view.Operations.Where(o => o.Method == "GET" && o.Available && services.Contains(o.Source))];
             Dictionary<string, ApiOperation> byName = new(StringComparer.Ordinal);
@@ -237,7 +285,7 @@ public sealed class PlatformReadTools(ApiCatalog catalog, RequestProxy proxy, To
                 string name = gets.Count(o => Snake(o.Name) == plain) > 1 ? Snake($"{operation.Source}_{operation.Name}") : plain;
                 ToolDescriptor tool = Describe(name, operation);
 
-                if (ToolPolicy.ReadOnly.Refusal(tool) is null && byName.TryAdd(name, operation))
+                if (!reserved.Contains(name) && ToolPolicy.ReadOnly.Refusal(tool) is null && byName.TryAdd(name, operation))
                 {
                     tools.Add(tool);
                 }

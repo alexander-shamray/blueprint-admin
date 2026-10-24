@@ -4,6 +4,7 @@ using Admin.Assistant;
 using Admin.Assistant.Protocol;
 using Admin.Assistant.Providers;
 using Admin.Assistant.Tools;
+using Admin.Host.Api;
 using Admin.Host.Assistant;
 using Admin.Host.Config;
 using Admin.Host.Fakes;
@@ -218,6 +219,77 @@ public sealed class PlatformReadToolsTests(AdminHostFactory factory) : IClassFix
         outcome.Ok.ShouldBeTrue(outcome.Content);
         host.Services.GetRequiredService<OperatorTranscript>().Read().Entries.Single().Command
             .ShouldContain("/api/v1/inventory/stock/..%2Fpayments%2Fx%3Fy%3D1");
+    }
+
+    [Fact]
+    public async Task An_anonymous_route_is_read_as_nobody_and_an_authenticated_one_as_the_first_realm_user()
+    {
+        using WebApplicationFactory<Program> host = factory.WithWebHostBuilder(_ => { });
+        PlatformReadTools tools = await Prepared(host);
+
+        JsonNode anonymous = JsonNode.Parse((await tools.InvokeAsync("get_products", [], Context(), Ct)).Content)!;
+        JsonNode authenticated = JsonNode.Parse((await tools.InvokeAsync("list_orders", [], Context(), Ct)).Content)!;
+
+        anonymous["status"]!.GetValue<int>().ShouldBe(200);
+        anonymous["identity"].ShouldBeNull();
+        authenticated["identity"]!.GetValue<string>().ShouldBe("demo");
+    }
+
+    private static ApiOperation Get(string source, string name, string policy = "anonymous", bool available = true, string method = "GET") =>
+        new($"{source}:{name}", source, name, method, $"http://localhost:5000/api/v1/{source}/{name}", [], [], null, false, policy, available);
+
+    private static string[] Listed(ApiOperation[] operations, string[] services, string[]? reserved = null) =>
+    [
+        .. PlatformReadTools.Snapshot.Of(new ApiCatalogView([], operations), new HashSet<string>(services), new HashSet<string>(reserved ?? []))
+            .Tools.Select(t => t.Name),
+    ];
+
+    [Fact]
+    public void Only_the_chosen_services_available_GETs_are_tools_and_a_name_two_services_share_says_whose_it_is()
+    {
+        ApiOperation[] operations =
+        [
+            Get("catalog", "GetItem"),
+            Get("inventory", "GetItem"),
+            Get("catalog", "PublishItem", method: "POST"),
+            Get("catalog", "GetGone", available: false),
+            Get("privacy", "GetSubject"),
+            Get("payments", "GetPayment"),
+        ];
+
+        Listed(operations, ["catalog", "inventory", "payments"]).ShouldBe(["catalog_get_item", "get_payment", "inventory_get_item"]);
+    }
+
+    [Fact]
+    public void A_get_whose_name_reads_as_an_action_or_is_too_long_or_belongs_to_another_source_is_left_out_not_a_startup_failure()
+    {
+        ApiOperation[] operations =
+        [
+            Get("catalog", "ResetCache"),
+            Get("catalog", "GetSomethingWithAVeryLongNameThatGoesOnAndOnAndOnPastWhatAToolNameMayHoldInTotal"),
+            Get("catalog", "StackStatus"),
+            Get("catalog", "GetFine"),
+        ];
+
+        Listed(operations, ["catalog"], reserved: ["stack_status"]).ShouldBe(["get_fine"]);
+    }
+
+    [Fact]
+    public void A_body_whose_quotes_double_its_length_is_cut_until_the_whole_result_fits_the_core_bound_with_its_flags_first()
+    {
+        string quoted = string.Concat(Enumerable.Repeat("{\"a\":\"b\"}", 1_500));
+        ProxyResponded responded = new(200, new Dictionary<string, string[]>(), quoted, false, null, 5, "corr-1");
+
+        ToolOutcome outcome = PlatformReadTools.Outcome(responded, "demo");
+
+        outcome.Ok.ShouldBeTrue();
+        outcome.Content.Length.ShouldBeLessThanOrEqualTo(PlatformReadTools.MaxResultChars);
+        JsonNode read = JsonNode.Parse(outcome.Content)!;
+        read["truncated"]!.GetValue<bool>().ShouldBeTrue();
+        read["correlationId"]!.GetValue<string>().ShouldBe("corr-1");
+        quoted.ShouldStartWith(read["body"]!.GetValue<string>());
+        read.AsObject().First().Key.ShouldBe("status");
+        read.AsObject().Last().Key.ShouldBe("body");
     }
 
     [Fact]
