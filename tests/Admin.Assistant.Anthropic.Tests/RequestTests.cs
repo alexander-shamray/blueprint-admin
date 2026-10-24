@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Admin.Assistant.Providers;
+using Admin.Assistant.Tools;
 using Shouldly;
 
 namespace Admin.Assistant.Anthropic.Tests;
@@ -56,6 +57,78 @@ public sealed class RequestTests
         tools.ShouldAllBe(t => t!["input_schema"]!["additionalProperties"]!.GetValue<bool>() == false);
         tools[0]!["input_schema"]!["required"]![0]!.GetValue<string>().ShouldBe("path");
         tools[0]!["description"]!.GetValue<string>().ShouldBe("The open_screen tool.");
+    }
+
+    private static ToolDescriptor Optionals(string name, int optional)
+    {
+        JsonObject properties = [];
+
+        for (int i = 0; i < optional; i++)
+        {
+            properties[$"p{i}"] = new JsonObject { ["type"] = "string" };
+        }
+
+        return Given.Tool(name) with { InputSchema = new JsonObject { ["type"] = "object", ["properties"] = properties } };
+    }
+
+    private static bool[] StrictOf(JsonArray tools) => [.. tools.Select(t => t!.AsObject().ContainsKey("strict") && t["strict"]!.GetValue<bool>())];
+
+    [Fact]
+    public async Task Past_twenty_strict_tools_the_rest_are_sent_without_strict_so_the_request_is_not_refused()
+    {
+        TurnRequest request = Given.Request(new UserMessage("hi")) with { Tools = [.. Enumerable.Range(0, 25).Select(i => Given.Tool($"tool_{i:00}"))] };
+
+        JsonArray tools = (await SentFor(request)).Body!["tools"]!.AsArray();
+
+        StrictOf(tools).Count(s => s).ShouldBe(RequestBuilder.MaxStrictTools);
+        StrictOf(tools).Take(RequestBuilder.MaxStrictTools).ShouldAllBe(s => s);
+        StrictOf(tools).Skip(RequestBuilder.MaxStrictTools).ShouldAllBe(s => !s);
+        // Still closed, so the model reads the same schema either way.
+        tools.ShouldAllBe(t => t!["input_schema"]!["additionalProperties"]!.GetValue<bool>() == false);
+    }
+
+    [Fact]
+    public async Task Past_twenty_four_optional_parameters_a_tool_that_would_pass_the_limit_is_not_strict_and_a_later_one_that_fits_is()
+    {
+        // Five optional parameters each: four tools reach 20, a fifth would make 25. A tool with none still fits.
+        TurnRequest request = Given.Request(new UserMessage("hi")) with
+        {
+            Tools = [Optionals("a", 5), Optionals("b", 5), Optionals("c", 5), Optionals("d", 5), Optionals("e", 5), Given.Tool("f")],
+        };
+
+        JsonArray tools = (await SentFor(request)).Body!["tools"]!.AsArray();
+
+        StrictOf(tools).ShouldBe([true, true, true, true, false, true]);
+    }
+
+    [Fact]
+    public async Task A_required_parameter_costs_nothing_against_the_optional_limit_and_a_nested_optional_one_does()
+    {
+        JsonObject nested = JsonNode.Parse("""{"type":"object","properties":{"outer":{"type":"object","properties":{"a":{"type":"string"},"b":{"type":"string"}}}},"required":["outer"]}""")!.AsObject();
+        TurnRequest request = Given.Request(new UserMessage("hi")) with
+        {
+            Tools = [.. Enumerable.Range(0, 12).Select(i => Given.Tool($"n{i:00}") with { InputSchema = (JsonObject)nested.DeepClone() }), Given.Tool("z")],
+        };
+
+        JsonArray tools = (await SentFor(request)).Body!["tools"]!.AsArray();
+
+        // Two nested optional parameters per tool: twelve tools reach 24, and `z`, with none, is the thirteenth strict one.
+        StrictOf(tools).ShouldAllBe(s => s);
+    }
+
+    [Fact]
+    public async Task Past_sixteen_union_typed_parameters_a_tool_that_adds_one_more_is_not_strict()
+    {
+        JsonObject union = JsonNode.Parse("""{"type":"object","properties":{"v":{"anyOf":[{"type":"string"},{"type":"null"}]}},"required":["v"]}""")!.AsObject();
+        TurnRequest request = Given.Request(new UserMessage("hi")) with
+        {
+            Tools = [.. Enumerable.Range(0, 17).Select(i => Given.Tool($"u{i:00}") with { InputSchema = (JsonObject)union.DeepClone() })],
+        };
+
+        JsonArray tools = (await SentFor(request)).Body!["tools"]!.AsArray();
+
+        StrictOf(tools).Count(s => s).ShouldBe(RequestBuilder.MaxUnionParameters);
+        StrictOf(tools)[^1].ShouldBeFalse();
     }
 
     [Fact]
