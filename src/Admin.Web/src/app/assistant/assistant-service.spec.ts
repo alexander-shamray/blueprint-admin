@@ -195,6 +195,26 @@ describe('AssistantService notice (AI assistant design §10)', () => {
   });
 });
 
+describe('AssistantService.show (an Assistant widget is a view of the conversation)', () => {
+  it('wants the conversation stream while a widget shows, as it does while the panel is open, and not after', () => {
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+    const assistant = service();
+    const setVisible = vi.spyOn(assistant['conversation'], 'setVisible');
+    let destroyed = (): void => undefined;
+
+    TestBed.tick();
+    expect(setVisible).toHaveBeenLastCalledWith(false);
+
+    assistant.show({ onDestroy: (callback: () => void) => (destroyed = callback) } as never);
+    TestBed.tick();
+    expect(setVisible).toHaveBeenLastCalledWith(true);
+
+    destroyed();
+    TestBed.tick();
+    expect(setVisible).toHaveBeenLastCalledWith(false);
+  });
+});
+
 describe('AssistantService.addProposed (the operator accepts a proposed widget)', () => {
   beforeEach(() => sessionStorage.clear());
 

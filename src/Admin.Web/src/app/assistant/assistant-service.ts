@@ -1,5 +1,5 @@
 import { DOCUMENT } from '@angular/common';
-import { Injectable, LOCALE_ID, computed, effect, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, LOCALE_ID, computed, effect, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { HostClient } from '../core/host/host-client';
 import { TraceFollow } from '../features/trace/trace-follow';
@@ -129,6 +129,9 @@ export class AssistantService {
   readonly status = signal<AssistantStatus | null>(null);
   readonly enabled = computed(() => this.status()?.enabled === true);
   readonly panelOpen = signal(false);
+
+  /** How many Assistant widgets are showing, each a view of this conversation as the side panel is. */
+  private readonly widgets = signal(0);
   readonly state = signal<ConversationState>(EMPTY_CONVERSATION);
 
   private readonly acknowledged = signal<string[]>(acknowledgedProviders());
@@ -184,7 +187,7 @@ export class AssistantService {
     this.document.addEventListener('visibilitychange', () =>
       tabVisible.set(this.document.visibilityState !== 'hidden'),
     );
-    effect(() => this.conversation.setVisible(this.panelOpen() && tabVisible()));
+    effect(() => this.conversation.setVisible((this.panelOpen() || this.widgets() > 0) && tabVisible()));
     // What shows a turn is the panel, not a page, so the item opens it; the link is where the question was asked.
     this.runningWork.report('assistant', () =>
       this.state().running
@@ -198,6 +201,12 @@ export class AssistantService {
     const status = await this.client.status();
     this.status.set(status);
     if (status?.enabled) await this.conversation.resume();
+  }
+
+  /** An Assistant widget is showing, so the conversation's stream is wanted as it is while the panel is open; its destruction ends that. */
+  show(destroyRef: DestroyRef): void {
+    this.widgets.update((n) => n + 1);
+    destroyRef.onDestroy(() => this.widgets.update((n) => n - 1));
   }
 
   toggle(): void {
