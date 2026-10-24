@@ -22,13 +22,27 @@ export const STATUS_REASON_TEXT: Record<StatusReason, string> = {
   unreachable: $localize`The assistant's provider cannot be reached.`,
 };
 
+/**
+ * The host's read tools (§6.2) in the console's words. The host's `AdminReadTools` owns the tools; this is only how the
+ * panel names a call to one, and a tool not listed here is still labelled, by its name.
+ */
+export const READ_TOOL_TEXT: Record<string, string> = {
+  stack_status: $localize`Reading the stack`,
+  firing_alerts: $localize`Reading the alerts`,
+  queue_depths: $localize`Reading the queues`,
+  recent_logs: $localize`Reading the log follow`,
+  trace_summary: $localize`Reading a trace`,
+  list_api_operations: $localize`Reading the API catalogue`,
+  list_runbooks: $localize`Reading the runbooks`,
+};
+
 /** A tool call's label, by its name and the few args it carries, in the console's words (§5.3). */
 export function toolLabel(name: string, args: Record<string, unknown>): string {
   if (name === 'open_screen') {
     const screen = SCREENS.find((s) => s.path === args['path']);
     return $localize`Opening ${screen?.label ?? String(args['path'])}:screen:`;
   }
-  return $localize`Using ${name}:tool:`;
+  return Object.hasOwn(READ_TOOL_TEXT, name) ? READ_TOOL_TEXT[name] : $localize`Using ${name}:tool:`;
 }
 
 /**
