@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Admin.Assistant;
@@ -55,15 +56,27 @@ public sealed partial class AdminReadToolsTests(AdminHostFactory factory) : ICla
     }
 
     [Fact]
-    public async Task Recent_logs_with_no_follow_started_says_so_and_starts_none()
+    public async Task Recent_logs_with_no_follow_started_says_none_is_running_and_starts_none()
     {
         using WebApplicationFactory<Program> host = factory.WithWebHostBuilder(_ => { });
 
         ToolOutcome outcome = await Tools(host).InvokeAsync("recent_logs", [], Context, Ct);
 
         outcome.Ok.ShouldBeTrue();
-        outcome.Content.ShouldContain("No log follow has been started");
+        outcome.Content.ShouldContain("No log follow is running");
         host.Services.GetRequiredService<LogFollower>().Current.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Recent_logs_after_the_follow_was_stopped_says_none_is_running_rather_than_its_old_lines()
+    {
+        using WebApplicationFactory<Program> host = factory.WithWebHostBuilder(_ => { });
+        Job follow = await FollowAsync(host);
+        (await host.CreateClient().PostAsync($"/api/logs/follow/{follow.Id}/stop", null, Ct)).EnsureSuccessStatusCode();
+
+        ToolOutcome outcome = await Tools(host).InvokeAsync("recent_logs", [], Context, Ct);
+
+        outcome.Content.ShouldContain("No log follow is running");
     }
 
     [Fact]
@@ -139,16 +152,32 @@ public sealed partial class AdminReadToolsTests(AdminHostFactory factory) : ICla
     }
 
     [Fact]
-    public void A_secret_with_a_quote_is_redacted_as_the_load_runs_command_line_writes_it_too()
+    public void A_secret_a_read_tool_serializes_is_redacted_in_the_escaped_form_its_json_carries()
     {
-        // LoadRunService doubles a quote when it writes the sa password into a PowerShell single-quoted string, and
-        // stack_status carries the last load run's command line.
+        // A log line or a trace event that prints a password reaches the provider inside a tool's JSON result, where a
+        // quote and a backslash are escaped, so the exact value is not what the text holds.
+        const string Secret = """it's "a" pa55\&é""";
+        using WebApplicationFactory<Program> host = factory.WithWebHostBuilder(b => b.UseSetting("Admin:SqlPassword", Secret));
+        IRedactor redactor = host.Services.GetRequiredService<AssistantRuntime>().Core!.Redactor;
+        // Not "Password=": the scrubber's own form rule would take that, and this is about the exact value.
+        string result = JsonSerializer.Serialize(new { text = $"connected with {Secret} as sa" }, AdminReadTools.Json);
+        result.ShouldNotContain(Secret);
+
+        string redacted = redactor.Redact(result, AssistantRuntime.Operator);
+
+        redacted.ShouldNotContain("pa55");
+        JsonNode.Parse(redacted)!["text"]!.GetValue<string>().ShouldBe($"connected with {FixtureScrubber.Scrubbed} as sa");
+    }
+
+    [Fact]
+    public void A_secret_with_a_quote_is_redacted_as_a_load_run_steps_command_line_writes_it_too()
+    {
+        // LoadRunService doubles a quote when it writes the sa password into a PowerShell single-quoted string.
         using WebApplicationFactory<Program> host = factory.WithWebHostBuilder(b => b.UseSetting("Admin:SqlPassword", "it's-a-pa55"));
         IRedactor redactor = host.Services.GetRequiredService<AssistantRuntime>().Core!.Redactor;
 
         string redacted = redactor.Redact("$p = 'it''s-a-pa55'; also it's-a-pa55", AssistantRuntime.Operator);
 
-        redacted.ShouldNotContain("pa55");
         redacted.ShouldBe($"$p = '{FixtureScrubber.Scrubbed}'; also {FixtureScrubber.Scrubbed}");
     }
 
