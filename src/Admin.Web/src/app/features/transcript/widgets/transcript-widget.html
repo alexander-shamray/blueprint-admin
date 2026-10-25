@@ -33,7 +33,13 @@
             <span class="at">{{ entry.at }}</span>
             <span class="outcome">{{ outcome(entry) }}</span>
             @if (entry.kind === 'Request') {
-              <span class="identity">{{ entry.identity ? 'as ' + entry.identity : 'anonymous' }}</span>
+              <span class="identity">
+                @if (entry.identity) {
+                  <ng-container i18n>as {{ entry.identity }}</ng-container>
+                } @else {
+                  <ng-container i18n>anonymous</ng-container>
+                }
+              </span>
             }
             @if (entry.assistant) {
               <span class="assistant" i18n>asked by the assistant</span>

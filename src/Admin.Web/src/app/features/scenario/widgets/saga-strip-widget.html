@@ -68,7 +68,11 @@
         @for (t of s.transitions; track t.to) {
           <li>
             {{ t.from }} → {{ t.to }}:
-            {{ t.seconds === null ? 'time unreadable' : t.seconds + ' s' }}
+            @if (t.seconds === null) {
+              <ng-container i18n>time unreadable</ng-container>
+            } @else {
+              <ng-container i18n>{{ t.seconds }} s</ng-container>
+            }
           </li>
         }
       </ul>

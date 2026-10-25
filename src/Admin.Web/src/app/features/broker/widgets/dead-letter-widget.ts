@@ -68,7 +68,13 @@ import { BrokerFeed, describeError } from '../broker-feed';
               <dl>
                 <dt i18n>Message</dt
                 ><dd
-                  ><code>{{ message.messageId ?? '(no message id)' }}</code></dd
+                  ><code>
+                    @if (message.messageId) {
+                      {{ message.messageId }}
+                    } @else {
+                      <ng-container i18n>(no message id)</ng-container>
+                    }
+                  </code></dd
                 >
                 @if (message.correlationId; as c) {
                   <dt i18n>Correlation</dt
@@ -89,7 +95,13 @@ import { BrokerFeed, describeError } from '../broker-feed';
                 }
                 <dt i18n>Body</dt
                 ><dd
-                  ><code class="body">{{ message.body ?? '(binary)' }}</code></dd
+                  ><code class="body">
+                    @if (message.body !== null) {
+                      {{ message.body }}
+                    } @else {
+                      <ng-container i18n>(binary)</ng-container>
+                    }
+                  </code></dd
                 >
               </dl>
               @if (message.messageId; as id) {
