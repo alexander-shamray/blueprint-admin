@@ -52,10 +52,22 @@ public sealed class HttpAdminHost(HttpClient http) : IAdminHost
         using HttpResponseMessage response = await SendAsync(() => http.GetAsync(CataloguePath, cancellationToken));
         string text = await response.Content.ReadAsStringAsync(cancellationToken);
 
-        // Without a built SPA the host answers any other path with its index page, so a status is not enough.
-        return response.IsSuccessStatusCode && JsonNode.Parse(text) is JsonArray
+        // A host with an older build answers any other path with its index page, so a status is not enough.
+        return response.IsSuccessStatusCode && IsArray(text)
             ? text
             : throw new HostUnavailableException($"The host serves no {CataloguePath}: build the SPA into the host's wwwroot (npm run build in src/Admin.Web).");
+    }
+
+    private static bool IsArray(string text)
+    {
+        try
+        {
+            return JsonNode.Parse(text) is JsonArray;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static async Task<HttpResponseMessage> SendAsync(Func<Task<HttpResponseMessage>> send)
