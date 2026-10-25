@@ -156,9 +156,12 @@ two pull requests together.
 - **A red `main` is reverted first and fixed forward after.**
   [`main-red.yml`](../.github/workflows/main-red.yml) turns a failed `ci`
   run on `main`'s tip into an issue, which outlives the run and the mail,
-  and closes it on the next green run. A session meets it first as a red
-  check on its own pull request, whose checks run on its merge with `main`,
-  which `/ship` step 6 stops on. Whoever meets it reverts the pull request
+  and closes it on the next green run. **That open issue is the signal, not
+  a pull request's own checks**: a `pull_request` run is pinned to the
+  merge it started on and never reruns when `main` moves, so a pull request
+  last pushed before `main` went red still reads green. So an open
+  `main is red` issue stops a landing as a red check would; `/ship` step 6
+  does not read it yet (#531). Whoever meets it reverts the pull request
   that turned it red with `bash .claude/scripts/git-revert-pr.sh <n>`, and
   the fix lands as a new pull request. A flake is the exception, a comment
   on the flaky tracker by the user-level rule. A check that is red on a pull
