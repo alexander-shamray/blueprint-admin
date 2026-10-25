@@ -213,11 +213,11 @@ Each round is the review done once, end to end:
 
    | | |
    |---|---|
-   | `host` | `src/Admin.Host/**` — Compose, jobs, proxy, FakePlatform, SSE — and `src/Admin.Assistant/**`, the assistant's core |
+   | `host` | `src/Admin.Host/**` — Compose, jobs, proxy, FakePlatform, SSE — and `src/Admin.Assistant/**`, the assistant's core, `src/Admin.Assistant.Anthropic/**`, its adapter, and `src/Admin.Mcp/**`, the MCP route |
    | `spa` | `src/Admin.Web/src/**` except specs — screens, core, shared |
    | `suites` | `tests/**`, the SPA's specs and `e2e/` — where the cannot-fail class lives |
    | `tooling` | `.github/**`, `tools/**`, `.claude/**` — Python, shell, YAML, commands |
-   | `config` | every tracked file at the repository root, the Host's and the assistant core's `.csproj` and the SPA's own configuration |
+   | `config` | every tracked file at the repository root, the host-side projects' `.csproj` (Host, assistant core, Anthropic adapter, MCP route) and the SPA's own configuration |
    | `samples` | `docs/**` fenced code, audited as code but excerpt-aware; the plans are owned, not read |
 
    The rows partition the repository: a tracked path no row owns exits 3 naming
