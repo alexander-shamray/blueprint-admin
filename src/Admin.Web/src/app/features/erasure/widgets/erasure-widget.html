@@ -111,8 +111,21 @@
       @for (row of run.rows(); track row.name) {
         <tr [class]="'holder-' + row.state">
           <td>{{ row.name }}</td>
-          <td
-            >[{{ row.state }}]
+          <td>
+            @switch (row.state) {
+              @case ('unasked') {
+                <ng-container i18n>[unasked]</ng-container>
+              }
+              @case ('answered') {
+                <ng-container i18n>[answered]</ng-container>
+              }
+              @case ('overdue') {
+                <ng-container i18n>[overdue]</ng-container>
+              }
+              @case ('waiting') {
+                <ng-container i18n>[waiting]</ng-container>
+              }
+            }
             @if (!row.counted) {
               <ng-container i18n>not counted</ng-container>
             }

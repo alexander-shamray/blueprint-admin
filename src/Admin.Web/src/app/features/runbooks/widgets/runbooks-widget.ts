@@ -195,7 +195,7 @@ export class RunbooksWidget {
         phase.alert === entry.phases[0]?.alert ? null : phase.alert,
         phase.confirmWith,
       ),
-      `cause of ${phase.alert} (${entry.runbook})`,
+      $localize`cause of ${phase.alert}:alert: (${entry.runbook}:runbook:)`,
     );
   }
 
@@ -203,7 +203,7 @@ export class RunbooksWidget {
   restore(): void {
     const entry = this.entry();
     if (!entry?.script || this.running()) return;
-    this.start(this.host.runbookRestore(entry.runbook), `undo of ${entry.runbook}`);
+    this.start(this.host.runbookRestore(entry.runbook), $localize`undo of ${entry.runbook}:runbook:`);
   }
 
   /** The job has ended, or its stream failed so no end will come: read the alerts at once instead of at the next tick. */
@@ -215,9 +215,9 @@ export class RunbooksWidget {
   /** What Prometheus says of an alert the runbook names, in words a colour does not carry alone. */
   alertState(name: string): string {
     const view = this.alerts();
-    if (!view) return this.alertsError() ? 'unknown' : 'reading';
-    if (!view.reachable) return 'unknown';
-    return view.loaded.find((r) => r.name === name)?.state ?? 'not loaded';
+    if (!view) return this.alertsError() ? $localize`unknown` : $localize`reading`;
+    if (!view.reachable) return $localize`unknown`;
+    return view.loaded.find((r) => r.name === name)?.state ?? $localize`not loaded`;
   }
 
   phaseFor(alert: string): RunbookPhase | undefined {
