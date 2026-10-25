@@ -31,9 +31,10 @@ Three further asks shape the design more than the first version does:
   deployed, multi-user and signed in, which the console is not, so the core is
   written for many callers from the first phase (§5.2), and nothing in the
   core or the browser client knows it is in the admin console.
-- **An MCP route later** (the earlier option C): external agents — Claude
+- **An MCP route** (the earlier option C): external agents — Claude
   Code, Claude Desktop, others — reaching the same tools over the Model
-  Context Protocol. Not built now; nothing built now may block it.
+  Context Protocol. Built in phase 5 (§12) once the operator decided it should
+  run.
 
 ## 2. Goals, non-goals, anti-goals
 
@@ -70,7 +71,7 @@ Three further asks shape the design more than the first version does:
 
 **Non-goals**
 
-- Building the MCP transport now (§12 is its outline).
+- Offering the client tools over MCP (§12).
 - An agent that operates the platform, **in this note**. No Up, Down, wipe,
   Reset, replay, Scenario, runbook step or write request is a tool in any
   phase here. The operator may decide to add actions later. That is a design
@@ -680,23 +681,46 @@ total, so spend is visible.
 - Spec §6's screens table, README and `CLAUDE.md`'s owners table gain the
   assistant's owners as each phase lands.
 
-## 12. The MCP route, later
+## 12. The MCP route
 
-What it will be, so nothing now blocks it:
+Phase 5, which the operator decided on 2026-10-25 (#433): **go, server tools
+only**. What it is:
 
 - A separate process, `src/Admin.Mcp/`, speaking MCP over **stdio** to the
   agent that launched it and HTTP to the host's `/api` on loopback — a client
   of the host like the SPA. stdio needs no new listener, so the spec's §8
   binding is untouched, and a non-browser request carries no `Sec-Fetch-Site`
-  or carries `none`, which `/api` already admits.
-- Its tools are the server tools of §6.2 and §6.5, served by a new
-  `GET /api/assistant/tools` and `POST /api/assistant/tools/{name}`, through
-  the same registry, limits and redactor. Descriptors are already MCP's shape.
-- Its resource is the catalogue, which by then needs a host-readable copy:
-  the SPA build emits the registry's catalogue as a JSON asset under
-  `wwwroot`, and the panel and the MCP route both read that one file.
-- Client tools reach a browser only if one is open; whether the MCP route
-  offers them at all is that phase's decision.
+  or carries `none`, which `/api` already admits. The process holds no package
+  and no admin type: it speaks the protocol's six calls by hand (`initialize`,
+  `ping`, `tools/list`, `tools/call`, `resources/list`, `resources/read`) and
+  passes the host's JSON through. It takes the host's address as `--host`,
+  which must be a loopback `http` URL; the port is `AdminOptions`'s, not
+  restated here.
+- Its tools are the server tools of §6.2 and §6.5, served by
+  `GET /api/assistant/tools` and `POST /api/assistant/tools/{name}`, mapped
+  only while the assistant is on (§9.1) and answering as any other
+  `/api/assistant/*` path does when it is off. Both go through the same
+  registry, policy, limits and redactor as a conversation's calls:
+  `AssistantCore.ServerTools` and `AssistantCore.CallServerToolAsync` build
+  the registry with no client tool, and the core's one path runs the tool
+  under `ServerToolTimeout`, redacts the result for the operator and cuts it to
+  `MaxToolResultChars`. A call outside a conversation carries the conversation
+  id `none` and no `hostOptions`, so the platform tools read as the automatic
+  identity (§6.5). Descriptors are already MCP's shape, so the process drops
+  only the core's `side`. A call is not an assistant turn: it opens no
+  conversation and is in the operator's transcript as the assistant's (§6.5)
+  as any platform read is.
+- Its resource is the catalogue, which needs a host-readable copy. **Amended
+  from the earlier outline**, which had the SPA build emit it: the build cannot
+  run `catalogue()`, so the copy is `src/Admin.Web/public/assistant-catalogue.json`,
+  a committed file in the source language that the build copies into
+  `wwwroot` and that a spec holds to `catalogue()`'s output, failing a stale
+  file with the text that replaces it. The panel still builds its catalogue
+  from `catalogue()` in the active language; the MCP route serves the file as
+  `blueprint-admin://catalogue`.
+- **Client tools are not offered**: they need a browser that is open and
+  answering, and the host lists none. An agent that wants a screen reads the
+  catalogue and tells its user where to look.
 
 ## 13. Another client, and where the shared code lives
 
@@ -810,7 +834,7 @@ Each phase is one or more PRs and leaves the console working.
 | 3a Console reads | the server tools of §6.2 and the redaction gate over each | 1 |
 | 3b Platform data | `PlatformReadTools` (§6.5): GET operations as tools, identity choice and the panel's override, `PlatformReads`, transcript marking; e2e asking a product's stock and an order's payment status on FakePlatform | 1 |
 | 4 Workspace | `help` on `WIDGETS`, the Assistant widget type, `open_page`, `highlight_widget`, `propose_widget`, `follow_correlation` | 1, #383 (and #390 for the last) |
-| 5 MCP | §12, as its own decision | 3a, 3b |
+| 5 MCP | §12: `Admin.Mcp`, the two tool endpoints, the catalogue asset and its spec; e2e listing the tools and asking a stack and a platform-data question on FakePlatform | 3a, 3b |
 | 6 Package | the console consumes the core from `blueprint-backend`'s package and drops its own copy; the browser client of §13's shared row becomes a copied, cited mirror of the backend's golden files under the `drift` job; `CLAUDE.md`'s owners table names the backend; a `nuget.config` naming the GitHub Packages feed, its token read from the environment and never committed, a CI secret for every job in `.github/workflows/` that restores NuGet packages, and the spec's **Prerequisites** row gaining that token (#435) | blueprint-backend#1346 |
 
 Phases 2, 3a and 3b can run in parallel. Compaction of long conversations
