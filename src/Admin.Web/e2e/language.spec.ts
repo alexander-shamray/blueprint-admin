@@ -34,9 +34,10 @@ test('a typed confirmation stays the literal text in Russian', async ({ page }) 
   await page.goto('/stack');
   await expect(page.locator('html')).toHaveAttribute('lang', 'ru-RU');
 
-  const confirm = page.getByPlaceholder('type: down -v');
+  // The hint and the button are Russian now; the word the operator types is not.
+  const confirm = page.getByPlaceholder('введите: down -v');
   await confirm.fill('down -v');
-  await expect(page.getByRole('button', { name: 'Down and wipe' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Опустить и стереть' })).toBeEnabled();
 });
 
 test.describe('with a Russian browser and no stored choice', () => {
