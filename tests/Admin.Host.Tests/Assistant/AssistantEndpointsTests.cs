@@ -366,7 +366,7 @@ public sealed class AssistantEndpointsTests : IClassFixture<AdminHostFactory>
     {
         AssistantOptions options = new() { Model = model, Effort = effort };
 
-        Should.Throw<InvalidOperationException>(() => AnthropicProviderFactory.Create(options, TimeProvider.System)).Message.ShouldContain(key);
+        Should.Throw<InvalidOperationException>(() => AnthropicProviderFactory.Create(options, TimeProvider.System, NullLogger.Instance)).Message.ShouldContain(key);
     }
 
     [Fact]

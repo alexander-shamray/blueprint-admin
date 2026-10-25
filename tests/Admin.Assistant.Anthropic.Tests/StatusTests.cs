@@ -11,7 +11,7 @@ public sealed class StatusTests
 {
     private const string Model = """{"id":"claude-opus-5-5","type":"model","display_name":"Claude Opus 5.5","created_at":"2026-08-01T00:00:00Z"}""";
 
-    private static AnthropicProvider Provider(FakeHttp http, TimeProvider time) => new(http.Client(), AnthropicSettings.Default, time);
+    private static AnthropicProvider Provider(FakeHttp http, TimeProvider time, Action<string>? warn = null) => new(http.Client(), AnthropicSettings.Default, time, warn);
 
     [Fact]
     public async Task A_model_the_credential_can_read_is_available_and_names_the_model()
@@ -43,6 +43,31 @@ public sealed class StatusTests
         AnthropicProvider provider = Provider(http, TimeProvider.System);
 
         (await provider.StatusAsync(CancellationToken.None)).Reason.ShouldBe(StatusReason.Unreachable);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound, "AnthropicNotFoundException")]
+    [InlineData(HttpStatusCode.TooManyRequests, "AnthropicRateLimitException")]
+    public async Task A_read_that_fails_otherwise_warns_with_the_exception_type_and_never_its_message(HttpStatusCode failure, string type)
+    {
+        FakeHttp http = new FakeHttp().Status(failure, """{"type":"error","error":{"type":"not_found_error","message":"sk-ant-echoed"}}""");
+        List<string> warnings = [];
+
+        ProviderStatus status = await Provider(http, TimeProvider.System, warnings.Add).StatusAsync(CancellationToken.None);
+
+        status.Reason.ShouldBe(StatusReason.Unreachable);
+        warnings.ShouldHaveSingleItem().ShouldBe($"The Anthropic status probe for model 'claude-opus-5-5' failed with {type}.");
+    }
+
+    [Fact]
+    public async Task A_refused_credential_does_not_warn()
+    {
+        FakeHttp http = new FakeHttp().Status(HttpStatusCode.Unauthorized);
+        List<string> warnings = [];
+
+        await Provider(http, TimeProvider.System, warnings.Add).StatusAsync(CancellationToken.None);
+
+        warnings.ShouldBeEmpty();
     }
 
     [Fact]
