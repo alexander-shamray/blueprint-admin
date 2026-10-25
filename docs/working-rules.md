@@ -118,6 +118,51 @@ dialects.
   `gh issue list --limit 1000`, because the default of 30 truncates
   silently.
 
+## Merging beside other agents
+
+Several sessions keep pull requests open at once, and `protect-main`, the
+repository's ruleset, owns how they land: rebase only, with no rule that a
+branch be up to date first. So no pull request is tested against the `main`
+it lands on, and the run of `ci` on the push to `main` is the first to see
+two pull requests together.
+
+- **Do not update an open pull request because another one merged.** No
+  rebase, and no *Update branch* button. A branch is updated only when
+  GitHub reports a conflict: `mergeable` reading `CONFLICTING`, or a rebase
+  landing refused. Then `bash .claude/scripts/git-rebase-onto-main.sh
+  <branch> start` fetches, replays onto `origin/main` and publishes under a
+  lease, and its exit codes are `/ship` step 6's. The raw spelling's push,
+  `git push --force-with-lease`, is denied in `.claude/settings.json`,
+  because a lease cannot check what the helper's guards do.
+- **Never force-push a branch another session owns**, even through the
+  helper. Its pull request is that session's, and so is the conflict.
+- **Each clone sets `git config rerere.enabled true` once.** Worktrees share
+  the clone's config, so a resolution recorded in one is replayed in the
+  next. It does not stage what it replays, so the helper's `continue` still
+  follows a `git add`.
+- **No pull request is set to auto-merge** while `protect-main` requires no
+  status check: with nothing to wait for, auto-merge lands at once, before
+  `ci` has run. `/ship` waits on the checks and lands with
+  `gh-pr-merge.sh` against the head it read, and a merge by hand does the
+  same.
+- **The jobs that judge the pull request rather than the tree run on pull
+  requests only**: `commits` in `ci.yml`, `commit-gate.yml` and
+  `locality-gate.yml`. Every other `ci` job also runs on the push to `main`.
+  The gap is accepted: the commit gate and the locality gate judge a range
+  and a body, which landing does not change, and `commits` built the
+  pre-replay commits, so a commit replayed onto a different `main` can still
+  fail to build. A red `ci` on `main` is therefore the one alert for that,
+  as for every other combination.
+- **A red `main` is reverted first and fixed forward after.**
+  [`main-red.yml`](../.github/workflows/main-red.yml) turns a failed `ci`
+  run on `main` into an issue, which every session lists, and closes it on
+  the next green run. Whoever meets it reverts the pull request that turned
+  it red with `bash .claude/scripts/git-revert-pr.sh <n>`, and the fix lands
+  as a new pull request. A flake is the exception, a comment on the flaky
+  tracker by the user-level rule. A check that is red on a pull request
+  and on `main` belongs to `main`, so a pull request that touched none of
+  it waits for that issue to close and is not changed to make it pass.
+
 ## One owner per fact
 
 Every fact has exactly one owner, and every other mention cites the owner by
