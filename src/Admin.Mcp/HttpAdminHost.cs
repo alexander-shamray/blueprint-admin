@@ -104,8 +104,9 @@ public sealed class HttpAdminHost(HttpClient http) : IAdminHost
         {
             return await response.Content.ReadFromJsonAsync<T>(Web, cancellationToken);
         }
-        catch (JsonException)
+        catch (Exception e) when (e is JsonException or NotSupportedException)
         {
+            // NotSupportedException is what ReadFromJsonAsync throws for a content type that is not JSON.
             throw new HostUnavailableException("The host answered with something that is not the JSON this process reads; is it a console host?");
         }
     }
@@ -116,7 +117,7 @@ public sealed class HttpAdminHost(HttpClient http) : IAdminHost
         {
             return await response.Content.ReadFromJsonAsync<JsonObject>(Web, cancellationToken);
         }
-        catch (JsonException)
+        catch (Exception e) when (e is JsonException or NotSupportedException)
         {
             return null;
         }
