@@ -15,9 +15,10 @@ not a second meaning: the redirection-target comment in
 writing-verb issue as `blueprint-frontend#26`, which a bare `#26` would
 resolve to the wrong repository. Where the context decided the sibling, the
 citation is qualified; the few it did not (the stdin-as-data `#33`, the `sed`
-`#23`, the hand-filed `#183`, the `#55, #56, #68` group, and the
-closure-keyword examples in `pr.md` and `commit.md`) stay bare and are owed
-under #448. The arguments
+`#23`, the `#55, #56, #68` group, and the closure-keyword examples in `pr.md`
+and `commit.md`) stay bare and are owed under #448, as are the copies of the
+same citations in `docs/commands/` and further down this file. A bare number
+not named here is a local issue. The arguments
 for the grants, the deny lists, the git-argv hook and the edit-target hook live
 in those two
 `docs/harness-boundaries.md` files and are not restated here; a summary of an
