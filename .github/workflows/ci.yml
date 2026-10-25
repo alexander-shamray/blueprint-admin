@@ -59,6 +59,9 @@ jobs:
           cache: npm
           cache-dependency-path: src/Admin.Web/package-lock.json
       - run: npm ci
+      # High and critical only, dev dependencies included: the build toolchain runs on the same machine that holds the realm
+      # passwords, and Dependabot (security updates on) opens the fix when one lands.
+      - run: npm audit --audit-level=high
       - run: npm run lint
       - run: npm test
       - run: npm run build
