@@ -281,8 +281,8 @@ would then reach a widget beside it, the stack goes under every widget on the
 page instead, so the migration never overlaps two widgets. A
 screen the console does not name was rendered as the first screen, so it
 becomes Stack's widgets. **The SPA runs this replacement, not the host**
-(§6.3): the defaults are the SPA's (`BUILT_IN_LAYOUTS` in
-`built-in-pages.ts`), and the host knows no widget types. The host's step to
+(§6.3): the defaults are the SPA's (the `layout` of each
+`BUILT_IN_PAGES` entry in `built-in-pages.ts`), and the host knows no widget types. The host's step to
 version 2 keeps the document as it is. The SPA replaces what it reads, and
 saves at once, so the notice is not repeated. The old routes keep working: `/stack`, `/trace/:correlationId`,
 `/mail?correlationId=`, … open the built-in page and hand the parameter to

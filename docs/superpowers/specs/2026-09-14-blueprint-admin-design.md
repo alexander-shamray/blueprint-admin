@@ -1037,8 +1037,9 @@ JSON viewer. The screen components of phases 0 to 5 are gone: each screen
 was rebuilt from widgets and the last of them retired in widget-workspace
 phase 6.
 
-The shell's screens are one list, `SCREENS` in `src/app/screens.ts`, read by
-the routes and the built-in pages; the side navigation and the command
+The shell's screens are one list, `BUILT_IN_PAGES` in
+`src/app/workspace/built-in-pages.ts` (named `SCREENS` in `src/app/screens.ts`),
+read by the routes and the default workspace; the side navigation and the command
 palette list the operator's pages (widget-workspace spec §7.2). `Ctrl+K`
 (`Cmd+K`) opens the palette from any page: go to a page, run the Scenario, or
 open what was typed as a
@@ -1053,14 +1054,14 @@ and names the active option through `aria-activedescendant`.
 With the assistant on (AI assistant note §9), the top bar has its toggle, the
 palette an "Ask the assistant" entry, and the shell a panel at its end: one
 conversation per browser tab, its id in `sessionStorage`, so a reload redraws
-it. What it explains each screen from is that screen's `help` in `SCREENS`;
+it. What it explains each screen from is that page's `help` in `BUILT_IN_PAGES`;
 it navigates through the client tool `open_screen`, and answers what the
 platform is doing now from the console's own reads, the server tools
 `AdminReadTools` lists (AI assistant note §6.2), each redacted before the
 provider sees it. Off, none of the three exists.
 
 The table is the widget catalogue by built-in page: what each page shows and
-does as it ships. A page is the widgets `BUILT_IN_LAYOUTS` in
+does as it ships. A page is the widgets its `layout` in `BUILT_IN_PAGES` in
 `src/app/workspace/built-in-pages.ts` places, and the types are the registry
 `WIDGETS` in `src/app/workspace/widgets.ts`; which widget is on which page is
 widget-workspace spec §5.2's. A widget shows and does its share of a row

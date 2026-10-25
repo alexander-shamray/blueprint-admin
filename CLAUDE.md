@@ -76,7 +76,7 @@ tools/token-usage/         Transcript report for the token plan
 | The assistant's limits and their defaults | `AssistantLimits` in `src/Admin.Assistant/AssistantLimits.cs` |
 | What the Anthropic provider sends, the default model and effort, and how its stream is read | `RequestBuilder`, `AnthropicSettings` and `StreamMapper` in `src/Admin.Assistant.Anthropic/` |
 | Where the provider's credential comes from | the SDK's own resolution, built in `AnthropicProviderFactory` (`src/Admin.Host/Assistant/`); no key holds one |
-| What each screen is for, as the assistant explains it | `help` in `SCREENS` (`src/Admin.Web/src/app/screens.ts`) |
+| What each screen is for, as the assistant explains it | `help` in `BUILT_IN_PAGES` (`src/Admin.Web/src/app/workspace/built-in-pages.ts`) |
 | Which console reads the assistant may call, and the endpoint each mirrors | `AdminReadTools` in `src/Admin.Host/Assistant/AdminReadTools.cs` |
 | The fake assistant's answers | `FakeAssistantScripts` in `src/Admin.Host/Fakes/` |
 | Token figures | `docs/token-usage.md` |

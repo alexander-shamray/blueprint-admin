@@ -349,9 +349,11 @@ Each feature has one `help`, and the owner moves as the workspace grows:
 - **Workspace phase 6 (#394)** retired the screen components but kept
   `SCREENS`: it is the list of built-in pages, and `BUILT_IN_LAYOUTS` is keyed
   by its paths. **With assistant phase 4 (#432)**, which adds `open_page`,
-  `SCREENS`' remaining text moves to the built-in pages' definitions, and
-  `open_screen` becomes an alias of `open_page` for the built-in page of the
-  same name.
+  `SCREENS`' remaining text moved to the built-in pages' definitions
+  (`BUILT_IN_PAGES` in `src/app/workspace/built-in-pages.ts`, which holds each
+  page's path, label, `help` and layout; `SCREENS` is only its name in
+  `screens.ts`), and `open_screen` becomes an alias of `open_page` for the
+  built-in page of the same name.
 
 Phase 1 builds on `SCREENS` knowing it will go: everything it builds there is
 the `help` field and one tool name.
