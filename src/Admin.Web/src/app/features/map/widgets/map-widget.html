@@ -27,7 +27,14 @@
   @for (service of m.services; track service.name) {
     <section class="service" [attr.aria-label]="serviceLabel(service.name)">
       <h2
-        >{{ service.name }} <small>{{ service.url ?? 'worker, no API of its own' }}</small></h2
+        >{{ service.name }}
+        <small>
+          @if (service.url) {
+            {{ service.url }}
+          } @else {
+            <ng-container i18n>worker, no API of its own</ng-container>
+          }
+        </small></h2
       >
       @if (service.routes.length > 0) {
         <table class="routes">

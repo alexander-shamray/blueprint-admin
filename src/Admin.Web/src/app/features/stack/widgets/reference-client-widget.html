@@ -20,11 +20,17 @@
       </span>
     </p>
     @if (!s.frontend.installed) {
-      <p class="error">{{
-        s.frontend.installProblem ??
-          (hostConfig()?.frontendDir ?? 'The frontend clone') +
-            ' has no node_modules. Run npm ci there; the console does not.'
-      }}</p>
+      <p class="error">
+        @if (s.frontend.installProblem) {
+          {{ s.frontend.installProblem }}
+        } @else if (hostConfig()?.frontendDir; as dir) {
+          <ng-container i18n>{{ dir }} has no node_modules. Run npm ci there; the console does not.</ng-container>
+        } @else {
+          <ng-container i18n
+            >The frontend clone has no node_modules. Run npm ci there; the console does not.</ng-container
+          >
+        }
+      </p>
     }
     @if (error(); as e) {
       <p class="error">{{ e }}</p>

@@ -136,11 +136,10 @@
               <p class="note">
                 <ng-container i18n>This cause costs the stack ({{ p.impact }}):</ng-container>&ngsp;
                 @if (p.confirmation === 'confirm') {
-                  <ng-container i18n>press Cause twice</ng-container>
+                  <ng-container i18n>press Cause twice.</ng-container>
                 } @else {
-                  <ng-container i18n>type {{ p.confirmWith }} to run it</ng-container>
+                  <ng-container i18n>type {{ p.confirmWith }} to run it.</ng-container>
                 }
-                .
               </p>
             }
           }
