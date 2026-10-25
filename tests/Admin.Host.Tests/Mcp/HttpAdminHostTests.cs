@@ -31,6 +31,16 @@ public sealed class HttpAdminHostTests
     }
 
     [Fact]
+    public async Task A_404_that_is_not_a_problem_document_is_the_assistant_being_off_not_a_crash()
+    {
+        HttpAdminHost host = Host(_ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new StringContent("<h1>404</h1>", System.Text.Encoding.UTF8, "text/html") }));
+
+        HostUnavailableException error = await Should.ThrowAsync<HostUnavailableException>(() => host.CallToolAsync("stack_status", [], Ct));
+
+        error.Message.ShouldContain("assistant is off");
+    }
+
+    [Fact]
     public async Task The_clients_own_timeout_is_an_unavailable_host_while_the_callers_cancellation_still_cancels()
     {
         HttpAdminHost slow = Host(_ => throw new TaskCanceledException("timed out"));
