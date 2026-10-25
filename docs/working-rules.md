@@ -128,10 +128,12 @@ two pull requests together.
 
 - **Do not update an open pull request because another one merged.** No
   rebase, and no *Update branch* button. A branch is updated only when
-  GitHub reports a conflict: `mergeable` reading `CONFLICTING`, or a rebase
-  landing refused. Then `bash .claude/scripts/git-rebase-onto-main.sh
-  <branch> start` fetches, replays onto `origin/main` and publishes under a
-  lease, and its exit codes are `/ship` step 6's. The raw spelling's push,
+  GitHub reports a conflict, and the update is
+  `bash .claude/scripts/git-rebase-onto-main.sh <branch> start`, which
+  fetches, replays onto `origin/main` and publishes under a lease. A rebase
+  landing refused is `/ship` step 6's own update, with its exit codes;
+  `mergeable` reading `CONFLICTING` stops `/ship`, and the update is the
+  caller's, run by hand before `/ship` resumes. The raw spelling's push,
   `git push --force-with-lease`, is denied in `.claude/settings.json`,
   because a lease cannot check what the helper's guards do.
 - **Never force-push a branch another session owns**, even through the
