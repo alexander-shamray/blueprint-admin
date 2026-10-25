@@ -147,14 +147,12 @@ two pull requests together.
   `ci` has run. `/ship` waits on the checks and lands with
   `gh-pr-merge.sh` against the head it read, and a merge by hand does the
   same.
-- **The jobs that judge the pull request rather than the tree run on pull
-  requests only**: `commits` in `ci.yml`, `commit-gate.yml` and
-  `locality-gate.yml`. Every other `ci` job also runs on the push to `main`.
-  The gap is accepted: the commit gate and the locality gate judge a range
-  and a body, which landing does not change, and `commits` built the
-  pre-replay commits, so a commit replayed onto a different `main` can still
-  fail to build. A red `ci` on `main` is therefore the one alert for that,
-  as for every other combination.
+- **Every `ci` job also runs on the push to `main`**, `commits` included,
+  which builds the commits the landing replayed onto a `main` their pull
+  request was never tested against. Only `commit-gate.yml` and
+  `locality-gate.yml` run on pull requests alone, and that gap is accepted:
+  they judge a range's trailers and a body's touch set, which landing does
+  not change.
 - **A red `main` is reverted first and fixed forward after.**
   [`main-red.yml`](../.github/workflows/main-red.yml) turns a failed `ci`
   run on `main`'s tip into an issue, which outlives the run and the mail,
