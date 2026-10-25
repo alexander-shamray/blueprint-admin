@@ -128,7 +128,8 @@ two pull requests together.
 
 - **Do not update an open pull request because another one merged.** No
   rebase, and no *Update branch* button. A branch is updated only when
-  GitHub reports a conflict, and the update is
+  GitHub reports a conflict, or when its checks went red with a red `main`
+  that has since turned green (the last bullet), and the update is
   `bash .claude/scripts/git-rebase-onto-main.sh <branch> start`, which
   fetches, replays onto `origin/main` and publishes under a lease. A rebase
   landing refused is `/ship` step 6's own update, with its exit codes;
@@ -167,7 +168,9 @@ two pull requests together.
   on the flaky tracker by the user-level rule. A check that is red on a pull
   request and on `main` belongs to `main`, so a pull request that touched
   none of it waits for that issue to close and is not changed to make it
-  pass.
+  pass. Once the issue closes, a rerun would still read the old merge with
+  the red `main`, so that pull request is updated through
+  `git-rebase-onto-main.sh`, the one update no conflict asked for.
 
 ## One owner per fact
 
