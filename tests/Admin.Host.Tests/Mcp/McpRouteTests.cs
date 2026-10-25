@@ -1,8 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
-using Admin.Mcp;
+using Admin.Host.Assistant;
 using Admin.Host.Tests.TestSupport;
+using Admin.Mcp;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Shouldly;
 
@@ -74,12 +75,13 @@ public sealed class McpRouteTests : IClassFixture<AdminHostFactory>
     }
 
     [Fact]
-    public async Task A_call_of_an_unknown_tool_is_a_404_problem_and_a_client_tools_name_is_unknown_too()
+    public async Task A_call_of_an_unknown_tool_is_a_404_problem_the_process_reads_as_unknown_and_not_as_an_assistant_that_is_off()
     {
         using HttpResponseMessage missing = await client.PostAsJsonAsync("/api/assistant/tools/open_screen", new { }, Ct);
 
         missing.StatusCode.ShouldBe(HttpStatusCode.NotFound);
-        JsonNode.Parse(await missing.Content.ReadAsStringAsync(Ct))!["title"]!.GetValue<string>().ShouldBe("No such tool");
+        JsonNode.Parse(await missing.Content.ReadAsStringAsync(Ct))!["title"]!.GetValue<string>().ShouldBe(AssistantEndpoints.NoSuchTool);
+        (await new HttpAdminHost(client).CallToolAsync("open_screen", [], Ct)).ShouldBeNull();
     }
 
     [Fact]

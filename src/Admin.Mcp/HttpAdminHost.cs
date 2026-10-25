@@ -15,6 +15,9 @@ public sealed class HttpAdminHost(HttpClient http) : IAdminHost
     /// <summary>Where the SPA build leaves the catalogue, under the host's <c>wwwroot</c>.</summary>
     public const string CataloguePath = "assistant-catalogue.json";
 
+    // Copied from AssistantEndpoints.NoSuchTool, its owner; McpRouteTests holds the two equal.
+    private const string NoSuchTool = "No such tool";
+
     private static readonly JsonSerializerOptions Web = new(JsonSerializerOptions.Web);
 
     private const string AssistantOff = "The console's assistant is off, so it offers no tools: start the host with Admin:Assistant:Provider set to 'fake' or 'anthropic'.";
@@ -37,7 +40,7 @@ public sealed class HttpAdminHost(HttpClient http) : IAdminHost
             // The host's own answer for an unknown tool is a problem document; anything else at that route is the off switch's 404.
             JsonObject? problem = await ProblemAsync(response, cancellationToken);
 
-            return problem?["title"]?.GetValue<string>() == "No such tool" ? null : throw new HostUnavailableException(AssistantOff);
+            return problem?["title"]?.GetValue<string>() == NoSuchTool ? null : throw new HostUnavailableException(AssistantOff);
         }
 
         JsonObject? body = await Json<JsonObject>(response, cancellationToken);

@@ -23,6 +23,12 @@ public static class AssistantEndpoints
     /// <summary>The longest message a caller may send, in characters.</summary>
     public const int MaxTextLength = 16_000;
 
+    /// <summary>
+    /// The title of the 404 for a tool the host does not have. <c>HttpAdminHost</c> in <c>src/Admin.Mcp</c> copies it to
+    /// tell this answer from the catch-all's 404 of an assistant that is off; a test holds the two together.
+    /// </summary>
+    public const string NoSuchTool = "No such tool";
+
     /// <summary>The most catalogue entries a client may send.</summary>
     public const int MaxCatalogue = 500;
 
@@ -58,7 +64,7 @@ public static class AssistantEndpoints
 
             return await core.CallServerToolAsync(caller, name, arguments ?? [], cancellationToken) is { } outcome
                 ? TypedResults.Ok(outcome)
-                : TypedResults.Problem(statusCode: StatusCodes.Status404NotFound, title: "No such tool", detail: name);
+                : TypedResults.Problem(statusCode: StatusCodes.Status404NotFound, title: NoSuchTool, detail: name);
         });
 
         app.MapPost("/api/assistant/conversations", async Task<Results<Ok<ConversationOpened>, ProblemHttpResult>> (OpenConversation? request, CancellationToken cancellationToken) =>
