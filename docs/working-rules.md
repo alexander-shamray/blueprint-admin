@@ -158,9 +158,9 @@ two pull requests together.
   run on `main`'s tip into an issue, which outlives the run and the mail,
   and closes it on the next green run. A session meets it first as a red
   check on its own pull request, whose checks run on its merge with `main`,
-  which `/ship` step 6 stops on. Whoever meets it reverts the pull request that turned
-  it red with `bash .claude/scripts/git-revert-pr.sh <n>`, and the fix lands
-  as a new pull request. A flake is the exception, a comment on the flaky
+  which `/ship` step 6 stops on. Whoever meets it reverts the pull request
+  that turned it red with `bash .claude/scripts/git-revert-pr.sh <n>`, and
+  the fix lands as a new pull request. A flake is the exception, a comment on the flaky
   tracker by the user-level rule. A check that is red on a pull request
   and on `main` belongs to `main`, so a pull request that touched none of
   it waits for that issue to close and is not changed to make it pass.
