@@ -15,8 +15,8 @@ const TRANSLATED_TEMPLATES = [
   'src/app/workspace/*.ts/*.html',
   'src/app/assistant/*.ts/*.html',
   'src/app/workspace/workspace-grid.html',
-  'src/app/workspace/widgets/note/mermaid-diagram.ts/*.html',
-  'src/app/workspace/widgets/note/note-widget.ts/*.html',
+  'src/app/workspace/widgets/**/*.html',
+  'src/app/workspace/widgets/**/*.ts/*.html',
 ];
 
 module.exports = defineConfig([

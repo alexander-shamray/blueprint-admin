@@ -2,23 +2,33 @@
   <form (ngSubmit)="submit()">
     <input
       name="correlationId"
+      i18n-aria-label
       aria-label="Correlation id"
+      i18n-placeholder
       placeholder="correlation id"
       [ngModel]="correlationId()"
       (ngModelChange)="correlationId.set($event)"
     />
     <label>
-      Window
-      <select name="window" aria-label="Window" [ngModel]="shownWindow()" (ngModelChange)="window.set($event)">
+      <ng-container i18n>Window</ng-container>
+      <select
+        name="window"
+        i18n-aria-label
+        aria-label="Window"
+        [ngModel]="shownWindow()"
+        (ngModelChange)="window.set($event)"
+      >
         @for (w of windows; track w) {
           <option [value]="w">{{ w }}</option>
         }
       </select>
     </label>
-    <button class="draw" type="submit" [disabled]="loading()">Draw</button>
-    <button class="reload" type="button" [disabled]="loading() || !canReload()" (click)="reload()">Reload</button>
+    <button class="draw" type="submit" [disabled]="loading()" i18n>Draw</button>
+    <button class="reload" type="button" [disabled]="loading() || !canReload()" (click)="reload()" i18n>
+      Reload
+    </button>
     @if (following()) {
-      <span class="following">Follows the last Trace link</span>
+      <span class="following" i18n>Follows the last Trace link</span>
     }
   </form>
 </section>
@@ -29,23 +39,25 @@
 
 @if (view(); as v) {
   <p class="summary" role="status">
-    {{ v.events.length }} event{{ v.events.length === 1 ? '' : 's' }} for {{ v.correlationId }} over the last
-    {{ v.window }}.
+    <ng-container i18n
+      >{v.events.length, plural, =1 {1 event} other {{{ v.events.length }} events}} for {{ v.correlationId }} over the
+      last {{ v.window }}.</ng-container
+    >&ngsp;
     @if (v.tracesTruncated) {
-      <span class="truncated">Only the {{ v.traceIds.length }} newest traces were fetched.</span>
+      <span class="truncated" i18n>Only the {{ v.traceIds.length }} newest traces were fetched.</span>
     }
   </p>
 
   @if (diff(); as d) {
     @if (!d.comparable) {
-      <p class="changes" role="status">
+      <p class="changes" role="status" i18n>
         The window changed from {{ d.previousWindow }} to {{ v.window }}, so this read is not compared with the one at
         {{ d.previousAt | date: 'HH:mm:ss' }}.
       </p>
     } @else if (d.arrived.length === 0 && d.gone.length === 0) {
-      <p class="changes" role="status">Nothing changed since the read at {{ d.previousAt | date: 'HH:mm:ss' }}.</p>
+      <p class="changes" role="status" i18n>Nothing changed since the read at {{ d.previousAt | date: 'HH:mm:ss' }}.</p>
     } @else {
-      <p class="changes" role="status">
+      <p class="changes" role="status" i18n>
         Since the read at {{ d.previousAt | date: 'HH:mm:ss' }}: {{ d.arrived.length }} new, {{ d.gone.length }} no
         longer in the timeline.
       </p>
@@ -58,7 +70,7 @@
 
   @if (sequence(); as s) {
     <app-mermaid-diagram [source]="s.source" />
-    <ol class="arrows" aria-label="The diagram's arrows">
+    <ol class="arrows" i18n-aria-label aria-label="The diagram's arrows">
       @for (event of s.arrows; track $index) {
         <li>
           {{ event.service }} [{{ event.kind }}] {{ event.summary }}
@@ -68,7 +80,8 @@
               [href]="link"
               target="_blank"
               rel="noopener"
-              [attr.aria-label]="'Open arrow ' + ($index + 1) + ' in Grafana Explore'"
+              [attr.aria-label]="arrowLabel($index + 1)"
+              i18n
               >Explore</a
             >
           }
@@ -76,14 +89,14 @@
       }
     </ol>
   } @else {
-    <p class="empty">
+    <p class="empty" i18n>
       The timeline for {{ v.correlationId }} holds no hop to draw: no log line, span or message of the last
       {{ v.window }}
       names a service call. The id may be older than the window, or the request may never have reached the platform.
     </p>
   }
 } @else if (loading()) {
-  <p>Loading…</p>
+  <p i18n>Loading…</p>
 } @else if (!error()) {
-  <p class="empty">Enter a correlation id, or follow a Trace link, to draw where the request went.</p>
+  <p class="empty" i18n>Enter a correlation id, or follow a Trace link, to draw where the request went.</p>
 }

@@ -180,19 +180,19 @@ export function topologyOf(map: PlatformMapView, reads: TopologyReads): Topology
     let text: string;
     if (parkedMessages > 0) {
       state = 'parked';
-      text = `parked: ${holding.map((t) => `${t.parked} ${t.messages}`).join(', ')}`;
+      text = $localize`parked: ${holding.map((t) => `${t.parked} ${t.messages}`).join(', ')}:twins:`;
     } else if (queue.messages === null) {
       state = 'unknown';
-      text = 'the broker does not list it';
+      text = $localize`the broker does not list it`;
     } else if (rate !== undefined && rate > 0) {
       state = 'growing';
-      text = 'growing';
+      text = $localize`growing`;
     } else if (queue.messages > 0) {
       state = 'holding';
-      text = 'holding';
+      text = $localize`holding`;
     } else {
       state = 'empty';
-      text = 'empty';
+      text = $localize`empty`;
     }
 
     const id = `q:${queue.name}`;

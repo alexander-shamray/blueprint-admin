@@ -34,6 +34,9 @@ export class SequenceWidget {
   readonly config = input<Record<string, unknown>>({});
 
   readonly windows = WINDOWS;
+
+  /** An arrow's link name, with its place in the list. */
+  arrowLabel = (n: number): string => $localize`Open arrow ${n}:n: in Grafana Explore`;
   readonly view = signal<TraceView | null>(null);
   /** What moved since this session's previous fetch of the id on screen; null on its first fetch. */
   readonly diff = signal<TraceDiff | null>(null);
