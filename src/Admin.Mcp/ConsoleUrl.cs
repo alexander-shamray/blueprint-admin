@@ -10,6 +10,13 @@ public static class ConsoleUrl
     /// <summary>The environment variable read when <c>--url</c> is not given.</summary>
     public const string Variable = "ADMIN_CONSOLE_URL";
 
+    /// <summary>
+    /// The host names the console answers, copied from <c>LoopbackOriginGuard.LoopbackHosts</c> (this project cannot see the
+    /// host's): its host filtering refuses any other, so another loopback address would pass here and fail on every call.
+    /// A drift test in <c>Admin.Host.Tests</c> holds the two lists equal.
+    /// </summary>
+    public static readonly IReadOnlyList<string> Hosts = ["127.0.0.1", "localhost", "[::1]"];
+
     /// <exception cref="ArgumentException">No address, one that is not an absolute http address, or one that is not loopback.</exception>
     public static Uri From(string[] args, string? fromEnvironment)
     {
@@ -26,9 +33,9 @@ public static class ConsoleUrl
             throw new ArgumentException($"'{given}' is not an http address.");
         }
 
-        if (!url.IsLoopback)
+        if (!Hosts.Contains(url.Host, StringComparer.OrdinalIgnoreCase))
         {
-            throw new ArgumentException($"'{url.Host}' is not a loopback address; the console binds loopback only, and this process reaches nothing else.");
+            throw new ArgumentException($"'{url.Host}' is not one of {string.Join(", ", Hosts)}; the console binds loopback only and answers only those names, and this process reaches nothing else.");
         }
 
         // The base address must end in a slash for the relative routes to join under it.

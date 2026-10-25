@@ -169,6 +169,8 @@ core's records; field names are camelCase JSON.
 | `POST /api/assistant/conversations/{id}/tool-results` | The result of a client tool call: `callId`, `ok`, `content`. |
 | `POST /api/assistant/conversations/{id}/cancel` | Ends the running turn; a provider stream in flight is cancelled. |
 | `DELETE /api/assistant/conversations/{id}` | Forgets the conversation. |
+| `GET /api/assistant/tools` | The host's server tools, in MCP's tool shape, as a client with no conversation sees them. For the MCP route only (§12). |
+| `POST /api/assistant/tools/{name}` | Calls one server tool outside a conversation. Body: the tool's input, a JSON object (`{}` for none). Returns `ok` and `content`, redacted and bounded as in a turn; `404` for a name that is not a server tool. For the MCP route only (§12). |
 | `POST /api/assistant/conversations/{id}/confirmations` | **Reserved** (§6.3): the operator's answer to a `confirmation_required` event. Until actions are allowed it answers `404`. |
 
 Conversations live in host memory only, bounded in number and idle time (the
@@ -692,7 +694,10 @@ Built in phase 5 (#433), at the operator's decision:
   address (`--url`, or `ADMIN_CONSOLE_URL`), which the console's own options own,
   and refuses any that is not http loopback. It implements what a tools-only
   server needs (`initialize`, `ping`, `tools/list`, `tools/call`) over
-  newline-delimited JSON-RPC and carries no package.
+  newline-delimited JSON-RPC and carries no package. It follows no redirect and
+  uses no proxy, so what answers on the loopback port is the console or an
+  error, and it answers one request at a time: a slow tool call holds the later
+  requests, and `notifications/cancelled` is not acted on.
 - Its tools are the server tools of §6.2 and §6.5, served by
   `GET /api/assistant/tools` and `POST /api/assistant/tools/{name}`, through
   the same registry, policy, limits and redactor as a turn's call

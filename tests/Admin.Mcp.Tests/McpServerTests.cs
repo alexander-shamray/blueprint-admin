@@ -169,7 +169,58 @@ public sealed class McpServerTests
 
         (await server.HandleAsync("{not json", Ct))!["error"]!["code"]!.GetValue<int>().ShouldBe(-32700);
         (await server.HandleAsync("[1,2]", Ct))!["error"]!["code"]!.GetValue<int>().ShouldBe(-32600);
-        (await server.HandleAsync("""{"jsonrpc":"2.0","id":1,"method":7}""", Ct)).ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task A_request_whose_method_is_not_a_string_is_answered_under_its_id_and_a_notification_like_it_is_not()
+    {
+        McpServer server = new(new Console().Client());
+
+        JsonNode reply = (await server.HandleAsync("""{"jsonrpc":"2.0","id":7,"method":7}""", Ct))!;
+
+        reply["error"]!["code"]!.GetValue<int>().ShouldBe(-32600);
+        reply["id"]!.GetValue<int>().ShouldBe(7);
+        (await server.HandleAsync("""{"jsonrpc":"2.0","method":7}""", Ct)).ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Params_or_arguments_that_are_not_an_object_are_invalid_params_and_reach_no_host()
+    {
+        Console console = new();
+
+        (await Ask(console, Request("tools/list", "[1]")))["error"]!["code"]!.GetValue<int>().ShouldBe(-32602);
+        (await Ask(console, Request("tools/call", """{"name":"stack_status","arguments":[1]}""")))["error"]!["code"]!.GetValue<int>().ShouldBe(-32602);
+        console.Requests.ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("tools/list", "not json at all")]
+    [InlineData("tools/list", "{\"unexpected\":true}")]
+    [InlineData("tools/call", "not json at all")]
+    [InlineData("tools/call", "[1]")]
+    public async Task An_answer_the_console_gave_that_cannot_be_read_is_that_requests_error_and_the_server_goes_on(string method, string body)
+    {
+        Console console = new Console().Json(body).Json("{}");
+        McpServer server = new(console.Client());
+        string parameters = method == "tools/call" ? """{"name":"stack_status"}""" : "{}";
+
+        JsonNode? reply = await server.HandleAsync(Request(method, parameters), Ct);
+
+        reply!["error"]!["code"]!.GetValue<int>().ShouldBe(-32603);
+        (await server.HandleAsync(Request("ping", id: 2), Ct))!["result"].ShouldNotBeNull();
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.TemporaryRedirect)]
+    [InlineData(HttpStatusCode.PermanentRedirect)]
+    public async Task A_redirect_is_the_consoles_failure_and_is_not_followed(HttpStatusCode redirect)
+    {
+        Console console = new Console().Status(redirect, "");
+
+        JsonNode reply = await Ask(console, Request("tools/call", """{"name":"stack_status","arguments":{"service":"ordering"}}"""));
+
+        reply["error"]!["message"]!.GetValue<string>().ShouldContain("answered 30");
+        console.Requests.Count.ShouldBe(1);
     }
 
     [Fact]

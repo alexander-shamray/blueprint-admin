@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
+using Admin.Host.Security;
 using Admin.Host.Tests.TestSupport;
 using Admin.Mcp;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -20,6 +21,12 @@ public sealed class McpRouteTests(AdminHostFactory factory) : IClassFixture<Admi
 
     private static async Task<JsonNode> Ask(McpServer server, string method, string? parameters = null, int id = 1) =>
         (await server.HandleAsync($$"""{"jsonrpc":"2.0","id":{{id}},"method":"{{method}}"{{(parameters is null ? "" : $",\"params\":{parameters}")}}}""", Ct))!;
+
+    [Fact]
+    public void The_MCP_process_accepts_exactly_the_host_names_the_console_answers()
+    {
+        ConsoleUrl.Hosts.ShouldBe(LoopbackOriginGuard.LoopbackHosts);
+    }
 
     [Fact]
     public async Task The_host_lists_its_server_tools_and_not_the_clients()

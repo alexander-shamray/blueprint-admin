@@ -68,10 +68,21 @@ public sealed class McpServer(HttpClient host)
         JsonNode? id = request["id"]?.DeepClone();
         string? method = Text(request["method"]);
 
+        // A request whose method is not a string cannot be answered by name, but its sender waits on the id.
+        if (id is not null && request.ContainsKey("method") && method is null)
+        {
+            return Error(id, InvalidRequest, "A request's method is a string.");
+        }
+
         // A message with no method is a response to a request this server never made; with no id it is a notification.
         if (method is null || id is null)
         {
             return null;
+        }
+
+        if (request["params"] is { } given && given is not JsonObject)
+        {
+            return Error(id, InvalidParams, "A request's params are an object.");
         }
 
         JsonObject parameters = request["params"] as JsonObject ?? [];
@@ -94,6 +105,12 @@ public sealed class McpServer(HttpClient host)
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             return Error(id, InternalError, "The console did not answer in time.");
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            // A 2xx whose body is not what the route promises: said as this request's error, never a crash of the process,
+            // which would leave the agent's other requests unanswered.
+            return Error(id, InternalError, $"The console's answer could not be read ({e.GetType().Name}).");
         }
     }
 
@@ -143,6 +160,11 @@ public sealed class McpServer(HttpClient host)
         if (Text(parameters["name"]) is not { Length: > 0 } name)
         {
             return Error(id, InvalidParams, "tools/call needs the name of a tool.");
+        }
+
+        if (parameters["arguments"] is { } given && given is not JsonObject)
+        {
+            return Error(id, InvalidParams, "A tool's arguments are an object.");
         }
 
         JsonObject arguments = parameters["arguments"] as JsonObject ?? [];

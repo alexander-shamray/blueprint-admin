@@ -24,6 +24,7 @@ public sealed class ConsoleUrlTests
     [Theory]
     [InlineData("http://example.com:5100")]
     [InlineData("http://10.0.0.5:5100")]
+    [InlineData("http://127.0.0.2:5100")]
     [InlineData("https://localhost:5100")]
     [InlineData("localhost:5100")]
     [InlineData("not a url")]
