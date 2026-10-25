@@ -251,8 +251,12 @@ The credential is the SDK's own: `ANTHROPIC_API_KEY`, or the profile that
 An external agent (Claude Code, Claude Desktop) can ask the same read-only
 tools over the Model Context Protocol, with the assistant on. Build the SPA
 (`npm run build` in `src/Admin.Web`) so the catalogue resource exists, start
-the host, and register the stdio process with the host's address, for example
+the host, and register the stdio process with the host's address. In Claude Code,
+from the repository root (the project path is relative to the agent's own
+working directory; give an absolute path otherwise):
 `claude mcp add blueprint-admin -- dotnet run --project src/Admin.Mcp -- --host http://127.0.0.1:<Admin:Port>`.
+Another agent, Claude Desktop among them, takes the same command and arguments in
+its own configuration.
 `--host` must be a loopback `http` URL: the process opens no listener and talks
 to nothing else. The agent lists the server tools, including the platform's
 own reads, and reads `blueprint-admin://catalogue`; it is offered no client
