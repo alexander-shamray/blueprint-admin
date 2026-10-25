@@ -8,23 +8,23 @@ import { StackFeed } from '../stack-feed';
 @Component({
   selector: 'app-alerts-widget',
   template: `
-    <section class="alerts" aria-label="Alerts">
+    <section class="alerts" i18n-aria-label aria-label="Alerts">
       @if (feed.alerts.error(); as e) {
-        <p class="error">The host did not answer for the alert rules: {{ e }}</p>
+        <p class="error" i18n>The host did not answer for the alert rules: {{ e }}</p>
       }
       @if (feed.alerts.value(); as a) {
         @if (!a.reachable) {
-          <p class="error">Alert rules unavailable: {{ a.error }}</p>
+          <p class="error" i18n>Alert rules unavailable: {{ a.error }}</p>
         } @else if (a.loaded.length === 0) {
-          <p class="alerts-empty"
+          <p class="alerts-empty" i18n
             >Prometheus has loaded no alert rules, so an empty strip here is not a quiet platform.</p
           >
         } @else if (rules().length === 0) {
-          <p class="alerts-empty">No rule is firing.</p>
+          <p class="alerts-empty" i18n>No rule is firing.</p>
         } @else {
           <table class="alerts">
             <thead
-              ><tr><th>Rule</th><th>State</th><th>Severity</th><th>Alight</th></tr></thead
+              ><tr><th i18n>Rule</th><th i18n>State</th><th i18n>Severity</th><th i18n>Alight</th></tr></thead
             >
             <tbody>
               @for (rule of rules(); track rule.group + '/' + rule.name) {
@@ -33,7 +33,7 @@ import { StackFeed } from '../stack-feed';
                   <td
                     >{{ rule.state }}
                     @if (rule.health === 'err') {
-                      (evaluation failing)
+                      <ng-container i18n>(evaluation failing)</ng-container>
                     }
                   </td>
                   <td>{{ rule.severity ?? '—' }}</td>
@@ -44,13 +44,13 @@ import { StackFeed } from '../stack-feed';
           </table>
         }
         @if (a.waiting.length > 0) {
-          <p class="alerts-waiting">
+          <p class="alerts-waiting" i18n>
             Waiting, not quiet: these rules are written out and not loaded, because the instrument each reads is not
             published yet. A rule that cannot fire says nothing about health.
           </p>
           <table class="waiting">
             <thead
-              ><tr><th>Rule</th><th>Waiting on</th></tr></thead
+              ><tr><th i18n>Rule</th><th i18n>Waiting on</th></tr></thead
             >
             <tbody>
               @for (rule of a.waiting; track rule.name) {
@@ -63,7 +63,7 @@ import { StackFeed } from '../stack-feed';
           </table>
         }
       } @else if (!feed.alerts.error()) {
-        <p class="loading">Loading…</p>
+        <p class="loading" i18n>Loading…</p>
       }
     </section>
   `,

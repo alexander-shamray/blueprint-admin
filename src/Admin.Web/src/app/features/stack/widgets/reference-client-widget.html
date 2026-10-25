@@ -1,17 +1,17 @@
 @if (feed.stack.value(); as s) {
-  <section class="frontend" aria-label="Reference client">
+  <section class="frontend" i18n-aria-label aria-label="Reference client">
     <p class="frontend-status">
-      npm start
+      <ng-container i18n>npm start</ng-container>&ngsp;
       @if (s.frontend.job; as job) {
         @if (job.state === 'Running') {
-          running
+          <ng-container i18n>running</ng-container>
         } @else {
-          exited {{ job.exitCode }}
+          <ng-container i18n>exited {{ job.exitCode }}</ng-container>
         }
       } @else {
-        not started
+        <ng-container i18n>not started</ng-container>
       }
-      <span [class.up]="clientUp()" [class.down]="!clientUp()"
+      <span [class.up]="clientUp()" [class.down]="!clientUp()" i18n
         >client {{ clientUp() ? 'answers' : 'does not answer' }}</span
       >
     </p>
@@ -25,42 +25,46 @@
     @if (error(); as e) {
       <p class="error">{{ e }}</p>
     }
-    <button class="frontend-start" [disabled]="frontendRunning() || !s.frontend.installed" (click)="startFrontend()"
+    <button
+      class="frontend-start"
+      [disabled]="frontendRunning() || !s.frontend.installed"
+      (click)="startFrontend()"
+      i18n
       >Start frontend</button
     >
-    <button class="frontend-stop" [disabled]="!frontendRunning()" (click)="stopFrontend()">Stop frontend</button>
-    <p class="frontend-stop-note"
+    <button class="frontend-stop" [disabled]="!frontendRunning()" (click)="stopFrontend()" i18n>Stop frontend</button>
+    <p class="frontend-stop-note" i18n
       >The client's own Playwright run reuses a dev server it finds running outside CI, so Stop ends it under that run
       too.</p
     >
     @if (s.frontend.job; as job) {
-      <button class="frontend-output" (click)="showOutput(job.id)">Show output</button>
+      <button class="frontend-output" (click)="showOutput(job.id)" i18n>Show output</button>
     }
 
-    <h3>Device lane</h3>
+    <h3 i18n>Device lane</h3>
     <p class="device-status">
-      npm run emulator:android
+      <ng-container i18n>npm run emulator:android</ng-container>&ngsp;
       @if (s.frontend.deviceJob; as job) {
         @if (job.state === 'Running') {
-          running
+          <ng-container i18n>running</ng-container>
         } @else {
-          exited {{ job.exitCode }}
+          <ng-container i18n>exited {{ job.exitCode }}</ng-container>
         }
       } @else {
-        not run
+        <ng-container i18n>not run</ng-container>
       }
     </p>
-    <p class="device-note"
+    <p class="device-note" i18n
       >Builds the client for the emulator and syncs it. Starting the AVD, installing and starting the app are by hand
       (run-locally.md, step 4).</p
     >
     @if (deviceReadsError(); as de) {
-      <p class="error">The host did not answer for the device reads: {{ de }}</p>
+      <p class="error" i18n>The host did not answer for the device reads: {{ de }}</p>
     }
     @if (deviceReads(); as d) {
       <table class="device-reads">
         <thead>
-          <tr><th scope="col">Read</th><th scope="col">Verdict</th><th scope="col">What it said</th></tr>
+          <tr><th scope="col" i18n>Read</th><th scope="col" i18n>Verdict</th><th scope="col" i18n>What it said</th></tr>
         </thead>
         <tbody>
           @for (c of d.checks; track c.name) {
@@ -75,18 +79,24 @@
         </tbody>
       </table>
     } @else if (deviceReading()) {
-      <p class="device-reading">Reading the emulator, the gateway and the realm…</p>
+      <p class="device-reading" i18n>Reading the emulator, the gateway and the realm…</p>
     }
-    <button class="device-read" type="button" [disabled]="deviceReading()" (click)="checkDevice()">Read again</button>
-    <button class="device-build" [disabled]="deviceBuildRunning() || !s.frontend.installed" (click)="buildForDevice()"
+    <button class="device-read" type="button" [disabled]="deviceReading()" (click)="checkDevice()" i18n
+      >Read again</button
+    >
+    <button
+      class="device-build"
+      [disabled]="deviceBuildRunning() || !s.frontend.installed"
+      (click)="buildForDevice()"
+      i18n
       >Build for emulator</button
     >
     @if (s.frontend.deviceJob; as job) {
-      <button class="device-output" (click)="showOutput(job.id)">Show device output</button>
+      <button class="device-output" (click)="showOutput(job.id)" i18n>Show device output</button>
     }
   </section>
 } @else if (feed.stack.error(); as e) {
-  <p class="error">The host did not answer: {{ e }}</p>
+  <p class="error" i18n>The host did not answer: {{ e }}</p>
 } @else {
-  <p class="loading">Loading…</p>
+  <p class="loading" i18n>Loading…</p>
 }

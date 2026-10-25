@@ -1,19 +1,19 @@
-<p>
+<p i18n>
   The backend's runbooks, each with the script that causes its alert. Cause it, watch the alert fire, follow the runbook
   beside it, then undo it. A cause is destructive to the local stack and stays until you undo it.
 </p>
 
 <div class="actions">
-  <button (click)="refresh()" [disabled]="loading()">Refresh</button>
+  <button (click)="refresh()" [disabled]="loading()" i18n>Refresh</button>
 </div>
 
 @if (loadError(); as e) {
-  <p class="error" role="alert">The runbooks could not be listed: {{ e }}</p>
+  <p class="error" role="alert" i18n>The runbooks could not be listed: {{ e }}</p>
 }
 
 @if (catalogue(); as c) {
   <div class="layout">
-    <nav aria-label="Runbooks">
+    <nav i18n-aria-label aria-label="Runbooks">
       <ul class="runbooks">
         @for (r of c.runbooks; track r.runbook) {
           <li>
@@ -25,7 +25,7 @@
             >
               {{ r.runbook }}
               @if (!r.script) {
-                <span class="tag">[no script]</span>
+                <span class="tag" i18n>[no script]</span>
               }
             </button>
           </li>
@@ -38,15 +38,15 @@
         <h2>{{ e.runbook }}</h2>
 
         @if (!e.script) {
-          <p class="no-script">No script causes this runbook's alert: {{ e.reason }}</p>
+          <p class="no-script" i18n>No script causes this runbook's alert: {{ e.reason }}</p>
         }
 
         <table>
           <thead>
             <tr
-              ><th>Alert</th><th>State</th>
+              ><th i18n>Alert</th><th i18n>State</th>
               @if (e.script) {
-                <th>Cost</th><th>Fires within</th><th>Clears within</th>
+                <th i18n>Cost</th><th i18n>Fires within</th><th i18n>Clears within</th>
               }
             </tr>
           </thead>
@@ -60,18 +60,20 @@
                   <td>{{ minutes(p.firesWithinSeconds) }}</td>
                   <td>{{ minutes(p.clearsWithinSeconds) }}</td>
                 } @else if (e.script) {
-                  <td colspan="3">not caused by this script</td>
+                  <td colspan="3" i18n>not caused by this script</td>
                 }
               </tr>
             }
           </tbody>
         </table>
         @if (alertsError(); as err) {
-          <p class="error" role="alert">The alerts could not be read: {{ err }}</p>
+          <p class="error" role="alert" i18n>The alerts could not be read: {{ err }}</p>
         }
         @if (alerts(); as strip) {
           @if (!strip.reachable) {
-            <p class="error" role="alert">Grafana did not answer, so no alert's state is known: {{ strip.error }}</p>
+            <p class="error" role="alert" i18n
+              >Grafana did not answer, so no alert's state is known: {{ strip.error }}</p
+            >
           }
         }
 
@@ -79,8 +81,10 @@
           <div class="controls">
             @if (e.phases.length > 1) {
               <label>
-                Alert to cause
-                <select [ngModel]="phase()?.alert" (ngModelChange)="choosePhase($event)">
+                <ng-container i18n>Alert to cause</ng-container>&ngsp;<select
+                  [ngModel]="phase()?.alert"
+                  (ngModelChange)="choosePhase($event)"
+                >
                   @for (p of e.phases; track p.alert) {
                     <option [value]="p.alert">{{ p.alert }}</option>
                   }
@@ -98,38 +102,43 @@
               }
               <button class="cause" [class.armed]="armed()" [disabled]="!canCause()" (click)="cause()">
                 @if (armed()) {
-                  Confirm: cause {{ p.alert }} ({{ p.impact }})
+                  <ng-container i18n>Confirm: cause {{ p.alert }} ({{ p.impact }})</ng-container>
                 } @else {
-                  Cause {{ p.alert }}
+                  <ng-container i18n>Cause {{ p.alert }}</ng-container>
                 }
               </button>
               @if (armed()) {
-                <button (click)="armed.set(false)">Cancel</button>
+                <button (click)="armed.set(false)" i18n>Cancel</button>
               }
             }
             <button
               class="undo"
               [disabled]="running()"
               (click)="restore()"
+              i18n-title
               title="Put the stack back; safe to press twice"
+              i18n
               >Undo</button
             >
           </div>
           @if (phase(); as p) {
             @if (p.sustained) {
               <p class="note"
-                >This cause is held by a background process until you undo it; its output is in
-                <code>artifacts/game-day/{{ e.runbook }}.log</code> in the backend clone.</p
+                ><ng-container i18n
+                  >This cause is held by a background process until you undo it; its output is in</ng-container
+                >&ngsp;<code i18n>artifacts/game-day/{{ e.runbook }}.log</code>&ngsp;<ng-container i18n
+                  >in the backend clone.</ng-container
+                ></p
               >
             }
             @if (p.confirmation !== 'none') {
-              <p class="note"
+              <p class="note" i18n
                 >This cause costs the stack ({{ p.impact }}):
                 {{ p.confirmation === 'confirm' ? 'press Cause twice' : 'type ' + p.confirmWith + ' to run it' }}.</p
               >
             }
           }
-          <p class="note"
+          <p class="note" i18n
             >Undo returns when the stack is back, not when the alert has cleared; the table above shows when it does.</p
           >
           @if (jobError(); as err) {
@@ -138,9 +147,9 @@
         }
       </section>
 
-      <section class="runbook-text" aria-label="Runbook text">
+      <section class="runbook-text" i18n-aria-label aria-label="Runbook text">
         @if (textError(); as err) {
-          <p class="error" role="alert">The runbook could not be read: {{ err }}</p>
+          <p class="error" role="alert" i18n>The runbook could not be read: {{ err }}</p>
         } @else if (text(); as blocks) {
           @for (b of blocks; track $index) {
             @switch (b.kind) {
@@ -192,22 +201,22 @@
             }
           }
         } @else {
-          <p>Reading the runbook…</p>
+          <p i18n>Reading the runbook…</p>
         }
       </section>
     } @else {
-      <p class="hint">Choose a runbook.</p>
+      <p class="hint" i18n>Choose a runbook.</p>
     }
   </div>
   <!-- Outside the selected runbook's block, so choosing another runbook neither hides a running job nor stops the widget hearing it exit. -->
   @if (jobId(); as id) {
-    <section class="job" aria-label="Job output">
-      <p class="note">Output of the {{ jobLabel() }}.</p>
+    <section class="job" i18n-aria-label aria-label="Job output">
+      <p class="note" i18n>Output of the {{ jobLabel() }}.</p>
       <app-output-pane [jobId]="id" (exited)="jobEnded()" (failed)="jobEnded()" />
     </section>
   }
 } @else if (!loadError()) {
-  <p>Listing the runbooks…</p>
+  <p i18n>Listing the runbooks…</p>
 }
 
 <ng-template #listItems let-items>

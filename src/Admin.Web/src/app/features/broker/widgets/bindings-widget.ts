@@ -7,19 +7,21 @@ import { BrokerFeed, exchangeName, filterOf } from '../broker-feed';
   selector: 'app-bindings-widget',
   template: `
     <section class="actions">
-      <button class="refresh" [disabled]="feed.bindings.refreshing()" (click)="feed.bindings.refresh()">Refresh</button>
+      <button class="refresh" [disabled]="feed.bindings.refreshing()" (click)="feed.bindings.refresh()" i18n
+        >Refresh</button
+      >
       @if (autoRefresh()) {
-        <span class="auto">Refreshes every 5 s</span>
+        <span class="auto" i18n>Refreshes every 5 s</span>
       }
     </section>
     @if (feed.bindings.error(); as e) {
-      <p class="error" role="alert">The host did not answer: {{ e }}</p>
+      <p class="error" role="alert" i18n>The host did not answer: {{ e }}</p>
     }
     @if (feed.bindings.value(); as b) {
       @if (b.reachable) {
         <table class="bindings">
           <thead
-            ><tr><th>Source</th><th>Destination</th><th>Kind</th><th>Routing key</th></tr></thead
+            ><tr><th i18n>Source</th><th i18n>Destination</th><th i18n>Kind</th><th i18n>Routing key</th></tr></thead
           >
           <tbody>
             @for (binding of shown(); track $index) {
@@ -35,10 +37,10 @@ import { BrokerFeed, exchangeName, filterOf } from '../broker-feed';
           </tbody>
         </table>
       } @else {
-        <p class="error" role="alert">The broker did not answer: {{ b.error }}</p>
+        <p class="error" role="alert" i18n>The broker did not answer: {{ b.error }}</p>
       }
     } @else if (!feed.bindings.error()) {
-      <p class="loading">Loading…</p>
+      <p class="loading" i18n>Loading…</p>
     }
   `,
   styleUrl: './broker-widgets.css',

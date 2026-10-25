@@ -7,15 +7,15 @@ import { StackFeed } from '../stack-feed';
   selector: 'app-compose-services-widget',
   template: `
     @if (feed.stack.error(); as e) {
-      <p class="error">The host did not answer: {{ e }}</p>
+      <p class="error" i18n>The host did not answer: {{ e }}</p>
     }
     @if (feed.stack.value(); as s) {
       @if (!s.backend.reachable) {
-        <p class="error">Docker did not answer: {{ s.backend.error }}</p>
+        <p class="error" i18n>Docker did not answer: {{ s.backend.error }}</p>
       }
       <table class="services">
         <thead
-          ><tr><th>Service</th><th>State</th><th>Health</th><th>Ports</th></tr></thead
+          ><tr><th i18n>Service</th><th i18n>State</th><th i18n>Health</th><th i18n>Ports</th></tr></thead
         >
         <tbody>
           @for (svc of services(); track svc.service) {
@@ -29,7 +29,7 @@ import { StackFeed } from '../stack-feed';
         </tbody>
       </table>
     } @else if (!feed.stack.error()) {
-      <p class="loading">Loading…</p>
+      <p class="loading" i18n>Loading…</p>
     }
   `,
   styleUrl: './stack-widgets.css',

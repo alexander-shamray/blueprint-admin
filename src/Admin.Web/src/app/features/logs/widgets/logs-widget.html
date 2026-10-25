@@ -1,35 +1,50 @@
 <section class="controls">
   <div class="buttons">
-    <button class="follow" [disabled]="follow.requestOut()" (click)="follow.follow()">Follow</button>
+    <button class="follow" [disabled]="follow.requestOut()" (click)="follow.follow()" i18n>Follow</button>
     <button
       class="stop"
       [disabled]="!(follow.pending() || follow.following() || follow.hostJob())"
       (click)="follow.stop()"
+      i18n
       >Stop</button
     >
-    <button (click)="follow.clear()">Clear</button>
-    <input aria-label="Filter" placeholder="filter text" [ngModel]="filter()" (ngModelChange)="filter.set($event)" />
+    <button (click)="follow.clear()" i18n>Clear</button>
     <input
+      i18n-aria-label
+      aria-label="Filter"
+      i18n-placeholder
+      placeholder="filter text"
+      [ngModel]="filter()"
+      (ngModelChange)="filter.set($event)"
+    />
+    <input
+      i18n-aria-label
       aria-label="Correlation id"
+      i18n-placeholder
       placeholder="correlation id"
       [ngModel]="correlationId()"
       (ngModelChange)="correlationId.set($event)"
     />
     @if (follow.following()) {
-      <span class="live">live</span>
+      <span class="live" i18n>live</span>
     }
   </div>
 </section>
 
 @if (pointed(); as names) {
   <p class="pointed" role="status">
-    Pointed at {{ names.join(', ') }} from the platform diagram.
-    <button class="unpoint" type="button" (click)="pointed.set(null)">Show the configured services</button>
+    <ng-container i18n>Pointed at {{ names.join(', ') }} from the platform diagram.</ng-container>&ngsp;<button
+      class="unpoint"
+      type="button"
+      (click)="pointed.set(null)"
+      i18n
+      >Show the configured services</button
+    >
   </p>
 }
 
 @if (unknown().length > 0) {
-  <p class="error">Not a Compose service: {{ unknown().join(', ') }}</p>
+  <p class="error" i18n>Not a Compose service: {{ unknown().join(', ') }}</p>
 }
 
 @if (follow.error(); as e) {
@@ -38,5 +53,5 @@
 
 <pre
   class="log"
->@for (l of visible(); track l.sequence) {<span class="line" [class.hit]="isHit(l)" [class.stderr]="l.stream === 'Stderr'">@if (isHit(l)) {<span class="tag">[match] </span>}@if (l.stream === 'Stderr') {<span class="tag">[stderr] </span>}{{ l.text }}
+>@for (l of visible(); track l.sequence) {<span class="line" [class.hit]="isHit(l)" [class.stderr]="l.stream === 'Stderr'">@if (isHit(l)) {<span class="tag" i18n>[match] </span>}@if (l.stream === 'Stderr') {<span class="tag" i18n>[stderr] </span>}{{ l.text }}
 </span>}</pre>

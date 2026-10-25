@@ -10,6 +10,10 @@ const TRANSLATED_TEMPLATES = [
   'src/app/shared/command-palette/command-palette.html',
   'src/app/shared/drained-indicator/drained-indicator.ts/*.html',
   'src/app/shared/output-pane/output-pane.ts/*.html',
+  'src/app/features/**/*.html',
+  'src/app/features/**/*.ts/*.html',
+  'src/app/workspace/*.ts/*.html',
+  'src/app/assistant/*.ts/*.html',
   'src/app/workspace/workspace-grid.html',
   'src/app/workspace/widgets/note/mermaid-diagram.ts/*.html',
   'src/app/workspace/widgets/note/note-widget.ts/*.html',
@@ -54,6 +58,8 @@ module.exports = defineConfig([
     // would ship English in every language. The list grows with each workspace phase, and the final sweep replaces
     // it with every template. An inline template is linted as `<component>.ts/<n>_inline-template...html`.
     files: TRANSLATED_TEMPLATES,
+    // A spec's host component is test scaffolding, not something an operator reads.
+    ignores: ['**/*.spec.ts/**'],
     rules: {
       '@angular-eslint/template/i18n': [
         'error',
@@ -70,6 +76,9 @@ module.exports = defineConfig([
             'aria-live',
             'mode',
             'position',
+            'referrerpolicy',
+            'rel',
+            'scope',
           ],
         },
       ],

@@ -6,21 +6,21 @@ import { StackFeed } from '../stack-feed';
 @Component({
   selector: 'app-golden-signals-widget',
   template: `
-    <section class="signals" aria-label="Golden signals">
+    <section class="signals" i18n-aria-label aria-label="Golden signals">
       @if (feed.health.error(); as e) {
-        <p class="error">The host did not answer for the golden signals: {{ e }}</p>
+        <p class="error" i18n>The host did not answer for the golden signals: {{ e }}</p>
       }
       @if (feed.health.value(); as h) {
         @if (!h.reachable) {
-          <p class="error">Golden signals unavailable: {{ h.error }}</p>
+          <p class="error" i18n>Golden signals unavailable: {{ h.error }}</p>
         } @else if (h.services.length === 0) {
-          <p class="signals-empty">No requests recorded yet.</p>
+          <p class="signals-empty" i18n>No requests recorded yet.</p>
         } @else {
           <table class="signals">
             <thead>
               <tr>
-                <th>Service</th><th>Requests (req/s)</th><th>5xx share</th><th>Latency p99</th> <th>422 (req/s)</th
-                ><th>401 (req/s)</th><th>Command p95</th><th>Query p95</th>
+                <th i18n>Service</th><th i18n>Requests (req/s)</th><th i18n>5xx share</th><th i18n>Latency p99</th>
+                <th i18n>422 (req/s)</th><th i18n>401 (req/s)</th><th i18n>Command p95</th><th i18n>Query p95</th>
               </tr>
             </thead>
             <tbody>
@@ -40,7 +40,7 @@ import { StackFeed } from '../stack-feed';
           </table>
         }
       } @else if (!feed.health.error()) {
-        <p class="loading">Loading…</p>
+        <p class="loading" i18n>Loading…</p>
       }
     </section>
   `,

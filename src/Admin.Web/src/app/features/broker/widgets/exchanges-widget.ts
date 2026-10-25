@@ -7,21 +7,21 @@ import { BrokerFeed, exchangeName, filterOf } from '../broker-feed';
   selector: 'app-exchanges-widget',
   template: `
     <section class="actions">
-      <button class="refresh" [disabled]="feed.exchanges.refreshing()" (click)="feed.exchanges.refresh()"
+      <button class="refresh" [disabled]="feed.exchanges.refreshing()" (click)="feed.exchanges.refresh()" i18n
         >Refresh</button
       >
       @if (autoRefresh()) {
-        <span class="auto">Refreshes every 5 s</span>
+        <span class="auto" i18n>Refreshes every 5 s</span>
       }
     </section>
     @if (feed.exchanges.error(); as e) {
-      <p class="error" role="alert">The host did not answer: {{ e }}</p>
+      <p class="error" role="alert" i18n>The host did not answer: {{ e }}</p>
     }
     @if (feed.exchanges.value(); as x) {
       @if (x.reachable) {
         <table class="exchanges">
           <thead
-            ><tr><th>Exchange</th><th>Type</th></tr></thead
+            ><tr><th i18n>Exchange</th><th i18n>Type</th></tr></thead
           >
           <tbody>
             @for (exchange of shown(); track exchange.name) {
@@ -33,10 +33,10 @@ import { BrokerFeed, exchangeName, filterOf } from '../broker-feed';
           </tbody>
         </table>
       } @else {
-        <p class="error" role="alert">The broker did not answer: {{ x.error }}</p>
+        <p class="error" role="alert" i18n>The broker did not answer: {{ x.error }}</p>
       }
     } @else if (!feed.exchanges.error()) {
-      <p class="loading">Loading…</p>
+      <p class="loading" i18n>Loading…</p>
     }
   `,
   styleUrl: './broker-widgets.css',

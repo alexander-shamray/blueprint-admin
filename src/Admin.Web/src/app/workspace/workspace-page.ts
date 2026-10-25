@@ -18,7 +18,10 @@ import { WidgetInstance } from './workspace-types';
   template: `
     @if (page(); as p) {
       @if (widgets().length === 0) {
-        <p class="empty">This page has no widgets yet: choose <strong>Add widget</strong>.</p>
+        <p class="empty"
+          ><ng-container i18n>This page has no widgets yet: choose</ng-container>&ngsp;<strong i18n>Add widget</strong
+          >.</p
+        >
       }
       <app-workspace-grid
         class="grid"
@@ -31,7 +34,10 @@ import { WidgetInstance } from './workspace-types';
         (dragging)="workspace.setDragging($event)"
       />
     } @else if (workspace.loaded()) {
-      <p class="empty">There is no page here. <a routerLink="/">Go to the first page</a>.</p>
+      <p class="empty"
+        ><ng-container i18n>There is no page here.</ng-container>&ngsp;<a routerLink="/" i18n>Go to the first page</a
+        >.</p
+      >
     }
   `,
   styles: `

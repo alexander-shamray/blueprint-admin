@@ -18,9 +18,9 @@ import { StackFeed } from '../stack-feed';
         }
       </p>
     } @else if (feed.stack.error(); as e) {
-      <p class="error">The host did not answer: {{ e }}</p>
+      <p class="error" i18n>The host did not answer: {{ e }}</p>
     } @else {
-      <p class="loading">Loading…</p>
+      <p class="loading" i18n>Loading…</p>
     }
   `,
   styleUrl: './stack-widgets.css',

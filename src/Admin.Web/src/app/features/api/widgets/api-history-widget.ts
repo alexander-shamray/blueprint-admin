@@ -12,7 +12,7 @@ import { ApiHistory } from '../api-client';
     @if (history.entries().length > 0) {
       <section class="history">
         @if (!history.canRestore()) {
-          <p class="note">Add an API request widget to this page to put a call back.</p>
+          <p class="note" i18n>Add an API request widget to this page to put a call back.</p>
         }
         <ul>
           @for (h of history.entries(); track h.seq) {
@@ -27,7 +27,7 @@ import { ApiHistory } from '../api-client';
         </ul>
       </section>
     } @else {
-      <p class="empty">Nothing has been sent from this tab yet.</p>
+      <p class="empty" i18n>Nothing has been sent from this tab yet.</p>
     }
   `,
   styles: `

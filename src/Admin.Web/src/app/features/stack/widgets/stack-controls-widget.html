@@ -1,29 +1,33 @@
 @if (lease(); as l) {
-  <section class="lease" role="status" aria-label="Scenario lease">
+  <section class="lease" role="status" i18n-aria-label aria-label="Scenario lease">
     <h3>{{ l.title }}</h3>
-    <p class="lease-what">
+    <p class="lease-what" i18n>
       A Scenario{{ l.label ? ' (' + l.label + ')' : '' }} changed {{ l.services.join(', ') }} at {{ l.since }}. It
       undoes it by itself at {{ l.expiresAt }}.
     </p>
     @if (l.restoreError) {
-      <p class="error">The last restore failed: {{ l.restoreError }}</p>
+      <p class="error" i18n>The last restore failed: {{ l.restoreError }}</p>
     }
     @if (restoreError(); as re) {
       <p class="error">{{ re }}</p>
     }
-    <button class="lease-restore" type="button" [disabled]="restoring()" (click)="restoreLease()">Restore now</button>
+    <button class="lease-restore" type="button" [disabled]="restoring()" (click)="restoreLease()" i18n
+      >Restore now</button
+    >
     @if (l.applyJob; as applyJob) {
-      <button class="lease-output" type="button" (click)="showOutput(applyJob)">Show output</button>
+      <button class="lease-output" type="button" (click)="showOutput(applyJob)" i18n>Show output</button>
     }
   </section>
 }
 
-<section class="actions" aria-label="Stack controls">
+<section class="actions" i18n-aria-label aria-label="Stack controls">
   <button class="up" [disabled]="run.running()" (click)="up()">{{ buttonLabel('Up') }}</button>
   <button class="down" [disabled]="run.running()" (click)="down()">{{ buttonLabel('Down') }}</button>
   <span class="wipe-box">
     <input
+      i18n-aria-label
       aria-label="Type down -v to confirm wiping volumes"
+      i18n-placeholder
       placeholder="type: down -v"
       [ngModel]="confirmText()"
       (ngModelChange)="confirmText.set($event)"
@@ -35,6 +39,7 @@
       class="reset"
       [disabled]="!canWipe() || run.running()"
       (click)="reset()"
+      i18n-title
       title="down -v, up, then wait until every platform surface answers; the reference client is not waited for"
       >{{ buttonLabel('Reset') }}</button
     >
@@ -44,9 +49,9 @@
   }
   @if (links(); as c) {
     <span class="links">
-      <a [href]="c.urls.client" target="_blank">client</a>
-      <a [href]="c.urls.grafana" target="_blank">grafana</a>
-      <a [href]="c.urls.keycloak" target="_blank">keycloak</a>
+      <a [href]="c.urls.client" target="_blank" i18n>client</a>
+      <a [href]="c.urls.grafana" target="_blank" i18n>grafana</a>
+      <a [href]="c.urls.keycloak" target="_blank" i18n>keycloak</a>
     </span>
   }
 </section>
@@ -57,8 +62,8 @@
 
 @if (run.progress(); as p) {
   @if (p.services.length > 0) {
-    <section class="compose-progress" aria-label="Compose progress">
-      <p class="compose-count">{{ p.settled }} of {{ p.services.length }} services settled</p>
+    <section class="compose-progress" i18n-aria-label aria-label="Compose progress">
+      <p class="compose-count" i18n>{{ p.settled }} of {{ p.services.length }} services settled</p>
       <ul>
         @for (c of p.services; track c.name) {
           <li [class.settled]="c.verb === 'Healthy'">{{ c.name }} {{ c.verb }}</li>

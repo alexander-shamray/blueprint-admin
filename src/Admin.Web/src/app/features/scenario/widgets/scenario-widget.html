@@ -1,8 +1,8 @@
 <section class="actions">
   <label>
-    Script
-    <select
+    <ng-container i18n>Script</ng-container>&ngsp;<select
       name="script"
+      i18n-aria-label
       aria-label="Script"
       [ngModel]="runner.script()"
       (ngModelChange)="runner.pick($event)"
@@ -14,9 +14,9 @@
     </select>
   </label>
   <label>
-    Run as
-    <select
+    <ng-container i18n>Run as</ng-container>&ngsp;<select
       name="runAs"
+      i18n-aria-label
       aria-label="Run as"
       [ngModel]="runner.runAs()"
       (ngModelChange)="runner.username.set($event)"
@@ -27,13 +27,13 @@
       }
     </select>
   </label>
-  <button class="run" type="button" [disabled]="!runner.canRun()" (click)="runner.run()">Run</button>
+  <button class="run" type="button" [disabled]="!runner.canRun()" (click)="runner.run()" i18n>Run</button>
   <button class="cancel" type="button" [disabled]="!runner.running() || runner.cancelling()" (click)="runner.cancel()">
     {{ runner.cancelling() ? 'Cancelling…' : 'Cancel' }}
   </button>
-  <button class="reload" type="button" [disabled]="runner.running()" (click)="runner.reload()">Reload</button>
+  <button class="reload" type="button" [disabled]="runner.running()" (click)="runner.reload()" i18n>Reload</button>
   @if (runner.runId(); as id) {
-    <span class="run-id">run {{ id }}</span>
+    <span class="run-id" i18n>run {{ id }}</span>
   }
   <button
     class="export"
@@ -46,10 +46,10 @@
 </section>
 
 @if (runner.exportError(); as e) {
-  <p class="error export-error" role="alert">Export failed: {{ e }}</p>
+  <p class="error export-error" role="alert" i18n>Export failed: {{ e }}</p>
 }
 
-<p class="intro">
+<p class="intro" i18n>
   {{ runner.intro() }} As run-locally.md does it by hand: each step carries its own correlation id, so each call that
   leaves the console has its own trace.
 </p>
@@ -64,7 +64,7 @@
 
 @if (runner.resolved(); as r) {
   @if (runner.identity.users().length === 0) {
-    <p class="no-users" role="status">
+    <p class="no-users" role="status" i18n>
       No realm user is known yet, so there is nobody to run as: the host did not list them. Reload asks again.
     </p>
   }
@@ -89,7 +89,7 @@
           <span class="status">{{ step.status }}</span>
         }
         @if (step.correlationId && step.state !== 'running') {
-          <a class="trace-step" [appTraceLink]="step.correlationId">Trace {{ step.correlationId }}</a>
+          <a class="trace-step" [appTraceLink]="step.correlationId" i18n>Trace {{ step.correlationId }}</a>
         }
       </div>
       @if (step.request) {
@@ -108,7 +108,7 @@
       }
       @if (step.body) {
         <details>
-          <summary>Body</summary>
+          <summary i18n>Body</summary>
           <pre class="body">{{ prettyBody(step.body) }}</pre>
         </details>
       }

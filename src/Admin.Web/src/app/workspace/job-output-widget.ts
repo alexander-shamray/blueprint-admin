@@ -14,7 +14,7 @@ import { injectPageJob } from './page-jobs';
     @if (jobId()) {
       <app-output-pane [jobId]="jobId()" [composeStderr]="compose()" />
     } @else {
-      <p class="idle">No job yet: the output of the next job this page starts shows here.</p>
+      <p class="idle" i18n>No job yet: the output of the next job this page starts shows here.</p>
     }
   `,
   styles: `

@@ -7,21 +7,21 @@ import { BrokerFeed, filterOf } from '../broker-feed';
   selector: 'app-permissions-widget',
   template: `
     <section class="actions">
-      <button class="refresh" [disabled]="feed.permissions.refreshing()" (click)="feed.permissions.refresh()"
+      <button class="refresh" [disabled]="feed.permissions.refreshing()" (click)="feed.permissions.refresh()" i18n
         >Refresh</button
       >
       @if (autoRefresh()) {
-        <span class="auto">Refreshes every 5 s</span>
+        <span class="auto" i18n>Refreshes every 5 s</span>
       }
     </section>
     @if (feed.permissions.error(); as e) {
-      <p class="error" role="alert">The host did not answer: {{ e }}</p>
+      <p class="error" role="alert" i18n>The host did not answer: {{ e }}</p>
     }
     @if (feed.permissions.value(); as p) {
       @if (p.reachable) {
         <table class="permissions">
           <thead
-            ><tr><th>User</th><th>Configure</th><th>Write</th><th>Read</th></tr></thead
+            ><tr><th i18n>User</th><th i18n>Configure</th><th i18n>Write</th><th i18n>Read</th></tr></thead
           >
           <tbody>
             @for (permission of shown(); track permission.user) {
@@ -41,10 +41,10 @@ import { BrokerFeed, filterOf } from '../broker-feed';
           </tbody>
         </table>
       } @else {
-        <p class="error" role="alert">The broker did not answer: {{ p.error }}</p>
+        <p class="error" role="alert" i18n>The broker did not answer: {{ p.error }}</p>
       }
     } @else if (!feed.permissions.error()) {
-      <p class="loading">Loading…</p>
+      <p class="loading" i18n>Loading…</p>
     }
   `,
   styleUrl: './broker-widgets.css',
