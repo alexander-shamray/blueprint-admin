@@ -154,7 +154,8 @@ export function topologyOf(map: PlatformMapView, reads: TopologyReads): Topology
         source: `s:${gateway.name}`,
         target: `s:${service.name}`,
         kind: 'route',
-        label: service.routes.length === 1 ? service.routes[0].prefix : `${service.routes.length} routes`,
+        label:
+          service.routes.length === 1 ? service.routes[0].prefix : $localize`routes: ${service.routes.length}:count:`,
       });
     }
   }

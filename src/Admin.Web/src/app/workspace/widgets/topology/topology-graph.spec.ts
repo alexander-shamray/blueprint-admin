@@ -102,7 +102,7 @@ describe('topologyOf', () => {
       ),
     };
 
-    expect(topologyOf(two, reads()).edges.find((e) => e.id === 'route:ordering')?.label).toBe('2 routes');
+    expect(topologyOf(two, reads()).edges.find((e) => e.id === 'route:ordering')?.label).toBe('routes: 2');
   });
 
   it('colours a probed service by its reachability and says why in words', () => {

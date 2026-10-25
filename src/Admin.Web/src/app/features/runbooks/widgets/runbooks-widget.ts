@@ -226,7 +226,7 @@ export class RunbooksWidget {
 
   /** Seconds as the minutes a person waits: the tool's deadlines are sums of evaluation intervals. */
   minutes(seconds: number): string {
-    return seconds < 90 ? `${seconds} s` : `${Math.round(seconds / 60)} min`;
+    return seconds < 90 ? $localize`${seconds}:seconds: s` : $localize`${Math.round(seconds / 60)}:minutes: min`;
   }
 
   private start(job: Observable<JobSummary>, label: string): void {

@@ -113,7 +113,7 @@ describe('TopologyWidget', () => {
       'shipping no Compose service',
       'ordering-catalog-events parked: error 1 2 · —',
     ]);
-    expect(el.querySelector('.graph')?.getAttribute('aria-label')).toContain('3 services and 1 queues');
+    expect(el.querySelector('.graph')?.getAttribute('aria-label')).toContain('services: 3, queues: 1');
   });
 
   it('draws the next answer without drawing it again from scratch', async () => {

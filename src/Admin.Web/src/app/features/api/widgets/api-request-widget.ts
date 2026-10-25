@@ -396,7 +396,7 @@ export class ApiRequestWidget {
     const headersText = this.headersText();
     const { headers, invalid } = parseHeaders(headersText);
     if (invalid.length > 0) {
-      this.error.set(`Not a "Name: value" header line, or a name given twice: ${invalid[0]}`);
+      this.error.set($localize`Not a "Name: value" header line, or a name given twice: ${invalid[0]}:line:`);
       return;
     }
 
@@ -431,7 +431,7 @@ export class ApiRequestWidget {
       next: (result) => {
         if (current()) {
           this.result.set(result);
-          this.answered.set(`${request.method} ${request.url} as ${identity}`);
+          this.answered.set($localize`${request.method}:method: ${request.url}:url: as ${identity}:identity:`);
           this.pending.set(false);
           // The send may have minted or renewed the token, so the clock is read again.
           this.readClock();
@@ -492,7 +492,9 @@ export class ApiRequestWidget {
     this.pending.set(false);
     this.error.set(null);
     this.result.set(entry.result);
-    this.answered.set(`${entry.request.method} ${entry.request.url} as ${entry.identity}`);
+    this.answered.set(
+      $localize`${entry.request.method}:method: ${entry.request.url}:url: as ${entry.identity}:identity:`,
+    );
     this.restoredHasCommandId = entry.hasCommandId;
     this.selectedId.set(entry.operationId);
     this.method.set(entry.request.method);
