@@ -72,7 +72,7 @@ export class TopologyWidget {
   readonly summary = computed(() => {
     const nodes = this.topology()?.nodes ?? [];
     const count = (kind: TopologyNode['kind']): number => nodes.filter((n) => n.kind === kind).length;
-    return `Platform diagram: ${count('service') + count('gateway')} services and ${count('queue')} queues. The same nodes are listed under it.`;
+    return $localize`Platform diagram, services: ${count('service') + count('gateway')}:services:, queues: ${count('queue')}:queues:. The same nodes are listed under it.`;
   });
 
   /** The library could not be fetched or the drawing failed. */
@@ -139,11 +139,12 @@ export class TopologyWidget {
   /** A service points a Logs widget on this page at its Compose service, or opens the Logs page. */
   private openService(node: TopologyNode): void {
     if (node.compose === null) {
-      this.notice.set(`${node.name} has no Compose service to follow.`);
+      this.notice.set($localize`${node.name}:name: has no Compose service to follow.`);
       return;
     }
     const pointed = this.point('logs', 'logs', [node.compose]);
-    if (pointed === 'here') this.notice.set(`The Logs widget on this page now shows ${node.compose}.`);
+    if (pointed === 'here')
+      this.notice.set($localize`The Logs widget on this page now shows ${node.compose}:service:.`);
     else if (pointed === null) void this.router.navigateByUrl('/logs');
   }
 
@@ -151,10 +152,10 @@ export class TopologyWidget {
   private openQueue(node: TopologyNode): void {
     if (node.parkedQueue !== null && this.broker.workbenches() > 0) {
       this.broker.requestOpen(node.parkedQueue);
-      this.notice.set(`The dead-letter workbench on this page opened ${node.parkedQueue}.`);
+      this.notice.set($localize`The dead-letter workbench on this page opened ${node.parkedQueue}:queue:.`);
     } else {
       const pointed = node.parkedQueue === null ? this.point('queues', 'broker', node.name) : null;
-      if (pointed === 'here') this.notice.set(`The Queues widget on this page shows ${node.name}.`);
+      if (pointed === 'here') this.notice.set($localize`The Queues widget on this page shows ${node.name}:queue:.`);
       else if (pointed === null) void this.router.navigateByUrl('/broker');
     }
   }
