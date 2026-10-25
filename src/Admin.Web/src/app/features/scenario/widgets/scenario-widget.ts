@@ -8,11 +8,11 @@ import { ScenarioRunner, StepState } from '../scenario-runner';
 
 /** Each state's word, because state is never carried by colour alone. */
 const STATE_WORDS: Record<StepState, string> = {
-  pending: '[pending]',
-  running: '[running]',
-  ok: '[ok]',
-  failed: '[failed]',
-  skipped: '[not run]',
+  pending: $localize`[pending]`,
+  running: $localize`[running]`,
+  ok: $localize`[ok]`,
+  failed: $localize`[failed]`,
+  skipped: $localize`[not run]`,
 };
 
 /**

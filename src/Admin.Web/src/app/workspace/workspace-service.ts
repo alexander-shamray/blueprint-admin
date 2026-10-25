@@ -345,7 +345,11 @@ export class WorkspaceService {
 export function describe(e: unknown): string {
   if (e instanceof HttpErrorResponse) {
     const detail = (e.error as { detail?: unknown } | null)?.detail;
-    return typeof detail === 'string' ? detail : e.status === 0 ? 'the host did not answer' : `HTTP ${e.status}`;
+    return typeof detail === 'string'
+      ? detail
+      : e.status === 0
+        ? $localize`the host did not answer`
+        : `HTTP ${e.status}`;
   }
   return String(e);
 }
