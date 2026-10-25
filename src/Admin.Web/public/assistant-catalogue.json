@@ -1,0 +1,248 @@
+[
+  {
+    "id": "stack",
+    "label": "Stack",
+    "where": "/stack",
+    "help": "The page that runs the platform as run-locally.md does. It holds the Workstation doctor, Compose services, Stack controls, Alerts, Job output, Reachability, Golden signals, Load run and Reference client widgets. It shows no log lines or traces; the Logs and Trace pages do."
+  },
+  {
+    "id": "logs",
+    "label": "Logs",
+    "where": "/logs",
+    "help": "The page for the services' live log output. It holds the Logs widget. To follow one request across services, open the Trace page with its correlation id instead."
+  },
+  {
+    "id": "broker",
+    "label": "Broker",
+    "where": "/broker",
+    "help": "The page for the RabbitMQ broker. It holds the Queues, BFF projection, Dead-letter workbench, Exchanges, Permissions and Bindings widgets. It has no way to publish a new message."
+  },
+  {
+    "id": "map",
+    "label": "Map",
+    "where": "/map",
+    "help": "The page that shows the platform as a table of services, routes and queues. It holds the Platform map widget. It shows structure, not live traffic; the Trace page follows one request."
+  },
+  {
+    "id": "erasure",
+    "label": "Erasure",
+    "where": "/erasure",
+    "help": "The page for privacy erasure requests. It holds the Erasure widget. It does not read the customer data itself."
+  },
+  {
+    "id": "mail",
+    "label": "Mail",
+    "where": "/mail",
+    "help": "The page for the mail Notifications sent. It holds the Mail widget. It sends nothing."
+  },
+  {
+    "id": "requests",
+    "label": "API",
+    "where": "/requests",
+    "help": "The page for calling the platform by hand through the gateway. It holds the API request and API history widgets."
+  },
+  {
+    "id": "trace",
+    "label": "Trace",
+    "where": "/trace",
+    "help": "The page for following one request across the services by its correlation id. It holds the Trace widget, and a correlation id in a response, a log line or a mail opens it here. It does not list traces."
+  },
+  {
+    "id": "scenario",
+    "label": "Scenario",
+    "where": "/scenario",
+    "help": "The page for the end-to-end scenario. It holds the Scenario and Saga strip widgets, and it holds the stack while the scenario runs."
+  },
+  {
+    "id": "runbooks",
+    "label": "Runbooks",
+    "where": "/runbooks",
+    "help": "The page for the backend's runbooks, for an incident or a game day. It holds the Runbooks widget. A step that changes the platform asks to be confirmed first."
+  },
+  {
+    "id": "transcript",
+    "label": "Transcript",
+    "where": "/transcript",
+    "help": "The page for what the console ran, as the lines that would repeat it. It holds the Transcript widget. It changes nothing."
+  },
+  {
+    "id": "widget:workstation-doctor",
+    "label": "Workstation doctor",
+    "where": "/stack",
+    "help": "Checks the developer's workstation against what run-locally.md needs before the stack can run, and says what is missing or wrong. Use it first when the stack will not start. It reports; it installs or changes nothing."
+  },
+  {
+    "id": "widget:stack-controls",
+    "label": "Stack controls",
+    "where": "/stack",
+    "help": "The buttons that start, stop and reset the backend as run-locally.md does: Up, Down, Down with the volumes wiped and Reset, the last two behind a typed confirmation. They are refused while a Scenario holds the stack, and the widget says when a Scenario has changed a service and will undo it. It shows no logs; Logs does."
+  },
+  {
+    "id": "widget:compose-services",
+    "label": "Compose services",
+    "where": "/stack",
+    "help": "Each backend Compose service with its state, its health and its ports, for the services chosen. Use it to see what is running and what is unhealthy. It starts and stops nothing; Stack controls does."
+  },
+  {
+    "id": "widget:reachability",
+    "label": "Reachability",
+    "where": "/stack",
+    "help": "Whether each platform surface answers: every service's readiness endpoint, the object store, the image edge, Keycloak, Grafana and the reference client. Use it to tell a service that is down from one that is up but misbehaving. It checks that a URL answers, not that the service is correct."
+  },
+  {
+    "id": "widget:golden-signals",
+    "label": "Golden signals",
+    "where": "/stack",
+    "help": "Each service's request rate, error rates (the 401 and 422 among them) and command and query p95 latency from Grafana, for the services chosen. Use it to see which service is slow or failing. It shows trends, not individual requests; Trace follows one request."
+  },
+  {
+    "id": "widget:alerts",
+    "label": "Alerts",
+    "where": "/stack",
+    "help": "The platform's Prometheus alert rules and which are firing, pending or quiet, with the rules that cannot fire because nothing records their metrics yet. It can show only the firing ones. It does not silence an alert; the Runbooks widget can cause one."
+  },
+  {
+    "id": "widget:load-run",
+    "label": "Load run",
+    "where": "/stack",
+    "help": "Runs the backend's k6 SLO load run, the steps of run-locally.md's load run, and shows its status and the last run; the output opens in the page's Job output widget, and Stop load stops it. Use it to put the stack under traffic and watch the golden signals. It generates real load, so it is for the local stack only."
+  },
+  {
+    "id": "widget:reference-client",
+    "label": "Reference client",
+    "where": "/stack",
+    "help": "Starts and stops the frontend dev server (npm start in the sibling blueprint-frontend clone) and says whether the client answers; its output opens in the page's Job output widget. It also builds the app for the emulator and reads the device. Use it to run the web client against the local backend. It does not edit the frontend."
+  },
+  {
+    "id": "widget:scenario",
+    "label": "Scenario",
+    "where": "/scenario",
+    "help": "Runs an end-to-end scenario script (an order delivered, cancelled or refused) as a chosen realm user: places an order and follows it through the saga, payment, stock and shipping, checking each step. It can be cancelled and exported as Markdown. Use it to check the platform works as a whole. It holds the stack while it runs and can change a service to cause a failure, which it undoes itself."
+  },
+  {
+    "id": "widget:saga-strip",
+    "label": "Saga strip",
+    "where": "/scenario",
+    "help": "The order saga of the Scenario's run as it moves, with the state it reads now and when the console first saw it so. It reads the run's order and starts nothing. When it stops reading it shows the last state read, not the order's state at this moment."
+  },
+  {
+    "id": "widget:queues",
+    "label": "Queues",
+    "where": "/broker",
+    "help": "Each RabbitMQ queue's depth, the service that consumes it, whether it is a parked (dead-letter) queue, with a text filter and an option to show only parked queues. Use it to see where messages are waiting. It publishes or deletes nothing; the Dead-letter workbench replays or discards parked messages."
+  },
+  {
+    "id": "widget:exchanges",
+    "label": "Exchanges",
+    "where": "/broker",
+    "help": "The broker's exchanges, with a text filter. Use it to see how messages are routed in. It lists them; it changes none."
+  },
+  {
+    "id": "widget:bindings",
+    "label": "Bindings",
+    "where": "/broker",
+    "help": "The bindings that connect exchanges to queues, with a text filter. Use it to see which queue a message published to an exchange reaches. It lists them; it changes none."
+  },
+  {
+    "id": "widget:permissions",
+    "label": "Permissions",
+    "where": "/broker",
+    "help": "The broker's users and what each may configure, write and read, with a text filter. Use it when a service cannot connect or publish. It lists them; it changes none."
+  },
+  {
+    "id": "widget:bff-projection",
+    "label": "BFF projection",
+    "where": "/broker",
+    "help": "The BFF's read-model projection: whether its queue has drained, a Repair that sends what the BFF inbox has not recorded, and a Rebuild that stops the BFF, deletes its order projection, replays the outbox and restarts it. Use Repair first when the BFF shows stale data; Rebuild is destructive and asks for a typed confirmation. The job's output shows in the widget itself."
+  },
+  {
+    "id": "widget:dead-letters",
+    "label": "Dead-letter workbench",
+    "where": "/broker",
+    "help": "Inspects a parked (dead-letter) queue, reading its first messages, and replays or discards them one message at a time. A dry run comes first, and the real run asks for a typed word and writes a record file. Use it to recover from a poison message: replay sends the message back to be handled again, and discard drops it."
+  },
+  {
+    "id": "widget:api-request",
+    "label": "API request",
+    "where": "/requests",
+    "help": "Sends a request to the platform through the gateway as a realm user, from each service's OpenAPI operations. Pick an operation, an identity and a body, and see the status and the response exactly as the gateway returned them. This is how to call the platform by hand."
+  },
+  {
+    "id": "widget:api-history",
+    "label": "API history",
+    "where": "/requests",
+    "help": "The requests this tab sent from the API request widget, newest first, which can be restored into an API request widget on the page. It keeps them for the tab only. It sends nothing."
+  },
+  {
+    "id": "widget:trace",
+    "label": "Trace",
+    "where": "/trace",
+    "help": "Follows one request across the services by its correlation id: Tempo's spans, the log lines and the events on one timeline. Start from a correlation id from a response, a log line or a mail; it can follow the last Trace link. It does not list traces."
+  },
+  {
+    "id": "widget:sequence",
+    "label": "Request sequence",
+    "where": "on no built-in page: add it to a page with Add widget in the layout editor",
+    "help": "The same timeline as the Trace widget drawn as a sequence diagram: where one request went, service to service. It is drawn when asked, not polled, and can follow the last Trace link. Use it to see the shape of a request; Trace has the detail."
+  },
+  {
+    "id": "widget:runbooks",
+    "label": "Runbooks",
+    "where": "/runbooks",
+    "help": "The backend's runbooks, read from its clone, each with the alerts it covers and, for some, a script that causes some of them, with an Undo that restores the stack. Use it during an incident or a game day. A costly cause asks for a second press or a typed word first."
+  },
+  {
+    "id": "widget:transcript",
+    "label": "Transcript",
+    "where": "/transcript",
+    "help": "Each command and request the console ran, except polls, as the line that would repeat it: docker compose, npm and a curl for each platform request, with the assistant's requests marked and secrets scrubbed. It is kept in memory until the host stops. Use it to see or copy what was done; it changes nothing."
+  },
+  {
+    "id": "widget:platform-map",
+    "label": "Platform map",
+    "where": "/map",
+    "help": "A table of the platform: each service with its URL, the gateway routes in front of it and its policy, and its queues with what consumes them. Use it to see what talks to what. It shows structure, not live traffic."
+  },
+  {
+    "id": "widget:platform-diagram",
+    "label": "Platform diagram",
+    "where": "on no built-in page: add it to a page with Add widget in the layout editor",
+    "help": "The platform drawn as a graph of services and queues, coloured by state, with nodes that can be dragged. A click on a service points a Logs widget at it, and a click on a queue points a Queues widget at it or opens the dead-letter workbench. It is not on a built-in page; add it from Add widget."
+  },
+  {
+    "id": "widget:mail",
+    "label": "Mail",
+    "where": "/mail",
+    "help": "The mail Notifications sent, as the local mail sink caught it: the list, each message, and a filter by correlation id. Use it to see an order's mail. It sends nothing."
+  },
+  {
+    "id": "widget:erasure",
+    "label": "Erasure",
+    "where": "/erasure",
+    "help": "Raises a privacy erasure request for a subject id and follows each personal-data holder's answer to it. Use it to check that every holder erased the subject. Raising a request changes data and has no undo; it does not read the customer data itself."
+  },
+  {
+    "id": "widget:logs",
+    "label": "Logs",
+    "where": "/logs",
+    "help": "Follows the services' log output live, as docker compose logs prints it, for the services chosen, with a text filter and a correlation-id filter. Use it to watch what the platform is doing now. To follow one request across services, use Trace with its correlation id instead."
+  },
+  {
+    "id": "widget:job-output",
+    "label": "Job output",
+    "where": "/stack",
+    "help": "The output of a job the console started, live: by job id, or the job its page started last. Use it to watch a command that is running or read how one ended. It starts nothing."
+  },
+  {
+    "id": "widget:note",
+    "label": "Note",
+    "where": "on no built-in page: add it to a page with Add widget in the layout editor",
+    "help": "A note or a diagram: Markdown whose mermaid blocks are drawn, written in place while the layout is being edited. Use it for your own reminders and sketches. It reads no platform data."
+  },
+  {
+    "id": "widget:assistant",
+    "label": "Assistant",
+    "where": "on no built-in page: add it to a page with Add widget in the layout editor",
+    "help": "A view of this tab's one conversation with the assistant, the same as the side panel, so a page can hold it beside what it asks about. Ask what a screen or widget is for, or where to find something. With the assistant switched off in the console's configuration it shows a notice instead; it never changes the platform."
+  }
+]
