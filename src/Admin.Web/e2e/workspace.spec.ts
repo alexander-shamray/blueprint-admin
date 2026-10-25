@@ -1,3 +1,6 @@
+// First, because the screens below pull in the widget catalogue, which calls `$localize` when its module loads; the
+// browser has it from the build's polyfills and this Node process does not.
+import '@angular/localize/init';
 import { readFile } from 'node:fs/promises';
 import { Locator, Page, expect, test } from '@playwright/test';
 import { openPalette } from './palette';
