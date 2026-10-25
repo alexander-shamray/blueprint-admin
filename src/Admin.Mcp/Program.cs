@@ -16,9 +16,7 @@ catch (ArgumentException e)
     return 2;
 }
 
-// No redirects and no proxy: what answers on the loopback port is the console or it is an error, and a 307 must not carry a
-// tool call's arguments to another host. The console's own HTTP clients refuse redirects for the same reason.
-using SocketsHttpHandler handler = new() { AllowAutoRedirect = false, UseProxy = false };
+using SocketsHttpHandler handler = ConsoleUrl.Handler();
 using HttpClient host = new(handler) { BaseAddress = url, Timeout = TimeSpan.FromSeconds(60) };
 using StreamWriter output = new(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true };
 using StreamReader input = new(Console.OpenStandardInput(), new UTF8Encoding(false));

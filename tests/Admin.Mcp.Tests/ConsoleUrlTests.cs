@@ -34,6 +34,15 @@ public sealed class ConsoleUrlTests
     }
 
     [Fact]
+    public void The_console_is_reached_through_a_handler_that_follows_no_redirect_and_uses_no_proxy()
+    {
+        using SocketsHttpHandler handler = ConsoleUrl.Handler();
+
+        handler.AllowAutoRedirect.ShouldBeFalse();
+        handler.UseProxy.ShouldBeFalse();
+    }
+
+    [Fact]
     public void No_address_is_refused_with_the_way_to_give_one()
     {
         ArgumentException refused = Should.Throw<ArgumentException>(() => ConsoleUrl.From([], null));

@@ -17,6 +17,13 @@ public static class ConsoleUrl
     /// </summary>
     public static readonly IReadOnlyList<string> Hosts = ["127.0.0.1", "localhost", "[::1]"];
 
+    /// <summary>
+    /// The handler the console is reached through: no redirects and no proxy, so what answers on the loopback port is the
+    /// console or it is an error, and a 307 cannot carry a tool call's arguments to another host. The console's own HTTP
+    /// clients refuse redirects for the same reason.
+    /// </summary>
+    public static SocketsHttpHandler Handler() => new() { AllowAutoRedirect = false, UseProxy = false };
+
     /// <exception cref="ArgumentException">No address, one that is not an absolute http address, or one that is not loopback.</exception>
     public static Uri From(string[] args, string? fromEnvironment)
     {
