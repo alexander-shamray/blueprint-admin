@@ -223,11 +223,11 @@ first visit follows the browser's language when the
 console has it. The shell, the palette, the shared components, the assistant
 and the widgets, including the words they build in code, are translated. Still
 English: the widget catalogue (the titles, field labels and presets of the
-add-widget picker and the configure editor), the scenario export, which is a
-report to paste into an issue, and the host's own messages, which the console
-shows as the host sent them. Platform
-responses, logs, command output, typed confirmations and service and queue
-names stay as written.
+add-widget picker and the configure editor), page titles, which are stored with
+the layout, the scenario export, which is a report to paste into an issue, and
+the host's own messages, which the console shows as the host sent them.
+Platform responses, logs, command output, typed confirmations and service and
+queue names stay as written.
 
 An assistant answers questions about the console in a panel the top bar's
 toggle opens (or "Ask the assistant" in the palette): what a page is for,
