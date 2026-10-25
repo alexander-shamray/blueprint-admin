@@ -128,7 +128,7 @@ export class ErasureRun {
     if (!GUID.test(subject.trim()) || this.busy()) return;
     this.send('POST', '/api/v1/privacy/erasure-requests', JSON.stringify({ subjectId: subject.trim() })).subscribe(
       (result) => {
-        const body = this.expect(result, 'Raising the request');
+        const body = this.expect(result, $localize`Raising the request`);
         if (body === null) return;
         try {
           const id = JSON.parse(body) as unknown;
@@ -138,7 +138,7 @@ export class ErasureRun {
           this.request.set(null);
           this.read();
         } catch {
-          this.error.set(`Privacy accepted the request but answered no request id: ${body}`);
+          this.error.set($localize`Privacy accepted the request but answered no request id: ${body}:body:`);
         }
       },
     );
@@ -159,7 +159,7 @@ export class ErasureRun {
       `/api/v1/privacy/erasure-requests/${request.requestId}/reissue`,
       JSON.stringify({ commandId: crypto.randomUUID() }),
     ).subscribe((result) => {
-      if (this.expect(result, 'Reissuing the request') !== null) this.read();
+      if (this.expect(result, $localize`Reissuing the request`) !== null) this.read();
     });
   }
 
@@ -173,7 +173,7 @@ export class ErasureRun {
       tap((result) => {
         // A tick whose answer lands after an operator's call has begun is not heard: that call's own read follows it.
         if (quiet && this.busy()) return;
-        const body = this.expect(result, 'Reading the request');
+        const body = this.expect(result, $localize`Reading the request`);
         if (body === null) {
           if (quiet) this.quietFailure = true;
           return;
@@ -191,7 +191,7 @@ export class ErasureRun {
           this.refreshDepths();
         } catch {
           if (quiet) this.quietFailure = true;
-          this.error.set(`Privacy answered something that is not an erasure request: ${body}`);
+          this.error.set($localize`Privacy answered something that is not an erasure request: ${body}:body:`);
         }
       }),
       map((): void => undefined),
@@ -241,17 +241,21 @@ export class ErasureRun {
   /** The body of a 2xx answer, or null after saying why the call did not succeed, in the platform's own words. */
   private expect(result: ProxyResult, what: string): string | null {
     if (result.outcome === 'unreached') {
-      this.error.set(`${what}: the request never got an answer (${result.error}).`);
+      this.error.set($localize`${what}:what:: the request never got an answer (${result.error}:error:).`);
       return null;
     }
     if (result.outcome === 'tokenRejected') {
       this.error.set(
-        `${what}: Keycloak refused the privacy login (${result.status}). A realm imported before it existed needs docker compose down -v.`,
+        $localize`${what}:what:: Keycloak refused the privacy login (${result.status}:status:). A realm imported before it existed needs docker compose down -v.`,
       );
       return null;
     }
     if (result.status < 200 || result.status >= 300) {
-      this.error.set(`${what}: the gateway answered ${result.status}${result.body ? ` — ${result.body}` : ''}`);
+      this.error.set(
+        result.body
+          ? $localize`${what}:what:: the gateway answered ${result.status}:status: — ${result.body}:body:`
+          : $localize`${what}:what:: the gateway answered ${result.status}:status:`,
+      );
       return null;
     }
     return result.body;
@@ -259,6 +263,6 @@ export class ErasureRun {
 
   private describe(e: unknown): string {
     const err = e as { error?: { detail?: string; title?: string }; message?: string } | null;
-    return err?.error?.detail ?? err?.error?.title ?? err?.message ?? 'The host did not answer.';
+    return err?.error?.detail ?? err?.error?.title ?? err?.message ?? $localize`The host did not answer.`;
   }
 }

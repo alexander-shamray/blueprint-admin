@@ -62,7 +62,9 @@ export class ComposeRun {
     inject(DestroyRef).onDestroy(() => this.subscription?.unsubscribe());
     inject(RunningWork).report('compose', () => {
       const job = this.job();
-      return job && job.exitCode === null ? { text: `Stack: ${job.label} running`, link: '/stack' } : null;
+      return job && job.exitCode === null
+        ? { text: $localize`Stack: ${job.label}:label: running`, link: '/stack' }
+        : null;
     });
   }
 

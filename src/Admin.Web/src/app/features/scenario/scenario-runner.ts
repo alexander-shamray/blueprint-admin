@@ -200,7 +200,7 @@ export class ScenarioRunner {
     const table = this.changes();
     const named = lease.changes.map((id) => table.find((c) => c.id === id)?.title ?? id);
     const services = [...new Set(lease.changes.map((id) => table.find((c) => c.id === id)?.service ?? id))];
-    return `Run changes the stack: ${named.join(', then ')} (${services.join(', ')}). Everything is restored when the run ends, is cancelled or fails, and the host restores it by itself after ${Math.round(lease.holdSeconds / 60)} minutes at most.`;
+    return $localize`Run changes the stack: ${named.join(', then ')}:changes: (${services.join(', ')}:services:). Everything is restored when the run ends, is cancelled or fails, and the host restores it by itself after ${Math.round(lease.holdSeconds / 60)}:minutes: minutes at most.`;
   });
 
   readonly canRun = computed(() => !this.running() && this.resolved()?.operations != null && this.runAs() !== '');
@@ -209,10 +209,10 @@ export class ScenarioRunner {
   readonly announcement = computed(() => {
     const steps = this.steps();
     const running = steps.find((s) => s.state === 'running');
-    if (running) return `${running.title}: running`;
+    if (running) return $localize`${running.title}:title:: running`;
     const failed = steps.find((s) => s.state === 'failed');
-    if (failed) return `Run stopped: ${failed.title} failed. ${failed.detail}`;
-    return steps.every((s) => s.state === 'ok') ? 'Run complete: every step succeeded.' : '';
+    if (failed) return $localize`Run stopped: ${failed.title}:title: failed. ${failed.detail}:detail:`;
+    return steps.every((s) => s.state === 'ok') ? $localize`Run complete: every step succeeded.` : '';
   });
 
   constructor() {
@@ -223,7 +223,10 @@ export class ScenarioRunner {
       const steps = this.steps();
       const at = steps.findIndex((s) => s.state === 'running');
       return {
-        text: at < 0 ? 'Scenario: running' : `Scenario: step ${at + 1}/${steps.length} running`,
+        text:
+          at < 0
+            ? $localize`Scenario: running`
+            : $localize`Scenario: step ${at + 1}:step:/${steps.length}:steps: running`,
         link: '/scenario',
       };
     });
@@ -368,7 +371,7 @@ export class ScenarioRunner {
       // Whatever ended the steps, a change to the stack is undone before the run is over: the `restore` step does not wait
       // for the steps before it to have succeeded, and Cancel does not stop it.
       await this.restoreLease(script);
-      const why = this.cancelled ? 'The run was cancelled.' : 'An earlier step did not succeed.';
+      const why = this.cancelled ? $localize`The run was cancelled.` : $localize`An earlier step did not succeed.`;
       this.steps.update((all) =>
         all.map((s) => {
           if (s.state === 'running') {
@@ -457,8 +460,8 @@ export class ScenarioRunner {
           if ((await this.send(key, stock, run, identity, body, path)) === null) return;
           this.patch(key, {
             detail: hasField(body, 'onHand', onHand)
-              ? `Answered with the stock on hand set to ${onHand}.`
-              : 'Answered, but the example body has no onHand to set, so the stock is unchanged.',
+              ? $localize`Answered with the stock on hand set to ${onHand}:onHand:.`
+              : $localize`Answered, but the example body has no onHand to set, so the stock is unchanged.`,
           });
           break;
         }
@@ -481,8 +484,8 @@ export class ScenarioRunner {
           if (script.postalCode !== undefined) {
             this.patch(key, {
               detail: hasShippingPostalCode(body, script.postalCode)
-                ? `Answered with id ${id}, to the delivery postal code ${script.postalCode}.`
-                : `Answered with id ${id}, but the example body has no shippingAddress to set, so the carrier takes its default.`,
+                ? $localize`Answered with id ${id}:id:, to the delivery postal code ${script.postalCode}:code:.`
+                : $localize`Answered with id ${id}:id:, but the example body has no shippingAddress to set, so the carrier takes its default.`,
             });
           }
           orderId = id;
@@ -521,7 +524,7 @@ export class ScenarioRunner {
     const polls = operations.polls;
     const bookingBody = withCarrierCode(bookings.exampleBody ?? '', carrier.code, this.carrierMarker || undefined);
     const since = this.placedAt;
-    const waiting = `Waiting for the carrier simulator's log to show ${carrier.code}: reading it every ${CARRIER_POLL_MS / 1000} s for up to ${CARRIER_WATCH_MS / 1000} s, from when the order was placed.`;
+    const waiting = $localize`Waiting for the carrier simulator's log to show ${carrier.code}:code:: reading it every ${CARRIER_POLL_MS / 1000}:poll: s for up to ${CARRIER_WATCH_MS / 1000}:cap: s, from when the order was placed.`;
     this.patch(key, { state: 'running', request: `${bookings.method} ${bookings.url}`, detail: waiting });
 
     const deadline = Date.now() + CARRIER_WATCH_MS;
@@ -546,7 +549,10 @@ export class ScenarioRunner {
         return false;
       }
       if (Date.now() >= deadline) {
-        this.patch(key, { state: 'failed', detail: `Not shown after ${CARRIER_WATCH_MS / 1000} s. ${v.detail}` });
+        this.patch(key, {
+          state: 'failed',
+          detail: $localize`Not shown after ${CARRIER_WATCH_MS / 1000}:cap: s. ${v.detail}:last:`,
+        });
         return false;
       }
       this.patch(key, { detail: `${waiting} ${v.detail}` });
@@ -567,7 +573,7 @@ export class ScenarioRunner {
     if (!review || this.cancelled) return false;
 
     const key: StepKey = 'flagged';
-    const waiting = `Waiting for Ordering to log the order as flagged for review as ${review.reason}: reading it every ${REVIEW_POLL_MS / 1000} s for up to ${REVIEW_WATCH_MS / 1000} s.`;
+    const waiting = $localize`Waiting for Ordering to log the order as flagged for review as ${review.reason}:reason:: reading it every ${REVIEW_POLL_MS / 1000}:poll: s for up to ${REVIEW_WATCH_MS / 1000}:cap: s.`;
     this.patch(key, { state: 'running', request: `GET /api/review/${orderId}`, detail: waiting });
 
     const deadline = Date.now() + REVIEW_WATCH_MS;
@@ -594,7 +600,10 @@ export class ScenarioRunner {
         return false;
       }
       if (Date.now() >= deadline) {
-        this.patch(key, { state: 'failed', detail: `Not logged after ${REVIEW_WATCH_MS / 1000} s. ${v.detail}` });
+        this.patch(key, {
+          state: 'failed',
+          detail: $localize`Not logged after ${REVIEW_WATCH_MS / 1000}:cap: s. ${v.detail}:last:`,
+        });
         return false;
       }
       this.patch(key, { detail: `${waiting} ${v.detail}` });
@@ -616,7 +625,7 @@ export class ScenarioRunner {
     if (!expected || this.cancelled) return false;
 
     const key: StepKey = 'mail';
-    const waiting = `Waiting for the send worker to mail the order's events: reading the mail sink every ${DRAIN_POLL_MS / 1000} s for up to ${DRAIN_WATCH_MS / 1000} s.`;
+    const waiting = $localize`Waiting for the send worker to mail the order's events: reading the mail sink every ${DRAIN_POLL_MS / 1000}:poll: s for up to ${DRAIN_WATCH_MS / 1000}:cap: s.`;
     this.patch(key, { state: 'running', request: 'GET /api/mail/messages', detail: waiting });
 
     const deadline = Date.now() + DRAIN_WATCH_MS;
@@ -643,7 +652,10 @@ export class ScenarioRunner {
         return false;
       }
       if (Date.now() >= deadline) {
-        this.patch(key, { state: 'failed', detail: `Not all sent after ${DRAIN_WATCH_MS / 1000} s. ${v.detail}` });
+        this.patch(key, {
+          state: 'failed',
+          detail: $localize`Not all sent after ${DRAIN_WATCH_MS / 1000}:cap: s. ${v.detail}:last:`,
+        });
         return false;
       }
       this.patch(key, { detail: `${waiting} ${v.detail}` });
@@ -664,7 +676,7 @@ export class ScenarioRunner {
     const key: StepKey = 'reserved';
     const correlationId = stepCorrelationId(run, key);
     const url = buildUrl(read.url, { [read.pathParameters[0]?.name ?? 'orderId']: orderId }, {});
-    const waiting = `Waiting for Inventory to reserve the stock: reading the reservation every ${RESERVATION_POLL_MS / 1000} s for up to ${RESERVATION_WATCH_MS / 1000} s.`;
+    const waiting = $localize`Waiting for Inventory to reserve the stock: reading the reservation every ${RESERVATION_POLL_MS / 1000}:poll: s for up to ${RESERVATION_WATCH_MS / 1000}:cap: s.`;
     this.patch(key, { state: 'running', correlationId, request: `${read.method} ${url}`, detail: waiting });
 
     const deadline = Date.now() + RESERVATION_WATCH_MS;
@@ -688,7 +700,7 @@ export class ScenarioRunner {
       if (Date.now() >= deadline) {
         this.patch(key, {
           state: 'failed',
-          detail: `Not reserved after ${RESERVATION_WATCH_MS / 1000} s. ${v.detail}`,
+          detail: $localize`Not reserved after ${RESERVATION_WATCH_MS / 1000}:cap: s. ${v.detail}:last:`,
         });
         return false;
       }
@@ -711,14 +723,14 @@ export class ScenarioRunner {
 
     this.patch('stop', {
       state: 'running',
-      detail: `Asking the host to add ${change} to the lease and waiting for it to be made. ${this.leaseNote()}`,
+      detail: $localize`Asking the host to add ${change}:change: to the lease and waiting for it to be made. ${this.leaseNote()}:note:`,
     });
 
     try {
       const held = await firstValueFrom(this.host.leaseAddChange(change));
       this.patch('stop', {
         state: 'ok',
-        detail: `Held: ${held.title}. The host restores it by itself at ${held.expiresAt}.`,
+        detail: $localize`Held: ${held.title}:title:. The host restores it by itself at ${held.expiresAt}:expiresAt:.`,
       });
       return !this.cancelled;
     } catch (e: unknown) {
@@ -753,8 +765,8 @@ export class ScenarioRunner {
     if (result.outcome !== 'responded') {
       const why =
         result.outcome === 'unreached'
-          ? `No answer from the carrier simulator: ${result.error}`
-          : 'The request was refused.';
+          ? $localize`No answer from the carrier simulator: ${result.error}:error:`
+          : $localize`The request was refused.`;
       this.patch(key, { state: 'failed', status: null, body: null, detail: why });
       return null;
     }
@@ -765,8 +777,8 @@ export class ScenarioRunner {
       this.patch(key, {
         state: 'failed',
         detail: result.bodyTruncated
-          ? "The simulator's answer was longer than the proxy reads, so the log cannot be judged: its request journal has grown too large for this screen to read (clear it, or restart the carrier simulator, and run again)."
-          : `The simulator answered ${result.status}, not a list of the requests it logged.`,
+          ? $localize`The simulator's answer was longer than the proxy reads, so the log cannot be judged: its request journal has grown too large for this screen to read (clear it, or restart the carrier simulator, and run again).`
+          : $localize`The simulator answered ${result.status}:status:, not a list of the requests it logged.`,
       });
     }
 
@@ -784,7 +796,7 @@ export class ScenarioRunner {
 
     this.patch('lease', {
       state: 'running',
-      detail: `Asking the host to change the stack and waiting for each service to be healthy, up to 3 minutes a change. ${this.leaseNote()}`,
+      detail: $localize`Asking the host to change the stack and waiting for each service to be healthy, up to 3 minutes a change. ${this.leaseNote()}:note:`,
     });
 
     try {
@@ -798,7 +810,7 @@ export class ScenarioRunner {
       this.leaseTaken = true;
       this.patch('lease', {
         state: 'ok',
-        detail: `Held: ${held.title}. The host restores it by itself at ${held.expiresAt}.`,
+        detail: $localize`Held: ${held.title}:title:. The host restores it by itself at ${held.expiresAt}:expiresAt:.`,
       });
       return !this.cancelled;
     } catch (e: unknown) {
@@ -821,23 +833,23 @@ export class ScenarioRunner {
     if (!SCRIPTS[script].steps.includes('restore')) return;
 
     if (!this.leaseTaken) {
-      this.patch('restore', { state: 'skipped', detail: 'No lease was taken, so nothing was changed.' });
+      this.patch('restore', { state: 'skipped', detail: $localize`No lease was taken, so nothing was changed.` });
       return;
     }
 
     this.patch('restore', {
       state: 'running',
-      detail: 'Asking the host to restore the stack and waiting for each service to be running.',
+      detail: $localize`Asking the host to restore the stack and waiting for each service to be running.`,
     });
 
     try {
       await firstValueFrom(this.host.leaseRestore());
       this.leaseTaken = false;
-      this.patch('restore', { state: 'ok', detail: 'The stack is as the run found it.' });
+      this.patch('restore', { state: 'ok', detail: $localize`The stack is as the run found it.` });
     } catch (e: unknown) {
       this.patch('restore', {
         state: 'failed',
-        detail: `The restore failed: ${describe(e)} The lease is still held; the host tries again every 30 seconds, and the Stack screen has Restore now.`,
+        detail: $localize`The restore failed: ${describe(e)}:error: The lease is still held; the host tries again every 30 seconds, and the Stack screen has Restore now.`,
       });
     }
   }
@@ -864,10 +876,10 @@ export class ScenarioRunner {
       status: result.status,
       body: result.body,
       detail: refused
-        ? 'Refused with 422 order.already_shipped, as an order the carrier has collected is.'
+        ? $localize`Refused with 422 order.already_shipped, as an order the carrier has collected is.`
         : result.status >= 200 && result.status < 300
-          ? `Answered ${result.status}: the cancel was taken, so this order was not despatched.`
-          : `Answered ${result.status}, not the 422 order.already_shipped a despatched order is refused with.`,
+          ? $localize`Answered ${result.status}:status:: the cancel was taken, so this order was not despatched.`
+          : $localize`Answered ${result.status}:status:, not the 422 order.already_shipped a despatched order is refused with.`,
     });
     return refused;
   }
@@ -899,7 +911,7 @@ export class ScenarioRunner {
         state: 'failed',
         status: issued.status,
         body: issued.body,
-        detail: `Answered ${issued.status}.`,
+        detail: $localize`Answered ${issued.status}:status:.`,
       });
       return null;
     }
@@ -909,14 +921,14 @@ export class ScenarioRunner {
         state: 'failed',
         status: issued.status,
         body: issued.body,
-        detail: `Answered ${issued.status}, but not with the upload URL and key the next steps need.`,
+        detail: $localize`Answered ${issued.status}:status:, but not with the upload URL and key the next steps need.`,
       });
       return null;
     }
 
     // The query carries the signature: it is long, expires in minutes and says nothing a reader needs.
     const target = signed.uploadUrl.split('?')[0];
-    this.patch(key, { request: `PUT ${target}`, detail: 'Signed; sending the image to the store.' });
+    this.patch(key, { request: `PUT ${target}`, detail: $localize`Signed; sending the image to the store.` });
     let put: ProxyResult;
     try {
       put = await firstValueFrom(
@@ -931,12 +943,12 @@ export class ScenarioRunner {
         state: 'failed',
         status: null,
         body: null,
-        detail: `No answer from the object store: ${put.error}`,
+        detail: $localize`No answer from the object store: ${put.error}:error:`,
       });
       return null;
     }
     if (put.outcome !== 'responded') {
-      this.patch(key, { state: 'failed', status: put.status, body: put.body, detail: 'Refused.' });
+      this.patch(key, { state: 'failed', status: put.status, body: put.body, detail: $localize`Refused.` });
       return null;
     }
     if (put.status < 200 || put.status >= 300) {
@@ -944,7 +956,7 @@ export class ScenarioRunner {
         state: 'failed',
         status: put.status,
         body: put.body,
-        detail: `The store answered ${put.status} to the PUT.`,
+        detail: $localize`The store answered ${put.status}:status: to the PUT.`,
       });
       return null;
     }
@@ -953,7 +965,7 @@ export class ScenarioRunner {
       state: 'ok',
       status: issued.status,
       body: issued.body,
-      detail: `Signed ${signed.key}, and the store answered ${put.status} to the PUT.`,
+      detail: $localize`Signed ${signed.key}:key:, and the store answered ${put.status}:status: to the PUT.`,
     });
     return signed.key;
   }
@@ -984,7 +996,7 @@ export class ScenarioRunner {
         state: 'failed',
         status: read.status,
         body: read.body,
-        detail: `Answered ${read.status}.`,
+        detail: $localize`Answered ${read.status}:status:.`,
       });
       return false;
     }
@@ -994,12 +1006,15 @@ export class ScenarioRunner {
         state: 'failed',
         status: read.status,
         body: read.body,
-        detail: 'The product has no thumbnailUrl, so the image did not attach.',
+        detail: $localize`The product has no thumbnailUrl, so the image did not attach.`,
       });
       return false;
     }
 
-    this.patch(key, { request: `HEAD ${thumbnail}`, detail: 'Read the product; asking the edge for its image.' });
+    this.patch(key, {
+      request: `HEAD ${thumbnail}`,
+      detail: $localize`Read the product; asking the edge for its image.`,
+    });
     let head: ProxyResult;
     try {
       // Anonymous, as a buyer's browser is: the edge serves products/ to anyone (blueprint-backend edge.conf).
@@ -1022,7 +1037,7 @@ export class ScenarioRunner {
         status: null,
         body: read.body,
         detail: refused
-          ? `${describe(e)} (the thumbnail's origin must be the one Admin:ImageEdgeUrl names)`
+          ? $localize`${describe(e)}:error: (the thumbnail's origin must be the one Admin:ImageEdgeUrl names)`
           : describe(e),
       });
       return false;
@@ -1032,7 +1047,10 @@ export class ScenarioRunner {
         state: 'failed',
         status: null,
         body: null,
-        detail: head.outcome === 'unreached' ? `No answer from the edge: ${head.error}` : `Refused: ${head.status}.`,
+        detail:
+          head.outcome === 'unreached'
+            ? $localize`No answer from the edge: ${head.error}:error:`
+            : $localize`Refused: ${head.status}:status:.`,
       });
       return false;
     }
@@ -1042,7 +1060,7 @@ export class ScenarioRunner {
       state: fault === null ? 'ok' : 'failed',
       status: head.status,
       body: read.body,
-      detail: fault ?? `The edge answered ${head.status} with an image and nosniff.`,
+      detail: fault ?? $localize`The edge answered ${head.status}:status: with an image and nosniff.`,
     });
     return fault === null;
   }
@@ -1074,8 +1092,8 @@ export class ScenarioRunner {
     const id = ok && readId ? idFrom(result.body) : null;
     if (!ok || (readId && id === null)) {
       const detail = ok
-        ? `Answered ${result.status}, but not with the id the next steps need.`
-        : `Answered ${result.status}.`;
+        ? $localize`Answered ${result.status}:status:, but not with the id the next steps need.`
+        : $localize`Answered ${result.status}:status:.`;
       this.patch(key, { state: 'failed', status: result.status, body: result.body, detail });
       return null;
     }
@@ -1084,7 +1102,9 @@ export class ScenarioRunner {
       state: 'ok',
       status: result.status,
       body: result.body,
-      detail: id ? `Answered ${result.status} with id ${id}.` : `Answered ${result.status}.`,
+      detail: id
+        ? $localize`Answered ${result.status}:status: with id ${id}:id:.`
+        : $localize`Answered ${result.status}:status:.`,
     });
     return id ?? '';
   }
@@ -1107,7 +1127,7 @@ export class ScenarioRunner {
 
     const correlationId = stepCorrelationId(run, key);
     const url = buildUrl(read.url, { [read.pathParameters[0]?.name ?? 'id']: orderId }, {});
-    const waiting = `Waiting for ${WATCHING_FOR[key]}: reading the order every ${DRAIN_POLL_MS / 1000} s for up to ${DRAIN_WATCH_MS / 1000} s.`;
+    const waiting = $localize`Waiting for ${WATCHING_FOR[key]}:what:: reading the order every ${DRAIN_POLL_MS / 1000}:poll: s for up to ${DRAIN_WATCH_MS / 1000}:cap: s.`;
     this.patch(key, { state: 'running', correlationId, request: `${read.method} ${url}`, detail: waiting });
 
     const deadline = Date.now() + DRAIN_WATCH_MS;
@@ -1120,14 +1140,14 @@ export class ScenarioRunner {
       sentUnderId = true;
 
       if (result.status === 404 && !this.orderAnswered) {
-        last = 'The BFF answered 404: it has not learned of the order yet.';
+        last = $localize`The BFF answered 404: it has not learned of the order yet.`;
         this.patch(key, { status: result.status, body: result.body });
       } else if (result.status !== 200) {
         this.patch(key, {
           state: 'failed',
           status: result.status,
           body: result.body,
-          detail: `Answered ${result.status}.`,
+          detail: $localize`Answered ${result.status}:status:.`,
         });
         return false;
       } else {
@@ -1141,7 +1161,7 @@ export class ScenarioRunner {
             state: 'failed',
             status: result.status,
             body: result.body,
-            detail: 'Answered 200, but not with an order read the watch can follow.',
+            detail: $localize`Answered 200, but not with an order read the watch can follow.`,
           });
           return false;
         }
@@ -1162,8 +1182,8 @@ export class ScenarioRunner {
             body: result.body,
             detail:
               after === null
-                ? `The order read shows ${key} at ${v.at}.`
-                : `The order read shows ${key} at ${v.at}, ${after} s after it was placed.`,
+                ? $localize`The order read shows ${key}:status: at ${v.at}:at:.`
+                : $localize`The order read shows ${key}:status: at ${v.at}:at:, ${after}:seconds: s after it was placed.`,
           });
           return true;
         }
@@ -1171,14 +1191,14 @@ export class ScenarioRunner {
           this.patch(key, { state: 'failed', status: result.status, body: result.body, detail: v.reason });
           return false;
         }
-        last = `Last read: ${order.status}, as the BFF knew it at ${order.asOf}.`;
+        last = $localize`Last read: ${order.status}:status:, as the BFF knew it at ${order.asOf}:asOf:.`;
         this.patch(key, { status: result.status, body: result.body });
       }
 
       if (Date.now() >= deadline) {
         this.patch(key, {
           state: 'failed',
-          detail: `Not ${key} after ${DRAIN_WATCH_MS / 1000} s. ${last}`,
+          detail: $localize`Not ${key}:status: after ${DRAIN_WATCH_MS / 1000}:cap: s. ${last}:last:`,
         });
         return false;
       }
@@ -1272,8 +1292,8 @@ export class ScenarioRunner {
           body: result.body,
           regrant: null,
           detail: sentBefore
-            ? `Keycloak refused ${identity.username}: ${result.status}. This read was not sent.`
-            : `Keycloak refused ${identity.username}: ${result.status}. Nothing was sent.`,
+            ? $localize`Keycloak refused ${identity.username}:user:: ${result.status}:status:. This read was not sent.`
+            : $localize`Keycloak refused ${identity.username}:user:: ${result.status}:status:. Nothing was sent.`,
         });
         return null;
       case 'unreached':
@@ -1282,7 +1302,7 @@ export class ScenarioRunner {
           correlationId: result.sent ? result.correlationId : traced,
           status: null,
           body: null,
-          detail: `No answer from the platform: ${result.error}`,
+          detail: $localize`No answer from the platform: ${result.error}:error:`,
           regrant: result.sent ? regrant : null,
         });
         return null;
@@ -1308,10 +1328,10 @@ export class ScenarioRunner {
       return null;
     }
     if (clock.held && clock.renewsAt && Date.now() >= Date.parse(clock.renewsAt)) {
-      return `The token held for ${identity.username} was due to renew at ${clock.renewsAt}, so the host minted a new one for this call.`;
+      return $localize`The token held for ${identity.username}:user: was due to renew at ${clock.renewsAt}:renewsAt:, so the host minted a new one for this call.`;
     }
     if (!clock.held && this.sentThisRun) {
-      return `The token for ${identity.username} had expired, so the host minted a new one for this call.`;
+      return $localize`The token for ${identity.username}:user: had expired, so the host minted a new one for this call.`;
     }
     return null;
   }
@@ -1331,7 +1351,7 @@ export class ScenarioRunner {
   private async drain(): Promise<boolean> {
     // `stopped` does not replay, so a Cancel while the publish was out is checked here.
     if (this.cancelled) return false;
-    this.patch('drain', { state: 'running', detail: 'Polling the broker.' });
+    this.patch('drain', { state: 'running', detail: $localize`Polling the broker.` });
 
     let last: QueuesView | undefined;
     try {
@@ -1359,14 +1379,14 @@ export class ScenarioRunner {
     if (!last) {
       this.patch('drain', {
         state: 'failed',
-        detail: 'The broker did not answer before the wait ran out.',
+        detail: $localize`The broker did not answer before the wait ran out.`,
       });
       return false;
     }
     if (!last.reachable) {
       this.patch('drain', {
         state: 'failed',
-        detail: `The broker did not answer: ${last.error ?? 'no reason given'}.`,
+        detail: $localize`The broker did not answer: ${last.error ?? $localize`no reason given`}:error:.`,
       });
       return false;
     }
@@ -1375,21 +1395,24 @@ export class ScenarioRunner {
     if (!p.found) {
       this.patch('drain', {
         state: 'failed',
-        detail: `${p.queue} is not declared: Ordering has not started, so it cannot price an order.`,
+        detail: $localize`${p.queue}:queue: is not declared: Ordering has not started, so it cannot price an order.`,
       });
       return false;
     }
     if (!p.drained) {
       this.patch('drain', {
         state: 'failed',
-        detail: `${p.queue} still holds ${p.messages ?? 'some'} messages after ${DRAIN_WATCH_MS / 1000} s; the Broker screen shows where they are.`,
+        detail:
+          p.messages == null
+            ? $localize`${p.queue}:queue: still holds messages after ${DRAIN_WATCH_MS / 1000}:cap: s; the Broker screen shows where they are.`
+            : $localize`${p.queue}:queue: still holds messages after ${DRAIN_WATCH_MS / 1000}:cap: s (${p.messages}:count: of them); the Broker screen shows where they are.`,
       });
       return false;
     }
 
     this.patch('drain', {
       state: 'ok',
-      detail: `${p.queue} is empty, which is what run-locally.md waits for before ordering.`,
+      detail: $localize`${p.queue}:queue: is empty, which is what run-locally.md waits for before ordering.`,
     });
     return true;
   }
@@ -1402,5 +1425,5 @@ export class ScenarioRunner {
 /** A problem's `detail`/`title`, else the error's message. */
 function describe(e: unknown): string {
   const err = e as { error?: { detail?: string; title?: string }; message?: string } | null;
-  return err?.error?.detail ?? err?.error?.title ?? err?.message ?? 'The host did not answer.';
+  return err?.error?.detail ?? err?.error?.title ?? err?.message ?? $localize`The host did not answer.`;
 }

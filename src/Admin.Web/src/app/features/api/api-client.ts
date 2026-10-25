@@ -87,13 +87,17 @@ export class ApiHistory {
 export function clockText(clock: TokenClockView | null, now: number): string | null {
   if (!clock?.username) return null;
   if (!clock.held || !clock.expiresAt || !clock.renewsAt)
-    return `No token held for ${clock.username}; the next call mints one.`;
+    return $localize`No token held for ${clock.username}:user:; the next call mints one.`;
   const left = Date.parse(clock.expiresAt) - now;
   const renews = Date.parse(clock.renewsAt) - now;
-  const grants = clock.permissions.length ? `Grants ${clock.permissions.join(', ')}.` : 'Grants no permission.';
-  if (left <= 0) return `${clock.username}'s token has expired; the next call mints one. ${grants}`;
-  const when = renews > 0 ? `the next call reuses it for ${duration(renews)} more` : 'the next call mints a new one';
-  return `${clock.username}'s token: ${duration(left)} left, and ${when}. ${grants}`;
+  const grants = clock.permissions.length
+    ? $localize`Grants ${clock.permissions.join(', ')}:permissions:.`
+    : $localize`Grants no permission.`;
+  if (left <= 0)
+    return $localize`${clock.username}:user:'s token has expired; the next call mints one. ${grants}:grants:`;
+  return renews > 0
+    ? $localize`${clock.username}:user:'s token: ${duration(left)}:left: left, and the next call reuses it for ${duration(renews)}:renews: more. ${grants}:grants:`
+    : $localize`${clock.username}:user:'s token: ${duration(left)}:left: left, and the next call mints a new one. ${grants}:grants:`;
 }
 
 function duration(ms: number): string {

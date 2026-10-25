@@ -200,26 +200,23 @@ const STOCKED = 10;
 
 export const SCRIPTS: Record<ScriptKey, Script> = {
   deliver: {
-    title: 'Order to delivered',
-    intro:
-      'Publish a product, wait for ordering-catalog-events to drain, set its stock on hand, quote a basket holding it, order it, and read the order back until the platform has confirmed, despatched and delivered it.',
+    title: $localize`Order to delivered`,
+    intro: $localize`Publish a product, wait for ordering-catalog-events to drain, set its stock on hand, quote a basket holding it, order it, and read the order back until the platform has confirmed, despatched and delivered it.`,
     steps: ['publish', 'drain', 'stock', 'quote', 'order', 'confirmed', 'dispatched', 'delivered', 'mail'],
     onHand: STOCKED,
     mail: ['order-placed', 'order-confirmed', 'shipment-dispatched', 'shipment-delivered'],
   },
   cancel: {
-    title: 'Order and cancel',
-    intro:
-      'Publish a product, wait for ordering-catalog-events to drain, set its stock on hand, quote a basket holding it, order it, cancel the order, and read it back until the platform says it is cancelled.',
+    title: $localize`Order and cancel`,
+    intro: $localize`Publish a product, wait for ordering-catalog-events to drain, set its stock on hand, quote a basket holding it, order it, cancel the order, and read it back until the platform says it is cancelled.`,
     steps: ['publish', 'drain', 'stock', 'quote', 'order', 'cancel', 'cancelled', 'mail'],
     onHand: STOCKED,
     // The cancel is asked a fraction of a second after the place, long before the saga confirms: no confirmation is mailed.
     mail: ['order-placed', 'order-cancelled'],
   },
   declined: {
-    title: 'Payment declined',
-    intro:
-      'Publish a product at 10.01, because the payment simulator declines an amount whose minor units are .01, stock it, order it, and read the order back until the saga says it was declined.',
+    title: $localize`Payment declined`,
+    intro: $localize`Publish a product at 10.01, because the payment simulator declines an amount whose minor units are .01, stock it, order it, and read the order back until the saga says it was declined.`,
     steps: ['publish', 'drain', 'stock', 'quote', 'order', 'declined', 'mail'],
     amount: DECLINED_AMOUNT,
     onHand: STOCKED,
@@ -229,48 +226,42 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
   // A script of its own, not two steps woven into the order scripts: the store is not the saga, and an order script
   // that failed on a broken store would hide the saga regression it exists to find.
   image: {
-    title: 'Product with an image',
-    intro:
-      "Ask the BFF for a pre-signed upload, PUT an image to the object store, publish a product with the key it returned, read the product back, and fetch its thumbnail from image-edge as a buyer's browser would.",
+    title: $localize`Product with an image`,
+    intro: $localize`Ask the BFF for a pre-signed upload, PUT an image to the object store, publish a product with the key it returned, read the product back, and fetch its thumbnail from image-edge as a buyer's browser would.`,
     steps: ['upload', 'publish', 'thumbnail'],
   },
   'out-of-stock': {
-    title: 'Reservation failed',
-    intro:
-      'Publish a product, set its stock on hand to 0, order it, and read the order back until the saga says it is out of stock.',
+    title: $localize`Reservation failed`,
+    intro: $localize`Publish a product, set its stock on hand to 0, order it, and read the order back until the saga says it is out of stock.`,
     steps: ['publish', 'drain', 'stock', 'quote', 'order', 'out_of_stock', 'mail'],
     onHand: 0,
     mail: ['order-placed', 'order-cancelled'],
   },
   'in-transit': {
-    title: 'Parcel collected, never delivered',
-    intro:
-      'Publish a product, stock it, order it to the delivery postal code SIM-TRANSIT, which scripts the carrier simulator to collect the parcel and never deliver it, and read the order back until it is despatched. It stays despatched.',
+    title: $localize`Parcel collected, never delivered`,
+    intro: $localize`Publish a product, stock it, order it to the delivery postal code SIM-TRANSIT, which scripts the carrier simulator to collect the parcel and never deliver it, and read the order back until it is despatched. It stays despatched.`,
     steps: ['publish', 'drain', 'stock', 'quote', 'order', 'confirmed', 'dispatched'],
     onHand: STOCKED,
     postalCode: IN_TRANSIT_CODE,
   },
   'already-shipped': {
-    title: 'Cancel after despatch',
-    intro:
-      'Order a stocked product to SIM-TRANSIT, wait until the order is despatched, ask to cancel it, expect the platform to refuse with 422 order.already_shipped, and read the order back unchanged.',
+    title: $localize`Cancel after despatch`,
+    intro: $localize`Order a stocked product to SIM-TRANSIT, wait until the order is despatched, ask to cancel it, expect the platform to refuse with 422 order.already_shipped, and read the order back unchanged.`,
     steps: ['publish', 'drain', 'stock', 'quote', 'order', 'confirmed', 'dispatched', 'late_cancel', 'unchanged'],
     onHand: STOCKED,
     postalCode: IN_TRANSIT_CODE,
   },
   'stock-timeout': {
-    title: 'Stock timeout',
-    intro:
-      "Shorten the saga's waits and stop Inventory, so nothing can answer the reservation; publish a product, order it, and read the order back until the saga's own stock wait has lapsed and ended it out of stock. Only that wait can have ended it. The stack is restored afterwards, whatever happens.",
+    title: $localize`Stock timeout`,
+    intro: $localize`Shorten the saga's waits and stop Inventory, so nothing can answer the reservation; publish a product, order it, and read the order back until the saga's own stock wait has lapsed and ended it out of stock. Only that wait can have ended it. The stack is restored afterwards, whatever happens.`,
     steps: ['lease', 'publish', 'drain', 'order', 'out_of_stock', 'mail', 'restore'],
     lease: { changes: [SHORT_WAITS, STOP_INVENTORY], holdSeconds: 420 },
     // Notifications is not Inventory: the cancel is mailed with Inventory stopped (read live, 2 of 2 runs).
     mail: ['order-placed', 'order-cancelled'],
   },
   'payment-timeout': {
-    title: 'Payment timeout',
-    intro:
-      "Shorten the saga's waits, publish a product at 10.09 (the payment simulator answers a total ending .09 after the adapter's own budget), stock it, order it, and read the order back until the saga's payment wait has lapsed and declined it. A .09 order holds Payments up while it waits, so run nothing else beside it. The stack is restored afterwards, whatever happens.",
+    title: $localize`Payment timeout`,
+    intro: $localize`Shorten the saga's waits, publish a product at 10.09 (the payment simulator answers a total ending .09 after the adapter's own budget), stock it, order it, and read the order back until the saga's payment wait has lapsed and declined it. A .09 order holds Payments up while it waits, so run nothing else beside it. The stack is restored afterwards, whatever happens.`,
     steps: ['lease', 'publish', 'drain', 'stock', 'quote', 'order', 'declined', 'mail', 'restore'],
     amount: PAYMENT_WAIT_AMOUNT,
     onHand: STOCKED,
@@ -279,9 +270,8 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
     mail: ['order-placed', 'order-cancelled', 'payment-declined'],
   },
   'despatch-timeout': {
-    title: 'Despatch timeout',
-    intro:
-      "Shorten the saga's waits, publish a product, stock it, and order it to the delivery postal code SIM-STRANGE, whose parcel is booked and never collected; read Ordering's log until the despatch wait has lapsed and it has flagged the order for review as not_despatched, and read the order back still confirmed. Nothing compensates it: a person owns it now. The stack is restored afterwards, whatever happens.",
+    title: $localize`Despatch timeout`,
+    intro: $localize`Shorten the saga's waits, publish a product, stock it, and order it to the delivery postal code SIM-STRANGE, whose parcel is booked and never collected; read Ordering's log until the despatch wait has lapsed and it has flagged the order for review as not_despatched, and read the order back still confirmed. Nothing compensates it: a person owns it now. The stack is restored afterwards, whatever happens.`,
     steps: ['lease', 'publish', 'drain', 'stock', 'quote', 'order', 'confirmed', 'flagged', 'held', 'mail', 'restore'],
     onHand: STOCKED,
     postalCode: STRANGE_CODE,
@@ -291,9 +281,8 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
     mail: ['order-placed', 'order-confirmed'],
   },
   'release-timeout': {
-    title: 'Release timeout',
-    intro:
-      "Shorten the saga's waits, publish a product at 10.09 (a total ending .09 holds the payment, so the stock is reserved and the order is not yet confirmed), stock it, order it, wait until Inventory has reserved the stock, stop Inventory, and cancel the order; read the order cancelled while the release the saga asks for is never answered, and Ordering's log until it has flagged the order for review as stock_not_released. A .09 order holds Payments up while it waits, so run nothing else beside it. The stack is restored afterwards, whatever happens.",
+    title: $localize`Release timeout`,
+    intro: $localize`Shorten the saga's waits, publish a product at 10.09 (a total ending .09 holds the payment, so the stock is reserved and the order is not yet confirmed), stock it, order it, wait until Inventory has reserved the stock, stop Inventory, and cancel the order; read the order cancelled while the release the saga asks for is never answered, and Ordering's log until it has flagged the order for review as stock_not_released. A .09 order holds Payments up while it waits, so run nothing else beside it. The stack is restored afterwards, whatever happens.`,
     steps: [
       'lease',
       'publish',
@@ -318,28 +307,28 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
     mail: ['order-placed', 'order-cancelled'],
   },
   'carrier-refused': carrierScript(
-    'Carrier refuses the address',
+    $localize`Carrier refuses the address`,
     'SIM-REFUSED',
     'refused',
-    'the carrier refuses the booking with 422 address_not_serviceable',
+    $localize`the carrier refuses the booking with 422 address_not_serviceable`,
   ),
   'carrier-down': carrierScript(
-    'Carrier is down',
+    $localize`Carrier is down`,
     'SIM-DOWN',
     'down',
-    'the carrier answers every booking attempt 503, and Shipping tries again',
+    $localize`the carrier answers every booking attempt 503, and Shipping tries again`,
   ),
   'carrier-slow': carrierScript(
-    'Carrier is slow',
+    $localize`Carrier is slow`,
     'SIM-SLOW',
     'slow',
-    'the carrier answers after Shipping has stopped waiting, so the same booking is tried again',
+    $localize`the carrier answers after Shipping has stopped waiting, so the same booking is tried again`,
   ),
   'carrier-strange': carrierScript(
-    'Carrier feed is strange',
+    $localize`Carrier feed is strange`,
     STRANGE_CODE,
     'strange',
-    'the carrier books the parcel and then serves a feed Shipping refuses whole, so it is polled again and again',
+    $localize`the carrier books the parcel and then serves a feed Shipping refuses whole, so it is polled again and again`,
   ),
 };
 
@@ -352,7 +341,7 @@ export const SCRIPTS: Record<ScriptKey, Script> = {
 function carrierScript(title: string, code: string, outcome: CarrierOutcome, saw: string): Script {
   return {
     title,
-    intro: `Publish a product, stock it, order it to the delivery postal code ${code}, and read the carrier simulator's request log until it shows ${saw}. The order read is then held to what run-locally.md says it shows: confirmed, never despatched. Only what the carrier saw is asserted, not the shipment's own state.`,
+    intro: $localize`Publish a product, stock it, order it to the delivery postal code ${code}:code:, and read the carrier simulator's request log until it shows ${saw}:saw:. The order read is then held to what run-locally.md says it shows: confirmed, never despatched. Only what the carrier saw is asserted, not the shipment's own state.`,
     steps: CARRIER_STEPS,
     onHand: STOCKED,
     postalCode: code,
@@ -366,30 +355,30 @@ function carrierScript(title: string, code: string, outcome: CarrierOutcome, saw
 export const ALREADY_SHIPPED = { status: 422, code: 'order.already_shipped' } as const;
 
 export const STEP_TITLES: Record<StepKey, string> = {
-  upload: 'Upload a product image',
-  publish: 'Publish a product',
-  thumbnail: 'Read the image back through the edge',
-  drain: 'Wait for the projection',
-  quote: 'Quote a basket',
-  stock: 'Set the stock on hand',
-  order: 'Place an order',
-  cancel: 'Cancel it',
-  lease: 'Change the stack for the cause',
-  restore: 'Restore the stack',
-  late_cancel: 'Ask to cancel it after despatch',
-  confirmed: 'Wait for confirmed',
-  dispatched: 'Wait for despatch',
-  delivered: 'Wait for delivery',
-  cancelled: 'Wait for the cancellation',
-  declined: 'Wait for the decline',
-  out_of_stock: 'Wait for the stock refusal',
-  unchanged: 'Read the order back unchanged',
-  carrier: 'Read what the carrier saw',
-  flagged: 'Read the review the platform raised',
-  reserved: 'Wait for the stock to be reserved',
-  stop: 'Stop Inventory now the stock is reserved',
-  held: 'Read the order back still confirmed',
-  mail: 'Count the mail the order sent',
+  upload: $localize`Upload a product image`,
+  publish: $localize`Publish a product`,
+  thumbnail: $localize`Read the image back through the edge`,
+  drain: $localize`Wait for the projection`,
+  quote: $localize`Quote a basket`,
+  stock: $localize`Set the stock on hand`,
+  order: $localize`Place an order`,
+  cancel: $localize`Cancel it`,
+  lease: $localize`Change the stack for the cause`,
+  restore: $localize`Restore the stack`,
+  late_cancel: $localize`Ask to cancel it after despatch`,
+  confirmed: $localize`Wait for confirmed`,
+  dispatched: $localize`Wait for despatch`,
+  delivered: $localize`Wait for delivery`,
+  cancelled: $localize`Wait for the cancellation`,
+  declined: $localize`Wait for the decline`,
+  out_of_stock: $localize`Wait for the stock refusal`,
+  unchanged: $localize`Read the order back unchanged`,
+  carrier: $localize`Read what the carrier saw`,
+  flagged: $localize`Read the review the platform raised`,
+  reserved: $localize`Wait for the stock to be reserved`,
+  stop: $localize`Stop Inventory now the stock is reserved`,
+  held: $localize`Read the order back still confirmed`,
+  mail: $localize`Count the mail the order sent`,
 };
 
 /**
@@ -399,14 +388,14 @@ export const STEP_TITLES: Record<StepKey, string> = {
  * which is why the two Shipping steps wait in silence before they move.
  */
 export const WATCHING_FOR: Record<WatchKey, string> = {
-  confirmed: 'the fulfilment saga to reserve the stock, authorise the payment and confirm the order',
-  dispatched: 'Shipping to book the carrier for the confirmed order, which it does on a timer of its own',
-  delivered: "Shipping's tracking to read the carrier's delivered event, which it polls on a timer",
-  cancelled: 'the saga to act on the cancel',
-  declined: 'the saga to ask the payment provider to authorise the order and be refused',
-  out_of_stock: 'the saga to ask Inventory to reserve the stock and be refused',
-  unchanged: 'the order read, which a refused cancel leaves where it was: despatched and no longer cancellable',
-  held: 'the order read, which a carrier that refused, was down or slow, or served a strange feed, and a despatch that never comes, leave at confirmed',
+  confirmed: $localize`the fulfilment saga to reserve the stock, authorise the payment and confirm the order`,
+  dispatched: $localize`Shipping to book the carrier for the confirmed order, which it does on a timer of its own`,
+  delivered: $localize`Shipping's tracking to read the carrier's delivered event, which it polls on a timer`,
+  cancelled: $localize`the saga to act on the cancel`,
+  declined: $localize`the saga to ask the payment provider to authorise the order and be refused`,
+  out_of_stock: $localize`the saga to ask Inventory to reserve the stock and be refused`,
+  unchanged: $localize`the order read, which a refused cancel leaves where it was: despatched and no longer cancellable`,
+  held: $localize`the order read, which a carrier that refused, was down or slow, or served a strange feed, and a despatch that never comes, leave at confirmed`,
 };
 
 /** The calls the steps make, each by its role. */
@@ -477,11 +466,11 @@ export function resolveOperations(
     const id = SCENARIO_OPERATIONS[role];
     const operation = view.operations.find((o) => o.id === id);
     if (!operation) {
-      missing.push(`${id} is not in the operation catalog`);
+      missing.push($localize`${id}:id: is not in the operation catalog`);
     } else if (!operation.available) {
       const error = view.sources.find((s) => s.name === operation.source)?.error;
-      const reason = `${id} is unavailable: its service's document did not load`;
-      missing.push(error ? `${reason}: ${error}` : reason);
+      const reason = $localize`${id}:id: is unavailable: its service's document did not load`;
+      missing.push(error ? $localize`${reason}:reason:: ${error}:error:` : reason);
     } else {
       found[role] = operation;
     }
@@ -769,17 +758,25 @@ export type MailVerdict =
  */
 export function mailVerdict(view: MailListView, orderId: string, expected: readonly string[]): MailVerdict {
   if (!view.reachable) {
-    return { kind: 'failed', reason: `The mail sink could not be read: ${view.error ?? 'no reason given'}.` };
+    return {
+      kind: 'failed',
+      reason: $localize`The mail sink could not be read: ${view.error ?? $localize`no reason given`}:error:.`,
+    };
   }
 
   const tallies = tallyMail(view, orderId);
   const counts = tallies.map((t) => `${t.event} (${t.template}) ×${t.messages}`);
-  const said = counts.length === 0 ? 'no message for this run yet' : counts.join(', ');
+  const said = counts.length === 0 ? $localize`no message for this run yet` : counts.join(', ');
 
   const doubled = tallies.filter((t) => t.messages > 1);
   if (doubled.length > 0) {
-    const list = doubled.map((t) => `${t.event} (${t.template}) sent ${t.messages} times`).join(', ');
-    return { kind: 'failed', reason: `A message was sent more than once: ${list}. Counted: ${said}.` };
+    const list = doubled
+      .map((t) => $localize`${t.event}:event: (${t.template}:template:) sent ${t.messages}:count: times`)
+      .join(', ');
+    return {
+      kind: 'failed',
+      reason: $localize`A message was sent more than once: ${list}:list:. Counted: ${said}:said:.`,
+    };
   }
 
   const unexpected = tallies.filter((t) => !expected.includes(t.template));
@@ -787,17 +784,17 @@ export function mailVerdict(view: MailListView, orderId: string, expected: reado
     const list = unexpected.map((t) => (t.template ? `${t.event} (${t.template})` : t.eventId)).join(', ');
     return {
       kind: 'failed',
-      reason: `A message answered an event this run does not expect: ${list}. Counted: ${said}.`,
+      reason: $localize`A message answered an event this run does not expect: ${list}:list:. Counted: ${said}:said:.`,
     };
   }
 
   const missing = expected.filter((template) => !tallies.some((t) => t.template === template));
   if (missing.length > 0) {
     const list = missing.map((t) => `${mailEvent(t)} (${t})`).join(', ');
-    return { kind: 'waiting', detail: `Not sent yet: ${list}. Counted: ${said}.` };
+    return { kind: 'waiting', detail: $localize`Not sent yet: ${list}:list:. Counted: ${said}:said:.` };
   }
 
-  return { kind: 'reached', detail: `One message for each event the order raised: ${said}.` };
+  return { kind: 'reached', detail: $localize`One message for each event the order raised: ${said}:said:.` };
 }
 
 export type ReviewVerdict =
@@ -812,7 +809,10 @@ export type ReviewVerdict =
  */
 export function reviewVerdict(view: ReviewFlagView, reason: string, placedAt: number): ReviewVerdict {
   if (!view.reachable) {
-    return { kind: 'failed', reason: `Loki could not be read: ${view.error ?? 'no reason given'}.` };
+    return {
+      kind: 'failed',
+      reason: $localize`Loki could not be read: ${view.error ?? $localize`no reason given`}:error:.`,
+    };
   }
 
   const wanted = view.flags.find((f) => f.reason === reason);
@@ -820,18 +820,21 @@ export function reviewVerdict(view: ReviewFlagView, reason: string, placedAt: nu
     const after = placedAt > 0 ? secondsBetween(new Date(placedAt).toISOString(), wanted.at) : null;
     return {
       kind: 'reached',
-      detail: `Ordering logged "${wanted.line}" at ${wanted.at}${after === null ? '' : `, ${after} s after the order was placed`}.`,
+      detail:
+        after === null
+          ? $localize`Ordering logged "${wanted.line}:line:" at ${wanted.at}:at:.`
+          : $localize`Ordering logged "${wanted.line}:line:" at ${wanted.at}:at:, ${after}:seconds: s after the order was placed.`,
     };
   }
 
   if (view.flags.length === 0) {
-    return { kind: 'waiting', detail: 'Ordering has not logged this order as flagged for review yet.' };
+    return { kind: 'waiting', detail: $localize`Ordering has not logged this order as flagged for review yet.` };
   }
 
   const others = [...new Set(view.flags.map((f) => f.reason))].join(', ');
   return {
     kind: 'waiting',
-    detail: `Ordering has flagged it for review as ${others}, not ${reason}; still waiting for ${reason}.`,
+    detail: $localize`Ordering has flagged it for review as ${others}:others:, not ${reason}:reason:; still waiting for ${reason}:reason:.`,
   };
 }
 
@@ -846,9 +849,12 @@ export type ReservationVerdict =
  */
 export function reservationVerdict(status: number, body: string): ReservationVerdict {
   if (status === 404) {
-    return { kind: 'waiting', detail: 'Inventory answered 404: it has made no reservation for the order yet.' };
+    return {
+      kind: 'waiting',
+      detail: $localize`Inventory answered 404: it has made no reservation for the order yet.`,
+    };
   }
-  if (status !== 200) return { kind: 'failed', reason: `Answered ${status}.` };
+  if (status !== 200) return { kind: 'failed', reason: $localize`Answered ${status}:status:.` };
 
   let parsed: unknown;
   try {
@@ -861,12 +867,15 @@ export function reservationVerdict(status: number, body: string): ReservationVer
       ? (parsed as Record<string, unknown>)['status']
       : undefined;
   if (typeof seen !== 'string') {
-    return { kind: 'failed', reason: 'Answered 200, but not with a reservation the step can follow.' };
+    return { kind: 'failed', reason: $localize`Answered 200, but not with a reservation the step can follow.` };
   }
   if (seen === 'Reserved') {
-    return { kind: 'reached', detail: 'The reservation reads Reserved: Inventory holds the stock for the order.' };
+    return {
+      kind: 'reached',
+      detail: $localize`The reservation reads Reserved: Inventory holds the stock for the order.`,
+    };
   }
-  return { kind: 'waiting', detail: `Last read: the reservation is ${seen}, not Reserved yet.` };
+  return { kind: 'waiting', detail: $localize`Last read: the reservation is ${seen}:state:, not Reserved yet.` };
 }
 
 export type CarrierVerdict =
@@ -887,7 +896,7 @@ export function carrierVerdict(
 ): CarrierVerdict {
   const mine = bookings.filter((b) => b.at >= since).sort((a, b) => a.at - b.at);
   if (mine.length === 0) {
-    return { kind: 'waiting', detail: 'The carrier has not been asked to book this order yet.' };
+    return { kind: 'waiting', detail: $localize`The carrier has not been asked to book this order yet.` };
   }
 
   const first = mine[0];
@@ -896,34 +905,42 @@ export function carrierVerdict(
   if (wrong) {
     return {
       kind: 'failed',
-      reason: `The carrier answered ${wrong.status} to a booking attempt, not ${EXPECTED_STATUS[outcome]}.`,
+      reason: $localize`The carrier answered ${wrong.status}:status: to a booking attempt, not ${EXPECTED_STATUS[outcome]}:expected:.`,
     };
   }
 
   const count = attempts.length;
   switch (outcome) {
     case 'refused':
-      return { kind: 'reached', detail: 'The carrier refused the booking with 422.' };
+      return { kind: 'reached', detail: $localize`The carrier refused the booking with 422.` };
     case 'down':
     case 'slow': {
-      const said = outcome === 'down' ? 'answered 503' : 'answered 201 after Shipping had stopped waiting';
-      return count >= 2
-        ? { kind: 'reached', detail: `The carrier saw ${count} attempts at the same booking, each ${said}.` }
-        : {
-            kind: 'waiting',
-            detail: `The carrier has seen ${count} attempt, ${said}; Shipping backs off before it tries again.`,
-          };
+      const down = outcome === 'down';
+      if (count >= 2) {
+        return {
+          kind: 'reached',
+          detail: down
+            ? $localize`The carrier saw ${count}:count: attempts at the same booking, each answered 503.`
+            : $localize`The carrier saw ${count}:count: attempts at the same booking, each answered 201 after Shipping had stopped waiting.`,
+        };
+      }
+      return {
+        kind: 'waiting',
+        detail: down
+          ? $localize`The carrier has seen one attempt, answered 503; Shipping backs off before it tries again.`
+          : $localize`The carrier has seen one attempt, answered 201 after Shipping had stopped waiting; Shipping backs off before it tries again.`,
+      };
     }
     default: {
       const after = polls.filter((p) => p.at > first.at).length;
       return after >= 2
         ? {
             kind: 'reached',
-            detail: `The carrier booked the parcel once (201) and its feed has been polled ${after} times since.`,
+            detail: $localize`The carrier booked the parcel once (201) and its feed has been polled since: ${after}:polls: polls.`,
           }
         : {
             kind: 'waiting',
-            detail: `The carrier booked the parcel (201); its feed has been polled ${after} time(s) since.`,
+            detail: $localize`The carrier booked the parcel (201); its feed has been polled since: ${after}:polls: polls.`,
           };
     }
   }
@@ -1016,7 +1033,7 @@ export function verdict(key: WatchKey, read: OrderRead): WatchVerdict {
       ? { kind: 'reached', at: read.timeline.confirmed ?? read.asOf }
       : {
           kind: 'failed',
-          reason: `The order reads ${read.status}, not confirmed: this script's cause should leave it there.`,
+          reason: $localize`The order reads ${read.status}:status:, not confirmed: this script's cause should leave it there.`,
         };
   }
 
@@ -1026,7 +1043,7 @@ export function verdict(key: WatchKey, read: OrderRead): WatchVerdict {
       ? { kind: 'reached', at: read.timeline.dispatched ?? read.asOf }
       : {
           kind: 'failed',
-          reason: `The order reads ${read.status}, not dispatched: the refused cancel should have moved nothing.`,
+          reason: $localize`The order reads ${read.status}:status:, not dispatched: the refused cancel should have moved nothing.`,
         };
   }
 
@@ -1036,7 +1053,7 @@ export function verdict(key: WatchKey, read: OrderRead): WatchVerdict {
       return { kind: 'reached', at: read.timeline.cancelled ?? read.asOf };
     }
     if (read.status === 'delivered' || CANCELLATIONS.includes(read.status)) {
-      return { kind: 'failed', reason: `The order ended ${read.status}, not ${key}.` };
+      return { kind: 'failed', reason: $localize`The order ended ${read.status}:status:, not ${key}:wanted:.` };
     }
     return { kind: 'waiting' };
   }
@@ -1046,12 +1063,12 @@ export function verdict(key: WatchKey, read: OrderRead): WatchVerdict {
       return { kind: 'reached', at: read.timeline.cancelled ?? read.asOf };
     }
     if (read.status === 'delivered') {
-      return { kind: 'failed', reason: 'The order was delivered: the cancel came too late.' };
+      return { kind: 'failed', reason: $localize`The order was delivered: the cancel came too late.` };
     }
     if (CANCELLATIONS.includes(read.status)) {
       return {
         kind: 'failed',
-        reason: `The order ended ${read.status}: the saga cancelled it for a reason of its own.`,
+        reason: $localize`The order ended ${read.status}:status:: the saga cancelled it for a reason of its own.`,
       };
     }
     return { kind: 'waiting' };
@@ -1060,7 +1077,7 @@ export function verdict(key: WatchKey, read: OrderRead): WatchVerdict {
   const at = read.timeline[key];
   if (at) return { kind: 'reached', at };
   if (CANCELLATIONS.includes(read.status)) {
-    return { kind: 'failed', reason: `The order ended ${read.status} before it was ${key}.` };
+    return { kind: 'failed', reason: $localize`The order ended ${read.status}:status: before it was ${key}:wanted:.` };
   }
   return { kind: 'waiting' };
 }
@@ -1134,9 +1151,11 @@ export function sagaText(word: SagaWord): string {
     case 'row':
       return word.state;
     case 'none':
-      return 'no row (a finalised saga, or an order it never saw)';
+      return $localize`no row (a finalised saga, or an order it never saw)`;
     case 'unreadable':
-      return `unreadable (${word.status === null ? 'no answer' : `answered ${word.status}`})`;
+      return word.status === null
+        ? $localize`unreadable (no answer)`
+        : $localize`unreadable (answered ${word.status}:status:)`;
   }
 }
 
@@ -1144,13 +1163,13 @@ export function sagaText(word: SagaWord): string {
 export function pairingText(pairing: Pairing): string {
   switch (pairing) {
     case 'agree':
-      return "The two agree: the same state in the saga's words and the buyer's.";
+      return $localize`The two agree: the same state in the saga's words and the buyer's.`;
     case 'ahead':
-      return "The buyer's status is ahead of the saga's state, which the backend expects until the saga has consumed the same event. If it stays so, the stuck-saga runbook is the next read.";
+      return $localize`The buyer's status is ahead of the saga's state, which the backend expects until the saga has consumed the same event. If it stays so, the stuck-saga runbook is the next read.`;
     case 'differs':
-      return "The saga's state and the buyer's status are a pair the backend's table does not allow: a difference of fact, in the saga or in the BFF.";
+      return $localize`The saga's state and the buyer's status are a pair the backend's table does not allow: a difference of fact, in the saga or in the BFF.`;
     case 'unknown':
-      return "This pair is not in the backend's table, so nothing is claimed about it.";
+      return $localize`This pair is not in the backend's table, so nothing is claimed about it.`;
   }
 }
 
@@ -1308,13 +1327,15 @@ export function headerOf(headers: Record<string, string[]>, name: string): strin
  * otherwise the reason it is not one.
  */
 export function imageFault(status: number, headers: Record<string, string[]>): string | null {
-  if (status < 200 || status >= 300) return `The edge answered ${status}, not the image.`;
+  if (status < 200 || status >= 300) return $localize`The edge answered ${status}:status:, not the image.`;
   const type = headerOf(headers, 'Content-Type');
   if (!type?.toLowerCase().startsWith('image/')) {
-    return `The edge served ${type ?? 'no content type'}, not an image.`;
+    return type === null
+      ? $localize`The edge served no content type, not an image.`
+      : $localize`The edge served ${type}:type:, not an image.`;
   }
   if (headerOf(headers, 'X-Content-Type-Options')?.toLowerCase() !== 'nosniff') {
-    return 'The edge did not set X-Content-Type-Options: nosniff.';
+    return $localize`The edge did not set X-Content-Type-Options: nosniff.`;
   }
   return null;
 }

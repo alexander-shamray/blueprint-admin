@@ -1006,7 +1006,7 @@ describe('ScenarioWidget', () => {
 
       expect(page.steps().map((s) => s.state)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok']);
       expect(page.steps()[6].detail).toBe(
-        'The carrier booked the parcel once (201) and its feed has been polled 2 times since.',
+        'The carrier booked the parcel once (201) and its feed has been polled since: 2 polls.',
       );
       expect(
         sent()
@@ -1042,7 +1042,7 @@ describe('ScenarioWidget', () => {
       await vi.advanceTimersByTimeAsync(0);
       const carrier = () => page.steps().find((s) => s.key === 'carrier')!;
       expect(carrier().state).toBe('running');
-      expect(carrier().detail).toContain('The carrier has seen 1 attempt, answered 503');
+      expect(carrier().detail).toContain('The carrier has seen one attempt, answered 503');
 
       await vi.advanceTimersByTimeAsync(CARRIER_POLL_MS);
       await done;
@@ -1076,7 +1076,7 @@ describe('ScenarioWidget', () => {
 
       expect(page.steps()[6].state).toBe('failed');
       expect(page.steps()[6].detail).toContain(
-        `Not shown after ${CARRIER_WATCH_MS / 1000} s. The carrier has seen 1 attempt`,
+        `Not shown after ${CARRIER_WATCH_MS / 1000} s. The carrier has seen one attempt`,
       );
     });
 
@@ -2511,7 +2511,7 @@ describe('ScenarioWidget', () => {
     vi.useRealTimers();
 
     expect(page.steps()[1].state).toBe('failed');
-    expect(page.steps()[1].detail).toContain('still holds 3 messages');
+    expect(page.steps()[1].detail).toContain('still holds messages after 120 s (3 of them)');
     expect(sent()).toHaveLength(1);
   });
 

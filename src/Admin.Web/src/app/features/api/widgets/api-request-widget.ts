@@ -160,11 +160,11 @@ export class ApiRequestWidget {
     if (!r) return '';
     switch (r.outcome) {
       case 'responded':
-        return `Response ${r.status} in ${r.elapsedMs} ms`;
+        return $localize`Response ${r.status}:status: in ${r.elapsedMs}:elapsed: ms`;
       case 'tokenRejected':
-        return `Keycloak refused the identity: ${r.status}`;
+        return $localize`Keycloak refused the identity: ${r.status}:status:`;
       case 'unreached':
-        return 'No answer from the platform';
+        return $localize`No answer from the platform`;
     }
   });
 
@@ -517,7 +517,7 @@ export class ApiRequestWidget {
     const request = this.identity.request();
     this.clearToken();
     if (!request) {
-      this.error.set('Anonymous has no token.');
+      this.error.set($localize`Anonymous has no token.`);
       return;
     }
     this.fetchingToken = this.host.token(request).subscribe({
@@ -581,7 +581,7 @@ export class ApiRequestWidget {
   private customWithoutUsername(): boolean {
     const c = this.identity.choice();
     if (c.kind !== CUSTOM || c.username.trim()) return false;
-    this.error.set('Enter a username for the custom identity.');
+    this.error.set($localize`Enter a username for the custom identity.`);
     return true;
   }
 
@@ -596,7 +596,7 @@ export class ApiRequestWidget {
       err?.error?.error_description ??
       err?.error?.title ??
       err?.message ??
-      'The host did not answer.'
+      $localize`The host did not answer.`
     );
   }
 }

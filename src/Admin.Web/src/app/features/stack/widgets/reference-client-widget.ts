@@ -89,6 +89,6 @@ export class ReferenceClientWidget {
       this.error.set(null);
       this.pageJob.show(job.id);
     },
-    error: (e: unknown) => this.error.set(hostErrorText(e, 'The host refused the request.')),
+    error: (e: unknown) => this.error.set(hostErrorText(e, $localize`The host refused the request.`)),
   };
 }
