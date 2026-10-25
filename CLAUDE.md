@@ -45,11 +45,9 @@ src/Admin.Assistant.Anthropic/  the one project that carries the Anthropic SDK
 src/Admin.Host/            .NET 10 minimal API: Compose, npm as children, HTTP
                            proxy, SSE. Composition root: Program.cs
 src/Admin.Web/             Angular 22 standalone SPA, built into Host/wwwroot
-src/Admin.Mcp/             the MCP route: an stdio process that is a client of the host's tool routes
 tests/Admin.Assistant.Tests/  xunit, the core
 tests/Admin.Assistant.Anthropic.Tests/  xunit, the adapter against recorded streams
 tests/Admin.Host.Tests/    xunit
-tests/Admin.Mcp.Tests/     xunit, the MCP server against a scripted console
 src/Admin.Web/e2e/         Playwright (FakePlatform)
 tools/token-usage/         Transcript report for the token plan
 .github/workflows/         host, web, smoke
@@ -77,7 +75,6 @@ tools/token-usage/         Transcript report for the token plan
 | Assistant on or off, and the `Admin:Assistant` keys | `AssistantOptions` in `src/Admin.Host/Assistant/AssistantOptions.cs` |
 | The assistant's limits and their defaults | `AssistantLimits` in `src/Admin.Assistant/AssistantLimits.cs` |
 | What the Anthropic provider sends, the default model and effort, and how its stream is read | `RequestBuilder`, `AnthropicSettings` and `StreamMapper` in `src/Admin.Assistant.Anthropic/` |
-| What the MCP route serves and the address it is given | `McpServer` and `ConsoleUrl` in `src/Admin.Mcp/`; the tool routes are `MapAssistant` in `src/Admin.Host/Assistant/AssistantEndpoints.cs` |
 | Where the provider's credential comes from | the SDK's own resolution, built in `AnthropicProviderFactory` (`src/Admin.Host/Assistant/`); no key holds one |
 | What each screen is for, as the assistant explains it | `help` in `BUILT_IN_PAGES` (`src/Admin.Web/src/app/workspace/built-in-pages.ts`) |
 | Which console reads the assistant may call, and the endpoint each mirrors | `AdminReadTools` in `src/Admin.Host/Assistant/AdminReadTools.cs` |

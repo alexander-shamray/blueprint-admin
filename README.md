@@ -248,16 +248,6 @@ in `src/Admin.Host/Assistant/AssistantOptions.cs` binds the keys, and
 The credential is the SDK's own: `ANTHROPIC_API_KEY`, or the profile that
 `ant auth login` stores. The console reads neither and keeps neither.
 
-An agent outside the browser (Claude Code, Claude Desktop) can read the same
-server tools over MCP. `src/Admin.Mcp` is an stdio process the agent launches,
-given the running console's address, which `AdminOptions` owns: for Claude Code,
-`claude mcp add blueprint-admin -- dotnet run --project src/Admin.Mcp -- --url
-http://localhost:<port>`. It reaches the console over loopback only, through
-`GET /api/assistant/tools` and `POST /api/assistant/tools/{name}`, which exist
-only while the assistant is on, and the tools are the panel's, with the same
-redaction and limits. It offers the tools alone: no client tools, since there is
-no browser behind it, and no catalogue resource yet.
-
 ## Known limits
 
 - A game-day cause stays until Undo is pressed, and a host that is stopped while
