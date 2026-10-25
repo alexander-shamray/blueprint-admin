@@ -305,7 +305,7 @@ for item in "${items[@]}"; do
   # trailing `/` names the directory the same way `docs` would, and was
   # dropped above before the boundary was judged.
   #
-  # **`\x01` was a GNU `sed` escape and macOS ships BSD `sed` (#23).** There it
+  # **`\x01` was a GNU `sed` escape and macOS ships BSD `sed` (blueprint-frontend#23).** There it
   # is not an escape at all, so the sentinel was written and read as the two
   # literal characters `x` and `1` — which leaves `**` mistranslated, or a
   # token containing that pair read as the placeholder. Either way the helper

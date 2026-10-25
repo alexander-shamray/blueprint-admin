@@ -5402,7 +5402,7 @@ class TheGitArgvGuard(unittest.TestCase):
                 self.assertAdmitted(command)
 
     def test_a_helper_script_reads_its_heredoc_as_data(self):
-        # **A shell handed a script file reads stdin as data (#33).** Filing
+        # **A shell handed a script file reads stdin as data (blueprint-frontend#33).** Filing
         # an issue by hand with a quoted heredoc whose body quoted code was
         # refused as a script building itself by substitution.
         for command in (
