@@ -97,14 +97,16 @@ import { BrokerFeed, describeError } from '../broker-feed';
                   <button
                     class="dry-replay"
                     (click)="dryRun(id, 'replay')"
-                    [title]="'Say what a replay of ' + id + ' would do; nothing moves'"
+                    i18n-title
+                    title="Say what a replay of {{ id }} would do; nothing moves"
                     i18n
                     >Dry-run replay</button
                   >
                   <button
                     class="dry-discard"
                     (click)="dryRun(id, 'discard')"
-                    [title]="'Say what a discard of ' + id + ' would do; nothing moves'"
+                    i18n-title
+                    title="Say what a discard of {{ id }} would do; nothing moves"
                     i18n
                     >Dry-run discard</button
                   >
@@ -112,16 +114,19 @@ import { BrokerFeed, describeError } from '../broker-feed';
                     @if (a.messageId === id) {
                       <span class="execute-box">
                         <input
-                          [attr.aria-label]="
-                            'Type ' + feed.deadLetterPlan()?.executeConfirm + ' to ' + a.verb + ' for real'
-                          "
-                          [placeholder]="'type: ' + feed.deadLetterPlan()?.executeConfirm"
+                          [attr.aria-label]="executeLabel(a.verb, feed.deadLetterPlan()?.executeConfirm)"
+                          i18n-placeholder
+                          placeholder="type: {{ feed.deadLetterPlan()?.executeConfirm }}"
                           [ngModel]="executeText()"
                           (ngModelChange)="executeText.set($event)"
                         />
-                        <button class="execute" [disabled]="!canExecute()" (click)="execute()" i18n
-                          >{{ a.verb === 'replay' ? 'Replay' : 'Discard' }} for real</button
-                        >
+                        <button class="execute" [disabled]="!canExecute()" (click)="execute()">
+                          @if (a.verb === 'replay') {
+                            <ng-container i18n>Replay for real</ng-container>
+                          } @else {
+                            <ng-container i18n>Discard for real</ng-container>
+                          }
+                        </button>
                       </span>
                     }
                   }
@@ -155,6 +160,12 @@ export class DeadLetterWidget {
   private readonly destroyRef = inject(DestroyRef);
   readonly feed = inject(BrokerFeed);
   readonly config = input<Record<string, unknown>>({});
+
+  /** The real-run box's accessible name, with the word to type in it. */
+  executeLabel = (verb: DeadLetterVerb, word: string | undefined): string =>
+    verb === 'replay'
+      ? $localize`Type ${word}:word: to replay for real`
+      : $localize`Type ${word}:word: to discard for real`;
 
   /** The parked queue this widget's config names, if any. */
   readonly queueOfConfig = computed(() => {

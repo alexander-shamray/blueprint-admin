@@ -18,6 +18,9 @@ export class MapWidget {
   readonly feed = inject(MapFeed);
   readonly config = input<Record<string, unknown>>({});
 
+  /** A service's section name. */
+  serviceLabel = (name: string): string => $localize`Service ${name}:name:`;
+
   readonly autoRefresh = computed(() => this.config()['autoRefresh'] === true);
 
   constructor() {

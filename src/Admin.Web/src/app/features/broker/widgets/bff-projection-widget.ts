@@ -27,10 +27,14 @@ import { BrokerFeed, describeError } from '../broker-feed';
               @if (d.messages === 0) {
                 <ng-container i18n>[drained] {{ p.queue }} is empty.</ng-container>
               } @else {
-                <ng-container i18n
-                  >[waiting] {{ p.queue }} holds {{ d.messages ?? 'some' }}
-                  {{ d.messages === 1 ? 'message' : 'messages' }}.</ng-container
-                >
+                @if (d.messages === null) {
+                  <ng-container i18n>[waiting] {{ p.queue }} holds some messages.</ng-container>
+                } @else {
+                  <ng-container i18n
+                    >[waiting] {{ p.queue }} holds
+                    {d.messages, plural, =1 {1 message} other {{{ d.messages }} messages}}.</ng-container
+                  >
+                }
               }
             </span>
           }
@@ -51,8 +55,9 @@ import { BrokerFeed, describeError } from '../broker-feed';
           >
           <span class="rebuild-box">
             <input
-              [attr.aria-label]="'Type ' + p.rebuildConfirm + ' to confirm a rebuild'"
-              [placeholder]="'type: ' + p.rebuildConfirm"
+              [attr.aria-label]="rebuildLabel(p.rebuildConfirm)"
+              i18n-placeholder
+              placeholder="type: {{ p.rebuildConfirm }}"
               [ngModel]="confirmText()"
               (ngModelChange)="confirmText.set($event)"
             />
@@ -84,6 +89,9 @@ import { BrokerFeed, describeError } from '../broker-feed';
 export class BffProjectionWidget {
   private readonly host = inject(HostClient);
   readonly feed = inject(BrokerFeed);
+
+  /** The rebuild box's accessible name, with the word to type in it. */
+  rebuildLabel = (word: string): string => $localize`Type ${word}:word: to confirm a rebuild`;
 
   /** The typed confirmation: never kept, so a re-created widget starts with it empty (§4.2). */
   readonly confirmText = signal('');

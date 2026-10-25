@@ -25,7 +25,7 @@
     </section>
   }
   @for (service of m.services; track service.name) {
-    <section class="service" [attr.aria-label]="'Service ' + service.name">
+    <section class="service" [attr.aria-label]="serviceLabel(service.name)">
       <h2
         >{{ service.name }} <small>{{ service.url ?? 'worker, no API of its own' }}</small></h2
       >

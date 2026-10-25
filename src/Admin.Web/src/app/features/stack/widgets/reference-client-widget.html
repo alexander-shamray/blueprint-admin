@@ -11,9 +11,13 @@
       } @else {
         <ng-container i18n>not started</ng-container>
       }
-      <span [class.up]="clientUp()" [class.down]="!clientUp()" i18n
-        >client {{ clientUp() ? 'answers' : 'does not answer' }}</span
-      >
+      <span [class.up]="clientUp()" [class.down]="!clientUp()">
+        @if (clientUp()) {
+          <ng-container i18n>client answers</ng-container>
+        } @else {
+          <ng-container i18n>client does not answer</ng-container>
+        }
+      </span>
     </p>
     @if (!s.frontend.installed) {
       <p class="error">{{
@@ -70,9 +74,19 @@
           @for (c of d.checks; track c.name) {
             <tr [class]="'state-' + c.state">
               <th class="name" scope="row">{{ c.name }}</th>
-              <td class="state">{{
-                c.state === 'Ok' ? 'ok' : c.state === 'Problem' ? 'problem' : 'could not tell'
-              }}</td>
+              <td class="state">
+                @switch (c.state) {
+                  @case ('Ok') {
+                    <ng-container i18n>ok</ng-container>
+                  }
+                  @case ('Problem') {
+                    <ng-container i18n>problem</ng-container>
+                  }
+                  @default {
+                    <ng-container i18n>could not tell</ng-container>
+                  }
+                }
+              </td>
               <td class="detail">{{ c.detail }}</td>
             </tr>
           }

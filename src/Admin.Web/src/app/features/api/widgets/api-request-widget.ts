@@ -71,6 +71,11 @@ export class ApiRequestWidget {
   private watchingProjection?: Subscription;
 
   readonly config = input<Record<string, unknown>>({});
+
+  /** Accessible names with the operation's own words in them, in the active language. */
+  pathLabel = (name: string): string => $localize`Path ${name}:name:`;
+  queryLabel = (name: string): string => $localize`Query ${name}:name:`;
+  traceLabel = (id: string): string => $localize`Trace correlation id ${id}:id:`;
   readonly identity = inject(IdentityState);
   /** A custom identity's password, kept for the tab and never saved: it is not in the config, only here. */
   private readonly savedPassword = widgetSession('customPassword', '');

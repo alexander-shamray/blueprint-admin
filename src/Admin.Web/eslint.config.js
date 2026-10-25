@@ -56,7 +56,9 @@ module.exports = defineConfig([
   {
     // The templates translated so far (AI assistant design §5.5): a literal in one of them without an i18n marker
     // would ship English in every language. The list grows with each workspace phase, and the final sweep replaces
-    // it with every template. An inline template is linted as `<component>.ts/<n>_inline-template...html`.
+    // it with every template. An inline template is linted as `<component>.ts/<n>_inline-template...html`. The rule
+    // reads literal text and static attributes only: a word chosen inside an interpolation, or an attribute bound
+    // with `[attr.x]`, is for the author to put through an `@if` branch or `$localize`.
     files: TRANSLATED_TEMPLATES,
     // A spec's host component is test scaffolding, not something an operator reads.
     ignores: ['**/*.spec.ts/**'],

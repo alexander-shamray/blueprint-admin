@@ -38,7 +38,13 @@
                 >
               }
             </td>
-            <td i18n>{{ s.statusChangedAt ?? 'no stamp on the order read' }} (the platform's clock)</td>
+            <td>
+              @if (s.statusChangedAt) {
+                <ng-container i18n>{{ s.statusChangedAt }} (the platform's clock)</ng-container>
+              } @else {
+                <ng-container i18n>no stamp on the order read (the platform's clock)</ng-container>
+              }
+            </td>
           </tr>
         </tbody>
       </table>
