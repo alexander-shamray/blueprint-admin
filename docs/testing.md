@@ -39,7 +39,10 @@ the templates `eslint.config.js` lists as translated.
 CI's `web` job also runs `npm audit --audit-level=high` after `npm ci`, dev
 dependencies included, so a new high or critical advisory turns the build red.
 `npm-checks.sh` leaves it out because it asks the registry; run it by hand in
-`src/Admin.Web` to see what CI will say.
+`src/Admin.Web` to see what CI will say. A red build here is meant to block:
+Dependabot's security update is the usual way out, and for an advisory with no
+patch yet the way out is an issue naming it and a change that raises the level
+for as long as the issue is open, not a silent skip.
 
 `npm-checks.sh` has no `e2e` mode. Playwright talks to the Host under
 `--Admin:FakePlatform=true`. Locally: build the SPA, run the Host with that
