@@ -2,10 +2,10 @@
 # Every issue a sweep de-duplicates against, with a FIXED field set.
 #
 # **This is the listing half of the control `gh-issue-text.sh` closed one grant
-# along.** #150 dropped `author` from the listing *line* and both sweeps wrote
+# along.** blueprint-backend#150 dropped `author` from the listing *line* and both sweeps wrote
 # that the field's absence is what stops the suppression decision being taken in
 # passing. Review then found `Bash(gh issue view:*)` returning the same field,
-# and that was closed with a fixed-field helper — citing #56, that a helper
+# and that was closed with a fixed-field helper — citing blueprint-backend#56, that a helper
 # which fixes its field set does not bind a caller who still holds the raw grant
 # and can choose fields.
 #
@@ -34,7 +34,7 @@ set -euo pipefail
 # the default 30 hides older issues and a de-duplication gate that cannot see an
 # issue reports a duplicate as new.
 #
-# **And 1000 is still a bound, which is what #17 and #22 are about.** Past it
+# **And 1000 is still a bound, which is what blueprint-frontend#17 and blueprint-frontend#22 are about.** Past it
 # the older issues are omitted and a sweep files a duplicate while reporting a
 # clean de-duplication — the fail-open shape those sweeps exist to refuse,
 # occurring in the gate itself. `gh issue list` has no `--paginate`, so the cap

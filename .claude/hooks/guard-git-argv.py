@@ -2,7 +2,7 @@
 """Judge git on the argv the shell will execute, not on the string a caller types.
 
 **This exists because a permission rule matches the typed STRING and the shell
-executes an ARGV**, and the gap between those two is where #30 lived.
+executes an ARGV**, and the gap between those two is where blueprint-backend#30 lived.
 `.claude/settings.json` denies `Bash(git *--output*)`, which closes the naive
 spelling and nothing more: the shell reassembles adjacent quoted fragments
 before `exec`, so `--out''put=<path>` reaches git as `--output=<path>` while
@@ -21,7 +21,7 @@ It also closes one thing the rule system provably cannot express. `Bash(git
 rejected at startup. So `ext::`, a git transport that RUNS its argument as a
 command, has no expressible Bash deny. It has one here.
 
-**The push half is an ALLOW-list, and that is the whole design (#23).** It began
+**The push half is an ALLOW-list, and that is the whole design (blueprint-backend#23).** It began
 as a deny-list of dangerous spellings and two review rounds took it apart, each
 finding a form nobody had listed: `--force-with-lease=<ref>` (not equal to the
 set entry), `--for` (git accepts unambiguous abbreviations), `-fv` (bundled
@@ -30,7 +30,7 @@ inspect), `refs/heads/*:refs/heads/*` (a wildcard destination that includes
 `main` and equals nothing), `git push origin HEAD` and bare `git push origin`
 (no destination named at all, so nothing can be shown NOT to be `main`).
 
-That is the deny-list trailing the grammar — the exact failure #23 is about,
+That is the deny-list trailing the grammar — the exact failure blueprint-backend#23 is about,
 reappearing inside its fix in parser form. **So the question is inverted:** a
 push is refused unless every part of it is recognised. One remote, one refspec
 that names a destination, and options drawn from a fixed set. Everything else,
@@ -56,7 +56,7 @@ by a reviewer after the previous fix looked complete:
 **What a value-taking flag is depends on the SUBCOMMAND**, and defaulting the
 other way was a hole: `-m` takes a value for `commit` and takes none for `log`,
 so a global skip-list let `git log -m --out''put=<path> --format=%B` walk the
-skipped element straight past the check — #30, reopened by its own fix. The map
+skipped element straight past the check — blueprint-backend#30, reopened by its own fix. The map
 below is consulted per subcommand and **skips nothing by default**, because the
 failure directions are not symmetric: not skipping costs a false positive, and
 skipping wrongly costs a bypass.
@@ -110,7 +110,7 @@ import traceback
 # refused activating an existing one, which is a boundary with the door left
 # open on the other side: a developer host can carry either key already, and
 # `.git/config` is writable through the redirection residual this file does
-# not close (#20). Measured in a scratch repository — with
+# not close (blueprint-frontend#20). Measured in a scratch repository — with
 # `diff.external` set, `git diff --ext-diff` RAN it and printed its output.
 # So `git diff`, `git log` and `git show`, granted everywhere as read-only,
 # were host code execution one flag away. Raised by Copilot against PR #13.
@@ -189,13 +189,13 @@ ASSIGNING_COMMANDS = frozenset({"env", "export", "declare", "typeset", "local", 
 # without using it as a transport.
 FORBIDDEN_SUBSTRINGS = ("ext::",)
 
-# **The trees a redirection or a writing verb may not write into (#20, #26),
+# **The trees a redirection or a writing verb may not write into (blueprint-frontend#20, blueprint-frontend#26),
 # and the reason this list is here rather than read off the deny rules is that
 # a hook cannot see them.**
 # `.claude/settings.json` denies `Edit(.claude/scripts/**)` and every editing
 # command denies the same trees in its own frontmatter — and all of that binds
 # the EDITING TOOLS. A `>` on any granted `Bash` command writes what every one
-# of those refuses (#20), measured on this repository's own hook: `ls >
+# of those refuses (blueprint-frontend#20), measured on this repository's own hook: `ls >
 # .claude/settings.json`, `wc -l README.md > package.json` and `git log
 # --oneline > package.json` were all admitted, and in a scratch directory the
 # write landed.
@@ -1802,7 +1802,7 @@ def separate_lines(command):
 # `redirection_spans` argues both.
 REDIRECTION_OPERATORS = ("&>>", "&>", ">>", ">&", ">|", "<>", "<&", ">", "<")
 
-# **The operators that OPEN THE TARGET FOR WRITING**, which is the half #20 is
+# **The operators that OPEN THE TARGET FOR WRITING**, which is the half blueprint-frontend#20 is
 # about. `<`, `<<` and `<<<` read, so a protected path on the right of one is a
 # read this hook has no quarrel with. `<>` is here because it opens read-write.
 #
@@ -1938,7 +1938,7 @@ def redirection_spans(command):
 
     **The operator and the target travel with the span because there were very
     nearly two parses of this grammar.** `strip_redirections` wants only the
-    span; #20 wants the target, and a second walk to find it would be the
+    span; blueprint-frontend#20 wants the target, and a second walk to find it would be the
     disagreement `word_end`'s own docstring records happening again one
     function along. One parse, three consumers.
 
@@ -2084,7 +2084,7 @@ def strip_redirections(command):
     `();<>|&` as ONE token, so `>&` arrives whole, but a digit is not
     punctuation: the `2` of `2>&1` detaches and survives as an ordinary word.
     That one stray word reached every check downstream that counts non-flags,
-    in three separate directions (#183):
+    in three separate directions (blueprint-backend#183):
 
         git push -u origin feat 2>&1        three positionals where two are
                                             required, so an honest push was
@@ -2096,7 +2096,7 @@ def strip_redirections(command):
                                             FORCE PUSH TO MAIN, admitted
         git 2>&1 log --output=/tmp/probe    the run split at `>&`, the second
                                             run led with `1` and held no `git`
-                                            token, so #30's write primitive was
+                                            token, so blueprint-backend#30's write primitive was
                                             admitted
 
     All measured against the guard as shipped. Removing the whole redirection
@@ -2548,7 +2548,7 @@ def redirection_offence(command):
     and that those did not need judging because each "has to be granted
     first". Under `"defaultMode": "auto"`, set in a user-level settings file
     this repository never reads, nothing has to be granted: a `cp` onto the
-    `src` a redirection here had just refused was admitted and landed (#26).
+    `src` a redirection here had just refused was admitted and landed (blueprint-frontend#26).
     `writing_verb_offence` judges the verbs now; what stays open is named
     there.
     """
@@ -2582,7 +2582,7 @@ def destination_offence(word, command, writer, kind):
     **One judgement, two callers, and the second is why it was lifted out.**
     It was `redirection_offence`'s loop body while a redirection was the only
     write this file judged. A `cp` writes the same file by another spelling
-    (#26), and a second copy of these rules for it is the sibling-drift
+    (blueprint-frontend#26), and a second copy of these rules for it is the sibling-drift
     `quote_states` records this file repeating five times.
     """
     if globbed(word):
@@ -2591,7 +2591,7 @@ def destination_offence(word, command, writer, kind):
             "bash expands it and the file written is not the string written "
             "here — `> package.jso?` writes `package.json`. Refusing rather "
             "than judging the pattern instead of the file: quote the name, or "
-            "write it out (#20, #26, docs/harness-boundaries.md)."
+            "write it out (blueprint-frontend#20, blueprint-frontend#26, docs/harness-boundaries.md)."
         )
     # **A dollar quote this guard cannot read is refused on the target
     # itself**, because the command-wide check runs after the redirection
@@ -2608,7 +2608,7 @@ def destination_offence(word, command, writer, kind):
             f"{kind}'s target is built by a command substitution, so the file "
             "it writes cannot be read from this command; refusing rather than "
             "admitting a write nothing judged. Name the path, or use the "
-            "editing tools, which the permission rules see (#20, #26, "
+            "editing tools, which the permission rules see (blueprint-frontend#20, blueprint-frontend#26, "
             "docs/harness-boundaries.md)."
         )
     # **An unquoted leading `~` is expanded before the file opens.**
@@ -2633,7 +2633,7 @@ def destination_offence(word, command, writer, kind):
                 f"{kind}'s target begins `{prefix}`, which bash expands to a "
                 "directory this guard cannot read — the previous working "
                 "directory, or another user's home. Refusing rather than "
-                "judging the tilde instead of the path (#20, #26, "
+                "judging the tilde instead of the path (blueprint-frontend#20, blueprint-frontend#26, "
                 "docs/harness-boundaries.md)."
             )
     if "$" in literal:
@@ -2644,8 +2644,8 @@ def destination_offence(word, command, writer, kind):
                 "parameter expansion this guard cannot read — a variable set "
                 "earlier in the same command, or one outside "
                 f"{', '.join(sorted(EXPANDABLE_VARIABLES))}. Refusing rather "
-                "than judging the name instead of the file it opens (#20, "
-                "#26, docs/harness-boundaries.md)."
+                "than judging the name instead of the file it opens (blueprint-frontend#20, "
+                "blueprint-frontend#26, docs/harness-boundaries.md)."
             )
         # **An expanded value can be a pattern too**, and `globbed` ran on
         # the word before it was expanded. With `TMPDIR=package.jso?`,
@@ -2657,7 +2657,7 @@ def destination_offence(word, command, writer, kind):
             return (
                 f"{kind}'s target `{literal}` expands to `{expanded}`, which "
                 "carries a pattern character, so the file bash opens is not "
-                "the string judged here (#20, #26, docs/harness-boundaries.md)."
+                "the string judged here (blueprint-frontend#20, blueprint-frontend#26, docs/harness-boundaries.md)."
             )
         literal = expanded
     # **A relative target is placed against the event's `cwd`, and a
@@ -2677,7 +2677,7 @@ def destination_offence(word, command, writer, kind):
             f"{writer} writes the relative path `{literal}` in a command that "
             "also changes directory, so where it lands is not the event's "
             "working directory and this guard cannot place it. Name the path "
-            "absolutely, or run the `cd` as its own command (#20, #26, "
+            "absolutely, or run the `cd` as its own command (blueprint-frontend#20, blueprint-frontend#26, "
             "docs/harness-boundaries.md)."
         )
     named = (protected_path(literal) or linked_protected_path(literal)
@@ -2687,14 +2687,14 @@ def destination_offence(word, command, writer, kind):
             f"{writer} would write `{literal}`, and `{named}` is the agent's "
             "own machinery or the toolchain that runs on it. Every `Edit(...)` "
             f"deny that names it binds the editing tools, so {kind} wrote "
-            "straight past them (#20, #26, docs/harness-boundaries.md). Write "
+            "straight past them (blueprint-frontend#20, blueprint-frontend#26, docs/harness-boundaries.md). Write "
             "it with an editing tool, where a permission rule judges the path."
         )
     return None
 
 
 # **The programs whose file operands are written, and which of them are.**
-# #26 measured the gap: a redirection onto `src/…` was refused, and the same
+# blueprint-frontend#26 measured the gap: a redirection onto `src/…` was refused, and the same
 # bytes written to scratch and then `cp`'d onto the same path were admitted and
 # landed. The residual this file stated for it — that `cp`, `tee` and the rest
 # "have to be granted first" — assumed a permission mode no file here sets; a
@@ -2716,7 +2716,7 @@ def destination_offence(word, command, writer, kind):
 # `rsync`, `tar -x`, `unzip`, `patch` and an interpreter
 # (`python -c`, `node -e`, an `awk` script using its own `print >`) all write
 # and none is here. The suite asserts every name below reaches the check
-# through its model, and that the verbs #26 named are all on it — it cannot
+# through its model, and that the verbs blueprint-frontend#26 named are all on it — it cannot
 # assert that nothing is missing, and `docs/harness-boundaries.md` carries that
 # residual.
 WRITING_VERBS = {
@@ -3775,7 +3775,7 @@ def verb_offence(verb, words, command):
                 return (
                     "`dd` is handed an operand built by a command substitution, "
                     "which can be its `of=`; refusing rather than admitting a "
-                    "write nothing judged (#26, docs/harness-boundaries.md)."
+                    "write nothing judged (blueprint-frontend#26, docs/harness-boundaries.md)."
                 )
             if literal.startswith("of="):
                 refusal = destination_offence(
@@ -3921,7 +3921,7 @@ def verb_offence(verb, words, command):
                 f"`{verb}` is handed `{unreadable[0]}`, whose value is built "
                 "by an expansion or a substitution this guard cannot read, and "
                 "it can be an option that moves the destination; refusing "
-                "rather than judging the words instead of the argv (#26, "
+                "rather than judging the words instead of the argv (blueprint-frontend#26, "
                 "docs/harness-boundaries.md)."
             )
         if targets:
@@ -3950,7 +3950,7 @@ def verb_offence(verb, words, command):
                     f"`{verb} -i` is given the backup suffix `{suffix}`, which "
                     "carries a `*` or a path separator, so the backup is "
                     "written somewhere other than beside the file; refusing "
-                    "rather than modelling where (#26, "
+                    "rather than modelling where (blueprint-frontend#26, "
                     "docs/harness-boundaries.md)."
                 )
             judged = judged + [word + shlex.quote(suffix) for word in files]
@@ -4030,7 +4030,7 @@ def writing_verb_offence(command):
                 return (
                     f"`xargs` runs `{verb}` on names it reads from stdin, so "
                     "the files it writes are not in this command; refusing "
-                    "rather than admitting a write nothing judged (#26, "
+                    "rather than admitting a write nothing judged (blueprint-frontend#26, "
                     "docs/harness-boundaries.md)."
                 )
             words = run[index + 1:]
@@ -4704,7 +4704,7 @@ def _run_bounds(command, position, ordinary):
 def _ends_run(command, index, ordinary):
     """Whether the character at `index` ends the command run it is in.
 
-    **The `&` of a redirection operator is not a run boundary (#37).** Every
+    **The `&` of a redirection operator is not a run boundary (blueprint-frontend#37).** Every
     unquoted `&` was read as one, so in `bash >&2 <<'EOF'` the run was taken to
     begin after the `&`, its words were `2` alone, no shell owned the heredoc,
     and bash ran the body. `<&`, `N>&M`, `&>` and `&>>` did the same, and so
@@ -6189,7 +6189,7 @@ def split_string_payloads(tokens):
     **The payload is a command line held in one word**, the same shape as a
     `bash -c` script: `env -S 'cp /tmp/a .claude/settings.json'` runs `cp`,
     while every scan over words sees `env`, `-S` and one opaque string. Raised
-    by Copilot against #26's first round, where the verb scan claimed `env`
+    by Copilot against blueprint-frontend#26's first round, where the verb scan claimed `env`
     coverage it only had for the unsplit form — and the same string hid a
     `git push` from the push grammar all along.
 
@@ -6271,7 +6271,7 @@ METACHARACTERS = set("|&;()<> \t\n")
 # What ends a command RUN. A subset of METACHARACTERS: a redirection
 # operator and a space separate words within one run rather than ending
 # it. **Read only through `_ends_run`**, because the `&` here is also the
-# second character of `>&` and `<&` and the first of `&>` (#37).
+# second character of `>&` and `<&` and the first of `&>` (blueprint-frontend#37).
 RUN_SEPARATORS = set(";&|()\n")
 
 
@@ -7314,7 +7314,7 @@ def _offence(command, depth, judged):
     # target is not an operand of the verb in front of it — `cp a b 2>
     # .claude/x` has already been judged above as the redirection it is — and
     # before the tokeniser, because the quoting a destination is judged by is
-    # what `shlex` is about to remove (#26).
+    # what `shlex` is about to remove (blueprint-frontend#26).
     refusal = writing_verb_offence(resolved)
     if refusal is not None:
         return refusal
@@ -7380,7 +7380,7 @@ def _offence(command, depth, judged):
                 "`env -S` is handed a string carrying a backslash or a `$`, "
                 "which env rewrites before splitting it into the command it "
                 "runs; refusing rather than judging the text instead of that "
-                "argv (#26)."
+                "argv (blueprint-frontend#26)."
             )
         # Judged behind its `env`, so an option in the payload (`-C dir`) is
         # still env's and moves the directory a relative target lands in (#359).

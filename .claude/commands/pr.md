@@ -183,7 +183,7 @@ runs. `docs/testing.md` owns the trigger contract.
 - `bash .claude/scripts/pr-for-branch.sh` — an OPEN row means you are
   updating, not creating. Say so and stop. It returns the newest row for this
   repository and no other, so a branch name reused after a merge cannot show
-  the old `MERGED` row here and have this command open a duplicate (#24).
+  the old `MERGED` row here and have this command open a duplicate (blueprint-frontend#24).
 - `bash .claude/scripts/host-checks.sh all` and
   `bash .claude/scripts/npm-checks.sh all` — Host tests, SPA lint, tests and
   build, green before the PR opens, or said plainly in the body if not.
@@ -206,7 +206,7 @@ substitution in the calling shell before the helper can refuse anything. A
 file is the channel `gh-issue-filing.sh` already uses for untrusted titles,
 and it is why the helper takes no argument.
 
-**The helper rather than `gh pr create` since #16.** `Bash(gh pr create:*)` was
+**The helper rather than `gh pr create` since blueprint-frontend#16.** `Bash(gh pr create:*)` was
 a prefix grant, so a trailing `--repo`, `--head`, `--base` or `--body-file`
 chose a repository, a branch, a base and a body that were not the ones this
 command derived. All four are fixed in the helper now: the repository and the

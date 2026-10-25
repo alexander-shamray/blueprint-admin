@@ -3,7 +3,7 @@
 # fixed vocabularies on the command line, the title and body on stdin, and the
 # provenance line a constant this caller cannot choose.
 #
-# **This exists so that a sweep cannot name its own provenance (#19).** The
+# **This exists so that a sweep cannot name its own provenance (blueprint-frontend#19).** The
 # route was the third argument of `gh-issue-create.sh`, and both sweeps held a
 # prefix grant on that script — so the model chose all three arguments,
 # including the sentence asserting that a second read-only auditor verified the

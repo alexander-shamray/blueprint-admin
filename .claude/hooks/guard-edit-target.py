@@ -53,7 +53,7 @@ the alternative were refusing everything, when it could instead name the roots
 it exists for. `/review-branch` holds an unrestricted `Write` and consumes
 untrusted branch text, `/ship` runs it unattended, and a prompt-injected diff
 can name an absolute path — a shell profile, an SSH key, a credential — which
-the fallback then allowed (#21). So `scratch_roots` names the two roots the old
+the fallback then allowed (blueprint-frontend#21). So `scratch_roots` names the two roots the old
 paragraph named, the platform temp directory the scratchpad is created under
 and the user's `~/.claude`, and everything else is refused. Within `~/.claude`
 the harness's own control surface is refused too: that root is admitted for
@@ -283,7 +283,7 @@ def scratch_roots():
     exists for. `/review-branch` holds an unrestricted `Write` and consumes
     untrusted branch text, and `/ship` runs it unattended — so a prompt-injected
     diff could steer an absolute path at a shell profile, an SSH key or a
-    credential, and the fallback returned allow (#21).
+    credential, and the fallback returned allow (blueprint-frontend#21).
 
     Two roots, which are the two the docstring already names. The session
     scratchpad is created under the platform temp directory, so that directory
@@ -407,7 +407,7 @@ def outside_offence(spelled, lexical, resolved):
                     return None
             # **A home directory inside the temp root is not scratch.** With
             # HOME at `/tmp/home`, `~/.ssh/authorized_keys` sat under the temp
-            # root and was admitted — the arbitrary home write #21 closed.
+            # root and was admitted — the arbitrary home write blueprint-frontend#21 closed.
             # Only when home is BENEATH the temp root: on Windows the temp root
             # is usually beneath home instead, and excluding home there would
             # refuse the scratchpad itself. `~/.claude` is judged just above,
@@ -421,7 +421,7 @@ def outside_offence(spelled, lexical, resolved):
                     return (
                         f"guard-edit-target: {spelled} resolves to {resolved}, "
                         "inside the home directory, which sits under the temp "
-                        "root here and is not scratch (#21, "
+                        "root here and is not scratch (blueprint-frontend#21, "
                         "docs/harness-boundaries.md)."
                     )
             for path in (lexical, resolved):
@@ -445,7 +445,7 @@ def outside_offence(spelled, lexical, resolved):
             f"guard-edit-target: {spelled} resolves to {resolved}, inside the "
             f"harness's own control surface — `{named}` grants what every "
             "other rule here bounds, and this exception exists for the "
-            "session's state writes rather than for its configuration (#21, "
+            "session's state writes rather than for its configuration (blueprint-frontend#21, "
             "docs/harness-boundaries.md)."
         )
     return (
@@ -453,7 +453,7 @@ def outside_offence(spelled, lexical, resolved):
         "outside every checkout here and outside the scratch and harness-state "
         "roots this guard admits. An unattended command reading untrusted "
         "branch text can name an absolute path, so a write nothing can place "
-        "is refused rather than admitted (#21, docs/harness-boundaries.md)."
+        "is refused rather than admitted (blueprint-frontend#21, docs/harness-boundaries.md)."
     )
 
 
@@ -898,7 +898,7 @@ def offence(event):
                 )
 
         # **And the target that is genuinely outside every checkout is now
-        # bounded rather than admitted (#21).** This was the residual the
+        # bounded rather than admitted (blueprint-frontend#21).** This was the residual the
         # module docstring stated, and stating it did not make it narrow: it
         # admitted every absolute path that was not in a checkout, which is a
         # shell profile, an SSH key or a credential as readily as a scratch

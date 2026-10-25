@@ -236,7 +236,7 @@ Each round is the review done once, end to end:
 **A round is clean when it files no new issue** — every candidate either failed
 verification, sat below the threshold, or was already tracked. The loop stops
 on a clean round or at the seventh, whichever comes first. **"Already tracked"
-means tracked by the gate's test, not merely matched by an open issue (#57)**;
+means tracked by the gate's test, not merely matched by an open issue (blueprint-backend#57)**;
 a stranger's issue never counted as tracking, so it can neither suppress a
 filing nor end the sweep. (why: docs/commands/security-sweep.md, *Where it
 stops*)

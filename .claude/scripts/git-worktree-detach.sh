@@ -36,7 +36,7 @@ git rev-parse --verify --quiet "$commit^{commit}" >/dev/null ||
   { echo "no such commit: $commit" >&2; exit 3; }
 
 # **The sweeps' `$work` containment is a rule about the SPELLING of a path, and
-# a tracked symbolic link defeats it (#18).** Both sweeps fan out auditors under
+# a tracked symbolic link defeats it (blueprint-frontend#18).** Both sweeps fan out auditors under
 # "root every path under `$work`", and a git worktree preserves tracked links —
 # so `$work/leak -> ~/.ssh/id_rsa` is an absolute path under `$work` whose
 # target is not, and `Read`, `Grep` and `Glob` all follow it. The auditor's
@@ -59,7 +59,7 @@ git rev-parse --verify --quiet "$commit^{commit}" >/dev/null ||
 # removed would report a clean audit of something that is not the branch.
 links=$(git ls-tree -r "$commit" | awk '$1 == "120000" { print $4 }' | head -5)
 [ -z "$links" ] ||
-  { echo "$commit carries tracked symbolic links, and a sweep's reads follow them out of the worktree it is bounded to (#18): $(printf '%s ' $links)" >&2; exit 5; }
+  { echo "$commit carries tracked symbolic links, and a sweep's reads follow them out of the worktree it is bounded to (blueprint-frontend#18): $(printf '%s ' $links)" >&2; exit 5; }
 
 tmproot=$(cd "${TMPDIR:-/tmp}" 2>/dev/null && pwd -P) ||
   { echo "cannot resolve the temp root" >&2; exit 4; }

@@ -58,7 +58,7 @@ repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner) ||
 # exists, and a helper that concluded "already there" from a near miss would
 # leave the sweep filing against a label that does not exist.
 #
-# **`gh label list` defaults to 30 and this read it as the whole set (#22).**
+# **`gh label list` defaults to 30 and this read it as the whole set (blueprint-frontend#22).**
 # The consequence is quiet and wrong in the direction that stops work: an
 # existing label past the page reads as absent, the create below then fails,
 # and the sweep aborts even though the label it needed was there. `--limit`

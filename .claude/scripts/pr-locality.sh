@@ -6,7 +6,7 @@
 # **Exists so that /review-branch, /review-copilot and /ship can read the two
 # rows `docs/change-locality.md` asks a PR body to carry without holding
 # `Bash(gh pr view:*)`** — the grant that reaches `--json reviews`, the
-# unfiltered feed #56 closed. `body` is the one field this reads from the
+# unfiltered feed blueprint-backend#56 closed. `body` is the one field this reads from the
 # pull request, `filename` the one field it reads from the files endpoint;
 # what applies is the shape rule every helper in this directory follows — a
 # caller that chooses fields can choose `reviews`, so this one chooses none.
@@ -277,7 +277,7 @@ for item in "${items[@]}"; do
     *'`'*) refuse "the Touch set row has an item that is not one path: an unbalanced backtick, or text beside a path. The cell holds paths only; a widened row's reason goes in a sentence below the table" ;;
   esac
   # **The two grammars here disagreed, and the touch-set one was the narrower
-  # (#19).** A changed path is admitted with `@` and `+` in it — git permits
+  # (blueprint-frontend#19).** A changed path is admitted with `@` and `+` in it — git permits
   # both — while a declared set naming `src/app/@types/**` or `docs/a+b.md`
   # made this `refuse` and exit 3 before printing any verdict. `/review-branch`,
   # `/review-copilot` and `/ship` all read a helper that prints nothing as

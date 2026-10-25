@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Does this issue suppress a sweep finding? (#150)
+# Does this issue suppress a sweep finding? (blueprint-backend#150)
 #
 # Both sweeps state the rule and neither enforced it: an open issue suppresses a
 # candidate only if the REPOSITORY OWNER opened it, and an issue meeting that
@@ -9,7 +9,7 @@
 # `BothSweepsAgreeOnWhatSuppresses` pinned that both files still SAY it; nothing
 # established that a sweep ever applied it to an issue.
 #
-# **The rule here is authorship alone, and #150 proposed a second condition this
+# **The rule here is authorship alone, and blueprint-backend#150 proposed a second condition this
 # helper deliberately does not implement.** That issue was written when a
 # maintainer's label was also sufficient; a later review round asked what a
 # label proves and retired it. A non-collaborator cannot set one at creation, so
