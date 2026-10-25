@@ -9,7 +9,7 @@ namespace Admin.Host.Workspace;
 public static class WorkspaceDefaults
 {
     /// <summary>
-    /// Copied from <c>SCREENS</c> in <c>src/Admin.Web/src/app/screens.ts</c>, which owns it: a page's id and
+    /// Copied from <c>BUILT_IN_PAGES</c> in <c>src/Admin.Web/src/app/workspace/built-in-pages.ts</c>, which owns it: a page's id and
     /// <c>builtIn</c> are the screen's path, its title the screen's label. A drift test reads that file.
     /// </summary>
     public static readonly IReadOnlyList<(string Path, string Label)> Screens =

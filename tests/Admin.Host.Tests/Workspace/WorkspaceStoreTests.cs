@@ -62,7 +62,7 @@ public sealed partial class WorkspaceStoreTests : IDisposable
             root = Path.GetDirectoryName(root) ?? throw new InvalidOperationException("BlueprintAdmin.slnx not found above the test output.");
         }
 
-        string source = File.ReadAllText(Path.Combine(root, "src", "Admin.Web", "src", "app", "screens.ts"));
+        string source = File.ReadAllText(Path.Combine(root, "src", "Admin.Web", "src", "app", "workspace", "built-in-pages.ts"));
         List<(string Path, string Label)> screens = [.. ScreenRow().Matches(source).Select(m => (m.Groups[1].Value, m.Groups[2].Value))];
 
         WorkspaceDefaults.Screens.ShouldBe(screens);
