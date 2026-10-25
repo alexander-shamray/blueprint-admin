@@ -130,7 +130,7 @@ export class TraceWidget {
         // was already cleared at load start if this is a different id, so nothing of another id's
         // timeline can survive here.
         if (!view.reachable) {
-          this.error.set(view.error ?? 'The trace could not be built.');
+          this.error.set(view.error ?? $localize`The trace could not be built.`);
           return;
         }
 
@@ -248,6 +248,6 @@ export class TraceWidget {
   /** Prefers a problem-detail body's `detail`/`title`, else the HttpErrorResponse's own `message`. */
   private describeError(e: unknown): string {
     const err = e as { error?: { detail?: string; title?: string }; message?: string } | null;
-    return err?.error?.detail ?? err?.error?.title ?? err?.message ?? 'The host did not answer.';
+    return err?.error?.detail ?? err?.error?.title ?? err?.message ?? $localize`The host did not answer.`;
   }
 }

@@ -106,7 +106,7 @@ export class MailWidget {
       .pipe(
         takeUntilDestroyed(this.destroyRef),
         catchError(() => {
-          this.error.set('The host did not answer.');
+          this.error.set($localize`The host did not answer.`);
           this.loading.set(false);
           return of(null);
         }),
@@ -114,7 +114,7 @@ export class MailWidget {
       .subscribe((view) => {
         if (view === null) return;
         this.list.set(view);
-        this.error.set(view.reachable ? null : `The mail sink did not answer: ${view.error}`);
+        this.error.set(view.reachable ? null : $localize`The mail sink did not answer: ${view.error}:error:`);
         this.loading.set(false);
       });
   }
@@ -126,7 +126,7 @@ export class MailWidget {
       .mailMessage(id)
       .pipe(
         takeUntilDestroyed(this.destroyRef),
-        catchError(() => of({ reachable: false, error: 'The host did not answer.', message: null })),
+        catchError(() => of({ reachable: false, error: $localize`The host did not answer.`, message: null })),
       )
       .subscribe((read) => {
         // The answer is for the message last asked for: a Close, or another Open, since has made it stale.
@@ -136,7 +136,9 @@ export class MailWidget {
           // The id is dropped only when the sink answered that the message is gone; a read that failed in transit
           // leaves it, so the next time the widget is created it tries again.
           if (read.reachable) this.openedId.set(null);
-          this.openError.set(read.reachable ? read.error : `The mail sink did not answer: ${read.error}`);
+          this.openError.set(
+            read.reachable ? read.error : $localize`The mail sink did not answer: ${read.error}:error:`,
+          );
         }
       });
   }

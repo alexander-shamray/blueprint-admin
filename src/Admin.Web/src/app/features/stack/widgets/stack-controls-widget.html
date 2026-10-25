@@ -22,14 +22,14 @@
 
 <section class="actions" i18n-aria-label aria-label="Stack controls">
   <button class="up" [disabled]="run.running()" (click)="up()">
-    @if (elapsedOf('Up'); as t) {
+    @if (elapsedOf(labels.up); as t) {
       <ng-container i18n>Up… {{ t }}</ng-container>
     } @else {
       <ng-container i18n>Up</ng-container>
     }
   </button>
   <button class="down" [disabled]="run.running()" (click)="down()">
-    @if (elapsedOf('Down'); as t) {
+    @if (elapsedOf(labels.down); as t) {
       <ng-container i18n>Down… {{ t }}</ng-container>
     } @else {
       <ng-container i18n>Down</ng-container>
@@ -45,7 +45,7 @@
       (ngModelChange)="confirmText.set($event)"
     />
     <button class="wipe" [disabled]="!canWipe() || run.running()" (click)="wipe()">
-      @if (elapsedOf('Down and wipe'); as t) {
+      @if (elapsedOf(labels.wipe); as t) {
         <ng-container i18n>Down and wipe… {{ t }}</ng-container>
       } @else {
         <ng-container i18n>Down and wipe</ng-container>
@@ -58,7 +58,7 @@
       i18n-title
       title="down -v, up, then wait until every platform surface answers; the reference client is not waited for"
     >
-      @if (elapsedOf('Reset'); as t) {
+      @if (elapsedOf(labels.reset); as t) {
         <ng-container i18n>Reset… {{ t }}</ng-container>
       } @else {
         <ng-container i18n>Reset</ng-container>

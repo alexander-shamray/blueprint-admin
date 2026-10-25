@@ -75,7 +75,7 @@ export class LogFollowService {
 
   constructor() {
     inject(RunningWork).report('logs', () =>
-      this.following() || this.pending() ? { text: 'Logs: following', link: '/logs' } : null,
+      this.following() || this.pending() ? { text: $localize`Logs: following`, link: '/logs' } : null,
     );
   }
 
@@ -159,7 +159,7 @@ export class LogFollowService {
           },
           error: (e: unknown) => {
             // Not yet following means the POST itself failed; already following means the SSE stream did.
-            const fallback = this.following() ? undefined : 'The host refused the request.';
+            const fallback = this.following() ? undefined : $localize`The host refused the request.`;
             this.error.set(this.describeError(e, fallback));
             this.restartOnArrival = false;
             this.requestOut.set(false);
@@ -264,7 +264,7 @@ export class LogFollowService {
   }
 
   /** Prefers a problem-detail body's `detail`/`title`, else the HttpErrorResponse's own `message`. */
-  private describeError(e: unknown, fallback = 'The host did not answer.'): string {
+  private describeError(e: unknown, fallback = $localize`The host did not answer.`): string {
     const err = e as { error?: { detail?: string; title?: string }; message?: string } | null;
     return err?.error?.detail ?? err?.error?.title ?? err?.message ?? fallback;
   }

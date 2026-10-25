@@ -98,21 +98,24 @@ export function composeOf(service: Pick<MapService, 'name'>): string | null {
 
 /** The two words a service node is coloured by: a probed service by reachability, a worker by its Compose state. */
 function serviceState(service: MapService, stack: StackView | undefined): { state: ServiceState; text: string } {
-  if (!stack) return { state: 'unknown', text: 'not read yet' };
+  if (!stack) return { state: 'unknown', text: $localize`not read yet` };
   if (service.url !== null) {
     const probed = stack.reachability.find((r) => r.name === service.name);
-    if (!probed) return { state: 'unknown', text: 'not probed' };
-    if (probed.up) return { state: 'up', text: 'reachable' };
-    return { state: 'down', text: probed.status === null ? 'refuses connections' : `answers ${probed.status}` };
+    if (!probed) return { state: 'unknown', text: $localize`not probed` };
+    if (probed.up) return { state: 'up', text: $localize`reachable` };
+    return {
+      state: 'down',
+      text: probed.status === null ? $localize`refuses connections` : $localize`answers ${probed.status}:status:`,
+    };
   }
-  if (!stack.backend.reachable) return { state: 'unknown', text: 'Compose did not answer' };
+  if (!stack.backend.reachable) return { state: 'unknown', text: $localize`Compose did not answer` };
   const compose = composeOf(service);
   const status = compose === null ? undefined : stack.backend.services.find((s) => s.service === compose);
-  if (!status) return { state: 'unknown', text: 'no Compose service' };
-  if (status.state !== 'running') return { state: 'down', text: `Compose: ${status.state}` };
-  if (status.health === 'unhealthy') return { state: 'down', text: 'Compose: unhealthy' };
-  if (status.health === 'starting') return { state: 'starting', text: 'Compose: starting' };
-  return { state: 'up', text: 'Compose: running' };
+  if (!status) return { state: 'unknown', text: $localize`no Compose service` };
+  if (status.state !== 'running') return { state: 'down', text: $localize`Compose: ${status.state}:state:` };
+  if (status.health === 'unhealthy') return { state: 'down', text: $localize`Compose: unhealthy` };
+  if (status.health === 'starting') return { state: 'starting', text: $localize`Compose: starting` };
+  return { state: 'up', text: $localize`Compose: running` };
 }
 
 /** The queue a parked twin (`<queue>_error`, `<queue>_skipped`) belongs to. */

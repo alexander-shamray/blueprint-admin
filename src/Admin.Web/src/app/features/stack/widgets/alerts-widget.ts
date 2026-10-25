@@ -30,8 +30,21 @@ import { StackFeed } from '../stack-feed';
               @for (rule of rules(); track rule.group + '/' + rule.name) {
                 <tr [class]="'state-' + rule.state" [title]="rule.summary ?? ''">
                   <td>{{ rule.name }}</td>
-                  <td
-                    >{{ rule.state }}
+                  <td>
+                    @switch (rule.state) {
+                      @case ('firing') {
+                        <ng-container i18n>firing</ng-container>
+                      }
+                      @case ('pending') {
+                        <ng-container i18n>pending</ng-container>
+                      }
+                      @case ('inactive') {
+                        <ng-container i18n>inactive</ng-container>
+                      }
+                      @default {
+                        {{ rule.state }}
+                      }
+                    }
                     @if (rule.health === 'err') {
                       <ng-container i18n>(evaluation failing)</ng-container>
                     }

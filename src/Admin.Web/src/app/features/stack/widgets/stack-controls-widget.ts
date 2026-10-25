@@ -32,6 +32,14 @@ export class StackControlsWidget {
 
   readonly config = input<Record<string, unknown>>({});
 
+  /** The Compose jobs' names, in the active language: the running button matches the job by the label it was started with. */
+  readonly labels = {
+    up: $localize`Up`,
+    down: $localize`Down`,
+    wipe: $localize`Down and wipe`,
+    reset: $localize`Reset`,
+  };
+
   /** On error, fall back to undefined so the config-derived links simply do not render. */
   readonly links = toSignal(this.host.config().pipe(catchError(() => of(undefined))));
 
@@ -62,24 +70,27 @@ export class StackControlsWidget {
     return job && job.exitCode !== null && job.endedAt !== null
       ? {
           ok: job.exitCode === 0,
-          text: `${job.label} ${job.exitCode === 0 ? 'finished' : 'failed'}: exit ${job.exitCode} in ${clock(job.endedAt - job.startedAt)}`,
+          text:
+            job.exitCode === 0
+              ? $localize`${job.label}:label: finished: exit ${job.exitCode}:code: in ${clock(job.endedAt - job.startedAt)}:time:`
+              : $localize`${job.label}:label: failed: exit ${job.exitCode}:code: in ${clock(job.endedAt - job.startedAt)}:time:`,
         }
       : null;
   });
 
   up(): void {
-    this.host.backendUp().subscribe(this.started('Up'));
+    this.host.backendUp().subscribe(this.started(this.labels.up));
   }
 
   down(): void {
-    this.host.backendDown(false).subscribe(this.started('Down'));
+    this.host.backendDown(false).subscribe(this.started(this.labels.down));
   }
 
   wipe(): void {
     if (!this.canWipe()) {
       return;
     }
-    this.host.backendDown(true, this.confirmText()).subscribe(this.started('Down and wipe'));
+    this.host.backendDown(true, this.confirmText()).subscribe(this.started(this.labels.wipe));
     this.confirmText.set('');
   }
 
@@ -87,7 +98,7 @@ export class StackControlsWidget {
     if (!this.canWipe()) {
       return;
     }
-    this.host.backendReset(this.confirmText()).subscribe(this.started('Reset'));
+    this.host.backendReset(this.confirmText()).subscribe(this.started(this.labels.reset));
     this.confirmText.set('');
   }
 
@@ -103,7 +114,7 @@ export class StackControlsWidget {
         this.restoring.set(false);
       },
       error: (e: unknown) => {
-        this.restoreError.set(hostErrorText(e, 'The host did not answer the restore.'));
+        this.restoreError.set(hostErrorText(e, $localize`The host did not answer the restore.`));
         this.restoring.set(false);
       },
     });
@@ -120,7 +131,7 @@ export class StackControlsWidget {
         this.run.started(job.id, label);
         this.pageJob.show(job.id);
       },
-      error: (e: unknown) => this.error.set(hostErrorText(e, 'The host refused the request.')),
+      error: (e: unknown) => this.error.set(hostErrorText(e, $localize`The host refused the request.`)),
     };
   }
 }

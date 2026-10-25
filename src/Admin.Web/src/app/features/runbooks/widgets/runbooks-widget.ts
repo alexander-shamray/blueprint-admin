@@ -253,6 +253,6 @@ export class RunbooksWidget {
   /** Prefers a problem-detail body's `detail`/`title`, else the HttpErrorResponse's own `message`. */
   private describeError(e: unknown): string {
     const err = e as { error?: { detail?: string; title?: string }; message?: string } | null;
-    return err?.error?.detail ?? err?.error?.title ?? err?.message ?? 'The host did not answer.';
+    return err?.error?.detail ?? err?.error?.title ?? err?.message ?? $localize`The host did not answer.`;
   }
 }
