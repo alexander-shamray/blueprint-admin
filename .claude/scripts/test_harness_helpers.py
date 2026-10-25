@@ -622,7 +622,7 @@ class IssueHelperHasNoFreeParameter(unittest.TestCase):
     `--label` unpinned reached any label in any spelling; both were held as
     prose in each sweep, which a finding can talk past. A third defect was the
     grant's and not the command's: a title beginning with `/` filed four times
-    as a Windows path (#55, #56, #68), because an env-prefixed `gh` no longer
+    as a Windows path (blueprint-backend#55, blueprint-backend#56, blueprint-backend#68), because an env-prefixed `gh` no longer
     begins with `gh issue create` and the grant was a prefix match. Like the
     label helper's cases these keep a closed grant closed rather than catch a
     defect that shipped, and they are read on the label helper's terms.

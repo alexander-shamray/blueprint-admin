@@ -48,7 +48,7 @@
 # can do that a grant could not. MSYS argument conversion rewrites an argument
 # that looks like an absolute POSIX path before a native `gh.exe` sees it, so a
 # title beginning with `/` filed four times as `C:/Program Files/Git/...`
-# (#55, #56, #68). The commands could not set MSYS2_ARG_CONV_EXCL, because an
+# (blueprint-backend#55, blueprint-backend#56, blueprint-backend#68). The commands could not set MSYS2_ARG_CONV_EXCL, because an
 # env-prefixed command no longer begins with `gh issue create` and the grant is
 # a prefix match. A script sets it for its own child and the grant on the
 # script is unchanged.
