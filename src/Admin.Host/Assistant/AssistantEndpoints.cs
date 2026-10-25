@@ -51,20 +51,36 @@ public static class AssistantEndpoints
 
         // The MCP route's tools (§12): the host's server tools, never a client's, through the registry, policy, limits and
         // redactor a conversation's calls go through. The platform tools are listed from the API catalogue, as for a conversation.
-        app.MapGet("/api/assistant/tools", async (CancellationToken cancellationToken) =>
+        // The registry is rebuilt on each call, because the platform tools are listed from a catalogue that changes. A source
+        // whose tool the policy then refuses is the host's fault, answered as a problem as a conversation's open is (400).
+        app.MapGet("/api/assistant/tools", async Task<Results<Ok<IReadOnlyList<ToolDescriptor>>, ProblemHttpResult>> (CancellationToken cancellationToken) =>
         {
             await runtime.PrepareAsync(cancellationToken);
 
-            return core.ServerTools();
+            try
+            {
+                return TypedResults.Ok(core.ServerTools());
+            }
+            catch (ToolRefusedException refused)
+            {
+                return TypedResults.Problem(statusCode: StatusCodes.Status500InternalServerError, title: "A tool was refused", detail: refused.Message);
+            }
         });
 
         app.MapPost("/api/assistant/tools/{name}", async Task<Results<Ok<ToolOutcome>, ProblemHttpResult>> (string name, JsonObject? arguments, CancellationToken cancellationToken) =>
         {
             await runtime.PrepareAsync(cancellationToken);
 
-            return await core.CallServerToolAsync(caller, name, arguments ?? [], cancellationToken) is { } outcome
-                ? TypedResults.Ok(outcome)
-                : TypedResults.Problem(statusCode: StatusCodes.Status404NotFound, title: NoSuchTool, detail: name);
+            try
+            {
+                return await core.CallServerToolAsync(caller, name, arguments ?? [], cancellationToken) is { } outcome
+                    ? TypedResults.Ok(outcome)
+                    : TypedResults.Problem(statusCode: StatusCodes.Status404NotFound, title: NoSuchTool, detail: name);
+            }
+            catch (ToolRefusedException refused)
+            {
+                return TypedResults.Problem(statusCode: StatusCodes.Status500InternalServerError, title: "A tool was refused", detail: refused.Message);
+            }
         });
 
         app.MapPost("/api/assistant/conversations", async Task<Results<Ok<ConversationOpened>, ProblemHttpResult>> (OpenConversation? request, CancellationToken cancellationToken) =>
