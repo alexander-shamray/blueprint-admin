@@ -3,8 +3,10 @@ name: main red
 # A pull request is not tested against the `main` it lands on, so two that are
 # green apart can be red together, and only `ci`'s run on the push to `main`
 # sees it. That run's failure mails whoever merged, if their settings say so;
-# this makes it an issue instead, which every session lists. One issue is open
-# at a time: a later failure comments on it, and the next green run closes it.
+# this makes it an issue instead, which outlives the run and the mail. One
+# issue is open at a time: a later failure comments on it, and the next green
+# run closes it. Only a run for main's current tip acts, because `ci` has no
+# concurrency group and an older commit's run can finish after a newer one's.
 # What a red `main` is owed is docs/working-rules.md, *Merging beside other
 # agents*. Nothing is checked out and nothing from the run is executed, so the
 # write token never meets the code that failed.
@@ -32,10 +34,15 @@ jobs:
           TITLE: main is red
         run: |
           set -euo pipefail
+          tip=$(gh api "repos/$GH_REPO/commits/main" --jq .sha)
+          if [ "$HEAD_SHA" != "$tip" ]; then
+            echo "$HEAD_SHA is not main's tip ($tip); the run for the tip reports"
+            exit 0
+          fi
           open=$(gh issue list --state open --label bug --search "in:title \"$TITLE\"" --json number,title \
             --jq 'map(select(.title == env.TITLE)) | .[0].number // empty')
           case "$CONCLUSION" in
-            failure|timed_out)
+            failure|timed_out|startup_failure|action_required)
               body="\`ci\` ended \`$CONCLUSION\` on \`main\` at $HEAD_SHA: $RUN_URL"
               if [ -n "$open" ]; then
                 gh issue comment "$open" --body "$body"
