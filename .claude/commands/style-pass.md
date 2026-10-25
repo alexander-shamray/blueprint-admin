@@ -137,20 +137,18 @@ Four outcomes, and the last is as important as the others:
   and ESLint fails closed on an unknown rule, so an invented one breaks
   `npm run lint` for everybody rather than being ignored.
 
-**Prettier is not in `npm run lint`, and that is a gap to state rather than to
-assume.** `ng lint` runs ESLint only, `package.json` carries no `format`
-script, and no CI job checks formatting — so a Prettier-owned rule is enforced
-by editors and by review and by nothing else. The guide should say which rules
-are in that position. Wiring `npx prettier --check .` into the `web` job is a
-follow-up worth having, and it is a decision about the build rather than about
-this pass.
+**Prettier is in `npm run lint`.** The `lint` script in
+`src/Admin.Web/package.json` chains `format:check` after `ng lint`, and the CI
+`web` job runs it, so a Prettier-owned rule fails the build instead of waiting
+for review. `docs/style-guide.md` says which rules are Prettier's and what the
+gate covers; state a rule there, not here.
 
 ## 5. Verify
 
 Re-scan for the invariants the corpus holds. Every one of these has caught a
 real regression introduced by a previous pass:
 
-- no line over 100 columns inside a code fence — `src/Admin.Web/.prettierrc`'s `printWidth`
+- no line over `src/Admin.Web/.prettierrc`'s `printWidth` inside a code fence
 - single quotes at every `.ts` site, source and sample alike
 - every continuation indent a multiple of two
 - no ragged list — one line, or one element per line
@@ -160,7 +158,9 @@ real regression introduced by a previous pass:
 
 Then run the linters themselves — `bash .claude/scripts/npm-checks.sh lint`,
 which this command is granted — and report what it said rather than what you
-expect it to say. A pass that touched `src/Admin.Web/.prettierrc` also wants
+expect it to say. That script includes the Prettier check over the files
+`format:check` names in `src/Admin.Web/package.json`. A pass that touched
+`src/Admin.Web/.prettierrc` and wants the rest of the tree checked also wants
 `npx prettier --check .`, which this command is **not** granted, for the
 reason §2 gives: run it and take the prompt, one approval, the same cost as
 the throwaway script.
