@@ -75,8 +75,12 @@ export class ApiHistory {
   label(entry: HistoryEntry): string {
     const r = entry.result;
     const outcome =
-      r.outcome === 'responded' ? String(r.status) : r.outcome === 'tokenRejected' ? `token ${r.status}` : 'unreached';
-    return `${outcome} ${entry.name} as ${entry.identity}`;
+      r.outcome === 'responded'
+        ? String(r.status)
+        : r.outcome === 'tokenRejected'
+          ? $localize`token ${r.status}:status:`
+          : $localize`unreached`;
+    return $localize`${outcome}:outcome: ${entry.name}:name: as ${entry.identity}:identity:`;
   }
 }
 

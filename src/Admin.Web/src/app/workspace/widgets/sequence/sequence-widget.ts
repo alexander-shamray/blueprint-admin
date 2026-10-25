@@ -92,7 +92,7 @@ export class SequenceWidget {
         // A Grafana that did not answer arrives as a successful response carrying reachable:false; it is an error
         // over whatever diagram is on screen, as the Trace widget shows it, and not a diagram of nothing.
         if (!view.reachable) {
-          this.error.set(view.error ?? 'The trace could not be built.');
+          this.error.set(view.error ?? $localize`The trace could not be built.`);
           return;
         }
         const current = { fetchedAt: new Date(), view };
@@ -165,6 +165,6 @@ export class SequenceWidget {
 
   private describeError(e: unknown): string {
     const err = e as { error?: { detail?: string; title?: string }; message?: string } | null;
-    return err?.error?.detail ?? err?.error?.title ?? err?.message ?? 'The host did not answer.';
+    return err?.error?.detail ?? err?.error?.title ?? err?.message ?? $localize`The host did not answer.`;
   }
 }

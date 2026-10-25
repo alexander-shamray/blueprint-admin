@@ -39,9 +39,9 @@ export class TranscriptWidget {
   }
 
   outcome(entry: TranscriptEntry): string {
-    if (entry.kind === 'Process') return entry.settled ? `exit ${entry.exitCode}` : 'running';
-    if (!entry.settled) return 'waiting';
-    return entry.status === null ? 'no answer' : `HTTP ${entry.status}`;
+    if (entry.kind === 'Process') return entry.settled ? $localize`exit ${entry.exitCode}:code:` : $localize`running`;
+    if (!entry.settled) return $localize`waiting`;
+    return entry.status === null ? $localize`no answer` : `HTTP ${entry.status}`;
   }
 
   /** Prefers a problem-detail body's `detail`/`title`, else the error's own `message`. */
