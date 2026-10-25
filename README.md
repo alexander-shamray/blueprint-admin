@@ -237,8 +237,12 @@ unless `Admin:Assistant:Provider` names a provider; under FakePlatform, left
 unset, it plays scripted answers, so "where are the logs?" or "где логи?"
 opens Logs and "is the stack running?" reads the stack, with no network.
 `--Admin:Assistant:Provider=off` turns it off
-there too, and with it off the console shows no trace of it. A real provider
-arrives with #429.
+there too, and with it off the console shows no trace of it. Set
+`Admin:Assistant:Provider=anthropic` to answer through the Anthropic API;
+`Model` and `Effort` sit beside it under `Admin:Assistant`, with their defaults
+owned by `AssistantOptions` in `src/Admin.Host/Assistant/AssistantOptions.cs`.
+The credential is the SDK's own: `ANTHROPIC_API_KEY`, or the profile that
+`ant auth login` stores. The console reads neither and keeps neither.
 
 ## Known limits
 
