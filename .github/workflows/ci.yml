@@ -59,8 +59,9 @@ jobs:
           cache: npm
           cache-dependency-path: src/Admin.Web/package-lock.json
       - run: npm ci
-      # High and critical only, dev dependencies included: the build toolchain runs on the same machine that holds the realm
-      # passwords, and Dependabot (security updates on) opens the fix when one lands.
+      # High and critical only, dev dependencies included: the same toolchain runs on a developer's machine beside the
+      # realm passwords, and this is where an advisory in it is caught. Dependabot security updates (a repository
+      # setting, #398) open the fix; docs/testing.md says what to do when there is none.
       - run: npm audit --audit-level=high
       - run: npm run lint
       - run: npm test
