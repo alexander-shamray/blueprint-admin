@@ -21,7 +21,7 @@ public sealed class HttpAdminHost(HttpClient http) : IAdminHost
 
     public async Task<JsonArray> ListToolsAsync(CancellationToken cancellationToken)
     {
-        using HttpResponseMessage response = await SendAsync(() => http.GetAsync("api/assistant/tools", cancellationToken));
+        using HttpResponseMessage response = await SendAsync(() => http.GetAsync("api/assistant/tools", cancellationToken), cancellationToken);
 
         return response.StatusCode == HttpStatusCode.NotFound
             ? throw new HostUnavailableException(AssistantOff)
@@ -30,7 +30,7 @@ public sealed class HttpAdminHost(HttpClient http) : IAdminHost
 
     public async Task<ToolResult?> CallToolAsync(string name, JsonObject arguments, CancellationToken cancellationToken)
     {
-        using HttpResponseMessage response = await SendAsync(() => http.PostAsJsonAsync($"api/assistant/tools/{Uri.EscapeDataString(name)}", arguments, Web, cancellationToken));
+        using HttpResponseMessage response = await SendAsync(() => http.PostAsJsonAsync($"api/assistant/tools/{Uri.EscapeDataString(name)}", arguments, Web, cancellationToken), cancellationToken);
 
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
@@ -49,7 +49,7 @@ public sealed class HttpAdminHost(HttpClient http) : IAdminHost
 
     public async Task<string> ReadCatalogueAsync(CancellationToken cancellationToken)
     {
-        using HttpResponseMessage response = await SendAsync(() => http.GetAsync(CataloguePath, cancellationToken));
+        using HttpResponseMessage response = await SendAsync(() => http.GetAsync(CataloguePath, cancellationToken), cancellationToken);
         string text = await response.Content.ReadAsStringAsync(cancellationToken);
 
         // A host with an older build answers any other path with its index page, so a status is not enough.
@@ -70,7 +70,7 @@ public sealed class HttpAdminHost(HttpClient http) : IAdminHost
         }
     }
 
-    private static async Task<HttpResponseMessage> SendAsync(Func<Task<HttpResponseMessage>> send)
+    private static async Task<HttpResponseMessage> SendAsync(Func<Task<HttpResponseMessage>> send, CancellationToken cancellationToken)
     {
         try
         {
@@ -79,6 +79,11 @@ public sealed class HttpAdminHost(HttpClient http) : IAdminHost
         catch (HttpRequestException e)
         {
             throw new HostUnavailableException($"The console host could not be reached ({e.Message}); start it with dotnet run --project src/Admin.Host.");
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // The client's own timeout, not the caller going away.
+            throw new HostUnavailableException("The console host did not answer in time; a tool that reads the platform may be waiting on a service that is down.");
         }
     }
 
@@ -92,7 +97,14 @@ public sealed class HttpAdminHost(HttpClient http) : IAdminHost
             throw new HostUnavailableException($"The host answered {(int)response.StatusCode}: {problem?["detail"] ?? problem?["title"] ?? response.ReasonPhrase}");
         }
 
-        return await response.Content.ReadFromJsonAsync<T>(Web, cancellationToken);
+        try
+        {
+            return await response.Content.ReadFromJsonAsync<T>(Web, cancellationToken);
+        }
+        catch (JsonException)
+        {
+            throw new HostUnavailableException("The host answered with something that is not the JSON this process reads; is it a console host?");
+        }
     }
 
     private static async Task<JsonObject?> ProblemAsync(HttpResponseMessage response, CancellationToken cancellationToken)

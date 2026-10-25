@@ -97,6 +97,19 @@ public sealed class McpServerTests
     }
 
     [Fact]
+    public async Task A_host_that_throws_anything_ends_that_call_and_never_the_server()
+    {
+        ScriptedHost host = new() { Throws = new InvalidOperationException("boom") };
+
+        JsonNode? call = await Ask(host, """{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"stack_status"}}""");
+        JsonNode? list = await Ask(host, """{"jsonrpc":"2.0","id":2,"method":"tools/list"}""");
+
+        call!["result"]!["isError"]!.GetValue<bool>().ShouldBeTrue();
+        call["result"]!["content"]![0]!["text"]!.GetValue<string>().ShouldContain("boom");
+        list!["error"]!["code"]!.GetValue<int>().ShouldBe(-32603);
+    }
+
+    [Fact]
     public async Task The_catalogue_is_the_one_resource()
     {
         ScriptedHost host = new() { Catalogue = """[{"id":"stack"}]""" };
@@ -147,19 +160,24 @@ public sealed class McpServerTests
 
         public string? Unavailable { get; init; }
 
+        public Exception? Throws { get; init; }
+
         public List<(string Name, JsonObject Arguments)> Calls { get; } = [];
 
         public Task<JsonArray> ListToolsAsync(CancellationToken cancellationToken) =>
-            Unavailable is null ? Task.FromResult(new JsonArray([.. Tools.Select(t => (JsonNode?)t.DeepClone())])) : throw new HostUnavailableException(Unavailable);
+            Fails<JsonArray>() ?? Task.FromResult(new JsonArray([.. Tools.Select(t => (JsonNode?)t.DeepClone())]));
 
         public Task<ToolResult?> CallToolAsync(string name, JsonObject arguments, CancellationToken cancellationToken)
         {
             Calls.Add((name, arguments));
 
-            return Unavailable is null ? Task.FromResult(Result) : throw new HostUnavailableException(Unavailable);
+            return Fails<ToolResult?>() ?? Task.FromResult(Result);
         }
 
         public Task<string> ReadCatalogueAsync(CancellationToken cancellationToken) =>
-            Unavailable is null ? Task.FromResult(Catalogue) : throw new HostUnavailableException(Unavailable);
+            Fails<string>() ?? Task.FromResult(Catalogue);
+
+        private Task<T>? Fails<T>() =>
+            Throws is not null ? throw Throws : Unavailable is not null ? throw new HostUnavailableException(Unavailable) : null;
     }
 }
