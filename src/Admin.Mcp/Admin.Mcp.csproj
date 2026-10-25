@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The MCP route (AI assistant design §12): an stdio process an agent launches, and a client of the console's /api over
+       loopback HTTP. It opens no listener and carries no package; the protocol it speaks is three methods of JSON-RPC.
+       Settings come from Directory.Build.props. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+</Project>

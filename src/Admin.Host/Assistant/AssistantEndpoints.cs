@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net.ServerSentEvents;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Admin.Assistant;
 using Admin.Assistant.Protocol;
 using Admin.Assistant.Tools;
@@ -147,6 +148,33 @@ public static class AssistantEndpoints
 
         app.MapDelete("/api/assistant/conversations/{id}", Results<NoContent, ProblemHttpResult> (string id) =>
             core.Delete(caller, id) ? TypedResults.NoContent() : Unknown(id));
+
+        // The MCP route (AI assistant design §12): the host's server tools outside a conversation, through the same
+        // registry, policy, limits and redactor. `src/Admin.Mcp` is their only caller; the SPA never uses them. A call's
+        // body is a JSON object, `{}` for a tool that takes nothing.
+        app.MapGet("/api/assistant/tools", async (CancellationToken cancellationToken) =>
+        {
+            await runtime.PrepareAsync(cancellationToken);
+
+            return TypedResults.Ok(core.ServerTools());
+        });
+
+        app.MapPost("/api/assistant/tools/{name}", async Task<Results<Ok<ToolOutcome>, ProblemHttpResult>> (string name, JsonNode? input, CancellationToken cancellationToken) =>
+        {
+            if (input is not (null or JsonObject))
+            {
+                return TypedResults.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Not tool input", detail: "Send a JSON object, {} for a tool that takes nothing.");
+            }
+
+            await runtime.PrepareAsync(cancellationToken);
+
+            if (core.ServerTools().All(t => t.Name != name))
+            {
+                return TypedResults.Problem(statusCode: StatusCodes.Status404NotFound, title: "No such tool", detail: name);
+            }
+
+            return TypedResults.Ok(await core.CallServerToolAsync(caller, name, input as JsonObject ?? [], cancellationToken));
+        });
 
         return app;
     }

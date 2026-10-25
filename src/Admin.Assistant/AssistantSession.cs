@@ -324,7 +324,7 @@ public sealed class AssistantSession : IDisposable
             _ => new ToolOutcome(false, $"There is no tool named {call.Name}."),
         };
 
-        string content = Bound(core.Redactor.Redact(outcome.Content, Caller));
+        string content = core.Bound(core.Redactor.Redact(outcome.Content, Caller));
 
         lock (gate)
         {
@@ -342,8 +342,6 @@ public sealed class AssistantSession : IDisposable
             return new ToolOutcome(false, $"There is no tool named {call.Name}.");
         }
 
-        using CancellationTokenSource timeout = new(core.Limits.ServerToolTimeout, core.Time);
-        using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
         ToolContext context;
 
         lock (gate)
@@ -351,18 +349,7 @@ public sealed class AssistantSession : IDisposable
             context = new ToolContext(Caller, Id, hostOptions);
         }
 
-        try
-        {
-            return await source.InvokeAsync(call.Name, call.Input, context, linked.Token);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            return new ToolOutcome(false, $"{call.Name} did not answer within {core.Limits.ServerToolTimeout.TotalSeconds:0} s.");
-        }
-        catch (Exception e) when (e is not OperationCanceledException)
-        {
-            return new ToolOutcome(false, $"{call.Name} failed: {e.Message}");
-        }
+        return await core.InvokeAsync(source, call.Name, call.Input, context, cancellationToken);
     }
 
     private async Task<ToolOutcome> ClientAsync(ToolCall call, CancellationToken cancellationToken)
@@ -450,11 +437,6 @@ public sealed class AssistantSession : IDisposable
             log.Append(value);
         }
     }
-
-    private string Bound(string content) =>
-        content.Length <= core.Limits.MaxToolResultChars
-            ? content
-            : string.Concat(content.AsSpan(0, core.Limits.MaxToolResultChars), $"\n[cut to {core.Limits.MaxToolResultChars} characters]");
 
     /// <summary>The few input values a label shows (§5.3): top-level strings, numbers and booleans, each short.</summary>
     private static JsonObject LabelArgs(JsonObject input)
