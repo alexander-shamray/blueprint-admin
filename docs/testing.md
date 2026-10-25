@@ -36,6 +36,11 @@ translation lacks a message. After changing a string, `npm run i18n:extract`
 and translate what it adds. The `@angular-eslint/template/i18n` rule runs on
 the templates `eslint.config.js` lists as translated.
 
+CI's `web` job also runs `npm audit --audit-level=high` after `npm ci`, dev
+dependencies included, so a new high or critical advisory turns the build red.
+`npm-checks.sh` leaves it out because it asks the registry; run it by hand in
+`src/Admin.Web` to see what CI will say.
+
 `npm-checks.sh` has no `e2e` mode. Playwright talks to the Host under
 `--Admin:FakePlatform=true`. Locally: build the SPA, run the Host with that
 flag, then `npm run e2e` in `src/Admin.Web`. CI's `smoke` job is the same
