@@ -1,6 +1,7 @@
 using System.Net;
 using Admin.Assistant.Protocol;
 using Admin.Assistant.Providers;
+using Anthropic;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 
@@ -34,6 +35,33 @@ public sealed class StatusTests
         ProviderStatus status = await Provider(http, TimeProvider.System).StatusAsync(CancellationToken.None);
 
         status.ShouldBe(new ProviderStatus(false, "claude-opus-5-5", StatusReason.NoCredential));
+    }
+
+    [Fact]
+    public async Task A_client_built_with_no_key_still_asks_and_the_refusal_is_no_credential()
+    {
+        // The factory builds `new AnthropicClient()` and leaves the credential to the SDK, so with no key and no profile the
+        // probe's first sight of the problem must not be an exception type of the SDK's own that falls through to
+        // "unreachable". It is not: SDK 12.x sends the request without an `x-api-key`, and the API's 401 is the refusal.
+        string? key = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
+        Environment.SetEnvironmentVariable("ANTHROPIC_API_KEY", null);
+
+        try
+        {
+            FakeHttp http = new FakeHttp().Status(HttpStatusCode.Unauthorized);
+            AnthropicClient client = new() { HttpClient = new HttpClient(http), MaxRetries = 0 };
+            List<string> warnings = [];
+
+            ProviderStatus status = await new AnthropicProvider(client, AnthropicSettings.Default, TimeProvider.System, warnings.Add).StatusAsync(CancellationToken.None);
+
+            status.ShouldBe(new ProviderStatus(false, "claude-opus-5-5", StatusReason.NoCredential));
+            http.Requests.ShouldHaveSingleItem();
+            warnings.ShouldBeEmpty();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ANTHROPIC_API_KEY", key);
+        }
     }
 
     [Fact]
