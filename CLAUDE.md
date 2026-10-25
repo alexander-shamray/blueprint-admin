@@ -150,6 +150,9 @@ Each is argued in [`docs/working-rules.md`](docs/working-rules.md).
   gateway returned them.
 - **Never revert uncommitted work to clean the tree**; it belongs in the PR
   being worked on, or ask.
+- **Another PR merging is no reason to touch yours**, and a red `main` is
+  reverted first: `docs/working-rules.md`, *Merging beside other agents*,
+  owns when a branch is updated and what a red `main` is owed.
 - **Commit messages** are semantic and present-tense, and the body argues.
   Resolve a review thread in the same act as the reply.
 - **`TODO.md`** is gitignored and local, and every agent keeps it true: at
