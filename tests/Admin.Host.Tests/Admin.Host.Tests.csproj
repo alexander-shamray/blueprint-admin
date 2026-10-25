@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Admin.Host\Admin.Host.csproj" />
+    <ProjectReference Include="..\..\src\Admin.Mcp\Admin.Mcp.csproj" />
   </ItemGroup>
 
 </Project>
