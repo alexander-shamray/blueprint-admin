@@ -53,11 +53,20 @@ export function findPage(pages: readonly Page[], query: string): { page: Page; p
   };
 }
 
-/** A widget type by its type, its catalogue id (`widget:<type>`) or its title. */
+/**
+ * A widget type by its type, its catalogue id (`widget:<type>`) or its title as shown. A title is in the console's
+ * language while a widget's `help` names its neighbours in English, so an English title also resolves through its type
+ * when the type is the title lower-cased and hyphenated ("Stack controls" is `stack-controls`). The catalogue id is the
+ * name that never changes with the language, and the tools' descriptions tell the model to prefer it.
+ */
 export function findWidgetType(query: string): WidgetType | undefined {
   const wanted = query.trim();
   const type = wanted.startsWith(WIDGET_PREFIX) ? wanted.slice(WIDGET_PREFIX.length) : wanted;
-  return widgetType(type) ?? WIDGETS.find((w) => same(w.title, wanted));
+  return (
+    widgetType(type) ??
+    WIDGETS.find((w) => same(w.title, wanted)) ??
+    widgetType(wanted.toLowerCase().replace(/\s+/g, '-'))
+  );
 }
 
 /** A widget instance on a page by its id, else the first of a type the query names. */
