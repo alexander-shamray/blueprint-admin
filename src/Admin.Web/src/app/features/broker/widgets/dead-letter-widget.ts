@@ -26,20 +26,14 @@ import { BrokerFeed, describeError } from '../broker-feed';
         <p class="empty" i18n>The host did not give the dead-letter tool's plan.</p>
       } @else if (openQueue(); as queue) {
         <p>
-          <ng-container i18n>Dead letters on</ng-container>&ngsp;<code>{{ queue }}</code
-          ><ng-container i18n
-            >. The first {{ feed.deadLetterPlan()?.inspectLimit }} messages, read with the backend's</ng-container
-          >&ngsp;<code i18n>tools/dead-letters</code
-          ><ng-container i18n
-            >, which puts each back, flagged redelivered; a deeper queue holds more than this shows. Each replay or
-            discard is a dry run first; the real run writes every message it takes to a record file under</ng-container
-          >&ngsp;<code>{{ feed.deadLetterPlan()?.recordDir }}</code
-          >&ngsp;<ng-container i18n>before it moves it. The runbook says when to do either.</ng-container>&ngsp;<button
-            class="close-dead-letters"
-            (click)="close()"
-            i18n
-            >Close</button
-          >
+          <span i18n
+            >Dead letters on <code>{{ queue }}</code
+            >. The first {{ feed.deadLetterPlan()?.inspectLimit }} messages, read with the backend's
+            <code>tools/dead-letters</code>, which puts each back, flagged redelivered; a deeper queue holds more than
+            this shows. Each replay or discard is a dry run first; the real run writes every message it takes to a
+            record file under <code>{{ feed.deadLetterPlan()?.recordDir }}</code> before it moves it. The runbook says
+            when to do either.</span
+          >&ngsp;<button class="close-dead-letters" (click)="close()" i18n>Close</button>
         </p>
         @if (inspecting()) {
           <p i18n>Reading…</p>
@@ -49,10 +43,9 @@ import { BrokerFeed, describeError } from '../broker-feed';
         }
         @if (moved(); as id) {
           <p class="moved" role="status">
-            <code>{{ id }}</code
-            >&ngsp;<ng-container i18n
-              >went to the real run, so the listing is dropped; any other message read is still on the queue. Read the
-              queue again once the run's output says it has ended.</ng-container
+            <span i18n
+              ><code>{{ id }}</code> went to the real run, so the listing is dropped; any other message read is still on
+              the queue. Read the queue again once the run's output says it has ended.</span
             >&ngsp;<button class="reread" [disabled]="inspecting()" (click)="open(queue)" i18n>Read again</button>
           </p>
         }

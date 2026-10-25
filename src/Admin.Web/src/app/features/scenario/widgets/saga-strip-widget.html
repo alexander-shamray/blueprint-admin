@@ -86,12 +86,9 @@
   } @else {
     <p class="saga-none" i18n>No order read yet: the strip fills when a watch reads the order.</p>
   }
-  <p class="saga-caveat">
-    <ng-container i18n>This strip is the only stuck-saga detector a workstation has. The backend's</ng-container
-    >&ngsp;<code i18n>StuckSaga</code>&ngsp;<ng-container i18n>rule sits in</ng-container>&ngsp;<code i18n
-      >deploy/observability/alerts/awaiting-signal.yaml</code
-    ><ng-container i18n
-      >, waiting on an instrument nothing publishes, so no alert can fire for it locally.</ng-container
-    >
+  <p class="saga-caveat" i18n>
+    This strip is the only stuck-saga detector a workstation has. The backend's <code>StuckSaga</code> rule sits in
+    <code>deploy/observability/alerts/awaiting-signal.yaml</code>, waiting on an instrument nothing publishes, so no
+    alert can fire for it locally.
   </p>
 </aside>

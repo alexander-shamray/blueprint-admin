@@ -1,8 +1,6 @@
 <!-- prettier-ignore -->
-<p class="lede">
-  <ng-container i18n>What Notifications sent, as the mail sink holds it: newest first, each message with the correlation id it carries as a link into
-  its trace. The widget only reads; clearing the sink is done in</ng-container>&ngsp;@if (list(); as l) {<a class="sink-link" [href]="l.sinkUrl" target="_blank" rel="noopener noreferrer" i18n>the sink's own UI</a>} @else {<ng-container i18n>the sink's own UI</ng-container>}.
-</p>
+<p class="lede" i18n>What Notifications sent, as the mail sink holds it: newest first, each message with the correlation id it carries as a link into
+  its trace. The widget only reads; clearing the sink is done in <a class="sink-link" [attr.href]="list()?.sinkUrl ?? null" target="_blank" rel="noopener noreferrer">the sink's own UI</a>.</p>
 
 <div class="row">
   <label
