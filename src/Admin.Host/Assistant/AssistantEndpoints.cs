@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net.ServerSentEvents;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Admin.Assistant;
 using Admin.Assistant.Protocol;
 using Admin.Assistant.Tools;
@@ -14,7 +15,8 @@ namespace Admin.Host.Assistant;
 /// <c>/api/assistant</c> (AI assistant design §5.1), under spec §8's rules: loopback only, and <c>LoopbackOriginGuard</c>
 /// refuses a cross-site request before any of this runs. With the assistant off only the status route is mapped, so
 /// every other <c>/api/assistant/*</c> path is the catch-all's 404 and nothing can open a conversation (§9.1).
-/// <c>POST …/confirmations</c> is reserved (§6.3) and stays that 404 until actions are allowed.
+/// <c>POST …/confirmations</c> is reserved (§6.3) and stays that 404 until actions are allowed. <c>/api/assistant/tools</c> is
+/// the MCP route's (§12): the server tools outside any conversation, which <c>src/Admin.Mcp</c> reads.
 /// </summary>
 public static class AssistantEndpoints
 {
@@ -40,6 +42,24 @@ public static class AssistantEndpoints
         }
 
         Caller caller = AssistantRuntime.Operator;
+
+        // The MCP route's tools (§12): the host's server tools, never a client's, through the registry, policy, limits and
+        // redactor a conversation's calls go through. The platform tools are listed from the API catalogue, as for a conversation.
+        app.MapGet("/api/assistant/tools", async (CancellationToken cancellationToken) =>
+        {
+            await runtime.PrepareAsync(cancellationToken);
+
+            return core.ServerTools();
+        });
+
+        app.MapPost("/api/assistant/tools/{name}", async Task<Results<Ok<ToolOutcome>, ProblemHttpResult>> (string name, JsonObject? arguments, CancellationToken cancellationToken) =>
+        {
+            await runtime.PrepareAsync(cancellationToken);
+
+            return await core.CallServerToolAsync(caller, name, arguments ?? [], cancellationToken) is { } outcome
+                ? TypedResults.Ok(outcome)
+                : TypedResults.Problem(statusCode: StatusCodes.Status404NotFound, title: "No such tool", detail: name);
+        });
 
         app.MapPost("/api/assistant/conversations", async Task<Results<Ok<ConversationOpened>, ProblemHttpResult>> (OpenConversation? request, CancellationToken cancellationToken) =>
         {
