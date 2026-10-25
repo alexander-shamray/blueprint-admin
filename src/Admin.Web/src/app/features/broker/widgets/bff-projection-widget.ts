@@ -18,15 +18,19 @@ import { BrokerFeed, describeError } from '../broker-feed';
     @if (feed.projectionPlan(); as p) {
       <section class="projection">
         <p>
-          The buyer's order list is built from the events on <code>{{ p.queue }}</code
+          <ng-container i18n>The buyer's order list is built from the events on</ng-container>&ngsp;<code>{{
+            p.queue
+          }}</code
           >.
           @if (depth(); as d) {
             <span class="depth" role="status" [class.drained]="d.messages === 0">
               @if (d.messages === 0) {
-                [drained] {{ p.queue }} is empty.
+                <ng-container i18n>[drained] {{ p.queue }} is empty.</ng-container>
               } @else {
-                [waiting] {{ p.queue }} holds {{ d.messages ?? 'some' }}
-                {{ d.messages === 1 ? 'message' : 'messages' }}.
+                <ng-container i18n
+                  >[waiting] {{ p.queue }} holds {{ d.messages ?? 'some' }}
+                  {{ d.messages === 1 ? 'message' : 'messages' }}.</ng-container
+                >
               }
             </span>
           }
@@ -40,7 +44,9 @@ import { BrokerFeed, describeError } from '../broker-feed';
           <button
             class="repair"
             (click)="repair()"
+            i18n-title
             title="Send what the BFF's inbox has not recorded; nothing is deleted"
+            i18n
             >Repair</button
           >
           <span class="rebuild-box">
@@ -54,20 +60,22 @@ import { BrokerFeed, describeError } from '../broker-feed';
               class="rebuild"
               [disabled]="!canRebuild()"
               (click)="rebuild()"
+              i18n-title
               title="Stop the BFF, delete its order projection, replay the outbox window, start the BFF again"
+              i18n
               >Rebuild</button
             >
           </span>
         </div>
         @if (error(); as e) {
-          <p class="error" role="alert">The host did not answer: {{ e }}</p>
+          <p class="error" role="alert" i18n>The host did not answer: {{ e }}</p>
         }
         @if (jobId(); as id) {
           <app-output-pane [jobId]="id" (exited)="ended()" (failed)="ended()" />
         }
       </section>
     } @else if (feed.projectionPlan() === null) {
-      <p class="empty">The host did not give the projection tool's plan.</p>
+      <p class="empty" i18n>The host did not give the projection tool's plan.</p>
     }
   `,
   styleUrl: './broker-widgets.css',

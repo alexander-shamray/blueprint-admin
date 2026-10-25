@@ -1,35 +1,35 @@
 <div class="layout">
   <aside class="tree">
     <div class="tree-head">
-      <strong>Operations</strong>
-      <button (click)="reload()">Reload</button>
+      <strong i18n>Operations</strong>
+      <button (click)="reload()" i18n>Reload</button>
     </div>
     @for (g of groups(); track g.name) {
       <section>
         <h3>{{ g.name }}</h3>
         @if (g.source && !g.source.available) {
-          <p class="source-error" [title]="g.source.documentUrl">unavailable: {{ g.source.error }}</p>
+          <p class="source-error" [title]="g.source.documentUrl" i18n>unavailable: {{ g.source.error }}</p>
         }
         @if (g.source?.changes; as c) {
           @if (c.error) {
             <p class="contract-error">{{ c.error }}</p>
           } @else if (c.baselineTaken) {
-            <p class="contract"
+            <p class="contract" i18n
               >document kept as the baseline at {{ c.baselineAt | date: 'yyyy-MM-dd HH:mm' }}; later changes show
               here</p
             >
           } @else if (changeLines(c).length > 0) {
             <div class="contract-changes" role="status">
-              <p>changed since {{ c.baselineAt | date: 'yyyy-MM-dd HH:mm' }}:</p>
+              <p i18n>changed since {{ c.baselineAt | date: 'yyyy-MM-dd HH:mm' }}:</p>
               <ul>
                 @for (line of changeLines(c); track line) {
                   <li>{{ line }}</li>
                 }
               </ul>
-              <button class="accept" (click)="acceptBaseline(g.name)">Accept as baseline</button>
+              <button class="accept" (click)="acceptBaseline(g.name)" i18n>Accept as baseline</button>
             </div>
           } @else {
-            <p class="contract">unchanged since {{ c.baselineAt | date: 'yyyy-MM-dd HH:mm' }}</p>
+            <p class="contract" i18n>unchanged since {{ c.baselineAt | date: 'yyyy-MM-dd HH:mm' }}</p>
           }
         }
         <ul>
@@ -55,58 +55,67 @@
   <section class="editor">
     <div class="identity">
       <label>
-        Send as
-        <select aria-label="Identity" [ngModel]="identityValue()" (ngModelChange)="chooseIdentity($event)">
-          <option value="anonymous">anonymous</option>
+        <ng-container i18n>Send as</ng-container>&ngsp;<select
+          i18n-aria-label
+          aria-label="Identity"
+          [ngModel]="identityValue()"
+          (ngModelChange)="chooseIdentity($event)"
+        >
+          <option value="anonymous" i18n>anonymous</option>
           @for (u of identity.users(); track u.username) {
             <option [value]="'user:' + u.username">{{ u.username }}</option>
           }
-          <option value="custom">custom…</option>
+          <option value="custom" i18n>custom…</option>
         </select>
       </label>
       @if (identity.choice().kind === 'custom') {
         <input
+          i18n-aria-label
           aria-label="Custom username"
+          i18n-placeholder
           placeholder="username"
           [ngModel]="customUsername()"
           (ngModelChange)="setCustom($event, customPassword())"
         />
         <input
+          i18n-aria-label
           aria-label="Custom password"
+          i18n-placeholder
           placeholder="password"
           type="password"
           [ngModel]="customPassword()"
           (ngModelChange)="setCustom(customUsername(), $event)"
         />
       }
-      <button (click)="showToken()">Show token</button>
+      <button (click)="showToken()" i18n>Show token</button>
     </div>
     @if (clockText(); as ct) {
       <p class="token-clock">{{ ct }}</p>
     }
 
     @if (token(); as t) {
-      <p class="expires">{{ t.username }}'s token, expires {{ t.expiresAt }}</p>
+      <p class="expires" i18n>{{ t.username }}'s token, expires {{ t.expiresAt }}</p>
       <pre class="access-token">{{ t.accessToken }}</pre>
       <pre class="claims">{{ claims(t) }}</pre>
     }
 
     @if (operation(); as o) {
       <p class="policy"
-        >edge policy: {{ o.edgePolicy }}
+        ><ng-container i18n>edge policy: {{ o.edgePolicy }}</ng-container
+        >&ngsp;
         @if (!o.available) {
-          — its service did not answer the last catalog load
+          <ng-container i18n>— its service did not answer the last catalog load</ng-container>
         }
       </p>
     }
 
     <div class="line">
-      <select aria-label="Method" [ngModel]="method()" (ngModelChange)="method.set($event)">
+      <select i18n-aria-label aria-label="Method" [ngModel]="method()" (ngModelChange)="method.set($event)">
         @for (m of methods; track m) {
           <option [value]="m">{{ m }}</option>
         }
       </select>
-      <input class="url" aria-label="URL" [ngModel]="url()" (ngModelChange)="url.set($event)" />
+      <input class="url" i18n-aria-label aria-label="URL" [ngModel]="url()" (ngModelChange)="url.set($event)" />
     </div>
 
     @if (operation(); as o) {
@@ -131,27 +140,35 @@
     }
 
     <label class="block"
-      >Headers, one per line
-      <textarea
+      ><ng-container i18n>Headers, one per line</ng-container>&ngsp;<textarea
+        i18n-aria-label
         aria-label="Headers"
         rows="2"
+        i18n-placeholder
         placeholder="Accept-Language: en"
         [ngModel]="headersText()"
         (ngModelChange)="headersText.set($event)"
       ></textarea>
     </label>
     <label class="block"
-      >Body
-      <textarea aria-label="Body" rows="8" [ngModel]="body()" (ngModelChange)="body.set($event)"></textarea>
+      ><ng-container i18n>Body</ng-container>&ngsp;<textarea
+        i18n-aria-label
+        aria-label="Body"
+        rows="8"
+        [ngModel]="body()"
+        (ngModelChange)="body.set($event)"
+      ></textarea>
     </label>
     <div class="line">
       <input
+        i18n-aria-label
         aria-label="Correlation id"
+        i18n-placeholder
         placeholder="correlation id (generated if empty)"
         [ngModel]="correlationId()"
         (ngModelChange)="correlationId.set($event)"
       />
-      <button class="send" [disabled]="pending()" (click)="send()">Send</button>
+      <button class="send" [disabled]="pending()" (click)="send()" i18n>Send</button>
     </div>
 
     @if (error(); as e) {
@@ -166,37 +183,40 @@
             <p class="sent">{{ answered() }}</p>
             <p>
               <span class="status" [class.ok]="r.status < 400" [class.bad]="r.status >= 400">{{ r.status }}</span>
-              <span class="elapsed">{{ r.elapsedMs }} ms</span>
-              <span class="correlation">correlation id {{ r.correlationId }}</span>
+              <span class="elapsed" i18n>{{ r.elapsedMs }} ms</span>
+              <span class="correlation" i18n>correlation id {{ r.correlationId }}</span>
               <button
                 class="trace-call"
                 type="button"
                 [attr.aria-label]="'Trace correlation id ' + r.correlationId"
                 (click)="traceThisCall(r.correlationId)"
+                i18n
                 >Trace this call</button
               >
             </p>
             <details
-              ><summary>Headers</summary><pre class="headers">{{ headerLines().join('\n') }}</pre>
+              ><summary i18n>Headers</summary><pre class="headers">{{ headerLines().join('\n') }}</pre>
             </details>
             <pre class="body">{{ prettyBody() }}</pre>
             @if (r.bodyTruncated) {
-              <p class="note">Body truncated at 1 MiB.</p>
+              <p class="note" i18n>Body truncated at 1 MiB.</p>
             }
             @if (r.bodyError; as bodyError) {
-              <p class="note body-error">Body incomplete: {{ bodyError }}</p>
+              <p class="note body-error" i18n>Body incomplete: {{ bodyError }}</p>
             }
             @if (projection(); as p) {
               <app-drained-indicator [projection]="p" />
             }
             @if (projectionError() !== null) {
-              <p class="note" role="alert"
+              <p class="note" role="alert" i18n
                 >Could not read the broker to say whether ordering-catalog-events has drained:
                 {{ projectionError() }}</p
               >
             }
             @if (projectionWatchExpired()) {
-              <p class="note" role="status">Stopped watching after 2 minutes; the Broker screen shows the queue.</p>
+              <p class="note" role="status" i18n
+                >Stopped watching after 2 minutes; the Broker screen shows the queue.</p
+              >
             }
           </section>
         }
@@ -204,8 +224,8 @@
           <section class="response rejected">
             <p class="sent">{{ answered() }}</p>
             <p
-              ><span class="status bad">Keycloak refused the identity: {{ r.status }}</span>
-              <span class="correlation">correlation id {{ r.correlationId }} (not sent)</span></p
+              ><span class="status bad" i18n>Keycloak refused the identity: {{ r.status }}</span>
+              <span class="correlation" i18n>correlation id {{ r.correlationId }} (not sent)</span></p
             >
             <pre class="body">{{ prettyBody() }}</pre>
           </section>
@@ -214,15 +234,16 @@
           <section class="response unreached">
             <p class="sent">{{ answered() }}</p>
             <p
-              ><span class="status bad">No answer from the platform</span>
-              <span class="elapsed">{{ r.elapsedMs }} ms</span>
-              <span class="correlation">correlation id {{ r.correlationId }}</span>
+              ><span class="status bad" i18n>No answer from the platform</span>
+              <span class="elapsed" i18n>{{ r.elapsedMs }} ms</span>
+              <span class="correlation" i18n>correlation id {{ r.correlationId }}</span>
               @if (r.sent) {
                 <button
                   class="trace-call"
                   type="button"
                   [attr.aria-label]="'Trace correlation id ' + r.correlationId"
                   (click)="traceThisCall(r.correlationId)"
+                  i18n
                   >Trace this call</button
                 >
               }

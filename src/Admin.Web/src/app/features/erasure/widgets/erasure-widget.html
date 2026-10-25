@@ -1,31 +1,40 @@
 <p class="lede">
-  Raises an erasure request through the gateway as the <code>privacy</code> login, which holds
-  <code>privacy:erase</code> and nothing else, then shows each holder answering it. Erasing replaces the subject's id
-  with its hash in every holder; there is no undo.
+  <ng-container i18n>Raises an erasure request through the gateway as the</ng-container>&ngsp;<code i18n>privacy</code
+  >&ngsp;<ng-container i18n>login, which holds</ng-container>&ngsp;<code i18n>privacy:erase</code>&ngsp;<ng-container
+    i18n
+    >and nothing else, then shows each holder answering it. Erasing replaces the subject's id with its hash in every
+    holder; there is no undo.</ng-container
+  >
 </p>
 
-<section class="raise" aria-label="Raise a request">
-  <h2>Raise a request</h2>
+<section class="raise" i18n-aria-label aria-label="Raise a request">
+  <h2 i18n>Raise a request</h2>
   <div class="row">
     <label
-      >Subject id
-      <input class="subject" [ngModel]="subject()" (ngModelChange)="subject.set($event)" placeholder="a GUID"
+      ><ng-container i18n>Subject id</ng-container>&ngsp;<input
+        class="subject"
+        [ngModel]="subject()"
+        (ngModelChange)="subject.set($event)"
+        i18n-placeholder
+        placeholder="a GUID"
     /></label>
-    <button class="new-subject" (click)="newSubject()">New subject</button>
-    <button class="raise-button" [disabled]="!canRaise()" (click)="raise()">Raise</button>
+    <button class="new-subject" (click)="newSubject()" i18n>New subject</button>
+    <button class="raise-button" [disabled]="!canRaise()" (click)="raise()" i18n>Raise</button>
   </div>
   <div class="row">
     <label
-      >Request id
-      <input
+      ><ng-container i18n>Request id</ng-container>&ngsp;<input
         class="request-id"
         [ngModel]="run.requestId()"
         (ngModelChange)="run.requestId.set($event)"
+        i18n-placeholder
         placeholder="a request raised earlier"
     /></label>
-    <button class="read" [disabled]="!run.canRead()" (click)="run.read()">Read</button>
+    <button class="read" [disabled]="!run.canRead()" (click)="run.read()" i18n>Read</button>
     <label
-      ><input type="checkbox" [ngModel]="run.watch()" (ngModelChange)="run.setWatch($event)" /> Read every 3 s</label
+      ><input type="checkbox" [ngModel]="run.watch()" (ngModelChange)="run.setWatch($event)" />&ngsp;<ng-container i18n
+        >Read every 3 s</ng-container
+      ></label
     >
   </div>
   @if (run.error(); as e) {
@@ -34,32 +43,36 @@
 </section>
 
 @if (run.request(); as r) {
-  <section class="request" aria-label="Request">
+  <section class="request" i18n-aria-label aria-label="Request">
     <h2
-      >Request <code>{{ r.requestId }}</code></h2
+      ><ng-container i18n>Request</ng-container>&ngsp;<code>{{ r.requestId }}</code></h2
     >
     <p class="status" role="status" [class.closed]="r.status === 'Closed'" [class.overdue]="r.status === 'Overdue'">
       [{{ r.status.toLowerCase() }}]
       @switch (r.status) {
         @case ('Closed') {
-          Every holder answered; the subject's id has been replaced by its hash.
+          <ng-container i18n>Every holder answered; the subject's id has been replaced by its hash.</ng-container>
         }
         @case ('Overdue') {
-          Open past its due time. Nothing closes it by itself: reissue it once the holder is back.
+          <ng-container i18n
+            >Open past its due time. Nothing closes it by itself: reissue it once the holder is back.</ng-container
+          >
         }
         @default {
-          Waiting on {{ r.missing.length }} of {{ r.responders.length }} holders.
+          <ng-container i18n>Waiting on {{ r.missing.length }} of {{ r.responders.length }} holders.</ng-container>
         }
       }
     </p>
     <p class="facts">
-      Raised {{ r.raisedAt }} · due {{ r.dueAt }}
+      <ng-container i18n>Raised {{ r.raisedAt }} · due {{ r.dueAt }}</ng-container
+      >&ngsp;
       @if (r.closedAt) {
-        · closed {{ r.closedAt }}
+        <ng-container i18n>· closed {{ r.closedAt }}</ng-container>
       }
-      · reissued {{ r.reissues }} {{ r.reissues === 1 ? 'time' : 'times' }}
+      &ngsp;<ng-container i18n>· reissued {{ r.reissues }} {{ r.reissues === 1 ? 'time' : 'times' }}</ng-container
+      >&ngsp;
       @if (run.raisedUnder(); as c) {
-        · <a [appTraceLink]="c">trace the raise</a>
+        · <a [appTraceLink]="c" i18n>trace the raise</a>
       }
     </p>
     @if (run.overdue()) {
@@ -68,27 +81,31 @@
           class="reissue"
           [disabled]="run.busy()"
           (click)="run.reissue()"
+          i18n-title
           title="Ask the holders again under the same request"
+          i18n
           >Reissue</button
         >
         @if (run.holders(); as h) {
-          <a [href]="h.runbookUrl" target="_blank" rel="noopener noreferrer">erasure-overdue runbook</a>
+          <a [href]="h.runbookUrl" target="_blank" rel="noopener noreferrer" i18n>erasure-overdue runbook</a>
         }
       </p>
     }
   </section>
 }
 
-<h2>Holders</h2>
+<h2 i18n>Holders</h2>
 @if (run.holders(); as h) {
   @if (!h.reachable) {
-    <p class="error" role="alert">The broker did not answer, so no queue depths: {{ h.error }}</p>
+    <p class="error" role="alert" i18n>The broker did not answer, so no queue depths: {{ h.error }}</p>
   }
 }
 @if (run.rows().length > 0) {
   <table class="holders">
     <thead
-      ><tr><th>Holder</th><th>State</th><th>Answered</th><th>Queue</th><th>Pending</th></tr></thead
+      ><tr
+        ><th i18n>Holder</th><th i18n>State</th><th i18n>Answered</th><th i18n>Queue</th><th i18n>Pending</th></tr
+      ></thead
     >
     <tbody>
       @for (row of run.rows(); track row.name) {
@@ -97,7 +114,7 @@
           <td
             >[{{ row.state }}]
             @if (!row.counted) {
-              not counted
+              <ng-container i18n>not counted</ng-container>
             }
           </td>
           <td>
@@ -113,9 +130,10 @@
   </table>
   @if (run.holders(); as h) {
     <p class="completions">
-      Answers not yet read by Privacy, on <code>privacy-completions</code>: {{ h.completionsPending ?? '—' }}
+      <ng-container i18n>Answers not yet read by Privacy, on</ng-container>&ngsp;<code i18n>privacy-completions</code>:
+      {{ h.completionsPending ?? '—' }}
     </p>
   }
 } @else {
-  <p>Loading…</p>
+  <p i18n>Loading…</p>
 }

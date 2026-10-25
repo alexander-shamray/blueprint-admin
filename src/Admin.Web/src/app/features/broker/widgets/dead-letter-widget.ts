@@ -23,28 +23,37 @@ import { BrokerFeed, describeError } from '../broker-feed';
   template: `
     <section class="dead-letters">
       @if (feed.deadLetterPlan() === null) {
-        <p class="empty">The host did not give the dead-letter tool's plan.</p>
+        <p class="empty" i18n>The host did not give the dead-letter tool's plan.</p>
       } @else if (openQueue(); as queue) {
         <p>
-          Dead letters on <code>{{ queue }}</code
-          >. The first {{ feed.deadLetterPlan()?.inspectLimit }} messages, read with the backend's
-          <code>tools/dead-letters</code>, which puts each back, flagged redelivered; a deeper queue holds more than
-          this shows. Each replay or discard is a dry run first; the real run writes every message it takes to a record
-          file under <code>{{ feed.deadLetterPlan()?.recordDir }}</code> before it moves it. The runbook says when to do
-          either.
-          <button class="close-dead-letters" (click)="close()">Close</button>
+          <ng-container i18n>Dead letters on</ng-container>&ngsp;<code>{{ queue }}</code
+          ><ng-container i18n
+            >. The first {{ feed.deadLetterPlan()?.inspectLimit }} messages, read with the backend's</ng-container
+          >&ngsp;<code i18n>tools/dead-letters</code
+          ><ng-container i18n
+            >, which puts each back, flagged redelivered; a deeper queue holds more than this shows. Each replay or
+            discard is a dry run first; the real run writes every message it takes to a record file under</ng-container
+          >&ngsp;<code>{{ feed.deadLetterPlan()?.recordDir }}</code
+          >&ngsp;<ng-container i18n>before it moves it. The runbook says when to do either.</ng-container>&ngsp;<button
+            class="close-dead-letters"
+            (click)="close()"
+            i18n
+            >Close</button
+          >
         </p>
         @if (inspecting()) {
-          <p>Reading…</p>
+          <p i18n>Reading…</p>
         }
         @if (error(); as e) {
           <p class="error" role="alert">{{ e }}</p>
         }
         @if (moved(); as id) {
           <p class="moved" role="status">
-            <code>{{ id }}</code> went to the real run, so the listing is dropped; any other message read is still on
-            the queue. Read the queue again once the run's output says it has ended.
-            <button class="reread" [disabled]="inspecting()" (click)="open(queue)">Read again</button>
+            <code>{{ id }}</code
+            >&ngsp;<ng-container i18n
+              >went to the real run, so the listing is dropped; any other message read is still on the queue. Read the
+              queue again once the run's output says it has ended.</ng-container
+            >&ngsp;<button class="reread" [disabled]="inspecting()" (click)="open(queue)" i18n>Read again</button>
           </p>
         }
         @if (inspection(); as view) {
@@ -52,33 +61,33 @@ import { BrokerFeed, describeError } from '../broker-feed';
             <p class="error" role="alert">{{ view.error }}</p>
           }
           @if (view.messages.length === 0 && !view.error) {
-            <p>No message is waiting on {{ queue }}.</p>
+            <p i18n>No message is waiting on {{ queue }}.</p>
           }
           @for (message of view.messages; track $index) {
             <article class="dead-letter">
               <dl>
-                <dt>Message</dt
+                <dt i18n>Message</dt
                 ><dd
                   ><code>{{ message.messageId ?? '(no message id)' }}</code></dd
                 >
                 @if (message.correlationId; as c) {
-                  <dt>Correlation</dt
+                  <dt i18n>Correlation</dt
                   ><dd
                     ><a [appTraceLink]="c">{{ c }}</a></dd
                   >
                 }
                 @if (message.messageType; as t) {
-                  <dt>Type</dt
+                  <dt i18n>Type</dt
                   ><dd
                     ><code>{{ t }}</code></dd
                   >
                 }
                 <!-- prettier-ignore -->
-                @if (message.faultExceptionType; as f) {<dt>Fault</dt><dd><code>{{ f }}</code>@if (message.faultMessage; as m) {: {{ m }}}</dd>}
+                @if (message.faultExceptionType; as f) {<dt i18n>Fault</dt><dd><code>{{ f }}</code>@if (message.faultMessage; as m) {: {{ m }}}</dd>}
                 @if (message.reason; as r) {
-                  <dt>Reason</dt><dd>{{ r }}</dd>
+                  <dt i18n>Reason</dt><dd>{{ r }}</dd>
                 }
-                <dt>Body</dt
+                <dt i18n>Body</dt
                 ><dd
                   ><code class="body">{{ message.body ?? '(binary)' }}</code></dd
                 >
@@ -89,12 +98,14 @@ import { BrokerFeed, describeError } from '../broker-feed';
                     class="dry-replay"
                     (click)="dryRun(id, 'replay')"
                     [title]="'Say what a replay of ' + id + ' would do; nothing moves'"
+                    i18n
                     >Dry-run replay</button
                   >
                   <button
                     class="dry-discard"
                     (click)="dryRun(id, 'discard')"
                     [title]="'Say what a discard of ' + id + ' would do; nothing moves'"
+                    i18n
                     >Dry-run discard</button
                   >
                   @if (armed(); as a) {
@@ -108,7 +119,7 @@ import { BrokerFeed, describeError } from '../broker-feed';
                           [ngModel]="executeText()"
                           (ngModelChange)="executeText.set($event)"
                         />
-                        <button class="execute" [disabled]="!canExecute()" (click)="execute()"
+                        <button class="execute" [disabled]="!canExecute()" (click)="execute()" i18n
                           >{{ a.verb === 'replay' ? 'Replay' : 'Discard' }} for real</button
                         >
                       </span>
@@ -125,9 +136,12 @@ import { BrokerFeed, describeError } from '../broker-feed';
       } @else {
         <p class="empty">
           @if (queueOfConfig(); as q) {
-            <button class="open-configured" [disabled]="inspecting()" (click)="open(q)">Open {{ q }}</button>
+            <button class="open-configured" [disabled]="inspecting()" (click)="open(q)" i18n>Open {{ q }}</button>
           } @else {
-            No queue is open: press Open on a parked queue in a Queues widget, or set this widget's queue.
+            <ng-container i18n
+              >No queue is open: press Open on a parked queue in a Queues widget, or set this widget's
+              queue.</ng-container
+            >
           }
         </p>
       }

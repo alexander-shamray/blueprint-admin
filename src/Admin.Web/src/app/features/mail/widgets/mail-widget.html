@@ -1,16 +1,19 @@
 <!-- prettier-ignore -->
 <p class="lede">
-  What Notifications sent, as the mail sink holds it: newest first, each message with the correlation id it carries as a link into
-  its trace. The widget only reads; clearing the sink is done in
-  @if (list(); as l) {<a class="sink-link" [href]="l.sinkUrl" target="_blank" rel="noopener noreferrer">the sink's own UI</a>} @else {the sink's own UI}.
+  <ng-container i18n>What Notifications sent, as the mail sink holds it: newest first, each message with the correlation id it carries as a link into
+  its trace. The widget only reads; clearing the sink is done in</ng-container>&ngsp;@if (list(); as l) {<a class="sink-link" [href]="l.sinkUrl" target="_blank" rel="noopener noreferrer" i18n>the sink's own UI</a>} @else {<ng-container i18n>the sink's own UI</ng-container>}.
 </p>
 
 <div class="row">
   <label
-    >Correlation id
-    <input class="filter" [ngModel]="filter()" (ngModelChange)="setFilter($event)" placeholder="one order's messages"
+    ><ng-container i18n>Correlation id</ng-container>&ngsp;<input
+      class="filter"
+      [ngModel]="filter()"
+      (ngModelChange)="setFilter($event)"
+      i18n-placeholder
+      placeholder="one order's messages"
   /></label>
-  <button class="refresh" [disabled]="loading()" (click)="refresh()">Refresh</button>
+  <button class="refresh" [disabled]="loading()" (click)="refresh()" i18n>Refresh</button>
 </div>
 
 @if (error(); as e) {
@@ -21,18 +24,19 @@
   @if (l.reachable) {
     <!-- prettier-ignore -->
     <p class="count" role="status">
-      @if (filter().trim()) {{{ messages().length }} of the {{ l.messages.length }} listed carry this correlation id.}
-      @else {{{ l.messages.length }} listed@if (l.total > l.messages.length) {, the newest of {{ l.total }} the sink holds}.}
+      @if (filter().trim()) {<ng-container i18n>{{ messages().length }} of the {{ l.messages.length }} listed carry this correlation id.</ng-container>}
+      @else {<ng-container i18n>{{ l.messages.length }} listed</ng-container>@if (l.total > l.messages.length) {<ng-container i18n>, the newest of {{ l.total }} the sink holds</ng-container>}.}
     </p>
     @if (noneCorrelated()) {
       <p class="no-correlation"
-        >No message here carries an <code>X-Correlation-Id</code>, so none links to its trace.</p
+        ><ng-container i18n>No message here carries an</ng-container>&ngsp;<code i18n>X-Correlation-Id</code
+        ><ng-container i18n>, so none links to its trace.</ng-container></p
       >
     }
     @if (messages().length > 0) {
       <table class="messages">
         <thead
-          ><tr><th>Received</th><th>To</th><th>Subject</th><th>Correlation id</th><th></th></tr
+          ><tr><th i18n>Received</th><th i18n>To</th><th i18n>Subject</th><th i18n>Correlation id</th><th></th></tr
         ></thead>
         <tbody>
           @for (m of messages(); track m.id) {
@@ -44,10 +48,10 @@
                 @if (m.correlationId; as c) {
                   <a [appTraceLink]="c">{{ c }}</a>
                 } @else {
-                  <span class="none">none</span>
+                  <span class="none" i18n>none</span>
                 }
               </td>
-              <td><button class="open" (click)="open(m.id)">Open</button></td>
+              <td><button class="open" (click)="open(m.id)" i18n>Open</button></td>
             </tr>
           }
         </tbody>
@@ -55,7 +59,7 @@
     }
   }
 } @else if (!error()) {
-  <p>Loading…</p>
+  <p i18n>Loading…</p>
 }
 
 @if (openError(); as e) {
@@ -63,24 +67,26 @@
 }
 
 @if (opened(); as m) {
-  <section class="message" aria-label="Message">
+  <section class="message" i18n-aria-label aria-label="Message">
     <h2>{{ m.subject }}</h2>
     <p class="facts">
-      From {{ mailboxes([m.from]) }} · to {{ mailboxes(m.to) }}
+      <ng-container i18n>From {{ mailboxes([m.from]) }} · to {{ mailboxes(m.to) }}</ng-container
+      >&ngsp;
       @if (m.cc.length > 0) {
-        · cc {{ mailboxes(m.cc) }}
+        <ng-container i18n>· cc {{ mailboxes(m.cc) }}</ng-container>
       }
       · {{ m.date }}
       @if (m.correlationId; as c) {
-        · <a [appTraceLink]="c">trace {{ c }}</a>
+        · <a [appTraceLink]="c" i18n>trace {{ c }}</a>
       } @else {
-        · no correlation id
+        <ng-container i18n>· no correlation id</ng-container>
       }
-      <button class="close" (click)="close()">Close</button>
+      <button class="close" (click)="close()" i18n>Close</button>
     </p>
     @if (html(); as h) {
       <iframe
         class="body-html"
+        i18n-title
         title="The message's HTML part"
         sandbox=""
         referrerpolicy="no-referrer"

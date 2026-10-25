@@ -1,14 +1,17 @@
-<section class="doctor" aria-label="Workstation">
+<section class="doctor" i18n-aria-label aria-label="Workstation">
   <div class="toolbar">
-    <button class="check" type="button" [disabled]="reading()" (click)="check()">Check again</button>
+    <button class="check" type="button" [disabled]="reading()" (click)="check()" i18n>Check again</button>
   </div>
   @if (error(); as e) {
-    <p class="error">The host did not answer for the workstation: {{ e }}</p>
+    <p class="error" i18n>The host did not answer for the workstation: {{ e }}</p>
   }
   @if (doctor(); as d) {
     <table class="doctor">
       <thead>
-        <tr><th scope="col">Check</th><th scope="col">Verdict</th><th scope="col">What the reads said</th></tr>
+        <tr
+          ><th scope="col" i18n>Check</th><th scope="col" i18n>Verdict</th
+          ><th scope="col" i18n>What the reads said</th></tr
+        >
       </thead>
       <tbody>
         @for (c of d.checks; track c.name) {
@@ -21,6 +24,6 @@
       </tbody>
     </table>
   } @else if (reading()) {
-    <p class="doctor-reading">Reading the workstation…</p>
+    <p class="doctor-reading" i18n>Reading the workstation…</p>
   }
 </section>

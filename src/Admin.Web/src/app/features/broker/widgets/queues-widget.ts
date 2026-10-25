@@ -14,26 +14,36 @@ import { BrokerFeed, filterOf } from '../broker-feed';
   imports: [DrainedIndicator],
   template: `
     <section class="actions">
-      <button class="refresh" [disabled]="feed.queues.refreshing()" (click)="feed.queues.refresh()">Refresh</button>
+      <button class="refresh" [disabled]="feed.queues.refreshing()" (click)="feed.queues.refresh()" i18n
+        >Refresh</button
+      >
       @if (autoRefresh()) {
-        <span class="auto">Refreshes every 5 s</span>
+        <span class="auto" i18n>Refreshes every 5 s</span>
       }
     </section>
     @if (pointed(); as name) {
       <p class="pointed" role="status">
-        Pointed at {{ name }} from the platform diagram.
-        <button class="unpoint" type="button" (click)="pointed.set(null)">Show the configured queues</button>
+        <ng-container i18n>Pointed at {{ name }} from the platform diagram.</ng-container>&ngsp;<button
+          class="unpoint"
+          type="button"
+          (click)="pointed.set(null)"
+          i18n
+          >Show the configured queues</button
+        >
       </p>
     }
     @if (feed.queues.error(); as e) {
-      <p class="error" role="alert">The host did not answer: {{ e }}</p>
+      <p class="error" role="alert" i18n>The host did not answer: {{ e }}</p>
     }
     @if (feed.queues.value(); as q) {
       @if (q.reachable) {
         <app-drained-indicator [projection]="q.projection" />
         <table class="queues">
           <thead
-            ><tr><th>Queue</th><th>Messages</th><th>Consumed by</th><th>Runbook</th><th>Dead letters</th></tr></thead
+            ><tr
+              ><th i18n>Queue</th><th i18n>Messages</th><th i18n>Consumed by</th><th i18n>Runbook</th
+              ><th i18n>Dead letters</th></tr
+            ></thead
           >
           <tbody>
             @for (queue of shown(); track queue.name) {
@@ -48,7 +58,7 @@ import { BrokerFeed, filterOf } from '../broker-feed';
                 <td class="consumer">{{ queue.consumer ?? '' }}</td>
                 <td class="runbook">
                   @if (queue.runbook && (queue.messages ?? 0) > 0) {
-                    <a [href]="queue.runbook" target="_blank" rel="noopener noreferrer"
+                    <a [href]="queue.runbook" target="_blank" rel="noopener noreferrer" i18n
                       >{{ queue.parked }}-queue runbook</a
                     >
                   }
@@ -59,6 +69,7 @@ import { BrokerFeed, filterOf } from '../broker-feed';
                       class="open-dead-letters"
                       (click)="feed.requestOpen(queue.name)"
                       [attr.aria-label]="'Open the messages on ' + queue.name"
+                      i18n
                       >Open</button
                     >
                   }
@@ -68,10 +79,10 @@ import { BrokerFeed, filterOf } from '../broker-feed';
           </tbody>
         </table>
       } @else {
-        <p class="error" role="alert">The broker did not answer: {{ q.error }}</p>
+        <p class="error" role="alert" i18n>The broker did not answer: {{ q.error }}</p>
       }
     } @else if (!feed.queues.error()) {
-      <p class="loading">Loading…</p>
+      <p class="loading" i18n>Loading…</p>
     }
   `,
   styleUrl: './broker-widgets.css',

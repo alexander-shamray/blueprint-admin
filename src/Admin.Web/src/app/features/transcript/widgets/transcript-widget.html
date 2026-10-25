@@ -1,26 +1,28 @@
 <section class="actions">
-  <button class="copy" [disabled]="!feed.transcript.value()?.entries?.length" (click)="copy()"
+  <button class="copy" [disabled]="!feed.transcript.value()?.entries?.length" (click)="copy()" i18n
     >Copy as shell script</button
   >
   @if (copied()) {
-    <span class="copied" role="status">Copied.</span>
+    <span class="copied" role="status" i18n>Copied.</span>
   }
   @if (copyError(); as e) {
-    <span class="error" role="alert">Not copied: {{ e }}</span>
+    <span class="error" role="alert" i18n>Not copied: {{ e }}</span>
   }
 </section>
 
 <p class="note">
-  Each command the console ran and each request it sent, in order. Polls are left out, and tokens, passwords, cookies
-  and Authorization values read <code>&lt;scrubbed&gt;</code>. Kept in memory until the host stops.
+  <ng-container i18n
+    >Each command the console ran and each request it sent, in order. Polls are left out, and tokens, passwords, cookies
+    and Authorization values read</ng-container
+  >&ngsp;<code i18n>&lt;scrubbed&gt;</code><ng-container i18n>. Kept in memory until the host stops.</ng-container>
 </p>
 
 @if (feed.transcript.error(); as e) {
-  <p class="error" role="alert">The host did not answer: {{ e }}</p>
+  <p class="error" role="alert" i18n>The host did not answer: {{ e }}</p>
 }
 @if (feed.transcript.value(); as t) {
   @if (t.dropped > 0) {
-    <p class="dropped">{{ t.dropped }} earlier entries were dropped.</p>
+    <p class="dropped" i18n>{{ t.dropped }} earlier entries were dropped.</p>
   }
   @if (t.entries.length) {
     <ol class="entries">
@@ -34,11 +36,11 @@
               <span class="identity">{{ entry.identity ? 'as ' + entry.identity : 'anonymous' }}</span>
             }
             @if (entry.assistant) {
-              <span class="assistant">asked by the assistant</span>
+              <span class="assistant" i18n>asked by the assistant</span>
             }
             @if (entry.workingDirectory) {
               <span class="directory"
-                >in <code>{{ entry.workingDirectory }}</code></span
+                ><ng-container i18n>in</ng-container>&ngsp;<code>{{ entry.workingDirectory }}</code></span
               >
             }
           </div>
@@ -47,8 +49,8 @@
       }
     </ol>
   } @else {
-    <p class="empty">Nothing yet: start the backend, send a request or run the Scenario.</p>
+    <p class="empty" i18n>Nothing yet: start the backend, send a request or run the Scenario.</p>
   }
 } @else if (!feed.transcript.error()) {
-  <p>Loading…</p>
+  <p i18n>Loading…</p>
 }

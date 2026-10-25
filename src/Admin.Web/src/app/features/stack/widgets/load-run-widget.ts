@@ -11,23 +11,23 @@ import { StackFeed } from '../stack-feed';
 @Component({
   selector: 'app-load-run-widget',
   template: `
-    <section class="load-run" aria-label="Load run">
+    <section class="load-run" i18n-aria-label aria-label="Load run">
       <p class="load-run-status">
-        k6 run slo.js
+        <ng-container i18n>k6 run slo.js</ng-container>&ngsp;
         @if (loadRun(); as job) {
           @if (job.state === 'Running') {
-            running
+            <ng-container i18n>running</ng-container>
           } @else {
-            exited {{ job.exitCode }}
+            <ng-container i18n>exited {{ job.exitCode }}</ng-container>
           }
         } @else if (feed.stack.value()) {
-          not run
+          <ng-container i18n>not run</ng-container>
         }
       </p>
       @if (!feed.stack.value() && feed.stack.error(); as e) {
-        <p class="error">The host did not answer: {{ e }}</p>
+        <p class="error" i18n>The host did not answer: {{ e }}</p>
       }
-      <p class="load-run-note">
+      <p class="load-run-note" i18n>
         The backend's SLO run, so the golden signals are read under load: it places orders and lists products through
         the gateway for a few minutes. A local run is not a staging baseline and proves nothing about the SLO (§13.7).
         Its orders, the slo-run client and the restocked count are left as they are (run-locally.md, Load run (k6),
@@ -36,17 +36,19 @@ import { StackFeed } from '../stack-feed';
       @if (error(); as e) {
         <p class="error">{{ e }}</p>
       }
-      <button class="load-run-start" type="button" [disabled]="running()" (click)="start()">Run load</button>
+      <button class="load-run-start" type="button" [disabled]="running()" (click)="start()" i18n>Run load</button>
       <button
         class="load-run-stop"
         type="button"
         [disabled]="!running()"
         (click)="stop()"
+        i18n-title
         title="Ends the step going at once; during k6, teardown() does not run, so there is no verdict"
+        i18n
         >Stop load</button
       >
       @if (loadRun(); as job) {
-        <button class="load-run-output" type="button" (click)="pageJob.show(job.id)">Show load output</button>
+        <button class="load-run-output" type="button" (click)="pageJob.show(job.id)" i18n>Show load output</button>
       }
     </section>
   `,

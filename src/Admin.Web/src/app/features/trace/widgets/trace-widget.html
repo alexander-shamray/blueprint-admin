@@ -2,25 +2,32 @@
   <form (ngSubmit)="submit()">
     <input
       name="correlationId"
+      i18n-aria-label
       aria-label="Correlation id"
+      i18n-placeholder
       placeholder="correlation id"
       [ngModel]="correlationId()"
       (ngModelChange)="correlationId.set($event)"
     />
     <label>
-      Window
-      <select name="window" aria-label="Window" [ngModel]="shownWindow()" (ngModelChange)="window.set($event)">
+      <ng-container i18n>Window</ng-container>&ngsp;<select
+        name="window"
+        i18n-aria-label
+        aria-label="Window"
+        [ngModel]="shownWindow()"
+        (ngModelChange)="window.set($event)"
+      >
         @for (w of windows; track w) {
           <option [value]="w">{{ w }}</option>
         }
       </select>
     </label>
-    <button class="trace" type="submit" [disabled]="loading()">Trace</button>
+    <button class="trace" type="submit" [disabled]="loading()" i18n>Trace</button>
     <!-- Enabled on a typed id too, not only on a loaded view: after a failed first load, submitting
          navigates to the route already showing, which the router ignores, so this is the only retry. -->
-    <button class="reload" type="button" [disabled]="loading() || !canReload()" (click)="reload()">Reload</button>
+    <button class="reload" type="button" [disabled]="loading() || !canReload()" (click)="reload()" i18n>Reload</button>
     @if (following()) {
-      <span class="following">Follows the last Trace link</span>
+      <span class="following" i18n>Follows the last Trace link</span>
     }
   </form>
 </section>
@@ -35,36 +42,38 @@
   <!-- Only ever a reachable view: an unreachable answer is surfaced through error() above, leaving
        the last good timeline in place. -->
   <p class="summary" role="status">
-    {{ v.events.length }} event{{ v.events.length === 1 ? '' : 's' }} for {{ v.correlationId }} over the last
-    {{ v.window }}, across {{ v.traceIds.length }} trace{{ v.traceIds.length === 1 ? '' : 's' }}.
+    <ng-container i18n
+      >{{ v.events.length }} event{{ v.events.length === 1 ? '' : 's' }} for {{ v.correlationId }} over the last
+      {{ v.window }}, across {{ v.traceIds.length }} trace{{ v.traceIds.length === 1 ? '' : 's' }}.</ng-container
+    >&ngsp;
     @if (v.tracesTruncated) {
-      <span class="truncated">Only the {{ v.traceIds.length }} newest traces were fetched.</span>
+      <span class="truncated" i18n>Only the {{ v.traceIds.length }} newest traces were fetched.</span>
     }
   </p>
 
   @if (diff(); as d) {
-    <section class="changes" aria-label="Since the last fetch">
+    <section class="changes" i18n-aria-label aria-label="Since the last fetch">
       @if (!d.comparable) {
-        <p class="not-compared" role="status">
+        <p class="not-compared" role="status" i18n>
           The window changed from {{ d.previousWindow }} to {{ v.window }}, so this fetch is not compared with the one
           at {{ d.previousAt | date: 'HH:mm:ss' }}.
         </p>
       } @else if (d.arrived.length === 0 && d.gone.length === 0) {
-        <p class="unchanged" role="status">
+        <p class="unchanged" role="status" i18n>
           Nothing changed between the fetch at {{ d.previousAt | date: 'HH:mm:ss' }} and this one at
           {{ d.currentAt | date: 'HH:mm:ss' }}.
         </p>
       } @else {
-        <p class="changed" role="status">
+        <p class="changed" role="status" i18n>
           Since the fetch at {{ d.previousAt | date: 'HH:mm:ss' }}: {{ d.arrived.length }} new, {{ d.gone.length }} no
           longer in the timeline.
         </p>
         <ul class="change-list">
           @for (event of d.arrived; track $index) {
-            <li class="arrived">[new] {{ event.service }} {{ kindWord(event.kind) }} {{ event.summary }}</li>
+            <li class="arrived" i18n>[new] {{ event.service }} {{ kindWord(event.kind) }} {{ event.summary }}</li>
           }
           @for (event of d.gone; track $index) {
-            <li class="gone">[gone] {{ event.service }} {{ kindWord(event.kind) }} {{ event.summary }}</li>
+            <li class="gone" i18n>[gone] {{ event.service }} {{ kindWord(event.kind) }} {{ event.summary }}</li>
           }
         </ul>
       }
@@ -76,7 +85,7 @@
   }
 
   @if (v.events.length <= 1) {
-    <p class="empty">
+    <p class="empty" i18n>
       No log line carries correlation id {{ v.correlationId }} in the last {{ v.window }}. The id may be older than the
       window, or the request may never have reached the platform.
     </p>
@@ -85,7 +94,7 @@
   @if (v.events.length > 0) {
     <table class="timeline">
       <thead>
-        <tr><th>At</th><th>Service</th><th>Kind</th><th>What happened</th></tr>
+        <tr><th i18n>At</th><th i18n>Service</th><th i18n>Kind</th><th i18n>What happened</th></tr>
       </thead>
       <tbody>
         @for (event of v.events; track $index) {
@@ -102,6 +111,7 @@
                   target="_blank"
                   rel="noopener"
                   [attr.aria-label]="'Open this ' + event.source + ' entry in Grafana Explore'"
+                  i18n
                   >Explore</a
                 >
               }
@@ -112,7 +122,7 @@
     </table>
   }
 } @else if (loading()) {
-  <p>Loading…</p>
+  <p i18n>Loading…</p>
 } @else if (!error()) {
-  <p class="empty">Enter a correlation id, or arrive here from the API screen with “Trace this call”.</p>
+  <p class="empty" i18n>Enter a correlation id, or arrive here from the API screen with “Trace this call”.</p>
 }
