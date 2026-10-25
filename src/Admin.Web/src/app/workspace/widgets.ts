@@ -61,6 +61,9 @@ function plain(kind: Kind): WidgetType {
   return { ...kind, config: () => ({}), titleOf: () => kind.title, presets: [{ label: kind.title, config: {} }] };
 }
 
+/** The label of each list setting `listing` is given, in the active language. */
+const LISTING_LABELS: Record<string, string> = { services: $localize`Services`, surfaces: $localize`Surfaces` };
+
 /** A type configured by one list of names to show, where `[]`, its preset, is every one. */
 function listing(key: string, every: string, kind: Kind): WidgetType {
   return {
@@ -71,7 +74,7 @@ function listing(key: string, every: string, kind: Kind): WidgetType {
       return shown.length === 0 ? kind.title : `${kind.title} (${shown.join(', ')})`;
     },
     presets: [{ label: every, config: { [key]: [] } }],
-    fields: [{ key, label: `${key[0].toUpperCase()}${key.slice(1)}`, kind: 'names' }],
+    fields: [{ key, label: LISTING_LABELS[key] ?? key, kind: 'names' }],
   };
 }
 
@@ -79,7 +82,7 @@ function listing(key: string, every: string, kind: Kind): WidgetType {
 export const STACK_WIDGETS = {
   doctor: plain({
     type: 'workstation-doctor',
-    title: 'Workstation doctor',
+    title: $localize`Workstation doctor`,
     help:
       "Checks the developer's workstation against what run-locally.md needs before the stack can run, and says what " +
       'is missing or wrong. Use it first when the stack will not start. It reports; it installs or changes nothing.',
@@ -91,7 +94,7 @@ export const STACK_WIDGETS = {
   }),
   controls: plain({
     type: 'stack-controls',
-    title: 'Stack controls',
+    title: $localize`Stack controls`,
     help:
       'The buttons that start, stop and reset the backend as run-locally.md does: Up, Down, Down with the volumes ' +
       'wiped and Reset, the last two behind a typed confirmation. They are refused while a Scenario holds the stack, ' +
@@ -101,9 +104,9 @@ export const STACK_WIDGETS = {
     minSize: { cols: 6, rows: 3 },
     dataServices: ['StackFeed', 'ComposeRun', 'PageJobs'],
   }),
-  services: listing('services', 'All services', {
+  services: listing('services', $localize`All services`, {
     type: 'compose-services',
-    title: 'Compose services',
+    title: $localize`Compose services`,
     help:
       'Each backend Compose service with its state, its health and its ports, for the services chosen. Use it to see ' +
       'what is running and what is unhealthy. It starts and stops nothing; Stack controls does.',
@@ -112,9 +115,9 @@ export const STACK_WIDGETS = {
     minSize: { cols: 6, rows: 3 },
     dataServices: ['StackFeed'],
   }),
-  reachability: listing('surfaces', 'All surfaces', {
+  reachability: listing('surfaces', $localize`All surfaces`, {
     type: 'reachability',
-    title: 'Reachability',
+    title: $localize`Reachability`,
     help:
       "Whether each platform surface answers: every service's readiness endpoint, the object store, the image edge, " +
       'Keycloak, Grafana and the reference client. Use it to tell a service that is down from one that is up but ' +
@@ -124,9 +127,9 @@ export const STACK_WIDGETS = {
     minSize: { cols: 4, rows: 2 },
     dataServices: ['StackFeed'],
   }),
-  signals: listing('services', 'All services', {
+  signals: listing('services', $localize`All services`, {
     type: 'golden-signals',
-    title: 'Golden signals',
+    title: $localize`Golden signals`,
     help:
       "Each service's request rate, error rates (the 401 and 422 among them) and command and query p95 latency from " +
       'Grafana, for the services chosen. Use it to see which service is slow or failing. It shows trends, not ' +
@@ -138,7 +141,7 @@ export const STACK_WIDGETS = {
   }),
   alerts: {
     type: 'alerts',
-    title: 'Alerts',
+    title: $localize`Alerts`,
     help:
       "The platform's Prometheus alert rules and which are firing, pending or quiet, with the rules that cannot fire " +
       'because nothing records their metrics yet. It can show only the firing ones. It does not silence an alert; ' +
@@ -147,16 +150,16 @@ export const STACK_WIDGETS = {
     defaultSize: { cols: 10, rows: 8 },
     minSize: { cols: 6, rows: 3 },
     config: (stored) => ({ firingOnly: stored['firingOnly'] === true }),
-    titleOf: (config) => (config['firingOnly'] === true ? 'Alerts (firing)' : 'Alerts'),
+    titleOf: (config) => (config['firingOnly'] === true ? $localize`Alerts (firing)` : $localize`Alerts`),
     presets: [
-      { label: 'Every rule', config: { firingOnly: false } },
-      { label: 'Firing only', config: { firingOnly: true } },
+      { label: $localize`Every rule`, config: { firingOnly: false } },
+      { label: $localize`Firing only`, config: { firingOnly: true } },
     ],
     dataServices: ['StackFeed'],
   } satisfies WidgetType,
   loadRun: plain({
     type: 'load-run',
-    title: 'Load run',
+    title: $localize`Load run`,
     help:
       "Runs the backend's k6 SLO load run, the steps of run-locally.md's load run, and shows its status and the last " +
       "run; the output opens in the page's Job output widget, and Stop load stops it. Use it to put the stack under " +
@@ -168,7 +171,7 @@ export const STACK_WIDGETS = {
   }),
   client: plain({
     type: 'reference-client',
-    title: 'Reference client',
+    title: $localize`Reference client`,
     help:
       'Starts and stops the frontend dev server (npm start in the sibling blueprint-frontend clone) and says whether ' +
       "the client answers; its output opens in the page's Job output widget. It also builds the app for the " +
@@ -185,7 +188,7 @@ export const STACK_WIDGETS = {
 export const SCENARIO_WIDGETS = {
   scenario: plain({
     type: 'scenario',
-    title: 'Scenario',
+    title: $localize`Scenario`,
     help:
       'Runs an end-to-end scenario script (an order delivered, cancelled or refused) as a chosen realm user: places ' +
       'an order and follows it through the saga, payment, stock and shipping, checking each step. It can be ' +
@@ -198,7 +201,7 @@ export const SCENARIO_WIDGETS = {
   }),
   saga: plain({
     type: 'saga-strip',
-    title: 'Saga strip',
+    title: $localize`Saga strip`,
     help:
       "The order saga of the Scenario's run as it moves, with the state it reads now and when the console first saw it " +
       "so. It reads the run's order and starts nothing. When it stops reading it shows the last state read, not the " +
@@ -210,8 +213,8 @@ export const SCENARIO_WIDGETS = {
   }),
 } as const;
 
-const FILTER: WidgetField = { key: 'filter', label: 'Filter', kind: 'text' };
-const AUTO_REFRESH: WidgetField = { key: 'autoRefresh', label: 'Refresh every 5 s', kind: 'flag' };
+const FILTER: WidgetField = { key: 'filter', label: $localize`Filter`, kind: 'text' };
+const AUTO_REFRESH: WidgetField = { key: 'autoRefresh', label: $localize`Refresh every 5 s`, kind: 'flag' };
 
 /**
  * A Broker listing (§5.2): a text filter, any flags of its own, and the opt-in auto-refresh, which is off until
@@ -243,7 +246,7 @@ export const BROKER_WIDGETS = {
   queues: brokerListing(
     {
       type: 'queues',
-      title: 'Queues',
+      title: $localize`Queues`,
       help:
         "Each RabbitMQ queue's depth, the service that consumes it, whether it is a parked (dead-letter) queue, with a " +
         'text filter and an option to show only parked queues. Use it to see where messages are waiting. It publishes ' +
@@ -253,11 +256,11 @@ export const BROKER_WIDGETS = {
       minSize: { cols: 8, rows: 4 },
       dataServices: ['BrokerFeed'],
     },
-    [{ key: 'parkedOnly', label: 'Parked queues only', kind: 'flag' }],
+    [{ key: 'parkedOnly', label: $localize`Parked queues only`, kind: 'flag' }],
   ),
   exchanges: brokerListing({
     type: 'exchanges',
-    title: 'Exchanges',
+    title: $localize`Exchanges`,
     help:
       "The broker's exchanges, with a text filter. Use it to see how messages are routed in. It lists them; it " +
       'changes none.',
@@ -268,7 +271,7 @@ export const BROKER_WIDGETS = {
   }),
   bindings: brokerListing({
     type: 'bindings',
-    title: 'Bindings',
+    title: $localize`Bindings`,
     help:
       'The bindings that connect exchanges to queues, with a text filter. Use it to see which queue a message ' +
       'published to an exchange reaches. It lists them; it changes none.',
@@ -279,7 +282,7 @@ export const BROKER_WIDGETS = {
   }),
   permissions: brokerListing({
     type: 'permissions',
-    title: 'Permissions',
+    title: $localize`Permissions`,
     help:
       "The broker's users and what each may configure, write and read, with a text filter. Use it when a service " +
       'cannot connect or publish. It lists them; it changes none.',
@@ -290,7 +293,7 @@ export const BROKER_WIDGETS = {
   }),
   projection: plain({
     type: 'bff-projection',
-    title: 'BFF projection',
+    title: $localize`BFF projection`,
     help:
       "The BFF's read-model projection: whether its queue has drained, a Repair that sends what the BFF inbox has " +
       'not recorded, and a Rebuild that stops the BFF, deletes its order projection, replays the outbox and ' +
@@ -303,7 +306,7 @@ export const BROKER_WIDGETS = {
   }),
   deadLetters: {
     type: 'dead-letters',
-    title: 'Dead-letter workbench',
+    title: $localize`Dead-letter workbench`,
     help:
       'Inspects a parked (dead-letter) queue, reading its first messages, and replays or discards them one message ' +
       'at a time. A dry run comes first, and the real run asks for a typed word and writes a record file. Use it to ' +
@@ -315,9 +318,11 @@ export const BROKER_WIDGETS = {
       queue: typeof stored['queue'] === 'string' && stored['queue'] !== '' ? stored['queue'] : null,
     }),
     titleOf: (config) =>
-      typeof config['queue'] === 'string' ? `Dead letters (${config['queue']})` : 'Dead-letter workbench',
-    presets: [{ label: 'Opened from a Queues widget', config: { queue: null } }],
-    fields: [{ key: 'queue', label: 'Queue', kind: 'text' }],
+      typeof config['queue'] === 'string'
+        ? $localize`Dead letters (${config['queue']}:queue:)`
+        : $localize`Dead-letter workbench`,
+    presets: [{ label: $localize`Opened from a Queues widget`, config: { queue: null } }],
+    fields: [{ key: 'queue', label: $localize`Queue`, kind: 'text' }],
     dataServices: ['BrokerFeed'],
   } satisfies WidgetType,
 } as const;
@@ -325,7 +330,7 @@ export const BROKER_WIDGETS = {
 /** The Platform map's widget (§5.2): the table of services, routes and queues, in `MapFeed`; its auto-refresh is opt-in (§4.3). */
 export const MAP: WidgetType = {
   type: 'platform-map',
-  title: 'Platform map',
+  title: $localize`Platform map`,
   help:
     'A table of the platform: each service with its URL, the gateway routes in front of it and its policy, and its ' +
     'queues with what consumes them. Use it to see what talks to what. It shows structure, not live traffic.',
@@ -333,8 +338,8 @@ export const MAP: WidgetType = {
   defaultSize: { cols: 24, rows: 22 },
   minSize: { cols: 8, rows: 5 },
   config: (stored) => ({ autoRefresh: stored['autoRefresh'] === true }),
-  titleOf: () => 'Platform map',
-  presets: [{ label: 'Platform map', config: { autoRefresh: false } }],
+  titleOf: () => $localize`Platform map`,
+  presets: [{ label: $localize`Platform map`, config: { autoRefresh: false } }],
   fields: [AUTO_REFRESH],
   dataServices: ['MapFeed'],
 };
@@ -346,7 +351,7 @@ export const MAP: WidgetType = {
  */
 export const TOPOLOGY: WidgetType = {
   type: 'platform-diagram',
-  title: 'Platform diagram',
+  title: $localize`Platform diagram`,
   help:
     'The platform drawn as a graph of services and queues, coloured by state, with nodes that can be dragged. A ' +
     'click on a service points a Logs widget at it, and a click on a queue points a Queues widget at it or opens ' +
@@ -355,8 +360,8 @@ export const TOPOLOGY: WidgetType = {
   defaultSize: { cols: 24, rows: 26 },
   minSize: { cols: 10, rows: 10 },
   config: (stored) => ({ autoRefresh: stored['autoRefresh'] !== false, positions: positionsOf(stored['positions']) }),
-  titleOf: () => 'Platform diagram',
-  presets: [{ label: 'Platform diagram', config: { autoRefresh: true, positions: {} } }],
+  titleOf: () => $localize`Platform diagram`,
+  presets: [{ label: $localize`Platform diagram`, config: { autoRefresh: true, positions: {} } }],
   fields: [AUTO_REFRESH],
   dataServices: ['MapFeed', 'StackFeed', 'BrokerFeed'],
 };
@@ -364,7 +369,7 @@ export const TOPOLOGY: WidgetType = {
 /** What the platform sent (§5.2): the mail sink's messages, filtered by a correlation id the widget starts with. */
 export const MAIL: WidgetType = {
   type: 'mail',
-  title: 'Mail',
+  title: $localize`Mail`,
   help:
     'The mail Notifications sent, as the local mail sink caught it: the list, each message, and a filter by ' +
     "correlation id. Use it to see an order's mail. It sends nothing.",
@@ -374,17 +379,17 @@ export const MAIL: WidgetType = {
   config: (stored) => ({ correlationId: typeof stored['correlationId'] === 'string' ? stored['correlationId'] : '' }),
   titleOf: (config) =>
     typeof config['correlationId'] === 'string' && config['correlationId'] !== ''
-      ? `Mail (${config['correlationId']})`
-      : 'Mail',
-  presets: [{ label: 'Every message', config: { correlationId: '' } }],
-  fields: [{ key: 'correlationId', label: 'Correlation id', kind: 'text' }],
+      ? $localize`Mail (${config['correlationId']}:id:)`
+      : $localize`Mail`,
+  presets: [{ label: $localize`Every message`, config: { correlationId: '' } }],
+  fields: [{ key: 'correlationId', label: $localize`Correlation id`, kind: 'text' }],
   dataServices: [],
 };
 
 /** An erasure request raised and watched (§5.2); the request is held by `ErasureRun`, the subject being typed is session state. */
 export const ERASURE: WidgetType = plain({
   type: 'erasure',
-  title: 'Erasure',
+  title: $localize`Erasure`,
   help:
     "Raises a privacy erasure request for a subject id and follows each personal-data holder's answer to it. Use it " +
     'to check that every holder erased the subject. Raising a request changes data and has no undo; it does not read ' +
@@ -403,7 +408,7 @@ export const ERASURE: WidgetType = plain({
 export const API_WIDGETS = {
   request: {
     type: 'api-request',
-    title: 'API request',
+    title: $localize`API request`,
     help:
       "Sends a request to the platform through the gateway as a realm user, from each service's OpenAPI operations. " +
       'Pick an operation, an identity and a body, and see the status and the response exactly as the gateway ' +
@@ -418,17 +423,17 @@ export const API_WIDGETS = {
           ? stored['identity']
           : null,
     }),
-    titleOf: () => 'API request',
-    presets: [{ label: 'API request', config: { operation: null, identity: null } }],
+    titleOf: () => $localize`API request`,
+    presets: [{ label: $localize`API request`, config: { operation: null, identity: null } }],
     fields: [
-      { key: 'operation', label: 'Operation id', kind: 'text' },
-      { key: 'identity', label: 'Identity: anonymous, user:<name> or custom:<name>', kind: 'text' },
+      { key: 'operation', label: $localize`Operation id`, kind: 'text' },
+      { key: 'identity', label: $localize`Identity: anonymous, user:<name> or custom:<name>`, kind: 'text' },
     ],
     dataServices: ['ApiHistory'],
   } satisfies WidgetType,
   history: plain({
     type: 'api-history',
-    title: 'API history',
+    title: $localize`API history`,
     help:
       'The requests this tab sent from the API request widget, newest first, which can be restored into an API ' +
       'request widget on the page. It keeps them for the tab only. It sends nothing.',
@@ -446,7 +451,7 @@ export const API_WIDGETS = {
  */
 export const TRACE: WidgetType = {
   type: 'trace',
-  title: 'Trace',
+  title: $localize`:widget title|The widget's name:Trace`,
   help:
     "Follows one request across the services by its correlation id: Tempo's spans, the log lines and the events on " +
     'one timeline. Start from a correlation id from a response, a log line or a mail; it can follow the last Trace ' +
@@ -461,16 +466,23 @@ export const TRACE: WidgetType = {
   }),
   titleOf: (config) =>
     typeof config['correlationId'] === 'string' && config['correlationId'] !== ''
-      ? `Trace (${config['correlationId']})`
-      : 'Trace',
+      ? $localize`Trace (${config['correlationId']}:id:)`
+      : $localize`:widget title|The widget's name:Trace`,
   presets: [
-    { label: 'Trace', config: { correlationId: '', window: '15m', follow: false } },
-    { label: 'Follows the last Trace link', config: { correlationId: '', window: '15m', follow: true } },
+    {
+      label: $localize`:widget title|The widget's name:Trace`,
+      config: { correlationId: '', window: '15m', follow: false },
+    },
+    { label: $localize`Follows the last Trace link`, config: { correlationId: '', window: '15m', follow: true } },
   ],
   fields: [
-    { key: 'correlationId', label: 'Correlation id, traced when the widget appears or this changes', kind: 'text' },
-    { key: 'window', label: 'Window: 15m, 1h, 6h or 24h', kind: 'text' },
-    { key: 'follow', label: 'Follow the last Trace link', kind: 'flag' },
+    {
+      key: 'correlationId',
+      label: $localize`Correlation id, traced when the widget appears or this changes`,
+      kind: 'text',
+    },
+    { key: 'window', label: $localize`Window: 15m, 1h, 6h or 24h`, kind: 'text' },
+    { key: 'follow', label: $localize`Follow the last Trace link`, kind: 'flag' },
   ],
   dataServices: ['TraceHistory', 'TraceFollow'],
 };
@@ -481,7 +493,7 @@ export const TRACE: WidgetType = {
  */
 export const SEQUENCE: WidgetType = {
   type: 'sequence',
-  title: 'Request sequence',
+  title: $localize`Request sequence`,
   help:
     'The same timeline as the Trace widget drawn as a sequence diagram: where one request went, service to service. ' +
     'It is drawn when asked, not polled, and can follow the last Trace link. Use it to see the shape of a ' +
@@ -496,16 +508,20 @@ export const SEQUENCE: WidgetType = {
   }),
   titleOf: (config) =>
     typeof config['correlationId'] === 'string' && config['correlationId'] !== ''
-      ? `Request sequence (${config['correlationId']})`
-      : 'Request sequence',
+      ? $localize`Request sequence (${config['correlationId']}:id:)`
+      : $localize`Request sequence`,
   presets: [
-    { label: 'Request sequence', config: { correlationId: '', window: '15m', follow: false } },
-    { label: 'Follows the last Trace link', config: { correlationId: '', window: '15m', follow: true } },
+    { label: $localize`Request sequence`, config: { correlationId: '', window: '15m', follow: false } },
+    { label: $localize`Follows the last Trace link`, config: { correlationId: '', window: '15m', follow: true } },
   ],
   fields: [
-    { key: 'correlationId', label: 'Correlation id, drawn when the widget appears or this changes', kind: 'text' },
-    { key: 'window', label: 'Window: 15m, 1h, 6h or 24h', kind: 'text' },
-    { key: 'follow', label: 'Follow the last Trace link', kind: 'flag' },
+    {
+      key: 'correlationId',
+      label: $localize`Correlation id, drawn when the widget appears or this changes`,
+      kind: 'text',
+    },
+    { key: 'window', label: $localize`Window: 15m, 1h, 6h or 24h`, kind: 'text' },
+    { key: 'follow', label: $localize`Follow the last Trace link`, kind: 'flag' },
   ],
   dataServices: ['TraceHistory', 'TraceFollow'],
 };
@@ -517,7 +533,7 @@ export const SEQUENCE: WidgetType = {
  */
 export const RUNBOOKS: WidgetType = {
   type: 'runbooks',
-  title: 'Runbooks',
+  title: $localize`Runbooks`,
   help:
     "The backend's runbooks, read from its clone, each with the alerts it covers and, for some, a script that " +
     'causes some of them, with an Undo that restores the stack. Use it during an incident or a game day. A costly ' +
@@ -528,16 +544,17 @@ export const RUNBOOKS: WidgetType = {
   config: (stored) => ({
     runbook: typeof stored['runbook'] === 'string' && stored['runbook'] !== '' ? stored['runbook'] : null,
   }),
-  titleOf: (config) => (typeof config['runbook'] === 'string' ? `Runbooks (${config['runbook']})` : 'Runbooks'),
-  presets: [{ label: 'Runbooks', config: { runbook: null } }],
-  fields: [{ key: 'runbook', label: 'Runbook to open on', kind: 'text' }],
+  titleOf: (config) =>
+    typeof config['runbook'] === 'string' ? $localize`Runbooks (${config['runbook']}:runbook:)` : $localize`Runbooks`,
+  presets: [{ label: $localize`Runbooks`, config: { runbook: null } }],
+  fields: [{ key: 'runbook', label: $localize`Runbook to open on`, kind: 'text' }],
   dataServices: [],
 };
 
 /** What the operator did this session (§5.2): the host's scrubbed transcript, read from `TranscriptFeed`. */
 export const TRANSCRIPT: WidgetType = plain({
   type: 'transcript',
-  title: 'Transcript',
+  title: $localize`Transcript`,
   help:
     'Each command and request the console ran, except polls, as the line that would repeat it: docker compose, npm ' +
     "and a curl for each platform request, with the assistant's requests marked and secrets scrubbed. It is kept in " +
@@ -549,9 +566,9 @@ export const TRANSCRIPT: WidgetType = plain({
 });
 
 /** The Logs page's widget (§5.2), a view of the one follow `LogFollowService` in features/logs runs. */
-export const LOGS: WidgetType = listing('services', 'All services', {
+export const LOGS: WidgetType = listing('services', $localize`All services`, {
   type: 'logs',
-  title: 'Logs',
+  title: $localize`Logs`,
   help:
     "Follows the services' log output live, as docker compose logs prints it, for the services chosen, with a text " +
     'filter and a correlation-id filter. Use it to watch what the platform is doing now. To follow one request ' +
@@ -565,7 +582,7 @@ export const LOGS: WidgetType = listing('services', 'All services', {
 /** Every screen's output pane, as a widget of its own (§5.2): a job by id, or the job its page started last. */
 export const JOB_OUTPUT: WidgetType = {
   type: 'job-output',
-  title: 'Job output',
+  title: $localize`Job output`,
   help:
     'The output of a job the console started, live: by job id, or the job its page started last. Use it to watch a ' +
     'command that is running or read how one ended. It starts nothing.',
@@ -573,16 +590,17 @@ export const JOB_OUTPUT: WidgetType = {
   defaultSize: { cols: 12, rows: 7 },
   minSize: { cols: 4, rows: 3 },
   config: (stored) => ({ jobId: typeof stored['jobId'] === 'string' ? stored['jobId'] : null }),
-  titleOf: (config) => (typeof config['jobId'] === 'string' ? `Job output (${config['jobId']})` : 'Job output'),
-  presets: [{ label: 'The job this page started last', config: { jobId: null } }],
-  fields: [{ key: 'jobId', label: 'Job id', kind: 'text' }],
+  titleOf: (config) =>
+    typeof config['jobId'] === 'string' ? $localize`Job output (${config['jobId']}:job:)` : $localize`Job output`,
+  presets: [{ label: $localize`The job this page started last`, config: { jobId: null } }],
+  fields: [{ key: 'jobId', label: $localize`Job id`, kind: 'text' }],
   dataServices: ['PageJobs'],
 };
 
 /** A note or a diagram (§8.3): Markdown whose mermaid fences are drawn, written in place while editing the layout. */
 export const NOTE: WidgetType = {
   type: 'note',
-  title: 'Note',
+  title: $localize`Note`,
   help:
     'A note or a diagram: Markdown whose mermaid blocks are drawn, written in place while the layout is being ' +
     'edited. Use it for your own reminders and sketches. It reads no platform data.',
@@ -601,13 +619,13 @@ export const NOTE: WidgetType = {
         if (heading) return heading[1];
       }
     }
-    return 'Note';
+    return $localize`Note`;
   },
   presets: [
-    { label: 'Empty note', config: { source: '' } },
-    { label: 'Note with a diagram', config: { source: BLANK_NOTE } },
-    { label: 'Architecture diagram', config: { source: ARCHITECTURE_NOTE } },
-    { label: 'Work order of the tabs', config: { source: TAB_ORDER_NOTE } },
+    { label: $localize`Empty note`, config: { source: '' } },
+    { label: $localize`Note with a diagram`, config: { source: BLANK_NOTE } },
+    { label: $localize`Architecture diagram`, config: { source: ARCHITECTURE_NOTE } },
+    { label: $localize`Work order of the tabs`, config: { source: TAB_ORDER_NOTE } },
   ],
   configurable: false,
   dataServices: [],
@@ -619,7 +637,7 @@ export const NOTE: WidgetType = {
  */
 export const ASSISTANT: WidgetType = plain({
   type: 'assistant',
-  title: 'Assistant',
+  title: $localize`Assistant`,
   help:
     "A view of this tab's one conversation with the assistant, the same as the side panel, so a page can hold it " +
     'beside what it asks about. Ask what a screen or widget is for, or where to find something. With the ' +
