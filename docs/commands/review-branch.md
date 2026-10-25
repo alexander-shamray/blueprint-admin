@@ -220,7 +220,7 @@ apply them after the review.
 
 ## The frontmatter denies, and what stays open
 
-**That is enforced now, and used to be prose alone (#60).** This command
+**That is enforced now, and used to be prose alone (blueprint-backend#60).** This command
 declared "do not fix" while holding `Write` and `Edit` over every path
 `.claude/settings.json` did not deny — a read-only claim resting on prose while
 the grant permits writing everywhere, which for a review command is the worse
@@ -290,7 +290,7 @@ it never sees a `Bash` call at all. Every `Edit(...)` rule in this file is
 therefore defence in depth against a model that reaches for the editing tools,
 not a bound on what this command can write.
 
-**The redirection is closed in the hook (#20).** `guard-git-argv.py`
+**The redirection is closed in the hook (blueprint-frontend#20).** `guard-git-argv.py`
 already parsed redirections in order to strip them, so the targets were in hand
 and what was missing was a rule about them. A redirection that OPENS its target
 is refused when the path names the machinery trees or a toolchain root file;
@@ -304,7 +304,7 @@ redirection is not the only way a command writes — `tee`, `cp`, `sed -i` and a
 interpreter all do, and none is judged. What made the redirection worth closing
 first is that it rides on a command that is already approved.
 
-**The verbs are judged too since #26**, because under a user-level `auto` mode
+**The verbs are judged too since blueprint-frontend#26**, because under a user-level `auto` mode
 an un-granted `cp` is approved as well; the interpreters and the writers not on
 the hook's list are what stands, and `docs/harness-boundaries.md` owns that
 residual.

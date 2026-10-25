@@ -177,7 +177,7 @@ distinguishes — including the two that used to need a second call and the one
 that used to need a failed one.
 
 **"The newest row" was this paragraph's claim before it was the helper's
-behaviour, and the gap was #24.** `--head` matches a branch NAME, so the
+behaviour, and the gap was blueprint-frontend#24.** `--head` matches a branch NAME, so the
 listing held every pull request that had ever used it, in whatever order the
 API gave — and a branch name reused after a merge leaves an older `MERGED` row
 beside a newer `OPEN` one. This step reads `MERGED` as finished and tears the
@@ -433,7 +433,7 @@ and not at its neighbour looks like.
    is a contradiction rather than a nicety. `pr-for-branch.sh` answers with a
    row or with `[]`, measured both ways on this repository — **one row at
    most, the newest in this repository**, which is what makes reading "a row
-   with state MERGED" safe on a branch name that has been used twice (#24).
+   with state MERGED" safe on a branch name that has been used twice (blueprint-frontend#24).
 
    **It is not filtered to merged, and the read above must do that itself.**
    The call it replaced was `gh pr list --state merged --head <branch>`, where
@@ -709,7 +709,7 @@ and not at its neighbour looks like.
    > which is stronger than checking one a caller supplied.
    >
    > **The three that were owed exist now, and the raw grants are withdrawn
-   > (#16).** `gh-pr-merge.sh`, `gh-pr-create.sh` and `git-worktree-remove.sh`
+   > (blueprint-frontend#16).** `gh-pr-merge.sh`, `gh-pr-create.sh` and `git-worktree-remove.sh`
    > each fix their repository and their method, and the merge helper takes
    > `--match-head-commit` as a required ARGUMENT rather than trusting the
    > paragraph below to supply it — this file calls that flag the only guard in
@@ -1218,7 +1218,7 @@ request into several. The bar for `medium` and above is unchanged.
    ```
 
    **Never `--admin`, and the helper is why that is now a fact rather than an
-   instruction (#16).** The old grant admitted it — for the reason step 0's
+   instruction (blueprint-frontend#16).** The old grant admitted it — for the reason step 0's
    callout argues at length — and it is the one flag that turns the check gate
    above into a formality: a PR merged past failing checks by a chain whose
    report says the checks gated it. `gh-pr-merge.sh` spells its own flags and

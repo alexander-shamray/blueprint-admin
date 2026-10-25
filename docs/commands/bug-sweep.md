@@ -504,7 +504,7 @@ or high.** Three gates, and each drops candidates the round must not file:
   prior-round caveat under *Where it stops* is a different set — issues still
   **open** are a live-defect signal, not the de-duplication test.)
 
-**Who wrote the suppressing issue decides whether it suppresses (#57).** This
+**Who wrote the suppressing issue decides whether it suppresses (blueprint-backend#57).** This
 repository is public, so **anyone with a GitHub account can open an issue**,
 and a gate that treats *any* open issue as tracked is a gate a stranger can
 close a finding through — file "{topic} is being tracked" against the area a
@@ -514,7 +514,7 @@ round clean. That is worse than a missed filing, because a clean round is what
 convergence.
 
 So enumerate the candidates here, and put the suppression **decision** behind a
-helper rather than taking it in passing (#150):
+helper rather than taking it in passing (blueprint-backend#150):
 
 ```bash
 bash .claude/scripts/gh-issue-list.sh
@@ -529,7 +529,7 @@ issue number and nothing else, and prints which condition matched, so a
 suppression is auditable rather than asserted.
 
 **`author` is deliberately absent from that field set, and the absence is the
-control.** This rule was prose in two files until #150 — a rule a reader
+control.** This rule was prose in two files until blueprint-backend#150 — a rule a reader
 follows, not one anything applies — and leaving the field in the listing leaves
 the decision takeable here, which is the state the helper exists to end. The
 helper prints the near-miss login on its exit-1 path, so the round summary can
@@ -574,9 +574,9 @@ nobody wrote down.
 Its field set is fixed at number, title, state and body, and the field it
 withholds is `author` — because dropping `author` from the listing was only
 half a control while an unrestricted `Bash(gh issue view:*)` sat beside it,
-returning the same field to the same session one invocation over. That is #56
+returning the same field to the same session one invocation over. That is blueprint-backend#56
 one command along: a helper that fixes its field set does not bind a caller who
-still holds the raw grant and can choose fields. Raised in review against #150's
+still holds the raw grant and can choose fields. Raised in review against blueprint-backend#150's
 first version. Authorship is read by `gh-issue-suppresses.sh`, in code, with
 the answer reduced to an exit status.
 
@@ -733,7 +733,7 @@ Each round is the review done once, end to end:
    the failure scenario as the fan-out returned them — under the verdict
    contract in `.claude/agents/bug-auditor.md`, and take its verdict record,
    which carries the reachability evidence too. **This step does not open
-   `$work` itself, and that is the change (#75 item 5).** It used to,
+   `$work` itself, and that is the change (blueprint-backend#75 item 5).** It used to,
    deliberately, so that an unverified agent claim never became an issue; the
    property that bought is kept — two independent read-only readings, neither
    able to mutate, must agree — and what it cost is given up: the audited
@@ -770,7 +770,7 @@ Each round is the review done once, end to end:
    refuses a stdin whose second line is not blank, and ensures both
    labels through `gh-label-ensure.sh` itself.
 
-   **The route is not an argument, and #19 is why.** It used to be the third
+   **The route is not an argument, and blueprint-frontend#19 is why.** It used to be the third
    one, and this command held a prefix grant — so the model chose it, including
    the sentence asserting that a second read-only auditor verified the finding
    at filing. That is the claim a triager reads to decide whether anybody
@@ -797,7 +797,7 @@ Each round is the review done once, end to end:
    shape, and this one exits 2 on it — so a confirmed finding following
    that leftover instruction is not filed. The line above is the sentence
    that route requires; the helper refuses it under `hand`, and refuses
-   `hand`'s sentence here. That is #184: the fixed last line is still the
+   `hand`'s sentence here. That is blueprint-backend#184: the fixed last line is still the
    detector for a heredoc that closed early, but it is no longer a
    provenance claim every issue makes whether or not it is true of them.
 
@@ -842,7 +842,7 @@ Each round is the review done once, end to end:
 ### Residuals
 
 **Residual — the parent's context still receives the verdict, and a verdict is
-text.** Step 2 no longer opens `$work` in the invocation that files (#75 item
+text.** Step 2 no longer opens `$work` in the invocation that files (blueprint-backend#75 item
 5), and both directions that paragraph used to name are taken: the fan-out
 contains the auditor, the verify dispatch contains the verifier, the parent
 composes from a record with declared fields, and `gh-sweep-issue-create.sh` leaves
@@ -870,7 +870,7 @@ Until that decision is taken, the path check above is the mitigation and this is
 the residual, named rather than hidden.
 
 **One half of it is closed, and it was the half a path rule could never have
-reached (#18).** "Root every path under `$work`" is a rule about the SPELLING
+reached (blueprint-frontend#18).** "Root every path under `$work`" is a rule about the SPELLING
 of a path, and a git worktree preserves tracked symbolic links — so
 `$work/leak -> ~/.ssh/id_rsa` is an absolute path under `$work` whose target is
 not, and `Read`, `Grep` and `Glob` all follow it. No discipline about spellings
@@ -970,7 +970,7 @@ verification, sat below the bar, or was already tracked. The loop stops on a
 clean round or at the seventh, whichever comes first.
 
 **"Already tracked" means tracked by the gate's test, not merely matched by an
-open issue (#57).** A candidate matched only by an issue that is not the
+open issue (blueprint-backend#57).** A candidate matched only by an issue that is not the
 owner's is **filed**, so such a round is unclean for the ordinary
 reason — it filed something — and needs no special case here. That is the point
 of deciding it at the gate: a stranger's issue can neither suppress the filing
@@ -1034,7 +1034,7 @@ allowed command, or an interpreter reached through one, alters source that
 is silently available too, which is the premise stated at the top of this
 section. So the denies raise the cost and do not close the class.
 
-**The redirection half of that is closed since #20**, and the rest of the
+**The redirection half of that is closed since blueprint-frontend#20**, and the rest of the
 sentence stands: `guard-git-argv.py` now judges a redirection's target and
 refuses one naming the machinery or the toolchain, while an interpreter reached
 through a granted command is still unjudged.
@@ -1053,7 +1053,7 @@ see `/security-sweep`'s copy for the whole argument, which is the same one
 twice. It is not in `disallowed-tools`, omitting it withholds nothing, and
 `.claude/settings.json` **allows** `Bash(git push origin:*)` globally, so a
 push of the current branch does not even prompt under the allow rules alone
-(a user-level `auto` mode has refused it anyway — #33, owned by
+(a user-level `auto` mode has refused it anyway — blueprint-frontend#33, owned by
 `docs/harness-boundaries.md`, and not leaned on here). Naming it in
 `disallowed-tools` is the fix, and it is taken here because the `Bash(...)`
 form in that key was measured first — a throwaway command in a detached
