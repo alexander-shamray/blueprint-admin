@@ -39,10 +39,11 @@ BASH = shutil.which("bash")
 
 # How long the launcher may let the hook run in these tests. Its own bound is 10 s,
 # which a loaded Windows runner overruns while Python starts, and the launcher then
-# prints its "did not run" note instead of the verdict (#471). Under the 60 s each
-# `subprocess.run` below allows, so a hung hook still ends as that note rather than
-# as a kill by the test that leaves an orphaned child holding a pipe.
-LOAD_BOUND = "50"
+# prints its "did not run" note instead of the verdict (#471). Well under the 60 s each
+# `subprocess.run` below allows, so bash start-up on a loaded runner cannot eat the
+# margin and a hung hook is ended by the launcher's bound, which one case below keeps
+# under test at its smallest.
+LOAD_BOUND = "40"
 
 
 def setUpModule():
@@ -288,7 +289,7 @@ class TheRouteFollowsTheServer(unittest.TestCase):
 class TheLauncherFailsOpen(unittest.TestCase):
 
     def launch(self, *args, project=ROOT):
-        env = dict(os.environ, CLAUDE_PROJECT_DIR=str(project))
+        env = dict(os.environ, CLAUDE_PROJECT_DIR=str(project), HINT_BOUND_SECONDS=LOAD_BOUND)
         done = subprocess.run([BASH, str(LAUNCHER), *args], input=b"{}",
                               capture_output=True, env=env, timeout=60)
         return done.stdout.decode(), done.returncode
@@ -301,13 +302,32 @@ class TheLauncherFailsOpen(unittest.TestCase):
                 self.assertEqual(0, status)
                 self.assertIn("did not run", json.loads(out)["hookSpecificOutput"]["additionalContext"])
 
+    def test_its_own_bound_still_ends_a_slow_hook_with_a_note(self):
+        """The other cases raise the bound for a loaded runner; this one tries the bound itself at its
+        smallest, so a launcher that stopped applying it, or stopped saying so, fails here."""
+        has_timeout = subprocess.run([BASH, "-c", "command -v timeout"],
+                                     capture_output=True, timeout=60).returncode == 0
+        env = dict(os.environ, CLAUDE_PROJECT_DIR=str(ROOT), HINT_BOUND_SECONDS="0.01")
+        done = subprocess.run([BASH, str(LAUNCHER), "PreToolUse", "index-search-hint.py"],
+                              input=b"{}", capture_output=True, env=env, timeout=60)
+        self.assertEqual(0, done.returncode)
+        if has_timeout:
+            context = json.loads(done.stdout)["hookSpecificOutput"]["additionalContext"]
+            self.assertIn("did not run", context)
+            self.assertIn("exit 124 after at most 0.01 s", context)
+        else:
+            # No `timeout` on this system (macOS): the launcher has no bound to apply, so it never says one fired.
+            self.assertNotIn("exit 124", done.stdout.decode())
+
     def test_an_interpreter_that_cannot_find_the_hook_says_so_and_exits_zero(self):
         with tempfile.TemporaryDirectory() as empty:
             out, status = self.launch("PreToolUse", "index-search-hint.py", project=empty)
         self.assertEqual(0, status)
         context = json.loads(out)["hookSpecificOutput"]["additionalContext"]
         self.assertIn("did not run", context)
-        self.assertIn("exit", context)
+        # A missing hook exits non-zero by itself; a load timeout would say 124.
+        self.assertRegex(context, r"exit [1-9][0-9]* after")
+        self.assertNotIn("exit 124", context)
 
 
 class TheHintsAgree(unittest.TestCase):
