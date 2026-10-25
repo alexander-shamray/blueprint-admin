@@ -820,7 +820,7 @@ Each round is the review done once, end to end:
    shipped four times.** MSYS argument conversion rewrites an argument that
    looks like an absolute POSIX path before the native `gh.exe` sees it, so
    `--title "/health/ready returns 200 …"` files as
-   `"C:/Program Files/Git/health/ready returns 200 …"`. Issues #55, #56 and #68
+   `"C:/Program Files/Git/health/ready returns 200 …"`. Issues blueprint-backend#55, blueprint-backend#56 and blueprint-backend#68
    carried it for two weeks and nobody reading the tracker could tell what the
    subject was. The body is safe — it arrives on stdin, which is bytes rather
    than an argument — so **only `--title` is exposed** inside the helper, and
