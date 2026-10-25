@@ -119,7 +119,7 @@ public static partial class FakeAssistantScripts
     public static string NotRead(string why, bool russian) =>
         russian ? $"Не удалось прочитать состояние стека: {why}" : $"The stack could not be read: {why}";
 
-    /// <summary>Each screen's path in <c>SCREENS</c> (the SPA's <c>screens.ts</c>) and the words that name it.</summary>
+    /// <summary>Each screen's path in <c>BUILT_IN_PAGES</c> (the SPA's <c>built-in-pages.ts</c>) and the words that name it.</summary>
     public static readonly IReadOnlyList<(string Screen, string[] Words)> Screens =
     [
         ("stack", ["stack", "стек", "compose"]),
