@@ -42,9 +42,15 @@ public sealed class StatusTests
     {
         // The factory builds `new AnthropicClient()` and leaves the credential to the SDK, so with no key and no profile the
         // probe's first sight of the problem must not be an exception type of the SDK's own that falls through to
-        // "unreachable". It is not: SDK 12.x sends the request without an `x-api-key`, and the API's 401 is the refusal.
+        // "unreachable". A local throw would show here as `unreachable` with no request recorded; instead the request is
+        // sent and the API's 401 is the refusal. (By hand, on SDK 12.54.1, that request carried no `x-api-key`; the test does
+        // not assert it, because a stored profile on a developer's machine adds a credential and the answer is the same.)
+        // The environment is process-wide: this is safe only while every other test in the assembly sets its `ApiKey`
+        // explicitly, as `FakeHttp.Client` does.
         string? key = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
+        string? token = Environment.GetEnvironmentVariable("ANTHROPIC_AUTH_TOKEN");
         Environment.SetEnvironmentVariable("ANTHROPIC_API_KEY", null);
+        Environment.SetEnvironmentVariable("ANTHROPIC_AUTH_TOKEN", null);
 
         try
         {
@@ -61,6 +67,7 @@ public sealed class StatusTests
         finally
         {
             Environment.SetEnvironmentVariable("ANTHROPIC_API_KEY", key);
+            Environment.SetEnvironmentVariable("ANTHROPIC_AUTH_TOKEN", token);
         }
     }
 
