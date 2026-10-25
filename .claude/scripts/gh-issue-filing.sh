@@ -61,7 +61,7 @@
 # takes. Both sweeps deny raw `gh issue create` by name, so for them this is
 # the only route, and an issue filed by hand out of a review triage or a
 # measurement taken mid-PR was made to claim a provenance it did not have the
-# moment it came through here. Measured: #183 was filed that way and carried
+# moment it came through here. Measured: blueprint-backend#183 was filed that way and carried
 # the sentence until it was edited afterwards.
 #
 # THE HELPER IS THE SWEEPS' ONLY ROUTE, NOT THE ONLY ROUTE THERE IS, and the

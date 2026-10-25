@@ -793,7 +793,7 @@ class IssueHelperHasNoFreeParameter(unittest.TestCase):
         # The helper required a sweep's provenance from every body it
         # accepted, hand filings through it included — so an issue filed by
         # hand out of a review triage was made to claim that a sweep filed it
-        # and that a second read-only auditor confirmed it. #183 carried that
+        # and that a second read-only auditor confirmed it. blueprint-backend#183 carried that
         # claim until it was edited afterwards.
         #
         # It is the sweeps' only route rather than every issue's: nothing
