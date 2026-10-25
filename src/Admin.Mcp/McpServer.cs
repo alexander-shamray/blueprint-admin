@@ -97,6 +97,11 @@ public sealed class McpServer(IAdminHost host)
         {
             return Failure(id, InternalError, e.Message);
         }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            // One bad exchange must not end the agent's server.
+            return Failure(id, InternalError, $"{name} failed: {e.Message}");
+        }
     }
 
     private static JsonObject Initialize(JsonObject parameters)
@@ -152,10 +157,10 @@ public sealed class McpServer(IAdminHost host)
                 ? Success(id, Content(result.Content, !result.Ok))
                 : Failure(id, InvalidParams, $"There is no tool named {name}.");
         }
-        catch (HostUnavailableException e)
+        catch (Exception e) when (e is not OperationCanceledException)
         {
             // The agent reads this one: a tool that could not run is a result, not a broken protocol.
-            return Success(id, Content(e.Message, isError: true));
+            return Success(id, Content(e is HostUnavailableException ? e.Message : $"{name} failed: {e.Message}", isError: true));
         }
     }
 

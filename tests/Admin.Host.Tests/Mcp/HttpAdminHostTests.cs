@@ -23,6 +23,26 @@ public sealed class HttpAdminHostTests
         error.Message.ShouldContain("npm run build");
     }
 
+    [Fact]
+    public async Task A_200_that_is_not_the_JSON_expected_is_an_unavailable_host_not_a_crash()
+    {
+        await Should.ThrowAsync<HostUnavailableException>(() => Host(_ => Html()).ListToolsAsync(Ct));
+        await Should.ThrowAsync<HostUnavailableException>(() => Host(_ => Html()).CallToolAsync("stack_status", [], Ct));
+    }
+
+    [Fact]
+    public async Task The_clients_own_timeout_is_an_unavailable_host_while_the_callers_cancellation_still_cancels()
+    {
+        HttpAdminHost slow = Host(_ => throw new TaskCanceledException("timed out"));
+
+        HostUnavailableException error = await Should.ThrowAsync<HostUnavailableException>(() => slow.ListToolsAsync(Ct));
+        error.Message.ShouldContain("did not answer in time");
+
+        using CancellationTokenSource cancelled = new();
+        await cancelled.CancelAsync();
+        await Should.ThrowAsync<TaskCanceledException>(() => slow.ListToolsAsync(cancelled.Token));
+    }
+
     private sealed class Handler(Func<HttpRequestMessage, Task<HttpResponseMessage>> answer) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => answer(request);
