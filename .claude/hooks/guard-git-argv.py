@@ -4827,7 +4827,7 @@ def _helper_reads_stdin_as_data(command, start, words):
     issue helpers as its script file — so its stdin is that helper's data.
 
     **A shell handed a script FILE reads its stdin as data, and the stdin pass
-    refused every hand-filed issue that quoted code (#33).** `bash
+    refused every hand-filed issue that quoted code (blueprint-frontend#33).** `bash
     .claude/scripts/gh-issue-create.sh bug medium <<'DELIM'` puts the title and
     body on the helper's stdin; the backticks in the body were read as a script
     building itself by substitution.
