@@ -44,6 +44,7 @@ src/Admin.Assistant/       the AI assistant's provider-neutral core (no admin ty
 src/Admin.Assistant.Anthropic/  the one project that carries the Anthropic SDK
 src/Admin.Host/            .NET 10 minimal API: Compose, npm as children, HTTP
                            proxy, SSE. Composition root: Program.cs
+src/Admin.Mcp/             the MCP route: stdio to an agent, HTTP to the host's /api
 src/Admin.Web/             Angular 22 standalone SPA, built into Host/wwwroot
 tests/Admin.Assistant.Tests/  xunit, the core
 tests/Admin.Assistant.Anthropic.Tests/  xunit, the adapter against recorded streams
@@ -78,6 +79,7 @@ tools/token-usage/         Transcript report for the token plan
 | Where the provider's credential comes from | the SDK's own resolution, built in `AnthropicProviderFactory` (`src/Admin.Host/Assistant/`); no key holds one |
 | What each screen is for, as the assistant explains it | `help` in `BUILT_IN_PAGES` (`src/Admin.Web/src/app/workspace/built-in-pages.ts`) |
 | Which console reads the assistant may call, and the endpoint each mirrors | `AdminReadTools` in `src/Admin.Host/Assistant/AdminReadTools.cs` |
+| The MCP route's tool endpoints, and what it speaks to an agent | `AssistantEndpoints` (`/api/assistant/tools`) and `McpServer` in `src/Admin.Mcp/`; the catalogue it serves is `src/Admin.Web/public/assistant-catalogue.json`, held to `catalogue()` by its spec |
 | The fake assistant's answers | `FakeAssistantScripts` in `src/Admin.Host/Fakes/` |
 | Token figures | `docs/token-usage.md` |
 

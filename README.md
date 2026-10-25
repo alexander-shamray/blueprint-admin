@@ -248,6 +248,17 @@ in `src/Admin.Host/Assistant/AssistantOptions.cs` binds the keys, and
 The credential is the SDK's own: `ANTHROPIC_API_KEY`, or the profile that
 `ant auth login` stores. The console reads neither and keeps neither.
 
+An external agent (Claude Code, Claude Desktop) can ask the same read-only
+tools over the Model Context Protocol, with the assistant on. Build the SPA
+(`npm run build` in `src/Admin.Web`) so the catalogue resource exists, start
+the host, and register the stdio process with the host's address, for example
+`claude mcp add blueprint-admin -- dotnet run --project src/Admin.Mcp -- --host http://127.0.0.1:<Admin:Port>`.
+`--host` must be a loopback `http` URL: the process opens no listener and talks
+to nothing else. The agent lists the server tools, including the platform's
+own reads, and reads `blueprint-admin://catalogue`; it is offered no client
+tool and no way to change the platform. `McpServer` in `src/Admin.Mcp/` owns
+what it speaks.
+
 ## Known limits
 
 - A game-day cause stays until Undo is pressed, and a host that is stopped while
