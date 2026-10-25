@@ -51,6 +51,9 @@ export class TraceWidget {
 
   readonly config = input<Record<string, unknown>>({});
 
+  /** A timeline entry's link name, with where the entry came from. */
+  exploreLabel = (source: string): string => $localize`Open this ${source}:source: entry in Grafana Explore`;
+
   readonly windows = WINDOWS;
   readonly view = signal<TraceView | null>(null);
   /** What moved since this session's previous fetch of the id on screen; null on its first fetch. */

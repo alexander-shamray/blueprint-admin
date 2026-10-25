@@ -123,7 +123,7 @@
         <label class="param"
           >{{ p.name }}
           <input
-            [attr.aria-label]="'Path ' + p.name"
+            [attr.aria-label]="pathLabel(p.name)"
             [ngModel]="pathValues()[p.name] ?? ''"
             (ngModelChange)="setPathValue(p.name, $event)"
         /></label>
@@ -132,7 +132,7 @@
         <label class="param"
           >?{{ q.name }}
           <input
-            [attr.aria-label]="'Query ' + q.name"
+            [attr.aria-label]="queryLabel(q.name)"
             [ngModel]="queryValues()[q.name] ?? ''"
             (ngModelChange)="setQueryValue(q.name, $event)"
         /></label>
@@ -188,7 +188,7 @@
               <button
                 class="trace-call"
                 type="button"
-                [attr.aria-label]="'Trace correlation id ' + r.correlationId"
+                [attr.aria-label]="traceLabel(r.correlationId)"
                 (click)="traceThisCall(r.correlationId)"
                 i18n
                 >Trace this call</button
@@ -241,7 +241,7 @@
                 <button
                   class="trace-call"
                   type="button"
-                  [attr.aria-label]="'Trace correlation id ' + r.correlationId"
+                  [attr.aria-label]="traceLabel(r.correlationId)"
                   (click)="traceThisCall(r.correlationId)"
                   i18n
                   >Trace this call</button

@@ -21,8 +21,20 @@
 }
 
 <section class="actions" i18n-aria-label aria-label="Stack controls">
-  <button class="up" [disabled]="run.running()" (click)="up()">{{ buttonLabel('Up') }}</button>
-  <button class="down" [disabled]="run.running()" (click)="down()">{{ buttonLabel('Down') }}</button>
+  <button class="up" [disabled]="run.running()" (click)="up()">
+    @if (elapsedOf('Up'); as t) {
+      <ng-container i18n>Up… {{ t }}</ng-container>
+    } @else {
+      <ng-container i18n>Up</ng-container>
+    }
+  </button>
+  <button class="down" [disabled]="run.running()" (click)="down()">
+    @if (elapsedOf('Down'); as t) {
+      <ng-container i18n>Down… {{ t }}</ng-container>
+    } @else {
+      <ng-container i18n>Down</ng-container>
+    }
+  </button>
   <span class="wipe-box">
     <input
       i18n-aria-label
@@ -32,17 +44,26 @@
       [ngModel]="confirmText()"
       (ngModelChange)="confirmText.set($event)"
     />
-    <button class="wipe" [disabled]="!canWipe() || run.running()" (click)="wipe()">{{
-      buttonLabel('Down and wipe')
-    }}</button>
+    <button class="wipe" [disabled]="!canWipe() || run.running()" (click)="wipe()">
+      @if (elapsedOf('Down and wipe'); as t) {
+        <ng-container i18n>Down and wipe… {{ t }}</ng-container>
+      } @else {
+        <ng-container i18n>Down and wipe</ng-container>
+      }
+    </button>
     <button
       class="reset"
       [disabled]="!canWipe() || run.running()"
       (click)="reset()"
       i18n-title
       title="down -v, up, then wait until every platform surface answers; the reference client is not waited for"
-      >{{ buttonLabel('Reset') }}</button
     >
+      @if (elapsedOf('Reset'); as t) {
+        <ng-container i18n>Reset… {{ t }}</ng-container>
+      } @else {
+        <ng-container i18n>Reset</ng-container>
+      }
+    </button>
   </span>
   @if (outcome(); as o) {
     <span class="job-outcome" [class.ok]="o.ok" [class.failed]="!o.ok">{{ o.text }}</span>

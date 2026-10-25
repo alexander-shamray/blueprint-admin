@@ -68,7 +68,7 @@ import { BrokerFeed, filterOf } from '../broker-feed';
                     <button
                       class="open-dead-letters"
                       (click)="feed.requestOpen(queue.name)"
-                      [attr.aria-label]="'Open the messages on ' + queue.name"
+                      [attr.aria-label]="openLabel(queue.name)"
                       i18n
                       >Open</button
                     >
@@ -92,6 +92,9 @@ import { BrokerFeed, filterOf } from '../broker-feed';
 export class QueuesWidget {
   readonly feed = inject(BrokerFeed);
   readonly config = input<Record<string, unknown>>({});
+
+  /** The Open button's accessible name, with its queue. */
+  openLabel = (queue: string): string => $localize`Open the messages on ${queue}:queue:`;
 
   readonly autoRefresh = computed(() => this.config()['autoRefresh'] === true);
 

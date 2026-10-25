@@ -50,12 +50,10 @@ export class StackControlsWidget {
     this.feed.stack.attach();
   }
 
-  /** The running job's label for its own button, `Up… 0:42`; the other buttons keep theirs. */
-  buttonLabel(label: string): string {
+  /** How long the running job has gone, for its own button's `Up… 0:42`; null on the other buttons, which keep theirs. */
+  elapsedOf(label: string): string | null {
     const job = this.run.job();
-    return job && job.exitCode === null && job.label === label
-      ? `${label}… ${clock(this.now() - job.startedAt)}`
-      : label;
+    return job && job.exitCode === null && job.label === label ? clock(this.now() - job.startedAt) : null;
   }
 
   /** `Up finished: exit 0 in 1:05`, shown beside the buttons for the Compose job that ended. */

@@ -46,6 +46,9 @@ export class RunbooksWidget {
   readonly loading = signal(false);
 
   readonly config = input<Record<string, unknown>>({});
+
+  /** The confirmation box's accessible name, with the word to type in it. */
+  confirmLabel = (word: string | null): string => $localize`Type ${word}:word: to confirm the cause`;
   private readonly configuredRunbook = computed(() => {
     const runbook = this.config()['runbook'];
     return typeof runbook === 'string' && runbook !== '' ? runbook : null;

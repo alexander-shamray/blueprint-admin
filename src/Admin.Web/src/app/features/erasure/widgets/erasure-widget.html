@@ -69,7 +69,7 @@
       @if (r.closedAt) {
         <ng-container i18n>· closed {{ r.closedAt }}</ng-container>
       }
-      &ngsp;<ng-container i18n>· reissued {{ r.reissues }} {{ r.reissues === 1 ? 'time' : 'times' }}</ng-container
+      &ngsp;<ng-container i18n>· reissued {r.reissues, plural, =1 {1 time} other {{{ r.reissues }} times}}</ng-container
       >&ngsp;
       @if (run.raisedUnder(); as c) {
         · <a [appTraceLink]="c" i18n>trace the raise</a>

@@ -94,8 +94,9 @@
             @if (phase(); as p) {
               @if (needsTyping()) {
                 <input
-                  [attr.aria-label]="'Type ' + p.confirmWith + ' to confirm the cause'"
-                  [placeholder]="'type: ' + p.confirmWith"
+                  [attr.aria-label]="confirmLabel(p.confirmWith)"
+                  i18n-placeholder
+                  placeholder="type: {{ p.confirmWith }}"
                   [ngModel]="confirmText()"
                   (ngModelChange)="confirmText.set($event)"
                 />
@@ -132,10 +133,15 @@
               >
             }
             @if (p.confirmation !== 'none') {
-              <p class="note" i18n
-                >This cause costs the stack ({{ p.impact }}):
-                {{ p.confirmation === 'confirm' ? 'press Cause twice' : 'type ' + p.confirmWith + ' to run it' }}.</p
-              >
+              <p class="note">
+                <ng-container i18n>This cause costs the stack ({{ p.impact }}):</ng-container>&ngsp;
+                @if (p.confirmation === 'confirm') {
+                  <ng-container i18n>press Cause twice</ng-container>
+                } @else {
+                  <ng-container i18n>type {{ p.confirmWith }} to run it</ng-container>
+                }
+                .
+              </p>
             }
           }
           <p class="note" i18n

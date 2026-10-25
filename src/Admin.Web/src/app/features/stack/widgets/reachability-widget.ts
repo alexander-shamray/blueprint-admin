@@ -10,7 +10,12 @@ import { StackFeed } from '../stack-feed';
       <p class="reachability">
         @for (r of surfaces(); track r.name) {
           <span [class.up]="r.up" [class.down]="!r.up" [title]="r.url"
-            >{{ r.name }} {{ r.up ? 'up' : 'down' }}
+            >{{ r.name }}&ngsp;
+            @if (r.up) {
+              <ng-container i18n>up</ng-container>
+            } @else {
+              <ng-container i18n>down</ng-container>
+            }
             @if (r.status !== null) {
               {{ r.status }}
             }

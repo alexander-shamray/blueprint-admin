@@ -29,7 +29,11 @@
   </label>
   <button class="run" type="button" [disabled]="!runner.canRun()" (click)="runner.run()" i18n>Run</button>
   <button class="cancel" type="button" [disabled]="!runner.running() || runner.cancelling()" (click)="runner.cancel()">
-    {{ runner.cancelling() ? 'Cancelling…' : 'Cancel' }}
+    @if (runner.cancelling()) {
+      <ng-container i18n>Cancelling…</ng-container>
+    } @else {
+      <ng-container i18n>Cancel</ng-container>
+    }
   </button>
   <button class="reload" type="button" [disabled]="runner.running()" (click)="runner.reload()" i18n>Reload</button>
   @if (runner.runId(); as id) {
@@ -41,7 +45,11 @@
     [disabled]="!runner.finished() || runner.running() || runner.exporting()"
     (click)="runner.export()"
   >
-    {{ runner.exporting() ? 'Exporting…' : 'Export Markdown' }}
+    @if (runner.exporting()) {
+      <ng-container i18n>Exporting…</ng-container>
+    } @else {
+      <ng-container i18n>Export Markdown</ng-container>
+    }
   </button>
 </section>
 
