@@ -781,8 +781,8 @@ later phase move one screen at a time without a page ever missing.
     tests and are kept as `<feature>-widgets.spec.ts`, driven through a
     test-local host laying out the same widgets; the five that only checked
     a screen rendered its widget went with it. `ScreenPath` and `isScreenPath`
-    moved to `screens.ts`, and `BUILT_IN_LAYOUTS` is typed by every screen, so
-    a screen added without a layout does not compile;
+    moved to `screens.ts`, and each `BUILT_IN_PAGES` entry carries its layout,
+    so a screen added without one does not compile;
   - the migration is the SPA's `retireLegacy` in `built-in-pages.ts`, applied
     wherever a document from the host is adopted (a read, an import, a
     conflict settled for the saved one), and saved at once. The shell says
