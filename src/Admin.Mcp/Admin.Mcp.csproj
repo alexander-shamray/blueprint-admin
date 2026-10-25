@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The MCP route of AI assistant design §12: a stdio process an external agent launches, a client of the host's /api
+       like the SPA. It holds no package and no admin type: the host's answers are passed through as JSON. Settings come
+       from Directory.Build.props. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Admin.Host.Tests" />
+  </ItemGroup>
+
+</Project>

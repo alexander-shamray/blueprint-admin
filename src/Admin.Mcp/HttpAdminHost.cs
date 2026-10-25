@@ -1,0 +1,97 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+
+namespace Admin.Mcp;
+
+/// <summary>
+/// The console host over HTTP on loopback. The shapes are the host's, owned by <c>AssistantEndpoints</c> in
+/// <c>src/Admin.Host/Assistant/</c> and the SPA build's catalogue asset: the tools come back as the host describes them
+/// and a call as <c>{ ok, content }</c>.
+/// </summary>
+public sealed class HttpAdminHost(HttpClient http) : IAdminHost
+{
+    /// <summary>Where the SPA build leaves the catalogue, under the host's <c>wwwroot</c>.</summary>
+    public const string CataloguePath = "assistant-catalogue.json";
+
+    private static readonly JsonSerializerOptions Web = new(JsonSerializerOptions.Web);
+
+    private const string AssistantOff = "The console's assistant is off, so it offers no tools: start the host with Admin:Assistant:Provider set to 'fake' or 'anthropic'.";
+
+    public async Task<JsonArray> ListToolsAsync(CancellationToken cancellationToken)
+    {
+        using HttpResponseMessage response = await SendAsync(() => http.GetAsync("api/assistant/tools", cancellationToken));
+
+        return response.StatusCode == HttpStatusCode.NotFound
+            ? throw new HostUnavailableException(AssistantOff)
+            : await Json<JsonArray>(response, cancellationToken) ?? throw new HostUnavailableException("The host's tool list was not a JSON array.");
+    }
+
+    public async Task<ToolResult?> CallToolAsync(string name, JsonObject arguments, CancellationToken cancellationToken)
+    {
+        using HttpResponseMessage response = await SendAsync(() => http.PostAsJsonAsync($"api/assistant/tools/{Uri.EscapeDataString(name)}", arguments, Web, cancellationToken));
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            // The host's own answer for an unknown tool is a problem document; anything else at that route is the off switch's 404.
+            JsonObject? problem = await ProblemAsync(response, cancellationToken);
+
+            return problem?["title"]?.GetValue<string>() == "No such tool" ? null : throw new HostUnavailableException(AssistantOff);
+        }
+
+        JsonObject? body = await Json<JsonObject>(response, cancellationToken);
+
+        return body?["ok"] is JsonValue ok && body["content"] is JsonValue content
+            ? new ToolResult(ok.GetValue<bool>(), content.GetValue<string>())
+            : throw new HostUnavailableException("The host's tool result had no ok and content.");
+    }
+
+    public async Task<string> ReadCatalogueAsync(CancellationToken cancellationToken)
+    {
+        using HttpResponseMessage response = await SendAsync(() => http.GetAsync(CataloguePath, cancellationToken));
+        string text = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        // Without a built SPA the host answers any other path with its index page, so a status is not enough.
+        return response.IsSuccessStatusCode && JsonNode.Parse(text) is JsonArray
+            ? text
+            : throw new HostUnavailableException($"The host serves no {CataloguePath}: build the SPA into the host's wwwroot (npm run build in src/Admin.Web).");
+    }
+
+    private static async Task<HttpResponseMessage> SendAsync(Func<Task<HttpResponseMessage>> send)
+    {
+        try
+        {
+            return await send();
+        }
+        catch (HttpRequestException e)
+        {
+            throw new HostUnavailableException($"The console host could not be reached ({e.Message}); start it with dotnet run --project src/Admin.Host.");
+        }
+    }
+
+    private static async Task<T?> Json<T>(HttpResponseMessage response, CancellationToken cancellationToken)
+        where T : JsonNode
+    {
+        if (!response.IsSuccessStatusCode)
+        {
+            JsonObject? problem = await ProblemAsync(response, cancellationToken);
+
+            throw new HostUnavailableException($"The host answered {(int)response.StatusCode}: {problem?["detail"] ?? problem?["title"] ?? response.ReasonPhrase}");
+        }
+
+        return await response.Content.ReadFromJsonAsync<T>(Web, cancellationToken);
+    }
+
+    private static async Task<JsonObject?> ProblemAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await response.Content.ReadFromJsonAsync<JsonObject>(Web, cancellationToken);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+}
