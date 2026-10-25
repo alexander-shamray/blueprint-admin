@@ -20,7 +20,7 @@ namespace Admin.Host.Mail;
 public sealed partial class MailSinkClient(HttpClient http, IOptions<AdminOptions> options)
 {
     /// <summary>The image tag whose API this client was checked against; a drift check holds the Compose unit to it.</summary>
-    public const string Image = "axllent/mailpit:v1.31.3";
+    public const string Image = "axllent/mailpit:v1.31.6";
 
     /// <summary>The messages one list shows, newest first. The sink keeps more; the list says how many.</summary>
     public const int Limit = 50;
