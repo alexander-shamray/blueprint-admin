@@ -30,14 +30,14 @@ interface BuiltInPage {
 /**
  * The console's built-in pages in their default order: each one's path, title, help and widgets. The routes, the
  * default workspace and the host's `WorkspaceDefaults` (held to this list by a drift test) all follow it. The side
- * navigation and the palette list the operator's pages instead (widget-workspace spec �7.2).
+ * navigation and the palette list the operator's pages instead (widget-workspace spec §7.2).
  *
- * `help` is what the assistant explains each page from (AI assistant design �6.1). The widgets own what each one shows
+ * `help` is what the assistant explains each page from (AI assistant design §6.1). The widgets own what each one shows
  * and does (`WidgetType.help`), so a page's text says what it is for and names the widgets it holds, which a spec holds
  * to its layout. It is sent in the source language; the model translates it as it answers. A spec fails an entry
  * without it.
  *
- * `layout` is the page's widgets (�5.3), each at its cell and its type's default size, in roughly the arrangement the
+ * `layout` is the page's widgets (§5.3), each at its cell and its type's default size, in roughly the arrangement the
  * screen had. For the Stack page that is: in the left column the doctor's rows above the buttons and the job's output
  * directly under them, with the Compose services and the alerts beside that column, and the load run beside the golden
  * signals below. The Scenario page keeps the run beside the order's state.
