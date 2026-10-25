@@ -1,7 +1,7 @@
 import { WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
-import { Observable, of, throwError } from 'rxjs';
+import { NEVER, Observable, of, throwError } from 'rxjs';
 import { HostClient } from '../../../core/host/host-client';
 import { MailListView, MailMessageRead, MailSummary } from '../../../core/host/host-types';
 import { WIDGET_CONTEXT } from '../../../workspace/widget-context';
@@ -80,6 +80,14 @@ describe('MailWidget', () => {
       (r) => r.textContent?.replace(/\s+/g, ' ').trim() ?? '',
     );
   }
+
+  it('names the sink in the lede before the first read, as an anchor with no address to follow', () => {
+    const { fixture } = render(NEVER);
+
+    const anchor = el(fixture).querySelector('a.sink-link') as HTMLAnchorElement;
+    expect(anchor.textContent).toContain("the sink's own UI");
+    expect(anchor.hasAttribute('href')).toBe(false);
+  });
 
   it('lists each message with its correlation id as a link into its trace, and links the sink', () => {
     const { fixture } = render(of(listed([summary({ id: 'm2', subject: 'Delivered' }), summary({})])));
