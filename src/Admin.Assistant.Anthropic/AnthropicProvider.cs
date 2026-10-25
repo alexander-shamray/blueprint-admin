@@ -26,14 +26,21 @@ public sealed class AnthropicProvider : IAssistantProvider
     private readonly AnthropicClient client;
     private readonly AnthropicSettings settings;
     private readonly TimeProvider time;
+    private readonly Action<string> warn;
     private readonly Lock gate = new();
 
     private ProviderStatus? known;
     private DateTimeOffset knownUntil;
     private Task<ProviderStatus>? inFlight;
 
-    public AnthropicProvider(AnthropicClient client, AnthropicSettings settings, TimeProvider time)
+    /// <param name="warn">
+    /// Told the exception type, and only the type, of a probe that failed for a reason other than a refused credential:
+    /// <c>unreachable</c> is the protocol's one word for it, so this is where an operator sees that the model id was
+    /// rejected or the account was rate limited. Never a message, which can carry what the API echoed back.
+    /// </param>
+    public AnthropicProvider(AnthropicClient client, AnthropicSettings settings, TimeProvider time, Action<string>? warn = null)
     {
+        this.warn = warn ?? (_ => { });
         this.client = client;
         this.settings = settings;
         this.time = time;
@@ -118,9 +125,12 @@ public sealed class AnthropicProvider : IAssistantProvider
         {
             return new ProviderStatus(false, settings.Model, StatusReason.NoCredential);
         }
-        catch (Exception)
+        catch (Exception e)
         {
-            // A connection that fails, a timeout, a 5xx: whatever kept the read from answering.
+            // A connection that fails, a timeout, a 5xx: whatever kept the read from answering. The protocol has no word for
+            // a model id the API does not know, so the type is what tells that 404 from a refused connection.
+            warn($"The Anthropic status probe for model '{settings.Model}' failed with {e.GetType().Name}.");
+
             return new ProviderStatus(false, settings.Model, StatusReason.Unreachable);
         }
     }
