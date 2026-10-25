@@ -1006,7 +1006,7 @@ describe('ScenarioWidget', () => {
 
       expect(page.steps().map((s) => s.state)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok']);
       expect(page.steps()[6].detail).toBe(
-        'The carrier booked the parcel once (201) and its feed has been polled since: 2 polls.',
+        'The carrier booked the parcel once (201) and its feed has been polled 2× since.',
       );
       expect(
         sent()

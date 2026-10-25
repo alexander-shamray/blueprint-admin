@@ -936,11 +936,11 @@ export function carrierVerdict(
       return after >= 2
         ? {
             kind: 'reached',
-            detail: $localize`The carrier booked the parcel once (201) and its feed has been polled since: ${after}:polls: polls.`,
+            detail: $localize`The carrier booked the parcel once (201) and its feed has been polled ${after}:polls:× since.`,
           }
         : {
             kind: 'waiting',
-            detail: $localize`The carrier booked the parcel (201); its feed has been polled since: ${after}:polls: polls.`,
+            detail: $localize`The carrier booked the parcel (201); its feed has been polled ${after}:polls:× since.`,
           };
     }
   }

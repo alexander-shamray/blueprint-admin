@@ -375,7 +375,7 @@ export class ScenarioRunner {
       this.steps.update((all) =>
         all.map((s) => {
           if (s.state === 'running') {
-            return { ...s, state: 'failed', detail: this.cancelled ? 'Cancelled.' : s.detail };
+            return { ...s, state: 'failed', detail: this.cancelled ? $localize`Cancelled.` : s.detail };
           }
           return s.state === 'pending' ? { ...s, state: 'skipped', detail: why } : s;
         }),
