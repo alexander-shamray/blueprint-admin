@@ -165,13 +165,13 @@ two pull requests together.
   does not read it yet (#531). The pull request that turned it red is
   reverted with `bash .claude/scripts/git-revert-pr.sh <n>`, run by hand,
   since no command grants it (`docs/harness-boundaries.md` says so), and
-  the revert lands as its own pull request; the fix lands after it. A flake is the exception, a comment
-  on the flaky tracker by the user-level rule. A check that is red on a pull
-  request and on `main` belongs to `main`, so a pull request that touched
-  none of it waits for that issue to close and is not changed to make it
-  pass. Once the issue closes, a rerun would still read the old merge with
-  the red `main`, so that pull request is updated through
-  `git-rebase-onto-main.sh`, the one update no conflict asked for.
+  the revert lands as its own pull request; the fix lands after it. A flake
+  is the exception, a comment on the flaky tracker by the user-level rule.
+  A check that is red on a pull request and on `main` belongs to `main`, so
+  a pull request that touched none of it waits for that issue to close and
+  is not changed to make it pass. Once the issue closes, a rerun would still
+  read the old merge with the red `main`, so that pull request is updated
+  through `git-rebase-onto-main.sh`, the one update no conflict asked for.
 
 ## One owner per fact
 
