@@ -37,6 +37,13 @@ PROMPT_HINT = CLAUDE / "hooks" / "index-query-hint.sh"
 # before PATH, where `bash` is WSL's.
 BASH = shutil.which("bash")
 
+# How long the launcher may let the hook run in these tests. Its own bound is 10 s,
+# which a loaded Windows runner overruns while Python starts, and the launcher then
+# prints its "did not run" note instead of the verdict (#471). Under the 60 s each
+# `subprocess.run` below allows, so a hung hook still ends as that note rather than
+# as a kill by the test that leaves an orphaned child holding a pipe.
+LOAD_BOUND = "50"
+
 
 def setUpModule():
     if BASH is None:
@@ -92,6 +99,7 @@ class Session:
         serves."""
         env = dict(os.environ)
         env.update({"CLAUDE_PROJECT_DIR": str(project or (ROOT if launcher else self.main)),
+                    "HINT_BOUND_SECONDS": LOAD_BOUND,
                     "TMP": str(self.tmp), "TEMP": str(self.tmp), "TMPDIR": str(self.tmp)})
         if launcher:
             argv = [BASH, str(LAUNCHER), "PreToolUse", "index-search-hint.py"]
@@ -208,7 +216,7 @@ class WhatItNeverTouches(unittest.TestCase):
         s = Session(self)
         for payload in ("", "not json", "[1, 2]", '{"tool_name": 7}'):
             with self.subTest(payload=payload):
-                env = dict(os.environ, CLAUDE_PROJECT_DIR=str(ROOT))
+                env = dict(os.environ, CLAUDE_PROJECT_DIR=str(ROOT), HINT_BOUND_SECONDS=LOAD_BOUND)
                 done = subprocess.run(
                     [BASH, str(LAUNCHER), "PreToolUse", "index-search-hint.py"],
                     input=payload.encode(), capture_output=True, env=env, timeout=60)
