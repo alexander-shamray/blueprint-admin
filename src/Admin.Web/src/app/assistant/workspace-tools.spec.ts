@@ -73,6 +73,11 @@ describe('finding a widget', () => {
     expect(findWidgetType('nonsense')).toBeUndefined();
   });
 
+  it('reads an English title through its type, which the help text names widgets by in any language', () => {
+    expect(findWidgetType('Stack controls')?.type).toBe('stack-controls');
+    expect(findWidgetType('Golden signals')?.type).toBe('golden-signals');
+  });
+
   it('finds an instance by id, else the first of the type', () => {
     const widgets = [widget('w1', 'note'), widget('w2', 'queues'), widget('w3', 'queues')];
 
