@@ -3,7 +3,7 @@
 # nothing else. `/pr`'s one create and `/ship`'s.
 #
 # **`Bash(gh pr create:*)` is a PREFIX grant and every one of the four things
-# that decide what gets opened is a trailing flag (#16).**
+# that decide what gets opened is a trailing flag (blueprint-frontend#16).**
 # `gh pr create --repo <other> --head <other> --base <other> --body-file <other>`
 # chooses a repository, a branch, a base and a body that are not the ones the
 # command derived. All four are fixed here: the repository and the branch are

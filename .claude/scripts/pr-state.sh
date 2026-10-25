@@ -2,13 +2,13 @@
 # Read a PR's merge-relevant state as JSON — /ship's only `gh pr view` route.
 # Read-only, fixed field set.
 #
-# **Exists so that ship.md need not hold `Bash(gh pr view:*)` (#56).** That
+# **Exists so that ship.md need not hold `Bash(gh pr view:*)` (blueprint-backend#56).** That
 # grant was the last unfiltered way to reach `--json reviews` and
 # `--json comments`: review-copilot.md dropped it and routed those two feeds
 # through filtering helpers, but /ship invokes /review-copilot as a skill while
 # holding its own broader grant, and `allowed-tools` entries are cumulative
 # auto-approvals rather than a whitelist. So the narrower grant one file over
-# withheld nothing on the unattended path — which is the path #56 was filed
+# withheld nothing on the unattended path — which is the path blueprint-backend#56 was filed
 # about. Removing the broad grant is what makes the filter reach it.
 #
 # Whether a skill invocation actually inherits the caller's frontmatter grants

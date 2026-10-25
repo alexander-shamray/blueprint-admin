@@ -7,7 +7,7 @@
 #
 # `Bash(gh issue create:*)` was a prefix grant, so it bought more than the
 # operation it was added for — the shape every helper in this directory exists
-# to close (#75 item 5). Two free parameters reached it from an audited tree
+# to close (blueprint-backend#75 item 5). Two free parameters reached it from an audited tree
 # that is prompt-injection input:
 #
 #   -R/--repo  unpinned, so the issue lands wherever the argument names. Both
@@ -53,7 +53,7 @@
 # a prefix match. A script sets it for its own child and the grant on the
 # script is unchanged.
 #
-# THE FIXED LINE IS SELECTED, NOT CONSTANT, and #184 is why. A detector needs
+# THE FIXED LINE IS SELECTED, NOT CONSTANT, and blueprint-backend#184 is why. A detector needs
 # a last line the caller cannot lose by accident; it does not need that line to
 # be the SAME line for everybody. What stood here was one sentence asserting
 # provenance — that a sweep filed the issue, and that a second read-only
@@ -91,7 +91,7 @@
 # sentence that is true of it. The detector is unchanged — the line is still
 # fixed, still exact, and a body cut short has still lost it.
 #
-# THE ROUTE IS NOT A PARAMETER ANY MORE, AND #19 IS WHY. It was the one
+# THE ROUTE IS NOT A PARAMETER ANY MORE, AND blueprint-frontend#19 IS WHY. It was the one
 # argument that escaped the reasoning three paragraphs up. Both sweeps held
 # `Bash(bash .claude/scripts/gh-issue-create.sh:*)`, a prefix grant, so the
 # model chose all three arguments — including which provenance claim the issue

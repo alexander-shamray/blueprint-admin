@@ -9,7 +9,7 @@
 # output is whoever runs `/pr`. Saying otherwise would make a missing control
 # look enforced, which is the one way a missing control does real damage.
 #
-# **Exists so that pr.md need not hold `Bash(gh pr view:*)` (#56).** This was
+# **Exists so that pr.md need not hold `Bash(gh pr view:*)` (blueprint-backend#56).** This was
 # the third command carrying that grant, after review-copilot.md and ship.md,
 # and it was found by the test whose subject is every command's frontmatter
 # rather than by reading the two files the issue named — which is the whole

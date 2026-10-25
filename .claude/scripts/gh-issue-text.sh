@@ -3,7 +3,7 @@
 # and NOT its author.
 #
 # **This exists because dropping `author` from the listing was only half a
-# control.** #150 moved the suppression decision into `gh-issue-suppresses.sh`
+# control.** blueprint-backend#150 moved the suppression decision into `gh-issue-suppresses.sh`
 # and removed `author` from `gh issue list`, with both sweeps stating that the
 # absence is what stops the decision being taken in passing. Both then kept an
 # unrestricted `Bash(gh issue view:*)`, which returns `author` — and the body —
@@ -11,7 +11,7 @@
 # the listing the test inspects, and the test could not see it: a listing-line
 # substring is not a control while the raw grant sits beside it.
 #
-# That is #56 one command along. `gh pr view` was dropped there for exactly this
+# That is blueprint-backend#56 one command along. `gh pr view` was dropped there for exactly this
 # reason — a helper that fixes its field set does not bind a caller who still
 # holds the grant and can choose fields. Matching genuinely needs the body, so
 # the answer is a second helper rather than keeping the unbounded grant.

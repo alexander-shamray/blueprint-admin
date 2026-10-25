@@ -8,7 +8,7 @@
 # session pushed past will have. A tip it cannot reach carries work done after
 # the merge. Only the pull request knows that oid.
 #
-# **Exists because `gh pr list` reaches the review feeds (#56).** Removing
+# **Exists because `gh pr list` reaches the review feeds (blueprint-backend#56).** Removing
 # `Bash(gh pr view:*)` from the three commands that held it was not enough:
 # `gh pr list --json reviews,comments` returns the same review bodies and issue
 # comments, in full, for every pull request at once. Measured, not reasoned —
@@ -62,7 +62,7 @@ repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner) ||
 [ -n "$repo" ] ||
   { echo "this checkout's repository resolved to nothing" >&2; exit 2; }
 # **`--head` matches a branch NAME, so this returned every pull request that
-# has ever used it, in whatever order the API gave (#24).** A branch name
+# has ever used it, in whatever order the API gave (blueprint-frontend#24).** A branch name
 # reused after a merge — ordinary, and nothing in `/branch` prevents it —
 # leaves an older `MERGED` row beside a newer `OPEN` one. `/ship` step 0 reads
 # a `MERGED` row as proof the branch is finished and tears the workspace down;
@@ -77,7 +77,7 @@ repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner) ||
 # that true. Sorted by `number`, which GitHub assigns monotonically per
 # repository, so it needs no date parsing to be a total order.
 #
-# **And the page is bounded where the field set was not (#22).** `gh pr list`
+# **And the page is bounded where the field set was not (blueprint-frontend#22).** `gh pr list`
 # defaults to 30 and has no `--paginate`; a popular branch name across forks
 # can fill it, and this helper's own repository filter runs AFTER the page is
 # taken — so the row that matters could be the one left off. `--limit` pages

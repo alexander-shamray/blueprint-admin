@@ -3,7 +3,7 @@
 # vocabularies on the command line, the title and body on stdin, and the
 # provenance line a constant.
 #
-# **The route used to be the third argument, and #19 is why it is not.** It was
+# **The route used to be the third argument, and blueprint-frontend#19 is why it is not.** It was
 # the one argument that escaped the reasoning `gh-issue-filing.sh` makes about
 # the other two: both sweeps held a prefix grant on this script, so the model
 # chose all three — including which provenance claim the issue carried. The

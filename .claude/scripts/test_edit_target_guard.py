@@ -754,7 +754,7 @@ class WhatThisGuardIsNotTheSubjectOf(GuardCase):
         # writes the session's own scratchpad by absolute path outside the
         # repository, and refusing that would take it with it. `self.outside`
         # is a `mkdtemp`, so this is the scratch root rather than "anywhere",
-        # which is the distinction #21 turned on — and the case below is the
+        # which is the distinction blueprint-frontend#21 turned on — and the case below is the
         # other half, without which this one would pass against a guard that
         # still admitted everything.
         self.assertAdmitted(os.path.join(self.outside, "loot.txt"))
@@ -1191,7 +1191,7 @@ class TheWiringWithoutWhichNoneOfTheAboveRuns(unittest.TestCase):
     def test_the_hook_runs_through_the_portable_launcher(self):
         """The 3.12 floor is still the floor; `py -3.12` is no longer the wiring.
 
-        **This case asserted `py -3.12` and #23 is what that cost.** `py` is the
+        **This case asserted `py -3.12` and blueprint-frontend#23 is what that cost.** `py` is the
         Windows Python launcher and ships nowhere else, so on macOS or Linux the
         hook command could not start and every `Edit`, `Write` and `Bash` call
         failed before the guard ran. Two cases pinned the broken spelling — this

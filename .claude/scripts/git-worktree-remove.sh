@@ -2,7 +2,7 @@
 # Remove the worktree `/branch` step 5 forked, and nothing else.
 #
 # **`Bash(git worktree remove:*)` is a PREFIX grant, so a trailing `-f` is
-# inside it (#16)** — and `-f` is precisely the refusal that matters here.
+# inside it (blueprint-frontend#16)** — and `-f` is precisely the refusal that matters here.
 # `ship.md` step 8 relies on `git worktree remove` declining a dirty worktree:
 # that refusal is what stops the teardown from deleting work the run did not
 # commit, and the step's own text says the directory is left for inspection

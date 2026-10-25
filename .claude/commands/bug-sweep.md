@@ -285,7 +285,7 @@ Each round is the review done once, end to end:
 Name the residuals rather than hide them: the parent's context still receives
 the verdict, and a verdict is text; the auditor's `Read`, `Grep` and `Glob` are
 not confined to `$work`, so the path rule and the verify-step check are the whole
-of that boundary. The half a path rule could not reach is closed (#18):
+of that boundary. The half a path rule could not reach is closed (blueprint-frontend#18):
 `git-worktree-detach.sh` now refuses a
 pinned commit carrying any tracked link, before the worktree exists. (why:
 docs/commands/bug-sweep.md, *Residuals*)
@@ -330,7 +330,7 @@ say so in the round summary and leave the change to the user. `Write`, `Edit`,
 `git push origin` and the raw `gh issue create` are denied in the frontmatter;
 never add a `Write` grant. The denies stop the editing tools, not the class: a
 redirection through a granted `Bash` can still write, `guard-git-argv.py` judges
-redirection targets (#20), and the honest boundary is the worktree, not the tool
+redirection targets (blueprint-frontend#20), and the honest boundary is the worktree, not the tool
 list. Every grant that could steer a mutation stays a
 helper, never its raw prefix grant. The worktree helpers refuse any path that is
 not `secsweep-` plus six characters under the canonical temp root. (why:

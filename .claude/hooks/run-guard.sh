@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # Run one guard hook with whichever Python this host actually has, exactly once.
 #
-# **`py -3.12` is the Windows launcher and both hooks were wired to it (#23).**
+# **`py -3.12` is the Windows launcher and both hooks were wired to it (blueprint-frontend#23).**
 # `py` ships with Python on Windows and nowhere else: a standard 3.12 on macOS
 # or Linux provides `python3` and no `py`, so the command could not start and
 # every `Bash`, `Edit` and `Write` call failed before the guard ran. Loud and

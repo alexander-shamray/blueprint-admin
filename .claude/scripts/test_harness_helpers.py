@@ -25,37 +25,37 @@ alone.
 
 What is under test, and which issue each half closes:
 
-  #75   the sweeps' worktree shape check was not the direct-child check its
+  blueprint-backend#75   the sweeps' worktree shape check was not the direct-child check its
         comment claimed, because `?` matches `/` in a bash `case`.
-  #75   `gh label create` is create-or-overwrite, so the grant reached any
+  blueprint-backend#75   `gh label create` is create-or-overwrite, so the grant reached any
         label in any repository. This one is the odd entry: it never shipped
         wrong. It is a grant closed by moving it into a helper, and these cases
         are what keep it closed rather than what caught it.
-  #75   `gh issue create` was the same shape one helper over: `--repo` and
+  blueprint-backend#75   `gh issue create` was the same shape one helper over: `--repo` and
         `--label` free under a prefix grant, and a `/`-title filed as a path
         because the grant could not carry an env prefix. Closed the same way,
         and the confinement never shipped wrong either; the title did, and
         the case that reads the child's environment is the one for it.
-  #33   the deny list guarded the helpers and not the files that grant them.
+  blueprint-backend#33   the deny list guarded the helpers and not the files that grant them.
         The cases cover every control-surface path in both spellings, that no
         rule is spelled `Write(`, and that the worktree root is never denied —
         the over-reach that would deny editing the repository itself.
-  #57   the sweeps' de-duplication gate treated any open issue as tracking, so
+  blueprint-backend#57   the sweeps' de-duplication gate treated any open issue as tracking, so
         a stranger could suppress a finding and end the sweep. The cases cover
         both copies of the gate and every phrasing it has retired.
-  #60   two commands stated editing boundaries their grants did not enforce.
+  blueprint-backend#60   two commands stated editing boundaries their grants did not enforce.
         The cases read every tracked tree and every tracked root file from
         `git ls-files` and assert each is denied, because the alternative is a
         list that rots the way every deny-list here has.
-  #30   `git log --output=` is an arbitrary file write that reads as
+  blueprint-backend#30   `git log --output=` is an arbitrary file write that reads as
         inspection, and the settings deny matches only the unquoted spelling.
-  #23   the push deny-list enumerated spellings, and git's refspec grammar is
+  blueprint-backend#23   the push deny-list enumerated spellings, and git's refspec grammar is
         larger than any list. Both are the argv guard's, and its cases are the
         longest set here because two review rounds took the first design apart:
         bundled shorts, abbreviations, wildcard destinations, pushes naming no
         destination, heredoc bodies read as arguments, command substitutions
         read as inert.
-  #150  what suppresses a sweep finding was prose in two files. The cases cover
+  blueprint-backend#150  what suppresses a sweep finding was prose in two files. The cases cover
         the helper's three exit codes, that neither sweep can read an issue's
         author at all, and that the one legitimate output stays writable.
   #181  a path deny is matched on the SPELLING, so an edit through a link
@@ -238,7 +238,7 @@ def private_tmproot(test):
 
 
 class SweepWorktreeShape(unittest.TestCase):
-    """#75 items 1 and 2 — the guard that was narrower than advertised.
+    """blueprint-backend#75 items 1 and 2 — the guard that was narrower than advertised.
 
     A bash `case` does no pathname expansion, so `?` matched `/` and
     `$tmproot/secsweep-a/bbbb` passed a check whose comment called it a
@@ -564,7 +564,7 @@ class LabelHelperBehaviour(unittest.TestCase):
 
 
 class LabelHelperHasNoFreeParameter(unittest.TestCase):
-    """#75 item 3 — `gh label create` is create-or-overwrite.
+    """blueprint-backend#75 item 3 — `gh label create` is create-or-overwrite.
 
     `--force` updates an existing label's colour and description, and `-R`
     unpinned puts that write in any repository. Both were held as prose in each
@@ -616,7 +616,7 @@ class LabelHelperHasNoFreeParameter(unittest.TestCase):
 
 
 class IssueHelperHasNoFreeParameter(unittest.TestCase):
-    """#75 item 5 — `gh issue create` was a prefix grant with two free parameters.
+    """blueprint-backend#75 item 5 — `gh issue create` was a prefix grant with two free parameters.
 
     `-R` unpinned put the issue in whichever repository a finding named, and
     `--label` unpinned reached any label in any spelling; both were held as
@@ -637,7 +637,7 @@ class IssueHelperHasNoFreeParameter(unittest.TestCase):
 
     HELPER = SCRIPTS / "gh-issue-create.sh"
     SWEEP_HELPER = SCRIPTS / "gh-sweep-issue-create.sh"
-    # Everything both entry points share, since #19 split the route out of the
+    # Everything both entry points share, since blueprint-frontend#19 split the route out of the
     # argument list: the source assertions below read this rather than either
     # wrapper, because this is where the shape they assert lives.
     LIBRARY = SCRIPTS / "gh-issue-filing.sh"
@@ -678,7 +678,7 @@ class IssueHelperHasNoFreeParameter(unittest.TestCase):
     def run_helper(self, *args, body=""):
         env = dict(os.environ)
         env["PATH"] = self.dir + os.pathsep + env["PATH"]
-        # **The route was the third argument until #19 and is now the choice
+        # **The route was the third argument until blueprint-frontend#19 and is now the choice
         # of script.** Every case below still spells which provenance it is
         # filing under, which is what keeps them readable — but the word now
         # selects an entry point instead of being handed to one, and neither
@@ -723,7 +723,7 @@ class IssueHelperHasNoFreeParameter(unittest.TestCase):
     def test_the_argument_count_is_exactly_two(self):
         # A title on the command line is the free parameter the fifth review
         # round named: it crossed the parent's shell before the helper ran.
-        # Two rather than three since #19 — the route is the script now.
+        # Two rather than three since blueprint-frontend#19 — the route is the script now.
         self.assert_refused_before_gh(self.run_helper("bug", body=self.STDIN))
         self.assert_refused_before_gh(self.run_helper("bug", "low", body=self.STDIN))
         self.assert_refused_before_gh(self.run_helper("a title", "bug", "low", "sweep", body=self.STDIN))
@@ -770,7 +770,7 @@ class IssueHelperHasNoFreeParameter(unittest.TestCase):
         self.assert_refused_before_gh(self.run_helper("bug", "low", "sweep", body="a title"))
 
     def test_neither_entry_point_takes_a_route_at_all(self):
-        # **#184 made the route a closed set; #19 made it not an argument.**
+        # **blueprint-backend#184 made the route a closed set; blueprint-frontend#19 made it not an argument.**
         # A closed set still let the caller choose, and both sweeps held a
         # prefix grant — so the model picked the sentence asserting that a
         # second read-only auditor verified the finding. Now a third argument
@@ -789,7 +789,7 @@ class IssueHelperHasNoFreeParameter(unittest.TestCase):
                     self.assertEqual([], self.calls())
 
     def test_each_route_requires_the_line_that_is_true_of_it(self):
-        # **The point of #184, stated as a test rather than as a sentence.**
+        # **The point of blueprint-backend#184, stated as a test rather than as a sentence.**
         # The helper required a sweep's provenance from every body it
         # accepted, hand filings through it included — so an issue filed by
         # hand out of a review triage was made to claim that a sweep filed it
@@ -938,7 +938,7 @@ class IssueHelperHasNoFreeParameter(unittest.TestCase):
 
     def test_a_sweep_cannot_reach_the_hand_route(self):
         # **The half that makes the split enforcement rather than tidiness
-        # (#19).** `allowed-tools` is an auto-approval list, so granting the
+        # (blueprint-frontend#19).** `allowed-tools` is an auto-approval list, so granting the
         # sweeps only `gh-sweep-issue-create.sh` withholds nothing on its own —
         # the parameterised route has to be denied by name. Each sweep is
         # judged by its own frontmatter, so a new sweep that grants neither
@@ -1004,7 +1004,7 @@ class IssueHelperHasNoFreeParameter(unittest.TestCase):
 
 
 class OnlyThisCheckoutsPullRequestsSurvive(unittest.TestCase):
-    """#56 round 9 — `--head` matches a branch name across forks.
+    """blueprint-backend#56 round 9 — `--head` matches a branch name across forks.
 
     `gh pr list --head <branch>` filters on the NAME, so an outside
     contributor's same-named branch is a candidate. /ship step 0 reads this to
@@ -1106,7 +1106,7 @@ class OnlyThisCheckoutsPullRequestsSurvive(unittest.TestCase):
 
 
 class BothSweepsAgreeOnWhatSuppresses(unittest.TestCase):
-    """#57 — the de-duplication gate, and the two copies of it.
+    """blueprint-backend#57 — the de-duplication gate, and the two copies of it.
 
     An issue only blocks a re-file if the **repository owner opened it**. The
     repository is public, so without that test any account could file "<topic>
@@ -1126,7 +1126,7 @@ class BothSweepsAgreeOnWhatSuppresses(unittest.TestCase):
     cases cannot prove the gate is applied — only that both files still state
     it and that neither has drifted back to the unconditional rule. The
     enforceable version is a helper the sweeps call, on the same argument this
-    pull request makes for the feed filters; it is #150 rather than something
+    pull request makes for the feed filters; it is blueprint-backend#150 rather than something
     smuggled into a review round.
 
     Two copies is the reason a test exists at all. `security-sweep.md` and
@@ -1209,7 +1209,7 @@ class BothSweepsAgreeOnWhatSuppresses(unittest.TestCase):
 
 
 class NoCommandHoldsAPrefixGrantThatAdmitsAForbiddenFlag(unittest.TestCase):
-    """#16 — three allow rules whose trailing position defeated the workflow.
+    """blueprint-frontend#16 — three allow rules whose trailing position defeated the workflow.
 
     An allow rule cannot exclude a trailing flag; only a deny takes `*` at any
     position. So `gh pr merge --merge <n> --admin` bypassed step 7's
@@ -1526,7 +1526,7 @@ class NoCommandHoldsAPrefixGrantThatAdmitsAForbiddenFlag(unittest.TestCase):
         self.assertIn("/pr-title.txt", ignored)
 
 class TheFourPortedResiduals(unittest.TestCase):
-    """#18 — four residuals in machinery ported verbatim from the backend.
+    """blueprint-frontend#18 — four residuals in machinery ported verbatim from the backend.
 
     Each stands against that repository too, which is why they were filed
     rather than fixed inside the port: fixing here forks the two copies, and
@@ -1585,7 +1585,7 @@ class TheFourPortedResiduals(unittest.TestCase):
         self.assertEqual([], os.listdir(root))
 
     def test_both_sweeps_state_the_half_that_is_closed(self):
-        # The other half of #18.1: the sweeps did not state the read half,
+        # The other half of blueprint-frontend#18.1: the sweeps did not state the read half,
         # which is what let it go unnoticed while the write half was closed
         # twice.
         for name in ("security-sweep.md", "bug-sweep.md"):
@@ -1612,7 +1612,7 @@ class TheFourPortedResiduals(unittest.TestCase):
     # ---- 4. a tracked suggestions.md passes the pre-clone allow-list --------
 
 class HarnessControlSurfaceIsDenied(unittest.TestCase):
-    """#33 — the deny list guarded the helpers and not the files that grant them.
+    """blueprint-backend#33 — the deny list guarded the helpers and not the files that grant them.
 
     `.claude/scripts/**` was denied; `commands/`,
     `agents/` and `settings.json` itself were not. Those are the files that hand
@@ -1620,7 +1620,7 @@ class HarnessControlSurfaceIsDenied(unittest.TestCase):
     level up and had not been.
 
     Ten commands carry an unrestricted `Edit` or `Write`, and three of them read
-    untrusted input by design — which is the same premise #56 is about, reaching
+    untrusted input by design — which is the same premise blueprint-backend#56 is about, reaching
     the frontmatter instead of the feed.
     """
 
@@ -1629,7 +1629,7 @@ class HarnessControlSurfaceIsDenied(unittest.TestCase):
 
     def test_every_control_surface_path_is_denied_in_both_spellings(self):
         deny = self.deny()
-        # `hooks/**` joined this list with #30's argv guard. `CLAUDE.md` had
+        # `hooks/**` joined this list with blueprint-backend#30's argv guard. `CLAUDE.md` had
         # excluded it on the stated grounds that no hook was configured here,
         # which was true and is the kind of exemption that expires silently: a
         # hook RUNS on every Bash call, so a session able to rewrite one could
@@ -1691,7 +1691,7 @@ class HarnessControlSurfaceIsDenied(unittest.TestCase):
 
 
 class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
-    """#60 — two commands promised not to edit and held repo-wide `Edit`.
+    """blueprint-backend#60 — two commands promised not to edit and held repo-wide `Edit`.
 
     `/review-branch` says "do not fix the findings" while holding `Write` and
     `Edit` over every undenied path, and is a step of an unattended `/ship`
@@ -1703,7 +1703,7 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
     that a second subject costs one line when one arrives.
 
     The fix is a path-scoped `disallowed-tools`, a specifier form this
-    repository had never verified until #60 measured it: `Edit(src/**)` there
+    repository had never verified until blueprint-backend#60 measured it: `Edit(src/**)` there
     refuses an edit under `src/` while one under `docs/` succeeds in the same
     invocation, so it scopes rather than removing the tool.
 
@@ -2519,9 +2519,9 @@ class SuppressionStub:
 
 
 class WhatSuppressesIsDecidedByCodeNow(unittest.TestCase):
-    """#150 — the de-duplication trust rule was prose in two files.
+    """blueprint-backend#150 — the de-duplication trust rule was prose in two files.
 
-    #57 established that an open issue suppresses a sweep finding only if the
+    blueprint-backend#57 established that an open issue suppresses a sweep finding only if the
     repository OWNER opened it: this repository is public, so otherwise a
     stranger files "{topic} is being tracked" and the next sweep suppresses the
     real finding and reports convergence — worse than a missed filing, because
@@ -2532,7 +2532,7 @@ class WhatSuppressesIsDecidedByCodeNow(unittest.TestCase):
     honest about being one. It pins that both files still SAY the rule; it
     cannot establish that a sweep ever applied it to an issue.
 
-    **The rule implemented here is authorship alone, and #150 as filed asked for
+    **The rule implemented here is authorship alone, and blueprint-backend#150 as filed asked for
     more than that.** It described "the owner opened it or a maintainer labelled
     it", which was the rule when it was written; a later review round asked what
     a label proves and retired it, because a label is applied to an issue rather
@@ -2566,7 +2566,7 @@ class WhatSuppressesIsDecidedByCodeNow(unittest.TestCase):
         self.assertIn("ada", result.stdout)
 
     def test_an_issue_a_stranger_opened_is_not_tracking(self):
-        # #57's exploitable half, now decided by code rather than by a reader.
+        # blueprint-backend#57's exploitable half, now decided by code rather than by a reader.
         result = self.stub(owner="ada", authors={"42": "mallory"}).run("42")
         self.assertEqual(1, result.returncode)
         self.assertIn("not tracking", result.stdout)
@@ -2636,7 +2636,7 @@ class WhatSuppressesIsDecidedByCodeNow(unittest.TestCase):
         # suppression helper resolved the owner itself; `gh issue view` went
         # when a reviewer showed it returns `author` to the same session;
         # `gh issue list` survived both rounds and returns `author` AND `body`
-        # for every issue at once. Each fix cited #56 and each left the next
+        # for every issue at once. Each fix cited blueprint-backend#56 and each left the next
         # grant standing.
         #
         # So this asserts on the GRANT rather than on the instruction line. The
@@ -2683,7 +2683,7 @@ class WhatSuppressesIsDecidedByCodeNow(unittest.TestCase):
         # The decision the helper exists to take was still takeable, and the
         # listing-line assertion below could not see it. Raised in review.
         #
-        # This is #56 one command along — a helper that fixes its field set does
+        # This is blueprint-backend#56 one command along — a helper that fixes its field set does
         # not bind a caller who still holds the raw grant and can choose fields.
         # Matching genuinely needs the body, which is an argument for a second
         # fixed-field helper rather than for keeping the grant.
@@ -2718,7 +2718,7 @@ class WhatSuppressesIsDecidedByCodeNow(unittest.TestCase):
 
     def test_neither_sweep_still_holds_the_grant_the_helper_replaced(self):
         # Moving a decision into a script is what lets a grant SHRINK rather
-        # than grow, which is #150's own argument. `gh repo view` existed in
+        # than grow, which is blueprint-backend#150's own argument. `gh repo view` existed in
         # both frontmatters for owner resolution and nothing else.
         for name in ("security-sweep.md", "bug-sweep.md"):
             with self.subTest(command=name):
@@ -2776,12 +2776,12 @@ class _TallyingList(list):
 
 
 class TheGitArgvGuard(unittest.TestCase):
-    """#30 and #23 — two holes a permission rule cannot close, closed at argv.
+    """blueprint-backend#30 and blueprint-backend#23 — two holes a permission rule cannot close, closed at argv.
 
     Both are the same defect in different grammars: **a permission rule matches
     the typed string and the shell executes an argv.**
 
-    #30 is a write primitive that reads as inspection. `Bash(git log:*)`,
+    blueprint-backend#30 is a write primitive that reads as inspection. `Bash(git log:*)`,
     `Bash(git diff:*)` and `Bash(git show:*)` are auto-approved as read-only and
     are not: all three take `--output=<path>`, with `--format=` choosing the
     bytes. `.claude/settings.json` denies `Bash(git *--output*)`, which closes
@@ -2792,7 +2792,7 @@ class TheGitArgvGuard(unittest.TestCase):
     `CLAUDE.md` had carried it as resting on documented semantics because the
     earlier probe was refused by the classifier rather than executed.
 
-    #23 is the push deny-list. Two broad allows pair with a list of exact
+    blueprint-backend#23 is the push deny-list. Two broad allows pair with a list of exact
     spellings, so `git push origin +HEAD:main` — a force push to main carrying
     neither `--force` nor the literal `origin main` — is auto-approved, along
     with five more. Enumeration trails git's refspec grammar forever, so the
@@ -2901,7 +2901,7 @@ class TheGitArgvGuard(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertAdmitted(command)
 
-    # ---- #30: the write primitive ------------------------------------------
+    # ---- blueprint-backend#30: the write primitive ------------------------------------------
 
     def test_the_output_flag_is_refused_in_every_spelling(self):
         for command in (
@@ -2952,10 +2952,10 @@ class TheGitArgvGuard(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertRefused(command)
 
-    # ---- #23: the push grammar ---------------------------------------------
+    # ---- blueprint-backend#23: the push grammar ---------------------------------------------
 
     def test_every_push_bypass_the_issue_enumerated_is_refused(self):
-        # The six spellings #23 listed, each of which matched an allow and no
+        # The six spellings blueprint-backend#23 listed, each of which matched an allow and no
         # deny. They are refused here on three parsed properties rather than on
         # six literals, which is what stops the seventh spelling working.
         for command in (
@@ -2970,7 +2970,7 @@ class TheGitArgvGuard(unittest.TestCase):
                 self.assertRefused(command)
 
     def test_a_spelling_the_issue_did_not_list_is_refused_too(self):
-        # The point of parsing. None of these appears in #23 or in the settings
+        # The point of parsing. None of these appears in blueprint-backend#23 or in the settings
         # deny list, and each is the same act under a different grammar.
         for command in (
             "git push origin main",
@@ -3522,7 +3522,7 @@ class TheGitArgvGuard(unittest.TestCase):
     def test_a_push_is_refused_unless_every_part_is_recognised(self):
         # **The check is an ALLOW-list now, and these are why.** Two review
         # rounds took the deny-list apart, each finding a form nobody had
-        # listed — which is #23's own conclusion arriving in parser form. Every
+        # listed — which is blueprint-backend#23's own conclusion arriving in parser form. Every
         # one of these was verified allowed against the shipped guard:
         #
         #   `-fv`          bundled shorts; not equal to `-f`
@@ -3595,7 +3595,7 @@ class TheGitArgvGuard(unittest.TestCase):
         # globals; `git --attr-source HEAD push …` then walked through the same
         # door, because that list had been written from the options this file
         # happened to hit. A list that trails git's globals is the deny-list
-        # shape #23 exists to refuse, and making the check depend on it just
+        # shape blueprint-backend#23 exists to refuse, and making the check depend on it just
         # moves the enumeration.
         #
         # `push` is LOCATED now, whatever precedes it — so an option nobody has
@@ -3621,12 +3621,12 @@ class TheGitArgvGuard(unittest.TestCase):
     def test_a_global_option_does_not_hide_the_subcommand(self):
         # **`git -C <dir> push …` was a complete bypass of the push guard.**
         # The check read `segment[0] != "push"`, and `-C` sits exactly where the
-        # subcommand goes, so none of #23's refspec parsing ever ran. Found by
+        # subcommand goes, so none of blueprint-backend#23's refspec parsing ever ran. Found by
         # writing a `git -C` command against this guard's own branch — which is
         # the only reason it was found, because nothing else in the suite used
         # one.
         #
-        # It is #23's own lesson arriving a token earlier: every global option is
+        # It is blueprint-backend#23's own lesson arriving a token earlier: every global option is
         # another way to say the same thing, so the subcommand has to be FOUND
         # rather than assumed to be first.
         for command in (
@@ -4245,7 +4245,7 @@ class TheGitArgvGuard(unittest.TestCase):
         self.assertAdmitted("git commit --amend")
         self.assertAdmitted("git status --short")
 
-        # **This is the abbreviation lesson arriving a second time.** `#23`
+        # **This is the abbreviation lesson arriving a second time.** `blueprint-backend#23`
         # already recorded that `--for` is an abbreviation git accepts, and
         # that argument is what turned the push check into an allow-list. The
         # flag check beside it stayed a prefix test for another six rounds.
@@ -4276,7 +4276,7 @@ class TheGitArgvGuard(unittest.TestCase):
         #
         # So this is the corpus: the git commands `/ship`, the two sweeps, the
         # helpers in `.claude/scripts/` and an ordinary session actually run.
-        # Over-reach here breaks the delivery chain, and `#23`'s own conclusion
+        # Over-reach here breaks the delivery chain, and `blueprint-backend#23`'s own conclusion
         # is that it would be found at the worst possible moment.
         #
         # The abbreviation check added last is the reason this is worth having
@@ -4609,7 +4609,7 @@ class TheGitArgvGuard(unittest.TestCase):
         # The corpus test's other half. `separate_lines` changed how EVERY
         # multi-line command is parsed, so the single-line corpus stopped being
         # enough on its own — and over-reach here breaks the delivery chain at
-        # the worst moment, which is `#23`'s own conclusion.
+        # the worst moment, which is `blueprint-backend#23`'s own conclusion.
         #
         # These are the shapes this session and `/ship` actually produce: a
         # `cd` and a command, a commit sequence, a heredoc commit body with a
@@ -4801,7 +4801,7 @@ class TheGitArgvGuard(unittest.TestCase):
         self.assertAdmitted("git checkout $BRANCH")
 
     def test_a_redirection_is_not_an_argument_to_the_program(self):
-        # **#183, and the file descriptor is the whole of it.**
+        # **blueprint-backend#183, and the file descriptor is the whole of it.**
         # `shlex(punctuation_chars=True)` emits a maximal run of `();<>|&` as
         # ONE token, so `>&` arrives whole — but a digit is not punctuation, so
         # the `2` of `2>&1` detaches and survives as an ordinary WORD. It then
@@ -4851,7 +4851,7 @@ class TheGitArgvGuard(unittest.TestCase):
         # The same root cause reaching the run splitter rather than the push
         # grammar. `git 2>&1 log --output=/tmp/probe` split into `['git','2']`
         # and `['1','log',…]`: the second run holds no `git` token, so
-        # `git_segments` yielded nothing at all and #30's write primitive was
+        # `git_segments` yielded nothing at all and blueprint-backend#30's write primitive was
         # admitted. The `ext::` check went the same way, because
         # `subcommand_of` read `2` and found it in no repository subcommand.
         for command in (
@@ -5785,7 +5785,7 @@ class TheGitArgvGuard(unittest.TestCase):
                 self.assertAdmitted(command)
 
     def test_a_redirection_ampersand_does_not_end_the_run(self):
-        # **#37: every unquoted `&` was a run boundary, including the one
+        # **blueprint-frontend#37: every unquoted `&` was a run boundary, including the one
         # inside a redirection operator.** So `bash >&2 <<'EOF'` was read as a
         # run of `2` alone, no shell owned the heredoc, and bash ran the push
         # in its body. Found by Copilot on PR #36; each shape below measured
@@ -6846,10 +6846,10 @@ class TheGitArgvGuard(unittest.TestCase):
         self.assertEqual("", result.stdout.strip())
         self.assertIn("guard-git-argv", result.stderr)
 
-    # ---- #20: a redirection writes what every Edit(...) deny refuses --------
+    # ---- blueprint-frontend#20: a redirection writes what every Edit(...) deny refuses --------
 
     def test_the_measured_redirections_are_refused(self):
-        # **The three in #20, fed to this hook and admitted, and the write
+        # **The three in blueprint-frontend#20, fed to this hook and admitted, and the write
         # landed.** They are first because they are what the issue measured:
         # `Bash(ls:*)` and `Bash(wc:*)` are auto-approved for every session, so
         # neither of the first two needs a grant of any kind, and the third
@@ -7191,7 +7191,7 @@ class TheGitArgvGuard(unittest.TestCase):
         self.assertAdmitted("ls > notes-in/plain.txt", cwd=root)
         self.assertAdmitted("ls > notes-in/to-notes/out.txt", cwd=root)
 
-    # ---- #26: a writing verb writes what a redirection may not -------------
+    # ---- blueprint-frontend#26: a writing verb writes what a redirection may not -------------
 
     def writing_checkout(self):
         root = tempfile.mkdtemp(prefix="argv-verb-")
@@ -7209,7 +7209,7 @@ class TheGitArgvGuard(unittest.TestCase):
         return root
 
     def test_the_measured_copy_is_refused(self):
-        # **The third spelling in #26, which was admitted and landed.** The
+        # **The third spelling in blueprint-frontend#26, which was admitted and landed.** The
         # first two — a computed redirection target and a redirection onto
         # `src` — were refused, and a copy of the same bytes onto the same
         # path was not, because the verb was the only difference.
@@ -7222,7 +7222,7 @@ class TheGitArgvGuard(unittest.TestCase):
             f"{Path(root).as_posix()}/src/app/x.ts", cwd=root)
 
     def test_every_writing_verb_reaches_the_machinery_check(self):
-        # **The case whose subject is the list, as #26 asked for.** Each verb
+        # **The case whose subject is the list, as blueprint-frontend#26 asked for.** Each verb
         # is driven through the operand model it is declared with, so a name
         # added without a model — or a model `verb_offence` does not read —
         # fails here rather than admitting its writes.
@@ -7238,7 +7238,7 @@ class TheGitArgvGuard(unittest.TestCase):
         for verb, model in sorted(module.WRITING_VERBS.items()):
             with self.subTest(verb=verb):
                 self.assertRefused(shapes[model].format(verb=verb))
-        # The verbs #26 named, which the list may grow past and never shrink
+        # The verbs blueprint-frontend#26 named, which the list may grow past and never shrink
         # below.
         for verb in ("cp", "mv", "install", "tee", "sed", "perl", "dd"):
             with self.subTest(named=verb):
@@ -8309,7 +8309,7 @@ class TheGitArgvGuard(unittest.TestCase):
 
 
 class TheHookWiringRunsOnMoreThanOneOperatingSystem(unittest.TestCase):
-    """#23 — both hooks were wired to `py -3.12`, the Windows Python launcher.
+    """blueprint-frontend#23 — both hooks were wired to `py -3.12`, the Windows Python launcher.
 
     `py` ships with Python on Windows and nowhere else: a standard 3.12 on
     macOS or Linux provides `python3` and no `py`, so the command could not
