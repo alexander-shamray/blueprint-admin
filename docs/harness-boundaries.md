@@ -65,9 +65,12 @@ as out of scope, never filed.
   `tools/token-usage/test_*.py` module executes as host code that no hook judges
   (#310). That is the job (a change to code is a change to its tests), so the
   residual is stated and not closed: the unattended chain's only input is the branch
-  it works on, the review reads the diff before the merge, and `main`'s ruleset
-  (`protect-main`, id 23805274, read with `gh api repos/.../rules/branches/main`,
-  which lists `required_status_checks`) requires CI. **`/pr` is not narrowed to its two files, and the reason is
+  it works on, the review reads the diff before the merge, and `/ship` step 6
+  merges only once every check on the pushed head has passed. `main`'s ruleset
+  (`protect-main`, id 23805274, read with `gh api repos/.../rules/branches/main`)
+  lists no `required_status_checks` rule, so a merge outside `/ship` is held
+  to CI by nobody; `docs/working-rules.md`, *Merging beside other agents*,
+  says what follows for auto-merge. **`/pr` is not narrowed to its two files, and the reason is
   structural**: a frontmatter deny holds for the rest of the user turn, and `/ship`
   runs `/pr` at step 4 and then applies review fixes to `src/**` and `tests/**` at
   step 5, so `Edit(src/**)` in `/pr` would refuse the chain's own fixes. `tools/**`
