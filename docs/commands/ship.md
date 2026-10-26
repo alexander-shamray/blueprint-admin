@@ -70,7 +70,7 @@ could have made differently:
 | This branch's PR was closed unmerged | Reopening a deliberate closure is not a recommended option |
 | A `branch-reviewer` round did not run | The agent is missing or its reply is not the JSON its file declares: the round did not happen, so no verdict may be minted from it |
 | `main` is ahead of `origin/main` at step 0 | Local commits on `main` need a decision this chain has no way to take |
-| CI is not green at step 6 | A merge onto a red `main` is not a judgement call |
+| CI is not green at step 6 | A merge onto a red `main` is not a judgement call, save the run that answers its issue (step 6) |
 | The PR is not mergeable | Conflicts are the caller's tree, not this chain's |
 
 The first two are questions about *this* run; the other four are questions
@@ -1101,7 +1101,8 @@ request into several. The bar for `medium` and above is unchanged.
    of the `pull_request` workflows and `--fail-fast` can exit 0 with nothing
    run. The two are the checks this change added, and a list that omits
    either is a wait that did not happen (#216). **A merge onto a
-   red `main` is not a recommended option**, and a conflicted branch is a
+   red `main` is not a recommended option**, save the one run that
+   answers its issue (below), and a conflicted branch is a
    question about the caller's tree that this chain cannot answer. Either one
    stops here and is reported as what it is.
 

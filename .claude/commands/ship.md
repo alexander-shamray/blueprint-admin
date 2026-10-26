@@ -37,7 +37,7 @@ checkout and removes the worktree, however the review ended.
 | This branch's PR was closed unmerged | Reopening a deliberate closure is not a recommended option |
 | A `branch-reviewer` round did not run | The round did not happen, so no verdict may be minted from it |
 | `main` is ahead of `origin/main` at step 0 | Local commits on `main` need a decision this chain has no way to take |
-| CI is not green at step 6 | A merge onto a red `main` is not a judgement call |
+| CI is not green at step 6 | A merge onto a red `main` is not a judgement call, save the run that answers its issue (step 6) |
 | The PR is not mergeable | Conflicts are the caller's tree, not this chain's |
 
 - **A refused push stops the chain before any PR exists.** `/pr` reports it:
