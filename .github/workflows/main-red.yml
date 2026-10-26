@@ -50,7 +50,7 @@ jobs:
               else
                 gh issue create --title "$TITLE" --label bug --label high --body "$body
 
-          Found by \`.github/workflows/main-red.yml\`, which watches \`ci\` on every push to \`main\`. Revert the pull request that turned it red first (\`bash .claude/scripts/git-revert-pr.sh <n>\`), then fix forward; a flake goes on the flaky tracker instead. The next green run on \`main\` closes this issue."
+          Found by \`.github/workflows/main-red.yml\`, which watches \`ci\` on every push to \`main\`. Revert the pull request that turned it red first (\`bash .claude/scripts/git-revert-pr.sh <n>\`), then fix forward. A flake is answered as \`docs/working-rules.md\`, *Merging beside other agents*, says, which owns what a red \`main\` is owed: a comment on the flaky tracker alone leaves \`main\` blocked, because only a green run on \`main\`'s tip closes this issue."
               fi
               ;;
             success)
