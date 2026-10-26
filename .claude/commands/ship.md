@@ -407,8 +407,9 @@ don't restart*)
      workflows for, an exit of 0 can mean nothing ran.
    - **An open `main is red` issue is a red check**, read after the
      checks wait: a pull request's checks never rerun when `main` turns
-     red. Exit 3 names it and is the CI-not-green stop; 2 is the read
-     failing, and stops too.
+     red. Exit 3 names it and is the CI-not-green stop, unless this run
+     was started for that issue (`/ship #<n>`): its revert or fix is
+     what turns `main` green. 2 is the read failing, and stops too.
    - **A non-empty workspace read is not a stop**: commit — **scoped**,
      always — push, re-enter step 5 for a recheck of what this workspace
      added, then return to the **top of this step**, not to this gate.

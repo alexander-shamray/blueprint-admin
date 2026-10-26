@@ -1123,6 +1123,16 @@ request into several. The bar for `medium` and above is unchanged.
    reason `gh-issue-list.sh` exists and a raw `gh issue list` grant would
    undo.
 
+   **The run that answers the issue is the one exemption.** The issue
+   closes only on a green `ci` run on `main`, and the revert or the fix
+   forward that produces one is itself a landing, so a gate with no
+   exemption leaves a red `main` no way out through this command. A run
+   started as `/ship #<n>` for the open issue's own number exists to
+   answer it, and exit 3 naming that number is not its stop. It is keyed
+   on the argument rather than on a `Reverts:` trailer because a fix
+   forward, such as an external drift no revert undoes, carries none. A
+   resumed run that drops the argument stops, and is resumed with it.
+
    **`MERGEABLE` is GitHub's answer about a merge commit, and this step lands
    by rebase**, which replays each commit and can conflict where
    merging the same branch would not. So the landing may be refused after this
