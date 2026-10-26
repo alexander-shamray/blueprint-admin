@@ -141,9 +141,8 @@ public sealed partial class LiteralDriftTests
         // host's own Dockerfile or appsettings, that set the variable would make Shipping's spans carry that value.
         string[] namers = [Path.Combine(Backend.Dir, "deploy", "compose"), Path.Combine(Backend.Dir, "src", "Services", "Shipping", service)];
         namers
-            .SelectMany(dir => Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
-            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
-                && !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .SelectMany(dir => Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories)
+                .Where(f => !Path.GetRelativePath(dir, f).Split(Path.DirectorySeparatorChar).Any(part => part is "bin" or "obj")))
             .Where(f => File.ReadAllText(f).Contains(serviceNameKey, StringComparison.Ordinal))
             .ShouldBeEmpty();
     }
