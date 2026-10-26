@@ -175,7 +175,8 @@ two pull requests together.
   since no command grants it (`docs/harness-boundaries.md` says so), and
   the revert lands as its own pull request, through a `/ship` started for
   the red issue's own number, the one run step 6's read lets through; the
-  fix lands after it the same way. A flake is the exception, a comment on
+  fix lands after it, once the issue has closed, and a fix forward with no
+  revert lands as the revert would. A flake is the exception, a comment on
   the flaky tracker by the user-level rule, and whoever comments also reruns
   `ci`'s failed jobs on `main`'s tip (`gh run rerun <run> --failed`, by
   hand, as no command grants it): only a green run on that tip closes the
