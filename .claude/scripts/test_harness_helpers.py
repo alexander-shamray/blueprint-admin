@@ -10282,5 +10282,111 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         self.assertFalse(reaches(git("rev-parse", "HEAD")))
 
 
+
+class MainRedOpenIsStepSixsReadOfARedMain(unittest.TestCase):
+    """`main-red-open.sh` is how `/ship` step 6 sees a red `main` (#531).
+
+    A pull request's checks are pinned to the merge they started on, so the
+    issue `main-red.yml` keeps open is the one signal that moves when `main`
+    turns red. These feed rows through the real `jq` filter behind a stubbed
+    `gh`, and hold the title and the query to the workflow that owns them.
+    """
+
+    HELPER = SCRIPTS / "main-red-open.sh"
+    WORKFLOW = SCRIPTS.parent.parent / ".github" / "workflows" / "main-red.yml"
+
+    def setUp(self):
+        self.bin = Path(tempfile.mkdtemp(prefix="ghstub-"))
+        self.log = self.bin / "calls"
+        stub = self.bin / "gh"
+        stub.write_text(
+            "#!/usr/bin/env bash\n"
+            'echo "$*" >> "$STUB_LOG"\n'
+            'if [ "$1 $2" = "issue list" ]; then\n'
+            '  [ -z "${STUB_FAIL:-}" ] || exit 1\n'
+            '  printf "%s" "$STUB_ROWS"; exit 0\n'
+            "fi\n"
+            'echo "unexpected gh call: $*" >&2; exit 9\n',
+            encoding="utf-8", newline="\n")
+        stub.chmod(0o755)
+
+    def tearDown(self):
+        shutil.rmtree(self.bin, ignore_errors=True)
+
+    def run_helper(self, rows="[]", fail=False, args=()):
+        env = {
+            **os.environ,
+            "PATH": str(self.bin) + os.pathsep + os.environ["PATH"],
+            "STUB_LOG": str(self.log),
+            "STUB_ROWS": rows,
+        }
+        env.pop("STUB_FAIL", None)
+        if fail:
+            env["STUB_FAIL"] = "1"
+        return subprocess.run(
+            [BASH, str(self.HELPER), *args],
+            capture_output=True, text=True, env=env)
+
+    @staticmethod
+    def rows(*titles):
+        return json.dumps([{"number": n, "title": t, "url": f"u{n}"}
+                           for n, t in enumerate(titles, start=1)])
+
+    def test_no_open_issue_lets_the_landing_through(self):
+        result = self.run_helper(self.rows())
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("", result.stdout)
+
+    def test_the_open_issue_stops_the_landing_and_is_named(self):
+        result = self.run_helper(self.rows("other", "main is red"))
+        self.assertEqual(3, result.returncode, result.stderr)
+        self.assertIn("#2 u2", result.stdout)
+        self.assertNotIn("#1", result.stdout)
+
+    def test_a_title_that_only_contains_the_phrase_is_not_the_issue(self):
+        # The search is full text, so it returns these; equality decides, as
+        # it does in the workflow.
+        result = self.run_helper(self.rows("main is red again?",
+                                           "Fix: main is red"))
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_a_listing_that_failed_fails_closed(self):
+        # A `gh` that could not answer is not a green `main`.
+        result = self.run_helper(fail=True)
+        self.assertEqual(2, result.returncode)
+        self.assertEqual("", result.stdout)
+
+    def test_a_full_page_is_refused_rather_than_read(self):
+        result = self.run_helper(self.rows(*["other"] * 100))
+        self.assertEqual(2, result.returncode)
+
+    def test_an_argument_is_refused_before_gh_runs(self):
+        # The caller chooses nothing: an argument is how a field set widens.
+        result = self.run_helper(args=("--json",))
+        self.assertEqual(2, result.returncode)
+        self.assertFalse(self.log.exists())
+
+    def test_the_title_and_the_query_are_the_workflows(self):
+        workflow = self.WORKFLOW.read_text(encoding="utf-8")
+        helper = self.HELPER.read_text(encoding="utf-8")
+        owned = re.search(r"^\s*TITLE: (.+?)\s*$", workflow, re.MULTILINE)
+        copied = re.search(r'^TITLE="(.+)"$', helper, re.MULTILINE)
+        self.assertIsNotNone(owned, "main-red.yml no longer spells TITLE")
+        self.assertIsNotNone(copied, "main-red-open.sh no longer spells TITLE")
+        self.assertEqual(owned.group(1), copied.group(1))
+        for part in ("--state open", "--label bug", 'in:title \\"$TITLE\\"'):
+            with self.subTest(part=part):
+                self.assertIn(part, workflow)
+                self.assertIn(part, helper)
+
+    def test_ship_grants_it_exactly_and_reads_it_at_step_six(self):
+        _, front, body = (COMMANDS / "ship.md").read_text(
+            encoding="utf-8").split("---", 2)
+        self.assertIn("Bash(bash .claude/scripts/main-red-open.sh)", front)
+        self.assertNotIn("main-red-open.sh:*", front)
+        self.assertNotIn("Bash(gh issue list", front)
+        self.assertIn("bash .claude/scripts/main-red-open.sh", body)
+
+
 if __name__ == "__main__":
     unittest.main()

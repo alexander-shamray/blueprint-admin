@@ -1011,17 +1011,18 @@ request into several. The bar for `medium` and above is unchanged.
    grant for deleting it, and `git worktree remove` does not count an ignored
    file as untracked work.
 
-   Three things genuinely gate it, and none is a judgement:
+   Four things genuinely gate it, and none is a judgement:
 
    ```bash
    bash .claude/scripts/pr-state.sh <n>
    gh pr checks <n> --watch --fail-fast --interval 60
+   bash .claude/scripts/main-red-open.sh   # 0: no open `main is red` issue
    git status --short              # empty
    git log <headRefOid>..HEAD      # empty: this workspace holds nothing extra
    ```
 
-   **The first two read the remote and the last two read the workspace, and
-   until round 9 only the remote half existed.** `headRefOid`, the checks and
+   **The first three read the remote and the last two read the workspace,
+   and until round 9 only the remote half existed.** `headRefOid`, the checks and
    `--match-head-commit` all agree happily about a head this checkout has
    since moved past: a commit made after the last review, or an edit made
    while the review ran, satisfies none of them and is invisible to all three.
@@ -1103,6 +1104,24 @@ request into several. The bar for `medium` and above is unchanged.
    red `main` is not a recommended option**, and a conflicted branch is a
    question about the caller's tree that this chain cannot answer. Either one
    stops here and is reported as what it is.
+
+   **An open `main is red` issue is a red check, and the pull request's
+   own checks cannot show it (#531).** A `pull_request` run is pinned to
+   the merge ref of the push that started it and nothing reruns it when
+   `main` moves, so with the up-to-date rule off a pull request last
+   pushed before `main` went red still reads green, and `--watch` exits 0
+   over it. The signal that does move is the issue
+   `.github/workflows/main-red.yml` keeps open while `ci` on `main`'s tip
+   is red, and `main-red-open.sh` reads it with the workflow's own query
+   and title, held to them by a test. Exit 3 names the open issue and is
+   the CI-not-green stop; 2 is a listing it could not take, and a read
+   that cannot say `main` is green has not said so. It runs after the
+   checks wait rather than before it, because that wait lasts minutes and
+   `main` can turn red inside it; what remains between this read and the
+   merge is seconds, and that residue is accepted. The helper takes no
+   argument and fixes its fields, so the grant reaches no issue body, the
+   reason `gh-issue-list.sh` exists and a raw `gh issue list` grant would
+   undo.
 
    **`MERGEABLE` is GitHub's answer about a merge commit, and this step lands
    by rebase**, which replays each commit and can conflict where
