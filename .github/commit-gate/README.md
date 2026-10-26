@@ -39,8 +39,9 @@ the suite runs the branch's copy, so a pull request cannot supply its own
 judge. The pull request that introduces the gate has no base copy and is
 judged by its own, with a notice; a base without the gate and a head without
 it fails. The workflow file itself is the branch's copy, as in
-[`locality-gate`](../workflows/locality-gate.yml), and closing that needs the
-required status check that `main`'s ruleset is to list.
+[`locality-gate`](../workflows/locality-gate.yml): the required status check
+`main`'s ruleset lists holds a deleted job, and a job rewritten under the
+same name is the review's to read.
 
 [`ci.yml`](../workflows/ci.yml)'s `commits` job is the other half: it builds
 every commit before the head, which `host`, `web` and `smoke` already cover.

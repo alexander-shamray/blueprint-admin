@@ -39,8 +39,8 @@ concurrency:
 # fails: that is a base nobody should be building on.
 
 # The workflow definition comes from the head ref, so a pull request can edit
-# or delete the enforcing step. What closes that is a required status check on
-# `main`.
+# or delete the enforcing step. A required status check on `main` holds a
+# deleted job; a job rewritten under the same name is the review's to read.
 jobs:
   locality-gate:
     runs-on: ubuntu-latest
