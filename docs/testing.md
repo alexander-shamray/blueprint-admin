@@ -33,7 +33,7 @@ no `node_modules`; the first check fails on a missing `ng`.
 `.i18n-check/`, then `scripts/check-translations.mjs`, which fails when
 `src/locale/messages.en-US.json` is not what the templates say or a shipped
 translation lacks a message. After changing a string, `npm run i18n:extract`
-and translate what it adds. The `@angular-eslint/template/i18n` rule runs on
+and translate what it adds, in the terms `src/locale/GLOSSARY.md` keeps. The `@angular-eslint/template/i18n` rule runs on
 the templates `eslint.config.js` lists as translated.
 
 CI's `web` job also runs `npm audit --audit-level=high` after `npm ci`, dev
