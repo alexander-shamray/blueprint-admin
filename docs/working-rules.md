@@ -146,10 +146,11 @@ two pull requests together.
 - **Auto-merge waits on `protect-main`'s required checks and nothing
   else**: not on the review, not on an open `main is red` issue, and not on
   a branch being up to date. So a pull request is set to auto-merge only
-  once its review has ended and no `main is red` issue is open, and it still
-  lands if one opens after that. `/ship` does not set it: step 6 waits on
-  every check of the pushed head and lands with `gh-pr-merge.sh` against the
-  head it read.
+  once its review has ended and no `main is red` issue is open, and when one
+  opens, auto-merge is turned off (`gh pr merge <n> --disable-auto`) on
+  every pull request that has it, since it would otherwise land through the
+  issue. `/ship` does not set it: step 6 waits on every check of the pushed
+  head and lands with `gh-pr-merge.sh` against the head it read.
 - **Every `ci` job also runs on the push to `main`**, `commits` included,
   which builds the commits the landing replayed onto a `main` their pull
   request was never tested against. Only `commit-gate.yml` and
