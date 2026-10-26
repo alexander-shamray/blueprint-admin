@@ -143,11 +143,13 @@ two pull requests together.
   the clone's config, so a resolution recorded in one is replayed in the
   next. It does not stage what it replays, so the helper's `continue` still
   follows a `git add`.
-- **No pull request is set to auto-merge** while `protect-main` requires no
-  status check: with nothing to wait for, auto-merge lands at once, before
-  `ci` has run. `/ship` waits on the checks and lands with
-  `gh-pr-merge.sh` against the head it read, and a merge by hand does the
-  same.
+- **Auto-merge waits on `protect-main`'s required checks and nothing
+  else**: not on the review, not on an open `main is red` issue, and not on
+  a branch being up to date. So a pull request is set to auto-merge only
+  once its review has ended and no `main is red` issue is open, and it still
+  lands if one opens after that. `/ship` does not set it: step 6 waits on
+  every check of the pushed head and lands with `gh-pr-merge.sh` against the
+  head it read.
 - **Every `ci` job also runs on the push to `main`**, `commits` included,
   which builds the commits the landing replayed onto a `main` their pull
   request was never tested against. Only `commit-gate.yml` and
