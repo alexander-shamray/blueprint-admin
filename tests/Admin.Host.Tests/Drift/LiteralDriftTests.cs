@@ -124,13 +124,24 @@ public sealed partial class LiteralDriftTests
     }
 
     [Fact]
-    public void Shippings_service_name_is_its_host_projects_since_the_common_defaults_name_a_service_after_its_application()
+    public void Shippings_service_name_is_its_host_projects_since_the_common_defaults_fall_back_to_the_application_and_compose_names_none()
     {
+        const string serviceNameKey = "OTEL_SERVICE_NAME";
         string service = SpanRecogniser.ShippingService;
+        string observability = Backend.Read("src", "BuildingBlocks", "Common.Web", "ObservabilityExtensions.cs");
 
         Backend.Read("src", "Services", "Shipping", service, "Program.cs").ShouldContain("builder.AddCommonWebDefaults();");
         File.Exists(Path.Combine(Backend.Dir, "src", "Services", "Shipping", service, $"{service}.csproj")).ShouldBeTrue();
-        Backend.Read("src", "BuildingBlocks", "Common.Web", "ObservabilityExtensions.cs").ShouldContain("string serviceName = builder.Environment.ApplicationName;");
+        observability.ShouldContain($"public const string ServiceNameKey = \"{serviceNameKey}\";");
+        observability.ShouldContain("string assembly = builder.Environment.ApplicationName;");
+        observability.ShouldContain("string serviceName = builder.Configuration[ServiceNameKey] is { } named");
+        observability.ShouldContain("            : assembly;");
+
+        // The fallback is the one that applies only while nothing local names the service: a Compose file that set
+        // the variable would make Shipping's spans carry that value instead.
+        Directory.EnumerateFiles(Path.Combine(Backend.Dir, "deploy", "compose"), "*", SearchOption.AllDirectories)
+            .Where(f => File.ReadAllText(f).Contains(serviceNameKey, StringComparison.Ordinal))
+            .ShouldBeEmpty();
     }
 
     [Fact]
