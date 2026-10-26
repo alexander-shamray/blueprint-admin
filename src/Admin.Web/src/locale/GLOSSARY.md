@@ -45,7 +45,8 @@ headers.
 Counts read «noun: N» without agreement, because `$localize` has no run-time
 ICU plural; a template's own ICU plural gets every Russian form. The
 Scenario's wait fragments complete «Ждём, пока {$what}», so each is a clause.
-The English «·» separator becomes «—».
+An English «·» separator inside a message becomes «—»; one a template
+writes outside its i18n blocks stays as it is.
 
 No native speaker has read the Russian text. The owner reviewed and approved
 it in that reader's place (#520).
