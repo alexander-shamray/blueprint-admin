@@ -46,9 +46,10 @@ cd "$root/src/Admin.Web"
 
 case "$mode" in
   all)
-    # The web job of .github/workflows/ci.yml, in its order. Lint first because
-    # it is the cheapest and the most often red; build last because it is the
-    # slowest and a type error has usually already surfaced in the tests.
+    # The web job of .github/workflows/ci.yml, in its order, less its
+    # `npm audit` step, which asks the registry. Lint first because it is the
+    # cheapest and the most often red; build last because it is the slowest
+    # and a type error has usually already surfaced in the tests.
     npm run lint
     npm test
     exec npm run build
