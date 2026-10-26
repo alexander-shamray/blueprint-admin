@@ -68,9 +68,12 @@ as out of scope, never filed.
   it works on, the review reads the diff before the merge, and `/ship` step 6
   merges only once every check on the pushed head has passed. `main`'s ruleset
   (`protect-main`, id 23805274, read with `gh api repos/.../rules/branches/main`)
-  lists no `required_status_checks` rule, so a merge outside `/ship` is held
-  to CI by nobody; `docs/working-rules.md`, *Merging beside other agents*,
-  says what follows for auto-merge. **`/pr` is not narrowed to its two files, and the reason is
+  carries a `required_status_checks` rule, which owns the list of checks, so
+  a merge outside `/ship` waits on them too (#530); `docs/working-rules.md`,
+  *Merging beside other agents*, says what follows for auto-merge. A
+  required check is matched by its job's name, so it holds a red or missing
+  job and not one a pull request rewrote under the same name: that is the
+  review's to read. **`/pr` is not narrowed to its two files, and the reason is
   structural**: a frontmatter deny holds for the rest of the user turn, and `/ship`
   runs `/pr` at step 4 and then applies review fixes to `src/**` and `tests/**` at
   step 5, so `Edit(src/**)` in `/pr` would refuse the chain's own fixes. `tools/**`
