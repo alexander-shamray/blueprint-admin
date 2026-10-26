@@ -147,10 +147,11 @@ two pull requests together.
   else**: not on the review, not on an open `main is red` issue, and not on
   a branch being up to date. So a pull request is set to auto-merge only
   once its review has ended and no `main is red` issue is open. When one
-  opens, whoever reverts the pull request that turned it red (below) also
-  turns auto-merge off (`gh pr merge <n> --disable-auto`) on every pull
-  request that has it, since it would otherwise land through the issue.
-  Nothing automates that, as nothing automates the revert. `/ship` does not
+  opens, whoever answers it (below), by a revert or by a comment on the
+  flaky tracker, also turns auto-merge off (`gh pr merge <n>
+  --disable-auto`) on every pull request that has it, since it would
+  otherwise land through the issue. Nothing automates that, as nothing
+  automates the revert. `/ship` does not
   set it: step 6 waits on every check of the pushed head and lands with
   `gh-pr-merge.sh` against the head it read.
 - **Every `ci` job also runs on the push to `main`**, `commits` included,
