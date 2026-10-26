@@ -1117,8 +1117,11 @@ request into several. The bar for `medium` and above is unchanged.
    the CI-not-green stop; 2 is a listing it could not take, and a read
    that cannot say `main` is green has not said so. It runs after the
    checks wait rather than before it, because that wait lasts minutes and
-   `main` can turn red inside it; what remains between this read and the
-   merge is seconds, and that residue is accepted. The helper takes no
+   `main` can turn red inside it. Two residues are accepted: the seconds
+   between this read and the merge, and the signal's own lag, since the
+   workflow opens the issue only once `ci` on `main`'s tip has finished,
+   so a `main` a landing broke reads green for that run's length. The
+   helper takes no
    argument and fixes its fields, so the grant reaches no issue body, the
    reason `gh-issue-list.sh` exists and a raw `gh issue list` grant would
    undo.
