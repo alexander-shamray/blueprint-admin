@@ -173,8 +173,10 @@ two pull requests together.
   wait. The pull request that turned it red is
   reverted with `bash .claude/scripts/git-revert-pr.sh <n>`, run by hand,
   since no command grants it (`docs/harness-boundaries.md` says so), and
-  the revert lands as its own pull request; the fix lands after it. A flake
-  is the exception, a comment on the flaky tracker by the user-level rule.
+  the revert lands as its own pull request, through a `/ship` started for
+  the red issue's own number, the one run step 6's read lets through; the
+  fix lands after it the same way. A flake is the exception, a comment on
+  the flaky tracker by the user-level rule.
   A check that is red on a pull request and on `main` belongs to `main`, so
   a pull request that touched none of it waits for that issue to close and
   is not changed to make it pass. Once the issue closes, a rerun would still
