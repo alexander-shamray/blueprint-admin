@@ -4,7 +4,7 @@
 `$localize` calls; `messages.<locale>.json` is each language the console ships.
 The build copies only `messages.*.json` from this directory (`angular.json`,
 `assets`), so this file is not served. `npm run lint` checks that every id has
-text and every placeholder survives (`docs/testing.md`).
+text and every placeholder survives (`scripts/check-translations.mjs`).
 
 ## ru-RU
 
