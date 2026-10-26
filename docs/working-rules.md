@@ -152,8 +152,9 @@ two pull requests together.
   --disable-auto`) on every pull request that has it, since it would
   otherwise land through the issue. Nothing automates that, as nothing
   automates the revert. `/ship` does not
-  set it: step 6 waits on every check of the pushed head and lands with
-  `gh-pr-merge.sh` against the head it read.
+  set it: step 6 waits on every check of the pushed head, stops on an open
+  `main is red` issue, and lands with `gh-pr-merge.sh` against the head it
+  read.
 - **Every `ci` job also runs on the push to `main`**, `commits` included,
   which builds the commits the landing replayed onto a `main` their pull
   request was never tested against. Only `commit-gate.yml` and
@@ -167,8 +168,9 @@ two pull requests together.
   a pull request's own checks**: a `pull_request` run is pinned to the
   merge it started on and never reruns when `main` moves, so a pull request
   last pushed before `main` went red still reads green. So an open
-  `main is red` issue stops a landing as a red check would; `/ship` step 6
-  does not read it yet (#531). The pull request that turned it red is
+  `main is red` issue stops a landing as a red check would, and `/ship`
+  step 6 reads it with `.claude/scripts/main-red-open.sh` after its checks
+  wait. The pull request that turned it red is
   reverted with `bash .claude/scripts/git-revert-pr.sh <n>`, run by hand,
   since no command grants it (`docs/harness-boundaries.md` says so), and
   the revert lands as its own pull request; the fix lands after it. A flake
