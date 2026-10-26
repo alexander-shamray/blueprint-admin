@@ -137,9 +137,13 @@ public sealed partial class LiteralDriftTests
         observability.ShouldContain("string serviceName = builder.Configuration[ServiceNameKey] is { } named");
         observability.ShouldContain("            : assembly;");
 
-        // The fallback is the one that applies only while nothing local names the service: a Compose file that set
-        // the variable would make Shipping's spans carry that value instead.
-        Directory.EnumerateFiles(Path.Combine(Backend.Dir, "deploy", "compose"), "*", SearchOption.AllDirectories)
+        // The fallback is the one that applies only while nothing local names the service: a Compose file, or the
+        // host's own Dockerfile or appsettings, that set the variable would make Shipping's spans carry that value.
+        string[] namers = [Path.Combine(Backend.Dir, "deploy", "compose"), Path.Combine(Backend.Dir, "src", "Services", "Shipping", service)];
+        namers
+            .SelectMany(dir => Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                && !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
             .Where(f => File.ReadAllText(f).Contains(serviceNameKey, StringComparison.Ordinal))
             .ShouldBeEmpty();
     }
