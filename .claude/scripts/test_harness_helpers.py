@@ -1893,7 +1893,8 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
 
     # What MSBuild and NuGet load without being asked (#311): a `Directory.Build.targets`
     # `Exec` runs and the build reports success. Documented names, finite like
-    # the Node list above, and none tracked, so `git ls-files` cannot reach them.
+    # the Node list above, and none tracked but the root nuget.config
+    # (TRACKED_BY_DESIGN), so `git ls-files` cannot reach the rest.
     # The first group is the root spellings (both `X` and `./X` are denied); the
     # second the families, denied at any depth.
     MSBUILD_AUTO_IMPORTED = (
@@ -1910,8 +1911,8 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
         "**/MSBuild.rsp", "**/msbuild.rsp", "**/global.json",
     )
     # #435: the root nuget.config names the GitHub Packages feed the assistant's
-    # core restores from, so it is tracked. It stays in PROTECTED_FILES and denied
-    # to every editing command, so a change to it is still the owner's.
+    # core restores from, so it may be tracked. It stays in PROTECTED_FILES and
+    # denied to every editing command, so a change to it is still the owner's.
     TRACKED_BY_DESIGN = ("nuget.config",)
 
     def _msbuild_rules(self):
@@ -1960,6 +1961,7 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
         self.assertNotIn("Edit(.claude/**)", denied)
 
     def test_the_msbuild_and_nuget_names_are_protected_files_and_untracked(self):
+        # Untracked save TRACKED_BY_DESIGN; protected without exception.
         spec = importlib.util.spec_from_file_location("guard_git_argv", HOOK)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
