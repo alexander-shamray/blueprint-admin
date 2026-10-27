@@ -38,8 +38,8 @@ jobs:
       - if: runner.os == 'Linux'
         run: python3 .github/pin-gate/pin_gate.py
       # Its evaluation (the same README): each project as MSBuild evaluates
-      # it, before anything restores. On both legs, since a condition can key
-      # an import on the operating system.
+      # it, before this job's build restores. On both legs, since a
+      # condition can key an import on the operating system.
       - run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} .github/pin-gate/evaluate.py
       - run: dotnet build --configuration Release
         env:
