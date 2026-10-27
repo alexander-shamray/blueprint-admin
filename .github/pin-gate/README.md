@@ -103,8 +103,8 @@ other properties (`$(SomeRoot)\..\x`), handed to a property the common
 targets import by a name none of the rules above catches (#562). It has
 MSBuild evaluate every tracked `*proj` (`-getProperty`, `-getItem` and
 `-preprocess`), with no configuration and with `Release`, as the jobs build,
-and before anything restores, so names and expansions stop mattering. In
-each evaluation it refuses:
+and before its job's build restores, so names and expansions stop
+mattering. In each evaluation it refuses:
 
 - an import outside the repository and the .NET install that ran it: every
   file `-preprocess` names, read from MSBuild's banners as XML, so no text
@@ -164,9 +164,9 @@ and before that commit is built, because a later bisect restores each one on
 a developer's machine.
 
 The evaluation runs in the same two places, after the static read and
-before the build, so before anything restores; in the `host` job on both
-legs, since what MSBuild evaluates can differ by operating system where the
-tree does not.
+before the build, so before that job's build restores (the other jobs
+restore beside it, as above); in the `host` job on both legs, since what
+MSBuild evaluates can differ by operating system where the tree does not.
 
 **The head's copy judges**, unlike the commit gate's base copy. The commit
 gate judges a pull request's metadata, which the branch writes freely; this
