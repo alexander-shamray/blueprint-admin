@@ -96,14 +96,47 @@ the nearest for its subtree too), a root `global.json` carrying
 `BlueprintAdmin.slnx`, and a project entry in that one naming anything but a
 literal path to a tracked `*proj`.
 
+## What the evaluation refuses
+
+`evaluate.py` closes what a static read cannot: a property value built from
+other properties (`$(SomeRoot)\..\x`), handed to a property the common
+targets import by a name none of the rules above catches (#562). It has
+MSBuild evaluate every tracked `*proj` (`-getProperty`, `-getItem` and
+`-preprocess`), with no configuration and with `Release`, as the jobs build,
+and before anything restores, so names and expansions stop mattering. In
+each evaluation it refuses:
+
+- an import outside the repository and the .NET install that ran it: every
+  file `-preprocess` names, read from MSBuild's banners as XML, so no text
+  inside a project can open a comment that hides one;
+- a feed or a NuGet setting (`RestoreSources`,
+  `RestoreAdditionalProjectSources`, `RestoreConfigFile`,
+  `RestoreRootConfigDirectory`) that evaluates to anything, and a package
+  folder (`RestorePackagesPath` and the fallback folders) outside the same
+  two bounds;
+- `ManagePackageVersionsCentrally` not `true`,
+  `CentralPackageVersionOverrideEnabled` not `false`, or a
+  `DirectoryPackagesPropsPath` other than the root pin file;
+- a `PackageVersion` or `GlobalPackageReference` defined anywhere but the
+  pin file or evaluating to a version other than its literal one there,
+  and one of the pin file's missing;
+- a `PackageReference` or `PackageDownload` that carries a `Version` or a
+  `VersionOverride`, save the SDK's own implicit references, defined by a
+  file in the .NET install, whose versions the `global.json` pin chooses.
+
+It fails rather than judges when MSBuild does not evaluate a project, when
+the SDK MSBuild ran from is not the install on `PATH`, and on a tree already
+restored, whose restore output imports the packages' own props from the
+NuGet cache, outside both bounds: run it on a clean checkout.
+
 ## What it does not judge
 
-A property value built from other properties (`$(SomeRoot)\..\x`): the gate
-reads MSBuild statically and cannot evaluate one. Given to a property the
-common targets import by a name none of the rules above catches, it could
-reach a file outside the repository. That is left to the review, which is
-also what reads a target; the rules above make such a property rare and
-visible.
+A condition keyed on anything but the configuration (an environment
+variable, a global property the solution hands its projects) is evaluated
+as the runner sees it; the operating system is covered by evaluating on
+both of the `host` job's legs. Nor a file that evaluation reads without
+importing it, through a property function, or what a target does: the
+rules above refuse every target, and the review reads the rest.
 
 The code the build compiles and the tests run: the residual
 `docs/harness-boundaries.md` already accepts for `src/**`, which asks for a
@@ -122,6 +155,11 @@ parallel, as they already build and run the pull request's own code, which
 is the residual above. In the `commits` job, on each commit before the head
 and before that commit is built, because a later bisect restores each one on
 a developer's machine.
+
+The evaluation runs in the same two places, after the static read and
+before the build, so before anything restores; in the `host` job on both
+legs, since what MSBuild evaluates can differ by operating system where the
+tree does not.
 
 **The head's copy judges**, unlike the commit gate's base copy. The commit
 gate judges a pull request's metadata, which the branch writes freely; this
