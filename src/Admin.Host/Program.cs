@@ -97,8 +97,8 @@ builder.Services.AddSingleton<WorkstationDoctor>();
 builder.Services.AddSingleton<DeviceReads>();
 builder.Services.AddSingleton<LoadRunService>();
 
-// The stress run leaves the stack idle for run-locally.md's minute after its up; FakePlatform's up recreates nothing, so it
-// waits none, and its summary is the hand-written one rather than a file in the clone.
+// The stress run leaves the stack idle for run-locally.md's minute after its up. FakePlatform has no live stack to quieten
+// and the smoke cannot wait a minute, so it waits none, and its summary is the hand-written one rather than a file in the clone.
 builder.Services.AddSingleton(sp => new StressRunService(
     sp.GetRequiredService<IProcessRunner>(),
     sp.GetRequiredService<ComposeGate>(),
