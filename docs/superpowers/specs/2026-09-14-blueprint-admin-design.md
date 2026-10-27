@@ -31,8 +31,9 @@ Three properties follow, and each design choice below is argued against them:
 
 1. **The console runs the platform's own commands.** Starting the backend is
    `docker compose -f deploy/compose/docker-compose.yml up -d --wait`, in the
-   backend clone, with its output shown. Nothing is reimplemented that the
-   Compose files or `package.json` already own.
+   backend clone, with its output shown: Compose asked to report as JSON, and
+   the images it pulls shown as a table above the rest (§5.3). Nothing is
+   reimplemented that the Compose files or `package.json` already own.
 2. **Nothing is invented that the backend owns.** Routes come from the
    gateway's configuration and the services' OpenAPI documents; permission
    names, status codes and error bodies pass through untouched. Where the
