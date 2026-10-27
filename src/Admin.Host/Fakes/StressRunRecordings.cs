@@ -122,9 +122,11 @@ internal static class StressRunRecordings
     /// <summary>How far through the default's five steps a tick is, as k6's bar prints it.</summary>
     private static int Percent(int tick) => 100 * tick / (5 * (RampTicks + HoldTicks));
 
-    /// <summary>k6's elapsed time as it prints it, at the default's pace of one tick a second.</summary>
+    /// <summary>
+    /// k6's elapsed time as it prints it, at the default's pace of one tick a second. A run whose most duration passes a minute
+    /// prints minutes from the first tick, as the load run's recorded <c>0m01.0s</c> does, padded here to the two digits a
+    /// 17m40s run's minutes take.
+    /// </summary>
     private static string Elapsed(int seconds) =>
-        seconds < 60
-            ? string.Create(CultureInfo.InvariantCulture, $"{seconds:00}.0s")
-            : string.Create(CultureInfo.InvariantCulture, $"{seconds / 60}m{seconds % 60:00}.0s");
+        string.Create(CultureInfo.InvariantCulture, $"{seconds / 60:00}m{seconds % 60:00}.0s");
 }
