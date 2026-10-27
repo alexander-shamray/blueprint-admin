@@ -131,9 +131,9 @@ Browser (any client)                   Host (any host)                         P
 assistant-client.ts  ──POST/GET /api──► endpoints (Admin.Host/Assistant)
  · protocol types                        │
  · SSE reader                            ▼
- · client-tool registry ◄─client_tool─  AssistantSession  (Admin.Assistant)  ──► IAssistantProvider
+ · client-tool registry ◄─client_tool─  AssistantSession (Common.Assistant)  ──► IAssistantProvider
    (open_screen, …)    ─tool-results─►   · the loop, limits, cancel             ├ AnthropicProvider
-assistant-panel (Angular)                · history (append-only)                 │  (Admin.Assistant.Anthropic)
+assistant-panel (Angular)                · history (append-only)                 │  (Common.Assistant.Anthropic)
                                          · redaction of every outbound byte     ├ FakeAssistantProvider
                                          ▼                                       │  (Admin.Host/Fakes)
                                        IToolSource × n  (host's read-only tools) └ … another adapter
@@ -572,7 +572,7 @@ with the feature off (§9.1).
 
 ### 8.4 Another provider
 
-A project beside `Admin.Assistant.Anthropic`, an `IAssistantProvider`, and one
+A package beside `Common.Assistant.Anthropic`, an `IAssistantProvider`, and one
 more value `Admin:Assistant:Provider` accepts. A provider on the workstation
 (a local model server on loopback) adds no outbound surface at all.
 
@@ -600,7 +600,7 @@ it off:
 
 - **The host reaches no provider and builds none.** No adapter is
   constructed, no SDK client is created, and no credential is resolved. The
-  `Admin.Assistant.Anthropic` assembly is never loaded.
+  `Common.Assistant.Anthropic` assembly is never loaded.
 - **The endpoints shrink to one.** `GET /api/assistant` answers
   `enabled: false, reason: off`. Every other `/api/assistant/*` route answers
   `404`, so nothing can open a conversation.
