@@ -328,6 +328,6 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
     /// builds nothing and is no value. The <c>ConnectionStrings__</c> environment lines are held to the host's own by
     /// ReplayDriftTests; any other is listed in <see cref="NotRun"/> with the section that sets it.
     /// </summary>
-    [GeneratedRegex(@"^(?:\$\w+ = @\{|\$\w+ = " + Value + @"(?: \| ConvertTo-Json)?(?:; \$\w+ = " + Value + @")*|\$env:\w+ = '[^']*'|\w+ = " + Value + @"(?:; \w+ = " + Value + @")*|\} \| ConvertTo-Json(?: -Depth \d+)?\))$")]
+    [GeneratedRegex(@"^(?:\$\w+ = @\{|\$\w+ = " + Value + @"(?: \| ConvertTo-Json)?(?:; \$\w+ = " + Value + @")*|\$env:ConnectionStrings__\w+ = '[^']*'|\w+ = " + Value + @"(?:; \w+ = " + Value + @")*|\} \| ConvertTo-Json(?: -Depth \d+)?\))$")]
     private static partial Regex BuildsAValue();
 }
