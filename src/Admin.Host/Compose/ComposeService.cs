@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Text.Json;
 using Admin.Host.Config;
 using Admin.Host.Jobs;
@@ -15,7 +16,7 @@ public sealed class ComposeService(IProcessRunner runner, RepoPaths paths, TimeP
     /// the Job output's per-image pull progress reads, and what Compose's plain lines leave out. A flag on how Compose
     /// reports, not on what it does, so the line is still run-locally.md's.
     /// </summary>
-    internal static readonly string[] Progress = ["--progress", "json"];
+    internal static readonly ImmutableArray<string> Progress = ["--progress", "json"];
 
     public Job Up() => Run([.. Progress, "up", "-d", "--wait"]);
 
