@@ -114,11 +114,14 @@ py -3.12 .github/pin-gate/pin_gate.py
 Its evaluation runs beside it in both places. It has MSBuild evaluate each
 project, so it needs the pinned SDK and a tree that has not been restored: a
 fresh clone or worktree, since one already built fails naming its
-`project.assets.json`. Its live cases skip where no .NET SDK runs:
+`project.assets.json`, and it fails where no .NET SDK is on `PATH`:
 
 ```bash
 py -3.12 .github/pin-gate/evaluate.py
 ```
+
+Its suite's live cases, which run MSBuild on a repository built for each
+case, skip where no .NET SDK runs.
 
 ## Locality
 
