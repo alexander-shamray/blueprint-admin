@@ -311,8 +311,8 @@ public sealed class LoadRunService(IProcessRunner runner, JobRegistry registry, 
         return (await job.Completion, stdout);
     }
 
-    /// <summary>Whether a step's job is k6's own, the last block.</summary>
-    private static bool IsRun(Job job) => job.Spec.Arguments is [.., var block] && block == Run;
+    /// <summary>Whether a step's job is k6's own, the last block, as it was started: with the configured <c>sa</c> password swapped in.</summary>
+    private bool IsRun(Job job) => job.Spec.Arguments is [.., var block] && block == Spec(Run, paths, options.Value.SqlPassword).Arguments[^1];
 
     private static string Verdict(int exitCode) => Verdicts.TryGetValue(exitCode, out string? verdict) ? verdict : "k6's own code, which run-locally.md does not read";
 

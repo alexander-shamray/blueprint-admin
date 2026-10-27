@@ -119,6 +119,23 @@ public sealed class StressRunServiceTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Stop_in_the_run_block_on_a_stack_with_another_sql_password_is_still_a_stop_during_k6()
+    {
+        const string password = "Other_Pa55!";
+        runner.On("powershell", Arguments(LoadRunService.K6Read), 0, "k6.exe v2.2.0")
+            .On("powershell", Arguments(StressRunService.Up), 0, " Container commerce-gateway-1  Recreated")
+            .On("powershell", Arguments(LoadRunService.PrometheusReady), 0, LoadRunService.PrometheusYes)
+            .OnLongRunning("powershell", string.Join(' ', LoadRunService.Spec(StressRunService.Run, Paths, password).Arguments), "running (01.0s), 05/50 VUs, 0 complete and 0 interrupted iterations");
+        StressRunService service = new(runner, composeGate, registry, Paths, Options.Create(new AdminOptions { SqlPassword = password }), time, TimeSpan.Zero, _ => null);
+
+        Job run = service.Start().Job;
+        await WaitUntilAsync(() => runner.Started.Count == 4 && runner.LastStarted is { State: JobState.Running });
+        await service.StopAsync().WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        Texts(run)[^1].ShouldBe(StressRunService.StoppedInRun);
+    }
+
+    [Fact]
     public async Task A_missing_k6_ends_the_run_at_its_first_block_before_the_stack_is_touched()
     {
         runner.On("powershell", Arguments(LoadRunService.K6Read), 0, "k6: not installed (winget install k6 --source winget)");

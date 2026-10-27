@@ -164,6 +164,26 @@ public sealed class LoadRunServiceTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Stop_in_the_run_block_on_a_stack_with_another_sql_password_still_says_teardown_did_not_run()
+    {
+        const string password = "Other_Pa55!";
+        runner.On("powershell", Arguments(LoadRunService.K6Read), 0, Recorded(LoadRunRecordings.K6))
+            .On("powershell", Arguments(LoadRunService.PrometheusReady), 0, Recorded(LoadRunRecordings.Prometheus))
+            .On("powershell", Arguments(LoadRunService.SloClient), 0, Recorded(LoadRunRecordings.SloClient))
+            .On("powershell", Arguments(LoadRunService.TokenCheck), 0, Recorded(LoadRunRecordings.TokenCheck))
+            .On("powershell", string.Join(' ', LoadRunService.Spec(LoadRunService.Product, Paths, password).Arguments), 0, Recorded(LoadRunRecordings.Product))
+            .On("powershell", string.Join(' ', LoadRunService.Spec(LoadRunService.Restock, Paths, password).Arguments), 0, Recorded(LoadRunRecordings.Restock))
+            .OnLongRunning("powershell", string.Join(' ', LoadRunService.Spec(LoadRunService.Run, Paths, password).Arguments), "running (0m01.0s), 00/20 VUs, 1 complete and 0 interrupted iterations");
+        LoadRunService service = new(runner, registry, Paths, Options.Create(new AdminOptions { SqlPassword = password }));
+
+        Job run = service.Start();
+        await WaitUntilAsync(() => runner.Started.Count == LoadRunService.Steps.Count && runner.LastStarted is { State: JobState.Running });
+        await service.StopAsync().WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        Texts(run)[^1].ShouldBe(LoadRunService.StoppedInRun);
+    }
+
+    [Fact]
     public async Task Stop_before_k6_names_the_step_it_ended_and_says_no_load_was_driven()
     {
         runner.On("powershell", Arguments(LoadRunService.K6Read), 0, Recorded(LoadRunRecordings.K6))
