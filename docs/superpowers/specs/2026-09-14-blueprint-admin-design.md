@@ -1329,13 +1329,13 @@ and the Playwright smoke covering the new screen.
 
 - Deployment, containers, multi-user, any listener that is not loopback.
 - Keycloak realm administration (users, clients, roles). The Keycloak console
-  is linked for that. The one change the console makes to the realm is the
-  load run's (§5.3): it makes the `slo-run` client when it is missing and
-  grants it its two roles, by `run-locally.md`'s own block, because that
-  document's run needs it and Keycloak keeps no volume, so every `down` takes
-  it away. The stress run's `setup()`, the backend's script and not the
-  console's, makes the `stress-run` client and its users the same way (§5.3).
-  It edits nothing else, and offers no way to.
+  is linked for that. The console's changes to the realm are the two runs'
+  (§5.3), each made by the backend's own block or script because that run
+  needs it and Keycloak keeps no volume, so every `down` takes it away: the
+  load run makes the `slo-run` client when it is missing and grants it its two
+  roles, by `run-locally.md`'s own block, and the stress run's `setup()` makes
+  the `stress-run` client and its users. The console edits nothing else in the
+  realm, and offers no way to.
 - Replacing Grafana. The Trace screen joins; Explore is one click away for
   anything deeper.
 - Editing the sibling repositories. If a backend fact needed for §5.8 or §5.9
