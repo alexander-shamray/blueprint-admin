@@ -105,6 +105,19 @@ public sealed class StressRunService(
     internal const string StoppedInRun =
         "stopped in the run block: if k6 had started, it wrote no raw.json and no summary, so there is no knee and the run is neither a pass nor a fail; any orders it placed stay, and the stack is still on the stress override.";
 
+    /// <summary>
+    /// What a Stop leaves that ran out of <see cref="SummaryGrace"/> after k6 had ended: k6 wrote <c>raw.json</c>, but the sampler or
+    /// summarise.mjs had not finished, so the block was ended and the summary may be missing or partial.
+    /// </summary>
+    internal const string StoppedSummarising =
+        "stopped while the summary was being written: k6 had ended and wrote raw.json, but the sampler or summarise.mjs had not finished in time, so the block was ended and the summary may be missing; the stack is still on the stress override.";
+
+    /// <summary>
+    /// How long a Stop after k6's exit line waits for the sampler, which polls every five seconds, and summarise.mjs, which reads
+    /// Prometheus once a step, before it ends the block after all.
+    /// </summary>
+    public static readonly TimeSpan SummaryGrace = TimeSpan.FromMinutes(2);
+
     /// <summary>What a Stop before k6 leaves: no load was driven. Only a Stop at or after the up can have left the override on.</summary>
     internal static string StoppedBefore(string step) => $"stopped at the {step} step, before k6 started: no load was driven and no order was placed.";
 
@@ -159,9 +172,9 @@ public sealed class StressRunService(
 
     /// <summary>
     /// Ends the run going, at the step it is in, and waits for the job to say so; null when none is going. As the load run's Stop,
-    /// it kills the step's process tree. One that arrives after k6 has ended by itself kills nothing: the run block's sampler
-    /// wait and summarise.mjs still run after k6's exit line, and killing them would lose the summary k6's raw.json was written
-    /// for, so the Stop waits for them instead.
+    /// it kills the step's process tree. One that arrives after k6 has ended by itself kills nothing at first: the run block's
+    /// sampler wait and summarise.mjs still run after k6's exit line, and killing them would lose the summary k6's raw.json was
+    /// written for, so the Stop waits for them, for <see cref="SummaryGrace"/> at most, and then ends the block after all.
     /// </summary>
     public async Task<Job?> StopAsync()
     {
@@ -186,6 +199,15 @@ public sealed class StressRunService(
             {
                 stopping = true;
                 stopped.TrySetResult();
+            }
+        }
+
+        if (running is null && await Task.WhenAny(run.Completion, Task.Delay(SummaryGrace, time)) != run.Completion)
+        {
+            lock (gate)
+            {
+                stopping = true;
+                running = step;
             }
         }
 
@@ -244,7 +266,7 @@ public sealed class StressRunService(
 
                 if (stopped)
                 {
-                    run.Append(OutputStream.Stderr, IsRun(job) ? StoppedInRun : StoppedBefore(next.Name));
+                    run.Append(OutputStream.Stderr, !IsRun(job) ? StoppedBefore(next.Name) : k6Ended ? StoppedSummarising : StoppedInRun);
                     run.MarkExited(-1);
                     return;
                 }

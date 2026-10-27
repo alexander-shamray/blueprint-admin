@@ -230,6 +230,28 @@ public sealed class StressRunServiceTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Stop_after_k6_ends_the_block_after_all_once_the_summary_grace_runs_out()
+    {
+        ScriptUntilRun();
+        runner.OnLongRunning("powershell", Arguments(StressRunService.Run), "k6 exit: 99");
+        StressRunService service = Service(settle: TimeSpan.Zero);
+
+        Job run = service.Start().Job;
+        await WaitUntilAsync(() => Texts(run).Contains("k6 exit: 99"));
+        Job block = runner.LastStarted!;
+        Task<Job?> stop = service.StopAsync();
+        await Task.Delay(50, TestContext.Current.CancellationToken);
+        block.Status.State.ShouldBe(JobState.Running);
+
+        time.Advance(StressRunService.SummaryGrace);
+        (await stop.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken)).ShouldBeSameAs(run);
+
+        block.Status.State.ShouldBe(JobState.Exited);
+        run.Status.ShouldBe((JobState.Exited, -1));
+        Texts(run)[^1].ShouldBe(StressRunService.StoppedSummarising);
+    }
+
+    [Fact]
     public async Task Stop_during_the_settle_names_it_and_starts_nothing_more()
     {
         ScriptUntilRun();
