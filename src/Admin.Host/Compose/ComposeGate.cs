@@ -4,7 +4,8 @@ using Microsoft.AspNetCore.Http.HttpResults;
 namespace Admin.Host.Compose;
 
 /// <summary>
-/// One job at a time that stops or starts the stack's services: Up, Down, the reset and the projection rebuild. Each
+/// One job at a time that stops or starts the stack's services: Up, Down, the reset, the projection rebuild, a game-day
+/// cause or restore, the stress run, and a Scenario's lease (spec §5.3). Each
 /// kept a gate of its own, or none, so a rebuild's <c>stop web-bff</c> could land in the middle of a reset's
 /// <c>down -v</c> and its <c>start web-bff</c> bring the BFF up into a half-reset stack. A Compose read changes
 /// nothing and takes no claim.
