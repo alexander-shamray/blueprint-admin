@@ -368,11 +368,13 @@ what it speaks.
   orders, the `slo-run` client and the restocked count as they are, and a
   local run proves nothing about the SLO (§13.7).
 - The stress run's Stop also kills the step going: a Stop during k6 writes no
-  summary, so that run names no knee. The step shown is read off k6's
-  once-a-second progress lines, a count held for ten of them being a hold, so a
-  staircase set from the environment with ramps slower than a user in ten
-  seconds would read a ramp as a step. FakePlatform's stress output is written
-  by hand to the scripts' shapes, not recorded from a live run.
+  summary, so that run names no knee. One after k6 has printed its exit waits
+  for the sampler and the summary first, for `StressRunService.SummaryGrace`
+  at most. The step shown is read off k6's once-a-second progress lines, a
+  count held for `StressStaircase.HoldTicks` of them being a hold, so a
+  staircase set from the environment with ramps slower than a user in that
+  many seconds would read a ramp as a step. FakePlatform's stress output is
+  written by hand to the scripts' shapes, not recorded from a live run.
 - The Mail page lists the sink's newest `MailSinkClient.Limit` messages and
   says how many it holds in all. Opening a message marks it read in the sink,
   as opening it in the sink's own UI does. A message with no
