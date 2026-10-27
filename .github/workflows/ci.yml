@@ -136,9 +136,10 @@ jobs:
   # adds stops it. An exit above 1, or a 1 that names no refusal (an uncaught
   # exception's traceback goes to stderr), is the gate not running, and stops
   # it there. The evaluation's refusals are held to the fork point the same
-  # way, beside the static read's. At the fork point alone, gates that do not
-  # run (its SDK pin older than the head's, under `rollForward: disable`)
-  # forgive nothing, so every commit is held to every refusal.
+  # way, beside the static read's. At the fork point alone, a gate that does
+  # not run (its SDK pin older than the head's, under `rollForward: disable`)
+  # forgives nothing, so every commit is held to its every refusal, and the
+  # other gate's inherited refusals still count.
   commits:
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -172,7 +173,10 @@ jobs:
               status=0
               python3 "$RUNNER_TEMP/$gate" > "$RUNNER_TEMP/gate.out" || status=$?
               if [ "$status" -gt 1 ] || { [ "$status" -eq 1 ] && ! grep -q '^::error::' "$RUNNER_TEMP/gate.out"; }; then
-                cat "$RUNNER_TEMP/gate.out" >&2; return 2
+                cat "$RUNNER_TEMP/gate.out" >&2
+                if [ "${1:-}" != fork ]; then return 2; fi
+                echo "::warning::$gate does not run at the fork point, so every commit is held to its every refusal" >&2
+                continue
               fi
               grep '^::error::' "$RUNNER_TEMP/gate.out" >> "$RUNNER_TEMP/refusals" || true
             done
@@ -181,10 +185,7 @@ jobs:
           inherited=""
           if [ "${#shas[@]}" -gt 0 ]; then
             git checkout --quiet --detach "$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
-            inherited=$(refusals) || {
-              echo "::warning::the gates do not run at the fork point, so every commit is held to every refusal"
-              inherited=""
-            }
+            inherited=$(refusals fork)
           fi
           if [ -n "$inherited" ]; then
             echo "the fork point already carries these refusals, so no commit is held to them:"
