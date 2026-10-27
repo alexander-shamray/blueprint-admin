@@ -131,15 +131,38 @@ internal static class FakeGrafana
     /// one only inside the selector; any other query answers the empty vector Prometheus gives for no series.
     /// While a fake load run's traffic is inside the strip's reads (<see cref="FakeStack.Loaded"/>) the answers are
     /// the ones recorded under a live load run instead (<see cref="LoadRunRecordings.GoldenSignals"/>), whose
-    /// absent 5xx, 401 and 422 series answer the empty vector Prometheus gave.
+    /// absent 5xx, 401 and 422 series answer the empty vector Prometheus gave. While a fake stress run's k6 runs users
+    /// (<see cref="FakeStack.StressUsers"/>) the load run's answers are scaled by those users over the load run's, so the
+    /// series rise with the steps; that scaling is the fake's own, since no stress run has been recorded (<see cref="StressRunRecordings"/>).
     /// </summary>
     public static HttpResponseMessage Prometheus(HttpRequestMessage request, FakeStack stack)
     {
-        using JsonDocument recording = JsonDocument.Parse(stack.Loaded ? LoadRunRecordings.GoldenSignals : Fixture("grafana-prometheus-golden-signals.json"));
+        int users = stack.StressUsers;
+        using JsonDocument recording = JsonDocument.Parse(users > 0 || stack.Loaded ? LoadRunRecordings.GoldenSignals : Fixture("grafana-prometheus-golden-signals.json"));
 
-        return GoldenSignalOf(request.RequestUri!) is { } field
-            ? FakeHttp.Json(HttpStatusCode.OK, recording.RootElement.GetProperty(field).GetRawText())
-            : FakeHttp.Json(HttpStatusCode.OK, """{"status":"success","data":{"resultType":"vector","result":[]}}""");
+        if (GoldenSignalOf(request.RequestUri!) is not { } field)
+        {
+            return FakeHttp.Json(HttpStatusCode.OK, """{"status":"success","data":{"resultType":"vector","result":[]}}""");
+        }
+
+        string answer = recording.RootElement.GetProperty(field).GetRawText();
+
+        return FakeHttp.Json(HttpStatusCode.OK, users > 0 ? Scaled(answer, (double)users / LoadRunRecordings.Users) : answer);
+    }
+
+    /// <summary>A vector answer with each sample's value multiplied by <paramref name="factor"/>.</summary>
+    internal static string Scaled(string answer, double factor)
+    {
+        JsonNode document = JsonNode.Parse(answer)!;
+
+        foreach (JsonNode? series in document["data"]!["result"]!.AsArray())
+        {
+            JsonArray value = series!["value"]!.AsArray();
+            double sample = double.Parse(value[1]!.GetValue<string>(), System.Globalization.CultureInfo.InvariantCulture);
+            value[1] = (sample * factor).ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        return document.ToJsonString();
     }
 
     /// <summary>

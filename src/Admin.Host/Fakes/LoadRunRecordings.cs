@@ -146,6 +146,9 @@ internal static class LoadRunRecordings
         k6 exit: 0
         """;
 
+    /// <summary>The most users the run above ran at once, as its <c>00/20 VUs</c> says.</summary>
+    public const int Users = 20;
+
     /// <summary>
     /// Each <see cref="Telemetry.GoldenSignals"/> query's answer through the live Grafana's Prometheus proxy 150 seconds into the run
     /// above, keyed as <c>grafana-prometheus-golden-signals.json</c> is. No 5xx, 401 or 422 series: the run sent none.

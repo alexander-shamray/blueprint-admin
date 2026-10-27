@@ -1,0 +1,414 @@
+using System.Text.RegularExpressions;
+using Admin.Host.Compose;
+using Admin.Host.Config;
+using Admin.Host.Jobs;
+using Microsoft.Extensions.Options;
+
+namespace Admin.Host.Stack;
+
+/// <summary>
+/// blueprint-backend's stress run, <c>deploy/observability/stress/stress.js</c>, as one job on the Stack screen beside the load run
+/// (spec §5.3). Every step is a block of run-locally.md's "Stress run (k6)", run as written through PowerShell from the backend
+/// clone and in the document's order: k6 answers, the stack comes up with the stress override, it is left idle for the minute the
+/// document asks, Prometheus answers through Grafana, then the run block chooses its products, starts the sampler and k6, and
+/// writes the summary. The console runs the backend's scripts and carries none: the staircase, the journey and the knee are
+/// theirs, and the step shown is read off k6's own progress lines (<see cref="StressStaircase"/>). Unlike the load run, the job
+/// claims <see cref="ComposeGate"/>, because its first block recreates the gateway and both workers; the way back to the normal
+/// profile is the section's last block, which is the command the Stack's Up runs (<see cref="ComposeService.Up"/>), and the
+/// override is read from the containers rather than remembered (<see cref="OverrideServices"/>).
+/// </summary>
+public sealed class StressRunService(
+    IProcessRunner runner,
+    ComposeGate composeGate,
+    JobRegistry registry,
+    RepoPaths paths,
+    IOptions<AdminOptions> options,
+    TimeProvider time,
+    TimeSpan settle,
+    Func<string, IReadOnlyList<string>?> readSummary)
+{
+    /// <summary>The stress-run job's name in the job list, followed by its steps' names, and the kind a refusal names.</summary>
+    public const string Kind = "stress-run";
+
+    /// <summary>Owner: run-locally.md, "Stress run (k6)", the full-stack up with the stress override.</summary>
+    internal const string Up =
+        "docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.stress.yml up -d --build --wait";
+
+    /// <summary>Owner: run-locally.md, "Stress run (k6)": the override the up adds, as Compose records it on each container it creates.</summary>
+    public const string OverrideFile = "docker-compose.stress.yml";
+
+    /// <summary>
+    /// Owner: blueprint-backend <c>deploy/compose/docker-compose.stress.yml</c>, the services it changes (copied, held by
+    /// <c>StressRunDriftTests</c>). Both ups recreate each of them, so the files a running one was created from say which
+    /// profile it runs; a service the override leaves alone keeps whatever label the last up that recreated it wrote.
+    /// </summary>
+    public static readonly IReadOnlyList<string> OverrideServices = ["gateway", "shipping-worker", "notifications-worker"];
+
+    /// <summary>Owner: run-locally.md, "Stress run (k6)": "Leave the stack idle for a minute afterwards".</summary>
+    public static readonly TimeSpan Settle = TimeSpan.FromMinutes(1);
+
+    /// <summary>Owner: run-locally.md, "Stress run (k6)", the run, which exits with k6's own code after the summary is written.</summary>
+    internal static readonly string Run = Block(
+        """
+        $ErrorActionPreference = 'Stop'
+        $rows = @(docker compose -f deploy/compose/docker-compose.yml exec -T sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Local_Dev_Pa55w0rd!' -d Ordering -h -1 -W -s ',' -Q "SET NOCOUNT ON; SELECT LOWER(CONVERT(char(36), ProductId)), Currency FROM ordering.ProductPrices WHERE IsAvailable = 1 AND CONVERT(char(36), ProductId) LIKE '5EED0000-%' AND CAST(ROUND(Amount * 100, 0) AS bigint) % 100 NOT IN (1, 2, 5, 9) ORDER BY Currency, ProductId" | ForEach-Object { "$_".Trim() } | Where-Object { $_ -match '^[0-9a-f-]{36},[A-Z]{3}$' })
+        if ($rows.Count -eq 0) { 'products: none usable in ordering.ProductPrices'; exit 1 }
+        $cur = ($rows[0] -split ',')[1]
+        $ids = ($rows | Where-Object { $_.EndsWith(",$cur") } | ForEach-Object { ($_ -split ',')[0] }) -join ','
+        "currency: $cur"; "products: $ids"
+        $out = "artifacts/stress/$(Get-Date -Format yyyyMMdd-HHmmss)"
+        New-Item -ItemType Directory -Force $out | Out-Null
+        $sampler = Start-Process node -ArgumentList 'deploy/observability/stress/sample.mjs', $out -NoNewWindow -PassThru
+        $env:KEYCLOAK_ADMIN_PASSWORD = 'admin'
+        $ErrorActionPreference = 'Continue'
+        k6 run --no-color -e BASE_URL=http://localhost:5000 -e KEYCLOAK_URL=http://localhost:8080 -e "STRESS_PRODUCTS=$ids" -e "STRESS_CURRENCY=$cur" -e "STRESS_OUT=$out" deploy/observability/stress/stress.js
+        $code = $LASTEXITCODE; "k6 exit: $code"
+        $sampler.WaitForExit()
+        node deploy/observability/stress/summarise.mjs $out
+        exit $code
+        """);
+
+    /// <summary>The step that waits out <see cref="Settle"/>: no block, so it starts no process.</summary>
+    internal const string SettleStep = "settle";
+
+    /// <summary>The steps in the document's order, each a block but the settle; the k6 read and Prometheus's are the load run's.</summary>
+    public static readonly IReadOnlyList<LoadRunStep> Steps =
+    [
+        new("k6", LoadRunService.K6Read, lines => !lines.Any(l => l.StartsWith(LoadRunService.K6Missing, StringComparison.Ordinal))),
+        new("up", Up, _ => true),
+        new(SettleStep, "", _ => true),
+        new("prometheus", LoadRunService.PrometheusReady, lines => lines.Contains(LoadRunService.PrometheusYes)),
+        new("run", Run, _ => true),
+    ];
+
+    /// <summary>Owner: run-locally.md, "Stress run (k6)", what k6's exit code says. A stress run reports and never passes or fails.</summary>
+    public static readonly IReadOnlyDictionary<int, string> Verdicts = new Dictionary<int, string>
+    {
+        [0] = "every step ran, and none failed past the abort rate",
+        [99] = "a step's requests failed at more than a fifth over its hold, and unless it was the last step k6 stopped there",
+        [107] = "setup() refused, so no load was driven and the run says nothing about the platform",
+    };
+
+    /// <summary>Owner: run-locally.md, "Stress run (k6)", the start of the line summarise.mjs ends on that names the knee.</summary>
+    internal const string KneePrefix = "Knee: ";
+
+    /// <summary>Owner: run-locally.md, "Stress run (k6)", the start of the line that names the summary, relative to the backend clone.</summary>
+    internal const string SummaryPrefix = "Summary: ";
+
+    /// <summary>
+    /// What a Stop in the run block leaves. Ending k6's process tree is not its Ctrl+C: <c>handleSummary()</c> does not run, so
+    /// no <c>raw.json</c> and no summary are written, and the run is neither a pass nor a fail. The stack stays on the override.
+    /// </summary>
+    internal const string StoppedInRun =
+        "stopped in the run block: if k6 had started, it wrote no raw.json and no summary, so there is no knee and the run is neither a pass nor a fail; any orders it placed stay, and the stack is still on the stress override.";
+
+    /// <summary>What a Stop before k6 leaves: no load was driven. Only a Stop at or after the up can have left the override on.</summary>
+    internal static string StoppedBefore(string step) => $"stopped at the {step} step, before k6 started: no load was driven and no order was placed.";
+
+    private readonly Lock gate = new();
+
+    // Written under the gate; the reads take them without it, and a reference read is atomic.
+    private volatile Job? current;
+    private volatile StressStaircase? staircase;
+    private volatile string? knee;
+    private Job? step;
+    private TaskCompletionSource stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private bool stopping;
+
+    /// <summary>The last stress run, running or exited, for the Stack screen; null before the first.</summary>
+    public Job? Current => current;
+
+    /// <summary>The last run with its step and its knee, as the Stack screen reads it; null before the first.</summary>
+    public StressRunView? View() =>
+        current is { } run ? new StressRunView(JobSummary.Of(run), staircase?.Current, knee) : null;
+
+    /// <summary>
+    /// The services of <see cref="OverrideServices"/> whose running container was created with <see cref="OverrideFile"/>: what
+    /// the Stack screen shows while the stack runs with the override, and empty when it does not.
+    /// </summary>
+    public static IReadOnlyList<string> OnOverride(ComposeStatus backend) =>
+        [.. backend.Services
+            .Where(s => OverrideServices.Contains(s.Service) && s.State == "running" && s.ConfigFiles?.Contains(OverrideFile) == true)
+            .Select(s => s.Service)];
+
+    /// <summary>
+    /// Starts a run under <see cref="ComposeGate"/>, or returns the one still going: its up recreates services, so it races an Up,
+    /// a Down, a reset or a lease as they race each other.
+    /// </summary>
+    public Claim Start() => composeGate.Claim(Kind, () =>
+    {
+        lock (gate)
+        {
+            Job run = registry.Create(new ProcessSpec(Kind, [.. Steps.Select(s => s.Name)], paths.BackendDir));
+            current = run;
+            staircase = null;
+            knee = null;
+            step = null;
+            stopping = false;
+            stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _ = Task.Run(() => RunAsync(run));
+
+            return run;
+        }
+    });
+
+    /// <summary>
+    /// Ends the run going, at the step it is in, and waits for the job to say so; null when none is going. As the load run's Stop,
+    /// it kills the step's process tree, and one that arrives after k6 has ended by itself kills nothing.
+    /// </summary>
+    public async Task<Job?> StopAsync()
+    {
+        Job run;
+        Job? running;
+
+        lock (gate)
+        {
+            if (current is not { State: JobState.Running } going)
+            {
+                return null;
+            }
+
+            run = going;
+            running = step;
+
+            if (running is { State: JobState.Exited } && IsRun(running))
+            {
+                running = null;
+            }
+            else
+            {
+                stopping = true;
+                stopped.TrySetResult();
+            }
+        }
+
+        if (running is not null)
+        {
+            await runner.StopAsync(running, CancellationToken.None);
+        }
+
+        await run.Completion;
+
+        return run;
+    }
+
+    private async Task RunAsync(Job run)
+    {
+        try
+        {
+            foreach (LoadRunStep next in Steps)
+            {
+                if (next.Name == SettleStep)
+                {
+                    if (!await SettleAsync(run))
+                    {
+                        run.Append(OutputStream.Stderr, StoppedBefore(next.Name));
+                        run.MarkExited(-1);
+                        return;
+                    }
+
+                    continue;
+                }
+
+                Job job;
+
+                lock (gate)
+                {
+                    if (stopping)
+                    {
+                        run.Append(OutputStream.Stderr, StoppedBefore(next.Name));
+                        run.MarkExited(-1);
+                        return;
+                    }
+
+                    job = runner.Start(LoadRunService.Spec(next.Block, paths, options.Value.SqlPassword));
+                    step = job;
+                }
+
+                StressStaircase? read = ReferenceEquals(next, Steps[^1]) ? new StressStaircase() : null;
+                staircase = read;
+                (int exitCode, List<string> stdout) = await FollowAsync(run, next, job, read);
+                bool stopped;
+
+                lock (gate)
+                {
+                    stopped = stopping;
+                }
+
+                if (stopped)
+                {
+                    run.Append(OutputStream.Stderr, IsRun(job) ? StoppedInRun : StoppedBefore(next.Name));
+                    run.MarkExited(-1);
+                    return;
+                }
+
+                if (read is not null)
+                {
+                    Finish(run, exitCode, stdout);
+                    return;
+                }
+
+                if (exitCode != 0 || !next.Passed(stdout))
+                {
+                    string said = exitCode != 0 ? $"exited with {exitCode}" : $"said \"{stdout.LastOrDefault(l => l.Length > 0) ?? ""}\"";
+                    run.Append(OutputStream.Stderr, $"{next.Name} {said}; the stress run stops here.");
+                    run.MarkExited(exitCode != 0 ? exitCode : 1);
+                    return;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            run.Append(OutputStream.Stderr, $"stress run failed: {ex.Message}");
+            run.MarkExited(-1);
+        }
+    }
+
+    /// <summary>The minute the document leaves the stack idle; false when a Stop ended it.</summary>
+    private async Task<bool> SettleAsync(Job run)
+    {
+        Task stop;
+
+        lock (gate)
+        {
+            if (stopping)
+            {
+                return false;
+            }
+
+            stop = stopped.Task;
+        }
+
+        // The timer starts before the line that says so; a Stop leaves it to run out on its own, since it holds nothing.
+        Task idle = Task.Delay(settle, time);
+        run.Append(OutputStream.Stdout, $"== {SettleStep}: the stack is left idle for {settle.TotalSeconds:0} s, as run-locally.md asks");
+
+        return await Task.WhenAny(idle, stop) == idle;
+    }
+
+    /// <summary>
+    /// The run's end: the summary summarise.mjs wrote, carried into the job so it outlives the folder, then k6's code and what the
+    /// document says it means, with the knee.
+    /// </summary>
+    private void Finish(Job run, int exitCode, List<string> stdout)
+    {
+        string? kneeLine = stdout.LastOrDefault(l => l.StartsWith(KneePrefix, StringComparison.Ordinal));
+        string? summary = stdout.LastOrDefault(l => l.StartsWith(SummaryPrefix, StringComparison.Ordinal))?[SummaryPrefix.Length..].Trim();
+        knee = kneeLine;
+
+        if (summary is not null)
+        {
+            if (SummaryPath(summary) is { } path && readSummary(path) is { } lines)
+            {
+                run.Append(OutputStream.Stdout, $"== summary ({summary})");
+
+                foreach (string line in lines)
+                {
+                    run.Append(OutputStream.Stdout, line);
+                }
+            }
+            else
+            {
+                run.Append(OutputStream.Stderr, $"the summary {summary} could not be read under the clone's artifacts/stress, so it is not carried here.");
+            }
+        }
+
+        string verdict = Verdicts.TryGetValue(exitCode, out string? said) ? said : "k6's own code, which run-locally.md does not read";
+        run.Append(exitCode == 0 ? OutputStream.Stdout : OutputStream.Stderr, $"k6 exited {exitCode}: {verdict}. {kneeLine ?? "No knee was named."}");
+        run.MarkExited(exitCode);
+    }
+
+    /// <summary>The summary's full path, when the line names a file under the clone's <c>artifacts/stress/</c>; null otherwise.</summary>
+    private string? SummaryPath(string relative)
+    {
+        string root = Path.GetFullPath(Path.Combine(paths.BackendDir, "artifacts", "stress")) + Path.DirectorySeparatorChar;
+        string full = Path.GetFullPath(Path.Combine(paths.BackendDir, relative.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar)));
+
+        return full.StartsWith(root, StringComparison.OrdinalIgnoreCase) ? full : null;
+    }
+
+    /// <summary>The summary as summarise.mjs wrote it, or null when it is not there.</summary>
+    public static IReadOnlyList<string>? ReadSummary(string path) => File.Exists(path) ? File.ReadAllLines(path) : null;
+
+    /// <summary>Copies a step's lines into the run as they arrive, under a line naming the step and its own job; k6's feed the staircase.</summary>
+    private static async Task<(int ExitCode, List<string> Stdout)> FollowAsync(Job run, LoadRunStep next, Job job, StressStaircase? read)
+    {
+        List<string> stdout = [];
+        run.Append(OutputStream.Stdout, $"== {next.Name} (job {job.Id})");
+
+        await foreach (OutputLine line in job.Follow(-1, CancellationToken.None))
+        {
+            run.Append(line.Stream, line.Text);
+
+            if (line.Stream == OutputStream.Stdout)
+            {
+                stdout.Add(line.Text.Trim());
+                read?.Observe(line.Text);
+            }
+        }
+
+        return (await job.Completion, stdout);
+    }
+
+    /// <summary>Whether a step's job is the run block's.</summary>
+    private static bool IsRun(Job job) => job.Spec.Arguments is [.., var block] && block == Run;
+
+    /// <summary>A block as the document prints it, one line to a newline, whatever line ending this file was checked out with.</summary>
+    private static string Block(string text) => text.ReplaceLineEndings("\n");
+}
+
+/// <summary>The last stress run as the Stack screen reads it: the job, the step k6 is at while it runs, and the knee once it is named.</summary>
+public sealed record StressRunView(JobSummary Job, StressProgress? Progress, string? Knee);
+
+/// <summary>
+/// Where k6 is on the staircase: the users it runs and the most it will, its elapsed time as it prints it, and the hold it is in or
+/// last reached. <see cref="Step"/> counts holds seen, 0 during the first ramp.
+/// </summary>
+public sealed record StressProgress(int Users, int MaxUsers, string Elapsed, int Step, bool Holding);
+
+/// <summary>
+/// The step read off k6's own progress lines, <c>running (1m10.0s), 050/400 VUs, …</c>, which k6 prints once a second when its
+/// output is not a terminal. The staircase is the backend's (<c>steps.js</c>) and can be changed from the environment, so it is not
+/// copied: a hold is a count k6 has printed unchanged for <see cref="HoldTicks"/> lines, and each new one is the next step. The
+/// default ramps move every second; a ramp slower than one user in <see cref="HoldTicks"/> seconds would read as a hold.
+/// </summary>
+public sealed partial class StressStaircase
+{
+    /// <summary>Progress lines, a second apart, a count must hold for before it is a step's hold rather than a ramp passing through it.</summary>
+    public const int HoldTicks = 10;
+
+    private int last = -1;
+    private int same;
+    private int lastHold = -1;
+    private int holds;
+
+    /// <summary>The last progress line read, or null before k6 printed one.</summary>
+    public StressProgress? Current { get; private set; }
+
+    public void Observe(string line)
+    {
+        Match m = Progress().Match(line);
+
+        if (!m.Success)
+        {
+            return;
+        }
+
+        int users = int.Parse(m.Groups["users"].ValueSpan, System.Globalization.CultureInfo.InvariantCulture);
+        int max = int.Parse(m.Groups["max"].ValueSpan, System.Globalization.CultureInfo.InvariantCulture);
+        same = users == last ? same + 1 : 1;
+        last = users;
+        bool holding = users > 0 && same >= HoldTicks;
+
+        if (holding && users != lastHold)
+        {
+            holds++;
+            lastHold = users;
+        }
+
+        Current = new StressProgress(users, max, m.Groups["elapsed"].Value, holds, holding);
+    }
+
+    [GeneratedRegex(@"^running \((?<elapsed>[^)]+)\), (?<users>\d+)/(?<max>\d+) VUs,")]
+    private static partial Regex Progress();
+}
