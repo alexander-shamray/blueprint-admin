@@ -97,6 +97,7 @@ public sealed partial class ReplayDriftTests
     [GeneratedRegex(@"\s+")]
     private static partial Regex Whitespace();
 
-    [GeneratedRegex(@"^\$env:(\w+) = '(.*)'\s*$", RegexOptions.Multiline)]
+    // The connections only: other sections set variables of their own, as the stress run does KEYCLOAK_ADMIN_PASSWORD.
+    [GeneratedRegex(@"^\$env:(ConnectionStrings__\w+) = '(.*)'\s*$", RegexOptions.Multiline)]
     private static partial Regex EnvironmentLine();
 }
