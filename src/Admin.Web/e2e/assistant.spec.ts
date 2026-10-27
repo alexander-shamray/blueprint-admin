@@ -11,6 +11,27 @@ async function ask(page: Page, question: string): Promise<void> {
   await page.getByRole('button', { name: 'Send' }).click();
 }
 
+/**
+ * The fake host keeps one workspace for the whole run, and Stack is read by later tests (workspace.spec.ts counts its
+ * widgets): a widget a test adds to Stack is taken off again, pass or fail, once any save in flight has landed.
+ */
+async function takeOffStack(page: Page, title: string): Promise<void> {
+  await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
+  await page.goto('/stack');
+  // Count only once the workspace has drawn Stack: before it has, every widget reads as absent.
+  await expect(page.locator('gridster-item').first()).toBeVisible();
+  const added = page.getByRole('article', { name: title, exact: true });
+  if ((await added.count()) === 0) {
+    return;
+  }
+
+  await page.getByRole('button', { name: 'Edit layout' }).click();
+  await page.getByRole('button', { name: `Remove ${title}` }).click();
+  await page.getByRole('button', { name: 'Done' }).click();
+  await expect(added).toHaveCount(0);
+  await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
+}
+
 test('asked where the logs are, the assistant opens Logs', async ({ page }) => {
   await page.goto('/stack');
   await page.getByRole('button', { name: 'Assistant', exact: true }).click();
@@ -109,40 +130,39 @@ test("a widget the assistant proposes is added by the operator's click and by no
   // Offered, not added: no Note on the page yet.
   await expect(page.getByRole('article', { name: 'Note', exact: true })).toHaveCount(0);
 
-  await add.click();
+  try {
+    await add.click();
 
-  await expect(page.getByRole('article', { name: 'Note', exact: true })).toHaveCount(1);
-  await expect(page.getByRole('button', { name: 'Added Note' })).toBeDisabled();
+    await expect(page.getByRole('article', { name: 'Note', exact: true })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Added Note' })).toBeDisabled();
+  } finally {
+    await takeOffStack(page, 'Note');
+  }
 });
 
 test('an Assistant widget on a page is a view of the same conversation as the panel', async ({ page }) => {
   await page.goto('/stack');
   await page.getByRole('button', { name: 'Assistant', exact: true }).click();
   await ask(page, 'please add an Assistant widget');
-  await page.getByRole('button', { name: 'Add Assistant' }).click();
 
-  const widget = page.getByRole('article', { name: 'Assistant', exact: true });
-  await expect(widget).toBeVisible();
-  // The add is saved to the host's one workspace, which every later test reads: wait for it here, and take the widget
-  // off again at the end, so what the next test meets does not turn on how fast this save was.
-  await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
-  await expect(widget.getByText('Answers from: fake')).toBeVisible();
-  // The widget has no panel to close, and the frame carries its title.
-  await expect(widget.getByRole('button', { name: 'Close the assistant' })).toHaveCount(0);
+  try {
+    await page.getByRole('button', { name: 'Add Assistant' }).click();
 
-  await widget.getByRole('textbox', { name: 'Message to the assistant' }).fill('where are the logs?');
-  await widget.getByRole('button', { name: 'Send' }).click();
+    const widget = page.getByRole('article', { name: 'Assistant', exact: true });
+    await expect(widget).toBeVisible();
+    await expect(widget.getByText('Answers from: fake')).toBeVisible();
+    // The widget has no panel to close, and the frame carries its title.
+    await expect(widget.getByRole('button', { name: 'Close the assistant' })).toHaveCount(0);
 
-  await expect(page).toHaveURL(/\/logs$/);
-  // The side panel shows what was asked in the widget: one conversation, two views of it.
-  await expect(page.locator('app-assistant-panel .operator').last()).toHaveText('where are the logs?');
+    await widget.getByRole('textbox', { name: 'Message to the assistant' }).fill('where are the logs?');
+    await widget.getByRole('button', { name: 'Send' }).click();
 
-  await page.goto('/stack');
-  await page.getByRole('button', { name: 'Edit layout' }).click();
-  await page.getByRole('button', { name: 'Remove Assistant' }).click();
-  await page.getByRole('button', { name: 'Done' }).click();
-  await expect(page.getByRole('article', { name: 'Assistant', exact: true })).toHaveCount(0);
-  await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
+    await expect(page).toHaveURL(/\/logs$/);
+    // The side panel shows what was asked in the widget: one conversation, two views of it.
+    await expect(page.locator('app-assistant-panel .operator').last()).toHaveText('where are the logs?');
+  } finally {
+    await takeOffStack(page, 'Assistant');
+  }
 });
 
 test('asked in Russian, it opens Logs and names it as labelled', async ({ page }) => {
