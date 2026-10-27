@@ -39,4 +39,15 @@ public sealed class ComposePsParserTests
     {
         ComposePsParser.Parse([]).ShouldBeEmpty();
     }
+
+    [Fact]
+    public void The_compose_files_a_container_was_created_from_are_read_from_its_labels_by_name()
+    {
+        const string labels = """com.docker.compose.depends_on=keycloak:service_healthy:false,com.docker.compose.project.config_files=C:\\dev\\blueprint-backend\\deploy\\compose\\docker-compose.yml,C:\\dev\\blueprint-backend\\deploy\\compose\\docker-compose.stress.yml,com.docker.compose.project.working_dir=C:\\dev\\blueprint-backend\\deploy\\compose,com.docker.compose.service=gateway""";
+        string line = Gateway.Replace("\"Publishers\"", $"\"Labels\":\"{labels}\",\"Publishers\"", StringComparison.Ordinal);
+
+        ComposePsParser.Parse([line])[0].ConfigFiles.ShouldBe(["docker-compose.yml", "docker-compose.stress.yml"]);
+        ComposePsParser.Parse([Gateway])[0].ConfigFiles.ShouldBeNull();
+        ComposePsParser.ConfigFiles("com.docker.compose.project.config_files=/srv/deploy/compose/docker-compose.yml").ShouldBe(["docker-compose.yml"]);
+    }
 }
