@@ -183,6 +183,30 @@ class AProjectFile(unittest.TestCase):
                 refused(self, project(f"<PropertyGroup><OutputPath>{value}</OutputPath></PropertyGroup>"),
                         "outside the repository")
 
+    def test_a_project_reference_handing_global_properties_fails(self) -> None:
+        # R1 of round 6: they outrank the referenced project's own, and the
+        # pin file's, as a response file's do.
+        for meta in ("Properties", "AdditionalProperties", "SetConfiguration", "SetTargetFramework"):
+            with self.subTest(meta=meta, form="attribute"):
+                refused(self, project(f'<ItemGroup><ProjectReference Include="..\\A\\A.csproj" '
+                                      f'{meta}="ManagePackageVersionsCentrally=false" /></ItemGroup>'),
+                        "global properties")
+            with self.subTest(meta=meta, form="element"):
+                refused(self, project(f'<ItemGroup><ProjectReference Include="..\\A\\A.csproj"><{meta}>'
+                                      f'x=y</{meta}></ProjectReference></ItemGroup>'), "global properties")
+
+    def test_a_version_on_any_item_fails(self) -> None:
+        # R2 of round 6: NuGet still restores a DotNetCliToolReference by its
+        # own version.
+        refused(self, project('<ItemGroup><DotNetCliToolReference Include="T" Version="1.0.0" /></ItemGroup>'),
+                "dotnetclitoolreference t sets version")
+
+    def test_a_property_holding_an_item_reference_fails(self) -> None:
+        for value in ("@(Pinned)", "%(Identity)", "a;@(Pinned->'%(Version)')"):
+            with self.subTest(value=value):
+                refused(self, project(f"<PropertyGroup><Pinned>{value}</Pinned></PropertyGroup>"),
+                        "holds an item reference")
+
     def test_a_value_inside_or_built_from_properties_passes(self) -> None:
         # The built one is the residual the README names.
         for value in ("..\\shared", "bin", "$(MSBuildThisFileDirectory)artifacts", "$(NoWarn);CA1707",
@@ -193,7 +217,9 @@ class AProjectFile(unittest.TestCase):
 
     def test_a_package_reference_copying_another_items_metadata_fails(self) -> None:
         # R4 of round 5: the transform carries Version across unread.
-        for attr, value in (("Include", "@(Pinned)"), ("Update", "%(Identity)")):
+        # Security review of round 5: a property expands before the item, so
+        # one holding a transform is refused in the property and the item.
+        for attr, value in (("Include", "@(Pinned)"), ("Update", "%(Identity)"), ("Include", "$(Pinned)")):
             with self.subTest(attr=attr):
                 refused(self, project(f'<ItemGroup><PackageReference {attr}="{value}" /></ItemGroup>'),
                         "copies another item's metadata")
@@ -319,6 +345,9 @@ class OtherRestoreInputs(unittest.TestCase):
         self.assertEqual(check_other("global.json", '{"sdk": {"version": "10.0.100"}}'), [])
         self.assertTrue(check_other("global.json", '{"msbuild-sdks": {"Some.Sdk": "1.0.0"}}'))
         self.assertTrue(check_other("src/global.json", '{"MSBuild-Sdks": {"Some.Sdk": "1.0.0"}}'))
+        # R3 of round 6: one below the root is a second SDK pin, however
+        # plain, as a nested nuget.config is a second feed list.
+        self.assertTrue(check_other("src/global.json", '{"sdk": {"version": "10.0.100"}}'))
         self.assertTrue(check_other("global.json", "{"))
 
 

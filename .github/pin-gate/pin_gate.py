@@ -173,6 +173,10 @@ def _outside(path: str, name: str, value: str) -> list[str]:
     the gate never reads it. A value built from other properties ($(...))
     cannot be resolved here, which the README names as the residual."""
     problems = []
+    # An item reference in a property waits for the item that names it: a
+    # transform the PackageReference rule above would refuse, one step away.
+    if "@(" in value or "%(" in value:
+        problems.append(f"{path}: <{name}> holds an item reference, which a later item expands unread")
     base = posixpath.dirname(path)
     for piece in (p.strip() for p in value.split(";")):
         if not piece or "$(" in piece:
@@ -211,25 +215,34 @@ def check(path: str, data: bytes | str, *, pin: bool = False, known: frozenset[s
                 name = _name(item)
                 if pin and name in PIN_ITEMS:
                     continue
+                attrs = _attrs(item)
+                metadata = set(attrs) | {_name(c) for c in item if _name(c)}
                 if name in REFUSED_ITEMS or name.startswith(REFUSED_ITEM_PREFIX):
                     problems.append(f"{path}: <{name}> sets a version outside {PIN_FILE}")
-                elif name == "projectreference":
-                    problems += _project_entries(path, "ProjectReference", _attrs(item).get("include", ""), known)
-                elif name == "packagereference":
-                    attrs = _attrs(item)
+                    continue
+                if name == "projectreference":
+                    problems += _project_entries(path, "ProjectReference", attrs.get("include", ""), known)
+                    # Global properties handed to the referenced project
+                    # outrank its own and the pin file's, as a response
+                    # file's do: every property rule here, passed by.
+                    for meta in sorted(metadata):
+                        if meta in ("properties", "additionalproperties") or meta.startswith("set"):
+                            problems.append(f"{path}: ProjectReference {meta} hands the referenced "
+                                            "project global properties no rule here reads")
+                if name == "packagereference":
                     # An item transform copies another item's metadata, its
-                    # Version or VersionOverride among them, unread.
+                    # Version or VersionOverride among them, unread; and a
+                    # property expands first, so one holding a transform is
+                    # the same thing one step removed.
                     for key in ("include", "update"):
-                        if any(mark in attrs.get(key, "") for mark in ("@(", "%(")):
+                        if any(mark in attrs.get(key, "") for mark in ("@(", "%(", "$(")):
                             problems.append(f"{path}: PackageReference {key} {attrs[key]!r} copies "
                                             "another item's metadata, which the gate never reads")
-                    chosen = sorted(VERSION_METADATA & attrs.keys())
-                    chosen += [_name(c) for c in item if _name(c) in VERSION_METADATA]
-                    package = attrs.get("include") or attrs.get("update") or "?"
-                    for what in chosen:
-                        problems.append(
-                            f"{path}: PackageReference {package} sets {what}; its version is {PIN_FILE}'s"
-                        )
+                # A version on any item, not only a PackageReference: NuGet
+                # still restores a DotNetCliToolReference by its own.
+                package = attrs.get("include") or attrs.get("update") or "?"
+                for what in sorted(VERSION_METADATA & metadata):
+                    problems.append(f"{path}: {name} {package} sets {what}; its version is {PIN_FILE}'s")
     return problems
 
 
@@ -284,6 +297,10 @@ def check_other(path: str, data: bytes | str, known: frozenset[str] | None = Non
     # is the pin file for its subtree, central management off included.
     if base == PIN_FILE.lower() and path != PIN_FILE:
         return [f"{path}: a second pin file beside the root {PIN_FILE}"]
+    # The nearest global.json picks the SDK, and with it every pack version,
+    # for a command run below it: one beside the root's is a second SDK pin.
+    if base == SDK_FILE and path != SDK_FILE:
+        return [f"{path}: a second SDK pin beside the root {SDK_FILE}"]
     if base == SDK_FILE:
         try:
             pins = json.loads(data)

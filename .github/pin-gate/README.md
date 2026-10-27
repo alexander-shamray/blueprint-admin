@@ -28,8 +28,10 @@ skipped. Project entries are held to literal `*proj` paths that resolve to a
 tracked file in the repository, so nothing expands into a name after it was
 read and nothing is fetched from outside. In each:
 
-- a `PackageReference` with `Version` or `VersionOverride`, as an attribute or
-  as metadata, in an `ItemGroup` or an `ItemDefinitionGroup`;
+- a `Version` or `VersionOverride` on any item, as an attribute or as
+  metadata, in an `ItemGroup` or an `ItemDefinitionGroup`: a `PackageReference`,
+  and any other item NuGet restores by its own version, such as a
+  `DotNetCliToolReference`;
 - a `PackageVersion`, `GlobalPackageReference` or `PackageDownload` item,
   each of which carries a version of its own, and any `Known*` item, whose
   metadata names the version of a pack restore downloads;
@@ -52,8 +54,10 @@ read and nothing is fetched from outside. In each:
 - any other property whose literal value is a drive, rooted or UNC path, or
   climbs past the top of the repository: whatever imports it, the gate never
   reads it;
-- a `PackageReference` whose `Include` or `Update` is an item transform
-  (`@(…)`, `%(…)`), which copies another item's metadata, `Version` with it;
+- a `PackageReference` whose `Include` or `Update` holds an item transform
+  (`@(…)`, `%(…)`), which copies another item's metadata, `Version` with it,
+  or a property (`$(…)`), which expands first and may hold one; and any
+  property holding an item reference, the same transform one step removed;
 - an `Import` or an `Sdk` element, and a `<Project Sdk>` outside the named
   list of SDKs the .NET SDK bundles: each brings in MSBuild the gate never
   reads, and an unbundled SDK, some of which share the `Microsoft.NET.Sdk`
@@ -62,7 +66,9 @@ read and nothing is fetched from outside. In each:
   `*proj` file: a `$(…)`, `@(…)` or `%(…)` or a wildcard can expand into
   another name, or several, after the gate has read it, and a drive, rooted,
   UNC or climbing path reaches MSBuild outside the repository, a share over
-  the network;
+  the network; and one carrying `Properties`, `AdditionalProperties` or a
+  `Set*` metadata, which hands the referenced project global properties that
+  outrank its own and the pin file's, as a response file's do;
 - a `Target` or a `UsingTask`: code, which runs during restore as readily as
   during a build, and inside which a `CreateProperty`, an
   `<Output PropertyName>` or an `<MSBuild Properties>` sets what no rule here
@@ -84,8 +90,9 @@ Beside them, the restore inputs no project names: any tracked `.rsp` (an
 `MSBuild.rsp` or `Directory.Build.rsp` hands MSBuild global properties,
 which outrank the pin file), a `Directory.Packages.props` below the root
 (NuGet takes the nearest above a project, so it would be the pin file for its
-subtree), a `nuget.config` anywhere but the root, a
-`global.json` carrying `msbuild-sdks`, a solution other than
+subtree), a `nuget.config` or a `global.json` anywhere but the root (each is
+the nearest for its subtree too), a root `global.json` carrying
+`msbuild-sdks`, a solution other than
 `BlueprintAdmin.slnx`, and a project entry in that one naming anything but a
 literal path to a tracked `*proj`.
 
