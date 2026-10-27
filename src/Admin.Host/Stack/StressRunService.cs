@@ -362,8 +362,8 @@ public sealed class StressRunService(
         return (await job.Completion, stdout);
     }
 
-    /// <summary>Whether a step's job is the run block's.</summary>
-    private static bool IsRun(Job job) => job.Spec.Arguments is [.., var block] && block == Run;
+    /// <summary>Whether a step's job is the run block's, as it was started: with the configured <c>sa</c> password swapped in.</summary>
+    private bool IsRun(Job job) => job.Spec.Arguments is [.., var block] && block == LoadRunService.Spec(Run, paths, options.Value.SqlPassword).Arguments[^1];
 
     /// <summary>A block as the document prints it, one line to a newline, whatever line ending this file was checked out with.</summary>
     private static string Block(string text) => text.ReplaceLineEndings("\n");
