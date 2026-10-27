@@ -16,7 +16,7 @@ internal static class AnthropicProviderFactory
     /// The client is the SDK's own, so the credential is whatever the SDK resolves: <c>ANTHROPIC_API_KEY</c>, or the
     /// profile <c>ant auth login</c> stores. The console reads none of it, keeps none and has no key that holds one. With
     /// none, the provider reports <c>no-credential</c> and the rest of the console is as it was. The package's provider
-    /// reports a failed probe only as <c>unreachable</c>, with no hook that names why.
+    /// reports a failed probe only as <c>unreachable</c>, with no hook that names why (blueprint-backend#1494).
     /// </summary>
     public static IAssistantProvider Create(AssistantOptions options, TimeProvider time) =>
         new AnthropicProvider(
