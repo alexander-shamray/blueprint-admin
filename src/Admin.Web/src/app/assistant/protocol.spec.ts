@@ -1,17 +1,17 @@
-import clientToolResult from '../../../../Admin.Assistant/Protocol/golden/client-tool-result.json';
-import conversationOpened from '../../../../Admin.Assistant/Protocol/golden/conversation-opened.json';
-import conversationView from '../../../../Admin.Assistant/Protocol/golden/conversation-view.json';
-import eventClientToolCall from '../../../../Admin.Assistant/Protocol/golden/event-client-tool-call.json';
-import eventConfirmationRequired from '../../../../Admin.Assistant/Protocol/golden/event-confirmation-required.json';
-import eventError from '../../../../Admin.Assistant/Protocol/golden/event-error.json';
-import eventText from '../../../../Admin.Assistant/Protocol/golden/event-text.json';
-import eventToolFinished from '../../../../Admin.Assistant/Protocol/golden/event-tool-finished.json';
-import eventToolStarted from '../../../../Admin.Assistant/Protocol/golden/event-tool-started.json';
-import eventTurnEnded from '../../../../Admin.Assistant/Protocol/golden/event-turn-ended.json';
-import openConversation from '../../../../Admin.Assistant/Protocol/golden/open-conversation.json';
-import startTurn from '../../../../Admin.Assistant/Protocol/golden/start-turn.json';
-import statusEnabled from '../../../../Admin.Assistant/Protocol/golden/status-enabled.json';
-import statusOff from '../../../../Admin.Assistant/Protocol/golden/status-off.json';
+import clientToolResult from './golden/client-tool-result.json';
+import conversationOpened from './golden/conversation-opened.json';
+import conversationView from './golden/conversation-view.json';
+import eventClientToolCall from './golden/event-client-tool-call.json';
+import eventConfirmationRequired from './golden/event-confirmation-required.json';
+import eventError from './golden/event-error.json';
+import eventText from './golden/event-text.json';
+import eventToolFinished from './golden/event-tool-finished.json';
+import eventToolStarted from './golden/event-tool-started.json';
+import eventTurnEnded from './golden/event-turn-ended.json';
+import openConversation from './golden/open-conversation.json';
+import startTurn from './golden/start-turn.json';
+import statusEnabled from './golden/status-enabled.json';
+import statusOff from './golden/status-off.json';
 import {
   AssistantEvents,
   AssistantStatus,
@@ -25,6 +25,8 @@ import {
 /**
  * The TypeScript mirror held to its owner (AI assistant design §14, "Protocol"): each golden file the C# records are
  * tested against equals a value typed here, so a field renamed, added or retyped on either side fails one of the two.
+ * The files are the copy under `./golden/`, which the host's tests hold to the pinned package and the drift job to its
+ * owner.
  */
 describe('the assistant protocol mirror', () => {
   const tool = {
