@@ -32,8 +32,9 @@ jobs:
         with:
           node-version-file: .nvmrc
       # The pin gate (.github/pin-gate/README.md): no project file chooses
-      # a version or a feed. Before the build, so nothing it refuses is ever
-      # restored; on one leg, since the tree is the same on both.
+      # a version or a feed. A required check, so it holds the merge; the
+      # restores beside it already run the PR's own code. One leg, since the
+      # tree is the same on both.
       - if: runner.os == 'Linux'
         run: python3 .github/pin-gate/pin_gate.py
       - run: dotnet build --configuration Release
@@ -121,9 +122,9 @@ jobs:
   # was never tested against. A red test in one costs a single step, so tests
   # are not run; a range of one commit has nothing to build and passes. The SPA
   # is built only for a commit that touches it, after one `npm ci` per lockfile.
-  # Each commit passes the pin gate before it is built, since restoring it
-  # here, or on a later bisect, is what the gate guards; the head's copy
-  # judges, as in the host job.
+  # Each commit passes the pin gate before it is built, since a later bisect
+  # restores it on a developer's machine; the head's copy judges, as in the
+  # host job.
   commits:
     runs-on: ubuntu-latest
     timeout-minutes: 60
