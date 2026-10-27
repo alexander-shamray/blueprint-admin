@@ -141,17 +141,17 @@ assistant-panel (Angular)                · history (append-only)               
 
 | Part | Where | Knows about |
 |---|---|---|
-| Core | `src/Admin.Assistant/` (class library, net10, no package beyond the BCL) | protocol, tools, providers, the loop — nothing of the admin |
-| Anthropic adapter | `src/Admin.Assistant.Anthropic/` | the core and the official `Anthropic` NuGet package |
+| Core | blueprint-backend's `Common.Assistant` package (class library, net10, no package beyond the BCL); `src/Admin.Assistant/` until phase 6 | protocol, tools, providers, the loop — nothing of the admin |
+| Anthropic adapter | blueprint-backend's `Common.Assistant.Anthropic` package; `src/Admin.Assistant.Anthropic/` until phase 6 | the core and the official `Anthropic` NuGet package |
 | Host wiring | `src/Admin.Host/Assistant/` | endpoints, options, the admin's tool sources, the redactor |
 | Fake provider | `src/Admin.Host/Fakes/FakeAssistantProvider.cs` and its scripts | the core |
 | Browser client | `src/Admin.Web/src/app/assistant/` — `protocol.ts`, `assistant-client.ts` and `client-tools.ts` import nothing from Angular; `assistant-panel.ts` is the Angular view | `/api/assistant` only |
 
 The core's names avoid the admin's vocabulary on purpose: it says "client",
 "catalogue" and "tool source", never "screen", "widget" or "stack". The
-namespace is `Admin.Assistant` because that is the repository's convention.
-Renaming it when it moves to `blueprint-backend` (§13) is a find-and-replace,
-not a redesign.
+namespace was `Admin.Assistant` because that was the repository's convention;
+it became `Common.Assistant` when it moved to `blueprint-backend` (§13), a
+find-and-replace and not a redesign.
 
 ## 5. The protocol
 
@@ -701,10 +701,14 @@ only**. What it is:
   only while the assistant is on (§9.1) and answering as any other
   `/api/assistant/*` path does when it is off. Both go through the same
   registry, policy, limits and redactor as a conversation's calls:
-  `AssistantCore.ServerTools` and `AssistantCore.CallServerToolAsync` build
-  the registry with no client tool, and the core's one path runs the tool
-  under `ServerToolTimeout`, redacts the result for the operator and cuts it to
-  `MaxToolResultChars`. A call outside a conversation carries the conversation
+  `ServerToolCalls` (`src/Admin.Host/Assistant/`) builds the registry with no
+  client tool from the core's sources, runs the tool under
+  `ServerToolTimeout`, redacts the result for the operator and cuts it to
+  `MaxToolResultChars`. **Amended by phase 6 (#435):** this path was the
+  core's (`AssistantCore.ServerTools` and `CallServerToolAsync`), but the
+  backend's `Common.Assistant` 0.1.1 calls a tool only inside a conversation,
+  so the host holds it, over the core's public `ToolRegistry`, `Redactor`,
+  `Limits` and `Time`. A call outside a conversation carries the conversation
   id `none` and no `hostOptions`, so the platform tools read as the automatic
   identity (§6.5). Descriptors are already MCP's shape, so the process drops
   only the core's `side`. A call is not an assistant turn: it opens no
@@ -760,7 +764,11 @@ wait for it and do not hold it back. The order:
   under the drift gate (phase 6, #435). Restoring from GitHub Packages
   needs a token even for a public package, so from phase 6 a clean clone
   needs one in the environment to build, locally and in CI. Phase 6 amends
-  the spec's **Prerequisites** row to say so.
+  the spec's **Prerequisites** row to say so. **As built (#435):** the token
+  is `GITHUB_PACKAGES_TOKEN`, which `nuget.config` reads; CI hands it the
+  job's own `GITHUB_TOKEN` under `packages: read`, not a stored secret,
+  because both packages grant this repository Read (owner's decision,
+  2026-10-27).
 
 **One owner at every moment.** From the moment #1346 publishes, the
 backend's copy owns the core and the protocol. This repository's copy is
@@ -785,7 +793,8 @@ not this note's.
 
 ## 14. Testing
 
-- **Core (xunit, new `tests/Admin.Assistant.Tests/`)**: the loop against a
+- **Core (xunit, `tests/Admin.Assistant.Tests/` until phase 6, then
+  blueprint-backend's `tests/Common.Assistant.Tests/` beside the package)**: the loop against a
   scripted provider — text relay, a server round, a client round, both in one
   round with all results in one message, `MaxSteps`, budget, cancel, a refusal,
   a client-tool timeout; the registry refusals of §6.3; history append-only
