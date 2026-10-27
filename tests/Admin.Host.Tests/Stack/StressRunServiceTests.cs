@@ -401,7 +401,7 @@ public sealed class StressRunEndpointTests(AdminHostFactory factory) : IClassFix
 
         JsonElement stack = await WaitForStackAsync(s => s.GetProperty("stressRun").GetProperty("progress").ValueKind == JsonValueKind.Object);
         stack.GetProperty("stressRun").GetProperty("job").GetProperty("id").GetString().ShouldBe(job.GetProperty("id").GetString());
-        stack.GetProperty("stressOverride").EnumerateArray().Select(s => s.GetString()).ShouldBe(StressRunService.OverrideServices, ignoreOrder: true);
+        stack.GetProperty("stressOverride").EnumerateArray().Select(s => s.GetString()).ShouldBe(StressRunService.OverrideServices);
         (await GatewayAsync()).GetProperty("requestRate").GetDouble().ShouldBeGreaterThan(idle.GetProperty("requestRate").GetDouble());
 
         (await client.PostAsync("/api/stack/backend/up", null, TestContext.Current.CancellationToken)).StatusCode.ShouldBe(HttpStatusCode.Conflict);
