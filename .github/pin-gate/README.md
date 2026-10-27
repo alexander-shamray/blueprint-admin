@@ -12,8 +12,9 @@ edits; this gate is what refuses the version that would otherwise reach
 
 ## What it refuses
 
-In every tracked MSBuild file (`*proj`, `.props`, `.targets`, at any depth)
-other than the pin file at the root:
+In every tracked MSBuild file (`*proj`, `*proj.user`, `.props`, `.targets`,
+at any depth), with every name read without regard to case, as MSBuild
+reads it:
 
 - a `PackageReference` with `Version` or `VersionOverride`, as an attribute or
   as metadata, in an `ItemGroup` or an `ItemDefinitionGroup`;
@@ -24,33 +25,45 @@ other than the pin file at the root:
   `ImportDirectoryPackagesProps`: central management, a feed, a restore input,
   NuGet's own settings, or a second pin file. A prefix rather than a list, so
   a property NuGet adds later is refused before anyone has read it;
-- an `Import` or an `Sdk` element, and a `<Project Sdk>` that is not one the
-  .NET SDK bundles: each brings in MSBuild the gate never reads, and an
-  unbundled SDK is itself a NuGet package with a version;
+- an `Import` or an `Sdk` element, and a `<Project Sdk>` outside the named
+  list of SDKs the .NET SDK bundles: each brings in MSBuild the gate never
+  reads, and an unbundled SDK, some of which share the `Microsoft.NET.Sdk`
+  prefix, is itself a NuGet package with a version;
 - a file that does not parse, or carries a `DOCTYPE`: one the gate cannot
   read is not one it has passed.
 
-And in the pin file, `ManagePackageVersionsCentrally` anything but `true` or
-`CentralPackageVersionOverrideEnabled` anything but `false`. The second makes
+The pin file is read by the same rules, save for the `PackageVersion` and
+`GlobalPackageReference` items and the central-management properties it
+exists to hold. It must also set `ManagePackageVersionsCentrally` to `true`
+and `CentralPackageVersionOverrideEnabled` to `false`, each once and under no
+`Condition`, so the value read is the one MSBuild evaluates. The second makes
 the SDK refuse a plain override too; it is not enough alone, because a
 project file's own properties are evaluated after it and can set it back,
 which the first list refuses.
+
+Beside them, the restore inputs no project names: any tracked `.rsp` (an
+`MSBuild.rsp` or `Directory.Build.rsp` hands MSBuild global properties,
+which outrank the pin file), a `nuget.config` anywhere but the root, and a
+`global.json` carrying `msbuild-sdks`.
 
 ## What it does not judge
 
 Code a project file runs: a target, an inline task, an `Exec`. That is the
 residual `docs/harness-boundaries.md` already accepts for `src/**`, and it
-asks for a review, not a parser. Nor `nuget.config`, `global.json` or the pin
-file's own versions: each is a class E change and denied to every command
-that edits unattended.
+asks for a review, not a parser. Nor the root `nuget.config`'s feeds or the
+pin file's own versions: each is a class E change and denied to every
+command that edits unattended.
 
 ## How it runs
 
-`ci.yml`, twice, both times before the build that restores. In the `host`
-job, on the Linux leg alone since the tree is the same on both, so a required
-check holds it and a merge outside `/ship` waits on it too. In the `commits`
-job, on each commit before the head, because that job restores each one, as
-does anyone who later bisects onto it.
+`ci.yml`, twice. In the `host` job before its build, on the Linux leg alone
+since the tree is the same on both: a required check, so **it holds the
+merge**, and a merge outside `/ship` waits on it too. It does not hold the
+restore: the `host` job's Windows leg, `drift` and `smoke` restore in
+parallel, as they already build and run the pull request's own code, which
+is the residual above. In the `commits` job, on each commit before the head
+and before that commit is built, because a later bisect restores each one on
+a developer's machine.
 
 **The head's copy judges**, unlike the commit gate's base copy. The commit
 gate judges a pull request's metadata, which the branch writes freely; this
