@@ -2203,14 +2203,16 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
         # references, so it holds the edit; /style-pass keeps the deny. The pin
         # file and the SDK's auto-imported .csproj.user stay denied in /ship,
         # but that does not keep a version out of a project file: one can set
-        # its own with VersionOverride, and only the review stands against it
-        # until #547 adds a check.
+        # its own with VersionOverride. The pin gate refuses that in CI
+        # (#547), judging with the head's copy, so `.github/**` stays denied
+        # here: a chain that could edit the gate could pass its own project file.
         ship = self.disallowed("ship.md")
         self.assertNotIn("Edit(**/*.csproj)", ship)
         self.assertIn("Edit(**/*.csproj)", self.disallowed("style-pass.md"))
         for rule in ("Edit(Directory.Packages.props)",
                      "Edit(./Directory.Packages.props)",
-                     "Edit(**/Directory.Packages.*)", "Edit(**/*.csproj.user)"):
+                     "Edit(**/Directory.Packages.*)", "Edit(**/*.csproj.user)",
+                     "Edit(.github/**)", "Edit(./.github/**)"):
             with self.subTest(rule=rule):
                 self.assertIn(rule, ship)
 
