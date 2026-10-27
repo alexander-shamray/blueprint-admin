@@ -12,6 +12,8 @@ const stack = {
   reachability: [],
   lease: null,
   loadRun: null,
+  stressRun: null,
+  stressOverride: [],
 };
 
 function fakeHost() {
@@ -55,7 +57,7 @@ describe('the Stack page', () => {
     await vi.advanceTimersByTimeAsync(0);
     page.detectChanges();
     await vi.advanceTimersByTimeAsync(0);
-    expect(page.nativeElement.querySelectorAll('.ws-body > *').length).toBe(9);
+    expect(page.nativeElement.querySelectorAll('.ws-body > *').length).toBe(10);
 
     const reads = () => [host.stack, host.telemetryHealth, host.telemetryAlerts].map((read) => read.mock.calls.length);
     // rxjs schedules the first tick of `timer(0, …)` as an interval, which the fake clock fires a millisecond in.
@@ -65,7 +67,7 @@ describe('the Stack page', () => {
 
     // Past the ticks at 3, 6, 9, 12 and 15 s and short of the next, so no tick sits on the window's edge.
     await vi.advanceTimersByTimeAsync(16_500);
-    // Five widgets read the stack and share one poll, a read each 3 s; the strips read each 15 s.
+    // Six widgets read the stack and share one poll, a read each 3 s; the strips read each 15 s.
     const before = reads();
     expect(before).toEqual([shown[0] + 5, shown[1] + 1, shown[2] + 1]);
 

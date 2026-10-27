@@ -23,6 +23,8 @@ const stack = {
   ],
   lease: null,
   loadRun: null,
+  stressRun: null,
+  stressOverride: [],
 };
 
 const signal = (service: string) => ({

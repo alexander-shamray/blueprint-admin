@@ -84,6 +84,16 @@ export class HostClient {
     return this.http.post<JobSummary>('/api/stack/load-run/stop', null);
   }
 
+  /** The backend's stress run as one job (spec §5.3), or the run still going; 409 while a Compose job or the load run goes. */
+  stressRunStart(): Observable<JobSummary> {
+    return this.http.post<JobSummary>('/api/stack/stress-run', null);
+  }
+
+  /** Ends the stress run going at the step it is in; 409 when none is going. */
+  stressRunStop(): Observable<JobSummary> {
+    return this.http.post<JobSummary>('/api/stack/stress-run/stop', null);
+  }
+
   lease(): Observable<LeaseState> {
     return this.http.get<LeaseState>('/api/stack/lease');
   }

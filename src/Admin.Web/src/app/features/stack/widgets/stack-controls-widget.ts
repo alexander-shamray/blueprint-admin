@@ -51,6 +51,8 @@ export class StackControlsWidget {
 
   /** The Scenario lease the host holds (spec §5.3), read with the stack, so a lease a run left behind is shown here. */
   readonly lease = computed(() => this.feed.stack.value()?.lease ?? null);
+  /** The services running on the stress override, read from their containers with the stack, so a stack left on it says so. */
+  readonly stressOverride = computed(() => this.feed.stack.value()?.stressOverride ?? []);
   readonly restoring = signal(false);
   readonly restoreError = signal<string | null>(null);
 

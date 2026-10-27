@@ -40,7 +40,7 @@ interface BuiltInPage {
  * `layout` is the page's widgets (§5.3), each at its cell and its type's default size, in roughly the arrangement the
  * screen had. For the Stack page that is: in the left column the doctor's rows above the buttons and the job's output
  * directly under them, with the Compose services and the alerts beside that column, and the load run beside the golden
- * signals below. The Scenario page keeps the run beside the order's state.
+ * signals below, the stress run under it. The Scenario page keeps the run beside the order's state.
  */
 export const BUILT_IN_PAGES = [
   {
@@ -48,7 +48,8 @@ export const BUILT_IN_PAGES = [
     label: 'Stack',
     help:
       'The page that runs the platform as run-locally.md does. It holds the Workstation doctor, Compose services, ' +
-      'Stack controls, Alerts, Job output, Reachability, Golden signals, Load run and Reference client widgets. It ' +
+      'Stack controls, Alerts, Job output, Reachability, Golden signals, Load run, Stress run and Reference client ' +
+      'widgets. It ' +
       'shows no log lines or traces; the Logs and Trace pages do.',
     layout: [
       [STACK_WIDGETS.doctor, 0, 0],
@@ -59,6 +60,7 @@ export const BUILT_IN_PAGES = [
       [STACK_WIDGETS.reachability, 0, 24, { surfaces: [] }],
       [STACK_WIDGETS.signals, 0, 27, { services: [] }],
       [STACK_WIDGETS.loadRun, 14, 27],
+      [STACK_WIDGETS.stressRun, 14, 35],
       [STACK_WIDGETS.client, 0, 35],
     ],
   },

@@ -13,6 +13,7 @@ import { JobOutputWidget } from '../../workspace/job-output-widget';
 import { LoadRunWidget } from './widgets/load-run-widget';
 import { ReachabilityWidget } from './widgets/reachability-widget';
 import { ReferenceClientWidget } from './widgets/reference-client-widget';
+import { StressRunWidget } from './widgets/stress-run-widget';
 import { WorkstationDoctorWidget } from './widgets/workstation-doctor-widget';
 
 /** The page's widgets laid out as the retired screen component laid them out, so these tests keep their fixture. */
@@ -26,6 +27,7 @@ import { WorkstationDoctorWidget } from './widgets/workstation-doctor-widget';
     ReachabilityWidget,
     ReferenceClientWidget,
     StackControlsWidget,
+    StressRunWidget,
     WorkstationDoctorWidget,
   ],
   template: `
@@ -38,6 +40,8 @@ import { WorkstationDoctorWidget } from './widgets/workstation-doctor-widget';
     <app-golden-signals-widget />
     <h2>Load run</h2>
     <app-load-run-widget />
+    <h2>Stress run</h2>
+    <app-stress-run-widget />
     <h2>Alerts</h2>
     <app-alerts-widget />
     <h2>Compose services</h2>
@@ -64,6 +68,8 @@ const stack = {
   ],
   lease: null,
   loadRun: null,
+  stressRun: null,
+  stressOverride: [],
 };
 
 const lease = {
@@ -195,6 +201,15 @@ const loadJob = {
   startedAt: '',
 };
 
+const stressJob = {
+  id: 'stress-1',
+  commandLine: 'stress-run k6 up settle prometheus run',
+  state: 'Running',
+  exitCode: null,
+  startedAt: '',
+};
+const overridden = ['gateway', 'shipping-worker', 'notifications-worker'];
+
 const deviceReads = {
   checks: [
     {
@@ -234,6 +249,8 @@ describe('StackWidgets', () => {
     leaseRestore: ReturnType<typeof vi.fn>;
     loadRunStart: ReturnType<typeof vi.fn>;
     loadRunStop: ReturnType<typeof vi.fn>;
+    stressRunStart: ReturnType<typeof vi.fn>;
+    stressRunStop: ReturnType<typeof vi.fn>;
     telemetryHealth: ReturnType<typeof vi.fn>;
     telemetryAlerts: ReturnType<typeof vi.fn>;
     doctor: ReturnType<typeof vi.fn>;
@@ -276,6 +293,8 @@ describe('StackWidgets', () => {
       leaseRestore: vi.fn(() => of({ lease: null, changes: [] })),
       loadRunStart: vi.fn(() => of(loadJob)),
       loadRunStop: vi.fn(() => of({ ...loadJob, state: 'Exited', exitCode: -1 })),
+      stressRunStart: vi.fn(() => of(stressJob)),
+      stressRunStop: vi.fn(() => of({ ...stressJob, state: 'Exited', exitCode: -1 })),
       telemetryHealth: vi.fn(() => of(health)),
       telemetryAlerts: vi.fn(() => of(alerts)),
       doctor: vi.fn(() => of(doctor)),
@@ -808,6 +827,134 @@ describe('StackWidgets', () => {
       fixture.detectChanges();
 
       expect(fixture.nativeElement.textContent).toContain('There is no load run to stop.');
+    });
+  });
+
+  describe('stress run', () => {
+    async function render() {
+      const fixture = TestBed.createComponent(StackWidgets);
+      fixture.detectChanges();
+      await vi.advanceTimersByTimeAsync(0);
+      fixture.detectChanges();
+      const q = (selector: string) => fixture.nativeElement.querySelector(selector) as HTMLButtonElement | null;
+      return { fixture, q };
+    }
+
+    it('says a local run says nothing of production capacity, and offers Run with Stop disabled and no override', async () => {
+      const { q } = await render();
+
+      expect(text(q('.stress-run-status'))).toBe('k6 run stress.js not run');
+      expect(text(q('.stress-run-note'))).toContain(
+        'A local run says which part gives out first and roughly where, never what production can carry.',
+      );
+      expect(q('button.stress-run-start')!.disabled).toBe(false);
+      expect(q('button.stress-run-stop')!.disabled).toBe(true);
+      expect(q('.stress-override')).toBeNull();
+      expect(q('button.stress-restore')).toBeNull();
+    });
+
+    it('starts a run and hands its job to the output pane', async () => {
+      const { fixture, q } = await render();
+
+      q('button.stress-run-start')!.click();
+      fixture.detectChanges();
+
+      expect(host.stressRunStart).toHaveBeenCalled();
+      expect(shownJob()).toBe('stress-1');
+    });
+
+    it('says what comes before k6, then the step k6 holds or ramps through', async () => {
+      host.stack.mockReturnValue(of({ ...stack, stressRun: { job: stressJob, progress: null, knee: null } }));
+      const { fixture, q } = await render();
+
+      expect(text(q('.stress-run-step'))).toBe(
+        "Before k6: the up with the override, a minute idle and Prometheus's read come first.",
+      );
+
+      const at = (progress: object) =>
+        host.stack.mockReturnValue(of({ ...stack, stressRun: { job: stressJob, progress, knee: null } }));
+      at({ users: 4, maxUsers: 400, elapsed: '04.0s', step: 0, holding: false });
+      await vi.advanceTimersByTimeAsync(3000);
+      fixture.detectChanges();
+      expect(text(q('.stress-run-step'))).toBe('Ramping to the first step: 4 of 400 users, 04.0s in');
+
+      at({ users: 50, maxUsers: 400, elapsed: '4m10.0s', step: 2, holding: true });
+      await vi.advanceTimersByTimeAsync(3000);
+      fixture.detectChanges();
+      expect(text(q('.stress-run-step'))).toBe('Step 2: holding at 50 of 400 users, 4m10.0s in');
+
+      at({ users: 74, maxUsers: 400, elapsed: '6m50.0s', step: 2, holding: false });
+      await vi.advanceTimersByTimeAsync(3000);
+      fixture.detectChanges();
+      expect(text(q('.stress-run-step'))).toBe('Ramping on from step 2: 74 of 400 users, 6m50.0s in');
+      expect(q('button.stress-run-start')!.disabled).toBe(true);
+      expect(q('button.stress-run-stop')!.disabled).toBe(false);
+    });
+
+    it('shows the knee of a run that ended, with its exit code, and opens its output', async () => {
+      const knee = 'Knee: step 4 (200 VUs): failures, 23.4% of requests failed';
+      host.stack.mockReturnValue(
+        of({ ...stack, stressRun: { job: { ...stressJob, state: 'Exited', exitCode: 99 }, progress: null, knee } }),
+      );
+      const { q } = await render();
+
+      expect(text(q('.stress-run-status'))).toBe('k6 run stress.js exited 99');
+      expect(text(q('.stress-run-knee'))).toBe(knee);
+      expect(q('.stress-run-step')).toBeNull();
+
+      q('button.stress-run-output')!.click();
+
+      expect(shownJob()).toBe('stress-1');
+    });
+
+    it('says the stack runs on the override in the widget and in the Stack controls, and offers the way back once the run ends', async () => {
+      host.stack.mockReturnValue(
+        of({ ...stack, stressRun: { job: stressJob, progress: null, knee: null }, stressOverride: overridden }),
+      );
+      const { fixture, q } = await render();
+
+      expect(text(q('p.stress-override'))).toContain(
+        'The stack runs on the stress override (gateway, shipping-worker, notifications-worker)',
+      );
+      expect(text(q('section.stress-override'))).toContain(
+        'gateway, shipping-worker, notifications-worker were created',
+      );
+      expect(q('button.stress-restore')!.disabled).toBe(true);
+
+      host.stack.mockReturnValue(
+        of({
+          ...stack,
+          stressRun: { job: { ...stressJob, state: 'Exited', exitCode: -1 }, progress: null, knee: null },
+          stressOverride: overridden,
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(3000);
+      fixture.detectChanges();
+      expect(q('button.stress-restore')!.disabled).toBe(false);
+
+      q('button.stress-restore')!.click();
+      fixture.detectChanges();
+
+      expect(host.backendUp).toHaveBeenCalled();
+      expect(shownJob()).toBe('up-1');
+      expect(q('button.up')!.disabled).toBe(true);
+    });
+
+    it('shows why the host refused a run', async () => {
+      host.stressRunStart.mockReturnValue(
+        throwError(() => ({
+          error: {
+            title: 'A run is already going',
+            detail: 'A load run (job load-1) is still running, so this stress run was not started.',
+          },
+        })),
+      );
+      const { fixture, q } = await render();
+
+      q('button.stress-run-start')!.click();
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.textContent).toContain('A load run (job load-1) is still running');
     });
   });
 

@@ -26,6 +26,8 @@ export interface ServiceStatus {
   health: string | null;
   exitCode: number | null;
   publishedPorts: number[];
+  /** The Compose files its container was created from, by name; null when `ps` printed no labels. */
+  configFiles?: string[] | null;
 }
 
 export interface ComposeStatus {
@@ -115,6 +117,27 @@ export interface StackView {
   lease: LeaseView | null;
   /** The last load run (spec §5.3), running or exited; null before the first. */
   loadRun: JobSummary | null;
+  /** The last stress run (spec §5.3), with its step while k6 runs and its knee once named; null before the first. */
+  stressRun: StressRunView | null;
+  /** Each service running on the stress override (`StressRunService.OnOverride`); empty when none is. */
+  stressOverride: string[];
+}
+
+/** Where k6 is on the stress run's staircase, read off its own progress lines (`StressStaircase`). */
+export interface StressProgress {
+  users: number;
+  maxUsers: number;
+  elapsed: string;
+  /** Holds seen so far; 0 during the first ramp. */
+  step: number;
+  holding: boolean;
+}
+
+export interface StressRunView {
+  job: JobSummary;
+  progress: StressProgress | null;
+  /** summarise.mjs's `Knee:` line, once the run has named it. */
+  knee: string | null;
 }
 
 export interface ConfigView {
