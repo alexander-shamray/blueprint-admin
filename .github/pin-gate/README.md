@@ -162,7 +162,10 @@ restore: the `host` job's Windows leg, `drift` and `smoke` restore in
 parallel, as they already build and run the pull request's own code, which
 is the residual above. In the `commits` job, on each commit before the head
 and before that commit is built, because a later bisect restores each one on
-a developer's machine.
+a developer's machine. There a commit is held only to the refusals its
+branch's fork point does not already carry: one the fork point carries is a
+rule `main` gained after the branch forked, which no commit of the branch can
+satisfy (#563).
 
 The evaluation runs in the same two places, after the static read and
 before the build, so before that job's build restores (the other jobs
