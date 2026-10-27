@@ -172,6 +172,8 @@ The evaluation runs in the same two places, after the static read and
 before the build, so before that job's build restores (the other jobs
 restore beside it, as above); in the `host` job on both legs, since what
 MSBuild evaluates can differ by operating system where the tree does not.
+In the `commits` job a commit is held only to the evaluation's refusals its
+fork point does not already carry, as to the static read's.
 
 **The head's copy judges**, unlike the commit gate's base copy. The commit
 gate judges a pull request's metadata, which the branch writes freely; this

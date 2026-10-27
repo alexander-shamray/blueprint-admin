@@ -269,10 +269,15 @@ class TheCiWiring(unittest.TestCase):
         self.assertNotIn("if:", after)
 
     def test_the_commits_job_evaluates_each_commit_before_building_it(self) -> None:
+        # `refusals` runs the evaluation beside the static read, and the loop
+        # calls it after cleaning each commit and before building it (#563).
         block = job("commits")
         self.assertIn('cp .github/pin-gate/evaluate.py "$RUNNER_TEMP/evaluate.py"', block)
-        loop = block[block.index("for sha in"):]
-        gate = 'python3 "$RUNNER_TEMP/evaluate.py"'
+        helper = block[block.index("refusals() {"):block.index('for sha in "${shas[@]}"')]
+        self.assertIn('python3 "$RUNNER_TEMP/$gate"', helper)
+        self.assertIn("evaluate.py", helper.split("for gate in", 1)[1].split(";", 1)[0].split())
+        loop = block[block.index('for sha in "${shas[@]}"'):]
+        gate = "found=$(refusals)"
         self.assertIn(gate, loop)
         self.assertLess(loop.index("git clean"), loop.index(gate))
         self.assertLess(loop.index(gate), loop.index("dotnet build"))

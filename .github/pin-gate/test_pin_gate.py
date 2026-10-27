@@ -483,8 +483,9 @@ class TheCiWiring(unittest.TestCase):
         # and is read against the fork point's refusals (#563).
         block = job("commits")
         self.assertIn('cp .github/pin-gate/pin_gate.py "$RUNNER_TEMP/pin_gate.py"', block)
-        helper = block[block.index("refusals() {"):block.index("for sha in")]
-        self.assertIn('python3 "$RUNNER_TEMP/pin_gate.py"', helper)
+        helper = block[block.index("refusals() {"):block.index('for sha in "${shas[@]}"')]
+        self.assertIn('python3 "$RUNNER_TEMP/$gate"', helper)
+        self.assertIn("pin_gate.py", helper.split("for gate in", 1)[1].split(";", 1)[0].split())
         self.assertIn('git merge-base "$BASE_SHA" "$HEAD_SHA"', helper)
         loop = block[block.index("for sha in"):]
         self.gate_before_build(loop, "found=$(refusals)")
