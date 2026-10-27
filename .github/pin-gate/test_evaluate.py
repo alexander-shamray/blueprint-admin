@@ -125,17 +125,23 @@ class TheJudgement(unittest.TestCase):
         self.refused("outside the repository", imported=[self.root + "-other" + os.sep + "x.props"])
 
     def test_a_feed_or_a_nuget_setting_fails(self) -> None:
-        for name in ("RestoreSources", "RestoreAdditionalProjectSources", "RestoreConfigFile",
-                     "RestoreRootConfigDirectory"):
+        for name in ("RestoreSources", "RestoreConfigFile", "RestoreRootConfigDirectory"):
             with self.subTest(name=name):
                 self.refused(name, self.evaluated(**{name: "https://feed.example/v3/index.json"}))
 
-    def test_a_package_folder_outside_both_fails(self) -> None:
-        for name in ("RestorePackagesPath", "RestoreFallbackFolders", "RestoreAdditionalProjectFallbackFolders"):
+    def test_a_package_folder_or_local_source_outside_the_install_fails(self) -> None:
+        # The install's own (a Windows runner's SDK adds its library-packs
+        # as a source where the folder exists) passes; the repository does
+        # not, since restore takes a package already extracted there as it is.
+        for name in ("RestorePackagesPath", "RestoreFallbackFolders", "RestoreAdditionalProjectFallbackFolders",
+                     "RestoreAdditionalProjectSources"):
             with self.subTest(name=name):
+                self.assertEqual(self.problems(self.evaluated(**{name: ";" + os.path.join(self.dotnet,
+                                                                                           "library-packs")})), [])
                 self.refused(name, self.evaluated(**{name: os.path.join(self.base, "packages")}))
                 self.refused(name, self.evaluated(**{name: "../../../packages"}))
-                self.assertEqual(self.problems(self.evaluated(**{name: "../../artifacts/packages"})), [])
+                self.refused(name, self.evaluated(**{name: "../../artifacts/packages"}))
+                self.refused(name, self.evaluated(**{name: "https://feed.example/v3/index.json"}))
 
     def test_central_management_turned_off_or_overridable_fails(self) -> None:
         self.refused("ManagePackageVersionsCentrally", self.evaluated(ManagePackageVersionsCentrally=""))
