@@ -82,8 +82,9 @@ as out of scope, never filed.
   that `host-checks.sh` runs, the same class of input as `src/**`. It is also a
   supply-chain input that the denied `Directory.Packages.props` does not close:
   a project file can name its own version with `VersionOverride`, opt out of
-  central management or add a feed, and only the review's reading of the diff
-  refuses that until a check does (#547). `/style-pass` keeps the deny, having
+  central management or add a feed, and the pin gate refuses each in CI
+  (`.github/pin-gate/README.md`, #547). It judges with the head's copy, so
+  `.github/**` stays denied here. `/style-pass` keeps the deny, having
   no business in a project file.
 - **File permission rules take `Edit(...)`, never `Write(...)`** — a
   `Write(path)` rule matches nothing and stops Claude Code from starting.
