@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Negative cases for the pin gate, each beside a positive control, and the
-wiring that makes CI run it before anything restores."""
+wiring that makes CI run it."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from pin_gate import PIN_FILE, check, check_pin_file, collect, main
+from pin_gate import PIN_FILE, check, check_other, check_pin_file, collect, main
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -31,10 +31,12 @@ PLAIN = """<Project Sdk="Microsoft.NET.Sdk">
 PIN = """<Project>
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
     <CentralPackageVersionOverrideEnabled>false</CentralPackageVersionOverrideEnabled>
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="Anthropic" Version="1.0.0" />
+    <GlobalPackageReference Include="Analyzer" Version="1.0.0" />
   </ItemGroup>
 </Project>
 """
@@ -47,7 +49,11 @@ def project(body: str, sdk: str = "Microsoft.NET.Sdk") -> str:
 def refused(test: unittest.TestCase, text: str, needle: str) -> None:
     problems = check("src/X/X.csproj", text)
     test.assertEqual(len(problems), 1, problems)
-    test.assertIn(needle, problems[0])
+    test.assertIn(needle.lower(), problems[0].lower())
+
+
+def pin_problems(text: str) -> list[str]:
+    return check_pin_file(text) + check(PIN_FILE, text, pin=True)
 
 
 class AProjectFile(unittest.TestCase):
@@ -74,6 +80,20 @@ class AProjectFile(unittest.TestCase):
         text = ('<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">'
                 '<ItemGroup><PackageReference Include="A" VersionOverride="9" /></ItemGroup></Project>')
         refused(self, text, "VersionOverride")
+
+    def test_names_are_read_without_regard_to_case_as_msbuild_reads_them(self) -> None:
+        # R1 of #550: NuGet honours each of these spellings.
+        for body, needle in (
+            ("<PropertyGroup><managePackageVersionsCentrally>false</managePackageVersionsCentrally>"
+             "</PropertyGroup>", "managepackageversionscentrally"),
+            ("<PropertyGroup><restoreSources>https://x</restoreSources></PropertyGroup>", "restoresources"),
+            ('<ItemGroup><packageDownload Include="A" Version="[1.0.0]" /></ItemGroup>', "packagedownload"),
+            ('<ItemGroup><PackageReference Include="A" versionOverride="9" /></ItemGroup>', "versionoverride"),
+            ('<ItemGroup><packagereference Include="A"><VERSION>9</VERSION></packagereference></ItemGroup>',
+             "sets version"),
+        ):
+            with self.subTest(needle=needle):
+                refused(self, project(body), needle)
 
     def test_a_comment_naming_the_attribute_passes(self) -> None:
         # Why the gate parses rather than greps: prose about the rule is not
@@ -111,7 +131,9 @@ class AProjectFile(unittest.TestCase):
         refused(self, project('<Sdk Name="Some.Sdk" Version="1.0.0" />'), "<Sdk>")
 
     def test_a_versioned_or_foreign_project_sdk_fails(self) -> None:
-        for sdk in ("Microsoft.NET.Sdk/10.0.100", "Some.Sdk", "Microsoft.NET.Sdk;Some.Sdk/1.0"):
+        # R4 of #550: Functions shares the prefix and is a NuGet package.
+        for sdk in ("Microsoft.NET.Sdk/10.0.100", "Some.Sdk", "Microsoft.NET.Sdk;Some.Sdk/1.0",
+                    "Microsoft.NET.Sdk.Functions"):
             with self.subTest(sdk=sdk):
                 self.assertTrue(check("src/X/X.csproj", project("", sdk=sdk)))
 
@@ -128,24 +150,64 @@ class AProjectFile(unittest.TestCase):
 
 
 class ThePinFile(unittest.TestCase):
-    def test_the_settings_the_gate_rests_on_pass(self) -> None:
-        self.assertEqual(check_pin_file(PIN), [])
+    def test_the_settings_and_items_it_exists_to_hold_pass(self) -> None:
+        self.assertEqual(pin_problems(PIN), [])
 
     def test_overrides_left_on_fail(self) -> None:
         for value in ("true", ""):
             with self.subTest(value=value):
                 text = PIN.replace("<CentralPackageVersionOverrideEnabled>false",
                                    f"<CentralPackageVersionOverrideEnabled>{value}")
-                self.assertEqual(len(check_pin_file(text)), 1)
+                self.assertEqual(len(pin_problems(text)), 1)
 
     def test_overrides_never_mentioned_fail(self) -> None:
         text = re.sub(r"\s*<CentralPackageVersionOverrideEnabled>.*?</CentralPackageVersionOverrideEnabled>",
                       "", PIN)
-        self.assertEqual(len(check_pin_file(text)), 1)
+        self.assertEqual(len(pin_problems(text)), 1)
 
     def test_central_management_off_fails(self) -> None:
         text = PIN.replace("<ManagePackageVersionsCentrally>true", "<ManagePackageVersionsCentrally>false")
-        self.assertEqual(len(check_pin_file(text)), 1)
+        self.assertEqual(len(pin_problems(text)), 1)
+
+    def test_a_setting_under_a_condition_or_set_twice_fails(self) -> None:
+        # The value read here would be one MSBuild may never evaluate.
+        conditional = PIN.replace("<CentralPackageVersionOverrideEnabled>",
+                                  "<CentralPackageVersionOverrideEnabled Condition=\"'$(X)'==''\">")
+        group = PIN.replace("<PropertyGroup>", "<PropertyGroup Condition=\"'$(X)'==''\">")
+        twice = PIN.replace("</PropertyGroup>",
+                            "<CentralPackageVersionOverrideEnabled>true</CentralPackageVersionOverrideEnabled>"
+                            "</PropertyGroup>")
+        for name, text in (("condition", conditional), ("group", group), ("twice", twice)):
+            with self.subTest(name):
+                self.assertTrue(pin_problems(text))
+
+    def test_its_feed_and_import_are_refused_as_anywhere_else(self) -> None:
+        for extra in ("<PropertyGroup><RestoreSources>https://x</RestoreSources></PropertyGroup>",
+                      '<Import Project="other.props" />',
+                      '<ItemGroup><PackageDownload Include="A" Version="[1.0.0]" /></ItemGroup>'):
+            with self.subTest(extra=extra):
+                self.assertEqual(len(pin_problems(PIN.replace("</Project>", extra + "</Project>"))), 1)
+
+
+class OtherRestoreInputs(unittest.TestCase):
+    # R3 of #550: what MSBuild and NuGet read without any project naming it.
+
+    def test_a_response_file_fails(self) -> None:
+        for path in ("Directory.Build.rsp", "src/MSBuild.rsp"):
+            with self.subTest(path=path):
+                self.assertTrue(check_other(path, "-p:RestoreSources=https://x"))
+
+    def test_only_the_root_feed_list_passes(self) -> None:
+        self.assertEqual(check_other("nuget.config", "<configuration />"), [])
+        for path in ("src/nuget.config", "tests/X/NuGet.Config"):
+            with self.subTest(path=path):
+                self.assertTrue(check_other(path, "<configuration />"))
+
+    def test_an_sdk_pin_that_fetches_msbuild_sdks_fails(self) -> None:
+        self.assertEqual(check_other("global.json", '{"sdk": {"version": "10.0.100"}}'), [])
+        self.assertTrue(check_other("global.json", '{"msbuild-sdks": {"Some.Sdk": "1.0.0"}}'))
+        self.assertTrue(check_other("src/global.json", '{"MSBuild-Sdks": {"Some.Sdk": "1.0.0"}}'))
+        self.assertTrue(check_other("global.json", "{"))
 
 
 @contextlib.contextmanager
@@ -168,17 +230,20 @@ class TheTree(unittest.TestCase):
         with inside(ROOT), contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(main([]), 0)
 
-    def test_only_tracked_msbuild_files_are_read(self) -> None:
+    def test_only_tracked_restore_inputs_are_read(self) -> None:
         with tempfile.TemporaryDirectory() as scratch, inside(Path(scratch)):
             run("git", "init", "-q")
             Path(PIN_FILE).write_text(PIN, encoding="utf-8")
             Path("src").mkdir()
             Path("src/A.csproj").write_text(PLAIN, encoding="utf-8")
+            Path("src/A.csproj.user").write_text("<Project />", encoding="utf-8")
             Path("src/B.targets").write_text("<Project />", encoding="utf-8")
             Path("src/notes.md").write_text("VersionOverride", encoding="utf-8")
+            Path("global.json").write_text("{}", encoding="utf-8")
             run("git", "add", ".")
             Path("src/Untracked.csproj").write_text(project('<Import Project="x" />'), encoding="utf-8")
-            self.assertEqual(collect(), [PIN_FILE, "src/A.csproj", "src/B.targets"])
+            self.assertEqual(collect(), [PIN_FILE, "global.json", "src/A.csproj", "src/A.csproj.user",
+                                         "src/B.targets"])
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(main([]), 0)
 
@@ -186,14 +251,16 @@ class TheTree(unittest.TestCase):
         with tempfile.TemporaryDirectory() as scratch, inside(Path(scratch)):
             run("git", "init", "-q")
             Path(PIN_FILE).write_text(PIN, encoding="utf-8")
-            Path("A.csproj").write_text(
-                project('<ItemGroup><PackageReference Include="A" VersionOverride="9" /></ItemGroup>'),
+            Path("A.csproj.user").write_text(
+                '<Project><ItemGroup><PackageReference Update="A" VersionOverride="9" /></ItemGroup></Project>',
                 encoding="utf-8")
+            Path("Directory.Build.rsp").write_text("-p:RestoreSources=https://x", encoding="utf-8")
             run("git", "add", ".")
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
                 self.assertEqual(main([]), 1)
-            self.assertIn("::error::A.csproj", out.getvalue())
+            self.assertIn("::error::A.csproj.user", out.getvalue())
+            self.assertIn("::error::Directory.Build.rsp", out.getvalue())
 
     def test_a_tree_with_no_pin_file_fails(self) -> None:
         with tempfile.TemporaryDirectory() as scratch, inside(Path(scratch)):
@@ -213,15 +280,14 @@ def job(name: str) -> str:
 
 
 class TheCiWiring(unittest.TestCase):
-    # #547: a gate nothing runs reads exactly like one that passes. These hold
-    # CI to running it before each restore it guards.
+    # #547: a gate nothing runs reads exactly like one that passes.
 
     def gate_before_build(self, block: str, gate: str) -> None:
         self.assertIn(gate, block)
         self.assertIn("dotnet build", block)
         self.assertLess(block.index(gate), block.index("dotnet build"))
 
-    def test_the_host_job_runs_the_gate_before_it_restores(self) -> None:
+    def test_the_host_job_runs_the_gate_before_it_builds(self) -> None:
         # `host (ubuntu-latest)` is a required check, so the gate holds a
         # merge outside /ship too, with no ruleset change.
         block = job("host")
@@ -229,8 +295,7 @@ class TheCiWiring(unittest.TestCase):
         self.assertIn("runner.os == 'Linux'", block)
 
     def test_the_commits_job_runs_the_gate_on_each_commit_before_building_it(self) -> None:
-        # Each commit before the head is restored there, and by anyone who
-        # bisects onto it later.
+        # Each commit before the head is what a later bisect restores.
         block = job("commits")
         self.assertIn('cp .github/pin-gate/pin_gate.py "$RUNNER_TEMP/pin_gate.py"', block)
         loop = block[block.index("for sha in"):]
