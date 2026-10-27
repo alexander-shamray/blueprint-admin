@@ -3,13 +3,13 @@ using System.Net.Http.Json;
 using System.Net.ServerSentEvents;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Admin.Assistant;
-using Admin.Assistant.Protocol;
-using Admin.Assistant.Providers;
 using Admin.Host.Assistant;
 using Admin.Host.Config;
 using Admin.Host.Fakes;
 using Admin.Host.Tests.TestSupport;
+using Common.Assistant;
+using Common.Assistant.Protocol;
+using Common.Assistant.Providers;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -366,7 +366,7 @@ public sealed class AssistantEndpointsTests : IClassFixture<AdminHostFactory>
     {
         AssistantOptions options = new() { Model = model, Effort = effort };
 
-        Should.Throw<InvalidOperationException>(() => AnthropicProviderFactory.Create(options, TimeProvider.System, NullLogger.Instance)).Message.ShouldContain(key);
+        Should.Throw<InvalidOperationException>(() => AnthropicProviderFactory.Create(options, TimeProvider.System)).Message.ShouldContain(key);
     }
 
     [Fact]

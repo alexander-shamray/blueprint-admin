@@ -4,6 +4,10 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup Label="Assistant">
+    <!-- blueprint-backend's packages, restored from GitHub Packages (nuget.config). Exempt from the two-week pin age
+         (AI assistant design note §3); the adapter is pinned to the version packed against the core's. -->
+    <PackageVersion Include="Common.Assistant" Version="0.1.1" />
+    <PackageVersion Include="Common.Assistant.Anthropic" Version="0.1.1" />
     <PackageVersion Include="Anthropic" Version="12.54.1" />
   </ItemGroup>
   <ItemGroup Label="Test">

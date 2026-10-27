@@ -1,7 +1,7 @@
-using Admin.Assistant;
 using Admin.Host.Assistant;
 using Admin.Host.Fakes;
 using Admin.Host.Tests.TestSupport;
+using Common.Assistant;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;

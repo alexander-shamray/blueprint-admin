@@ -1,5 +1,5 @@
 using System.Text.RegularExpressions;
-using Admin.Assistant.Protocol;
+using Common.Assistant.Protocol;
 
 namespace Admin.Host.Fakes;
 
