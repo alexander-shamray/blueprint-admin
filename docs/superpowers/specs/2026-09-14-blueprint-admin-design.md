@@ -56,7 +56,7 @@ routes are `Gateway.Api/appsettings.json`; health endpoints are mapped by
 
 | Operation | Command, in which clone |
 |---|---|
-| Start backend | `docker compose -f deploy/compose/docker-compose.yml up -d --wait`, backend |
+| Start backend | `docker compose -f deploy/compose/docker-compose.yml --progress json up -d --wait`, backend (the document's line, with Compose's output as JSON for the pull progress, §5.3) |
 | Stop backend | `docker compose -f deploy/compose/docker-compose.yml down`, backend |
 | Stop and wipe | `... down -v`, backend. Destroys databases and broker state |
 | Backend status | `... ps --format json`, backend |
@@ -271,7 +271,12 @@ is kept (`ComposeService.ExecListedAsync`).
 `ComposeService` builds every command from `AdminOptions` and runs it through
 `ProcessRunner` in `BackendDir`:
 
-- `Up()`: `up -d --wait`. Returns the job.
+- `Up()`: `--progress json up -d --wait`. Returns the job. The flag changes how
+  Compose reports, not what it does, as `ps --format json` does, so the line is
+  still run-locally.md's (`RunLocallyCommandsDriftTests` lets the host add a
+  flag). It is what names the image each layer belongs to and the layer's size,
+  which the plain output leaves out: the output pane reads it into one row per
+  image pulled (`PullTracker`) and writes the rest back as Compose's plain lines.
 - `Down(wipeVolumes)`: `down` or `down -v`. The endpoint requires
   `confirm: "down -v"` in the body when `wipeVolumes` is true.
 - `Ps()`: `ps --format json`, parsed into `ServiceStatus { Service, State,

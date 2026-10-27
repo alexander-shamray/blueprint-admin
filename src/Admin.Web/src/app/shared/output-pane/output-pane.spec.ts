@@ -85,6 +85,70 @@ describe('OutputPane', () => {
     expect(fixture.nativeElement.querySelector('pre')?.textContent).toContain('one');
   });
 
+  it('tabulates the images a Compose job pulls, and leaves their lines out of the log until asked', () => {
+    const events = new Subject<JobEvent>();
+    const sse = { follow: vi.fn(() => events.asObservable()) };
+    TestBed.configureTestingModule({ imports: [OutputPane], providers: [{ provide: SseClient, useValue: sse }] });
+    const fixture = TestBed.createComponent(OutputPane);
+    fixture.componentRef.setInput('jobId', 'up');
+    fixture.componentRef.setInput('composeStderr', true);
+    fixture.detectChanges();
+    const send = (sequence: number, event: object) =>
+      events.next({ kind: 'line', line: { sequence, at: '', stream: 'Stderr', text: JSON.stringify(event) } });
+
+    send(0, { id: 'Image grafana/otel-lgtm:0.37.0', status: 'Working', text: 'Pulling' });
+    send(1, {
+      id: '3c5e70de2899',
+      parent_id: 'Image grafana/otel-lgtm:0.37.0',
+      status: 'Working',
+      text: 'Downloading',
+      details: '241.2MB',
+      current: 241_200_000,
+      total: 900_400_000,
+    });
+    send(2, { id: 'Image redis:7.4.11-alpine', status: 'Working', text: 'Pulling' });
+    send(3, { id: 'Container commerce-sql-1', status: 'Done', text: 'Healthy' });
+    fixture.detectChanges();
+
+    const pull = fixture.nativeElement.querySelector('section.pull') as HTMLElement;
+    const rows = Array.from(pull.querySelectorAll('tbody tr')) as HTMLElement[];
+    expect(pull.querySelector('.pull-summary')?.textContent).toContain('Images left to pull: 2 of 2');
+    expect(rows.map((r) => r.querySelector('th')?.textContent)).toEqual([
+      'grafana/otel-lgtm:0.37.0',
+      'redis:7.4.11-alpine',
+    ]);
+    expect(rows[0].querySelector('.size')?.textContent).toBe('241 MB / 900 MB');
+    expect(rows[0].querySelector('.state')?.textContent).toBe('downloading');
+    expect(rows[1].querySelector('.state')?.textContent).toBe('waiting');
+
+    const pre = fixture.nativeElement.querySelector('pre') as HTMLElement;
+    expect(pre.textContent).toContain(' Container commerce-sql-1  Healthy');
+    expect(pre.textContent).not.toContain('3c5e70de2899');
+    expect(pre.querySelector('.stderr')).toBeNull();
+
+    (pull.querySelector('button.pull-lines') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(pre.textContent).toContain(' 3c5e70de2899  Downloading 241.2MB');
+  });
+
+  it('marks a line Compose reports as an error, though it is JSON', () => {
+    const events = new Subject<JobEvent>();
+    const sse = { follow: vi.fn(() => events.asObservable()) };
+    TestBed.configureTestingModule({ imports: [OutputPane], providers: [{ provide: SseClient, useValue: sse }] });
+    const fixture = TestBed.createComponent(OutputPane);
+    fixture.componentRef.setInput('jobId', 'up');
+    fixture.componentRef.setInput('composeStderr', true);
+    fixture.detectChanges();
+
+    events.next({
+      kind: 'line',
+      line: { sequence: 0, at: '', stream: 'Stderr', text: '{"id":"Container sql-1","status":"Error","text":"Error"}' },
+    });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('pre .stderr')?.textContent).toContain('Container sql-1');
+  });
+
   it('clears a previous stream error when it follows another job', () => {
     const first = new Subject<JobEvent>();
     const second = new Subject<JobEvent>();

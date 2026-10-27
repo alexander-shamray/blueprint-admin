@@ -64,7 +64,12 @@ public sealed class FakePlatformTests : IClassFixture<AdminHostFactory>
         JsonElement job = await client.GetFromJsonAsync<JsonElement>($"/api/jobs/{id}", TestContext.Current.CancellationToken);
 
         job.GetProperty("summary").GetProperty("exitCode").GetInt32().ShouldBe(0);
-        job.GetProperty("lines").EnumerateArray().Count().ShouldBe(6);
+
+        // Compose's JSON progress, a line per event: the pulls the Job output tabulates, then the containers.
+        JsonElement[] events = [.. job.GetProperty("lines").EnumerateArray().Select(l => JsonDocument.Parse(l.GetProperty("text").GetString()!).RootElement)];
+        events.ShouldContain(e => e.GetProperty("id").GetString() == "Image grafana/otel-lgtm:0.37.0" && e.GetProperty("text").GetString() == "Pulled");
+        events[^1].GetProperty("id").GetString().ShouldBe("Container commerce-gateway-1");
+        events[^1].GetProperty("text").GetString().ShouldBe("Healthy");
     }
 
     // The recorded logs -f output, by Compose service prefix: gateway 3,
