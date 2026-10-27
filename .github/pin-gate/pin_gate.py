@@ -7,6 +7,7 @@ py -3.12 .github/pin-gate/pin_gate.py from the repository root.
 from __future__ import annotations
 
 import json
+import posixpath
 import re
 import subprocess
 import sys
@@ -35,6 +36,7 @@ MSBUILD_FILE = re.compile(r"\.(?:[a-z]*proj(?:\.user)?|props|targets)$", re.IGNO
 # ($(...), @(...), %(...), a wildcard) can become several paths, or another
 # name, after the gate has read it.
 PROJECT_ENTRY = re.compile(r"^[^$@%*?]*\.[a-z]*proj$", re.IGNORECASE)
+ROOTED = re.compile(r"^(?:[A-Za-z]:|[\\/])")
 
 # Properties that turn central management off or redirect it, name a feed or
 # a restore input, reach NuGet's own settings, import a file by path, or pick
@@ -93,6 +95,12 @@ PIN_SETTINGS = {
 }
 
 
+ENCODING_ERRORS = frozenset(
+    expat.errors.codes[message]
+    for message in (expat.errors.XML_ERROR_UNKNOWN_ENCODING, expat.errors.XML_ERROR_INCORRECT_ENCODING)
+)
+
+
 class _Doctype(Exception):
     pass
 
@@ -124,18 +132,35 @@ def _parse(path: str, data: bytes | str) -> tuple[ET.Element | None, list[str]]:
         probe.Parse(data, True)
     except _Doctype:
         return None, [f"{path}: carries a DOCTYPE, which no MSBuild file needs, so nothing in it was read"]
-    except (expat.ExpatError, ValueError) as error:
+    except (expat.ExpatError, ValueError, LookupError) as error:
         return None, [f"{path}: is not well-formed XML ({error}), so nothing in it was read"]
     return ET.fromstring(data), []
 
 
-def _project_entries(path: str, what: str, value: str) -> list[str]:
-    """A project entry that is not a literal path to a *proj."""
-    return [f"{path}: {what} {entry!r} is not a literal *proj path, so the gate cannot be sure it read it"
-            for entry in (e.strip() for e in value.split(";")) if entry and not PROJECT_ENTRY.match(entry)]
+def _project_entries(path: str, what: str, value: str, known: frozenset[str] | None) -> list[str]:
+    """A project entry that is not a literal *proj path to a tracked file. A
+    rooted, drive or UNC path, or one that climbs out of the repository,
+    names MSBuild the gate never reads; a share would hand it over the
+    network. `known` is every tracked path, lower-cased as Windows matches
+    them; None, for a file judged alone, checks the entry's form only."""
+    problems = []
+    base = posixpath.dirname(path)
+    for entry in (e.strip() for e in value.split(";")):
+        if not entry:
+            continue
+        if not PROJECT_ENTRY.match(entry):
+            problems.append(f"{path}: {what} {entry!r} is not a literal *proj path, "
+                            "so the gate cannot be sure it read it")
+        elif ROOTED.match(entry):
+            problems.append(f"{path}: {what} {entry!r} is rooted outside the repository")
+        elif known is not None:
+            target = posixpath.normpath(posixpath.join(base, entry.replace("\\", "/")))
+            if target.lower() not in known:
+                problems.append(f"{path}: {what} {entry!r} names no tracked file in the repository")
+    return problems
 
 
-def check(path: str, data: bytes | str, *, pin: bool = False) -> list[str]:
+def check(path: str, data: bytes | str, *, pin: bool = False, known: frozenset[str] | None = None) -> list[str]:
     """Every problem in one MSBuild file; empty is a pass. The pin file is
     read the same way, save for the items and settings it exists to hold."""
     root, problems = _parse(path, data)
@@ -164,7 +189,7 @@ def check(path: str, data: bytes | str, *, pin: bool = False) -> list[str]:
                 if name in REFUSED_ITEMS or name.startswith(REFUSED_ITEM_PREFIX):
                     problems.append(f"{path}: <{name}> sets a version outside {PIN_FILE}")
                 elif name == "projectreference":
-                    problems += _project_entries(path, "ProjectReference", _attrs(item).get("include", ""))
+                    problems += _project_entries(path, "ProjectReference", _attrs(item).get("include", ""), known)
                 elif name == "packagereference":
                     attrs = _attrs(item)
                     chosen = sorted(VERSION_METADATA & attrs.keys())
@@ -208,7 +233,7 @@ def check_pin_file(data: bytes | str) -> list[str]:
     return problems
 
 
-def check_other(path: str, data: bytes | str) -> list[str]:
+def check_other(path: str, data: bytes | str, known: frozenset[str] | None = None) -> list[str]:
     """A tracked restore input that is not an MSBuild file: a response file,
     a second solution or feed list, or an SDK pin naming MSBuild SDKs."""
     base = PurePosixPath(path).name.lower()
@@ -221,7 +246,7 @@ def check_other(path: str, data: bytes | str) -> list[str]:
         if root is None:
             return problems
         return [p for element in root.iter() if _name(element) == "project"
-                for p in _project_entries(path, "Project", _attrs(element).get("path", ""))]
+                for p in _project_entries(path, "Project", _attrs(element).get("path", ""), known)]
     if base == FEED_FILE and path != FEED_FILE:
         return [f"{path}: a second feed list beside the root {FEED_FILE}"]
     if base == SDK_FILE:
@@ -270,19 +295,26 @@ def _is_project(data: bytes) -> bool:
         return _name(root.name.rsplit(":", 1)[-1]) == "project"
     except _Doctype:
         return True
-    except (expat.ExpatError, ValueError):
-        return False
+    except expat.ExpatError as error:
+        # An encoding expat does not know (Shift_JIS, say) is one XmlReader
+        # may: read the file, and refuse it, rather than skip it. Any other
+        # failure before the root is a file XmlReader rejects too, such as
+        # an HTML page's lower-case doctype.
+        return error.code in ENCODING_ERRORS
+    except (ValueError, LookupError):
+        # LookupError is pyexpat asking Python's codecs for a name they lack.
+        return True
     return seen["doctype"]
 
 
-def judge(path: str, data: bytes) -> list[str] | None:
+def judge(path: str, data: bytes, known: frozenset[str]) -> list[str] | None:
     """The problems in one tracked file, or None when it is no restore input."""
     if path == PIN_FILE:
-        return check_pin_file(data) + check(path, data, pin=True)
+        return check_pin_file(data) + check(path, data, pin=True, known=known)
     if _is_other(path):
-        return check_other(path, data)
+        return check_other(path, data, known)
     if MSBUILD_FILE.search(path) or _is_project(data):
-        return check(path, data)
+        return check(path, data, known=known)
     return None
 
 
@@ -304,7 +336,9 @@ def read(path: str) -> bytes:
 
 def collect() -> list[str]:
     """Every tracked restore input, the pin file included, as repository paths."""
-    return [p for p in tracked() if judge(p, read(p)) is not None]
+    paths = tracked()
+    known = frozenset(p.lower() for p in paths)
+    return [p for p in paths if judge(p, read(p), known) is not None]
 
 
 def main(argv: list[str]) -> int:
@@ -320,10 +354,11 @@ def main(argv: list[str]) -> int:
     if PIN_FILE not in paths:
         print(f"::error::{PIN_FILE} is not tracked, so there is no pin file to hold anything to")
         return 1
+    known = frozenset(p.lower() for p in paths)
     problems: list[str] = []
     read_count = 0
     for path in paths:
-        verdict = judge(path, read(path))
+        verdict = judge(path, read(path), known)
         if verdict is not None:
             read_count += 1
             problems += verdict

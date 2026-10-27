@@ -21,11 +21,12 @@ as MSBuild reads it. That is every `*proj`, `*proj.user`, `.props` and
 an import reaches a file of any name, but only one whose first element is
 `<Project>`. So every tracked file is parsed from its bytes, as XmlReader
 reads them (the byte-order mark, the declared encoding, UTF-16 told from its
-first bytes), up to its first element and no further; one in UTF-32, which
-the parser cannot decode, or whose root it cannot name without expanding an
-entity, is read and refused rather than skipped. Project entries are held to
-literal `*proj` paths, so nothing expands into a name after it was read. In
-each:
+first bytes), up to its first element and no further; one in UTF-32 or an
+encoding the parser does not know, which XmlReader may, or whose root it
+cannot name without expanding an entity, is read and refused rather than
+skipped. Project entries are held to literal `*proj` paths that resolve to a
+tracked file in the repository, so nothing expands into a name after it was
+read and nothing is fetched from outside. In each:
 
 - a `PackageReference` with `Version` or `VersionOverride`, as an attribute or
   as metadata, in an `ItemGroup` or an `ItemDefinitionGroup`;
@@ -49,9 +50,11 @@ each:
   list of SDKs the .NET SDK bundles: each brings in MSBuild the gate never
   reads, and an unbundled SDK, some of which share the `Microsoft.NET.Sdk`
   prefix, is itself a NuGet package with a version;
-- a `ProjectReference` naming anything but a literal path to a `*proj` file:
-  a `$(…)`, `@(…)` or `%(…)` or a wildcard can expand into another name, or
-  several, after the gate has read it;
+- a `ProjectReference` naming anything but a literal path to a tracked
+  `*proj` file: a `$(…)`, `@(…)` or `%(…)` or a wildcard can expand into
+  another name, or several, after the gate has read it, and a drive, rooted,
+  UNC or climbing path reaches MSBuild outside the repository, a share over
+  the network;
 - a `Target` or a `UsingTask`: code, which runs during restore as readily as
   during a build, and inside which a `CreateProperty`, an
   `<Output PropertyName>` or an `<MSBuild Properties>` sets what no rule here
@@ -74,7 +77,7 @@ Beside them, the restore inputs no project names: any tracked `.rsp` (an
 which outrank the pin file), a `nuget.config` anywhere but the root, a
 `global.json` carrying `msbuild-sdks`, a solution other than
 `BlueprintAdmin.slnx`, and a project entry in that one naming anything but a
-literal `*proj` path.
+literal path to a tracked `*proj`.
 
 ## What it does not judge
 
