@@ -28,6 +28,36 @@ public static partial class FakePlatformScripts
         "rabbitmq      | 2026-09-14 07:00:00.000 [info] <0.1.0> connection accepted from ordering-api",
     ];
 
+    // up -d --wait with --progress json, as Compose 5.6 prints it: two images pulled, one with a layer already on the machine,
+    // then the containers to Healthy. The layer sizes are grafana/otel-lgtm:0.37.0's own, read on 2026-10-27.
+    private static readonly string[] UpLines =
+    [
+        """{"id":"Image grafana/otel-lgtm:0.37.0","status":"Working","text":"Pulling"}""",
+        """{"id":"Image redis:7.4.11-alpine","status":"Working","text":"Pulling"}""",
+        """{"id":"227bdb4b4505","parent_id":"Image grafana/otel-lgtm:0.37.0","status":"Working","text":"Pulling fs layer","details":"0B"}""",
+        """{"id":"7ffe3362a5d6","parent_id":"Image grafana/otel-lgtm:0.37.0","status":"Working","text":"Pulling fs layer","details":"0B"}""",
+        """{"id":"3c5e70de2899","parent_id":"Image grafana/otel-lgtm:0.37.0","status":"Working","text":"Pulling fs layer","details":"0B"}""",
+        """{"id":"f18232174bc9","parent_id":"Image redis:7.4.11-alpine","status":"Done","text":"Already exists","details":"0B","percent":100}""",
+        """{"id":"9f1c0e2a7b31","parent_id":"Image redis:7.4.11-alpine","status":"Working","text":"Downloading","details":"8.389MB","current":8388608,"total":17301504,"percent":48}""",
+        """{"id":"227bdb4b4505","parent_id":"Image grafana/otel-lgtm:0.37.0","status":"Working","text":"Downloading","details":"7.34MB","current":7340032,"total":7340032,"percent":100}""",
+        """{"id":"7ffe3362a5d6","parent_id":"Image grafana/otel-lgtm:0.37.0","status":"Working","text":"Downloading","details":"8.389MB","current":8388608,"total":20709376,"percent":40}""",
+        """{"id":"3c5e70de2899","parent_id":"Image grafana/otel-lgtm:0.37.0","status":"Working","text":"Downloading","details":"241.2MB","current":241172480,"total":900399104,"percent":26}""",
+        """{"id":"9f1c0e2a7b31","parent_id":"Image redis:7.4.11-alpine","status":"Done","text":"Download complete","details":"0B","percent":100}""",
+        """{"id":"9f1c0e2a7b31","parent_id":"Image redis:7.4.11-alpine","status":"Done","text":"Pull complete","details":"0B","percent":100}""",
+        """{"id":"Image redis:7.4.11-alpine","status":"Done","text":"Pulled"}""",
+        """{"id":"227bdb4b4505","parent_id":"Image grafana/otel-lgtm:0.37.0","status":"Done","text":"Pull complete","details":"0B","percent":100}""",
+        """{"id":"7ffe3362a5d6","parent_id":"Image grafana/otel-lgtm:0.37.0","status":"Done","text":"Pull complete","details":"0B","percent":100}""",
+        """{"id":"3c5e70de2899","parent_id":"Image grafana/otel-lgtm:0.37.0","status":"Done","text":"Download complete","details":"0B","percent":100}""",
+        """{"id":"3c5e70de2899","parent_id":"Image grafana/otel-lgtm:0.37.0","status":"Done","text":"Pull complete","details":"0B","percent":100}""",
+        """{"id":"Image grafana/otel-lgtm:0.37.0","status":"Done","text":"Pulled"}""",
+        """{"id":"Network commerce_default","status":"Done","text":"Created"}""",
+        """{"id":"Container commerce-sql-1","status":"Done","text":"Healthy"}""",
+        """{"id":"Container commerce-rabbitmq-1","status":"Done","text":"Healthy"}""",
+        """{"id":"Container commerce-keycloak-1","status":"Done","text":"Healthy"}""",
+        """{"id":"Container commerce-catalog-api-1","status":"Done","text":"Healthy"}""",
+        """{"id":"Container commerce-gateway-1","status":"Done","text":"Healthy"}""",
+    ];
+
     // npm start in the frontend clone as the Angular dev server prints it. It
     // keeps running until stopped, as ng serve does.
     private static readonly string[] NgServeLines =
@@ -57,19 +87,11 @@ public static partial class FakePlatformScripts
         return runner
             .On("docker", prefix + "ps -a --format json", 0, _ => ComposePsLines(stack.StressOverride))
             // The up without the override recreates the services it changes with every default (run-locally.md, "Stress run (k6)").
-            .On("docker", prefix + "up -d --wait", 0, _ =>
+            .On("docker", prefix + "--progress json up -d --wait", 0, _ =>
             {
                 stack.StressOverride = false;
 
-                return
-                [
-                    " Network commerce_default  Created",
-                    " Container commerce-sql-1  Healthy",
-                    " Container commerce-rabbitmq-1  Healthy",
-                    " Container commerce-keycloak-1  Healthy",
-                    " Container commerce-catalog-api-1  Healthy",
-                    " Container commerce-gateway-1  Healthy",
-                ];
+                return UpLines;
             })
             // Either down removes the container a load run's samples live in, so it ends the strip's load too, and every
             // container the stress override made.

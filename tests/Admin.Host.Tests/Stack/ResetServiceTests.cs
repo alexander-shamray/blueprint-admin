@@ -34,7 +34,7 @@ public sealed class ResetServiceTests : IAsyncDisposable
     public async Task A_reset_runs_down_v_then_up_then_reports_every_surface_ready()
     {
         runner.On("docker", Prefix + "down -v", 0, " Volume commerce_sql-data  Removed")
-            .On("docker", Prefix + "up -d --wait", 0, " Container commerce-gateway-1  Healthy");
+            .On("docker", Prefix + "--progress json up -d --wait", 0, " Container commerce-gateway-1  Healthy");
 
         Job reset = Service(Ready("gateway", "catalog", "client")).Start().Job;
         int exitCode = await reset.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
@@ -44,7 +44,7 @@ public sealed class ResetServiceTests : IAsyncDisposable
         [
             $"$ docker {Prefix}down -v",
             " Volume commerce_sql-data  Removed",
-            $"$ docker {Prefix}up -d --wait",
+            $"$ docker {Prefix}--progress json up -d --wait",
             " Container commerce-gateway-1  Healthy",
             "ready: gateway, catalog",
         ]);
@@ -67,7 +67,7 @@ public sealed class ResetServiceTests : IAsyncDisposable
     [Fact]
     public async Task The_wait_names_what_it_is_still_waiting_for_until_it_answers()
     {
-        runner.On("docker", Prefix + "down -v", 0).On("docker", Prefix + "up -d --wait", 0);
+        runner.On("docker", Prefix + "down -v", 0).On("docker", Prefix + "--progress json up -d --wait", 0);
         int polls = 0;
 
         Job reset = Service(_ =>
@@ -88,7 +88,7 @@ public sealed class ResetServiceTests : IAsyncDisposable
     [Fact]
     public async Task The_wait_gives_up_at_its_cap_and_names_what_never_answered()
     {
-        runner.On("docker", Prefix + "down -v", 0).On("docker", Prefix + "up -d --wait", 0);
+        runner.On("docker", Prefix + "down -v", 0).On("docker", Prefix + "--progress json up -d --wait", 0);
 
         DateTimeOffset start = time.GetUtcNow();
         Job reset = Service(_ => Task.FromResult<IReadOnlyList<Reachability>>([new("ordering", "", false, null)])).Start().Job;
@@ -130,7 +130,7 @@ public sealed class ResetServiceTests : IAsyncDisposable
     [Fact]
     public void A_reset_while_another_compose_job_runs_returns_that_job_and_starts_nothing()
     {
-        runner.OnLongRunning("docker", Prefix + "up -d --wait");
+        runner.OnLongRunning("docker", Prefix + "--progress json up -d --wait");
         Claim up = gate.Claim("up", new ComposeService(runner, Paths, time).Up);
 
         Claim asked = Service(Ready("gateway")).Start();

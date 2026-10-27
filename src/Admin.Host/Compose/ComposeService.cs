@@ -10,7 +10,14 @@ namespace Admin.Host.Compose;
 /// </summary>
 public sealed class ComposeService(IProcessRunner runner, RepoPaths paths, TimeProvider time)
 {
-    public Job Up() => Run("up", "-d", "--wait");
+    /// <summary>
+    /// Compose's output as one JSON object per line, which names the image each layer belongs to and the layer's size: what
+    /// the Job output's per-image pull progress reads, and what Compose's plain lines leave out. A flag on how Compose
+    /// reports, not on what it does, so the line is still run-locally.md's.
+    /// </summary>
+    internal static readonly string[] Progress = ["--progress", "json"];
+
+    public Job Up() => Run([.. Progress, "up", "-d", "--wait"]);
 
     public Job Down(bool wipeVolumes) => wipeVolumes ? Run("down", "-v") : Run("down");
 

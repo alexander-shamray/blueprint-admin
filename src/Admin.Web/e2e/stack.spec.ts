@@ -21,10 +21,19 @@ test('the stack screen lists the fake services and runs up', async ({ page }) =>
 
   // The job lands in the page's Job output widget, which follows the job the page started last.
   await page.getByRole('button', { name: 'Up' }).click();
-  const output = page.getByRole('article', { name: 'Job output' }).locator('app-output-pane pre');
+  const widget = page.getByRole('article', { name: 'Job output' });
+  const output = widget.locator('app-output-pane pre');
   await expect(output).toContainText('commerce-gateway-1  Healthy');
   await expect(output).toContainText('exited 0');
   await expect(page.locator('.job-outcome')).toHaveText(/^Up finished: exit 0 in /);
+
+  // The fake Up pulls two images: a row each, and the layers' lines kept out of the log until asked for.
+  const pulls = widget.getByRole('region', { name: 'Image pulls' });
+  await expect(pulls.getByRole('rowheader')).toHaveText(['grafana/otel-lgtm:0.37.0', 'redis:7.4.11-alpine']);
+  await expect(pulls.locator('.pull-summary')).toHaveText('Images pulled: 2 · 946 MB');
+  await expect(output).not.toContainText('3c5e70de2899');
+  await pulls.getByRole('button', { name: /^Show the download lines/ }).click();
+  await expect(output).toContainText('3c5e70de2899  Pull complete');
 });
 
 // FakeGrafana answers each dashboard query with its live recording of 2026-10-03.

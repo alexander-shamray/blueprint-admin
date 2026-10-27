@@ -41,9 +41,14 @@ public sealed partial class StressRunDriftTests
         new ComposeService(runner, paths, time).Up();
         ProcessSpec up = runner.Started.Single();
 
-        // The up, Prometheus's read and the run are the job's; the one after them is the way back, and the last.
+        // The up, Prometheus's read and the run are the job's; the one after them is the way back, and the last. The Up
+        // asks Compose for its JSON progress, which changes how Compose reports and not what it runs, so that flag is not
+        // the document's.
+        string[] arguments = [.. up.Arguments];
+        int progress = arguments.AsSpan().IndexOf(ComposeService.Progress);
+        progress.ShouldBeGreaterThan(0);
         blocks.Length.ShouldBe(4);
-        string.Join(' ', [up.FileName, .. up.Arguments]).ShouldBe(blocks[^1]);
+        string.Join(' ', [up.FileName, .. arguments[..progress], .. arguments[(progress + ComposeService.Progress.Length)..]]).ShouldBe(blocks[^1]);
     }
 
     [Fact]

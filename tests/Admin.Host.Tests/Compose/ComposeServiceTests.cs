@@ -31,7 +31,7 @@ public sealed class ComposeServiceTests : IAsyncDisposable
 
         ProcessSpec spec = runner.Started.Single();
         spec.FileName.ShouldBe("docker");
-        spec.Arguments.ShouldBe(["compose", "-f", Paths.ComposeFile, "up", "-d", "--wait"]);
+        spec.Arguments.ShouldBe(["compose", "-f", Paths.ComposeFile, "--progress", "json", "up", "-d", "--wait"]);
         spec.WorkingDirectory.ShouldBe("/repo/backend");
     }
 
