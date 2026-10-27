@@ -56,23 +56,7 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
             "the secret read prints the secret, and the load run's own block reads it into k6's environment (LoadRunService.Run)",
         ["} else { 'slo-run: already there' }"] =
             "the other branch of the load run's client block, which says created or already there (LoadRunService.SloClient)",
-        ["docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.stress.yml up -d --build --wait"] = StressRun,
-        ["if ($rows.Count -eq 0) { 'products: none usable in ordering.ProductPrices'; exit 1 }"] = StressRun,
-        ["$cur = ($rows[0] -split ',')[1]"] = StressRun,
-        ["$ids = ($rows | Where-Object { $_.EndsWith(\",$cur\") } | ForEach-Object { ($_ -split ',')[0] }) -join ','"] = StressRun,
-        ["\"currency: $cur\"; \"products: $ids\""] = StressRun,
-        ["New-Item -ItemType Directory -Force $out | Out-Null"] = StressRun,
-        ["$sampler = Start-Process node -ArgumentList 'deploy/observability/stress/sample.mjs', $out -NoNewWindow -PassThru"] = StressRun,
-        ["$env:KEYCLOAK_ADMIN_PASSWORD = 'admin'"] = StressRun,
-        ["k6 run --no-color -e BASE_URL=http://localhost:5000 -e KEYCLOAK_URL=http://localhost:8080 -e \"STRESS_PRODUCTS=$ids\" -e \"STRESS_CURRENCY=$cur\" -e \"STRESS_OUT=$out\" deploy/observability/stress/stress.js"] = StressRun,
-        ["$code = $LASTEXITCODE; \"k6 exit: $code\""] = StressRun,
-        ["$sampler.WaitForExit()"] = StressRun,
-        ["node deploy/observability/stress/summarise.mjs $out"] = StressRun,
-        ["exit $code"] = StressRun,
     };
-
-    // "Stress run (k6)": the console does not run it yet; #539 makes it a Stack job and these lines its commands.
-    private const string StressRun = "the stress run, which the console does not run until #539";
 
     /// <summary>
     /// Lines of "Attach a product image by hand" that the host performs in code, not as a command it starts or a request the
@@ -213,6 +197,12 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
 
         // The load run: every block it runs, each whole, as it starts them.
         foreach (LoadRunStep step in LoadRunService.Steps)
+        {
+            runner.Start(LoadRunService.Spec(step.Block, Paths));
+        }
+
+        // The stress run: every block it runs, each whole; its way back is the Up above.
+        foreach (LoadRunStep step in StressRunService.Steps.Where(s => s.Name != StressRunService.SettleStep))
         {
             runner.Start(LoadRunService.Spec(step.Block, Paths));
         }

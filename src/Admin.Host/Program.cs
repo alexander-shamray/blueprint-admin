@@ -82,7 +82,8 @@ builder.Services.AddSingleton<FakeStack>();
 builder.Services.AddSingleton(sp => FakePlatformScripts.Script(
     new FakeProcessRunner(sp.GetRequiredService<JobRegistry>()),
     sp.GetRequiredService<RepoPaths>(),
-    sp.GetRequiredService<FakeStack>()));
+    sp.GetRequiredService<FakeStack>(),
+    sp.GetRequiredService<TimeProvider>()));
 builder.Services.AddSingleton<IProcessRunner>(sp => new TranscribingProcessRunner(
     sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform ? sp.GetRequiredService<FakeProcessRunner>()
     : sp.GetRequiredService<FixtureRecorder>().On ? new RecordingProcessRunner(
@@ -95,6 +96,18 @@ builder.Services.AddSingleton<ComposeGate>();
 builder.Services.AddSingleton<WorkstationDoctor>();
 builder.Services.AddSingleton<DeviceReads>();
 builder.Services.AddSingleton<LoadRunService>();
+
+// The stress run leaves the stack idle for run-locally.md's minute after its up; FakePlatform's up recreates nothing, so it
+// waits none, and its summary is the hand-written one rather than a file in the clone.
+builder.Services.AddSingleton(sp => new StressRunService(
+    sp.GetRequiredService<IProcessRunner>(),
+    sp.GetRequiredService<ComposeGate>(),
+    sp.GetRequiredService<JobRegistry>(),
+    sp.GetRequiredService<RepoPaths>(),
+    sp.GetRequiredService<IOptions<AdminOptions>>(),
+    sp.GetRequiredService<TimeProvider>(),
+    sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform ? TimeSpan.Zero : StressRunService.Settle,
+    sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform ? StressRunRecordings.ReadSummary : StressRunService.ReadSummary));
 
 // The lease's journal lives beside the baselines under Admin:DataDir, where a restart finds it. FakePlatform writes nothing a
 // real incident could need, and each fake host takes a journal of its own, so two test hosts never read each other's lease.
@@ -251,6 +264,7 @@ builder.Services.AddSingleton(sp => new AdminReadTools(
     () => sp.GetRequiredService<PlatformProbe>(),
     sp.GetRequiredService<ScenarioLeaseService>(),
     sp.GetRequiredService<LoadRunService>(),
+    sp.GetRequiredService<StressRunService>(),
     sp.GetRequiredService<AlertStripService>(),
     sp.GetRequiredService<BrokerService>(),
     sp.GetRequiredService<LogFollower>(),

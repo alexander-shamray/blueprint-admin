@@ -28,6 +28,7 @@ public sealed class AdminReadTools(
     Func<PlatformProbe> probe,
     ScenarioLeaseService leases,
     LoadRunService loadRun,
+    StressRunService stressRun,
     AlertStripService alerts,
     BrokerService broker,
     LogFollower follower,
@@ -61,8 +62,9 @@ public sealed class AdminReadTools(
             "stack_status",
             "Reading the stack",
             "The Stack screen's read: each backend Compose service's state, health and ports, the frontend dev server, whether "
-            + "each platform URL answers, the scenario lease if one holds, and the last load run. Use it for whether the "
-            + "platform is up and what is running."),
+            + "each platform URL answers, the scenario lease if one holds, the last load run, the last stress run with its step "
+            + "and knee, and which services run on the stress override. Use it for whether the platform is up and what is "
+            + "running."),
         Tool(
             "firing_alerts",
             "Reading the alerts",
@@ -127,7 +129,7 @@ public sealed class AdminReadTools(
         name switch
         {
             // GET /api/stack
-            "stack_status" => Result(await StackEndpoints.ReadAsync(compose, frontend, probe(), leases, loadRun, cancellationToken)),
+            "stack_status" => Result(await StackEndpoints.ReadAsync(compose, frontend, probe(), leases, loadRun, stressRun, cancellationToken)),
 
             // GET /api/telemetry/alerts
             "firing_alerts" => Result(Firing(await alerts.ReadAsync(cancellationToken))),

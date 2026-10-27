@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Admin.Host.Compose;
 using Admin.Host.Frontend;
 using Admin.Host.Stack;
@@ -6,7 +7,7 @@ using Admin.Host.Stack;
 namespace Admin.Host.Fakes;
 
 /// <summary>The recorded docker outputs FakePlatform mode replays. Exact text is not a contract; the shapes are.</summary>
-public static class FakePlatformScripts
+public static partial class FakePlatformScripts
 {
     // logs -f output as Compose prefixes it. By service: gateway 3, catalog-api 4,
     // ordering-api 3, web-bff 1, rabbitmq 1; twelve in all. A follow of named
@@ -48,24 +49,34 @@ public static class FakePlatformScripts
     /// <c>ps</c> as <c>Admin:Record</c> wrote it from the whole stack (<see cref="FixtureRecordings"/>), so the doctor
     /// finds every port Docker holds published by a container of this stack.
     /// </summary>
-    public static FakeProcessRunner Script(FakeProcessRunner runner, Config.RepoPaths paths, FakeStack? stack = null)
+    public static FakeProcessRunner Script(FakeProcessRunner runner, Config.RepoPaths paths, FakeStack? stack = null, TimeProvider? time = null)
     {
         stack ??= new FakeStack();
         string prefix = $"compose -f {paths.ComposeFile} ";
 
         return runner
-            .On("docker", prefix + "ps -a --format json", 0, [.. ComposePsLines()])
-            .On("docker", prefix + "up -d --wait", 0,
-                " Network commerce_default  Created",
-                " Container commerce-sql-1  Healthy",
-                " Container commerce-rabbitmq-1  Healthy",
-                " Container commerce-keycloak-1  Healthy",
-                " Container commerce-catalog-api-1  Healthy",
-                " Container commerce-gateway-1  Healthy")
-            // Either down removes the container a load run's samples live in, so it ends the strip's load too.
+            .On("docker", prefix + "ps -a --format json", 0, _ => ComposePsLines(stack.StressOverride))
+            // The up without the override recreates the services it changes with every default (run-locally.md, "Stress run (k6)").
+            .On("docker", prefix + "up -d --wait", 0, _ =>
+            {
+                stack.StressOverride = false;
+
+                return
+                [
+                    " Network commerce_default  Created",
+                    " Container commerce-sql-1  Healthy",
+                    " Container commerce-rabbitmq-1  Healthy",
+                    " Container commerce-keycloak-1  Healthy",
+                    " Container commerce-catalog-api-1  Healthy",
+                    " Container commerce-gateway-1  Healthy",
+                ];
+            })
+            // Either down removes the container a load run's samples live in, so it ends the strip's load too, and every
+            // container the stress override made.
             .On("docker", prefix + "down -v", 0, _ =>
             {
                 stack.Unload();
+                stack.StressOverride = false;
 
                 return
                 [
@@ -80,6 +91,7 @@ public static class FakePlatformScripts
             .On("docker", prefix + "down", 0, _ =>
             {
                 stack.Unload();
+                stack.StressOverride = false;
 
                 return
                 [
@@ -157,6 +169,15 @@ public static class FakePlatformScripts
 
                 return Recorded(LoadRunRecordings.Run);
             })
+            // The stress run (run-locally.md, "Stress run (k6)"): its up puts the three services it changes on the override, and
+            // its run block prints k6's staircase a line at a time, so the Stack screen reads each step as it is reached.
+            .On("powershell", PowerShell(StressRunService.Up), 0, _ =>
+            {
+                stack.StressOverride = true;
+
+                return Recorded(StressRunRecordings.Up);
+            })
+            .OnPaced("powershell", PowerShell(StressRunService.Run), 99, StressRunRecordings.Pace, time ?? TimeProvider.System, _ => StressRunRecordings.Run(stack))
             .On("powershell", "-NoProfile -Command & ", 0, DeviceRecordings.AdbDevices)
             .On("powershell", "-NoProfile -Command curl.exe ", 0, DeviceRecordings.Preflight)
             .On("powershell", $"-NoProfile -Command {DeviceReads.StopOnError}\n$t = ", 0, DeviceRecordings.Realm)
@@ -165,6 +186,21 @@ public static class FakePlatformScripts
     }
 
     public static IReadOnlyList<string> ComposePsLines() => FixtureLines("compose-ps.jsonl");
+
+    /// <summary>
+    /// <c>ps</c> with the services the stress override changes created from it too, as Compose labels a container it made from
+    /// two files, when <paramref name="stressOverride"/> holds; the recording otherwise.
+    /// </summary>
+    public static IReadOnlyList<string> ComposePsLines(bool stressOverride) =>
+        stressOverride
+            ? [.. ComposePsLines().Select(l => StressRunService.OverrideServices.Any(s => l.Contains($"\"Service\":\"{s}\"", StringComparison.Ordinal))
+                ? ConfigFile().Replace(l, m => $"{m.Value},{m.Groups["dir"].Value}{StressRunService.OverrideFile}", 1)
+                : l)]
+            : ComposePsLines();
+
+    /// <summary>The base file in a container's <c>config_files</c> label as the recording's JSON escapes it, with its directory.</summary>
+    [GeneratedRegex(@"(?<=config_files=)(?<dir>[^,]*?)docker-compose\.yml")]
+    private static partial Regex ConfigFile();
 
     private static string[] Lines(string recording) =>
         recording.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

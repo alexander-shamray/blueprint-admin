@@ -16,18 +16,32 @@ public static partial class StackEndpoints
 
     public static IEndpointRouteBuilder MapStack(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/stack", async (ComposeService compose, FrontendSupervisor frontend, PlatformProbe probe, ScenarioLeaseService leases, LoadRunService loadRun, CancellationToken cancellationToken) =>
-            TypedResults.Ok(await ReadAsync(compose, frontend, probe, leases, loadRun, cancellationToken)));
+        app.MapGet("/api/stack", async (ComposeService compose, FrontendSupervisor frontend, PlatformProbe probe, ScenarioLeaseService leases, LoadRunService loadRun, StressRunService stressRun, CancellationToken cancellationToken) =>
+            TypedResults.Ok(await ReadAsync(compose, frontend, probe, leases, loadRun, stressRun, cancellationToken)));
 
         // The backend's SLO run as one job (spec §5.3): a run still going answers a second Run with itself, as an Up does, and
-        // Stop ends it at the step it is in.
-        app.MapPost("/api/stack/load-run", (LoadRunService loadRun) =>
-            TypedResults.Accepted((string?)null, JobSummary.Of(loadRun.Start())));
+        // Stop ends it at the step it is in. The stress run's traffic would be read as its own, so one going refuses it.
+        app.MapPost("/api/stack/load-run", Results<Accepted<JobSummary>, ProblemHttpResult> (LoadRunService loadRun, StressRunService stressRun) =>
+            stressRun.Current is { State: JobState.Running } stress
+                ? Busy("load run", "stress run", stress)
+                : TypedResults.Accepted((string?)null, JobSummary.Of(loadRun.Start())));
 
         app.MapPost("/api/stack/load-run/stop", async Task<Results<Ok<JobSummary>, ProblemHttpResult>> (LoadRunService loadRun) =>
             await loadRun.StopAsync() is Job stopped
                 ? TypedResults.Ok(JobSummary.Of(stopped))
                 : TypedResults.Problem(statusCode: StatusCodes.Status409Conflict, title: "No load run going", detail: "There is no load run to stop."));
+
+        // The backend's stress run as one job under ComposeGate (spec §5.3), since its up recreates services: one going answers a
+        // second Run with itself and an Up, a Down, a reset or a lease is refused while it runs. A load run going refuses it.
+        app.MapPost("/api/stack/stress-run", Results<Accepted<JobSummary>, ProblemHttpResult> (StressRunService stressRun, LoadRunService loadRun) =>
+            loadRun.Current is { State: JobState.Running } load
+                ? Busy("stress run", "load run", load)
+                : stressRun.Start().Answer(StressRunService.Kind));
+
+        app.MapPost("/api/stack/stress-run/stop", async Task<Results<Ok<JobSummary>, ProblemHttpResult>> (StressRunService stressRun) =>
+            await stressRun.StopAsync() is Job stopped
+                ? TypedResults.Ok(JobSummary.Of(stopped))
+                : TypedResults.Problem(statusCode: StatusCodes.Status409Conflict, title: "No stress run going", detail: "There is no stress run to stop."));
 
         // A Scenario's lease (spec §5.3): a change from ScenarioControl.Table held under ComposeGate, journaled, and always
         // undone. The acquire waits for the change, so the answer is the lease held or why it was not; a request that goes
@@ -133,9 +147,17 @@ public static partial class StackEndpoints
         return app;
     }
 
+    /// <summary>The refusal of one k6 run while the other goes: two staircases on one stack would each read the other's load.</summary>
+    private static ProblemHttpResult Busy(string wanted, string going, Job job) =>
+        TypedResults.Problem(
+            statusCode: StatusCodes.Status409Conflict,
+            title: "A run is already going",
+            detail: $"A {going} (job {job.Id}) is still running, so this {wanted} was not started. Stop it or wait for it to end.");
+
     /// <summary>
-    /// The Stack screen's read: the backend's services, the frontend, what answers on its port, the lease and the last load
-    /// run. <c>GET /api/stack</c> and the assistant's <c>stack_status</c> both call it, so the tool reads what the screen reads.
+    /// The Stack screen's read: the backend's services, the frontend, what answers on its port, the lease, the last load run, the
+    /// last stress run and which services run on the stress override. <c>GET /api/stack</c> and the assistant's
+    /// <c>stack_status</c> both call it, so the tool reads what the screen reads.
     /// </summary>
     public static async Task<StackView> ReadAsync(
         ComposeService compose,
@@ -143,20 +165,33 @@ public static partial class StackEndpoints
         PlatformProbe probe,
         ScenarioLeaseService leases,
         LoadRunService loadRun,
+        StressRunService stressRun,
         CancellationToken cancellationToken)
     {
         Task<ComposeStatus> backend = compose.PsAsync(cancellationToken);
         Task<IReadOnlyList<Reachability>> reachability = probe.ProbeAsync(cancellationToken);
         JobSummary? lastRun = loadRun.Current is { } run ? JobSummary.Of(run) : null;
+        ComposeStatus services = await backend;
 
-        return new StackView(await backend, frontend.Status(), await reachability, leases.Current, lastRun);
+        return new StackView(services, frontend.Status(), await reachability, leases.Current, lastRun, stressRun.View(), StressRunService.OnOverride(services));
     }
 
     [GeneratedRegex(@"\A[A-Za-z0-9][A-Za-z0-9._-]*\z")]
     private static partial Regex ServiceName();
 }
 
-public sealed record StackView(ComposeStatus Backend, FrontendStatus Frontend, IReadOnlyList<Reachability> Reachability, LeaseView? Lease, JobSummary? LoadRun);
+/// <summary>
+/// <see cref="StressOverride"/> names each service running on the stress override (<see cref="StressRunService.OnOverride"/>),
+/// empty when none is: the Stack screen says so while any is, since a stack left on it has its gateway's rate limits lifted.
+/// </summary>
+public sealed record StackView(
+    ComposeStatus Backend,
+    FrontendStatus Frontend,
+    IReadOnlyList<Reachability> Reachability,
+    LeaseView? Lease,
+    JobSummary? LoadRun,
+    StressRunView? StressRun,
+    IReadOnlyList<string> StressOverride);
 
 /// <summary>One or more changes from <see cref="ScenarioControl.Table"/>, how long to hold them, and a label the Stack screen shows beside them.</summary>
 public sealed record LeaseRequest(string[]? Changes, int HoldSeconds, string? Label);

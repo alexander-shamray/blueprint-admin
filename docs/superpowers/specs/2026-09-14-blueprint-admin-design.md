@@ -74,6 +74,7 @@ routes are `Gateway.Api/appsettings.json`; health endpoints are mapped by
 | Read the device lane | three reads from `run-locally.md` step 4, each run as written through PowerShell: `adb.exe devices`, a `curl.exe` CORS preflight to the gateway, and the running realm's `mobile-app` redirects through Keycloak's admin API. None changes anything |
 | Stop and restore Inventory for a Scenario | `... stop inventory-api`, and `... up -d --no-deps inventory-api` to restore it, backend; only for a script whose cause `run-locally.md` gives as stopping it (§5.3, *Scenario service control*) |
 | Load run | `run-locally.md`'s "Load run (k6)" blocks, each run whole through PowerShell, backend: the k6 read, Prometheus through Grafana, the `slo-run` client made if missing, its token, a product and its restock, then `k6 run ... deploy/observability/slo/slo.js` (§5.3) |
+| Stress run | `run-locally.md`'s "Stress run (k6)" blocks, each run whole through PowerShell, backend: the k6 read, the full-stack `up -d --build --wait` with `docker-compose.stress.yml` added, the document's idle minute, Prometheus through Grafana, then the block that starts `sample.mjs`, `k6 run ... deploy/observability/stress/stress.js` and `summarise.mjs`; the way back is the section's last block, the Stack's own `up -d --wait` (§5.3) |
 | Shorten the saga's waits for a Scenario | `docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.short-timeouts.yml up -d --no-deps ordering-api`, backend (ADR-128), and the same without the second file to restore it; only for a script whose cause is one of those waits (§5.3) |
 
 `npm ci` is not a console operation. It is a prerequisite and the console
@@ -468,6 +469,52 @@ here; the blocks are copied and held to the document word for word
   a minute (`LoadRunRecordings`, `FakeStack.LoadWindow`), or until a Down,
   which removes the container those samples live in (`FakeStack.Unload`).
 
+**The stress run.** The load run is a fixed, gentle load from one account; it
+cannot say what gives out when hundreds of users arrive. `StressRunService`
+runs the backend's stress run, `deploy/observability/stress/stress.js`, as one
+listed job beside the load run. Every step is a block of `run-locally.md`'s
+"Stress run (k6)", run whole through PowerShell from the backend clone and in
+that document's order: the k6 read of step 0, the full-stack up with the
+stress override, the minute the document leaves the stack idle, Prometheus
+answering through Grafana, then the block that chooses its products, starts
+the sampler and k6, and writes the summary. The console runs the backend's
+scripts and carries none: the staircase, the journey, the metrics and the
+knee are theirs, and the blocks are held to the document word for word
+(`StressRunDriftTests`).
+
+- **One job, under the gate.** It is built as the load run is (§5.3 above),
+  but it claims `ComposeGate`, because its up recreates the gateway and both
+  workers: an Up, a Down, a reset or a lease is refused while it runs, and a
+  second Run answers with the run going. One k6 run at a time: a load run
+  going refuses a stress run, and the other way round, since each would read
+  the other's traffic as its own.
+- **The step is k6's.** The step shown is read off k6's once-a-second
+  progress lines (`StressStaircase`): the users running and the most it will
+  run, and a count held for `StressStaircase.HoldTicks` lines is a hold, each
+  new one the next step. The staircase can be changed from the environment, so
+  it is not copied. The golden-signal strip stays live beside it.
+- **The override is never invisible.** Compose labels each container with the
+  files it was created from, so whether the stack runs on the override is read
+  from `ps` with the stack, never remembered: each service the override
+  changes (`StressRunService.OverrideServices`, held to the override file)
+  whose running container was created with it is named on the Stack screen,
+  in the stress widget and above the Stack controls, whoever left it so. The
+  way back is the section's last block, which is the command Up already runs;
+  it is offered once the run has ended or been stopped.
+- **Stop and the report.** Stop kills the step's process tree as the load
+  run's does: during k6 no summary is written, so the run names no knee and is
+  neither a pass nor a fail, and the stack stays on the override. A finished
+  run's job carries `summary.md`, read from the clone's `artifacts/stress/`,
+  and its last line says what the document says k6's code means, with the
+  `Knee:` line summarise.mjs printed. A stress run reports and never passes or
+  fails, and the screen says a local run names which part gives out first,
+  never what production can carry.
+- **FakePlatform.** The up puts the fake stack on the override, which the fake
+  `ps` labels; the run block prints a cut staircase a line at a time, breaking
+  at its fourth step, and the strip's series rise with its users
+  (`StressRunRecordings`, `FakeStack.StressUsers`). No live run has been
+  recorded, so that output is written by hand to the scripts' shapes.
+
 ### 5.4 FrontendSupervisor
 
 Holds at most one `npm start` job in `FrontendDir`. `Start()` refuses if one
@@ -764,8 +811,9 @@ All under `/api`, JSON, loopback only.
 
 | Method and path | Does |
 |---|---|
-| `GET /stack` | `ServiceStatus[]`, the frontend job summary, reachability of every HTTP surface of §2.2 that answers a readiness route, the object store and image edge among them, the Scenario lease in force or null, and the last load run's job summary or null (§5.3) |
-| `POST /stack/load-run`, `POST /stack/load-run/stop` | §5.3's load run: returns the job, or the run still going; and Stop, 200 with the run once it has ended, 409 when none is going |
+| `GET /stack` | `ServiceStatus[]`, the frontend job summary, reachability of every HTTP surface of §2.2 that answers a readiness route, the object store and image edge among them, the Scenario lease in force or null, the last load run's job summary or null, the last stress run with its step and knee or null, and the services running on the stress override (§5.3) |
+| `POST /stack/load-run`, `POST /stack/load-run/stop` | §5.3's load run: returns the job, or the run still going, 409 while a stress run goes; and Stop, 200 with the run once it has ended, 409 when none is going |
+| `POST /stack/stress-run`, `POST /stack/stress-run/stop` | §5.3's stress run: returns the job, or the run still going, 409 naming the claim in the way while another `ComposeGate` job, a lease or the load run goes; and Stop, 200 with the run once it has ended, 409 when none is going |
 | `GET /stack/lease`, `POST /stack/lease`, `POST /stack/lease/changes`, `POST /stack/lease/restore` | §5.3's lease: the table of changes with the lease held; body `{ changes, holdSeconds, label }`, which waits for each change in turn and answers the lease held, 400 for no change, a change twice or off the table, or a hold off its bounds, 409 naming the claim that refuses it (another lease, or another `ComposeGate` job), 500 for a change that failed, which it has already undone or says it could not; and the restore, 200 with nothing held too, 500 when the restore failed and the lease is still held; `POST /stack/lease/changes`, body `{ change }`, takes one more change into the lease held (§5.3), 200 with the lease, 400 for a change off the table or already in the lease, 409 when no lease is held, 500 for a change that failed, which undid the whole lease or says it could not |
 | `GET /stack/doctor` | §5.3's workstation checks, one row each with its verdict and what the reads said |
 | `POST /stack/backend/up` | Compose up; returns the job, or the Up still running; 409 while another `ComposeGate` job (§5.3) runs |
@@ -1068,7 +1116,7 @@ wherever an operator puts it.
 
 | Built-in page | Shows | Does |
 |---|---|---|
-| **Stack** | the workstation doctor's rows above the buttons, read when the page opens; one row per Compose service with state, health and port; the frontend job; a reachability strip; the load run's state beside the golden signals (§5.3); quick links to the client, Grafana, Keycloak | Check the workstation again; Up, Down, Down and wipe, Reset (both behind one typed confirmation), each disabled while a Compose job runs, the one pressed counting the job up (`Up… 0:42`) and the outcome left beside the buttons (`Up finished: exit 0 in 1:05`); Start and Stop frontend; Run load and Stop load; opens the job's output pane directly under the actions, where a Compose job's stderr is marked only on a line that says it failed, and a per-container list with a settled count is read from its `Container <name>  <Verb>` lines |
+| **Stack** | the workstation doctor's rows above the buttons, read when the page opens; one row per Compose service with state, health and port; the frontend job; a reachability strip; the load run's state beside the golden signals, and the stress run's with the step k6 holds and its knee, and the services on the stress override above the buttons whenever any is (§5.3); quick links to the client, Grafana, Keycloak | Check the workstation again; Up, Down, Down and wipe, Reset (both behind one typed confirmation), each disabled while a Compose job runs, the one pressed counting the job up (`Up… 0:42`) and the outcome left beside the buttons (`Up finished: exit 0 in 1:05`); Start and Stop frontend; Run load and Stop load; Run stress, Stop stress, and Back to the normal profile once the run has ended; opens the job's output pane directly under the actions, where a Compose job's stderr is marked only on a line that says it failed, and a per-container list with a settled count is read from its `Container <name>  <Verb>` lines |
 | **Logs** | a follow stream with service filter, text search and correlation-id highlight | start, stop (the host's follow job too; leaving the page does not stop it, `LogFollowService` keeps following until Stop, and the shell's running-work indicator says so), clear |
 | **Broker** | queues with depth, `_error` and `_skipped` queues marked with the runbook of one that holds a message, a BFF projection panel (what the rebuild tool cannot restore, the depth of `bff-order-events`), exchanges, bindings, permissions; a drained indicator for `ordering-catalog-events`; an opened parked queue's messages, each with its fault, type, body and correlation id as a link into Trace | refresh, and an auto-refresh each of the four listing widgets has of its own (off until switched on in the widget's settings, saved with it; widget-workspace spec §4.3); Repair, and Rebuild behind a typed confirmation, each opening the job's output pane and reading the queues again when it starts and when it ends; Open on a parked queue that holds a message; per message a dry-run Replay or Discard, then, once a dry run of that message and verb is started, that one for real behind a typed confirmation, each opening the job's output pane |
 | **Map** | each service of `PlatformServices.All` with the gateway routes that reach it and the queues it consumes (parked twins included), each queue's depth, its change per second between two reads and the exchanges bound to it; the places where the broker and the console's tables disagree | Refresh, and an auto-refresh of the widget's own every 5 s (off until switched on in its settings, saved with it; widget-workspace spec §4.3) |
@@ -1284,7 +1332,9 @@ and the Playwright smoke covering the new screen.
   load run's (§5.3): it makes the `slo-run` client when it is missing and
   grants it its two roles, by `run-locally.md`'s own block, because that
   document's run needs it and Keycloak keeps no volume, so every `down` takes
-  it away. It edits nothing else, and offers no way to.
+  it away. The stress run's `setup()`, the backend's script and not the
+  console's, makes the `stress-run` client and its users the same way (§5.3).
+  It edits nothing else, and offers no way to.
 - Replacing Grafana. The Trace screen joins; Explore is one click away for
   anything deeper.
 - Editing the sibling repositories. If a backend fact needed for §5.8 or §5.9

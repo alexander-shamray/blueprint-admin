@@ -79,6 +79,17 @@ public sealed class FakeProcessRunner(JobRegistry registry) : IProcessRunner, IA
         return this;
     }
 
+    /// <summary>
+    /// A script that prints its lines <paramref name="pace"/> apart and then exits, as a run that takes a while does; a Stop
+    /// ends it between lines. The lines are read one at a time, so a script's own effects land as each line is printed.
+    /// </summary>
+    public FakeProcessRunner OnPaced(string fileName, string argumentPrefix, int exitCode, TimeSpan pace, TimeProvider time, Func<IReadOnlyList<string>, IEnumerable<string>> lines)
+    {
+        Add(new FakeScript(fileName, argumentPrefix, exitCode, OutputStream.Stdout, lines) { Pace = pace, Time = time });
+
+        return this;
+    }
+
     public Job Start(ProcessSpec spec)
     {
         Job job = registry.Create(spec);
@@ -102,6 +113,13 @@ public sealed class FakeProcessRunner(JobRegistry registry) : IProcessRunner, IA
 
         string[] rest = arguments[script.ArgumentPrefix.Length..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
+        if (script.Pace is { } pace)
+        {
+            _ = Task.Run(() => PaceAsync(job, script, rest, pace));
+
+            return job;
+        }
+
         foreach (string line in script.Lines(rest))
         {
             job.Append(script.Stream, line);
@@ -121,6 +139,23 @@ public sealed class FakeProcessRunner(JobRegistry registry) : IProcessRunner, IA
         }
 
         return job;
+    }
+
+    /// <summary>A paced script's lines, one every <paramref name="pace"/>, until they run out or a Stop marks the job exited.</summary>
+    private static async Task PaceAsync(Job job, FakeScript script, string[] rest, TimeSpan pace)
+    {
+        foreach (string line in script.Lines(rest))
+        {
+            if (job.State == JobState.Exited)
+            {
+                return;
+            }
+
+            job.Append(script.Stream, line);
+            await Task.Delay(pace, script.Time ?? TimeProvider.System);
+        }
+
+        job.MarkExited(script.ExitCode ?? 0);
     }
 
     public Task StopAsync(Job job, CancellationToken cancellationToken)
@@ -156,5 +191,11 @@ public sealed class FakeProcessRunner(JobRegistry registry) : IProcessRunner, IA
         }
     }
 
-    private sealed record FakeScript(string FileName, string ArgumentPrefix, int? ExitCode, OutputStream Stream, Func<IReadOnlyList<string>, IEnumerable<string>> Lines);
+    private sealed record FakeScript(string FileName, string ArgumentPrefix, int? ExitCode, OutputStream Stream, Func<IReadOnlyList<string>, IEnumerable<string>> Lines)
+    {
+        /// <summary>How far apart a paced script prints its lines; null for one that prints them all at once.</summary>
+        public TimeSpan? Pace { get; init; }
+
+        public TimeProvider? Time { get; init; }
+    }
 }

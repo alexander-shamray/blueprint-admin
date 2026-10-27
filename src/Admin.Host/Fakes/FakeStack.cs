@@ -5,7 +5,8 @@ namespace Admin.Host.Fakes;
 /// recreated with the short-timeouts override, and which alerts a game-day cause (spec §5.14) holds firing. The scripted <c>docker</c> commands set them (<see cref="FakePlatformScripts"/>)
 /// and <see cref="FakeOrders"/> reads them when an order is placed, so a script's cause has its effect on a fake order as it has
 /// on a stack. A load run's k6 block puts the golden-signal strip under load for <see cref="LoadWindow"/>, which
-/// <see cref="FakeGrafana"/> reads. Written by hand; a recording holds one instant and these have to change.
+/// <see cref="FakeGrafana"/> reads; a stress run's up puts the stack on the stress override until an up without it or a down,
+/// and its k6 block sets the users the strip scales with. Written by hand; a recording holds one instant and these have to change.
 /// </summary>
 public sealed class FakeStack(TimeProvider? time = null)
 {
@@ -19,6 +20,8 @@ public sealed class FakeStack(TimeProvider? time = null)
     private readonly TimeProvider clock = time ?? TimeProvider.System;
     private volatile bool inventoryStopped;
     private volatile bool shortWaits;
+    private volatile bool stressOverride;
+    private volatile int stressUsers;
     private long loadedUntilTicks;
     private readonly Lock gate = new();
     private readonly HashSet<string> causedAlerts = new(StringComparer.Ordinal);
@@ -45,6 +48,20 @@ public sealed class FakeStack(TimeProvider? time = null)
     {
         get => shortWaits;
         set => shortWaits = value;
+    }
+
+    /// <summary>Whether the services the stress override changes were last recreated with it (<see cref="FakePlatformScripts"/>).</summary>
+    public bool StressOverride
+    {
+        get => stressOverride;
+        set => stressOverride = value;
+    }
+
+    /// <summary>The users a fake stress run's k6 is running, which the strip scales with; 0 when none is (<see cref="StressRunRecordings.Run"/>).</summary>
+    public int StressUsers
+    {
+        get => stressUsers;
+        set => stressUsers = value;
     }
 
     /// <summary>The alerts a game-day cause has put in the state it fires from, until its restore (<see cref="RunbookRecordings"/>).</summary>
