@@ -56,6 +56,7 @@ public sealed partial class StressRunDriftTests
         section.ReplaceLineEndings(" ").ShouldContain("Leave the stack idle for a minute afterwards");
         StressRunService.Settle.ShouldBe(TimeSpan.FromMinutes(1));
         section.ShouldContain(LoadRunService.PrometheusYes);
+        StressRunService.Run.ShouldContain($"\"{StressRunService.K6ExitPrefix}$code\"");
 
         foreach (int code in StressRunService.Verdicts.Keys)
         {

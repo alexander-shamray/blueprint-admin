@@ -92,6 +92,9 @@ public sealed class StressRunService(
     /// <summary>Owner: run-locally.md, "Stress run (k6)", the start of the line summarise.mjs ends on that names the knee.</summary>
     internal const string KneePrefix = "Knee: ";
 
+    /// <summary>Owner: run-locally.md, "Stress run (k6)", the line the run block prints with k6's code once k6 has run.</summary>
+    internal const string K6ExitPrefix = "k6 exit: ";
+
     /// <summary>Owner: run-locally.md, "Stress run (k6)", the start of the line that names the summary, relative to the backend clone.</summary>
     internal const string SummaryPrefix = "Summary: ";
 
@@ -311,6 +314,15 @@ public sealed class StressRunService(
             {
                 run.Append(OutputStream.Stderr, $"the summary {summary} could not be read under the clone's artifacts/stress, so it is not carried here.");
             }
+        }
+
+        // The block prints k6's code once k6 has run; without that line the block itself stopped first, and its code is not k6's.
+        if (!stdout.Any(l => l.StartsWith(K6ExitPrefix, StringComparison.Ordinal)))
+        {
+            string last = stdout.LastOrDefault(l => l.Length > 0) ?? "";
+            run.Append(OutputStream.Stderr, $"the run block exited {exitCode} before k6 ran, saying \"{last}\": no load was driven.");
+            run.MarkExited(exitCode != 0 ? exitCode : 1);
+            return;
         }
 
         string verdict = Verdicts.TryGetValue(exitCode, out string? said) ? said : "k6's own code, which run-locally.md does not read";
