@@ -63,6 +63,7 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
         ["\"currency: $cur\"; \"products: $ids\""] = StressRun,
         ["New-Item -ItemType Directory -Force $out | Out-Null"] = StressRun,
         ["$sampler = Start-Process node -ArgumentList 'deploy/observability/stress/sample.mjs', $out -NoNewWindow -PassThru"] = StressRun,
+        ["$env:KEYCLOAK_ADMIN_PASSWORD = 'admin'"] = StressRun,
         ["k6 run --no-color -e BASE_URL=http://localhost:5000 -e KEYCLOAK_URL=http://localhost:8080 -e \"STRESS_PRODUCTS=$ids\" -e \"STRESS_CURRENCY=$cur\" -e \"STRESS_OUT=$out\" deploy/observability/stress/stress.js"] = StressRun,
         ["$code = $LASTEXITCODE; \"k6 exit: $code\""] = StressRun,
         ["$sampler.WaitForExit()"] = StressRun,
@@ -324,7 +325,8 @@ public sealed partial class RunLocallyCommandsDriftTests : IAsyncDisposable
     /// PowerShell that builds a value: a variable assigned a value, or the open of a hashtable, a member line inside one
     /// whose right-hand sides are each a literal, a variable, a <c>[guid]</c> or a nested hashtable or array, the close that
     /// pipes it to <c>ConvertTo-Json</c>, or an environment variable the next command reads. A control line (<c>} else</c>)
-    /// builds nothing and is no value. The environment lines are held to the host's own by ReplayDriftTests.
+    /// builds nothing and is no value. The <c>ConnectionStrings__</c> environment lines are held to the host's own by
+    /// ReplayDriftTests; any other is listed in <see cref="NotRun"/> with the section that sets it.
     /// </summary>
     [GeneratedRegex(@"^(?:\$\w+ = @\{|\$\w+ = " + Value + @"(?: \| ConvertTo-Json)?(?:; \$\w+ = " + Value + @")*|\$env:\w+ = '[^']*'|\w+ = " + Value + @"(?:; \w+ = " + Value + @")*|\} \| ConvertTo-Json(?: -Depth \d+)?\))$")]
     private static partial Regex BuildsAValue();
