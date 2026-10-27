@@ -374,7 +374,7 @@ paragraph first:
 
 - **A lease, not a switch.** The changes a script needs are held as one lease
   (one or more of the table's, each once: the stock timeout needs Inventory
-  stopped and the short waits together) under the sixth `ComposeGate` kind. They
+  stopped and the short waits together) under its own `ComposeGate` kind (`ComposeGate.LeaseKind`). They
   are made in the order asked and undone last first. At most one lease exists. While it is held, Up, Down, Down
   and wipe, the reset and a projection rebuild are refused with 409 naming the
   lease (the §5.10 rows that refuse "another `ComposeGate` job" mean this too),
