@@ -136,7 +136,9 @@ jobs:
   # adds stops it. An exit above 1, or a 1 that names no refusal (an uncaught
   # exception's traceback goes to stderr), is the gate not running, and stops
   # it there. The evaluation's refusals are held to the fork point the same
-  # way, beside the static read's.
+  # way, beside the static read's. At the fork point alone, gates that do not
+  # run (its SDK pin older than the head's, under `rollForward: disable`)
+  # forgive nothing, so every commit is held to every refusal.
   commits:
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -179,7 +181,10 @@ jobs:
           inherited=""
           if [ "${#shas[@]}" -gt 0 ]; then
             git checkout --quiet --detach "$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
-            inherited=$(refusals)
+            inherited=$(refusals) || {
+              echo "::warning::the gates do not run at the fork point, so every commit is held to every refusal"
+              inherited=""
+            }
           fi
           if [ -n "$inherited" ]; then
             echo "the fork point already carries these refusals, so no commit is held to them:"
