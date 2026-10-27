@@ -40,10 +40,14 @@ runs is a line from `run-locally.md`; if the console needs something that
 document does not do, change that document's owner first.
 
 ```
+src/Admin.Assistant/       the AI assistant's provider-neutral core (no admin type)
+src/Admin.Assistant.Anthropic/  the one project that carries the Anthropic SDK
 src/Admin.Host/            .NET 10 minimal API: Compose, npm as children, HTTP
                            proxy, SSE. Composition root: Program.cs
 src/Admin.Mcp/             the MCP route: stdio to an agent, HTTP to the host's /api
 src/Admin.Web/             Angular 22 standalone SPA, built into Host/wwwroot
+tests/Admin.Assistant.Tests/  xunit, the core
+tests/Admin.Assistant.Anthropic.Tests/  xunit, the adapter against recorded streams
 tests/Admin.Host.Tests/    xunit
 src/Admin.Web/e2e/         Playwright (FakePlatform)
 tools/token-usage/         Transcript report for the token plan
@@ -68,12 +72,10 @@ tools/token-usage/         Transcript report for the token plan
 | Golden-signal queries (copied, cited) | `GoldenSignals.cs` |
 | What a Tempo span is | `SpanRecogniser.Table` in `SpanRecogniser.cs` |
 | OS (tree kill, job object, `npm.cmd`) | `ProcessRunner.cs`, `WindowsJobObject.cs`, `ExecutableResolver.cs` |
-| The assistant's core, its protocol and its Anthropic adapter | blueprint-backend's `Common.Assistant` and `Common.Assistant.Anthropic` packages (`src/BuildingBlocks/` there), at the versions `Directory.Packages.props` pins; restored through `nuget.config` |
-| The assistant's protocol, mirrored (copied, cited) | `src/Admin.Web/src/app/assistant/protocol.ts`, with the owner's golden files copied to `golden/` beside it |
+| The assistant's protocol (mirrored in `src/Admin.Web/src/app/assistant/protocol.ts`) | `src/Admin.Assistant/Protocol/` and `src/Admin.Assistant/Tools/ToolDescriptor.cs`, pinned by `Protocol/golden/` |
 | Assistant on or off, and the `Admin:Assistant` keys | `AssistantOptions` in `src/Admin.Host/Assistant/AssistantOptions.cs` |
-| The assistant's limits and their defaults | `AssistantLimits` in the `Common.Assistant` package |
-| What the Anthropic provider sends, the default model and effort, and how its stream is read | `RequestBuilder`, `AnthropicSettings` and `StreamMapper` in the `Common.Assistant.Anthropic` package |
-| The MCP route's server-tool calls outside a conversation | `ServerToolCalls` in `src/Admin.Host/Assistant/ServerToolCalls.cs` |
+| The assistant's limits and their defaults | `AssistantLimits` in `src/Admin.Assistant/AssistantLimits.cs` |
+| What the Anthropic provider sends, the default model and effort, and how its stream is read | `RequestBuilder`, `AnthropicSettings` and `StreamMapper` in `src/Admin.Assistant.Anthropic/` |
 | Where the provider's credential comes from | the SDK's own resolution, built in `AnthropicProviderFactory` (`src/Admin.Host/Assistant/`); no key holds one |
 | What each screen is for, as the assistant explains it | `help` in `BUILT_IN_PAGES` (`src/Admin.Web/src/app/workspace/built-in-pages.ts`) |
 | Which console reads the assistant may call, and the endpoint each mirrors | `AdminReadTools` in `src/Admin.Host/Assistant/AdminReadTools.cs` |
