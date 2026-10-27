@@ -37,15 +37,23 @@ read and nothing is fetched from outside. In each:
   `CentralPackage`, `Restore`, `NuGet`, `DirectoryPackagesProps` or
   `ImportDirectoryPackagesProps`: central management, a feed, a restore input,
   NuGet's own settings, or a second pin file. A prefix rather than a list, so
-  a property NuGet adds later is refused before anyone has read it;
+  a property NuGet adds later is refused before anyone has read it, and read
+  after any leading underscores, since MSBuild's own inputs to these names
+  (`_DirectoryPackagesPropsBasePath`) redirect them as surely;
 - a property that imports a file by path (`CustomBefore*`, `CustomAfter*`,
   `DirectoryBuild*`, `ImportDirectoryBuild*`, `ImportProjectExtension*`,
   `MSBuildProjectExtensionsPath`, `MSBuildExtensionsPath`,
   `MSBuildUserExtensionsPath`, `ForceImport*`, `ImportByWildcard*`,
   `ImportUserLocations*`, `LanguageTargets`, `BeforeMicrosoftNET*`,
-  `AfterMicrosoftNET*`), as defence in depth, since what it imports is read
-  anyway; and `RuntimeFrameworkVersion` or any `*PackageVersion`, which pick a
-  pack's version;
+  `AfterMicrosoftNET*`), and any property named `*Targets` or `*Props`, the
+  way the common targets name what they import (`CodeAnalysisTargets`); and
+  `RuntimeFrameworkVersion` or any `*PackageVersion`, which pick a pack's
+  version;
+- any other property whose literal value is a drive, rooted or UNC path, or
+  climbs past the top of the repository: whatever imports it, the gate never
+  reads it;
+- a `PackageReference` whose `Include` or `Update` is an item transform
+  (`@(…)`, `%(…)`), which copies another item's metadata, `Version` with it;
 - an `Import` or an `Sdk` element, and a `<Project Sdk>` outside the named
   list of SDKs the .NET SDK bundles: each brings in MSBuild the gate never
   reads, and an unbundled SDK, some of which share the `Microsoft.NET.Sdk`
@@ -74,12 +82,21 @@ which the first list refuses.
 
 Beside them, the restore inputs no project names: any tracked `.rsp` (an
 `MSBuild.rsp` or `Directory.Build.rsp` hands MSBuild global properties,
-which outrank the pin file), a `nuget.config` anywhere but the root, a
+which outrank the pin file), a `Directory.Packages.props` below the root
+(NuGet takes the nearest above a project, so it would be the pin file for its
+subtree), a `nuget.config` anywhere but the root, a
 `global.json` carrying `msbuild-sdks`, a solution other than
 `BlueprintAdmin.slnx`, and a project entry in that one naming anything but a
 literal path to a tracked `*proj`.
 
 ## What it does not judge
+
+A property value built from other properties (`$(SomeRoot)\..\x`): the gate
+reads MSBuild statically and cannot evaluate one. Given to a property the
+common targets import by a name none of the rules above catches, it could
+reach a file outside the repository. That is left to the review, which is
+also what reads a target; the rules above make such a property rare and
+visible.
 
 The code the build compiles and the tests run: the residual
 `docs/harness-boundaries.md` already accepts for `src/**`, which asks for a
