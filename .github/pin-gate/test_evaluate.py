@@ -281,6 +281,11 @@ class TheCiWiring(unittest.TestCase):
         self.assertIn(gate, loop)
         self.assertLess(loop.index("git clean"), loop.index(gate))
         self.assertLess(loop.index(gate), loop.index("dotnet build"))
+        # `found` stops nothing alone: the refusals a commit adds stop the build.
+        stop = 'if [ -n "$added" ]; then printf \'%s\\n\' "$added"; exit 1; fi'
+        self.assertIn(stop, loop)
+        self.assertLess(loop.index(gate), loop.index(stop))
+        self.assertLess(loop.index(stop), loop.index("dotnet build"))
 
 
 if __name__ == "__main__":
