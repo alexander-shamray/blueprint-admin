@@ -132,7 +132,8 @@ class TheJudgement(unittest.TestCase):
     def test_a_package_folder_or_local_source_outside_the_install_fails(self) -> None:
         # The install's own (a Windows runner's SDK adds its library-packs
         # as a source where the folder exists) passes; the repository does
-        # not, since restore takes a package already extracted there as it is.
+        # not: restore takes a package already extracted in a packages or
+        # fallback folder as it is, and a local source serves its .nupkg.
         for name in ("RestorePackagesPath", "RestoreFallbackFolders", "RestoreAdditionalProjectFallbackFolders",
                      "RestoreAdditionalProjectSources"):
             with self.subTest(name=name):
