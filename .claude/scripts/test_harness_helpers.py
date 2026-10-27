@@ -2189,6 +2189,22 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
         self.assertNotIn("Edit(**/*.config.ts)", denied)
         self.assertNotIn("Edit(**/*.config.mts)", denied)
 
+    def test_ship_edits_project_files_and_style_pass_does_not(self):
+        # #542: a .csproj is MSBuild that host-checks.sh runs, the same class
+        # of input as src/** and tests/**, which /ship already edits under the
+        # residual docs/harness-boundaries.md states. /ship moves project
+        # references, so it holds the edit; /style-pass keeps the deny. The pin
+        # file and the SDK's auto-imported .csproj.user stay denied in /ship, so
+        # a package named in a project file still cannot take a version.
+        ship = self.disallowed("ship.md")
+        self.assertNotIn("Edit(**/*.csproj)", ship)
+        self.assertIn("Edit(**/*.csproj)", self.disallowed("style-pass.md"))
+        for rule in ("Edit(Directory.Packages.props)",
+                     "Edit(./Directory.Packages.props)",
+                     "Edit(**/Directory.Packages.*)", "Edit(**/*.csproj.user)"):
+            with self.subTest(rule=rule):
+                self.assertIn(rule, ship)
+
     def test_a_command_that_does_not_publish_cannot_push(self):
         for path in sorted(COMMANDS.glob("*.md")):
             text = path.read_text(encoding="utf-8")
