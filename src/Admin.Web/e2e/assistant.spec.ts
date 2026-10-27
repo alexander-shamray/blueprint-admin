@@ -116,36 +116,37 @@ test('asked where a widget lives, it opens the page that holds it and outlines t
   await expect(page.locator('[data-widget-id="builtin-broker-queues"]')).not.toHaveClass(/assistant-highlight/);
 });
 
-test("a widget the assistant proposes is added by the operator's click and by nothing else", async ({ page }) => {
-  await page.goto('/stack');
-  await page.getByRole('button', { name: 'Assistant', exact: true }).click();
+test.describe('a widget added to Stack', () => {
+  // After each, whether it passed, failed or timed out, and reported apart from the test's own error.
+  test.afterEach(async ({ page }) => {
+    await takeOffStack(page, 'Note');
+    await takeOffStack(page, 'Assistant');
+  });
 
-  await ask(page, 'please add a Note widget');
+  test("a widget the assistant proposes is added by the operator's click and by nothing else", async ({ page }) => {
+    await page.goto('/stack');
+    await page.getByRole('button', { name: 'Assistant', exact: true }).click();
 
-  await expect(page.locator('app-assistant-panel .reply').last()).toHaveText(
-    'Press the button under this reply to add the Note widget.',
-  );
-  const add = page.getByRole('button', { name: 'Add Note' });
-  await expect(add).toBeVisible();
-  // Offered, not added: no Note on the page yet.
-  await expect(page.getByRole('article', { name: 'Note', exact: true })).toHaveCount(0);
+    await ask(page, 'please add a Note widget');
 
-  try {
+    await expect(page.locator('app-assistant-panel .reply').last()).toHaveText(
+      'Press the button under this reply to add the Note widget.',
+    );
+    const add = page.getByRole('button', { name: 'Add Note' });
+    await expect(add).toBeVisible();
+    // Offered, not added: no Note on the page yet.
+    await expect(page.getByRole('article', { name: 'Note', exact: true })).toHaveCount(0);
+
     await add.click();
 
     await expect(page.getByRole('article', { name: 'Note', exact: true })).toHaveCount(1);
     await expect(page.getByRole('button', { name: 'Added Note' })).toBeDisabled();
-  } finally {
-    await takeOffStack(page, 'Note');
-  }
-});
+  });
 
-test('an Assistant widget on a page is a view of the same conversation as the panel', async ({ page }) => {
-  await page.goto('/stack');
-  await page.getByRole('button', { name: 'Assistant', exact: true }).click();
-  await ask(page, 'please add an Assistant widget');
-
-  try {
+  test('an Assistant widget on a page is a view of the same conversation as the panel', async ({ page }) => {
+    await page.goto('/stack');
+    await page.getByRole('button', { name: 'Assistant', exact: true }).click();
+    await ask(page, 'please add an Assistant widget');
     await page.getByRole('button', { name: 'Add Assistant' }).click();
 
     const widget = page.getByRole('article', { name: 'Assistant', exact: true });
@@ -160,9 +161,7 @@ test('an Assistant widget on a page is a view of the same conversation as the pa
     await expect(page).toHaveURL(/\/logs$/);
     // The side panel shows what was asked in the widget: one conversation, two views of it.
     await expect(page.locator('app-assistant-panel .operator').last()).toHaveText('where are the logs?');
-  } finally {
-    await takeOffStack(page, 'Assistant');
-  }
+  });
 });
 
 test('asked in Russian, it opens Logs and names it as labelled', async ({ page }) => {
