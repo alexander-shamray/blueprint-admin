@@ -86,12 +86,14 @@ dialects.
   (with the unpaused issues each closes) and every other open issue.
   **Where a row sits is a function of state, so every agent that works here
   re-derives it at each event** (work starts on an issue, a PR opens, merges
-  or closes, an issue is filed, closed, reopened, paused or unpaused, work
-  is abandoned) **and writes the result in the same act**:
+  or closes, an issue is filed, closed, reopened, paused or unpaused, labelled
+  `tracking` or unlabelled, work is abandoned) **and writes the result in the
+  same act**:
 
   | State | Where |
   |---|---|
   | Open issue, nothing built for it | **Remaining**, in its wave |
+  | Open issue labelled `tracking`, not `paused`: it records work done elsewhere or a measurement over time, and no PR implements it | **Tracking**, in its wave |
   | Open issue labelled `paused` | **Paused**, whatever else is true of it |
   | Open issue a session has taken up (about to be branched, or with a branch or a worktree) and no open PR | **In progress**, with the branch once it is named |
   | Open PR | **In progress**, one row for the PR naming the open, unpaused issues it closes, or `—` when there are none; an issue so named has no row of its own |
