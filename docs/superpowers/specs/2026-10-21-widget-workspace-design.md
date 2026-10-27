@@ -224,6 +224,7 @@ column is the built-in page that places the widget.
 | Golden signals | Stack | services shown | Stack |
 | Alerts | Stack | firing only | Stack |
 | Load run | Stack | — | Stack |
+| Stress run | Stack | — | Stack |
 | Reference client (start, stop, device lane) | Stack | — | Stack |
 | Job output | every screen's output pane | a job id, or "last job started from this page" | Stack |
 | Logs | Logs | services, text filter, correlation id | Logs |
