@@ -206,6 +206,30 @@ public sealed class StressRunServiceTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Stop_after_k6_has_printed_its_exit_kills_nothing_and_the_summary_is_still_carried()
+    {
+        ScriptUntilRun();
+        runner.OnLongRunning("powershell", Arguments(StressRunService.Run), "k6 exit: 0");
+        StressRunService service = Service(settle: TimeSpan.Zero);
+
+        Job run = service.Start().Job;
+        await WaitUntilAsync(() => Texts(run).Contains("k6 exit: 0"));
+        Job block = runner.LastStarted!;
+        Task<Job?> stop = service.StopAsync();
+
+        await Task.Delay(50, TestContext.Current.CancellationToken);
+        block.Status.State.ShouldBe(JobState.Running);
+        stop.IsCompleted.ShouldBeFalse();
+
+        block.Append(OutputStream.Stdout, "Knee: none; every measured step held.");
+        block.MarkExited(0);
+        (await stop.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken)).ShouldBeSameAs(run);
+
+        run.Status.ShouldBe((JobState.Exited, 0));
+        Texts(run)[^1].ShouldBe($"k6 exited 0: {StressRunService.Verdicts[0]}. Knee: none; every measured step held.");
+    }
+
+    [Fact]
     public async Task Stop_during_the_settle_names_it_and_starts_nothing_more()
     {
         ScriptUntilRun();
