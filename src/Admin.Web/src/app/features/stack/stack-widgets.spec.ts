@@ -889,6 +889,14 @@ describe('StackWidgets', () => {
       expect(text(q('.stress-run-step'))).toBe('Ramping on from step 2: 74 of 400 users, 6m50.0s in');
       expect(q('button.stress-run-start')!.disabled).toBe(true);
       expect(q('button.stress-run-stop')!.disabled).toBe(false);
+
+      // k6 has stopped driving load, and the block is still waiting on the sampler and writing the summary.
+      at({ users: 0, maxUsers: 400, elapsed: '13m42.0s', step: 4, holding: false });
+      await vi.advanceTimersByTimeAsync(3000);
+      fixture.detectChanges();
+      expect(text(q('.stress-run-step'))).toBe(
+        'k6 has stopped after step 4; the sampler and summarise.mjs are writing the summary.',
+      );
     });
 
     it('shows the knee of a run that ended, with its exit code, and opens its output', async () => {
