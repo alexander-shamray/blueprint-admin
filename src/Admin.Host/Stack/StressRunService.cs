@@ -113,8 +113,9 @@ public sealed class StressRunService(
         "stopped while the summary was being written: k6 had ended and wrote raw.json, but the sampler or summarise.mjs had not finished in time, so the block was ended and the summary may be missing; the stack is still on the stress override.";
 
     /// <summary>
-    /// How long a Stop after k6's exit line waits for the sampler, which polls every five seconds, and summarise.mjs, which reads
-    /// Prometheus once a step, before it ends the block after all.
+    /// How long a Stop after k6's exit line waits for the sampler and summarise.mjs before it ends the block after all: the
+    /// console's own bound, not the scripts'. How long each takes is <c>deploy/observability/stress/sample.mjs</c>'s and
+    /// <c>summarise.mjs</c>'s to say.
     /// </summary>
     public static readonly TimeSpan SummaryGrace = TimeSpan.FromMinutes(2);
 
