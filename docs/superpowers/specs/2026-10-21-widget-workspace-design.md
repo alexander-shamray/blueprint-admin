@@ -198,8 +198,9 @@ Some sources are one thing on the host however many widgets show them:
   Run is refused while it is going, as the palette's second request is
   today. Two Scenario widgets are allowed and show the same run.
 - **Jobs.** A Job output widget shows a job by id; several may show the same
-  one, each with its own SSE stream, as two tabs can today. An Up that pulls
-  images shows them as a table above the log (main design §5.3).
+  one, each with its own SSE stream, as two tabs can today. Its pane fills the
+  tile and scrolls only its log, so the tile never scrolls around it; an Up that
+  pulls images shows them as a table above the log (main design §5.3).
 
 ## 5. Widgets
 

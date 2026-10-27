@@ -34,6 +34,10 @@ test('the stack screen lists the fake services and runs up', async ({ page }) =>
   await expect(output).not.toContainText('3c5e70de2899');
   await pulls.getByRole('button', { name: /^Show the download lines/ }).click();
   await expect(output).toContainText('3c5e70de2899  Pull complete');
+
+  // The pane fills the tile and scrolls its own log, so the tile's body never scrolls as well.
+  const body = widget.locator('.ws-body');
+  expect(await body.evaluate((el) => el.scrollHeight <= el.clientHeight)).toBe(true);
 });
 
 // FakeGrafana answers each dashboard query with its live recording of 2026-10-03.

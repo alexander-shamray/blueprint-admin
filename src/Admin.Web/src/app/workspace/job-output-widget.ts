@@ -12,12 +12,17 @@ import { injectPageJob } from './page-jobs';
   imports: [OutputPane],
   template: `
     @if (jobId()) {
-      <app-output-pane [jobId]="jobId()" [composeStderr]="compose()" />
+      <app-output-pane [jobId]="jobId()" [composeStderr]="compose()" [fill]="true" />
     } @else {
       <p class="idle" i18n>No job yet: the output of the next job this page starts shows here.</p>
     }
   `,
   styles: `
+    /* The tile's body scrolls what overflows it; the pane fills it instead, so only the pane's log scrolls. */
+    :host {
+      display: block;
+      height: 100%;
+    }
     .idle {
       margin: 0;
       color: var(--app-muted);
