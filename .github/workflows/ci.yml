@@ -169,8 +169,11 @@ jobs:
             fi
             grep '^::error::' "$RUNNER_TEMP/gate.out" | LC_ALL=C sort || true
           }
-          git checkout --quiet --detach "$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
-          inherited=$(refusals)
+          inherited=""
+          if [ "${#shas[@]}" -gt 0 ]; then
+            git checkout --quiet --detach "$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
+            inherited=$(refusals)
+          fi
           if [ -n "$inherited" ]; then
             echo "the fork point already carries these refusals, so no commit is held to them:"
             printf '%s\n' "$inherited" | sed 's/^::error::/  /'
