@@ -218,6 +218,7 @@ class ALiveEvaluation(unittest.TestCase):
         root.mkdir()
         # Each stops MSBuild's walk upward at the repository's root.
         (root / "Directory.Build.props").write_text("<Project />", encoding="utf-8")
+        (root / "Directory.Build.targets").write_text("<Project />", encoding="utf-8")
         (root / "Directory.Packages.props").write_text(PIN, encoding="utf-8")
         for name, properties in projects.items():
             (root / name).mkdir()
