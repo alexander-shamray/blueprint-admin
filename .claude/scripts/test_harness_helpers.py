@@ -2201,8 +2201,10 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
         # of input as src/** and tests/**, which /ship already edits under the
         # residual docs/harness-boundaries.md states. /ship moves project
         # references, so it holds the edit; /style-pass keeps the deny. The pin
-        # file and the SDK's auto-imported .csproj.user stay denied in /ship, so
-        # a package named in a project file still cannot take a version.
+        # file and the SDK's auto-imported .csproj.user stay denied in /ship,
+        # but that does not keep a version out of a project file: one can set
+        # its own with VersionOverride, and only the review stands against it
+        # until #547 adds a check.
         ship = self.disallowed("ship.md")
         self.assertNotIn("Edit(**/*.csproj)", ship)
         self.assertIn("Edit(**/*.csproj)", self.disallowed("style-pass.md"))
