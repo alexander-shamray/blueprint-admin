@@ -92,7 +92,7 @@ dialects.
 
   | State | Where |
   |---|---|
-  | Open issue, nothing built for it | **Remaining**, in its wave |
+  | Open issue not labelled `tracking`, nothing built for it | **Remaining**, in its wave |
   | Open issue labelled `tracking`, not `paused`: it records work done elsewhere or a measurement over time, and no PR implements it | **Tracking**, in its wave |
   | Open issue labelled `paused` | **Paused**, whatever else is true of it |
   | Open issue a session has taken up (about to be branched, or with a branch or a worktree) and no open PR | **In progress**, with the branch once it is named |
