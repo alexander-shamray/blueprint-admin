@@ -11,7 +11,7 @@ a developer does by hand.**
 | **Frontend** | `alexander-shamray/blueprint-frontend`, checked out beside this repository at `../blueprint-frontend` |
 | **Toolkit** | .NET 10 / C# 14 minimal API host; Angular 22 standalone SPA; xunit, Vitest, Playwright |
 | **Runs on** | The developer's workstation, loopback only. Never deployed, never multi-user |
-| **Prerequisites** | Docker Desktop, Node 22.22 or newer, .NET 10 SDK, both sibling clones |
+| **Prerequisites** | Docker Desktop, Node 22.22 or newer, .NET 10 SDK, both sibling clones, and `GITHUB_PACKAGES_TOKEN` set to a GitHub token with `read:packages` (`gh auth refresh -s read:packages`, then `gh auth token`): the assistant's core is a package on GitHub Packages, which asks for one even for a public package (`nuget.config`) |
 
 ## 1. Purpose
 
@@ -177,13 +177,12 @@ blueprint-admin/
   run-locally.md                   NOT here; the workspace copy is the source and §2 cites it
   global.json                      .NET SDK pin, same version as the backend
   Directory.Build.props            analyser policy and warnings-as-errors, copied from the backend
-  Directory.Packages.props         central package versions
+  Directory.Packages.props         central package versions, the backend's assistant packages among them
+  nuget.config                     nuget.org, and GitHub Packages for the assistant's core (AI assistant note §13)
   .editorconfig, .gitattributes    CRLF for .cs, LF for everything else, as the siblings do
   BlueprintAdmin.slnx
-  src/Admin.Assistant/             the AI assistant's provider-neutral core, no admin type in it (AI assistant note §4)
   src/Admin.Host/                  the .NET 10 minimal API host (§5)
   src/Admin.Web/                   the Angular 22 SPA (§6); its build lands in Admin.Host/wwwroot
-  tests/Admin.Assistant.Tests/     xunit, the core's loop, registry and protocol goldens
   tests/Admin.Host.Tests/          xunit
   .github/workflows/ci.yml         dotnet build and test; npm ci, lint, test, build
   docs/superpowers/specs/          this document

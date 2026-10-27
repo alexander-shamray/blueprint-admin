@@ -244,7 +244,8 @@ there too, and with it off the console shows no trace of it. Set
 `Admin:Assistant:Provider=anthropic` to answer through the Anthropic API;
 `Model` and `Effort` sit beside it under `Admin:Assistant`; `AssistantOptions`
 in `src/Admin.Host/Assistant/AssistantOptions.cs` binds the keys, and
-`AnthropicSettings` in `src/Admin.Assistant.Anthropic/` owns their defaults.
+`AnthropicSettings` in blueprint-backend's `Common.Assistant.Anthropic`
+package owns their defaults.
 The credential is the SDK's own: `ANTHROPIC_API_KEY`, or the profile that
 `ant auth login` stores. The console reads neither and keeps neither.
 
