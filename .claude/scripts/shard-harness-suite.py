@@ -86,9 +86,10 @@ HERE = Path(__file__).resolve()
 ROOT = HERE.parents[2]
 
 # The two roots every caller used to name for itself, `tools/token-usage`,
-# whose suite nothing ran until it joined them (#144), and each CI gate's own. They live here, so
-# `harness-checks.sh` and the `harness` CI job cannot drift apart about what
-# the suite is; `test_harness_shards.py` asserts each one still contributes.
+# whose suite nothing ran until it joined them (#144), and each CI gate's
+# own. They live here, so `harness-checks.sh` and the `harness` CI job cannot
+# drift apart about what the suite is; `test_harness_shards.py` asserts each
+# one still contributes.
 ROOTS = ((".claude/scripts", "test_*.py"),
          (".github/locality-gate", "test*.py"),
          (".github/commit-gate", "test*.py"),
