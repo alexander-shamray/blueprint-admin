@@ -149,6 +149,20 @@ describe('OutputPane', () => {
     expect(fixture.nativeElement.querySelector('pre .stderr')?.textContent).toContain('Container sql-1');
   });
 
+  it('fills its parent only when asked, so a tile scrolls its log rather than itself', () => {
+    TestBed.configureTestingModule({
+      imports: [OutputPane],
+      providers: [{ provide: SseClient, useValue: { follow: vi.fn() } }],
+    });
+    const fixture = TestBed.createComponent(OutputPane);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.classList).not.toContain('fill');
+
+    fixture.componentRef.setInput('fill', true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.classList).toContain('fill');
+  });
+
   it('clears a previous stream error when it follows another job', () => {
     const first = new Subject<JobEvent>();
     const second = new Subject<JobEvent>();

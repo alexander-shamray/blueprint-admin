@@ -38,6 +38,7 @@ interface Entry {
  */
 @Component({
   selector: 'app-output-pane',
+  host: { '[class.fill]': 'fill()' },
   template: `
     <p class="visually-hidden" role="status">{{ announcement() }}</p>
     @if (pull(); as p) {
@@ -93,6 +94,13 @@ interface Entry {
     }
   `,
   styles: `
+    :host(.fill) {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      height: 100%;
+      min-height: 0;
+    }
     .pane {
       max-height: 24rem;
       overflow: auto;
@@ -100,6 +108,18 @@ interface Entry {
       color: #ddd;
       padding: 0.75rem;
       font-size: 0.8rem;
+    }
+    /* In a tile the log takes the height the table leaves, so only the log scrolls and never the tile around it. */
+    :host(.fill) .pane {
+      flex: 1 1 0;
+      min-height: 4rem;
+      max-height: none;
+      margin: 0;
+    }
+    :host(.fill) .pull {
+      flex: 0 1 auto;
+      min-height: 0;
+      overflow: auto;
     }
     .pull-summary {
       margin: 0 0 0.25rem;
@@ -190,6 +210,8 @@ export class OutputPane {
    * when it says something went wrong, so a healthy Up does not read as a wall of errors.
    */
   readonly composeStderr = input(false);
+  /** Set where the pane is a widget's whole body: it then takes that body's height and scrolls only its log. */
+  readonly fill = input(false);
   readonly entries = signal<Entry[]>([]);
   readonly exitCode = signal<number | null>(null);
   /** The followed job's exit code, once, when the stream reports it: what a screen re-reads state on. */
