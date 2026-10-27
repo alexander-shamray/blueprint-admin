@@ -65,13 +65,14 @@ D:
   - '.codeindexignore'
 
 # E -- dependency graph. Exact pins on both toolchains, the solution, the
-# SDK, and the SPA lockfile with its manifest.
+# SDK, the SPA lockfile with its manifest, and where NuGet restores from.
 E:
   - 'Directory.Packages.props'
   - 'Directory.Build.props'
   - '**/*.csproj'
   - 'global.json'
   - 'BlueprintAdmin.slnx'
+  - 'nuget.config'
   - 'src/Admin.Web/package.json'
   - 'src/Admin.Web/package-lock.json'
   - '.nvmrc'

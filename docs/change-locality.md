@@ -64,7 +64,7 @@ and `/ship` also run `bash .claude/scripts/pr-locality.sh`.
 | **B — shared mechanism** | `AdminOptions`, SSE client, identity state, `LoopbackOriginGuard` | one shared Host or `src/Admin.Web/src/app/core/**` / `shared/**` area, and the one screen spec that proves the wiring | two core areas in one PR; the frozen plan |
 | **C — a rule moved** | FakePlatform becomes required for a new surface; loopback policy tightens | code and tests; the single spec section the change amends | every historical paragraph; the plan; `CLAUDE.md` |
 | **D — docs or harness** | a new `/command`, this contract, a CI job | only the documents, `tools/**`, `.claude/**`, `.github/**`, `CLAUDE.md`, and root config the touch-set row names | `src/**` — that absence is load-bearing |
-| **E — dependency graph** | add a package, raise a pin | `Directory.Packages.props` with the `.csproj`; or `src/Admin.Web/package.json` with the lockfile; `global.json` / `BlueprintAdmin.slnx` when those pins move | the sections that use the package |
+| **E — dependency graph** | add a package, raise a pin | `Directory.Packages.props` with the `.csproj`; or `src/Admin.Web/package.json` with the lockfile; `global.json` / `BlueprintAdmin.slnx` when those pins move; `nuget.config` when a package's source does | the sections that use the package |
 
 Notes:
 
