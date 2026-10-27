@@ -487,6 +487,10 @@ class TheCiWiring(unittest.TestCase):
         self.assertIn('python3 "$RUNNER_TEMP/$gate"', helper)
         self.assertIn("pin_gate.py", helper.split("for gate in", 1)[1].split(";", 1)[0].split())
         self.assertIn('git merge-base "$BASE_SHA" "$HEAD_SHA"', helper)
+        # At the fork point alone, a gate that does not run forgives nothing
+        # rather than stopping the job; on a commit it still stops it.
+        self.assertIn("inherited=$(refusals fork)", helper)
+        self.assertIn('if [ "${1:-}" != fork ]; then return 2; fi', helper)
         loop = block[block.index("for sha in"):]
         self.gate_before_build(loop, "found=$(refusals)")
         # `found` stops nothing alone: the refusals a commit adds stop the build.
