@@ -78,6 +78,10 @@ as out of scope, never filed.
   runs `/pr` at step 4 and then applies review fixes to `src/**` and `tests/**` at
   step 5, so `Edit(src/**)` in `/pr` would refuse the chain's own fixes. `tools/**`
   stays editable in `/ship` because the token-usage tooling changes through it.
+  So does `*.csproj`, under the same residual (#542): a project file is MSBuild
+  that `host-checks.sh` runs, the same class of input as `src/**`, and a package
+  one names still needs its pin in `Directory.Packages.props`, which stays
+  denied. `/style-pass` keeps the deny, having no business in a project file.
 - **File permission rules take `Edit(...)`, never `Write(...)`** — a
   `Write(path)` rule matches nothing and stops Claude Code from starting.
 - **`.claude/settings.json` self-locks, not instantaneously** — a change to
