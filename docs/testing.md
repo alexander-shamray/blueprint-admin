@@ -111,6 +111,15 @@ build and before each commit the `commits` job builds:
 py -3.12 .github/pin-gate/pin_gate.py
 ```
 
+Its evaluation runs beside it in both places. It has MSBuild evaluate each
+project, so it needs the pinned SDK and a tree that has not been restored: a
+fresh clone or worktree, since one already built fails naming its
+`project.assets.json`. Its live cases skip where no .NET SDK runs:
+
+```bash
+py -3.12 .github/pin-gate/evaluate.py
+```
+
 ## Locality
 
 `python -m unittest` in `.github/locality-gate/` is the gate's own suite.

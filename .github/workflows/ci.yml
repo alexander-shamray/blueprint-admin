@@ -37,6 +37,10 @@ jobs:
       # tree is the same on both.
       - if: runner.os == 'Linux'
         run: python3 .github/pin-gate/pin_gate.py
+      # Its evaluation (the same README): each project as MSBuild evaluates
+      # it, before anything restores. On both legs, since a condition can key
+      # an import on the operating system.
+      - run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} .github/pin-gate/evaluate.py
       - run: dotnet build --configuration Release
         env:
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -150,11 +154,13 @@ jobs:
           echo "${#shas[@]} commit(s) besides the head"
           installed=""
           cp .github/pin-gate/pin_gate.py "$RUNNER_TEMP/pin_gate.py"
+          cp .github/pin-gate/evaluate.py "$RUNNER_TEMP/evaluate.py"
           for sha in "${shas[@]}"; do
             echo "::group::$sha"
             git checkout --quiet --detach "$sha"
             git clean -fdxq -e src/Admin.Web/node_modules
             python3 "$RUNNER_TEMP/pin_gate.py"
+            python3 "$RUNNER_TEMP/evaluate.py"
             dotnet build BlueprintAdmin.slnx --configuration Release
             if git diff --quiet "$sha^" "$sha" -- src/Admin.Web; then
               echo "no SPA change: not built"
