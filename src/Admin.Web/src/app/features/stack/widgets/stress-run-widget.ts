@@ -36,6 +36,11 @@ import { ComposeRun, StackFeed } from '../stack-feed';
               <ng-container i18n
                 >Step {{ p.step }}: holding at {{ p.users }} of {{ p.maxUsers }} users, {{ p.elapsed }} in</ng-container
               >
+            } @else if (p.users === 0 && p.step > 0) {
+              <ng-container i18n
+                >k6 has stopped after step {{ p.step }}; the sampler and summarise.mjs are writing the
+                summary.</ng-container
+              >
             } @else if (p.step === 0) {
               <ng-container i18n
                 >Ramping to the first step: {{ p.users }} of {{ p.maxUsers }} users, {{ p.elapsed }} in</ng-container

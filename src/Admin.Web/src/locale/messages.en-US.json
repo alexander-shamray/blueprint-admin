@@ -642,6 +642,7 @@
     "2538178110862642535": "Stress run",
     "5704095748839950241": "k6 run stress.js",
     "4441391969236630374": "Step {$INTERPOLATION}: holding at {$INTERPOLATION_1} of {$INTERPOLATION_2} users, {$INTERPOLATION_3} in",
+    "421230436575959078": "k6 has stopped after step {$INTERPOLATION}; the sampler and summarise.mjs are writing the\n                summary.",
     "6760619742476525233": "Ramping to the first step: {$INTERPOLATION} of {$INTERPOLATION_1} users, {$INTERPOLATION_2} in",
     "4132124506433165457": "Ramping on from step {$INTERPOLATION}: {$INTERPOLATION_1} of {$INTERPOLATION_2} users,\n                {$INTERPOLATION_3} in",
     "6114941441786810875": "Before k6: the up with the override, a minute idle and Prometheus's read come first.",
