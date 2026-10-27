@@ -14,6 +14,9 @@ public static partial class StackEndpoints
 
     private const string DownWipe = "down -v";
 
+    /// <summary>Held across one k6 run's check of the other and its own start, so two requests at once cannot start both.</summary>
+    private static readonly Lock K6Runs = new();
+
     public static IEndpointRouteBuilder MapStack(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/stack", async (ComposeService compose, FrontendSupervisor frontend, PlatformProbe probe, ScenarioLeaseService leases, LoadRunService loadRun, StressRunService stressRun, CancellationToken cancellationToken) =>
@@ -22,9 +25,14 @@ public static partial class StackEndpoints
         // The backend's SLO run as one job (spec §5.3): a run still going answers a second Run with itself, as an Up does, and
         // Stop ends it at the step it is in. The stress run's traffic would be read as its own, so one going refuses it.
         app.MapPost("/api/stack/load-run", Results<Accepted<JobSummary>, ProblemHttpResult> (LoadRunService loadRun, StressRunService stressRun) =>
-            stressRun.Current is { State: JobState.Running } stress
-                ? Busy("load run", "stress run", stress)
-                : TypedResults.Accepted((string?)null, JobSummary.Of(loadRun.Start())));
+        {
+            lock (K6Runs)
+            {
+                return stressRun.Current is { State: JobState.Running } stress
+                    ? Busy("load run", "stress run", stress)
+                    : TypedResults.Accepted((string?)null, JobSummary.Of(loadRun.Start()));
+            }
+        });
 
         app.MapPost("/api/stack/load-run/stop", async Task<Results<Ok<JobSummary>, ProblemHttpResult>> (LoadRunService loadRun) =>
             await loadRun.StopAsync() is Job stopped
@@ -34,9 +42,14 @@ public static partial class StackEndpoints
         // The backend's stress run as one job under ComposeGate (spec §5.3), since its up recreates services: one going answers a
         // second Run with itself and an Up, a Down, a reset or a lease is refused while it runs. A load run going refuses it.
         app.MapPost("/api/stack/stress-run", Results<Accepted<JobSummary>, ProblemHttpResult> (StressRunService stressRun, LoadRunService loadRun) =>
-            loadRun.Current is { State: JobState.Running } load
-                ? Busy("stress run", "load run", load)
-                : stressRun.Start().Answer(StressRunService.Kind));
+        {
+            lock (K6Runs)
+            {
+                return loadRun.Current is { State: JobState.Running } load
+                    ? Busy("stress run", "load run", load)
+                    : stressRun.Start().Answer(StressRunService.Kind);
+            }
+        });
 
         app.MapPost("/api/stack/stress-run/stop", async Task<Results<Ok<JobSummary>, ProblemHttpResult>> (StressRunService stressRun) =>
             await stressRun.StopAsync() is Job stopped
