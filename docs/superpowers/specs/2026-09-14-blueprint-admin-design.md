@@ -347,12 +347,13 @@ under one id. It wipes volumes, so its endpoint takes the same typed
 confirmation as `down -v`. There is no seed step: the backend has no seed to
 run yet.
 
-`ComposeGate` lets one job at a time stop or start the stack's services. Six
-kinds claim it: Up, Down, Down and wipe, the reset, §5.5's projection rebuild
-and a Scenario's lease (below). The lease is a claim that outlives any one
+`ComposeGate` lets one job at a time stop or start the stack's services. Up,
+Down, Down and wipe, the reset, §5.5's projection rebuild, §5.14's game-day
+cause and restore, the stress run (below) and a Scenario's lease (below) claim
+it. The lease is a claim that outlives any one
 command rather than a running job, and every "another `ComposeGate` job" in §5.10
 includes it; a lease request is itself refused with 409, naming the kind and the
-job, while any of the other five runs. A Compose read claims nothing. While one of them runs, a request of
+job, while any of the others runs. A Compose read claims nothing. While one of them runs, a request of
 the same kind is answered with the running job and any other kind is refused
 with 409 naming the kind and the job id, so a rebuild's `stop web-bff` and
 `start web-bff` never land inside a reset's `down -v` and `up`. Down and Down
