@@ -493,7 +493,10 @@ as out of scope, never filed.
   `.targets`, `NuGet.Config` in each casing, and the solution's
   `before.`/`after.`/plain `.slnx.targets` are untracked, so no listing of
   tracked files reaches them, yet an `Exec` in one runs under the granted
-  `host-checks.sh` and the build reports success (#311). Each editing command and
+  `host-checks.sh` and the build reports success (#311). The root `nuget.config` is the one
+  exception since #435: it is tracked, because it names the GitHub Packages
+  feed the assistant's core restores from, and it stays denied by name like
+  the rest, so a change to it is the owner's. Each editing command and
   `settings.json` deny them at the root in both spellings and by family at any
   depth (`MSBuild.rsp` and any `global.json` among them), and `PROTECTED_FILES` carries the names, so a redirect to one is refused
   at any depth too. Beside them: `Directory.Packages.*`, `*.csproj.user` (the SDK's

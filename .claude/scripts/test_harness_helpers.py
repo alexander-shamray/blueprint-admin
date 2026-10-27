@@ -1909,6 +1909,10 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
         "**/Directory.Packages.*", "**/*.csproj.user", "**/obj/**",
         "**/MSBuild.rsp", "**/msbuild.rsp", "**/global.json",
     )
+    # #435: the root nuget.config names the GitHub Packages feed the assistant's
+    # core restores from, so it is tracked. It stays in PROTECTED_FILES and denied
+    # to every editing command, so a change to it is still the owner's.
+    TRACKED_BY_DESIGN = ("nuget.config",)
 
     def _msbuild_rules(self):
         rules = []
@@ -1962,7 +1966,8 @@ class CommandsEnforceTheEditingBoundariesTheyState(unittest.TestCase):
         tracked = self.tracked_root_files()
         for name in self.MSBUILD_AUTO_IMPORTED:
             with self.subTest(name=name):
-                self.assertNotIn(name, tracked)
+                if name not in self.TRACKED_BY_DESIGN:
+                    self.assertNotIn(name, tracked)
                 self.assertIn(name.lower(), module.PROTECTED_FILES_FOLDED)
         for written in ("src/Admin.Host/Directory.Build.targets",
                         "src/Admin.Host/Admin.Host.csproj.user",
