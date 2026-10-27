@@ -20,6 +20,16 @@
   </section>
 }
 
+@if (stressOverride().length > 0) {
+  <section class="lease stress-override" role="status" i18n-aria-label aria-label="Stress override">
+    <h3 i18n>The stack runs on the stress override</h3>
+    <p i18n>
+      {{ stressOverride().join(', ') }} were created with the stress override: the gateway's rate limits are lifted and
+      the workers do not pace themselves. It is never for a deployment. Up without it is the way back.
+    </p>
+  </section>
+}
+
 <section class="actions" i18n-aria-label aria-label="Stack controls">
   <button class="up" [disabled]="run.running()" (click)="up()">
     @if (elapsedOf(labels.up); as t) {

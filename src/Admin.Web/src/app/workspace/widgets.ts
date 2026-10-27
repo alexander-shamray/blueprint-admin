@@ -169,6 +169,20 @@ export const STACK_WIDGETS = {
     minSize: { cols: 6, rows: 4 },
     dataServices: ['StackFeed', 'PageJobs'],
   }),
+  stressRun: plain({
+    type: 'stress-run',
+    title: $localize`Stress run`,
+    help:
+      "Runs the backend's k6 stress run, the steps of run-locally.md's stress run: it brings the stack up with the stress " +
+      'override, then ramps signed-in users through the gateway in steps until the platform gives out. It shows the ' +
+      'step k6 is at, the knee once named, and whether the stack still runs on the override, with the way back. The ' +
+      "output opens in the page's Job output widget, and Stop stress stops it. Use it to find which part gives out " +
+      'first; it says nothing about production capacity, and it is for the local stack only.',
+    component: () => import('../features/stack/widgets/stress-run-widget').then((m) => m.StressRunWidget),
+    defaultSize: { cols: 10, rows: 10 },
+    minSize: { cols: 6, rows: 5 },
+    dataServices: ['StackFeed', 'PageJobs'],
+  }),
   client: plain({
     type: 'reference-client',
     title: $localize`Reference client`,

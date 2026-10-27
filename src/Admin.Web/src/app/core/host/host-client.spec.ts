@@ -110,6 +110,34 @@ describe('HostClient', () => {
     });
   });
 
+  it('starts a stress run', () => {
+    client.stressRunStart().subscribe();
+
+    const req = http.expectOne('/api/stack/stress-run');
+    expect(req.request.method).toBe('POST');
+    req.flush({
+      id: 'stress-1',
+      commandLine: 'stress-run k6 up settle prometheus run',
+      state: 'Running',
+      exitCode: null,
+      startedAt: '',
+    });
+  });
+
+  it('stops the stress run', () => {
+    client.stressRunStop().subscribe();
+
+    const req = http.expectOne('/api/stack/stress-run/stop');
+    expect(req.request.method).toBe('POST');
+    req.flush({
+      id: 'stress-1',
+      commandLine: 'stress-run k6 up settle prometheus run',
+      state: 'Exited',
+      exitCode: -1,
+      startedAt: '',
+    });
+  });
+
   it('stops the load run', () => {
     client.loadRunStop().subscribe();
 

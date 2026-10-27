@@ -12,6 +12,8 @@ const stack = {
   reachability: [],
   lease: null,
   loadRun: null,
+  stressRun: null,
+  stressOverride: [],
 };
 
 describe('StackControlsWidget', () => {
