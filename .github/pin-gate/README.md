@@ -109,11 +109,13 @@ each evaluation it refuses:
 - an import outside the repository and the .NET install that ran it: every
   file `-preprocess` names, read from MSBuild's banners as XML, so no text
   inside a project can open a comment that hides one;
-- a feed or a NuGet setting (`RestoreSources`,
-  `RestoreAdditionalProjectSources`, `RestoreConfigFile`,
-  `RestoreRootConfigDirectory`) that evaluates to anything, and a package
-  folder (`RestorePackagesPath` and the fallback folders) outside the same
-  two bounds;
+- a feed or a NuGet setting (`RestoreSources`, `RestoreConfigFile`,
+  `RestoreRootConfigDirectory`) that evaluates to anything;
+- a package folder or a local source (`RestorePackagesPath`, the fallback
+  folders, `RestoreAdditionalProjectSources`) outside the .NET install,
+  which names its own `NuGetFallbackFolder` and, where it exists, its
+  `library-packs`; never the repository, since restore takes a package
+  already extracted in such a folder as it finds it;
 - `ManagePackageVersionsCentrally` not `true`,
   `CentralPackageVersionOverrideEnabled` not `false`, or a
   `DirectoryPackagesPropsPath` other than the root pin file;

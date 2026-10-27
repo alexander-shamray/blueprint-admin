@@ -29,12 +29,15 @@ CONFIGURATIONS: tuple[str | None, ...] = (None, "Release")
 
 # A feed and NuGet's settings come from the root nuget.config alone, so a
 # project's evaluated value of each is empty.
-FEEDS = ("RestoreSources", "RestoreAdditionalProjectSources", "RestoreConfigFile",
-         "RestoreRootConfigDirectory")
-# The folders restore reads packages from or writes them to: each entry lies
-# inside the repository or the .NET install, which names its own
-# NuGetFallbackFolder.
-FOLDERS = ("RestorePackagesPath", "RestoreFallbackFolders", "RestoreAdditionalProjectFallbackFolders")
+FEEDS = ("RestoreSources", "RestoreConfigFile", "RestoreRootConfigDirectory")
+# The folders restore takes packages from or writes them to, and the local
+# sources the SDK adds of its own: each entry lies inside the .NET install,
+# which names its NuGetFallbackFolder and, where it exists, its
+# library-packs. Never the repository: restore takes a package already
+# extracted in a packages or fallback folder as it finds it, so a tracked
+# folder there would be package content the project chose.
+FOLDERS = ("RestorePackagesPath", "RestoreFallbackFolders", "RestoreAdditionalProjectFallbackFolders",
+           "RestoreAdditionalProjectSources")
 SETTINGS = {"ManagePackageVersionsCentrally": "true", "CentralPackageVersionOverrideEnabled": "false"}
 PIN_PATH = "DirectoryPackagesPropsPath"
 # Reserved, so no project can set it: the SDK MSBuild actually ran from, and
@@ -148,10 +151,10 @@ def judge(project: str, configuration: str | None, evaluated: dict, imported: li
                             "a feed and NuGet's settings come from the root nuget.config alone")
     for name in FOLDERS:
         for entry in filter(None, (part.strip() for part in properties.get(name, "").split(";"))):
-            # A relative entry is NuGet's to resolve against the project; it
-            # is judged as though it were, so climbing out is caught too.
-            if not allowed(os.path.join(root, os.path.dirname(project), entry)):
-                problems.append(f"{where}: {name} names {entry}, outside the repository and the .NET install")
+            # A relative entry is NuGet's to resolve against the project, and
+            # is judged as resolved; a URL resolves to no folder in the install.
+            if "://" in entry or not inside(os.path.join(root, os.path.dirname(project), entry), dotnet):
+                problems.append(f"{where}: {name} names {entry}, outside the .NET install")
     for name, value in SETTINGS.items():
         if properties.get(name, "").lower() != value:
             problems.append(f"{where}: {name} evaluates to {properties.get(name, '')!r}, not {value}")
