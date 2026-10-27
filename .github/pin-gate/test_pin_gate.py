@@ -158,6 +158,14 @@ class AProjectFile(unittest.TestCase):
                 refused(self, project(f'<ItemGroup><ProjectReference Include="{include}" /></ItemGroup>'),
                         "not a literal *proj path")
 
+    def test_a_project_reference_rooted_outside_the_repository_fails(self) -> None:
+        # Commit security review of #550: a drive, a root or a share names
+        # MSBuild the gate never reads, a share over the network.
+        for include in ("C:\\elsewhere\\a.csproj", "\\\\host\\share\\a.csproj", "/abs/a.csproj"):
+            with self.subTest(include=include):
+                refused(self, project(f'<ItemGroup><ProjectReference Include="{include}" /></ItemGroup>'),
+                        "rooted outside")
+
     def test_a_property_set_inside_a_choose_is_read(self) -> None:
         refused(self, project("<Choose><When Condition=\"true\"><PropertyGroup>"
                               "<RestoreSources>https://x</RestoreSources></PropertyGroup></When></Choose>"),
@@ -257,6 +265,11 @@ class OtherRestoreInputs(unittest.TestCase):
         for path in ("Other.slnx", "src/Old.sln"):
             with self.subTest(path=path):
                 self.assertTrue(check_other(path, good))
+        # Each entry must be a tracked file, matched as Windows matches it.
+        self.assertEqual(check_other("BlueprintAdmin.slnx", good, frozenset({"src/a/a.csproj"})), [])
+        self.assertTrue(check_other("BlueprintAdmin.slnx", good, frozenset({"src/b/b.csproj"})))
+        self.assertTrue(check_other("BlueprintAdmin.slnx", good.replace("src/A", "../out"),
+                                    frozenset({"src/a/a.csproj"})))
 
     def test_only_the_root_feed_list_passes(self) -> None:
         self.assertEqual(check_other("nuget.config", "<configuration />"), [])
@@ -297,6 +310,9 @@ class TheTree(unittest.TestCase):
             Path(PIN_FILE).write_text(PIN, encoding="utf-8")
             Path("src").mkdir()
             Path("src/A.csproj").write_text(PLAIN, encoding="utf-8")
+            # PLAIN's ProjectReference, which must resolve to a tracked file.
+            Path("Admin.Assistant").mkdir()
+            Path("Admin.Assistant/Admin.Assistant.csproj").write_text("<Project />", encoding="utf-8")
             Path("src/A.csproj.user").write_text("<Project />", encoding="utf-8")
             Path("src/B.targets").write_text("<Project />", encoding="utf-8")
             Path("src/notes.md").write_text("VersionOverride", encoding="utf-8")
@@ -321,7 +337,8 @@ class TheTree(unittest.TestCase):
             Path("src/logo.png").write_bytes(b"\x89PNG\r\n\x1a\n\xff\xfe\x00")
             run("git", "add", ".")
             Path("src/Untracked.csproj").write_text(project('<Import Project="x" />'), encoding="utf-8")
-            self.assertEqual(collect(), [PIN_FILE, "dirs.proj", "global.json", "src/A.csproj",
+            self.assertEqual(collect(), ["Admin.Assistant/Admin.Assistant.csproj", PIN_FILE, "dirs.proj",
+                                         "global.json", "src/A.csproj",
                                          "src/A.csproj.user", "src/B.targets", "src/lib.xml",
                                          "src/narrow.xml", "src/pi.xml", "src/prefixed.xml",
                                          "src/wide.csproj"])
@@ -344,12 +361,20 @@ class TheTree(unittest.TestCase):
             # decode, and a DOCTYPE'd root the gate cannot name unexpanded.
             Path("wide32.xml").write_bytes("<Project />".encode("utf-32"))
             Path("dtd.xml").write_text('<!DOCTYPE x [<!ENTITY e "y">]><Project />', encoding="utf-8")
+            # Round 4, R6: an encoding XmlReader knows and expat does not.
+            Path("jis.xml").write_bytes(b'<?xml version="1.0" encoding="shift_jis"?><Project />')
+            Path("unicode.xml").write_bytes('<?xml version="1.0" encoding="unicode"?><Project />'
+                                            .encode("utf-16"))
+            # A reference to a file outside the repository, or untracked.
+            Path("C.csproj").write_text(project(
+                '<ItemGroup><ProjectReference Include="..\\outside\\x.csproj" /></ItemGroup>'),
+                encoding="utf-8")
             run("git", "add", ".")
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
                 self.assertEqual(main([]), 1)
             for path in ("A.csproj.user", "Directory.Build.rsp", "after.anything", "B.csproj",
-                         "wide32.xml", "dtd.xml"):
+                         "wide32.xml", "dtd.xml", "jis.xml", "unicode.xml", "C.csproj"):
                 with self.subTest(path=path):
                     self.assertIn(f"::error::{path}", out.getvalue())
 
