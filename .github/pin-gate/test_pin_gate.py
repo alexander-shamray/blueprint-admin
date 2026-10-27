@@ -478,11 +478,16 @@ class TheCiWiring(unittest.TestCase):
         self.assertIn("runner.os == 'Linux'", block)
 
     def test_the_commits_job_runs_the_gate_on_each_commit_before_building_it(self) -> None:
-        # Each commit before the head is what a later bisect restores.
+        # Each commit before the head is what a later bisect restores. The
+        # gate runs inside `refusals`, which the loop calls before building,
+        # and is read against the fork point's refusals (#563).
         block = job("commits")
         self.assertIn('cp .github/pin-gate/pin_gate.py "$RUNNER_TEMP/pin_gate.py"', block)
+        helper = block[block.index("refusals() {"):block.index("for sha in")]
+        self.assertIn('python3 "$RUNNER_TEMP/pin_gate.py"', helper)
+        self.assertIn('git merge-base "$BASE_SHA" "$HEAD_SHA"', helper)
         loop = block[block.index("for sha in"):]
-        self.gate_before_build(loop, 'python3 "$RUNNER_TEMP/pin_gate.py"')
+        self.gate_before_build(loop, "found=$(refusals)")
 
 
 if __name__ == "__main__":
