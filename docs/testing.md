@@ -5,7 +5,9 @@ What a checkout needs that `BlueprintAdmin.slnx` and `ci.yml` cannot say.
 ## Host
 
 `dotnet test` (via `bash .claude/scripts/host-checks.sh`) needs the SDK in
-`global.json`. It does **not** need Docker: FakePlatform is in-process.
+`global.json`, and `GITHUB_PACKAGES_TOKEN` for the restore of the
+assistant's packages (README, *Prerequisites*). It does **not** need
+Docker: FakePlatform is in-process.
 Container-spawning tests in the Host use `node` for long-running children
 (`ProcessRunnerTests`); CI installs Node for that reason.
 
@@ -51,12 +53,18 @@ path. A green unit suite is not a green smoke. `playwright.config.ts` starts
 a second fake host, with the assistant off, on the port `e2e/hosts.ts` names;
 only `assistant-off.spec.ts` reads it.
 
-The assistant's protocol is pinned by golden JSON files under
-`src/Admin.Assistant/Protocol/golden/`: `ProtocolGoldenTests` holds the C#
-records to them and `protocol.spec.ts` the TypeScript mirror, so a field
-changed on one side alone fails. A new body or event is a new golden file:
-the C# test fails one no C# test pins, but `protocol.spec.ts` imports each
-file by name, so the new one is added there by hand.
+The assistant's protocol is pinned by golden JSON files its owner,
+blueprint-backend's `Common.Assistant` package, keeps under
+`src/BuildingBlocks/Common.Assistant/Protocol/golden/`. They are copied to
+`src/Admin.Web/src/app/assistant/golden/`, and three tests hold the copy:
+`protocol.spec.ts` the TypeScript mirror to it, the host's
+`ProtocolGoldenTests` the pinned package's records to it, and the drift
+job's `AssistantProtocolDriftTests` it to the backend's `main`. So a field
+changed on one side alone fails, and a golden file the backend changes fails
+the drift job before a package carrying it is pinned. A new body or event is
+a new golden file: copied here, the C# test fails one it does not pin, but
+`protocol.spec.ts` imports each file by name, so the new one is added there
+by hand.
 
 Most of FakePlatform's fixtures are recordings; `FixtureRecordings` names
 which, and why each of the rest is written by hand. To re-record, bring the stack up,

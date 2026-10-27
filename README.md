@@ -16,6 +16,14 @@ Docker Desktop, the .NET SDK pinned in `global.json`, the Node version in
     ../blueprint-backend    alexander-shamray/blueprint-backend
     ../blueprint-frontend   alexander-shamray/blueprint-frontend
 
+A restore also needs `GITHUB_PACKAGES_TOKEN`, a GitHub token with
+`read:packages`: the assistant's core is blueprint-backend's package on
+GitHub Packages, which asks for a token even for a public package
+(`nuget.config`). With the GitHub CLI, run
+`gh auth refresh -h github.com -s read:packages` once, then set the variable
+from `gh auth token` in the shell that builds, or in the one that starts an
+agent session. The design spec's Prerequisites row is the owner.
+
 Other locations: set `Admin:BackendDir` and `Admin:FrontendDir` (see
 `src/Admin.Host/Config/AdminOptions.cs`) on the command line
 (`--Admin:BackendDir=D:/work/backend`) or as `BLUEPRINT_Admin__BackendDir`.
@@ -244,7 +252,8 @@ there too, and with it off the console shows no trace of it. Set
 `Admin:Assistant:Provider=anthropic` to answer through the Anthropic API;
 `Model` and `Effort` sit beside it under `Admin:Assistant`; `AssistantOptions`
 in `src/Admin.Host/Assistant/AssistantOptions.cs` binds the keys, and
-`AnthropicSettings` in `src/Admin.Assistant.Anthropic/` owns their defaults.
+`AnthropicSettings` in blueprint-backend's `Common.Assistant.Anthropic`
+package owns their defaults.
 The credential is the SDK's own: `ANTHROPIC_API_KEY`, or the profile that
 `ant auth login` stores. The console reads neither and keeps neither.
 
