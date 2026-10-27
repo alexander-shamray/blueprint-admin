@@ -42,14 +42,56 @@ public static class ComposePsParser
         row.State,
         string.IsNullOrEmpty(row.Health) ? null : row.Health,
         row.ExitCode,
-        (row.Publishers ?? []).Where(p => p.PublishedPort > 0).Select(p => p.PublishedPort).Distinct().ToList());
+        (row.Publishers ?? []).Where(p => p.PublishedPort > 0).Select(p => p.PublishedPort).Distinct().ToList(),
+        row.Labels is null ? null : ConfigFiles(row.Labels));
+
+    /// <summary>
+    /// The file names in the container's <c>com.docker.compose.project.config_files</c> label. <c>ps</c> joins labels with commas
+    /// and Compose joins the files inside that one with commas too, so a part with no <c>=</c> belongs to the label before it.
+    /// </summary>
+    internal static IReadOnlyList<string> ConfigFiles(string labels)
+    {
+        List<string> files = [];
+        bool inside = false;
+
+        foreach (string part in labels.Split(','))
+        {
+            int equals = part.IndexOf('=', StringComparison.Ordinal);
+
+            if (equals >= 0)
+            {
+                inside = part[..equals] == ConfigFilesLabel;
+
+                if (!inside)
+                {
+                    continue;
+                }
+            }
+            else if (!inside)
+            {
+                continue;
+            }
+
+            string path = equals >= 0 ? part[(equals + 1)..] : part;
+
+            if (path.Length > 0)
+            {
+                files.Add(path[(path.LastIndexOfAny(['/', '\\']) + 1)..]);
+            }
+        }
+
+        return files;
+    }
+
+    private const string ConfigFilesLabel = "com.docker.compose.project.config_files";
 
     private sealed record PsRow(
         string Service,
         string State,
         string? Health,
         int? ExitCode,
-        [property: JsonPropertyName("Publishers")] List<Publisher>? Publishers);
+        [property: JsonPropertyName("Publishers")] List<Publisher>? Publishers,
+        string? Labels);
 
     private sealed record Publisher(int PublishedPort);
 }
