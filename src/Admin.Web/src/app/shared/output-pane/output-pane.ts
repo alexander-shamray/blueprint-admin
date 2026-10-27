@@ -109,7 +109,8 @@ interface Entry {
       padding: 0.75rem;
       font-size: 0.8rem;
     }
-    /* In a tile the log takes the height the table leaves, so only the log scrolls and never the tile around it. */
+    /* In a tile the log takes the height the table leaves and scrolls in it; a table of more images than its share
+       scrolls in its own, so the tile around them never does. */
     :host(.fill) .pane {
       flex: 1 1 0;
       min-height: 4rem;
@@ -210,7 +211,7 @@ export class OutputPane {
    * when it says something went wrong, so a healthy Up does not read as a wall of errors.
    */
   readonly composeStderr = input(false);
-  /** Set where the pane is a widget's whole body: it then takes that body's height and scrolls only its log. */
+  /** Set where the pane is a widget's whole body: it then takes that body's height, and its parts scroll inside it. */
   readonly fill = input(false);
   readonly entries = signal<Entry[]>([]);
   readonly exitCode = signal<number | null>(null);
