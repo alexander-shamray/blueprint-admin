@@ -342,14 +342,16 @@ export class OutputPane {
 
   private append(line: OutputLine): void {
     const pull = this.tracker.add(line);
-    if (pull) this.pull.set(this.tracker.snapshot());
-
     const event = composeEvent(line.text);
+    const failed = event !== null && composeFailed(event);
+    // A failure stays in the log, but it is also where an image's row turns failed.
+    if (pull || failed) this.pull.set(this.tracker.snapshot());
+
     const entry: Entry = {
       sequence: line.sequence,
       stream: line.stream,
       text: event ? composePlain(event) : line.text,
-      failed: event !== null && composeFailed(event),
+      failed,
       pull,
     };
     this.entries.update((all) => [...all, entry]);
