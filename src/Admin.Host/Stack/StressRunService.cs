@@ -115,6 +115,7 @@ public sealed class StressRunService(
     private volatile StressStaircase? staircase;
     private volatile string? knee;
     private Job? step;
+    private volatile bool k6Ended;
     private TaskCompletionSource stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private bool stopping;
 
@@ -147,6 +148,7 @@ public sealed class StressRunService(
             staircase = null;
             knee = null;
             step = null;
+            k6Ended = false;
             stopping = false;
             stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             _ = Task.Run(() => RunAsync(run));
@@ -157,7 +159,9 @@ public sealed class StressRunService(
 
     /// <summary>
     /// Ends the run going, at the step it is in, and waits for the job to say so; null when none is going. As the load run's Stop,
-    /// it kills the step's process tree, and one that arrives after k6 has ended by itself kills nothing.
+    /// it kills the step's process tree. One that arrives after k6 has ended by itself kills nothing: the run block's sampler
+    /// wait and summarise.mjs still run after k6's exit line, and killing them would lose the summary k6's raw.json was written
+    /// for, so the Stop waits for them instead.
     /// </summary>
     public async Task<Job?> StopAsync()
     {
@@ -174,7 +178,7 @@ public sealed class StressRunService(
             run = going;
             running = step;
 
-            if (running is { State: JobState.Exited } && IsRun(running))
+            if (running is not null && IsRun(running) && (k6Ended || running.State == JobState.Exited))
             {
                 running = null;
             }
@@ -230,7 +234,7 @@ public sealed class StressRunService(
 
                 StressStaircase? read = ReferenceEquals(next, Steps[^1]) ? new StressStaircase() : null;
                 staircase = read;
-                (int exitCode, List<string> stdout) = await FollowAsync(run, next, job, read);
+                (int exitCode, List<string> stdout) = await FollowAsync(run, next, job, read, () => k6Ended = true);
                 bool stopped;
 
                 lock (gate)
@@ -342,8 +346,11 @@ public sealed class StressRunService(
     /// <summary>The summary as summarise.mjs wrote it, or null when it is not there.</summary>
     public static IReadOnlyList<string>? ReadSummary(string path) => File.Exists(path) ? File.ReadAllLines(path) : null;
 
-    /// <summary>Copies a step's lines into the run as they arrive, under a line naming the step and its own job; k6's feed the staircase.</summary>
-    private static async Task<(int ExitCode, List<string> Stdout)> FollowAsync(Job run, LoadRunStep next, Job job, StressStaircase? read)
+    /// <summary>
+    /// Copies a step's lines into the run as they arrive, under a line naming the step and its own job. The run block's feed the
+    /// staircase, and its k6 exit line calls <paramref name="ended"/>.
+    /// </summary>
+    private static async Task<(int ExitCode, List<string> Stdout)> FollowAsync(Job run, LoadRunStep next, Job job, StressStaircase? read, Action ended)
     {
         List<string> stdout = [];
         run.Append(OutputStream.Stdout, $"== {next.Name} (job {job.Id})");
@@ -356,6 +363,11 @@ public sealed class StressRunService(
             {
                 stdout.Add(line.Text.Trim());
                 read?.Observe(line.Text);
+
+                if (read is not null && line.Text.StartsWith(K6ExitPrefix, StringComparison.Ordinal))
+                {
+                    ended();
+                }
             }
         }
 
