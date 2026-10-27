@@ -45,7 +45,7 @@ public sealed partial class StressRunDriftTests
         // asks Compose for its JSON progress, which changes how Compose reports and not what it runs, so that flag is not
         // the document's.
         string[] arguments = [.. up.Arguments];
-        int progress = arguments.AsSpan().IndexOf(ComposeService.Progress);
+        int progress = arguments.AsSpan().IndexOf(ComposeService.Progress.AsSpan());
         progress.ShouldBeGreaterThan(0);
         blocks.Length.ShouldBe(4);
         string.Join(' ', [up.FileName, .. arguments[..progress], .. arguments[(progress + ComposeService.Progress.Length)..]]).ShouldBe(blocks[^1]);
