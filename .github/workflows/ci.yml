@@ -132,7 +132,9 @@ jobs:
   # against a clean slate: a refusal the fork point already carries is a rule
   # `main` gained after the branch forked (#563), which no commit of the branch
   # can satisfy and a bisect meets on `main` too, so only a refusal a commit
-  # adds stops it. An exit above 1 is the gate not running, and stops it there.
+  # adds stops it. An exit above 1, or a 1 that names no refusal (an uncaught
+  # exception's traceback goes to stderr), is the gate not running, and stops
+  # it there.
   commits:
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -162,7 +164,9 @@ jobs:
           refusals() {
             local status=0
             python3 "$RUNNER_TEMP/pin_gate.py" > "$RUNNER_TEMP/gate.out" || status=$?
-            if [ "$status" -gt 1 ]; then cat "$RUNNER_TEMP/gate.out" >&2; return "$status"; fi
+            if [ "$status" -gt 1 ] || { [ "$status" -eq 1 ] && ! grep -q '^::error::' "$RUNNER_TEMP/gate.out"; }; then
+              cat "$RUNNER_TEMP/gate.out" >&2; return 2
+            fi
             grep '^::error::' "$RUNNER_TEMP/gate.out" | LC_ALL=C sort -u || true
           }
           git checkout --quiet --detach "$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
