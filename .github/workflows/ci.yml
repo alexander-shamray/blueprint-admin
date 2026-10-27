@@ -130,8 +130,9 @@ jobs:
   # restores it on a developer's machine; the head's copy judges, as in the
   # host job. It judges each commit against the branch's fork point, not
   # against a clean slate: a refusal the fork point already carries is a rule
-  # `main` gained after the branch forked (#563), which no commit of the branch
-  # can satisfy and a bisect meets on `main` too, so only a refusal a commit
+  # the judging copy holds and the fork point's tree predates, most often one
+  # `main` gained after the branch forked (#563). No commit of the branch can
+  # satisfy it and a bisect meets it on `main` too, so only a refusal a commit
   # adds stops it. An exit above 1, or a 1 that names no refusal (an uncaught
   # exception's traceback goes to stderr), is the gate not running, and stops
   # it there.

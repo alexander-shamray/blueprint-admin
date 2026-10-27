@@ -164,7 +164,8 @@ is the residual above. In the `commits` job, on each commit before the head
 and before that commit is built, because a later bisect restores each one on
 a developer's machine. There a commit is held only to the refusals its
 branch's fork point does not already carry: one the fork point carries is a
-rule `main` gained after the branch forked, which no commit of the branch can
+rule the judging copy holds and the fork point's tree predates, most often one
+`main` gained after the branch forked, which no commit of the branch can
 satisfy (#563).
 
 The evaluation runs in the same two places, after the static read and
