@@ -133,12 +133,17 @@ NuGet cache, outside both bounds: run it on a clean checkout.
 
 ## What it does not judge
 
-A condition keyed on anything but the configuration (an environment
-variable, a global property the solution hands its projects) is evaluated
-as the runner sees it; the operating system is covered by evaluating on
-both of the `host` job's legs. Nor a file that evaluation reads without
-importing it, through a property function, or what a target does: the
-rules above refuse every target, and the review reads the rest.
+The context the build evaluates in, where it differs from this one (#566).
+The evaluation varies the configuration and, by running on both of the
+`host` job's legs, the operating system, and nothing else. Restore's global
+properties (`MSBuildIsRestoring`, `ExcludeRestorePackageImports`), the
+solution's (`SolutionDir`), the build step's environment, and whether
+restore has written its output yet each differ when the build evaluates, so
+a condition or a value keyed on one of them can import what this
+evaluation never saw. Judging the build's own binary log instead is #566's
+fix. Nor a file that evaluation reads without importing it, through a
+property function, or what a target does: the rules above refuse every
+target, and the review reads the rest.
 
 The code the build compiles and the tests run: the residual
 `docs/harness-boundaries.md` already accepts for `src/**`, which asks for a
