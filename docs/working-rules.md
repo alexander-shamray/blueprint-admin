@@ -87,7 +87,7 @@ dialects.
   **Where a row sits is a function of state, so every agent that works here
   re-derives it at each event** (work starts on an issue, a PR opens, merges
   or closes, an issue is filed, closed, reopened, paused or unpaused, labelled
-  `tracking` or unlabelled, work is abandoned) **and writes the result in the
+  or unlabelled `tracking`, work is abandoned) **and writes the result in the
   same act**:
 
   | State | Where |
