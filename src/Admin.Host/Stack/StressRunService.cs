@@ -142,12 +142,12 @@ public sealed class StressRunService(
 
     /// <summary>
     /// The services of <see cref="OverrideServices"/> whose running container was created with <see cref="OverrideFile"/>: what
-    /// the Stack screen shows while the stack runs with the override, and empty when it does not.
+    /// the Stack screen shows while the stack runs with the override, and empty when it does not. In the order
+    /// <see cref="OverrideServices"/> gives, so the screen's line does not move with the order <c>ps</c> prints.
     /// </summary>
     public static IReadOnlyList<string> OnOverride(ComposeStatus backend) =>
-        [.. backend.Services
-            .Where(s => OverrideServices.Contains(s.Service) && s.State == "running" && s.ConfigFiles?.Contains(OverrideFile) == true)
-            .Select(s => s.Service)];
+        [.. OverrideServices.Where(name => backend.Services.Any(s =>
+            s.Service == name && s.State == "running" && s.ConfigFiles?.Contains(OverrideFile) == true))];
 
     /// <summary>
     /// Starts a run under <see cref="ComposeGate"/>, or returns the one still going: its up recreates services, so it races an Up,
