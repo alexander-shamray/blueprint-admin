@@ -3,7 +3,8 @@
 **The claim: `Directory.Packages.props` is the only file that chooses a
 package version, and NuGet restores from no feed a project file names.**
 The packs the SDK downloads take their versions from the SDK `global.json`
-names, and a project's two ways of choosing one are refused below.
+names, and the properties and items by which a project chooses one instead
+are refused below.
 Central package management makes that the default and nothing more. A
 project file evaluated after the pin file can set `VersionOverride`, turn
 central management off for itself and take a `Version=`, add a feed, or
@@ -16,10 +17,15 @@ edits; this gate is what refuses the version that would otherwise reach
 
 In every tracked MSBuild file, with every name read without regard to case,
 as MSBuild reads it. That is every `*proj`, `*proj.user`, `.props` and
-`.targets` at any depth. A file reaches evaluation under another name only
-by an import, which is refused below, or by a project entry, which must name
-a `*proj`; so this list is the guarantee. Every other tracked file whose root
-is `<Project>` is read too, as a backstop that need not be complete. In each:
+`.targets` at any depth, and every other tracked file MSBuild could import:
+an import reaches a file of any name, but only one whose first element is
+`<Project>`. So every tracked file is parsed from its bytes, as XmlReader
+reads them (the byte-order mark, the declared encoding, UTF-16 told from its
+first bytes), up to its first element and no further; one in UTF-32, which
+the parser cannot decode, or whose root it cannot name without expanding an
+entity, is read and refused rather than skipped. Project entries are held to
+literal `*proj` paths, so nothing expands into a name after it was read. In
+each:
 
 - a `PackageReference` with `Version` or `VersionOverride`, as an attribute or
   as metadata, in an `ItemGroup` or an `ItemDefinitionGroup`;
@@ -33,14 +39,19 @@ is `<Project>` is read too, as a backstop that need not be complete. In each:
   a property NuGet adds later is refused before anyone has read it;
 - a property that imports a file by path (`CustomBefore*`, `CustomAfter*`,
   `DirectoryBuild*`, `ImportDirectoryBuild*`, `ImportProjectExtension*`,
-  `MSBuildProjectExtensionsPath`, `ForceImport*`, `ImportByWildcard*`), and
-  `RuntimeFrameworkVersion`, which picks a runtime pack;
+  `MSBuildProjectExtensionsPath`, `MSBuildExtensionsPath`,
+  `MSBuildUserExtensionsPath`, `ForceImport*`, `ImportByWildcard*`,
+  `ImportUserLocations*`, `LanguageTargets`, `BeforeMicrosoftNET*`,
+  `AfterMicrosoftNET*`), as defence in depth, since what it imports is read
+  anyway; and `RuntimeFrameworkVersion` or any `*PackageVersion`, which pick a
+  pack's version;
 - an `Import` or an `Sdk` element, and a `<Project Sdk>` outside the named
   list of SDKs the .NET SDK bundles: each brings in MSBuild the gate never
   reads, and an unbundled SDK, some of which share the `Microsoft.NET.Sdk`
   prefix, is itself a NuGet package with a version;
-- a `ProjectReference` naming anything but a `*proj` file, a bare
-  `$(Property)` included, since the gate cannot be sure it read it;
+- a `ProjectReference` naming anything but a literal path to a `*proj` file:
+  a `$(…)`, `@(…)` or `%(…)` or a wildcard can expand into another name, or
+  several, after the gate has read it;
 - a `Target` or a `UsingTask`: code, which runs during restore as readily as
   during a build, and inside which a `CreateProperty`, an
   `<Output PropertyName>` or an `<MSBuild Properties>` sets what no rule here
@@ -63,7 +74,7 @@ Beside them, the restore inputs no project names: any tracked `.rsp` (an
 which outrank the pin file), a `nuget.config` anywhere but the root, a
 `global.json` carrying `msbuild-sdks`, a solution other than
 `BlueprintAdmin.slnx`, and a project entry in that one naming anything but a
-`*proj`.
+literal `*proj` path.
 
 ## What it does not judge
 
