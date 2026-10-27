@@ -2,6 +2,8 @@
 
 **The claim: `Directory.Packages.props` is the only file that chooses a
 package version, and NuGet restores from no feed a project file names.**
+The packs the SDK downloads take their versions from the SDK `global.json`
+names, and a project's two ways of choosing one are refused below.
 Central package management makes that the default and nothing more. A
 project file evaluated after the pin file can set `VersionOverride`, turn
 central management off for itself and take a `Version=`, add a feed, or
@@ -12,47 +14,65 @@ edits; this gate is what refuses the version that would otherwise reach
 
 ## What it refuses
 
-In every tracked MSBuild file (`*proj`, `*proj.user`, `.props`, `.targets`,
-at any depth), with every name read without regard to case, as MSBuild
-reads it:
+In every tracked MSBuild file, with every name read without regard to case,
+as MSBuild reads it. That is every `*proj`, `*proj.user`, `.props` and
+`.targets` at any depth. A file reaches evaluation under another name only
+by an import, which is refused below, or by a project entry, which must name
+a `*proj`; so this list is the guarantee. Every other tracked file whose root
+is `<Project>` is read too, as a backstop that need not be complete. In each:
 
 - a `PackageReference` with `Version` or `VersionOverride`, as an attribute or
   as metadata, in an `ItemGroup` or an `ItemDefinitionGroup`;
 - a `PackageVersion`, `GlobalPackageReference` or `PackageDownload` item,
-  each of which carries a version of its own;
+  each of which carries a version of its own, and any `Known*` item, whose
+  metadata names the version of a pack restore downloads;
 - a property whose name starts `ManagePackageVersionsCentrally`,
   `CentralPackage`, `Restore`, `NuGet`, `DirectoryPackagesProps` or
   `ImportDirectoryPackagesProps`: central management, a feed, a restore input,
   NuGet's own settings, or a second pin file. A prefix rather than a list, so
   a property NuGet adds later is refused before anyone has read it;
+- a property that imports a file by path (`CustomBefore*`, `CustomAfter*`,
+  `DirectoryBuild*`, `ImportDirectoryBuild*`, `ImportProjectExtension*`,
+  `MSBuildProjectExtensionsPath`, `ForceImport*`, `ImportByWildcard*`), and
+  `RuntimeFrameworkVersion`, which picks a runtime pack;
 - an `Import` or an `Sdk` element, and a `<Project Sdk>` outside the named
   list of SDKs the .NET SDK bundles: each brings in MSBuild the gate never
   reads, and an unbundled SDK, some of which share the `Microsoft.NET.Sdk`
   prefix, is itself a NuGet package with a version;
-- a file that does not parse, or carries a `DOCTYPE`: one the gate cannot
-  read is not one it has passed.
+- a `ProjectReference` naming anything but a `*proj` file, a bare
+  `$(Property)` included, since the gate cannot be sure it read it;
+- a `Target` or a `UsingTask`: code, which runs during restore as readily as
+  during a build, and inside which a `CreateProperty`, an
+  `<Output PropertyName>` or an `<MSBuild Properties>` sets what no rule here
+  can see. No project carries one; one that needs it is a change to the gate;
+- a file that does not parse or is not text, or carries a `DOCTYPE`: one the
+  gate cannot read is not one it has passed.
 
 The pin file is read by the same rules, save for the `PackageVersion` and
 `GlobalPackageReference` items and the central-management properties it
 exists to hold. It must also set `ManagePackageVersionsCentrally` to `true`
-and `CentralPackageVersionOverrideEnabled` to `false`, each once and under no
-`Condition`, so the value read is the one MSBuild evaluates. The second makes
+and `CentralPackageVersionOverrideEnabled` to `false`, each once, in a
+property group directly under `<Project>` and under no `Condition`, so the
+value read is the one MSBuild evaluates. The second makes
 the SDK refuse a plain override too; it is not enough alone, because a
 project file's own properties are evaluated after it and can set it back,
 which the first list refuses.
 
 Beside them, the restore inputs no project names: any tracked `.rsp` (an
 `MSBuild.rsp` or `Directory.Build.rsp` hands MSBuild global properties,
-which outrank the pin file), a `nuget.config` anywhere but the root, and a
-`global.json` carrying `msbuild-sdks`.
+which outrank the pin file), a `nuget.config` anywhere but the root, a
+`global.json` carrying `msbuild-sdks`, a solution other than
+`BlueprintAdmin.slnx`, and a project entry in that one naming anything but a
+`*proj`.
 
 ## What it does not judge
 
-Code a project file runs: a target, an inline task, an `Exec`. That is the
-residual `docs/harness-boundaries.md` already accepts for `src/**`, and it
-asks for a review, not a parser. Nor the root `nuget.config`'s feeds or the
-pin file's own versions: each is a class E change and denied to every
-command that edits unattended.
+The code the build compiles and the tests run: the residual
+`docs/harness-boundaries.md` already accepts for `src/**`, which asks for a
+review, not a parser. Nor the root `nuget.config`'s feeds, the SDK
+`global.json` pins or the pin file's own versions: each is a class E change
+and denied to every command that edits unattended. Nor a file a build
+generates rather than tracks.
 
 ## How it runs
 

@@ -114,6 +114,41 @@ class AProjectFile(unittest.TestCase):
             with self.subTest(name=name):
                 refused(self, project(f"<PropertyGroup><{name}>x</{name}></PropertyGroup>"), f"<{name}>")
 
+    def test_properties_that_import_a_file_by_path_fail(self) -> None:
+        # Commit security review of #550: each imports a tracked file with no
+        # <Import> element in sight.
+        for name in ("CustomAfterMicrosoftCommonTargets", "CustomBeforeMicrosoftCommonProps",
+                     "DirectoryBuildTargetsPath", "ImportDirectoryBuildProps",
+                     "ImportProjectExtensionProps", "MSBuildProjectExtensionsPath",
+                     "ForceImportBeforeCppTargets", "ImportByWildcardBeforeMicrosoftCommonTargets"):
+            with self.subTest(name=name):
+                refused(self, project(f"<PropertyGroup><{name}>x</{name}></PropertyGroup>"), f"<{name}>")
+
+    def test_a_runtime_pack_version_fails(self) -> None:
+        # R4 of #550: restore downloads the pack these name.
+        refused(self, project("<PropertyGroup><RuntimeFrameworkVersion>9.0.0</RuntimeFrameworkVersion>"
+                              "</PropertyGroup>"), "runtimeframeworkversion")
+        for item in ("KnownFrameworkReference", "KnownAppHostPack", "KnownILLinkPack"):
+            with self.subTest(item=item):
+                refused(self, project(f'<ItemGroup><{item} Update="Microsoft.NETCore.App" '
+                                      'LatestRuntimeFrameworkVersion="9.0.0" /></ItemGroup>'), item)
+
+    def test_code_in_a_project_file_fails(self) -> None:
+        # Inside a target, CreateProperty or <Output PropertyName> sets what
+        # no static rule sees; no project here carries one.
+        refused(self, project('<Target Name="T" BeforeTargets="_GenerateRestoreProjectSpec">'
+                              '<CreateProperty Value="https://x"><Output TaskParameter="Value" '
+                              'PropertyName="RestoreSources" /></CreateProperty></Target>'), "<Target>")
+        refused(self, project('<UsingTask TaskName="T" AssemblyFile="t.dll" />'), "<UsingTask>")
+
+    def test_a_project_reference_to_a_file_not_named_as_a_project_fails(self) -> None:
+        # Commit security review of #550: a reference reaches a file by any
+        # name, and only a *proj is certain to have been read.
+        for include in ("..\\lib\\x.xml", "$(Elsewhere)", "a.csproj;b.txt"):
+            with self.subTest(include=include):
+                refused(self, project(f'<ItemGroup><ProjectReference Include="{include}" /></ItemGroup>'),
+                        "names no *proj file")
+
     def test_a_property_set_inside_a_choose_is_read(self) -> None:
         refused(self, project("<Choose><When Condition=\"true\"><PropertyGroup>"
                               "<RestoreSources>https://x</RestoreSources></PropertyGroup></When></Choose>"),
@@ -177,7 +212,16 @@ class ThePinFile(unittest.TestCase):
         twice = PIN.replace("</PropertyGroup>",
                             "<CentralPackageVersionOverrideEnabled>true</CentralPackageVersionOverrideEnabled>"
                             "</PropertyGroup>")
-        for name, text in (("condition", conditional), ("group", group), ("twice", twice)):
+        # R3 of #550: a definition inside a <Choose> or a target is not the
+        # value MSBuild evaluates either.
+        override = "<CentralPackageVersionOverrideEnabled>false</CentralPackageVersionOverrideEnabled>"
+        moved = PIN.replace(override, "")
+        chosen = moved.replace("<ItemGroup>", f"<Choose><When Condition=\"'$(X)'==''\"><PropertyGroup>"
+                                              f"{override}</PropertyGroup></When></Choose><ItemGroup>", 1)
+        targeted = moved.replace("<ItemGroup>", f"<Target Name=\"T\"><PropertyGroup>{override}"
+                                                f"</PropertyGroup></Target><ItemGroup>", 1)
+        for name, text in (("condition", conditional), ("group", group), ("twice", twice),
+                           ("choose", chosen), ("target", targeted)):
             with self.subTest(name):
                 self.assertTrue(pin_problems(text))
 
@@ -196,6 +240,14 @@ class OtherRestoreInputs(unittest.TestCase):
         for path in ("Directory.Build.rsp", "src/MSBuild.rsp"):
             with self.subTest(path=path):
                 self.assertTrue(check_other(path, "-p:RestoreSources=https://x"))
+
+    def test_only_the_one_solution_naming_only_projects_passes(self) -> None:
+        good = '<Solution><Folder Name="/src/"><Project Path="src/A/A.csproj" /></Folder></Solution>'
+        self.assertEqual(check_other("BlueprintAdmin.slnx", good), [])
+        self.assertTrue(check_other("BlueprintAdmin.slnx", good.replace("A.csproj", "x.xml")))
+        for path in ("Other.slnx", "src/Old.sln"):
+            with self.subTest(path=path):
+                self.assertTrue(check_other(path, good))
 
     def test_only_the_root_feed_list_passes(self) -> None:
         self.assertEqual(check_other("nuget.config", "<configuration />"), [])
@@ -240,10 +292,20 @@ class TheTree(unittest.TestCase):
             Path("src/B.targets").write_text("<Project />", encoding="utf-8")
             Path("src/notes.md").write_text("VersionOverride", encoding="utf-8")
             Path("global.json").write_text("{}", encoding="utf-8")
+            # R2 of #550: a plain .proj; R1: a project by any other name,
+            # which a ProjectReference or an import path reaches.
+            Path("dirs.proj").write_text("<Project />", encoding="utf-8")
+            Path("src/lib.xml").write_text('<?xml version="1.0"?>\n<!-- a -->\n<Project>\n</Project>',
+                                           encoding="utf-8")
+            Path("src/pi.xml").write_text('<?xml version="1.0"?><?other x?>\n<Project />', encoding="utf-8")
+            Path("src/other.xml").write_text("<configuration />", encoding="utf-8")
+            Path("src/wide.csproj").write_bytes(PLAIN.encode("utf-16"))
+            Path("src/logo.png").write_bytes(b"\x89PNG\r\n\x1a\n\xff\xfe\x00")
             run("git", "add", ".")
             Path("src/Untracked.csproj").write_text(project('<Import Project="x" />'), encoding="utf-8")
-            self.assertEqual(collect(), [PIN_FILE, "global.json", "src/A.csproj", "src/A.csproj.user",
-                                         "src/B.targets"])
+            self.assertEqual(collect(), [PIN_FILE, "dirs.proj", "global.json", "src/A.csproj",
+                                         "src/A.csproj.user", "src/B.targets", "src/lib.xml",
+                                         "src/pi.xml", "src/wide.csproj"])
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(main([]), 0)
 
@@ -255,12 +317,17 @@ class TheTree(unittest.TestCase):
                 '<Project><ItemGroup><PackageReference Update="A" VersionOverride="9" /></ItemGroup></Project>',
                 encoding="utf-8")
             Path("Directory.Build.rsp").write_text("-p:RestoreSources=https://x", encoding="utf-8")
+            Path("after.anything").write_text(
+                '<Project><PropertyGroup><CentralPackageVersionOverrideEnabled>true'
+                '</CentralPackageVersionOverrideEnabled></PropertyGroup></Project>', encoding="utf-8")
+            Path("B.csproj").write_bytes(b"\xff\x00\xfe")
             run("git", "add", ".")
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
                 self.assertEqual(main([]), 1)
-            self.assertIn("::error::A.csproj.user", out.getvalue())
-            self.assertIn("::error::Directory.Build.rsp", out.getvalue())
+            for path in ("A.csproj.user", "Directory.Build.rsp", "after.anything", "B.csproj"):
+                with self.subTest(path=path):
+                    self.assertIn(f"::error::{path}", out.getvalue())
 
     def test_a_tree_with_no_pin_file_fails(self) -> None:
         with tempfile.TemporaryDirectory() as scratch, inside(Path(scratch)):
