@@ -2,6 +2,9 @@
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+    <!-- No project overrides a pin. A project can set this back, so
+         .github/pin-gate refuses one that tries (#547). -->
+    <CentralPackageVersionOverrideEnabled>false</CentralPackageVersionOverrideEnabled>
   </PropertyGroup>
   <ItemGroup Label="Assistant">
     <!-- blueprint-backend's packages, restored from GitHub Packages (nuget.config). Exempt from the two-week pin age
