@@ -81,7 +81,7 @@ public sealed class StressRunServiceTests : IAsyncDisposable
     public async Task A_summary_line_outside_the_clones_artifacts_is_not_read()
     {
         ScriptUntilRun();
-        runner.On("powershell", Arguments(StressRunService.Run), 0, "Knee: none; every measured step held.", @"Summary: ..\..\elsewhere\summary.md");
+        runner.On("powershell", Arguments(StressRunService.Run), 0, "k6 exit: 0", "Knee: none; every measured step held.", @"Summary: ..\..\elsewhere\summary.md");
 
         Job run = Service(settle: TimeSpan.Zero).Start().Job;
         await run.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
@@ -102,6 +102,20 @@ public sealed class StressRunServiceTests : IAsyncDisposable
 
         exitCode.ShouldBe(code);
         Texts(run)[^1].ShouldStartWith($"k6 exited {code}: {StressRunService.Verdicts[code]}. ");
+    }
+
+    [Fact]
+    public async Task A_run_block_that_stops_before_k6_says_so_rather_than_reading_its_code_as_k6s()
+    {
+        ScriptUntilRun();
+        runner.On("powershell", Arguments(StressRunService.Run), 1, "products: none usable in ordering.ProductPrices");
+
+        Job run = Service(settle: TimeSpan.Zero).Start().Job;
+        int exitCode = await run.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        exitCode.ShouldBe(1);
+        Texts(run)[^1].ShouldBe("the run block exited 1 before k6 ran, saying \"products: none usable in ordering.ProductPrices\": no load was driven.");
+        NoVerdictWasRead(run);
     }
 
     [Fact]
@@ -211,6 +225,8 @@ public sealed class StressRunServiceTests : IAsyncDisposable
         StressRunService.OnOverride(backend).ShouldBe(["gateway"]);
         StressRunService.OnOverride(ComposeStatus.Unreachable("docker did not answer")).ShouldBeEmpty();
     }
+
+    private static void NoVerdictWasRead(Job run) => Texts(run).ShouldNotContain(t => t.StartsWith("k6 exited", StringComparison.Ordinal));
 
     private StressRunService Service(TimeSpan? settle = null) =>
         new(runner, composeGate, registry, Paths, Options.Create(new AdminOptions()), time, settle ?? StressRunService.Settle, path =>
