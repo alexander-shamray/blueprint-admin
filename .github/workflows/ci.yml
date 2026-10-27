@@ -167,7 +167,7 @@ jobs:
             if [ "$status" -gt 1 ] || { [ "$status" -eq 1 ] && ! grep -q '^::error::' "$RUNNER_TEMP/gate.out"; }; then
               cat "$RUNNER_TEMP/gate.out" >&2; return 2
             fi
-            grep '^::error::' "$RUNNER_TEMP/gate.out" | LC_ALL=C sort -u || true
+            grep '^::error::' "$RUNNER_TEMP/gate.out" | LC_ALL=C sort || true
           }
           git checkout --quiet --detach "$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
           inherited=$(refusals)
