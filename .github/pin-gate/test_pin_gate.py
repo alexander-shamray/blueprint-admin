@@ -489,6 +489,9 @@ class TheCiWiring(unittest.TestCase):
         self.assertIn('git merge-base "$BASE_SHA" "$HEAD_SHA"', helper)
         loop = block[block.index("for sha in"):]
         self.gate_before_build(loop, "found=$(refusals)")
+        # `found` stops nothing alone: the refusals a commit adds stop the build.
+        self.assertIn('comm -13 <(printf \'%s\\n\' "$inherited") <(printf \'%s\\n\' "$found")', loop)
+        self.gate_before_build(loop, 'if [ -n "$added" ]; then printf \'%s\\n\' "$added"; exit 1; fi')
 
 
 if __name__ == "__main__":
