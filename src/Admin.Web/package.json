@@ -28,7 +28,7 @@
     "@angular/router": "22.2.3",
     "@fontsource/material-symbols-outlined": "5.3.8",
     "angular-gridster2": "22.0.0",
-    "cytoscape": "3.34.3",
+    "cytoscape": "3.34.4",
     "cytoscape-dagre": "4.0.1",
     "mermaid": "12.2.0",
     "rxjs": "7.8.2",
