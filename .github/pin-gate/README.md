@@ -115,7 +115,8 @@ mattering. In each evaluation it refuses:
   folders, `RestoreAdditionalProjectSources`) outside the .NET install,
   which names its own `NuGetFallbackFolder` and, where it exists, its
   `library-packs`; never the repository, since restore takes a package
-  already extracted in such a folder as it finds it;
+  already extracted in a packages or fallback folder as it finds it, and a
+  local source there would serve a `.nupkg` the repository chose;
 - `ManagePackageVersionsCentrally` not `true`,
   `CentralPackageVersionOverrideEnabled` not `false`, or a
   `DirectoryPackagesPropsPath` other than the root pin file;
