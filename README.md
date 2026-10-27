@@ -102,7 +102,10 @@ backend golden-signals dashboard: request rate, 5xx share, p99 latency, the
 loaded, firing first, and the backend's `awaiting-signal.yaml` rules listed apart
 as waiting, each with the metric it lacks; and the load run, the backend's
 §13.7 SLO run as one job, block by block as `run-locally.md`'s "Load run
-(k6)" runs it, with Stop, so the strip is read under load), the Logs page
+(k6)" runs it, with Stop, so the strip is read under load; and the stress
+run, the backend's stepped k6 run under the stress override, block by block
+as "Stress run (k6)" runs it, with the step k6 holds, the knee once named, and
+the override said on the screen until Up takes it away), the Logs page
 (follow, service filter, text filter, correlation-id highlight) and the API
 page (Catalog's, Ordering's, Inventory's, Payments' and Privacy's OpenAPI operations
 through the gateway, the BFF quote, its product-image upload and saved address,
@@ -364,6 +367,12 @@ what it speaks.
   its `teardown()`, so that run has no verdict. A run leaves its
   orders, the `slo-run` client and the restocked count as they are, and a
   local run proves nothing about the SLO (§13.7).
+- The stress run's Stop also kills the step going: a Stop during k6 writes no
+  summary, so that run names no knee. The step shown is read off k6's
+  once-a-second progress lines, a count held for ten of them being a hold, so a
+  staircase set from the environment with ramps slower than a user in ten
+  seconds would read a ramp as a step. FakePlatform's stress output is written
+  by hand to the scripts' shapes, not recorded from a live run.
 - The Mail page lists the sink's newest `MailSinkClient.Limit` messages and
   says how many it holds in all. Opening a message marks it read in the sink,
   as opening it in the sink's own UI does. A message with no
