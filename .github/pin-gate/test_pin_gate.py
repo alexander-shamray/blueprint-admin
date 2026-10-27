@@ -120,14 +120,20 @@ class AProjectFile(unittest.TestCase):
         for name in ("CustomAfterMicrosoftCommonTargets", "CustomBeforeMicrosoftCommonProps",
                      "DirectoryBuildTargetsPath", "ImportDirectoryBuildProps",
                      "ImportProjectExtensionProps", "MSBuildProjectExtensionsPath",
-                     "ForceImportBeforeCppTargets", "ImportByWildcardBeforeMicrosoftCommonTargets"):
+                     "ForceImportBeforeCppTargets", "ImportByWildcardBeforeMicrosoftCommonTargets",
+                     # R1 of round 3: each reaches a file of any name.
+                     "MSBuildUserExtensionsPath", "MSBuildExtensionsPath", "LanguageTargets",
+                     "ImportUserLocationsByWildcardBeforeMicrosoftCommonProps",
+                     "BeforeMicrosoftNETSdkTargets", "AfterMicrosoftNETSdkTargets"):
             with self.subTest(name=name):
                 refused(self, project(f"<PropertyGroup><{name}>x</{name}></PropertyGroup>"), f"<{name}>")
 
     def test_a_runtime_pack_version_fails(self) -> None:
         # R4 of #550: restore downloads the pack these name.
-        refused(self, project("<PropertyGroup><RuntimeFrameworkVersion>9.0.0</RuntimeFrameworkVersion>"
-                              "</PropertyGroup>"), "runtimeframeworkversion")
+        for name in ("RuntimeFrameworkVersion", "WindowsSdkPackageVersion",
+                     "MicrosoftNETCoreAppRefPackageVersion"):
+            with self.subTest(name=name):
+                refused(self, project(f"<PropertyGroup><{name}>9.0.0</{name}></PropertyGroup>"), name)
         for item in ("KnownFrameworkReference", "KnownAppHostPack", "KnownILLinkPack"):
             with self.subTest(item=item):
                 refused(self, project(f'<ItemGroup><{item} Update="Microsoft.NETCore.App" '
@@ -144,10 +150,13 @@ class AProjectFile(unittest.TestCase):
     def test_a_project_reference_to_a_file_not_named_as_a_project_fails(self) -> None:
         # Commit security review of #550: a reference reaches a file by any
         # name, and only a *proj is certain to have been read.
-        for include in ("..\\lib\\x.xml", "$(Elsewhere)", "a.csproj;b.txt"):
+        # And one MSBuild expands may become another name, or several, after
+        # the gate has read it.
+        for include in ("..\\lib\\x.xml", "$(Elsewhere)", "a.csproj;b.txt", "$(X).csproj",
+                        "src/*.csproj", "@(Refs)", "%(Identity).csproj"):
             with self.subTest(include=include):
                 refused(self, project(f'<ItemGroup><ProjectReference Include="{include}" /></ItemGroup>'),
-                        "names no *proj file")
+                        "not a literal *proj path")
 
     def test_a_property_set_inside_a_choose_is_read(self) -> None:
         refused(self, project("<Choose><When Condition=\"true\"><PropertyGroup>"
@@ -297,7 +306,16 @@ class TheTree(unittest.TestCase):
             Path("dirs.proj").write_text("<Project />", encoding="utf-8")
             Path("src/lib.xml").write_text('<?xml version="1.0"?>\n<!-- a -->\n<Project>\n</Project>',
                                            encoding="utf-8")
-            Path("src/pi.xml").write_text('<?xml version="1.0"?><?other x?>\n<Project />', encoding="utf-8")
+            # Round 3: the root is found by parsing, so a processing
+            # instruction holding `>`, a prefix, or UTF-16 with no byte-order
+            # mark does not hide it; an HTML page is no import.
+            Path("src/pi.xml").write_text('<?xml version="1.0"?><?other a>b?>\n<Project />', encoding="utf-8")
+            Path("src/prefixed.xml").write_text(
+                '<m:Project xmlns:m="http://schemas.microsoft.com/developer/msbuild/2003" />', encoding="utf-8")
+            Path("src/narrow.xml").write_bytes('<?xml version="1.0" encoding="UTF-16"?><Project />'
+                                               .encode("utf-16-le"))
+            Path("src/page.html").write_text("<!doctype html>\n<html><body><br></body></html>",
+                                             encoding="utf-8")
             Path("src/other.xml").write_text("<configuration />", encoding="utf-8")
             Path("src/wide.csproj").write_bytes(PLAIN.encode("utf-16"))
             Path("src/logo.png").write_bytes(b"\x89PNG\r\n\x1a\n\xff\xfe\x00")
@@ -305,7 +323,8 @@ class TheTree(unittest.TestCase):
             Path("src/Untracked.csproj").write_text(project('<Import Project="x" />'), encoding="utf-8")
             self.assertEqual(collect(), [PIN_FILE, "dirs.proj", "global.json", "src/A.csproj",
                                          "src/A.csproj.user", "src/B.targets", "src/lib.xml",
-                                         "src/pi.xml", "src/wide.csproj"])
+                                         "src/narrow.xml", "src/pi.xml", "src/prefixed.xml",
+                                         "src/wide.csproj"])
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(main([]), 0)
 
@@ -321,11 +340,16 @@ class TheTree(unittest.TestCase):
                 '<Project><PropertyGroup><CentralPackageVersionOverrideEnabled>true'
                 '</CentralPackageVersionOverrideEnabled></PropertyGroup></Project>', encoding="utf-8")
             Path("B.csproj").write_bytes(b"\xff\x00\xfe")
+            # Read as an import and refused: UTF-32, which expat cannot
+            # decode, and a DOCTYPE'd root the gate cannot name unexpanded.
+            Path("wide32.xml").write_bytes("<Project />".encode("utf-32"))
+            Path("dtd.xml").write_text('<!DOCTYPE x [<!ENTITY e "y">]><Project />', encoding="utf-8")
             run("git", "add", ".")
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
                 self.assertEqual(main([]), 1)
-            for path in ("A.csproj.user", "Directory.Build.rsp", "after.anything", "B.csproj"):
+            for path in ("A.csproj.user", "Directory.Build.rsp", "after.anything", "B.csproj",
+                         "wide32.xml", "dtd.xml"):
                 with self.subTest(path=path):
                     self.assertIn(f"::error::{path}", out.getvalue())
 
