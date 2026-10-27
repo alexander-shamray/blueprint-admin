@@ -3,9 +3,9 @@ using System.Net.ServerSentEvents;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Admin.Assistant;
-using Admin.Assistant.Protocol;
-using Admin.Assistant.Tools;
+using Common.Assistant;
+using Common.Assistant.Protocol;
+using Common.Assistant.Tools;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Http.HttpResults;
 
@@ -42,7 +42,7 @@ public static class AssistantEndpoints
         app.MapGet("/api/assistant", async (CancellationToken cancellationToken) =>
             runtime.Core is { } on ? await on.StatusAsync(cancellationToken) : AssistantStatus.Off);
 
-        if (runtime.Core is not AssistantCore core)
+        if (runtime.Core is not AssistantCore core || runtime.ServerTools is not ServerToolCalls serverTools)
         {
             return app;
         }
@@ -59,7 +59,7 @@ public static class AssistantEndpoints
 
             try
             {
-                return TypedResults.Ok(core.ServerTools());
+                return TypedResults.Ok(serverTools.Tools());
             }
             catch (ToolRefusedException refused)
             {
@@ -73,7 +73,7 @@ public static class AssistantEndpoints
 
             try
             {
-                return await core.CallServerToolAsync(caller, name, arguments ?? [], cancellationToken) is { } outcome
+                return await serverTools.CallAsync(caller, name, arguments ?? [], cancellationToken) is { } outcome
                     ? TypedResults.Ok(outcome)
                     : TypedResults.Problem(statusCode: StatusCodes.Status404NotFound, title: NoSuchTool, detail: name);
             }

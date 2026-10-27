@@ -1,7 +1,0 @@
-{
-  "callId": "call-1",
-  "name": "open_screen",
-  "input": {
-    "path": "logs"
-  }
-}

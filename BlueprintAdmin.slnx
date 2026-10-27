@@ -1,13 +1,9 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/Admin.Assistant/Admin.Assistant.csproj" />
-    <Project Path="src/Admin.Assistant.Anthropic/Admin.Assistant.Anthropic.csproj" />
     <Project Path="src/Admin.Host/Admin.Host.csproj" />
     <Project Path="src/Admin.Mcp/Admin.Mcp.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/Admin.Assistant.Tests/Admin.Assistant.Tests.csproj" />
-    <Project Path="tests/Admin.Assistant.Anthropic.Tests/Admin.Assistant.Anthropic.Tests.csproj" />
     <Project Path="tests/Admin.Host.Tests/Admin.Host.Tests.csproj" />
   </Folder>
 </Solution>

@@ -1,16 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
-  <!-- Settings come from Directory.Build.props. No packages in phase 1: the
-       shared framework carries minimal APIs, options, HttpClientFactory and
-       Server-Sent Events. -->
+  <!-- Settings come from Directory.Build.props. The shared framework carries
+       minimal APIs, options, HttpClientFactory and Server-Sent Events; the
+       assistant's core and its Anthropic adapter are blueprint-backend's
+       packages (AI assistant design §13), pinned in Directory.Packages.props. -->
 
   <ItemGroup>
     <InternalsVisibleTo Include="Admin.Host.Tests" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Admin.Assistant\Admin.Assistant.csproj" />
-    <ProjectReference Include="..\Admin.Assistant.Anthropic\Admin.Assistant.Anthropic.csproj" />
+    <PackageReference Include="Common.Assistant" />
+    <PackageReference Include="Common.Assistant.Anthropic" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,9 +1,11 @@
 /**
- * The assistant's protocol (AI assistant design §5), mirrored from its owner, the C# records under
- * `src/Admin.Assistant/Protocol/` (`Resources.cs`, `Events.cs`) and `src/Admin.Assistant/Tools/ToolDescriptor.cs`.
- * The golden files beside them pin the JSON, and `protocol.spec.ts` reads them, so this mirror cannot drift from its
- * owner. Framework-free: nothing here imports Angular. Every code below is a code, never a sentence; a client words it
- * in its own language (§5.4).
+ * The assistant's protocol (AI assistant design §5), mirrored from its owner, the C# records of blueprint-backend's
+ * `Common.Assistant` package under `src/BuildingBlocks/Common.Assistant/Protocol/` (`Resources.cs`, `Events.cs`) and
+ * `Tools/ToolDescriptor.cs`, at the version `Directory.Packages.props` pins. The golden files beside them pin the JSON
+ * and are copied, cited, to `./golden/`: `protocol.spec.ts` reads the copy, the host's `ProtocolGoldenTests` hold it
+ * to the pinned package, and the drift job (`AssistantProtocolDriftTests`) to the owner's files. Framework-free:
+ * nothing here imports Angular. Every code below is a code, never a sentence; a client words it in its own language
+ * (§5.4).
  */
 
 /** Why the assistant is not enabled. */

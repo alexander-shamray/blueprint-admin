@@ -2,7 +2,6 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
-using Admin.Assistant.Tools;
 using Admin.Host.Api;
 using Admin.Host.Broker;
 using Admin.Host.Compose;
@@ -12,6 +11,7 @@ using Admin.Host.Runbooks;
 using Admin.Host.Stack;
 using Admin.Host.Telemetry;
 using Admin.Host.Trace;
+using Common.Assistant.Tools;
 
 namespace Admin.Host.Assistant;
 

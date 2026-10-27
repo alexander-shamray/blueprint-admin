@@ -1,8 +1,8 @@
-using Admin.Assistant;
-using Admin.Assistant.Providers;
-using Admin.Assistant.Tools;
 using Admin.Host.Config;
 using Admin.Host.Fakes;
+using Common.Assistant;
+using Common.Assistant.Providers;
+using Common.Assistant.Tools;
 
 namespace Admin.Host.Assistant;
 
@@ -10,9 +10,10 @@ namespace Admin.Host.Assistant;
 /// The assistant as this host runs it (AI assistant design §9.1), decided once at startup. Off, no provider is built,
 /// no credential is resolved and <see cref="Core"/> is null, so only the status route is mapped. On, the core is built
 /// with the admin's caller, policy, redactor, read tools and instructions. A wrong provider value, a limit that is not positive or a
-/// key under <c>Admin:Assistant</c> named like a secret fails startup with the key to fix.
+/// key under <c>Admin:Assistant</c> named like a secret fails startup with the key to fix. It owns the core, whose idle
+/// sweep runs on a timer, and disposes it with the host.
 /// </summary>
-public sealed partial class AssistantRuntime
+public sealed partial class AssistantRuntime : IDisposable
 {
     /// <summary>The console has no login (spec §8), so it has exactly one caller (§5.2).</summary>
     public static readonly Caller Operator = new("operator", "Operator");
@@ -69,6 +70,8 @@ public sealed partial class AssistantRuntime
             AssistantOptions.Anthropic => (new AssistantCore(anthropic(), tools, ToolPolicy.ReadOnly, redactor(), Instructions, limits, time, Logged), options.Assistant.Model.Trim()),
             _ => ((AssistantCore?)null, ""),
         };
+
+        ServerTools = Core is null ? null : new ServerToolCalls(Core, tools, ToolPolicy.ReadOnly);
     }
 
     /// <summary>
@@ -96,6 +99,11 @@ public sealed partial class AssistantRuntime
 
     /// <summary>Null when the assistant is off: then nothing of it exists but the status route's answer.</summary>
     public AssistantCore? Core { get; }
+
+    /// <summary>The MCP route's tools (§12), over the same sources the core has; null when the assistant is off.</summary>
+    public ServerToolCalls? ServerTools { get; }
+
+    public void Dispose() => Core?.Dispose();
 
     private static void RefuseSecretNamedKeys(IConfigurationSection section)
     {

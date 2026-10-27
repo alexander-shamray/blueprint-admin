@@ -1,9 +1,9 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
-using Admin.Assistant.Protocol;
-using Admin.Assistant.Providers;
-using Admin.Assistant.Tools;
 using Admin.Host.Fakes;
+using Common.Assistant.Protocol;
+using Common.Assistant.Providers;
+using Common.Assistant.Tools;
 using Shouldly;
 
 namespace Admin.Host.Tests.Fakes;

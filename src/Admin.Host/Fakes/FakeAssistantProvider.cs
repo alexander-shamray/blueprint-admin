@@ -1,10 +1,10 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Admin.Assistant;
-using Admin.Assistant.Protocol;
-using Admin.Assistant.Providers;
 using Admin.Host.Assistant;
+using Common.Assistant;
+using Common.Assistant.Protocol;
+using Common.Assistant.Providers;
 
 namespace Admin.Host.Fakes;
 

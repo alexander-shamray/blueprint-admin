@@ -1,15 +1,18 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Admin.Assistant.Protocol;
-using Admin.Assistant.Tools;
+using Admin.Host.Config;
+using Common.Assistant.Protocol;
+using Common.Assistant.Tools;
 using Shouldly;
 
-namespace Admin.Assistant.Tests;
+namespace Admin.Host.Tests.Assistant;
 
 /// <summary>
-/// The protocol's JSON, pinned (AI assistant design §14, "Protocol"): every body and event the core writes serializes to
-/// its golden file under <c>src/Admin.Assistant/Protocol/golden/</c>, and every body it reads deserializes from one. The
-/// SPA's <c>protocol.spec.ts</c> reads the same files, so the C# owner and the TypeScript mirror cannot drift.
+/// The protocol's JSON, pinned (AI assistant design §14, "Protocol"): every body and event the pinned
+/// <c>Common.Assistant</c> package writes serializes to its golden file, and every body it reads deserializes from one.
+/// The files are the SPA's copy under <c>src/Admin.Web/src/app/assistant/golden/</c>, which <c>protocol.spec.ts</c>
+/// reads, so the package this host runs and the TypeScript mirror cannot drift apart; <c>AssistantProtocolDriftTests</c>
+/// holds the copy to its owner's files.
 /// </summary>
 public sealed class ProtocolGoldenTests
 {
@@ -49,7 +52,7 @@ public sealed class ProtocolGoldenTests
 
     [Theory]
     [MemberData(nameof(Written))]
-    public void What_the_core_writes_is_its_golden_file(string golden, object value)
+    public void What_the_package_writes_is_its_golden_file(string golden, object value)
     {
         JsonNode written = JsonSerializer.SerializeToNode(value, value.GetType(), Web)!;
 
@@ -93,23 +96,21 @@ public sealed class ProtocolGoldenTests
     {
         string[] pinned = [.. Written.Select(row => (string)((ITheoryDataRow)row).GetData()[0]!), "open-conversation", "start-turn", "client-tool-result"];
 
-        Directory.GetFiles(GoldenDirectory(), "*.json").Select(Path.GetFileNameWithoutExtension).Order(StringComparer.Ordinal)
+        Directory.GetFiles(GoldenDirectory, "*.json").Select(Path.GetFileNameWithoutExtension).Order(StringComparer.Ordinal)
             .ShouldBe(pinned.Order(StringComparer.Ordinal));
     }
 
-    private static T Read<T>(string golden) => JsonSerializer.Deserialize<T>(File.ReadAllText(Path.Combine(GoldenDirectory(), $"{golden}.json")), Web)!;
+    /// <summary>The SPA's copy of the package's golden files.</summary>
+    internal static string GoldenDirectory { get; } = Path.Combine(
+        RepoRoot.Find(AppContext.BaseDirectory) ?? throw new InvalidOperationException("BlueprintAdmin.slnx not found above the test output."),
+        "src",
+        "Admin.Web",
+        "src",
+        "app",
+        "assistant",
+        "golden");
 
-    private static JsonNode Golden(string golden) => JsonNode.Parse(File.ReadAllText(Path.Combine(GoldenDirectory(), $"{golden}.json")))!;
+    private static T Read<T>(string golden) => JsonSerializer.Deserialize<T>(File.ReadAllText(Path.Combine(GoldenDirectory, $"{golden}.json")), Web)!;
 
-    private static string GoldenDirectory()
-    {
-        string root = AppContext.BaseDirectory;
-
-        while (!File.Exists(Path.Combine(root, "BlueprintAdmin.slnx")))
-        {
-            root = Path.GetDirectoryName(root) ?? throw new InvalidOperationException("BlueprintAdmin.slnx not found above the test output.");
-        }
-
-        return Path.Combine(root, "src", "Admin.Assistant", "Protocol", "golden");
-    }
+    private static JsonNode Golden(string golden) => JsonNode.Parse(File.ReadAllText(Path.Combine(GoldenDirectory, $"{golden}.json")))!;
 }

@@ -273,7 +273,7 @@ builder.Services.AddSingleton(sp => new AssistantRuntime(
     sp.GetRequiredService<IOptions<AdminOptions>>().Value,
     sp.GetRequiredService<IConfiguration>(),
     () => new FakeAssistantProvider(),
-    () => AnthropicProviderFactory.Create(sp.GetRequiredService<IOptions<AdminOptions>>().Value.Assistant, sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<ILoggerFactory>().CreateLogger("Admin.Assistant.Anthropic")),
+    () => AnthropicProviderFactory.Create(sp.GetRequiredService<IOptions<AdminOptions>>().Value.Assistant, sp.GetRequiredService<TimeProvider>()),
     () => new AdminRedactor(sp.GetRequiredService<IOptions<AdminOptions>>().Value, sp.GetRequiredService<DeadLetterService>()),
     () => [sp.GetRequiredService<AdminReadTools>(), sp.GetRequiredService<PlatformReadTools>()],
     sp.GetRequiredService<TimeProvider>(),
