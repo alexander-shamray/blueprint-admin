@@ -46,7 +46,10 @@ ROOTED = re.compile(r"^(?:[A-Za-z]:|[\\/])")
 # so the gate does too. The import-path names are defence in depth: whatever a
 # property imports must have a <Project> root, and so is read anyway.
 REFUSED_PROPERTY = re.compile(
-    r"^(?:ManagePackageVersionsCentrally|CentralPackage|Restore|NuGet"
+    # After any leading underscores: MSBuild's own inputs to these names
+    # (_DirectoryPackagesPropsBasePath, _DirectoryBuildTargetsFile) redirect
+    # them as surely as the names do.
+    r"^_*(?:ManagePackageVersionsCentrally|CentralPackage|Restore|NuGet"
     r"|DirectoryPackagesProps|ImportDirectoryPackagesProps"
     r"|CustomBefore|CustomAfter|DirectoryBuild|ImportDirectoryBuild|ImportProjectExtension"
     r"|MSBuildProjectExtensionsPath|MSBuildExtensionsPath|MSBuildUserExtensionsPath"
@@ -56,7 +59,11 @@ REFUSED_PROPERTY = re.compile(
     # And by suffix: the SDK names the version of each pack it downloads
     # <Something>PackageVersion (WindowsSdkPackageVersion,
     # MicrosoftNETCoreAppRefPackageVersion and their kin).
-    r"|^.*PackageVersion$",
+    r"|^.*PackageVersion$"
+    # And any property named for a file it imports, the way the common
+    # targets name theirs (CodeAnalysisTargets, ReportingServicesTargets):
+    # none of the lists above has to have heard of it.
+    r"|^.*(?:Targets|Props)$",
     re.IGNORECASE,
 )
 
@@ -160,6 +167,22 @@ def _project_entries(path: str, what: str, value: str, known: frozenset[str] | N
     return problems
 
 
+def _outside(path: str, name: str, value: str) -> list[str]:
+    """A literal property value naming a place outside the repository: a
+    drive, a root, a share, or a climb past the top. Whatever imports it,
+    the gate never reads it. A value built from other properties ($(...))
+    cannot be resolved here, which the README names as the residual."""
+    problems = []
+    base = posixpath.dirname(path)
+    for piece in (p.strip() for p in value.split(";")):
+        if not piece or "$(" in piece:
+            continue
+        climbed = posixpath.normpath(posixpath.join(base, piece.replace("\\", "/")))
+        if ROOTED.match(piece) or climbed == ".." or climbed.startswith("../"):
+            problems.append(f"{path}: <{name}> names {piece!r}, outside the repository")
+    return problems
+
+
 def check(path: str, data: bytes | str, *, pin: bool = False, known: frozenset[str] | None = None) -> list[str]:
     """Every problem in one MSBuild file; empty is a pass. The pin file is
     read the same way, save for the items and settings it exists to hold."""
@@ -179,6 +202,8 @@ def check(path: str, data: bytes | str, *, pin: bool = False, known: frozenset[s
                     continue
                 if REFUSED_PROPERTY.match(_name(child)):
                     problems.append(f"{path}: <{_name(child)}> is the pin file's, NuGet's or an import's setting")
+                elif _name(child):
+                    problems += _outside(path, _name(child), child.text or "")
         # An item definition gives every item of its type default metadata,
         # so a Version there reaches each PackageReference in the project.
         elif tag in ("itemgroup", "itemdefinitiongroup"):
@@ -192,6 +217,12 @@ def check(path: str, data: bytes | str, *, pin: bool = False, known: frozenset[s
                     problems += _project_entries(path, "ProjectReference", _attrs(item).get("include", ""), known)
                 elif name == "packagereference":
                     attrs = _attrs(item)
+                    # An item transform copies another item's metadata, its
+                    # Version or VersionOverride among them, unread.
+                    for key in ("include", "update"):
+                        if any(mark in attrs.get(key, "") for mark in ("@(", "%(")):
+                            problems.append(f"{path}: PackageReference {key} {attrs[key]!r} copies "
+                                            "another item's metadata, which the gate never reads")
                     chosen = sorted(VERSION_METADATA & attrs.keys())
                     chosen += [_name(c) for c in item if _name(c) in VERSION_METADATA]
                     package = attrs.get("include") or attrs.get("update") or "?"
@@ -249,6 +280,10 @@ def check_other(path: str, data: bytes | str, known: frozenset[str] | None = Non
                 for p in _project_entries(path, "Project", _attrs(element).get("path", ""), known)]
     if base == FEED_FILE and path != FEED_FILE:
         return [f"{path}: a second feed list beside the root {FEED_FILE}"]
+    # NuGet takes the nearest pin file above a project, so one below the root
+    # is the pin file for its subtree, central management off included.
+    if base == PIN_FILE.lower() and path != PIN_FILE:
+        return [f"{path}: a second pin file beside the root {PIN_FILE}"]
     if base == SDK_FILE:
         try:
             pins = json.loads(data)
@@ -261,7 +296,7 @@ def check_other(path: str, data: bytes | str, known: frozenset[str] | None = Non
 
 def _is_other(path: str) -> bool:
     base = PurePosixPath(path).name.lower()
-    return base.endswith((".rsp", ".sln", ".slnx")) or base in (FEED_FILE, SDK_FILE)
+    return base.endswith((".rsp", ".sln", ".slnx")) or base in (FEED_FILE, SDK_FILE, PIN_FILE.lower())
 
 
 class _Root(Exception):

@@ -166,6 +166,38 @@ class AProjectFile(unittest.TestCase):
                 refused(self, project(f'<ItemGroup><ProjectReference Include="{include}" /></ItemGroup>'),
                         "rooted outside")
 
+    def test_msbuilds_underscored_inputs_and_named_imports_fail(self) -> None:
+        # R1 and R3 of round 5: the underscored inputs NuGet and the SDK build
+        # the pin file's and Directory.Build's paths from, and a property
+        # named for a file the common targets import.
+        for name in ("_DirectoryPackagesPropsBasePath", "_DirectoryPackagesPropsFile",
+                     "_DirectoryBuildTargetsBasePath", "__RestoreSources",
+                     "CodeAnalysisTargets", "ReportingServicesTargets", "SomeImportProps"):
+            with self.subTest(name=name):
+                refused(self, project(f"<PropertyGroup><{name}>x</{name}></PropertyGroup>"), f"<{name}>")
+
+    def test_a_literal_value_outside_the_repository_fails(self) -> None:
+        # R3 of round 5: a drive, a root, a share or a climb past the top.
+        for value in ("C:\\elsewhere", "\\\\host\\share\\x", "/etc/x", "..\\..\\..\\x", "ok;..\\..\\..\\x"):
+            with self.subTest(value=value):
+                refused(self, project(f"<PropertyGroup><OutputPath>{value}</OutputPath></PropertyGroup>"),
+                        "outside the repository")
+
+    def test_a_value_inside_or_built_from_properties_passes(self) -> None:
+        # The built one is the residual the README names.
+        for value in ("..\\shared", "bin", "$(MSBuildThisFileDirectory)artifacts", "$(NoWarn);CA1707",
+                      "https://example.com/x", "net10.0"):
+            with self.subTest(value=value):
+                self.assertEqual(check("src/X/X.csproj", project(
+                    f"<PropertyGroup><OutputPath>{value}</OutputPath></PropertyGroup>")), [])
+
+    def test_a_package_reference_copying_another_items_metadata_fails(self) -> None:
+        # R4 of round 5: the transform carries Version across unread.
+        for attr, value in (("Include", "@(Pinned)"), ("Update", "%(Identity)")):
+            with self.subTest(attr=attr):
+                refused(self, project(f'<ItemGroup><PackageReference {attr}="{value}" /></ItemGroup>'),
+                        "copies another item's metadata")
+
     def test_a_property_set_inside_a_choose_is_read(self) -> None:
         refused(self, project("<Choose><When Condition=\"true\"><PropertyGroup>"
                               "<RestoreSources>https://x</RestoreSources></PropertyGroup></When></Choose>"),
@@ -270,6 +302,12 @@ class OtherRestoreInputs(unittest.TestCase):
         self.assertTrue(check_other("BlueprintAdmin.slnx", good, frozenset({"src/b/b.csproj"})))
         self.assertTrue(check_other("BlueprintAdmin.slnx", good.replace("src/A", "../out"),
                                     frozenset({"src/a/a.csproj"})))
+
+    def test_a_pin_file_below_the_root_fails(self) -> None:
+        # R2 of round 5: NuGet takes the nearest one above a project.
+        for path in ("src/Admin.Host/Directory.Packages.props", "tests/directory.packages.props"):
+            with self.subTest(path=path):
+                self.assertTrue(check_other(path, "<Project />"))
 
     def test_only_the_root_feed_list_passes(self) -> None:
         self.assertEqual(check_other("nuget.config", "<configuration />"), [])
