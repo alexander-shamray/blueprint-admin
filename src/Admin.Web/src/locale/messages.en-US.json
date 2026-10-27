@@ -651,7 +651,7 @@
     "1485923720887715174": "Back to the normal profile",
     "5191538883402310838": "\n        The backend's stress run: distinct signed-in users walk the shop's typical visit through the gateway, more of\n        them at each step, until the platform gives out. It first brings the stack up with the stress override, which\n        recreates the gateway and both workers, and takes about twenty minutes. It reports and never passes or fails. A\n        local run says which part gives out first and roughly where, never what production can carry.\n      ",
     "79742062749296883": "Run stress",
-    "5623454902319768360": "Ends the step going at once; during k6 no summary is written, so there is no knee and no verdict",
+    "4088490877989201140": "Ends the step going at once, and during k6 no summary is written, so there is no knee and no verdict; once k6 has ended it waits for the summary first",
     "1743948887355700825": "Stop stress",
     "6308744691981147951": "Show stress output",
     "7435657876583438815": "Workstation",

@@ -504,7 +504,10 @@ knee are theirs, and the blocks are held to the document word for word
   it is offered once the run has ended or been stopped.
 - **Stop and the report.** Stop kills the step's process tree as the load
   run's does: during k6 no summary is written, so the run names no knee and is
-  neither a pass nor a fail, and the stack stays on the override. A finished
+  neither a pass nor a fail, and the stack stays on the override. Once k6 has
+  printed its exit, the block still waits on the sampler and runs
+  summarise.mjs, so a Stop then waits for the summary, for
+  `StressRunService.SummaryGrace` at most, before it ends the block after all. A finished
   run's job carries `summary.md`, read from the clone's `artifacts/stress/`,
   and its last line says what the document says k6's code means, with the
   `Knee:` line summarise.mjs printed. A stress run reports and never passes or

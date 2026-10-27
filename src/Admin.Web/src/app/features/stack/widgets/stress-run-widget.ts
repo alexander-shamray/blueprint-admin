@@ -93,7 +93,7 @@ import { ComposeRun, StackFeed } from '../stack-feed';
         [disabled]="!running()"
         (click)="stop()"
         i18n-title
-        title="Ends the step going at once; during k6 no summary is written, so there is no knee and no verdict"
+        title="Ends the step going at once, and during k6 no summary is written, so there is no knee and no verdict; once k6 has ended it waits for the summary first"
         i18n
         >Stop stress</button
       >
