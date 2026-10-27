@@ -123,6 +123,9 @@ test('an Assistant widget on a page is a view of the same conversation as the pa
 
   const widget = page.getByRole('article', { name: 'Assistant', exact: true });
   await expect(widget).toBeVisible();
+  // The add is saved to the host's one workspace, which every later test reads: wait for it here, and take the widget
+  // off again at the end, so what the next test meets does not turn on how fast this save was.
+  await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
   await expect(widget.getByText('Answers from: fake')).toBeVisible();
   // The widget has no panel to close, and the frame carries its title.
   await expect(widget.getByRole('button', { name: 'Close the assistant' })).toHaveCount(0);
@@ -133,6 +136,13 @@ test('an Assistant widget on a page is a view of the same conversation as the pa
   await expect(page).toHaveURL(/\/logs$/);
   // The side panel shows what was asked in the widget: one conversation, two views of it.
   await expect(page.locator('app-assistant-panel .operator').last()).toHaveText('where are the logs?');
+
+  await page.goto('/stack');
+  await page.getByRole('button', { name: 'Edit layout' }).click();
+  await page.getByRole('button', { name: 'Remove Assistant' }).click();
+  await page.getByRole('button', { name: 'Done' }).click();
+  await expect(page.getByRole('article', { name: 'Assistant', exact: true })).toHaveCount(0);
+  await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
 });
 
 test('asked in Russian, it opens Logs and names it as labelled', async ({ page }) => {
