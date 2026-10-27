@@ -149,6 +149,35 @@ describe('OutputPane', () => {
     expect(fixture.nativeElement.querySelector('pre .stderr')?.textContent).toContain('Container sql-1');
   });
 
+  it('turns an image’s row failed on the failure line, though that line stays in the log', () => {
+    const events = new Subject<JobEvent>();
+    const sse = { follow: vi.fn(() => events.asObservable()) };
+    TestBed.configureTestingModule({ imports: [OutputPane], providers: [{ provide: SseClient, useValue: sse }] });
+    const fixture = TestBed.createComponent(OutputPane);
+    fixture.componentRef.setInput('jobId', 'up');
+    fixture.componentRef.setInput('composeStderr', true);
+    fixture.detectChanges();
+
+    const image = 'Image grafana/otel-lgtm:0.37.0';
+    events.next({
+      kind: 'line',
+      line: { sequence: 0, at: '', stream: 'Stderr', text: JSON.stringify({ id: image, text: 'Pulling' }) },
+    });
+    events.next({
+      kind: 'line',
+      line: {
+        sequence: 1,
+        at: '',
+        stream: 'Stderr',
+        text: JSON.stringify({ id: image, status: 'Error', text: 'Error' }),
+      },
+    });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('section.pull tbody tr .state')?.textContent).toBe('failed');
+    expect(fixture.nativeElement.querySelector('pre .stderr')?.textContent).toContain('grafana/otel-lgtm:0.37.0');
+  });
+
   it('fills its parent only when asked, so a tile scrolls its log rather than itself', () => {
     TestBed.configureTestingModule({
       imports: [OutputPane],
