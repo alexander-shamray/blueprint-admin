@@ -3,6 +3,19 @@
 # docs/change-locality.md section 6 says why the two gates skip a Dependabot
 # pull request.
 version: 2
+
+# The assistant's core and adapter restore from blueprint-backend's packages on
+# GitHub Packages (nuget.config's blueprint-backend source), which asks for a
+# token even for a public package. Dependabot runs outside the workflows, so
+# the job token ci.yml hands the restore never reaches it, and GitHub Packages
+# takes only a personal access token here. PACKAGES_READ_TOKEN is a Dependabot
+# secret holding a classic token with read:packages and nothing else.
+registries:
+  blueprint-backend:
+    type: nuget-feed
+    url: https://nuget.pkg.github.com/alexander-shamray/index.json
+    token: ${{secrets.PACKAGES_READ_TOKEN}}
+
 updates:
   - package-ecosystem: npm
     directory: /src/Admin.Web
@@ -19,6 +32,8 @@ updates:
   # the root.
   - package-ecosystem: nuget
     directory: /
+    registries:
+      - blueprint-backend
     schedule:
       interval: weekly
 
