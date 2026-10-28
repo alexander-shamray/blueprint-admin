@@ -98,7 +98,8 @@ builder.Services.AddSingleton<DeviceReads>();
 builder.Services.AddSingleton<LoadRunService>();
 
 // The stress run leaves the stack idle for run-locally.md's minute after its up. FakePlatform has no live stack to quieten
-// and the smoke cannot wait a minute, so it waits none, and its summary is the hand-written one rather than a file in the clone.
+// and the smoke cannot wait a minute, so it waits none, its summary is the hand-written one rather than a file in the clone, and
+// the services its override changes are the ones its ps labels, since the smoke has no clone to read the override from.
 builder.Services.AddSingleton(sp => new StressRunService(
     sp.GetRequiredService<IProcessRunner>(),
     sp.GetRequiredService<ComposeGate>(),
@@ -107,7 +108,8 @@ builder.Services.AddSingleton(sp => new StressRunService(
     sp.GetRequiredService<IOptions<AdminOptions>>(),
     sp.GetRequiredService<TimeProvider>(),
     sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform ? TimeSpan.Zero : StressRunService.Settle,
-    sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform ? StressRunRecordings.ReadSummary : StressRunService.ReadSummary));
+    sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform ? StressRunRecordings.ReadSummary : StressRunService.ReadSummary,
+    sp.GetRequiredService<IOptions<AdminOptions>>().Value.FakePlatform ? _ => FakePlatformScripts.OverrideServices : StressRunService.ReadOverride));
 
 // The lease's journal lives beside the baselines under Admin:DataDir, where a restart finds it. FakePlatform writes nothing a
 // real incident could need, and each fake host takes a journal of its own, so two test hosts never read each other's lease.

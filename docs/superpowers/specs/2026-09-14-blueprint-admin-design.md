@@ -569,11 +569,21 @@ knee are theirs, and the blocks are held to the document word for word
 - **The override is never invisible.** Compose labels each container with the
   files it was created from, so whether the stack runs on the override is read
   from `ps` with the stack, never remembered: each service the override
-  changes (`StressRunService.OverrideServices`, held to the override file)
-  whose running container was created with it is named on the Stack screen,
-  in the stress widget and above the Stack controls, whoever left it so. The
-  way back is the section's last block, which is the command Up already runs;
-  it is offered once the run has ended or been stopped.
+  changes whose running container was created with it is named on the Stack
+  screen, in the stress widget and above the Stack controls, whoever left it
+  so. Which services the override changes is read from the clone's override
+  file on every read (`StressRunService.ServicesOf`), never copied, so a
+  service the backend adds to it is named the moment it is there; FakePlatform,
+  with no clone, reads the ones its own `ps` labels. The way back is the
+  section's last block, which is the command Up already runs; it is offered
+  once the run has ended or been stopped, and its title names what it
+  recreates.
+- **An Up that recreates the observability container says so first.** When
+  `StressRunService.ObservabilityService` is among the services on the
+  override, the Up that is the way back recreates it, and since it keeps no
+  volume of its own the run's metrics, logs and traces go with it; the stress
+  widget and the Stack controls say so beside their Ups
+  (`StackView.UpRecreatesObservability`). It does not stop the Up.
 - **A port the override takes away is not a service down.** The override may
   reset a service's host port (blueprint-backend ADR-158 does Ordering's, which
   runs as replicas the gateway reaches by name), so its §2.2 URL has nothing

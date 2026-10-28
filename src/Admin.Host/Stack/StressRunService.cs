@@ -15,9 +15,9 @@ namespace Admin.Host.Stack;
 /// theirs, and the step shown is read off k6's own progress lines (<see cref="StressStaircase"/>). Unlike the load run, the job
 /// claims <see cref="ComposeGate"/>, because its first block recreates the gateway, both workers and Ordering; the way back to the normal
 /// profile is the section's last block, which is the command the Stack's Up runs (<see cref="ComposeService.Up"/>), and the
-/// override is read from the containers rather than remembered (<see cref="OverrideServices"/>).
+/// override is read from the containers rather than remembered (<see cref="OnOverride"/>).
 /// </summary>
-public sealed class StressRunService(
+public sealed partial class StressRunService(
     IProcessRunner runner,
     ComposeGate composeGate,
     JobRegistry registry,
@@ -25,7 +25,8 @@ public sealed class StressRunService(
     IOptions<AdminOptions> options,
     TimeProvider time,
     TimeSpan settle,
-    Func<string, IReadOnlyList<string>?> readSummary)
+    Func<string, IReadOnlyList<string>?> readSummary,
+    Func<string, IReadOnlyList<string>> readOverride)
 {
     /// <summary>The stress-run job's name in the job list, followed by its steps' names, and the kind a refusal names.</summary>
     public const string Kind = "stress-run";
@@ -38,11 +39,11 @@ public sealed class StressRunService(
     public const string OverrideFile = "docker-compose.stress.yml";
 
     /// <summary>
-    /// Owner: blueprint-backend <c>deploy/compose/docker-compose.stress.yml</c>, the services it changes (copied, held by
-    /// <c>StressRunDriftTests</c>). Both ups recreate each of them, so the files a running one was created from say which
-    /// profile it runs; a service the override leaves alone keeps whatever label the last up that recreated it wrote.
+    /// Owner: blueprint-backend <c>deploy/compose/infrastructure.yml</c>, the service that runs <c>grafana/otel-lgtm</c> and
+    /// mounts no volume of its own (held by <c>StressRunDriftTests</c>): recreating it loses the Prometheus, Loki and Tempo
+    /// data it holds, so an Up that recreates it says so first.
     /// </summary>
-    public static readonly IReadOnlyList<string> OverrideServices = ["gateway", "shipping-worker", "notifications-worker", "ordering-api"];
+    public const string ObservabilityService = "grafana";
 
     /// <summary>Owner: run-locally.md, "Stress run (k6)": "Leave the stack idle for a minute afterwards".</summary>
     public static readonly TimeSpan Settle = TimeSpan.FromMinutes(1);
@@ -154,13 +155,39 @@ public sealed class StressRunService(
         current is { } run ? new StressRunView(JobSummary.Of(run), staircase?.Current, knee, choice, ended, firstToGiveUp) : null;
 
     /// <summary>
-    /// The services of <see cref="OverrideServices"/> whose running container was created with <see cref="OverrideFile"/>: what
-    /// the Stack screen shows while the stack runs with the override, and empty when it does not. In the order
-    /// <see cref="OverrideServices"/> gives, so the screen's line does not move with the order <c>ps</c> prints.
+    /// The services the override changes whose running container was created with <see cref="OverrideFile"/>: what the Stack
+    /// screen shows while the stack runs with the override, and empty when it does not. Both ups recreate each service the
+    /// override changes, so the files a running one was created from say which profile it runs; a service the override leaves
+    /// alone keeps whatever label the last up that recreated it wrote, so only the ones it changes are read. Which those are is
+    /// read from the clone's override file on every call (<see cref="ServicesOf"/>), never copied, so a service the backend
+    /// adds to it is read the moment it is there; in the file's order, so the screen's line does not move with the order
+    /// <c>ps</c> prints.
     /// </summary>
-    public static IReadOnlyList<string> OnOverride(ComposeStatus backend) =>
-        [.. OverrideServices.Where(name => backend.Services.Any(s =>
+    public IReadOnlyList<string> OnOverride(ComposeStatus backend) =>
+        [.. readOverride(Path.Combine(paths.BackendDir, "deploy", "compose", OverrideFile)).Where(name => backend.Services.Any(s =>
             s.Service == name && s.State == "running" && s.ConfigFiles?.Contains(OverrideFile) == true))];
+
+    /// <summary>The services the override file at <paramref name="path"/> changes, or none when there is no file there.</summary>
+    public static IReadOnlyList<string> ReadOverride(string path) => File.Exists(path) ? ServicesOf(File.ReadAllText(path)) : [];
+
+    /// <summary>
+    /// The keys of an override's top-level <c>services:</c> map, in the file's order: each line under it indented two spaces
+    /// that names a key and nothing more, until the next top-level key. Compose names a service by that key alone, so the
+    /// override changes exactly these.
+    /// </summary>
+    public static IReadOnlyList<string> ServicesOf(string overlay)
+    {
+        string[] lines = overlay.ReplaceLineEndings("\n").Split('\n');
+        int services = Array.FindIndex(lines, l => TopLevelKey().Match(l) is { Success: true } m && m.Groups[1].Value == "services");
+
+        return services < 0
+            ? []
+            : [.. lines.Skip(services + 1)
+                .TakeWhile(l => !TopLevelKey().IsMatch(l))
+                .Select(l => ServiceKey().Match(l))
+                .Where(m => m.Success)
+                .Select(m => m.Groups[1].Value)];
+    }
 
     /// <summary>
     /// The probe's rows, each surface that did not answer marked unpublished when its service runs on the override and none of
@@ -169,17 +196,13 @@ public sealed class StressRunService(
     /// profile lasts, and that is not the service being down. Read from <c>ps</c> as <see cref="OnOverride"/> is, so which
     /// service loses its port is not copied here.
     /// </summary>
-    public static IReadOnlyList<Reachability> MarkUnpublished(ComposeStatus backend, IReadOnlyList<Reachability> probed)
-    {
-        IReadOnlyList<string> overridden = OnOverride(backend);
-
-        return [.. probed.Select(r => !r.Up
+    public static IReadOnlyList<Reachability> MarkUnpublished(ComposeStatus backend, IReadOnlyList<string> overridden, IReadOnlyList<Reachability> probed) =>
+        [.. probed.Select(r => !r.Up
             && PlatformServices.All.FirstOrDefault(s => s.Name == r.Name) is { } service
             && overridden.Contains(service.ComposeService)
             && backend.Services.Where(s => s.Service == service.ComposeService).All(s => s.PublishedPorts.Count == 0)
                 ? r with { Published = false }
                 : r)];
-    }
 
     /// <summary>
     /// Starts a run under <see cref="ComposeGate"/>, or returns the one still going: its up recreates services, so it races an Up,
@@ -444,6 +467,14 @@ public sealed class StressRunService(
 
     /// <summary>A block as the document prints it, one line to a newline, whatever line ending this file was checked out with.</summary>
     private static string Block(string text) => text.ReplaceLineEndings("\n");
+
+    /// <summary>A key at the start of a line, the next character not a space: a top-level key of a Compose file.</summary>
+    [GeneratedRegex(@"^([A-Za-z0-9_][A-Za-z0-9._-]*):(\s|$)")]
+    private static partial Regex TopLevelKey();
+
+    /// <summary>A key indented two spaces with nothing after it but a comment: a service under <c>services:</c>.</summary>
+    [GeneratedRegex(@"^  ([A-Za-z0-9][A-Za-z0-9._-]*):\s*(#.*)?$")]
+    private static partial Regex ServiceKey();
 }
 
 /// <summary>

@@ -26,6 +26,7 @@ const stack = {
   loadRun: null,
   stressRun: null,
   stressOverride: [],
+  upRecreatesObservability: false,
 };
 
 const signal = (service: string) => ({

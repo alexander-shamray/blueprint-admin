@@ -53,6 +53,8 @@ export class StackControlsWidget {
   readonly lease = computed(() => this.feed.stack.value()?.lease ?? null);
   /** The services running on the stress override, read from their containers with the stack, so a stack left on it says so. */
   readonly stressOverride = computed(() => this.feed.stack.value()?.stressOverride ?? []);
+  /** Whether Up would recreate the observability container the override changed, wiping what the run left in it. */
+  readonly upRecreatesObservability = computed(() => this.feed.stack.value()?.upRecreatesObservability ?? false);
   readonly restoring = signal(false);
   readonly restoreError = signal<string | null>(null);
 

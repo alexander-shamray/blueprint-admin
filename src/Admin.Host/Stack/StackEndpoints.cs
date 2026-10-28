@@ -213,15 +213,17 @@ public static partial class StackEndpoints
         Task<IReadOnlyList<Reachability>> reachability = probe.ProbeAsync(cancellationToken);
         JobSummary? lastRun = loadRun.Current is { } run ? JobSummary.Of(run) : null;
         ComposeStatus services = await backend;
+        IReadOnlyList<string> overridden = stressRun.OnOverride(services);
 
         return new StackView(
             services,
             frontend.Status(),
-            StressRunService.MarkUnpublished(services, await reachability),
+            StressRunService.MarkUnpublished(services, overridden, await reachability),
             leases.Current,
             lastRun,
             stressRun.View(),
-            StressRunService.OnOverride(services));
+            overridden,
+            overridden.Contains(StressRunService.ObservabilityService));
     }
 
     [GeneratedRegex(@"\A[A-Za-z0-9][A-Za-z0-9._-]*\z")]
@@ -231,6 +233,8 @@ public static partial class StackEndpoints
 /// <summary>
 /// <see cref="StressOverride"/> names each service running on the stress override (<see cref="StressRunService.OnOverride"/>),
 /// empty when none is: the Stack screen says so while any is, since a stack left on it has its gateway's rate limits lifted.
+/// <see cref="UpRecreatesObservability"/> holds when <see cref="StressRunService.ObservabilityService"/> is among them, so the
+/// Up that is the way back recreates it and the run's metrics, logs and traces go with it: the screen says so beside the Up.
 /// </summary>
 public sealed record StackView(
     ComposeStatus Backend,
@@ -239,7 +243,8 @@ public sealed record StackView(
     LeaseView? Lease,
     JobSummary? LoadRun,
     StressRunView? StressRun,
-    IReadOnlyList<string> StressOverride);
+    IReadOnlyList<string> StressOverride,
+    bool UpRecreatesObservability);
 
 /// <summary>One or more changes from <see cref="ScenarioControl.Table"/>, how long to hold them, and a label the Stack screen shows beside them.</summary>
 public sealed record LeaseRequest(string[]? Changes, int HoldSeconds, string? Label);

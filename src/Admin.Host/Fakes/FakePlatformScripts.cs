@@ -216,7 +216,7 @@ public static partial class FakePlatformScripts
     /// </summary>
     public static IReadOnlyList<string> ComposePsLines(bool stressOverride) =>
         stressOverride
-            ? [.. ComposePsLines().Select(l => StressRunService.OverrideServices.Any(s => l.Contains($"\"Service\":\"{s}\"", StringComparison.Ordinal))
+            ? [.. ComposePsLines().Select(l => OverrideServices.Any(s => l.Contains($"\"Service\":\"{s}\"", StringComparison.Ordinal))
                 ? ConfigFile().Replace(l, m => $"{m.Value},{m.Groups["dir"].Value}{StressRunService.OverrideFile}", 1)
                 : l)
                 .SelectMany(l => l.Contains($"\"Service\":\"{UnpublishedOnOverride}\"", StringComparison.Ordinal)
@@ -225,6 +225,14 @@ public static partial class FakePlatformScripts
                         .Replace("container-number=1", $"container-number={n}", StringComparison.Ordinal))
                     : [l])]
             : ComposePsLines();
+
+    /// <summary>
+    /// Owner: blueprint-backend <c>deploy/compose/docker-compose.stress.yml</c>, services it changes (copied, held by
+    /// <c>StressRunDriftTests</c> to be among the ones it names): the ones the fake's <c>ps</c> labels with the override, and
+    /// the ones the host reads as changed under FakePlatform, which has no clone to read the file from. A subset, so a service
+    /// the backend adds to the override fails no test and leaves the fake as it was.
+    /// </summary>
+    public static readonly IReadOnlyList<string> OverrideServices = ["gateway", "shipping-worker", "notifications-worker", UnpublishedOnOverride];
 
     /// <summary>
     /// Owner: blueprint-backend <c>deploy/compose/docker-compose.stress.yml</c>, the service whose <c>ports</c> it resets and

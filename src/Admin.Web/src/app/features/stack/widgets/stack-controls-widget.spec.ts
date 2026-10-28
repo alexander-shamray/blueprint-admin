@@ -14,6 +14,7 @@ const stack = {
   loadRun: null,
   stressRun: null,
   stressOverride: [],
+  upRecreatesObservability: false,
 };
 
 describe('StackControlsWidget', () => {
