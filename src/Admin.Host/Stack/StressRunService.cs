@@ -71,6 +71,9 @@ public sealed class StressRunService(
     /// <summary>The step that waits out <see cref="Settle"/>: no block, so it starts no process.</summary>
     internal const string SettleStep = "settle";
 
+    /// <summary>The marker the summary's lines are copied under once k6 has ended; a step of the job after the last block's.</summary>
+    internal const string SummaryStep = "summary";
+
     /// <summary>The steps in the document's order, each a block but the settle; the k6 read and Prometheus's are the load run's.</summary>
     public static readonly IReadOnlyList<LoadRunStep> Steps =
     [
@@ -157,7 +160,7 @@ public sealed class StressRunService(
     {
         lock (gate)
         {
-            Job run = registry.Create(new ProcessSpec(Kind, [.. Steps.Select(s => s.Name)], paths.BackendDir));
+            Job run = registry.Create(new ProcessSpec(Kind, [.. Steps.Select(s => s.Name)], paths.BackendDir) { Steps = [.. Steps.Select(s => s.Name), SummaryStep] });
             current = run;
             staircase = null;
             knee = null;
@@ -330,7 +333,7 @@ public sealed class StressRunService(
         {
             if (SummaryPath(summary) is { } path && readSummary(path) is { } lines)
             {
-                run.Append(OutputStream.Stdout, $"== summary ({summary})");
+                run.Append(OutputStream.Stdout, $"== {SummaryStep} ({summary})");
 
                 foreach (string line in lines)
                 {

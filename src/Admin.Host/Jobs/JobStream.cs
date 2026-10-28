@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 namespace Admin.Host.Jobs;
 
 /// <summary>
-/// One job as Server-Sent Events: a <c>line</c> event per output line whose
+/// One job as Server-Sent Events: for a job with <see cref="ProcessSpec.Steps"/>, one <c>steps</c> event first; a <c>line</c> event per output line whose
 /// id is the sequence number, so a reconnecting EventSource resumes from the
 /// ring buffer, then one <c>exited</c> event. A reader that fell too far
 /// behind gets the end of the response without <c>exited</c>: the browser
@@ -26,6 +26,12 @@ public static class JobStream
     public static async IAsyncEnumerable<SseItem<string>> Events(Job job, long afterSequence, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         long last = afterSequence;
+
+        // Without an id, so a reconnecting EventSource's Last-Event-ID still names the last line.
+        if (job.Spec.Steps is { } steps)
+        {
+            yield return new SseItem<string>(JsonSerializer.Serialize(new { steps }, Options), "steps");
+        }
 
         await foreach (OutputLine line in job.Follow(afterSequence, cancellationToken))
         {

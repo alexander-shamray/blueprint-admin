@@ -95,7 +95,10 @@ public sealed class ProjectionRebuildService(
     private Job Begin(RebuildMode mode)
     {
         string[] arguments = mode == RebuildMode.Rebuild ? ["--reset"] : [];
-        Job job = registry.Create(new ProcessSpec("bff-replay", arguments, paths.BackendDir));
+        Job job = registry.Create(new ProcessSpec("bff-replay", arguments, paths.BackendDir)
+        {
+            Steps = mode == RebuildMode.Rebuild ? [$"stop {BffService}", "bff-replay", $"start {BffService}"] : ["bff-replay"],
+        });
         _ = Task.Run(() => RunAsync(job, mode));
 
         return job;
