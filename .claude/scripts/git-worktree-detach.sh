@@ -74,7 +74,8 @@ links=$(git ls-tree -r "$commit" | awk '$1 == "120000" { print $4 }' | head -5)
 # this loop, and a refused one is left standing for inspection and named. Its
 # output goes to stderr, because stdout is this script's return value. Then
 # `git worktree prune` forgets every registration of this repository whose
-# directory has gone, a sweep's or a PR's, and deletes no file. The residual is
+# directory has gone, a sweep's or a PR's, deleting each one's admin directory
+# under .git/worktrees/ but no working-tree file. The residual is
 # docs/harness-boundaries.md's, `A sweep's start drops`.
 registered=$(git worktree list --porcelain)
 while IFS= read -r line; do
