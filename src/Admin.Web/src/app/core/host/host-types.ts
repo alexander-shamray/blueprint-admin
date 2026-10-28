@@ -126,6 +126,7 @@ export interface StackView {
 /** Where k6 is on the stress run's staircase, read off its own progress lines (`StressStaircase`). */
 export interface StressProgress {
   users: number;
+  /** k6's ceiling, the run's cap: a level doubles on past its own steps, so it is a limit and not the staircase's top. */
   maxUsers: number;
   elapsed: string;
   /** Holds seen so far; 0 during the first ramp. */
@@ -133,11 +134,33 @@ export interface StressProgress {
   holding: boolean;
 }
 
+/** What a stress run is asked for: run-locally.md's `STRESS_PROFILE` and `STRESS_STOP` (`StressChoice`). */
+export interface StressChoice {
+  level: StressLevel;
+  stop: StressStop;
+}
+
+/** Owner: `StressChoice.Levels` on the host, which holds them to run-locally.md. */
+export const STRESS_LEVELS = ['low', 'medium', 'high', 'xhigh'] as const;
+export type StressLevel = (typeof STRESS_LEVELS)[number];
+
+/** Owner: `StressChoice.Stops` on the host; the first is the default rule. */
+export const STRESS_STOPS = ['knee', 'errors'] as const;
+export type StressStop = (typeof STRESS_STOPS)[number];
+
+export const DEFAULT_STRESS_CHOICE: StressChoice = { level: 'low', stop: 'knee' };
+
 export interface StressRunView {
   job: JobSummary;
   progress: StressProgress | null;
   /** summarise.mjs's `Knee:` line, once the run has named it. */
   knee: string | null;
+  /** What the run was asked for; null only for a view the host built without one. */
+  choice: StressChoice | null;
+  /** summarise.mjs's `Ended:` line: why the run ended, with its step, level and stop rule. */
+  ended: string | null;
+  /** summarise.mjs's `First to give up:` line: the service that crossed first, or `none named`. */
+  firstToGiveUp: string | null;
 }
 
 export interface ConfigView {

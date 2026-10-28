@@ -111,10 +111,11 @@ describe('HostClient', () => {
   });
 
   it('starts a stress run', () => {
-    client.stressRunStart().subscribe();
+    client.stressRunStart({ level: 'high', stop: 'errors' }).subscribe();
 
     const req = http.expectOne('/api/stack/stress-run');
     expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ level: 'high', stop: 'errors' });
     req.flush({
       id: 'stress-1',
       commandLine: 'stress-run k6 up settle prometheus run',

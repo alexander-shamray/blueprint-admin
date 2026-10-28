@@ -862,8 +862,65 @@ describe('StackWidgets', () => {
       q('button.stress-run-start')!.click();
       fixture.detectChanges();
 
-      expect(host.stressRunStart).toHaveBeenCalled();
+      expect(host.stressRunStart).toHaveBeenCalledWith({ level: 'low', stop: 'knee' });
       expect(shownJob()).toBe('stress-1');
+    });
+
+    describe('the level and the stop rule', () => {
+      const KEY = 'blueprint-admin.stress-choice';
+      const choose = (fixture: { detectChanges: () => void }, select: HTMLSelectElement, value: string) => {
+        select.value = value;
+        select.dispatchEvent(new Event('change'));
+        fixture.detectChanges();
+      };
+
+      const list = (q: (selector: string) => unknown, selector: string) => q(selector) as HTMLSelectElement;
+
+      afterEach(() => localStorage.removeItem(KEY));
+
+      it('offers the four levels and the two rules, the lowest and the first knee chosen', async () => {
+        const { fixture, q } = await render();
+        await vi.advanceTimersByTimeAsync(0);
+        fixture.detectChanges();
+
+        const level = list(q, 'select.stress-run-level');
+        const stop = list(q, 'select.stress-run-stop-rule');
+        expect([...level.options].map((o) => o.value)).toEqual(['low', 'medium', 'high', 'xhigh']);
+        expect([...stop.options].map((o) => text(o))).toEqual(['at the first knee', 'at real errors']);
+        expect(level.value).toBe('low');
+        expect(stop.value).toBe('knee');
+      });
+
+      it('passes the choice to the run and remembers it for the next visit', async () => {
+        const { fixture, q } = await render();
+        await vi.advanceTimersByTimeAsync(0);
+        fixture.detectChanges();
+
+        choose(fixture, list(q, 'select.stress-run-level'), 'xhigh');
+        choose(fixture, list(q, 'select.stress-run-stop-rule'), 'errors');
+        q('button.stress-run-start')!.click();
+
+        expect(host.stressRunStart).toHaveBeenCalledWith({ level: 'xhigh', stop: 'errors' });
+        expect(JSON.parse(localStorage.getItem(KEY)!)).toEqual({ level: 'xhigh', stop: 'errors' });
+      });
+
+      it('starts from what was remembered, and from the default where that is no longer a value the host names', async () => {
+        localStorage.setItem(KEY, JSON.stringify({ level: 'high', stop: 'sometimes' }));
+        const { fixture, q } = await render();
+        await vi.advanceTimersByTimeAsync(0);
+        fixture.detectChanges();
+
+        expect(list(q, 'select.stress-run-level').value).toBe('high');
+        expect(list(q, 'select.stress-run-stop-rule').value).toBe('knee');
+      });
+
+      it('leaves the lists alone while a run goes', async () => {
+        host.stack.mockReturnValue(of({ ...stack, stressRun: { job: stressJob, progress: null, knee: null } }));
+        const { q } = await render();
+
+        expect(list(q, 'select.stress-run-level').disabled).toBe(true);
+        expect(list(q, 'select.stress-run-stop-rule').disabled).toBe(true);
+      });
     });
 
     it('says what comes before k6, then the step k6 holds or ramps through', async () => {
@@ -879,17 +936,17 @@ describe('StackWidgets', () => {
       at({ users: 4, maxUsers: 400, elapsed: '04.0s', step: 0, holding: false });
       await vi.advanceTimersByTimeAsync(3000);
       fixture.detectChanges();
-      expect(text(q('.stress-run-step'))).toBe('Ramping to the first step: 4 of 400 users, 04.0s in');
+      expect(text(q('.stress-run-step'))).toBe('Ramping to the first step: 4 users, 04.0s in');
 
       at({ users: 50, maxUsers: 400, elapsed: '4m10.0s', step: 2, holding: true });
       await vi.advanceTimersByTimeAsync(3000);
       fixture.detectChanges();
-      expect(text(q('.stress-run-step'))).toBe('Step 2: holding at 50 of 400 users, 4m10.0s in');
+      expect(text(q('.stress-run-step'))).toBe('Step 2: holding at 50 users, 4m10.0s in');
 
       at({ users: 74, maxUsers: 400, elapsed: '6m50.0s', step: 2, holding: false });
       await vi.advanceTimersByTimeAsync(3000);
       fixture.detectChanges();
-      expect(text(q('.stress-run-step'))).toBe('Ramping on from step 2: 74 of 400 users, 6m50.0s in');
+      expect(text(q('.stress-run-step'))).toBe('Ramping on from step 2: 74 users, 6m50.0s in');
       expect(q('button.stress-run-start')!.disabled).toBe(true);
       expect(q('button.stress-run-stop')!.disabled).toBe(false);
 
@@ -911,11 +968,35 @@ describe('StackWidgets', () => {
 
       expect(text(q('.stress-run-status'))).toBe('k6 run stress.js exited 99');
       expect(text(q('.stress-run-knee'))).toBe(knee);
+      expect(q('.stress-run-first')).toBeNull();
+      expect(q('.stress-run-ended')).toBeNull();
       expect(q('.stress-run-step')).toBeNull();
 
       q('button.stress-run-output')!.click();
 
       expect(shownJob()).toBe('stress-1');
+    });
+
+    it('shows why the run ended and the service that gave up first, under the knee', async () => {
+      const firstToGiveUp = 'First to give up: Ordering.Api: 5xx 3.2% | sql: 4 deadlocks';
+      const ended = 'Ended: knee at step 2 (6400 VUs); level high, stop rule knee';
+      host.stack.mockReturnValue(
+        of({
+          ...stack,
+          stressRun: {
+            job: { ...stressJob, state: 'Exited', exitCode: 108 },
+            progress: null,
+            knee: 'Knee: step 2 (6400 VUs): failures',
+            firstToGiveUp,
+            ended,
+          },
+        }),
+      );
+      const { q } = await render();
+
+      expect(text(q('.stress-run-status'))).toBe('k6 run stress.js exited 108');
+      expect(text(q('.stress-run-first'))).toBe(firstToGiveUp);
+      expect(text(q('.stress-run-ended'))).toBe(ended);
     });
 
     it('says the stack runs on the override in the widget and in the Stack controls, and offers the way back once the run ends', async () => {
