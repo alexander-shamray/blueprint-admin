@@ -366,7 +366,11 @@ as out of scope, never filed.
   registered whose name is sweep-shaped and whose directory is over a day old
   to `git-worktree-drop.sh`, then runs `git worktree prune`, which forgets
   every registration of the repository whose directory has gone, a sweep's or
-  a PR's, and deletes no file. The candidates come from git's own list, never
+  a PR's. It deletes no working-tree file, but it does delete each pruned
+  registration's admin directory under `.git/worktrees/` (its HEAD, index and
+  per-worktree refs), so a PR worktree whose directory was moved, or sits on a
+  volume not mounted, loses that state; `git worktree lock` is what exempts
+  one. The candidates come from git's own list, never
   from the tree or an argument, so a poisoned finding cannot add one; the drop
   helper's shape checks and git's refusal of a tree holding anything modified
   or untracked still decide, so a worktree a refused teardown left for
