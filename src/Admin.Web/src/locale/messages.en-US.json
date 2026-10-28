@@ -674,7 +674,7 @@
     "1633677003850421810": "\n            Up also recreates the observability container, Grafana with its Prometheus, Loki and Tempo, which keeps no\n            volume of its own, so this run's metrics, logs and traces go with it. Read what you need in Grafana first.\n          ",
     "1045272087899025381": "Up without the override, run-locally.md's way back: it recreates {$INTERPOLATION} with every default",
     "1485923720887715174": "Back to the normal profile",
-    "1348357676252244521": "\n        The backend's stress run: distinct signed-in users walk the shop's typical visit through the gateway, more of\n        them at each step, until the platform gives out. It first brings the stack up with the stress override, which\n        recreates the gateway, both workers and Ordering, and takes about twenty minutes. It reports and never passes or\n        fails. A local run says which part gives out first and roughly where, never what production can carry.\n      ",
+    "8710603017678333915": "\n        The backend's stress run: distinct signed-in users walk the shop's typical visit through the gateway, more of\n        them at each step, until the platform gives out. It first brings the stack up with the stress override, which\n        recreates each service the override changes, and takes about twenty minutes. It reports and never passes or\n        fails. A local run says which part gives out first and roughly where, never what production can carry.\n      ",
     "3733215288982610673": "Level",
     "3361562144991146572": "How hard the run pushes: each level is a staircase of users the backend defines",
     "8190056382696112760": "At the first knee, or at real errors: to see what falls over, not only what slows down",
