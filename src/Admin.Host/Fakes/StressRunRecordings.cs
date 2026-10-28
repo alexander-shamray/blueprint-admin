@@ -28,6 +28,9 @@ internal static partial class StressRunRecordings
         ["xhigh"] = ([12800, 25600], 1),
     };
 
+    /// <summary>The users the fake golden-signal strip scales to at most: its own scale, the old default staircase's top, whatever level runs.</summary>
+    private const int StripCeiling = 400;
+
     /// <summary>What k6 prints as the most VUs when <c>STRESS_MAX_USERS</c> is not set: the owner's default cap.</summary>
     private const int DefaultCap = 12800;
 
@@ -139,7 +142,7 @@ internal static partial class StressRunRecordings
                     int users = i <= RampTicks ? from + ((target - from) * i / RampTicks) : target;
                     tick++;
                     complete += users / 2;
-                    stack.StressUsers = Math.Min(users, 400);
+                    stack.StressUsers = Math.Min(users, StripCeiling);
 
                     yield return $"running ({Elapsed(tick)}), {users:000}/{plan.Cap} VUs, {complete} complete and 0 interrupted iterations";
                     yield return $"journey   [ {Percent(tick, planned),3}% ] {users:000}/{plan.Cap} VUs  {Elapsed(tick)}/{Elapsed(planned)}";
