@@ -264,6 +264,18 @@ describe('OutputPane', () => {
       expect(fixture.nativeElement.querySelector('pre')?.textContent).toContain('Container commerce-sql-1  Error');
     });
 
+    it('keeps the steps it has read when a reconnect names them again', () => {
+      const events = new Subject<JobEvent>();
+      const fixture = open(events);
+
+      events.next({ kind: 'steps', steps: ['k6', 'run'] });
+      send(events, 0, '== k6 (job j-1)', 'Stdout');
+      events.next({ kind: 'steps', steps: ['k6', 'run'] });
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelector('.steps li')?.className).toBe('running');
+    });
+
     it('shows no tables for a job that names no container and pulls no image', () => {
       const events = new Subject<JobEvent>();
       const fixture = open(events);
