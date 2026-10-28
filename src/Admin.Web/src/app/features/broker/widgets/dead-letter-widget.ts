@@ -4,9 +4,11 @@ import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { HostClient } from '../../../core/host/host-client';
 import { DeadLetterInspection, DeadLetterVerb } from '../../../core/host/host-types';
+import { OutputLine } from '../../../core/host/host-types';
 import { OutputPane } from '../../../shared/output-pane/output-pane';
 import { TraceLink } from '../../trace/trace-follow';
 import { BrokerFeed, describeError } from '../broker-feed';
+import { MoveOutcome, MoveResult, MoveResultReader, isDryRun } from './dead-letter-results';
 
 /**
  * The dead-letter workbench (widget-workspace spec §5.2): a parked queue's messages, read with the backend's tool,
@@ -141,7 +143,40 @@ import { BrokerFeed, describeError } from '../broker-feed';
           }
         }
         @if (jobId(); as id) {
-          <app-output-pane [jobId]="id" />
+          <app-output-pane [jobId]="id" [claims]="claims" (claimed)="read($event)">
+            <ng-container tables>
+              @if (results(); as rows) {
+                <section class="move-results" aria-label="Messages" i18n-aria-label>
+                  <p class="move-summary">{{ resultSummary(rows) }}</p>
+                  <table class="move-table">
+                    <thead class="visually-hidden">
+                      <tr>
+                        <th scope="col" i18n="a message result table's column">Message</th>
+                        <th scope="col" i18n="a message result table's column">Outcome</th>
+                        <th scope="col" i18n="a message result table's column">Destination</th>
+                        <th scope="col" i18n="a message result table's column">Note</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (row of rows; track $index) {
+                        <tr [class]="outcomeClass(row)">
+                          <th scope="row" class="message-id" [title]="row.messageId">{{ row.messageId }}</th>
+                          <td class="outcome">{{ outcomeLabel(row.outcome) }}</td>
+                          <td class="destination">{{ row.destination }}</td>
+                          <td class="note">{{ row.reason }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                  @if (hasNotFound(rows)) {
+                    <p class="move-hint" i18n>
+                      A message that was not found may have been moved or have expired since the queue was read.
+                    </p>
+                  }
+                </section>
+              }
+            </ng-container>
+          </app-output-pane>
         }
       } @else {
         <p class="empty">
@@ -171,6 +206,76 @@ export class DeadLetterWidget {
     verb === 'replay'
       ? $localize`Type ${word}:word: to replay for real`
       : $localize`Type ${word}:word: to discard for real`;
+
+  /** The tool's per-message lines of the followed job, as the table above its log; null until it has printed one. */
+  readonly results = computed(() => {
+    const rows = this.resultRows();
+    return rows.length === 0 ? null : rows;
+  });
+  private readonly resultRows = signal<MoveResult[]>([]);
+  private reader = new MoveResultReader();
+  /** The pane keeps these lines behind its toggle and hands each to `read`. */
+  readonly claims = MoveResultReader.claims;
+
+  read(line: OutputLine): void {
+    if (this.reader.add(line.text)) this.resultRows.set(this.reader.snapshot());
+  }
+
+  /** The job the pane follows: a new one starts with no rows, as the pane starts with no lines. */
+  private follow(id: string | null): void {
+    this.reader = new MoveResultReader();
+    this.resultRows.set([]);
+    this.jobId.set(id);
+  }
+
+  /** How many messages came out each way, then whether it was a dry run. */
+  resultSummary(rows: readonly MoveResult[]): string {
+    const counts = new Map<MoveOutcome, number>();
+    for (const row of rows) counts.set(row.outcome, (counts.get(row.outcome) ?? 0) + 1);
+    const outcomes = [...counts].map(([outcome, n]) => `${n} ${this.outcomeLabel(outcome)}`).join(', ');
+    return isDryRun(rows) ? $localize`${outcomes}:outcomes: (dry run)` : outcomes;
+  }
+
+  outcomeLabel(outcome: MoveOutcome): string {
+    switch (outcome) {
+      case 'replayed':
+        return $localize`:a message's outcome:replayed`;
+      case 'discarded':
+        return $localize`:a message's outcome:discarded`;
+      case 'would-replay':
+        return $localize`:a message's outcome:would be replayed`;
+      case 'would-discard':
+        return $localize`:a message's outcome:would be discarded`;
+      case 'would-refuse':
+        return $localize`:a message's outcome:would be refused`;
+      case 'refused':
+        return $localize`:a message's outcome:refused`;
+      case 'failed':
+        return $localize`:a message's outcome:failed`;
+      case 'not-found':
+        return $localize`:a message's outcome:not found`;
+      case 'not-reached':
+        return $localize`:a message's outcome:not reached`;
+    }
+  }
+
+  outcomeClass(row: MoveResult): string {
+    switch (row.outcome) {
+      case 'not-found':
+        return 'not-found';
+      case 'refused':
+      case 'would-refuse':
+      case 'failed':
+      case 'not-reached':
+        return 'problem';
+      default:
+        return 'moved-row';
+    }
+  }
+
+  hasNotFound(rows: readonly MoveResult[]): boolean {
+    return rows.some((r) => r.outcome === 'not-found');
+  }
 
   /** The parked queue this widget's config names, if any. */
   readonly queueOfConfig = computed(() => {
@@ -229,7 +334,7 @@ export class DeadLetterWidget {
     this.armed.set(null);
     this.executeText.set('');
     this.error.set(null);
-    this.jobId.set(null);
+    this.follow(null);
     this.moved.set(null);
     this.inspecting.set(true);
     this.host
@@ -256,7 +361,7 @@ export class DeadLetterWidget {
     this.inspection.set(null);
     this.armed.set(null);
     this.executeText.set('');
-    this.jobId.set(null);
+    this.follow(null);
     this.moved.set(null);
   }
 
@@ -272,7 +377,7 @@ export class DeadLetterWidget {
       next: (job) => {
         if (listing !== this.generation) return;
         this.error.set(null);
-        this.jobId.set(job.id);
+        this.follow(job.id);
         this.armed.set({ messageId, verb });
       },
       error: (e: unknown) => this.error.set(describeError(e)),
@@ -293,7 +398,7 @@ export class DeadLetterWidget {
         if (listing !== this.generation) return;
         this.generation++;
         this.error.set(null);
-        this.jobId.set(job.id);
+        this.follow(job.id);
         this.armed.set(null);
         this.inspection.set(null);
         this.moved.set(armed.messageId);
