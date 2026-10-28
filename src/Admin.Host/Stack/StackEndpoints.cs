@@ -223,7 +223,7 @@ public static partial class StackEndpoints
             lastRun,
             stressRun.View(),
             overridden,
-            overridden.Contains(StressRunService.ObservabilityService));
+            StressRunService.UpRecreatesObservability(overridden));
     }
 
     [GeneratedRegex(@"\A[A-Za-z0-9][A-Za-z0-9._-]*\z")]

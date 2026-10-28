@@ -336,11 +336,13 @@ public sealed class StressRunServiceTests : IAsyncDisposable
         StressRunService service = Service();
 
         service.OnOverride(backend).ShouldBe(["gateway"]);
+        StressRunService.UpRecreatesObservability(service.OnOverride(backend)).ShouldBeFalse();
 
         overrideServices = ["gateway", StressRunService.ObservabilityService];
 
         service.OnOverride(backend).ShouldBe(["gateway", StressRunService.ObservabilityService]);
-        overridesRead.ShouldBe([.. Enumerable.Repeat(Path.Combine(Paths.BackendDir, "deploy", "compose", StressRunService.OverrideFile), 2)]);
+        StressRunService.UpRecreatesObservability(service.OnOverride(backend)).ShouldBeTrue();
+        overridesRead.ShouldBe([.. Enumerable.Repeat(Path.Combine(Paths.BackendDir, "deploy", "compose", StressRunService.OverrideFile), 4)]);
     }
 
     [Fact]

@@ -168,6 +168,12 @@ public sealed partial class StressRunService(
             s.Service == name && s.State == "running" && s.ConfigFiles?.Contains(OverrideFile) == true))];
 
     /// <summary>
+    /// Whether the Up that is the way back recreates <see cref="ObservabilityService"/>, given what <see cref="OnOverride"/>
+    /// read: it is among the services running on the override.
+    /// </summary>
+    public static bool UpRecreatesObservability(IReadOnlyList<string> overridden) => overridden.Contains(ObservabilityService);
+
+    /// <summary>
     /// The services the override file at <paramref name="path"/> changes, or none when there is no file there or it cannot be
     /// read: every Stack poll reads it, and a backend checkout replacing or locking it for a moment must not fail the read.
     /// </summary>
