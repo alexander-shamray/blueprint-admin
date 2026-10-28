@@ -6,6 +6,7 @@ py -3.12 .github/pin-gate/evaluate.py from the root of a tree that has not been 
 
 from __future__ import annotations
 
+import itertools
 import json
 import os
 import re
@@ -74,11 +75,21 @@ def _parser() -> expat.XMLParserType:
 
 def _unescaped(path: str) -> str:
     """The banner's path as the file system has it. The banner is an XML
-    comment, which may not hold `--`, so MSBuild writes `__` for it; the
-    mapping is applied only where the escaped path is absent and the
-    unescaped one exists, so a real `__` path is never rewritten."""
-    mapped = path.replace("__", "--")
-    return mapped if mapped != path and not os.path.exists(path) and os.path.exists(mapped) else path
+    comment, which may not hold `--`, so MSBuild writes `__` for it. Each `__`
+    is either that escape or a real `__`, so every reading is tried (up to
+    eight of them) and the one that exists is taken. Where the path as written
+    exists, or more than one reading does, it is left as written and fails
+    closed: a real `__` directory is never rewritten and no guess favours the
+    path that passes."""
+    parts = path.split("__")
+    if len(parts) == 1 or len(parts) > 9 or os.path.exists(path):
+        return path
+    found = [
+        candidate
+        for choice in itertools.product(("--", "__"), repeat=len(parts) - 1)
+        if os.path.exists(candidate := parts[0] + "".join(sep + part for sep, part in zip(choice, parts[1:])))
+    ]
+    return found[0] if len(found) == 1 else path
 
 
 def imports(preprocessed: str) -> list[str]:

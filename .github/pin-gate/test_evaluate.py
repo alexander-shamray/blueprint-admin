@@ -64,6 +64,14 @@ class TheImportBanners(unittest.TestCase):
             escaped = str(real).replace("--", "__")
             self.assertEqual(imports(preprocessed(escaped)), [str(real)])
 
+    def test_a_real_double_underscore_beside_an_escaped_hyphen_pair_is_read_back(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            real = Path(tmp, "a__b--c", "x.props")
+            real.parent.mkdir()
+            real.write_text("<Project/>")
+            escaped = str(real).replace("--", "__")
+            self.assertEqual(imports(preprocessed(escaped)), [str(real)])
+
     def test_a_double_underscore_path_that_exists_is_left_alone(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             real = Path(tmp, "a__b", "x.props")
