@@ -72,10 +72,11 @@ class Sweep:
             )
         )
 
-    def slices(self, kind, *extra):
+    def slices(self, kind, *extra, **env):
         return run_bash(
             'cd "$R" && bash "$SLICES" "$KIND" "$W" $EXTRA',
             R=self.repo, SLICES=str(SLICES), KIND=kind, W=self.path, EXTRA=" ".join(extra),
+            **env,
         )
 
 
@@ -179,9 +180,12 @@ class ASmallRepository(unittest.TestCase):
         git(self.repo, 'commit -q -m "the small tree"')
 
     def commit(self, relative, text):
+        # Bytes, so a sample holds exactly the line ends and characters it
+        # names: write_text turns a newline into CRLF on Windows and encodes in
+        # the locale's code page.
         target = Path(self.repo, relative)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(text)
+        target.write_bytes(text.encode("utf-8"))
         git(self.repo, f'add -- "{relative}"')
         git(self.repo, f'commit -q -m "add {relative}"')
         return git(self.repo, "rev-parse HEAD")
@@ -270,6 +274,34 @@ class ASmallRepository(unittest.TestCase):
         self.assertEqual(1, head["counts"]["record"])
         # The fenced line alone; the nested fence's body is its three inner lines.
         self.assertEqual(len("var x = 1;\n") + len("```\ninner\n```\n"), sum(s[2] for s in slices))
+
+    def test_a_sample_counts_bytes_and_one_without_a_last_newline_ends_where_it_should(self):
+        # Every sample is read from one stream, so a blob ends at a byte count:
+        # a miscount there runs one sample into the next, and a character count
+        # undercounts the e-acute.
+        self.assertEqual(0, self.mark("bug", git(self.repo, "rev-parse HEAD")).returncode)
+        self.commit("docs/a.md", "```\n\u00e9\n```")
+        self.commit("docs/b.md", "```\nab\n```\n")
+        result = Sweep(self, self.repo).slices("bug")
+        self.assertEqual(0, result.returncode, result.stderr)
+        head, slices = parse(result.stdout)
+        self.assertEqual(["docs/a.md", "docs/b.md"], sorted(listed(slices)))
+        self.assertEqual(len("\u00e9\n".encode("utf-8")) + len("ab\n"), sum(s[2] for s in slices))
+
+    def test_every_sample_is_read_through_one_cat_file(self):
+        # A pipeline per sample is a fork per file, most of a run under MSYS
+        # (#577); the count is the subject, since a timing passes on a fast host.
+        self.assertEqual(0, self.mark("bug", git(self.repo, "rev-parse HEAD")).returncode)
+        for k in range(5):
+            self.commit(f"docs/s{k}.md", "```sh\nx\n```\n")
+        handle, trace = tempfile.mkstemp(prefix="sweepslices-trace-")
+        os.close(handle)
+        self.addCleanup(os.remove, trace)
+        result = Sweep(self, self.repo).slices("bug", GIT_TRACE=trace)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(5, len(listed(parse(result.stdout)[1])))
+        calls = re.findall(r"trace: built-in: git cat-file", Path(trace).read_text(encoding="utf-8"))
+        self.assertEqual(1, len(calls))
 
     def test_the_lockfile_is_owned_and_counted_not_read(self):
         self.commit(
@@ -417,6 +449,23 @@ class ASmallRepository(unittest.TestCase):
             R=self.repo, DROP=str(DROP), W=sweep.path,
         )
         self.assertEqual("gone", dropped.stdout.strip(), dropped.stderr)
+
+
+class ThePerFileLoop(unittest.TestCase):
+    """The loop over the tracked files starts no process of its own."""
+
+    def test_the_loop_holds_no_command_substitution(self):
+        # Under MSYS each command substitution is an emulated fork, and one per
+        # tracked file is most of a run over a real tree (#321, #577); the loop
+        # is read, since a fork is invisible in the output.
+        source = SLICES.read_text(encoding="utf-8")
+        start = source.index("while IFS= read -r -d '' rec; do")
+        end = source.index('\ndone < "$out/.tree"\n', start)
+        code = [line for line in source[start:end].splitlines() if not line.lstrip().startswith("#")]
+        body = "\n".join(code)
+        self.assertIn("row_of", body, "the loop pattern stopped matching")
+        self.assertNotRegex(body, r"\$\((?!\()", "a command substitution; `$((` is arithmetic")
+        self.assertNotIn("`", body)
 
 
 class TheTablesNameTheHelpersRows(unittest.TestCase):
