@@ -40,7 +40,9 @@ test.describe('the stress run', () => {
     await expect(k6.locator('.pull-summary')).toHaveText(/^k6 · [\d:]+ of 17:30 · \d+ of 400 users/, {
       timeout: 40_000,
     });
-    await expect(k6.locator('.staircase [aria-current="step"]')).toHaveText(/^(Ramp|Hold) [1-5]$/, { timeout: 40_000 });
+    await expect(k6.locator('.staircase [aria-current="step"]')).toHaveText(/^\s*(Ramp|Hold) [1-5]\s*$/, {
+      timeout: 40_000,
+    });
 
     await expect(stress.locator('.stress-run-status')).toHaveText(/exited 99/, { timeout: 40_000 });
     await expect(stress.locator('.stress-run-knee')).toHaveText(/^Knee: step 4 \(200 VUs\): failures/);
