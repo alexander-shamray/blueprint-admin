@@ -543,9 +543,27 @@ knee are theirs, and the blocks are held to the document word for word
   second Run answers with the run going. One k6 run at a time: a load run
   going refuses a stress run, and the other way round, since each would read
   the other's traffic as its own.
+- **The level and the stop rule are the operator's.** Two lists beside Run
+  choose how hard the run pushes, `low`, `medium`, `high` or `xhigh`
+  (default `low`), and when it stops: at the first knee (default) or at real
+  errors, "to see what falls over, not only what slows down". The choice
+  reaches the run block as the variables `run-locally.md` sets before it,
+  `STRESS_PROFILE` and `STRESS_STOP`, and `STRESS_MAX_USERS` where `xhigh`
+  needs a larger cap, through `ProcessSpec.Environment`; the block's command
+  line stays the document's, and the levels' steps are the backend's, never
+  copied (`StressChoice`, held to the document by `StressRunDriftTests`).
+  `POST /stack/stress-run` takes the two as an optional JSON body and refuses a
+  value the backend does not name before anything starts. This browser
+  remembers the lists between runs. The run says what it was asked for
+  (`StressRunView.Choice`), and, once summarise.mjs has printed them, why it
+  ended (`Ended:`) and the service that crossed first (`First to give up:`),
+  each shown under the knee and read by the assistant and the MCP route with
+  the stack.
 - **The step is k6's.** The step shown is read off k6's once-a-second
-  progress lines (`StressStaircase`): the users running and the most it will
-  run, and a count held for `StressStaircase.HoldTicks` lines is a hold, each
+  progress lines (`StressStaircase`): the users running, with k6's ceiling,
+  which is the run's cap and not the staircase's top since a level doubles on
+  past its own steps, so the screen shows the users as the target the run is at.
+  A count held for `StressStaircase.HoldTicks` lines is a hold, each
   new one the next step. The staircase can be changed from the environment, so
   it is not copied. The golden-signal strip stays live beside it.
 - **The override is never invisible.** Compose labels each container with the
@@ -563,14 +581,17 @@ knee are theirs, and the blocks are held to the document word for word
   summarise.mjs, so a Stop then waits for the summary, for
   `StressRunService.SummaryGrace` at most, before it ends the block after all. A finished
   run's job carries `summary.md`, read from the clone's `artifacts/stress/`,
-  and its last line says what the document says k6's code means, with the
-  `Knee:` line summarise.mjs printed. A stress run reports and never passes or
+  and its last line says what the document says k6's code means (0, 108 for a
+  stop at the knee, 99 for one at errors, 107 for a refusal), with the `Knee:`,
+  `Ended:` and `First to give up:` lines summarise.mjs printed. A stress run reports and never passes or
   fails, and the screen says a local run names which part gives out first,
   never what production can carry.
 - **FakePlatform.** The up puts the fake stack on the override, which the fake
-  `ps` labels; the run block prints a cut staircase a line at a time, breaking
-  at its fourth step, and the strip's series rise with its users
-  (`StressRunRecordings`, `FakeStack.StressUsers`). No live run has been
+  `ps` labels; the run block prints the chosen level's staircase cut short a
+  line at a time, ending as the stop rule says (at its break under the knee
+  rule, past its last step under errors, and `xhigh` on the generator), and the
+  strip's series rise with its users (`StressRunRecordings`,
+  `FakeStack.StressUsers`). No live run has been
   recorded, so that output is written by hand to the scripts' shapes.
 
 ### 5.4 FrontendSupervisor
@@ -880,7 +901,7 @@ All under `/api`, JSON, loopback only.
 |---|---|
 | `GET /stack` | `ServiceStatus[]`, the frontend job summary, reachability of every HTTP surface of §2.2 that answers a readiness route, the object store and image edge among them, the Scenario lease in force or null, the last load run's job summary or null, the last stress run with its step and knee or null, and the services running on the stress override (§5.3) |
 | `POST /stack/load-run`, `POST /stack/load-run/stop` | §5.3's load run: returns the job, or the run still going, 409 while a stress run goes; and Stop, 200 with the run once it has ended, 409 when none is going |
-| `POST /stack/stress-run`, `POST /stack/stress-run/stop` | §5.3's stress run: returns the job, or the run still going, 409 naming the claim in the way while another `ComposeGate` job, a lease or the load run goes; and Stop, 200 with the run once it has ended, 409 when none is going |
+| `POST /stack/stress-run`, `POST /stack/stress-run/stop` | §5.3's stress run, with an optional body `{level, stop}` (400 for a value the backend does not name): returns the job, or the run still going, 409 naming the claim in the way while another `ComposeGate` job, a lease or the load run goes; and Stop, 200 with the run once it has ended, 409 when none is going |
 | `GET /stack/lease`, `POST /stack/lease`, `POST /stack/lease/changes`, `POST /stack/lease/restore` | §5.3's lease: the table of changes with the lease held; body `{ changes, holdSeconds, label }`, which waits for each change in turn and answers the lease held, 400 for no change, a change twice or off the table, or a hold off its bounds, 409 naming the claim that refuses it (another lease, or another `ComposeGate` job), 500 for a change that failed, which it has already undone or says it could not; and the restore, 200 with nothing held too, 500 when the restore failed and the lease is still held; `POST /stack/lease/changes`, body `{ change }`, takes one more change into the lease held (§5.3), 200 with the lease, 400 for a change off the table or already in the lease, 409 when no lease is held, 500 for a change that failed, which undid the whole lease or says it could not |
 | `GET /stack/doctor` | §5.3's workstation checks, one row each with its verdict and what the reads said |
 | `POST /stack/backend/up` | Compose up; returns the job, or the Up still running; 409 while another `ComposeGate` job (§5.3) runs |

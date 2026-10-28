@@ -106,8 +106,8 @@ as waiting, each with the metric it lacks; and the load run, the backend's
 (k6)" runs it, with Stop, so the strip is read under load, and k6's per-second
 lines drawn as a bar of elapsed time and users; and the stress
 run, the backend's stepped k6 run under the stress override, block by block
-as "Stress run (k6)" runs it, with the step k6 holds drawn as a staircase of
-ramps and holds in that bar, the knee once named, and
+as "Stress run (k6)" runs it, with the level and the stop rule chosen from two lists, the step k6 holds drawn as a staircase of
+ramps and holds in that bar, the knee, why it ended and the service that gave up first once named, and
 the override said on the screen until Up takes it away), the Logs page
 (follow, service filter, text filter, correlation-id highlight) and the API
 page (Catalog's, Ordering's, Inventory's, Payments' and Privacy's OpenAPI operations
@@ -378,7 +378,7 @@ what it speaks.
   at most. The step shown is read off k6's once-a-second progress lines, a
   count held for `StressStaircase.HoldTicks` of them being a hold, so a
   staircase set from the environment with ramps slower than a user in that
-  many seconds would read a ramp as a step. FakePlatform's stress output is
+  many seconds would read a ramp as a step. FakePlatform's stress output, each level and both stop rules, is
   written by hand to the scripts' shapes, not recorded from a live run.
 - The Mail page lists the sink's newest `MailSinkClient.Limit` messages and
   says how many it holds in all. Opening a message marks it read in the sink,
