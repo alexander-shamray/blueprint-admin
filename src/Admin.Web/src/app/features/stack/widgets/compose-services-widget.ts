@@ -18,7 +18,7 @@ import { StackFeed } from '../stack-feed';
           ><tr><th i18n>Service</th><th i18n>State</th><th i18n>Health</th><th i18n>Ports</th></tr></thead
         >
         <tbody>
-          @for (svc of services(); track svc.service) {
+          @for (svc of services(); track $index) {
             <tr [class.exited]="svc.state === 'exited'">
               <td>{{ svc.service }}</td>
               <td>{{ svc.state }}</td>
