@@ -185,7 +185,8 @@ def judge_assets(assets: dict, *, where: str, root: str, dotnet: str, config: st
         for name, dependency in sorted(body.get("dependencies", {}).items()):
             # The SDK's implicit references (NETStandard.Library) take the
             # version the global.json pin chooses; pin_gate.py refuses the
-            # metadata by which a project would add or change one.
+            # IsImplicitlyDefined and the version by which a tracked file
+            # would add or change one.
             if (dependency.get("versionCentrallyManaged") is True or dependency.get("autoReferenced") is True
                     or name.lower() in global_references):
                 continue

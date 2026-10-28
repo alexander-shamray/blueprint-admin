@@ -201,6 +201,16 @@ class AProjectFile(unittest.TestCase):
         refused(self, project('<ItemGroup><DotNetCliToolReference Include="T" Version="1.0.0" /></ItemGroup>'),
                 "dotnetclitoolreference t sets version")
 
+    def test_a_reference_marked_implicit_fails(self) -> None:
+        # R2 of #580: restore marks such a reference autoReferenced, which the
+        # build's judge exempts as the SDK's own.
+        for item in ('<PackageReference Include="Anthropic" IsImplicitlyDefined="true" />',
+                     '<PackageReference Include="Anthropic"><IsImplicitlyDefined>true</IsImplicitlyDefined>'
+                     "</PackageReference>"):
+            for group in ("ItemGroup", "ItemDefinitionGroup"):
+                with self.subTest(item=item, group=group):
+                    refused(self, project(f"<{group}>{item}</{group}>"), "sets IsImplicitlyDefined")
+
     def test_a_property_holding_an_item_reference_fails(self) -> None:
         for value in ("@(Pinned)", "%(Identity)", "a;@(Pinned->'%(Version)')"):
             with self.subTest(value=value):

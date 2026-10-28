@@ -243,6 +243,12 @@ def check(path: str, data: bytes | str, *, pin: bool = False, known: frozenset[s
                 package = attrs.get("include") or attrs.get("update") or "?"
                 for what in sorted(VERSION_METADATA & metadata):
                     problems.append(f"{path}: {name} {package} sets {what}; its version is {PIN_FILE}'s")
+                # The SDK's mark on its own implicit references: NuGet leaves
+                # a reference so marked out of central management, and the
+                # build's judge exempts one restore marks autoReferenced.
+                if "isimplicitlydefined" in metadata:
+                    problems.append(f"{path}: {name} {package} sets IsImplicitlyDefined, which takes it out "
+                                    f"of {PIN_FILE}'s management")
     return problems
 
 
