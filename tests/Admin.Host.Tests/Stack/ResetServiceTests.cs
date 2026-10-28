@@ -46,7 +46,7 @@ public sealed class ResetServiceTests : IAsyncDisposable
             " Volume commerce_sql-data  Removed",
             $"$ docker {Prefix}--progress json up -d --wait",
             " Container commerce-gateway-1  Healthy",
-            "== readiness",
+            $"== readiness: up to {ResetService.ReadinessCap.TotalSeconds:0} s",
             "ready: gateway, catalog",
         ]);
         runner.Started.Select(s => s.Arguments[^1]).ShouldBe(["-v", "--wait"]);
