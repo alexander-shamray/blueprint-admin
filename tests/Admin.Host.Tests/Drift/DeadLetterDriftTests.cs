@@ -80,6 +80,23 @@ public sealed partial class DeadLetterDriftTests
         Readme.ShouldContain("`replayed`, `discarded`");
     }
 
+    /// <summary>
+    /// The words the Job output's result table reads (<c>dead-letter-results.ts</c>, <c>MoveResultReader</c>): a word the
+    /// tool stops printing would leave its lines in the log with no row, so each is held to the tool here.
+    /// </summary>
+    [Fact]
+    public void The_result_tables_action_words_are_ones_the_tool_prints()
+    {
+        string tool = Backend.Read(DeadLetterService.Tool);
+
+        foreach (string word in new[] { "\"would-refuse\"", "\"discarded\"", "\"replayed\"", "\"refused\"", "\"failed\"" })
+        {
+            tool.ShouldContain(word);
+        }
+
+        tool.ShouldContain("f\"not reached    {identity} (the run stopped first)\"");
+    }
+
     [GeneratedRegex(@"^\| `inspect` \|.*$", RegexOptions.Multiline)]
     private static partial Regex InspectRow();
 
