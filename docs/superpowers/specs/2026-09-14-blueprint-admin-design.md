@@ -1100,9 +1100,25 @@ cleared; the screen shows the alert's state and the tool's `clears_within_second
 back what the tool says it cannot (the orders a cause placed, `contact-refused`'s deleted contacts); that is
 `run-locally.md`'s sentence and the screen quotes the cost, not a promise.
 
+**The job's output says which alert to wait for, and the screen counts the window down.** The tool prints, when a cause
+starts, `RUNBOOK: causing ALERT; it fires within Ns once caused`, and, per phase when a restore ends, `ALERT is STATE after
+the restore`, with `; its window clears it within Ns` where the scenario has a settle time of its own (`game_day.py`,
+`cause_only` and `restore_only`; `GameDayDriftTests` holds the words). The Job output reads those two lines
+(`GameDayLineReader`) and keeps them behind its "show the lines" toggle, as a pull's lines are (§5.3). Above the log a row
+per alert reads *ALERT should fire within 3 min (1:12 left)*, turning to *fired* when §5.8's alert read, which the tile
+already polls, shows the alert firing, and to *did not fire within 3 min* once the window passes with it quiet; a restore's
+row does the same for *clear*, and is *cleared* at once when the line says `inactive`. The window is the listing's
+(`RunbookPhase.FiresWithinSeconds` and `ClearsWithinSeconds`), never the number in the line, and the count starts at the
+line's own time, so a pane re-attached after a page change counts from the same moment. A fired or cleared row stays so
+if the alert later resolves. A line the reader does not recognise stays in the log, and a restore line with no window
+names none, so the row only waits for the alert to read inactive. Nothing is invented: a countdown the tool did not
+promise is not drawn.
+
 FakePlatform (`RunbookRecordings`) replays four entries of the catalogue as the backend printed them, one for each
 confirmation and one with no script, and three runbook texts. A scripted cause puts its alert in `FakeStack`, which
-`FakeGrafana.Rules` answers firing until the restore.
+`FakeGrafana.Rules` answers firing until the restore. Its `--cause` and `--restore` print the lines above as the tool
+words them, with the windows the recorded catalogue gives and the settle clause only for the runbooks whose scenario has
+one, read from the tool's source on 2026-10-28; the real stack was not up for it.
 
 ### 5.15 The platform map
 
