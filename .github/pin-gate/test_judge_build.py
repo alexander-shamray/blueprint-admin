@@ -195,8 +195,11 @@ class TheJudgement(unittest.TestCase):
         problems = self.problems(tracked=tracked)
         self.assertTrue(any("is tracked" in p for p in problems), problems)
 
-    def test_an_empty_log_fails(self) -> None:
-        self.refused("names no import", imported=[])
+    def test_an_empty_log_fails_rather_than_refusing(self) -> None:
+        # A refusal is what the commits job forgives when the fork point
+        # carries it too; an empty log there would forgive every commit's.
+        with self.assertRaises(JudgeError):
+            self.problems(imported=[])
 
     def test_central_management_off_or_overridable_fails(self) -> None:
         for name in ("centralPackageVersionsManagementEnabled", "centralPackageVersionOverrideDisabled"):

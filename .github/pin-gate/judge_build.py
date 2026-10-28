@@ -218,7 +218,10 @@ def judge(imported: list[tuple[str, str]], read_assets, *, root: str, dotnet: st
     naming no position, so a commit and its fork point name one refusal
     alike. `read_assets` reads an assets file by path, None when absent."""
     if not imported:
-        return ["the log names no import, so no build was judged: replay a binary log a build wrote"]
+        # A failure, not a refusal: the commits job forgives a refusal its
+        # fork point carries, and a fork point whose log is empty too would
+        # forgive every commit's.
+        raise JudgeError("the log names no import, so no build was judged: replay a binary log a build wrote")
     problems: list[str] = []
 
     def shown(path: str) -> str:
