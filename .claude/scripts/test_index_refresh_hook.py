@@ -256,13 +256,14 @@ class TheRefresh(unittest.TestCase):
     def clear(self, holder):
         # The hook's detached refresh can still be standing in a checkout when
         # the case ends, and Windows will not remove a directory a process is
-        # in; it is done in about half a second, so the removal is retried
-        # until the same deadline as `wait_for`, then fails the case (#588).
+        # in, nor one a write lands in mid-removal (left not empty); it is done
+        # in about half a second, so the removal is retried until the same
+        # deadline as `wait_for`, then fails the case (#588).
         deadline = time.monotonic() + 90
         while True:
             try:
                 return holder.cleanup()
-            except PermissionError:
+            except OSError:
                 if time.monotonic() > deadline:
                     raise
                 time.sleep(0.1)
