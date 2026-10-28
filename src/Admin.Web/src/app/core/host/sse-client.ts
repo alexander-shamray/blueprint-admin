@@ -2,7 +2,8 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { OutputLine } from './host-types';
 
-export type JobEvent = { kind: 'line'; line: OutputLine } | { kind: 'exited'; exitCode: number };
+export type JobEvent =
+  { kind: 'steps'; steps: string[] } | { kind: 'line'; line: OutputLine } | { kind: 'exited'; exitCode: number };
 
 /**
  * One job's Server-Sent Events as an Observable. The browser's EventSource
@@ -21,6 +22,10 @@ export class SseClient {
       const query = after === -1 ? '' : `?after=${after}`;
       const source = new EventSource(`/api/jobs/${encodeURIComponent(jobId)}/stream${query}`);
 
+      // A job that runs several steps names them first, and again after a reconnect.
+      source.addEventListener('steps', (e: MessageEvent) =>
+        subscriber.next({ kind: 'steps', steps: (JSON.parse(e.data) as { steps: string[] }).steps }),
+      );
       source.addEventListener('line', (e: MessageEvent) =>
         subscriber.next({ kind: 'line', line: JSON.parse(e.data) as OutputLine }),
       );

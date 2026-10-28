@@ -22,7 +22,9 @@ test.describe('the stress run', () => {
     await stress.getByRole('button', { name: 'Run stress' }).click();
 
     const output = page.locator('app-output-pane pre');
-    await expect(output).toContainText('Container commerce-gateway-1  Recreated');
+    const containers = page.getByRole('region', { name: 'Containers' });
+    await expect(containers.getByRole('row', { name: /^commerce-gateway-1 healthy/ })).toBeVisible();
+    await expect(page.locator('app-output-pane .steps li').first()).toContainText('k6');
     const banner = page.getByRole('status', { name: 'Stress override' });
     await expect(banner).toContainText(
       'gateway, shipping-worker, notifications-worker were created with the stress override',
@@ -39,7 +41,7 @@ test.describe('the stress run', () => {
     await expect(output).toContainText('k6 exited 99: a step');
 
     await stress.getByRole('button', { name: 'Back to the normal profile' }).click();
-    await expect(output).toContainText('Container commerce-gateway-1  Healthy');
+    await expect(containers.getByRole('row', { name: /^commerce-gateway-1 healthy/ })).toBeVisible();
     await expect(banner).toBeHidden();
     await expect(stress.getByRole('button', { name: 'Back to the normal profile' })).toBeHidden();
   });

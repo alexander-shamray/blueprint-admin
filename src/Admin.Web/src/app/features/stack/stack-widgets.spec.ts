@@ -417,7 +417,7 @@ describe('StackWidgets', () => {
       expect(outcome.classList.contains('failed')).toBe(true);
     });
 
-    it('marks only error-bearing Compose stderr lines, and lists each container at its last verb', async () => {
+    it('marks only error-bearing Compose stderr lines, and counts the containers the Job output tabulates', async () => {
       const fixture = await openAndPressUp();
 
       events.next(line(0, 'Stderr', ' Container commerce-sql-1  Creating'));
@@ -429,9 +429,12 @@ describe('StackWidgets', () => {
       const marked = Array.from(fixture.nativeElement.querySelectorAll('pre .stderr')) as HTMLElement[];
       expect(marked.map((m) => text(m))).toEqual(['[stderr] Container commerce-gateway-1 is unhealthy']);
       expect(text(fixture.nativeElement.querySelector('.compose-count'))).toBe('1 of 2 services settled');
-      expect(
-        Array.from(fixture.nativeElement.querySelectorAll('.compose-progress li')).map((li) => text(li as Element)),
-      ).toEqual(['commerce-sql-1 Healthy', 'commerce-gateway-1 Waiting']);
+      expect(fixture.nativeElement.querySelector('.compose-progress li')).toBeNull();
+      const rows = Array.from(fixture.nativeElement.querySelectorAll('.container-table tbody tr')) as HTMLElement[];
+      expect(rows.map((r) => Array.from(r.querySelectorAll('th, td'), (c) => text(c)).slice(0, 2))).toEqual([
+        ['commerce-sql-1', 'healthy'],
+        ['commerce-gateway-1', 'waiting'],
+      ]);
     });
 
     it('holds the buttons while the page shows another job, since the Compose job is followed on its own stream', async () => {

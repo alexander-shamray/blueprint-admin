@@ -158,12 +158,3 @@ table.device-reads tr.state-Unknown td.state {
 .compose-progress {
   margin-bottom: 1rem;
 }
-.compose-progress ul {
-  columns: 2;
-  margin: 0;
-  padding-left: 1.25rem;
-  font-family: monospace;
-}
-.compose-progress li.settled {
-  color: var(--app-ok);
-}
