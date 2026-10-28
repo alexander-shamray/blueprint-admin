@@ -155,8 +155,10 @@ alert to fire and clear. Cause runs `RUNBOOK --cause`, and Undo runs `RUNBOOK
 --restore`; both are `run-locally.md`'s "Game day" lines, as jobs under the same
 gate as Up and Down. A cause the tool lists as `confirm` takes a second press of
 the button, and one it lists as `typed` takes the runbook's name typed, as the
-wipe takes `down -v`. Against FakePlatform four runbooks are listed and a cause
-fires its alert in the alert read until Undo. Spec §5.14 has the rest.
+wipe takes `down -v`. The job's output counts down the window for the alert a
+cause or restore awaits, from the tool's own lines. Against FakePlatform four
+runbooks are listed and a cause fires its alert in the alert read until Undo.
+Spec §5.14 has the rest.
 The Mail page lists what Notifications sent, newest first, as the mail sink
 (Mailpit) holds it: when, to whom, the subject, and the message's
 `X-Correlation-Id` as a link into its Trace timeline; a correlation id typed
