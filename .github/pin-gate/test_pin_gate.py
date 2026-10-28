@@ -508,5 +508,6 @@ class TheCiWiring(unittest.TestCase):
         for before, after in zip(order, order[1:]):
             self.assertLess(loop.index(before), loop.index(after))
 
+
 if __name__ == "__main__":
     unittest.main()
