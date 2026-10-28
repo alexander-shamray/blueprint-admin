@@ -373,8 +373,10 @@ as out of scope, never filed.
   inspection stays, named on stderr. The residual is the day, which stands in
   for "no sweep still runs there", a thing no helper can ask: a sweep running
   that long would lose its worktree mid-round. A harness test that forks a
-  sweep worktree of this checkout under the shared temp root is a sweep start
-  too, and drops and prunes the same way.
+  sweep worktree of this checkout is a sweep start too: every such run prunes
+  this checkout's registrations, whatever its temp root, and one under the
+  shared temp root also drops this checkout's day-old sweep worktrees, since
+  the drop helper refuses any outside the root it was handed.
 
 - **The only force push in this repository is
   `.claude/scripts/git-rebase-onto-main.sh`, and `/ship` step 7 grants it by
