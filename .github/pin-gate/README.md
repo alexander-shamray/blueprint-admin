@@ -96,55 +96,62 @@ the nearest for its subtree too), a root `global.json` carrying
 `BlueprintAdmin.slnx`, and a project entry in that one naming anything but a
 literal path to a tracked `*proj`.
 
-## What the evaluation refuses
+## What the build's judge refuses
 
-`evaluate.py` closes what a static read cannot: a property value built from
-other properties (`$(SomeRoot)\..\x`), handed to a property the common
-targets import by a name none of the rules above catches (#562). It has
-MSBuild evaluate every tracked `*proj` (`-getProperty`, `-getItem` and
-`-preprocess`), with no configuration and with `Release`, as the jobs build,
-and before its job's build restores, so names and expansions stop
-mattering. In each evaluation it refuses:
+`judge_build.py` closes what a static read cannot: a property value built
+from other properties (`$(SomeRoot)\..\x`), handed to a property the common
+targets import by a name none of the rules above catches (#562), and the
+condition that chooses it, which may key on anything the build sets (#566).
+It judges the build itself, not an evaluation standing in for it: each CI
+build writes a binary log (`-bl`), and the judge replays it through MSBuild's
+diagnostic file logger and reads every `Importing project "…" into project
+"…"` line. Restore's evaluations write them as the build's do, under the
+build's own global properties, environment and restore state, so no
+condition can tell the judge from the build. In each log it refuses:
 
-- an import outside the repository and the .NET install that ran it: every
-  file `-preprocess` names, read from MSBuild's banners as XML, so no text
-  inside a project can open a comment that hides one;
-- a feed or a NuGet setting (`RestoreSources`, `RestoreConfigFile`,
-  `RestoreRootConfigDirectory`) that evaluates to anything;
-- a package folder or a local source (`RestorePackagesPath`, the fallback
-  folders, `RestoreAdditionalProjectSources`) outside the .NET install,
-  which names its own `NuGetFallbackFolder` and, where it exists, its
-  `library-packs`; never the repository, since restore takes a package
-  already extracted in a packages or fallback folder as it finds it, and a
-  local source there would serve a `.nupkg` the repository chose;
-- `ManagePackageVersionsCentrally` not `true`,
-  `CentralPackageVersionOverrideEnabled` not `false`, or a
-  `DirectoryPackagesPropsPath` other than the root pin file;
-- a `PackageVersion` or `GlobalPackageReference` defined anywhere but the
-  pin file or evaluating to a version other than its literal one there,
-  and one of the pin file's missing;
-- a `PackageReference` or `PackageDownload` that carries a `Version` or a
-  `VersionOverride`, save the SDK's own implicit references, defined by a
-  file in the .NET install, whose versions the `global.json` pin chooses.
+- an import outside the repository, the .NET install that replays the log,
+  and the folder of a package one of the log's restores resolved
+  (`<packages or fallback folder>/<id>/<version>/`, for a package its
+  `project.assets.json` lists): a package the machine's cache holds from
+  another build, or at another version, is none of the pin file's. A line
+  naming an import in a shape the judge cannot read, a path holding a quote
+  among them, is refused rather than skipped;
+- a tracked project the log never evaluated, or holds no restore of: what
+  the build did not run, nothing judged;
+- in each project's `project.assets.json`, found beside the `nuget.g.props`
+  or `nuget.g.targets` the log has it import, and never one the repository
+  tracks:
+  - central management off or overridable
+    (`centralPackageVersionsManagementEnabled`,
+    `centralPackageVersionOverrideDisabled`);
+  - a nearest NuGet config other than the root `nuget.config`, or any
+    other inside the repository;
+  - a source the root `nuget.config` does not leave standing, save a local
+    one inside the .NET install (a Windows runner's `library-packs`);
+  - a packages or fallback folder inside the repository: restore takes a
+    package already extracted there as it finds it, so it would be package
+    content the repository chose;
+  - central versions other than the pin file's literal ones, a dependency
+    that is not centrally managed (save the SDK's implicit references and a
+    `GlobalPackageReference`), and a pinned package resolved at another
+    version.
 
-It fails rather than judges when MSBuild does not evaluate a project, when
-the SDK MSBuild ran from is not the install on `PATH`, and on a tree already
-restored, whose restore output imports the packages' own props from the
-NuGet cache, outside both bounds: run it on a clean checkout.
+It fails rather than judges when a log is missing or does not replay, when
+it names no import, and where no .NET SDK is on `PATH`; an SDK other than
+the one on `PATH` builds from outside that install, which the first rule
+refuses.
 
 ## What it does not judge
 
-The context the build evaluates in, where it differs from this one (#566).
-The evaluation varies the configuration and, by running on both of the
-`host` job's legs, the operating system, and nothing else. Restore's global
-properties (`MSBuildIsRestoring`, `ExcludeRestorePackageImports`), the
-solution's (`SolutionDir`), the build step's environment, and whether
-restore has written its output yet each differ when the build evaluates, so
-a condition or a value keyed on one of them can import what this
-evaluation never saw. Judging the build's own binary log instead is #566's
-fix. Nor a file that evaluation reads without importing it, through a
-property function, or what a target does: the rules above refuse every
-target, and the review reads the rest.
+A build CI does not run. The judge sees the builds CI makes (Debug and
+Release on both of the `host` job's operating systems, and Release of each
+earlier commit in `commits`), so a condition keyed on a context none of them
+has, such as one project built alone rather than through the solution, or a
+developer's environment, imports what no log recorded; the review reads for
+it. Adding contexts one by one was rejected in #566: each closes one route
+and any other build-time state reopens it. Nor a file evaluation reads
+without importing it, through a property function, or what a target does:
+the rules above refuse every target, and the review reads the rest.
 
 The code the build compiles and the tests run: the residual
 `docs/harness-boundaries.md` already accepts for `src/**`, which asks for a
@@ -168,12 +175,14 @@ rule the judging copy holds and the fork point's tree predates, most often one
 `main` gained after the branch forked, which no commit of the branch can
 satisfy (#563).
 
-The evaluation runs in the same two places, after the static read and
-before the build, so before that job's build restores (the other jobs
-restore beside it, as above); in the `host` job on both legs, since what
-MSBuild evaluates can differ by operating system where the tree does not.
-In the `commits` job a commit is held only to the evaluation's refusals its
-fork point does not already carry, as to the static read's.
+The build's judge runs in the same two places, after the build rather than
+before it, since the log is what it reads: in the `host` job on both legs,
+after a Debug and a Release build and before the tests, and in the `commits`
+job after each commit's build. There a commit is held only to the judge's
+refusals its fork point's build does not already carry, as to the static
+read's, which costs one more build: the fork point's. The gate's job is the
+merge, not the run: the build it judges has already run the pull request's
+code, the residual above.
 
 **The head's copy judges**, unlike the commit gate's base copy. The commit
 gate judges a pull request's metadata, which the branch writes freely; this

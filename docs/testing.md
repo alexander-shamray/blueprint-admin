@@ -111,17 +111,19 @@ build and before each commit the `commits` job builds:
 py -3.12 .github/pin-gate/pin_gate.py
 ```
 
-Its evaluation runs beside it in both places. It has MSBuild evaluate each
-project, so it needs the pinned SDK and a tree that has not been restored: a
-fresh clone or worktree, since one already built fails naming its
-`project.assets.json`, and it fails where no .NET SDK is on `PATH`:
+Its judge of the build runs beside it in both places, after the build
+rather than before it: it replays the binary log the build wrote, so build
+with `-bl` first and name each log. It reads each project's
+`project.assets.json` beside it, so judge the tree that was built, and it
+fails where no .NET SDK is on `PATH`:
 
 ```bash
-py -3.12 .github/pin-gate/evaluate.py
+dotnet build -bl:artifacts/build.binlog
+py -3.12 .github/pin-gate/judge_build.py artifacts/build.binlog
 ```
 
-Its suite's live cases, which run MSBuild on a repository built for each
-case, skip where no .NET SDK runs.
+Its suite's live cases, which build a repository made for each case, skip
+where no .NET SDK runs.
 
 ## Locality
 
