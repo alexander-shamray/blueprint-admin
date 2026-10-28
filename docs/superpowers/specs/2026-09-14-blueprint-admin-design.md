@@ -307,6 +307,25 @@ is kept (`ComposeService.ExecListedAsync`).
   last step is the summary it copies in. Nothing is shown that the job does not
   print: the steps are the host's names for what it runs, and a step the job
   never reaches is "not run".
+- A k6 run's per-second lines become a bar above the log (`K6Tracker`): the
+  latest `running (…), n/max VUs, … complete and … interrupted iterations` line
+  gives the elapsed time, the users against the most and the iterations, and the
+  scenarios' bars under it leave the log behind the same toggle. The length of the
+  run is shown only where exactly one scenario prints it (the stress run's
+  `journey`); the load run's scenarios start at offsets k6 does not print, so it
+  shows elapsed time and users and no percentage. For the stress run the bar also
+  draws the staircase the host has counted (`StressProgress`, §5.3): a ramp and a
+  hold per step reached, the one k6 is in marked. The staircase is the backend's
+  and can change, so no step that k6 has not reached is drawn; the Job output
+  reads the host's count (`GET /stack`) only once its job has printed a k6 line.
+- Reset's readiness wait is a checklist (`ReadinessTracker`) with a countdown. The
+  host writes the cap into the wait's marker line, `== readiness: up to <n> s`
+  (`ResetService.ReadinessCap`), so the SPA restates no value; every surface the
+  first `waiting for:` line names is listed, ticked when a later poll no longer
+  names it, all ticked on `ready:` and the named ones marked failed on
+  `not ready after`. The polls leave the log behind the toggle; the marker and the
+  verdict stay in it. The count starts at the marker's own host time, so a pane
+  re-attached after a page change counts from the same moment.
 - `Down(wipeVolumes)`: `down` or `down -v`. The endpoint requires
   `confirm: "down -v"` in the body when `wipeVolumes` is true.
 - `Ps()`: `ps --format json`, parsed into `ServiceStatus { Service, State,
