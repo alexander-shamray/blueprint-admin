@@ -26,6 +26,7 @@ public sealed class DriftCoverageTests
         ["src/Admin.Host/Broker/DeadLetterContracts.cs"] = typeof(DeadLetterDriftTests),
         ["src/Admin.Host/Broker/DeadLetterService.cs"] = typeof(DeadLetterDriftTests),
         ["src/Admin.Host/Fakes/DeadLetterRecordings.cs"] = typeof(DeadLetterDriftTests),
+        ["src/Admin.Web/src/app/features/broker/widgets/dead-letter-results.ts"] = typeof(DeadLetterDriftTests),
         ["src/Admin.Host/Broker/PlatformQueues.cs"] = typeof(QueueDriftTests),
         ["src/Admin.Host/Config/AdminOptions.cs"] = typeof(ComposeDriftTests),
         ["src/Admin.Host/Api/SampleImage.cs"] = typeof(ObjectStoreDriftTests),
