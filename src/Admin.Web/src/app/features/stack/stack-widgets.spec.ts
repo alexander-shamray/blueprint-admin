@@ -70,6 +70,7 @@ const stack = {
   loadRun: null,
   stressRun: null,
   stressOverride: [],
+  upRecreatesObservability: false,
 };
 
 const lease = {
@@ -1030,6 +1031,38 @@ describe('StackWidgets', () => {
       expect(host.backendUp).toHaveBeenCalled();
       expect(shownJob()).toBe('up-1');
       expect(q('button.up')!.disabled).toBe(true);
+    });
+
+    it('names what the way back recreates, and warns beside both Ups only when that is the observability container', async () => {
+      host.stack.mockReturnValue(
+        of({ ...stack, stressRun: { job: stressJob, progress: null, knee: null }, stressOverride: overridden }),
+      );
+      const { fixture, q } = await render();
+
+      expect(q('button.stress-restore')!.title).toContain(
+        'it recreates gateway, shipping-worker, notifications-worker, ordering-api with every default',
+      );
+      expect(q('.stress-observability')).toBeNull();
+
+      host.stack.mockReturnValue(
+        of({
+          ...stack,
+          stressRun: { job: stressJob, progress: null, knee: null },
+          stressOverride: [...overridden, 'grafana'],
+          upRecreatesObservability: true,
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(3000);
+      fixture.detectChanges();
+
+      const warnings = [
+        ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('.stress-observability'),
+      ];
+      expect(warnings).toHaveLength(2);
+      for (const w of warnings) {
+        expect(text(w)).toContain('Up also recreates the observability container');
+        expect(text(w)).toContain("this run's metrics, logs and traces go with it");
+      }
     });
 
     it('shows why the host refused a run', async () => {

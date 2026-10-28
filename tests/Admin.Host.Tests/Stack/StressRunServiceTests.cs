@@ -33,6 +33,8 @@ public sealed class StressRunServiceTests : IAsyncDisposable
     private readonly FakeProcessRunner runner;
     private readonly ComposeGate composeGate = new();
     private readonly List<string> summariesRead = [];
+    private readonly List<string> overridesRead = [];
+    private IReadOnlyList<string> overrideServices = ["gateway", "shipping-worker", "notifications-worker", "ordering-api"];
 
     public StressRunServiceTests()
     {
@@ -160,7 +162,7 @@ public sealed class StressRunServiceTests : IAsyncDisposable
             .On("powershell", Arguments(StressRunService.Up), 0, " Container commerce-gateway-1  Recreated")
             .On("powershell", Arguments(LoadRunService.PrometheusReady), 0, LoadRunService.PrometheusYes)
             .OnLongRunning("powershell", string.Join(' ', LoadRunService.Spec(StressRunService.Run, Paths, password).Arguments), "running (01.0s), 05/50 VUs, 0 complete and 0 interrupted iterations");
-        StressRunService service = new(runner, composeGate, registry, Paths, Options.Create(new AdminOptions { SqlPassword = password }), time, TimeSpan.Zero, _ => null);
+        StressRunService service = new(runner, composeGate, registry, Paths, Options.Create(new AdminOptions { SqlPassword = password }), time, TimeSpan.Zero, _ => null, _ => overrideServices);
 
         Job run = service.Start().Job;
         await WaitUntilAsync(() => runner.Started.Count == 4 && runner.LastStarted is { State: JobState.Running });
@@ -319,8 +321,52 @@ public sealed class StressRunServiceTests : IAsyncDisposable
             new("ordering-api", "running", "healthy", null, []),
         ]);
 
-        StressRunService.OnOverride(backend).ShouldBe(["gateway"]);
-        StressRunService.OnOverride(ComposeStatus.Unreachable("docker did not answer")).ShouldBeEmpty();
+        Service().OnOverride(backend).ShouldBe(["gateway"]);
+        Service().OnOverride(ComposeStatus.Unreachable("docker did not answer")).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void The_services_the_override_changes_are_read_from_the_clones_file_on_every_read_in_the_files_order()
+    {
+        ComposeStatus backend = ComposeStatus.Up(
+        [
+            new("grafana", "running", "healthy", null, [3000], ["docker-compose.yml", StressRunService.OverrideFile]),
+            new("gateway", "running", "healthy", null, [5000], ["docker-compose.yml", StressRunService.OverrideFile]),
+        ]);
+        StressRunService service = Service();
+
+        service.OnOverride(backend).ShouldBe(["gateway"]);
+
+        overrideServices = ["gateway", StressRunService.ObservabilityService];
+
+        service.OnOverride(backend).ShouldBe(["gateway", StressRunService.ObservabilityService]);
+        overridesRead.ShouldBe([.. Enumerable.Repeat(Path.Combine(Paths.BackendDir, "deploy", "compose", StressRunService.OverrideFile), 2)]);
+    }
+
+    [Fact]
+    public void The_services_of_an_override_are_the_keys_under_its_top_level_services_and_nothing_else()
+    {
+        const string overlay = """
+            # services: in a comment is not the map
+            name: commerce
+            services:
+              # a comment indented as a key is not one
+              gateway:
+                environment:
+                  RateLimits__AnonymousPermitLimit: "1000000"
+
+              ordering-api: # with a comment after it
+                ports: !reset []
+              otel.collector_2:
+            volumes:
+              sql-data:
+            """;
+
+        StressRunService.ServicesOf(overlay).ShouldBe(["gateway", "ordering-api", "otel.collector_2"]);
+        StressRunService.ServicesOf(overlay.ReplaceLineEndings("\r\n")).ShouldBe(["gateway", "ordering-api", "otel.collector_2"]);
+        StressRunService.ServicesOf(overlay.ReplaceLineEndings("\n")).ShouldBe(["gateway", "ordering-api", "otel.collector_2"]);
+        StressRunService.ServicesOf("volumes:\n  sql-data:\n").ShouldBeEmpty();
+        StressRunService.ReadOverride(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), StressRunService.OverrideFile)).ShouldBeEmpty();
     }
 
     [Fact]
@@ -338,12 +384,15 @@ public sealed class StressRunServiceTests : IAsyncDisposable
         Reachability catalog = new("catalog", "http://localhost:5100/health/ready", false, null);
         Reachability grafana = new("grafana", "http://localhost:3000/api/health", false, null);
 
-        StressRunService.MarkUnpublished(backend, [gateway, ordering, catalog, grafana])
+        IReadOnlyList<string> overridden = Service().OnOverride(backend);
+
+        StressRunService.MarkUnpublished(backend, overridden, [gateway, ordering, catalog, grafana])
             .ShouldBe([gateway, ordering with { Published = false }, catalog, grafana]);
-        StressRunService.MarkUnpublished(backend, [ordering with { Up = true, Status = 200 }])
+        StressRunService.MarkUnpublished(backend, overridden, [ordering with { Up = true, Status = 200 }])
             .ShouldBe([ordering with { Up = true, Status = 200 }]);
-        StressRunService.MarkUnpublished(ComposeStatus.Up([new("ordering-api", "running", "healthy", null, [5101])]), [ordering])
+        StressRunService.MarkUnpublished(ComposeStatus.Up([new("ordering-api", "running", "healthy", null, [5101])]), overridden, [ordering])
             .ShouldBe([ordering]);
+        StressRunService.MarkUnpublished(backend, [], [ordering]).ShouldBe([ordering]);
     }
 
     private static void NoVerdictWasRead(Job run) => Texts(run).ShouldNotContain(t => t.StartsWith("k6 exited", StringComparison.Ordinal));
@@ -354,6 +403,11 @@ public sealed class StressRunServiceTests : IAsyncDisposable
             summariesRead.Add(path);
 
             return ["| Step | VUs |", "| 1 | 10 |"];
+        }, path =>
+        {
+            overridesRead.Add(path);
+
+            return overrideServices;
         });
 
     private void Script(int run)
@@ -458,7 +512,8 @@ public sealed class StressRunEndpointTests(AdminHostFactory factory) : IClassFix
 
         JsonElement stack = await WaitForStackAsync(s => s.GetProperty("stressRun").GetProperty("progress").ValueKind == JsonValueKind.Object);
         stack.GetProperty("stressRun").GetProperty("job").GetProperty("id").GetString().ShouldBe(job.GetProperty("id").GetString());
-        stack.GetProperty("stressOverride").EnumerateArray().Select(s => s.GetString()).ShouldBe(StressRunService.OverrideServices);
+        stack.GetProperty("stressOverride").EnumerateArray().Select(s => s.GetString()).ShouldBe(FakePlatformScripts.OverrideServices);
+        stack.GetProperty("upRecreatesObservability").GetBoolean().ShouldBeFalse();
         Ordering(stack).GetProperty("up").GetBoolean().ShouldBeFalse();
         Ordering(stack).GetProperty("published").GetBoolean().ShouldBeFalse();
         (await GatewayAsync()).GetProperty("requestRate").GetDouble().ShouldBeGreaterThan(idle.GetProperty("requestRate").GetDouble());
@@ -469,7 +524,7 @@ public sealed class StressRunEndpointTests(AdminHostFactory factory) : IClassFix
         HttpResponseMessage stop = await client.PostAsync("/api/stack/stress-run/stop", null, TestContext.Current.CancellationToken);
         stop.StatusCode.ShouldBe(HttpStatusCode.OK);
         (await stop.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken)).GetProperty("exitCode").GetInt32().ShouldBe(-1);
-        (await StackAsync()).GetProperty("stressOverride").GetArrayLength().ShouldBe(StressRunService.OverrideServices.Count);
+        (await StackAsync()).GetProperty("stressOverride").GetArrayLength().ShouldBe(FakePlatformScripts.OverrideServices.Count);
 
         HttpResponseMessage up = await client.PostAsync("/api/stack/backend/up", null, TestContext.Current.CancellationToken);
         up.StatusCode.ShouldBe(HttpStatusCode.Accepted);

@@ -123,6 +123,8 @@ export interface StackView {
   stressRun: StressRunView | null;
   /** Each service running on the stress override (`StressRunService.OnOverride`); empty when none is. */
   stressOverride: string[];
+  /** Whether the observability container is among them, so the Up that is the way back recreates it and its data goes. */
+  upRecreatesObservability: boolean;
 }
 
 /** Where k6 is on the stress run's staircase, read off its own progress lines (`StressStaircase`). */

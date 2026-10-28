@@ -28,6 +28,12 @@
       workers do not pace themselves, and Ordering runs as replicas with no host port. It is never for a deployment. Up
       without it is the way back.
     </p>
+    @if (upRecreatesObservability()) {
+      <p class="stress-observability" i18n>
+        Up also recreates the observability container, Grafana with its Prometheus, Loki and Tempo, which keeps no
+        volume of its own, so this run's metrics, logs and traces go with it. Read what you need in Grafana first.
+      </p>
+    }
   </section>
 }
 

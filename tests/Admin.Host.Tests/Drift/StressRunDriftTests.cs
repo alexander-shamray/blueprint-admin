@@ -118,12 +118,33 @@ public sealed partial class StressRunDriftTests
     }
 
     [Fact]
-    public void The_services_the_override_changes_are_the_ones_its_file_names()
+    public void The_services_read_from_the_override_are_services_of_the_stack_and_the_fakes_are_among_them()
     {
-        string overlay = File.ReadAllText(Path.Combine(Backend.Dir, "deploy", "compose", StressRunService.OverrideFile)).ReplaceLineEndings("\n");
-        string[] services = [.. OverlayService().Matches(overlay[overlay.IndexOf("\nservices:\n", StringComparison.Ordinal)..]).Select(m => m.Groups[1].Value)];
+        IReadOnlyList<string> services = StressRunService.ReadOverride(Path.Combine(Backend.Dir, "deploy", "compose", StressRunService.OverrideFile));
+        string stack = string.Concat(Directory.GetFiles(Path.Combine(Backend.Dir, "deploy", "compose"), "*.yml", SearchOption.AllDirectories)
+            .Where(f => Path.GetFileName(f) != StressRunService.OverrideFile)
+            .Select(f => File.ReadAllText(f).ReplaceLineEndings("\n")));
 
-        services.ShouldBe(StressRunService.OverrideServices, ignoreOrder: true);
+        services.ShouldNotBeEmpty();
+        services.ShouldAllBe(s => stack.Contains($"\n  {s}:\n"));
+        services.ShouldBeUnique();
+        FakePlatformScripts.OverrideServices.ShouldAllBe(s => services.Contains(s));
+        FakePlatformScripts.OverrideServices.ShouldContain(FakePlatformScripts.UnpublishedOnOverride);
+    }
+
+    [Fact]
+    public void The_observability_service_runs_the_lgtm_image_and_mounts_no_volume_of_its_own()
+    {
+        string infrastructure = File.ReadAllText(Path.Combine(Backend.Dir, "deploy", "compose", "infrastructure.yml")).ReplaceLineEndings("\n");
+        Match[] heads = [.. OverlayService().Matches(infrastructure).Cast<Match>()];
+        int at = Array.FindIndex(heads, h => h.Groups[1].Value == StressRunService.ObservabilityService);
+        at.ShouldBeGreaterThanOrEqualTo(0, $"infrastructure.yml names no {StressRunService.ObservabilityService} service");
+        string block = infrastructure[heads[at].Index..(at + 1 < heads.Length ? heads[at + 1].Index : infrastructure.Length)];
+        string[] mounts = [.. Mount().Matches(block).Select(m => m.Groups[1].Value)];
+
+        block.ShouldContain("image: grafana/otel-lgtm:");
+        mounts.ShouldNotBeEmpty();
+        mounts.ShouldAllBe(m => m.StartsWith("./", StringComparison.Ordinal) || m.StartsWith("../", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -165,4 +186,8 @@ public sealed partial class StressRunDriftTests
     /// <summary>A service under the file's top-level <c>services:</c>, indented two spaces.</summary>
     [GeneratedRegex(@"^  ([a-z][a-z0-9-]*):$", RegexOptions.Multiline)]
     private static partial Regex OverlayService();
+
+    /// <summary>The source of a <c>volumes</c> list entry, <c>- source:target</c>, under a service.</summary>
+    [GeneratedRegex(@"^      - ([^:\s]+):", RegexOptions.Multiline)]
+    private static partial Regex Mount();
 }

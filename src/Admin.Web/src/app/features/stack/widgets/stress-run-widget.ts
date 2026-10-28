@@ -82,13 +82,21 @@ const CHOICE_STORAGE_KEY = 'blueprint-admin.stress-choice';
           the workers do not pace themselves, and Ordering runs as replicas with no host port. It is never for a
           deployment.
         </p>
+        @if (upRecreatesObservability()) {
+          <p class="stress-observability" i18n>
+            Up also recreates the observability container, Grafana with its Prometheus, Loki and Tempo, which keeps no
+            volume of its own, so this run's metrics, logs and traces go with it. Read what you need in Grafana first.
+          </p>
+        }
         <button
           class="stress-restore"
           type="button"
           [disabled]="running() || compose.running()"
           (click)="restore()"
           i18n-title
-          title="Up without the override, run-locally.md's way back: it recreates the gateway, both workers and Ordering with every default"
+          title="Up without the override, run-locally.md's way back: it recreates {{
+            overridden().join(', ')
+          }} with every default"
           i18n
           >Back to the normal profile</button
         >
@@ -171,6 +179,7 @@ export class StressRunWidget {
   readonly stressRun = computed(() => this.feed.stack.value()?.stressRun ?? null);
   readonly running = computed(() => this.stressRun()?.job.state === 'Running');
   readonly overridden = computed(() => this.feed.stack.value()?.stressOverride ?? []);
+  readonly upRecreatesObservability = computed(() => this.feed.stack.value()?.upRecreatesObservability ?? false);
 
   constructor() {
     this.feed.stack.attach();
