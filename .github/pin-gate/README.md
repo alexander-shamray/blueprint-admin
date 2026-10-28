@@ -146,12 +146,14 @@ refuses.
 
 ## What it does not judge
 
-A build CI does not run. The judge sees the builds CI makes (Debug and
-Release on both of the `host` job's operating systems, and Release of each
-earlier commit in `commits`), so a condition keyed on a context none of them
-has, such as one project built alone rather than through the solution, or a
-developer's environment, imports what no log recorded; the review reads for
-it. Adding contexts one by one was rejected in #566: each closes one route
+A build the judge is not handed. It sees the `host` job's builds (Debug and
+Release on both operating systems) and each earlier commit's Release build
+in `commits`, and no other: `drift` builds one test project alone and
+`smoke` builds Debug on Linux, and neither log is judged, as neither job's
+restore holds the merge (*How it runs*). So a condition keyed on a context no
+judged build has, such as one project built alone rather than through the
+solution, or a developer's environment, imports what no judged log
+recorded; the review reads for it. Adding contexts one by one was rejected in #566: each closes one route
 and any other build-time state reopens it. Nor a file evaluation reads
 without importing it, through a property function, or what a target does:
 the rules above refuse every target, and the review reads the rest.
