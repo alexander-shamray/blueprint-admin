@@ -102,7 +102,7 @@ class Fixture(unittest.TestCase):
             self.git("push", "-q", "-u", "origin", "HEAD")
 
     def stray(self):
-        # Written by the shell: the checkout's path is an MSYS one that Python on Windows cannot open.
+        # Written by the shell, as every other step on the checkout is.
         self.assertEqual(0, sh('cd "$WORK"\necho x > stray.txt', WORK=self.work).returncode)
 
     def branch(self, name="feat/x"):
