@@ -39,6 +39,11 @@
 # `secsweep-` checkout from a previous session was sitting in the temp root
 # while this was being written.
 #
+# `git-worktree-detach.sh` does meet the question once, from this side: before
+# it forks, it hands this helper each day-old sweep-shaped worktree git lists
+# for the repository, which is exactly the registered, right-shaped and not
+# provably-ours case above, and it leans on these checks to decide (#577).
+#
 # So exclusion is the load-bearing half here and ownership is not proved.
 # Generalising the detach helper's new property to this one would retire a
 # residual by asserting it away, which is the same mistake as answering "what is
