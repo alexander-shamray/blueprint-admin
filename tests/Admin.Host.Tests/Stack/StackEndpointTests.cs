@@ -73,6 +73,17 @@ public sealed class StackEndpointTests : IClassFixture<AdminHostFactory>
     }
 
     [Fact]
+    public async Task A_stress_run_with_a_body_that_is_not_json_is_refused_rather_than_run_at_the_defaults()
+    {
+        int stressSpecsBefore = Runner.Started.Count(s => s.Arguments.Contains(Admin.Host.Stack.StressRunService.Up));
+
+        HttpResponseMessage response = await client.PostAsync("/api/stack/stress-run", new StringContent("level=high", System.Text.Encoding.UTF8, "text/plain"), TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.UnsupportedMediaType);
+        Runner.Started.Count(s => s.Arguments.Contains(Admin.Host.Stack.StressRunService.Up)).ShouldBe(stressSpecsBefore);
+    }
+
+    [Fact]
     public async Task Wiping_volumes_without_the_typed_confirmation_is_refused()
     {
         // R5: FakeProcessRunner is shared across the fixture, and xunit v3 does
