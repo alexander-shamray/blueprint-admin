@@ -48,7 +48,8 @@ public static partial class StackEndpoints
         {
             StressRunRequest? request = null;
 
-            if (http.ContentLength is > 0 && !http.HasJsonContentType())
+            // A chunked body has no length, so the type decides: a request that names one and is not JSON has a body to refuse.
+            if (http.ContentLength != 0 && http.ContentType is not null && !http.HasJsonContentType())
             {
                 return TypedResults.Problem(statusCode: StatusCodes.Status415UnsupportedMediaType, title: "Stress run refused", detail: "The body, if there is one, is JSON.");
             }
