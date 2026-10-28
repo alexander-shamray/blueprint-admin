@@ -479,24 +479,24 @@ class TheCiWiring(unittest.TestCase):
 
     def test_the_commits_job_runs_the_gate_on_each_commit_before_building_it(self) -> None:
         # Each commit before the head is what a later bisect restores. The
-        # gate runs inside `refusals`, which the loop calls before building,
-        # and is read against the fork point's refusals (#563).
+        # loop runs the gate through `refusals` before building, and `held`
+        # reads what it found against the fork point's refusals (#563).
         block = job("commits")
         self.assertIn('cp .github/pin-gate/pin_gate.py "$RUNNER_TEMP/pin_gate.py"', block)
         helper = block[block.index("refusals() {"):block.index('for sha in "${shas[@]}"')]
-        self.assertIn('python3 "$RUNNER_TEMP/$gate"', helper)
-        self.assertIn("pin_gate.py", helper.split("for gate in", 1)[1].split(";", 1)[0].split())
+        self.assertIn('python3 "$RUNNER_TEMP/$1" "${@:2}"', helper)
         self.assertIn('git merge-base "$BASE_SHA" "$HEAD_SHA"', helper)
         # At the fork point alone, a gate that does not run forgives nothing
-        # rather than stopping the job; on a commit it still stops it.
-        self.assertIn("inherited=$(refusals fork)", helper)
-        self.assertIn('if [ "${1:-}" != fork ]; then return 2; fi', helper)
-        loop = block[block.index("for sha in"):]
-        self.gate_before_build(loop, "found=$(refusals)")
+        # rather than stopping the job; on a commit it still stops it, as a
+        # failed `found=$(refusals ...)` does under `set -e`.
+        self.assertIn("static=$(refusals pin_gate.py) ||", helper)
+        self.assertIn("return 2", helper)
         # `found` stops nothing alone: the refusals a commit adds stop the build.
-        self.assertIn('comm -13 <(printf \'%s\\n\' "$inherited") <(printf \'%s\\n\' "$found")', loop)
-        self.gate_before_build(loop, 'if [ -n "$added" ]; then printf \'%s\\n\' "$added"; exit 1; fi')
-
+        self.assertIn('if [ -n "$added" ]; then printf \'%s\\n\' "$added"; exit 1; fi', helper)
+        loop = block[block.index("for sha in"):]
+        order = ["found=$(refusals pin_gate.py)", 'held "$found"', "\n            build\n"]
+        for before, after in zip(order, order[1:]):
+            self.assertLess(loop.index(before), loop.index(after))
 
 if __name__ == "__main__":
     unittest.main()
