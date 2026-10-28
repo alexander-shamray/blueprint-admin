@@ -53,6 +53,7 @@ public sealed class DriftCoverageTests
         ["src/Admin.Web/src/app/assistant/protocol.ts"] = typeof(AssistantProtocolDriftTests),
         ["src/Admin.Web/src/app/features/erasure/erasure-run.ts"] = typeof(LiteralDriftTests),
         ["src/Admin.Web/src/app/features/logs/compose-services.ts"] = typeof(ComposeDriftTests),
+        ["src/Admin.Web/src/app/features/runbooks/game-day-lines.ts"] = typeof(GameDayDriftTests),
         ["src/Admin.Web/src/app/features/scenario/scenario-run.ts"] = typeof(LiteralDriftTests),
     };
 

@@ -217,7 +217,25 @@
   @if (jobId(); as id) {
     <section class="job" i18n-aria-label aria-label="Job output">
       <p class="note" i18n>Output of the {{ jobLabel() }}.</p>
-      <app-output-pane [jobId]="id" (exited)="jobEnded()" (failed)="jobEnded()" />
+      <app-output-pane
+        [jobId]="id"
+        [claims]="claims"
+        (claimed)="read($event)"
+        (exited)="jobEnded()"
+        (failed)="jobEnded()"
+      >
+        <ng-container tables>
+          @if (countdowns(); as rows) {
+            @if (rows.length > 0) {
+              <ul class="countdowns" aria-label="Alerts awaited" i18n-aria-label>
+                @for (row of rows; track $index) {
+                  <li [class]="row.status">{{ countdownLabel(row) }}</li>
+                }
+              </ul>
+            }
+          }
+        </ng-container>
+      </app-output-pane>
     </section>
   }
 } @else if (!loadError()) {
