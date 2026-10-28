@@ -56,7 +56,7 @@ describe('OutputPane', () => {
     const fixture = TestBed.createComponent(OutputPane);
     fixture.componentRef.setInput('jobId', 'j1');
     fixture.detectChanges();
-    events.next({ kind: 'line', line: { sequence: 0, at: '', stream: 'Stderr', text: ' Container sql  Healthy' } });
+    events.next({ kind: 'line', line: { sequence: 0, at: '', stream: 'Stderr', text: 'Pulling the layers' } });
     events.next({ kind: 'line', line: { sequence: 1, at: '', stream: 'Stderr', text: 'Error response from daemon' } });
     fixture.detectChanges();
     const marked = () => Array.from(fixture.nativeElement.querySelectorAll('pre .stderr')).length;
@@ -122,13 +122,14 @@ describe('OutputPane', () => {
     expect(rows[1].querySelector('.state')?.textContent).toBe('waiting');
 
     const pre = fixture.nativeElement.querySelector('pre') as HTMLElement;
-    expect(pre.textContent).toContain(' Container commerce-sql-1  Healthy');
     expect(pre.textContent).not.toContain('3c5e70de2899');
+    expect(pre.textContent).not.toContain('Container commerce-sql-1');
     expect(pre.querySelector('.stderr')).toBeNull();
 
-    (pull.querySelector('button.pull-lines') as HTMLButtonElement).click();
+    (fixture.nativeElement.querySelector('button.pull-lines') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(pre.textContent).toContain(' 3c5e70de2899  Downloading 241.2MB');
+    expect(pre.textContent).toContain(' Container commerce-sql-1  Healthy');
   });
 
   it('marks a line Compose reports as an error, though it is JSON', () => {
@@ -207,5 +208,99 @@ describe('OutputPane', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('.error')).toBeNull();
+  });
+
+  describe('a Compose job’s containers and a multi-step job’s steps', () => {
+    const open = (events: Subject<JobEvent>) => {
+      const sse = { follow: vi.fn(() => events.asObservable()) };
+      TestBed.configureTestingModule({ imports: [OutputPane], providers: [{ provide: SseClient, useValue: sse }] });
+      const fixture = TestBed.createComponent(OutputPane);
+      fixture.componentRef.setInput('jobId', 'j1');
+      fixture.componentRef.setInput('composeStderr', true);
+      fixture.detectChanges();
+      return fixture;
+    };
+    const send = (events: Subject<JobEvent>, sequence: number, text: string, stream: 'Stdout' | 'Stderr' = 'Stderr') =>
+      events.next({
+        kind: 'line',
+        line: { sequence, at: new Date(Date.UTC(2026, 9, 28, 10, 0, sequence)).toISOString(), stream, text },
+      });
+
+    it('tabulates the containers, settled ones counted, and leaves their lines in the log behind the toggle', () => {
+      const events = new Subject<JobEvent>();
+      const fixture = open(events);
+
+      send(events, 0, '{"id":"Container commerce-sql-1","status":"Working","text":"Waiting"}');
+      send(events, 1, '{"id":"Container commerce-gateway-1","status":"Working","text":"Waiting"}');
+      send(events, 4, '{"id":"Container commerce-sql-1","status":"Done","text":"Healthy"}');
+      send(events, 5, '{"id":"Network commerce_default","status":"Done","text":"Created"}');
+      fixture.detectChanges();
+
+      const section = fixture.nativeElement.querySelector('section.containers') as HTMLElement;
+      expect(section.querySelector('.pull-summary')?.textContent).toBe('Containers settled: 1 of 2');
+      const rows = Array.from(section.querySelectorAll('tbody tr')) as HTMLElement[];
+      expect(rows.map((r) => [r.className, ...Array.from(r.children, (c) => c.textContent?.trim())])).toEqual([
+        ['settled', 'commerce-sql-1', 'healthy', '4s'],
+        ['working', 'commerce-gateway-1', 'waiting', ''],
+      ]);
+
+      const pre = fixture.nativeElement.querySelector('pre') as HTMLElement;
+      expect(pre.textContent).toContain(' Network commerce_default  Created');
+      expect(pre.textContent).not.toContain('Container commerce-sql-1');
+
+      (fixture.nativeElement.querySelector('button.pull-lines') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(pre.textContent).toContain(' Container commerce-sql-1  Healthy');
+    });
+
+    it('turns a container whose line says Error to failed and keeps that line in the log', () => {
+      const events = new Subject<JobEvent>();
+      const fixture = open(events);
+
+      send(events, 0, '{"id":"Container commerce-sql-1","status":"Error","text":"Error"}');
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelector('.container-table tbody tr')?.className).toBe('failed');
+      expect(fixture.nativeElement.querySelector('pre')?.textContent).toContain('Container commerce-sql-1  Error');
+    });
+
+    it('shows no tables for a job that names no container and pulls no image', () => {
+      const events = new Subject<JobEvent>();
+      const fixture = open(events);
+
+      send(events, 0, 'plain output', 'Stdout');
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelector('.tables')).toBeNull();
+      expect(fixture.nativeElement.querySelector('.steps')).toBeNull();
+    });
+
+    it('strips the steps the host names, moves them on at their markers and ends the running one with the job', () => {
+      const events = new Subject<JobEvent>();
+      const fixture = open(events);
+      const strip = () =>
+        Array.from(fixture.nativeElement.querySelectorAll('.steps li'), (li) =>
+          Array.from((li as HTMLElement).children, (c) => c.textContent?.trim()).join(' '),
+        );
+
+      events.next({ kind: 'steps', steps: ['down -v', 'up -d --wait', 'readiness'] });
+      fixture.detectChanges();
+      expect(strip()).toEqual(['down -v pending', 'up -d --wait pending', 'readiness pending']);
+
+      send(events, 0, '$ docker compose down -v', 'Stdout');
+      send(events, 3, '$ docker compose --progress json up -d --wait', 'Stdout');
+      fixture.detectChanges();
+      expect(strip()).toEqual(['down -v done 3s', 'up -d --wait running', 'readiness pending']);
+
+      send(events, 9, 'docker compose up exited with 1; the reset stops here.');
+      events.next({ kind: 'exited', exitCode: 1 });
+      fixture.detectChanges();
+      expect(strip()).toEqual([
+        'down -v done 3s',
+        'up -d --wait failed 6s docker compose up exited with 1; the reset stops here.',
+        'readiness not run',
+      ]);
+      expect(fixture.nativeElement.querySelector('pre')?.textContent).toContain('$ docker compose down -v');
+    });
   });
 });

@@ -15,69 +15,118 @@ import { Subscription } from 'rxjs';
 import { OutputLine } from '../../core/host/host-types';
 import { SseClient } from '../../core/host/sse-client';
 import { composeEvent, composeFailed, composePlain } from './compose-json';
+import { ComposeProgress, ComposeService, ComposeTracker } from './compose-progress';
 import { ImagePull, PullProgress, PullState, PullTracker } from './pull-progress';
+import { StepRow, StepState, StepTracker } from './step-progress';
 
 /** What marks a Compose stderr line as a failure rather than progress. */
 const PROBLEM = /\b(error|unhealthy|failed|denied)\b/i;
 
-/** A line as the log shows it: Compose's JSON written back as its plain form, and whether it was a pull's progress. */
+/**
+ * A line as the log shows it: Compose's JSON written back as its plain form, and whether a table above the log shows
+ * it instead (a pull's progress, a container's verb).
+ */
 interface Entry {
   sequence: number;
   stream: OutputLine['stream'];
   text: string;
   failed: boolean;
-  pull: boolean;
+  tabulated: boolean;
 }
 
 /**
  * Live output of one job. Give it a job id; it follows until the job exits. The pane is a log a screen reader can
  * read and a keyboard can scroll, but it is not live: Compose prints hundreds of lines, and announcing each would
- * drown everything else. The status beside it says only that a job started and how it ended. A job that pulls images
- * with `--progress json` shows them as a table above the log, one row each, and the log leaves out the pull's lines
- * until asked for them.
+ * drown everything else. The status beside it says only that a job started and how it ended. Above the log sit what
+ * the job's own lines add up to: a strip of the steps of a job that runs several, a table of the images a
+ * `--progress json` job pulls, and a table of the containers a Compose job brings up or takes down. The log leaves out
+ * the lines those tables are made of until asked for them.
  */
 @Component({
   selector: 'app-output-pane',
   host: { '[class.fill]': 'fill()' },
   template: `
     <p class="visually-hidden" role="status">{{ announcement() }}</p>
-    @if (pull(); as p) {
-      <section class="pull" aria-label="Image pulls" i18n-aria-label>
-        <p class="pull-summary">{{ summary(p) }}</p>
-        <table class="pull-table">
-          <thead class="visually-hidden">
-            <tr>
-              <th scope="col" i18n="an image pull table's column">Image</th>
-              <th scope="col" i18n="an image pull table's column">Progress</th>
-              <th scope="col" i18n="an image pull table's column">Size</th>
-              <th scope="col" i18n="an image pull table's column">State</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (image of p.images; track image.name) {
-              <tr [class]="image.state">
-                <th scope="row" class="image" [title]="image.name">{{ image.name }}</th>
-                <td class="bar">
-                  <progress
-                    [max]="image.total || 1"
-                    [value]="image.state === 'done' ? image.total || 1 : image.current"
-                    [attr.aria-label]="image.name"
-                  ></progress>
-                </td>
-                <td class="size">{{ size(image) }}</td>
-                <td class="state">{{ stateLabel(image.state) }}</td>
-              </tr>
+    @if (steps(); as list) {
+      <ol class="steps" aria-label="Steps" i18n-aria-label>
+        @for (step of list; track step.name) {
+          <li [class]="step.state">
+            <span class="step-name">{{ step.name }}</span>
+            <span class="step-state"> {{ stepLabel(step.state) }}</span>
+            @if (step.seconds !== null) {
+              <span class="step-time"> {{ duration(step.seconds) }}</span>
             }
-          </tbody>
-        </table>
-        <button type="button" class="pull-lines" (click)="showPullLines.set(!showPullLines())">
-          @if (showPullLines()) {
-            <ng-container i18n>Hide the download lines</ng-container>
+            @if (step.detail) {
+              <span class="step-detail"> {{ step.detail }}</span>
+            }
+          </li>
+        }
+      </ol>
+    }
+    @if (pull() || containers()) {
+      <div class="tables">
+        @if (pull(); as p) {
+          <section class="pull" aria-label="Image pulls" i18n-aria-label>
+            <p class="pull-summary">{{ summary(p) }}</p>
+            <table class="pull-table">
+              <thead class="visually-hidden">
+                <tr>
+                  <th scope="col" i18n="an image pull table's column">Image</th>
+                  <th scope="col" i18n="an image pull table's column">Progress</th>
+                  <th scope="col" i18n="an image pull table's column">Size</th>
+                  <th scope="col" i18n="an image pull table's column">State</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (image of p.images; track image.name) {
+                  <tr [class]="image.state">
+                    <th scope="row" class="image" [title]="image.name">{{ image.name }}</th>
+                    <td class="bar">
+                      <progress
+                        [max]="image.total || 1"
+                        [value]="image.state === 'done' ? image.total || 1 : image.current"
+                        [attr.aria-label]="image.name"
+                      ></progress>
+                    </td>
+                    <td class="size">{{ size(image) }}</td>
+                    <td class="state">{{ stateLabel(image.state) }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </section>
+        }
+        @if (containers(); as c) {
+          <section class="containers" aria-label="Containers" i18n-aria-label>
+            <p class="pull-summary">{{ containerSummary(c) }}</p>
+            <table class="pull-table container-table">
+              <thead class="visually-hidden">
+                <tr>
+                  <th scope="col" i18n="a container table's column">Container</th>
+                  <th scope="col" i18n="a container table's column">State</th>
+                  <th scope="col" i18n="a container table's column">Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (service of c.services; track service.name) {
+                  <tr [class]="containerClass(service)">
+                    <th scope="row" class="image" [title]="service.name">{{ service.name }}</th>
+                    <td class="state">{{ verbLabel(service.verb) }}</td>
+                    <td class="size">{{ service.seconds === null ? '' : duration(service.seconds) }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </section>
+        }
+        <button type="button" class="pull-lines" (click)="showRawLines.set(!showRawLines())">
+          @if (showRawLines()) {
+            <ng-container i18n>Hide the lines behind the tables</ng-container>
           } @else {
-            <ng-container i18n>Show the download lines ({{ p.lines }})</ng-container>
+            <ng-container i18n>Show the lines behind the tables ({{ tabulatedCount() }})</ng-container>
           }
         </button>
-      </section>
+      </div>
     }
     <pre
       #pane
@@ -117,10 +166,48 @@ interface Entry {
       max-height: none;
       margin: 0;
     }
-    :host(.fill) .pull {
+    :host(.fill) .tables {
       flex: 0 1 auto;
       min-height: 0;
       overflow: auto;
+    }
+    .steps {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.25rem 1rem;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      font-size: 0.8rem;
+    }
+    .steps li {
+      display: flex;
+      gap: 0.4rem;
+    }
+    .step-name {
+      font-family: monospace;
+    }
+    .step-state,
+    .step-time {
+      color: var(--app-muted);
+    }
+    .steps .running .step-name,
+    .steps .running .step-state {
+      font-weight: 600;
+      color: var(--mat-sys-primary);
+    }
+    .steps .done .step-state {
+      color: #3fa66a;
+    }
+    .steps .failed .step-state,
+    .steps .failed .step-detail {
+      color: #b00;
+    }
+    .steps .skipped {
+      opacity: 0.6;
+    }
+    .containers {
+      margin-top: 0.5rem;
     }
     .pull-summary {
       margin: 0 0 0.25rem;
@@ -169,6 +256,9 @@ interface Entry {
     }
     .pull-table .failed .state {
       color: #b00;
+    }
+    .pull-table .settled .state {
+      color: #3fa66a;
     }
     .pull-lines {
       margin-top: 0.25rem;
@@ -221,8 +311,12 @@ export class OutputPane {
   readonly failed = output<void>();
   readonly error = signal<string | null>(null);
   readonly pull = signal<PullProgress | null>(null);
-  readonly showPullLines = signal(false);
-  readonly shown = computed(() => (this.showPullLines() ? this.entries() : this.entries().filter((e) => !e.pull)));
+  readonly containers = signal<ComposeProgress | null>(null);
+  /** The steps of a job that runs several, once the host has named them. */
+  readonly steps = signal<StepRow[] | null>(null);
+  readonly showRawLines = signal(false);
+  readonly shown = computed(() => (this.showRawLines() ? this.entries() : this.entries().filter((e) => !e.tabulated)));
+  readonly tabulatedCount = computed(() => this.entries().filter((e) => e.tabulated).length);
   readonly announcement = computed(() => {
     if (!this.jobId()) return '';
     const code = this.exitCode();
@@ -255,6 +349,74 @@ export class OutputPane {
       case 'failed':
         return $localize`:an image pull's state:failed`;
     }
+  }
+
+  stepLabel(state: StepState): string {
+    switch (state) {
+      case 'pending':
+        return $localize`:a job step's state:pending`;
+      case 'running':
+        return $localize`:a job step's state:running`;
+      case 'done':
+        return $localize`:a job step's state:done`;
+      case 'failed':
+        return $localize`:a job step's state:failed`;
+      case 'skipped':
+        return $localize`:a job step's state:not run`;
+    }
+  }
+
+  /** Compose's verb as the table words it; a verb not listed is shown as Compose printed it, in lower case. */
+  verbLabel(verb: string): string {
+    switch (verb) {
+      case 'Waiting':
+        return $localize`:a container's state:waiting`;
+      case 'Creating':
+        return $localize`:a container's state:creating`;
+      case 'Created':
+        return $localize`:a container's state:created`;
+      case 'Recreate':
+        return $localize`:a container's state:recreating`;
+      case 'Recreated':
+        return $localize`:a container's state:recreated`;
+      case 'Starting':
+        return $localize`:a container's state:starting`;
+      case 'Started':
+        return $localize`:a container's state:started`;
+      case 'Running':
+        return $localize`:a container's state:running`;
+      case 'Healthy':
+        return $localize`:a container's state:healthy`;
+      case 'Stopping':
+        return $localize`:a container's state:stopping`;
+      case 'Stopped':
+        return $localize`:a container's state:stopped`;
+      case 'Removing':
+        return $localize`:a container's state:removing`;
+      case 'Removed':
+        return $localize`:a container's state:removed`;
+      case 'Exited':
+        return $localize`:a container's state:exited`;
+      case 'Error':
+        return $localize`:a container's state:failed`;
+      default:
+        return verb.toLowerCase();
+    }
+  }
+
+  containerClass(service: ComposeService): string {
+    return service.failed ? 'failed' : service.settled ? 'settled' : 'working';
+  }
+
+  /** How many containers have nothing more to wait for. */
+  containerSummary(c: ComposeProgress): string {
+    const settled = c.settled;
+    const count = c.services.length;
+    return $localize`Containers settled: ${settled}:settled: of ${count}:count:`;
+  }
+
+  duration(seconds: number): string {
+    return this.secondsFormat.format(seconds);
   }
 
   /** How many images are left, how much is still to come, and while it is downloading, how fast and for how long. */
@@ -294,8 +456,15 @@ export class OutputPane {
     unit: 'megabyte-per-second',
     maximumFractionDigits: 1,
   });
+  private readonly secondsFormat = new Intl.NumberFormat(this.locale, {
+    style: 'unit',
+    unit: 'second',
+    unitDisplay: 'narrow',
+  });
   private readonly minutes = new Intl.NumberFormat(this.locale, { style: 'unit', unit: 'minute', unitDisplay: 'long' });
   private tracker = new PullTracker();
+  private composeTracker = new ComposeTracker();
+  private stepTracker: StepTracker | null = null;
   private subscription?: Subscription;
 
   /** Docker counts in decimal megabytes, so these read as its own figures do. */
@@ -313,16 +482,27 @@ export class OutputPane {
       this.exitCode.set(null);
       this.error.set(null);
       this.tracker = new PullTracker();
+      this.composeTracker = new ComposeTracker();
+      this.stepTracker = null;
       this.pull.set(null);
-      this.showPullLines.set(false);
+      this.containers.set(null);
+      this.steps.set(null);
+      this.showRawLines.set(false);
       if (!id) {
         return;
       }
       this.subscription = this.sse.follow(id).subscribe({
         next: (event) => {
-          if (event.kind === 'line') {
+          if (event.kind === 'steps') {
+            this.stepTracker = new StepTracker(event.steps);
+            this.steps.set(this.stepTracker.snapshot());
+          } else if (event.kind === 'line') {
             this.append(event.line);
           } else {
+            if (this.stepTracker) {
+              this.stepTracker.finish(event.exitCode);
+              this.steps.set(this.stepTracker.snapshot());
+            }
             this.exitCode.set(event.exitCode);
             this.exited.emit(event.exitCode);
           }
@@ -343,17 +523,23 @@ export class OutputPane {
 
   private append(line: OutputLine): void {
     const pull = this.tracker.add(line);
+    const container = !pull && this.composeTracker.add(line);
     const event = composeEvent(line.text);
     const failed = event !== null && composeFailed(event);
-    // A failure stays in the log, but it is also where an image's row turns failed.
+    // A failure stays in the log, but it is also where an image's or a container's row turns failed.
     if (pull || failed) this.pull.set(this.tracker.snapshot());
+    if (container || (failed && line.text.includes('Container '))) this.containers.set(this.composeTracker.snapshot());
+    if (this.stepTracker) {
+      this.stepTracker.add(line);
+      this.steps.set(this.stepTracker.snapshot());
+    }
 
     const entry: Entry = {
       sequence: line.sequence,
       stream: line.stream,
       text: event ? composePlain(event) : line.text,
       failed,
-      pull,
+      tabulated: pull || container,
     };
     this.entries.update((all) => [...all, entry]);
   }

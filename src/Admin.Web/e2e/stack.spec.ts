@@ -23,7 +23,6 @@ test('the stack screen lists the fake services and runs up', async ({ page }) =>
   await page.getByRole('button', { name: 'Up' }).click();
   const widget = page.getByRole('article', { name: 'Job output' });
   const output = widget.locator('app-output-pane pre');
-  await expect(output).toContainText('commerce-gateway-1  Healthy');
   await expect(output).toContainText('exited 0');
   await expect(page.locator('.job-outcome')).toHaveText(/^Up finished: exit 0 in /);
 
@@ -31,9 +30,15 @@ test('the stack screen lists the fake services and runs up', async ({ page }) =>
   const pulls = widget.getByRole('region', { name: 'Image pulls' });
   await expect(pulls.getByRole('rowheader')).toHaveText(['grafana/otel-lgtm:0.37.0', 'redis:7.4.11-alpine']);
   await expect(pulls.locator('.pull-summary')).toHaveText('Images pulled: 2 · 946 MB');
+  // And the containers: a row each at its last verb, the fake Up's lines for them kept out of the log the same way.
+  const containers = widget.getByRole('region', { name: 'Containers' });
+  await expect(containers.getByRole('row', { name: /^commerce-gateway-1 healthy/ })).toBeVisible();
+  await expect(containers.locator('.pull-summary')).toContainText('Containers settled: 5 of 5');
   await expect(output).not.toContainText('3c5e70de2899');
-  await pulls.getByRole('button', { name: /^Show the download lines/ }).click();
+  await expect(output).not.toContainText('commerce-gateway-1  Healthy');
+  await widget.getByRole('button', { name: /^Show the lines behind the tables/ }).click();
   await expect(output).toContainText('3c5e70de2899  Pull complete');
+  await expect(output).toContainText('commerce-gateway-1  Healthy');
 
   // The pane fills the tile and scrolls its own log, so the tile's body never scrolls as well.
   const body = widget.locator('.ws-body');
@@ -158,11 +163,19 @@ test('reset needs the typed confirmation, then runs down -v, up and the readines
 
   const output = page.locator('app-output-pane pre');
   await expect(output).toContainText('Volume commerce_sql-data  Removed');
-  await expect(output).toContainText('commerce-gateway-1  Healthy');
+  await expect(
+    page.getByRole('region', { name: 'Containers' }).getByRole('row', { name: /^commerce-gateway-1 healthy/ }),
+  ).toBeVisible();
   await expect(output).toContainText(
     'ready: gateway, catalog, ordering, bff, inventory, payments, privacy, object-store, image-edge, keycloak, grafana',
   );
   await expect(output).toContainText('exited 0');
+  // Reset is three steps under one job; each reads done once the job has ended.
+  await expect(page.locator('app-output-pane .steps li')).toHaveText([
+    /^down -v done/,
+    /^up -d --wait done/,
+    /^readiness done/,
+  ]);
 });
 
 // Last in the file: FakePlatformScripts replays each block of run-locally.md's load run as a live run printed it, and the

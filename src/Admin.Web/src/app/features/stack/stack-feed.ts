@@ -76,7 +76,7 @@ export class ComposeRun {
       next: (event) => {
         if (event.kind === 'line') {
           this.lines.update((all) => [...all, event.line]);
-        } else {
+        } else if (event.kind === 'exited') {
           this.job.update((job) => (job?.id === id ? { ...job, exitCode: event.exitCode, endedAt: Date.now() } : job));
         }
       },

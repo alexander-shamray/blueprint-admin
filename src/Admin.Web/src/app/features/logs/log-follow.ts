@@ -151,7 +151,7 @@ export class LogFollowService {
               this.lines.update((all) =>
                 all.length >= MAX_LINES ? [...all.slice(1), event.line] : [...all, event.line],
               );
-            } else {
+            } else if (event.kind === 'exited') {
               this.hostJob.set(null);
               this.pending.set(false);
               this.following.set(false);

@@ -95,11 +95,6 @@
   @if (p.services.length > 0) {
     <section class="compose-progress" i18n-aria-label aria-label="Compose progress">
       <p class="compose-count" i18n>{{ p.settled }} of {{ p.services.length }} services settled</p>
-      <ul>
-        @for (c of p.services; track c.name) {
-          <li [class.settled]="c.verb === 'Healthy'">{{ c.name }} {{ c.verb }}</li>
-        }
-      </ul>
     </section>
   }
 }
