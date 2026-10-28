@@ -177,8 +177,10 @@ satisfy (#563).
 
 The build's judge runs in the same two places, after the build rather than
 before it, since the log is what it reads: in the `host` job on both legs,
-after a Debug and a Release build and before the tests, and in the `commits`
-job after each commit's build. There a commit is held only to the judge's
+after each of a Debug and a Release build, before the next one restores
+over the `project.assets.json` both share, and in the `commits` job after
+each commit's build; it refuses an assets file written after the log it is
+read with, which only another restore since could have written. There a commit is held only to the judge's
 refusals its fork point's build does not already carry, as to the static
 read's, which costs one more build: the fork point's. The gate's job is the
 merge, not the run: the build it judges has already run the pull request's

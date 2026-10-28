@@ -273,14 +273,21 @@ def replay(binlog: str, scratch: str) -> list[tuple[str, str]]:
         return imports(handle)
 
 
-def read_assets(path: str) -> dict | None:
+def read_assets(path: str, written: float | None = None) -> dict | None:
+    """One restore's assets file, None when there is none. One written after
+    the log was (`written`, its modification time) is another restore's,
+    since a build's own restore writes it before the log closes."""
     try:
         with open(path, encoding="utf-8-sig") as handle:
-            return json.load(handle)
+            assets = json.load(handle)
     except FileNotFoundError:
         return None
     except json.JSONDecodeError as error:
         raise JudgeError(f"{path} is not JSON: {error}") from error
+    if written is not None and os.path.getmtime(path) > written:
+        raise JudgeError(f"{path} was written after the log it is read with, so another restore ran since: "
+                         "judge each log before the next build")
+    return assets
 
 
 def _git(*args: str) -> str:
@@ -315,8 +322,10 @@ def main(argv: list[str]) -> int:
         problems: list[str] = []
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as scratch:
             for binlog in argv:
+                written = os.path.getmtime(binlog) if os.path.isfile(binlog) else None
                 problems += [f"{os.path.basename(binlog)}: {problem}" for problem in judge(
-                    replay(binlog, scratch), read_assets, root=root, dotnet=dotnet, projects=projects,
+                    replay(binlog, scratch), lambda path: read_assets(path, written), root=root, dotnet=dotnet,
+                    projects=projects,
                     config=config, sources=sources, pinned=pinned, tracked=tracked)]
     except (JudgeError, OSError) as error:
         print(f"::error::{error}")
