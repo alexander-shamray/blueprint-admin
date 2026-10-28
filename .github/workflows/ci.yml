@@ -42,14 +42,17 @@ jobs:
       # solution's global properties, the step's environment and restore's
       # own output are the build's own (#566). Debug, as `smoke` and a
       # developer build it, and Release, on both legs, since a condition can
-      # key an import on the configuration or the operating system.
+      # key an import on the configuration or the operating system. Each log
+      # is judged before the next build restores: both configurations share
+      # one project.assets.json, which the judge reads beside its log.
       - run: dotnet build -bl:${{ runner.temp }}/debug.binlog
         env:
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} .github/pin-gate/judge_build.py ${{ runner.temp }}/debug.binlog
       - run: dotnet build --configuration Release -bl:${{ runner.temp }}/release.binlog
         env:
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} .github/pin-gate/judge_build.py ${{ runner.temp }}/debug.binlog ${{ runner.temp }}/release.binlog
+      - run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} .github/pin-gate/judge_build.py ${{ runner.temp }}/release.binlog
       - run: dotnet test --configuration Release --no-build
 
   # The owner-drift gate: the facts this console copies, read against the

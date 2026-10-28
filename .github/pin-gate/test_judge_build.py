@@ -14,7 +14,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from judge_build import JudgeError, config_sources, imports, judge, judge_assets, main, pin_versions
+from judge_build import (JudgeError, config_sources, imports, judge, judge_assets, main, pin_versions,
+                         read_assets)
 from test_pin_gate import inside as cwd, job, run
 
 PIN = """<Project>
@@ -75,6 +76,21 @@ class TheConfigAndThePinFile(unittest.TestCase):
             pin_versions('<!DOCTYPE Project [<!ENTITY e "x">]><Project />')
         with self.assertRaises(JudgeError):
             config_sources('<!DOCTYPE configuration [<!ENTITY e "x">]><configuration />', "/repo")
+
+
+class TheAssetsFile(unittest.TestCase):
+    def test_one_written_after_its_log_fails_rather_than_standing_for_it(self) -> None:
+        # Two builds share one assets file: the second's restore rewrites it,
+        # so the first's log, judged after it, would read the second's.
+        with tempfile.TemporaryDirectory() as scratch:
+            path = os.path.join(scratch, "project.assets.json")
+            Path(path).write_text("{}", encoding="utf-8")
+            written = os.path.getmtime(path)
+            os.utime(path, (written + 10, written + 10))
+            with self.assertRaises(JudgeError):
+                read_assets(path, written)
+            self.assertEqual(read_assets(path, written + 10), {})
+            self.assertIsNone(read_assets(os.path.join(scratch, "none.json"), written))
 
 
 class TheJudgement(unittest.TestCase):
@@ -319,22 +335,25 @@ class ALiveBuild(unittest.TestCase):
 class TheCiWiring(unittest.TestCase):
     # A gate nothing runs reads exactly like one that passes.
 
-    def test_the_host_job_judges_both_builds_on_both_legs_before_its_tests(self) -> None:
+    def test_the_host_job_judges_each_build_on_both_legs_before_the_next(self) -> None:
         # A condition can key an import on the operating system or the
-        # configuration, so neither leg's log stands for the other's.
+        # configuration, so neither leg's log stands for the other's; and the
+        # two builds share one assets file, so each is judged before the next
+        # restores over it (R1).
         block = job("host")
-        debug = "- run: dotnet build -bl:${{ runner.temp }}/debug.binlog"
-        release = "- run: dotnet build --configuration Release -bl:${{ runner.temp }}/release.binlog"
-        step = ("- run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} .github/pin-gate/judge_build.py "
-                "${{ runner.temp }}/debug.binlog ${{ runner.temp }}/release.binlog")
-        for text in (debug, release, step):
-            self.assertIn(text, block)
-        self.assertLess(block.index(debug), block.index(step))
-        self.assertLess(block.index(release), block.index(step))
-        self.assertLess(block.index(step), block.index("dotnet test"))
-        # `- run:` opens the step, so no `if:` precedes it; none may follow.
-        after = block[block.index(step) + len(step):].split("\n", 2)[1]
-        self.assertNotIn("if:", after)
+        judge = "- run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} .github/pin-gate/judge_build.py "
+        order = ["- run: dotnet build -bl:${{ runner.temp }}/debug.binlog",
+                 judge + "${{ runner.temp }}/debug.binlog\n",
+                 "- run: dotnet build --configuration Release -bl:${{ runner.temp }}/release.binlog",
+                 judge + "${{ runner.temp }}/release.binlog\n",
+                 "- run: dotnet test"]
+        at = 0
+        for text in order:
+            self.assertIn(text, block[at:], text)
+            at = block.index(text, at) + len(text)
+        # `- run:` opens each judge step, so no `if:` precedes it; none may follow.
+        for step in (order[1], order[3]):
+            self.assertNotIn("if:", block[block.index(step) + len(step):].split("\n", 1)[0])
 
     def test_the_commits_job_judges_each_commits_build(self) -> None:
         # The static read before the build, the judge of its log after, each
