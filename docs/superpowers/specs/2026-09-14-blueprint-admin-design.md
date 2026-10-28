@@ -574,6 +574,14 @@ knee are theirs, and the blocks are held to the document word for word
   in the stress widget and above the Stack controls, whoever left it so. The
   way back is the section's last block, which is the command Up already runs;
   it is offered once the run has ended or been stopped.
+- **A port the override takes away is not a service down.** The override may
+  reset a service's host port (blueprint-backend ADR-158 does Ordering's, which
+  runs as replicas the gateway reaches by name), so its §2.2 URL has nothing
+  behind it while the profile lasts. A surface that does not answer, whose
+  service runs on the override and none of whose containers publishes a port,
+  is reported unpublished rather than down (`StressRunService.MarkUnpublished`),
+  read from `ps` like the override itself; the reachability strip says it has
+  no host port and the topology colours it by its Compose state.
 - **Stop and the report.** Stop kills the step's process tree as the load
   run's does: during k6 no summary is written, so the run names no knee and is
   neither a pass nor a fail, and the stack stays on the override. Once k6 has

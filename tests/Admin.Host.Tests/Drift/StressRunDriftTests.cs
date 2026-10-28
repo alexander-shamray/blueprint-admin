@@ -126,6 +126,20 @@ public sealed partial class StressRunDriftTests
         services.ShouldBe(StressRunService.OverrideServices, ignoreOrder: true);
     }
 
+    [Fact]
+    public void The_service_the_fakes_take_the_host_port_from_is_the_one_whose_ports_the_override_resets()
+    {
+        string overlay = File.ReadAllText(Path.Combine(Backend.Dir, "deploy", "compose", StressRunService.OverrideFile)).ReplaceLineEndings("\n");
+        string body = overlay[overlay.IndexOf("\nservices:\n", StringComparison.Ordinal)..];
+        Match[] heads = [.. OverlayService().Matches(body).Cast<Match>()];
+        string[] reset = [.. heads
+            .Select((head, i) => (Name: head.Groups[1].Value, Block: body[head.Index..(i + 1 < heads.Length ? heads[i + 1].Index : body.Length)]))
+            .Where(s => s.Block.Contains("ports: !reset []", StringComparison.Ordinal))
+            .Select(s => s.Name)];
+
+        reset.ShouldBe([FakePlatformScripts.UnpublishedOnOverride]);
+    }
+
     /// <summary>The section from its heading to the next one at the same level.</summary>
     private static string SectionOf(string document)
     {

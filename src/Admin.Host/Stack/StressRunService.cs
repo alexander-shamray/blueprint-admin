@@ -163,6 +163,25 @@ public sealed class StressRunService(
             s.Service == name && s.State == "running" && s.ConfigFiles?.Contains(OverrideFile) == true))];
 
     /// <summary>
+    /// The probe's rows, each surface that did not answer marked unpublished when its service runs on the override and none of
+    /// its containers publishes a host port: the override may take a port away (it takes Ordering's, blueprint-backend
+    /// ADR-158, and the gateway reaches the replicas by name), so the configured URL has nothing behind it by design while the
+    /// profile lasts, and that is not the service being down. Read from <c>ps</c> as <see cref="OnOverride"/> is, so which
+    /// service loses its port is not copied here.
+    /// </summary>
+    public static IReadOnlyList<Reachability> MarkUnpublished(ComposeStatus backend, IReadOnlyList<Reachability> probed)
+    {
+        IReadOnlyList<string> overridden = OnOverride(backend);
+
+        return [.. probed.Select(r => !r.Up
+            && PlatformServices.All.FirstOrDefault(s => s.Name == r.Name) is { } service
+            && overridden.Contains(service.ComposeService)
+            && backend.Services.Where(s => s.Service == service.ComposeService).All(s => s.PublishedPorts.Count == 0)
+                ? r with { Published = false }
+                : r)];
+    }
+
+    /// <summary>
     /// Starts a run under <see cref="ComposeGate"/>, or returns the one still going: its up recreates services, so it races an Up,
     /// a Down, a reset or a lease as they race each other.
     /// </summary>

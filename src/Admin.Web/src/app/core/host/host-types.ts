@@ -41,6 +41,8 @@ export interface Reachability {
   url: string;
   up: boolean;
   status: number | null;
+  /** False when the stress override took the service's host port away (`StressRunService.MarkUnpublished`): `up` is then false and says nothing about the service. */
+  published: boolean;
 }
 
 /**

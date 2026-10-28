@@ -46,9 +46,9 @@ const stack = {
     services: [{ service: 'shipping-worker', state: 'running', health: null, exitCode: null, publishedPorts: [] }],
   },
   reachability: [
-    { name: 'gateway', url: 'http://localhost:5000/health/ready', up: true, status: 200 },
-    { name: 'ordering', url: 'http://localhost:5101/health/ready', up: false, status: 503 },
-    { name: 'catalog', url: 'http://localhost:5100/health/ready', up: false, status: null },
+    { name: 'gateway', url: 'http://localhost:5000/health/ready', up: true, status: 200, published: true },
+    { name: 'ordering', url: 'http://localhost:5101/health/ready', up: false, status: 503, published: true },
+    { name: 'catalog', url: 'http://localhost:5100/health/ready', up: false, status: null, published: true },
   ],
 } as unknown as StackView;
 
@@ -131,6 +131,22 @@ describe('topologyOf', () => {
       node('s:shipping', undefined, { ...stack, backend: { ...stack.backend, reachable: false } } as StackView).state,
     ).toBe('unknown');
     expect(node('s:shipping', undefined, null)).toMatchObject({ state: 'unknown', stateText: 'not read yet' });
+  });
+
+  it('colours a service whose host port the stress override took away by its Compose state, not as down', () => {
+    const unpublished = {
+      backend: {
+        ...stack.backend,
+        services: [
+          { service: 'ordering-api', state: 'running', health: 'healthy', exitCode: null, publishedPorts: [] },
+        ],
+      },
+      reachability: [
+        { name: 'ordering', url: 'http://localhost:5101/health/ready', up: false, status: null, published: false },
+      ],
+    } as unknown as StackView;
+
+    expect(node('s:ordering', undefined, unpublished)).toMatchObject({ state: 'up', stateText: 'Compose: running' });
   });
 
   it('draws a service the probe does not cover as unknown, not green', () => {
