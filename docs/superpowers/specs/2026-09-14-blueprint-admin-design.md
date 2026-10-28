@@ -32,7 +32,9 @@ Three properties follow, and each design choice below is argued against them:
 1. **The console runs the platform's own commands.** Starting the backend is
    `docker compose -f deploy/compose/docker-compose.yml up -d --wait`, in the
    backend clone, with its output shown: Compose asked to report as JSON, and
-   the images it pulls shown as a table above the rest (§5.3). Nothing is
+   the images it pulls and the containers it brings up or takes down shown as
+   tables above the rest, and a job that runs several steps as a strip of them
+   (§5.3). Nothing is
    reimplemented that the Compose files or `package.json` already own.
 2. **Nothing is invented that the backend owns.** Routes come from the
    gateway's configuration and the services' OpenAPI documents; permission
@@ -244,7 +246,16 @@ the other tables do not carry.
 stdout and stderr line by line into a `Job`, and returns it. A `Job` has an
 id, the command line, `Running`/`Exited` state, the exit code, a bounded ring
 buffer of the last 2000 lines with a monotonic sequence number, and a
-broadcast channel that live subscribers read from. `Stop(jobId)` kills the
+broadcast channel that live subscribers read from. A job that runs Compose with
+`--progress json` also keeps the last line of each resource it names (a layer,
+an image, a container), and a subscriber that replays from the start receives
+those that have left the ring first, so a page opened late into a long pull
+still sees every image. A job that runs several steps under one (the load and
+stress runs, Reset, the projection rebuild) names them in `ProcessSpec.Steps`,
+and its stream sends them as a `steps` event before its first line. The reads
+that are not the stream (`GET /api/jobs/{id}`, the assistant's log read, and so
+the MCP route's) return Compose's JSON lines in the plain form Compose wrote
+before the flag. `Stop(jobId)` kills the
 process tree: on Windows each started process is assigned to its own Job
 Object (kill-on-close), and Stop terminates the job, reaching orphaned
 descendants that a parent-link walk would miss; elsewhere, and as the Windows
@@ -278,6 +289,24 @@ is kept (`ComposeService.ExecListedAsync`).
   flag). It is what names the image each layer belongs to and the layer's size,
   which the plain output leaves out: the output pane reads it into one row per
   image pulled (`PullTracker`) and writes the rest back as Compose's plain lines.
+  The same pane reads the `Container <name>  <Verb>` lines, plain or JSON, into
+  a second table (`ComposeTracker`): one row per container with its latest verb
+  as a state, the seconds from its first line to its settled one, and a summary
+  "N of M settled". A Down reads the same table the other way (Stopping to
+  Removed); a Reset's Up, a stress run's Up and a recreate show it inside their
+  job; a container that exited (a migrator, an init job) is settled, and one whose
+  line says `Error` is failed. A line the table is made of leaves the log behind
+  one "Show the lines behind the tables" toggle; `Volume` and `Network` lines and
+  any line the readers do not recognise stay in the log. The Stack controls tile
+  keeps only its "N of M services settled" count: the list is the Job output's.
+- A job with `ProcessSpec.Steps` shows a strip above its log (`StepTracker`):
+  every step pending, running, done, failed or not run, each started by its marker
+  line, `== <step>` or a `$ <command line>` that contains the step's name, with
+  the seconds it took and, for a failed one, the job's "stops here" line. Reset
+  writes `== readiness` for its last step, which has no command; the stress run's
+  last step is the summary it copies in. Nothing is shown that the job does not
+  print: the steps are the host's names for what it runs, and a step the job
+  never reaches is "not run".
 - `Down(wipeVolumes)`: `down` or `down -v`. The endpoint requires
   `confirm: "down -v"` in the body when `wipeVolumes` is true.
 - `Ps()`: `ps --format json`, parsed into `ServiceStatus { Service, State,
@@ -1126,7 +1155,7 @@ wherever an operator puts it.
 
 | Built-in page | Shows | Does |
 |---|---|---|
-| **Stack** | the workstation doctor's rows above the buttons, read when the page opens; one row per Compose service with state, health and port; the frontend job; a reachability strip; the load run's state beside the golden signals, and the stress run's with the step k6 holds and its knee, and the services on the stress override above the buttons whenever any is (§5.3); quick links to the client, Grafana, Keycloak | Check the workstation again; Up, Down, Down and wipe, Reset (both behind one typed confirmation), each disabled while a Compose job runs, the one pressed counting the job up (`Up… 0:42`) and the outcome left beside the buttons (`Up finished: exit 0 in 1:05`); Start and Stop frontend; Run load and Stop load; Run stress, Stop stress, and Back to the normal profile once the run has ended; opens the job's output pane directly under the actions, where a Compose job's stderr is marked only on a line that says it failed, and a per-container list with a settled count is read from its `Container <name>  <Verb>` lines |
+| **Stack** | the workstation doctor's rows above the buttons, read when the page opens; one row per Compose service with state, health and port; the frontend job; a reachability strip; the load run's state beside the golden signals, and the stress run's with the step k6 holds and its knee, and the services on the stress override above the buttons whenever any is (§5.3); quick links to the client, Grafana, Keycloak | Check the workstation again; Up, Down, Down and wipe, Reset (both behind one typed confirmation), each disabled while a Compose job runs, the one pressed counting the job up (`Up… 0:42`) and the outcome left beside the buttons (`Up finished: exit 0 in 1:05`); Start and Stop frontend; Run load and Stop load; Run stress, Stop stress, and Back to the normal profile once the run has ended; opens the job's output pane directly under the actions, where a Compose job's stderr is marked only on a line that says it failed, with the pane's container table and, for a job of several steps, its step strip (§5.3); the tile itself keeps a settled count read from the `Container <name>  <Verb>` lines |
 | **Logs** | a follow stream with service filter, text search and correlation-id highlight | start, stop (the host's follow job too; leaving the page does not stop it, `LogFollowService` keeps following until Stop, and the shell's running-work indicator says so), clear |
 | **Broker** | queues with depth, `_error` and `_skipped` queues marked with the runbook of one that holds a message, a BFF projection panel (what the rebuild tool cannot restore, the depth of `bff-order-events`), exchanges, bindings, permissions; a drained indicator for `ordering-catalog-events`; an opened parked queue's messages, each with its fault, type, body and correlation id as a link into Trace | refresh, and an auto-refresh each of the four listing widgets has of its own (off until switched on in the widget's settings, saved with it; widget-workspace spec §4.3); Repair, and Rebuild behind a typed confirmation, each opening the job's output pane and reading the queues again when it starts and when it ends; Open on a parked queue that holds a message; per message a dry-run Replay or Discard, then, once a dry run of that message and verb is started, that one for real behind a typed confirmation, each opening the job's output pane |
 | **Map** | each service of `PlatformServices.All` with the gateway routes that reach it and the queues it consumes (parked twins included), each queue's depth, its change per second between two reads and the exchanges bound to it; the places where the broker and the console's tables disagree | Refresh, and an auto-refresh of the widget's own every 5 s (off until switched on in its settings, saved with it; widget-workspace spec §4.3) |
