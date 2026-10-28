@@ -86,7 +86,8 @@ public sealed class ResetService(
 
     private async Task<bool> WaitForReadinessAsync(Job reset)
     {
-        reset.Append(OutputStream.Stdout, $"== {ReadinessStep}");
+        // The cap is written here, once, so the Job output counts down to it without restating the value.
+        reset.Append(OutputStream.Stdout, $"== {ReadinessStep}: up to {ReadinessCap.TotalSeconds:0} s");
         DateTimeOffset deadline = time.GetUtcNow() + ReadinessCap;
 
         while (true)
