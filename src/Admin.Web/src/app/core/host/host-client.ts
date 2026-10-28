@@ -32,6 +32,7 @@ import {
   RunbookText,
   ReviewFlagView,
   StackView,
+  StressChoice,
   AlertStripView,
   TelemetryHealthView,
   TokenClockView,
@@ -85,8 +86,8 @@ export class HostClient {
   }
 
   /** The backend's stress run as one job (spec §5.3), or the run still going; 409 while a Compose job or the load run goes. */
-  stressRunStart(): Observable<JobSummary> {
-    return this.http.post<JobSummary>('/api/stack/stress-run', null);
+  stressRunStart(choice: StressChoice): Observable<JobSummary> {
+    return this.http.post<JobSummary>('/api/stack/stress-run', choice);
   }
 
   /** Ends the stress run going at the step it is in; 409 when none is going. */

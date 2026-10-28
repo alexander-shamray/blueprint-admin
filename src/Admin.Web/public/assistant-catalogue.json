@@ -111,7 +111,7 @@
     "id": "widget:stress-run",
     "label": "Stress run",
     "where": "/stack",
-    "help": "Runs the backend's k6 stress run, the steps of run-locally.md's stress run: it brings the stack up with the stress override, then ramps signed-in users through the gateway in steps until the platform gives out. It shows the step k6 is at, the knee once named, and whether the stack still runs on the override, with the way back. The output opens in the page's Job output widget, and Stop stress stops it. Use it to find which part gives out first; it says nothing about production capacity, and it is for the local stack only."
+    "help": "Runs the backend's k6 stress run, the steps of run-locally.md's stress run: it brings the stack up with the stress override, then ramps signed-in users through the gateway in steps until the platform gives out. It offers two lists, the level (low, medium, high, xhigh) and the stop rule (at the first knee, or at real errors), and shows the step k6 is at, the knee once named, why the run ended, which service gave up first, and whether the stack still runs on the override, with the way back. The output opens in the page's Job output widget, and Stop stress stops it. Use it to find which part gives out first; it says nothing about production capacity, and it is for the local stack only."
   },
   {
     "id": "widget:reference-client",
