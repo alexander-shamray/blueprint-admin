@@ -23,9 +23,15 @@ test('a runbook is caused, watched firing beside its text, and undone', async ({
   await expect(log).toContainText('exited 0');
   await expect(detail.locator('td.state')).toHaveText('[firing]');
 
+  // The tool's lines name the alert to wait for; the fake's alert answers at once, so the row has already settled.
+  const awaited = page.getByRole('list', { name: 'Alerts awaited' });
+  await expect(awaited).toContainText('OutboxGrowth fired');
+  await expect(log).not.toContainText('causing OutboxGrowth');
+
   await detail.getByRole('button', { name: 'Undo' }).click();
   await expect(log).toContainText('game day: restore OK');
   await expect(detail.locator('td.state')).toHaveText('[inactive]');
+  await expect(awaited).toContainText('OutboxGrowth cleared');
 });
 
 test('a cause that deletes data is not offered until the runbook name is typed', async ({ page }) => {

@@ -109,6 +109,22 @@ table.md td,
 table.md th {
   font-size: 0.9rem;
 }
+/* The alerts a cause or restore waits on, above the log they came from. */
+.countdowns {
+  margin: 0 0 0.25rem;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+}
+.countdowns .waiting {
+  color: var(--app-muted);
+}
+.countdowns .settled {
+  color: #3fa66a;
+}
+.countdowns .overdue {
+  color: #b00;
+}
 @media (max-width: 70rem) {
   .layout {
     grid-template-columns: 1fr;

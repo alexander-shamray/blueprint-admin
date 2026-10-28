@@ -142,6 +142,89 @@ describe('RunbooksWidget', () => {
     expect((again.nativeElement.querySelector('button.undo') as HTMLButtonElement).disabled).toBe(false);
   });
 
+  describe('countdowns', () => {
+    let seq = 0;
+    const said = (text: string) => ({ sequence: ++seq, at: new Date().toISOString(), stream: 'Stdout' as const, text });
+    const firing: AlertStripView = {
+      reachable: true,
+      error: null,
+      loaded: [{ name: 'OutboxGrowth', state: 'firing' } as AlertStripView['loaded'][number]],
+      waiting: [],
+    };
+    const labels = (fixture: ReturnType<typeof render>): string[] =>
+      Array.from(fixture.nativeElement.querySelectorAll('.countdowns li') as NodeListOf<HTMLElement>).map((li) =>
+        (li.textContent ?? '').trim(),
+      );
+
+    it('counts down the phase’s window from the tool’s causing line, in the listing’s own figures', () => {
+      const fixture = render();
+      fixture.componentInstance.read(said('outbox-growth: causing OutboxGrowth; it fires within 999s once caused'));
+      fixture.detectChanges();
+      expect(fixture.componentInstance.countdowns()[0].windowSeconds).toBe(300);
+
+      vi.advanceTimersByTime(60_000);
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.countdowns()[0].remainingSeconds).toBe(240);
+      expect(fixture.componentInstance.countdowns()[0].status).toBe('waiting');
+    });
+
+    it('turns to fired once the strip reads the alert firing, and stays so when it resolves again', () => {
+      const fixture = render();
+      fixture.componentInstance.read(said('outbox-growth: causing OutboxGrowth; it fires within 300s once caused'));
+      fixture.detectChanges();
+      host['telemetryAlerts'].mockReturnValue(of(firing));
+
+      vi.advanceTimersByTime(5000);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.countdowns()[0].status).toBe('settled');
+
+      host['telemetryAlerts'].mockReturnValue(of(strip));
+      vi.advanceTimersByTime(5000);
+      expect(fixture.componentInstance.countdowns()[0].status).toBe('settled');
+    });
+
+    it('turns overdue when the window passes with the alert still quiet', () => {
+      const fixture = render();
+      fixture.componentInstance.read(said('outbox-growth: causing OutboxGrowth; it fires within 300s once caused'));
+      fixture.detectChanges();
+
+      vi.advanceTimersByTime(301_000);
+
+      expect(fixture.componentInstance.countdowns()[0].status).toBe('overdue');
+    });
+
+    it('waits on a restore’s alert while the line says it still fires, and none when it says it is quiet', () => {
+      const fixture = render();
+      fixture.componentInstance.read(
+        said('OutboxGrowth is firing after the restore; its window clears it within 300s'),
+      );
+      fixture.componentInstance.read(said('OutboxStuck is inactive after the restore'));
+
+      const [growth, stuck] = fixture.componentInstance.countdowns();
+
+      expect(growth.status).toBe('waiting');
+      expect(stuck.status).toBe('settled');
+    });
+
+    it('draws the rows above the log once the pane hands over the lines it claimed', () => {
+      TestBed.overrideProvider(SseClient, {
+        useValue: {
+          follow: () =>
+            of({
+              kind: 'line',
+              line: said('outbox-growth: causing OutboxGrowth; it fires within 300s once caused'),
+            }),
+        },
+      });
+      const first = render();
+      first.componentInstance.jobId.set('job-1');
+      first.detectChanges();
+
+      expect(labels(first)).toEqual([expect.stringContaining('OutboxGrowth should fire within 5 min')]);
+    });
+  });
+
   describe('confirmations', () => {
     it('start disarmed on return: the first press of a confirm cause is not kept', () => {
       const first = render();

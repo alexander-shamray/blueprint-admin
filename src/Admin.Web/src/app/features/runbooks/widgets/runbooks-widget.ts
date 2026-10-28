@@ -1,12 +1,13 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { Component, DestroyRef, computed, effect, inject, input, signal, untracked } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { EMPTY, Observable, Subject, catchError, combineLatest, merge, of, switchMap, timer } from 'rxjs';
 import { HostClient } from '../../../core/host/host-client';
 import {
   AlertStripView,
   JobSummary,
+  OutputLine,
   RunbookCatalogue,
   RunbookEntry,
   RunbookPhase,
@@ -14,11 +15,24 @@ import {
 import { OutputPane } from '../../../shared/output-pane/output-pane';
 import { TabVisibility } from '../../../workspace/polled-feed';
 import { widgetSession } from '../../../workspace/widget-session-store';
+import { GameDayLineReader, Watch } from '../game-day-lines';
 import { Block, blocks } from '../runbook-markdown';
 import { RunbookSpans } from '../runbook-spans';
 
 /** How often the alerts are read while the widget is showing: Prometheus evaluates a minute apart, so a faster read shows nothing new. */
 export const ALERT_POLL_MS = 5000;
+
+/** How often a countdown redraws: it shows seconds. */
+export const COUNTDOWN_TICK_MS = 1000;
+
+/** One alert a cause or restore is waiting on: still counting, settled the way it was meant to, or past its window. */
+export interface Countdown {
+  watch: Watch;
+  /** The listing's window for the phase (`RunbookPhase`); null where the line promised none or the listing has no such phase. */
+  windowSeconds: number | null;
+  status: 'waiting' | 'settled' | 'overdue';
+  remainingSeconds: number;
+}
 
 /**
  * The backend's runbooks, each with the script that causes its alert (spec §5.14; widget-workspace spec §5.2). Which
@@ -99,7 +113,38 @@ export class RunbooksWidget {
   readonly alerts = signal<AlertStripView | null>(null);
   readonly alertsError = signal<string | null>(null);
 
+  /** The tool's `causing` and `after the restore` lines of the followed job, which the pane keeps behind its toggle and hands over. */
+  readonly claims = GameDayLineReader.claims;
+  private reader = new GameDayLineReader();
+  private readonly watches = signal<Watch[]>([]);
+  /** The watches whose alert has been seen to do what was awaited: kept, since a fired alert may resolve again. */
+  private readonly settled = signal<ReadonlySet<Watch>>(new Set());
+  private readonly now = signal(Date.now());
+  /** The alerts the followed job is waiting on, each with the time that is left of its window. */
+  readonly countdowns = computed<Countdown[]>(() => {
+    const now = this.now();
+    const settled = this.settled();
+    return this.watches().map((watch) => {
+      const phase = this.catalogue()
+        ?.runbooks.flatMap((r) => r.phases)
+        .find((p) => p.alert === watch.alert);
+      const seconds = phase ? (watch.kind === 'cause' ? phase.firesWithinSeconds : phase.clearsWithinSeconds) : null;
+      const windowSeconds = watch.windowed ? seconds : null;
+      const left = windowSeconds === null ? 0 : Math.ceil((watch.startedAt + windowSeconds * 1000 - now) / 1000);
+      const status = settled.has(watch) ? 'settled' : windowSeconds !== null && left <= 0 ? 'overdue' : 'waiting';
+      return { watch, windowSeconds, status, remainingSeconds: Math.max(0, left) };
+    });
+  });
+
   constructor() {
+    // Redraw once a second while a countdown is counting, and not otherwise.
+    toObservable(computed(() => this.countdowns().some((c) => c.status === 'waiting' && c.windowSeconds !== null)))
+      .pipe(
+        switchMap((counting) => (counting ? timer(0, COUNTDOWN_TICK_MS) : EMPTY)),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(() => this.now.set(Date.now()));
+
     // Read while the tab is showing: a hidden tab polls nothing (§4.3), and the widget is gone with its page.
     combineLatest([this.visible, merge(timer(0, ALERT_POLL_MS), this.alertsNow)])
       .pipe(
@@ -118,6 +163,7 @@ export class RunbooksWidget {
       .subscribe((view) => {
         if (view) this.alertsError.set(null);
         this.alerts.set(view ?? this.alerts());
+        this.settle();
       });
 
     const name = this.selected();
@@ -206,6 +252,29 @@ export class RunbooksWidget {
     this.start(this.host.runbookRestore(entry.runbook), $localize`undo of ${entry.runbook}:runbook:`);
   }
 
+  /** A line of the followed job that the pane claimed: a cause or a restore now has an alert to wait on. */
+  read(line: OutputLine): void {
+    if (!this.reader.add(line)) return;
+    this.watches.set(this.reader.snapshot());
+    this.now.set(Date.now());
+    this.settle();
+  }
+
+  /**
+   * An awaited change seen on the strip is kept: a cause is settled once its alert reads firing, a restore once it
+   * reads inactive (or the line already said so). Nothing is read from the strip that it does not already poll.
+   */
+  private settle(): void {
+    const view = this.alerts();
+    const pending = this.watches().filter((w) => !this.settled().has(w));
+    const done = pending.filter((w) => {
+      if (w.state === 'inactive') return true;
+      const state = view?.reachable ? view.loaded.find((r) => r.name === w.alert)?.state : undefined;
+      return w.kind === 'cause' ? state === 'firing' : state === 'inactive';
+    });
+    if (done.length > 0) this.settled.set(new Set([...this.settled(), ...done]));
+  }
+
   /** The job has ended, or its stream failed so no end will come: read the alerts at once instead of at the next tick. */
   jobEnded(): void {
     this.running.set(false);
@@ -229,12 +298,36 @@ export class RunbooksWidget {
     return seconds < 90 ? $localize`${seconds}:seconds: s` : $localize`${Math.round(seconds / 60)}:minutes: min`;
   }
 
+  /** What the countdown row says: the alert, what is awaited of it, and while it counts, the time left as minutes and seconds. */
+  countdownLabel(c: Countdown): string {
+    const alert = c.watch.alert;
+    const window = c.windowSeconds === null ? '' : this.minutes(c.windowSeconds);
+    const left = `${Math.floor(c.remainingSeconds / 60)}:${String(c.remainingSeconds % 60).padStart(2, '0')}`;
+    if (c.watch.kind === 'cause') {
+      if (c.status === 'settled') return $localize`:a game-day cause's alert:${alert}:alert: fired`;
+      if (c.windowSeconds === null) return $localize`:a game-day cause's alert:${alert}:alert: should fire`;
+      return c.status === 'overdue'
+        ? $localize`:a game-day cause's alert:${alert}:alert: did not fire within ${window}:window:`
+        : $localize`:a game-day cause's alert:${alert}:alert: should fire within ${window}:window: (${left}:left: left)`;
+    }
+    if (c.status === 'settled') return $localize`:a game-day restore's alert:${alert}:alert: cleared`;
+    if (c.windowSeconds === null) {
+      return $localize`:a game-day restore's alert:${alert}:alert: is ${c.watch.state}:state: after the restore`;
+    }
+    return c.status === 'overdue'
+      ? $localize`:a game-day restore's alert:${alert}:alert: did not clear within ${window}:window:`
+      : $localize`:a game-day restore's alert:${alert}:alert: should clear within ${window}:window: (${left}:left: left)`;
+  }
+
   private start(job: Observable<JobSummary>, label: string): void {
     this.running.set(true);
     this.jobError.set(null);
     job.subscribe({
       next: (summary) => {
         this.jobLabel.set(label);
+        this.reader = new GameDayLineReader();
+        this.watches.set([]);
+        this.settled.set(new Set());
         this.jobId.set(summary.id);
         this.disarm();
       },
