@@ -206,6 +206,16 @@ class TheJudgement(unittest.TestCase):
             with self.subTest(name=name):
                 self.refused(name, assets=self.assets(**{name: False}))
 
+    def test_the_root_config_named_as_nuget_probed_for_it_passes(self) -> None:
+        # macOS: restore names the root's nuget.config NuGet.Config, the
+        # spelling it probed for, which a case-insensitive file system matched.
+        os.makedirs(self.root)
+        Path(self.config).write_text("<configuration />", encoding="utf-8")
+        probed = os.path.join(self.root, "NuGet.Config")
+        if not os.path.exists(probed):
+            self.skipTest("a case-sensitive file system, where NuGet names the file as it is spelled")
+        self.assertEqual(self.problems(assets=self.assets(configFilePaths=[probed])), [])
+
     def test_a_nuget_config_other_than_the_roots_fails(self) -> None:
         nested = os.path.join(self.root, "src", "nuget.config")
         self.refused("nearest NuGet config", assets=self.assets(configFilePaths=[nested, self.config]))

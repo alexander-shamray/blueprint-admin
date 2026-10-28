@@ -93,6 +93,16 @@ def _canonical(path: str) -> str:
     return os.path.normcase(os.path.realpath(path))
 
 
+def _same(path: str, other: str) -> bool:
+    """One file, by identity where both exist: NuGet names a config by the
+    spelling it probed for, which a case-insensitive file system (macOS,
+    Windows) matches against a file spelled otherwise."""
+    try:
+        return os.path.samefile(path, other)
+    except OSError:
+        return _canonical(path) == _canonical(other)
+
+
 def inside(path: str, root: str) -> bool:
     if not path:
         return False
@@ -152,11 +162,11 @@ def judge_assets(assets: dict, *, where: str, root: str, dotnet: str, config: st
     # Nearest first: the root's, then any above the checkout and the user's
     # and the machine's, none of which the repository writes.
     configs: list[str] = restore.get("configFilePaths", [])
-    if not configs or _canonical(configs[0]) != _canonical(config):
+    if not configs or not _same(configs[0], config):
         problems.append(f"{where}: restore's nearest NuGet config is {configs[0] if configs else None!r}, "
                         f"not the root {CONFIG}")
     for path in configs[1:]:
-        if inside(path, root) and _canonical(path) != _canonical(config):
+        if inside(path, root) and not _same(path, config):
             problems.append(f"{where}: restore read the NuGet config {path}, inside the repository")
 
     # The SDK's own local sources (a Windows runner's library-packs) lie
