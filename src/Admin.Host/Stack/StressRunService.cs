@@ -61,7 +61,7 @@ public sealed class StressRunService(
         $sampler = Start-Process node -ArgumentList 'deploy/observability/stress/sample.mjs', $out -NoNewWindow -PassThru
         $env:KEYCLOAK_ADMIN_PASSWORD = 'admin'
         $ErrorActionPreference = 'Continue'
-        k6 run --no-color -e BASE_URL=http://localhost:5000 -e KEYCLOAK_URL=http://localhost:8080 -e "STRESS_PRODUCTS=$ids" -e "STRESS_CURRENCY=$cur" -e "STRESS_OUT=$out" deploy/observability/stress/stress.js
+        k6 run --no-color --address 127.0.0.1:6565 -e BASE_URL=http://localhost:5000 -e KEYCLOAK_URL=http://localhost:8080 -e "STRESS_PRODUCTS=$ids" -e "STRESS_CURRENCY=$cur" -e "STRESS_OUT=$out" deploy/observability/stress/stress.js
         $code = $LASTEXITCODE; "k6 exit: $code"
         $sampler.WaitForExit()
         node deploy/observability/stress/summarise.mjs $out
