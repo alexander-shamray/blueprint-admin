@@ -15,6 +15,13 @@ public sealed record ProcessSpec(string FileName, IReadOnlyList<string> Argument
     public bool Listed { get; init; } = true;
 
     /// <summary>
+    /// The steps a job runs one after another under this one job, in order, or null for a job that is a single command.
+    /// <see cref="JobStream"/> sends them first, so the output pane can show the steps not yet reached. Each is named by
+    /// the marker line the job writes when it starts: <c>== name</c>, or a <c>$ command line</c> that contains it.
+    /// </summary>
+    public IReadOnlyList<string>? Steps { get; init; }
+
+    /// <summary>
     /// Variables set for the child on top of the host's own, each a line run-locally.md gives as <c>$env:Name = …</c>.
     /// Never part of <see cref="CommandLine"/>: a value may be a connection string.
     /// </summary>

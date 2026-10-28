@@ -10,6 +10,36 @@ public sealed class JobStreamTests
     private static readonly ProcessSpec Spec = new("docker", ["compose", "logs", "-f"], "/tmp");
 
     [Fact]
+    public async Task A_job_with_steps_sends_them_first_and_without_an_id_and_a_job_without_sends_none()
+    {
+        Job stepped = new("job-1", Spec with { Steps = ["down -v", "readiness"] }, new FakeTimeProvider());
+        stepped.Append(OutputStream.Stdout, "line 0");
+        stepped.MarkExited(0);
+        Job single = new("job-2", Spec, new FakeTimeProvider());
+        single.MarkExited(0);
+
+        List<SseItem<string>> withSteps = await Collect(stepped);
+        List<SseItem<string>> without = await Collect(single);
+
+        withSteps.Select(e => e.EventType).ShouldBe(["steps", "line", "exited"]);
+        withSteps[0].EventId.ShouldBeNull();
+        withSteps[0].Data.ShouldBe("""{"steps":["down -v","readiness"]}""");
+        without.Select(e => e.EventType).ShouldBe(["exited"]);
+    }
+
+    private static async Task<List<SseItem<string>>> Collect(Job job)
+    {
+        List<SseItem<string>> items = [];
+
+        await foreach (SseItem<string> item in JobStream.Events(job, -1, TestContext.Current.CancellationToken))
+        {
+            items.Add(item);
+        }
+
+        return items;
+    }
+
+    [Fact]
     public async Task A_stream_whose_reader_fell_behind_ends_without_an_exited_event_so_the_browser_resumes()
     {
         Job job = new("job-1", Spec, new FakeTimeProvider(), capacity: 3);

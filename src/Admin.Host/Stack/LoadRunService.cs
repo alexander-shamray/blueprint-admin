@@ -168,7 +168,7 @@ public sealed class LoadRunService(IProcessRunner runner, JobRegistry registry, 
                 return running;
             }
 
-            Job run = registry.Create(new ProcessSpec(Kind, [.. Steps.Select(s => s.Name)], paths.BackendDir));
+            Job run = registry.Create(new ProcessSpec(Kind, [.. Steps.Select(s => s.Name)], paths.BackendDir) { Steps = [.. Steps.Select(s => s.Name)] });
             current = run;
             step = null;
             stopping = false;

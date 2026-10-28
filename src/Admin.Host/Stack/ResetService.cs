@@ -26,6 +26,9 @@ public sealed class ResetService(
     /// <summary>The reference client is not part of the backend a reset brings back, so it is not waited for.</summary>
     private const string Client = "client";
 
+    /// <summary>The step with no command of its own, so no <c>$</c> line: the reset writes its marker, the one line of its own.</summary>
+    private const string ReadinessStep = "readiness";
+
     /// <summary>How a reset is named in a refusal, and the kind <see cref="Claim.Answer"/> is asked for.</summary>
     public const string Kind = "reset";
 
@@ -35,7 +38,10 @@ public sealed class ResetService(
     /// </summary>
     public Claim Start() => composeGate.Claim(Kind, () =>
     {
-        Job reset = registry.Create(new ProcessSpec("reset", ["down -v", "up -d --wait", "readiness"], paths.BackendDir));
+        Job reset = registry.Create(new ProcessSpec("reset", ["down -v", "up -d --wait", ReadinessStep], paths.BackendDir)
+        {
+            Steps = ["down -v", "up -d --wait", ReadinessStep],
+        });
         _ = Task.Run(() => RunAsync(reset));
 
         return reset;
@@ -80,6 +86,7 @@ public sealed class ResetService(
 
     private async Task<bool> WaitForReadinessAsync(Job reset)
     {
+        reset.Append(OutputStream.Stdout, $"== {ReadinessStep}");
         DateTimeOffset deadline = time.GetUtcNow() + ReadinessCap;
 
         while (true)
