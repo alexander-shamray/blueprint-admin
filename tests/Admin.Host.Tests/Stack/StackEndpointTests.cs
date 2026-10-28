@@ -72,12 +72,16 @@ public sealed class StackEndpointTests : IClassFixture<AdminHostFactory>
         Runner.Started.Count(s => s.Arguments.Contains(Admin.Host.Stack.StressRunService.Up)).ShouldBe(stressSpecsBefore);
     }
 
-    [Fact]
-    public async Task A_stress_run_with_a_body_that_is_not_json_is_refused_rather_than_run_at_the_defaults()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_stress_run_with_a_body_that_is_not_json_is_refused_rather_than_run_at_the_defaults(bool chunked)
     {
         int stressSpecsBefore = Runner.Started.Count(s => s.Arguments.Contains(Admin.Host.Stack.StressRunService.Up));
+        using HttpRequestMessage request = new(HttpMethod.Post, "/api/stack/stress-run") { Content = new StringContent("level=high", System.Text.Encoding.UTF8, "text/plain") };
+        request.Headers.TransferEncodingChunked = chunked;
 
-        HttpResponseMessage response = await client.PostAsync("/api/stack/stress-run", new StringContent("level=high", System.Text.Encoding.UTF8, "text/plain"), TestContext.Current.CancellationToken);
+        HttpResponseMessage response = await client.SendAsync(request, TestContext.Current.CancellationToken);
 
         response.StatusCode.ShouldBe(HttpStatusCode.UnsupportedMediaType);
         Runner.Started.Count(s => s.Arguments.Contains(Admin.Host.Stack.StressRunService.Up)).ShouldBe(stressSpecsBefore);
