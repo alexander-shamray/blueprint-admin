@@ -94,7 +94,8 @@ fetch, image age, and whether the image store was provisioned (`object-store`
 and `image-edge` healthy, `object-store-init` exited 0); then Compose services, reachability,
 up, down, down with a typed `down -v` confirmation, Reset behind the same
 confirmation, which runs `down -v`, up and the readiness wait as one job, live
-output; the reference
+output, the wait a checklist of the surfaces with a countdown to the host's cap;
+the reference
 client's `npm start` with start, stop and its output; a table of each
 service's golden signals from Prometheus, one column per panel of the
 backend golden-signals dashboard: request rate, 5xx share, p99 latency, the
@@ -102,9 +103,11 @@ backend golden-signals dashboard: request rate, 5xx share, p99 latency, the
 loaded, firing first, and the backend's `awaiting-signal.yaml` rules listed apart
 as waiting, each with the metric it lacks; and the load run, the backend's
 §13.7 SLO run as one job, block by block as `run-locally.md`'s "Load run
-(k6)" runs it, with Stop, so the strip is read under load; and the stress
+(k6)" runs it, with Stop, so the strip is read under load, and k6's per-second
+lines drawn as a bar of elapsed time and users; and the stress
 run, the backend's stepped k6 run under the stress override, block by block
-as "Stress run (k6)" runs it, with the step k6 holds, the knee once named, and
+as "Stress run (k6)" runs it, with the step k6 holds drawn as a staircase of
+ramps and holds in that bar, the knee once named, and
 the override said on the screen until Up takes it away), the Logs page
 (follow, service filter, text filter, correlation-id highlight) and the API
 page (Catalog's, Ordering's, Inventory's, Payments' and Privacy's OpenAPI operations
