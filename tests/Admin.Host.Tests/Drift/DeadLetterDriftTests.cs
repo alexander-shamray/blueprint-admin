@@ -89,9 +89,18 @@ public sealed partial class DeadLetterDriftTests
     {
         string tool = Backend.Read(DeadLetterService.Tool);
 
-        foreach (string word in new[] { "\"would-refuse\"", "\"discarded\"", "\"replayed\"", "\"refused\"", "\"failed\"" })
+        // As the tool spells them where it records an action, not as bare words that appear all through it. The layout
+        // of the lines and `not found` are held by the test above.
+        foreach (string call in new[]
         {
-            tool.ShouldContain(word);
+            "\"would-refuse\" if reason else f\"would-{verb}\"",
+            "act(message, \"discarded\")",
+            "act(message, \"replayed\")",
+            "put_back(run, queue, message, \"refused\", reason, actions)",
+            "act(message, \"failed\", reason)",
+        })
+        {
+            tool.ShouldContain(call);
         }
 
         tool.ShouldContain("f\"not reached    {identity} (the run stopped first)\"");
