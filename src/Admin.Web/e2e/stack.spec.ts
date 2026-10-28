@@ -170,6 +170,10 @@ test('reset needs the typed confirmation, then runs down -v, up and the readines
     'ready: gateway, catalog, ordering, bff, inventory, payments, privacy, object-store, image-edge, keycloak, grafana',
   );
   await expect(output).toContainText('exited 0');
+  // The readiness wait is a checklist of the surfaces, every one answering by the `ready:` line.
+  await expect(page.getByRole('region', { name: 'Readiness' }).locator('.pull-summary')).toHaveText(
+    /^Ready: (\d+) of \1 surfaces answer$/,
+  );
   // Reset is three steps under one job; each reads done once the job has ended.
   await expect(page.locator('app-output-pane .steps li')).toHaveText([
     /^down -v done/,
@@ -205,6 +209,10 @@ test.describe('the load run', () => {
     await expect(output).toContainText('token check: pass');
     await expect(output).toContainText('k6 exit: 0');
     await expect(output).toContainText('k6 exited 0: a pass');
+    // The run's progress lines are a bar above the log; two scenarios, so no length is guessed.
+    await expect(page.getByRole('region', { name: 'k6 run', exact: true }).locator('.pull-summary')).toHaveText(
+      /^k6 · [\d:]+ · \d+ of 20 users · \d+ iterations complete, 0 interrupted$/,
+    );
     await expect(load.locator('.load-run-status')).toHaveText(/exited 0/);
 
     // The strip reads on its own 15-second timer, so the load arrives at its next tick.

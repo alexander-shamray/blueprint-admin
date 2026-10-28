@@ -35,6 +35,13 @@ test.describe('the stress run', () => {
       timeout: 40_000,
     });
 
+    // The Job output's k6 bar reads the same hold, as the staircase of the steps the host has counted.
+    const k6 = page.getByRole('region', { name: 'k6 run', exact: true });
+    await expect(k6.locator('.pull-summary')).toHaveText(/^k6 · [\d:]+ of 17:30 · \d+ of 400 users/, {
+      timeout: 40_000,
+    });
+    await expect(k6.locator('.staircase [aria-current="step"]')).toHaveText(/^(Ramp|Hold) [1-5]$/, { timeout: 40_000 });
+
     await expect(stress.locator('.stress-run-status')).toHaveText(/exited 99/, { timeout: 40_000 });
     await expect(stress.locator('.stress-run-knee')).toHaveText(/^Knee: step 4 \(200 VUs\): failures/);
     await expect(output).toContainText('| 4 | 200 | 52.6 | 4210 | 9870 | 23.4% (past the abort rate) |');
