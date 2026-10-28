@@ -72,6 +72,15 @@ def _parser() -> expat.XMLParserType:
     return parser
 
 
+def _unescaped(path: str) -> str:
+    """The banner's path as the file system has it. The banner is an XML
+    comment, which may not hold `--`, so MSBuild writes `__` for it; the
+    mapping is applied only where the escaped path is absent and the
+    unescaped one exists, so a real `__` path is never rewritten."""
+    mapped = path.replace("__", "--")
+    return mapped if mapped != path and not os.path.exists(path) and os.path.exists(mapped) else path
+
+
 def imports(preprocessed: str) -> list[str]:
     """Every file `-preprocess` says it imported, from the banner it writes
     around each import. The output is read as XML, comments and all, so no
@@ -85,7 +94,7 @@ def imports(preprocessed: str) -> list[str]:
             return
         body = [line for line in lines[1:-1] if line]
         if body and body[0].startswith("<Import "):
-            found.append(body[-1])
+            found.append(_unescaped(body[-1]))
 
     parser = _parser()
     parser.CommentHandler = comment
