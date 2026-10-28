@@ -78,8 +78,9 @@ const CHOICE_STORAGE_KEY = 'blueprint-admin.stress-choice';
       }
       @if (overridden().length > 0) {
         <p class="stress-override" role="status" i18n>
-          The stack runs on the stress override ({{ overridden().join(', ') }}): the gateway's rate limits are lifted
-          and the workers do not pace themselves. It is never for a deployment.
+          The stack runs on the stress override ({{ overridden().join(', ') }}): the gateway's rate limits are lifted,
+          the workers do not pace themselves, and Ordering runs as replicas with no host port. It is never for a
+          deployment.
         </p>
         <button
           class="stress-restore"
@@ -87,7 +88,7 @@ const CHOICE_STORAGE_KEY = 'blueprint-admin.stress-choice';
           [disabled]="running() || compose.running()"
           (click)="restore()"
           i18n-title
-          title="Up without the override, run-locally.md's way back: it recreates the gateway and both workers with every default"
+          title="Up without the override, run-locally.md's way back: it recreates the gateway, both workers and Ordering with every default"
           i18n
           >Back to the normal profile</button
         >
@@ -95,8 +96,8 @@ const CHOICE_STORAGE_KEY = 'blueprint-admin.stress-choice';
       <p class="stress-run-note" i18n>
         The backend's stress run: distinct signed-in users walk the shop's typical visit through the gateway, more of
         them at each step, until the platform gives out. It first brings the stack up with the stress override, which
-        recreates the gateway and both workers, and takes about twenty minutes. It reports and never passes or fails. A
-        local run says which part gives out first and roughly where, never what production can carry.
+        recreates the gateway, both workers and Ordering, and takes about twenty minutes. It reports and never passes or
+        fails. A local run says which part gives out first and roughly where, never what production can carry.
       </p>
       @if (error(); as e) {
         <p class="error">{{ e }}</p>
