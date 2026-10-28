@@ -3,7 +3,12 @@ using Microsoft.Extensions.Options;
 
 namespace Admin.Host.Stack;
 
-public sealed record Reachability(string Name, string Url, bool Up, int? Status);
+/// <summary>
+/// One surface's answer. <see cref="Published"/> is false when the stack runs on the stress override with the service's host
+/// port taken away (<see cref="StressRunService.MarkUnpublished"/>): <see cref="Up"/> is then false and says nothing about the
+/// service, only that its configured URL has nothing behind it on that profile.
+/// </summary>
+public sealed record Reachability(string Name, string Url, bool Up, int? Status, bool Published = true);
 
 /// <summary>
 /// Whether each HTTP surface on the workstation answers. A refused connection

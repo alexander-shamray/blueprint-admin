@@ -9,10 +9,12 @@ import { StackFeed } from '../stack-feed';
     @if (feed.stack.value()) {
       <p class="reachability">
         @for (r of surfaces(); track r.name) {
-          <span [class.up]="r.up" [class.down]="!r.up" [title]="r.url"
+          <span [class.up]="r.up" [class.down]="!r.up && r.published" [title]="r.url"
             >{{ r.name }}&ngsp;
             @if (r.up) {
               <ng-container i18n>up</ng-container>
+            } @else if (!r.published) {
+              <ng-container i18n>no host port on the stress override</ng-container>
             } @else {
               <ng-container i18n>down</ng-container>
             }

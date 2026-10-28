@@ -10,7 +10,9 @@ namespace Admin.Host.Fakes;
 /// host; the realm token endpoint, the four OpenAPI documents, the gateway, the payment simulator's
 /// request log, the mail sink and Grafana's datasource proxies are recordings (FakeKeycloak, FakeOpenApi, FakeGateway,
 /// FakeMailSink, FakeGrafana), and the BFF's order read is <see cref="FakeOrders"/>, through the gateway or, sent to the BFF's own
-/// port, through <see cref="FakeBff"/>. Hosts are told apart by the configured URLs.
+/// port, through <see cref="FakeBff"/>. Hosts are told apart by the configured URLs. While the fake stack is on the stress
+/// override, the URL of the service it takes the host port from (<see cref="FakePlatformScripts.UnpublishedOnOverride"/>)
+/// refuses the connection, as nothing listens there on that profile.
 /// </summary>
 public sealed class FakePlatformHandler(AdminOptions options, FakeOrders orders) : HttpMessageHandler
 {
@@ -18,6 +20,12 @@ public sealed class FakePlatformHandler(AdminOptions options, FakeOrders orders)
     {
         Uri uri = request.RequestUri!;
         string path = uri.AbsolutePath;
+
+        if (orders.Stack.StressOverride
+            && PlatformServices.WithUrl.Any(s => s.ComposeService == FakePlatformScripts.UnpublishedOnOverride && Is(uri, s.Url!(options))))
+        {
+            throw new HttpRequestException(HttpRequestError.ConnectionError, "No connection could be made because the target machine actively refused it.");
+        }
 
         HttpResponseMessage response =
             path == "/health/ready" ? FakeHttp.Json(HttpStatusCode.OK, """{"status":"Healthy"}""")

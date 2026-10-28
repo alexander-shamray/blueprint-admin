@@ -18,8 +18,9 @@ const stack = {
   },
   frontend: { job: null, installed: true, deviceJob: null },
   reachability: [
-    { name: 'gateway', url: 'http://localhost:5000/health/ready', up: true, status: 200 },
-    { name: 'grafana', url: 'http://localhost:3000', up: false, status: null },
+    { name: 'gateway', url: 'http://localhost:5000/health/ready', up: true, status: 200, published: true },
+    { name: 'grafana', url: 'http://localhost:3000', up: false, status: null, published: true },
+    { name: 'ordering', url: 'http://localhost:5101/health/ready', up: false, status: null, published: false },
   ],
   lease: null,
   loadRun: null,
@@ -104,6 +105,13 @@ describe('a Stack widget with a config', () => {
     const rows = await render(ReachabilityWidget, { surfaces: ['grafana'] });
 
     expect(rows('.reachability span')).toEqual(['grafana down']);
+  });
+
+  it('says a surface the stress override took the host port from has none, rather than that it is down', async () => {
+    const rows = await render(ReachabilityWidget, { surfaces: ['ordering'] });
+
+    expect(rows('.reachability span')).toEqual(['ordering no host port on the stress override']);
+    expect(rows('.reachability span.down')).toEqual([]);
   });
 
   it('prints the golden signals of only the services it names', async () => {

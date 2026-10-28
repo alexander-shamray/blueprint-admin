@@ -96,11 +96,14 @@ export function composeOf(service: Pick<MapService, 'name'>): string | null {
   return COMPOSE_OF[service.name] ?? null;
 }
 
-/** The two words a service node is coloured by: a probed service by reachability, a worker by its Compose state. */
+/**
+ * The two words a service node is coloured by: a probed service by reachability, a worker by its Compose state, and so is a
+ * probed service whose host port the stress override took away, since its URL has nothing behind it on that profile.
+ */
 function serviceState(service: MapService, stack: StackView | undefined): { state: ServiceState; text: string } {
   if (!stack) return { state: 'unknown', text: $localize`not read yet` };
-  if (service.url !== null) {
-    const probed = stack.reachability.find((r) => r.name === service.name);
+  const probed = service.url === null ? undefined : stack.reachability.find((r) => r.name === service.name);
+  if (service.url !== null && probed?.published !== false) {
     if (!probed) return { state: 'unknown', text: $localize`not probed` };
     if (probed.up) return { state: 'up', text: $localize`reachable` };
     return {

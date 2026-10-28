@@ -323,6 +323,29 @@ public sealed class StressRunServiceTests : IAsyncDisposable
         StressRunService.OnOverride(ComposeStatus.Unreachable("docker did not answer")).ShouldBeEmpty();
     }
 
+    [Fact]
+    public void A_surface_down_on_the_override_with_no_host_port_is_unpublished_and_every_other_row_is_as_probed()
+    {
+        ComposeStatus backend = ComposeStatus.Up(
+        [
+            new("gateway", "running", "healthy", null, [5000], ["docker-compose.yml", StressRunService.OverrideFile]),
+            new("ordering-api", "running", "healthy", null, [], ["docker-compose.yml", StressRunService.OverrideFile]),
+            new("ordering-api", "running", "healthy", null, [], ["docker-compose.yml", StressRunService.OverrideFile]),
+            new("catalog-api", "running", "healthy", null, [], ["docker-compose.yml"]),
+        ]);
+        Reachability gateway = new("gateway", "http://localhost:5000/health/ready", false, null);
+        Reachability ordering = new("ordering", "http://localhost:5101/health/ready", false, null);
+        Reachability catalog = new("catalog", "http://localhost:5100/health/ready", false, null);
+        Reachability grafana = new("grafana", "http://localhost:3000/api/health", false, null);
+
+        StressRunService.MarkUnpublished(backend, [gateway, ordering, catalog, grafana])
+            .ShouldBe([gateway, ordering with { Published = false }, catalog, grafana]);
+        StressRunService.MarkUnpublished(backend, [ordering with { Up = true, Status = 200 }])
+            .ShouldBe([ordering with { Up = true, Status = 200 }]);
+        StressRunService.MarkUnpublished(ComposeStatus.Up([new("ordering-api", "running", "healthy", null, [5101])]), [ordering])
+            .ShouldBe([ordering]);
+    }
+
     private static void NoVerdictWasRead(Job run) => Texts(run).ShouldNotContain(t => t.StartsWith("k6 exited", StringComparison.Ordinal));
 
     private StressRunService Service(TimeSpan? settle = null) =>
@@ -436,6 +459,8 @@ public sealed class StressRunEndpointTests(AdminHostFactory factory) : IClassFix
         JsonElement stack = await WaitForStackAsync(s => s.GetProperty("stressRun").GetProperty("progress").ValueKind == JsonValueKind.Object);
         stack.GetProperty("stressRun").GetProperty("job").GetProperty("id").GetString().ShouldBe(job.GetProperty("id").GetString());
         stack.GetProperty("stressOverride").EnumerateArray().Select(s => s.GetString()).ShouldBe(StressRunService.OverrideServices);
+        Ordering(stack).GetProperty("up").GetBoolean().ShouldBeFalse();
+        Ordering(stack).GetProperty("published").GetBoolean().ShouldBeFalse();
         (await GatewayAsync()).GetProperty("requestRate").GetDouble().ShouldBeGreaterThan(idle.GetProperty("requestRate").GetDouble());
 
         (await client.PostAsync("/api/stack/backend/up", null, TestContext.Current.CancellationToken)).StatusCode.ShouldBe(HttpStatusCode.Conflict);
@@ -448,8 +473,13 @@ public sealed class StressRunEndpointTests(AdminHostFactory factory) : IClassFix
 
         HttpResponseMessage up = await client.PostAsync("/api/stack/backend/up", null, TestContext.Current.CancellationToken);
         up.StatusCode.ShouldBe(HttpStatusCode.Accepted);
-        await WaitForStackAsync(s => s.GetProperty("stressOverride").GetArrayLength() == 0);
+        JsonElement back = await WaitForStackAsync(s => s.GetProperty("stressOverride").GetArrayLength() == 0);
+        Ordering(back).GetProperty("up").GetBoolean().ShouldBeTrue();
+        Ordering(back).GetProperty("published").GetBoolean().ShouldBeTrue();
     }
+
+    private static JsonElement Ordering(JsonElement stack) =>
+        stack.GetProperty("reachability").EnumerateArray().Single(r => r.GetProperty("name").GetString() == "ordering");
 
     [Fact]
     public async Task Stop_with_no_run_going_is_a_conflict()

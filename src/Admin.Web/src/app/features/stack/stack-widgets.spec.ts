@@ -63,8 +63,8 @@ const stack = {
   },
   frontend: { job: null, installed: true, deviceJob: null },
   reachability: [
-    { name: 'gateway', url: 'http://localhost:5000/health/ready', up: true, status: 200 },
-    { name: 'client', url: 'http://localhost:5173/', up: false, status: null },
+    { name: 'gateway', url: 'http://localhost:5000/health/ready', up: true, status: 200, published: true },
+    { name: 'client', url: 'http://localhost:5173/', up: false, status: null, published: true },
   ],
   lease: null,
   loadRun: null,
@@ -331,8 +331,8 @@ describe('StackWidgets', () => {
       of({
         ...stack,
         reachability: [
-          { name: 'gateway', url: 'http://localhost:5000/health/ready', up: true, status: 200 },
-          { name: 'grafana', url: 'http://localhost:3000', up: false, status: null },
+          { name: 'gateway', url: 'http://localhost:5000/health/ready', up: true, status: 200, published: true },
+          { name: 'grafana', url: 'http://localhost:3000', up: false, status: null, published: true },
         ],
       }),
     );
@@ -1107,7 +1107,7 @@ describe('StackWidgets', () => {
         of({
           ...stack,
           frontend: { job: runningJob, installed: true },
-          reachability: [{ name: 'client', url: 'http://localhost:5173/', up: true, status: 200 }],
+          reachability: [{ name: 'client', url: 'http://localhost:5173/', up: true, status: 200, published: true }],
         }),
       );
       const { fixture, q } = await render();

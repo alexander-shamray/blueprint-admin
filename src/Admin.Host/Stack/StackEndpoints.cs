@@ -214,7 +214,14 @@ public static partial class StackEndpoints
         JobSummary? lastRun = loadRun.Current is { } run ? JobSummary.Of(run) : null;
         ComposeStatus services = await backend;
 
-        return new StackView(services, frontend.Status(), await reachability, leases.Current, lastRun, stressRun.View(), StressRunService.OnOverride(services));
+        return new StackView(
+            services,
+            frontend.Status(),
+            StressRunService.MarkUnpublished(services, await reachability),
+            leases.Current,
+            lastRun,
+            stressRun.View(),
+            StressRunService.OnOverride(services));
     }
 
     [GeneratedRegex(@"\A[A-Za-z0-9][A-Za-z0-9._-]*\z")]

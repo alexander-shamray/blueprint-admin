@@ -211,18 +211,34 @@ public static partial class FakePlatformScripts
 
     /// <summary>
     /// <c>ps</c> with the services the stress override changes created from it too, as Compose labels a container it made from
-    /// two files, when <paramref name="stressOverride"/> holds; the recording otherwise.
+    /// two files, and <see cref="UnpublishedOnOverride"/> publishing no host port, when <paramref name="stressOverride"/> holds;
+    /// the recording otherwise.
     /// </summary>
     public static IReadOnlyList<string> ComposePsLines(bool stressOverride) =>
         stressOverride
             ? [.. ComposePsLines().Select(l => StressRunService.OverrideServices.Any(s => l.Contains($"\"Service\":\"{s}\"", StringComparison.Ordinal))
                 ? ConfigFile().Replace(l, m => $"{m.Value},{m.Groups["dir"].Value}{StressRunService.OverrideFile}", 1)
-                : l)]
+                : l)
+                .Select(l => l.Contains($"\"Service\":\"{UnpublishedOnOverride}\"", StringComparison.Ordinal) ? Publishers().Replace(l, Unpublished, 1) : l)]
             : ComposePsLines();
+
+    /// <summary>
+    /// Owner: blueprint-backend <c>deploy/compose/docker-compose.stress.yml</c>, the service whose <c>ports</c> it resets
+    /// (copied, held by <c>StressRunDriftTests</c>): on the override its URL refuses (<see cref="FakePlatformHandler"/>) and
+    /// <c>ps</c> shows it publishing nothing. The host reads the same from <c>ps</c> and copies none of it.
+    /// </summary>
+    public const string UnpublishedOnOverride = "ordering-api";
+
+    /// <summary>A container's port exposed and published nowhere, as <c>ps</c> prints one in the recording.</summary>
+    private const string Unpublished = "\"Publishers\":[{\"URL\":\"\",\"TargetPort\":8080,\"PublishedPort\":0,\"Protocol\":\"tcp\"}]";
 
     /// <summary>The base file in a container's <c>config_files</c> label as the recording's JSON escapes it, with its directory.</summary>
     [GeneratedRegex(@"(?<=config_files=)(?<dir>[^,]*?)docker-compose\.yml")]
     private static partial Regex ConfigFile();
+
+    /// <summary>A container's published ports in a <c>ps</c> row.</summary>
+    [GeneratedRegex(@"""Publishers"":\[[^\]]*\]")]
+    private static partial Regex Publishers();
 
     private static string[] Lines(string recording) =>
         recording.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
