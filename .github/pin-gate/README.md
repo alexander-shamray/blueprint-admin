@@ -140,7 +140,8 @@ condition can tell the judge from the build. In each log it refuses:
     version.
 
 It fails rather than judges when a log is missing or does not replay, when
-it names no import, and where no .NET SDK is on `PATH`; an SDK other than
+it names no import, when an assets file was written after its log, and
+where no .NET SDK is on `PATH`; an SDK other than
 the one on `PATH` builds from outside that install, which the first rule
 refuses.
 
@@ -184,12 +185,12 @@ The build's judge runs in the same two places, after the build rather than
 before it, since the log is what it reads: in the `host` job on both legs,
 after each of a Debug and a Release build, before the next one restores
 over the `project.assets.json` both share, and in the `commits` job after
-each commit's build; it refuses an assets file written after the log it is
-read with, which only another restore since could have written. There a commit is held only to the judge's
-refusals its fork point's build does not already carry, as to the static
-read's, which costs one more build: the fork point's. The gate's job is the
-merge, not the run: the build it judges has already run the pull request's
-code, the residual above.
+each commit's build. It fails on an assets file written after the log it is
+read with, which only another restore since could have written. There a
+commit is held only to the judge's refusals its fork point's build does not
+already carry, as to the static read's, which costs one more build: the
+fork point's. The gate's job is the merge, not the run: the build it judges
+has already run the pull request's code, the residual above.
 
 **The head's copy judges**, unlike the commit gate's base copy. The commit
 gate judges a pull request's metadata, which the branch writes freely; this
