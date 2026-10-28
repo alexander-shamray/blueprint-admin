@@ -58,18 +58,32 @@ row_of() {
   esac
 }
 
-# The bytes inside fences, the only part of a sample the sweeps audit. A fence
-# closes only on its own character, at least as long, with nothing after it.
+# The bytes inside fences, the only part of a sample the sweeps audit, one line
+# per blob of a `git cat-file --batch` stream: a header, the blob, and the
+# newline cat-file adds after it. A fence closes only on its own character, at
+# least as long, with nothing after it. A blob ends at a byte count, so
+# LC_ALL=C: gawk's length counts characters in a UTF-8 locale, and one é
+# miscounted would run a sample into the next. A stream that does not parse —
+# a `missing` header, a blob cut short — fails rather than answering for it.
 fenced_bytes() {
-  awk '
-    match($0, /^[ \t]*(```+|~~~+)/) {
-      mark = substr($0, RSTART, RLENGTH); sub(/^[ \t]*/, "", mark)
-      ch = substr(mark, 1, 1); n = length(mark); rest = substr($0, RSTART + RLENGTH)
-      if (!open) { open = 1; och = ch; on = n; next }
-      if (ch == och && n >= on && rest ~ /^[ \t]*$/) { open = 0; next }
+  LC_ALL=C awk '
+    state == 2 { if ($0 != "") bad = 1; state = 0; next }
+    state == 0 {
+      if (NF != 3 || $2 != "blob") { bad = 1; exit }
+      left = $3; open = 0; total = 0; state = 1; next
     }
-    open { total += length($0) + 1 }
-    END { print total + 0 }'
+    {
+      left -= length($0) + 1; fence = 0
+      if (match($0, /^[ \t]*(```+|~~~+)/)) {
+        mark = substr($0, RSTART, RLENGTH); sub(/^[ \t]*/, "", mark)
+        ch = substr(mark, 1, 1); n = length(mark); rest = substr($0, RSTART + RLENGTH)
+        if (!open) { open = 1; och = ch; on = n; fence = 1 }
+        else if (ch == och && n >= on && rest ~ /^[ \t]*$/) { open = 0; fence = 1 }
+      }
+      if (open && !fence) total += length($0) + 1
+      if (left <= 0) { print total + 0; state = left == 0 ? 2 : 0 }
+    }
+    END { if (bad || state) { print "unreadable cat-file stream" > "/dev/stderr"; exit 1 } }'
 }
 
 # The lockfile's two promises, read mechanically because 340 KB is not a thing
@@ -138,6 +152,7 @@ while IFS= read -r -d '' f; do texts+="${f#"$pinned:"}"$'\n'; done < "$out/.text
 while IFS= read -r -d '' f; do changes+="$f"$'\n'; done < "$out/.changed"
 
 tracked=0 unowned=0 unchanged=0 empty=0 binary=0 record=0 generated=0 fenceless=0 listed=0
+sampled=0 lockfile=""
 while IFS= read -r -d '' rec; do
   meta=${rec%%$'\t'*} file=${rec#*$'\t'}
   # A slice list is one name a line, so a name holding a line break cannot be
@@ -175,23 +190,48 @@ while IFS= read -r -d '' rec; do
   # fault refuses the run. Owned by their rows, counted, not listed.
   case "$file" in
     docs/superpowers/plans/*) record=$((record + 1)); continue ;;
-    src/Admin.Web/package-lock.json)
-      faults=$(g cat-file blob "$pinned:$file" | lockfile_faults)
-      if [ -n "$faults" ]; then
-        printf '%s\n' "$faults" | head -n 20 >&2
-        echo "the lockfile fails its check: $file" >&2; exit 3
-      fi
-      generated=$((generated + 1)); continue ;;
+    src/Admin.Web/package-lock.json) lockfile=$file; generated=$((generated + 1)); continue ;;
   esac
+  # Both blob reads wait for the loop to end. Under MSYS each pipeline started
+  # here was an emulated fork per file, most of a run's time (#577), so a
+  # sample's name is written down and every sample is read in one pass below.
   if [ "$row" = samples ]; then
-    size=$(g cat-file blob "$pinned:$file" | fenced_bytes)
-    [ "$size" -gt 0 ] || { fenceless=$((fenceless + 1)); continue; }
+    printf '%s:%s\n' "$pinned" "$file" >> "$out/.samples"
+    sampled=$((sampled + 1)); continue
   fi
   listed=$((listed + 1))
   printf '%s %s\n' "$size" "$file" >> "$out/.row.$row"
 done < "$out/.tree"
 rm -f "$out/.tree" "$out/.text" "$out/.changed"
 [ "$unowned" -eq 0 ] || { echo "$unowned tracked path(s) no row owns" >&2; exit 3; }
+
+if [ -n "$lockfile" ]; then
+  faults=$(g cat-file blob "$pinned:$lockfile" | lockfile_faults)
+  if [ -n "$faults" ]; then
+    printf '%s\n' "$faults" | head -n 20 >&2
+    echo "the lockfile fails its check: $lockfile" >&2; exit 3
+  fi
+fi
+
+# Every sample through one cat-file and one awk, in tree order, the answers read
+# back beside the names. Counted both ways, so a stream answering for fewer
+# samples or more fails rather than pairing a count with the wrong name.
+if [ "$sampled" -gt 0 ]; then
+  g cat-file --batch < "$out/.samples" | fenced_bytes > "$out/.fenced"
+  answered=0
+  while IFS= read -r size <&4; do
+    IFS= read -r sample <&3 || { echo "more fence counts than samples" >&2; exit 3; }
+    answered=$((answered + 1))
+    sample=${sample#"$pinned:"}
+    case "$size" in ''|*[!0-9]*) echo "an unreadable fence count for: $sample" >&2; exit 3 ;; esac
+    [ "$size" -gt 0 ] || { fenceless=$((fenceless + 1)); continue; }
+    listed=$((listed + 1))
+    printf '%s %s\n' "$size" "$sample" >> "$out/.row.samples"
+  done 3< "$out/.samples" 4< "$out/.fenced"
+  [ "$answered" -eq "$sampled" ] ||
+    { echo "fences read for $answered of $sampled samples" >&2; exit 3; }
+  rm -f "$out/.samples" "$out/.fenced"
+fi
 if [ -z "$since" ] && [ "$listed" -eq 0 ]; then
   echo "a full run that lists nothing has read nothing" >&2; exit 3
 fi
