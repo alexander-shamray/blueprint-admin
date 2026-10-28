@@ -63,8 +63,9 @@ interface Entry {
         }
       </ol>
     }
-    @if (pull() || containers()) {
+    @if (pull() || containers() || tabulatedCount() > 0) {
       <div class="tables">
+        <ng-content select="[tables]" />
         @if (pull(); as p) {
           <section class="pull" aria-label="Image pulls" i18n-aria-label>
             <p class="pull-summary">{{ summary(p) }}</p>
@@ -303,6 +304,13 @@ export class OutputPane {
   readonly composeStderr = input(false);
   /** Set where the pane is a widget's whole body: it then takes that body's height, and its parts scroll inside it. */
   readonly fill = input(false);
+  /**
+   * A screen's own reader for the lines of a job it knows: it says whether a line is one the screen tabulates, and
+   * the pane then keeps that line behind the toggle and hands it over through `claimed`. The screen projects its
+   * table into the pane as `[tables]`.
+   */
+  readonly claims = input<((text: string) => boolean) | null>(null);
+  readonly claimed = output<OutputLine>();
   readonly entries = signal<Entry[]>([]);
   readonly exitCode = signal<number | null>(null);
   /** The followed job's exit code, once, when the stream reports it: what a screen re-reads state on. */
@@ -525,6 +533,8 @@ export class OutputPane {
   private append(line: OutputLine): void {
     const pull = this.tracker.add(line);
     const container = !pull && this.composeTracker.add(line);
+    const claimed = !pull && !container && (this.claims()?.(line.text) ?? false);
+    if (claimed) this.claimed.emit(line);
     const event = composeEvent(line.text);
     const failed = event !== null && composeFailed(event);
     // A failure stays in the log, but it is also where an image's or a container's row turns failed.
@@ -540,7 +550,7 @@ export class OutputPane {
       stream: line.stream,
       text: event ? composePlain(event) : line.text,
       failed,
-      tabulated: pull || container,
+      tabulated: pull || container || claimed,
     };
     this.entries.update((all) => [...all, entry]);
   }

@@ -51,8 +51,14 @@ test('an error queue opens into its message, dry-runs a replay, then replays it 
 
   await message.getByRole('button', { name: 'Dry-run replay' }).click();
   const log = panel.getByRole('log', { name: 'Job output' });
-  await expect(log).toContainText('would-replay');
-  await expect(log).toContainText('-> ordering-catalog-events');
+  // The tool's per-message line is a row of the result table; the log keeps the tool's other lines.
+  const results = panel.getByRole('region', { name: 'Messages' });
+  await expect(results.locator('.move-summary')).toHaveText('1 would be replayed (dry run)');
+  const row = results.locator('tbody tr');
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText('would be replayed');
+  await expect(row).toContainText('ordering-catalog-events');
+  await expect(log).not.toContainText('would-replay');
   await expect(log).toContainText('dry run: nothing left ordering-catalog-events_error');
   await expect(log).toContainText('clear_password dead-letter-operator');
   await expect(log).toContainText('exited 0');
@@ -63,10 +69,13 @@ test('an error queue opens into its message, dry-runs a replay, then replays it 
   await expect(execute).toBeEnabled();
   await execute.click();
 
-  await expect(log).toContainText('replayed');
+  await expect(results.locator('.move-summary')).toHaveText('1 replayed');
   await expect(log).toContainText('--execute --record');
   await expect(log).toContainText('exited 0');
   await expect(log).not.toContainText('would-replay');
+  // The lines the table is made of are one click away.
+  await panel.getByRole('button', { name: /Show the lines behind the tables/ }).click();
+  await expect(log).toContainText('replayed');
 });
 
 // Against the fake platform's recorded rabbitmqctl output (src/Admin.Host/Fakes/fixtures/rabbitmq-*.json):

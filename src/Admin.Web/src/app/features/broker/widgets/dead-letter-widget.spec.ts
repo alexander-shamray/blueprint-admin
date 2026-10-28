@@ -148,6 +148,36 @@ describe('DeadLetterWidget', () => {
     expect(fixture.nativeElement.querySelector('.moved')).toBeNull();
   });
 
+  it('tabulates the tool’s per-message lines above the log, the count line saying a dry run', () => {
+    const line = (sequence: number, text: string) => ({
+      kind: 'line' as const,
+      line: { sequence, at: '2026-10-28T10:00:00Z', stream: 'Stdout' as const, text },
+    });
+    (TestBed.inject(SseClient) as { follow: unknown }).follow = () =>
+      of(
+        line(1, 'would-replay    m-1 -> rabbitmq://rabbitmq/ordering-catalog-events'),
+        line(2, 'not found       m-9'),
+        line(3, 'dry run: nothing left ordering-catalog-events_error.'),
+      );
+    const fixture = render();
+    open(fixture);
+    click(fixture, 'button.dry-replay');
+    // The pane follows the job in an effect, which runs on that pass; its lines land after it.
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.move-summary')?.textContent).toBe('1 would be replayed, 1 not found (dry run)');
+    const rows = Array.from(el.querySelectorAll('.move-table tbody tr'));
+    expect(rows.map((r) => r.querySelector('th')?.textContent)).toEqual(['m-1', 'm-9']);
+    expect(rows[1].className).toBe('not-found');
+    expect(el.querySelector('.move-hint')).not.toBeNull();
+    // The tool's own closing line stays in the log; the two result lines wait behind the toggle.
+    expect(el.querySelector('pre.pane')?.textContent).toContain('dry run: nothing left');
+    expect(el.querySelector('pre.pane')?.textContent).not.toContain('would-replay');
+    click(fixture, 'button.pull-lines');
+    expect(el.querySelector('pre.pane')?.textContent).toContain('would-replay');
+  });
+
   it("opening another queue does not show the last queue's job", () => {
     const fixture = render();
     open(fixture);
