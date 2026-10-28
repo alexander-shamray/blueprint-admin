@@ -179,7 +179,7 @@ public sealed class AdminReadTools(
             return new ToolOutcome(true, "No log follow is running in this console. The Logs screen starts one.");
         }
 
-        IEnumerable<OutputLine> lines = job.Tail(job.Capacity);
+        IEnumerable<OutputLine> lines = job.Tail(job.Capacity).Select(ComposeJsonLine.Plain);
 
         if (!string.IsNullOrEmpty(filter))
         {

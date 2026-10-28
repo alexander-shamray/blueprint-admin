@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
+using Admin.Host.Compose;
 
 namespace Admin.Host.Jobs;
 
@@ -12,12 +13,16 @@ namespace Admin.Host.Jobs;
 /// A follower's channel holds at most a ring's worth of lines: one that falls
 /// that far behind is ended rather than buffered without bound, and resumes
 /// from the ring by sequence number (an EventSource does this on its own).
+/// A job that runs Compose with <c>--progress json</c> writes a layer's progress many times a second, so a long pull
+/// scrolls its early layers out of the ring: the last line of each Compose resource is kept beside it, and a follower
+/// replaying from the start receives those first, so a page opened late still sees every image and container.
 /// </summary>
 public sealed class Job
 {
     private readonly Lock gate = new();
     private readonly OutputLine?[] ring;
     private readonly List<Channel<OutputLine>> followers = [];
+    private readonly Dictionary<string, OutputLine> resources = [];
     private readonly TaskCompletionSource<int> completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TimeProvider time;
     private long next;
@@ -81,6 +86,7 @@ public sealed class Job
             OutputLine line = new(next, time.GetUtcNow(), stream, text);
             ring[next % ring.Length] = line;
             next++;
+            Keep(line);
 
             // Never wait on a slow reader here: this runs on the process's output
             // thread. A full channel means that follower is a ring behind, so it is
@@ -158,7 +164,7 @@ public sealed class Job
 
         lock (gate)
         {
-            replay = SinceUnlocked(afterSequence);
+            replay = [.. Evicted(afterSequence), .. SinceUnlocked(afterSequence)];
 
             if (State == JobState.Running)
             {
@@ -203,6 +209,28 @@ public sealed class Job
                 followers.Remove(live);
             }
         }
+    }
+
+    /// <summary>Remembers a Compose line as its resource's latest, up to one resource per ring slot: past that, new resources are not kept.</summary>
+    private void Keep(OutputLine line)
+    {
+        if (!line.Text.StartsWith("{\"id\":", StringComparison.Ordinal) || ComposeJsonLine.ResourceOf(line.Text) is not { } id)
+        {
+            return;
+        }
+
+        if (resources.ContainsKey(id) || resources.Count < ring.Length)
+        {
+            resources[id] = line;
+        }
+    }
+
+    /// <summary>Each Compose resource's last line that has left the ring and follows <paramref name="afterSequence"/>, oldest first.</summary>
+    private List<OutputLine> Evicted(long afterSequence)
+    {
+        long oldest = next - ring.Length;
+
+        return [.. resources.Values.Where(l => l.Sequence < oldest && l.Sequence > afterSequence).OrderBy(l => l.Sequence)];
     }
 
     private List<OutputLine> SinceUnlocked(long afterSequence)
