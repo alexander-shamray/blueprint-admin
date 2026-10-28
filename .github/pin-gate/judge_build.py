@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Every build a binary log records imported nothing from outside the repository, the .NET install and the packages it restored, and restored by the pin file and the root nuget.config alone.
 The rules are .github/pin-gate/README.md's, *What the build's judge refuses*; run it as
-py -3.12 .github/pin-gate/judge_build.py BINLOG... from the root of the tree that was built.
+py -3.12 .github/pin-gate/judge_build.py BINLOG... from the root of the tree that was built, each log
+before the next build restores over the assets files it is read with.
 """
 
 from __future__ import annotations
@@ -304,7 +305,8 @@ def _git(*args: str) -> str:
 def main(argv: list[str]) -> int:
     if not argv:
         print(__doc__.splitlines()[0], file=sys.stderr)
-        print("it takes the binary logs to judge: build with -bl:<path>, then name each", file=sys.stderr)
+        print("it takes the binary logs to judge: build with -bl:<path>, and judge each log before the next "
+              "build restores", file=sys.stderr)
         return 2
     try:
         root = _git("rev-parse", "--show-toplevel").strip()
