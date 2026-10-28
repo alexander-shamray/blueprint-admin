@@ -13,7 +13,7 @@ namespace Admin.Host.Stack;
 /// document asks, Prometheus answers through Grafana, then the run block chooses its products, starts the sampler and k6, and
 /// writes the summary. The console runs the backend's scripts and carries none: the staircase, the journey and the knee are
 /// theirs, and the step shown is read off k6's own progress lines (<see cref="StressStaircase"/>). Unlike the load run, the job
-/// claims <see cref="ComposeGate"/>, because its first block recreates the gateway, both workers and Ordering; the way back to the normal
+/// claims <see cref="ComposeGate"/>, because its first block recreates each service the override changes; the way back to the normal
 /// profile is the section's last block, which is the command the Stack's Up runs (<see cref="ComposeService.Up"/>), and the
 /// override is read from the containers rather than remembered (<see cref="OnOverride"/>).
 /// </summary>

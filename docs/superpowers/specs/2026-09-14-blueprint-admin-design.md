@@ -538,8 +538,8 @@ knee are theirs, and the blocks are held to the document word for word
 (`StressRunDriftTests`).
 
 - **One job, under the gate.** It is built as the load run is (§5.3 above),
-  but it claims `ComposeGate`, because its up recreates the gateway, both
-  workers and Ordering: an Up, a Down, a reset or a lease is refused while it runs, and a
+  but it claims `ComposeGate`, because its up recreates each service the
+  override changes: an Up, a Down, a reset or a lease is refused while it runs, and a
   second Run answers with the run going. One k6 run at a time: a load run
   going refuses a stress run, and the other way round, since each would read
   the other's traffic as its own.

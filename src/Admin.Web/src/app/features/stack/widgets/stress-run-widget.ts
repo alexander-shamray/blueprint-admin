@@ -104,7 +104,7 @@ const CHOICE_STORAGE_KEY = 'blueprint-admin.stress-choice';
       <p class="stress-run-note" i18n>
         The backend's stress run: distinct signed-in users walk the shop's typical visit through the gateway, more of
         them at each step, until the platform gives out. It first brings the stack up with the stress override, which
-        recreates the gateway, both workers and Ordering, and takes about twenty minutes. It reports and never passes or
+        recreates each service the override changes, and takes about twenty minutes. It reports and never passes or
         fails. A local run says which part gives out first and roughly where, never what production can carry.
       </p>
       @if (error(); as e) {
