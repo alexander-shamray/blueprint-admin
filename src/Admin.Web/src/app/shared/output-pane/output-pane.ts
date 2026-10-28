@@ -494,7 +494,8 @@ export class OutputPane {
       this.subscription = this.sse.follow(id).subscribe({
         next: (event) => {
           if (event.kind === 'steps') {
-            this.stepTracker = new StepTracker(event.steps);
+            // Named again on every reconnect, which resumes after the last line: the tracker keeps what it has read.
+            if (!this.stepTracker?.is(event.steps)) this.stepTracker = new StepTracker(event.steps);
             this.steps.set(this.stepTracker.snapshot());
           } else if (event.kind === 'line') {
             this.append(event.line);

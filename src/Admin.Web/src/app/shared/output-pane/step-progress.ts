@@ -37,6 +37,11 @@ export class StepTracker {
     this.steps = names.map((name) => ({ name, state: 'pending', startedAt: NaN, endedAt: NaN, detail: null }));
   }
 
+  /** Whether these are the steps this tracker was made for. */
+  is(names: readonly string[]): boolean {
+    return names.length === this.steps.length && names.every((name, i) => name === this.steps[i].name);
+  }
+
   add(line: OutputLine): void {
     const at = Date.parse(line.at);
     if (!Number.isNaN(at)) this.lastAt = at;
