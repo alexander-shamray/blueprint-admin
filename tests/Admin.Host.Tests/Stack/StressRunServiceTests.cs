@@ -358,13 +358,19 @@ public sealed class StressRunServiceTests : IAsyncDisposable
               ordering-api: # with a comment after it
                 ports: !reset []
               otel.collector_2:
+              grafana: &lgtm
+                mem_limit: 2g
+              web-bff: !override
+                environment: {}
+              privacy-api: { mem_limit: 512m }
             volumes:
               sql-data:
             """;
+        string[] keys = ["gateway", "ordering-api", "otel.collector_2", "grafana", "web-bff", "privacy-api"];
 
-        StressRunService.ServicesOf(overlay).ShouldBe(["gateway", "ordering-api", "otel.collector_2"]);
-        StressRunService.ServicesOf(overlay.ReplaceLineEndings("\r\n")).ShouldBe(["gateway", "ordering-api", "otel.collector_2"]);
-        StressRunService.ServicesOf(overlay.ReplaceLineEndings("\n")).ShouldBe(["gateway", "ordering-api", "otel.collector_2"]);
+        StressRunService.ServicesOf(overlay).ShouldBe(keys);
+        StressRunService.ServicesOf(overlay.ReplaceLineEndings("\r\n")).ShouldBe(keys);
+        StressRunService.ServicesOf(overlay.ReplaceLineEndings("\n")).ShouldBe(keys);
         StressRunService.ServicesOf("volumes:\n  sql-data:\n").ShouldBeEmpty();
         StressRunService.ReadOverride(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), StressRunService.OverrideFile)).ShouldBeEmpty();
     }

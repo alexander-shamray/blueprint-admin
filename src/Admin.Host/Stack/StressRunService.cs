@@ -172,7 +172,7 @@ public sealed partial class StressRunService(
 
     /// <summary>
     /// The keys of an override's top-level <c>services:</c> map, in the file's order: each line under it indented two spaces
-    /// that names a key and nothing more, until the next top-level key. Compose names a service by that key alone, so the
+    /// that starts with a key, whatever its value, until the next top-level key. Compose names a service by that key alone, so the
     /// override changes exactly these.
     /// </summary>
     public static IReadOnlyList<string> ServicesOf(string overlay)
@@ -472,8 +472,8 @@ public sealed partial class StressRunService(
     [GeneratedRegex(@"^([A-Za-z0-9_][A-Za-z0-9._-]*):(\s|$)")]
     private static partial Regex TopLevelKey();
 
-    /// <summary>A key indented two spaces with nothing after it but a comment: a service under <c>services:</c>.</summary>
-    [GeneratedRegex(@"^  ([A-Za-z0-9][A-Za-z0-9._-]*):\s*(#.*)?$")]
+    /// <summary>A key indented two spaces, whatever follows it (a tag, an anchor, a flow map): a service under <c>services:</c>.</summary>
+    [GeneratedRegex(@"^  ([A-Za-z0-9][A-Za-z0-9._-]*):(\s|$)")]
     private static partial Regex ServiceKey();
 }
 
