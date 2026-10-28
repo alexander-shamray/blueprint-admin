@@ -633,7 +633,16 @@ listed job. The real run with `--execute` takes the typed confirmation
 records no incident could need, writes them under the temp directory instead.
 The host takes the real run on its own; it is the screen that offers it only
 for the message and verb a dry run was last started for, and the dry run's
-output, in the job pane below the messages, says what the real run would do. A stderr line the tool
+output, in the job pane below the messages, says what the real run would do. The pane
+reads the tool's per-message lines into a table above its log (`MoveResultReader`):
+one row per message id with its outcome (replayed, would be replayed, not found and
+the like), the destination and the tool's reason, under a count line that says
+"dry run" when the lines are `would-` ones. A line is a row only when its action
+word is one `finish` prints (held by `DeadLetterDriftTests`); the lines the table
+is made of leave the log behind the same "Show the lines behind the tables" toggle
+as a pull's, and the tool's other lines, `truncated` and the dry run's closing
+note among them, stay in the log. A `not found` row is marked, since the message
+may have been moved or have expired since the queue was read. A stderr line the tool
 prefixes `unrecorded` is the last copy of a message it took and could not
 record, so the job keeps it in a file beside the record and says where. The
 drift gate holds the tool's path, the account, the variable, the prefix and the
