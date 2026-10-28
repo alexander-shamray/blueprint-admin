@@ -89,11 +89,18 @@ public sealed class StressRunService(
     {
         [0] = "every step ran, and none failed past the abort rate",
         [99] = "a step's requests failed at more than a fifth over its hold, and unless it was the last step k6 stopped there",
+        [108] = "the knee stop ended the run at the end of that step's hold, so the step is measured whole and nothing past it ran",
         [107] = "setup() refused, so no load was driven and the run says nothing about the platform",
     };
 
     /// <summary>Owner: run-locally.md, "Stress run (k6)", the start of the line summarise.mjs ends on that names the knee.</summary>
     internal const string KneePrefix = "Knee: ";
+
+    /// <summary>Owner: run-locally.md, "Stress run (k6)", the start of the line that says why the run ended, after the knee's.</summary>
+    internal const string EndedPrefix = "Ended: ";
+
+    /// <summary>Owner: blueprint-backend <c>deploy/observability/README.md</c>, "The stress run", the start of the line that names the service that crossed first.</summary>
+    internal const string FirstToGiveUpPrefix = "First to give up: ";
 
     /// <summary>Owner: run-locally.md, "Stress run (k6)", the line the run block prints with k6's code once k6 has run.</summary>
     internal const string K6ExitPrefix = "k6 exit: ";
@@ -131,6 +138,9 @@ public sealed class StressRunService(
     private volatile Job? current;
     private volatile StressStaircase? staircase;
     private volatile string? knee;
+    private volatile string? firstToGiveUp;
+    private volatile string? ended;
+    private volatile StressChoice? choice;
     private Job? step;
     private volatile bool k6Ended;
     private TaskCompletionSource stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -141,7 +151,7 @@ public sealed class StressRunService(
 
     /// <summary>The last run with its step and its knee, as the Stack screen reads it; null before the first.</summary>
     public StressRunView? View() =>
-        current is { } run ? new StressRunView(JobSummary.Of(run), staircase?.Current, knee) : null;
+        current is { } run ? new StressRunView(JobSummary.Of(run), staircase?.Current, knee, choice, ended, firstToGiveUp) : null;
 
     /// <summary>
     /// The services of <see cref="OverrideServices"/> whose running container was created with <see cref="OverrideFile"/>: what
@@ -156,7 +166,7 @@ public sealed class StressRunService(
     /// Starts a run under <see cref="ComposeGate"/>, or returns the one still going: its up recreates services, so it races an Up,
     /// a Down, a reset or a lease as they race each other.
     /// </summary>
-    public Claim Start() => composeGate.Claim(Kind, () =>
+    public Claim Start(StressChoice? asked = null) => composeGate.Claim(Kind, () =>
     {
         lock (gate)
         {
@@ -164,6 +174,9 @@ public sealed class StressRunService(
             current = run;
             staircase = null;
             knee = null;
+            firstToGiveUp = null;
+            ended = null;
+            choice = asked ?? StressChoice.Default;
             step = null;
             k6Ended = false;
             stopping = false;
@@ -254,7 +267,10 @@ public sealed class StressRunService(
                         return;
                     }
 
-                    job = runner.Start(LoadRunService.Spec(next.Block, paths, options.Value.SqlPassword));
+                    ProcessSpec spec = LoadRunService.Spec(next.Block, paths, options.Value.SqlPassword);
+
+                    // The choice reaches only the run block, as the document sets it before that block.
+                    job = runner.Start(ReferenceEquals(next, Steps[^1]) ? spec with { Environment = choice?.Environment } : spec);
                     step = job;
                 }
 
@@ -327,7 +343,11 @@ public sealed class StressRunService(
     {
         string? kneeLine = stdout.LastOrDefault(l => l.StartsWith(KneePrefix, StringComparison.Ordinal));
         string? summary = stdout.LastOrDefault(l => l.StartsWith(SummaryPrefix, StringComparison.Ordinal))?[SummaryPrefix.Length..].Trim();
+        string? endedLine = stdout.LastOrDefault(l => l.StartsWith(EndedPrefix, StringComparison.Ordinal));
+        string? giveUpLine = stdout.LastOrDefault(l => l.StartsWith(FirstToGiveUpPrefix, StringComparison.Ordinal));
         knee = kneeLine;
+        ended = endedLine;
+        firstToGiveUp = giveUpLine;
 
         if (summary is not null)
         {
@@ -356,7 +376,7 @@ public sealed class StressRunService(
         }
 
         string verdict = Verdicts.TryGetValue(exitCode, out string? said) ? said : "k6's own code, which run-locally.md does not read";
-        run.Append(exitCode == 0 ? OutputStream.Stdout : OutputStream.Stderr, $"k6 exited {exitCode}: {verdict}. {kneeLine ?? "No knee was named."}");
+        run.Append(exitCode == 0 ? OutputStream.Stdout : OutputStream.Stderr, $"k6 exited {exitCode}: {verdict}. {kneeLine ?? "No knee was named."}{(endedLine is null ? "" : $" {endedLine}")}{(giveUpLine is null ? "" : $" {giveUpLine}")}");
         run.MarkExited(exitCode);
     }
 
@@ -407,12 +427,17 @@ public sealed class StressRunService(
     private static string Block(string text) => text.ReplaceLineEndings("\n");
 }
 
-/// <summary>The last stress run as the Stack screen reads it: the job, the step k6 is at while it runs, and the knee once it is named.</summary>
-public sealed record StressRunView(JobSummary Job, StressProgress? Progress, string? Knee);
+/// <summary>
+/// The last stress run as the Stack screen reads it: the job, the step k6 is at while it runs, the level and stop rule it was asked
+/// for, and once summarise.mjs has printed them the knee, why the run ended and the service that crossed first, each as its line.
+/// </summary>
+public sealed record StressRunView(JobSummary Job, StressProgress? Progress, string? Knee, StressChoice? Choice, string? Ended, string? FirstToGiveUp);
 
 /// <summary>
-/// Where k6 is on the staircase: the users it runs and the most it will, its elapsed time as it prints it, and the hold it is in or
-/// last reached. <see cref="Step"/> counts holds seen, 0 during the first ramp.
+/// Where k6 is on the staircase: the users it runs and k6's ceiling, its elapsed time as it prints it, and the hold it is in or
+/// last reached. <see cref="Step"/> counts holds seen, 0 during the first ramp. <see cref="MaxUsers"/> is the run's cap, not the
+/// staircase's top: a level doubles on past its own steps until a stop rule ends it or the cap does, so the screen shows
+/// <see cref="Users"/> as the target the run is at and the ceiling only as a ceiling.
 /// </summary>
 public sealed record StressProgress(int Users, int MaxUsers, string Elapsed, int Step, bool Holding);
 

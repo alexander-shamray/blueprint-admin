@@ -56,6 +56,22 @@ public sealed class StackEndpointTests : IClassFixture<AdminHostFactory>
         Runner.Started[^1].Arguments.ShouldNotContain("-v");
     }
 
+    [Theory]
+    [InlineData("extreme", "knee")]
+    [InlineData("low", "never")]
+    public async Task A_stress_run_asked_for_a_level_or_rule_the_backend_does_not_name_is_refused_before_anything_starts(string level, string stop)
+    {
+        int stressSpecsBefore = Runner.Started.Count(s => s.Arguments.Contains(Admin.Host.Stack.StressRunService.Up));
+
+        HttpResponseMessage response = await client.PostAsJsonAsync("/api/stack/stress-run", new { level, stop }, TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        JsonElement problem = await response.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken);
+        problem.GetProperty("title").GetString().ShouldBe("Stress run refused");
+        problem.GetProperty("detail").GetString().ShouldNotBeNull().ShouldContain("not one the backend names");
+        Runner.Started.Count(s => s.Arguments.Contains(Admin.Host.Stack.StressRunService.Up)).ShouldBe(stressSpecsBefore);
+    }
+
     [Fact]
     public async Task Wiping_volumes_without_the_typed_confirmation_is_refused()
     {
