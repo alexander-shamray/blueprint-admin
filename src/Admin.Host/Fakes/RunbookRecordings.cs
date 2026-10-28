@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Admin.Host.Fakes;
 
 /// <summary>
@@ -97,40 +99,66 @@ public static class RunbookRecordings
 
     /// <summary>
     /// What the scripted <c>py</c> prints for <c>RUNBOOK --cause [--phase ALERT]</c> and <c>RUNBOOK --restore</c>, after putting the
-    /// alerts in the state the tool would. The first phase is the default, as it is in the tool.
+    /// alerts in the state the tool would. The first phase is the default, as it is in the tool. The lines are the ones
+    /// <c>tools/game-day/game_day.py</c> prints (<c>cause_only</c>, <c>restore_only</c>, <c>verdict</c>), read from its source on
+    /// 2026-10-28, and the console's countdown reads them (<c>game-day-lines.ts</c>). The fake's alert answers at once where the
+    /// tool's takes its window, and a restore says <c>firing</c> for an alert the cause had put there, as the tool does.
     /// </summary>
     public static IEnumerable<string> Run(IReadOnlyList<string> arguments, FakeStack stack)
     {
         string runbook = arguments.Count > 0 ? arguments[0] : "";
-        string[] alerts = PhasesOf(runbook);
+        Phase[] phases = PhasesOf(runbook);
 
         if (arguments.Contains("--cause", StringComparer.Ordinal))
         {
             int at = arguments.ToList().IndexOf("--phase");
-            string? chosen = at >= 0 && at + 1 < arguments.Count ? arguments[at + 1] : alerts.FirstOrDefault();
+            string? chosen = at >= 0 && at + 1 < arguments.Count ? arguments[at + 1] : phases.FirstOrDefault()?.Alert;
+            Phase? phase = phases.FirstOrDefault(p => p.Alert == chosen);
 
-            if (chosen is null || !alerts.Contains(chosen))
+            if (phase is null)
             {
                 return [$"FINDING: {runbook} has no phase {chosen}", "game day: cause FAILED in 0m01s"];
             }
 
-            stack.Cause([chosen]);
+            stack.Cause([phase.Alert]);
 
-            return [$"{chosen} is inactive; causing it", "game day: cause OK in 0m05s"];
+            string causing = $"{runbook}: causing {phase.Alert}; it fires within {phase.FiresWithinSeconds}s once caused";
+
+            return phase.Sustained
+                ? [causing, $"{phase.Alert}: the cause is running in the background (pid {BackgroundPid}); --restore ends it", "game day: cause OK in 0m05s"]
+                : [causing, "game day: cause OK in 0m05s"];
         }
 
-        stack.Restore(alerts);
+        IReadOnlySet<string> caused = stack.CausedAlerts;
+        string[] lines = [.. phases.Select(p =>
+            $"{p.Alert} is {(caused.Contains(p.Alert) ? "firing" : "inactive")} after the restore"
+            + (SettlesOnItsOwn.Contains(runbook) ? $"; its window clears it within {p.ClearsWithinSeconds}s" : string.Empty))];
 
-        return [$"restored {runbook}", "game day: restore OK in 0m04s"];
+        stack.Restore(phases.Select(p => p.Alert));
+
+        return [.. lines, "game day: restore OK in 0m04s"];
     }
 
-    private static string[] PhasesOf(string runbook) => runbook switch
-    {
-        "outbox-growth" => ["OutboxGrowth"],
-        "error-rate" => ["ErrorRateGateway", "ErrorRateService"],
-        "contact-refused" => ["ContactReadRefused"],
-        _ => [],
-    };
+    /// <summary>The pid a sustained cause's background child reports; a number the console only displays.</summary>
+    private const int BackgroundPid = 4242;
+
+    /// <summary>
+    /// The runbooks whose scenario gives a phase a <c>SETTLE</c> of its own, which the restore's line then names
+    /// (<c>tools/game-day/scenarios/</c>): the others print no window, and the listing's <c>clears_within_seconds</c> is their deadline.
+    /// </summary>
+    private static readonly HashSet<string> SettlesOnItsOwn = new(StringComparer.Ordinal) { "contact-refused", "error-rate" };
+
+    private static readonly JsonSerializerOptions ToolJson = new(JsonSerializerDefaults.Web) { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+
+    private static readonly Lazy<Dictionary<string, Phase[]>> Listed = new(() =>
+        (JsonSerializer.Deserialize<Row[]>(Catalogue, ToolJson) ?? []).ToDictionary(r => r.Runbook, r => r.Phases ?? [], StringComparer.Ordinal));
+
+    /// <summary>The phases the <see cref="Catalogue"/> lists for a runbook, the one owner of their alerts and windows here.</summary>
+    private static Phase[] PhasesOf(string runbook) => Listed.Value.GetValueOrDefault(runbook) ?? [];
+
+    private sealed record Row(string Runbook, Phase[]? Phases);
+
+    private sealed record Phase(string Alert, bool Sustained, int FiresWithinSeconds, int ClearsWithinSeconds);
 
     private const string OutboxGrowth = """""
 # Runbook — outbox backlog growing
