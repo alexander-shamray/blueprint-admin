@@ -166,8 +166,9 @@ class TheScan(unittest.TestCase):
             raise AssertionError("required on PATH: git")
 
     def setUp(self):
-        self.repo = Path(tempfile.mkdtemp(prefix="root-ignore-"))
-        self.addCleanup(shutil.rmtree, str(self.repo), ignore_errors=True)
+        holder = tempfile.TemporaryDirectory(prefix="root-ignore-")
+        self.addCleanup(holder.cleanup)
+        self.repo = Path(holder.name)
         subprocess.run([GIT, "init", "-q", str(self.repo)], check=True)
 
     def write(self, rel, text):

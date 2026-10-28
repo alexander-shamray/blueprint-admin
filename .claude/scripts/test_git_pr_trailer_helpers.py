@@ -45,7 +45,7 @@ REVERT = SCRIPTS / "git-revert-pr.sh"
 
 BUILD = """
 set -eu
-root=$(mktemp -d)
+root=$ROOT
 git init -q --bare --initial-branch=main "$root/remote.git"
 git init -q --initial-branch=main "$root/work"
 cd "$root/work"
@@ -74,10 +74,14 @@ def sh(script, **env):
 
 class Fixture(unittest.TestCase):
     def setUp(self):
-        built = run_bash(BUILD, GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_SYSTEM="/dev/null", GIT_CONFIG_NOSYSTEM="1")
+        # The root is made here, not by `mktemp -d` in BUILD: on Windows the `/tmp` bash names is not the
+        # directory Python resolves, and TemporaryDirectory clears the read-only objects git writes (#588).
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        built = run_bash(BUILD, ROOT=Path(holder.name).as_posix(),
+                         GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_SYSTEM="/dev/null", GIT_CONFIG_NOSYSTEM="1")
         self.assertEqual(0, built.returncode, built.stderr)
         self.root = built.stdout.strip()
-        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
         self.work = f"{self.root}/work"
         shim = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, shim, ignore_errors=True)

@@ -198,8 +198,9 @@ class TheRefresh(unittest.TestCase):
             raise AssertionError(f"required on PATH: {missing}")
 
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="index-refresh-"))
-        self.addCleanup(shutil.rmtree, str(self.tmp), ignore_errors=True)
+        holder = tempfile.TemporaryDirectory(prefix="index-refresh-")
+        self.addCleanup(self.clear, holder)
+        self.tmp = Path(holder.name)
         self.repo = self.tmp / "repo"
         self.repo.mkdir()
         subprocess.run([GIT, "init", "-q", str(self.repo)], check=True)
@@ -251,6 +252,20 @@ class TheRefresh(unittest.TestCase):
             if time.monotonic() > deadline:
                 raise AssertionError(f"timed out waiting for {what}")
             time.sleep(0.05)
+
+    def clear(self, holder):
+        # The hook's detached refresh can still be standing in a checkout when
+        # the case ends, and Windows will not remove a directory a process is
+        # in; it is done in about half a second, so the removal is retried
+        # until the same deadline as `wait_for`, then fails the case (#588).
+        deadline = time.monotonic() + 90
+        while True:
+            try:
+                return holder.cleanup()
+            except PermissionError:
+                if time.monotonic() > deadline:
+                    raise
+                time.sleep(0.1)
 
     def pending(self):
         # On Windows an open that meets the script's `mv -f` mid-rename is
@@ -455,10 +470,12 @@ class TheSeed(unittest.TestCase):
     fake = TheRefresh.fake
     env = TheRefresh.env
     calls = TheRefresh.calls
+    clear = TheRefresh.clear
 
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="index-seed-"))
-        self.addCleanup(shutil.rmtree, str(self.tmp), ignore_errors=True)
+        holder = tempfile.TemporaryDirectory(prefix="index-seed-")
+        self.addCleanup(self.clear, holder)
+        self.tmp = Path(holder.name)
         self.main = self.tmp / "main"
         git = [GIT, "-c", "user.name=t", "-c", "user.email=t@example.invalid"]
         subprocess.run([GIT, "init", "-q", str(self.main)], check=True)
@@ -635,10 +652,12 @@ class TheEvent(unittest.TestCase):
     calls = TheRefresh.calls
     wait_for = TheRefresh.wait_for
     held_until = TheRefresh.held_until
+    clear = TheRefresh.clear
 
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="index-event-"))
-        self.addCleanup(shutil.rmtree, str(self.tmp), ignore_errors=True)
+        holder = tempfile.TemporaryDirectory(prefix="index-event-")
+        self.addCleanup(self.clear, holder)
+        self.tmp = Path(holder.name)
         self.main = self.tmp / "main"
         git = [GIT, "-c", "user.name=t", "-c", "user.email=t@example.invalid"]
         subprocess.run([GIT, "init", "-q", str(self.main)], check=True)

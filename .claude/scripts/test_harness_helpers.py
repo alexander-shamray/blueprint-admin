@@ -1417,8 +1417,9 @@ class NoCommandHoldsAPrefixGrantThatAdmitsAForbiddenFlag(unittest.TestCase):
         # `/branch` forks them: naming the other run's path, or this run's path
         # with a branch it does not hold, is refused and leaves the directory
         # standing; the matching pair is removed.
-        base = Path(tempfile.mkdtemp(prefix="wt-remove-"))
-        self.addCleanup(shutil.rmtree, str(base), ignore_errors=True)
+        holder = tempfile.TemporaryDirectory(prefix="wt-remove-")
+        self.addCleanup(holder.cleanup)
+        base = Path(holder.name)
         repo = base / "repo"
         repo.mkdir()
         trees = repo / ".claude" / "worktrees"
@@ -1488,8 +1489,9 @@ class NoCommandHoldsAPrefixGrantThatAdmitsAForbiddenFlag(unittest.TestCase):
         # on `<worktree>/.claude` was measured to last about 40 s). The directory used to be left
         # behind. A shim `git` stands for that: it removes for real, leaves a directory, and fails.
         # A refusal (a dirty tree, still registered) must stay a failure with the tree kept.
-        base = Path(tempfile.mkdtemp(prefix="wt-held-"))
-        self.addCleanup(shutil.rmtree, str(base), ignore_errors=True)
+        holder = tempfile.TemporaryDirectory(prefix="wt-held-")
+        self.addCleanup(holder.cleanup)
+        base = Path(holder.name)
         repo = base / "repo"
         repo.mkdir()
         trees = repo / ".claude" / "worktrees"
@@ -1565,8 +1567,9 @@ class NoCommandHoldsAPrefixGrantThatAdmitsAForbiddenFlag(unittest.TestCase):
         # And a title that is not one line, which `gh` would otherwise take as
         # body text with nothing in the report to show what was sent — driven
         # in a scratch checkout, where the helper refuses before any `gh`.
-        repo = Path(tempfile.mkdtemp(prefix="pr-create-"))
-        self.addCleanup(shutil.rmtree, str(repo), ignore_errors=True)
+        holder = tempfile.TemporaryDirectory(prefix="pr-create-")
+        self.addCleanup(holder.cleanup)
+        repo = Path(holder.name)
         subprocess.run(["git", "init", "-q", "-b", "feat/x", str(repo)],
                        check=True, capture_output=True)
         (repo / "pr-body.md").write_text("body\n", encoding="utf-8")
@@ -1634,8 +1637,9 @@ class TheFourPortedResiduals(unittest.TestCase):
         # change that stopped matching would keep every string it asserts.
         # Raised by Copilot. Driven against a real commit instead — the index
         # records mode 120000 without any OS symlink privilege.
-        repo = Path(tempfile.mkdtemp(prefix="detach-link-"))
-        self.addCleanup(shutil.rmtree, str(repo), ignore_errors=True)
+        holder = tempfile.TemporaryDirectory(prefix="detach-link-")
+        self.addCleanup(holder.cleanup)
+        repo = Path(holder.name)
 
         def git(*args, **kw):
             return subprocess.run(
@@ -9861,8 +9865,9 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         treated as unused and its workspace kept, which is the direction step
         0 already takes for an abandoned worktree.
         """
-        repo = Path(tempfile.mkdtemp(prefix="branch-point-"))
-        self.addCleanup(shutil.rmtree, str(repo), ignore_errors=True)
+        holder = tempfile.TemporaryDirectory(prefix="branch-point-")
+        self.addCleanup(holder.cleanup)
+        repo = Path(holder.name)
 
         def git(*args):
             return subprocess.run(
@@ -9920,8 +9925,9 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         because the landing commit is absent from the tip. Ancestry against
         the head cannot tell the two apart; ancestry against `main` can.
         """
-        repo = Path(tempfile.mkdtemp(prefix="stale-reuse-"))
-        self.addCleanup(shutil.rmtree, str(repo), ignore_errors=True)
+        holder = tempfile.TemporaryDirectory(prefix="stale-reuse-")
+        self.addCleanup(holder.cleanup)
+        repo = Path(holder.name)
 
         def git(*args):
             return subprocess.run(
@@ -9975,8 +9981,9 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         on a clone that happened to hold the commit, which is the vacuity it
         exists to close.
         """
-        root = Path(tempfile.mkdtemp(prefix="pull-ref-fetch-"))
-        self.addCleanup(shutil.rmtree, str(root), ignore_errors=True)
+        holder = tempfile.TemporaryDirectory(prefix="pull-ref-fetch-")
+        self.addCleanup(holder.cleanup)
+        root = Path(holder.name)
         origin, clone = root / "origin", root / "clone"
 
         def git_in(where, *args):
@@ -10052,8 +10059,9 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         shas, which is why the earlier attempt at this coverage proved
         nothing: it never executed `merge-base --is-ancestor`.
         """
-        repo = Path(tempfile.mkdtemp(prefix="finished-relation-"))
-        self.addCleanup(shutil.rmtree, str(repo), ignore_errors=True)
+        holder = tempfile.TemporaryDirectory(prefix="finished-relation-")
+        self.addCleanup(holder.cleanup)
+        repo = Path(holder.name)
 
         def git(*args):
             return subprocess.run(
@@ -10197,8 +10205,9 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         The identity read has no such shape, because every commit moves the
         tip whatever its content.
         """
-        repo = Path(tempfile.mkdtemp(prefix="post-merge-work-"))
-        self.addCleanup(shutil.rmtree, str(repo), ignore_errors=True)
+        holder = tempfile.TemporaryDirectory(prefix="post-merge-work-")
+        self.addCleanup(holder.cleanup)
+        repo = Path(holder.name)
 
         def git(*args):
             return subprocess.run(
@@ -10292,8 +10301,9 @@ class LandingByRebaseMovedTheReadsThatAssumedAMergeCommit(unittest.TestCase):
         self.assertNotEqual(merged_head, tip)
 
     def test_a_rebase_merged_branch_is_finished_under_the_new_read_only(self):
-        repo = Path(tempfile.mkdtemp(prefix="rebase-finished-"))
-        self.addCleanup(shutil.rmtree, str(repo), ignore_errors=True)
+        holder = tempfile.TemporaryDirectory(prefix="rebase-finished-")
+        self.addCleanup(holder.cleanup)
+        repo = Path(holder.name)
 
         def git(*args):
             return subprocess.run(
