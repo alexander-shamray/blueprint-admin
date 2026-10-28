@@ -12,11 +12,13 @@ import {
   DestroyRef,
 } from '@angular/core';
 import { Subscription } from 'rxjs';
-import { OutputLine } from '../../core/host/host-types';
+import { OutputLine, StressProgress } from '../../core/host/host-types';
 import { SseClient } from '../../core/host/sse-client';
 import { composeEvent, composeFailed, composePlain } from './compose-json';
 import { ComposeProgress, ComposeService, ComposeTracker } from './compose-progress';
+import { K6Progress, K6Tracker } from './k6-progress';
 import { ImagePull, PullProgress, PullState, PullTracker } from './pull-progress';
+import { ReadinessProgress, ReadinessTracker, SurfaceState } from './readiness-progress';
 import { StepRow, StepState, StepTracker } from './step-progress';
 
 /** What marks a Compose stderr line as a failure rather than progress. */
@@ -63,9 +65,45 @@ interface Entry {
         }
       </ol>
     }
-    @if (pull() || containers() || tabulatedCount() > 0) {
+    @if (pull() || containers() || k6() || readiness() || tabulatedCount() > 0) {
       <div class="tables">
         <ng-content select="[tables]" />
+        @if (k6(); as k) {
+          <section class="k6" aria-label="k6 run" i18n-aria-label>
+            <p class="pull-summary">{{ k6Summary(k) }}</p>
+            <progress [max]="k.maxUsers || 1" [value]="k.users" aria-label="Virtual users" i18n-aria-label></progress>
+            @if (k.totalSeconds) {
+              <progress
+                [max]="k.totalSeconds"
+                [value]="k.elapsedSeconds"
+                aria-label="Elapsed time"
+                i18n-aria-label
+              ></progress>
+            }
+            @if (staircaseSegments(); as segments) {
+              <ol class="staircase" aria-label="Staircase" i18n-aria-label>
+                @for (segment of segments; track segment.label) {
+                  <li [class]="segment.state" [attr.aria-current]="segment.state === 'current' ? 'step' : null">
+                    {{ segment.label }}
+                  </li>
+                }
+              </ol>
+            }
+          </section>
+        }
+        @if (readiness(); as r) {
+          <section class="readiness" aria-label="Readiness" i18n-aria-label>
+            <p class="pull-summary">{{ readinessSummary(r) }}</p>
+            <ul class="surfaces">
+              @for (surface of r.surfaces; track surface.name) {
+                <li [class]="surface.state">
+                  <span class="surface-name">{{ surface.name }}</span>
+                  <span class="surface-state"> {{ surfaceLabel(surface.state) }}</span>
+                </li>
+              }
+            </ul>
+          </section>
+        }
         @if (pull(); as p) {
           <section class="pull" aria-label="Image pulls" i18n-aria-label>
             <p class="pull-summary">{{ summary(p) }}</p>
@@ -207,8 +245,43 @@ interface Entry {
     .steps .skipped {
       opacity: 0.6;
     }
-    .containers {
+    .containers,
+    .k6,
+    .readiness {
       margin-top: 0.5rem;
+    }
+    .k6 progress {
+      display: block;
+      width: 100%;
+      accent-color: var(--mat-sys-primary);
+    }
+    .staircase,
+    .surfaces {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.25rem 1rem;
+      margin: 0.25rem 0 0;
+      padding: 0;
+      list-style: none;
+      font-size: 0.8rem;
+    }
+    .staircase .done,
+    .surfaces .up .surface-state {
+      color: #3fa66a;
+    }
+    .staircase .current {
+      font-weight: 600;
+      color: var(--mat-sys-primary);
+    }
+    .surface-name {
+      font-family: monospace;
+    }
+    .surfaces .waiting .surface-state {
+      color: var(--app-muted);
+    }
+    .surfaces .failed .surface-name,
+    .surfaces .failed .surface-state {
+      color: #b00;
     }
     .pull-summary {
       margin: 0 0 0.25rem;
@@ -310,6 +383,11 @@ export class OutputPane {
    * table into the pane as `[tables]`.
    */
   readonly claims = input<((text: string) => boolean) | null>(null);
+  /**
+   * Where a stress run is on its staircase (`StressRunView.progress`), which the host reads and the pane does not: the
+   * staircase is the backend's and can change, so the segments are what the host has counted and nothing more.
+   */
+  readonly staircase = input<StressProgress | null>(null);
   readonly claimed = output<OutputLine>();
   readonly entries = signal<Entry[]>([]);
   readonly exitCode = signal<number | null>(null);
@@ -322,6 +400,25 @@ export class OutputPane {
   readonly containers = signal<ComposeProgress | null>(null);
   /** The steps of a job that runs several, once the host has named them. */
   readonly steps = signal<StepRow[] | null>(null);
+  /** The latest progress line of a k6 run, once it has printed one. */
+  readonly k6 = signal<K6Progress | null>(null);
+  /** The checklist of Reset's readiness wait, once the host has written its marker. */
+  readonly readiness = signal<ReadinessProgress | null>(null);
+  /** Each ramp and hold the host has counted, the one k6 is in marked; empty before k6 has printed a line it can read. */
+  readonly staircaseSegments = computed(() => {
+    const s = this.staircase();
+    if (!s || !this.k6()) return null;
+    // A hold is the odd segment of its step, and a ramp the even one before it; k6 at zero users after a step is over.
+    const stopped = s.users === 0 && s.step > 0;
+    const last = s.holding || stopped ? 2 * s.step - 1 : 2 * s.step;
+    return Array.from({ length: last + 1 }, (_, i) => ({
+      label:
+        i % 2 === 0
+          ? $localize`:a stress step's ramp:Ramp ${i / 2 + 1}:step:`
+          : $localize`:a stress step's hold:Hold ${(i + 1) / 2}:step:`,
+      state: i < last || stopped ? 'done' : 'current',
+    }));
+  });
   readonly showRawLines = signal(false);
   readonly shown = computed(() => (this.showRawLines() ? this.entries() : this.entries().filter((e) => !e.tabulated)));
   readonly tabulatedCount = computed(() => this.entries().filter((e) => e.tabulated).length);
@@ -412,6 +509,42 @@ export class OutputPane {
     }
   }
 
+  surfaceLabel(state: SurfaceState): string {
+    switch (state) {
+      case 'waiting':
+        return $localize`:a platform surface's readiness:waiting`;
+      case 'up':
+        return $localize`:a platform surface's readiness:answers`;
+      case 'failed':
+        return $localize`:a platform surface's readiness:did not answer`;
+    }
+  }
+
+  /** How many surfaces have answered and, while the wait goes on, the time left of the cap the host wrote. */
+  readinessSummary(r: ReadinessProgress): string {
+    const answered = r.surfaces.filter((s) => s.state === 'up').length;
+    const count = r.surfaces.length;
+    if (r.surfaces.some((s) => s.state === 'failed')) {
+      return $localize`Not ready: ${answered}:answered: of ${count}:count: surfaces answer`;
+    }
+    if (r.ended) return $localize`Ready: ${answered}:answered: of ${count}:count: surfaces answer`;
+    if (this.exitCode() !== null || Number.isNaN(r.startedAt)) {
+      return $localize`Surfaces answering: ${answered}:answered: of ${count}:count:`;
+    }
+    const left = this.clock(Math.max(0, Math.ceil((r.startedAt + r.capSeconds * 1000 - this.now()) / 1000)));
+    return $localize`Surfaces answering: ${answered}:answered: of ${count}:count: · ${left}:left: left of ${this.clock(r.capSeconds)}:cap:`;
+  }
+
+  /** Elapsed time and users against the most; the length of the run only where k6 printed it. */
+  k6Summary(k: K6Progress): string {
+    const elapsed =
+      k.totalSeconds === null
+        ? this.clock(k.elapsedSeconds)
+        : $localize`${this.clock(k.elapsedSeconds)}:elapsed: of ${this.clock(k.totalSeconds)}:total:`;
+    const { users, maxUsers, complete, interrupted } = k;
+    return $localize`k6 · ${elapsed}:elapsed: · ${users}:users: of ${maxUsers}:max: users · ${complete}:complete: iterations complete, ${interrupted}:interrupted: interrupted`;
+  }
+
   containerClass(service: ComposeService): string {
     return service.failed ? 'failed' : service.settled ? 'settled' : 'working';
   }
@@ -473,7 +606,17 @@ export class OutputPane {
   private tracker = new PullTracker();
   private composeTracker = new ComposeTracker();
   private stepTracker: StepTracker | null = null;
+  private k6Tracker = new K6Tracker();
+  private readinessTracker = new ReadinessTracker();
   private subscription?: Subscription;
+
+  private readonly now = signal(Date.now());
+
+  /** Minutes and seconds, `1:42`: the figure a countdown or an elapsed time reads as. */
+  private clock(seconds: number): string {
+    const whole = Math.round(seconds);
+    return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+  }
 
   /** Docker counts in decimal megabytes, so these read as its own figures do. */
   private bytes(n: number): string {
@@ -482,6 +625,15 @@ export class OutputPane {
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.subscription?.unsubscribe());
+
+    // The cap's countdown redraws once a second while the wait is going on, and not otherwise.
+    effect((onCleanup) => {
+      const r = this.readiness();
+      if (!r || r.ended || this.exitCode() !== null) return;
+      this.now.set(Date.now());
+      const timer = setInterval(() => this.now.set(Date.now()), 1000);
+      onCleanup(() => clearInterval(timer));
+    });
 
     effect(() => {
       const id = this.jobId();
@@ -492,9 +644,13 @@ export class OutputPane {
       this.tracker = new PullTracker();
       this.composeTracker = new ComposeTracker();
       this.stepTracker = null;
+      this.k6Tracker = new K6Tracker();
+      this.readinessTracker = new ReadinessTracker();
       this.pull.set(null);
       this.containers.set(null);
       this.steps.set(null);
+      this.k6.set(null);
+      this.readiness.set(null);
       this.showRawLines.set(false);
       if (!id) {
         return;
@@ -533,7 +689,11 @@ export class OutputPane {
   private append(line: OutputLine): void {
     const pull = this.tracker.add(line);
     const container = !pull && this.composeTracker.add(line);
-    const claimed = !pull && !container && (this.claims()?.(line.text) ?? false);
+    const progress = !pull && !container && this.k6Tracker.add(line.text);
+    if (progress) this.k6.set(this.k6Tracker.snapshot());
+    const wait = !pull && !container && this.readinessTracker.add(line);
+    if (wait) this.readiness.set(this.readinessTracker.snapshot());
+    const claimed = !pull && !container && !progress && (this.claims()?.(line.text) ?? false);
     if (claimed) this.claimed.emit(line);
     const event = composeEvent(line.text);
     const failed = event !== null && composeFailed(event);
@@ -550,7 +710,7 @@ export class OutputPane {
       stream: line.stream,
       text: event ? composePlain(event) : line.text,
       failed,
-      tabulated: pull || container || claimed,
+      tabulated: pull || container || progress || claimed || (wait && ReadinessTracker.isPoll(line.text)),
     };
     this.entries.update((all) => [...all, entry]);
   }

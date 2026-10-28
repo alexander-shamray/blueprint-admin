@@ -314,5 +314,125 @@ describe('OutputPane', () => {
       ]);
       expect(fixture.nativeElement.querySelector('pre')?.textContent).toContain('$ docker compose down -v');
     });
+
+    it('draws a k6 run as its latest progress line and keeps the lines behind the toggle', () => {
+      const events = new Subject<JobEvent>();
+      const fixture = open(events);
+
+      send(events, 0, 'running (0m42.0s), 05/10 VUs, 812 complete and 0 interrupted iterations', 'Stdout');
+      send(events, 1, 'query     [   1% ] 00/10 VUs  0m00.9s/3m0s  1.00 iters/s', 'Stdout');
+      send(events, 4, 'command • [   0% ] waiting    09.1s', 'Stdout');
+      send(events, 2, 'running (0m43.0s), 06/10 VUs, 830 complete and 1 interrupted iterations', 'Stdout');
+      send(events, 3, 'k6 exit: 0', 'Stdout');
+      fixture.detectChanges();
+
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('.k6 .pull-summary')?.textContent).toBe(
+        'k6 · 0:43 · 6 of 10 users · 830 iterations complete, 1 interrupted',
+      );
+      const bar = el.querySelector('.k6 progress') as HTMLProgressElement;
+      expect([bar.value, bar.max]).toEqual([6, 10]);
+      expect(el.querySelectorAll('.k6 progress')).toHaveLength(1);
+      expect(el.querySelector('pre')?.textContent).toBe('k6 exit: 0\n');
+
+      (el.querySelector('.pull-lines') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(el.querySelector('pre')?.textContent).toContain('running (0m42.0s)');
+    });
+
+    it('draws the length of a one-scenario run and the staircase the host counted, the segment k6 is in marked', () => {
+      const events = new Subject<JobEvent>();
+      const fixture = open(events);
+      fixture.componentRef.setInput('staircase', {
+        users: 50,
+        maxUsers: 400,
+        elapsed: '1m10.0s',
+        step: 2,
+        holding: true,
+      });
+
+      send(events, 0, 'running (1m10.0s), 050/400 VUs, 9 complete and 0 interrupted iterations', 'Stdout');
+      send(events, 1, 'journey   [  10% ] 050/400 VUs  1m10.0s/17m30s', 'Stdout');
+      fixture.detectChanges();
+
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('.k6 .pull-summary')?.textContent).toContain('1:10 of 17:30');
+      const bars = Array.from(el.querySelectorAll<HTMLProgressElement>('.k6 progress'), (p) => [p.value, p.max]);
+      expect(bars).toEqual([
+        [50, 400],
+        [70, 1050],
+      ]);
+      expect(
+        Array.from(el.querySelectorAll('.staircase li'), (li) => `${li.className} ${li.textContent?.trim()}`),
+      ).toEqual(['done Ramp 1', 'done Hold 1', 'done Ramp 2', 'current Hold 2']);
+      expect(el.querySelector('.staircase [aria-current="step"]')?.textContent?.trim()).toBe('Hold 2');
+    });
+
+    it('draws a staircase only for a run that has printed a progress line, and ends it when k6 has stopped', () => {
+      const events = new Subject<JobEvent>();
+      const fixture = open(events);
+      fixture.componentRef.setInput('staircase', {
+        users: 0,
+        maxUsers: 400,
+        elapsed: '17m30s',
+        step: 1,
+        holding: false,
+      });
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.staircase')).toBeNull();
+
+      send(events, 0, 'running (17m31.0s), 000/400 VUs, 900 complete and 194 interrupted iterations', 'Stdout');
+      fixture.detectChanges();
+
+      expect(
+        Array.from(fixture.nativeElement.querySelectorAll('.staircase li'), (li) => (li as HTMLElement).className),
+      ).toEqual(['done', 'done']);
+    });
+
+    it('lists the surfaces of Reset’s readiness wait, ticks them as the polls drop them, and counts down to the host’s cap', () => {
+      const events = new Subject<JobEvent>();
+      const fixture = open(events);
+      const sendNow = (sequence: number, text: string) =>
+        events.next({ kind: 'line', line: { sequence, at: new Date().toISOString(), stream: 'Stdout', text } });
+      const list = () =>
+        Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.surfaces li'), (li) =>
+          li.textContent?.replace(/\s+/g, ' ').trim(),
+        );
+
+      sendNow(0, '== readiness: up to 120 s');
+      sendNow(1, 'waiting for: gateway, ordering');
+      sendNow(2, 'waiting for: ordering');
+      fixture.detectChanges();
+
+      expect(list()).toEqual(['gateway answers', 'ordering waiting']);
+      expect(fixture.nativeElement.querySelector('.readiness .pull-summary')?.textContent).toMatch(
+        /^Surfaces answering: 1 of 2 · [012]:\d\d left of 2:00$/,
+      );
+      // The polls leave the log; the marker stays in it.
+      expect(fixture.nativeElement.querySelector('pre')?.textContent).toBe('== readiness: up to 120 s\n');
+
+      sendNow(3, 'ready: gateway, ordering');
+      fixture.detectChanges();
+
+      expect(list()).toEqual(['gateway answers', 'ordering answers']);
+      expect(fixture.nativeElement.querySelector('.readiness .pull-summary')?.textContent).toBe(
+        'Ready: 2 of 2 surfaces answer',
+      );
+      expect(fixture.nativeElement.querySelector('pre')?.textContent).toContain('ready: gateway, ordering');
+    });
+
+    it('turns the surfaces the cap named failed', () => {
+      const events = new Subject<JobEvent>();
+      const fixture = open(events);
+
+      send(events, 0, '== readiness: up to 120 s', 'Stdout');
+      send(events, 1, 'waiting for: ordering, bff', 'Stdout');
+      send(events, 2, 'not ready after 120 s: ordering', 'Stderr');
+      fixture.detectChanges();
+
+      const el = fixture.nativeElement as HTMLElement;
+      expect(Array.from(el.querySelectorAll('.surfaces li'), (li) => li.className)).toEqual(['failed', 'up']);
+      expect(el.querySelector('.readiness .pull-summary')?.textContent).toBe('Not ready: 1 of 2 surfaces answer');
+    });
   });
 });
