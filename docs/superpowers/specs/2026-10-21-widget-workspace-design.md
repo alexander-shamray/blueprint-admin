@@ -427,7 +427,10 @@ The question it answers: *what is happening now, and where is it stuck?*
     reachability (`PlatformProbe`, which covers `PlatformServices.WithUrl`
     only). A worker with no URL, such as Shipping or Notifications, is
     coloured by its Compose service's state and health from the same
-    `GET /api/stack`. A service with neither is drawn neutral, never green.
+    `GET /api/stack`, and so is a probed service the stress override took the
+    host port from (`StressRunService.MarkUnpublished`, design spec §5.3), the
+    worst of its replicas deciding. A service with neither is drawn neutral,
+    never green.
   - **Queue nodes** are coloured by state: empty, holding, growing between
     two reads, or parked messages present. The edge into a queue carries its
     depth and rate.
