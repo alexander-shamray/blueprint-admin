@@ -32,6 +32,9 @@ read and nothing is fetched from outside. In each:
   metadata, in an `ItemGroup` or an `ItemDefinitionGroup`: a `PackageReference`,
   and any other item NuGet restores by its own version, such as a
   `DotNetCliToolReference`;
+- `IsImplicitlyDefined` on any item, the mark the SDK puts on its own
+  implicit references: NuGet leaves a reference so marked out of central
+  management, and the build's judge below exempts one as the SDK's;
 - a `PackageVersion`, `GlobalPackageReference` or `PackageDownload` item,
   each of which carries a version of its own, and any `Known*` item, whose
   metadata names the version of a pack restore downloads;
