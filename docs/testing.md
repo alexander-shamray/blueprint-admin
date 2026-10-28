@@ -113,10 +113,10 @@ py -3.12 .github/pin-gate/pin_gate.py
 
 Its judge of the build runs beside it in both places, after the build
 rather than before it: it replays the binary log the build wrote, so build
-with `-bl` first. It reads each project's `project.assets.json` beside the
-log, so judge the tree that was built, and each log before the next build
-restores over that file; it fails on one restored over since, and where no
-.NET SDK is on `PATH`:
+with `-bl` first. It reads each project's `project.assets.json` from that
+project's restore output, so judge the tree that was built, and each log
+before the next build restores over that file; it fails on one restored over
+since, and where no .NET SDK is on `PATH`:
 
 ```bash
 dotnet build -bl:artifacts/build.binlog
