@@ -1,4 +1,5 @@
 using System.Globalization;
+using Admin.Host.Compose;
 using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace Admin.Host.Jobs;
@@ -11,7 +12,7 @@ public static class JobEndpoints
 
         app.MapGet("/api/jobs/{id}", Results<Ok<JobView>, ProblemHttpResult> (string id, JobRegistry registry) =>
             registry.Find(id) is Job job
-                ? TypedResults.Ok(new JobView(JobSummary.Of(job), job.Tail(200)))
+                ? TypedResults.Ok(new JobView(JobSummary.Of(job), [.. job.Tail(200).Select(ComposeJsonLine.Plain)]))
                 : TypedResults.Problem(statusCode: StatusCodes.Status404NotFound, title: "No such job", detail: id));
 
         app.MapGet("/api/jobs/{id}/stream", IResult (string id, long? after, HttpContext context, JobRegistry registry, CancellationToken cancellationToken) =>

@@ -65,11 +65,10 @@ public sealed class FakePlatformTests : IClassFixture<AdminHostFactory>
 
         job.GetProperty("summary").GetProperty("exitCode").GetInt32().ShouldBe(0);
 
-        // Compose's JSON progress, a line per event: the pulls the Job output tabulates, then the containers.
-        JsonElement[] events = [.. job.GetProperty("lines").EnumerateArray().Select(l => JsonDocument.Parse(l.GetProperty("text").GetString()!).RootElement)];
-        events.ShouldContain(e => e.GetProperty("id").GetString() == "Image grafana/otel-lgtm:0.37.0" && e.GetProperty("text").GetString() == "Pulled");
-        events[^1].GetProperty("id").GetString().ShouldBe("Container commerce-gateway-1");
-        events[^1].GetProperty("text").GetString().ShouldBe("Healthy");
+        // The job read gives Compose's JSON progress in the plain form: the pulls, then the containers.
+        string[] lines = [.. job.GetProperty("lines").EnumerateArray().Select(l => l.GetProperty("text").GetString()!)];
+        lines.ShouldContain(" Image grafana/otel-lgtm:0.37.0  Pulled");
+        lines[^1].ShouldBe(" Container commerce-gateway-1  Healthy");
     }
 
     // The recorded logs -f output, by Compose service prefix: gateway 3,
