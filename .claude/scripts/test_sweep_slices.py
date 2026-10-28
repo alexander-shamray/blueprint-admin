@@ -160,16 +160,22 @@ class ASmallRepository(unittest.TestCase):
     """
 
     def setUp(self):
-        self.root = tempfile.mkdtemp(prefix="sweeproot-")
-        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        # The repository and the temp root in one directory, cleared by
+        # TemporaryDirectory rather than rmtree with ignore_errors: git writes
+        # its objects read-only, Windows refuses to delete a read-only file,
+        # and the flag hid every repository that stayed behind (#577).
+        holder = tempfile.TemporaryDirectory(prefix="sweepslices-")
+        self.addCleanup(holder.cleanup)
+        self.repo = str(Path(holder.name, "repo"))
+        self.root = str(Path(holder.name, "root"))
+        os.mkdir(self.repo)
+        os.mkdir(self.root)
         # A forward-slashed path, which MSYS bash takes as it stands; the
         # helpers resolve it with `cd` and `pwd -P` themselves.
         private = mock.patch.dict(os.environ,
                                   {"TMPDIR": Path(self.root).as_posix()})
         private.start()
         self.addCleanup(private.stop)
-        self.repo = tempfile.mkdtemp(prefix="sweepslices-")
-        self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
         made = run_bash('cd "$R" && git init -q --initial-branch=main .', R=self.repo)
         self.assertEqual(0, made.returncode, made.stderr)
         for relative, text in SMALL_TREE.items():
