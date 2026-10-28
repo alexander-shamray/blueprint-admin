@@ -90,8 +90,42 @@ public sealed class StressRunServiceTests : IAsyncDisposable
         Texts(run).ShouldContain(@"the summary ..\..\elsewhere\summary.md could not be read under the clone's artifacts/stress, so it is not carried here.");
     }
 
+    [Fact]
+    public async Task The_choice_is_the_run_blocks_environment_alone_and_the_ending_and_the_first_to_give_up_are_read_into_the_view()
+    {
+        string[] lines = [.. RunLines.Where(l => !l.StartsWith("k6 exit", StringComparison.Ordinal)), "First to give up: Ordering.Api: 5xx 3.2%", "Ended: errors at step 4 (800 VUs); level medium, stop rule errors", "k6 exit: 99"];
+        ScriptUntilRun();
+        runner.On("powershell", Arguments(StressRunService.Run), 99, lines);
+        StressRunService service = Service(settle: TimeSpan.Zero);
+
+        Job run = service.Start(new StressChoice("xhigh", "errors")).Job;
+        await run.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        runner.Started.Take(3).ShouldAllBe(s => s.Environment == null);
+        runner.Started[3].Environment.ShouldBe(new Dictionary<string, string> { ["STRESS_PROFILE"] = "xhigh", ["STRESS_STOP"] = "errors", ["STRESS_MAX_USERS"] = "25600" });
+        StressRunView view = service.View()!;
+        view.Choice.ShouldBe(new StressChoice("xhigh", "errors"));
+        view.FirstToGiveUp.ShouldBe("First to give up: Ordering.Api: 5xx 3.2%");
+        view.Ended.ShouldBe("Ended: errors at step 4 (800 VUs); level medium, stop rule errors");
+        Texts(run)[^1].ShouldEndWith("Ended: errors at step 4 (800 VUs); level medium, stop rule errors First to give up: Ordering.Api: 5xx 3.2%");
+    }
+
+    [Fact]
+    public async Task A_run_asked_for_nothing_is_the_low_level_stopping_at_the_first_knee()
+    {
+        Script(run: 108);
+        StressRunService service = Service(settle: TimeSpan.Zero);
+
+        Job run = service.Start().Job;
+        await run.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        runner.Started[3].Environment.ShouldBe(new Dictionary<string, string> { ["STRESS_PROFILE"] = "low", ["STRESS_STOP"] = "knee" });
+        service.View()!.Choice.ShouldBe(StressChoice.Default);
+    }
+
     [Theory]
     [InlineData(0)]
+    [InlineData(108)]
     [InlineData(107)]
     public async Task A_run_ends_with_k6s_code_and_says_what_the_document_says_it_means(int code)
     {

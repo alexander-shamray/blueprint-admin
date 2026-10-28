@@ -199,7 +199,7 @@ public static partial class FakePlatformScripts
 
                 return Recorded(StressRunRecordings.Up);
             })
-            .OnPaced("powershell", PowerShell(StressRunService.Run), 99, StressRunRecordings.Pace, time ?? TimeProvider.System, _ => StressRunRecordings.Run(stack))
+            .OnPacedBySpec("powershell", PowerShell(StressRunService.Run), StressRunRecordings.Pace, time ?? TimeProvider.System, spec => StressRunRecordings.Run(stack, spec.Environment))
             .On("powershell", "-NoProfile -Command & ", 0, DeviceRecordings.AdbDevices)
             .On("powershell", "-NoProfile -Command curl.exe ", 0, DeviceRecordings.Preflight)
             .On("powershell", $"-NoProfile -Command {DeviceReads.StopOnError}\n$t = ", 0, DeviceRecordings.Realm)

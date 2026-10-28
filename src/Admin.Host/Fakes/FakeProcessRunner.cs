@@ -90,6 +90,17 @@ public sealed class FakeProcessRunner(JobRegistry registry) : IProcessRunner, IA
         return this;
     }
 
+    /// <summary>
+    /// A paced script whose lines and exit code depend on the whole spec, its environment included: a run the caller shapes with
+    /// variables, which the arguments alone do not say.
+    /// </summary>
+    public FakeProcessRunner OnPacedBySpec(string fileName, string argumentPrefix, TimeSpan pace, TimeProvider time, Func<ProcessSpec, (IEnumerable<string> Lines, int ExitCode)> run)
+    {
+        Add(new FakeScript(fileName, argumentPrefix, null, OutputStream.Stdout, _ => []) { Pace = pace, Time = time, BySpec = run });
+
+        return this;
+    }
+
     public Job Start(ProcessSpec spec)
     {
         Job job = registry.Create(spec);
@@ -113,9 +124,17 @@ public sealed class FakeProcessRunner(JobRegistry registry) : IProcessRunner, IA
 
         string[] rest = arguments[script.ArgumentPrefix.Length..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
+        if (script.BySpec is { } bySpec && script.Pace is { } specPace)
+        {
+            (IEnumerable<string> specLines, int specExit) = bySpec(spec);
+            _ = Task.Run(() => PaceAsync(job, script with { ExitCode = specExit }, specLines, specPace));
+
+            return job;
+        }
+
         if (script.Pace is { } pace)
         {
-            _ = Task.Run(() => PaceAsync(job, script, rest, pace));
+            _ = Task.Run(() => PaceAsync(job, script, script.Lines(rest), pace));
 
             return job;
         }
@@ -142,9 +161,9 @@ public sealed class FakeProcessRunner(JobRegistry registry) : IProcessRunner, IA
     }
 
     /// <summary>A paced script's lines, one every <paramref name="pace"/>, until they run out or a Stop marks the job exited.</summary>
-    private static async Task PaceAsync(Job job, FakeScript script, string[] rest, TimeSpan pace)
+    private static async Task PaceAsync(Job job, FakeScript script, IEnumerable<string> lines, TimeSpan pace)
     {
-        foreach (string line in script.Lines(rest))
+        foreach (string line in lines)
         {
             if (job.State == JobState.Exited)
             {
@@ -197,5 +216,8 @@ public sealed class FakeProcessRunner(JobRegistry registry) : IProcessRunner, IA
         public TimeSpan? Pace { get; init; }
 
         public TimeProvider? Time { get; init; }
+
+        /// <summary>For a paced script shaped by its spec's environment: the lines and the code for the spec started.</summary>
+        public Func<ProcessSpec, (IEnumerable<string> Lines, int ExitCode)>? BySpec { get; init; }
     }
 }

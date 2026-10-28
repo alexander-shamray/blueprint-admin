@@ -70,6 +70,43 @@ public sealed partial class StressRunDriftTests
     }
 
     [Fact]
+    public void The_variables_the_levels_and_the_rules_and_the_open_levels_cap_are_the_sections_and_the_ending_lines_are_the_ones_the_run_prints()
+    {
+        string section = SectionOf(Document());
+        string flat = Regex.Replace(section, @"\s+", " ");
+        string profiles = flat.Split("`$env:STRESS_PROFILE = 'low'`", 2)[1].Split("A level the cap", 2)[0];
+
+        foreach (string level in StressChoice.Levels)
+        {
+            profiles.ShouldContain(level);
+        }
+
+        section.ShouldContain($"`$env:STRESS_STOP = '{StressChoice.Stops[1]}'`");
+        section.ShouldContain($"Unset, it is `{StressChoice.Stops[0]}`");
+        section.ShouldContain($"`$env:STRESS_MAX_USERS = '{StressChoice.OpenLevelCap}'`");
+        StressChoice.Levels.ShouldContain(StressChoice.OpenLevel);
+        flat.ShouldContain($"`{StressChoice.OpenLevel}` needs");
+        section.ShouldContain($"`{StressRunService.EndedPrefix}knee at step 4 (800 VUs)");
+
+        string readme = File.ReadAllText(Path.Combine(Backend.Dir, "deploy", "observability", "README.md")).ReplaceLineEndings("\n");
+
+        readme.ShouldContain($"`{StressRunService.FirstToGiveUpPrefix}Ordering.Api:");
+    }
+
+    [Fact]
+    public void The_steps_the_fake_climbs_on_each_level_are_the_ones_the_section_gives()
+    {
+        string flat = Regex.Replace(SectionOf(Document()), @"\s+", " ");
+
+        StressRunRecordings.Levels.Keys.ShouldBe(StressChoice.Levels, ignoreOrder: true);
+
+        foreach ((string level, (int[] steps, _)) in StressRunRecordings.Levels)
+        {
+            flat.ShouldContain(level == StressChoice.OpenLevel ? $"{level} from {steps[0]}" : $"{level} {string.Join(", ", steps)}");
+        }
+    }
+
+    [Fact]
     public void The_scripts_the_run_names_are_in_the_clone_and_the_override_is_the_file_the_up_adds()
     {
         string[] scripts = [.. ScriptPath().Matches(StressRunService.Run).Select(m => m.Value).Distinct()];

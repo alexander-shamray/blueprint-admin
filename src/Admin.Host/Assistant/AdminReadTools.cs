@@ -62,8 +62,8 @@ public sealed class AdminReadTools(
             "stack_status",
             "Reading the stack",
             "The Stack screen's read: each backend Compose service's state, health and ports, the frontend dev server, whether "
-            + "each platform URL answers, the scenario lease if one holds, the last load run, the last stress run with its step "
-            + "and knee, and which services run on the stress override. Use it for whether the platform is up and what is "
+            + "each platform URL answers, the scenario lease if one holds, the last load run, the last stress run with the level "
+            + "and stop rule it was asked for, its step, its knee, why it ended and which service gave up first, and which services run on the stress override. Use it for whether the platform is up and what is "
             + "running."),
         Tool(
             "firing_alerts",

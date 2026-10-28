@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Admin.Host.Compose;
 using Admin.Host.Frontend;
@@ -41,13 +42,34 @@ public static partial class StackEndpoints
 
         // The backend's stress run as one job under ComposeGate (spec §5.3), since its up recreates services: one going answers a
         // second Run with itself and an Up, a Down, a reset or a lease is refused while it runs. A load run going refuses it.
-        app.MapPost("/api/stack/stress-run", Results<Accepted<JobSummary>, ProblemHttpResult> (StressRunService stressRun, LoadRunService loadRun) =>
+        // The body names the level and the stop rule, each optional, and a value the backend does not name is refused before anything
+        // starts. It is read here, not bound: a POST with no content type and no body, which is what asks for the defaults, is a 404 to the binder.
+        app.MapPost("/api/stack/stress-run", async Task<Results<Accepted<JobSummary>, ProblemHttpResult>> (HttpRequest http, StressRunService stressRun, LoadRunService loadRun, CancellationToken cancellationToken) =>
         {
+            StressRunRequest? request = null;
+
+            if (http.ContentLength is > 0 && http.HasJsonContentType())
+            {
+                try
+                {
+                    request = await http.ReadFromJsonAsync<StressRunRequest>(cancellationToken);
+                }
+                catch (JsonException)
+                {
+                    return TypedResults.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Stress run refused", detail: "The body is not a JSON object of the form {\"level\": …, \"stop\": …}.");
+                }
+            }
+
+            if (StressChoice.Parse(request?.Level, request?.Stop, out string? refusal) is not { } choice)
+            {
+                return TypedResults.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Stress run refused", detail: refusal);
+            }
+
             lock (K6Runs)
             {
                 return loadRun.Current is { State: JobState.Running } load
                     ? Busy("stress run", "load run", load)
-                    : stressRun.Start().Answer(StressRunService.Kind);
+                    : stressRun.Start(choice).Answer(StressRunService.Kind);
             }
         });
 
@@ -210,6 +232,9 @@ public sealed record StackView(
 public sealed record LeaseRequest(string[]? Changes, int HoldSeconds, string? Label);
 
 public sealed record LeaseChangeRequest(string? Change);
+
+/// <summary>The level and the stop rule a stress run is asked for, as <see cref="StressChoice"/> names them; each defaults when left out.</summary>
+public sealed record StressRunRequest(string? Level, string? Stop);
 
 public sealed record DownRequest(bool WipeVolumes, string? Confirm);
 
