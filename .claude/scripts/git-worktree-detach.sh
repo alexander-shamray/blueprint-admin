@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Fork the detached, pinned worktree a sweep audits in — /security-sweep or
-# /bug-sweep — and nothing else: `git worktree add --detach <path> <commit>`.
+# /bug-sweep — `git worktree add --detach <path> <commit>`, once the worktrees
+# interrupted sweeps of this repository left are dropped and the registrations
+# whose directory has gone are pruned, every sweep's or not.
 #
 # A `Bash(git worktree add:*)` grant would also buy `-B`, which resets an
 # existing branch — the operation .claude/settings.json denies as
@@ -60,6 +62,29 @@ git rev-parse --verify --quiet "$commit^{commit}" >/dev/null ||
 links=$(git ls-tree -r "$commit" | awk '$1 == "120000" { print $4 }' | head -5)
 [ -z "$links" ] ||
   { echo "$commit carries tracked symbolic links, and a sweep's reads follow them out of the worktree it is bounded to (blueprint-frontend#18): $(printf '%s ' $links)" >&2; exit 5; }
+
+# **A sweep stopped before its teardown leaves its worktree registered, and no
+# later run's name ever meets it again (#577)**: `mktemp` invents a new one each
+# time. So a sweep's start drops them: a worktree of this repository whose name
+# is sweep-shaped and whose directory is over a day old, the day standing in for
+# "no sweep still runs there", which no helper can ask. The candidates come from
+# git's own list, never from an argument or the tree, so a poisoned finding
+# cannot add one; each goes through git-worktree-drop.sh, whose shape checks and
+# git's refusal of a tree holding anything modified or untracked decide, never
+# this loop, and a refused one is left standing for inspection and named. Its
+# output goes to stderr, because stdout is this script's return value. Then
+# `git worktree prune` forgets every registration of this repository whose
+# directory has gone, a sweep's or a PR's, and deletes no file. The residual is
+# docs/harness-boundaries.md's, `A sweep's start drops`.
+registered=$(git worktree list --porcelain)
+while IFS= read -r line; do
+  case "$line" in "worktree "*) old=${line#worktree } ;; *) continue ;; esac
+  case "${old##*/}" in secsweep-??????) : ;; *) continue ;; esac
+  [ -n "$(find "$old" -maxdepth 0 -mmin +1440 2>/dev/null)" ] || continue
+  bash "$(dirname "${BASH_SOURCE[0]}")/git-worktree-drop.sh" "$old" >&2 ||
+    echo "left a stale sweep worktree standing: $old" >&2
+done <<<"$registered"
+git worktree prune >&2
 
 tmproot=$(cd "${TMPDIR:-/tmp}" 2>/dev/null && pwd -P) ||
   { echo "cannot resolve the temp root" >&2; exit 4; }

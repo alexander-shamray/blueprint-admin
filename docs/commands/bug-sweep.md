@@ -323,9 +323,12 @@ reach, which is the point, since the audited tree is prompt-injection input and
 a poisoned finding naming a PR worktree would otherwise be able to delete it.
 **It still does not establish that the path came from this invocation, and the
 two helpers differ on why.** `git-worktree-detach.sh` now creates the directory
-itself and prints it, so for *that* helper the question does not arise — there
-is no caller-supplied path to doubt, and the `Bash(mktemp:*)` grant that took an
-arbitrary template is gone from both sweeps. `git-worktree-drop.sh` is the other
+itself and prints it, so for the path it forks the question does not arise —
+there is no caller-supplied path to doubt, and the `Bash(mktemp:*)` grant that
+took an arbitrary template is gone from both sweeps. Before forking, though, it
+hands each day-old sweep-shaped worktree git lists for this repository to the
+drop helper, so it meets the question too (`docs/harness-boundaries.md`,
+*A sweep's start drops*). `git-worktree-drop.sh` is the other
 case and is unchanged in this respect: the teardown hands it `$posix`, and any
 registered worktree of the right shape satisfies it, including one an abandoned
 earlier sweep left behind. That is not hypothetical — a stray `secsweep-`

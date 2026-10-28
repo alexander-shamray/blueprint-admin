@@ -36,6 +36,7 @@ line names one residual below by the words it opens with.
 | The review agent grant, or restoring an external reviewer | `grants exactly`, `archive/external-reviewers` |
 | The harness suite and its shards | `shard-harness-suite.py`, `That runner owns every discovery root`, `One run at a time, per user` |
 | The sweeps' slice lists and `refs/sweeps/` | `The sweeps write two things` |
+| A sweep's start dropping stale sweep worktrees | `A sweep's start drops` |
 | Rebasing or force-pushing | `The only force push`, `A second helper rewrites` |
 | `/branch` worktrees under `.claude/worktrees/` | `worktrees sit inside the checkout` |
 | MSBuild/NuGet auto-imports, agent types, `/style-pass` and its linter | `The files MSBuild and NuGet`, `is denied beside the built-in agent types`, `runs the linter it configures` |
@@ -359,6 +360,21 @@ as out of scope, never filed.
   root, as the worktree helpers do. The residual is the ref: a wrong mark
   narrows the next sweep, and `full` is the answer. Their argument is in
   [`commands/bug-sweep.md`](commands/bug-sweep.md), *Slices, leads and the mark*.
+
+- **A sweep's start drops what an interrupted sweep left (#577).** Before it
+  forks, `git-worktree-detach.sh` hands each worktree this repository has
+  registered whose name is sweep-shaped and whose directory is over a day old
+  to `git-worktree-drop.sh`, then runs `git worktree prune`, which forgets
+  every registration of the repository whose directory has gone, a sweep's or
+  a PR's, and deletes no file. The candidates come from git's own list, never
+  from the tree or an argument, so a poisoned finding cannot add one; the drop
+  helper's shape checks and git's refusal of a tree holding anything modified
+  or untracked still decide, so a worktree a refused teardown left for
+  inspection stays, named on stderr. The residual is the day, which stands in
+  for "no sweep still runs there", a thing no helper can ask: a sweep running
+  that long would lose its worktree mid-round. A harness test that forks a
+  sweep worktree of this checkout under the shared temp root is a sweep start
+  too, and drops and prunes the same way.
 
 - **The only force push in this repository is
   `.claude/scripts/git-rebase-onto-main.sh`, and `/ship` step 7 grants it by
