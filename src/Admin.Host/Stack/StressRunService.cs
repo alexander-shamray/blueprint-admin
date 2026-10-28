@@ -167,8 +167,21 @@ public sealed partial class StressRunService(
         [.. readOverride(Path.Combine(paths.BackendDir, "deploy", "compose", OverrideFile)).Where(name => backend.Services.Any(s =>
             s.Service == name && s.State == "running" && s.ConfigFiles?.Contains(OverrideFile) == true))];
 
-    /// <summary>The services the override file at <paramref name="path"/> changes, or none when there is no file there.</summary>
-    public static IReadOnlyList<string> ReadOverride(string path) => File.Exists(path) ? ServicesOf(File.ReadAllText(path)) : [];
+    /// <summary>
+    /// The services the override file at <paramref name="path"/> changes, or none when there is no file there or it cannot be
+    /// read: every Stack poll reads it, and a backend checkout replacing or locking it for a moment must not fail the read.
+    /// </summary>
+    public static IReadOnlyList<string> ReadOverride(string path)
+    {
+        try
+        {
+            return ServicesOf(File.ReadAllText(path));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
 
     /// <summary>
     /// The keys of an override's top-level <c>services:</c> map, in the file's order: each line under it indented two spaces

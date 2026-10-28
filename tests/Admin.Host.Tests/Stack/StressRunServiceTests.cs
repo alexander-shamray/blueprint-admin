@@ -373,6 +373,7 @@ public sealed class StressRunServiceTests : IAsyncDisposable
         StressRunService.ServicesOf(overlay.ReplaceLineEndings("\n")).ShouldBe(keys);
         StressRunService.ServicesOf("volumes:\n  sql-data:\n").ShouldBeEmpty();
         StressRunService.ReadOverride(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), StressRunService.OverrideFile)).ShouldBeEmpty();
+        StressRunService.ReadOverride(Path.GetTempPath()).ShouldBeEmpty();
     }
 
     [Fact]
