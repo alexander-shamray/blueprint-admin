@@ -48,7 +48,12 @@ public static partial class StackEndpoints
         {
             StressRunRequest? request = null;
 
-            if (http.ContentLength is > 0 && http.HasJsonContentType())
+            if (http.ContentLength is > 0 && !http.HasJsonContentType())
+            {
+                return TypedResults.Problem(statusCode: StatusCodes.Status415UnsupportedMediaType, title: "Stress run refused", detail: "The body, if there is one, is JSON.");
+            }
+
+            if (http.ContentLength != 0 && http.HasJsonContentType())
             {
                 try
                 {
