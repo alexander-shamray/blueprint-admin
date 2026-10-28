@@ -133,20 +133,36 @@ describe('topologyOf', () => {
     expect(node('s:shipping', undefined, null)).toMatchObject({ state: 'unknown', stateText: 'not read yet' });
   });
 
-  it('colours a service whose host port the stress override took away by its Compose state, not as down', () => {
-    const unpublished = {
-      backend: {
-        ...stack.backend,
-        services: [
-          { service: 'ordering-api', state: 'running', health: 'healthy', exitCode: null, publishedPorts: [] },
+  it('colours a service whose host port the stress override took away by its Compose state, the worst replica deciding', () => {
+    const replica = {
+      service: 'ordering-api',
+      state: 'running',
+      health: 'healthy',
+      exitCode: null,
+      publishedPorts: [],
+    };
+    const unpublished = (...services: object[]) =>
+      ({
+        backend: { ...stack.backend, services },
+        reachability: [
+          { name: 'ordering', url: 'http://localhost:5101/health/ready', up: false, status: null, published: false },
         ],
-      },
-      reachability: [
-        { name: 'ordering', url: 'http://localhost:5101/health/ready', up: false, status: null, published: false },
-      ],
-    } as unknown as StackView;
+      }) as unknown as StackView;
 
-    expect(node('s:ordering', undefined, unpublished)).toMatchObject({ state: 'up', stateText: 'Compose: running' });
+    expect(node('s:ordering', undefined, unpublished(replica, replica))).toMatchObject({
+      state: 'up',
+      stateText: 'Compose: running',
+    });
+    expect(node('s:ordering', undefined, unpublished(replica, { ...replica, health: 'starting' })).state).toBe(
+      'starting',
+    );
+    expect(
+      node(
+        's:ordering',
+        undefined,
+        unpublished({ ...replica, health: 'starting' }, { ...replica, health: 'unhealthy' }),
+      ),
+    ).toMatchObject({ state: 'down', stateText: 'Compose: unhealthy' });
   });
 
   it('draws a service the probe does not cover as unknown, not green', () => {

@@ -211,23 +211,31 @@ public static partial class FakePlatformScripts
 
     /// <summary>
     /// <c>ps</c> with the services the stress override changes created from it too, as Compose labels a container it made from
-    /// two files, and <see cref="UnpublishedOnOverride"/> publishing no host port, when <paramref name="stressOverride"/> holds;
-    /// the recording otherwise.
+    /// two files, and <see cref="UnpublishedOnOverride"/> as <see cref="ReplicasOnOverride"/> containers publishing no host port,
+    /// when <paramref name="stressOverride"/> holds; the recording otherwise.
     /// </summary>
     public static IReadOnlyList<string> ComposePsLines(bool stressOverride) =>
         stressOverride
             ? [.. ComposePsLines().Select(l => StressRunService.OverrideServices.Any(s => l.Contains($"\"Service\":\"{s}\"", StringComparison.Ordinal))
                 ? ConfigFile().Replace(l, m => $"{m.Value},{m.Groups["dir"].Value}{StressRunService.OverrideFile}", 1)
                 : l)
-                .Select(l => l.Contains($"\"Service\":\"{UnpublishedOnOverride}\"", StringComparison.Ordinal) ? Publishers().Replace(l, Unpublished, 1) : l)]
+                .SelectMany(l => l.Contains($"\"Service\":\"{UnpublishedOnOverride}\"", StringComparison.Ordinal)
+                    ? Enumerable.Range(1, ReplicasOnOverride).Select(n => Publishers().Replace(l, Unpublished, 1)
+                        .Replace($"commerce-{UnpublishedOnOverride}-1", $"commerce-{UnpublishedOnOverride}-{n}", StringComparison.Ordinal)
+                        .Replace("container-number=1", $"container-number={n}", StringComparison.Ordinal))
+                    : [l])]
             : ComposePsLines();
 
     /// <summary>
-    /// Owner: blueprint-backend <c>deploy/compose/docker-compose.stress.yml</c>, the service whose <c>ports</c> it resets
-    /// (copied, held by <c>StressRunDriftTests</c>): on the override its URL refuses (<see cref="FakePlatformHandler"/>) and
-    /// <c>ps</c> shows it publishing nothing. The host reads the same from <c>ps</c> and copies none of it.
+    /// Owner: blueprint-backend <c>deploy/compose/docker-compose.stress.yml</c>, the service whose <c>ports</c> it resets and
+    /// how many replicas it runs (copied, held by <c>StressRunDriftTests</c>): on the override its URL refuses
+    /// (<see cref="FakePlatformHandler"/>) and <c>ps</c> shows a row for each replica, publishing nothing. The host reads the
+    /// same from <c>ps</c> and copies none of it.
     /// </summary>
     public const string UnpublishedOnOverride = "ordering-api";
+
+    /// <inheritdoc cref="UnpublishedOnOverride"/>
+    public const int ReplicasOnOverride = 3;
 
     /// <summary>A container's port exposed and published nowhere, as <c>ps</c> prints one in the recording.</summary>
     private const string Unpublished = "\"Publishers\":[{\"URL\":\"\",\"TargetPort\":8080,\"PublishedPort\":0,\"Protocol\":\"tcp\"}]";

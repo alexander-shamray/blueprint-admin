@@ -113,7 +113,13 @@ function serviceState(service: MapService, stack: StackView | undefined): { stat
   }
   if (!stack.backend.reachable) return { state: 'unknown', text: $localize`Compose did not answer` };
   const compose = composeOf(service);
-  const status = compose === null ? undefined : stack.backend.services.find((s) => s.service === compose);
+  // A service run as replicas has a row each, so the worst of them colours the node.
+  const rows = stack.backend.services.filter((s) => s.service === compose);
+  const status =
+    rows.find((s) => s.state !== 'running') ??
+    rows.find((s) => s.health === 'unhealthy') ??
+    rows.find((s) => s.health === 'starting') ??
+    rows[0];
   if (!status) return { state: 'unknown', text: $localize`no Compose service` };
   if (status.state !== 'running') return { state: 'down', text: $localize`Compose: ${status.state}:state:` };
   if (status.health === 'unhealthy') return { state: 'down', text: $localize`Compose: unhealthy` };
