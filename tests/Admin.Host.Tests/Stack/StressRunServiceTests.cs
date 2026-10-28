@@ -444,7 +444,7 @@ public sealed class StressRunEndpointTests(AdminHostFactory factory) : IClassFix
         HttpResponseMessage stop = await client.PostAsync("/api/stack/stress-run/stop", null, TestContext.Current.CancellationToken);
         stop.StatusCode.ShouldBe(HttpStatusCode.OK);
         (await stop.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken)).GetProperty("exitCode").GetInt32().ShouldBe(-1);
-        (await StackAsync()).GetProperty("stressOverride").GetArrayLength().ShouldBe(3);
+        (await StackAsync()).GetProperty("stressOverride").GetArrayLength().ShouldBe(StressRunService.OverrideServices.Count);
 
         HttpResponseMessage up = await client.PostAsync("/api/stack/backend/up", null, TestContext.Current.CancellationToken);
         up.StatusCode.ShouldBe(HttpStatusCode.Accepted);

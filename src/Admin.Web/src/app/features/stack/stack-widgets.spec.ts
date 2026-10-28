@@ -208,7 +208,7 @@ const stressJob = {
   exitCode: null,
   startedAt: '',
 };
-const overridden = ['gateway', 'shipping-worker', 'notifications-worker'];
+const overridden = ['gateway', 'shipping-worker', 'notifications-worker', 'ordering-api'];
 
 const deviceReads = {
   checks: [
@@ -1006,10 +1006,10 @@ describe('StackWidgets', () => {
       const { fixture, q } = await render();
 
       expect(text(q('p.stress-override'))).toContain(
-        'The stack runs on the stress override (gateway, shipping-worker, notifications-worker)',
+        'The stack runs on the stress override (gateway, shipping-worker, notifications-worker, ordering-api)',
       );
       expect(text(q('section.stress-override'))).toContain(
-        'gateway, shipping-worker, notifications-worker were created',
+        'gateway, shipping-worker, notifications-worker, ordering-api were created',
       );
       expect(q('button.stress-restore')!.disabled).toBe(true);
 

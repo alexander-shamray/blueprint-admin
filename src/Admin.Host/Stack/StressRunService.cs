@@ -13,7 +13,7 @@ namespace Admin.Host.Stack;
 /// document asks, Prometheus answers through Grafana, then the run block chooses its products, starts the sampler and k6, and
 /// writes the summary. The console runs the backend's scripts and carries none: the staircase, the journey and the knee are
 /// theirs, and the step shown is read off k6's own progress lines (<see cref="StressStaircase"/>). Unlike the load run, the job
-/// claims <see cref="ComposeGate"/>, because its first block recreates the gateway and both workers; the way back to the normal
+/// claims <see cref="ComposeGate"/>, because its first block recreates the gateway, both workers and Ordering; the way back to the normal
 /// profile is the section's last block, which is the command the Stack's Up runs (<see cref="ComposeService.Up"/>), and the
 /// override is read from the containers rather than remembered (<see cref="OverrideServices"/>).
 /// </summary>
@@ -42,7 +42,7 @@ public sealed class StressRunService(
     /// <c>StressRunDriftTests</c>). Both ups recreate each of them, so the files a running one was created from say which
     /// profile it runs; a service the override leaves alone keeps whatever label the last up that recreated it wrote.
     /// </summary>
-    public static readonly IReadOnlyList<string> OverrideServices = ["gateway", "shipping-worker", "notifications-worker"];
+    public static readonly IReadOnlyList<string> OverrideServices = ["gateway", "shipping-worker", "notifications-worker", "ordering-api"];
 
     /// <summary>Owner: run-locally.md, "Stress run (k6)": "Leave the stack idle for a minute afterwards".</summary>
     public static readonly TimeSpan Settle = TimeSpan.FromMinutes(1);

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
-// FakePlatformScripts answers run-locally.md's stress run: its up puts the gateway and both workers on the override, which the
-// fake ps then labels with docker-compose.stress.yml, and its run block prints a cut staircase a line at a time
+// FakePlatformScripts answers run-locally.md's stress run: its up puts the gateway, both workers and Ordering on the override,
+// which the fake ps then labels with docker-compose.stress.yml, and its run block prints a cut staircase a line at a time
 // (StressRunRecordings), at the level and under the stop rule the lists chose, ending as that rule says: the default, low at the
 // first knee, breaks at step 2 with k6's 108. The run claims ComposeGate, so each test ends on the Up that is the
 // way back; one that fails before it sends the Stop and the Up after it, so the next file meets a normal stack.
@@ -30,7 +30,7 @@ test.describe('the stress run', () => {
     await expect(page.locator('app-output-pane .steps li').first()).toContainText('k6');
     const banner = page.getByRole('status', { name: 'Stress override' });
     await expect(banner).toContainText(
-      'gateway, shipping-worker, notifications-worker were created with the stress override',
+      'gateway, shipping-worker, notifications-worker, ordering-api were created with the stress override',
     );
 
     // Each hold lasts long enough for the stack's 3-second poll to read it.
