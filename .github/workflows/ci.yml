@@ -243,6 +243,12 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    # The issue-form gate below lists the repository's labels; nothing in
+    # this job restores a package, so the workflow's packages grant is not
+    # carried over.
+    permissions:
+      contents: read
+      issues: read
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -262,3 +268,15 @@ jobs:
       # subject — the base copy of the gate judged against the PR body —
       # rather than a duplicate of this.
       - run: python .claude/scripts/shard-harness-suite.py
+      # The issue form against the helper's vocabularies and the labels its
+      # answers name (.github/issue-form-gate/README.md); its suite ran in
+      # the step above. One leg, since the labels are the repository's and
+      # not the runner's, and the one input this job reads over the network.
+      - if: runner.os == 'Linux'
+        name: Every issue-form choice is its owner's word and a label here
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          gh label list --repo "$GITHUB_REPOSITORY" --limit 1000 --json name |
+            python .github/issue-form-gate/issue_form_gate.py

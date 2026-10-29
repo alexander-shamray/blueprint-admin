@@ -122,7 +122,9 @@ gh_issue_file() {
 
 # The whole vocabulary a sweep files under. A word outside it is refused rather
 # than passed on — that refusal is the point of the file — and `documentation`
-# is deliberately absent: neither sweep files one.
+# is deliberately absent: neither sweep files one. These two arms are also
+# the issue form's kind and severity: .github/issue-form-gate/ reads them
+# here, in this shape, and holds the form's dropdowns equal to them.
 case "$kind" in
   security|bug) ;;
   *) echo "not a kind this helper will file under: $kind" >&2; exit 2 ;;
