@@ -193,9 +193,10 @@ public sealed partial class StressRunService(
     /// <summary>
     /// The keys of an override's top-level <c>services:</c> map that its Up starts, in the file's order: each line under it
     /// indented two spaces that starts with a key, whatever its value, until the next top-level key, less every service that sets
-    /// <c>profiles:</c>. Compose names a service by that key alone, so the Up changes exactly these; a profiled service is started
-    /// by <c>run</c> alone, as the stress run's k6 is (blueprint-backend ADR-170), so it is not a service of the stack the Up moved
-    /// onto the override, and the Up that is the way back has nothing of it to recreate.
+    /// <c>profiles:</c>. Compose names a service by that key alone, so the Up changes exactly these; a profiled service is one
+    /// the Up's command line, which names no <c>--profile</c>, does not start (the backend's compose k6, blueprint-backend
+    /// ADR-170, is one), so it is not a service of the stack the Up moved onto the override, and the Up that is the way back has
+    /// nothing of it to recreate.
     /// </summary>
     public static IReadOnlyList<string> ServicesOf(string overlay)
     {
