@@ -174,7 +174,7 @@ public sealed partial class StressRunService(
     public static bool UpRecreatesObservability(IReadOnlyList<string> overridden) => overridden.Contains(ObservabilityService);
 
     /// <summary>
-    /// The services the override file at <paramref name="path"/> changes, or none when there is no file there or it cannot be
+    /// The services the Up with the override file at <paramref name="path"/> starts, or none when there is no file there or it cannot be
     /// read: every Stack poll reads it, and a backend checkout replacing or locking it for a moment must not fail the read.
     /// </summary>
     public static IReadOnlyList<string> ReadOverride(string path)
@@ -190,22 +190,42 @@ public sealed partial class StressRunService(
     }
 
     /// <summary>
-    /// The keys of an override's top-level <c>services:</c> map, in the file's order: each line under it indented two spaces
-    /// that starts with a key, whatever its value, until the next top-level key. Compose names a service by that key alone, so the
-    /// override changes exactly these.
+    /// The keys of an override's top-level <c>services:</c> map that its Up starts, in the file's order: each line under it
+    /// indented two spaces that starts with a key, whatever its value, until the next top-level key, less every service that sets
+    /// <c>profiles:</c>. Compose names a service by that key alone, so the Up changes exactly these; a profiled service is started
+    /// by <c>run</c> alone, as the stress run's k6 is (blueprint-backend ADR-170), so it is not a service of the stack the Up moved
+    /// onto the override, and the Up that is the way back has nothing of it to recreate.
     /// </summary>
     public static IReadOnlyList<string> ServicesOf(string overlay)
     {
         string[] lines = overlay.ReplaceLineEndings("\n").Split('\n');
         int services = Array.FindIndex(lines, l => TopLevelKey().Match(l) is { Success: true } m && m.Groups[1].Value == "services");
+        if (services < 0)
+        {
+            return [];
+        }
 
-        return services < 0
-            ? []
-            : [.. lines.Skip(services + 1)
-                .TakeWhile(l => !TopLevelKey().IsMatch(l))
-                .Select(l => ServiceKey().Match(l))
-                .Where(m => m.Success)
-                .Select(m => m.Groups[1].Value)];
+        // A service's own keys sit at the indent of its first one; a `profiles:` deeper than that is some map's entry, not the service's.
+        List<(string Name, bool Profiled)> keys = [];
+        int own = 0;
+        foreach (string line in lines.Skip(services + 1).TakeWhile(l => !TopLevelKey().IsMatch(l)))
+        {
+            if (ServiceKey().Match(line) is { Success: true } service)
+            {
+                keys.Add((service.Groups[1].Value, FlowProfiles().IsMatch(line[service.Length..])));
+                own = 0;
+            }
+            else if (keys.Count > 0 && NestedKey().Match(line) is { Success: true } nested)
+            {
+                own = own == 0 ? nested.Groups["indent"].Length : own;
+                if (nested.Groups["indent"].Length == own && nested.Groups["key"].Value == "profiles")
+                {
+                    keys[^1] = keys[^1] with { Profiled = true };
+                }
+            }
+        }
+
+        return [.. keys.Where(k => !k.Profiled).Select(k => k.Name)];
     }
 
     /// <summary>
@@ -494,6 +514,14 @@ public sealed partial class StressRunService(
     /// <summary>A key indented two spaces, whatever follows it (a tag, an anchor, a flow map): a service under <c>services:</c>.</summary>
     [GeneratedRegex(@"^  ([A-Za-z0-9][A-Za-z0-9._-]*):(\s|$)")]
     private static partial Regex ServiceKey();
+
+    /// <summary>A key indented deeper than a service's: one of a service's own keys, or an entry of a map under one.</summary>
+    [GeneratedRegex(@"^(?<indent> {3,})(?<key>[A-Za-z0-9_][A-Za-z0-9._-]*):(\s|$)")]
+    private static partial Regex NestedKey();
+
+    /// <summary>A service written as a flow map that sets <c>profiles</c>, read up to any comment after it.</summary>
+    [GeneratedRegex(@"^\s*\{[^#]*\bprofiles\s*:")]
+    private static partial Regex FlowProfiles();
 }
 
 /// <summary>
