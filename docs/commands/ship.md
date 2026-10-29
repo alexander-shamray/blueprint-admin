@@ -745,11 +745,12 @@ and not at its neighbour looks like.
    a session inside `.claude/worktrees/` the main checkout's own files
    (`docs/working-rules.md`, #603). So the branch is added to the row once
    `/branch` has named it, from the worktree, and every later event is
-   written when it happens rather than carried as owed. It is written by its
-   own path, never through a `TODO.md` link, which the edit guard refuses.
-   Which section a row belongs in is `docs/working-rules.md`'s table and is
-   not restated here. Work no issue started has no row until its PR opens,
-   and the run that opens it writes that row then.
+   written when it happens, carried as owed only when the write is refused.
+   It is written by its own path, never through a `TODO.md` link, which the
+   edit guard refuses. Which section a row belongs in is
+   `docs/working-rules.md`'s table and is not restated here. Work no issue
+   started has no row until its PR opens, and the run that opens it writes
+   that row then.
 
    **This step is also where the workspace comes from, and it has two
    outcomes.** From a clean `main`, `/branch` forks a worktree under
@@ -1374,8 +1375,8 @@ request into several. The bar for `medium` and above is unchanged.
    own row, written when it was filed. The file sits outside every checkout
    (#603), so the run wrote each earlier event from the worktree as it
    happened (the PR it opened, the issues it filed), and a run that stopped
-   before the merge leaves the list true for the state it stopped in, with
-   nothing owed.
+   before the merge leaves the list true for the state it stopped in, owing
+   only a write the permission check or the edit guard refused.
 
 ## Report
 
