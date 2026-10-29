@@ -139,6 +139,13 @@ class ThePlacementIsDerivedFromDiscovery(unittest.TestCase):
         self.assertTrue(
             any(i.startswith("test_pin_gate.") for i in found()))
 
+    def test_the_issue_form_gate_suite_is_part_of_it(self):
+        # #600: the suite holds ci.yml to piping the labels into the gate,
+        # so a root list that drops it lets the wiring go unread.
+        self.assertIn((".github/issue-form-gate", "test*.py"), SHARD.ROOTS)
+        self.assertTrue(
+            any(i.startswith("test_issue_form_gate.") for i in found()))
+
     def test_every_name_the_tables_pin_still_exists(self):
         # A renamed class loses its pinning, and a pinning that has stopped
         # applying reads exactly like one that is working.

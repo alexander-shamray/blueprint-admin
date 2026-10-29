@@ -82,7 +82,7 @@ pinned the old answer moves with it.
 `python .claude/scripts/shard-harness-suite.py` — Python 3.12, plus Bash,
 `grep`, Git and `jq` on PATH. Python plus `jq` alone fails before a case
 runs. It discovers `.claude/scripts`, `.github/locality-gate`,
-`.github/commit-gate`, `.github/pin-gate` and `tools/token-usage`, and runs their classes as parallel workers; `docs/harness-boundaries.md` owns what
+`.github/commit-gate`, `.github/pin-gate`, `.github/issue-form-gate` and `tools/token-usage`, and runs their classes as parallel workers; `docs/harness-boundaries.md` owns what
 that may not do. The `harness` job in `ci.yml` is the matrix.
 
 ## Commit gate
@@ -125,6 +125,19 @@ py -3.12 .github/pin-gate/judge_build.py artifacts/build.binlog
 
 Its suite's live cases, which build a repository made for each case, skip
 where no .NET SDK runs.
+
+## Issue-form gate
+
+`python -m unittest` in `.github/issue-form-gate/` is the gate's own suite,
+and the `harness` job runs it too. The gate needs the repository's labels,
+which a `gh` session reads and pipes in; `ci.yml` does the same on the
+`harness` job's Linux leg:
+
+```bash
+gh label list --limit 1000 --json name | py -3.12 .github/issue-form-gate/issue_form_gate.py
+```
+
+What it reads and claims is [its README](../.github/issue-form-gate/README.md)'s.
 
 ## Locality
 

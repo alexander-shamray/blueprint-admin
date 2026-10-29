@@ -94,6 +94,7 @@ ROOTS = ((".claude/scripts", "test_*.py"),
          (".github/locality-gate", "test*.py"),
          (".github/commit-gate", "test*.py"),
          (".github/pin-gate", "test*.py"),
+         (".github/issue-form-gate", "test*.py"),
          ("tools/token-usage", "test_*.py"))
 
 # Whose subject is time or a port, and so cannot share a box with seven
