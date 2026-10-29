@@ -236,12 +236,12 @@ don't restart*)
    never handed a name that exists.
 
    **Before `/branch`, the task list.** When this run is for an issue, its
-   row leaves **Remaining** for **In progress** in `TODO.md` at the main
-   checkout's root, while the session is still in that checkout; once
-   `/branch` has moved the session into a worktree the file is refused. Add
-   the branch to the row when next in the main checkout. Which section a row
-   belongs in is `docs/working-rules.md`'s table. Work no issue started has
-   no row until its PR opens.
+   row leaves **Remaining** for **In progress** in the task list,
+   `.todo/blueprint-admin.md` in the main checkout's parent directory, by
+   that path and never through a `TODO.md` link; add the branch to the row
+   once `/branch` has named it, from the worktree as well. Which section a
+   row belongs in is `docs/working-rules.md`'s table. Work no issue started
+   has no row until its PR opens.
 
    From a clean `main`, `/branch` forks a worktree under `.claude/worktrees/`
    and **every step below then runs in the PR's own directory**; on a dirty
@@ -464,10 +464,11 @@ don't restart*)
    - Run the pull, the ancestry check and the prune on both paths; report
      containment, never equality: the HEAD `main` landed on, and that the
      merge is in its history.
-   - Back in the main checkout, re-derive every `TODO.md` row this run
-     touched by `docs/working-rules.md`'s table; make the updates the run
-     owed from inside the worktree too. A run that stopped before the merge
-     cannot reach the file from there: it reports each update as owed.
+   - Once the merge is verified, re-derive every task-list row this run
+     touched by `docs/working-rules.md`'s table, in
+     `.todo/blueprint-admin.md` in the main checkout's parent directory, by
+     that path. Every other event the run met (the PR it opened, an issue it
+     filed) was written there when it happened, from the worktree too.
    - Never delete the merged branch: `git branch -d` is denied; name it in
      the report.
 
@@ -496,8 +497,9 @@ In this order:
   stopped it; that `main` was pulled, the HEAD it is now at, and that it
   contains the merge oid; the worktree removed, or the one left behind and why
   the helper refused it; and the merged branch still sitting in `git branch`.
-- **The task list**: each row moved, added or deleted, and the move made
-  before `/branch` ran; or an update still owed and why.
+- **The task list**: each row moved, added or deleted, the move made
+  before `/branch` ran among them; or an update that could not be made and
+  why.
 - **Issues filed**: every problem the PR left unfixed is an issue before the
   report, by the user-level rule; list each filed or commented on, by number.
 

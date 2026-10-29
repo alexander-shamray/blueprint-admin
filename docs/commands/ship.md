@@ -738,14 +738,18 @@ and not at its neighbour looks like.
    `git-worktree-fork.sh` would refuse the name if it tried.
 
    **Before `/branch`, the task list.** When this run is for an issue, its
-   row leaves **Remaining** for **In progress** in `TODO.md` at the main
-   checkout's root now, while the session is still in that checkout: once
-   `/branch` has moved it into the worktree, Claude Code's isolation refuses
-   it that file. The branch is not named yet, so it is added to the row when
-   the session is next in the main checkout. Which section a row belongs in
-   is `docs/working-rules.md`'s table and is not restated here. Work no
-   issue started has no row until its PR opens, and the run that opens it
-   owes that row from inside the worktree.
+   row leaves **Remaining** for **In progress** now, before anything is
+   built, so the list the user reads shows the work from its first step. The
+   file is `.todo/blueprint-admin.md` in the main checkout's parent
+   directory, outside every checkout because Claude Code's isolation refuses
+   a session inside `.claude/worktrees/` the main checkout's own files
+   (`docs/working-rules.md`, #603). So the branch is added to the row once
+   `/branch` has named it, from the worktree, and every later event is
+   written when it happens rather than carried as owed. It is written by its
+   own path, never through a `TODO.md` link, which the edit guard refuses.
+   Which section a row belongs in is `docs/working-rules.md`'s table and is
+   not restated here. Work no issue started has no row until its PR opens,
+   and the run that opens it writes that row then.
 
    **This step is also where the workspace comes from, and it has two
    outcomes.** From a clean `main`, `/branch` forks a worktree under
@@ -1363,16 +1367,15 @@ request into several. The bar for `medium` and above is unchanged.
    The merged branch itself stays. `git branch -d` is denied, deliberately, and
    a merged branch costs a line in `git branch` — name it in the report.
 
-   **Then the task list, now that the session is back in the main
-   checkout.** Re-derive every row this run touched by
-   `docs/working-rules.md`'s table: a merged PR whose issue closed leaves no
-   row, a PR merged without closing its issue sends that issue back to its
-   wave, and whatever the run filed gets its own row. Make every update the
-   run owed from inside the worktree as well (the PR it opened, the issues it
-   filed). A run that stopped before the merge is still inside the worktree
-   unless it had already left, and from there it cannot reach the file: it
-   makes none of these updates and reports each as owed, for the state it
-   stopped in.
+   **Then the task list, once the merge is verified.** Re-derive every row
+   this run touched by `docs/working-rules.md`'s table: a merged PR whose
+   issue closed leaves no row, a PR merged without closing its issue sends
+   that issue back to its wave, and whatever the run filed already has its
+   own row, written when it was filed. The file sits outside every checkout
+   (#603), so the run wrote each earlier event from the worktree as it
+   happened (the PR it opened, the issues it filed), and a run that stopped
+   before the merge leaves the list true for the state it stopped in, with
+   nothing owed.
 
 ## Report
 
@@ -1409,9 +1412,9 @@ in between leaves `main` at a later descendant and nothing is wrong; the
 worktree removed, or the one left behind and why git refused it; and the merged
 branch still sitting in `git branch`.
 
-**The task list gets its own line.** Each row moved, added or deleted, and the
-move made before `/branch` ran; or an update that is still owed and why it
-could not be made. A run that reports the work landed and says nothing of the
+**The task list gets its own line.** Each row moved, added or deleted, the
+move made before `/branch` ran among them; or an update that could not be made
+and why, which since #603 is a write the permission check refused. A run that reports the work landed and says nothing of the
 list has left the list wrong.
 
 **Every problem a PR leaves unfixed is an issue before the report**, by the

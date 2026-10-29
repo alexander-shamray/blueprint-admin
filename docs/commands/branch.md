@@ -351,13 +351,13 @@ not content.
    diffed against a stale base is a review of something else. Cutting the
    worktree from the remote-tracking ref is where that is cheapest to get right.
 
-   **The task list is the caller's to move, not this command's.** Once the
-   session is inside the worktree it is refused `TODO.md` at the main
-   checkout's root, and this command cannot edit files at all, so the row's
-   move from **Remaining** to **In progress** is made before it runs (`/ship`
-   step 1 does). A `/branch` run directly for an issue reports that the row
-   has not moved and is owed. The rule that decides the row is in
-   `docs/working-rules.md`.
+   **The task list is the caller's to move, not this command's.** This
+   command cannot edit files at all, so the row's move from **Remaining** to
+   **In progress** is made by its caller (`/ship` step 1 makes it before this
+   command runs); the file sits outside every checkout, so the caller adds
+   the branch from the new worktree too. A `/branch` run directly for an
+   issue reports that the row has not moved and is owed. Where the file
+   lives and the rule that decides the row are in `docs/working-rules.md`.
 
    Then switch the session into it with **`EnterWorktree`**, passing the new
    directory as `path` — the worktree exists and `git worktree list` reports
