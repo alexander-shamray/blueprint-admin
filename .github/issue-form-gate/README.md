@@ -43,6 +43,11 @@ twice.
   renders the form, and a broken one shows on the *New issue* page.
 - The gate reads label names, not descriptions, so it holds the area
   choices to the labels and says nothing about what each covers.
+- `documentation` is an area on the form and never its kind: a defect in
+  the prose is kind `bug` with area `documentation`. The bare
+  `documentation` label that `gh-issue-filing.sh`'s header describes on
+  hand filings is a filing outside the form, which its `case "$kind"`
+  refuses and so the form does not offer.
 - The form offers only the helper's kinds. A filing of another kind, an
   `enhancement` say, has no form; with blank issues off, a filer below write
   access cannot make one from the web UI.
