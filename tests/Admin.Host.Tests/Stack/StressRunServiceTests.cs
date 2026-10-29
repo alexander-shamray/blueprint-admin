@@ -346,7 +346,7 @@ public sealed class StressRunServiceTests : IAsyncDisposable
     }
 
     [Fact]
-    public void The_services_of_an_override_are_the_keys_under_its_top_level_services_and_nothing_else()
+    public void The_services_of_an_override_are_the_keys_under_its_top_level_services_its_up_starts_and_nothing_else()
     {
         const string overlay = """
             # services: in a comment is not the map
@@ -356,15 +356,22 @@ public sealed class StressRunServiceTests : IAsyncDisposable
               gateway:
                 environment:
                   RateLimits__AnonymousPermitLimit: "1000000"
+                  profiles: "a map's entry, not the service's own key"
 
               ordering-api: # with a comment after it
                 ports: !reset []
+              k6:
+                image: grafana/k6:2.2.0
+                # started by `run` alone: the Up leaves it out
+                profiles: [ "stress-run" ]
+                working_dir: /repo
               otel.collector_2:
               grafana: &lgtm
                 mem_limit: 2g
+              seeder: { image: seed, profiles: [ "seed" ] }
               web-bff: !override
                 environment: {}
-              privacy-api: { mem_limit: 512m }
+              privacy-api: { mem_limit: 512m } # profiles: in a comment is not the key
             volumes:
               sql-data:
             """;
