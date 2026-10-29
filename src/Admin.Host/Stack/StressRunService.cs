@@ -193,10 +193,10 @@ public sealed partial class StressRunService(
     /// <summary>
     /// The keys of an override's top-level <c>services:</c> map that its Up starts, in the file's order: each line under it
     /// indented two spaces that starts with a key, whatever its value, until the next top-level key, less every service that sets
-    /// <c>profiles:</c>. Compose names a service by that key alone, so the Up changes exactly these; a profiled service is one
-    /// the Up's command line, which names no <c>--profile</c>, does not start (the backend's compose k6, blueprint-backend
-    /// ADR-170, is one), so it is not a service of the stack the Up moved onto the override, and the Up that is the way back has
-    /// nothing of it to recreate.
+    /// a non-empty <c>profiles:</c>. Compose names a service by that key alone, so the Up changes exactly these; a profiled
+    /// service is one the Up's command line, which names no <c>--profile</c>, does not start (the backend's compose k6,
+    /// blueprint-backend ADR-170, is one), so it is not a service of the stack the Up moved onto the override, and the Up that
+    /// is the way back has nothing of it to recreate.
     /// </summary>
     public static IReadOnlyList<string> ServicesOf(string overlay)
     {
@@ -220,7 +220,8 @@ public sealed partial class StressRunService(
             else if (keys.Count > 0 && NestedKey().Match(line) is { Success: true } nested)
             {
                 own = own == 0 ? nested.Groups["indent"].Length : own;
-                if (nested.Groups["indent"].Length == own && nested.Groups["key"].Value == "profiles")
+                if (nested.Groups["indent"].Length == own && nested.Groups["key"].Value == "profiles"
+                    && !NoProfiles().IsMatch(line[nested.Length..]))
                 {
                     keys[^1] = keys[^1] with { Profiled = true };
                 }
@@ -521,9 +522,15 @@ public sealed partial class StressRunService(
     [GeneratedRegex(@"^(?<indent> {3,})(?<key>[A-Za-z0-9_][A-Za-z0-9._-]*):(\s|$)")]
     private static partial Regex NestedKey();
 
-    /// <summary>A service written as a flow map that sets <c>profiles</c>, read up to any comment after it.</summary>
-    [GeneratedRegex(@"^\s*\{[^#]*\bprofiles\s*:")]
+    /// <summary>
+    /// A service written as a flow map, after any tag or anchor, that sets <c>profiles</c>, read up to any comment after it.
+    /// </summary>
+    [GeneratedRegex(@"^\s*(?:[!&]\S+\s+)*\{[^#]*\bprofiles\s*:")]
     private static partial Regex FlowProfiles();
+
+    /// <summary>A <c>profiles:</c> value that names none, so the service starts on every up: an empty list, reset or not.</summary>
+    [GeneratedRegex(@"^\s*(?:!reset\s*)?\[\s*\]\s*(?:#.*)?$")]
+    private static partial Regex NoProfiles();
 }
 
 /// <summary>
