@@ -1134,6 +1134,115 @@ class WhatThisGuardIsNotTheSubjectOf(GuardCase):
                 self.assertIn("guard-edit-target", result.stderr)
 
 
+class TheTaskListBesideTheMainCheckout(GuardCase):
+    """#603: the one file outside every checkout the guard admits by name.
+
+    **Asked of `outside_offence` with the scratch roots emptied**, because this
+    suite's fixtures sit under the temp root, where the file would be admitted
+    as scratch whatever the rule said, and a case that passes either way
+    proves nothing. The main checkout gets a parent of its own so that no case
+    writes a `.todo` into the shared temp directory.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.parent = tempfile.mkdtemp(prefix="guard-parent-")
+        self.addCleanup(shutil.rmtree, self.parent, ignore_errors=True)
+        self.main = os.path.join(self.parent, "blueprint-admin")
+        os.makedirs(os.path.join(self.main, ".git"))
+        self.list = os.path.join(self.parent, ".todo", "blueprint-admin.md")
+
+    def anchored(self, root):
+        module = self.guard_module()
+        return module, [(root, os.path.realpath(root), module.traits_of(root))]
+
+    def verdict(self, target, root=None, resolved=None):
+        module, checkouts = self.anchored(self.main if root is None else root)
+        with mock.patch.object(module, "scratch_roots", return_value=[]):
+            return module.outside_offence(
+                target, target,
+                os.path.realpath(target) if resolved is None else resolved,
+                checkouts)
+
+    def worktree(self, backlink=True):
+        """`/branch`'s layout: `<main>/.claude/worktrees/<slug>`, registered."""
+        worktree = os.path.join(self.main, ".claude", "worktrees", "slug")
+        os.makedirs(worktree)
+        admin = os.path.join(self.main, ".git", "worktrees", "slug")
+        os.makedirs(admin)
+        self.write(os.path.join(worktree, ".git"), "gitdir: " + admin + "\n")
+        if backlink:
+            self.write(os.path.join(admin, "gitdir"),
+                       os.path.join(worktree, ".git") + "\n")
+        return worktree
+
+    def test_the_task_list_is_admitted_from_the_main_checkout(self):
+        self.assertIsNone(self.verdict(self.list))
+
+    def test_and_from_a_worktree_linked_to_it_which_is_why_it_moved(self):
+        # The anchor is the worktree alone: the main checkout is found from its
+        # `.git` file, which is the session the move exists for.
+        self.assertIsNone(self.verdict(self.list, root=self.worktree()))
+
+    def test_a_worktree_git_does_not_confirm_names_no_main_checkout(self):
+        reason = self.verdict(self.list, root=self.worktree(backlink=False))
+        self.assertIsNotNone(reason)
+        self.assertIn("outside every checkout", reason)
+
+    def test_nothing_else_beside_it_is_admitted(self):
+        # A file, not a root: the sibling repositories' lists share `.todo/`.
+        for parts in ((".todo", "blueprint-backend.md"),
+                      (".todo", "notes", "blueprint-admin.md"),
+                      ("blueprint-admin.md",),
+                      (".bashrc",)):
+            with self.subTest(parts=parts):
+                reason = self.verdict(os.path.join(self.parent, *parts))
+                self.assertIsNotNone(reason)
+                self.assertIn("outside every checkout", reason)
+
+    def test_the_task_list_is_admitted_only_as_the_file_it_is_spelled_as(self):
+        # The pair the hook computes for a link: spelled as the list, resolved
+        # somewhere else.
+        elsewhere = os.path.join(self.outside, "loot.txt")
+        self.assertIsNotNone(self.verdict(self.list, resolved=elsewhere))
+
+        # And a real link at `.todo`, with every primitive the platform grants.
+        for linker in linkers():
+            with self.subTest(linker=linker):
+                todo = os.path.join(self.parent, ".todo")
+                if linker == "symlink":
+                    os.symlink(self.outside, todo, target_is_directory=True)
+                else:
+                    JUNCTIONS(self.outside, todo)
+                try:
+                    self.assertIsNotNone(self.verdict(self.list))
+                finally:
+                    os.rmdir(todo) if os.name == "nt" else os.unlink(todo)
+
+    def test_a_todo_link_in_the_checkout_is_refused_as_any_link_out_is(self):
+        # The user's editor may keep `TODO.md` at the root as a link to the
+        # list; a session writes the list by its own path, never through it.
+        os.makedirs(os.path.dirname(self.list))
+        self.write(self.list, "# TODO\n")
+        for linker in linkers():
+            with self.subTest(linker=linker):
+                if linker == "symlink":
+                    target = os.path.join(self.main, "TODO.md")
+                    os.symlink(self.list, target)
+                else:
+                    link = os.path.join(self.main, "todo-dir")
+                    JUNCTIONS(os.path.dirname(self.list), link)
+                    target = os.path.join(link, "blueprint-admin.md")
+                try:
+                    self.assertRefused(target, cwd=self.main,
+                                       project=self.main)
+                finally:
+                    if linker == "symlink":
+                        os.unlink(target)
+                    else:
+                        os.rmdir(os.path.dirname(target))
+
+
 class TheWiringWithoutWhichNoneOfTheAboveRuns(unittest.TestCase):
 
     def registered(self):
