@@ -335,13 +335,15 @@ TASK_LIST = (".todo", "blueprint-admin.md")
 
 
 def task_lists(checkouts):
-    """The task list beside each checkout's main one: (spelled, real, traits).
+    """The task list beside each checkout's main one, resolved: (path, traits).
 
-    **The real form is the one a target must resolve to**, so the file is
-    admitted only as the file its path spells: a link at `.todo` or at the
-    file itself resolves elsewhere and `outside_offence` refuses it like any
-    other out-of-tree write. The spelled form is there for a main checkout
-    reached through a link of its own, the case `anchors` keeps its pairs for.
+    **Only the resolved form, because the main checkout may be read from git**:
+    from a linked worktree `main_checkout` takes it out of the gitdir, which
+    git records resolved, so a spelled form built from it is the resolved one
+    too and a target spelled through a linked directory (`/var` on macOS)
+    matched neither. `outside_offence` instead asks that the target resolve to
+    this file and name it, in a directory that resolves beside it, so a link
+    at `.todo` or at the file is refused like any other out-of-tree write.
 
     Traits are the main checkout's, which exists, rather than the file's,
     which need not: `case_insensitive` reads a missing path as sensitive.
@@ -353,11 +355,8 @@ def task_lists(checkouts):
             if main is None:
                 continue
             real_main = os.path.realpath(main)
-            found.append((
-                os.path.join(os.path.dirname(os.path.abspath(main)),
-                             *TASK_LIST),
-                os.path.join(os.path.dirname(real_main), *TASK_LIST),
-                traits_of(real_main)))
+            found.append((os.path.join(os.path.dirname(real_main), *TASK_LIST),
+                          traits_of(real_main)))
     return found
 
 
@@ -511,10 +510,12 @@ def outside_offence(spelled, lexical, resolved, checkouts=()):
             "session's state writes rather than for its configuration (blueprint-frontend#21, "
             "docs/harness-boundaries.md)."
         )
-    for spelled_list, real_list, traits in task_lists(checkouts):
-        if (same(resolved, real_list, traits)
-                and (same(lexical, spelled_list, traits)
-                     or same(lexical, real_list, traits))):
+    for task_list, traits in task_lists(checkouts):
+        if (same(resolved, task_list, traits)
+                and same(os.path.basename(lexical),
+                         os.path.basename(task_list), traits)
+                and same(os.path.realpath(os.path.dirname(lexical)),
+                         os.path.dirname(task_list), traits)):
             return None
     return (
         f"guard-edit-target: {spelled} resolves to {resolved}, which is "
