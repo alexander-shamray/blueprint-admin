@@ -653,7 +653,7 @@ def protected_in_worktree(path, root):
 
 
 def own_checkout():
-    """The checkout this file sits in, which no environment can move."""
+    """The checkout whose guard is running: the tree this file sits in."""
     return os.path.dirname(os.path.dirname(os.path.dirname(
         os.path.abspath(__file__))))
 
@@ -991,10 +991,10 @@ def offence(event):
         # shell profile, an SSH key or a credential as readily as a scratch
         # file. `outside_offence` names the two roots the exception was written
         # for, and the one file `task_lists` adds (#603), and refuses the rest.
-        # **That file is read from this guard's own checkout alone**, never
-        # from every anchor: an anchor may only narrow the judgement above,
-        # and `CLAUDE_PROJECT_DIR` and `cwd` are what the environment says
-        # rather than where this file is. Raised in review.
+        # **That file is read from the tree whose guard is running**, never
+        # from every anchor: an anchor may only narrow the judgement above, so
+        # neither `CLAUDE_PROJECT_DIR` nor `cwd` may add a list beside a
+        # checkout of its own. Raised in review.
         own = own_checkout()
         return outside_offence(
             spelled, lexical, resolved,
