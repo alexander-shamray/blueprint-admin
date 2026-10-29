@@ -1237,6 +1237,9 @@ class TheTaskListBesideTheMainCheckout(GuardCase):
     def test_a_todo_link_in_the_checkout_is_refused_as_any_link_out_is(self):
         # The user's editor may keep `TODO.md` at the root as a link to the
         # list; a session writes the list by its own path, never through it.
+        # This pins the anchor loop's existing link refusal (#181) rather
+        # than `task_lists`: the whole hook runs with the scratch roots live,
+        # and the target is refused before `outside_offence` is asked.
         os.makedirs(os.path.dirname(self.list))
         self.write(self.list, "# TODO\n")
         for linker in linkers():
