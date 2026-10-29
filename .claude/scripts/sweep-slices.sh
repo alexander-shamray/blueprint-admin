@@ -61,12 +61,14 @@ row_of() {
 # The bytes inside fences, the only part of a sample the sweeps audit, one line
 # per blob of a `git cat-file --batch` stream: a header, the blob, and the
 # newline cat-file adds after it. A fence closes only on its own character, at
-# least as long, with nothing after it. A blob ends at a byte count, so
-# LC_ALL=C: gawk's length counts characters in a UTF-8 locale, and one é
-# miscounted would run a sample into the next. A stream that does not parse —
+# least as long, with only blanks or a CR after it. A blob ends at a byte
+# count, so LC_ALL=C: gawk's length counts characters in a UTF-8 locale, and
+# one é miscounted would run a sample into the next; and BINMODE=3, as gawk
+# under MSYS strips a CRLF line's CR, which other awks take as a variable they
+# never read. A stream that does not parse —
 # a `missing` header, a blob cut short — fails rather than answering for it.
 fenced_bytes() {
-  LC_ALL=C awk '
+  LC_ALL=C awk -v BINMODE=3 '
     state == 2 { if ($0 != "") bad = 1; state = 0; next }
     state == 0 {
       if (NF != 3 || $2 != "blob") { bad = 1; exit }
@@ -78,7 +80,7 @@ fenced_bytes() {
         mark = substr($0, RSTART, RLENGTH); sub(/^[ \t]*/, "", mark)
         ch = substr(mark, 1, 1); n = length(mark); rest = substr($0, RSTART + RLENGTH)
         if (!open) { open = 1; och = ch; on = n; fence = 1 }
-        else if (ch == och && n >= on && rest ~ /^[ \t]*$/) { open = 0; fence = 1 }
+        else if (ch == och && n >= on && rest ~ /^[ \t\r]*$/) { open = 0; fence = 1 }
       }
       if (open && !fence) total += length($0) + 1
       if (left <= 0) { print total + 0; state = left == 0 ? 2 : 0 }

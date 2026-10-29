@@ -188,11 +188,12 @@ class ASmallRepository(unittest.TestCase):
     def commit(self, relative, text):
         # Bytes, so a sample holds exactly the line ends and characters it
         # names: write_text turns a newline into CRLF on Windows and encodes in
-        # the locale's code page.
+        # the locale's code page. No autocrlf either: Git for Windows sets it
+        # system-wide, and it stores a CRLF sample as LF.
         target = Path(self.repo, relative)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(text.encode("utf-8"))
-        git(self.repo, f'add -- "{relative}"')
+        git(self.repo, f'-c core.autocrlf=false add -- "{relative}"')
         git(self.repo, f'commit -q -m "add {relative}"')
         return git(self.repo, "rev-parse HEAD")
 
@@ -283,16 +284,19 @@ class ASmallRepository(unittest.TestCase):
 
     def test_a_sample_counts_bytes_and_one_without_a_last_newline_ends_where_it_should(self):
         # Every sample is read from one stream, so a blob ends at a byte count:
-        # a miscount there runs one sample into the next, and a character count
-        # undercounts the e-acute.
+        # a miscount there runs one sample into the next, a character count
+        # undercounts the e-acute, and an awk that drops a CR undercounts every
+        # CRLF line.
         self.assertEqual(0, self.mark("bug", git(self.repo, "rev-parse HEAD")).returncode)
         self.commit("docs/a.md", "```\n\u00e9\n```")
-        self.commit("docs/b.md", "```\nab\n```\n")
+        self.commit("docs/b.md", "```\r\nab\r\n```\r\n")
+        self.commit("docs/c.md", "```\ncd\n```\n")
         result = Sweep(self, self.repo).slices("bug")
         self.assertEqual(0, result.returncode, result.stderr)
         head, slices = parse(result.stdout)
-        self.assertEqual(["docs/a.md", "docs/b.md"], sorted(listed(slices)))
-        self.assertEqual(len("\u00e9\n".encode("utf-8")) + len("ab\n"), sum(s[2] for s in slices))
+        self.assertEqual(["docs/a.md", "docs/b.md", "docs/c.md"], sorted(listed(slices)))
+        self.assertEqual(len("\u00e9\n".encode("utf-8")) + len("ab\r\n") + len("cd\n"),
+                         sum(s[2] for s in slices))
 
     def test_every_sample_is_read_through_one_cat_file(self):
         # A pipeline per sample is a fork per file, most of a run under MSYS
