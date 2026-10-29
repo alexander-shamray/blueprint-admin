@@ -369,13 +369,17 @@ public sealed class StressRunServiceTests : IAsyncDisposable
               grafana: &lgtm
                 mem_limit: 2g
               seeder: { image: seed, profiles: [ "seed" ] }
+              loader: !override { image: load, profiles: [ "load" ] }
               web-bff: !override
                 environment: {}
+                profiles: !reset []
+              payments-api:
+                profiles: []
               privacy-api: { mem_limit: 512m } # profiles: in a comment is not the key
             volumes:
               sql-data:
             """;
-        string[] keys = ["gateway", "ordering-api", "otel.collector_2", "grafana", "web-bff", "privacy-api"];
+        string[] keys = ["gateway", "ordering-api", "otel.collector_2", "grafana", "web-bff", "payments-api", "privacy-api"];
 
         StressRunService.ServicesOf(overlay).ShouldBe(keys);
         StressRunService.ServicesOf(overlay.ReplaceLineEndings("\r\n")).ShouldBe(keys);
