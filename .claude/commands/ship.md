@@ -291,7 +291,8 @@ don't restart*)
    that decision, and pushes that close review findings update the PR without
    asking. `/pr` also stamps `PR: #<n>` on the branch's commits straight after
    creating the PR, so the SHAs change once, before the first review round;
-   say in the report whether it rewrote any.
+   say in the report whether it rewrote any. Once the PR is open, write its
+   row in the task list by `docs/working-rules.md`'s table.
    (why: docs/commands/ship.md, *Step 4: push, then /pr*)
 
 5. **The local review.** Once the PR is open, review the branch in rounds
@@ -502,6 +503,8 @@ In this order:
   why.
 - **Issues filed**: every problem the PR left unfixed is an issue before the
   report, by the user-level rule; list each filed or commented on, by number.
+  Each issue filed gets its task-list row as it is filed, by
+  `docs/working-rules.md`'s table.
 
 Restate here every assumption a step was skipped on, and name every check
 that did not run. (why: docs/commands/ship.md, *Report*)
