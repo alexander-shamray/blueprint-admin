@@ -82,8 +82,9 @@ dialects.
   gateway returned them. A fake's answer is recorded from the live service
   where one can be, and says where it is not.
 - **The task list is `.todo/blueprint-admin.md` in the main checkout's
-  parent directory: outside every checkout, local, never committed.** It is for the user, and it lists open PRs
-  (with the unpaused issues each closes) and every other open issue.
+  parent directory: outside every checkout, local, never committed.** It is
+  for the user, and it lists open PRs (with the unpaused issues each closes)
+  and every other open issue.
   **Where a row sits is a function of state, so every agent that works here
   re-derives it at each event** (work starts on an issue, a PR opens, merges
   or closes, an issue is filed, closed, reopened, paused or unpaused, labelled
