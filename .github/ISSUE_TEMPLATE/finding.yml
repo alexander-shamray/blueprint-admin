@@ -37,8 +37,7 @@ body:
       label: Area
       description: >-
         The tree the finding is in, by each label's description on the Labels
-        page: harness for .claude/, code for src/, tests/ and the CI
-        workflows, documentation for the prose.
+        page; choose every one that applies.
       multiple: true
       options:
         - harness
