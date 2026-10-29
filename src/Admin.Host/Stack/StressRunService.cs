@@ -523,13 +523,17 @@ public sealed partial class StressRunService(
     private static partial Regex NestedKey();
 
     /// <summary>
-    /// A service written as a flow map, after any tag or anchor, that sets <c>profiles</c>, read up to any comment after it.
+    /// A service written as a flow map, after any tag or anchor, whose <c>profiles</c> names at least one, read up to any comment
+    /// after it.
     /// </summary>
-    [GeneratedRegex(@"^\s*(?:[!&]\S+\s+)*\{[^#]*\bprofiles\s*:")]
+    [GeneratedRegex(@"^\s*(?:[!&]\S+\s+)*\{[^#]*\bprofiles\s*:\s*\[\s*[^\]\s]")]
     private static partial Regex FlowProfiles();
 
-    /// <summary>A <c>profiles:</c> value that names none, so the service starts on every up: an empty list, reset or not.</summary>
-    [GeneratedRegex(@"^\s*(?:!reset\s*)?\[\s*\]\s*(?:#.*)?$")]
+    /// <summary>
+    /// A <c>profiles:</c> value that names none, so the service starts on every up: an empty list or a null, reset or not, or a
+    /// bare reset. A value left empty on the line is not one of these: a block list follows it on the lines below.
+    /// </summary>
+    [GeneratedRegex(@"^\s*(?:!reset\s*(?:\[\s*\]|null|~)?|\[\s*\]|null|~)\s*(?:#.*)?$")]
     private static partial Regex NoProfiles();
 }
 

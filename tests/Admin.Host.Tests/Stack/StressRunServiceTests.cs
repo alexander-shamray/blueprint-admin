@@ -375,11 +375,17 @@ public sealed class StressRunServiceTests : IAsyncDisposable
                 profiles: !reset []
               payments-api:
                 profiles: []
+              inventory-api:
+                profiles: !reset
+              catalog-api: { image: catalog, profiles: [] }
+              tagged:
+                profiles:
+                  - block-list
               privacy-api: { mem_limit: 512m } # profiles: in a comment is not the key
             volumes:
               sql-data:
             """;
-        string[] keys = ["gateway", "ordering-api", "otel.collector_2", "grafana", "web-bff", "payments-api", "privacy-api"];
+        string[] keys = ["gateway", "ordering-api", "otel.collector_2", "grafana", "web-bff", "payments-api", "inventory-api", "catalog-api", "privacy-api"];
 
         StressRunService.ServicesOf(overlay).ShouldBe(keys);
         StressRunService.ServicesOf(overlay.ReplaceLineEndings("\r\n")).ShouldBe(keys);
