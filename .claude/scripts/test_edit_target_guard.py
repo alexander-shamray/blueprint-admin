@@ -1176,6 +1176,21 @@ class TheTaskListBesideTheMainCheckout(GuardCase):
                        os.path.join(worktree, ".git") + "\n")
         return worktree
 
+    def test_an_anchor_does_not_widen_it_only_the_guards_own_checkout_does(
+            self):
+        # The environment names `self.main` as the project and the session
+        # stands in it, yet its list is refused: `offence` reads the task list
+        # from the checkout the guard sits in. Raised in review.
+        module = self.guard_module()
+        event = {"hook_event_name": "PreToolUse", "cwd": self.main,
+                 "tool_name": "Write", "tool_input": {"file_path": self.list}}
+        with mock.patch.object(module, "scratch_roots", return_value=[]):
+            with mock.patch.dict(os.environ,
+                                 {"CLAUDE_PROJECT_DIR": self.main}):
+                reason = module.offence(event)
+        self.assertIsNotNone(reason)
+        self.assertIn("outside every checkout", reason)
+
     def test_the_task_list_is_admitted_from_the_main_checkout(self):
         self.assertIsNone(self.verdict(self.list))
 

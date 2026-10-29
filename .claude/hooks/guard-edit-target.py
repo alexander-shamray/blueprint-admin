@@ -334,7 +334,7 @@ TASK_LIST = (".todo", "blueprint-admin.md")
 
 
 def task_lists(checkouts):
-    """The task list beside each anchor's main checkout: (spelled, real, traits).
+    """The task list beside each checkout's main one: (spelled, real, traits).
 
     **The real form is the one a target must resolve to**, so the file is
     admitted only as the file its path spells: a link at `.todo` or at the
@@ -420,8 +420,9 @@ def outside_offence(spelled, lexical, resolved, checkouts=()):
     place the anchors do not reach.
 
     **`checkouts` adds one file and no root**: the task list `task_lists`
-    names beside each anchor's main checkout (#603), admitted only when the
-    target resolves to it.
+    names beside each given checkout's main checkout (#603), admitted only
+    when the target resolves to it. `offence` passes this guard's own
+    checkout alone, so no anchor widens what is admitted here.
     """
     for spelled_root, real_root in scratch_roots():
         traits = traits_of(spelled_root)
@@ -649,6 +650,12 @@ def protected_in_worktree(path, root):
     return module.protected_path(relative)
 
 
+def own_checkout():
+    """The checkout this file sits in, which no environment can move."""
+    return os.path.dirname(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))))
+
+
 def anchors(event):
     """The checkouts this guard is standing in, as (spelled, resolved) pairs.
 
@@ -677,8 +684,7 @@ def anchors(event):
     what makes an environment-supplied `CLAUDE_PROJECT_DIR` safe to trust here:
     a wrong one cannot excuse a traversal that this file's own tree refuses.
     """
-    here = os.path.dirname(os.path.dirname(os.path.dirname(
-        os.path.abspath(__file__))))
+    here = own_checkout()
     cwd = event.get("cwd")
     roots = [
         os.environ.get("CLAUDE_PROJECT_DIR"),
@@ -983,7 +989,14 @@ def offence(event):
         # shell profile, an SSH key or a credential as readily as a scratch
         # file. `outside_offence` names the two roots the exception was written
         # for, and the one file `task_lists` adds (#603), and refuses the rest.
-        return outside_offence(spelled, lexical, resolved, checkouts)
+        # **That file is read from this guard's own checkout alone**, never
+        # from every anchor: an anchor may only narrow the judgement above,
+        # and `CLAUDE_PROJECT_DIR` and `cwd` are what the environment says
+        # rather than where this file is. Raised in review.
+        own = own_checkout()
+        return outside_offence(
+            spelled, lexical, resolved,
+            [(own, os.path.realpath(own), traits_of(own))])
 
     # Reached when every anchor containing the target agreed. A target outside
     # every one of them went to `outside_offence` above.
