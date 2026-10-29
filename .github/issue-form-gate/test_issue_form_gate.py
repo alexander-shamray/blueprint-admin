@@ -7,6 +7,7 @@ say, and the wiring that makes CI run it.
 from __future__ import annotations
 
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -200,7 +201,11 @@ class ThisRepositoryTests(unittest.TestCase):
         # does; a workflow that stops running it, or whose token cannot list
         # issues' labels, would leave only the cases above.
         text = CI.read_text(encoding="utf-8")
-        job = text[text.index("\n  harness:\n"):]
+        start = text.index("\n  harness:\n") + 1
+        # The job ends at the next job key, so a job added after it cannot
+        # answer for the harness job's wiring.
+        following = re.search(r"^  [a-z][a-z0-9-]*:\n", text[start + 1:], re.MULTILINE)
+        job = text[start:start + 1 + following.start()] if following else text[start:]
         self.assertIn("issues: read", job)
         self.assertRegex(job, r"gh label list [^\n]*--json name \|\n\s*python \.github/issue-form-gate/issue_form_gate\.py")
         self.assertIn("set -o pipefail", job)
