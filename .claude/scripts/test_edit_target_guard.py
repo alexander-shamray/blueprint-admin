@@ -1212,6 +1212,27 @@ class TheTaskListBesideTheMainCheckout(GuardCase):
         # `.git` file, which is the session the move exists for.
         self.assertIsNone(self.verdict(self.list, root=self.worktree()))
 
+    def test_a_link_above_the_main_checkout_is_not_a_link_to_the_list(self):
+        # `harness (macos-latest)`: `/var` links to `/private/var`, and from a
+        # worktree the main checkout is read out of git's resolved gitdir, so
+        # a list spelled through the link matched nothing. Spelled here through
+        # a link to the main checkout's parent, with every primitive.
+        worktree = self.worktree()
+        for linker in linkers():
+            with self.subTest(linker=linker):
+                above = os.path.join(self.outside, f"above-{linker}")
+                if linker == "symlink":
+                    os.symlink(self.parent, above, target_is_directory=True)
+                else:
+                    JUNCTIONS(self.parent, above)
+                try:
+                    spelled = os.path.join(above, ".todo", "blueprint-admin.md")
+                    self.assertIsNone(self.verdict(
+                        spelled, root=worktree,
+                        resolved=os.path.realpath(self.list)))
+                finally:
+                    os.rmdir(above) if os.name == "nt" else os.unlink(above)
+
     def test_a_worktree_git_does_not_confirm_names_no_main_checkout(self):
         reason = self.verdict(self.list, root=self.worktree(backlink=False))
         self.assertIsNotNone(reason)
