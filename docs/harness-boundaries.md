@@ -481,9 +481,10 @@ as out of scope, never filed.
   and outside the temp and `~/.claude` roots, and the task list sits at
   `.todo/blueprint-admin.md` in the main checkout's parent directory, where
   `docs/working-rules.md` puts it so that a worktree session can write it.
-  So `task_lists` names that one file beside each anchor's main checkout,
-  read from the anchor's own `.git` (a directory, or a linked worktree's
-  gitdir with git's backlink), and a target is admitted only when it
+  So `task_lists` names that one file beside the main checkout of the
+  guard's own tree (never of an anchor, which may only narrow), read from
+  that tree's `.git` (a directory, or a linked worktree's gitdir with git's
+  backlink), and a target is admitted only when it
   resolves to that file under the main checkout's real path: a link at
   `.todo/` or at the file resolves elsewhere and is refused, and so is a
   `TODO.md` link in the checkout, whose target resolves out of it. The rest
