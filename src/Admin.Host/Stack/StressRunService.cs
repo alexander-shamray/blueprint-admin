@@ -160,8 +160,8 @@ public sealed partial class StressRunService(
     /// override changes, so the files a running one was created from say which profile it runs; a service the override leaves
     /// alone keeps whatever label the last up that recreated it wrote, so only the ones it changes are read. Which those are is
     /// read from the clone's override file on every call (<see cref="ServicesOf"/>), never copied, so a service the backend
-    /// adds to it is read the moment it is there, unless it sets <c>profiles:</c>, which the Up never starts; in the file's
-    /// order, so the screen's line does not move with the order
+    /// adds to it is read the moment it is there, save one the Up never starts, which <see cref="ServicesOf"/> leaves out; in
+    /// the file's order, so the screen's line does not move with the order
     /// <c>ps</c> prints.
     /// </summary>
     public IReadOnlyList<string> OnOverride(ComposeStatus backend) =>

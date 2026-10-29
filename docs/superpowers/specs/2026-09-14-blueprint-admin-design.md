@@ -573,8 +573,8 @@ knee are theirs, and the blocks are held to the document word for word
   screen, in the stress widget and above the Stack controls, whoever left it
   so. Which services the override changes is read from the clone's override
   file on every read (`StressRunService.ServicesOf`), never copied, so a
-  service the backend adds to it is named the moment it is there, unless it
-  sets `profiles:`, which the Up's command line never starts; FakePlatform,
+  service the backend adds to it is named the moment it is there, save one
+  the Up never starts, which `ServicesOf` leaves out; FakePlatform,
   with no clone, reads the ones its own `ps` labels. The way back is the
   section's last block, which is the command Up already runs; it is offered
   once the run has ended or been stopped, and its title names what it
