@@ -1414,8 +1414,9 @@ branch still sitting in `git branch`.
 
 **The task list gets its own line.** Each row moved, added or deleted, the
 move made before `/branch` ran among them; or an update that could not be made
-and why, which since #603 is a write the permission check refused. A run that
-reports the work landed and says nothing of the list has left the list wrong.
+and why, which since #603 is a write the permission check or the edit guard
+refused. A run that reports the work landed and says nothing of the list has
+left the list wrong.
 
 **Every problem a PR leaves unfixed is an issue before the report**, by the
 user-level rule: a check worked around, a review finding left at the ceiling,
