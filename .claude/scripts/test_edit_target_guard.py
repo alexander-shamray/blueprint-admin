@@ -1191,6 +1191,19 @@ class TheTaskListBesideTheMainCheckout(GuardCase):
         self.assertIsNotNone(reason)
         self.assertIn("outside every checkout", reason)
 
+    def test_the_hook_admits_the_list_beside_its_own_checkout(self):
+        # The admit half of `offence`'s wiring. The cases below ask
+        # `outside_offence` directly, so a call site passing no checkout or
+        # the wrong one would refuse the list in every session and leave them
+        # green. Raised in review.
+        module = self.guard_module()
+        event = {"hook_event_name": "PreToolUse", "cwd": self.main,
+                 "tool_name": "Write", "tool_input": {"file_path": self.list}}
+        with mock.patch.object(module, "scratch_roots", return_value=[]):
+            with mock.patch.object(module, "own_checkout",
+                                   return_value=self.main):
+                self.assertIsNone(module.offence(event))
+
     def test_the_task_list_is_admitted_from_the_main_checkout(self):
         self.assertIsNone(self.verdict(self.list))
 
