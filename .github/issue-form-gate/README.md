@@ -6,8 +6,9 @@ repository, and a blank issue is switched off for a filer below write
 access.** The owner is
 [`gh-issue-filing.sh`](../../.claude/scripts/gh-issue-filing.sh)'s two closed
 `case` arms, the kind's and the severity's, which every filing through
-`gh-issue-create.sh` and the sweeps' helper passes; the area choices are the
-form's own.
+`gh-issue-create.sh` and the sweeps' helper passes. The area choices are the
+form's own, and what each covers is its label's description on the
+*Labels* page, which the form cites rather than restates.
 
 ## What it reads
 
@@ -40,8 +41,8 @@ twice.
 - It does not read the text fields, the label colours or descriptions,
   or whether GitHub accepts the form: GitHub validates the schema when it
   renders the form, and a broken one shows on the *New issue* page.
-- The area choices have no owner outside the form, so the gate holds them
-  to the labels only.
+- The gate reads label names, not descriptions, so it holds the area
+  choices to the labels and says nothing about what each covers.
 - The form offers only the helper's kinds. A filing of another kind, an
   `enhancement` say, has no form; with blank issues off, a filer below write
   access cannot make one from the web UI.
