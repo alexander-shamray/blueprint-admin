@@ -9,7 +9,7 @@ whole.
 | | |
 |---|---|
 | [`README.md`](README.md) | How to run it, what the screens do today, known limits |
-| `TODO.md` (gitignored, local) | Open PRs and issues, for the user; every task change edits it |
+| `.todo/blueprint-admin.md` in the main checkout's parent directory (local) | Open PRs and issues, for the user; every task change edits it, from a worktree too |
 | [`docs/working-rules.md`](docs/working-rules.md) | Build policy, style, working rules, precedence, commands |
 | [`docs/change-locality.md`](docs/change-locality.md) | The operating contract: trust order, classes, touch sets; the gate reads `.github/locality-gate/classes.yml` |
 | [`docs/harness-boundaries.md`](docs/harness-boundaries.md) | What the harness grants these commands, and refuses; start at its index |
@@ -153,9 +153,10 @@ Each is argued in [`docs/working-rules.md`](docs/working-rules.md).
   owns when a branch is updated and what a red `main` is owed.
 - **Commit messages** are semantic and present-tense, and the body argues.
   Resolve a review thread in the same act as the reply.
-- **`TODO.md`** is gitignored and local, and every agent keeps it true: at
-  each event re-derive a row's section from the state table in
-  `docs/working-rules.md`, and move an issue from Remaining to In progress
-  *before* entering its worktree.
+- **The task list** is local and outside every checkout, and every agent
+  keeps it true: at each event re-derive a row's section from the state
+  table in `docs/working-rules.md`, which says where the file lives, and
+  write it by that path from wherever the session stands, never through a
+  `TODO.md` link.
 - **Read `docs/harness-boundaries.md` by its index** before touching
   anything under `.claude/`.

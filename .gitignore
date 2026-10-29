@@ -57,6 +57,7 @@ __pycache__/
 # Never committed, and ignored so a leftover cannot dirty /ship's clean-tree gate.
 /suggestions.md
 
-# The user's local task list, kept current by Claude (CLAUDE.md, Working in
-# this repo). Local by design: it changes too often to go through a PR.
+# An optional link to the user's local task list, which lives outside every
+# checkout where docs/working-rules.md puts it. Local by design: it changes too
+# often to go through a PR.
 /TODO.md

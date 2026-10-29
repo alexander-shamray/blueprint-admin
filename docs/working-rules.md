@@ -81,8 +81,8 @@ dialects.
 - **Do not invent platform behaviour.** 401/403/409/422 pass through as the
   gateway returned them. A fake's answer is recorded from the live service
   where one can be, and says where it is not.
-- **The task list is `TODO.md` at the main checkout's root: gitignored,
-  local, never committed.** It is for the user, and it lists open PRs
+- **The task list is `.todo/blueprint-admin.md` in the main checkout's
+  parent directory: outside every checkout, local, never committed.** It is for the user, and it lists open PRs
   (with the unpaused issues each closes) and every other open issue.
   **Where a row sits is a function of state, so every agent that works here
   re-derives it at each event** (work starts on an issue, a PR opens, merges
@@ -99,23 +99,29 @@ dialects.
   | Open PR | **In progress**, one row for the PR naming the open, unpaused issues it closes, or `—` when there are none; an issue so named has no row of its own |
   | Closed issue; merged or closed PR | no row, and no note of what landed, which git and the closed issues already keep |
 
-  Three things follow. Work that stops without landing (a claim abandoned,
+  Two things follow. Work that stops without landing (a claim abandoned,
   a PR closed unmerged, or one merged without closing its issue) leaves the
   issue open and ends its claim, so its row is re-derived by the table:
   **In progress** with the branch if one remains, otherwise back to its wave.
-  Whatever the work found and filed has its own row by the same table, made
-  in the main checkout or owed as the paragraph below says. And the move from
-  **Remaining** to **In progress** is made before the session enters the
-  worktree.
+  Whatever the work found and filed has its own row by the same table,
+  written when it is filed.
 
-  Only the main checkout's copy counts, never one in a worktree — and a
-  session inside `.claude/worktrees/` is refused that copy by Claude Code's
-  own isolation. So the move in is made in the main checkout before
-  `EnterWorktree` and the re-derivation after `ExitWorktree` (which removes
-  the row when the issue has closed and otherwise moves it as the paragraph
-  above says); every event that happens inside the worktree (a PR opens, a
-  filing, work stops) is carried in the report as owed and made once the
-  session is back. The file's own note, topmost, holds the section and
+  It lives outside the checkout because Claude Code's isolation refuses a
+  session moved into `.claude/worktrees/` with `EnterWorktree` every path in
+  the main checkout outside that worktree, `TODO.md` at its root included,
+  and admits one that no checkout contains (#603; measured in
+  blueprint-backend#1590). So every session writes it by that path from
+  wherever it stands, at the event itself, and nothing is carried in a
+  report as owed. `guard-edit-target.py` admits that one file and nothing
+  else beside the checkout (`docs/harness-boundaries.md`, *The edit guard
+  admits one file outside every checkout*). The permission check still sees
+  a path outside the project: under `acceptEdits` the write prompts unless
+  the user's own settings list the directory under `additionalDirectories`;
+  auto mode wrote it unprompted when blueprint-backend#1590 measured it. The
+  main checkout's root may hold `TODO.md`, gitignored, as a link to it for
+  the user's editor; a session writes the file by its own path, never
+  through the link, which the edit guard refuses because its target resolves
+  out of the checkout. The file's own note, topmost, holds the section and
   column rules. When in doubt, rebuild it from `gh pr list --limit 1000` and
   `gh issue list --limit 1000`, because the default of 30 truncates
   silently.
