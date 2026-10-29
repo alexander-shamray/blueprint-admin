@@ -478,9 +478,9 @@ as out of scope, never filed.
   caught an existing file spelled so; a new name such as `docs.` was admitted).
 - **The edit guard admits one file outside every checkout beside its two
   roots (#603).** `outside_offence` refuses a target outside every checkout
-  and outside the temp and `~/.claude` roots, and the task list sits at
-  `.todo/blueprint-admin.md` in the main checkout's parent directory, where
-  `docs/working-rules.md` puts it so that a worktree session can write it.
+  and outside the temp and `~/.claude` roots, and the task list sits beside
+  the main checkout, where `docs/working-rules.md` puts it so that a
+  worktree session can write it (the guard's `TASK_LIST` spells the path).
   So `task_lists` names that one file beside the main checkout of the
   guard's own tree (never of an anchor, which may only narrow), read from
   that tree's `.git` (a directory, or a linked worktree's gitdir with git's

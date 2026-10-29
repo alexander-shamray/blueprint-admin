@@ -740,17 +740,16 @@ and not at its neighbour looks like.
    **Before `/branch`, the task list.** When this run is for an issue, its
    row leaves **Remaining** for **In progress** now, before anything is
    built, so the list the user reads shows the work from its first step. The
-   file is `.todo/blueprint-admin.md` in the main checkout's parent
-   directory, outside every checkout because Claude Code's isolation refuses
-   a session inside `.claude/worktrees/` the main checkout's own files
-   (`docs/working-rules.md`, #603). So the branch is added to the row once
-   `/branch` has named it, from the worktree, and every later event is
-   written when it happens, carried as owed only when the write is refused.
-   It is written by its own path, never through a `TODO.md` link, which the
-   edit guard refuses. Which section a row belongs in is
-   `docs/working-rules.md`'s table and is not restated here. Work no issue
-   started has no row until its PR opens, and the run that opens it writes
-   that row then.
+   file sits outside every checkout, where `docs/working-rules.md` puts it,
+   because Claude Code's isolation refuses a session inside
+   `.claude/worktrees/` the main checkout's own files (#603). So the branch
+   is added to the row once `/branch` has named it, from the worktree, and
+   every later event is written when it happens, carried as owed only when
+   the write is refused. It is written by its own path, never through a
+   `TODO.md` link, which the edit guard refuses. Which section a row belongs
+   in is `docs/working-rules.md`'s table and is not restated here. Work no
+   issue started has no row until its PR opens, and the run that opens it
+   writes that row then.
 
    **This step is also where the workspace comes from, and it has two
    outcomes.** From a clean `main`, `/branch` forks a worktree under
