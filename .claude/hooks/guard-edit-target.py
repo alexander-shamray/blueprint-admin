@@ -324,6 +324,63 @@ def harness_state_root():
     return os.path.abspath(os.path.join(os.path.expanduser("~"), ".claude"))
 
 
+# **The one file outside every checkout this guard admits by name** (#603).
+# `docs/working-rules.md` puts the user's task list beside the main checkout
+# because Claude Code's isolation refuses a session in `.claude/worktrees/`
+# every main-checkout path outside its own worktree, `TODO.md` at the root
+# included. A file, not a root: `.todo/` holds the sibling repositories' lists
+# too, and no session here has business with them.
+TASK_LIST = (".todo", "blueprint-admin.md")
+
+
+def task_lists(checkouts):
+    """The task list beside each anchor's main checkout: (spelled, real, traits).
+
+    **The real form is the one a target must resolve to**, so the file is
+    admitted only as the file its path spells: a link at `.todo` or at the
+    file itself resolves elsewhere and `outside_offence` refuses it like any
+    other out-of-tree write. The spelled form is there for a main checkout
+    reached through a link of its own, the case `anchors` keeps its pairs for.
+
+    Traits are the main checkout's, which exists, rather than the file's,
+    which need not: `case_insensitive` reads a missing path as sensitive.
+    """
+    found = []
+    for spelled_root, real_root, _ in checkouts:
+        for root in (spelled_root, real_root):
+            main = main_checkout(root)
+            if main is None:
+                continue
+            real_main = os.path.realpath(main)
+            found.append((
+                os.path.join(os.path.dirname(os.path.abspath(main)),
+                             *TASK_LIST),
+                os.path.join(os.path.dirname(real_main), *TASK_LIST),
+                traits_of(real_main)))
+    return found
+
+
+def main_checkout(root):
+    """`root` when it is a main checkout, the one it is linked to, or `None`.
+
+    Read from `root`'s own `.git`, as `linked_worktree` reads it and for its
+    reason: a directory is a main checkout, and a linked worktree's file names
+    `<main>/.git/worktrees/<name>`, believed only with git's backlink.
+    """
+    if os.path.isdir(os.path.join(root, ".git")):
+        return root
+    gitdir = worktree_gitdir(root)
+    if gitdir is None:
+        return None
+    worktrees = os.path.dirname(gitdir)
+    common = os.path.dirname(worktrees)
+    if (os.path.basename(worktrees) != "worktrees"
+            or os.path.basename(common) != ".git"):
+        return None
+    main = os.path.dirname(common)
+    return main if os.path.isdir(os.path.join(main, ".git")) else None
+
+
 def control_surface(path, root, traits):
     """Which control-surface name `path` holds beneath `root`, or `None`.
 
@@ -350,7 +407,7 @@ def control_surface(path, root, traits):
     return None
 
 
-def outside_offence(spelled, lexical, resolved):
+def outside_offence(spelled, lexical, resolved, checkouts=()):
     """The reason to refuse a target that lands outside every checkout.
 
     **Turns the fallback from "admit unless it lands in a checkout it cannot
@@ -361,6 +418,10 @@ def outside_offence(spelled, lexical, resolved):
     either spelling of the root. A path under a temp root that resolves out of
     it is the link traversal this whole file is about, arriving at the one
     place the anchors do not reach.
+
+    **`checkouts` adds one file and no root**: the task list `task_lists`
+    names beside each anchor's main checkout (#603), admitted only when the
+    target resolves to it.
     """
     for spelled_root, real_root in scratch_roots():
         traits = traits_of(spelled_root)
@@ -448,10 +509,16 @@ def outside_offence(spelled, lexical, resolved):
             "session's state writes rather than for its configuration (blueprint-frontend#21, "
             "docs/harness-boundaries.md)."
         )
+    for spelled_list, real_list, traits in task_lists(checkouts):
+        if (same(resolved, real_list, traits)
+                and (same(lexical, spelled_list, traits)
+                     or same(lexical, real_list, traits))):
+            return None
     return (
         f"guard-edit-target: {spelled} resolves to {resolved}, which is "
-        "outside every checkout here and outside the scratch and harness-state "
-        "roots this guard admits. An unattended command reading untrusted "
+        "outside every checkout here, outside the scratch and harness-state "
+        "roots this guard admits, and not the task list beside the main "
+        "checkout. An unattended command reading untrusted "
         "branch text can name an absolute path, so a write nothing can place "
         "is refused rather than admitted (blueprint-frontend#21, docs/harness-boundaries.md)."
     )
@@ -515,6 +582,22 @@ def linked_worktree(path, checkouts):
     root = checkout_root(path)
     if root is None:
         return None
+    gitdir = worktree_gitdir(root)
+    if gitdir is None:
+        return None
+    for spelled_root, real_root, traits in checkouts:
+        for base in (spelled_root, real_root):
+            if under(gitdir, os.path.join(base, ".git"), traits):
+                return root
+    return None
+
+
+def worktree_gitdir(root):
+    """The admin directory `root`'s `.git` file names, once git confirms it.
+
+    `None` for a `.git` that is a directory or missing, and for a file git's
+    own record does not point back at.
+    """
     marker = os.path.join(root, ".git")
     if not os.path.isfile(marker):
         return None
@@ -540,11 +623,7 @@ def linked_worktree(path, checkouts):
     if os.path.normcase(os.path.realpath(backlink)) != os.path.normcase(
             os.path.realpath(marker)):
         return None
-    for spelled_root, real_root, traits in checkouts:
-        for base in (spelled_root, real_root):
-            if under(gitdir, os.path.join(base, ".git"), traits):
-                return root
-    return None
+    return gitdir
 
 
 def protected_in_worktree(path, root):
@@ -903,8 +982,8 @@ def offence(event):
         # admitted every absolute path that was not in a checkout, which is a
         # shell profile, an SSH key or a credential as readily as a scratch
         # file. `outside_offence` names the two roots the exception was written
-        # for and refuses the rest.
-        return outside_offence(spelled, lexical, resolved)
+        # for, and the one file `task_lists` adds (#603), and refuses the rest.
+        return outside_offence(spelled, lexical, resolved, checkouts)
 
     # Reached when every anchor containing the target agreed. A target outside
     # every one of them went to `outside_offence` above.

@@ -39,6 +39,7 @@ line names one residual below by the words it opens with.
 | A sweep's start dropping stale sweep worktrees | `A sweep's start drops` |
 | Rebasing or force-pushing | `The only force push`, `A second helper rewrites` |
 | `/branch` worktrees under `.claude/worktrees/` | `worktrees sit inside the checkout` |
+| The task list outside the checkout | `admits one file outside every checkout` |
 | MSBuild/NuGet auto-imports, agent types, `/style-pass` and its linter | `The files MSBuild and NuGet`, `is denied beside the built-in agent types`, `runs the linter it configures` |
 
 A new residual is stated **here** and gets a row above.
@@ -475,6 +476,21 @@ as out of scope, never filed.
   or a space is refused outright, since `abspath` and `realpath` drop it and
   whether the rule matcher does is unmeasured (a link-style refusal already
   caught an existing file spelled so; a new name such as `docs.` was admitted).
+- **The edit guard admits one file outside every checkout beside its two
+  roots (#603).** `outside_offence` refuses a target outside every checkout
+  and outside the temp and `~/.claude` roots, and the task list sits at
+  `.todo/blueprint-admin.md` in the main checkout's parent directory, where
+  `docs/working-rules.md` puts it so that a worktree session can write it.
+  So `task_lists` names that one file beside each anchor's main checkout,
+  read from the anchor's own `.git` (a directory, or a linked worktree's
+  gitdir with git's backlink), and a target is admitted only when it
+  resolves to that file under the main checkout's real path: a link at
+  `.todo/` or at the file resolves elsewhere and is refused, and so is a
+  `TODO.md` link in the checkout, whose target resolves out of it. The rest
+  of `.todo/` stays refused, the sibling repositories' lists included. The
+  residual is the file's content: a prompt-injected diff under
+  `/review-branch` can rewrite the list, which is the user's planning file
+  and runs nothing.
 - **`find` is judged by its writing actions only.** `guard-git-argv.py` reads
   `-fprint`, `-fprint0`, `-fprintf`, `-fls` and `-delete`. An action word that is
   itself computed (`find /tmp "$A"`) is not read, and a `-delete` start given as
