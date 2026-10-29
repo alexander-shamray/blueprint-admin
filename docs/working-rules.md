@@ -117,15 +117,15 @@ dialects.
   and reports the row's move as owed to its caller. `guard-edit-target.py`
   admits that one file and nothing else beside the checkout
   (`docs/harness-boundaries.md`, *The edit guard admits one file outside
-  every checkout*). The permission check still sees
-  a path outside the project: under `acceptEdits` the write prompts unless
-  the user's own settings list the directory under `additionalDirectories`;
-  auto mode wrote it unprompted when blueprint-backend#1590 measured it. The
-  main checkout's root may hold `TODO.md`, gitignored, as a link to it for
-  the user's editor; a session writes the file by its own path, never
-  through the link, which the edit guard refuses because its target resolves
-  out of the checkout. The file's own note, topmost, holds the section and
-  column rules. When in doubt, rebuild it from `gh pr list --limit 1000` and
+  every checkout*). The permission check still sees a path outside the
+  project: under `acceptEdits` the write prompts unless the user's own
+  settings list the directory under `additionalDirectories`; auto mode wrote
+  it unprompted when blueprint-backend#1590 measured it. The main checkout's
+  root may hold `TODO.md`, gitignored, as a link to it for the user's
+  editor; a session writes the file by its own path, never through the link,
+  which the edit guard refuses because its target resolves out of the
+  checkout. The file's own note, topmost, holds the section and column
+  rules. When in doubt, rebuild it from `gh pr list --limit 1000` and
   `gh issue list --limit 1000`, because the default of 30 truncates
   silently.
 
