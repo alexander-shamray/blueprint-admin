@@ -188,12 +188,15 @@ class ASmallRepository(unittest.TestCase):
     def commit(self, relative, text):
         # Bytes, so a sample holds exactly the line ends and characters it
         # names: write_text turns a newline into CRLF on Windows and encodes in
-        # the locale's code page. No autocrlf either: Git for Windows sets it
-        # system-wide, and it stores a CRLF sample as LF.
+        # the locale's code page. No autocrlf and no global attributes file
+        # either: Git for Windows sets the first system-wide, a `text`
+        # attribute in the second does the same, and each stores a CRLF
+        # sample as LF.
         target = Path(self.repo, relative)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(text.encode("utf-8"))
-        git(self.repo, f'-c core.autocrlf=false add -- "{relative}"')
+        git(self.repo, f'-c core.autocrlf=false -c core.attributesFile=/dev/null '
+                       f'add -- "{relative}"')
         git(self.repo, f'commit -q -m "add {relative}"')
         return git(self.repo, "rev-parse HEAD")
 
