@@ -115,9 +115,9 @@ dialects.
   wherever it stands, at the event itself, and nothing is carried in a
   report as owed, save by a direct `/branch` run, which cannot edit files
   and reports the row's move as owed to its caller. `guard-edit-target.py`
-  admits that one file and nothing
-  else beside the checkout (`docs/harness-boundaries.md`, *The edit guard
-  admits one file outside every checkout*). The permission check still sees
+  admits that one file and nothing else beside the checkout
+  (`docs/harness-boundaries.md`, *The edit guard admits one file outside
+  every checkout*). The permission check still sees
   a path outside the project: under `acceptEdits` the write prompts unless
   the user's own settings list the directory under `additionalDirectories`;
   auto mode wrote it unprompted when blueprint-backend#1590 measured it. The

@@ -53,19 +53,18 @@ the alternative were refusing everything, when it could instead name the roots
 it exists for. `/review-branch` holds an unrestricted `Write` and consumes
 untrusted branch text, `/ship` runs it unattended, and a prompt-injected diff
 can name an absolute path — a shell profile, an SSH key, a credential — which
-the fallback then allowed (blueprint-frontend#21). So `scratch_roots` names the two roots the old
-paragraph named, the platform temp directory the scratchpad is created under
-and the user's `~/.claude`, `task_lists` adds one file, the task list beside
-this guard's main checkout (#603), and everything else is refused. Within
-`~/.claude` the harness's own control surface is refused too: that root is
-admitted for STATE and a credential or a settings file is not state. A
-spelling no anchor recognises that nevertheless *lands inside* a checkout is
-refused by the
-paragraph below instead, whatever alphabet it is in, because the matcher then
-judged a string that is not this file. Nothing in the exposure this closes can
-spell either: `/review-grok`'s site contract admits one plain
-repository-relative path per row, with no leading slash, no drive letter and no
-`..` segment, and the adjudicator drops a row that is not.
+the fallback then allowed (blueprint-frontend#21). So `scratch_roots` names the
+two roots the old paragraph named, the platform temp directory the scratchpad
+is created under and the user's `~/.claude`, `task_lists` adds one file, the
+task list beside this guard's main checkout (#603), and everything else is
+refused. Within `~/.claude` the harness's own control surface is refused too:
+that root is admitted for STATE and a credential or a settings file is not
+state. A spelling no anchor recognises that nevertheless *lands inside* a
+checkout is refused by the paragraph below instead, whatever alphabet it is in,
+because the matcher then judged a string that is not this file. Nothing in the
+exposure this closes can spell either: `/review-grok`'s site contract admits
+one plain repository-relative path per row, with no leading slash, no drive
+letter and no `..` segment, and the adjudicator drops a row that is not.
 
 **What that leaves, stated because an allow-list is not an absence of
 residual.** The temp root is admitted whole rather than the session's own

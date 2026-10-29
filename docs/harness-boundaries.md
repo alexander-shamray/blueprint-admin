@@ -484,14 +484,13 @@ as out of scope, never filed.
   So `task_lists` names that one file beside the main checkout of the
   guard's own tree (never of an anchor, which may only narrow), read from
   that tree's `.git` (a directory, or a linked worktree's gitdir with git's
-  backlink), and a target is admitted only when it
-  resolves to that file under the main checkout's real path: a link at
-  `.todo/` or at the file resolves elsewhere and is refused, and so is a
-  `TODO.md` link in the checkout, whose target resolves out of it. The rest
-  of `.todo/` stays refused, the sibling repositories' lists included. The
-  residual is the file's content: a prompt-injected diff under
-  `/review-branch` can rewrite the list, which is the user's planning file
-  and runs nothing.
+  backlink), and a target is admitted only when it resolves to that file
+  under the main checkout's real path: a link at `.todo/` or at the file
+  resolves elsewhere and is refused, and so is a `TODO.md` link in the
+  checkout, whose target resolves out of it. The rest of `.todo/` stays
+  refused, the sibling repositories' lists included. The residual is the
+  file's content: a prompt-injected diff under `/review-branch` can rewrite
+  the list, which is the user's planning file and runs nothing.
 - **`find` is judged by its writing actions only.** `guard-git-argv.py` reads
   `-fprint`, `-fprint0`, `-fprintf`, `-fls` and `-delete`. An action word that is
   itself computed (`find /tmp "$A"`) is not read, and a `-delete` start given as
