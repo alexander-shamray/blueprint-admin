@@ -1137,10 +1137,12 @@ class WhatThisGuardIsNotTheSubjectOf(GuardCase):
 class TheTaskListBesideTheMainCheckout(GuardCase):
     """#603: the one file outside every checkout the guard admits by name.
 
-    **Asked of `outside_offence` with the scratch roots emptied**, because this
-    suite's fixtures sit under the temp root, where the file would be admitted
-    as scratch whatever the rule said, and a case that passes either way
-    proves nothing. The main checkout gets a parent of its own so that no case
+    **Most cases ask `outside_offence` with the scratch roots emptied**,
+    because this suite's fixtures sit under the temp root, where the file
+    would be admitted as scratch whatever the rule said, and a case that
+    passes either way proves nothing. The two wiring cases ask `offence` the
+    same way, and the TODO-link case runs the whole hook and says which rule
+    it pins. The main checkout gets a parent of its own so that no case
     writes a `.todo` into the shared temp directory.
     """
 
