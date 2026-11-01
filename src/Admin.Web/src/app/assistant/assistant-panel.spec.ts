@@ -111,6 +111,21 @@ describe('AssistantPanel', () => {
     expect(reply.querySelector('ol > li > ul > li')?.textContent).toBe('pick catalog-api');
   });
 
+  it('shows the target of a link a reply cites as text after its words, never as a link', async () => {
+    const { fixture, assistant, element } = await render();
+
+    assistant.state.set({
+      ...EMPTY_CONVERSATION,
+      id: 'c1',
+      items: [{ kind: 'reply', text: 'Open [Explore](http://localhost:3000/explore) for the logs.' }],
+    });
+    await fixture.whenStable();
+
+    const reply = element.querySelector('.reply')!;
+    expect(reply.textContent).toBe('Open Explore (http://localhost:3000/explore) for the logs.');
+    expect(reply.querySelector('a')).toBeNull();
+  });
+
   it('shows a mermaid fence in a reply as its source, never as a diagram', async () => {
     const { fixture, assistant, element } = await render();
     const fence = '%%{init: {"themeCSS": "body { display: none }"}}%%\ngraph TD; A-->B';
