@@ -97,9 +97,9 @@ owns the argument). `/pr` owns the
 report: the push did not happen, the `! git push -u origin <branch>` line for
 the caller, and the user-level `autoMode` settings that remove the need for
 it: environment trust and an `autoMode.allow` entry for the push, the pair
-under which pushes pass (`docs/harness-boundaries.md`). A resumed run after
-that push lands at the *clean and pushed* row
-and carries on.
+under which pushes have passed since (this repository's
+`docs/harness-boundaries.md`, *The auto-mode classifier refuses*). A resumed
+run after that push lands at the *clean and pushed* row and carries on.
 
 **A refused merge is the same row at the other end of the chain.** The
 auto-mode classifier can refuse `gh-pr-merge.sh` with no exit code and no
