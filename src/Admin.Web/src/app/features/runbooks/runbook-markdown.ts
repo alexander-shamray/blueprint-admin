@@ -1,6 +1,7 @@
 /**
- * One run of text inside a line: plain, `code` or **strong**. A link is its words, with its target kept beside them
- * and never made a link: a runbook's target is a path in the backend clone, which a reader draws without it.
+ * One run of text inside a line: plain, `code` or **strong**. A link is its words, with its target kept beside them;
+ * the parser never makes a link. How a target is drawn is `RunbookSpans`' `targets`: off, as for a runbook, whose
+ * targets are paths in the backend clone, it is dropped; on, a console page is routed and anything else is text.
  */
 export interface Span {
   kind: 'text' | 'code' | 'strong';
