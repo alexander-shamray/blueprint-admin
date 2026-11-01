@@ -48,6 +48,8 @@ describe('runbook markdown', () => {
     const [bullets, numbers] = result as { kind: 'list'; items: ListItem[] }[];
     expect(bullets.items.map(text)).toEqual(['first continued', 'second']);
     expect(numbers.items.map(text)).toEqual(['one', 'two']);
+    expect(bullets.items.map((i) => i.ordered)).toEqual([false, false]);
+    expect(numbers.items.map((i) => i.ordered)).toEqual([true, true]);
   });
 
   it('keeps an indented item under the item before it, to any depth, and returns to the outer list after it', () => {
@@ -60,6 +62,9 @@ describe('runbook markdown', () => {
     expect(list.items.map(text)).toEqual(['drain', 'restore continued']);
     expect(list.items[0].children.map(text)).toEqual(['check a', 'check b']);
     expect(list.items[0].children[1].children.map(text)).toEqual(['deeper']);
+    // Each level keeps its own marker: numbered steps with bulleted checks under them.
+    expect(list.items[0].ordered).toBe(true);
+    expect(list.items[0].children[0].ordered).toBe(false);
     expect(list.items[1].children).toEqual([]);
   });
 

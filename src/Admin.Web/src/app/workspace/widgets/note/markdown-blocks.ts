@@ -69,16 +69,26 @@ import { MermaidDiagram } from './mermaid-diagram';
     }
 
     <ng-template #listItems let-items>
-      <ul>
-        @for (item of items; track $index) {
-          <li>
-            <app-runbook-spans [spans]="item.spans" />
-            @if (item.children.length > 0) {
-              <ng-container *ngTemplateOutlet="listItems; context: { $implicit: item.children }" />
-            }
-          </li>
-        }
-      </ul>
+      @if (items[0]?.ordered) {
+        <ol>
+          <ng-container *ngTemplateOutlet="listEntries; context: { $implicit: items }" />
+        </ol>
+      } @else {
+        <ul>
+          <ng-container *ngTemplateOutlet="listEntries; context: { $implicit: items }" />
+        </ul>
+      }
+    </ng-template>
+
+    <ng-template #listEntries let-items>
+      @for (item of items; track $index) {
+        <li>
+          <app-runbook-spans [spans]="item.spans" />
+          @if (item.children.length > 0) {
+            <ng-container *ngTemplateOutlet="listItems; context: { $implicit: item.children }" />
+          }
+        </li>
+      }
     </ng-template>
   `,
   styles: `
@@ -93,11 +103,12 @@ import { MermaidDiagram } from './mermaid-diagram';
     p {
       margin: 0 0 0.5rem;
     }
-    ul {
+    ul,
+    ol {
       margin: 0 0 0.5rem;
       padding-left: 1.25rem;
     }
-    li > ul {
+    li > :is(ul, ol) {
       margin-bottom: 0;
     }
     .code {

@@ -96,6 +96,21 @@ describe('AssistantPanel', () => {
     expect(reply.textContent).toContain('<b>not bold</b>');
   });
 
+  it('numbers a reply’s numbered steps, and keeps the bullets under a step', async () => {
+    const { fixture, assistant, element } = await render();
+
+    assistant.state.set({
+      ...EMPTY_CONVERSATION,
+      id: 'c1',
+      items: [{ kind: 'reply', text: '1. Start the stack\n2. Open Logs\n   - pick catalog-api' }],
+    });
+    await fixture.whenStable();
+
+    const reply = element.querySelector('.reply')!;
+    expect([...reply.querySelectorAll(':scope app-markdown-blocks > ol > li')]).toHaveLength(2);
+    expect(reply.querySelector('ol > li > ul > li')?.textContent).toBe('pick catalog-api');
+  });
+
   it('shows a mermaid fence in a reply as its source, never as a diagram', async () => {
     const { fixture, assistant, element } = await render();
     const fence = '%%{init: {"themeCSS": "body { display: none }"}}%%\ngraph TD; A-->B';
