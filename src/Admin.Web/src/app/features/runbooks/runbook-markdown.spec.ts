@@ -3,16 +3,17 @@ import { ListItem, blocks, inline } from './runbook-markdown';
 const text = (item: ListItem): string => item.spans.map((s) => s.text).join('');
 
 describe('runbook markdown', () => {
-  it('reads code, strong and a link as spans, keeping the link words and dropping its target', () => {
+  it('reads code, strong and a link as spans, a link as its words with its target beside them', () => {
     expect(inline('Run `kubectl get pods` **now** per [the guide](../x.md).')).toEqual([
       { kind: 'text', text: 'Run ' },
       { kind: 'code', text: 'kubectl get pods' },
       { kind: 'text', text: ' ' },
       { kind: 'strong', text: 'now' },
       { kind: 'text', text: ' per ' },
-      { kind: 'text', text: 'the guide' },
+      { kind: 'text', text: 'the guide', target: '../x.md' },
       { kind: 'text', text: '.' },
     ]);
+    expect(inline('[empty]()')).toEqual([{ kind: 'text', text: 'empty' }]);
   });
 
   it('reads headings, paragraphs that wrap, fenced commands and rules', () => {

@@ -1,7 +1,11 @@
-/** One run of text inside a line: plain, `code` or **strong**. A link keeps its words and drops its target, which is a path in the backend clone. */
+/**
+ * One run of text inside a line: plain, `code` or **strong**. A link is its words, with its target kept beside them
+ * and never made a link: a runbook's target is a path in the backend clone, which a reader draws without it.
+ */
 export interface Span {
   kind: 'text' | 'code' | 'strong';
   text: string;
+  target?: string;
 }
 
 /** One item of a list, numbered or bulleted as its marker was, with the items indented under it. */
@@ -24,7 +28,7 @@ export type Block =
   | { kind: 'rule' };
 
 const INLINE = /(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\([^)]*\))/;
-const LINK = /^\[([^\]]+)\]\([^)]*\)$/;
+const LINK = /^\[([^\]]+)\]\(([^)]*)\)$/;
 const HEADING = /^(#{1,6})\s+(.*)$/;
 const ITEM = /^(\s*)([-*]|\d+\.)\s+(.*)$/;
 const TABLE_RULE = /^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?$/;
@@ -40,6 +44,7 @@ export function inline(text: string): Span[] {
       if (part.length > 4 && part.startsWith('**') && part.endsWith('**'))
         return { kind: 'strong', text: part.slice(2, -2) };
       const link = LINK.exec(part);
+      if (link && link[2].trim() !== '') return { kind: 'text', text: link[1], target: link[2].trim() };
       return { kind: 'text', text: link ? link[1] : part };
     });
 }

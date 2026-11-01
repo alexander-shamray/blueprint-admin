@@ -19,18 +19,18 @@ import { MermaidDiagram } from './mermaid-diagram';
         @case ('heading') {
           @switch (b.level) {
             @case (1) {
-              <h3><app-runbook-spans [spans]="b.spans" /></h3>
+              <h3><app-runbook-spans [spans]="b.spans" [targets]="linkTargets()" /></h3>
             }
             @case (2) {
-              <h4><app-runbook-spans [spans]="b.spans" /></h4>
+              <h4><app-runbook-spans [spans]="b.spans" [targets]="linkTargets()" /></h4>
             }
             @default {
-              <h5><app-runbook-spans [spans]="b.spans" /></h5>
+              <h5><app-runbook-spans [spans]="b.spans" [targets]="linkTargets()" /></h5>
             }
           }
         }
         @case ('paragraph') {
-          <p><app-runbook-spans [spans]="b.spans" /></p>
+          <p><app-runbook-spans [spans]="b.spans" [targets]="linkTargets()" /></p>
         }
         @case ('list') {
           <ng-container *ngTemplateOutlet="listItems; context: { $implicit: b.items }" />
@@ -47,7 +47,7 @@ import { MermaidDiagram } from './mermaid-diagram';
             <thead>
               <tr>
                 @for (h of b.header; track $index) {
-                  <th><app-runbook-spans [spans]="h" /></th>
+                  <th><app-runbook-spans [spans]="h" [targets]="linkTargets()" /></th>
                 }
               </tr>
             </thead>
@@ -55,7 +55,7 @@ import { MermaidDiagram } from './mermaid-diagram';
               @for (row of b.rows; track $index) {
                 <tr>
                   @for (cell of row; track $index) {
-                    <td><app-runbook-spans [spans]="cell" /></td>
+                    <td><app-runbook-spans [spans]="cell" [targets]="linkTargets()" /></td>
                   }
                 </tr>
               }
@@ -83,7 +83,7 @@ import { MermaidDiagram } from './mermaid-diagram';
     <ng-template #listEntries let-items>
       @for (item of items; track $index) {
         <li>
-          <app-runbook-spans [spans]="item.spans" />
+          <app-runbook-spans [spans]="item.spans" [targets]="linkTargets()" />
           @if (item.children.length > 0) {
             <ng-container *ngTemplateOutlet="listItems; context: { $implicit: item.children }" />
           }
@@ -137,5 +137,10 @@ export class MarkdownBlocks {
    * steered model could restyle the console around it.
    */
   readonly diagrams = input(true);
+  /**
+   * Whether a link's target is shown after its words, as text. Off for a note, as for a runbook, whose targets are
+   * paths in the backend clone; on for the assistant's reply, where a URL it cites is the answer.
+   */
+  readonly linkTargets = input(false);
   readonly parsed = computed<Block[]>(() => blocks(this.source()));
 }
