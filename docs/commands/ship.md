@@ -106,9 +106,10 @@ owns what was measured (#613). It does not refuse every time, so the step is
 tried rather than skipped, and a refusal is reported, never retried by
 another spelling and never answered with a branch update: the PR did not
 merge, and the caller gets the `! bash .claude/scripts/gh-pr-merge.sh <n>
-<oid>` line with the oid the gates read. `autoMode.environment` is the
-expected remedy, the one a refused push takes, though no merge refusal has
-yet been measured against it. The owner's merge leaves the run at the
+<oid>` line with the oid the gates read. The remedy is not
+`autoMode.environment`, which already trusted this repository through every
+refusal, but an `autoMode.allow` entry for the helper like the push's own
+(`docs/harness-boundaries.md`). The owner's merge leaves the run at the
 *already merged* row: step 0 tears the workspace down, and the task-list
 rows step 6's teardown would have re-derived are re-derived then.
 
