@@ -45,6 +45,9 @@ checkout and removes the worktree, however the review ended.
   caller, and the user-level `autoMode.environment` setting that removes the
   need for it; a resumed run after that push lands at the *clean and pushed*
   row.
+- **A refused merge is the same stop at step 6** (#613): the PR did not
+  merge, the `! bash .claude/scripts/gh-pr-merge.sh <n> <oid>` line, the same
+  setting; never another spelling.
 - **The review hitting its ceiling is not a stop**: it ends the review,
   reported unconverged, and step 6 merges anyway.
 - **Never skip step 2**: this command merges, so it is the last gate before
