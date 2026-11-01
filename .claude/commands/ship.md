@@ -45,9 +45,9 @@ checkout and removes the worktree, however the review ended.
   caller, and the user-level `autoMode.environment` setting that removes the
   need for it; a resumed run after that push lands at the *clean and pushed*
   row.
-- **A refused merge is the same stop at step 6** (#613): the PR did not
-  merge, the `! bash .claude/scripts/gh-pr-merge.sh <n> <oid>` line, the same
-  setting; never another spelling.
+- **A refused merge is the same stop at step 6** (#613): hand over the
+  `! bash .claude/scripts/gh-pr-merge.sh <n> <oid>` line, never another
+  spelling; resumed, step 0 runs, then the task list.
 - **The review hitting its ceiling is not a stop**: it ends the review,
   reported unconverged, and step 6 merges anyway.
 - **Never skip step 2**: this command merges, so it is the last gate before
@@ -417,7 +417,7 @@ don't restart*)
    - **A non-empty workspace read is not a stop**: commit — **scoped**,
      always — push, re-enter step 5 for a recheck of what this workspace
      added, then return to the **top of this step**, not to this gate.
-   - A rebase landing refused after `MERGEABLE` read yes: report the refusal
+   - A rebase landing GitHub refused after `MERGEABLE` read yes: report it
      rather than reaching for another method. What resolves it is a branch
      update, and a branch update is a rebase:
 

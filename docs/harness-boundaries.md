@@ -300,10 +300,10 @@ as out of scope, never filed.
   Without Review" with every step 6 gate read in the same turn and a clean
   review behind it: the classifier judges the call without step 5, and
   `/ship`'s `allowed-tools` already grants the helper. It refused #611 and
-  #612 and let #609 through on the same day. The remedy is the owner's and
-  user-level, the one blueprint-frontend#33 names for a refused push: this
-  repository and its `origin` named as trusted source control in
-  `autoMode.environment`. Until then `/ship` treats a refusal as a stop and
+  #612 and let #609 through on the same day. The expected remedy is the
+  owner's and user-level, the one blueprint-frontend#33 names for a refused
+  push: this repository and its `origin` named as trusted source control in
+  `autoMode.environment`, not yet measured against a merge refusal. Until then `/ship` treats a refusal as a stop and
   hands the owner the `!` line (`docs/commands/ship.md`, *A refused merge*).
 - **`/ship` grants exactly `Agent(branch-reviewer)`, for step 5's local review
   (#124).** The profile's `tools:` is `Read`, `Grep` and `Glob` — none of the
