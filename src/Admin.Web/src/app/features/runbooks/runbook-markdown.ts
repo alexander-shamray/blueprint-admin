@@ -8,11 +8,15 @@ export interface Span {
   target?: string;
 }
 
-/** One item of a list, numbered or bulleted as its marker was, with the items indented under it. */
+/**
+ * One item of a list, numbered or bulleted as its marker was, with the items indented under it. A numbered item keeps
+ * its number, so a list a blank line or a fence split goes on counting where it left off.
+ */
 export interface ListItem {
   spans: Span[];
   children: ListItem[];
   ordered: boolean;
+  number?: number;
 }
 
 /**
@@ -55,11 +59,25 @@ function cells(line: string): string[] {
 }
 
 /** The items of a list, each under the nearest item before it that is indented less. */
-function nest(entries: { indent: number; text: string; ordered: boolean }[]): ListItem[] {
+interface Entry {
+  indent: number;
+  text: string;
+  marker: string;
+}
+
+/** An entry from a list line's indent, marker and text. */
+function entryOf(match: RegExpExecArray): Entry {
+  return { indent: match[1].length, marker: match[2], text: match[3] };
+}
+
+function nest(entries: Entry[]): ListItem[] {
   const root: ListItem[] = [];
   const open: { indent: number; item: ListItem }[] = [];
   for (const entry of entries) {
-    const item: ListItem = { spans: inline(entry.text), children: [], ordered: entry.ordered };
+    const ordered = entry.marker !== '-' && entry.marker !== '*';
+    const item: ListItem = ordered
+      ? { spans: inline(entry.text), children: [], ordered, number: Number.parseInt(entry.marker, 10) }
+      : { spans: inline(entry.text), children: [], ordered };
     while (open.length > 0 && open[open.length - 1].indent >= entry.indent) open.pop();
     (open.length > 0 ? open[open.length - 1].item.children : root).push(item);
     open.push({ indent: entry.indent, item });
@@ -122,18 +140,12 @@ export function blocks(markdown: string): Block[] {
     const item = ITEM.exec(line);
     if (item) {
       endParagraph();
-      const entries: { indent: number; text: string; ordered: boolean }[] = [
-        { indent: item[1].length, text: item[3], ordered: item[2] !== '-' && item[2] !== '*' },
-      ];
+      const entries: Entry[] = [entryOf(item)];
       for (; i + 1 < lines.length; i++) {
         const next = lines[i + 1];
         const nextItem = ITEM.exec(next);
         if (nextItem) {
-          entries.push({
-            indent: nextItem[1].length,
-            text: nextItem[3],
-            ordered: nextItem[2] !== '-' && nextItem[2] !== '*',
-          });
+          entries.push(entryOf(nextItem));
         } else if (/^\s+\S/.test(next)) {
           entries[entries.length - 1].text += ' ' + next.trim();
         } else {

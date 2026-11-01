@@ -70,7 +70,7 @@ import { MermaidDiagram } from './mermaid-diagram';
 
     <ng-template #listItems let-items>
       @if (items[0]?.ordered) {
-        <ol>
+        <ol [attr.start]="items[0].number ?? null">
           <ng-container *ngTemplateOutlet="listEntries; context: { $implicit: items }" />
         </ol>
       } @else {
