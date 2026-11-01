@@ -3,7 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
-import { GridsterItem } from 'angular-gridster2';
+import { Gridster, GridsterItem } from 'angular-gridster2';
 import { WIDGET_CONTEXT } from './widget-context';
 import { JOB_OUTPUT, NOTE } from './widgets';
 import { WorkspaceGrid } from './workspace-grid';
@@ -47,6 +47,38 @@ describe('WorkspaceGrid', () => {
     const titles = [...element.querySelectorAll('.ws-head .ws-title')].map((h) => h.textContent?.trim());
     expect(titles).toEqual(['Alerts (firing)', 'Unknown widget (from-a-newer-console)']);
     expect(element.querySelector('.ws-unknown')?.textContent).toContain('from-a-newer-console');
+  });
+
+  it('measures the grid again when its own width changes, as when the assistant panel opens beside it', () => {
+    let changed: () => void = () => undefined;
+    const observed: Element[] = [];
+    const disconnect = vi.fn();
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: () => void) {
+          changed = callback;
+        }
+        observe(target: Element): void {
+          observed.push(target);
+        }
+        disconnect = disconnect;
+      },
+    );
+    try {
+      const fixture = render([known], false);
+      const gridster = fixture.debugElement.query(By.directive(Gridster)).injector.get(Gridster);
+      const resize = vi.spyOn(gridster.api, 'resize').mockImplementation(() => undefined);
+      expect(observed).toEqual([fixture.nativeElement]);
+
+      changed();
+      expect(resize).toHaveBeenCalledTimes(1);
+
+      fixture.destroy();
+      expect(disconnect).toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('tells each widget its instance and page, and keeps that injector while the layout moves', () => {
