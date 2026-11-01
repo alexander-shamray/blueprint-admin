@@ -251,7 +251,8 @@ and where to find something, which it opens. The panel's pin keeps it open
 with every load in that browser until it is unpinned or closed. A reply's
 Markdown is drawn as elements, never as HTML, with a link's target shown as
 text and a mermaid fence as its source. It reads each built-in page's `help` in
-`src/Admin.Web/src/app/screens.ts` and never changes the platform. It answers
+`BUILT_IN_PAGES` (`src/Admin.Web/src/app/workspace/built-in-pages.ts`) and
+never changes the platform. It answers
 what the platform is doing now from the console's own reads, which
 `AdminReadTools` in `src/Admin.Host/Assistant/` lists. Each read is redacted
 before the provider sees it, and it never starts or stops a log follow. It is off
