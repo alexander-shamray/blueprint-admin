@@ -12,6 +12,9 @@ function stub() {
     status: signal<AssistantStatus | null>({ enabled: true, provider: 'fake', model: 'scripted', reason: null }),
     state: signal<ConversationState>(EMPTY_CONVERSATION),
     panelOpen: signal(true),
+    panelPinned: signal(false),
+    togglePanelPin: vi.fn(),
+    close: vi.fn(),
     needsNotice: signal(false),
     acknowledge: vi.fn(),
     identity: signal<string | null>(null),
@@ -93,10 +96,28 @@ describe('AssistantPanel', () => {
     expect(reply.textContent).toContain('<b>not bold</b>');
   });
 
+  it('pins the side panel by its pin button, which says whether it is pinned', async () => {
+    const { fixture, assistant, element } = await render();
+    const pin = element.querySelector('button.pin') as HTMLButtonElement;
+    expect(pin.getAttribute('aria-pressed')).toBe('false');
+
+    pin.click();
+    expect(assistant.togglePanelPin).toHaveBeenCalledTimes(1);
+
+    assistant.panelPinned.set(true);
+    await fixture.whenStable();
+    expect(pin.getAttribute('aria-pressed')).toBe('true');
+    expect(pin.classList).toContain('pinned');
+
+    (element.querySelector('button[aria-label="Close the assistant"]') as HTMLButtonElement).click();
+    expect(assistant.close).toHaveBeenCalledTimes(1);
+  });
+
   it('embedded in a widget, drops its title and its close button and keeps the rest', async () => {
     const full = await render();
     expect(full.element.querySelector('#assistant-title')).not.toBeNull();
     expect(full.element.querySelector('button[aria-label="Close the assistant"]')).not.toBeNull();
+    expect(full.element.querySelector('button.pin')).not.toBeNull();
     TestBed.resetTestingModule();
 
     TestBed.configureTestingModule({ providers: [{ provide: AssistantService, useValue: stub() }] });
@@ -108,6 +129,7 @@ describe('AssistantPanel', () => {
     expect(element.querySelector('#assistant-title')).toBeNull();
     expect(element.querySelector('section')!.getAttribute('aria-labelledby')).toBeNull();
     expect(element.querySelector('button[aria-label="Close the assistant"]')).toBeNull();
+    expect(element.querySelector('button.pin')).toBeNull();
     expect(element.querySelector('button[aria-label="New conversation"]')).not.toBeNull();
     expect(element.querySelector('textarea')).not.toBeNull();
   });
