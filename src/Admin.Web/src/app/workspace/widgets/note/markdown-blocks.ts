@@ -6,8 +6,9 @@ import { MermaidDiagram } from './mermaid-diagram';
 
 /**
  * Markdown drawn as elements, never as HTML, so a tag in the text is text on the page: read by the Runbooks screen's
- * reader, with a mermaid fence drawn as a diagram through Mermaid's strict level and `safeSvg`. A note's text and the
- * assistant's reply are drawn by it, the second as it streams, so the source is parsed again only when it changes.
+ * reader, with a mermaid fence drawn as a diagram through Mermaid's strict level and `safeSvg` where `diagrams` allows.
+ * A note's text and the assistant's reply are drawn by it, the second as it streams, so the source is parsed again
+ * only when it changes.
  */
 @Component({
   selector: 'app-markdown-blocks',
@@ -35,7 +36,7 @@ import { MermaidDiagram } from './mermaid-diagram';
           <ng-container *ngTemplateOutlet="listItems; context: { $implicit: b.items }" />
         }
         @case ('code') {
-          @if (b.lang === 'mermaid') {
+          @if (b.lang === 'mermaid' && diagrams()) {
             <app-mermaid-diagram [source]="b.text" />
           } @else {
             <pre class="code" tabindex="0">{{ b.text }}</pre>
@@ -119,5 +120,11 @@ import { MermaidDiagram } from './mermaid-diagram';
 })
 export class MarkdownBlocks {
   readonly source = input.required<string>();
+  /**
+   * Whether a mermaid fence is drawn, or shown as its source. Off for text the operator did not write: a diagram's
+   * `%%{init}%%` directive can carry `themeCSS`, which strict mode does not refuse and `safeSvg` does not scope, so a
+   * steered model could restyle the console around it.
+   */
+  readonly diagrams = input(true);
   readonly parsed = computed<Block[]>(() => blocks(this.source()));
 }
