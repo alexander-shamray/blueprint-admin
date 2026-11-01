@@ -58,7 +58,7 @@ function cells(line: string): string[] {
   return trimmed.split('|').map((c) => c.trim());
 }
 
-/** The items of a list, each under the nearest item before it that is indented less. */
+/** One list line as read: how far it is indented, its marker (`-`, `*` or a number and a stop), and its text. */
 interface Entry {
   indent: number;
   text: string;
@@ -70,6 +70,7 @@ function entryOf(match: RegExpExecArray): Entry {
   return { indent: match[1].length, marker: match[2], text: match[3] };
 }
 
+/** The items of a list, each under the nearest item before it that is indented less. */
 function nest(entries: Entry[]): ListItem[] {
   const root: ListItem[] = [];
   const open: { indent: number; item: ListItem }[] = [];
