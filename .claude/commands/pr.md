@@ -54,7 +54,8 @@ and no PR was opened, give the line for the caller to run —
 that removes the need for it, which is user-level: this repository and its
 `origin` named as trusted source control in `autoMode.environment`, with an
 `autoMode.allow` entry for the push beside it, the pair under which pushes
-pass (`docs/harness-boundaries.md`, *The auto-mode classifier refuses*). Never
+have passed since (`docs/harness-boundaries.md`, *The auto-mode classifier
+refuses*). Never
 reach the remote by another spelling or a wrapper whose text hides it; that
 is routing around a refusal, not pushing.
 
