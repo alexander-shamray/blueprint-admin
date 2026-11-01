@@ -33,6 +33,7 @@ line names one residual below by the words it opens with.
 | A guard hook or its launcher | `Every guard hook uses`, `The git-argv hook answers` |
 | The index: refresh, query or search hints, MCP approval, timeout | `Two hooks guard nothing`, `The second is the query hint`, `The search hint asks`, `A session started in a worktree`, `The CLI's skill rewrite`, `The MCP startup timeout` |
 | A command's `allowed-tools` or `disallowed-tools` | `grant the index commands`, `runs before it pushes never denies push`, `is a grant surface`, `A command that holds` |
+| `/ship` step 6's merge under auto mode | `The auto-mode classifier refuses` |
 | The review agent grant, or restoring an external reviewer | `grants exactly`, `archive/external-reviewers` |
 | The harness suite and its shards | `shard-harness-suite.py`, `That runner owns every discovery root`, `One run at a time, per user` |
 | The sweeps' slice lists and `refs/sweeps/` | `The sweeps write two things` |
@@ -293,6 +294,17 @@ as out of scope, never filed.
   it back.** `CHAINED_BEFORE_A_PUSH` in `test_harness_helpers.py` names the
   two and fails if one denies push again. A terminal, read-only command — the
   two sweeps — keeps its deny, because nothing pushes after it.
+- **The auto-mode classifier refuses `/ship`'s merge, and no grant here
+  answers it (#613).** Under a user-level `"defaultMode": "auto"`,
+  `bash .claude/scripts/gh-pr-merge.sh <n> <oid>` has been refused as "Merge
+  Without Review" with every step 6 gate read in the same turn and a clean
+  review behind it: the classifier judges the call without step 5, and
+  `/ship`'s `allowed-tools` already grants the helper. It refused #611 and
+  #612 and let #609 through on the same day. The remedy is the owner's and
+  user-level, the one blueprint-frontend#33 names for a refused push: this
+  repository and its `origin` named as trusted source control in
+  `autoMode.environment`. Until then `/ship` treats a refusal as a stop and
+  hands the owner the `!` line (`docs/commands/ship.md`, *A refused merge*).
 - **`/ship` grants exactly `Agent(branch-reviewer)`, for step 5's local review
   (#124).** The profile's `tools:` is `Read`, `Grep` and `Glob` — none of the
   broad types `/ship`'s `disallowed-tools` keeps from what it spawns — so the

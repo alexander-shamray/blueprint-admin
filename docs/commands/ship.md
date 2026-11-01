@@ -99,6 +99,19 @@ the caller, and the user-level `autoMode.environment` setting that removes the
 need for it. A resumed run after that push lands at the *clean and pushed* row
 and carries on.
 
+**A refused merge is the same row at the other end of the chain.** The
+auto-mode classifier has refused `gh-pr-merge.sh` as "Merge Without Review",
+again with no exit code and no hook reason, on a pull request whose review
+had run clean and whose checks were all green on the head the oid named
+(#613): it does not see step 5, and `allowed-tools` granting the helper does
+not overrule it. It is not every time (on one day it refused #611 and #612
+and let #609 through), so the step is tried rather than skipped, and a
+refusal is reported, never retried by another spelling: the PR did not merge,
+the `! bash .claude/scripts/gh-pr-merge.sh <n> <oid>` line for the caller
+with the oid the gates read, and the `autoMode.environment` setting that
+removes the need for it. The owner's merge leaves the run at the *already
+merged* row, whose step 0 tears the workspace down.
+
 **The review hitting its ceiling is not on that list, and putting it there
 was a real confusion rather than a wording slip.** A ceiling ends the *review*
 — it reports itself unconverged, files what it left open, and step 6 merges
