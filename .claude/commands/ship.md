@@ -42,7 +42,7 @@ checkout and removes the worktree, however the review ended.
 
 - **A refused push stops the chain before any PR exists.** `/pr` reports it:
   the push did not happen, the `! git push -u origin <branch>` line for the
-  caller, and the user-level `autoMode.environment` setting that removes the
+  caller, and the user-level `autoMode` settings that remove the
   need for it; a resumed run after that push lands at the *clean and pushed*
   row.
 - **A refused merge is the same stop at step 6** (#613): hand over the

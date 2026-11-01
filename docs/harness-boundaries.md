@@ -303,12 +303,14 @@ as out of scope, never filed.
   #612 and let #609 through on the same day, and refused #614 as "judged
   dangerous" with no explanation. **Environment trust is not the remedy:**
   the owner's `autoMode.environment` already named this repository and its
-  `origin` as trusted source control through all four. The push passes
-  because the owner's `autoMode.allow` holds an entry for it; the merge had
-  none until the owner added a matching one on 2026-11-01, and #613 records
-  whether a landing since has still been refused. Until a measured landing
-  closes it, `/ship` treats a refusal as a stop and hands the owner the `!`
-  line (`docs/commands/ship.md`, *A refused merge*).
+  `origin` as trusted source control through all four merges. The push,
+  which holds an `autoMode.allow` entry of its own beside that trust,
+  passes; the merge held no such entry until the owner added a matching one
+  on 2026-11-01. Which of the two lets the push through is not measured, so
+  the entry is the expected remedy for the merge, not a proven one, and #613
+  records whether a landing since has still been refused. Until a measured
+  landing closes it, `/ship` treats a refusal as a stop and hands the owner
+  the `!` line (`docs/commands/ship.md`, *A refused merge*).
 - **`/ship` grants exactly `Agent(branch-reviewer)`, for step 5's local review
   (#124).** The profile's `tools:` is `Read`, `Grep` and `Glob` — none of the
   broad types `/ship`'s `disallowed-tools` keeps from what it spawns — so the

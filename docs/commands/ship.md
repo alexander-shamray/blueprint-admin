@@ -95,8 +95,10 @@ an unattended push that a user-level `auto` mode has refused on every run
 measured (blueprint-frontend#33; that clone's `docs/harness-boundaries.md`
 owns the argument). `/pr` owns the
 report: the push did not happen, the `! git push -u origin <branch>` line for
-the caller, and the user-level `autoMode.environment` setting that removes the
-need for it. A resumed run after that push lands at the *clean and pushed* row
+the caller, and the user-level `autoMode` settings that remove the need for
+it: environment trust and an `autoMode.allow` entry for the push, the pair
+under which pushes pass (`docs/harness-boundaries.md`). A resumed run after
+that push lands at the *clean and pushed* row
 and carries on.
 
 **A refused merge is the same row at the other end of the chain.** The
@@ -106,10 +108,11 @@ owns what was measured (#613). It does not refuse every time, so the step is
 tried rather than skipped, and a refusal is reported, never retried by
 another spelling and never answered with a branch update: the PR did not
 merge, and the caller gets the `! bash .claude/scripts/gh-pr-merge.sh <n>
-<oid>` line with the oid the gates read. The remedy is not
-`autoMode.environment`, which already trusted this repository through every
-refusal, but an `autoMode.allow` entry for the helper like the push's own
-(`docs/harness-boundaries.md`). The owner's merge leaves the run at the
+<oid>` line with the oid the gates read. `autoMode.environment` is not the
+remedy, since it already trusted this repository through every refusal; the
+expected one is an `autoMode.allow` entry for the helper like the push's,
+not yet measured against a merge (`docs/harness-boundaries.md`, #613). The
+owner's merge leaves the run at the
 *already merged* row: step 0 tears the workspace down, and the task-list
 rows step 6's teardown would have re-derived are re-derived then.
 
