@@ -1,6 +1,7 @@
 import { NgComponentOutlet, NgTemplateOutlet } from '@angular/common';
 import {
   Component,
+  DestroyRef,
   ElementRef,
   Injector,
   Type,
@@ -11,6 +12,7 @@ import {
   output,
   signal,
   untracked,
+  viewChild,
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -79,6 +81,7 @@ export class WorkspaceGrid {
   readonly configureWidget = output<{ id: string; config: Record<string, unknown> }>();
 
   private readonly maximisedId = signal<string | null>(null);
+  private readonly grid = viewChild(Gridster);
 
   /** The loaded component of each type, so `*ngComponentOutlet` has a class to render. */
   private readonly components = signal<ReadonlyMap<string, Type<unknown>>>(new Map());
@@ -87,6 +90,13 @@ export class WorkspaceGrid {
     effect(() => {
       for (const item of this.items()) if (item.kind) this.loadComponent(item.kind);
     });
+    // Gridster measures itself on a window resize only, so the page narrowing under it, as it does when the
+    // assistant's side panel opens, would leave the widgets laid out for the old width and running on under the panel.
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(() => this.grid()?.api.resize());
+      observer.observe(this.host.nativeElement);
+      inject(DestroyRef).onDestroy(() => observer.disconnect());
+    }
     // Leaving the layout editor closes an open settings panel, so the next edit starts without a stale draft.
     effect(() => {
       if (!this.editing()) untracked(() => this.settings.set(null));
