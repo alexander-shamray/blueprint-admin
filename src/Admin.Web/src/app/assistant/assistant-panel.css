@@ -76,8 +76,10 @@ h2 {
   color: var(--mat-sys-on-primary-container);
 }
 
-.reply {
+/* Drawn as blocks, whose own margins space it; a line break in the source is not one on the page. */
+.messages li.reply {
   max-width: 95%;
+  white-space: normal;
 }
 
 .tool,

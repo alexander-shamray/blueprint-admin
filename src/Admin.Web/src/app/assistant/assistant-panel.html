@@ -31,7 +31,7 @@
           <li class="operator">{{ item.text }}</li>
         }
         @case ('reply') {
-          <li class="reply">{{ item.text }}</li>
+          <li class="reply"><app-markdown-blocks [source]="item.text" /></li>
         }
         @case ('tool') {
           <li class="tool" [class.failed]="item.ok === false">

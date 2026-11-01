@@ -2,6 +2,7 @@ import { Component, ElementRef, computed, effect, inject, input, signal, viewChi
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { SCREENS } from '../screens';
+import { MarkdownBlocks } from '../workspace/widgets/note/markdown-blocks';
 import { AssistantService } from './assistant-service';
 import { ConversationItem, StatusReason, TurnEndReason } from './protocol';
 import { findWidgetType } from './workspace-tools';
@@ -58,12 +59,13 @@ function widgetName(value: unknown): string {
 
 /**
  * The shell's assistant panel (AI assistant design §2): a view of the tab's one conversation. It streams the reply as
- * it is written, labels each tool call, says plainly when a turn was refused or stopped, and holds no timer: what
- * keeps it current is the conversation's event stream, open while the panel shows or a turn runs.
+ * it is written, its Markdown drawn as a note's is, labels each tool call, says plainly when a turn was refused or
+ * stopped, and holds no timer: what keeps it current is the conversation's event stream, open while the panel shows or
+ * a turn runs.
  */
 @Component({
   selector: 'app-assistant-panel',
-  imports: [MatButtonModule, MatIconModule],
+  imports: [MatButtonModule, MatIconModule, MarkdownBlocks],
   templateUrl: './assistant-panel.html',
   styleUrl: './assistant-panel.css',
 })

@@ -67,6 +67,32 @@ describe('AssistantPanel', () => {
     expect((element.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it('draws Markdown in a reply as elements, and a tag in it as text', async () => {
+    const { fixture, assistant, element } = await render();
+
+    assistant.state.set({
+      ...EMPTY_CONVERSATION,
+      id: 'c1',
+      items: [
+        {
+          kind: 'reply',
+          text: '**Alerts**\n- **ErrorQueueDepth** is firing\n- read `ordering_error`\n\n<b>not bold</b>',
+        },
+      ],
+    });
+    await fixture.whenStable();
+
+    const reply = element.querySelector('.reply')!;
+    expect(reply.querySelector('p strong')?.textContent).toBe('Alerts');
+    expect([...reply.querySelectorAll('ul > li')].map((li) => li.textContent)).toEqual([
+      'ErrorQueueDepth is firing',
+      'read ordering_error',
+    ]);
+    expect(reply.querySelector('li code')?.textContent).toBe('ordering_error');
+    expect(reply.querySelector('b')).toBeNull();
+    expect(reply.textContent).toContain('<b>not bold</b>');
+  });
+
   it('embedded in a widget, drops its title and its close button and keeps the rest', async () => {
     const full = await render();
     expect(full.element.querySelector('#assistant-title')).not.toBeNull();
@@ -153,7 +179,7 @@ describe('AssistantPanel', () => {
       ],
     });
     await fixture.whenStable();
-    expect(element.querySelector('.reply')?.textContent).toBe('Opening ');
+    expect(element.querySelector('.reply')?.textContent).toBe('Opening');
 
     assistant.state.update((s) => ({
       ...s,
@@ -165,7 +191,7 @@ describe('AssistantPanel', () => {
     }));
     await fixture.whenStable();
 
-    expect(element.querySelector('.reply')?.textContent).toBe('Opening Logs. ');
+    expect(element.querySelector('.reply')?.textContent).toBe('Opening Logs.');
     expect(element.querySelector('.tool')?.textContent).toContain('Opening Logs');
   });
 
