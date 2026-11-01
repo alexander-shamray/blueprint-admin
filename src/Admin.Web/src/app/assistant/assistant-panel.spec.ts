@@ -111,6 +111,20 @@ describe('AssistantPanel', () => {
     expect(reply.querySelector('ol > li > ul > li')?.textContent).toBe('pick catalog-api');
   });
 
+  it('goes on counting steps a command fence splits, rather than starting again at 1', async () => {
+    const { fixture, assistant, element } = await render();
+
+    assistant.state.set({
+      ...EMPTY_CONVERSATION,
+      id: 'c1',
+      items: [{ kind: 'reply', text: '1. Start the stack\n\n```bash\ndocker compose up\n```\n\n2. Open Logs' }],
+    });
+    await fixture.whenStable();
+
+    const lists = [...element.querySelectorAll('.reply ol')];
+    expect(lists.map((ol) => ol.getAttribute('start'))).toEqual(['1', '2']);
+  });
+
   it('shows the target of a link a reply cites as text after its words, never as a link', async () => {
     const { fixture, assistant, element } = await render();
 

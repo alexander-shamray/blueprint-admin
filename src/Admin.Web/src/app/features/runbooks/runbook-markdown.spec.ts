@@ -51,6 +51,16 @@ describe('runbook markdown', () => {
     expect(numbers.items.map(text)).toEqual(['one', 'two']);
     expect(bullets.items.map((i) => i.ordered)).toEqual([false, false]);
     expect(numbers.items.map((i) => i.ordered)).toEqual([true, true]);
+    expect(numbers.items.map((i) => i.number)).toEqual([1, 2]);
+    expect(bullets.items[0].number).toBeUndefined();
+  });
+
+  it('keeps the number a list split by a fence goes on from', () => {
+    const result = blocks(['1. Start', '', '```bash', 'up', '```', '', '2. Open Logs'].join('\n'));
+
+    expect(result.map((b) => b.kind)).toEqual(['list', 'code', 'list']);
+    const resumed = result[2] as { kind: 'list'; items: ListItem[] };
+    expect(resumed.items[0].number).toBe(2);
   });
 
   it('keeps an indented item under the item before it, to any depth, and returns to the outer list after it', () => {
