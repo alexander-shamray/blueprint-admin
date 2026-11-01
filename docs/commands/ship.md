@@ -100,17 +100,17 @@ need for it. A resumed run after that push lands at the *clean and pushed* row
 and carries on.
 
 **A refused merge is the same row at the other end of the chain.** The
-auto-mode classifier has refused `gh-pr-merge.sh` as "Merge Without Review",
-again with no exit code and no hook reason, on a pull request whose review
-had run clean and whose checks were all green on the head the oid named
-(#613): it does not see step 5, and `allowed-tools` granting the helper does
-not overrule it. It is not every time (on one day it refused #611 and #612
-and let #609 through), so the step is tried rather than skipped, and a
-refusal is reported, never retried by another spelling: the PR did not merge,
-the `! bash .claude/scripts/gh-pr-merge.sh <n> <oid>` line for the caller
-with the oid the gates read, and the `autoMode.environment` setting that
-removes the need for it. The owner's merge leaves the run at the *already
-merged* row, whose step 0 tears the workspace down.
+auto-mode classifier can refuse `gh-pr-merge.sh` with no exit code and no
+hook reason after every step 6 gate has passed; `docs/harness-boundaries.md`
+owns what was measured (#613). It does not refuse every time, so the step is
+tried rather than skipped, and a refusal is reported, never retried by
+another spelling and never answered with a branch update: the PR did not
+merge, and the caller gets the `! bash .claude/scripts/gh-pr-merge.sh <n>
+<oid>` line with the oid the gates read. `autoMode.environment` is the
+expected remedy, the one a refused push takes, though no merge refusal has
+yet been measured against it. The owner's merge leaves the run at the
+*already merged* row: step 0 tears the workspace down, and the task-list
+rows step 6's teardown would have re-derived are re-derived then.
 
 **The review hitting its ceiling is not on that list, and putting it there
 was a real confusion rather than a wording slip.** A ceiling ends the *review*
@@ -1161,6 +1161,11 @@ request into several. The bar for `medium` and above is unchanged.
    reachable from here, so there is nothing to fall back to — and the refusal
    lands *before* the teardown, which is what keeps the workspace intact when
    it does.
+
+   **This is GitHub refusing the rebase, and the helper exits non-zero.** A
+   refusal by the harness's auto-mode classifier, with no exit code, is the
+   refused-merge stop instead (*A refused merge*), and no branch update
+   answers it.
 
    **What resolves it is a branch update, and a branch update is a rebase.**
 
