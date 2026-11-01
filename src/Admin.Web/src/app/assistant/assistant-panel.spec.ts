@@ -153,7 +153,9 @@ describe('AssistantPanel', () => {
       items: [
         {
           kind: 'reply',
-          text: 'See [Broker](/broker), [the trace](/trace/abc?x=1), [nowhere](/nowhere) and [elsewhere](//example.com/broker).',
+          text:
+            'See [Broker](/broker), [the trace](/trace/abc?x=1), [nowhere](/nowhere), [too deep](/broker/extra), ' +
+            '[no id](/page) and [elsewhere](//example.com/broker).',
         },
       ],
     });
@@ -165,7 +167,9 @@ describe('AssistantPanel', () => {
       ['Broker', '/broker'],
       ['the trace', '/trace/abc?x=1'],
     ]);
-    expect(reply.textContent).toBe('See Broker, the trace, nowhere (/nowhere) and elsewhere (//example.com/broker).');
+    expect(reply.textContent).toBe(
+      'See Broker, the trace, nowhere (/nowhere), too deep (/broker/extra), no id (/page) and elsewhere (//example.com/broker).',
+    );
   });
 
   it('shows a mermaid fence in a reply as its source, never as a diagram', async () => {

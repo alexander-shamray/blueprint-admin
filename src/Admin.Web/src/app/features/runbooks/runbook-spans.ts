@@ -6,14 +6,22 @@ import { Span } from './runbook-markdown';
 type Run = Span & { route?: UrlTree };
 
 /**
- * The console route a link's target names, or null. Only an absolute path whose first segment is one of the router's
- * own routes is one: a URL with a scheme or a host, a `//` path or a relative one is never routed, and a path the router
- * does not know stays text rather than end in a navigation error.
+ * The console route a link's target names, or null. Only an absolute path one of the router's own routes matches whole
+ * is one, a `:param` standing for any one segment: a URL with a scheme or a host, a `//` path or a relative one is never
+ * routed, and a path the router does not match (`/broker/extra`, `/page`) stays text rather than end in a navigation
+ * error, since the routes have no wildcard.
  */
 export function consoleRoute(router: Router, target: string): UrlTree | null {
   if (!/^\/[^/\\]/.test(target)) return null;
-  const first = target.slice(1).split(/[/?#]/)[0];
-  const known = router.config.some((r) => r.path !== undefined && r.path !== '' && r.path.split('/')[0] === first);
+  const segments = target.slice(1).split(/[?#]/)[0].split('/');
+  const known = router.config.some((r) => {
+    if (r.path === undefined || r.path === '') return false;
+    const parts = r.path.split('/');
+    return (
+      parts.length === segments.length &&
+      parts.every((p, i) => (p.startsWith(':') ? segments[i] !== '' : p === segments[i]))
+    );
+  });
   return known ? router.parseUrl(target) : null;
 }
 
