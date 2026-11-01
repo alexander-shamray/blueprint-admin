@@ -45,6 +45,23 @@ test('asked where the logs are, the assistant opens Logs', async ({ page }) => {
   await expect(page.locator('app-assistant-panel .tool')).toContainText('Opening Logs');
 });
 
+test('pinned, the panel opens with the next load; closed, it is unpinned and stays shut', async ({ page }) => {
+  await page.goto('/stack');
+  await page.getByRole('button', { name: 'Assistant', exact: true }).click();
+  const pin = page.getByRole('button', { name: 'Keep the assistant open' });
+  await pin.click();
+  await expect(pin).toHaveAttribute('aria-pressed', 'true');
+
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Assistant' })).toBeVisible();
+  await expect(pin).toHaveAttribute('aria-pressed', 'true');
+
+  await page.getByRole('button', { name: 'Close the assistant' }).click();
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Assistant', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Assistant' })).toHaveCount(0);
+});
+
 test('asked whether the stack is running, it answers from the stack read and says it read it', async ({ page }) => {
   await page.goto('/logs');
   await page.getByRole('button', { name: 'Assistant', exact: true }).click();

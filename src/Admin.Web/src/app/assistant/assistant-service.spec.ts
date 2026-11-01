@@ -6,7 +6,14 @@ import { HostClient } from '../core/host/host-client';
 import { WorkspaceService } from '../workspace/workspace-service';
 import { SCREENS } from '../screens';
 import { WIDGETS } from '../workspace/widgets';
-import { ACKNOWLEDGED_KEY, ADDED_KEY, AssistantService, IDENTITY_KEY, catalogue } from './assistant-service';
+import {
+  ACKNOWLEDGED_KEY,
+  ADDED_KEY,
+  AssistantService,
+  IDENTITY_KEY,
+  PANEL_PINNED_KEY,
+  catalogue,
+} from './assistant-service';
 import { AssistantStatus } from './protocol';
 
 const anthropic: AssistantStatus = { enabled: true, provider: 'anthropic', model: 'claude-opus-5-5', reason: null };
@@ -192,6 +199,86 @@ describe('AssistantService notice (AI assistant design §10)', () => {
     assistant.status.set(anthropic);
 
     expect(assistant.needsNotice()).toBe(true);
+  });
+});
+
+describe('AssistantService panel pin (the side panel kept open across loads)', () => {
+  beforeEach(() => localStorage.clear());
+
+  afterEach(() => vi.restoreAllMocks());
+
+  /** A load of the console in this browser, reading the given status. */
+  async function loaded(status: AssistantStatus): Promise<AssistantService> {
+    const assistant = service();
+    vi.spyOn(assistant['client'], 'status').mockResolvedValue(status);
+    vi.spyOn(assistant['conversation'], 'resume').mockResolvedValue(undefined);
+    await assistant.load();
+    return assistant;
+  }
+
+  it('opens the panel with every load once pinned, and pinning opens it now', async () => {
+    const first = await loaded(anthropic);
+    expect(first.panelOpen()).toBe(false);
+
+    first.togglePanelPin();
+
+    expect(first.panelPinned()).toBe(true);
+    expect(first.panelOpen()).toBe(true);
+    expect(localStorage.getItem(PANEL_PINNED_KEY)).toBe('true');
+
+    const again = await loaded(anthropic);
+    expect(again.panelPinned()).toBe(true);
+    expect(again.panelOpen()).toBe(true);
+  });
+
+  it('forgets the pin when unpinned, and leaves the panel open until it is closed', async () => {
+    const assistant = await loaded(anthropic);
+    assistant.togglePanelPin();
+
+    assistant.togglePanelPin();
+
+    expect(assistant.panelPinned()).toBe(false);
+    expect(assistant.panelOpen()).toBe(true);
+    expect(localStorage.getItem(PANEL_PINNED_KEY)).toBeNull();
+    expect((await loaded(anthropic)).panelOpen()).toBe(false);
+  });
+
+  it('unpins when the panel is closed, by its close button or the top bar toggle', async () => {
+    const closed = await loaded(anthropic);
+    closed.togglePanelPin();
+    closed.close();
+    expect(closed.panelOpen()).toBe(false);
+    expect(closed.panelPinned()).toBe(false);
+
+    const toggled = await loaded(anthropic);
+    toggled.togglePanelPin();
+    toggled.toggle();
+    expect(toggled.panelOpen()).toBe(false);
+    expect(toggled.panelPinned()).toBe(false);
+    expect(localStorage.getItem(PANEL_PINNED_KEY)).toBeNull();
+  });
+
+  it('opens nothing while the assistant is off, pinned or not', async () => {
+    localStorage.setItem(PANEL_PINNED_KEY, 'true');
+    const assistant = await loaded({ enabled: false, provider: null, model: null, reason: 'off' });
+
+    assistant.togglePanelPin();
+
+    expect(assistant.panelOpen()).toBe(false);
+  });
+
+  it('keeps the pin for the load when the browser cannot store it, and does not fail', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('storage is blocked');
+    });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('storage is blocked');
+    });
+    const assistant = await loaded(anthropic);
+
+    expect(() => assistant.togglePanelPin()).not.toThrow();
+    expect(assistant.panelPinned()).toBe(true);
+    expect(assistant.panelOpen()).toBe(true);
   });
 });
 

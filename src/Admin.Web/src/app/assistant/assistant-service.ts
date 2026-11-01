@@ -62,6 +62,17 @@ export const ADDED_KEY = 'admin.assistant.added';
 
 const MAX_ADDED = 100;
 
+/** Where the browser keeps whether the operator pinned the side panel, so it opens with every load; absent is unpinned. */
+export const PANEL_PINNED_KEY = 'admin.assistant.panelPinned';
+
+function storedPanelPinned(): boolean {
+  try {
+    return localStorage.getItem(PANEL_PINNED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
 function storedAdded(): string[] {
   try {
     const stored: unknown = JSON.parse(sessionStorage.getItem(ADDED_KEY) ?? '[]');
@@ -129,6 +140,8 @@ export class AssistantService {
   readonly status = signal<AssistantStatus | null>(null);
   readonly enabled = computed(() => this.status()?.enabled === true);
   readonly panelOpen = signal(false);
+  /** Pinned, the side panel opens with every load of the console in this browser, until it is unpinned or closed. */
+  readonly panelPinned = signal(storedPanelPinned());
 
   /** How many Assistant widgets are showing, each a view of this conversation as the side panel is. */
   private readonly widgets = signal(0);
@@ -200,7 +213,9 @@ export class AssistantService {
   async load(): Promise<void> {
     const status = await this.client.status();
     this.status.set(status);
-    if (status?.enabled) await this.conversation.resume();
+    if (!status?.enabled) return;
+    if (this.panelPinned()) this.panelOpen.set(true);
+    await this.conversation.resume();
   }
 
   /** An Assistant widget is showing, so the conversation's stream is wanted as it is while the panel is open; its destruction ends that. */
@@ -210,11 +225,37 @@ export class AssistantService {
   }
 
   toggle(): void {
-    if (this.enabled()) this.panelOpen.update((open) => !open);
+    if (this.panelOpen()) this.close();
+    else this.open();
+  }
+
+  /** Closing is the operator saying they want the panel out of the way, so it unpins it too: a pin would bring it back. */
+  close(): void {
+    this.panelOpen.set(false);
+    this.storePanelPinned(false);
   }
 
   open(): void {
     if (this.enabled()) this.panelOpen.set(true);
+  }
+
+  /** Pinning opens the panel as well, since a pinned panel is an open one. */
+  togglePanelPin(): void {
+    if (!this.enabled()) return;
+    const pinned = !this.panelPinned();
+    this.storePanelPinned(pinned);
+    if (pinned) this.panelOpen.set(true);
+  }
+
+  private storePanelPinned(pinned: boolean): void {
+    if (this.panelPinned() === pinned) return;
+    this.panelPinned.set(pinned);
+    try {
+      if (pinned) localStorage.setItem(PANEL_PINNED_KEY, 'true');
+      else localStorage.removeItem(PANEL_PINNED_KEY);
+    } catch {
+      // A browser that cannot store keeps the pin until it reloads.
+    }
   }
 
   /** The operator accepted that this provider is sent their questions; kept for the browser, per provider. */
