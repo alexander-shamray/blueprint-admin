@@ -249,8 +249,9 @@ An assistant answers questions about the console in a panel the top bar's
 toggle opens (or "Ask the assistant" in the palette): what a page is for,
 and where to find something, which it opens. The panel's pin keeps it open
 with every load in that browser until it is unpinned or closed. A reply's
-Markdown is drawn as elements, never as HTML, with a link's target shown as
-text and a mermaid fence as its source. It reads each built-in page's `help` in
+Markdown is drawn as elements, never as HTML: a link to one of the console's
+pages is a link the console routes to, any other link's target is shown as
+text, and a mermaid fence is shown as its source. It reads each built-in page's `help` in
 `BUILT_IN_PAGES` (`src/Admin.Web/src/app/workspace/built-in-pages.ts`) and
 never changes the platform. It answers
 what the platform is doing now from the console's own reads, which
