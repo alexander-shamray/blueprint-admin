@@ -138,8 +138,9 @@ export class MarkdownBlocks {
    */
   readonly diagrams = input(true);
   /**
-   * Whether a link's target is shown after its words, as text. Off for a note, as for a runbook, whose targets are
-   * paths in the backend clone; on for the assistant's reply, where a URL it cites is the answer.
+   * Whether a link's target is drawn: a console page as a router link, anything else as text after its words. Off for
+   * a note, as for a runbook, whose targets are paths in the backend clone; on for the assistant's reply, where a page
+   * it names is somewhere to go and a URL it cites is the answer.
    */
   readonly linkTargets = input(false);
   readonly parsed = computed<Block[]>(() => blocks(this.source()));

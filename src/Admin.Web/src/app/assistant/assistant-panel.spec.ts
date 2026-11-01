@@ -1,5 +1,7 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { routes } from '../app.routes';
 import { EMPTY_CONVERSATION, ConversationState } from './assistant-client';
 import { AssistantPanel, END_REASON_TEXT, STATUS_REASON_TEXT, toolLabel } from './assistant-panel';
 import { AssistantService } from './assistant-service';
@@ -32,7 +34,9 @@ function stub() {
 }
 
 async function render(assistant = stub()) {
-  TestBed.configureTestingModule({ providers: [{ provide: AssistantService, useValue: assistant }] });
+  TestBed.configureTestingModule({
+    providers: [{ provide: AssistantService, useValue: assistant }, provideRouter(routes)],
+  });
   const fixture = TestBed.createComponent(AssistantPanel);
   await fixture.whenStable();
   return { fixture, assistant, element: fixture.nativeElement as HTMLElement };
@@ -138,6 +142,30 @@ describe('AssistantPanel', () => {
     const reply = element.querySelector('.reply')!;
     expect(reply.textContent).toBe('Open Explore (http://localhost:3000/explore) for the logs.');
     expect(reply.querySelector('a')).toBeNull();
+  });
+
+  it('makes a link to one of the console’s pages a router link, and leaves any other path as text', async () => {
+    const { fixture, assistant, element } = await render();
+
+    assistant.state.set({
+      ...EMPTY_CONVERSATION,
+      id: 'c1',
+      items: [
+        {
+          kind: 'reply',
+          text: 'See [Broker](/broker), [the trace](/trace/abc?x=1), [nowhere](/nowhere) and [elsewhere](//example.com/broker).',
+        },
+      ],
+    });
+    await fixture.whenStable();
+
+    const reply = element.querySelector('.reply')!;
+    const links = [...reply.querySelectorAll('a')].map((a) => [a.textContent, a.getAttribute('href')]);
+    expect(links).toEqual([
+      ['Broker', '/broker'],
+      ['the trace', '/trace/abc?x=1'],
+    ]);
+    expect(reply.textContent).toBe('See Broker, the trace, nowhere (/nowhere) and elsewhere (//example.com/broker).');
   });
 
   it('shows a mermaid fence in a reply as its source, never as a diagram', async () => {
