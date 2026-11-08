@@ -390,35 +390,44 @@ describe('OutputPane', () => {
     });
 
     it('lists the surfaces of Reset’s readiness wait, ticks them as the polls drop them, and counts down to the host’s cap', () => {
-      const events = new Subject<JobEvent>();
-      const fixture = open(events);
-      const sendNow = (sequence: number, text: string) =>
-        events.next({ kind: 'line', line: { sequence, at: new Date().toISOString(), stream: 'Stdout', text } });
-      const list = () =>
-        Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.surfaces li'), (li) =>
-          li.textContent?.replace(/\s+/g, ' ').trim(),
-        );
+      // The clock is the test's, so the time left is one exact figure, and moves only when the test moves it.
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-10-20T10:00:00Z'));
+      try {
+        const events = new Subject<JobEvent>();
+        const fixture = open(events);
+        const sendNow = (sequence: number, text: string) =>
+          events.next({ kind: 'line', line: { sequence, at: new Date().toISOString(), stream: 'Stdout', text } });
+        const list = () =>
+          Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.surfaces li'), (li) =>
+            li.textContent?.replace(/\s+/g, ' ').trim(),
+          );
+        const summary = () => fixture.nativeElement.querySelector('.readiness .pull-summary')?.textContent;
 
-      sendNow(0, '== readiness: up to 120 s');
-      sendNow(1, 'waiting for: gateway, ordering');
-      sendNow(2, 'waiting for: ordering');
-      fixture.detectChanges();
+        sendNow(0, '== readiness: up to 120 s');
+        sendNow(1, 'waiting for: gateway, ordering');
+        sendNow(2, 'waiting for: ordering');
+        fixture.detectChanges();
 
-      expect(list()).toEqual(['gateway answers', 'ordering waiting']);
-      expect(fixture.nativeElement.querySelector('.readiness .pull-summary')?.textContent).toMatch(
-        /^Surfaces answering: 1 of 2 · [012]:\d\d left of 2:00$/,
-      );
-      // The polls leave the log; the marker stays in it.
-      expect(fixture.nativeElement.querySelector('pre')?.textContent).toBe('== readiness: up to 120 s\n');
+        expect(list()).toEqual(['gateway answers', 'ordering waiting']);
+        expect(summary()).toBe('Surfaces answering: 1 of 2 · 2:00 left of 2:00');
+        // The polls leave the log; the marker stays in it.
+        expect(fixture.nativeElement.querySelector('pre')?.textContent).toBe('== readiness: up to 120 s\n');
 
-      sendNow(3, 'ready: gateway, ordering');
-      fixture.detectChanges();
+        // Only the once-a-second tick moves the countdown: nothing else here redraws it.
+        vi.advanceTimersByTime(30_000);
+        fixture.detectChanges();
+        expect(summary()).toBe('Surfaces answering: 1 of 2 · 1:30 left of 2:00');
 
-      expect(list()).toEqual(['gateway answers', 'ordering answers']);
-      expect(fixture.nativeElement.querySelector('.readiness .pull-summary')?.textContent).toBe(
-        'Ready: 2 of 2 surfaces answer',
-      );
-      expect(fixture.nativeElement.querySelector('pre')?.textContent).toContain('ready: gateway, ordering');
+        sendNow(3, 'ready: gateway, ordering');
+        fixture.detectChanges();
+
+        expect(list()).toEqual(['gateway answers', 'ordering answers']);
+        expect(summary()).toBe('Ready: 2 of 2 surfaces answer');
+        expect(fixture.nativeElement.querySelector('pre')?.textContent).toContain('ready: gateway, ordering');
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('turns the surfaces the cap named failed', () => {
