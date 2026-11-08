@@ -133,8 +133,8 @@ export class MarkdownBlocks {
   readonly source = input.required<string>();
   /**
    * Whether a mermaid fence is drawn, or shown as its source. Off for text the operator did not write: a diagram's
-   * `%%{init}%%` directive can carry `themeCSS`, which strict mode does not refuse and `safeSvg` does not scope, so a
-   * steered model could restyle the console around it.
+   * `%%{init}%%` directive is the source steering Mermaid, and although `MERMAID_CONFIG.secure` now refuses it
+   * `themeCSS`, which `safeSvg` does not scope, a steered model's diagram stays text rather than resting on that list.
    */
   readonly diagrams = input(true);
   /**

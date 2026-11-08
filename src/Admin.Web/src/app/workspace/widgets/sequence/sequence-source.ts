@@ -14,13 +14,15 @@ const BROKER = 'B';
 
 /**
  * Text that is safe to put after a colon or an `as` in a sequence diagram. `;` ends a statement, `#` opens an entity
- * code and `%%` a comment, and a newline ends the line, so none of them survives; what is left is only ever a label.
+ * code and `%%` a comment or a `%%{init}%%` directive, and a newline ends the line, so none of them survives; what is
+ * left is only ever a label. A run of `%` of any length becomes one, so no `%%` is left over the way halving `%%%` once
+ * would leave one.
  */
 export function label(text: string): string {
   const flat = text
     .replace(/[\r\n\t]+/g, ' ')
     .replace(/[;#]/g, ',')
-    .replace(/%%/g, '%')
+    .replace(/%+/g, '%')
     .replace(/\s+/g, ' ')
     .trim();
   return flat.length > LABEL_MAX ? `${flat.slice(0, LABEL_MAX - 1)}…` : flat;

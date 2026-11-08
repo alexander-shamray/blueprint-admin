@@ -120,4 +120,13 @@ describe('label', () => {
     expect(cut).toHaveLength(90);
     expect(cut.endsWith('…')).toBe(true);
   });
+
+  it('leaves no %% however long the run of % (#618)', () => {
+    const hostile = '%%%{init:{"themeCSS":"} body{visibility:hidden} g{"}}%%%';
+
+    expect(label(hostile)).not.toContain('%%');
+    expect(label(hostile)).toBe('%{init:{"themeCSS":"} body{visibility:hidden} g{"}}%');
+    expect(label('%%%%% a % b %%%%')).toBe('% a % b %');
+    expect(label('50% done')).toBe('50% done');
+  });
 });

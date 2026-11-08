@@ -486,7 +486,10 @@ slow?*
   architecture and the work order of the tabs) ship as preset notes the
   picker offers. That file sits outside this repository, so the presets are
   copied into `src/Admin.Web` as source, not read at run time.
-- **Safety**: Mermaid runs with `securityLevel: 'strict'` and no HTML labels;
+- **Safety**: Mermaid runs with `securityLevel: 'strict'`, no HTML labels
+  and a `secure` list that refuses a diagram's own `%%{init}%%` directive the
+  styling keys (`themeCSS` and its neighbours, owned by `MERMAID_CONFIG`), so
+  no diagram restyles the console around it;
   Markdown is rendered to elements with no raw HTML, as the Runbooks screen
   renders a runbook (spec §5.14). Nothing the operator writes executes.
 - Mermaid is lazy-loaded, shared by §8.2 and §8.3.
@@ -766,8 +769,9 @@ later phase move one screen at a time without a page ever missing.
     its inbound request on the callee and its span on the caller, as they
     stand in time order;
   - participants are declared in order of first appearance with ids of their
-    own and a label cut to 90 characters with `;`, `#`, `%%` and newlines
-    removed, so a service name or summary cannot add a line to the source;
+    own and a label cut to 90 characters with `;`, `#` and newlines removed
+    and every run of `%` cut to one, so a service name or summary cannot add
+    a line or a `%%{init}%%` directive to the source;
   - Mermaid's sequence diagram links a participant and not an arrow, so the
     arrows are numbered (`autonumber`) and the numbered list under the
     diagram carries each arrow's Explore link;
