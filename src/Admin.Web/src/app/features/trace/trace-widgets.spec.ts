@@ -400,15 +400,23 @@ describe('TraceWidgets', () => {
     });
 
     it('says nothing changed, with both fetch times, when the timeline is the same', () => {
-      configure('demo-trace-0001');
-      const fixture = render();
+      // Two distinct fetch times, set in local time as the date pipe prints them, so a slot holding the wrong one shows.
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        vi.setSystemTime(new Date(2026, 9, 20, 10, 0, 5));
+        configure('demo-trace-0001');
+        const fixture = render();
 
-      fixture.componentInstance.reload();
-      fixture.detectChanges();
+        vi.setSystemTime(new Date(2026, 9, 20, 10, 1, 7));
+        fixture.componentInstance.reload();
+        fixture.detectChanges();
 
-      expect(text(fixture, '.changes .unchanged')).toMatch(
-        /^Nothing changed between the fetch at \d\d:\d\d:\d\d and this one at \d\d:\d\d:\d\d\.$/,
-      );
+        expect(text(fixture, '.changes .unchanged')).toBe(
+          'Nothing changed between the fetch at 10:00:05 and this one at 10:01:07.',
+        );
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('does not compare fetches over different windows', () => {

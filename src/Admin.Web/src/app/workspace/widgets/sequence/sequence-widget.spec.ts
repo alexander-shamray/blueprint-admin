@@ -127,6 +127,25 @@ describe('SequenceWidget', () => {
     );
   });
 
+  it('names the time of the read before, not of this one, when nothing moved', () => {
+    // Two distinct read times, set in local time as the date pipe prints them, so showing this read's time fails.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date(2026, 9, 20, 10, 0, 5));
+      const fixture = render({ correlationId: 'c1' });
+
+      vi.setSystemTime(new Date(2026, 9, 20, 10, 1, 7));
+      fixture.componentInstance.reload();
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelector('p.changes').textContent.replace(/\s+/g, ' ').trim()).toBe(
+        'Nothing changed since the read at 10:00:05.',
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   describe('following the last Trace link', () => {
     it('is re-drawn by a link made after it appeared, when its config says follow', () => {
       const fixture = render({ follow: true });

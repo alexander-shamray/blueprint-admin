@@ -65,6 +65,8 @@ describe('diffTimelines', () => {
     expect(diff.comparable).toBe(true);
     expect(diff.arrived.map((e) => e.summary)).toEqual(['three']);
     expect(diff.gone.map((e) => e.summary)).toEqual(['two']);
+    expect(diff.previousAt).toEqual(new Date(1));
+    expect(diff.currentAt).toEqual(new Date(2));
   });
 
   it('reads the broker snapshot by what it says, since its time is new on every fetch', () => {
