@@ -1,12 +1,41 @@
 import type { MermaidConfig } from 'mermaid';
 
+/** The keys Mermaid's own default config already refuses to a `%%{init}%%` directive or front matter. */
+const MERMAID_SECURE_DEFAULTS = [
+  'secure',
+  'securityLevel',
+  'startOnLoad',
+  'maxTextSize',
+  'suppressErrorRendering',
+  'maxEdges',
+] as const;
+
+/**
+ * The keys a diagram's own source may not set, beyond Mermaid's defaults: the styling ones, because `themeCSS` lands
+ * in the `<style>` that `safeSvg` keeps unscoped and a balanced `} body {…} g {` restyles the whole console (#618), and
+ * the font and theme keys feed the same sheet; and the ones that would turn HTML labels back on or loosen DOMPurify.
+ * Strict mode refuses none of them on its own.
+ */
+const MERMAID_SECURE_EXTRA = [
+  'themeCSS',
+  'themeVariables',
+  'theme',
+  'fontFamily',
+  'altFontFamily',
+  'htmlLabels',
+  'flowchart',
+  'dompurifyConfig',
+] as const;
+
 /**
  * Mermaid's settings (widget-workspace spec §8.3): the strict security level, which escapes the text of a label and
- * refuses click handlers, and no HTML in a label, so a label is only ever text.
+ * refuses click handlers, no HTML in a label, so a label is only ever text, and a `secure` list no directive in a
+ * diagram's source can override.
  */
 export const MERMAID_CONFIG: MermaidConfig = {
   startOnLoad: false,
   securityLevel: 'strict',
+  secure: [...MERMAID_SECURE_DEFAULTS, ...MERMAID_SECURE_EXTRA],
   htmlLabels: false,
   flowchart: { htmlLabels: false },
   theme: 'neutral',

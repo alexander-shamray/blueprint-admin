@@ -102,4 +102,22 @@ describe('NoteWidget', () => {
     expect(MERMAID_CONFIG.htmlLabels).toBe(false);
     expect(MERMAID_CONFIG.flowchart?.htmlLabels).toBe(false);
   });
+
+  it("keeps Mermaid's own secure keys and refuses a diagram's directive the styling ones (#618)", async () => {
+    const mermaid = (await import('mermaid')).default;
+
+    expect(MERMAID_CONFIG.secure).toEqual(expect.arrayContaining(mermaid.mermaidAPI.defaultConfig.secure ?? []));
+    expect(MERMAID_CONFIG.secure).toEqual(
+      expect.arrayContaining(['themeCSS', 'themeVariables', 'fontFamily', 'altFontFamily', 'dompurifyConfig']),
+    );
+  });
+
+  it('drops a themeCSS directive from the config a diagram renders with (#618)', async () => {
+    const mermaid = (await import('mermaid')).default;
+    mermaid.initialize(MERMAID_CONFIG);
+
+    await mermaid.parse('%%{init:{"themeCSS":"} body{visibility:hidden} g{"}}%%\nsequenceDiagram\nA->>B: hi');
+
+    expect(mermaid.mermaidAPI.getConfig().themeCSS).toBeUndefined();
+  });
 });
