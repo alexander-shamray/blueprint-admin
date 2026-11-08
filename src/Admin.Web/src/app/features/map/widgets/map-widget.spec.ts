@@ -123,6 +123,9 @@ describe('MapWidget', () => {
   });
 
   it('makes no baseline of a read that lands after the last widget has gone', () => {
+    // Each read lands at a later instant than the one before, so a rate is computable between any two of them: only
+    // the guard on a read landing with no widget showing can keep the late read from becoming the baseline.
+    vi.setSystemTime(new Date('2026-10-20T10:00:00Z'));
     const late = new Subject<PlatformMapView>();
     const fixture = render();
     const feed = TestBed.inject(MapFeed);
@@ -130,11 +133,14 @@ describe('MapWidget', () => {
     feed.map.refresh();
 
     fixture.destroy();
+    vi.setSystemTime(new Date('2026-10-20T10:01:00Z'));
     late.next(view);
     late.complete();
     host.platformMap.mockReturnValue(of(view));
+    vi.setSystemTime(new Date('2026-10-20T10:02:00Z'));
     const again = render();
 
+    expect(feed.rateOf('ordering-catalog-events')).toBe('—');
     expect(again.nativeElement.querySelector('table.queues td.rate')?.textContent).toBe('—');
   });
 
