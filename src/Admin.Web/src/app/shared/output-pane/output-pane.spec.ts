@@ -414,8 +414,13 @@ describe('OutputPane', () => {
         // The polls leave the log; the marker stays in it.
         expect(fixture.nativeElement.querySelector('pre')?.textContent).toBe('== readiness: up to 120 s\n');
 
-        // Only the once-a-second tick moves the countdown: nothing else here redraws it.
-        vi.advanceTimersByTime(30_000);
+        // Only the once-a-second tick moves the countdown: nothing else here redraws it. One second shows any slower
+        // tick; thirty more show it keeps going.
+        vi.advanceTimersByTime(1_000);
+        fixture.detectChanges();
+        expect(summary()).toBe('Surfaces answering: 1 of 2 · 1:59 left of 2:00');
+
+        vi.advanceTimersByTime(29_000);
         fixture.detectChanges();
         expect(summary()).toBe('Surfaces answering: 1 of 2 · 1:30 left of 2:00');
 
