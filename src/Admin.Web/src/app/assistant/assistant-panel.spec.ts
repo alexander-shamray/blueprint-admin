@@ -27,6 +27,7 @@ function stub() {
       added.update((a) => [...a, callId]);
       return 'added';
     }),
+    followProposed: vi.fn<(correlationId: string) => boolean>(() => true),
     send: vi.fn(() => Promise.resolve()),
     cancel: vi.fn(() => Promise.resolve()),
     startOver: vi.fn(() => Promise.resolve()),
@@ -458,6 +459,44 @@ describe('the assistant codes', () => {
     for (const reason of STATUS_REASONS) expect(STATUS_REASON_TEXT[reason]).not.toBe('');
   });
 
+  it('offers a Follow button for a correlation id, and follows it only on the click (#622)', async () => {
+    const assistant = stub();
+    assistant.state.set({
+      ...EMPTY_CONVERSATION,
+      id: 'c1',
+      items: [
+        { kind: 'operator', text: 'which order failed?' },
+        {
+          kind: 'tool',
+          callId: 'k-trace',
+          name: 'follow_correlation',
+          side: 'client',
+          args: { correlationId: 'order-1' },
+          ok: true,
+        },
+        {
+          kind: 'tool',
+          callId: 'k-bad',
+          name: 'follow_correlation',
+          side: 'client',
+          args: { correlationId: 'a b' },
+          ok: false,
+        },
+      ],
+    });
+    const { fixture, element } = await render(assistant);
+    const buttons = element.querySelectorAll<HTMLButtonElement>('.propose');
+
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].textContent).toContain('Follow order-1');
+    expect(assistant.followProposed).not.toHaveBeenCalled();
+
+    buttons[0].click();
+    await fixture.whenStable();
+
+    expect(assistant.followProposed).toHaveBeenCalledWith('order-1');
+  });
+
   it('labels a screen opening by the screen as labelled', () => {
     expect(toolLabel('open_screen', { path: 'requests' })).toBe('Opening API');
   });
@@ -466,7 +505,7 @@ describe('the assistant codes', () => {
     expect(toolLabel('open_page', { page: 'Broker' })).toBe('Opening Broker');
     expect(toolLabel('highlight_widget', { widget: 'widget:queues' })).toBe('Showing Queues');
     expect(toolLabel('propose_widget', { type: 'note' })).toBe('Offering Note');
-    expect(toolLabel('follow_correlation', { correlationId: 'order-1' })).toBe('Following order-1');
+    expect(toolLabel('follow_correlation', { correlationId: 'order-1' })).toBe('Offering trace order-1');
   });
 
   it("labels a call to one of the host's reads in the console's words, and any other tool by its name", () => {

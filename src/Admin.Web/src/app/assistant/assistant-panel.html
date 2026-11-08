@@ -54,6 +54,11 @@
                 {{ addLabel(item) }}
               </button>
             }
+            @if (offersTrace(item)) {
+              <button mat-stroked-button type="button" class="propose" (click)="follow(item)">
+                {{ followLabel(item) }}
+              </button>
+            }
           </li>
         }
         @case ('end') {

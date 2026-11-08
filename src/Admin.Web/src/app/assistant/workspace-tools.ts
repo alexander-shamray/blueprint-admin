@@ -13,12 +13,10 @@ export interface WorkspaceToolsHost {
   open(page: Page): Promise<boolean>;
   /** Scrolls to and outlines a widget instance, waiting for it to be drawn; false when it never was. */
   highlight(instanceId: string): Promise<boolean>;
-  /** What a correlation-id link does: re-point a following Trace widget, or open the Trace page. */
-  followTrace(correlationId: string): void;
 }
 
 /** The backend's adoption rule for a correlation id (`CorrelationId.IsAdoptable` on the host). */
-const CORRELATION_ID = /^[A-Za-z0-9_-]{1,128}$/;
+export const CORRELATION_ID = /^[A-Za-z0-9_-]{1,128}$/;
 
 /** How long a pageless `highlight_widget` waits for the page being shown to hold the widget, and how often it looks. */
 export const SETTLE_MS = 1000;
@@ -213,11 +211,13 @@ export function registerWorkspaceTools(
     },
   });
 
+  // An offer, as `propose_widget` is, and never a redraw by itself: the id comes from platform text the model read, and
+  // re-pointing a following widget draws that trace's own text in the console (#622). The operator's click follows it.
   tools.register({
     descriptor: viewTool(
       'follow_correlation',
-      'Follow a correlation id',
-      'Opens a correlation id in Trace: a Trace widget on the page that follows the last Trace link is pointed at it, else the Trace page opens.',
+      'Offer to follow a correlation id',
+      'Offers the operator a Follow button for a correlation id, shown under your reply. Only if they click it is the id opened in Trace: a Trace widget on the page that follows the last Trace link is pointed at it, else the Trace page opens.',
       {
         type: 'object',
         properties: { correlationId: text('A correlation id: 1 to 128 letters, digits, "-" or "_".') },
@@ -230,8 +230,10 @@ export function registerWorkspaceTools(
       if (!CORRELATION_ID.test(id)) {
         return { ok: false, content: 'A correlation id is 1 to 128 letters, digits, "-" or "_".' };
       }
-      host.followTrace(id);
-      return { ok: true, content: `Opened the trace for ${id}.` };
+      return {
+        ok: true,
+        content: `Offered the operator the trace for ${id}; it is followed only if they click the button.`,
+      };
     },
   });
 }
