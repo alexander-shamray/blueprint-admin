@@ -172,7 +172,7 @@ public sealed class ComposeServiceTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task ExecAsync_fails_with_the_last_stderr_line_when_the_command_cannot_start()
+    public async Task ExecAsync_fails_with_the_stderr_line_when_the_command_cannot_start()
     {
         // No script: the fake exits 127 with a stderr line, the shape of a service that is not running.
         CommandOutput output = await Service.ExecAsync("rabbitmq", ["rabbitmqctl", "list_queues"], TestContext.Current.CancellationToken);
@@ -221,7 +221,8 @@ public sealed class ComposeServiceTests : IAsyncDisposable
             "",
             "Usage",
             "",
-            "rabbitmqctl [--node <node>] [--longnames] [--quiet] list_queues [--vhost <vhost>] ... [--timeout <timeout>]");
+            "rabbitmqctl [--node <node>] [--longnames] [--quiet] list_queues [--vhost <vhost>] ... [--timeout <timeout>]",
+            "Error: a later error line is not the cause the first one names");
 
         CommandOutput output = await Service.ExecAsync("rabbitmq", ["rabbitmqctl", "list_queues", "name", "messages", "--formatter", "json"], TestContext.Current.CancellationToken);
 
@@ -231,7 +232,7 @@ public sealed class ComposeServiceTests : IAsyncDisposable
     [Fact]
     public async Task ExecAsync_fails_with_the_last_non_blank_stderr_line_when_none_starts_with_Error()
     {
-        runner.OnFailing("docker", $"compose -f {Paths.ComposeFile} exec -T rabbitmq", 1, "something failed", "");
+        runner.OnFailing("docker", $"compose -f {Paths.ComposeFile} exec -T rabbitmq", 1, "a banner", "some detail", "something failed", "");
 
         CommandOutput output = await Service.ExecAsync("rabbitmq", ["rabbitmqctl", "list_queues"], TestContext.Current.CancellationToken);
 
