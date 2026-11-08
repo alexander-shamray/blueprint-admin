@@ -575,6 +575,9 @@ public sealed class EventTraceServiceTests : IAsyncDisposable
         view.Warning.ShouldNotBeNull();
         view.Warning.ShouldContain("2 of 2 traces could not be read from Tempo");
         handler.Requests.Count(r => r.Request.RequestUri!.AbsolutePath.Contains("/api/traces/", StringComparison.Ordinal)).ShouldBe(0);
+
+        // One list for the Loki uid and one for the Tempo lookup that finds none; a per-trace re-resolve adds one per trace.
+        handler.Requests.Count(r => r.Request.RequestUri!.AbsolutePath == "/api/datasources").ShouldBe(2);
     }
 
     [Fact]
