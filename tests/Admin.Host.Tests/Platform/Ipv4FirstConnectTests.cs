@@ -68,9 +68,10 @@ public sealed class Ipv4FirstConnectTests
     [Fact]
     public void Orders_every_ipv4_address_before_any_ipv6_one_and_keeps_each_family_in_resolver_order()
     {
-        IPAddress[] resolved = [IPAddress.IPv6Loopback, IPAddress.Parse("10.0.0.2"), IPAddress.Parse("fe80::1"), IPAddress.Loopback];
+        // Each family arrives in descending order, by string and by byte alike, so a sort within a family would show.
+        IPAddress[] resolved = [IPAddress.Parse("fe80::1"), IPAddress.Loopback, IPAddress.IPv6Loopback, IPAddress.Parse("10.0.0.2")];
 
-        Ipv4FirstConnect.Order(resolved).ShouldBe([IPAddress.Parse("10.0.0.2"), IPAddress.Loopback, IPAddress.IPv6Loopback, IPAddress.Parse("fe80::1")]);
+        Ipv4FirstConnect.Order(resolved).ShouldBe([IPAddress.Loopback, IPAddress.Parse("10.0.0.2"), IPAddress.Parse("fe80::1"), IPAddress.IPv6Loopback]);
     }
 
     [Fact]
