@@ -426,7 +426,7 @@ conditions, which this note fixes now so the protocol is ready:
 | `open_page` | switches to a workspace page by id or title (after #383) |
 | `highlight_widget` | scrolls to and outlines a widget instance or the first of a type on the page (after #383) |
 | `propose_widget` | shows an "Add *type*" chip in the reply; the operator's click adds it, through the workspace's own add path (after #383) |
-| `follow_correlation` | fires the workspace's "follow the last Trace link" for an id (after #390) |
+| `follow_correlation` | shows a "Follow *id*" chip in the reply; the operator's click fires the workspace's "follow the last Trace link" for it (after #390). Never on the call alone: the id comes from platform text, and a redraw draws that trace's text in the console (#622) |
 
 A client tool the client does not answer within the timeout is an error
 result, not a hung turn.

@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { of } from 'rxjs';
 import { HostClient } from '../core/host/host-client';
+import { TraceFollow } from '../features/trace/trace-follow';
 import { WorkspaceService } from '../workspace/workspace-service';
 import { SCREENS } from '../screens';
 import { WIDGETS } from '../workspace/widgets';
@@ -350,6 +351,20 @@ describe('AssistantService.addProposed (the operator accepts a proposed widget)'
     expect(service({ currentPageId: () => null, addWidget }).addProposed('note', 'k1')).toBe('no-page');
     expect(service({ addWidget }).addProposed('hologram', 'k2')).toBe('no-page');
     expect(addWidget).not.toHaveBeenCalled();
+  });
+});
+
+describe('AssistantService.followProposed (the operator follows an offered correlation id, #622)', () => {
+  it('follows an id only on the call the click makes, and checks the id the model offered again', () => {
+    const assistant = service();
+    const traceFollow = TestBed.inject(TraceFollow);
+    const open = vi.spyOn(traceFollow, 'open').mockImplementation(() => undefined);
+
+    expect(open).not.toHaveBeenCalled();
+    expect(assistant.followProposed('order-1_a')).toBe(true);
+    expect(assistant.followProposed('a b')).toBe(false);
+    expect(assistant.followProposed('x'.repeat(129))).toBe(false);
+    expect(open.mock.calls).toEqual([['order-1_a']]);
   });
 });
 

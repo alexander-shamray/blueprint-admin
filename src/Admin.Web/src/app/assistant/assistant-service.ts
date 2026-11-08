@@ -18,7 +18,7 @@ import {
 import { ClientToolRegistry } from './client-tools';
 import { highlightWidget } from './highlight';
 import { AssistantStatus, CatalogueEntry, OpenConversation } from './protocol';
-import { findWidgetType, registerWorkspaceTools } from './workspace-tools';
+import { CORRELATION_ID, findWidgetType, registerWorkspaceTools } from './workspace-tools';
 
 /** Where the tab keeps its conversation's id, so a reload (a language switch among them) resumes it (§5.5). */
 export const CONVERSATION_KEY = 'admin.assistant.conversation';
@@ -185,7 +185,6 @@ export class AssistantService {
       widgetsOf: (page) => widgetsOf(page),
       open: (page) => this.router.navigate(this.workspace.pageLink(page.id)),
       highlight: (instanceId) => highlightWidget(this.document, instanceId),
-      followTrace: (correlationId) => this.traceFollow.open(correlationId),
     });
     this.conversation = new AssistantConversation(
       this.client,
@@ -298,6 +297,17 @@ export class AssistantService {
     this.workspace.editing.set(true);
     this.rememberAdded(callId);
     return 'added';
+  }
+
+  /**
+   * The operator's click on an offered correlation id (`follow_correlation`, §6.4): what a correlation-id link does,
+   * re-pointing a following Trace or sequence widget, else opening the Trace page. The id is checked again here, since
+   * the offer's arguments came from the model; false when it is not a correlation id.
+   */
+  followProposed(correlationId: string): boolean {
+    if (!CORRELATION_ID.test(correlationId)) return false;
+    this.traceFollow.open(correlationId);
+    return true;
   }
 
   private rememberAdded(callId: string): void {

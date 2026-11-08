@@ -26,7 +26,7 @@ const PAGES: Page[] = [
 ];
 
 function setup(start: Page | null = PAGES[2], settleMs = 0) {
-  const calls = { opened: [] as string[], highlighted: [] as string[], followed: [] as string[] };
+  const calls = { opened: [] as string[], highlighted: [] as string[] };
   let current = start;
   const host: WorkspaceToolsHost = {
     pages: () => PAGES,
@@ -40,7 +40,6 @@ function setup(start: Page | null = PAGES[2], settleMs = 0) {
       calls.highlighted.push(id);
       return Promise.resolve(true);
     },
-    followTrace: (id) => calls.followed.push(id),
   };
   const tools = new ClientToolRegistry();
   registerWorkspaceTools(tools, host, settleMs);
@@ -204,12 +203,14 @@ describe('the workspace client tools (AI assistant design §6.4)', () => {
     expect(calls.opened).toEqual([]);
   });
 
-  it('opens a correlation id in Trace, and refuses one the platform would not adopt', async () => {
+  it('offers a correlation id without following it, and refuses one the platform would not adopt (#622)', async () => {
     const { tools, calls } = setup();
 
-    expect((await tools.run('follow_correlation', { correlationId: 'order-1_a' })).ok).toBe(true);
+    const offered = await tools.run('follow_correlation', { correlationId: 'order-1_a' });
+    expect(offered.ok).toBe(true);
+    expect(offered.content).toContain('only if they click');
     expect((await tools.run('follow_correlation', { correlationId: 'a b' })).ok).toBe(false);
     expect((await tools.run('follow_correlation', { correlationId: 'x'.repeat(129) })).ok).toBe(false);
-    expect(calls.followed).toEqual(['order-1_a']);
+    expect(calls.opened).toEqual([]);
   });
 });

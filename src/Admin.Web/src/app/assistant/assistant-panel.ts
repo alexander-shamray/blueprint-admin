@@ -47,7 +47,7 @@ export function toolLabel(name: string, args: Record<string, unknown>): string {
   if (name === 'open_page') return $localize`Opening ${String(args['page'])}:page:`;
   if (name === 'highlight_widget') return $localize`Showing ${widgetName(args['widget'])}:widget:`;
   if (name === 'propose_widget') return $localize`Offering ${widgetName(args['type'])}:widget:`;
-  if (name === 'follow_correlation') return $localize`Following ${String(args['correlationId'])}:id:`;
+  if (name === 'follow_correlation') return $localize`Offering trace ${String(args['correlationId'])}:id:`;
   return Object.hasOwn(READ_TOOL_TEXT, name) ? READ_TOOL_TEXT[name] : $localize`Using ${name}:tool:`;
 }
 
@@ -142,6 +142,20 @@ export class AssistantPanel {
       const rest = Object.fromEntries(Object.entries(r).filter(([id]) => id !== item.callId));
       return outcome === 'added' ? rest : { ...rest, [item.callId]: outcome };
     });
+  }
+
+  /** Whether a tool call is an offer of a trace to follow: a finished `follow_correlation` whose id passed its check. */
+  offersTrace(item: ConversationItem & { kind: 'tool' }): boolean {
+    return item.name === 'follow_correlation' && item.ok === true;
+  }
+
+  followLabel(item: ConversationItem & { kind: 'tool' }): string {
+    return $localize`Follow ${String(item.args['correlationId'])}:id:`;
+  }
+
+  /** The operator's click: only now is the id followed, as a correlation-id link in the console would be (#622). */
+  follow(item: ConversationItem & { kind: 'tool' }): void {
+    this.assistant.followProposed(String(item.args['correlationId']));
   }
 
   endText(item: ConversationItem & { kind: 'end' }): string {
