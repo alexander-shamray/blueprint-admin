@@ -11,10 +11,11 @@ const MERMAID_SECURE_DEFAULTS = [
 ] as const;
 
 /**
- * The keys a diagram's own source may not set, beyond Mermaid's defaults: the styling ones, because `themeCSS` lands
- * in the `<style>` that `safeSvg` keeps unscoped and a balanced `} body {…} g {` restyles the whole console (#618), and
- * the font and theme keys feed the same sheet; and the ones that would turn HTML labels back on or loosen DOMPurify.
- * Strict mode refuses none of them on its own.
+ * The keys a diagram's own source may not set, beyond Mermaid's defaults: the styling ones, which feed the `<style>`
+ * that `safeSvg` keeps, and the ones that would turn HTML labels back on or loosen DOMPurify. Strict mode refuses none
+ * of them. Mermaid 12 already refuses a directive's `themeCSS` whose `}` runs ahead of its `{` and nests the rest under
+ * the diagram's id, so this is defence in depth (#618): the console does not rest on that sanitiser and that nesting
+ * staying as they are in every version, nor on what an unnested at-rule could still do.
  */
 const MERMAID_SECURE_EXTRA = [
   'themeCSS',
