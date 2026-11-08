@@ -243,14 +243,18 @@ describe('DeadLetterWidget', () => {
     const fixture = render();
     open(fixture, 'ordering-catalog-events_error');
 
+    // Two requests while the read is out: the first is overtaken, so only the latest may be opened.
     open(fixture, 'bff-order-events_skipped');
+    open(fixture, 'bff-order-events_error');
     expect(host.deadLetters).toHaveBeenCalledTimes(1);
     first.next(inspection);
     first.complete();
     fixture.detectChanges();
 
-    expect(host.deadLetters).toHaveBeenLastCalledWith('bff-order-events_skipped');
-    expect(fixture.nativeElement.querySelector('.dead-letters code')?.textContent).toBe('bff-order-events_skipped');
+    expect(host.deadLetters).toHaveBeenCalledTimes(2);
+    expect(host.deadLetters).toHaveBeenLastCalledWith('bff-order-events_error');
+    expect(host.deadLetters).not.toHaveBeenCalledWith('bff-order-events_skipped');
+    expect(fixture.nativeElement.querySelector('.dead-letters code')?.textContent).toBe('bff-order-events_error');
   });
 
   it('says why the host refused a move, and arms nothing', () => {
