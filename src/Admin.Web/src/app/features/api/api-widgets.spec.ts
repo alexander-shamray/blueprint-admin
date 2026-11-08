@@ -744,6 +744,12 @@ describe('ApiWidgets', () => {
     click(fixture, 'POST PublishProduct');
 
     expect(fixture.nativeElement.querySelector('.error')).toBeNull();
+
+    // A response on screen, then another operation: left there, it would read as the new operation's.
+    click(fixture, 'Send');
+    expect(fixture.nativeElement.querySelector('.response')).not.toBeNull();
+    click(fixture, 'GET GetProducts');
+
     expect(fixture.nativeElement.querySelector('.response')).toBeNull();
   });
 
