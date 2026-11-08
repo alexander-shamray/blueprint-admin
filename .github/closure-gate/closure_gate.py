@@ -1,0 +1,334 @@
+#!/usr/bin/env python3
+"""What a pull request says it closes must match what merging it will close.
+
+The README beside this file owns the argument; the invocation is in closure-gate.yml and `/pr`.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+
+# GitHub's documented set, all nine spellings. Written out rather than
+# generated, because a generated list is one more thing that can quietly
+# produce eight.
+_KEYWORD = r"(?:close[sd]?|fix(?:es|ed)?|resolve[sd]?)"
+
+# Every keyword and the token after it, classified afterwards: a keyword whose
+# reference this gate cannot parse is a finding, not a non-match. The token is
+# a lookahead, so a keyword used as the token still matches: "fix closes it".
+# Markup may sit around the colon, which needs no space; a bare keyword does.
+_NOT_ALNUM_BEFORE = r"(?<![^\W_])"
+_NOT_ALNUM_AFTER = r"(?![^\W_])"
+_MARKUP = r"[*_`~]*"
+KEYWORD_THEN_TOKEN = re.compile(
+    rf"{_NOT_ALNUM_BEFORE}{_KEYWORD}{_NOT_ALNUM_AFTER}{_MARKUP}"
+    rf"(?:\s*:{_MARKUP}\s*|\s+)(?=(?P<token>\S+))",
+    re.IGNORECASE,
+)
+
+# GitHub ends a long subject's headline with this mark and starts the body
+# with it, at about 70 characters.
+CUT = "…"
+
+# What a token has to look like to be an issue reference. The optional
+# `owner/repo` prefix is captured so a cross-repository form can be refused by
+# name rather than failing to match and vanishing.
+REFERENCE = re.compile(
+    r"^(?:(?:(?P<repo>[\w.-]+/[\w.-]+))?#|gh-)(?P<number>\d+)\b"
+    r"|^https?://github\.com/(?P<url_repo>[\w.-]+/[\w.-]+)/issues/(?P<url_number>\d+)\b",
+    re.IGNORECASE,
+)
+
+# Markup a reference may be wrapped in. A commit body arguing about a keyword
+# writes it in backticks, and GitHub links it anyway.
+WRAPPERS = "`\"'([{*_<"
+
+# A token this matches is issue-shaped whatever markup wraps it, so an
+# unresolved one struck through with `~~` is reported rather than read as
+# prose and dropped from the commit set. `GH-n` is GitHub's own autolink form.
+ISSUE_SHAPED = re.compile(r"#\d|(?<![^\W_])gh-\d", re.IGNORECASE)
+
+# The house form's metadata row: `| Closes | <issue> (high), <issue> (high) |`.
+TABLE_ROW = re.compile(
+    rf"^[ \t]*\|[ \t]*{_KEYWORD}[ \t]*\|(?P<cell>[^|]*)\|",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+ISSUE_NUMBER = re.compile(r"(?:#|(?<![^\W_])gh-)(\d+)\b", re.IGNORECASE)
+
+# Dependabot copies the upstream release notes into its description, inside
+# `<details>`, and a note there can carry a closing keyword about the upstream
+# repository. The README's *The Dependabot description* owns the argument.
+DEPENDABOT = "app/dependabot"
+DETAILS = re.compile(r"<details>(?:(?!<details>).)*?</details>", re.IGNORECASE | re.DOTALL)
+
+REQUIRED_FIELDS = ("number", "url", "body", "commits", "closingIssuesReferences", "headRefOid")
+
+# One page of `gh pr view`. The commit list is not preloaded, so a list this
+# long may be a prefix and a prefix is indistinguishable from the whole thing
+# from in here. `closingIssuesReferences` is preloaded through every page and
+# is not held to this.
+GH_PAGE_SIZE = 100
+
+PULL_URL = re.compile(r"^https?://github\.com/(?P<repo>[\w.-]+/[\w.-]+)/pull/\d+", re.IGNORECASE)
+
+
+def repository_of(pull_url: str) -> str | None:
+    """`owner/name` from the pull request's own URL, so nothing has to be passed in."""
+    match = PULL_URL.match(pull_url.strip())
+    return match.group("repo") if match else None
+
+
+ISSUE_URL = re.compile(r"^https?://github\.com/(?P<repo>[\w.-]+/[\w.-]+)/issues/\d+", re.IGNORECASE)
+
+
+def linked_issues(entries: list[dict], repository: str) -> tuple[set[int], list[str]]:
+    """This repository's closing numbers, and a description of each foreign entry.
+
+    No `url` reads as local; a `url` that is another repository's, or unreadable, is foreign.
+    """
+    numbers: set[int] = set()
+    foreign: list[str] = []
+    for entry in entries:
+        url = entry.get("url")
+        if url is None:
+            numbers.add(entry["number"])
+            continue
+        match = ISSUE_URL.match(str(url).strip())
+        if match and match.group("repo").lower() == repository.lower():
+            numbers.add(entry["number"])
+        else:
+            foreign.append(f"{match.group('repo')}#{entry['number']}" if match else str(url))
+    return numbers, foreign
+
+
+def commit_texts(commit: dict) -> list[str]:
+    """Each reading of the commit's message the gate must judge.
+
+    A headline cut at the limit is read as written and rejoined to its body.
+    Both, because a pair that only looks cut reads as written to GitHub.
+    """
+    headline = commit.get("messageHeadline") or ""
+    body = commit.get("messageBody") or ""
+    texts = [f"{headline}\n{body}"]
+    if headline.endswith(CUT) and body.startswith(CUT):
+        texts.append(headline[:-1] + body[1:])
+    return texts
+
+
+def closing_references(text: str, repository: str) -> tuple[set[int], list[str]]:
+    """Issue numbers a closing keyword in `text` names, and what could not be read.
+
+    Returns `(numbers, unreadable)`. A keyword followed by ordinary prose —
+    "closes the naive spelling and nothing more" — is neither: it is not a
+    reference and it is not a failure to read one, so it appears in neither
+    half. Only a token that *looks* like a reference and still does not resolve
+    to an issue in this repository is reported.
+    """
+    numbers: set[int] = set()
+    unreadable: list[str] = []
+
+    for match in KEYWORD_THEN_TOKEN.finditer(text):
+        phrase = f"{match.group(0)}{match.group('token')}".strip()
+        token = match.group("token").lstrip(WRAPPERS)
+        reference = REFERENCE.match(token)
+        if reference is None:
+            # Prose. `Closes the door` is English, not a link. The substring
+            # test below is not a sanitiser: it runs only after REFERENCE has
+            # refused the token, and a match widens a rejection rather than
+            # granting anything. The trust decision is REFERENCE and the
+            # repository comparison below, and both are exact.
+            if (token.startswith("#")
+                    or ISSUE_SHAPED.search(token)
+                    or "github.com/" in token.lower()):
+                unreadable.append(phrase)
+            continue
+
+        named = reference.group("repo") or reference.group("url_repo")
+        number = reference.group("number") or reference.group("url_number")
+        if named is not None and named.lower() != repository.lower():
+            unreadable.append(phrase)
+            continue
+        numbers.add(int(number))
+
+    return numbers, unreadable
+
+
+def declared_in_table(body: str) -> set[int]:
+    """Issue numbers named by the body's `| Closes |` metadata row."""
+    return {
+        int(number)
+        for row in TABLE_ROW.finditer(body)
+        for number in ISSUE_NUMBER.findall(row.group("cell"))
+    }
+
+
+def check(payload: dict) -> list[str]:
+    problems: list[str] = []
+
+    missing = [field for field in REQUIRED_FIELDS if field not in payload]
+    if missing:
+        return [
+            "the gate was handed JSON with no "
+            + ", ".join(f"`{field}`" for field in missing)
+            + " — it judged nothing, and a gate that judged nothing must not report a pass"
+        ]
+
+    repository = repository_of(payload["url"] or "")
+    if repository is None:
+        return [f"`url` is not a pull request URL, so the repository is unknown: {payload['url']!r}"]
+
+    commits = payload["commits"]
+    if not commits:
+        return [
+            "this pull request reports no commits at all, which is not a state "
+            "the gate can judge — the commit half of the comparison would be "
+            "empty for the wrong reason"
+        ]
+
+    # A read taken before GitHub has indexed the newest push returns the
+    # commit list without it, and a missing commit is a missing keyword. A
+    # list not containing `headRefOid` is behind or truncated, so it is
+    # refused rather than judged.
+    oids = {(commit.get("oid") or "") for commit in commits}
+    if payload["headRefOid"] not in oids:
+        return [
+            f"the commit list does not contain this pull request's head "
+            f"({payload['headRefOid'][:8]}), so it is stale or truncated — a "
+            f"closing keyword in a commit this gate cannot see is exactly the "
+            f"fail-open it exists to refuse. Re-read `gh pr view` and try again"
+        ]
+
+    if len(commits) >= GH_PAGE_SIZE:
+        return [
+            f"this pull request reports {len(commits)} commits, at or above "
+            f"the {GH_PAGE_SIZE} that `gh pr view --json commits` returns "
+            f"in one page — so the list may be a prefix, and a closing keyword "
+            f"past the cut is invisible to this gate for a reason that has "
+            f"nothing to do with what the pull request says. That is the "
+            f"fail-open shape this gate exists to close, so it refuses rather "
+            f"than judging: fetch the commits through a paginated endpoint and "
+            f"pass the complete list"
+        ]
+
+    linked, foreign = linked_issues(payload["closingIssuesReferences"], repository)
+    for reference in foreign:
+        problems.append(
+            f"GitHub links `{reference}` as closed by merging, which is outside "
+            f"{repository} — this gate compares only this repository's issues, "
+            f"so unlink it in the sidebar or its number may hide a local one"
+        )
+    declared = declared_in_table(payload["body"] or "")
+
+    from_commits: dict[int, list[str]] = {}
+    for commit in commits:
+        oid = (commit.get("oid") or "")[:8] or "(no oid)"
+        readings = [closing_references(text, repository) for text in commit_texts(commit)]
+        unreadable: list[str] = []
+        for _, failed in readings:
+            unreadable += [phrase for phrase in failed if phrase not in unreadable]
+        agreed = set.intersection(*(found for found, _ in readings))
+        for number in agreed:
+            from_commits.setdefault(number, []).append(oid)
+        for number in sorted(set.union(*(found for found, _ in readings)) - agreed - linked):
+            problems.append(
+                f"commit {oid} is cut at the limit and its two readings differ on "
+                f"#{number}, which the description does not name: GitHub closes it "
+                f"only if the raw message does, and it may be a fragment of a longer "
+                f"number, so do not name it to settle this: reword the commit so "
+                f"nothing straddles the cut"
+            )
+        for phrase in unreadable:
+            problems.append(
+                f"commit {oid} carries `{phrase}`, which is keyword-shaped and "
+                f"names no issue in {repository} — this gate will not guess at it"
+            )
+
+    # The body is read only for the keyword-shaped tokens below. What the
+    # description *closes* is `closingIssuesReferences`, which is GitHub's own
+    # answer rather than this file's, and there is no reason to prefer a second
+    # opinion to the authority.
+    body = payload["body"] or ""
+    author = payload.get("author") or {}
+    if author.get("is_bot") and author.get("login") == DEPENDABOT:
+        # DETAILS matches an innermost block, so a nested one takes passes.
+        stripped = DETAILS.sub("", body)
+        while stripped != body:
+            body, stripped = stripped, DETAILS.sub("", stripped)
+    _, body_unreadable = closing_references(body, repository)
+    for phrase in body_unreadable:
+        problems.append(
+            f"the description carries `{phrase}`, which is keyword-shaped and "
+            f"names no issue in {repository} — this gate will not guess at it"
+        )
+
+    for number in sorted(from_commits.keys() - linked):
+        oids = ", ".join(sorted(from_commits[number]))
+        problems.append(
+            f"#{number} is closed by commit {oids} and the description does not "
+            f"name it (`closingIssuesReferences` reports "
+            f"{sorted(linked) or 'nothing'}). The merge will close it either "
+            f"way — a merged commit message cannot be edited — so reconcile the "
+            f"description to the commits, not the commits to the description"
+        )
+
+    for number in sorted(declared - linked):
+        problems.append(
+            f"the `| Closes |` row names #{number} and GitHub linked nothing "
+            f"for it. A table pipe between the keyword and the reference means "
+            f"there is no keyword-reference pair to read: add a bare "
+            f"`Closes #{number}` line below the table"
+        )
+
+    for number in sorted(linked - declared):
+        problems.append(
+            f"merging closes #{number} and the `| Closes |` row does not say "
+            f"so, so the summary a reader trusts understates what happens"
+        )
+
+    return problems
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "payload",
+        nargs="?",
+        type=argparse.FileType(encoding="utf-8"),
+        default=sys.stdin,
+        help="`gh pr view --json ...` output; stdin by default",
+    )
+    args = parser.parse_args(argv[1:])
+
+    try:
+        payload = json.load(args.payload)
+    except json.JSONDecodeError as error:
+        print(f"closure-gate: the input is not JSON: {error}", file=sys.stderr)
+        return 2
+
+    problems = check(payload)
+    if problems:
+        print(
+            f"closure-gate: {len(problems)} problem(s) with what PR "
+            f"#{payload.get('number', '?')} says it closes:\n",
+            file=sys.stderr,
+        )
+        for problem in problems:
+            print(f"  - {problem}", file=sys.stderr)
+        return 1
+
+    repository = repository_of(payload["url"]) or ""
+    linked = sorted(linked_issues(payload["closingIssuesReferences"], repository)[0])
+    closes = ", ".join(f"#{number}" for number in linked) if linked else "nothing"
+    print(
+        f"closure-gate: what this pull request says it closes matches what "
+        f"merging it will close — {closes}."
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
