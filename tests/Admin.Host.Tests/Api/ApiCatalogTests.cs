@@ -222,10 +222,12 @@ public sealed class ApiCatalogTests : IDisposable
     public async Task The_catalog_identity_is_the_first_configured_user_when_there_is_no_demo()
     {
         ScriptedHandler handler = Platform(Every);
-        AdminOptions options = new() { Users = [new RealmUser { Username = "ops", Password = "pw" }] };
+        AdminOptions options = new() { Users = [new RealmUser { Username = "ops", Password = "pw" }, new RealmUser { Username = "other", Password = "pw2" }] };
 
         await Catalog(handler, options).GetAsync(Token);
 
-        handler.Requests.Single(r => r.Body != null).Body!.ShouldContain("username=ops&password=pw");
+        string body = handler.Requests.Single(r => r.Body != null).Body!;
+        body.ShouldContain("username=ops&password=pw");
+        body.ShouldNotContain("username=other");
     }
 }
