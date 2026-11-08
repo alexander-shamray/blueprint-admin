@@ -8,12 +8,14 @@ namespace Admin.Host.Security;
 /// <c>preferHostingUrls</c> from the app's configuration, and with <c>preferHostingUrls</c> true Kestrel binds the
 /// hosting urls and drops the code-backed listener. The documented launch makes the caller's directory the content
 /// root, so a root <c>appsettings.json</c> could set both (#620). <see cref="PinnedHostingKeys"/> is added after every
-/// other source, so no file, variable or argument reaches those keys; <see cref="NonLoopback"/> is the check made
-/// once the server has bound, in case anything still did.
+/// other source. The pin that does the work is <c>preferHostingUrls=false</c>: with it Kestrel keeps the code's
+/// listener and ignores any hosting url. The empty <c>urls</c> and ports are best effort only, since the web host falls
+/// back to the <c>urls</c> it read while the builder was created, before this source existed. <see cref="NonLoopback"/>
+/// is the check made once the server has bound, in case anything still widened it.
 /// </summary>
 public static class LoopbackBind
 {
-    /// <summary>The hosting keys that could widen the bind, each pinned to the value that leaves only the code's listener.</summary>
+    /// <summary>The hosting keys that could widen the bind; <c>preferHostingUrls</c> is the one the bind rests on.</summary>
     public static readonly IReadOnlyDictionary<string, string?> PinnedHostingKeys = new Dictionary<string, string?>
     {
         [WebHostDefaults.ServerUrlsKey] = "",

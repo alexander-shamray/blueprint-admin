@@ -28,8 +28,9 @@ WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 builder.Configuration.AddAdminSources(args);
 
-// Last, so it beats every source above: the hosting keys that could widen the
-// bind from configuration (#620), which LoopbackBind names.
+// Last, so it beats every source above: preferHostingUrls pinned false keeps
+// the code's loopback listener over any hosting url configuration names (#620);
+// LoopbackBind says why the other keys it pins are only best effort.
 builder.Configuration.AddInMemoryCollection(LoopbackBind.PinnedHostingKeys);
 builder.Services.Configure<AdminOptions>(builder.Configuration.GetSection(AdminOptions.Section));
 
