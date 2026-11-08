@@ -434,14 +434,20 @@ public sealed class FakeOrdersTests
     public void The_log_keeps_only_the_newest_orders_to_a_code_so_a_long_lived_host_answers_small()
     {
         FakeOrders orders = new(time);
+        List<DateTimeOffset> placedAt = [];
 
         for (int i = 0; i < 8; i++)
         {
+            placedAt.Add(time.GetUtcNow());
             orders.Place(postalCode: "SIM-REFUSED");
             time.Advance(FakeOrders.Step * 3);
         }
 
-        Log(orders, "SIM-REFUSED").Length.ShouldBe(5);
+        // Each SIM-REFUSED order is booked once, after it was placed, so the five newest orders are the ones whose
+        // bookings all fall at or after the fourth placement; keeping the oldest five would log the first three too.
+        JsonElement[] log = Log(orders, "SIM-REFUSED");
+        log.Length.ShouldBe(5);
+        log.ShouldAllBe(e => e.GetProperty("Request").GetProperty("DateTime").GetDateTimeOffset() >= placedAt[3]);
     }
 
     [Fact]
