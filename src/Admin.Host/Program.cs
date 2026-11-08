@@ -27,6 +27,10 @@ using Microsoft.Extensions.Options;
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 builder.Configuration.AddAdminSources(args);
+
+// Last, so it beats every source above: the hosting keys that could widen the
+// bind from configuration (#620), which LoopbackBind names.
+builder.Configuration.AddInMemoryCollection(LoopbackBind.PinnedHostingKeys);
 builder.Services.Configure<AdminOptions>(builder.Configuration.GetSection(AdminOptions.Section));
 
 // Relative BackendDir/FrontendDir must not resolve against the process's
@@ -48,7 +52,8 @@ builder.Services.AddSingleton(sp => RepoPaths.From(sp.GetRequiredService<IOption
 // because the host holds realm passwords and can wipe volumes (spec §8). The
 // default builder loads Kestrel:Endpoints from configuration and Kestrel adds
 // those beside a code-backed listener, so that loader is replaced with an
-// empty one first.
+// empty one first; the hosting urls are pinned above, and the bound addresses
+// are checked once the server has started, below.
 builder.WebHost.ConfigureKestrel((context, kestrel) =>
 {
     kestrel.Configure(new ConfigurationBuilder().Build());
@@ -363,7 +368,20 @@ if (spaFiles is not null)
     app.MapFallbackToFile("index.html", new StaticFileOptions { FileProvider = spaFiles, OnPrepareResponse = c => FramingProtection.Apply(c.Context.Response) }).ShortCircuit();
 }
 
-app.Run();
+await app.StartAsync();
+
+// The bind as Kestrel made it, not as configured: an address off loopback stops
+// the host before it serves on it any longer than the start took (#620).
+IReadOnlyList<string> wide = LoopbackBind.NonLoopback(app.Urls);
+if (wide.Count > 0)
+{
+    await app.StopAsync();
+
+    throw new InvalidOperationException($"The console binds loopback only (spec §8), but it was bound to {string.Join(", ", wide)}.");
+}
+
+await app.WaitForShutdownAsync();
+await app.DisposeAsync();
 
 /// <summary>Visible to WebApplicationFactory in the test project.</summary>
 public partial class Program;
