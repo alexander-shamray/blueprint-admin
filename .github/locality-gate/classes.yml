@@ -51,6 +51,7 @@ C:
 # D -- docs or harness. Never src/**: that absence is the load-bearing half
 # of this class, and the gate enforces it by this list having no code entry.
 D:
+  - '.harness/**'
   - 'docs/**'
   - 'tools/**'
   - '.claude/**'
