@@ -573,6 +573,10 @@ class TheShippedMap(unittest.TestCase):
                  "`CLAUDE.md`, `.gitattributes`")
         self.assertEqual(check(payload(files, class_cell="D", touch_cell=touch), self.map), [])
 
+    def test_the_harness_sync_files_are_a_class_d_change(self) -> None:
+        files = [".harness/config.json", ".harness/manifest.json", ".claude/settings.json"]
+        self.assertEqual(check(payload(files, class_cell="D", touch_cell="`.harness/**`, `.claude/**`"), self.map), [])
+
     def test_the_contract_cites_this_file_rather_than_restating_it(self) -> None:
         contract = (ROOT / "docs" / "change-locality.md").read_text(encoding="utf-8")
         self.assertIn(".github/locality-gate/classes.yml", contract)
