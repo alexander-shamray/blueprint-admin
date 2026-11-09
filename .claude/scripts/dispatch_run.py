@@ -408,17 +408,17 @@ def launch(root, run, gid, tasks_path, branch, worktree, owned_source):
     save_state(directory, state)
 
 
-def sync_ready(root, run, pr):
+def sync_ready(root, run, pr, red_source):
     """Refuse a sync `sync-launch` would refuse whatever its tree holds, before there is a tree: a sync that only waits
     may be superseded before its turn, and the worktree and branch made for it would have no launch to end them."""
     directory = run_dir(root, run)
     state = load_state(directory)
     if not _number(pr):
         raise Refusal(f"{pr!r} is not a pull request number")
-    _sync_may_launch(directory, state.get("groups", {}), f"sync-{pr}")
+    _sync_may_launch(directory, state.get("groups", {}), f"sync-{pr}", red_source)
 
 
-def _sync_may_launch(directory, entries, gid):
+def _sync_may_launch(directory, entries, gid, red_source):
     if gid in entries:
         raise Refusal(f"{gid} is already in this run; a new take is a new group")
     if (directory / "STOP").exists():
@@ -434,9 +434,13 @@ def _sync_may_launch(directory, entries, gid):
     claimed = _claimed(entries)
     if claimed:
         raise Refusal(f"{claimed[0]}'s merge is claimed and not verified; a sync is launched alone")
+    # Its executor would stop at `/ship` step 6 on that issue as any other would, only after spending its round.
+    red = red_source()
+    if red:
+        raise Refusal(f"{'; '.join(red)}; a sync waits for a green main")
 
 
-def sync_launch(root, run, pr, branch, worktree, oid):
+def sync_launch(root, run, pr, branch, worktree, oid, red_source):
     """Record a proved sync as its group, first and alone: it holds no task-list row, so no list is read or written."""
     directory = run_dir(root, run)
     state = load_state(directory)
@@ -444,7 +448,7 @@ def sync_launch(root, run, pr, branch, worktree, oid):
         raise Refusal(f"{pr!r} is not a pull request number")
     gid = f"sync-{pr}"
     entries = state.setdefault("groups", {})
-    _sync_may_launch(directory, entries, gid)
+    _sync_may_launch(directory, entries, gid, red_source)
     if not SYNC_HEAD.fullmatch(branch):
         raise Refusal(f"{branch!r} is not a sync head")
     if not _oid(oid):
@@ -1118,11 +1122,12 @@ def absorb(root, run, gid, run_refused=None):
     worktree = _field(entry, gid, "worktree", _path_text)
     source = Path(root) / worktree / "artifacts" / "dispatch" / run / f"{gid}.json"
     copy = directory / f"{gid}.json"
+    # With none in the worktree, a copy already here is this launch's: an executor wrote it to the main checkout's run
+    # directory, as H22 of run 20261108-071135 did, since the launch removed any earlier one before starting it and an
+    # unread record is proof that removal ran.
     try:
         if source.is_file():
             shutil.copyfile(source, copy)
-        else:
-            copy.unlink(missing_ok=True)
     except OSError as error:
         raise Refusal(f"could not copy {source}: {error}") from None
     issues = _field(entry, gid, "issues", _numbers_list)
@@ -1236,18 +1241,39 @@ def _worktree_kept(root, entry):
     return _path_text(worktree) and (Path(root) / worktree).is_dir()
 
 
-def sync_drop(root):
-    """One line for each local sync head offered to git-branch-drop.sh, which alone decides whether it goes."""
-    lines = []
-    for ref in git(root, "for-each-ref", "--format=%(refname)", "refs/heads/chore/harness-sync-*").splitlines():
+def _offer_sync_heads(root, drop, refs):
+    """One line for each sync head among `refs` offered to the `drop` helper, which alone decides whether it goes."""
+    for ref in refs:
         branch = ref.removeprefix("refs/heads/")
         if not SYNC_HEAD.fullmatch(branch):
             continue
         try:
-            lines.append(one_line(helper(root, "git-branch-drop.sh", branch)))
+            yield one_line(helper(root, drop, branch))
         except Refusal as kept:
-            lines.append(f"kept {branch}: {kept}")
-    return lines or ["no sync branch"]
+            yield f"kept {branch}: {kept}"
+
+
+def sync_drop(root):
+    """Origin's merged sync heads, then the local ones: an origin that cannot be read is a line, not the end of both.
+
+    Each line comes as its head is done, so a run the dispatcher's timeout cuts short still says what it deleted.
+    """
+    said = False
+    try:
+        listed = git(root, "ls-remote", "--heads", "origin", "refs/heads/chore/harness-sync-*")
+    except Refusal as unread:
+        listed = ""
+        said = True
+        yield f"origin's sync heads were not read: {one_line(str(unread), 200)}"
+    for line in _offer_sync_heads(root, "git-sync-head-drop.sh", [row.split()[-1] for row in listed.splitlines()]):
+        said = True
+        yield line
+    local = git(root, "for-each-ref", "--format=%(refname)", "refs/heads/chore/harness-sync-*")
+    for line in _offer_sync_heads(root, "git-branch-drop.sh", local.splitlines()):
+        said = True
+        yield line
+    if not said:
+        yield "no sync branch"
 
 
 def sync_close(root, run, gid):
@@ -1374,7 +1400,8 @@ def take_reading(directory, source):
     return reading, failure
 
 
-def wake(root, run, tasks_path, today, body_source, open_source, branch_source, weekly_source, owned_source):
+def wake(root, run, tasks_path, today, body_source, open_source, branch_source, weekly_source, owned_source,
+         red_source):
     directory = run_dir(root, run)
     state = load_state(directory)
     entries = state.get("groups", {})
@@ -1428,6 +1455,10 @@ def wake(root, run, tasks_path, today, body_source, open_source, branch_source, 
     taken = [claim for claim, _ in _held(tasks, bodies, branch_source)]
     chosen = pick(candidates + running, ready_map, claims, [g.id for g in running], taken, slots, lifted)
     if chosen:
+        # An executor launched now would spend its session and stop at `/ship` step 6 on that issue.
+        red = red_source()
+        if red:
+            return out + red + ["launch: none"]
         named = {gid: lifted[gid] for gid in chosen if gid in lifted}
         # The report names what the flag released, so it is recorded from the one read that launched it.
         _note_released(directory, named)
@@ -1733,7 +1764,7 @@ def add_commands(sub):
     r.add_argument("--today")
 
 
-def command(args: argparse.Namespace, today, bodies_from, open_from, branch_from, weekly_from, owned_from):
+def command(args: argparse.Namespace, today, bodies_from, open_from, branch_from, weekly_from, owned_from, red_from):
     """Run one of add_commands' subcommands and return its exit code; a Refusal is the caller's to print."""
     root = args.root
     if args.command == "start":
@@ -1757,11 +1788,12 @@ def command(args: argparse.Namespace, today, bodies_from, open_from, branch_from
     elif args.command == "launch":
         launch(root, args.run, args.group, args.tasks, args.branch, args.worktree, owned_from)
     elif args.command == "sync-launch":
-        sync_launch(root, args.run, args.pr, args.branch, args.worktree, args.oid)
+        sync_launch(root, args.run, args.pr, args.branch, args.worktree, args.oid, red_from)
     elif args.command == "sync-ready":
-        sync_ready(root, args.run, args.pr)
+        sync_ready(root, args.run, args.pr, red_from)
     elif args.command == "sync-drop":
-        print("\n".join(sync_drop(root)))
+        for line in sync_drop(root):
+            print(line, flush=True)
     elif args.command == "sync-close":
         sync_close(root, args.run, args.group)
     elif args.command == "run":
@@ -1776,7 +1808,7 @@ def command(args: argparse.Namespace, today, bodies_from, open_from, branch_from
         print(wait(root, args.run, args.group))
     elif args.command == "wake":
         print("\n".join(wake(root, args.run, args.tasks, today, bodies_from, open_from, branch_from, weekly_from,
-                              owned_from)))
+                              owned_from, red_from)))
     elif args.command == "filed":
         # The interview's filings and closes reach no `tasks place`, so Filed overnight learns of them here.
         issue = int(args.issue) if args.issue.isdecimal() and args.issue.isascii() else 0
