@@ -96,12 +96,11 @@ there is the payload's, changed in `blueprint-harness`.
 
 The `gates` job in `ci.yml` runs every `test_*.py` under a `.github/*/`
 directory, from that directory, on Linux and on a push to `main` too, since a
-gate's own workflow runs its suite on a pull request alone and a gate that neither
-a workflow nor the `harness` job names would run nowhere. It finds the directories
-rather than listing them, fails on finding none, and then runs the plan-size gate
-itself. Each suite runs
-locally as `python -m unittest` in its directory; `harness-checks.sh` runs only
-the four gate suites its list names.
+gate's own workflow runs its suite on a pull request alone and a gate that
+neither a workflow nor the `harness` job names would run nowhere. It finds the
+directories rather than listing them, fails on finding none, and then runs the
+plan-size gate itself. Each suite runs locally as `python -m unittest` in its
+directory; `harness-checks.sh` runs only the four gate suites its list names.
 
 The `workflow-lint` job in `ci.yml` runs `actionlint` over the workflows, after
 requiring it to fail on `.github/workflow-lint/broken-reference.yml`. What it
