@@ -58,6 +58,6 @@ __pycache__/
 /suggestions.md
 
 # An optional link to the user's local task list, which lives outside every
-# checkout where docs/working-rules.md puts it. Local by design: it changes too
+# checkout where .harness/agent-rules.md puts it. Local by design: it changes too
 # often to go through a PR.
 /TODO.md
