@@ -51,8 +51,10 @@ No setting expresses the control-flow rule just above, so it stays a review
 matter.
 
 **Prose** wraps at 80 columns (tables, links and fences may exceed it),
-British spelling, identifiers keep their real spelling. A comment says why
-and cites the owner.
+British spelling, identifiers keep their real spelling.
+
+**Comments**: a comment says why and cites the owner, with no history, no
+inventory and no PR named. A finding against a comment is closed by cutting it.
 
 `/style-pass` records a newly settled form in **this** file, then in
 `.editorconfig` or the SPA linters, in one change.
