@@ -1,0 +1,18 @@
+# The rows /bug-sweep and /security-sweep cut this checkout into, read by
+# .claude/scripts/sweep-slices.sh. Tab-separated: kind (bug, security or * for
+# both), a POSIX extended regular expression over the whole path, anchored here,
+# the row, and what the row holds. The first matching line wins; row - owns
+# nothing, so a path it matches refuses the run. The order is the old row_of's.
+*	^src/Admin\.Web/package-lock\.json$	samples	the lockfile: no fence, so counted and not read; a local check reads it
+bug	^src/Admin\.(Host|Mcp)/.*\.csproj$	config	the two project files
+bug	^src/Admin\.(Host|Mcp)/	host	the host and the MCP server
+bug	^src/Admin\.Web/.*\.spec\.ts$	suites	every SPA spec
+bug	^src/Admin\.Web/e2e/	suites	the Playwright suites
+bug	^tests/	suites	the host's tests
+bug	^src/Admin\.Web/src/	spa	the SPA's source
+bug	^src/Admin\.Web/	config	the rest of src/Admin.Web/: its toolchain configuration
+security	^(src|tests)/	source	the host, the SPA and their tests
+*	^(tools|\.github|\.claude|\.harness)/	tooling	the harness, CI, the gates and tools/
+*	^docs/	samples	fenced code in docs/, audited as code but excerpt-aware
+*	^.*/.*$	-	a directory no line above names: the run refuses until one owns it
+*	^[^/]+$	config	every tracked file at the repository root
