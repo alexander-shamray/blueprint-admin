@@ -9,7 +9,10 @@ and names the test each step passes. It follows
 method: measure first, one PR per step, an exit test per step.
 
 The figures are not restated here. [`token-usage.md`](token-usage.md) owns
-them, one dated section per measurement, and every number below cites it.
+them, one dated section per measurement, and every number below cites it. The
+rules the steps landed are not either: `.harness/agent-rules.md`, *Subagents,
+review rounds and plans*, owns them and `docs/harness/token-rules.md` their
+reasons. What stays is the sequence and each step's exit, a dated record.
 
 ## 1. What the baseline says
 
@@ -69,10 +72,8 @@ first wake to its next prompt, which moves with where the first wait falls
 rather than with what waking costs. The cost a wake can add is the cache
 rewrite on the call after it, so that is what the exit now holds.
 
-**Built** (#122): the rules. `CLAUDE.md`'s *Subagents, review rounds and
-plans* held the delegation brief, the review loop (citing `/ship` step 5),
-the planning rule, the compact-before-a-wait rule and one task per session;
-it holds them still, but for the compact rule, retired below.
+**Built** (#122): the rules, in `CLAUDE.md` then; `.harness/agent-rules.md`
+owns them now, but for the compact-before-a-wait rule, retired below.
 **Built** (#225): the `--tools` measurement, recorded in
 [`token-usage.md`](token-usage.md), and the cut it names: step 6's `gh pr checks
 --watch` takes `--interval 60`; its effect is read in the 2026-10-18 section
@@ -90,8 +91,8 @@ the cache.
 
 ### Step 3 — what every session loads
 
-- `CLAUDE.md` cut to a locator and its hard rules; every rule it drops is
-  cited from [`working-rules.md`](working-rules.md), its new owner.
+- `CLAUDE.md` cut to a locator and its hard rules, which
+  `docs/harness/token-rules.md`, *What every session loads*, argues.
 - `docs/harness-boundaries.md` gains an index, so a session reads the one
   residual it needs.
 
@@ -107,11 +108,10 @@ attribute it to this cut. **Exit met** (#123).
 Replace the external review loops, switched off and still resident in
 `ship.md`, with one local review. **Exit** on the review quality set.
 
-**Built** (#124): `/ship` step 5 reviews in rounds of a read-only
-`branch-reviewer`; the external reviewers' commands, agents, helpers,
-hooks, suites and sandbox are at the tag `archive/external-reviewers`.
-The exit is not measured: it holds the reviewer to the baseline recall
-recorded in step 1.
+**Built** (#124): the review loop `docs/harness/token-rules.md`, *Reviewers*,
+argues; the external reviewers' commands, agents, helpers, hooks, suites and
+sandbox are at the tag `archive/external-reviewers`. The exit is not measured:
+it holds the reviewer to the baseline recall recorded in step 1.
 
 ### Step 5 — the sweeps
 
@@ -119,12 +119,10 @@ recorded in step 1.
 list, follow leads in round two onwards, and keep the commit of the last
 clean sweep. **Exit** on the sweep quality set.
 
-**Built** (#125): `sweep-slices.sh` owns both sweeps' row partitions and
-cuts each row into lists of at most 240,000 bytes; `sweep-mark.sh` keeps a
-clean sweep's commit as the local `refs/sweeps/<kind>`; verification runs on
-Sonnet, and the bug verifier weighs the covering tests. The argument is in
-[`commands/bug-sweep.md`](commands/bug-sweep.md), *Slices, leads and the
-mark*. The exit is not measured yet, but it now has a baseline: the
+**Built** (#125): the slices and the mark, whose argument is
+[`commands/bug-sweep.md`](commands/bug-sweep.md), *Slices, leads and the mark*,
+and verification on Sonnet (`docs/harness/token-rules.md`, *Which model a
+subagent runs on*). The exit is not measured yet, but it now has a baseline: the
 2026-10-20 section of [`token-quality-sets.md`](token-quality-sets.md)
 records a round-1 auditor run over the sweep set (#168). A change to the
 sweeps claims its exit by finding no fewer rows on the same slices.
@@ -136,11 +134,9 @@ when the command is disputed. `ship.md` is the target; its size
 is in the baseline. **Exit.** A `/ship` run reaches the same end state with a
 smaller resident prompt, measured by the step 1 report.
 
-**Built** (#126): `ship`, `branch`, `review-branch`, `bug-sweep` and
-`security-sweep` are runbooks in `.claude/commands/` with their argument
-in [`commands/`](commands/); `test_command_runbooks.py` holds each
-runbook under a ceiling and each citation to a heading that exists. The
-exit is not measured: it waits on sessions run since (#123).
+**Built** (#126): the runbooks in `.claude/commands/` and their argument in
+[`commands/`](commands/), which `test_command_runbooks.py` holds. The exit is
+not measured: it waits on sessions run since (#123).
 
 ## 3. What each step may not do
 
