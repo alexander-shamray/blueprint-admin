@@ -115,6 +115,10 @@ Directory.Packages.props        BlueprintAdmin.slnx
 
 ## 6. What still applies
 
+The rules every target shares, on keeping `main` green, closing issues and
+Dependabot pull requests among them, are `docs/harness/working-rules.md`'s.
+What only this repository has:
+
 - FakePlatform is first-class: a new endpoint works against the fakes and the
   Playwright smoke covers its screen.
 - Exact pins, both toolchains.
@@ -123,19 +127,15 @@ Directory.Packages.props        BlueprintAdmin.slnx
   `commit-gate.yml` stand down when `dependabot[bot]` opened it **and made
   every commit in it**: Dependabot's address as author and GitHub's
   (`noreply@github.com`) as committer, as its own commits and rebases carry.
-  The other jobs in `ci.yml` run on it as on any pull request, and the owner
-  merges it. **Rebase a Dependabot branch with `@dependabot rebase`, not
-  locally.** A local rebase or amend keeps Dependabot as the author but makes
-  you the committer, so it runs both gates. So do a commit anyone else pushes
-  and a merge commit from *Update branch*, and the pull request then needs
-  the rows and the trailers like any other. `@dependabot recreate` drops such
-  commits. A commit that only claims both addresses is a deliberate bypass:
-  branch protection and the owner's review bound that, not this check (#400).
+  The other jobs in `ci.yml` run on it as on any pull request. A local rebase
+  or amend keeps Dependabot as the author but makes you the committer, so it
+  runs both gates. So do a commit anyone else pushes and a merge commit from
+  *Update branch*, and the pull request then needs the rows and the trailers
+  like any other. `@dependabot recreate` drops such commits. A commit that only
+  claims both addresses is a deliberate bypass: branch protection and the
+  owner's review bound that, not this check (#400).
 - The dialect in [`style-guide.md`](style-guide.md).
-- `main` stays green.
-- `Closes #n` as a bare line when a change closes an issue.
 - Loopback only; no credential store (spec §8).
-- [`harness-boundaries.md`](harness-boundaries.md) before touching `.claude/`.
 
 ## 7. Checklist
 
