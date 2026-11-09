@@ -122,8 +122,9 @@ clean sweep. **Exit** on the sweep quality set.
 **Built** (#125): the slices and the mark, whose argument is
 [`commands/bug-sweep.md`](commands/bug-sweep.md), *The round: fan out* and
 *Where it stops*, and verification on Sonnet (`docs/harness/token-rules.md`,
-*Which model a subagent runs on*). The exit is not measured yet, but it now has a baseline: the
-2026-10-20 section of [`token-quality-sets.md`](token-quality-sets.md)
+*Which model a subagent runs on*). The exit is not measured yet, but it now
+has a baseline: the 2026-10-20 section of
+[`token-quality-sets.md`](token-quality-sets.md)
 records a round-1 auditor run over the sweep set (#168). A change to the
 sweeps claims its exit by finding no fewer rows on the same slices.
 
