@@ -1,10 +1,9 @@
 name: main red
 
-# Two pull requests green apart can be red together, and only `ci`'s run on
-# the push to `main` sees it. This makes its failure one open issue, closed by
-# the next green run; only main's tip acts, as `ci` has no concurrency group.
-# What it is owed is docs/harness/working-rules.md, *CI*. Nothing from the run
-# is checked out or executed, so the write token never meets the failed code.
+# This makes a failed `ci` run on `main` one open issue, closed by the next
+# green run; only main's tip acts, as `ci` has no concurrency group. What it is
+# owed is docs/harness/working-rules.md, *CI*. Nothing from the run is checked
+# out or executed, so the write token never meets the failed code.
 on:
   workflow_run:
     workflows: [ci]
