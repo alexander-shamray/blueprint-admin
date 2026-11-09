@@ -31,6 +31,15 @@ concurrency:
 # travels with the gate, so a pull request that widens Class D to reach src/**
 # is judged by the base's map and not its own.
 
+# The enforcing step comes first and the suite last, in this workflow and in
+# commit-gate.yml. Test code can write to $GITHUB_ENV or $GITHUB_PATH or replace
+# a tool on the runner, and every later step inherits that, so a suite ahead of
+# the gate could choose the verdict with no workflow edit. A later step cannot
+# turn an earlier failure green, and `python -I` on the gate would leave a
+# replaced `python`, `gh` or `jq` in place, so the order is the control;
+# TheShippedWorkflows in test_locality_gate.py reads it. The cost is that a run
+# the gate refuses reports no suite result.
+
 # The bootstrap is the one departure from the closure gate, which fails when
 # the base carries no gate. This one has to land once, and on the pull request
 # landing it the base has no copy by definition, so a base with no
@@ -87,16 +96,6 @@ jobs:
         if: steps.dependabot.outputs.own != 'true'
         with:
           python-version: '3.12'
-
-      # The head copy, deliberately: this step's subject is the gate this pull
-      # request proposes. The suite is negative cases with the positive
-      # controls beside them — a clean diff that must pass, a matcher that must
-      # match — plus reads of the shipped map, so a proposal that fails its own
-      # suite belongs red here.
-      - name: Test the proposed gate
-        if: steps.dependabot.outputs.own != 'true'
-        working-directory: .github/locality-gate
-        run: python -m unittest
 
       # The base copy — gate and map together — for the reason above, with the
       # one bootstrap branch argued there.
@@ -164,3 +163,13 @@ jobs:
           gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[] | {filename, previous_filename}' |
             jq -s --argjson pr "$pr_json" '$pr + {files: .}' |
             python "$RUNNER_TEMP/locality-gate/locality_gate.py" --map "$RUNNER_TEMP/locality-gate/classes.yml"
+
+      # The head copy, deliberately: this step's subject is the gate this pull
+      # request proposes. The suite is negative cases with the positive
+      # controls beside them — a clean diff that must pass, a matcher that must
+      # match — plus reads of the shipped map, so a proposal that fails its own
+      # suite belongs red here. Last, for the order argued at the top.
+      - name: Test the proposed gate
+        if: steps.dependabot.outputs.own != 'true'
+        working-directory: .github/locality-gate
+        run: python -m unittest

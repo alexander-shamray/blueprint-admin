@@ -36,9 +36,11 @@ against a throwaway repository. `docs/testing.md` has the live invocation.
 [`commit-gate.yml`](../workflows/commit-gate.yml), on every pull request with
 no path filter. **The gate that judges is read out of the base commit**, while
 the suite runs the branch's copy, so a pull request cannot supply its own
-judge. The pull request that introduces the gate has no base copy and is
-judged by its own, with a notice; a base without the gate and a head without
-it fails. The workflow file itself is the branch's copy, as in
+judge. The suite runs only after the gate has judged, so head test code cannot
+alter the run ahead of it; [`locality-gate.yml`](../workflows/locality-gate.yml)
+argues the order. The pull request that introduces the gate has no base copy
+and is judged by its own, with a notice; a base without the gate and a head
+without it fails. The workflow file itself is the branch's copy, as in
 [`locality-gate`](../workflows/locality-gate.yml): the required status check
 `main`'s ruleset lists holds a deleted job, and a job rewritten under the
 same name is the review's to read.
