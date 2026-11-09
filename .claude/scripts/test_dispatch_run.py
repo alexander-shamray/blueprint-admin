@@ -111,6 +111,7 @@ def make_worktree(path):
 def run_cli(argv, **sources):
     out = io.StringIO()
     sources.setdefault("owned_source", OWNED)
+    sources.setdefault("red_source", list)
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
         db.main(argv, **sources)
     return out.getvalue()
@@ -428,6 +429,23 @@ class LaunchTests(InRoot):
             out = run_cli(["launch", RUN, "S3", "--tasks", "todo.md", "--branch", BRANCH, "--worktree", WORKTREE])
         self.assertIn("refused: S3 is not in this run", out)
 
+    def test_a_launch_on_a_red_main_is_refused_and_changes_nothing(self):
+        # A resumed night's `moved, never launched` group was named by a `wake` that read a green main.
+        self.write_tasks(FIXTURE)
+        self.move("S1")
+        listed = f"worktree {(self.root / WORKTREE).as_posix()}\nHEAD {HEAD}\nbranch refs/heads/{BRANCH}\n\n"
+        earlier = state_dir() / "S1.refused.json"
+        earlier.write_text('{"refused": "stop file"}\n', encoding="utf-8")
+        argv = ["launch", RUN, "S1", "--tasks", "todo.md", "--branch", BRANCH, "--worktree", WORKTREE]
+        with mock.patch.object(dr, "git", lambda root, *args: listed):
+            out = run_cli(argv, red_source=lambda: ["main is red: #1895 u1", "main is red: #1896 u2"])
+        self.assertIn("refused: S1 is not launched: main is red: #1895 u1; main is red: #1896 u2", out)
+        self.assertIsNone(group_state(RUN, "S1").get("status"), "a refused launch recorded the group as running")
+        self.assertTrue(earlier.exists(), "a refused launch removed the earlier launch's files")
+        with mock.patch.object(dr, "git", lambda root, *args: listed):
+            self.assertEqual("", run_cli(argv))
+        self.assertEqual("running", group_state(RUN, "S1")["status"], "a green main launches the same group")
+
     def test_a_launch_after_a_hand_back_removes_the_earlier_launchs_files_or_is_refused(self):
         # tasks move reset the group, so nothing names the earlier launch's record as read: one a later run met beside
         # its own marker would be refused as unread, and the group would hold its slot all night.
@@ -488,7 +506,11 @@ class LaunchTests(InRoot):
         stale = Path(WORKTREE) / "artifacts" / "dispatch" / RUN / "S1.json"
         stale.parent.mkdir(parents=True)
         stale.write_text(json.dumps(MERGED_S1), encoding="utf-8")
+        # `absorb` takes what stands in the run directory as this launch's, so an earlier launch's has to go here.
+        earlier = state_dir() / "S1.json"
+        earlier.write_text(json.dumps(MERGED_S1), encoding="utf-8")
         raw = run_fake_claude(stdout=json.dumps(SUCCESS).encode("utf-8"))
+        self.assertFalse(earlier.exists())
         seen = json.loads(Path("fake/seen.json").read_text(encoding="utf-8"))
         self.assertEqual(["-p", "--output-format", "json", "--model", "opus"], seen["argv"])
         for flag in ("--dangerously-skip-permissions", "--permission-mode"):
@@ -855,9 +877,15 @@ class ClassifyTests(InRoot):
 
 
 class ResultCommandTests(InRoot):
-    def absorb(self, data, envelope=SUCCESS, code=0, crashes=0, **fields):
+    def absorb(self, data, envelope=SUCCESS, code=0, crashes=0, in_run_directory=None, **fields):
         record(RUN, "S1", **{"status": "running", "branch": BRANCH, "worktree": WORKTREE, "crashes": crashes,
                              **fields})
+        # Each call stands for a launch and its session, and a launch removes what the session before it left here.
+        copy = state_dir() / "S1.json"
+        copy.unlink(missing_ok=True)
+        if in_run_directory is not None:
+            copy.write_text(in_run_directory if isinstance(in_run_directory, str) else json.dumps(in_run_directory),
+                            encoding="utf-8")
         target = Path(WORKTREE) / "artifacts" / "dispatch" / RUN / "S1.json"
         target.parent.mkdir(parents=True, exist_ok=True)
         if data is None:
@@ -874,6 +902,26 @@ class ResultCommandTests(InRoot):
     def test_result_records_the_prs_title(self):
         self.assertEqual("S1: merged-claimed pr #1690", self.absorb(MERGED_S1)[0])
         self.assertEqual(MERGED_S1["title"], group_state(RUN, "S1")["title"])
+
+    def test_a_result_written_to_the_run_directory_is_read_rather_than_relaunched(self):
+        # H22 of run 20261108-071135 wrote to the main checkout's run directory; a hand-back there read as a crash,
+        # and its reason was lost with the file.
+        for outcome in ("handed-back", "stopped"):
+            with self.subTest(outcome=outcome):
+                result = {**HANDED_S1, "outcome": outcome, "reason": "needs a key"}
+                self.assertEqual(f"S1: {outcome} - needs a key", self.absorb(None, in_run_directory=result)[0])
+                self.assertEqual("needs a key", group_state(RUN, "S1")["reason"])
+
+    def test_a_merge_written_to_the_run_directory_is_a_claim(self):
+        self.assertEqual("S1: merged-claimed pr #1690", self.absorb(None, in_run_directory=MERGED_S1)[0])
+
+    def test_a_bad_result_in_the_run_directory_is_still_a_crash(self):
+        self.assertIn("S1: relaunch - invalid result: ", self.absorb(None, in_run_directory="not json")[0])
+
+    def test_the_worktrees_result_wins_over_one_in_the_run_directory(self):
+        other = {**HANDED_S1, "reason": "the run directory's"}
+        self.assertEqual("S1: merged-claimed pr #1690", self.absorb(MERGED_S1, in_run_directory=other)[0])
+        self.assertEqual(MERGED_S1, json.loads((state_dir() / "S1.json").read_text(encoding="utf-8")))
 
     def test_usage_sums_every_session_the_group_ran(self):
         earlier = {"input_tokens": 100, "cache_read_input_tokens": 1000, "output_tokens": 50}
@@ -1210,13 +1258,13 @@ class BerserkTests(InRoot):
     def start(self, *extra):
         return run_cli(["start", "--pairs", "2", "--tasks", "todo.md", *extra])
 
-    def wake(self, text):
+    def wake(self, text, **sources):
         with open("todo.md", "w", encoding="utf-8", newline="") as handle:
             handle.write(text)
         with mock.patch.object(dr, "PROJECTS", self.root / "projects"):
             return run_cli(["wake", RUN, "--tasks", "todo.md", "--today", "2026-11-01"],
                            body_source=lambda n: self.BODIES.get(n, ""), open_source=set,
-                           branch_source=NO_BRANCH).splitlines()
+                           branch_source=NO_BRANCH, **sources).splitlines()
 
     def state(self, **fields):
         dr.save_state(state_dir(), {"run": RUN, "pairs": 2, "lang": "en", "berserk": True, "groups": {}, **fields})
@@ -1283,6 +1331,14 @@ class BerserkTests(InRoot):
         lines = self.wake(text)
         self.assertEqual(["released Z1: waits on a human", "launch: Z1"], lines[-2:])
         self.assertEqual({"Z1": "waits on a human"}, dr.load_state(state_dir())["released"])
+
+    def test_a_launch_a_red_main_held_released_nothing(self):
+        # The report names what the flag released, so a launch that did not happen must not record one.
+        self.state()
+        lines = self.wake(tasks_of(line(depends="OWNER")), red_source=lambda: ["main is red: #9 u"])
+        self.assertEqual(["main is red: #9 u", "launch: none"], lines[-2:])
+        self.assertFalse(any(text.startswith("released ") for text in lines), lines)
+        self.assertNotIn("released", dr.load_state(state_dir()))
 
     def test_a_wave_launches_its_ready_groups_before_the_released(self):
         self.state(pairs=1)
@@ -1374,7 +1430,7 @@ class WakeTests(InRoot):
     BODIES = {1682: "touches definitions.json", 1683: "deploy/rabbitmq/definitions.json",
               1681: "src/gateway/program.cs", 1685: "a.cs", 1686: "b.cs", 1440: "docs/x.md"}
 
-    def wake(self, text=FIXTURE, pairs=2):
+    def wake(self, text=FIXTURE, pairs=2, **sources):
         if not (state_dir() / "state.json").is_file():
             dr.save_state(state_dir(), {"run": RUN, "pairs": pairs, "lang": "en", "groups": {}})
         with open("todo.md", "w", encoding="utf-8", newline="") as handle:
@@ -1382,7 +1438,50 @@ class WakeTests(InRoot):
         with mock.patch.object(dr, "PROJECTS", self.root / "projects"):
             return run_cli(["wake", RUN, "--tasks", "todo.md", "--today", "2026-11-01"],
                            body_source=lambda n: self.BODIES.get(n, ""), open_source=lambda: {1440},
-                           branch_source=NO_BRANCH).splitlines()
+                           branch_source=NO_BRANCH, **sources).splitlines()
+
+    def test_an_open_main_is_red_issue_holds_what_would_have_launched(self):
+        # blueprint-backend's run 20261109-093606: `launch: J2` beside the issue that had just stopped J1 at step 6.
+        self.assertEqual("launch: S1 S3", self.wake()[-1])
+        red = ["main is red: #1895 u1", "main is red: #1896 u2"]
+        lines = self.wake(red_source=lambda: red)
+        self.assertEqual([*red, "launch: none"], lines[-3:])
+        self.assertEqual(1, sum(text.startswith("launch:") for text in lines), lines)
+        self.assertEqual("launch: S1 S3", self.wake()[-1], "a later wake reads it again, so a green main launches")
+
+    def test_a_red_main_holds_beside_a_running_group_and_ends_no_night(self):
+        record(RUN, "S9", status="running")
+        lines = self.wake(red_source=lambda: ["main is red: #1 u"])
+        self.assertIn("running: S9", lines)
+        self.assertEqual(["main is red: #1 u", "launch: none"], lines[-2:])
+
+    def test_a_read_that_cannot_say_main_is_green_launches_nothing(self):
+        def failed():
+            raise db.Refusal("main-red-open.sh exited 2: cannot list the open issues")
+        printed = "\n".join(self.wake(red_source=failed))
+        self.assertIn("refused: main-red-open.sh exited 2", printed)
+        self.assertNotIn("launch:", printed)
+
+    def test_a_night_with_nothing_to_launch_does_not_read_it(self):
+        def failed():
+            raise AssertionError("no launch is at stake, so a failed read must not cost this wake its ending")
+        self.assertEqual("end: drained", self.wake(tasks_of(line(depends="OWNER")), red_source=failed)[-1])
+        record(RUN, "S9", status="running")
+        self.assertEqual("launch: none", self.wake(tasks_of(line(depends="OWNER")), red_source=failed)[-1])
+
+    def test_the_command_line_reads_the_helper_from_the_root_it_was_given(self):
+        with mock.patch.object(db, "main_red", return_value=["main is red: #1 u"]) as read:
+            lines = self.wake(red_source=None)
+        read.assert_called_once_with(".")
+        self.assertEqual(["main is red: #1 u", "launch: none"], lines[-2:])
+
+    def test_the_runbook_says_what_a_red_main_asks_of_the_dispatcher(self):
+        runbook = " ".join((Path(dr.__file__).parent.parent / "commands" / "dispatch.md").read_text(
+            encoding="utf-8").split())
+        loop = runbook[runbook.index("2. **The night loop.**"):runbook.index("**Launch a group**")]
+        self.assertIn("`main is red: #<n> <url>`", loop)
+        self.assertIn("no rerun, no close and no revert from this session: each is the owner's", loop)
+        self.assertIn("each `main is red` line a `wake` held on, under *Needs a human*", runbook)
 
     def test_a_stop_file_ends_the_night_on_the_next_wake(self):
         self.assertEqual("launch: S1 S3", self.wake()[-1])
