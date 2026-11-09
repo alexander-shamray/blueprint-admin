@@ -111,7 +111,8 @@ same list: a close comment is a comment on an issue, which the spec's
 `--dry-run` is the builder's flag the spec's §3 allows: it runs step 0's
 checks and `board`, says what the rebuild would change and what would
 launch, and writes nothing to the list or GitHub, so the owner can see a
-night before starting one.
+night before starting one. It does not read a red `main`, so what it names is
+what a green one would launch (*A red main*).
 
 ## The interview
 
@@ -257,7 +258,11 @@ one.
 ## What an executor returns
 
 The executor writes `<group>.json` in its own worktree, and `result` copies
-it into the run and checks it as untrusted data: a missing, unparsable or
+it into the run and checks it as untrusted data. One written to the main
+checkout's run directory instead is read there, under the same checks: `run`
+removed any earlier copy before it started the executor, so what stands there
+is this launch's, and a hand-back's `reason` is not lost to a relaunch. A
+missing, unparsable or
 mis-shaped result is a crash, never a success (spec §6.3), unless GitHub shows
 the merge at the worktree's tip (*Waking*). A claimed merge is believed only
 once `verify` has read it from GitHub — merged, at that oid, from that branch,
@@ -318,9 +323,10 @@ executor returns*). A read that fails, or a predicate that does not hold,
 leaves the crash as it was, and so does a sync whose tip is not the head its
 proof bound (*The proof binds*). Run 20261108-071135 relaunched five groups of
 twenty-one: one had merged and written its result to the main checkout's run
-directory rather than its worktree's, which `result` does not read, and four
-had ended the turn on `/commit`'s report, before any merge, which only a
-relaunch can recover. A turn ended there ends a `claude -p` session, which is
+directory rather than its worktree's, which `result` did not read then and
+does now (*What an executor returns*), and four had ended the turn on
+`/commit`'s report, before any merge, which only a relaunch can recover. A turn
+ended there ends a `claude -p` session, which is
 why `/ship --dispatched` says a step's status is not a reply.
 
 A `Model` cell `launch` would refuse holds its group at `board` and `wake`,
@@ -362,6 +368,60 @@ that ran: a hand-back, the cautious side. Recording either writes
 still holds the slot; what this separates is a marker that only another
 process holds.
 
+## A red main
+
+An open `main is red` issue stops every dispatched executor at `/ship` step 6,
+whatever its own checks read, and a run's leading tag is not the argument that
+exempts the run answering it (`docs/commands/ship.md`, *Step 6: the gates*). A
+group launched beside one spends its session and goes back. On
+blueprint-backend's run 20261109-093606 a group stopped there after 15 million
+tokens and about $10.53, every check on its pull request green, and `wake` then
+named the next group to the same stop, which the dispatcher held by hand.
+
+So `wake` reads `main-red-open.sh` once it has a group to launch, and prints
+each open issue and `launch: none` in place of the launch. It reads nothing
+where no launch is at stake, so a drained night stays `end: drained` and a
+failed read cannot cost it that ending. A read that cannot say `main` is green
+is a refusal, which launches nothing, as a failed read of the open issues is.
+A held launch records no release, since *Decided without the owner* names what
+the flag released from the one read that launched it. `sync-ready` and
+`sync-launch` read it too: a sync's executor takes the same stop after its
+round, so its refusal waits for a later exit, as one naming a running group
+does.
+
+It holds and does not end the night. A running executor is left to its own step
+6, and each exit reads again, so a `main` turned green launches what was held.
+With nothing left to wake the session the night is over (*When the night
+ends*), and the report names each issue under *Needs a human*, because a backlog
+left unstarted would otherwise read as nothing being ready.
+
+**The answers are the owner's.** `docs/harness/working-rules.md`, *CI*, says a
+rerun comes first and an issue closes on its green run. The dispatcher does none
+of it: it holds no grant for `gh run rerun`, raw `gh issue close` is denied, and
+nothing the night does widens a grant (*Grants*), while a revert is a landing
+and which of a red `main`'s answers lands first is the owner's. So the owner
+reruns the failed jobs with `gh run rerun <run id> --failed`, comments on the
+flaky tests tracker and closes the issue on a green run, or reverts, and the
+next `wake` launches. Giving the dispatcher the rerun was the other answer, and
+it would save a night a flake holds; it is rejected because it needs a new write
+grant on a session nobody is watching.
+
+`launch` reads it too, so resume's `moved, never launched` cannot start a group
+an earlier `wake` named before `main` turned red: it refuses, and the
+dispatcher puts the group `tasks back` as for any refused launch, so its rows
+return marked `OWNER`, no later `wake` launches it, and its worktree stays for
+the owner. That group is not held for a green `main`; the alternative, leaving
+it moved so the next resume offers it again, is rejected because no `wake` line
+would launch it in the meantime. It reads after the group's own checks and
+before anything is written.
+
+Three residues are accepted. A relaunch reads nothing, since its group already
+holds its worktree and its session's work, and a hold would leave a running
+group that no `wake` line relaunches. `--dry-run` reads nothing either, since
+the dispatcher holds no grant on the helper and a read through
+`dispatch_board.py` would only preview what the night may hold. And the signal
+lags as step 6's does: the issue opens only once the push run has finished.
+
 ## Issue text stays off the command line
 
 A group's task and a placed row's cells come from issue titles, and anyone can
@@ -402,6 +462,12 @@ branch for a launch that was never going to happen. `sync-drop`, before the
 report, offers `git-branch-drop.sh` every local branch named as a sync head:
 what merged goes, as does one whose pull request closed with origin's branch
 gone at this tip, which no merge can land and which a worktree does not hold.
+It first offers `git-sync-head-drop.sh` every branch on origin named as a sync
+head, since `harness_sync` deletes a superseded one and nothing deletes a merged
+one: the repository's delete-on-merge would, but that is the owner's setting.
+Each head costs GitHub reads and a push, so the first run over a backlog is
+slow, which is why step 3 gives it a ten-minute `timeout`; it is idempotent, and
+a run cut short leaves the rest for the next.
 
 **The proof binds.** The verify at step 0.3 and after each exit runs in the
 main checkout, because the executor runs that head's own copy of `sync_pr.py`,
