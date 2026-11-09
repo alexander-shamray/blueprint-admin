@@ -117,7 +117,7 @@ Directory.Packages.props        BlueprintAdmin.slnx
 
 The rules every target shares, on keeping `main` green, closing issues and
 Dependabot pull requests among them, are `docs/harness/working-rules.md`'s.
-What only this repository has:
+What this repository adds:
 
 - FakePlatform is first-class: a new endpoint works against the fakes and the
   Playwright smoke covers its screen.
