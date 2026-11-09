@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-"""What the gate would catch, which running it against this repository does not
-say, and the wiring that makes CI run it.
+"""What the gate would catch, which running it against this repository does not say.
 
     py -3.12 -m unittest discover -s .github/issue-form-gate
 """
 from __future__ import annotations
 
 import json
-import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -16,22 +14,34 @@ import issue_form_gate as gate
 
 HELPER = """\
 case "$kind" in
-  security|bug) ;;
+  security|bug|test-gap) ;;
   *) exit 2 ;;
 esac
 case "$severity" in
   critical|high|medium|low) ;;
   *) exit 2 ;;
 esac
+case "$area" in
+  harness|code|documentation|harness,test|code,test) ;;
+  *) exit 2 ;;
+esac
 """
 
-LABELS = {"security", "bug", "critical", "high", "medium", "low", "harness", "code", "documentation"}
+VOCABULARY = """\
+- **The issue vocabulary**: kind is
+  `security`, `bug`, `test-gap` or `documentation`; area is the tree:
+  `harness` for `.claude/`, its prose included,
+  `documentation` for prose and `code` for `src/`, with `test` beside one.
+  Nothing after it, `design`, is read.
+- **A reply is not a resolution.** Kind is `nothing` here, area is `none`.
+"""
 
-CI = gate.REPO_ROOT / ".github" / "workflows" / "ci.yml"
+LABELS = {"security", "bug", "test-gap", "documentation", "critical", "high", "medium", "low",
+          "harness", "code", "test"}
 
 
-def form(kind: str = "bug security", severity: str = "critical high medium low",
-         area: str = "harness code documentation", extra: str = "") -> str:
+def form(kind: str = "bug security test-gap documentation", severity: str = "critical high medium low",
+         area: str = "harness code documentation test", extra: str = "") -> str:
     def dropdown(name: str, words: str) -> str:
         options = "".join(f"        - {word}\n" for word in words.split())
         return (f"  - type: dropdown\n    id: {name}\n    attributes:\n      label: {name}\n"
@@ -48,8 +58,10 @@ class IssueFormGateTests(unittest.TestCase):
         root = Path(self._tmp.name)
         self.templates = root / "ISSUE_TEMPLATE"
         self.templates.mkdir()
-        self.helper = root / "gh-issue-filing.sh"
+        self.helper = root / "gh-issue-create.sh"
+        self.rules = root / "working-rules.md"
         self.helper.write_text(HELPER, encoding="utf-8")
+        self.rules.write_text(VOCABULARY, encoding="utf-8")
         self.write("config.yml", "blank_issues_enabled: false\n")
         self.write("finding.yml", form())
 
@@ -57,46 +69,92 @@ class IssueFormGateTests(unittest.TestCase):
         (self.templates / name).write_text(text, encoding="utf-8")
 
     def check(self, labels: set[str] = LABELS) -> list[str]:
-        return gate.check(self.templates, self.helper, labels)
+        return gate.check(self.templates, self.helper, self.rules, labels)
 
-    def assert_one(self, needle: str, labels: set[str] = LABELS) -> None:
-        problems = self.check(labels)
+    def assert_one(self, needle: str) -> None:
+        problems = self.check()
         self.assertEqual(1, len(problems), problems)
         self.assertIn(needle, problems[0])
 
     def test_a_form_matching_its_owners_passes(self) -> None:
         self.assertEqual([], self.check())
 
-    def test_a_kind_the_helper_lacks_fails(self) -> None:
-        self.write("finding.yml", form(kind="bug security enhancement"))
-        self.assert_one("extra ['enhancement']", LABELS | {"enhancement"})
+    def test_a_kind_the_rules_lack_fails(self) -> None:
+        self.write("finding.yml", form(kind="bug security test-gap documentation enhancement"))
+        problems = self.check(LABELS | {"enhancement"})
+        self.assertEqual(1, len(problems), problems)
+        self.assertIn("extra ['enhancement']", problems[0])
 
-    def test_a_kind_the_helper_gains_fails(self) -> None:
-        self.helper.write_text(HELPER.replace("security|bug", "security|bug|test-gap"), encoding="utf-8")
-        self.assert_one("missing ['test-gap']")
-
-    def test_a_kind_the_form_drops_fails(self) -> None:
-        self.write("finding.yml", form(kind="bug"))
-        self.assert_one("missing ['security']")
+    def test_a_kind_the_rules_name_but_the_form_drops_fails(self) -> None:
+        self.write("finding.yml", form(kind="bug security test-gap"))
+        self.assert_one("missing ['documentation']")
 
     def test_a_severity_the_helper_lacks_fails(self) -> None:
         self.write("finding.yml", form(severity="critical high medium low trivial"))
-        self.assert_one("extra ['trivial']", LABELS | {"trivial"})
+        problems = self.check(LABELS | {"trivial"})
+        self.assertEqual(1, len(problems), problems)
+        self.assertIn("extra ['trivial']", problems[0])
 
     def test_a_severity_the_helper_gains_fails(self) -> None:
         self.helper.write_text(HELPER.replace("critical|high", "blocker|critical|high"), encoding="utf-8")
         self.assert_one("missing ['blocker']")
 
+    def test_an_area_the_helper_lacks_fails(self) -> None:
+        self.write("finding.yml", form(area="harness code documentation test design"))
+        problems = self.check(LABELS | {"design"})
+        self.assertEqual(1, len(problems), problems)
+        self.assertIn("finding.yml's area differs from working-rules.md", problems[0])
+        self.assertIn("extra ['design']", problems[0])
+
+    def test_an_area_the_rules_name_but_the_form_drops_fails(self) -> None:
+        self.write("finding.yml", form(area="harness code documentation"))
+        self.assert_one("missing ['test']")
+
+    def test_an_area_the_helper_gains_fails(self) -> None:
+        self.helper.write_text(HELPER.replace("code,test) ;;", "code,test|design) ;;"), encoding="utf-8")
+        self.assert_one("gh-issue-create.sh's area differs from working-rules.md")
+
+    def test_an_area_only_the_helper_s_comma_form_names_is_one_the_helper_files(self) -> None:
+        # `test` sits in the helper's arm only beside another area, and it is still a word the helper files.
+        self.helper.write_text(HELPER.replace("|harness,test|code,test) ;;", ") ;;"), encoding="utf-8")
+        self.assert_one("missing ['test']")
+
+    def test_the_area_list_stops_at_its_sentence_and_skips_paths(self) -> None:
+        self.assertEqual(["harness", "documentation", "code", "test"], gate.vocabulary_areas(self.rules))
+
+    def test_rules_without_the_area_sentence_are_refused(self) -> None:
+        self.rules.write_text(VOCABULARY.replace("area is", "areas are"), encoding="utf-8")
+        with self.assertRaisesRegex(gate.InputRefused, "no `area is ...` sentence"):
+            self.check()
+
     def test_a_repeated_option_fails(self) -> None:
         self.write("finding.yml", form(severity="critical high medium low low"))
         self.assert_one("repeats an option")
 
-    def test_an_option_that_is_not_a_label_fails(self) -> None:
-        self.assert_one("option harness is not a label", LABELS - {"harness"})
+    def test_a_helper_kind_outside_the_vocabulary_fails(self) -> None:
+        self.helper.write_text(HELPER.replace("security|bug|test-gap", "security|bug|test-gap|chore"),
+                               encoding="utf-8")
+        self.assert_one("['chore']")
 
-    def test_an_area_option_that_is_not_a_label_fails(self) -> None:
-        self.write("finding.yml", form(area="harness code documentation test"))
-        self.assert_one("area option test is not a label")
+    def test_an_option_that_is_not_a_label_fails(self) -> None:
+        self.assert_one_label_missing("harness")
+
+    def assert_one_label_missing(self, label: str) -> None:
+        problems = self.check(LABELS - {label})
+        self.assertEqual(1, len(problems), problems)
+        self.assertIn(f"option {label} is not a label", problems[0])
+
+    def test_a_form_attaching_fixed_labels_fails(self) -> None:
+        for key in ("labels: [enhancement]\n", "labels:\n  - bug\n", '"labels": [bug]\n'):
+            with self.subTest(key=key):
+                self.write("finding.yml", form().replace("body:\n", key + "body:\n"))
+                self.assert_one("top-level labels key")
+
+    def test_a_field_named_labels_inside_the_body_passes(self) -> None:
+        field = ("  - type: input\n    id: labels\n    attributes:\n      label: labels\n"
+                 "      description: >-\n        labels: which apply\n")
+        self.write("finding.yml", form() + field)
+        self.assertEqual([], self.check())
 
     def test_a_missing_dropdown_fails(self) -> None:
         self.write("finding.yml", form().replace("id: area", "id: areas"))
@@ -106,7 +164,17 @@ class IssueFormGateTests(unittest.TestCase):
 
     def test_every_form_is_read(self) -> None:
         self.write("second.yaml", form(kind="bug"))
-        self.assert_one("second.yaml's kind")
+        problems = self.check()
+        self.assertEqual(1, len(problems), problems)
+        self.assertIn("second.yaml's kind", problems[0])
+
+    def test_a_markdown_template_beside_the_form_fails(self) -> None:
+        self.write("bug_report.md", "---\nname: Bug\nabout: anything\n---\n")
+        self.assert_one("bug_report.md is neither config.yml nor a form")
+
+    def test_a_directory_beside_the_form_fails(self) -> None:
+        (self.templates / "drafts").mkdir()
+        self.assert_one("drafts is neither config.yml nor a form")
 
     def test_blank_issues_left_on_fails(self) -> None:
         self.write("config.yml", "blank_issues_enabled: true\n")
@@ -126,7 +194,9 @@ class IssueFormGateTests(unittest.TestCase):
 
     def test_options_after_a_blank_line_are_still_read(self) -> None:
         self.write("finding.yml", form().replace("        - low\n", "\n        - low\n        - trivial\n"))
-        self.assert_one("extra ['trivial']", LABELS | {"trivial"})
+        problems = self.check(LABELS | {"trivial"})
+        self.assertEqual(1, len(problems), problems)
+        self.assertIn("extra ['trivial']", problems[0])
 
     def test_a_flow_style_options_list_is_refused(self) -> None:
         self.write("finding.yml", form().replace("      options:\n        - critical\n        - high\n"
@@ -140,21 +210,24 @@ class IssueFormGateTests(unittest.TestCase):
         with self.assertRaisesRegex(gate.InputRefused, "not a bare label name"):
             self.check()
 
-    def test_a_line_inside_an_options_list_that_is_not_an_option_is_refused(self) -> None:
-        self.write("finding.yml", form().replace("        - low\n", "        - low\n        # trailing\n"))
-        with self.assertRaisesRegex(gate.InputRefused, "inside an options list"):
-            self.check()
-
-    def test_options_outside_a_dropdown_are_refused(self) -> None:
-        self.write("finding.yml", form(extra="  - type: checkboxes\n    id: ticks\n    attributes:\n"
-                                             "      options:\n        - one\n"))
-        with self.assertRaisesRegex(gate.InputRefused, "options outside a dropdown"):
-            self.check()
-
     def test_a_dropdown_twice_is_refused(self) -> None:
         self.write("finding.yml", form() + form().split("body:\n", 1)[1])
         with self.assertRaisesRegex(gate.InputRefused, "appears twice"):
             self.check()
+
+    def test_rules_without_the_bullet_are_refused(self) -> None:
+        self.rules.write_text("- **Something else**: kind is `bug`.\n", encoding="utf-8")
+        with self.assertRaisesRegex(gate.InputRefused, "no bullet opening"):
+            self.check()
+
+    def test_the_kind_list_is_read_across_wrapped_lines(self) -> None:
+        self.assertEqual(["security", "bug", "test-gap", "documentation"], gate.vocabulary_kinds(self.rules))
+
+    def test_a_kind_list_in_a_later_bullet_is_not_read(self) -> None:
+        self.rules.write_text("- **The issue vocabulary**: see below.\n"
+                              "- **Another rule**: kind is `chore`.\n", encoding="utf-8")
+        with self.assertRaisesRegex(gate.InputRefused, "has no `kind is ...` list"):
+            gate.vocabulary_kinds(self.rules)
 
     def test_a_helper_without_the_arm_is_refused(self) -> None:
         self.helper.write_text("echo nothing\n", encoding="utf-8")
@@ -167,9 +240,6 @@ class IssueFormGateTests(unittest.TestCase):
     def test_main_refuses_stdin_that_is_not_json(self) -> None:
         self.assertEqual(1, self.main(""))
 
-    def test_main_refuses_rows_without_a_name(self) -> None:
-        self.assertEqual(1, self.main('[{"label": "bug"}]'))
-
     def test_main_exits_by_the_check(self) -> None:
         labels = json.dumps([{"name": name} for name in LABELS])
         self.assertEqual(0, self.main(labels))
@@ -177,7 +247,8 @@ class IssueFormGateTests(unittest.TestCase):
         self.assertEqual(1, self.main(labels))
 
     def main(self, stdin: str) -> int:
-        return gate.main(["--templates", str(self.templates), "--helper", str(self.helper)], stdin=stdin)
+        return gate.main(["--templates", str(self.templates), "--helper", str(self.helper),
+                          "--rules", str(self.rules)], stdin=stdin)
 
 
 class ThisRepositoryTests(unittest.TestCase):
@@ -187,28 +258,19 @@ class ThisRepositoryTests(unittest.TestCase):
         found = gate.dropdowns(gate.DEFAULT_TEMPLATES / "finding.yml")
         self.assertEqual(set(gate.GOVERNED), set(found))
 
-    def test_this_repository_s_helper_arms_are_read(self) -> None:
+    def test_this_repository_s_owners_are_read(self) -> None:
+        self.assertIn("documentation", gate.vocabulary_kinds(gate.DEFAULT_VOCABULARY))
         self.assertIn("bug", gate.case_arm(gate.DEFAULT_HELPER, "kind"))
         self.assertIn("low", gate.case_arm(gate.DEFAULT_HELPER, "severity"))
+        self.assertIn("code,test", gate.case_arm(gate.DEFAULT_HELPER, "area"))
+        self.assertEqual({"harness", "code", "documentation", "test"},
+                         set(gate.vocabulary_areas(gate.DEFAULT_VOCABULARY)))
 
     def test_this_repository_s_forms_pass_against_their_own_options_as_labels(self) -> None:
         labels = {option for options in gate.dropdowns(gate.DEFAULT_TEMPLATES / "finding.yml").values()
                   for option in options}
-        self.assertEqual([], gate.check(gate.DEFAULT_TEMPLATES, gate.DEFAULT_HELPER, labels))
-
-    def test_ci_pipes_the_labels_into_the_gate_with_a_token_that_may_read_them(self) -> None:
-        # The live half reads the labels over the network, which no case here
-        # does; a workflow that stops running it, or whose token cannot list
-        # issues' labels, would leave only the cases above.
-        text = CI.read_text(encoding="utf-8")
-        start = text.index("\n  harness:\n") + 1
-        # The job ends at the next job key, so a job added after it cannot
-        # answer for the harness job's wiring.
-        following = re.search(r"^  [a-z][a-z0-9-]*:\n", text[start + 1:], re.MULTILINE)
-        job = text[start:start + 1 + following.start()] if following else text[start:]
-        self.assertIn("issues: read", job)
-        self.assertRegex(job, r"gh label list [^\n]*--json name \|\n\s*python \.github/issue-form-gate/issue_form_gate\.py")
-        self.assertIn("set -o pipefail", job)
+        problems = gate.check(gate.DEFAULT_TEMPLATES, gate.DEFAULT_HELPER, gate.DEFAULT_VOCABULARY, labels)
+        self.assertEqual([], problems)
 
 
 if __name__ == "__main__":

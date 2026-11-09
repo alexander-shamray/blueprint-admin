@@ -2,12 +2,13 @@
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "Edit|Write|NotebookEdit|MultiEdit|Bash",
+        "matcher": "Edit|Write|NotebookEdit|MultiEdit|Bash|PowerShell",
         "hooks": [
           {
             "type": "command",
-            "command": "CBX_NO_SKILL_AUTO_UPDATE=1 codebase-index update >/dev/null 2>&1 &",
-            "timeout": 5
+            "command": "py -3.12 -P -c \"import os, runpy; runpy.run_path(os.environ['CLAUDE_PROJECT_DIR'] + '/.claude/hooks/refresh-index.py', run_name='__main__')\"",
+            "timeout": 15,
+            "statusMessage": "refreshing the code index"
           }
         ]
       }
@@ -17,8 +18,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "CBX_NO_SKILL_AUTO_UPDATE=1 codebase-index update >/dev/null 2>&1 &",
-            "timeout": 5
+            "command": "py -3.12 -P -c \"import os, runpy; runpy.run_path(os.environ['CLAUDE_PROJECT_DIR'] + '/.claude/hooks/refresh-index.py', run_name='__main__')\"",
+            "timeout": 15,
+            "statusMessage": "refreshing the code index"
           }
         ]
       }

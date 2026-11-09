@@ -1,0 +1,476 @@
+"""gh-issue-create.sh: the issue a sweep files, with no free parameter.
+
+The shared harness and the reason it shells out rather than
+re-implementing are `review_helpers.py`'s.
+"""
+
+import os
+import shutil
+import subprocess
+import tempfile
+import textwrap
+import unittest
+from pathlib import Path
+
+from review_helpers import (
+    SCRIPTS,
+    BASH,
+    setUpModule,
+)
+
+
+class IssueHelperHasNoFreeParameter(unittest.TestCase):
+    """The issue helper leaves a sweep no free parameter.
+
+    `-R` unpinned puts the issue in whichever repository a finding names, and
+    `--label` unpinned reaches any label in any spelling. A title beginning
+    with `/` needs `MSYS2_ARG_CONV_EXCL` or it files as a Windows path, and an
+    env-prefixed `gh` no longer matches a `gh issue create` prefix grant, so
+    the helper sets it.
+
+    A refusing `gh` sits first on PATH for every case. The negatives exit
+    before `gh repo view` is reached, so they need no network — and the stub is
+    what proves it, because a validation that regressed would otherwise reach a
+    real `gh` and file a real issue. The positive control answers the calls the
+    helper and its label sibling make, and records the argv and the
+    environment the `issue create` child actually received.
+    """
+
+    HELPER = SCRIPTS / "gh-issue-create.sh"
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(prefix="issue-stub-")
+        d = Path(self.dir)
+        gh = d / "gh"
+        gh.write_text(
+            textwrap.dedent(
+                f"""\
+                #!/usr/bin/env bash
+                printf '%s\\n' "$*" >> {(d / 'argv').as_posix()!r}
+                case "$*" in
+                  *"repo view"*)
+                    echo 'acme/widgets'; exit 0
+                    ;;
+                  *"label list"*)
+                    printf '%s\\n' security bug test-gap critical high medium low \\
+                      harness code documentation test; exit 0
+                    ;;
+                  *"issue create"*)
+                    printf '%s\\n' "${{MSYS2_ARG_CONV_EXCL-unset}}" > {(d / 'conv').as_posix()!r}
+                    cat > {(d / 'body').as_posix()!r}
+                    exit 0
+                    ;;
+                esac
+                echo "stub gh: unexpected call: $*" >&2
+                exit 99
+                """
+            ),
+            encoding="utf-8",
+        )
+        gh.chmod(0o755)
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def run_helper(self, *args, body=""):
+        env = dict(os.environ)
+        env["PATH"] = self.dir + os.pathsep + env["PATH"]
+        return subprocess.run(
+            [BASH, str(self.HELPER), *args],
+            capture_output=True, text=True, encoding="utf-8", input=body, env=env,
+        )
+
+    def calls(self):
+        f = Path(self.dir) / "argv"
+        return f.read_text(encoding="utf-8").splitlines() if f.exists() else []
+
+    def assert_refused_before_gh(self, result):
+        # Exit 2 is the validation code, and an empty argv file is the proof
+        # that the refusal happened before `gh repo view` rather than after it.
+        self.assertEqual(2, result.returncode, result.stderr)
+        self.assertEqual([], self.calls())
+
+    TRAILER = "Filed by an authorised sweep and verified at filing by a second read-only auditor."
+    HAND_TRAILER = "Filed by hand rather than by a sweep: no second auditor verified it at filing."
+    MUTATION_TRAILER = ("Filed by an authorised mutation sweep: each mutant listed ran against its suite"
+                        " and was not detected.")
+    STDIN = f"a title\n\nthe body\n\n{TRAILER}\n"
+    HAND_STDIN = f"a title\n\nthe body\n\n{HAND_TRAILER}\n"
+    MUTATION_STDIN = f"a title\n\nthe body\n\n{MUTATION_TRAILER}\n"
+    REQUEST_TRAILER = "Filed by hand as a requested change, not a finding: nothing was verified at filing."
+    REQUEST_STDIN = f"a title\n\nthe body\n\n{REQUEST_TRAILER}\n"
+
+    def test_no_arguments_prints_the_usage_line(self):
+        result = self.run_helper()
+        self.assert_refused_before_gh(result)
+        self.assertIn(
+            "usage: gh-issue-create.sh <security|bug|test-gap|enhancement> <critical|high|medium|low>"
+            " <harness|code|documentation|harness,test|code,test> <sweep|mutation|hand|request>"
+            " < title, blank line, body ending in the trailer",
+            result.stderr,
+        )
+
+    def test_the_argument_count_is_exactly_four(self):
+        # A title on the command line is a free parameter: it crosses the
+        # parent's shell before the helper runs. A call missing the area is
+        # refused rather than read with the route in the area's place.
+        self.assert_refused_before_gh(self.run_helper("bug", body=self.STDIN))
+        self.assert_refused_before_gh(self.run_helper("bug", "low", body=self.STDIN))
+        self.assert_refused_before_gh(self.run_helper("bug", "low", "sweep", body=self.STDIN))
+        self.assert_refused_before_gh(self.run_helper("a title", "bug", "low", "code", "sweep", body=self.STDIN))
+        self.assert_refused_before_gh(self.run_helper("bug", "low", "code", "sweep", "--repo", body=self.STDIN))
+
+    def test_a_kind_outside_the_vocabulary_is_refused(self):
+        # `documentation` is a real label on this tracker and is refused on
+        # purpose: no sweep files one and a wrong statement filed by hand is a
+        # `bug`, so docs/harness/working-rules.md, *Issues and the task list*,
+        # says the issue vocabulary is wider than the helper. A near spelling of
+        # `enhancement` is refused like any other word.
+        for kind in ("documentation", "feature", "Enhancement", "enhancements", "Security", "security --force",
+                     "-R other/repo", ""):
+            with self.subTest(kind=kind):
+                self.assert_refused_before_gh(self.run_helper(kind, "high", "code", "sweep", body=self.STDIN))
+
+    def test_a_severity_outside_the_four_is_refused(self):
+        for severity in ("info", "High", "high --force", "-R other/repo", ""):
+            with self.subTest(severity=severity):
+                self.assert_refused_before_gh(self.run_helper("bug", severity, "code", "sweep", body=self.STDIN))
+
+    def test_an_area_outside_the_set_is_refused(self):
+        # The area becomes one `--label` per comma-separated word, so a word
+        # outside the set, a second tree, `test` alone or beside documentation,
+        # and a flag riding on a comma are each refused rather than labelled.
+        for area in ("Code", "codes", "test", "documentation,test", "test,code", "harness,code", "code,test,test",
+                     "code,", ",test", "code test", "code,--repo", "code,-R other/repo", "--label bug", ""):
+            with self.subTest(area=area):
+                result = self.run_helper("bug", "low", area, "sweep", body=self.STDIN)
+                self.assert_refused_before_gh(result)
+                self.assertIn("not an area", result.stderr)
+
+    def test_an_empty_title_is_refused(self):
+        self.assert_refused_before_gh(self.run_helper("bug", "low", "code", "sweep", body="\n\nthe body\n"))
+        self.assert_refused_before_gh(self.run_helper("bug", "low", "code", "sweep", body=""))
+
+    def test_a_title_that_is_a_heading_is_refused(self):
+        # A body that opens with a heading and a blank line passes the blank-separator check when it is handed
+        # over without its title line, and would be filed under the heading.
+        for title in ("## Summary", "# Summary", "#Summary", "### Where"):
+            with self.subTest(title=title):
+                result = self.run_helper("bug", "low", "code", "sweep",
+                                         body=f"{title}\n\nthe body\n\n{self.TRAILER}\n")
+                self.assert_refused_before_gh(result)
+                self.assertIn("begins with a hash", result.stderr)
+
+    def test_a_title_with_a_hash_inside_is_filed(self):
+        # The control: only a leading hash is refused, so a title naming C# or an issue still files.
+        result = self.run_helper("bug", "low", "code", "sweep",
+                                 body=f"fix: C# parsing of #12\n\nthe body\n\n{self.TRAILER}\n")
+        self.assertEqual(0, result.returncode, result.stderr)
+        create = [c for c in self.calls() if c.startswith("issue create ")]
+        self.assertIn("--title fix: C# parsing of #12", create[0])
+
+    def test_a_body_without_the_blank_separator_is_refused(self):
+        # A body piped without its title line would otherwise file under its
+        # own first sentence, with the second sentence lost into the title.
+        self.assert_refused_before_gh(self.run_helper("bug", "low", "code", "sweep", body="the body\nand more\n"))
+
+    def test_a_stdin_that_ends_before_the_separator_is_refused(self):
+        # `read` fails at EOF and leaves the separator unset, which an
+        # `|| true` would read as blank and file with an empty body.
+        self.assert_refused_before_gh(self.run_helper("bug", "low", "code", "sweep", body="a title\n"))
+        self.assert_refused_before_gh(self.run_helper("bug", "low", "code", "sweep", body="a title"))
+
+    def test_a_route_outside_the_set_is_refused(self):
+        # The route decides which fixed line the body must end with, and it is
+        # a closed set like the other three. A spelling outside it is refused
+        # rather than defaulted, because a default is an unconditional
+        # provenance claim.
+        for route in ("sweeps", "Sweep", "auto", "requests", "Request", "sweep --force", "-R other/repo", ""):
+            with self.subTest(route=route):
+                self.assert_refused_before_gh(
+                    self.run_helper("bug", "low", "code", route, body=self.STDIN))
+
+    def test_each_route_requires_the_line_that_is_true_of_it(self):
+        # Neither trailer is accepted under the other's route, so a hand filing
+        # cannot claim that a sweep filed it and a second auditor confirmed it:
+        # a claim every issue makes distinguishes nothing.
+        self.assert_refused_before_gh(
+            self.run_helper("bug", "low", "code", "hand", body=self.STDIN))
+        self.assert_refused_before_gh(
+            self.run_helper("bug", "low", "code", "sweep", body=self.HAND_STDIN))
+        # The mutation route's sentence claims an execution, and the sweep's a second reading: neither stands in.
+        self.assert_refused_before_gh(
+            self.run_helper("test-gap", "low", "code,test", "mutation", body=self.STDIN))
+        self.assert_refused_before_gh(
+            self.run_helper("test-gap", "low", "code,test", "sweep", body=self.MUTATION_STDIN))
+
+    def test_an_enhancement_and_the_request_route_go_only_together(self):
+        # Each body ends in the sentence its route requires, so the refusal is the pairing and not the trailer.
+        for kind, route, body in (("enhancement", "hand", self.HAND_STDIN),
+                                  ("enhancement", "sweep", self.STDIN),
+                                  ("bug", "request", self.REQUEST_STDIN)):
+            with self.subTest(kind=kind, route=route):
+                result = self.run_helper(kind, "low", "harness", route, body=body)
+                self.assert_refused_before_gh(result)
+                self.assertIn("an enhancement files under the request route", result.stderr)
+        # And the trailer still decides on the pair that is admitted.
+        self.assert_refused_before_gh(
+            self.run_helper("enhancement", "low", "harness", "request", body=self.HAND_STDIN))
+
+    def test_a_request_reaches_gh_under_the_enhancement_kind_without_ensuring_it(self):
+        # `enhancement` is no sweep's label, so the sibling refuses it, and the severity and the area are the
+        # labels ensured; the issue still carries all three.
+        result = self.run_helper("enhancement", "low", "harness", "request", body=self.REQUEST_STDIN)
+        self.assertEqual(0, result.returncode, result.stderr)
+        create = [c for c in self.calls() if c.startswith("issue create ")]
+        self.assertEqual(1, len(create), self.calls())
+        self.assertIn("--label enhancement", create[0])
+        self.assertIn("--label low", create[0])
+        self.assertIn("--label harness", create[0])
+        listed = [c for c in self.calls() if c.startswith("label list ")]
+        self.assertEqual(2, len(listed), self.calls())
+        self.assertIn("--search low", listed[0])
+        self.assertIn("--search harness", listed[1])
+        self.assertEqual(f"the body\n\n{self.REQUEST_TRAILER}\n",
+                         (Path(self.dir) / "body").read_text(encoding="utf-8"))
+
+    def test_a_mutation_filing_reaches_gh_under_the_test_gap_kind(self):
+        result = self.run_helper("test-gap", "low", "code,test", "mutation", body=self.MUTATION_STDIN)
+        self.assertEqual(0, result.returncode, result.stderr)
+        create = [c for c in self.calls() if c.startswith("issue create ")]
+        self.assertEqual(1, len(create), self.calls())
+        self.assertIn("--label test-gap", create[0])
+        self.assertIn("--label low", create[0])
+        self.assertEqual(f"the body\n\n{self.MUTATION_TRAILER}\n",
+                         (Path(self.dir) / "body").read_text(encoding="utf-8"))
+
+    def test_a_suite_area_is_two_labels_each_ensured(self):
+        # The comma is the helper's to split: each word is ensured through the sibling and passed as its own
+        # `--label`, so `code,test` never reaches GitHub as one label name.
+        for area, words in (("code,test", ["code", "test"]), ("harness,test", ["harness", "test"])):
+            with self.subTest(area=area):
+                Path(self.dir, "argv").unlink(missing_ok=True)
+                result = self.run_helper("bug", "medium", area, "sweep", body=self.STDIN)
+                self.assertEqual(0, result.returncode, result.stderr)
+                create = [c for c in self.calls() if c.startswith("issue create ")]
+                self.assertEqual(1, len(create), self.calls())
+                for word in words:
+                    self.assertIn(f"--label {word} ", create[0])
+                self.assertNotIn(area, create[0])
+                searched = [c.split("--search ", 1)[1].split()[0] for c in self.calls() if c.startswith("label list ")]
+                self.assertEqual(["bug", "medium", *words], searched)
+
+    def test_a_hand_filing_reaches_gh_with_its_own_trailer(self):
+        # And the positive control on the other half: the hand route files,
+        # rather than merely refusing the sweep's sentence. The body reaching
+        # `gh` is the one that was piped in, trailer included.
+        result = self.run_helper("bug", "low", "documentation", "hand", body=self.HAND_STDIN)
+        self.assertEqual(0, result.returncode, result.stderr)
+        d = Path(self.dir)
+        self.assertEqual(
+            f"the body\n\n{self.HAND_TRAILER}\n",
+            (d / "body").read_text(encoding="utf-8"),
+        )
+        create = [c for c in self.calls() if c.startswith("issue create ")]
+        self.assertIn("--label documentation ", create[0])
+
+    def run_entry(self, name, *args, body=""):
+        env = dict(os.environ)
+        env["PATH"] = self.dir + os.pathsep + env["PATH"]
+        return subprocess.run(
+            [BASH, str(SCRIPTS / name), *args],
+            capture_output=True, text=True, encoding="utf-8", input=body, env=env,
+        )
+
+    # Each entry point with the words it takes and the stdin it files: the mutation route's holds the kind as well
+    # as the route.
+    ENTRY_POINTS = (("gh-issue-sweep.sh", ("bug", "low", "code"), STDIN),
+                    ("gh-issue-hand.sh", ("bug", "low", "code"), HAND_STDIN),
+                    ("gh-issue-mutation.sh", ("low", "code"), MUTATION_STDIN))
+
+    def test_no_entry_point_takes_a_route_at_all(self):
+        # A route word, or any word past its own, is refused by arity before `gh` runs, so a command granted an
+        # entry point cannot name another route's trailer. Each is handed the stdin it files, so that only arity
+        # can refuse it: under another route's trailer the trailer check would answer for a loosened count.
+        for name, words, own in self.ENTRY_POINTS:
+            for route in ("sweep", "hand", "mutation", "request", "-R other/repo", ""):
+                with self.subTest(entry=name, route=route):
+                    self.assert_refused_before_gh(self.run_entry(name, *words, route, body=own))
+            with self.subTest(entry=name, args="short"):
+                self.assert_refused_before_gh(self.run_entry(name, *words[:-1], body=own))
+
+    def test_the_entry_points_offer_no_kind_they_cannot_file(self):
+        # An enhancement files under the request route alone, which neither of these entry points spells.
+        for name in ("gh-issue-sweep.sh", "gh-issue-hand.sh"):
+            with self.subTest(entry=name):
+                result = self.run_entry(name)
+                self.assertEqual(2, result.returncode)
+                self.assertIn(f"usage: {name} <security|bug|test-gap>", result.stderr)
+                self.assertNotIn("enhancement", result.stderr)
+
+    def test_the_mutation_entry_offers_no_kind_at_all(self):
+        # Its route's sentence says a mutant went undetected, which is a test gap and nothing else.
+        result = self.run_entry("gh-issue-mutation.sh")
+        self.assertEqual(2, result.returncode)
+        self.assertIn("usage: gh-issue-mutation.sh <critical|high|medium|low>", result.stderr)
+        self.assertNotIn("test-gap", result.stderr)
+        self.assertNotIn("enhancement", result.stderr)
+        kind_named = self.run_entry("gh-issue-mutation.sh", "test-gap", "low", "code", body=self.MUTATION_STDIN)
+        self.assert_refused_before_gh(kind_named)
+        self.assertIn("usage: gh-issue-mutation.sh", kind_named.stderr)
+
+    def test_each_entry_point_files_one_route_and_refuses_the_other_trailers(self):
+        # The positive controls come first in each pair: an entry point that refused everything would satisfy
+        # the refusals.
+        for name, words, own in self.ENTRY_POINTS:
+            with self.subTest(entry=name):
+                created = len([c for c in self.calls() if c.startswith("issue create ")])
+                result = self.run_entry(name, *words, body=own)
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertEqual(created + 1, len([c for c in self.calls() if c.startswith("issue create ")]))
+                for other in {self.STDIN, self.HAND_STDIN, self.MUTATION_STDIN} - {own}:
+                    before = len(self.calls())
+                    self.assertEqual(2, self.run_entry(name, *words, body=other).returncode)
+                    self.assertEqual(before, len(self.calls()))
+
+    def test_the_mutation_entry_files_as_the_test_gap_it_spells(self):
+        result = self.run_entry("gh-issue-mutation.sh", "low", "code,test", body=self.MUTATION_STDIN)
+        self.assertEqual(0, result.returncode, result.stderr)
+        create = [c for c in self.calls() if c.startswith("issue create ")]
+        self.assertEqual(1, len(create), self.calls())
+        for label in ("test-gap", "low", "code", "test"):
+            self.assertIn(f"--label {label} ", create[0] + " ")
+        self.assertEqual(f"the body\n\n{self.MUTATION_TRAILER}\n",
+                         (Path(self.dir) / "body").read_text(encoding="utf-8"))
+
+    def test_the_entry_points_do_not_file_the_request_trailer_nothing_files_under(self):
+        for name, words, _ in self.ENTRY_POINTS:
+            with self.subTest(entry=name):
+                kind = ("enhancement",) if len(words) == 3 else ()
+                self.assert_refused_before_gh(self.run_entry(name, *kind, *words[-2:], body=self.REQUEST_STDIN))
+
+    def test_a_body_without_the_trailer_is_refused(self):
+        # The detector for an early heredoc close: a body cut short by a
+        # repository line equal to the delimiter has lost its last line.
+        self.assert_refused_before_gh(self.run_helper("bug", "low", "code", "sweep", body="a title\n\nthe body\n"))
+        self.assert_refused_before_gh(self.run_helper("bug", "low", "code", "sweep", body="a title\n\n"))
+        self.assert_refused_before_gh(
+            self.run_helper("bug", "low", "code", "sweep", body=f"a title\n\n{self.TRAILER}\n\nmore after it\n")
+        )
+
+    def test_a_repository_line_equal_to_a_naive_delimiter_is_the_hazard_and_the_token_is_the_rule(self):
+        # The real composition again, with the payload the sweeps' rule is
+        # written for: a quoted repository line that reads `EOF`, followed by
+        # a substitution that would run in the parent if the heredoc closed
+        # there. Under the token delimiter the rule prescribes, the whole
+        # payload reaches the stub and the marker is never created. The naive
+        # delimiter is not run here on purpose, because its failure mode is the
+        # parent's shell executing the tail; the helper's part of it is the
+        # trailer case.
+        d = Path(self.dir)
+        marker = (d / "pwned").as_posix()
+        body = f"the affected lines:\n\n    EOF\n    $(touch {marker})\n\n{self.TRAILER}\n"
+        env = dict(os.environ)
+        env["PATH"] = self.dir + os.pathsep + env["PATH"]
+        script = (
+            'case "$(command -v gh)" in */issue-stub-*/gh) ;; *) exit 97 ;; esac\n'
+            f"bash {str(self.HELPER)!r} bug high code sweep <<'ISSUE_BODY_END'\n"
+            "a title\n"
+            "\n"
+            f"{body}"
+            "ISSUE_BODY_END\n"
+        )
+        result = subprocess.run([BASH, "-c", script], capture_output=True, text=True, encoding="utf-8", env=env)
+        self.assertNotEqual(97, result.returncode, "the stub gh was not first on PATH")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertFalse((d / "pwned").exists())
+        self.assertEqual(body, (d / "body").read_text(encoding="utf-8"))
+
+    def test_the_title_never_crosses_the_parents_command_line(self):
+        # The real boundary: the parent is a shell composing a command string
+        # around a quoted heredoc, and the title carries every expansion a
+        # verdict record could smuggle. The stub must receive the bytes as
+        # written, and the marker file the substitution would create must not
+        # exist — the argv-array cases above cannot show either.
+        d = Path(self.dir)
+        marker = (d / "pwned").as_posix()
+        title = f"`touch {marker}` and $(touch {marker}) and \"quoted\" and $HOME"
+        # The stub is put on PATH through the environment, the way run_helper
+        # does it, and the script refuses to go on unless `gh` resolves to it:
+        # a test of a filing helper that reaches the real `gh` files a real
+        # issue.
+        env = dict(os.environ)
+        env["PATH"] = self.dir + os.pathsep + env["PATH"]
+        script = (
+            'case "$(command -v gh)" in */issue-stub-*/gh) ;; *) exit 97 ;; esac\n'
+            f"bash {str(self.HELPER)!r} security high code sweep <<'ISSUE_BODY_END'\n"
+            f"{title}\n"
+            "\n"
+            "the body\n"
+            "\n"
+            f"{self.TRAILER}\n"
+            "ISSUE_BODY_END\n"
+        )
+        result = subprocess.run([BASH, "-c", script], capture_output=True, text=True, encoding="utf-8", env=env)
+        self.assertNotEqual(97, result.returncode, "the stub gh was not first on PATH")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertFalse((d / "pwned").exists())
+        create = [c for c in self.calls() if c.startswith("issue create ")]
+        self.assertEqual(1, len(create), self.calls())
+        self.assertIn(f"--title {title}", create[0])
+        self.assertEqual(f"the body\n\n{self.TRAILER}\n", (d / "body").read_text(encoding="utf-8"))
+
+    def test_a_valid_filing_reaches_gh_with_every_parameter_pinned(self):
+        # The positive control the negatives need: a helper that refused
+        # everything would pass every case above.
+        title = "`/security-sweep` files a title that begins with a slash"
+        body = f"the body\n\n{self.TRAILER}\n"
+        result = self.run_helper("security", "high", "harness", "sweep", body=f"{title}\n\n{body}")
+        self.assertEqual(0, result.returncode, result.stderr)
+        create = [c for c in self.calls() if c.startswith("issue create ")]
+        self.assertEqual(1, len(create), self.calls())
+        self.assertIn("--repo acme/widgets", create[0])
+        self.assertIn(f"--title {title}", create[0])
+        self.assertIn("--label security", create[0])
+        self.assertIn("--label high", create[0])
+        self.assertIn("--label harness", create[0])
+        self.assertIn("--body-file -", create[0])
+        self.assertNotIn("--force", create[0])
+        d = Path(self.dir)
+        self.assertEqual(body, (d / "body").read_text(encoding="utf-8"))
+        self.assertEqual("*", (d / "conv").read_text(encoding="utf-8").strip())
+
+    def test_force_is_never_spelled(self):
+        text = self.HELPER.read_text(encoding="utf-8")
+        code = "\n".join(
+            line for line in text.splitlines() if not line.lstrip().startswith("#")
+        )
+        self.assertNotIn("--force", code)
+        self.assertNotIn(" -f ", code)
+
+    def test_the_repository_is_resolved_rather_than_accepted(self):
+        text = self.HELPER.read_text(encoding="utf-8")
+        self.assertIn("gh repo view --json nameWithOwner", text)
+        self.assertIn('--repo "$repo"', text)
+
+    def test_the_command_shape_is_the_one_the_sweeps_describe(self):
+        # Each of these is a claim a sweep's step 4 makes about the helper, and
+        # a source assertion is what stops the two drifting apart silently.
+        text = self.HELPER.read_text(encoding="utf-8")
+        self.assertIn("MSYS2_ARG_CONV_EXCL='*' gh issue create", text)
+        self.assertIn('--repo "$repo"', text)
+        self.assertIn('--label "$kind"', text)
+        self.assertIn('--label "$severity"', text)
+        self.assertIn('"${area_labels[@]}"', text)
+        self.assertIn("--body-file -", text)
+
+    def test_each_label_but_enhancement_goes_through_the_sibling_helper(self):
+        text = self.HELPER.read_text(encoding="utf-8")
+        self.assertIn('[ "$kind" = enhancement ] || bash "$here/gh-label-ensure.sh" "$kind"', text)
+        self.assertIn('"$here/gh-label-ensure.sh" "$severity"', text)
+        self.assertIn('"$here/gh-label-ensure.sh" "$label"', text)
+
+
+
+if __name__ == "__main__":
+    unittest.main()

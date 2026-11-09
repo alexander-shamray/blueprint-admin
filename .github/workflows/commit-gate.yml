@@ -11,9 +11,9 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: commit-gate-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+# No concurrency group, for locality-gate.yml's reason: a rerun of an older
+# head's run would cancel the newest head's, which then stays there as a
+# failed required check that blocks the merge.
 
 jobs:
   commit-gate:
@@ -22,13 +22,13 @@ jobs:
       - uses: actions/checkout@v7
         with:
           # The range is base..head and the enforcing copy is read from the
-          # base commit, so history is needed (locality-gate.yml's reasoning).
+          # base commit, so history is needed (closure-gate.yml's reasoning).
+          # The decision below reads it too.
           fetch-depth: 0
 
-      # The same decision as locality-gate.yml's step of this name, which
-      # argues it: the gate stands down only when Dependabot opened the pull
-      # request and made every commit in it, as author and through GitHub as
-      # committer (docs/change-locality.md section 6).
+      # The opener alone is not enough: every commit's author and committer
+      # must be Dependabot's too; .github/commit-gate/README.md, How it runs.
+      # No job condition: a skipped job passes a required check unjudged.
       - name: Decide whether this is Dependabot's own pull request
         id: dependabot
         shell: bash
@@ -56,7 +56,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      # The base copy judges, as in locality-gate.yml. The one difference is
+      # The base copy judges, as in closure-gate.yml. The one difference is
       # the pull request that introduces the gate: its base carries none, so
       # it is judged by its own copy, with a notice. A base that predates the
       # gate while the head also lacks it still fails.
@@ -93,8 +93,7 @@ jobs:
             "${{ github.event.pull_request.base.sha }}" \
             "${{ github.event.pull_request.head.sha }}"
 
-      # Last, so head test code cannot steer the gate above: locality-gate.yml
-      # argues the order.
+      # Last, so head test code cannot steer the gate above (closure-gate.yml).
       - name: Test the proposed gate
         if: steps.dependabot.outputs.own != 'true'
         working-directory: .github/commit-gate

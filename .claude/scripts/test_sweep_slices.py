@@ -1,51 +1,24 @@
 """sweep-slices.sh and sweep-mark.sh: the partition, the budget and the ref.
 
-The partition runs against this repository's own tree, so a new top-level
-directory no row owns fails here before a sweep passes over it.
-
-**Two Windows pitfalls the backend met first, both designed around.** The helper
-prints a POSIX `/tmp/...` path that Windows Python reads as `C:\\tmp\\...`, so
-every list is read through bash and never through `pathlib`. And a suite that
-checked this whole repository out per test was slow, so everything but the real
-tree runs over a small synthetic repository.
+Small repositories are cut by a helper copy reading a row file of the case's
+own; this checkout's tree by its own, so that case runs in every target.
 """
 
 import os
 import re
 import shutil
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
 
-SCRIPTS = Path(__file__).resolve().parent
+from review_helpers import SCRIPTS, setUpModule, run_bash, code_lines
+
 SLICES = SCRIPTS / "sweep-slices.sh"
 MARK = SCRIPTS / "sweep-mark.sh"
 DETACH = SCRIPTS / "git-worktree-detach.sh"
 DROP = SCRIPTS / "git-worktree-drop.sh"
 REPO = str(SCRIPTS.parent.parent)
-BUDGET = 240000
 GIT_ID = "-c user.name=t -c user.email=t@example.invalid"
-
-BASH = shutil.which("bash")
-GIT = shutil.which("git")
-
-
-def setUpModule():
-    # Not a skip: a skip on a missing tool reports a pass, the fail-open
-    # test_harness_helpers.py refuses for the same two tools.
-    missing = [n for n, p in (("bash", BASH), ("git", GIT)) if p is None]
-    if missing:
-        raise RuntimeError(f"{', '.join(missing)} required and not on PATH")
-
-
-def run_bash(script, **env_extra):
-    """A bash fragment with every value in the environment, never in argv, which
-    MSYS re-parses on the way into bash.exe."""
-    env = dict(os.environ)
-    env.update(env_extra)
-    return subprocess.run([BASH, "-c", script], capture_output=True, text=True, env=env)
 
 
 def git(repo, args):
@@ -55,28 +28,32 @@ def git(repo, args):
 
 
 class Sweep:
-    """A detached sweep worktree of `repo`, dropped with its slices afterwards."""
+    """A detached sweep worktree of `repo`, dropped with its slices afterwards;
+    under `root` as its temp root when one is given, cut by `script`, the
+    checkout's own helper when none is."""
 
-    def __init__(self, case, repo):
+    def __init__(self, case, repo, root=None, script=SLICES):
         self.repo = repo
+        self.script = str(script)
+        self.env = {"TMPDIR": root} if root else {}
         sha = git(repo, "rev-parse HEAD")
         made = run_bash(
-            'cd "$R" && bash "$DETACH" "$SHA" 2>/dev/null', R=repo, DETACH=str(DETACH), SHA=sha
+            'cd "$R" && bash "$DETACH" "$SHA" 2>/dev/null', R=repo, DETACH=str(DETACH), SHA=sha, **self.env
         )
         case.assertEqual(0, made.returncode, made.stderr)
         self.path = made.stdout.strip()
         case.addCleanup(
             lambda: run_bash(
                 'cd "$R" && bash "$DROP" "$W" >/dev/null 2>&1; rm -rf "$W.slices"',
-                R=repo, DROP=str(DROP), W=self.path,
+                R=repo, DROP=str(DROP), W=self.path, **self.env,
             )
         )
 
     def slices(self, kind, *extra, **env):
         return run_bash(
             'cd "$R" && bash "$SLICES" "$KIND" "$W" $EXTRA',
-            R=self.repo, SLICES=str(SLICES), KIND=kind, W=self.path, EXTRA=" ".join(extra),
-            **env,
+            R=self.repo, SLICES=self.script, KIND=kind, W=self.path, EXTRA=" ".join(extra),
+            **self.env, **env,
         )
 
 
@@ -106,76 +83,40 @@ def listed(slices):
     return paths
 
 
-class TheRealTree(unittest.TestCase):
-    """Both partitions hold over this repository, within the budget."""
-
-    def test_every_tracked_path_is_listed_or_counted_and_every_slice_fits(self):
-        # `full`, so a ref a real sweep left in this checkout does not narrow it.
-        sweep = Sweep(self, REPO)
-        tracked = len(git(REPO, "ls-tree -r --name-only --full-tree HEAD").splitlines())
-        for kind in ("bug", "security"):
-            with self.subTest(kind=kind):
-                run_bash('rm -rf "$W.slices"', W=sweep.path)
-                result = sweep.slices(kind, "full")
-                self.assertEqual(0, result.returncode, result.stderr)
-                head, slices = parse(result.stdout)
-                self.assertEqual("full", head["mode"])
-                counts = head["counts"]
-                self.assertEqual(tracked, counts["tracked"])
-                skipped = sum(v for k, v in counts.items() if k not in ("tracked", "listed"))
-                self.assertEqual(counts["tracked"], counts["listed"] + skipped)
-                for row, files, size, _ in slices:
-                    self.assertTrue(size <= BUDGET or files == 1, (row, files, size))
-                paths = listed(slices)
-                self.assertEqual(counts["listed"], len(paths))
-                self.assertEqual(len(paths), len(set(paths)), "a path in two slices")
-                for top in ("src/", "tests/", "tools/", ".claude/", ".github/", "docs/"):
-                    self.assertTrue(any(p.startswith(top) for p in paths), top)
-                self.assertTrue(any("/" not in p for p in paths), "the root files")
-                self.assertFalse(any(p.startswith("docs/superpowers/plans/") for p in paths))
-                self.assertFalse(any(p.endswith("package-lock.json") for p in paths))
-
-
-# One file in every row both sweeps own, so a small repository partitions the
-# way this one does; a clone of this one checks out every file per test.
-SMALL_TREE = {
-    "src/Admin.Host/a.cs": "x\n", "src/Admin.Host/Admin.Host.csproj": "x\n",
-    "src/Admin.Mcp/m.cs": "x\n", "src/Admin.Mcp/Admin.Mcp.csproj": "x\n",
-    "src/Admin.Web/src/app/b.ts": "x\n", "src/Admin.Web/src/app/b.spec.ts": "x\n",
-    "src/Admin.Web/e2e/c.spec.ts": "x\n", "src/Admin.Web/package.json": "x\n",
-    "tests/Admin.Host.Tests/d.cs": "x\n", "tools/e.py": "x\n", ".github/f.yml": "x\n",
-    ".claude/g.md": "x\n", "README.md": "x\n", "docs/i.md": "```sh\nx\n```\n",
-}
+# Rows of backend's shape, and one file in every row both sweeps own, so a small
+# repository partitions the way a target does; a clone of one checks out every
+# file per test.
+SMALL_ROWS = (
+    "# a comment line\n"
+    "bug\t^src/BuildingBlocks/\tbuilding-blocks\tthe building blocks\n"
+    "bug\t^src/\tservices\tthe services\n"
+    "bug\t^tests/\tsuites\tthe suites\n"
+    "security\t^(src|tests)/\tsource\tthe source\n"
+    "*\t^(tools|\\.github|\\.claude|\\.harness)/\ttooling\tthe tooling\n"
+    "*\t^(deploy|\\.config)/\tdeploy\tdeployment\n"
+    "*\t^docs/\tsamples\tfenced code\n"
+    "*\t^.*/.*$\t-\ta directory no row names\n"
+    "*\t^[^/]+$\tdeploy\tthe root\n"
+)
+SMALL_TREE = {"src/BuildingBlocks/a.cs": "x\n", "src/Services/b.cs": "x\n", "tests/c.cs": "x\n",
+              "tools/d.py": "x\n", ".github/e.yml": "x\n", ".claude/f.md": "x\n", "deploy/g.yaml": "x\n",
+              ".config/h.json": "x\n", "README.md": "x\n", "docs/i.md": "```sh\nx\n```\n"}
 
 
 class ASmallRepository(unittest.TestCase):
-    """A small repository of its own, so a commit and a ref never touch this one.
-
-    And a temp root of its own: the detach, drop and slices helpers make and
-    accept sweep worktrees only directly under `${TMPDIR:-/tmp}`, so with
-    `TMPDIR` pointed at a fresh directory this class shares no `secsweep-*`
-    namespace with `TheRealTree` or a real sweep, and the shard runner need
-    not keep it on the same worker as them (#322). The cleanups run last in,
-    first out, so the sweep is dropped while `TMPDIR` still names its root.
-    """
+    """A small repository of its own, so a commit and a ref never touch this one;
+    its sweeps under a temp root beside it, so a run stopped before its cleanups
+    leaves one directory behind, not a worktree git can no longer reach."""
 
     def setUp(self):
-        # The repository and the temp root in one directory, cleared by
-        # TemporaryDirectory rather than rmtree with ignore_errors: git writes
-        # its objects read-only, Windows refuses to delete a read-only file,
-        # and the flag hid every repository that stayed behind (#577).
+        # Not rmtree with ignore_errors: git's objects are read-only, which
+        # Windows refuses to delete, and the flag hides each one that stays.
         holder = tempfile.TemporaryDirectory(prefix="sweepslices-")
         self.addCleanup(holder.cleanup)
-        self.repo = str(Path(holder.name, "repo"))
-        self.root = str(Path(holder.name, "root"))
+        top = holder.name
+        self.repo, self.root = str(Path(top, "repo")), str(Path(top, "root"))
         os.mkdir(self.repo)
         os.mkdir(self.root)
-        # A forward-slashed path, which MSYS bash takes as it stands; the
-        # helpers resolve it with `cd` and `pwd -P` themselves.
-        private = mock.patch.dict(os.environ,
-                                  {"TMPDIR": Path(self.root).as_posix()})
-        private.start()
-        self.addCleanup(private.stop)
         made = run_bash('cd "$R" && git init -q --initial-branch=main .', R=self.repo)
         self.assertEqual(0, made.returncode, made.stderr)
         for relative, text in SMALL_TREE.items():
@@ -184,19 +125,30 @@ class ASmallRepository(unittest.TestCase):
             target.write_text(text)
         git(self.repo, "add -A")
         git(self.repo, 'commit -q -m "the small tree"')
+        self.script = self.helper(SMALL_ROWS)
+
+    def helper(self, rows):
+        """A copy of the helper in a checkout of its own whose row file is `rows`,
+        its bytes as given, or absent for None."""
+        checkout = Path(tempfile.mkdtemp(prefix="checkout-", dir=Path(self.repo).parent))
+        scripts = checkout / ".claude" / "scripts"
+        scripts.mkdir(parents=True)
+        shutil.copyfile(SLICES, scripts / SLICES.name)
+        if rows is not None:
+            (checkout / ".harness").mkdir()
+            (checkout / ".harness" / "sweep-rows.tsv").write_bytes(rows.encode("utf-8"))
+        return scripts / SLICES.name
+
+    def sweep(self, script=None):
+        return Sweep(self, self.repo, self.root, script or self.script)
 
     def commit(self, relative, text):
-        # Bytes, so a sample holds exactly the line ends and characters it
-        # names: write_text turns a newline into CRLF on Windows and encodes in
-        # the locale's code page. No autocrlf and no global attributes file
-        # either: Git for Windows sets the first system-wide, a `text`
-        # attribute in the second does the same, and each stores a CRLF
-        # sample as LF.
+        # Bytes, so a sample holds exactly the line ends and characters it names,
+        # and no autocrlf, which Git for Windows sets and which stores CRLF as LF.
         target = Path(self.repo, relative)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(text.encode("utf-8"))
-        git(self.repo, f'-c core.autocrlf=false -c core.attributesFile=/dev/null '
-                       f'add -- "{relative}"')
+        git(self.repo, f'-c core.autocrlf=false add -- "{relative}"')
         git(self.repo, f'commit -q -m "add {relative}"')
         return git(self.repo, "rev-parse HEAD")
 
@@ -205,64 +157,138 @@ class ASmallRepository(unittest.TestCase):
             'cd "$R" && bash "$MARK" "$KIND" "$SHA"', R=self.repo, MARK=str(MARK), KIND=kind, SHA=sha
         )
 
-    def test_its_sweeps_land_in_its_own_temp_root(self):
-        # What lets the runner deal this class anywhere: if a helper stopped
-        # honouring TMPDIR under MSYS, its sweeps would land in the shared
-        # root beside `TheRealTree`'s again, and nothing else would notice.
-        sweep = Sweep(self, self.repo)
-        result = sweep.slices("bug")
-        self.assertEqual(0, result.returncode, result.stderr)
-        where = run_bash('cd "$TMPDIR" && pwd -P && cd "$(dirname "$W")" && pwd -P',
-                         W=sweep.path)
-        self.assertEqual(0, where.returncode, where.stderr)
-        root, parent = where.stdout.split()
-        self.assertEqual(root, parent)
-        listing = parse(result.stdout)[1][0][3]
-        self.assertTrue(listing.startswith(f"{sweep.path}.slices/"), listing)
-
-    def test_each_row_owns_the_paths_its_command_says(self):
-        sweep = Sweep(self, self.repo)
-        result = sweep.slices("bug")
-        self.assertEqual(0, result.returncode, result.stderr)
-        head, slices = parse(result.stdout)
-        by_row = {}
-        for row, _, _, listing in slices:
-            by_row.setdefault(row, []).extend(listed([(row, 0, 0, listing)]))
-        self.assertEqual(
-            {
-                "host": ["src/Admin.Host/a.cs", "src/Admin.Mcp/m.cs"],
-                "spa": ["src/Admin.Web/src/app/b.ts"],
-                "suites": [
-                    "src/Admin.Web/e2e/c.spec.ts", "src/Admin.Web/src/app/b.spec.ts",
-                    "tests/Admin.Host.Tests/d.cs",
-                ],
-                "tooling": [".claude/g.md", ".github/f.yml", "tools/e.py"],
-                "config": [
-                    "README.md", "src/Admin.Host/Admin.Host.csproj",
-                    "src/Admin.Mcp/Admin.Mcp.csproj", "src/Admin.Web/package.json",
-                ],
-                "samples": ["docs/i.md"],
-            },
-            {row: sorted(paths) for row, paths in by_row.items()},
-        )
-
     def test_a_top_level_directory_no_row_owns_refuses_the_run(self):
         self.commit("newtree/x.txt", "x\n")
-        result = Sweep(self, self.repo).slices("bug")
+        result = self.sweep().slices("bug")
         self.assertEqual(3, result.returncode)
         self.assertIn("no row owns: newtree/x.txt", result.stderr)
 
-    def test_a_new_source_project_refuses_the_run_rather_than_joining_a_row(self):
-        self.commit("src/Admin.Other/x.cs", "x\n")
-        result = Sweep(self, self.repo).slices("bug")
+    def test_a_row_comes_from_the_file(self):
+        # The positive control of the case above: the same tree passes once a
+        # line of the checkout's row file names its directory.
+        self.commit("newtree/x.txt", "x\n")
+        script = self.helper("*\t^newtree/\textra\ta tree of the case's own\n" + SMALL_ROWS)
+        result = self.sweep(script).slices("bug")
+        self.assertEqual(0, result.returncode, result.stderr)
+        rows = {row for row, *_ in parse(result.stdout)[1]}
+        self.assertIn("extra", rows)
+        self.assertIn("newtree/x.txt", listed([s for s in parse(result.stdout)[1] if s[0] == "extra"]))
+
+    def test_a_missing_row_file_exits_3(self):
+        result = self.sweep(self.helper(None)).slices("bug")
         self.assertEqual(3, result.returncode)
-        self.assertIn("no row owns: src/Admin.Other/x.cs", result.stderr)
+        self.assertIn(".harness/sweep-rows.tsv", result.stderr)
+        self.assertEqual("", result.stdout)
+
+    def test_a_malformed_line_exits_3_naming_it(self):
+        for name, line in (
+            ("three fields", "*\t^x/\tx"),
+            ("five fields", "*\t^x/\tx\tholds\textra"),
+            ("an unknown kind", "both\t^x/\tx\tholds"),
+            ("an empty pattern", "*\t\tx\tholds"),
+            ("a row that is not a word", "*\t^x/\tRow\tholds"),
+            ("an empty holds", "*\t^x/\tx\t"),
+            ("a pattern awk cannot compile", "*\t^x/(\tx\tholds"),
+        ):
+            with self.subTest(line=name):
+                result = self.sweep(self.helper(SMALL_ROWS + line + "\n")).slices("bug")
+                self.assertEqual(3, result.returncode, result.stderr)
+                self.assertIn("sweep-rows.tsv", result.stderr)
+                self.assertEqual("", result.stdout)
+                if name != "a pattern awk cannot compile":
+                    self.assertIn("line 11", result.stderr)
+
+    def test_the_first_matching_row_wins(self):
+        script = self.helper("*\t^tools/d\\.py$\tfirst\tone file\n" + SMALL_ROWS)
+        self.commit("tools/e.py", "x\n")
+        result = self.sweep(script).slices("bug")
+        self.assertEqual(0, result.returncode, result.stderr)
+        slices = parse(result.stdout)[1]
+        self.assertEqual(["tools/d.py"], listed([s for s in slices if s[0] == "first"]))
+        self.assertIn("tools/e.py", listed([s for s in slices if s[0] == "tooling"]))
+        self.assertNotIn("tools/d.py", listed([s for s in slices if s[0] == "tooling"]))
+
+    def test_a_mirror_row_owns_an_equal_copy_and_leaves_it_unlisted(self):
+        # The rendered root is the payload's bytes: the copy is counted and the
+        # payload's file is the one read. A copy that differs, or has no
+        # counterpart, falls through to the next row and is read as itself.
+        mirror = "*\t^tools/\t=payload/\tcopies of the payload's files\n"
+        script = self.helper(mirror + "*\t^payload/\tpayload\tthe payload\n" + SMALL_ROWS)
+        self.commit("payload/tools/same.py", "x\n")
+        self.commit("tools/same.py", "x\n")
+        self.commit("payload/tools/differs.py", "x\n")
+        self.commit("tools/differs.py", "y\n")
+        self.commit("tools/alone.py", "x\n")
+        for kind in ("bug", "security"):
+            with self.subTest(kind=kind):
+                result = self.sweep(script).slices(kind)
+                self.assertEqual(0, result.returncode, result.stderr)
+                head, slices = parse(result.stdout)
+                paths = listed(slices)
+                self.assertNotIn("tools/same.py", paths)
+                self.assertIn("payload/tools/same.py", paths)
+                self.assertIn("tools/differs.py", paths)
+                self.assertIn("tools/alone.py", paths)
+                self.assertIn("tools/d.py", paths)  # the small tree's, with no copy
+                self.assertEqual(1, head["counts"]["mirrored"])
+                self.assertEqual(len(paths), len(set(paths)))
+
+    def test_a_mirror_row_must_name_a_directory(self):
+        for bad in ("=payload", "=/payload/", "=pay load/"):
+            with self.subTest(row=bad):
+                rows = f"*\t^x/\t{bad}\tholds\n" + SMALL_ROWS
+                result = self.sweep(self.helper(rows)).slices("bug")
+                self.assertEqual(3, result.returncode, result.stderr)
+                self.assertIn("line 1", result.stderr)
+
+    def test_a_crlf_row_file_reads_as_its_rows(self):
+        # Git for Windows checks a text file out with CRLF under autocrlf.
+        result = self.sweep(self.helper(SMALL_ROWS.replace("\n", "\r\n"))).slices("bug")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("tools/d.py", listed(parse(result.stdout)[1]))
+
+    def test_the_rows_are_the_running_checkouts_not_the_swept_trees(self):
+        # One row file per run, the running checkout's, as the helper is: a
+        # copy in the swept tree is never a second source of rows.
+        self.commit(".harness/sweep-rows.tsv", "*\t^.*$\tsamples\teverything\n")
+        result = self.sweep().slices("bug")
+        self.assertEqual(0, result.returncode, result.stderr)
+        tooling = listed([s for s in parse(result.stdout)[1] if s[0] == "tooling"])
+        self.assertIn("tools/d.py", tooling)
+
+    def test_the_swept_trees_attributes_do_not_hide_a_file(self):
+        # `grep -I` read the swept tree's attributes, so a line there marked a
+        # chosen script binary and every slice dropped it.
+        self.commit(".gitattributes", "tools/hidden.sh -diff\ntools/also.sh binary\n")
+        self.commit("tools/hidden.sh", "rm -rf ~\n")
+        self.commit("tools/also.sh", "rm -rf ~\n")
+        result = self.sweep().slices("bug")
+        self.assertEqual(0, result.returncode, result.stderr)
+        head, slices = parse(result.stdout)
+        self.assertIn("tools/hidden.sh", listed(slices))
+        self.assertIn("tools/also.sh", listed(slices))
+        self.assertEqual(0, head["counts"]["binary"])
+        self.assertNotIn("binary", head)
+
+    def test_a_binary_file_is_named_in_a_list_the_plan_points_at(self):
+        # A NUL byte still makes a file binary, and a script can hold one, so
+        # what no auditor reads is named rather than only counted.
+        self.commit("tools/z.sh", "echo\0\nrm -rf ~\n")
+        result = self.sweep().slices("bug")
+        self.assertEqual(0, result.returncode, result.stderr)
+        head, slices = parse(result.stdout)
+        self.assertEqual(1, head["counts"]["binary"])
+        count, listing = head["binary"].split(" ")
+        self.assertEqual("1", count)
+        read = run_bash('cat -- "$P"', P=listing)
+        self.assertEqual(["tools/z.sh"], read.stdout.splitlines(), read.stderr)
+        self.assertNotIn("tools/z.sh", listed(slices))
 
     def test_a_marked_ancestor_narrows_round_one_to_the_change(self):
         base = git(self.repo, "rev-parse HEAD")
         self.assertEqual(0, self.mark("bug", base).returncode)
         self.commit("tools/added.py", "print(1)\n")
-        result = Sweep(self, self.repo).slices("bug")
+        result = self.sweep().slices("bug")
         self.assertEqual(0, result.returncode, result.stderr)
         head, slices = parse(result.stdout)
         self.assertEqual(f"since {base}", head["mode"])
@@ -275,164 +301,48 @@ class ASmallRepository(unittest.TestCase):
         self.commit("docs/fenced.md", "# t\n" + body)
         self.commit("docs/nested.md", nested)
         self.commit("docs/plain.md", "no code here\n")
-        self.commit("docs/superpowers/plans/p.md", "```sh\nx\n```\n")
-        result = Sweep(self, self.repo).slices("bug")
+        result = self.sweep().slices("bug")
         self.assertEqual(0, result.returncode, result.stderr)
         head, slices = parse(result.stdout)
         self.assertEqual(["docs/fenced.md", "docs/nested.md"], sorted(listed(slices)))
         self.assertEqual(1, head["counts"]["fenceless"])
-        self.assertEqual(1, head["counts"]["record"])
         # The fenced line alone; the nested fence's body is its three inner lines.
         self.assertEqual(len("var x = 1;\n") + len("```\ninner\n```\n"), sum(s[2] for s in slices))
 
     def test_a_sample_counts_bytes_and_one_without_a_last_newline_ends_where_it_should(self):
-        # Every sample is read from one stream, so a blob ends at a byte count:
-        # a miscount there runs one sample into the next, a character count
-        # undercounts the e-acute, and an awk that drops a CR undercounts every
-        # CRLF line.
+        # Read as one stream, so a blob's end is a byte count: a miscount there
+        # runs one sample into the next, a character count undercounts é, and
+        # an awk that drops a CR undercounts every CRLF line.
         self.assertEqual(0, self.mark("bug", git(self.repo, "rev-parse HEAD")).returncode)
-        self.commit("docs/a.md", "```\n\u00e9\n```")
+        self.commit("docs/a.md", "```\né\n```")
         self.commit("docs/b.md", "```\r\nab\r\n```\r\n")
         self.commit("docs/c.md", "```\ncd\n```\n")
-        result = Sweep(self, self.repo).slices("bug")
+        result = self.sweep().slices("bug")
         self.assertEqual(0, result.returncode, result.stderr)
         head, slices = parse(result.stdout)
         self.assertEqual(["docs/a.md", "docs/b.md", "docs/c.md"], sorted(listed(slices)))
-        self.assertEqual(len("\u00e9\n".encode("utf-8")) + len("ab\r\n") + len("cd\n"),
+        self.assertEqual(len("é\n".encode("utf-8")) + len("ab\r\n") + len("cd\n"),
                          sum(s[2] for s in slices))
 
     def test_every_sample_is_read_through_one_cat_file(self):
-        # A pipeline per sample is a fork per file, most of a run under MSYS
-        # (#577); the count is the subject, since a timing passes on a fast host.
+        # A pipeline per sample is a fork per file, most of a run under MSYS;
+        # the count is the subject, since a timing passes on a fast host.
         self.assertEqual(0, self.mark("bug", git(self.repo, "rev-parse HEAD")).returncode)
         for k in range(5):
             self.commit(f"docs/s{k}.md", "```sh\nx\n```\n")
         handle, trace = tempfile.mkstemp(prefix="sweepslices-trace-")
         os.close(handle)
         self.addCleanup(os.remove, trace)
-        result = Sweep(self, self.repo).slices("bug", GIT_TRACE=trace)
+        result = self.sweep().slices("bug", GIT_TRACE=trace)
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual(5, len(listed(parse(result.stdout)[1])))
         calls = re.findall(r"trace: built-in: git cat-file", Path(trace).read_text(encoding="utf-8"))
         self.assertEqual(1, len(calls))
 
-    def test_the_lockfile_is_owned_and_counted_not_read(self):
-        self.commit(
-            "src/Admin.Web/package-lock.json",
-            '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/x": {\n'
-            '      "resolved": "https://registry.npmjs.org/x/-/x-1.0.0.tgz",\n'
-            '      "integrity": "sha512-AAAA"\n    }\n  }\n}\n',
-        )
-        result = Sweep(self, self.repo).slices("bug", "full")
-        self.assertEqual(0, result.returncode, result.stderr)
-        head, slices = parse(result.stdout)
-        self.assertEqual(1, head["counts"]["generated"])
-        self.assertNotIn("src/Admin.Web/package-lock.json", listed(slices))
-
-    def test_a_binary_asset_is_counted_and_a_binary_code_file_refuses_the_run(self):
-        Path(self.repo, "src/Admin.Web/public").mkdir(parents=True)
-        Path(self.repo, "src/Admin.Web/public/logo.PNG").write_bytes(b"a\0b")
-        git(self.repo, "add -A")
-        git(self.repo, 'commit -q -m "an image"')
-        result = Sweep(self, self.repo).slices("bug", "full")
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual(1, parse(result.stdout)[0]["counts"]["binary"])
-        Path(self.repo, "tools").mkdir(exist_ok=True)
-        Path(self.repo, "tools/blob.py").write_bytes(b"print(1)\0\n")
-        git(self.repo, "add -A")
-        git(self.repo, 'commit -q -m "a code file with a NUL"')
-        result = Sweep(self, self.repo).slices("bug", "full")
-        self.assertEqual(3, result.returncode, result.stderr)
-        self.assertIn("tools/blob.py", result.stderr)
-
-    def test_a_lockfile_resolving_off_the_registry_or_missing_an_integrity_refuses_the_run(self):
-        entry = (
-            '    "node_modules/x": {\n      "version": "1.0.0",\n'
-            '      "resolved": "%s",\n%s    }'
-        )
-        integrity = '      "integrity": "sha512-AAAA"\n'
-        sound = entry % ("https://registry.npmjs.org/x/-/x-1.0.0.tgz", integrity)
-        link = '    "node_modules/w": {\n      "resolved": "../w",\n      "link": true\n    },\n'
-        lock = '{\n  "lockfileVersion": 3,\n  "packages": {\n    "": {\n      "name": "a"\n    },\n' + link + '%s\n  }\n}\n'
-        self.commit("src/Admin.Web/package-lock.json", lock % sound)
-        result = Sweep(self, self.repo).slices("bug", "full")
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual(1, parse(result.stdout)[0]["counts"]["generated"])
-        off = entry % ("https://evil.example/x.tgz", integrity)
-        self.commit("src/Admin.Web/package-lock.json", lock % off)
-        result = Sweep(self, self.repo).slices("security", "full")
-        self.assertEqual(3, result.returncode, result.stderr)
-        self.assertIn("resolved off the registry: node_modules/x", result.stderr)
-        bare = entry % ("https://registry.npmjs.org/x/-/x-1.0.0.tgz", "")
-        self.commit("src/Admin.Web/package-lock.json", lock % bare.replace('tgz",\n    }', 'tgz"\n    }'))
-        result = Sweep(self, self.repo).slices("bug", "full")
-        self.assertEqual(3, result.returncode, result.stderr)
-        self.assertIn("no integrity: node_modules/x", result.stderr)
-
-    def test_a_lockfile_is_read_as_json_so_its_whitespace_cannot_hide_an_entry(self):
-        # #283: `npm ci` parses the file and ignores whitespace, so the check
-        # that matched npm's own indentation was passed by reformatting one entry.
-        path = "src/Admin.Web/package-lock.json"
-        registry = "https://registry.npmjs.org/x/-/x-1.0.0.tgz"
-
-        def lock(resolved, integrity='"integrity":"sha512-AAAA",'):
-            return (
-                '{"lockfileVersion":3,"packages":{"":{"name":"a"},"node_modules/ok":{"resolved":"%s","integrity":"sha512-BBBB"},'
-                '"node_modules/x":{%s"version":"1.0.0","resolved":"%s"}}}\n'
-            ) % (registry, integrity, resolved)
-
-        self.commit(path, lock(registry))
-        result = Sweep(self, self.repo).slices("security", "full")
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual(1, parse(result.stdout)[0]["counts"]["generated"])
-
-        # A bundled entry is exempt from integrity, as a link is exempt from both.
-        self.commit(
-            path,
-            '{"lockfileVersion":3,"packages":{"node_modules/b":{"resolved":"%s","inBundle":true},'
-            '"node_modules/w":{"resolved":"../w","link":true}}}\n' % registry,
-        )
-        result = Sweep(self, self.repo).slices("security", "full")
-        self.assertEqual(0, result.returncode, result.stderr)
-
-        cases = {
-            "one-line entry off the registry": (
-                lock("https://evil.example/x.tgz"), "resolved off the registry: node_modules/x"),
-            "resolved at an odd indent": (
-                '{\n "lockfileVersion": 3, "packages": {\n  "node_modules/x": {\n       "resolved": "https://evil.example/x.tgz",\n'
-                '  "integrity": "sha512-AAAA" } } }\n',
-                "resolved off the registry: node_modules/x"),
-            "one-line entry with no integrity": (
-                lock(registry, integrity=""), "no integrity: node_modules/x"),
-            "an http registry": (
-                lock("http://registry.npmjs.org/x/-/x-1.0.0.tgz"), "resolved off the registry: node_modules/x"),
-            "not JSON": ("{ not json\n", "the lockfile is not valid JSON"),
-            "no packages": ('{"lockfileVersion":3}\n', "no package entries read"),
-            # npm ci reads `dependencies` for a version 1 file, which this check does not walk.
-            "a version 1 file": (
-                '{"lockfileVersion":1,"dependencies":{"x":{"resolved":"https://evil.example/x.tgz"}}}\n',
-                "lockfileVersion is not 2 or 3"),
-            "no version": ('{"packages":{"node_modules/x":{}}}\n', "lockfileVersion is not 2 or 3"),
-            "a non-object entry": (
-                '{"lockfileVersion":3,"packages":{"node_modules/x":5}}\n', "malformed entry: node_modules/x"),
-            "a non-string resolved": (
-                '{"lockfileVersion":3,"packages":{"node_modules/x":{"resolved":5,"integrity":"sha512-A"}}}\n',
-                "resolved off the registry: node_modules/x"),
-            "a non-string integrity": (
-                '{"lockfileVersion":3,"packages":{"node_modules/x":{"resolved":"%s","integrity":5}}}\n' % registry,
-                "no integrity: node_modules/x"),
-        }
-        for label, (content, expected) in cases.items():
-            with self.subTest(label):
-                self.commit(path, content)
-                result = Sweep(self, self.repo).slices("security", "full")
-                self.assertEqual(3, result.returncode, result.stderr)
-                self.assertIn(expected, result.stderr)
-
     def test_full_and_a_non_ancestor_ref_both_read_everything(self):
         self.commit("tools/added.py", "print(1)\n")
         tip = git(self.repo, "rev-parse HEAD")
-        sweep = Sweep(self, self.repo)
+        sweep = self.sweep()
         self.assertEqual(0, self.mark("bug", tip).returncode)
         result = sweep.slices("bug", "full")
         self.assertEqual("full", parse(result.stdout)[0]["mode"])
@@ -455,49 +365,82 @@ class ASmallRepository(unittest.TestCase):
         self.assertEqual(sha, git(self.repo, "rev-parse refs/sweeps/security"))
 
     def test_the_slices_go_with_the_worktree(self):
-        sweep = Sweep(self, self.repo)
+        sweep = self.sweep()
         self.assertEqual(0, sweep.slices("security").returncode)
         dropped = run_bash(
             'cd "$R" && bash "$DROP" "$W" && [ ! -e "$W.slices" ] && echo gone',
-            R=self.repo, DROP=str(DROP), W=sweep.path,
+            R=self.repo, DROP=str(DROP), W=sweep.path, TMPDIR=self.root,
         )
         self.assertEqual("gone", dropped.stdout.strip(), dropped.stderr)
 
 
-class ThePerFileLoop(unittest.TestCase):
-    """The loop over the tracked files starts no process of its own."""
+class TheCheckout(unittest.TestCase):
+    """This checkout's own row file partitions its own tree, for each kind."""
+
+    def test_the_checkout_partitions_with_no_unowned_path(self):
+        for kind in ("bug", "security"):
+            with self.subTest(kind=kind):
+                result = Sweep(self, REPO).slices(kind, "full")
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertNotIn("no row owns", result.stderr)
+                head, slices = parse(result.stdout)
+                self.assertEqual("full", head["mode"])
+                self.assertGreater(len(slices), 0)
+
+
+class TheCheckoutReadsEachFileOnce(unittest.TestCase):
+    """The partition's subject: no path is listed twice across a sweep's slices,
+    and none is listed beside a payload file of the same blob, since the
+    payload's is the one read. A target with no `payload/` passes with nothing
+    to mirror; the one that renders from it is where the rows had to."""
+
+    def test_no_file_is_listed_twice_and_no_copy_beside_its_payload_file(self):
+        tree = run_bash('git -C "$R" ls-tree -r -z --full-tree HEAD', R=REPO)
+        self.assertEqual(0, tree.returncode, tree.stderr)
+        blobs = {}
+        for entry in tree.stdout.split(chr(0)):
+            if entry:
+                meta, _, name = entry.partition("\t")
+                blobs[name] = meta.split(" ")[2]
+        for kind in ("bug", "security"):
+            with self.subTest(kind=kind):
+                result = Sweep(self, REPO).slices(kind, "full")
+                self.assertEqual(0, result.returncode, result.stderr)
+                head, slices = parse(result.stdout)
+                paths = listed(slices)
+                self.assertEqual([], sorted({p for p in paths if paths.count(p) > 1}))
+                copies = [p for p in paths if not p.startswith("payload/")
+                          and blobs.get(f"payload/{p}") == blobs.get(p)
+                          and f"payload/{p}" in blobs]
+                self.assertEqual([], copies)
+                if any(name.startswith("payload/") for name in blobs):
+                    self.assertGreater(head["counts"]["mirrored"], 0)
+
+
+class TheSliceLoop(unittest.TestCase):
+    """The loop over the plan's lines starts no process of its own."""
 
     def test_the_loop_holds_no_command_substitution(self):
-        # Under MSYS each command substitution is an emulated fork, and one per
-        # tracked file is most of a run over a real tree (#321, #577); the loop
-        # is read, since a fork is invisible in the output.
+        # Under MSYS each `$(…)` is an emulated fork, and one per listed file
+        # is most of a run over a real tree; the loop is read, since a fork is
+        # invisible in the output. The rows are an awk pass, which forks once.
         source = SLICES.read_text(encoding="utf-8")
-        start = source.index("while IFS= read -r -d '' rec; do")
-        end = source.index('\ndone < "$out/.tree"\n', start)
-        code = [line for line in source[start:end].splitlines() if not line.lstrip().startswith("#")]
-        body = "\n".join(code)
-        self.assertIn("row_of", body, "the loop pattern stopped matching")
+        start = source.index("while IFS=$'\\t' read -r row size file; do")
+        body = "\n".join(code_lines(source[start:source.index("\ndone", start)]))
+        self.assertIn("flush", body, "the loop pattern stopped matching")
         self.assertNotRegex(body, r"\$\((?!\()", "a command substitution; `$((` is arithmetic")
         self.assertNotIn("`", body)
 
 
-class TheTablesNameTheHelpersRows(unittest.TestCase):
-    """Each command's row table names exactly the rows `row_of` can return."""
+class TheCommandsReadTheRowFile(unittest.TestCase):
+    """The rows are the checkout's, so no command restates them as a table."""
 
-    def test_each_table_matches_row_of(self):
-        source = SLICES.read_text(encoding="utf-8")
-        body = source[source.index("row_of() {"):source.index("\n}\n", source.index("row_of() {"))]
-        arms = re.findall(r"^\s*(.+?)\) REPLY=([a-z-]+) ;;$", body, re.MULTILINE)
-        self.assertGreater(len(arms), 5, "the arm pattern stopped matching row_of")
+    def test_each_command_names_the_row_file_and_holds_no_row_table(self):
         for kind in ("bug", "security"):
             with self.subTest(kind=kind):
-                rows = {
-                    row for pattern, row in arms
-                    if pattern == "*" or any(p.split(":")[0] in (kind, "*") for p in pattern.split("|"))
-                }
                 text = (SCRIPTS.parent / "commands" / f"{kind}-sweep.md").read_text(encoding="utf-8")
-                table = set(re.findall(r"^   \| `([a-z-]+)` \|", text, re.MULTILINE))
-                self.assertEqual(rows, table)
+                self.assertIn(".harness/sweep-rows.tsv", text)
+                self.assertEqual([], re.findall(r"^\s*\| `[a-z-]+` \|", text, re.MULTILINE))
 
 
 class Arguments(unittest.TestCase):

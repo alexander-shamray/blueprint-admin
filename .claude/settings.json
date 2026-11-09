@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "env": {
-    "CBX_NO_SKILL_AUTO_UPDATE": "1",
-    "MCP_TIMEOUT": "120000"
+    "MCP_TIMEOUT": "120000",
+    "CBX_NO_SKILL_AUTO_UPDATE": "1"
   },
   "permissions": {
     "allow": [
@@ -18,12 +18,21 @@
       "Bash(git branch --show-current)",
       "Bash(git push -u origin:*)",
       "Bash(git push origin:*)",
+      "Bash(bash .claude/scripts/git-push-force.sh:*)",
+      "Bash(bash .claude/scripts/git-branch-drop.sh:*)",
+      "Bash(py -3.12 .claude/scripts/sync_pr.py:*)",
+      "Bash(bash .claude/scripts/git-worktree-sync.sh:*)",
       "Bash(git remote -v)",
       "Bash(ls:*)",
       "Bash(wc:*)",
+      "Bash(comm:*)",
       "Grep",
       "Glob",
-      "Read"
+      "Read",
+      "Bash(bash .claude/scripts/host-checks.sh:*)",
+      "Bash(bash .claude/scripts/spa-ci.sh)",
+      "Bash(bash .claude/scripts/harness-checks.sh:*)",
+      "Bash(bash .claude/scripts/npm-checks.sh:*)"
     ],
     "deny": [
       "Edit(.remember/**)",
@@ -42,6 +51,40 @@
       "Edit(./.claude/settings.json)",
       "Edit(.claude/settings.local.json)",
       "Edit(./.claude/settings.local.json)",
+      "Edit(.git/**)",
+      "Edit(./.git/**)",
+      "Edit(.git)",
+      "Edit(./.git)",
+      "Edit(.mcp.json)",
+      "Edit(./.mcp.json)",
+      "Edit(.codeindexignore)",
+      "Edit(./.codeindexignore)",
+      "Edit(.harness/**)",
+      "Edit(./.harness/**)",
+      "Bash(git push --force:*)",
+      "Bash(git push --force-with-lease:*)",
+      "Bash(git push -f:*)",
+      "Bash(git push origin main:*)",
+      "Bash(git push -u origin main:*)",
+      "Bash(git push origin HEAD:main:*)",
+      "Bash(git push -u origin HEAD:main:*)",
+      "Bash(git push --delete:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean:*)",
+      "Bash(git branch -d:*)",
+      "Bash(git branch -D:*)",
+      "Bash(git branch -m:*)",
+      "Bash(git branch -M:*)",
+      "Bash(git branch --delete:*)",
+      "Bash(git branch --move:*)",
+      "Bash(git branch --force:*)",
+      "Bash(git branch --list *--no-l*)",
+      "Bash(git worktree remove:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(git *--output*)",
+      "Bash(git *--upload-pack*)",
+      "Bash(git *--receive-pack*)",
+      "Bash(git *--exec*)",
       "Edit(.claude/rules/**)",
       "Edit(./.claude/rules/**)",
       "Edit(.claude/output-styles/**)",
@@ -92,36 +135,41 @@
       "Edit(**/global.json)",
       "Edit(AGENTS.md)",
       "Edit(./AGENTS.md)",
-      "Edit(.mcp.json)",
-      "Edit(./.mcp.json)",
-      "Bash(git push --force:*)",
-      "Bash(git push --force-with-lease:*)",
-      "Bash(git push -f:*)",
-      "Bash(git push origin main:*)",
-      "Bash(git push -u origin main:*)",
-      "Bash(git push origin HEAD:main:*)",
-      "Bash(git push -u origin HEAD:main:*)",
-      "Bash(git push --delete:*)",
-      "Bash(git reset --hard:*)",
-      "Bash(git clean:*)",
-      "Bash(git branch -d:*)",
-      "Bash(git branch -D:*)",
-      "Bash(git branch -m:*)",
-      "Bash(git branch -M:*)",
-      "Bash(git branch --delete:*)",
-      "Bash(git branch --move:*)",
-      "Bash(git branch --force:*)",
-      "Bash(git *--output*)",
       "Bash(git *--no-index*)",
-      "Bash(git *--upload-pack*)",
-      "Bash(git *--receive-pack*)",
-      "Bash(git *--exec*)"
+      "Edit(.npmrc)",
+      "Edit(./.npmrc)",
+      "Edit(**/.npmrc)"
     ]
   },
   "hooks": {
     "PreToolUse": [
       {
         "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/run-guard.sh\" guard-git-argv.py",
+            "statusMessage": "checking git argv"
+          },
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/run-guard.sh\" guard-index-argv.py",
+            "statusMessage": "checking index argv"
+          },
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/run-guard.sh\" guard-helper-argv.py",
+            "statusMessage": "checking helper argv"
+          },
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/run-guard.sh\" guard-sed-crlf.py",
+            "statusMessage": "checking sed line endings"
+          }
+        ]
+      },
+      {
+        "matcher": "PowerShell",
         "hooks": [
           {
             "type": "command",
@@ -141,11 +189,21 @@
         ]
       },
       {
-        "matcher": "Grep|Bash",
+        "matcher": "Grep|Bash|PowerShell",
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/index-hint-run.sh\" PreToolUse index-search-hint.py",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/hint-bound.sh\" PreToolUse index-search-hint.py",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__codebase-index__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3.12 -P -c \"import os, runpy; runpy.run_path(os.environ['CLAUDE_PROJECT_DIR'] + '/.claude/hooks/index-mcp-root.py', run_name='__main__')\"",
             "timeout": 15
           }
         ]
@@ -153,12 +211,13 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Edit|Write|NotebookEdit|MultiEdit|Bash",
+        "matcher": "Edit|Write|NotebookEdit|MultiEdit|Bash|PowerShell",
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/refresh-index.sh\" >/dev/null 2>&1",
-            "timeout": 5
+            "command": "py -3.12 -P -c \"import os, runpy; runpy.run_path(os.environ['CLAUDE_PROJECT_DIR'] + '/.claude/hooks/refresh-index.py', run_name='__main__')\"",
+            "timeout": 15,
+            "statusMessage": "refreshing the code index"
           }
         ]
       }
@@ -168,8 +227,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/refresh-index.sh\" >/dev/null 2>&1",
-            "timeout": 5
+            "command": "py -3.12 -P -c \"import os, runpy; runpy.run_path(os.environ['CLAUDE_PROJECT_DIR'] + '/.claude/hooks/refresh-index.py', run_name='__main__')\"",
+            "timeout": 15,
+            "statusMessage": "refreshing the code index"
           }
         ]
       }
@@ -179,8 +239,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/index-query-hint.sh\"",
-            "timeout": 5
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/hint-bound.sh\" UserPromptSubmit index-query-hint.py",
+            "timeout": 15
           }
         ]
       }

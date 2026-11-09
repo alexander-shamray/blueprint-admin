@@ -1,81 +1,30 @@
 #!/usr/bin/env python3
-"""Run one guard in this interpreter, and prove by the exit status that it ran.
+"""Run one guard in this interpreter and prove by the exit status that it ran: `run-guard.py <guard>.py`.
 
-**`run-guard.sh` runs this, and only for an interpreter it did not probe on
-this call.** The launcher probes each candidate before it `exec`s one, and it
-remembers when the first candidate passed so that the next call can skip the
-probe (#44). What the probe established was true when it was made. By the next
-call the interpreter may have been uninstalled or repointed below the floor,
-and the mark that says it passed sits where the guarded session can make one —
-so on that path nothing is taken on trust, and this file is what replaces it.
-
-**The floor is checked here, in the interpreter that is about to judge**, and
-before anything is read from stdin. An interpreter below it leaves with a
-status that proves nothing and an event nobody has consumed.
-
-**Three statuses mean this file reached the guard, and they are chosen clear
-of what anything else is known to leave with.** A `PreToolUse` hook is
-believed on its exit status alone, and so is this file by its launcher — but 0
-is also what a stand-in that ran nothing answers, and 2 is also Python's own
-answer to a script it could not open. So the guard's status is translated:
-`ALLOWED` for its 0, `REFUSED` for its 2 and `ERRORED` for anything else — a
-crash, or a guard that does not compile. The launcher turns those back into 0,
-2 and 1 and refuses the call on every other status, 0 among them. The Store
-alias exits 49, the `py` launcher with no matching runtime exits 103, a
-missing command 127; none is one of the three.
-
-**The verdict itself is the guard's and is passed through**: its stdout, its
-stderr, and which way its own crash falls. `guard-git-argv.py` argues that
-direction for itself, and a launcher that answered differently depending on
-whether a mark existed would be a second opinion nobody asked for.
-
-**One thing falls closed here that the `exec` lets through, and it is not a
-verdict.** A verdict that could not be written was not delivered, and the
-interpreter says so itself, leaving with 120 when its last flush fails. That
-is a status that proves nothing, so the launcher refuses, where the same 120
-under the `exec` lets the tool run. A guard that cannot be opened is refused
-on both paths: `python` answers a script it cannot open with 2.
-
-**Compiled from source on every call, as `python guard.py` compiles it.** No
-import and so no `__pycache__`: a cached module under `.claude/hooks/` would be
-one more file whose contents decide what the guard does, and that list is
-kept at the guards themselves.
-
-**A bare name, resolved beside this file.** The launcher's closed set is what
-admits a guard; this file takes the name it admitted and refuses anything
-carrying a directory, so the guard and the file that proves it ran come from
-one checkout, as the launcher and the guard already do.
-"""
+For an interpreter `run-guard.sh` remembered rather than probed; it checks the floor and answers in three statuses
+only it leaves. Why: docs/harness-boundaries.md (*The guard launcher*)."""
 
 import os
 import sys
 
 FLOOR = (3, 12)
 
-# What the launcher's `case` reads. Chosen clear of the statuses a candidate
-# that never ran this file is known to leave with: 0, 1 and 2 are everybody's,
-# 49 is the Store alias, the `py` launcher's own start at 100, 120 is the
-# interpreter's for a flush that failed, 126 and 127 are the shell's, and
-# anything above 128 reads as a signal.
+# Clear of what a candidate that never ran this file leaves with: 0 to 2, the Store alias's 49, the `py` launcher's
+# 100 and up, a failed flush's 120, the shell's 126 and 127, and a signal's over 128.
 ALLOWED = 91
 REFUSED = 92
 ERRORED = 93
 
 
 def judged(name):
-    """Run the guard called `name` as `__main__` and return its proven status."""
+    """Run the guard called `name` as `__main__`, as `python <guard>` would, and return its proven status."""
     here = os.path.dirname(os.path.abspath(__file__))
     path = os.path.join(here, name)
-    # Outside the `try` on purpose. A guard that cannot be opened ran nothing,
-    # so this leaves with a traceback and a status that proves nothing, and the
-    # launcher refuses the call — as `python` refuses a script it cannot open,
-    # with 2.
+    # Outside the `try`: a guard that cannot be opened ran nothing, so this leaves with a status that proves nothing.
     with open(path, "rb") as handle:
         source = handle.read()
 
-    # What `python guard.py` gives the guard: its own `__main__`, its own path
-    # in `__file__` and in `sys.argv[0]`. `guard-edit-target.py`
-    # finds its checkout from `__file__`.
+    # Its own `__main__`, `__file__` and `argv[0]`, which `guard-edit-target.py` finds its checkout from.
     module = type(sys)("__main__")
     module.__file__ = path
     sys.modules["__main__"] = module
@@ -90,20 +39,14 @@ def judged(name):
         sys.excepthook(*sys.exc_info())
         status = 1
 
-    # `sys.exit`'s own rules: nothing is success, a number is itself, and
-    # anything else is printed and counts as a failure.
+    # `sys.exit`'s own rules: nothing is success, a number is itself, and anything else is printed and is a failure.
     if status is None:
         status = 0
     elif not isinstance(status, int):
         sys.stderr.write("%s\n" % (status,))
         status = 1
 
-    # Nothing is flushed here on purpose. The interpreter flushes both streams
-    # as it leaves, and when that fails it leaves with 120 whatever this file
-    # returned — a status that proves nothing, so the launcher refuses. A
-    # flush of this file's own would add nothing to that and would have to
-    # cope with a stream closed before the interpreter started, which is
-    # `None`.
+    # No flush here: the interpreter's own, on the way out, leaves with 120 when it fails, which proves nothing.
     if status == 0:
         return ALLOWED
     if status == 2:

@@ -1,23 +1,10 @@
 #!/usr/bin/env bash
 # Fork /branch step 5's worktree under .claude/worktrees/, and nothing else.
 #
-# The whole command is fixed here: `git worktree add --no-track -b <branch>
-# <path> origin/main`. A `Bash(git worktree add:*)` grant would buy that and
-# also `-B`, which does not create a branch but **resets** an existing one to
-# the start point — the operation `.claude/settings.json` denies as
-# `git branch --force` and `git branch -M`. A grant that reaches around the
-# deny list is worth more than the deny list, and a prefix rule cannot exclude
-# a flag: see git-switch-existing.sh, where the flags were shown to combine.
-#
-# `--no-track` is part of the fixed command rather than a caller's choice. The
-# start point is a remote-tracking ref, so without it the new branch's upstream
-# becomes origin/main and /pr never sets the right one. Checked at the pin:
-# `git worktree add -h` lists `--[no-]track`, and a real add with it produced a
-# branch with no upstream.
-#
-# origin/main is fixed for the same reason. Step 5 forks only from the fetched
-# base, and a caller-supplied start point would be one more thing to validate
-# for the sake of a case this command does not have.
+# The whole command is fixed: `git worktree add --no-track -b <branch> <path>
+# origin/main`. A prefix grant on `git worktree add` also buys `-B`, which
+# resets an existing branch to the start point past the `git branch --force`
+# and `git branch -M` denies, and a prefix rule cannot exclude a flag.
 set -euo pipefail
 [ "$#" -eq 2 ] || { echo "usage: git-worktree-fork.sh <path> <branch>" >&2; exit 2; }
 path="$1"
@@ -41,8 +28,8 @@ git rev-parse --git-dir >/dev/null 2>&1 ||
 [ "$(git rev-parse --git-dir)" = "$(git rev-parse --git-common-dir)" ] ||
   { echo "run from the main checkout, not a linked worktree" >&2; exit 2; }
 # A worktree inside the checkout is untracked content of it unless ignored,
-# and every `git status` the chain reads — grok-review.sh's clean-tree
-# refusal, /commit's unscoped sweep — would then see it.
+# and every `git status` the chain reads — /ship's clean-tree gate,
+# /commit's unscoped sweep — would then see it.
 git check-ignore -q "$path" ||
   { echo "$path is not ignored — add .claude/worktrees/ to .gitignore" >&2; exit 2; }
 [ ! -e "$path" ] || { echo "path already exists: $path" >&2; exit 2; }
@@ -53,27 +40,30 @@ case "$branch" in
 esac
 [[ "$branch" =~ ^[A-Za-z0-9][A-Za-z0-9._/()-]*$ ]] ||
   { echo "not a branch name this helper will take: $branch" >&2; exit 2; }
-# It must NOT exist: this helper only ever creates. Refusing here is what makes
-# the missing -B harmless rather than merely unavailable — a caller who wanted
-# to reset a branch cannot get there by passing its name.
+# It must not exist: refusing here is what makes the missing -B harmless
+# rather than merely unavailable, since a caller cannot reset a branch by
+# passing its name.
 ! git show-ref --verify --quiet "refs/heads/$branch" ||
   { echo "branch already exists: $branch" >&2; exit 3; }
 git show-ref --verify --quiet refs/remotes/origin/main ||
   { echo "no refs/remotes/origin/main — fetch first (step 1)" >&2; exit 4; }
+# `--no-track` is fixed because the start point is a remote-tracking ref, so
+# without it the new branch's upstream becomes origin/main and /pr never sets
+# the right one. origin/main is fixed because step 5 forks only from the
+# fetched base.
 git worktree add --no-track -b "$branch" "$path" origin/main
 # python3 stands in where the `py` launcher the hooks name does not exist.
 python=python3
-command -v py >/dev/null 2>&1 && python="py -3"
+command -v py >/dev/null 2>&1 && python="py -3.12"
 # A session started in the worktree reads that directory's own untracked local
 # settings, where the main checkout's approval of its `.mcp.json` servers does
-# not reach (#117), so the approval crosses as the names it covers, an
-# approve-all expanded to the servers defined now; never the file, whose
-# `permissions` rows are the main checkout's own grants. A server defined later
-# still prompts. A shape it cannot copy warns and leaves the fork done.
+# not reach, so the approval crosses as the names it covers, an approve-all
+# expanded to the servers defined now; never the file, whose `permissions` rows
+# are the main checkout's own grants. Definitions are found by walking up.
 settings=.claude/settings.local.json
 # -L as well as -e, because -e follows a link and a dangling one reads absent.
 if [ -f "$settings" ] && [ ! -L "$path/$settings" ] && [ ! -e "$path/$settings" ]; then
-  # -I keeps a checkout-root json.py off the import path.
+  # -I keeps a checkout-root json.py off the import path, as the hooks' -P does.
   if ! $python -I - "$settings" "$path/$settings" .mcp.json <<'PY'; then
 import json, os, sys
 local = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -97,9 +87,11 @@ PY
     echo "warning: could not copy the MCP approval from $settings; the worktree's MCP servers stay unapproved" >&2
   fi
 fi
-# Seed the new worktree's code index now rather than at its first edit: /branch
-# enters it mid-session, where no `SessionStart` fires, and a query there before
-# any edit would build from scratch. The worktree's own hook does the work,
-# silenced as its hook entries are; with no event on stdin it refreshes this
-# directory, and it detaches its own refresh, so the `&` only spares a wait.
-(cd "$path" && sh .claude/hooks/refresh-index.sh) </dev/null >/dev/null 2>&1 &
+# Seed the new worktree's code index now: /branch enters it mid-session, where
+# no `SessionStart` fires. Its own hook does the work, silenced as its hook
+# entries are, and with no event it takes the working directory; it detaches
+# its own refresh, so the `&` only spares a wait.
+hook=.claude/hooks/refresh-index.py
+if [ -f "$path/$hook" ]; then
+  (cd "$path" && env -u CLAUDE_PROJECT_DIR $python "$hook") </dev/null >/dev/null 2>&1 &
+fi

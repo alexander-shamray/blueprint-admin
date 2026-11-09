@@ -1,69 +1,7 @@
 #!/usr/bin/env python3
-"""Run the harness suite as parallel class shards, covering what the serial run covered.
+"""Run the `.claude/scripts` suite as parallel class shards, covering what a serial run covers.
 
-**Every caller of this suite ran two `unittest discover` roots serially, and
-paid about seventeen minutes for it on Windows.** Half the runtime is in a
-handful of classes and almost none of it is approximable: roughly seven tenths
-of the suite is real `bash`, real `git` and real `gh` on purpose, because
-re-implementing a `grep` pattern in Python's `re` would be a second
-specification — `test_harness_helpers.py` says so in its own words. So the lever
-is concurrency rather than rewriting, and the unit is the class, because a
-class is what shares a fixture.
-
-**What has to be true here is coverage, not speed**, and the shape a failure
-takes is always the same: every worker green, and some part of the suite never
-run. So nothing here reports a pass it has not earned.
-
-* Placement is derived from discovery, never from a list written by hand. A
-  class nobody has heard of is placed on weight alone.
-* `plan()` is checked against discovery by `test_harness_shards.py`, and the
-  path from `plan()` to the workers is checked again at runtime, in `main()`,
-  because a plan that covers everything and a run that covers everything are
-  two different claims.
-* A root that discovers nothing refuses the run. An empty suite is what a
-  renamed directory or a pattern that stopped matching looks like, and the
-  case that would have caught it is among the tests that stopped being found,
-  so it cannot be left to report zero tests and exit 0.
-* A worker refuses a unit holding an id discovery does not hold, and leaves
-  it unfinished, so the run fails on it by name. The serial worker, handed
-  its ids directly, refuses to start on such an id, or on no ids at all.
-
-**Three tables, and every one of them is a schedule hint rather than a fact.**
-`SERIAL` names the classes whose subject is elapsed time or a listening port,
-so running them beside seven other workers would measure the load instead.
-`TOGETHER` names the ones that share something outside their own fixture — a
-`secsweep-*` namespace in the shared temp root, and `git worktree` against
-this checkout's own `.git`. `WEIGHT` is a measurement that makes the order
-better and cannot make it wrong: a class missing from it is costed on its test
-count, and a class whose entry has gone stale is dealt late and still runs.
-A name in any table that no longer resolves to a discovered class fails a
-test, so a renamed class loses its pinning loudly rather than silently.
-
-**Classes are dealt from a queue rather than packed ahead of time.** Packing
-had to guess every class's cost before the run and paid for each wrong guess
-with a whole worker: the slowest shard took 1.43-1.52x the mean in every
-green run measured, with unlisted classes costing ten to forty times what
-their test count implied (#322). Now each worker takes the next unit when it
-finishes the last, longest first, so a wrong guess costs one class. A unit is
-claimed by creating its claim file exclusively, which exactly one worker can
-do, and is marked in `done/` only once it has run, so a unit a dead worker
-dropped is still visible to the check that every unit finished.
-
-**One run at a time, per user.** Each run sizes its pool for the whole host,
-so two at once — two sessions, two worktrees — ran sixteen workers and each
-took about three times as long (#323). A run takes a lock named for the user
-in their temp directory first, and a second run waits for it, saying so,
-rather than running beside it. That spans what one user runs, which on a
-developer's machine is every session that could collide; it does not hold
-another user's runs, nor one started under a different `TMPDIR`. The
-operating system releases the lock when its holder exits however it exits,
-so there is no stale lock to recover.
-
-**The floor is the longest class.** Class sharding cannot split one, so the
-makespan never goes below the slowest class however many workers there are;
-past eight the run stops getting faster and the interleavings start. That is
-why the count is capped rather than tuned, and why the remaining lever on the
-long poles is inside those classes and not here (issue #43).
+`docs/harness-boundaries.md`, *The suite's shard runner*, holds the argument: nothing reports a pass it has not earned.
 """
 
 import contextlib
@@ -85,129 +23,127 @@ else:
 HERE = Path(__file__).resolve()
 ROOT = HERE.parents[2]
 
-# The two roots every caller used to name for itself, `tools/token-usage`,
-# whose suite nothing ran until it joined them (#144), and each CI gate's
-# own. They live here, so `harness-checks.sh` and the `harness` CI job cannot
-# drift apart about what the suite is; `test_harness_shards.py` asserts each
-# one still contributes.
-ROOTS = ((".claude/scripts", "test_*.py"),
-         (".github/locality-gate", "test*.py"),
-         (".github/commit-gate", "test*.py"),
-         (".github/pin-gate", "test*.py"),
-         (".github/issue-form-gate", "test*.py"),
-         ("tools/token-usage", "test_*.py"))
+# The one tree every target holds. A gate's suite or a stack's root is that
+# target's to run beside this, and `test_harness_shards.py` holds the list to it.
+ROOTS = ((".claude/scripts", "test_*.py"),)
 
-# Whose subject is time or a port, and so cannot share a box with seven
-# workers. `TheRefresh` once asserted that a hook command returns inside two seconds,
-# which lost to a loaded host (#330); it now holds the fake CLI open until released
-# and fails on a call that cannot return. It stays here for what it still shares: a
-# real shell, a detached process and a cache directory per case.
+# Whose subject is elapsed time, and so cannot share a box with seven workers.
+# The wrapper's bound is the thing `HintBound` measures, its subclass runs the
+# same cases under the watchdog, and the third asserts a stalled `gh` read ends
+# inside twenty seconds, which it missed at thirty-two beside seven workers.
 SERIAL = frozenset({
-    "test_index_refresh_hook.TheRefresh",
+    "test_hint_bound.HintBound",
+    "test_hint_bound.HintBoundUnderTheWatchdog",
+    "test_pr_helpers.NoCommandReadsAPullRequestFeedUnfiltered",
 })
 
-# Who shares state outside their own fixture, and therefore shares a unit.
-# The first three create and list fixed `secsweep-*` names in the shared bash
-# temp root and drive `git worktree add`/`remove` against this checkout; the
-# fourth reads the whole working tree and asserts a finding list is empty, so
-# a concurrent worktree round trip is exactly what could disturb it. The
-# last makes a detached sweep worktree of this checkout, in the same
-# `secsweep-*` namespace the first lists. `test_sweep_slices.ASmallRepository`
-# makes its sweep worktrees of a synthetic repository under a temp root of its
-# own, so it shares nothing and runs wherever it is dealt.
+# Who shares state outside their own fixture, and therefore shares a unit. Each makes a detached sweep worktree of
+# this checkout in the shared temp root's `secsweep-*` namespace, and the first lists that namespace. Classes using
+# a repository and a temp root of their own, as `test_sweep_slices.ASmallRepository` does, run wherever dealt.
 TOGETHER = {
-    "test_harness_helpers.SweepWorktreeShape": "the checkout",
-    "test_harness_helpers.NoCommandHoldsAPrefixGrantThatAdmitsAForbiddenFlag": "the checkout",
-    "test_harness_helpers.TheFourPortedResiduals": "the checkout",
-    "test_root_ignore_coverage.ThisRepository": "the checkout",
-    "test_sweep_slices.TheRealTree": "the checkout",
+    "test_git_worktree_detach.SweepWorktreeShape": "the checkout",
+    "test_sweep_slices.TheCheckout": "the checkout",
+    "test_sweep_slices.TheCheckoutReadsEachFileOnce": "the checkout",
 }
 
-# Seconds a class took, every one of them from the slowest-classes data one
-# queued run of the whole suite printed, on one Windows host on 2026-10-20
-# (#322), with #320 and #321 already in. Nothing reads these as a fact about
-# anything. They set the order the queue deals units in, longest first, and
-# under a queue the order is all a weight can buy: a class dealt late runs
-# late and still runs.
-#
-# **Contended, and that is the right condition for them.** Each class was
-# timed whole, `setUpClass` included, while seven other workers ran beside
-# it, so these are the times a class takes inside the run it is ordered for.
-# They are several times the uncontended floor. That does not matter, because
-# they are only read against each other, and a host with less load scales
-# them together.
-#
-# **Refreshed whole rather than entry by entry, and that is the point.** These
-# numbers are read against each other, so a table half old and half new orders
-# worse than either. The one this replaces was taken one class at a time on
-# 2026-09-22, before the queue, and had gone stale in both directions: one
-# class sped up many times over in #320, and classes it did not list had
-# grown to cost far more than their test count (#322).
-#
-# **A class is listed when it measured 5 s or more, OR when it holds ten tests
-# or more.** Two arms because there are two ways to order the queue wrongly.
-# Slower than its test count is the obvious one: an unlisted class costs
-# `UNMEASURED` per test, and the slowest class here holds 18 tests. Faster
-# than its test count is the other: `TheGitArgvGuard`'s many tests would be
-# costed far above what it takes, and it would be dealt ahead of the classes
-# that decide the run. A class under both arms is dealt on its test count, and
-# is too small for the difference to reach the wall.
-#
-# The seconds are not restated here on purpose: the table owns them, and a
-# comment that carries a second copy is the drift this repository keeps
-# finding. Every run ends by printing its slowest classes, so the next
-# refresh needs no profile.
-#
-# SERIAL classes are absent by construction: `plan()` sets them aside before
-# it reads this, so an entry for one would never be consulted.
+# Seconds a class took in one queued run of the whole suite on one Windows host, timed whole beside seven workers.
+# They only order the queue, longest first, and a class dealt late still runs. Refresh the table whole from the
+# class times every run prints, since a table half old and half new orders worse than either. That run listed a
+# class at 5 s or at ten tests, and one added or sped up since costs `UNMEASURED` a test or its old seconds until the
+# next refresh; SERIAL classes are absent, since `plan()` sets them aside before it reads this.
 WEIGHT = {
-    "test_sweep_slices.ASmallRepository": 807.4,
-    "test_git_pr_trailer_helpers.TrailerHelper": 766.0,
-    "test_git_rebase_onto_main.TheHelperPublishesWhatItRebased": 728.4,
-    "test_git_rebase_onto_main.AConflictIsTheCaseRebaseIsHereFor": 490.7,
-    "test_git_rebase_onto_main.TheApplyBackendIsDrivenToo": 444.2,
-    "test_harness_helpers.TheLauncherProvesWhatItRemembers": 281.3,
-    "test_git_rebase_onto_main.TheHelperRefusesBeforeItRewrites": 275.8,
-    "test_git_worktree_fork.ForkShape": 268.9,
-    "test_git_pr_trailer_helpers.RevertHelper": 234.7,
-    "test_index_refresh_hook.TheSeed": 230.7,
-    "test_harness_helpers.ARememberedGuardAnswersAsAProbedOne": 179.5,
-    "test_git_rebase_onto_main.AStoppedReplayIsNotAlwaysAConflict": 177.3,
-    "test_harness_helpers.IssueHelperHasNoFreeParameter": 153.9,
-    "test_index_refresh_hook.TheEvent": 152.6,
-    "test_sweep_slices.TheRealTree": 147.4,
-    "test_harness_helpers.LandingByRebaseMovedTheReadsThatAssumedAMergeCommit": 82.4,
-    "test_harness_helpers.LabelHelperBehaviour": 72.0,
-    "test_harness_helpers.TheGitArgvGuard": 67.8,
-    "test_git_rebase_onto_main.ALegacyMergeForwardIsNotSilentlyDropped": 64.3,
-    "test_harness_helpers.SweepWorktreeShape": 64.1,
-    "test_harness_helpers.NoCommandHoldsAPrefixGrantThatAdmitsAForbiddenFlag": 47.2,
-    "test_index_query_hint.TheHint": 39.6,
-    "test_edit_target_guard.WhatThisGuardIsNotTheSubjectOf": 33.0,
-    "test_harness_helpers.OnlyThisCheckoutsPullRequestsSurvive": 25.6,
-    "test_index_search_hint.WhatItNeverTouches": 24.8,
-    "test_git_rebase_onto_main.TheFixtureCopyIsTheFixture": 23.5,
-    "test_harness_helpers.WhatSuppressesIsDecidedByCodeNow": 21.9,
-    "test_commit_gate.Reading": 20.6,
-    "test_root_ignore_coverage.TheScan": 14.9,
-    "test_harness_helpers.TheHookWiringRunsOnMoreThanOneOperatingSystem": 14.8,
-    "test_index_search_hint.TheFirstSymbolSearchIsRefusedOnce": 14.5,
-    "test_edit_target_guard.TheOrdinaryWriteIsNotDisturbed": 10.7,
-    "test_harness_helpers.TheFourPortedResiduals": 10.0,
-    "test_edit_target_guard.ALinkIsNotTheFileItIsSpelledAs": 9.2,
-    "test_git_rebase_onto_main.TheBranchNameGuardsEachHaveTheirOwnCase": 8.7,
-    "test_root_ignore_coverage.ThisRepository": 8.5,
-    "test_harness_shards.TheRunnerRefusesRatherThanReportingAPass": 7.3,
-    "test_harness_helpers.CommandsEnforceTheEditingBoundariesTheyState": 5.7,
-    "test_harness_helpers.HarnessChecksFindsAGenericPyLauncher": 5.1,
-    "test_token_usage.ReportTests": 0.3,
-    "test_harness_shards.ThePlacementIsDerivedFromDiscovery": 0.1,
-    "test_token_usage.CommandLineTests": 0.1,
-    "test_locality_gate.Verdicts": 0.0,
-    "test_locality_gate.TouchSetGrammar": 0.0,
-    "test_locality_gate.MapGrammar": 0.0,
-    "test_locality_gate.Matching": 0.0,
-    "test_commit_gate.Judgement": 0.0,
+    "test_sweep_slices.ASmallRepository": 824.8,
+    "test_git_rebase_onto_main.TheHelperPublishesWhatItRebased": 777.0,
+    "test_git_branch_drop.TheHelperKeepsWhatHasNotLanded": 637.6,
+    "test_git_rebase_onto_main.AConflictIsTheCaseRebaseIsHereFor": 610.1,
+    "test_git_argv_guard.TheGitArgvGuard": 517.0,
+    "test_sync_pr.VerifyTests": 484.5,
+    "test_git_pr_trailer_helpers.TrailerHelper": 466.8,
+    "test_git_worktree_remove.RemoveShape": 383.4,
+    "test_git_rebase_onto_main.ALegacyMergeForwardIsNotSilentlyDropped": 305.0,
+    "test_sync_pr.RenderedSettingsTests": 260.2,
+    "test_gh_pr_create.PrCreateHelper": 222.0,
+    "test_gh_issue_create.IssueHelperHasNoFreeParameter": 188.7,
+    "test_git_rebase_onto_main.TheHelperRefusesBeforeItRewrites": 185.4,
+    "test_sync_pr.ReviewDiffTests": 181.3,
+    "test_git_push_force.TheHelperRefusesBeforeItPushes": 178.9,
+    "test_pr_for_branch.OnlyThisCheckoutsPullRequestsSurvive": 168.8,
+    "test_git_rebase_onto_main.TheApplyBackendIsNeverTheOneThatRuns": 166.9,
+    "test_git_worktree_fork.ForkShape": 150.3,
+    "test_gh_issue_harness.HarnessIssueHelperHasNoFreeParameter": 149.4,
+    "test_git_worktree_sync.SyncShape": 145.8,
+    "test_run_guard.TheLauncherProvesWhatItRemembers": 136.3,
+    "test_run_guard.ARememberedGuardAnswersAsAProbedOne": 134.8,
+    "test_git_pr_trailer_helpers.RevertHelper": 131.4,
+    "test_gh_label_ensure.LabelHelperBehaviour": 118.3,
+    "test_git_argv_guard.AWriteIntoWhatTheTargetDenies": 113.8,
+    "test_ship_landing_method.TheFinishedPredicateSurvivesTheLandingMethod": 108.8,
+    "test_sync_pr.PinnedHeadTests": 103.6,
+    "test_run_guard.TheHookWiringRunsOnMoreThanOneOperatingSystem": 98.5,
+    "test_cbx.CbxWrapper": 89.9,
+    "test_sweep_slices.TheCheckoutReadsEachFileOnce": 77.5,
+    "test_git_push_force.TheHelperPublishesTheBranchInHand": 73.5,
+    "test_index_search_hint.WhatCountsAsASearch": 72.7,
+    "test_sync_pr.ConfigGlobTests": 70.2,
+    "test_dispatch_sync.SyncLaunch": 64.1,
+    "test_sweep_slices.TheCheckout": 60.8,
+    "test_git_worktree_detach.StaleSweepWorktrees": 60.0,
+    "test_git_worktree_detach.ATrackedLinkIsRefusedBeforeAnythingIsMade": 58.0,
+    "test_ship_landing_method.TheMergeHelperRefusesWhatTheGrantAdmitted": 53.9,
+    "test_index_mcp_root.WhatItNames": 53.0,
+    "test_git_branch_drop.TheHelperDropsWhatLanded": 52.0,
+    "test_sync_pr.LocalSuitesTests": 48.3,
+    "test_sync_pr.LocalPathTests": 45.6,
+    "test_git_trailer_pr.TheHelperRefusesMain": 44.6,
+    "test_dispatch_sync.RunningASync": 44.0,
+    "test_git_worktree_detach.SweepWorktreeShape": 37.7,
+    "test_index_query_hint.TheHint": 37.5,
+    "test_issue_decisions.Cli": 28.7,
+    "test_index_search_hint.WhenItAsks": 27.5,
+    "test_sed_crlf_guard.ARewriteOfATrackedCrlfFileIsRefused": 23.8,
+    "test_index_gate.TheCliIsNotStartedOverAnIndexTheHookRefuses": 23.5,
+    "test_helper_argv_guard.GuardHelperArgv": 22.3,
+    "test_sync_pr.ListTests": 21.1,
+    "test_harness_shards.TheRunnerRefusesRatherThanReportingAPass": 15.4,
+    "test_refresh_index.IgnoredPaths": 15.3,
+    "test_gh_issue_suppresses.WhatSuppressesIsDecidedByCodeNow": 15.1,
+    "test_index_argv_guard.GuardIndexArgv": 14.7,
+    "test_edit_target_guard.AWorktreeTheSessionHasNotEntered": 14.6,
+    "test_gh_issue_owned.OwnedIssues": 11.7,
+    "test_dispatch_run.MergeCheckTests": 11.0,
+    "test_edit_target_guard.TheHomeDirectoryKeepsWhatRunsAtLogin": 11.0,
+    "test_sync_pr.UnreadableConfigTests": 10.7,
+    "test_refresh_index.TheIndexIsCompactedAfterARefresh": 10.2,
+    "test_destructive_classes.DestructiveClasses": 9.7,
+    "test_index_query_hint.TheWiring": 9.7,
+    "test_edit_target_guard.TheOrdinaryWriteIsNotDisturbed": 8.1,
+    "test_index_search_hint.TheWiring": 8.1,
+    "test_sync_pr.HeadBlobsTests": 7.8,
+    "test_git_rebase_onto_main.TheArgumentGuardsEachHaveTheirOwnCase": 7.4,
+    "test_edit_target_guard.ALinkIsNotTheFileItIsSpelledAs": 7.1,
+    "test_sed_crlf_guard.WhatSedLeavesAloneIsAdmitted": 6.5,
+    "test_dispatch_board.BoardTests": 5.8,
+    "test_index_mcp_root.WhenItRefuses": 5.6,
+    "test_dispatch_run.WakeTests": 4.7,
+    "test_python_hygiene.PythonHygiene": 3.5,
+    "test_refresh_index.TheIndexerAKilledWorkerLeftBehind": 3.3,
+    "test_dispatch_run.LaunchTests": 3.0,
+    "test_refresh_index.OneRefreshAtATime": 2.2,
+    "test_dispatch_run.ResultCommandTests": 2.1,
+    "test_dispatch_run.BerserkTests": 1.3,
+    "test_dispatch_board.WriteTests": 1.2,
+    "test_dispatch_run.ReportTests": 0.9,
+    "test_refresh_index.OnlyAnIndexAtRest": 0.8,
+    "test_refresh_index.SeedingAWorktree": 0.6,
+    "test_dispatch_run.ClassifyTests": 0.4,
+    "test_refresh_index.ChoosingTheCheckout": 0.2,
+    "test_command_runbooks.EachSplitCommandHasBothHalves": 0.1,
+    "test_command_runbooks.ShipStopsAndContinuesWhereTheHelpersSay": 0.0,
+    "test_dispatch_board.BerserkTests": 0.0,
+    "test_dispatch_board.PathTests": 0.0,
+    "test_issue_decisions.Shapes": 0.0,
+    "test_ship_dispatched.TheDispatchedTokenChangesOnlyWhatTheSpecLists": 0.0,
+    "test_ship_sync.TheSyncRow": 0.0,
 }
 
 # What an unmeasured class is assumed to cost per test. Deliberately coarse:
@@ -239,15 +175,10 @@ def walk(suite):
 
 
 def discovered():
-    """Every test the serial run ran, in the order it ran them.
+    """Every test the run covers, in discovery order.
 
-    Import failures arrive as loader placeholders rather than as an exception,
-    which is what keeps a broken module a red test in some worker instead of a
-    module that quietly stops being discovered. A root that yields nothing at
-    all is different in kind and refuses the run: a renamed directory or a
-    pattern that stopped matching looks exactly like an empty suite, and the
-    case that would have caught it is among the tests that stopped being
-    found.
+    An import failure arrives as a loader placeholder, so a broken module stays a red test in some worker. A root
+    yielding nothing refuses the run: the case that would catch a renamed directory is among the tests it lost.
     """
     found = []
     for start, pattern in ROOTS:
@@ -268,14 +199,10 @@ def owner(test_id):
 
 
 def plan(found):
-    """Cut every id into the units the queue deals, and the serial tail.
+    """Cut every id into the units the queue deals, longest first, and the serial tail.
 
-    A unit is one class, or every class one `TOGETHER` group names. The units
-    come back longest first, which is the order the workers take them in and
-    the only place WEIGHT is read: a long class dealt last is the one wrong
-    guess a queue still pays for in full. Between them the units and the tail
-    hold `found` exactly once — which is the property `test_harness_shards.py`
-    checks rather than takes.
+    A unit is one class, or every class one `TOGETHER` group names. Between them the units and the tail hold `found`
+    exactly once, which `test_harness_shards.py` checks rather than takes.
     """
     tail = [test_id for test_id in found if owner(test_id) in SERIAL]
 
@@ -296,9 +223,8 @@ def plan(found):
 def unplaced(found, phases):
     """What discovery holds that the runs do not, and the reverse.
 
-    `plan()` covering everything and the runs covering everything are two
-    claims, and only the first has a test that can see it. This is the second,
-    checked where the plan becomes subprocesses.
+    `plan()` covering everything and the runs covering everything are two claims; this is the second, checked where
+    the plan becomes subprocesses.
     """
     placed = [test_id for _, ids in phases for test_id in ids]
     missing = sorted(set(found) - set(placed))
@@ -312,11 +238,8 @@ def unplaced(found, phases):
 def unfinished(work, units):
     """The units of a queued run that never reached `done/`.
 
-    `unplaced` checks what was queued; this checks what came back. A worker
-    that died mid-unit leaves its unit claimed in `taken/` and absent from
-    `done/`, one that refused an id does too, and a unit no worker reached is
-    in neither — all three are tests that did not run, however every worker
-    exited.
+    A worker that died mid-unit leaves its unit in `taken/` alone, one that refused an id does too, and a unit no
+    worker reached is in neither: all three are tests that did not run, however every worker exited.
     """
     done = {path.name for path in (work / "done").glob("*.ids")}
     return [name for name in units if name not in done]
@@ -325,13 +248,8 @@ def unfinished(work, units):
 def settle_streams():
     """Write UTF-8 to a log file, whatever the code page says.
 
-    **The two streams are reconfigured because they are a file rather than a
-    console**, which on Windows makes them the ANSI code page, and unittest
-    writes test names and failure messages carrying literal dashes; the parent
-    then reads back bytes that are not UTF-8. It is done here rather than in
-    the worker's environment on purpose: an inherited `PYTHONIOENCODING`
-    reaches every `bash`, `git` and hook the tests spawn, and what those
-    behave like unaided is the whole subject of this suite.
+    A worker's streams are a file, which on Windows makes them the ANSI code page. It is done here because an inherited
+    `PYTHONIOENCODING` would reach every `bash`, `git` and hook the tests spawn, whose unaided behaviour is the subject.
     """
     sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
     sys.stderr.reconfigure(encoding="utf-8", errors="backslashreplace")
@@ -350,13 +268,10 @@ def loaded():
 
 
 def run_listed(wanted):
-    """Run exactly these ids, and refuse the run if discovery lost one.
+    """Run exactly these ids, alone, and refuse the run if discovery lost one.
 
-    The refusal is the runtime half of the coverage rule: a worker handed a
-    name nothing discovers has been told to run something that does not exist,
-    and reporting that as a pass is the failure this file exists to avoid. A
-    worker handed nothing at all is the same failure with nothing to name.
-    The serial tail runs this way, alone, after the queue has drained.
+    A worker handed a name nothing discovers, or handed nothing, has been told to run what does not exist, and
+    reporting that as a pass is the failure this file exists to avoid. The serial tail runs this way.
     """
     settle_streams()
     if not wanted:
@@ -379,18 +294,8 @@ def run_listed(wanted):
 def claims(work):
     """The units this worker wins, longest first, each claimed once.
 
-    Creating `taken/<unit>` exclusively is the claim: `O_CREAT | O_EXCL` is
-    atomic on NTFS as on POSIX, so exactly one worker's create succeeds and
-    every other one sees the file exist and moves on. Every worker walks the
-    whole list in order, so a unit nobody has claimed is never passed over,
-    and a worker stops only at the end of the list.
-
-    Not a rename. A rename of a queue file was the first design, and on
-    Windows it is not exclusive: two workers that opened the same file before
-    either moved it both "succeeded", the second moving it onto itself, and
-    ran the unit twice. A race of four workers over single-test units in
-    `test_harness_shards.py` reproduces that and asserts each test ran once,
-    and `done/` is written exclusively too, so a doubled unit fails its run.
+    Creating `taken/<unit>` exclusively is the claim, atomic on NTFS as on POSIX. A rename is not: on Windows two
+    workers that opened one file both succeeded and ran the unit twice. Every worker walks the whole list.
     """
     for name in sorted(path.name for path in (work / "units").glob("*.ids")):
         try:
@@ -404,15 +309,8 @@ def claims(work):
 def run_queue(work):
     """Run every unit in `work` this worker can claim.
 
-    Discovery happens once per worker, not once per unit: it imports every
-    module in every root. Each class in a unit runs as its own suite, in
-    discovery order, so its time is measured whole — `setUpClass` included —
-    and written to `done/` beside the unit's completion, which is where the
-    parent reads the slowest classes from. A unit holding an id discovery does
-    not hold is refused and never reaches `done/`, so the parent's check that
-    every unit finished fails on it by name. Nothing a worker reads is a file
-    another worker writes: the ids sit in `units/`, written before any worker
-    started.
+    Each class runs as its own suite, so its time is measured whole, and module cleanups run between classes. A unit
+    holding an id discovery does not hold is refused and never reaches `done/`, so the parent's check names it.
     """
     settle_streams()
     tests = loaded()
@@ -446,9 +344,7 @@ def run_queue(work):
 def spawn(args, log):
     """One worker process, writing everything to one log.
 
-    The environment is this process's, unchanged: a worker settles its own two
-    streams in `settle_streams`, and anything set here would reach every
-    process the tests under it spawn.
+    The environment is this process's, unchanged, since anything set here would reach every process the tests spawn.
     """
     return subprocess.Popen([sys.executable, str(HERE), *args],
                             cwd=str(ROOT), stdout=log,
@@ -458,11 +354,8 @@ def spawn(args, log):
 def report(logs):
     """Print what each worker wrote, whatever ended the run.
 
-    Called from a `finally`, and before the working directory goes: a run
-    interrupted at minute four otherwise showed nothing at all, where the
-    serial command it replaced had been streaming test names the whole time.
-    Bytes straight through — decoding a worker's output here only to encode
-    it again is what once killed the parent printing a run it had finished.
+    Called from a `finally`, so an interrupted run still shows its logs. Bytes straight through, since decoding a
+    worker's output only to encode it again once killed the parent printing a run it had finished.
     """
     for title, log in logs:
         if not log.exists():
@@ -472,10 +365,10 @@ def report(logs):
         sys.stdout.buffer.flush()
 
 
-def slowest(work, count=15):
-    """The classes that took longest, from every unit that finished.
+def slowest(work):
+    """Every class's time, longest first, from every queued unit that finished; `SERIAL` classes are not queued.
 
-    Printed at the end of every run so `WEIGHT` can be refreshed from data
+    Printed at the end of every run so `WEIGHT` can be refreshed whole from data
     rather than from a profile somebody has to remember to take.
     """
     rows = []
@@ -483,25 +376,21 @@ def slowest(work, count=15):
         for line in path.read_text(encoding="utf-8").splitlines():
             seconds, cls = line.split("\t")
             rows.append((float(seconds), cls))
-    return sorted(rows, reverse=True)[:count]
+    return sorted(rows, reverse=True)
 
 
 def lock_path():
     """Where the lock lives: the user's temp directory, under the user's name.
 
-    The temp directory rather than the checkout, because what two runs contend
-    for is the host: two worktrees of this repository, or two clones, are two
-    checkouts and one set of cores. The user's name in the file, because a
-    shared `/tmp` holds other users' files, and opening one of theirs would
-    fail rather than wait. So the lock spans one user's runs, which on a
-    developer's machine is every session that could collide.
+    The temp directory, because two checkouts contend for one host's cores. The user's name, because opening another
+    user's file in a shared `/tmp` would fail rather than wait.
     """
     try:
         user = getpass.getuser()
     except Exception:
         user = "unknown"
     safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in user)
-    return Path(tempfile.gettempdir()) / f"blueprint-admin-harness-{safe}.lock"
+    return Path(tempfile.gettempdir()) / f"blueprint-harness-suite-{safe}.lock"
 
 
 LOCK = lock_path()
@@ -651,7 +540,7 @@ def run_all(units, tail, count):
         report(logs)
         shutil.rmtree(str(work), ignore_errors=True)
 
-    print("\nshard-harness-suite.py: slowest classes, in seconds:")
+    print("\nshard-harness-suite.py: every class the queue finished, slowest first, in seconds:")
     for seconds, cls in times:
         print(f"  {seconds:7.1f}  {cls}")
     bad = [title for (title, _), code in zip(logs, codes) if code != 0]

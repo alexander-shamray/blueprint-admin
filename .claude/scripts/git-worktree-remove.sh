@@ -1,134 +1,156 @@
 #!/usr/bin/env bash
-# Remove the worktree `/branch` step 5 forked, and nothing else.
-#
-# **`Bash(git worktree remove:*)` is a PREFIX grant, so a trailing `-f` is
-# inside it (blueprint-frontend#16)** — and `-f` is precisely the refusal that matters here.
-# `ship.md` step 8 relies on `git worktree remove` declining a dirty worktree:
-# that refusal is what stops the teardown from deleting work the run did not
-# commit, and the step's own text says the directory is left for inspection
-# when it fires. A grant that admits the flag which defeats it leaves the
-# guarantee resting on the model not typing three characters.
-#
-# The path shape is `git-worktree-fork.sh`'s, because the fork is the only
-# thing that creates what this removes: `.claude/worktrees/<name>`.
-# Neither the sweeps' detached worktrees nor anything else reaches this —
-# `git-worktree-drop.sh` owns those, with its own shape check.
-#
-# **Registration is not ownership, and the first form took it as ownership.**
-# `git-worktree-drop.sh` says so of its own paths; this helper checked only
-# that the path was a registered worktree of the right shape, so a prefix
-# grant with a caller-chosen path could remove ANY clean forked worktree —
-# someone else's PR checkout included. So the caller names the branch the run
-# forked too, and the worktree registered at that path must have that branch
-# checked out, which is the pair `git-worktree-fork.sh <path> <branch>` wrote.
-# Raised by Copilot.
-#
-# **What that does not reach**: a caller naming another run's path AND its
-# branch together passes. `/ship` passes the branch it created, recorded at
-# step 1, so what is left is a caller that already knows both names — not a
-# path a poisoned string can pick blind.
+# Remove the /branch worktree at <path> holding <branch>, without -f, once no
+# code-index refresh holds it. The command is fixed and both arguments are
+# shape-checked, so no flag can arrive; docs/commands/ship.md says who passes
+# the branch and what the binding leaves open.
 set -euo pipefail
 [ "$#" -eq 2 ] ||
   { echo "usage: git-worktree-remove.sh <path> <branch>" >&2; exit 2; }
 path="$1"
 branch="$2"
-
-# The same grammar the fork helper writes with, so nothing can be removed that
-# this repository's own commands did not create — and neither `-f` nor any
-# other flag can arrive, since neither argument can begin with `-`.
 [[ "$path" =~ ^\.claude/worktrees/[A-Za-z0-9][A-Za-z0-9._-]*$ ]] ||
   { echo "path must be .claude/worktrees/<name>" >&2; exit 2; }
+# The pattern git-branch-create.sh and git-worktree-fork.sh use, which admits
+# `()` because `/branch` cuts `feat(<scope>)/` names.
 [[ "$branch" =~ ^[A-Za-z0-9][A-Za-z0-9._/()-]*$ ]] && [[ "$branch" != *..* ]] ||
   { echo "not a branch name this helper will take: $branch" >&2; exit 2; }
-[ "$branch" != main ] ||
-  { echo "main is never a forked branch" >&2; exit 2; }
-# **No slug is derived from the branch here, and the first form derived one.**
-# `/branch` cuts the directory name to the first word or two of the change —
-# `feat(template)/masstransit-registration` forks
-# `.claude/worktrees/masstransit` — so requiring the full branch basename
-# refused every such worktree and `/ship`'s teardown with it. The registered
-# worktree holding the named branch, checked below, is the binding. Raised by
-# Copilot.
-[ -d "$path" ] || { echo "no such directory: $path" >&2; exit 3; }
-
-# It must be a worktree of THIS repository, not merely a directory with the
-# right name, and it must hold the named branch. `git worktree list` is the
-# register, and its porcelain puts each `worktree` line before that
-# worktree's `branch` line.
-resolved=$(cd "$path" && pwd -P)
-registered=$(git worktree list --porcelain)
-found=no
-current=
-# Read in THIS shell, not through a pipe: a `while` on the right of a pipe runs
-# in a subshell, so a flag set inside it is lost and the check would answer
-# `no` on every path — refusing the teardown it exists to permit.
-while IFS= read -r line; do
-  case "$line" in
-    "worktree "*)
-      current=
-      dir="${line#worktree }"
-      [ -d "$dir" ] && [ "$(cd "$dir" && pwd -P)" = "$resolved" ] && current=yes
-      ;;
-    "branch "*)
-      [ "$current" = yes ] && [ "${line#branch }" = "refs/heads/$branch" ] && found=yes
-      ;;
-  esac
-done <<<"$registered"
-[ "$found" = yes ] ||
-  { echo "not the worktree of this repository holding ${branch}: $resolved" >&2; exit 3; }
-
-# No `--force`. The refusal on a dirty worktree is the point of this endpoint,
-# and `ship.md` step 8 reports the directory as left for inspection when it
-# fires rather than treating it as an error to get past.
-#
-# **A refusal and a half-finished removal are different failures, and on Windows only the
-# first was handled (#329).** git unregisters the worktree and then deletes its tree; a
-# process holding `<worktree>/.claude` (measured here: it let go about 40 s after a build,
-# with the build servers already shut down) makes the delete fail with `Permission denied`
-# or `Invalid argument` after the worktree is gone from the register. Leaving that
-# directory behind is how `.claude/worktrees` and the temp root accumulated remnants. So
-# when git fails, the register is asked again: still registered means git refused (a dirty
-# tree), and the failure stands; not registered means only the directory is left, and it
-# is deleted here, retrying for a bounded time, since the path matched the fork helper's
-# shape and was registered to the named branch above.
-removed_status=0
-git worktree remove "$path" || removed_status=$?
-if [ "$removed_status" -ne 0 ]; then
-  # **Unregistered is established twice and positively; any doubt is "still registered".** The
-  # listing must run, name at least the main worktree, and not name this path; and git itself
-  # must no longer recognise the directory as a worktree. A failed listing, an empty one or a
-  # path-form mismatch must never read as "gone", because the next step deletes a tree.
-  listing=$(git worktree list --porcelain) || exit "$removed_status"
-  [ -n "$listing" ] || exit "$removed_status"
-  still=no
-  while IFS= read -r line; do
-    case "$line" in
-      "worktree "*)
-        dir="${line#worktree }"
-        [ -d "$dir" ] && [ "$(cd "$dir" && pwd -P)" = "$resolved" ] && still=yes
-        ;;
-    esac
-  done <<<"$listing"
-  [ "$still" = no ] || exit "$removed_status"
-  # Asked of the directory itself, and compared git to git (never against a path string, which
-  # differs in form under MSYS and on a case-folding volume): a leftover with no `.git` resolves
-  # to the checkout that contains it, whose git dir IS the common dir; one whose `.git` points
-  # at a removed admin directory makes git fail. A live linked worktree answers with its own
-  # admin directory, which is not the common dir, and is kept.
-  if there=$(git -C "$resolved" rev-parse --path-format=absolute --git-dir 2>/dev/null); then
-    here=$(git rev-parse --path-format=absolute --git-common-dir) || exit "$removed_status"
-    [ "$there" = "$here" ] || exit "$removed_status"
-  fi
-  tries="${CLAUDE_WORKTREE_REMOVE_TRIES:-18}"
-  pause="${CLAUDE_WORKTREE_REMOVE_PAUSE:-5}"
-  [[ "$tries" =~ ^[0-9]+$ && "$pause" =~ ^[0-9]+$ ]] ||
-    { echo "CLAUDE_WORKTREE_REMOVE_TRIES and _PAUSE must be whole numbers" >&2; exit 2; }
-  for ((attempt = 1; attempt <= tries; attempt++)); do
-    rm -rf -- "$resolved" 2>/dev/null || true
-    [ ! -e "$resolved" ] && break
-    [ "$attempt" -lt "$tries" ] && sleep "$pause"
-  done
-  [ ! -e "$resolved" ] ||
-    { echo "$path is unregistered but a process still holds it; delete it by hand" >&2; exit 1; }
-  echo "removed $path after git left it behind"
+# Folded, as git-rebase-onto-main.sh folds it: a case-insensitive host's `Main`
+# is `main`'s ref.
+[ "$(printf %s "$branch" | tr '[:upper:]' '[:lower:]')" != main ] ||
+  { echo "main is never a forked branch: $branch" >&2; exit 2; }
+git rev-parse --git-dir >/dev/null 2>&1 ||
+  { echo "not in a git repository" >&2; exit 2; }
+[ -z "$(git rev-parse --show-prefix)" ] ||
+  { echo "run from the checkout root" >&2; exit 2; }
+[ "$(git rev-parse --git-dir)" = "$(git rev-parse --git-common-dir)" ] ||
+  { echo "run from the main checkout, not a linked worktree" >&2; exit 2; }
+[ -d "$path" ] || { echo "not an existing directory: $path" >&2; exit 3; }
+# Asked of git, because `git worktree list` paths are not comparable with the
+# shell's under MSYS. A plain directory answers with this checkout's own git
+# directory, found by walking up, and so reads as no linked worktree.
+common_here=$(git rev-parse --path-format=absolute --git-common-dir)
+common_there=$(git -C "$path" rev-parse --path-format=absolute --git-common-dir) &&
+  dir_there=$(git -C "$path" rev-parse --path-format=absolute --git-dir) ||
+  { echo "not a git worktree: $path" >&2; exit 3; }
+[ "$common_there" = "$common_here" ] && [ "$dir_there" != "$common_there" ] ||
+  { echo "not a linked worktree of this repository: $path" >&2; exit 3; }
+# The branch is asked of the worktree itself, as git answers there, which holds
+# on Windows where a comparison of directory spellings does not. A detached
+# worktree has no symbolic HEAD and holds no branch, so it is refused too.
+[ "$(git -C "$path" symbolic-ref --quiet HEAD || :)" = "refs/heads/$branch" ] ||
+  { echo "not the worktree of this repository holding ${branch}: $path" >&2; exit 3; }
+# A refresh worker holds this lock for its whole run, and Windows will not
+# delete a file held open, so it is taken first, in the git directory, and one
+# held at the bound removes nothing. It covers a worker, not the survivor a
+# killed one left on the record: meeting that, a Windows removal can leave
+# part of the tree, which exit 4 reports.
+state="$common_here/index-refresh"
+# The files' name, taken while the path still stats: it is the worktree's
+# device and inode, which a later worktree can be given once this one is gone.
+# Where the state exists and the name cannot be had, a refresh may hold the
+# tree and nothing can wait on it, so nothing is removed.
+keyed=
+if [ -d "$state" ]; then
+  python=python3
+  command -v py >/dev/null 2>&1 && python="py -3.12"
+  # Only the hex crosses the pipe: Windows writes a path in the ANSI code page,
+  # which bash does not read back as the path it passed in.
+  key=$($python -I -c '
+import hashlib, os, sys
+info = os.stat(sys.argv[1])
+print(hashlib.sha256(f"{info.st_dev}:{info.st_ino}".encode()).hexdigest()[:32])' "$path" | tr -d '\r') ||
+    { echo "nothing removed: $path; its refresh lock cannot be named" >&2; exit 5; }
+  keyed="$state/$key"
 fi
+if [ -n "$keyed" ] && { [ -e "$keyed.lock" ] || [ -e "$keyed.pending" ]; }; then
+  if ! $python -I - "$keyed" <<'PY'; then
+import os, sys, time
+lock, pending = sys.argv[1] + ".lock", sys.argv[1] + ".pending"
+bound, grace = 30, 2
+if sys.platform == "win32":
+    import msvcrt
+    def grab(handle):
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+    def release(handle):
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+else:
+    import fcntl
+    def grab(handle):
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    def release(handle):
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+start, unclaimed = time.monotonic(), None
+while True:
+    now = time.monotonic()
+    with open(lock, "a+b") as handle:
+        try:
+            grab(handle)
+        except OSError:
+            unclaimed = None
+        else:
+            try:
+                if not os.path.exists(pending):
+                    sys.exit(0)
+                # A request with the lock free is a worker on its way to the
+                # lock, or one a failed refresh put back that nobody will take.
+                unclaimed = now if unclaimed is None else unclaimed
+                if now - unclaimed >= grace:
+                    try:
+                        os.remove(pending)
+                    except FileNotFoundError:
+                        pass
+                    sys.exit(0)
+            finally:
+                release(handle)
+    # A grace already begun runs out first, so the message is never said of a
+    # tree that nothing holds.
+    if now - start >= bound and unclaimed is None:
+        sys.exit(f"a code-index refresh still holds the worktree after {bound} s")
+    time.sleep(0.2)
+PY
+    echo "nothing removed: $path; run this again once the refresh ends" >&2
+    exit 5
+  fi
+fi
+# The worktree's lock and marker go with it, and a file that will not go is not
+# the removal failing.
+forget() {
+  [ -z "$keyed" ] || rm -f "$keyed.lock" "$keyed.pending" 2>/dev/null || :
+}
+# Windows refuses a path past 260 characters unless git asks for long paths:
+# git then refuses a worktree holding files it cannot read, or, failing to
+# delete one, unregisters the worktree anyway and leaves its directory behind.
+# The status is captured, so the checks below run whatever git exits.
+status=0
+git -c core.longpaths=true worktree remove "$path" || status=$?
+# Git still registering the worktree is the dirty-tree refusal; one it no longer
+# registers is a failed delete. Asked by branch, so no spellings are compared.
+if [ -e "$path" ]; then
+  listed=$(git worktree list --porcelain) ||
+    { echo "cannot read the worktree list, so whether $path is still registered is unknown" >&2
+      exit "$((status == 0 ? 1 : status))"; }
+  if ! grep -Fxq "branch refs/heads/$branch" <<<"$listed"; then
+    # Git can fail after it has deleted the files and the registration, with
+    # only the directory left. `rmdir` refuses one holding anything, so an
+    # empty directory goes and the removal succeeded, and any other is named.
+    if rmdir "$path" 2>/dev/null; then
+      [ "$status" -eq 0 ] ||
+        echo "git exited $status after deleting $path; the empty directory is removed" >&2
+      forget
+      exit 0
+    fi
+    # Empty and still refused is a process holding the directory, on Windows a
+    # session launched inside it: nothing there is lost, and a by-hand removal
+    # waits for that process to end.
+    if listing=$(ls -A "$path" 2>/dev/null) && [ -z "$listing" ]; then
+      echo "unregistered but not deleted: $path is empty and held by a process, such as a session launched in it; remove it once that process ends" >&2
+    else
+      echo "unregistered but not deleted: $path is still there; remove it by hand" >&2
+    fi
+    exit 4
+  fi
+fi
+[ "$status" -ne 0 ] || forget
+exit "$status"

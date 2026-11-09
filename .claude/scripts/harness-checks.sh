@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The harness, locality-gate and token-usage suites, with no free parameter
+# The payload's suite, then this repository's own suites, with no free parameter
 # anywhere.
 set -euo pipefail
 root="$(git rev-parse --show-toplevel)"
@@ -32,8 +32,16 @@ run_py() {
   exit 2
 }
 
-# Every discovery root lives in the runner now, which is what keeps this check
-# and the `harness` CI job from coming to run different suites. It takes no
-# arguments: the worker count is the host's, capped, and a caller who could set
-# it would be a second opinion about what the suite is.
+# It takes no arguments: the worker count is the host's, capped, and a caller
+# who could set it would be a second opinion about what the suite is.
 run_py .claude/scripts/shard-harness-suite.py
+
+# The roots the payload's runner does not know, each serial. `unittest discover`
+# exits 5 on no tests from 3.12 on, so an empty discovery refuses this check.
+# The `harness` job in ci.yml runs the same list, and
+# test_harness_helpers_admin.py holds the two together.
+run_py -m unittest discover -s .github/locality-gate -p 'test*.py'
+run_py -m unittest discover -s .github/commit-gate -p 'test*.py'
+run_py -m unittest discover -s .github/pin-gate -p 'test*.py'
+run_py -m unittest discover -s .github/issue-form-gate -p 'test*.py'
+run_py -m unittest discover -s tools/token-usage -p 'test_*.py'

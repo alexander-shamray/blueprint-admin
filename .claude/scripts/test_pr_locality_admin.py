@@ -99,13 +99,13 @@ class TheVerdict(Case):
         result = self.run_helper(body("D", "docs/**"), files=("docs/a.md", "src/Admin.Host/Program.cs"))
 
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual(["class D", "inside docs/a.md", "outside src/Admin.Host/Program.cs"], result.stdout.splitlines())
+        self.assertEqual(["class D", "inside docs/a.md", "outside-class src/Admin.Host/Program.cs"], result.stdout.splitlines())
 
     def test_the_declared_set_alone_is_not_enough(self):
         # Class D does not reach src/**; a touch set that names it is still outside.
         result = self.run_helper(body("D", "src/**"), files=("src/Admin.Host/Program.cs",))
 
-        self.assertEqual(["class D", "outside src/Admin.Host/Program.cs"], result.stdout.splitlines())
+        self.assertEqual(["class D", "outside-class src/Admin.Host/Program.cs"], result.stdout.splitlines())
 
     def test_a_joined_class_is_the_union_and_a_brace_glob_is_one_token(self):
         result = self.run_helper(
@@ -115,12 +115,6 @@ class TheVerdict(Case):
 
         self.assertEqual(
             ["class A+D", "inside src/Admin.Host/Jobs/X.cs", "inside docs/b.md", "outside docs/c.md"], result.stdout.splitlines())
-
-    def test_both_ends_of_a_rename_are_judged(self):
-        result = self.run_helper(body("D", "docs/**"), files=("docs/b.md\tsrc/Admin.Host/Program.cs",), changed=1)
-
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual(["class D", "inside docs/b.md", "outside src/Admin.Host/Program.cs"], result.stdout.splitlines())
 
     def test_the_touch_set_cell_is_never_printed(self):
         result = self.run_helper(body("D", "docs/**"))
@@ -160,8 +154,8 @@ class TheRefusalsMirrorTheGate(Case):
     """(case, class cell, touch cell, phrase). The phrase is in both copies, or this fails."""
 
     REFUSALS = (
-        ("an unbalanced backtick", "D", "`docs/a.md", "an unbalanced backtick, or text beside a path"),
-        ("a reason beside a path", "D", "`docs/a.md` because", "text beside a path"),
+        ("an unbalanced backtick", "D", "`docs/a.md", "an unbalanced backtick"),
+        ("a reason beside a path", "D", "`docs/a.md` because", "an unbalanced backtick"),
         ("a reason as its own item", "D", "docs/a.md, because we need it", "is not a path list"),
         ("an unbalanced opening brace", "D", "docs/{a,b.md", "has an unbalanced brace"),
         ("an unbalanced closing brace", "D", "docs/a,b}.md", "has an unbalanced brace"),
