@@ -50,8 +50,8 @@ Selected by what the diff touched:
   run.
 
 A gate that reports a pass over nothing is ranked critical by `/bug-sweep`. Here
-that means the locality gate, the pin gate, the `harness` job, `dotnet test`,
-`npm test` and `smoke`.
+that means the locality gate, the pin gate, the `harness` and `gates` jobs,
+`dotnet test`, `npm test` and `smoke`.
 
 The checks `/ship` step 6's wait requires: `commit-gate`, `commits`, `drift`,
 `harness (macos-latest)`, `harness (ubuntu-latest)`, `harness (windows-latest)`,
@@ -168,10 +168,7 @@ no longer refuses on a fault; the `harness` job does.
 **The output gate does not run here yet.** `.github/output-gate/output_gate.py`
 reads a solution named `Platform.slnx`, and this repository's is
 `BlueprintAdmin.slnx`, so its invocation waits on the payload
-(blueprint-harness#315). Its suite and the plan-size gate's run in no job here
-until Task 8 of blueprint-backend's
-`docs/superpowers/plans/2026-11-08-shared-harness-6-admin-sync.md` adds them to
-`ci.yml`.
+(blueprint-harness#315). Its suite runs in `ci.yml`'s `gates` job.
 
 ## Review examples
 
