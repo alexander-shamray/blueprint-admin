@@ -1,126 +1,28 @@
-"""The harness's helpers, guards and command grants, tested where they decide.
+"""This repository's own cases from the old helpers suite: its stack, its tree and its local scripts.
 
-The scripts in this directory carry the judgements the whole /ship chain and
-both sweeps rest on, and until this suite existed none of them had a test.
+The payload's suites hold everything shared. What stays here reads this repository's tracked tree, its .NET and
+npm toolchain, the settings its config renders, or a script `.harness/config.json` keeps local.
 
-**Almost every subject below shipped wrong**, and each of those is reproduced
-as a case that fails against the old behaviour — a gate only ever observed
-green is one nobody has established is looking at anything, which is the rule
-the .github/**-gate suites are already written to. One subject is the
-exception and is marked as such: the label helper's confinement never shipped
-wrong, and its cases keep a closed grant closed rather than catching anything.
-
-**No count opens this list, in this file or in the two that mirror it.**
-`.github/workflows/ci.yml` and `docs/testing.md` enumerate the same subjects,
-and the numeral that used to lead all of them said four, then five, then six,
-and was stale again inside the pull request that added the last of them. A
-figure restated in several places goes stale in all of them at once; the
-enumerations are what a reader compares.
-
-**The regression negatives are paired with positive controls, and those are not
-decoration.** A negative that passes because a pattern matches *nothing* is
-indistinguishable from one that works — a trap this suite fell into once, when
-`\\b402\\b`'s negatives all tested digits *around* the number and none tested it
-alone.
-
-What is under test, and which issue each half closes:
-
-  blueprint-backend#75   the sweeps' worktree shape check was not the direct-child check its
-        comment claimed, because `?` matches `/` in a bash `case`.
-  blueprint-backend#75   `gh label create` is create-or-overwrite, so the grant reached any
-        label in any repository. This one is the odd entry: it never shipped
-        wrong. It is a grant closed by moving it into a helper, and these cases
-        are what keep it closed rather than what caught it.
-  blueprint-backend#75   `gh issue create` was the same shape one helper over: `--repo` and
-        `--label` free under a prefix grant, and a `/`-title filed as a path
-        because the grant could not carry an env prefix. Closed the same way,
-        and the confinement never shipped wrong either; the title did, and
-        the case that reads the child's environment is the one for it.
-  blueprint-backend#33   the deny list guarded the helpers and not the files that grant them.
-        The cases cover every control-surface path in both spellings, that no
-        rule is spelled `Write(`, and that the worktree root is never denied —
-        the over-reach that would deny editing the repository itself.
-  blueprint-backend#57   the sweeps' de-duplication gate treated any open issue as tracking, so
-        a stranger could suppress a finding and end the sweep. The cases cover
-        both copies of the gate and every phrasing it has retired.
-  blueprint-backend#60   two commands stated editing boundaries their grants did not enforce.
-        The cases read every tracked tree and every tracked root file from
-        `git ls-files` and assert each is denied, because the alternative is a
-        list that rots the way every deny-list here has.
-  blueprint-backend#30   `git log --output=` is an arbitrary file write that reads as
-        inspection, and the settings deny matches only the unquoted spelling.
-  blueprint-backend#23   the push deny-list enumerated spellings, and git's refspec grammar is
-        larger than any list. Both are the argv guard's, and its cases are the
-        longest set here because two review rounds took the first design apart:
-        bundled shorts, abbreviations, wildcard destinations, pushes naming no
-        destination, heredoc bodies read as arguments, command substitutions
-        read as inert.
-  blueprint-backend#150  what suppresses a sweep finding was prose in two files. The cases cover
-        the helper's three exit codes, that neither sweep can read an issue's
-        author at all, and that the one legitimate output stays writable.
-  #181  a path deny is matched on the SPELLING, so an edit through a link
-        inside an allowed tree lands where no deny has judged it. Its cases
-        live in `test_edit_target_guard.py` beside this file, which the same
-        discover picks up — a link into a denied tree, a link out of the
-        checkout, a denied tree spelled as ITSELF (admitted, because the guard
-        holds no copy of any deny list), and a checkout reached through a link
-        (admitted, or every edit in a worktree under a linked temp root would
-        be refused).
-  #124  the external reviewers' helpers, hooks and suites left with them for
-        the tag `archive/external-reviewers`; what stays is the grants and the
-        agent list those commands were checked against.
-
-**This inventory is a third copy of a list `ci.yml` and `docs/testing.md` also
-keep, and it goes stale exactly as a redundant copy does.** Reconcile it with
-those two, or the next reader of the suite gets the shortest version.
-
-Two rules the suite is written to, both of them this repository's:
-
-  *The engine under test is the engine that ships.* Every pattern assertion
-  shells out to the same `grep -E` the scripts call. Re-implementing the regex
-  in Python's `re` would be a second specification, and a hand-written double
-  cannot disagree with itself.
-
-  *A declared pattern needs a test whose subject is where it is APPLIED.* A
-  pattern declared once and then quietly not used, or used alongside a second
-  literal copy, is the drift `SOURCE_INPUTS` was invented for. So the pattern
-  cases are paired with structural cases over the call sites.
-
-Run: py -3.12 -m unittest discover -s .claude/scripts
-Needs bash, grep, git and jq on PATH; needs no network, no Docker, no gh
-and no SDK. `git` because one case drives a real worktree round trip.
+Run: py -3.12 -m unittest test_harness_helpers_admin, from .claude/scripts.
+Needs bash, git and jq on PATH; needs no network, no Docker, no gh and no SDK.
 """
 
-import contextlib
 import importlib.util
-import io
 import json
 import os
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
-import textwrap
-import time
 import unittest
-from unittest import mock
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent
-DETACH = SCRIPTS / "git-worktree-detach.sh"
-NEWLINE = chr(10)  # spelled this way so patch scripts cannot mangle it
 SETTINGS = SCRIPTS.parent / "settings.json"
 COMMANDS = SCRIPTS.parent / "commands"
-DROP = SCRIPTS / "git-worktree-drop.sh"
 HOOK = SCRIPTS.parent / "hooks" / "guard-git-argv.py"
-BRANCH_COMMAND = SCRIPTS.parent / "commands" / "branch.md"
-SUPPRESSES = SCRIPTS / "gh-issue-suppresses.sh"
-ISSUE_TEXT = SCRIPTS / "gh-issue-text.sh"
-ISSUE_LIST = SCRIPTS / "gh-issue-list.sh"
 
 BASH = shutil.which("bash")
-GREP = shutil.which("grep")
 GIT = shutil.which("git")
 JQ = shutil.which("jq")
 
@@ -130,14 +32,9 @@ def setUpModule():
     # fail-open every gate in this repository is written against — a check
     # that cannot fail makes everything behind it unverified. Absent any of
     # these, this suite has established nothing and says so.
-    #
-    # The list grew with the suite and is checked rather than assumed: `git`
-    # arrived with the worktree round trip and `jq` with the parsed verdict, and
-    # a prerequisite that is used but not declared is the drift this repository
-    # keeps finding one file at a time.
     missing = [
         name for name, path in
-        (("bash", BASH), ("grep", GREP), ("git", GIT), ("jq", JQ))
+        (("bash", BASH), ("git", GIT), ("jq", JQ))
         if path is None
     ]
     if missing:
@@ -146,95 +43,6 @@ def setUpModule():
             "the same tools the scripts do, and asserting through Python "
             "equivalents instead would be testing a second specification"
         )
-
-
-def run_bash(script, subject="", **env_extra):
-    """Run a bash fragment with the subject on stdin and everything else in env.
-
-    Nothing is passed as an argument, and that is not fastidiousness. Under MSYS
-    — the host this repository is developed on — an argv element crossing into
-    `bash.exe` is re-parsed by the MSYS runtime, so a pattern containing `"`
-    arrives with its quotes eaten and matches nothing. That failure is silent in
-    the direction that matters: `grep` finding no stopReason reads exactly like
-    a payload that carries none, so the first version of this suite reported the
-    allow-list as broken when the allow-list was fine. Environment variables and
-    stdin are not re-parsed, so they mean the same thing on both platforms.
-    """
-    env = dict(os.environ)
-    env.update(env_extra)
-    return subprocess.run(
-        [BASH, "-c", script],
-        input=subject,
-        capture_output=True,
-        text=True,
-        env=env,
-    )
-
-
-def grep_matches(pattern, subject, ignore_case=True):
-    """`grep -qE` (optionally -i) on the real engine the scripts call."""
-    flag = "-i" if ignore_case else ""
-    return run_bash(f'grep -q {flag} -E "$PAT"', subject, PAT=pattern).returncode == 0
-
-
-def code_lines(text):
-    """The executable lines of a shell script — comments and blanks dropped.
-
-    Shared rather than duplicated per class, because the two callers assert
-    opposite things with it and both are load-bearing: one that a pattern has no
-    second literal copy, the other that an exit code exists in the *code*. That
-    second one is why this is here at all — asserted against the whole file, it
-    passed on the explanatory comments alone, so deleting the executable line
-    would not have failed it.
-    """
-    return [
-        line for line in text.splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
-    ]
-
-
-# A `git` that does what a Windows removal does when a handle is held: `worktree remove` really
-# removes, leaves a directory behind and fails; and, when GIT_SHIM_BLIND is set, `worktree list`
-# fails afterwards, a register that cannot be read. It is a bash FUNCTION sourced through
-# BASH_ENV, not a `git` earlier on PATH: PATH resolution of an extensionless script differed on
-# the Windows CI runner, and a function does not depend on it. `command git` is the real one.
-GIT_FAILING_AFTER_REMOVAL = """\
-git() {
-  if [ "$1" = worktree ] && [ "$2" = remove ]; then
-    command git worktree remove "$3" && mkdir -p "$3/held" && : > "$3/held/file"
-    : > "$GIT_SHIM_MARK"
-    return 1
-  fi
-  if [ "$1" = worktree ] && [ "$2" = list ] && [ -n "${GIT_SHIM_BLIND:-}" ] && [ -e "$GIT_SHIM_MARK" ]; then
-    return 1
-  fi
-  command git "$@"
-}
-"""
-
-
-def git_failing_after_removal(directory):
-    """The environment that makes a helper's `git` behave so: BASH_ENV and the mark file's path."""
-    directory = Path(directory)
-    shim = directory / "git-shim.sh"
-    shim.write_text(GIT_FAILING_AFTER_REMOVAL, encoding="utf-8", newline="\n")
-    return {"BASH_ENV": shim.as_posix(), "GIT_SHIM_MARK": (directory / "removed.mark").as_posix()}
-
-
-def private_tmproot(test):
-    """A fresh temp root for `test`, removed when the test ends (#356), as BASH resolves it.
-
-    That is not the root Python resolves. On this host `/tmp` is `D:\\tmp\\alexa` for the
-    shell and `C:\\tmp` for every Python and built-in reader — different directories,
-    both populated. A test that made its fixture with `pathlib` and then handed the path
-    to a shell script was checking a directory the script could not see, and the refusal
-    it asserted on was `not an existing directory` rather than the shape check it meant
-    to exercise. So the root is returned in bash's spelling and the fixtures are made by
-    bash too.
-    """
-    root = tempfile.mkdtemp(prefix="sweeproot-")
-    test.addCleanup(shutil.rmtree, root, ignore_errors=True)
-    return run_bash('cd "$ROOT" && pwd -P', ROOT=root).stdout.strip()
 
 
 class AdminStack(unittest.TestCase):
@@ -345,6 +153,16 @@ class AdminStack(unittest.TestCase):
         "jest.config.js",
     )
 
+    def test_the_auto_load_surface_is_denied(self):
+        # `tracked_root_files` enumerates what exists, and the dangerous file is one that does not: the Node
+        # toolchain loads these names by executing them, and `/review-branch` holds `Write` and a build runner.
+        for name in self.SUBJECTS:
+            rules = self.disallowed(name)
+            for target in self.AUTO_IMPORTED:
+                with self.subTest(command=name, target=target):
+                    self.assertIn(f"Edit({target})", rules)
+                    self.assertIn(f"Edit(./{target})", rules)
+
     MSBUILD_AUTO_IMPORTED = (
         "Directory.Build.targets", "Directory.Build.rsp", "MSBuild.rsp", "msbuild.rsp",
         "Directory.Solution.props", "Directory.Solution.targets",
@@ -378,8 +196,7 @@ class AdminStack(unittest.TestCase):
     def test_settings_denies_the_files_claude_code_loads_as_instructions(self):
         # #343: `.claude/rules/**`, `.claude/output-styles/**` and `CLAUDE.local.md` are read
         # into the session's context unasked. Nothing here writes them. `CLAUDE.md` is NOT in
-        # this list: the commands deny it themselves, and `/style-pass` and the owner's own
-        # sessions edit it by design (docs/harness-boundaries.md).
+        # this list: `/style-pass` and the owner's own sessions edit it by design.
         denied = set(json.loads(
             SETTINGS.read_text(encoding="utf-8"))["permissions"]["deny"])
         for rule in ("Edit(.claude/rules/**)", "Edit(./.claude/rules/**)",
@@ -515,13 +332,10 @@ class HarnessChecksFindsAGenericPyLauncher(unittest.TestCase):
             cwd=str(SCRIPTS.parent.parent))
         self.assertEqual(0, out.returncode, out.stderr)
         ran = log.read_text(encoding="utf-8").splitlines()
-        # The discovery roots moved into the shard runner, which holds the
-        # only copy of what they are, and `test_harness_shards.py` is what
-        # checks each is still reached. This case's own subject is narrower:
-        # that a `py` satisfying the floor only as `-3` gets as far as running
-        # the suite at all.
+        # That a `py` satisfying the floor only as `-3` gets as far as running the suite at all.
         self.assertTrue(
             any("shard-harness-suite.py" in line for line in ran), ran)
+
 
 class TheLocalRoots(unittest.TestCase):
     """The roots the payload's runner does not know are run in two places, and the two lists are one fact."""
