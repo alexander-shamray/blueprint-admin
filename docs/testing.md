@@ -79,11 +79,20 @@ pinned the old answer moves with it.
 
 ## Harness
 
-`python .claude/scripts/shard-harness-suite.py` — Python 3.12, plus Bash,
-`grep`, Git and `jq` on PATH. Python plus `jq` alone fails before a case
-runs. It discovers `.claude/scripts`, `.github/locality-gate`,
-`.github/commit-gate`, `.github/pin-gate`, `.github/issue-form-gate` and `tools/token-usage`, and runs their classes as parallel workers; `docs/harness-boundaries.md` owns what
-that may not do. The `harness` job in `ci.yml` is the matrix.
+`bash .claude/scripts/harness-checks.sh` — Python 3.12, plus Bash, `grep`, Git
+and `jq` on PATH. Python plus `jq` alone fails before a case runs. It runs the
+payload's `.claude/scripts` suite through `shard-harness-suite.py`, as parallel
+workers (`docs/harness-boundaries.md` owns what that may not do), then
+`.github/locality-gate`, `.github/commit-gate`, `.github/pin-gate`,
+`.github/issue-form-gate` and `tools/token-usage` serially. A full run took 26 to
+63 minutes on a loaded Windows host, so run the module a change touches while
+working.
+
+The `harness` job in `ci.yml` is the matrix, in the shape the harness's own
+`payload-suites` job certifies: the shard runner on Linux and the whole suite
+serially on Windows and macOS, then the same five roots on each. The local files
+under `.claude/` are `.harness/config.json`'s `local` list; everything else there
+is the payload's, changed in `blueprint-harness`.
 
 ## Commit gate
 

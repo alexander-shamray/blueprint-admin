@@ -106,6 +106,6 @@ Stdlib only, and the suite writes its transcripts to a temporary directory:
 cd tools/token-usage && py -3.12 -m unittest
 ```
 
-The harness suite discovers it as one of its roots, so
-`bash .claude/scripts/harness-checks.sh` and the `harness` job in `ci.yml`
-run it too; the root list is `ROOTS` in `.claude/scripts/shard-harness-suite.py`.
+`bash .claude/scripts/harness-checks.sh` and the `harness` job in `ci.yml` run it
+too, after the payload's suite; each names it as one of the roots that suite's
+runner does not know.
