@@ -1,353 +1,338 @@
-"""The prompt-time hook that points a locate or impact question at the index.
-
-**A hint that never fires looks exactly like one that is working**, because
-its whole effect is a line of context nobody is shown. So this file runs
-`index-query-hint.sh` itself — on every pattern it answers, on prompts it must
-not answer, on slash commands, on unreadable input and on an `awk` that fails
-— and asserts the wiring from the file the harness reads.
-
-**What the hint tells an agent to run is read out of the hook's `emit` calls**,
-never written out here: each command must be a row of the skill's route table,
-spelled as the table spells it, under a subcommand its `allowed-tools`
-approves, and each must be reached by a case below. A row re-pointed in the
-skill, or a branch added to the hook with no case, is a red here.
-
-**A hint is not the only door, because work here starts with a slash
-command** (#97). `/ship` and `/branch` have their arguments read; every other
-slash command stays silent. And `/ship` names the index itself, so a run
-started from an issue number — which reads as no question — still locates
-through it. The commands each names are held to their own grant and the
-skill's, and the CLI's skill rewrite is held off for every session.
-
-**Not a skip where `sh` is missing.** A skip reports a pass, which is the
-fail-open `test_index_refresh_hook.py` refuses for the same tool.
-"""
+"""What `.claude/hooks/index-query-hint.py` says, and to which prompts. It
+fails open and is silent on most, so its exit status proves nothing; the
+cases run it as `settings.json` does, a process over stdin, and read what it
+printed."""
 
 import json
+import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
+from review_helpers import python_as_py
+
 SCRIPTS = Path(__file__).resolve().parent
 CLAUDE = SCRIPTS.parent
+HINT = CLAUDE / "hooks" / "index-query-hint.py"
+SEARCH_HINT = CLAUDE / "hooks" / "index-search-hint.py"
 SETTINGS = CLAUDE / "settings.json"
 SKILL = CLAUDE / "skills" / "codebase-index" / "SKILL.md"
-HINT = CLAUDE / "hooks" / "index-query-hint.sh"
-SHIP = CLAUDE / "commands" / "ship.md"
-REVIEW_BRANCH = CLAUDE / "commands" / "review-branch.md"
 EVENT = "UserPromptSubmit"
+COMMAND = 'bash "${CLAUDE_PROJECT_DIR}/.claude/hooks/hint-bound.sh" UserPromptSubmit index-query-hint.py'
 
-# The full path, never the bare name: on Windows `subprocess` searches System32
-# before PATH, where `bash` is WSL's.
-SH = shutil.which("sh")
-
-# One case per alternative in the hook's patterns, each with the subcommand it
-# must be pointed at.
+# One prompt per alternative of each pattern, and the subcommand it routes to.
 CASES = {
-    "what breaks if I rename ExploreLink": "impact",
-    "What depends on GrafanaClient?": "impact",
-    "what is the impact of": "impact",
-    "who calls JobRegistry": "refs",
-    "What uses the token service?": "refs",
-    "what calls Publish": "refs",
-    "How does the SSE stream work?": "explain",
-    "how does the stack page keep working": "explain",
-    "how does the broker drain works": "explain",
-    "How does ProcessRunner.cs work?": "explain",
-    "find the handler for publish": "symbol",
-    "find class ExploreLink": "symbol",
-    "find methods named Start": "symbol",
-    "find the classes that publish": "symbol",
-    "Where is the broker service implemented?": "search",
-    "where are the fakes recorded": "search",
-    "where does the token come from": "search",
+    "what breaks if OrderPlaced changes?": "impact",
+    "What depends on Money?": "impact",
+    "what is the impact of renaming the outbox table": "impact",
+    "who calls PlaceOrderHandler": "refs",
+    "what calls the publisher?": "refs",
+    "What uses IClock in Ordering?": "refs",
+    "how does the saga work?": "explain",
+    "How does Order.Place work": "explain",
+    "how does the outbox relay keep working": "explain",
+    "how does the inbox filter works": "explain",
+    "find the class that parses money": "symbol",
+    "find method names for refunds": "symbol",
+    "find handlers for OrderPaid": "symbol",
+    "find the classes under Catalog": "symbol",
+    "where is the idempotency store?": "search",
+    "Where are the migrations kept": "search",
+    "where does Shipping publish ShipmentDispatched": "search",
 }
 
-# Each pattern's boundary, broken on one side at a time.
+# Each looks like a question above and is not one.
 NOT_QUESTIONS = (
-    "it is somewhere is it not",       # where is: leading
-    "say where isolated runs go",      # where is: trailing
-    "somewhat breaks the layout",      # what breaks: leading
-    "what callsign is it",             # what calls: trailing
-    "How does that sound? Then work on the fix",
-    "how does that end. Then work on the fix",
-    "how does that end.. Then work on the fix",
-    "how does /branch name the worktree",
-    "find the classification bug in the parser",
-    "rename the field and fix the test",
+    "somewhere is a bug in the saga",
+    "elsewhere is fine",
+    "the impact offset is wrong",
+    "nobody calls back",
+    "how does it. Work on the saga next",
+    "finder classes need a rename",
+    "rewhere is not a word",
+    "fix the build",
+    "",
 )
 
 
-def read_json(path):
-    return json.loads(path.read_text(encoding="utf-8"))
+def run(payload: bytes):
+    """The hook as a process whose text stdin is what a Windows pipe gets, so
+    a case about decoding means the same on every host."""
+    return subprocess.run(
+        [sys.executable, str(HINT)], input=payload, capture_output=True,
+        timeout=30, check=False, env=dict(os.environ, PYTHONIOENCODING="cp1252:surrogateescape"))
 
 
-def hint_hooks():
-    """The entries running the hint, keyed by the event that runs them."""
-    running = {}
-    for event, entries in (read_json(SETTINGS).get("hooks") or {}).items():
-        matched = [
-            (entry.get("matcher") or "", h)
-            for entry in entries
-            for h in (entry.get("hooks") or [])
-            if HINT.name in (h.get("command") or "")
-        ]
-        if matched:
-            running[event] = matched
-    return running
+def ask(prompt: str):
+    return run(json.dumps({"hook_event_name": EVENT, "prompt": prompt}).encode())
 
 
-def emitted_commands():
-    """The command in every `emit` call, with the awk escaping undone."""
-    found = re.findall(r'emit\("[a-z-]+", "`([^`]*)`"\)',
-                       HINT.read_text(encoding="utf-8"))
-    return [command.replace('\\\\\\"', '"') for command in found]
+def context(done) -> str:
+    """The `additionalContext` a run returned, or '' when it said nothing."""
+    if not done.stdout.strip():
+        return ""
+    answer = json.loads(done.stdout)
+    output = answer["hookSpecificOutput"]
+    assert output["hookEventName"] == EVENT, answer
+    return output["additionalContext"]
 
 
-def named_subcommands():
-    return {command.split()[1] for command in emitted_commands()}
+def emitted(text: str) -> str:
+    """The `cbx` command inside the hint's backticks."""
+    found = re.search(r"`(bash [^`]+)`", text)
+    assert found, text
+    return found.group(1)
 
 
-def run(payload, cwd=None, awk_status=None):
-    """The hook's stdout, stderr and status for one payload.
-
-    With `awk_status`, the hook is sourced in a shell where `awk` is a function
-    that fails with that status. A fake on PATH cannot stand in: Git for
-    Windows' `bin\\sh.exe` puts `/usr/bin` first, so the real `awk` wins there.
-    """
-    if SH is None:
-        raise AssertionError("no `sh` on PATH; the hook cannot run here")
-    stdin = payload if isinstance(payload, str) else json.dumps(payload)
-    argv = [SH, str(HINT)]
-    if awk_status is not None:
-        prelude = f'awk() {{ echo "awk: fatal" >&2; return {awk_status}; }}'
-        argv = [SH, "-c", prelude + '; . "$0"', HINT.as_posix()]
-    done = subprocess.run(argv, input=stdin.encode("utf-8"),
-                          capture_output=True, cwd=cwd, timeout=30)
-    return (done.stdout.decode("utf-8"), done.stderr.decode("utf-8"),
-            done.returncode)
-
-
-def prompt(text, **fields):
-    """A payload shaped like the harness's, with `text` as the prompt."""
-    return {"session_id": "s", "transcript_path": "t.jsonl", "cwd": ".",
-            "hook_event_name": EVENT, "permission_mode": "default",
-            "prompt": text, **fields}
+def tool(text: str) -> str:
+    """The MCP tool inside the hint's backticks."""
+    found = re.search(r"`mcp__codebase-index__(\w+)`", text)
+    assert found, text
+    return found.group(1)
 
 
 class TheWiring(unittest.TestCase):
-
     def test_it_runs_on_every_prompt_and_under_no_other_event(self):
-        # The registration surface is the subject, read across every event, so
-        # the hint added to a second event is a red case rather than context
-        # injected somewhere nobody decided it belongs.
-        found = hint_hooks()
-        self.assertEqual({EVENT}, set(found), found)
-        self.assertEqual(1, len(found[EVENT]), found)
+        hooks = json.loads(SETTINGS.read_text(encoding="utf-8"))["hooks"]
+        running = [
+            event for event, entries in hooks.items()
+            for entry in entries
+            for hook in entry.get("hooks", [])
+            if hook.get("command") == COMMAND
+        ]
 
-    def test_it_runs_under_plain_sh_and_cannot_hold_a_prompt(self):
-        # Not backgrounded — its stdout is the whole of what it does — and not
-        # through `run-guard.sh`, whose every failure is 2, which under this
-        # event erases the prompt.
-        _, hook = hint_hooks()[EVENT][0]
-        self.assertEqual(
-            'sh "${CLAUDE_PROJECT_DIR}/.claude/hooks/index-query-hint.sh"',
-            hook["command"])
-        self.assertLessEqual(hook.get("timeout", 60), 5)
+        self.assertEqual([EVENT], running)
+
+    def test_the_registered_command_cannot_erase_a_prompt(self):
+        """Python exits 2 on a file it cannot open, a worktree emptied under a
+        running session, and exit 2 here erases every prompt; through `runpy`
+        the same failure exits 1. A project path holding a quote still runs."""
+        argv = [shutil.which("bash"), str(CLAUDE / "hooks" / "hint-bound.sh"), EVENT, HINT.name]
+        event = json.dumps({"hook_event_name": EVENT, "prompt": "where is X"}).encode()
+        with tempfile.TemporaryDirectory() as scratch:
+            quoted = Path(scratch) / "O'Brien"
+            (quoted / ".claude" / "hooks").mkdir(parents=True)
+            shutil.copyfile(HINT, quoted / ".claude" / "hooks" / HINT.name)
+            for root, hinted in ((CLAUDE.parent, True), (quoted, True), (Path(scratch), False)):
+                done = subprocess.run(
+                    argv, input=event, capture_output=True, timeout=30, check=False,
+                    env=python_as_py(dict(os.environ, CLAUDE_PROJECT_DIR=str(root)), scratch))
+                with self.subTest(root=str(root)):
+                    self.assertNotEqual(2, done.returncode, done.stderr)
+                    # A hook that cannot run leaves hint-bound.sh's line, and a prompt is never erased.
+                    if hinted:
+                        self.assertTrue(context(done), done.stderr)
+                        self.assertNotIn("did not run", context(done))
+                    else:
+                        self.assertIn("did not run", context(done))
+
+    def test_its_entry_has_no_matcher(self):
+        """A prompt event takes none; one written would be ignored or read
+        as a filter nobody meant."""
+        hooks = json.loads(SETTINGS.read_text(encoding="utf-8"))["hooks"]
+        for entry in hooks[EVENT]:
+            self.assertNotIn("matcher", entry)
 
 
 class TheHint(unittest.TestCase):
-
-    def assertHints(self, payload, subcommand, cwd=None):
-        if isinstance(payload, str) and not payload.startswith("{"):
-            payload = prompt(payload)
-        out, err, status = run(payload, cwd)
-        self.assertEqual(("", 0), (err, status))
-        answer = json.loads(out)["hookSpecificOutput"]
-        self.assertEqual(EVENT, answer["hookEventName"])
-        context = answer["additionalContext"]
-        self.assertIn(f"`codebase-index {subcommand} ", context)
-        self.assertIn("load the codebase-index skill", context)
-        self.assertIn("session tag", context)
-        return context
-
-    def assertSilent(self, payload, awk_status=None):
-        self.assertEqual(("", "", 0), run(payload, awk_status=awk_status))
-
     def test_each_kind_of_question_names_its_own_subcommand(self):
-        for text, subcommand in CASES.items():
-            with self.subTest(text=text):
-                self.assertHints(text, subcommand)
+        for prompt, subcommand in CASES.items():
+            with self.subTest(prompt=prompt):
+                done = ask(prompt)
+                self.assertEqual(0, done.returncode, done.stderr)
+                command = emitted(context(done))
+                self.assertEqual(subcommand, command.split()[2], command)
 
-    def test_every_command_it_emits_is_reached_by_a_case(self):
-        # Read from the hook, so a branch added there with no case of its own,
-        # or a case dropped here, is a red rather than an untested hint.
-        self.assertGreaterEqual(len(emitted_commands()), 5)
-        self.assertEqual(named_subcommands(), set(CASES.values()))
+    def test_each_kind_of_question_names_the_mcp_tool_asking_it(self):
+        expected = {"impact": "impact_of", "refs": "find_refs", "explain": "explain_code",
+                    "symbol": "find_symbol", "search": "search_code"}
+        for prompt, subcommand in CASES.items():
+            with self.subTest(prompt=prompt):
+                self.assertEqual(expected[subcommand], tool(context(ask(prompt))))
 
-    def test_a_locate_question_is_pointed_at_a_tagged_search(self):
-        context = self.assertHints("where is the broker service", "search")
-        self.assertIn("--limit 5 --session <tag>", context)
+    def test_it_names_the_same_tool_as_the_search_hint(self):
+        """Two hooks, one question each way: a session told `find_refs` by one
+        and something else by the other would load the wrong tool."""
+        self.assertEqual(_module(SEARCH_HINT).TOOLS, _module().TOOLS)
+
+    def test_every_route_is_reached_by_a_case(self):
+        reached = {emitted(context(ask(prompt))) for prompt in CASES}
+
+        self.assertEqual({row[2] for row in _module().ROUTES}, reached)
 
     def test_a_phrase_that_is_not_the_question_is_silent(self):
-        for text in NOT_QUESTIONS:
-            with self.subTest(text=text):
-                self.assertSilent(prompt(text))
+        for prompt in NOT_QUESTIONS:
+            with self.subTest(prompt=prompt):
+                done = ask(prompt)
+                self.assertEqual(0, done.returncode, done.stderr)
+                self.assertEqual(b"", done.stdout.strip())
 
     def test_ship_and_branch_are_read_for_the_task_they_carry(self):
-        # The two slash commands whose arguments describe a change, and the
-        # way this repository's work is started.
-        self.assertHints("/ship where is the broker service", "search")
-        self.assertHints("  /branch who calls JobRegistry", "refs")
-        self.assertHints("/SHIP\thow does the SSE stream work", "explain")
+        for prompt in ("/ship where is the outbox relay?",
+                       "/branch how does checkout work"):
+            with self.subTest(prompt=prompt):
+                self.assertTrue(context(ask(prompt)))
 
     def test_every_other_slash_command_is_silent_whatever_follows_it(self):
-        for text in ("  /commit who calls it", "/clear",
-                     "/review-copilot where is it", "/shipit where is it",
-                     "/branches where is it", "/ship", "/branch",
-                     "/ship issue #97"):
-            with self.subTest(text=text):
-                self.assertSilent(prompt(text))
+        for prompt in ("/commit where is the outbox relay?",
+                       "/shipping where is it", "/review-branch who calls X",
+                       "  /pr how does it work"):
+            with self.subTest(prompt=prompt):
+                self.assertEqual(b"", ask(prompt).stdout.strip())
 
     def test_only_the_prompt_is_read_and_never_the_rest_of_the_payload(self):
-        self.assertSilent(prompt("rename it", cwd="C:/where is/who calls"))
-        self.assertSilent(prompt("rename it",
-                                 transcript_path="what breaks/where is.jsonl"))
+        payload = {"hook_event_name": EVENT, "prompt": "fix the build",
+                   "cwd": "C:/where is/who calls", "transcript_path": "where are"}
 
-    def test_the_prompt_is_decoded_from_its_json_escapes(self):
-        # An escaped quote before the question must not end the string early,
-        # and a newline or a tab is whitespace, not the end of the prompt.
-        self.assertHints('say "hi"\nwhere are the fakes', "search")
-        self.assertHints("who\tcalls JobRegistry", "refs")
+        self.assertEqual(b"", run(json.dumps(payload).encode()).stdout.strip())
+
+    def test_a_prompt_spread_over_lines_still_reads(self):
+        self.assertTrue(context(ask("where\nis the relay")))
 
     def test_a_long_prompt_is_read_as_far_as_the_cap(self):
-        self.assertHints("where is the broker " + "x" * 200_000, "search")
-        self.assertSilent(prompt("x" * 5_000 + " where is the broker"))
+        cap = _module().CAP
+        self.assertTrue(context(ask("where is it " + "x" * (cap * 4))))
+        self.assertEqual(b"", ask("x " * cap + "where is it").stdout.strip())
+
+    def test_a_prompt_holding_non_ascii_text_is_routed(self):
+        payload = json.dumps({"hook_event_name": EVENT,
+                              "prompt": "where is the \u0141\u00f3d\u017a relay \u2014 the outbox?"},
+                             ensure_ascii=False).encode("utf-8")
+
+        self.assertTrue(context(run(payload)))
+
+    def test_the_prompt_is_decoded_as_utf_8(self):
+        """`\u00e9where` asks nothing, `\u00e9` being a word character; read in
+        the ANSI code page Python gives a Windows pipe it becomes `\u00c3\u00a9`,
+        whose `\u00a9` is not, and the hint fires on a prompt with no question."""
+        payload = json.dumps({"hook_event_name": EVENT, "prompt": "\u00e9where is the relay"},
+                             ensure_ascii=False).encode("utf-8")
+
+        self.assertEqual(b"", run(payload).stdout.strip())
 
     def test_input_it_cannot_read_is_silent_and_never_blocks(self):
-        for payload in ("", "not json", '{"prompt": 7}', '{"prompt":"where is'):
+        for payload in (b"", b"<html>", b"\xff\xfe\x00", b'{"prompt": 7}',
+                        b"[1, 2]", b'{"prompt": null}'):
             with self.subTest(payload=payload):
-                self.assertSilent(payload)
-
-    def test_an_awk_that_fails_leaves_the_prompt_alone(self):
-        # The guarantee the header rests on: 2 under this event erases the
-        # prompt, and an `awk` that dies says 2 itself unless the hook does not.
-        # The prompt is one the real `awk` answers, so a shadow that failed to
-        # take would print a hint and turn this red rather than pass it.
-        for status in (2, 127):
-            with self.subTest(status=status):
-                self.assertSilent(prompt("where is the broker service"),
-                                  awk_status=status)
-
-    def test_it_writes_nothing(self):
-        with tempfile.TemporaryDirectory() as scratch:
-            self.assertHints("where is the broker service", "search",
-                             cwd=scratch)
-            self.assertEqual([], list(Path(scratch).iterdir()))
-
-
-class TheSkillAgrees(unittest.TestCase):
-
-    def test_every_command_it_emits_is_a_row_of_the_route_table(self):
-        skill = SKILL.read_text(encoding="utf-8")
-        for command in emitted_commands():
-            with self.subTest(command=command):
-                self.assertTrue(command.startswith("codebase-index "), command)
-                self.assertIn(f"| `{command}` |", skill)
-
-    def test_every_subcommand_it_names_is_one_the_skill_approves(self):
-        skill = SKILL.read_text(encoding="utf-8")
-        allowed = set(re.findall(r"Bash\(codebase-index ([a-z-]+):\*\)", skill))
-        self.assertGreaterEqual(len(allowed), 5, f"allowed-tools shrank: {allowed}")
-        for subcommand in named_subcommands():
-            with self.subTest(subcommand=subcommand):
-                self.assertIn(subcommand, allowed)
-
-
-def body_of(path):
-    """A command file's text after its frontmatter."""
-    return path.read_text(encoding="utf-8").split("---", 2)[2]
-
-
-def granted(path):
-    """The `codebase-index` subcommands a file's frontmatter approves."""
-    frontmatter = path.read_text(encoding="utf-8").split("---", 2)[1]
-    return set(re.findall(r"Bash\(codebase-index ([a-z-]+):\*\)",
-                          frontmatter))
-
-
-def named(text):
-    """The `codebase-index` subcommands a command's prose tells it to run."""
-    return set(re.findall(r"codebase-index ([a-z][a-z-]*)", text))
+                done = run(payload)
+                self.assertEqual(0, done.returncode, done.stderr)
+                self.assertEqual(b"", done.stdout.strip())
 
 
 class TheShipChainReadsTheIndex(unittest.TestCase):
-    """`/ship` says it itself, because the hint cannot read an issue number as
-    a question, and every review round starts from the diff's blast radius."""
+    """`/ship` says it itself, because the hint cannot read an issue number as a
+    question, and a full pass starts from the diff's blast radius. No index must
+    stop nothing: a target may have none, and a merge does not wait on one."""
 
-    def test_it_names_the_index_before_any_grep(self):
-        body = body_of(SHIP)
-        search = body.find("`codebase-index search")
-        self.assertNotEqual(-1, search)
-        grep = body.lower().find("grep")
-        if grep != -1:
-            self.assertLess(search, grep)
+    CBX = "bash .claude/skills/codebase-index/scripts/cbx"
 
-    def test_every_review_round_starts_from_the_blast_radius(self):
-        body = body_of(SHIP)
-        # Inside item (1) of step 5, which items (2) and (3) loop back to, so
-        # every round reads it and not only the first; against the merge base,
-        # which an exact grant lets the command read.
-        review = body.index("5. **The local review.**")
-        item = body.find("\n   1. **", review)
-        base = body.find("git merge-base origin/main HEAD", review)
-        impact = body.find("codebase-index diff-impact --base <that sha>", review)
-        spawn = body.find("spawn `branch-reviewer`", review)
-        self.assertTrue(-1 < item < base < impact < spawn,
-                        (item, base, impact, spawn))
-        self.assertIn("Bash(git merge-base origin/main HEAD)",
-                      SHIP.read_text(encoding="utf-8").split("---", 2)[1])
+    def setUp(self):
+        text = (CLAUDE / "commands" / "ship.md").read_text(encoding="utf-8")
+        _, self.front, self.body = text.split("---\n", 2)
 
-    def test_a_full_review_reads_the_blast_radius_before_it_greps(self):
-        body = body_of(REVIEW_BRANCH)
-        full = body.index("## Full review mode")
-        impact = body.find("`codebase-index diff-impact", full)
-        self.assertNotEqual(-1, impact)
-        self.assertLess(impact, body.index("Grep `src/`", full))
-        # A shell variable set in one call is empty in the next, and an
-        # empty base reads as an empty range: the sha is carried instead.
-        self.assertNotIn("$MERGE_BASE", body)
-        # `--local` computes no merge base, so step 2 names its own: every
-        # mode the review runs diff-impact in has a base spelled where it runs.
-        step = body[impact:body.index("Grep `src/`", full)]
-        self.assertIn("--base <merge-base>", step)
-        self.assertIn("`--base HEAD` under `--local`", step)
+    def test_step_one_names_the_index_before_any_grep(self):
+        step = self.body.index("1. **`/branch`**")
+        search = self.body.find("`cbx search`", step)
+        self.assertLess(-1, search)
+        for line in ("`cbx refs`", "`cbx impact`"):
+            self.assertIn(line, self.body[step:])
+        self.assertLess(search, self.body.find("`Grep`", step))
 
-    def test_every_subcommand_a_command_names_is_granted_there_and_by_the_skill(self):
-        skill = granted(SKILL)
-        self.assertGreaterEqual(len(skill), 5, f"allowed-tools shrank: {skill}")
-        for path in (SHIP, REVIEW_BRANCH):
-            names = named(body_of(path))
-            with self.subTest(command=path.name):
-                self.assertIn("diff-impact", names)
-                self.assertEqual(names, granted(path))
-                self.assertLessEqual(names, skill)
+    def test_a_full_pass_starts_from_the_blast_radius(self):
+        review = self.body.index("5. **The local review.**")
+        item = self.body.find("\n   1. **", review)
+        base = self.body.find("git merge-base origin/main HEAD", review)
+        impact = self.body.find(f"{self.CBX} diff-impact --base <that sha> --json", review)
+        written = self.body.find("artifacts/review/<slug>-r<N>.impact", review)
+        spawn = self.body.find("spawn `branch-reviewer`", review)
+        self.assertTrue(-1 < item < base < impact < written < spawn, (item, base, impact, written, spawn))
+
+    def test_each_line_the_chain_runs_is_granted(self):
+        # A dispatched run's shell read is one command its grants name, and the skill's own grant holds only once loaded.
+        grants = [grant.strip() for grant in re.search(r"^allowed-tools:(.*)$", self.front, re.M).group(1).split(",")]
+        self.assertIn("Bash(git merge-base origin/main HEAD)", grants)
+        for sub in ("search", "refs", "impact", "diff-impact"):
+            with self.subTest(sub=sub):
+                self.assertIn(f"Bash({self.CBX} {sub}:*)", grants)
+
+    def test_only_the_reads_it_runs_are_granted(self):
+        # `update` and `index` write the cache, and the skill approves them only while it is loaded.
+        for sub in ("update", "index", "doctor"):
+            with self.subTest(sub=sub):
+                self.assertNotIn(f"cbx {sub}", self.front)
+
+    def test_an_index_that_cannot_answer_is_not_a_stop(self):
+        row = next(line for line in self.body.splitlines() if line.startswith("| A helper or a guarded git command"))
+        self.assertIn("`cbx` reads", row)
+
+    def test_the_reviewer_is_told_and_never_skips_it(self):
+        profile = " ".join((CLAUDE / "agents" / "branch-reviewer.md").read_text(encoding="utf-8").split())
+        self.assertIn("**The impact file**", profile)
+        self.assertIn("names no absences", profile)
+        # `skipped` naming anything but locality stops the chain, so a file that may be absent is never in it.
+        self.assertIn("its absence is no check you skipped", profile)
 
 
-class TheTrackedSkillIsNeverRewritten(unittest.TestCase):
-    """The CLI re-materialises its packaged skill over this one whenever the
-    ignored `.skill_version` stamp differs from the installed package, and a
-    `/branch` worktree has no stamp: the first call the hint or `/ship` sends
-    there rewrote the tracked skill and widened its `allowed-tools`.
-    `.mcp.json` and `refresh-index.sh` turn that off for their own calls; an
-    agent's Bash call is covered by `settings.json`'s `env` and nothing else."""
+class TheSkillAgrees(unittest.TestCase):
+    """A hint naming a command the skill does not route, or does not approve,
+    sends the session to a permission prompt instead of the index."""
 
-    def test_every_session_runs_the_cli_with_the_auto_update_off(self):
-        env = read_json(SETTINGS).get("env") or {}
-        self.assertEqual("1", env.get("CBX_NO_SKILL_AUTO_UPDATE"), env)
+    def setUp(self):
+        self.skill = SKILL.read_text(encoding="utf-8")
+
+    def test_every_command_it_emits_is_a_row_of_the_route_table(self):
+        rows = set(re.findall(r"^\|[^|]+\| `([^`]+)` \|$", self.skill, re.M))
+        for _kind, _pattern, command in _module().ROUTES:
+            with self.subTest(command=command):
+                self.assertIn(command, rows)
+
+    def test_search_carries_the_limit_the_skill_sets(self):
+        self.assertIn("**`search` takes `--limit 3`**", self.skill)
+        search = [row[2] for row in _module().ROUTES if " search " in row[2]]
+        self.assertEqual(1, len(search))
+        self.assertIn("--limit 3", search[0])
+
+    def test_no_command_double_quotes_the_term(self):
+        """Inside double quotes bash still runs a `$(…)`, a backtick or a
+        `$VAR` the term carries. The guard refuses the first two and not the
+        third, so `cbx refs "$event"` asks about nothing. Every `cbx` line in
+        the skill's markdown is held, and a subcommand written bare in prose."""
+        bare = re.compile(r"`(?:search|explain|symbol|refs|impact|path|describe|verify) +\"")
+        lines = [line for path in sorted(SKILL.parent.rglob("*.md"))
+                 for line in path.read_text(encoding="utf-8").splitlines()
+                 if "scripts/cbx " in line or bare.search(line)]
+        self.assertGreater(len(lines), 20, "found almost no cbx lines")
+        for line in [*lines, *(row[2] for row in _module().ROUTES)]:
+            with self.subTest(line=line):
+                self.assertNotIn('"', line)
+        # The positive control: the term is still there, single-quoted.
+        self.assertTrue(all("'X'" in row[2] for row in _module().ROUTES))
+        self.assertIn(QUOTE_RULE, self.skill)
+
+    def test_every_subcommand_it_names_is_one_the_skill_approves(self):
+        front = self.skill.split("---")[1]
+        for _kind, _pattern, command in _module().ROUTES:
+            prefix = " ".join(command.split()[:3])
+            with self.subTest(command=command):
+                self.assertIn(f"Bash({prefix}:*)", front)
+
+
+# How a single quote goes inside a term, spelled in the skill: a quote, a
+# backslash, two quotes.
+QUOTE_RULE = "term as `" + "'" + chr(92) + "''" + "`"
+
+
+def _module(path: Path = HINT):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(path.stem.replace("-", "_"), path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 if __name__ == "__main__":

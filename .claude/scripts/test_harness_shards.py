@@ -1,30 +1,12 @@
 """The splitter's subject is what it is looking at, not what it found.
 
-**A shard runner that quietly stops placing a class is this repository's
-most-repeated failure in its cheapest form**: every worker green, and one
-class never run. Nothing here compares the placement against a list written
-here — a list is the thing that goes stale. It compares the units the queue
-deals back against discovery, and the units that came back against the units
-that went out.
-
-**The three tables are the second subject.** They are schedule hints, so a
-wrong entry costs a slower run; but a name in one that no longer resolves to a
-discovered class is a pinning that has silently stopped applying, which is the
-same failure in a smaller place. Each of them is checked against discovery
-too.
-
-**And the refusals are the third.** A run that discovers nothing, a plan that
-loses a unit, a unit that never finishes, a worker handed a name nothing
-discovers or handed nothing at all — each of those is a way to report a pass
-over tests that never ran, and each has a case here.
-
-**The run lock is the fourth**: a second run waits rather than running
-beside the first, and a holder that dies does not leave the lock behind.
+The units are compared back against discovery, never against a list written here, and each table's names against
+discovery too. Each way of reporting a pass over tests that never ran has a case, and so does the run lock.
 """
 
 import contextlib
 import importlib.util
-import re
+import io
 import subprocess
 import sys
 import tempfile
@@ -37,8 +19,6 @@ from unittest import mock
 SCRIPTS = Path(__file__).resolve().parent
 ROOT = SCRIPTS.parent.parent
 RUNNER = SCRIPTS / "shard-harness-suite.py"
-CHECKS = SCRIPTS / "harness-checks.sh"
-WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 
 
 def loaded():
@@ -64,11 +44,6 @@ def queued(tmp, units):
     """A queue directory holding <units>, laid out as `run_all` lays one."""
     work = Path(tmp)
     return work, SHARD.queue_units(work, units)
-
-
-def uncommented(path):
-    return "\n".join(line for line in path.read_text(encoding="utf-8")
-                     .splitlines() if not line.lstrip().startswith("#"))
 
 
 class ThePlacementIsDerivedFromDiscovery(unittest.TestCase):
@@ -116,35 +91,11 @@ class ThePlacementIsDerivedFromDiscovery(unittest.TestCase):
                 self.assertTrue(ids, f"{start} discovered nothing")
                 self.assertEqual(set(), ids - set(found()))
 
-    def test_the_token_usage_suite_is_part_of_it(self):
-        # #144: the report every token-plan exit test reads had a suite that
-        # no check ran. A root list that drops it again passes the case
-        # above, which only asks that the roots it holds contribute.
-        self.assertIn(("tools/token-usage", "test_*.py"), SHARD.ROOTS)
-        self.assertTrue(
-            any(i.startswith("test_token_usage.") for i in found()))
-
-    def test_the_commit_gate_suite_is_part_of_it(self):
-        # #216: the gate's own cases are what stops a change to it from
-        # passing unjudged, and a root list that drops them passes the
-        # case above, which only asks that the roots it holds contribute.
-        self.assertIn((".github/commit-gate", "test*.py"), SHARD.ROOTS)
-        self.assertTrue(
-            any(i.startswith("test_commit_gate.") for i in found()))
-
-    def test_the_pin_gate_suite_is_part_of_it(self):
-        # #547: the suite holds ci.yml to running the gate before each
-        # restore, so a root list that drops it lets the wiring go unread.
-        self.assertIn((".github/pin-gate", "test*.py"), SHARD.ROOTS)
-        self.assertTrue(
-            any(i.startswith("test_pin_gate.") for i in found()))
-
-    def test_the_issue_form_gate_suite_is_part_of_it(self):
-        # #600: the suite holds ci.yml to piping the labels into the gate,
-        # so a root list that drops it lets the wiring go unread.
-        self.assertIn((".github/issue-form-gate", "test*.py"), SHARD.ROOTS)
-        self.assertTrue(
-            any(i.startswith("test_issue_form_gate.") for i in found()))
+    def test_the_only_root_is_the_scripts_directory(self):
+        # Every target renders this file, and `.claude/scripts` is the one
+        # tree they all hold. A gate suite or a stack root is the target's to
+        # run, and a root some target lacks refuses that target's whole run.
+        self.assertEqual(((".claude/scripts", "test_*.py"),), SHARD.ROOTS)
 
     def test_every_name_the_tables_pin_still_exists(self):
         # A renamed class loses its pinning, and a pinning that has stopped
@@ -259,7 +210,7 @@ class TheRunnerRefusesRatherThanReportingAPass(unittest.TestCase):
         # The condition the windows-latest runner failed under: several
         # workers claiming from one queue at once, many small units, every
         # claim a race. Every unit has to come back, and every worker green.
-        ids = [i for i in found() if i.startswith("test_locality_gate.")]
+        ids = [i for i in found() if i.startswith("test_dispatch_board.")]
         self.assertGreater(len(ids), 40, "the suite this case borrows shrank")
         # Logs to files, as `run_all` does: a worker writes its whole run to
         # stderr, which would fill a pipe nobody reads until `wait` returns.
@@ -289,7 +240,8 @@ class TheRunnerRefusesRatherThanReportingAPass(unittest.TestCase):
             work, names = queued(tmp, [["test_nothing_at_all.AClass.test_it"]])
             out = subprocess.run(
                 [sys.executable, str(RUNNER), "--queue", str(work)],
-                cwd=str(ROOT), capture_output=True, text=True, timeout=600)
+                cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8",
+                timeout=600)
             self.assertEqual(2, out.returncode, out.stdout + out.stderr)
             self.assertIn("discovery does not hold", out.stderr)
             self.assertEqual(names, SHARD.unfinished(work, names))
@@ -298,16 +250,17 @@ class TheRunnerRefusesRatherThanReportingAPass(unittest.TestCase):
         # The control for the case above, on a real class: the unit moves to
         # `done/` and carries the seconds its class took, which is what the
         # parent prints the slowest classes from.
-        ids = [i for i in found() if SHARD.owner(i) == "test_locality_gate.Verdicts"]
+        ids = [i for i in found() if SHARD.owner(i) == "test_dispatch_board.ParseTests"]
         self.assertTrue(ids, "the class this case borrows is gone")
         with tempfile.TemporaryDirectory() as tmp:
             work, names = queued(tmp, [ids])
             out = subprocess.run(
                 [sys.executable, str(RUNNER), "--queue", str(work)],
-                cwd=str(ROOT), capture_output=True, text=True, timeout=600)
+                cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8",
+                timeout=600)
             self.assertEqual(0, out.returncode, out.stdout + out.stderr)
             self.assertEqual([], SHARD.unfinished(work, names))
-            self.assertEqual(["test_locality_gate.Verdicts"],
+            self.assertEqual(["test_dispatch_board.ParseTests"],
                              [cls for _, cls in SHARD.slowest(work)])
 
     def test_an_id_discovery_does_not_hold_stops_the_worker(self):
@@ -320,7 +273,8 @@ class TheRunnerRefusesRatherThanReportingAPass(unittest.TestCase):
                                encoding="utf-8")
             out = subprocess.run(
                 [sys.executable, str(RUNNER), "--ids", str(listing)],
-                cwd=str(ROOT), capture_output=True, text=True, timeout=600)
+                cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8",
+                timeout=600)
         self.assertEqual(2, out.returncode, out.stdout + out.stderr)
         self.assertIn("discovery does not hold", out.stderr)
 
@@ -330,7 +284,8 @@ class TheRunnerRefusesRatherThanReportingAPass(unittest.TestCase):
             listing.write_text("", encoding="utf-8")
             out = subprocess.run(
                 [sys.executable, str(RUNNER), "--ids", str(listing)],
-                cwd=str(ROOT), capture_output=True, text=True, timeout=600)
+                cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8",
+                timeout=600)
         self.assertEqual(2, out.returncode, out.stdout + out.stderr)
         self.assertIn("no ids to run", out.stderr)
 
@@ -338,14 +293,95 @@ class TheRunnerRefusesRatherThanReportingAPass(unittest.TestCase):
         # The shard count is the host's, capped; a caller who could set it
         # would be a second opinion about what the suite is.
         out = subprocess.run([sys.executable, str(RUNNER), "--shards", "3"],
-                             cwd=str(ROOT), capture_output=True, text=True,
+                             cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8",
                              timeout=120)
         self.assertEqual(2, out.returncode, out.stdout)
         self.assertIn("takes no arguments", out.stderr)
 
 
+class Worker:
+    """What `run_all` waits on, standing in for a process, which exits with <code>."""
+
+    def __init__(self, code):
+        self.code = code
+
+    def wait(self):
+        return self.code
+
+    def poll(self):
+        return self.code
+
+
+class TheRunItselfRefuses(unittest.TestCase):
+    """The checks where the plan becomes workers and the workers come back, driven through `run_all` and
+    `discover_and_run` rather than called apart from them."""
+
+    def run_all(self, finish, code=0):
+        """`run_all` over two units whose workers exit <code>, having finished the units <finish> names."""
+
+        def spawn(args, _log):
+            work = Path(args[1])
+            for name in finish:
+                (work / "done" / f"{name}.ids").write_bytes(b"")
+            return Worker(code)
+
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(SHARD, "spawn", spawn), mock.patch.object(SHARD, "report"), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            status = SHARD.run_all([["a.A.x"], ["b.B.x"]], [], 1)
+        return status, out.getvalue(), err.getvalue()
+
+    def discover_and_run(self):
+        err = io.StringIO()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+            status = SHARD.discover_and_run()
+        return status, err.getvalue()
+
+    def test_workers_that_exit_zero_on_an_unfinished_unit_fail_the_run(self):
+        status, _, err = self.run_all(["0000"])
+        self.assertEqual(1, status)
+        self.assertIn("1 of 2 units never finished", err)
+
+    def test_a_worker_that_exits_non_zero_fails_the_run(self):
+        status, out, _ = self.run_all(["0000", "0001"], code=1)
+        self.assertEqual(1, status)
+        self.assertIn("worker 0 failed", out)
+
+    def test_every_unit_finished_by_green_workers_passes(self):
+        status, out, err = self.run_all(["0000", "0001"])
+        self.assertEqual(0, status, err)
+        self.assertIn("all green", out)
+
+    def test_a_plan_that_drops_a_unit_runs_nothing(self):
+        units, tail = SHARD.plan(found())
+        with mock.patch.object(SHARD, "discovered", return_value=found()), \
+                mock.patch.object(SHARD, "plan", return_value=(units[:-1], tail)), \
+                mock.patch.object(SHARD, "run_all") as run_all:
+            status, err = self.discover_and_run()
+        self.assertEqual(2, status)
+        self.assertIn("the runs do not cover discovery", err)
+        run_all.assert_not_called()
+
+    def test_a_root_that_discovers_nothing_runs_nothing(self):
+        with mock.patch.object(SHARD, "ROOTS", (("docs", "test_*.py"),)), \
+                mock.patch.object(SHARD, "run_all") as run_all:
+            status, err = self.discover_and_run()
+        self.assertEqual(2, status)
+        self.assertIn("Refusing the run", err)
+        run_all.assert_not_called()
+
+    def test_every_class_time_is_there_for_the_refresh(self):
+        # `WEIGHT` lists far more classes than a short list of the slowest could hold.
+        with tempfile.TemporaryDirectory() as tmp:
+            work, _ = queued(tmp, [["a.A.x"]])
+            (work / "done" / "0000.ids.times").write_text(
+                "".join(f"{n}.0\tm.C{n}\n" for n in range(30)), encoding="utf-8")
+            self.assertEqual(30, len(SHARD.slowest(work)))
+            self.assertEqual((29.0, "m.C29"), SHARD.slowest(work)[0])
+
+
 class OneRunAtATime(unittest.TestCase):
-    """The lock two runs would otherwise interleave without (#323).
+    """The lock two runs would otherwise interleave without.
 
     Every case takes a lock file of its own: the real one is held by the run
     this case is part of, and a case that waited on it would wait on itself.
@@ -357,7 +393,7 @@ class OneRunAtATime(unittest.TestCase):
         # `/tmp` would fail rather than wait.
         self.assertEqual(Path(tempfile.gettempdir()), SHARD.LOCK.parent)
         with mock.patch.object(SHARD.getpass, "getuser", return_value="a b/c"):
-            self.assertEqual("blueprint-admin-harness-a_b_c.lock",
+            self.assertEqual("blueprint-harness-suite-a_b_c.lock",
                              SHARD.lock_path().name)
 
     def test_a_lock_that_cannot_be_opened_refuses_the_run(self):
@@ -411,28 +447,6 @@ class OneRunAtATime(unittest.TestCase):
             with open(path, "a+b") as after:
                 self.assertTrue(SHARD.try_lock(after))
                 SHARD.unlock(after)
-
-
-class TheCallersNameTheRunnerAndNoRootOfTheirOwn(unittest.TestCase):
-    """Two copies of a discovery root is how a local check and CI come to run
-    different suites. The roots have one owner now, and these are the two
-    places that used to spell them out."""
-
-    def test_harness_checks_runs_the_runner(self):
-        code = uncommented(CHECKS)
-        self.assertIn("shard-harness-suite.py", code)
-        self.assertNotIn("unittest discover", code)
-
-    def test_the_ci_harness_job_runs_the_runner(self):
-        # The `run:` values, not the file's text: an `assertIn` over the raw
-        # workflow is satisfied by the comment block sitting directly above
-        # the step, which is the one distinction this case exists to make.
-        runs = [line.split("run:", 1)[1].strip()
-                for line in WORKFLOW.read_text(encoding="utf-8").splitlines()
-                if re.match(r"\s*-?\s*run:", line)]
-        self.assertTrue(any("shard-harness-suite.py" in one for one in runs),
-                        runs)
-        self.assertFalse(any("unittest discover" in one for one in runs), runs)
 
 
 if __name__ == "__main__":

@@ -282,7 +282,7 @@ class ALiveBuild(unittest.TestCase):
     thing, and so are the contexts #566 names."""
 
     def tree(self, **projects: tuple[str, str]) -> tuple[Path, Path]:
-        scratch = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        scratch = tempfile.TemporaryDirectory()
         self.addCleanup(scratch.cleanup)
         base = Path(os.path.realpath(scratch.name))
         if not _dotnet_runs(base):

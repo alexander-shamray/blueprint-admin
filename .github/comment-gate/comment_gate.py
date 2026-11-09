@@ -1,0 +1,1097 @@
+#!/usr/bin/env python3
+"""The comments, C# lines and Markdown prose lines a pull request adds, against the style guide.
+
+The guide's *Comments* and *Wrapping* rule; exit 1 is a finding, 2 a refusal.
+"""
+
+import argparse
+import ast
+import io
+import json
+import os
+import re
+import subprocess
+import sys
+import tokenize
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
+
+BLOCK_LIMIT = 5
+
+# The style guide's *Wrapping* budget for a line of C#, and the generated
+# files it exempts: a migration and its snapshot, and a designer.
+WIDTH_LIMIT = 120
+GENERATED = re.compile(r"(?:^|/)Migrations/|\.Designer\.cs$")
+
+# The style guide's *Prose conventions* budget for a line of Markdown prose. The specs under docs/superpowers are never
+# edited to match the code that followed them (CLAUDE.md), so a line added there is a record and not prose.
+PROSE_LIMIT = 80
+PROSE_EXEMPT = ("docs/superpowers/",)
+# A table row, an HTML line, a heading or a reference definition is not wrapped prose. A link's target and a bare
+# address may run long, and the prose around them may not, so each is measured as one character.
+UNWRAPPABLE = re.compile(r"^\s*(?:\||<(?!https?://)|#|\[[^\]]*\]:)")
+LINK_TARGET = re.compile(r"\]\((?:[^()]|\([^()]*\))*\)")
+ADDRESS = re.compile(r"https?://\S+")
+FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
+# One blockquote marker, so a fence or a table inside a quote is read as one; a fence ends with its own quote depth.
+QUOTE = re.compile(r"\s*>\s?")
+
+# A section, an Appendix E section, an ADR or a symbol: the owners a
+# `<remarks>` may exist to cite.
+CITATION = re.compile(r"§|\bE\.[0-9]+\.[0-9]+|\bADR-[0-9]+|\bcref=")
+
+# The languages whose added lines the report weighs, comment against code.
+REPORTED = {"C#": (".cs",), "scripts": (".py", ".sh")}
+
+# The pull requests the C# ratio excepts; the README owns why.
+DOCS_TITLE = re.compile(r"docs[:(]")
+SWEEP_LABEL = "comment-sweep"
+
+# The third field exempts a tree: the harness's helpers are about the
+# reviewers, so a reviewer named there is a subject rather than history.
+PATTERNS = [
+    ("an issue or pull request number", re.compile(r"#[0-9]+\b"), ()),
+    ("a delivery-plan row", re.compile(r"PR-[0-9]+"), ()),
+    ("a reviewer", re.compile(r"Copilot|Grok|CodeQL|found in review"),
+     (".claude/",)),
+    ("history", re.compile(r"\b(used to|went stale|"
+                           r"this (line|sentence|comment) (said|carried))\b",
+                           re.IGNORECASE),
+     ()),
+    ("emphasis", re.compile(r"\*\*[^*]+\*\*|</?b>"), ()),
+]
+
+
+class Unreadable(Exception):
+    """A diff or a file the gate cannot read, which refuses the run."""
+
+
+@dataclass(frozen=True)
+class Comment:
+    """One comment token: its whole extent, and its text inside the markers."""
+
+    start: int
+    end: int
+    body_start: int
+    body_end: int
+
+
+def _line_end(text, i):
+    while i < len(text) and text[i] not in "\r\n":
+        i += 1
+    return i
+
+
+def _comment(start, end, marker, closer=0):
+    return Comment(start, end, start + marker, end - closer)
+
+
+def csharp(text):
+    """`//`, `///` and `/* */`, never in a string, a character or a message."""
+    found = []
+    _cs_code(text, 0, found, closing=False)
+    return found
+
+
+_MESSAGE_DIRECTIVE = re.compile(r"#\s*(region|endregion|error|warning)\b")
+
+
+def _cs_directive_comment(text, i, end):
+    """Where a directive's trailing `//` opens, or -1: never inside the
+    quoted arguments `#line` and `#pragma checksum` take."""
+    while i < end:
+        if text[i] == '"':
+            close = text.find('"', i + 1, end)
+            if close < 0:
+                return -1
+            i = close + 1
+        elif text.startswith("//", i):
+            return i
+        else:
+            i += 1
+    return -1
+
+
+def _cs_code(text, i, found, closing):
+    depth = 0
+    nest = 0
+    at_line_start = True
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c in "\r\n":
+            at_line_start = True
+            i += 1
+            continue
+        if c in " \t":
+            i += 1
+            continue
+        if c == "#" and at_line_start:
+            end = _line_end(text, i)
+            comment = _cs_directive_comment(text, i, end)
+            if comment >= 0 and not _MESSAGE_DIRECTIVE.match(text, i):
+                found.append(_comment(comment, end, 2))
+            i = end
+            continue
+        at_line_start = False
+        if text.startswith("//", i):
+            end = _line_end(text, i)
+            marker = 3 if text.startswith("///", i) else 2
+            found.append(_comment(i, end, marker))
+            i = end
+        elif text.startswith("/*", i):
+            close = text.find("*/", i + 2)
+            end = n if close < 0 else close + 2
+            found.append(_comment(i, end, 2, 0 if close < 0 else 2))
+            i = end
+        elif c == "'":
+            i = _cs_char(text, i)
+        elif c in "$@\"":
+            i = _cs_string(text, i, found)
+        elif closing and c in "([":
+            nest += 1
+            i += 1
+        elif closing and c in ")]":
+            nest -= 1
+            i += 1
+        elif closing and c == "{":
+            depth += 1
+            i += 1
+        elif closing and c == "}":
+            if depth == 0:
+                return i + 1
+            depth -= 1
+            i += 1
+        elif (closing and c == ":" and depth == 0 and nest <= 0
+              and not text.startswith("::", i) and text[i - 1] != ":"):
+            # A hole's top-level colon opens its format clause, which is
+            # literal text up to the brace that closes the hole.
+            close = text.find("}", i)
+            return n if close < 0 else close + 1
+        else:
+            i += 1
+    return i
+
+
+def _run(text, i, character):
+    j = i
+    while j < len(text) and text[j] == character:
+        j += 1
+    return j - i
+
+
+def _cs_char(text, i):
+    i += 1
+    while i < len(text) and text[i] not in "'\r\n":
+        i += 2 if text[i] == "\\" else 1
+    return i + 1
+
+
+def _cs_string(text, i, found):
+    j = i
+    while j < len(text) and text[j] in "$@":
+        j += 1
+    prefix = text[i:j]
+    if not text.startswith('"', j):
+        return j if j > i else i + 1
+    dollars = prefix.count("$")
+    quotes = _run(text, j, '"')
+    if quotes >= 3 and "@" not in prefix:
+        return _cs_raw(text, j + quotes, quotes, dollars, found)
+    return _cs_quoted(text, j + 1, "@" in prefix, dollars, found)
+
+
+def _cs_quoted(text, i, verbatim, dollars, found):
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c == '"':
+            if verbatim and text.startswith('""', i):
+                i += 2
+                continue
+            return i + 1
+        if c == "\\" and not verbatim:
+            i += 2
+        elif c in "\r\n" and not verbatim:
+            return i
+        elif dollars and text.startswith("{{", i):
+            i += 2
+        elif dollars and c == "{":
+            i = _cs_code(text, i + 1, found, closing=True)
+        else:
+            i += 1
+    return i
+
+
+def _cs_raw(text, i, quotes, dollars, found):
+    n = len(text)
+    closer = '"' * quotes
+    while i < n:
+        if text.startswith(closer, i):
+            return i + quotes
+        if dollars and text[i] == "{":
+            run = _run(text, i, "{")
+            if run >= dollars:
+                i = _cs_code(text, i + run, found, closing=True)
+                i += dollars - 1
+                continue
+            i += run
+            continue
+        i += 1
+    return i
+
+
+def python(text):
+    """`#` comments from the tokenizer, and docstrings from the syntax tree."""
+    starts = _line_starts(text)
+    try:
+        tokens = list(tokenize.generate_tokens(io.StringIO(text).readline))
+        tree = ast.parse(text)
+    except (SyntaxError, tokenize.TokenError) as error:
+        raise Unreadable(f"Python that does not parse: {error}") from None
+
+    def offset(position):
+        return starts[position[0] - 1] + position[1]
+
+    def node_offset(line, byte_column):
+        # The syntax tree counts columns in UTF-8 bytes, the tokenizer in
+        # characters.
+        start = starts[line - 1]
+        row = text[start:_line_end(text, start)]
+        return start + len(row.encode("utf-8")[:byte_column].decode("utf-8"))
+
+    found = []
+    for token in tokens:
+        if token.type == tokenize.COMMENT:
+            found.append(_comment(offset(token.start), offset(token.end), 1))
+    strings = [t for t in tokens if t.type == tokenize.STRING]
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef,
+                                 ast.AsyncFunctionDef)):
+            continue
+        body = node.body
+        if not (body and isinstance(body[0], ast.Expr)
+                and isinstance(body[0].value, ast.Constant)
+                and isinstance(body[0].value.value, str)):
+            continue
+        doc = body[0].value
+        first = node_offset(doc.lineno, doc.col_offset)
+        last = node_offset(doc.end_lineno, doc.end_col_offset)
+        spans = [t for t in strings
+                 if offset(t.start) >= first and offset(t.end) <= last]
+        if not spans:
+            continue
+        head, tail = spans[0], spans[-1]
+        quote = head.string.lstrip("rRbBuU")
+        opener = len(head.string) - len(quote) + (3 if quote[:3] in
+                                                   ('"""', "'''") else 1)
+        closer = 3 if tail.string[-3:] in ('"""', "'''") else 1
+        found.append(_comment(offset(head.start), offset(tail.end),
+                              opener, closer))
+    return found
+
+
+def shell(text):
+    """`#` where a word begins, never in quotes, expansions or a heredoc."""
+    found = []
+    _sh_code(text, 0, found, closing=None)
+    return found
+
+
+_SH_WORD_BREAK = " \t\r\n;&|()"
+
+
+def _sh_heredoc_word(text, i):
+    """The delimiter after `<<` or `<<-`, quotes removed, and where it ends.
+
+    The whole word, as the shell reads it: a delimiter cut short at the first
+    character a narrower pattern did not expect never matches its terminator,
+    and everything after it would be read as heredoc body.
+    """
+    n = len(text)
+    while i < n and text[i] in " \t":
+        i += 1
+    word = []
+    while i < n and text[i] not in _SH_WORD_BREAK + "<>":
+        c = text[i]
+        if text.startswith("\\\n", i):
+            i += 2
+        elif c == "\\" and i + 1 < n:
+            word.append(text[i + 1])
+            i += 2
+        elif c == "$" and text[i + 1:i + 2] in ("'", '"'):
+            close = text.find(text[i + 1], i + 2)
+            if text[i + 1] == "'" and "\\" in text[i:max(close, i)]:
+                raise Unreadable("a heredoc delimiter spelt with an escape")
+            i += 1
+        elif c in "'\"":
+            close = text.find(c, i + 1)
+            if close < 0 or "\n" in text[i:close]:
+                return None, i
+            word.append(text[i + 1:close])
+            i = close + 1
+        else:
+            word.append(c)
+            i += 1
+    return "".join(word) or None, i
+
+
+def _sh_word_starts(text, i):
+    """Whether a word starts at `i`, once the continuations before it are
+    removed as the shell removes them."""
+    while text.startswith("\\\n", i - 2) and i >= 2:
+        i -= 2
+    return i == 0 or text[i - 1] in _SH_WORD_BREAK
+
+
+def _sh_code(text, i, found, closing):
+    depth = 0
+    pending = []
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c == "\\":
+            i += 2
+        elif c == "\n":
+            i = _sh_heredocs(text, i + 1, pending)
+            pending = []
+        elif c == "#" and _sh_word_starts(text, i):
+            end = _line_end(text, i)
+            if closing == "`":
+                # The shell cuts a backtick body out before it reads it.
+                tick = text.find("`", i, end)
+                end = end if tick < 0 else tick
+            found.append(_comment(i, end, 1))
+            i = end
+        elif c == "'":
+            close = text.find("'", i + 1)
+            i = n if close < 0 else close + 1
+        elif text.startswith("$'", i):
+            i = _sh_escaped(text, i + 2, "'")
+        elif c == '"':
+            i = _sh_double(text, i + 1, found)
+        elif c == "`":
+            if closing == "`":
+                return i + 1
+            i = _sh_code(text, i + 1, found, closing="`")
+        elif (end := _sh_arithmetic_at(text, i, found)) is not None:
+            i = end
+        elif text.startswith("$(", i):
+            i = _sh_code(text, i + 2, found, closing=")")
+        elif text.startswith("${", i):
+            i = _sh_parameter(text, i + 2, found)
+        elif text.startswith("<<<", i):
+            i += 3
+        elif text.startswith("<<", i):
+            strip_tabs = text.startswith("<<-", i)
+            word, end = _sh_heredoc_word(text, i + (3 if strip_tabs else 2))
+            if word is None:
+                i += 2
+            else:
+                pending.append((word, strip_tabs))
+                i = end
+        elif closing == ")" and c == "(":
+            depth += 1
+            i += 1
+        elif closing == ")" and c == ")":
+            if depth == 0:
+                return i + 1
+            depth -= 1
+            i += 1
+        else:
+            i += 1
+    return i
+
+
+def _sh_arithmetic_at(text, i, found, bare=True):
+    """Past the arithmetic context opening at `i`, or None when none does;
+    `((` opens one only where a command can start, which `bare` says."""
+    if text.startswith("$((", i):
+        body = i + 3
+    elif bare and text.startswith("((", i) and (
+            i == 0 or text[i - 1] in _SH_WORD_BREAK):
+        body = i + 2
+    else:
+        return None
+    inner = []
+    end = _sh_arithmetic(text, body, inner)
+    if end is not None:
+        found.extend(inner)
+    return end
+
+
+def _sh_arithmetic(text, i, found):
+    """Past the `))` closing an arithmetic context, where `<<` is a shift and
+    `#` a base; None when the parentheses were nested subshells after all."""
+    depth = 0
+    while i < len(text):
+        c = text[i]
+        if text.startswith("$(", i) and not text.startswith("$((", i):
+            i = _sh_code(text, i + 2, found, closing=")")
+            continue
+        if c == "`":
+            i = _sh_code(text, i + 1, found, closing="`")
+            continue
+        if c == "(":
+            depth += 1
+        elif c == ")" and depth:
+            depth -= 1
+        elif c == ")":
+            return i + 2 if text.startswith("))", i) else None
+        i += 1
+    return None
+
+
+def _sh_heredocs(text, i, pending):
+    for word, strip_tabs in pending:
+        while i < len(text):
+            end = text.find("\n", i)
+            end = len(text) if end < 0 else end
+            line = text[i:end].rstrip("\r")
+            i = end + 1
+            if (line.lstrip("\t") if strip_tabs else line) == word:
+                break
+    return i
+
+
+def _sh_escaped(text, i, closer):
+    while i < len(text) and text[i] != closer:
+        i += 2 if text[i] == "\\" else 1
+    return i + 1
+
+
+def _sh_double(text, i, found):
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c == "\\":
+            i += 2
+        elif c == '"':
+            return i + 1
+        elif c == "`":
+            i = _sh_code(text, i + 1, found, closing="`")
+        elif (end := _sh_arithmetic_at(text, i, found, bare=False)):
+            i = end
+        elif text.startswith("$(", i):
+            i = _sh_code(text, i + 2, found, closing=")")
+        elif text.startswith("${", i):
+            i = _sh_parameter(text, i + 2, found)
+        else:
+            i += 1
+    return i
+
+
+def _sh_parameter(text, i, found):
+    depth = 0
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c == "\\":
+            i += 2
+        elif c == "'":
+            close = text.find("'", i + 1)
+            i = n if close < 0 else close + 1
+        elif c == '"':
+            i = _sh_double(text, i + 1, found)
+        elif c == "`":
+            i = _sh_code(text, i + 1, found, closing="`")
+        elif (end := _sh_arithmetic_at(text, i, found, bare=False)):
+            i = end
+        elif text.startswith("$(", i):
+            i = _sh_code(text, i + 2, found, closing=")")
+        elif c == "{":
+            depth += 1
+            i += 1
+        elif c == "}":
+            if depth == 0:
+                return i + 1
+            depth -= 1
+            i += 1
+        else:
+            i += 1
+    return i
+
+
+_BLOCK_SCALAR = re.compile(r"(?:^|[\s:\-])[|>][-+0-9]*$")
+_INDICATOR = re.compile(r"[|>][-+0-9]*")
+_SCALAR_HEADER = re.compile(r":[ \t]+(?:[&!][^ \t]*[ \t]+)*[|>][-+0-9]*$")
+_ITEM_PREFIX = re.compile(r"^[ ]*(?:-[ ]+)*")
+
+
+_ENTRY_INDICATOR = re.compile(r"[ ]*(?:-[ ]+)*[-?]")
+_NODE_PROPERTY = re.compile(r"(?:^|(?<=[ \t]))[&!][^ \t]*[ \t]+$")
+
+
+def _opens_scalar(line, j):
+    """Whether a quote at `j` starts a scalar; mid-scalar it is plain text."""
+    head = line[:j]
+    while (match := _NODE_PROPERTY.search(head)):
+        head = head[:match.start()]
+    before = head.rstrip()
+    last = before[-1:]
+    if last in ("", "[", "{", ","):
+        return True
+    if last == ":":
+        return before != head or before[-2:-1] in ("'", '"')
+    return before != head and bool(_ENTRY_INDICATOR.fullmatch(before))
+
+
+def workflow(text):
+    """YAML the Actions runner executes, so a `run:` block is shell."""
+    return yaml(text, run_blocks=True)
+
+
+def yaml(text, run_blocks=False):
+    """`#` outside quotes and block scalars, which are literals."""
+    found = []
+    starts = _line_starts(text)
+    quote = None
+    scalar_parent = None
+    script = None
+    folded = False
+    explicit_key = ""
+    for start in starts:
+        end = _line_end(text, start)
+        line = text[start:end]
+        indent = len(line) - len(line.lstrip(" "))
+        if scalar_parent is not None:
+            if not line.strip() or indent > scalar_parent:
+                if script is not None:
+                    script.append((start, end))
+                continue
+            scalar_parent = None
+            _run_block(text, script, found, folded)
+            script = None
+        code_end = len(line)
+        j = 0
+        while j < len(line):
+            c = line[j]
+            if quote == "'":
+                if line.startswith("''", j):
+                    j += 2
+                    continue
+                if c == "'":
+                    quote = None
+            elif quote == '"':
+                if c == "\\":
+                    j += 2
+                    continue
+                if c == '"':
+                    quote = None
+            elif c == "#" and (j == 0 or line[j - 1] in " \t"):
+                found.append(_comment(start + j, start + len(line), 1))
+                code_end = j
+                break
+            elif c in "'\"" and _opens_scalar(line, j):
+                quote = c
+            j += 1
+        code = line[:code_end].rstrip()
+        entry = code[_ITEM_PREFIX.match(code).end():]
+        if entry.startswith("? "):
+            explicit_key = entry[2:].strip()
+        elif entry and not entry.startswith(":"):
+            explicit_key = ""
+        if quote is None and _BLOCK_SCALAR.search(code):
+            prefix = _ITEM_PREFIX.match(code).group(0)
+            owner = code[len(prefix):]
+            if not _INDICATOR.fullmatch(owner):
+                scalar_parent = len(prefix)
+                # `? run` on one line and `: |` on the next is the same key.
+                key = explicit_key + owner if owner[:1] == ":" else owner
+                runs = run_blocks and _RUN_KEY.match(key)
+                script = [] if runs else None
+                folded = ">" in code[_BLOCK_SCALAR.search(code).start():]
+                if not _SCALAR_HEADER.search(owner):
+                    scalar_parent = script = None
+            elif prefix.strip():
+                scalar_parent = code.rfind("-", 0, len(prefix))
+            else:
+                scalar_parent = indent - 1
+            # An explicit indentation indicator sets where content starts, and
+            # a line short of it ends the scalar.
+            indicator = code[_BLOCK_SCALAR.search(code).start():]
+            width = re.search(r"[1-9]", indicator)
+            if width and scalar_parent is not None:
+                scalar_parent += int(width.group(0)) - 1
+    _run_block(text, script, found, folded)
+    return found
+
+
+_RUN_KEY = re.compile(r"""(?:run|"run"|'run')[ \t]*:\s""")
+
+
+def _run_block(text, rows, found, folded):
+    """A `run:` block's comments, read as the runner's shell reads it: `>`
+    joins neighbouring lines at the block's own indent before the shell sees
+    them, so a comment there runs on through the lines folded into it."""
+    content = [text[s:e] for s, e in rows or [] if text[s:e].strip()]
+    if not content:
+        return
+    indent = min(len(line) - len(line.lstrip(" ")) for line in content)
+    script = []
+    where = []
+    for start, end in rows:
+        cut = min(indent, end - start)
+        script.append(text[start + cut:end] + "\n")
+        where.extend(range(start + cut, end + 1))
+    if folded:
+        for k in range(len(script) - 1):
+            if all(row.strip() and row[0] not in " \t"
+                   for row in script[k:k + 2]):
+                script[k] = script[k][:-1] + " "
+    for comment in shell("".join(script)):
+        found.append(Comment(where[comment.start], where[comment.end - 1] + 1,
+                             where[comment.body_start],
+                             where[comment.body_end - 1] + 1
+                             if comment.body_end > comment.body_start
+                             else where[comment.body_start]))
+
+
+def msbuild(text):
+    """`<!-- -->`, never inside a CDATA section."""
+    found = []
+    i = 0
+    while True:
+        comment = text.find("<!--", i)
+        cdata = text.find("<![CDATA[", i)
+        if comment < 0:
+            return found
+        if 0 <= cdata < comment:
+            close = text.find("]]>", cdata)
+            i = len(text) if close < 0 else close + 3
+            continue
+        close = text.find("-->", comment + 4)
+        end = len(text) if close < 0 else close + 3
+        found.append(_comment(comment, end, 4, 0 if close < 0 else 3))
+        i = end
+
+
+def editorconfig(text):
+    """A line whose first character past its indent is `#` or `;`."""
+    found = []
+    for start in _line_starts(text):
+        end = _line_end(text, start)
+        stripped = text[start:end].lstrip(" \t")
+        if stripped[:1] in ("#", ";"):
+            first = end - len(stripped)
+            found.append(_comment(first, end, 1))
+    return found
+
+
+READERS = {
+    ".cs": csharp,
+    ".py": python,
+    ".sh": shell,
+    ".yml": yaml,
+    ".yaml": yaml,
+    ".csproj": msbuild,
+    ".props": msbuild,
+    ".targets": msbuild,
+}
+
+
+def rendered(path):
+    """Where a sync renders a path: a rule reads that one, so the payload is judged as a target is."""
+    return path.removeprefix("payload/")
+
+
+def reader_for(path):
+    """The comment reader for a repository path, or None for one it skips."""
+    name = PurePosixPath(path).name
+    if name == ".editorconfig":
+        return editorconfig
+    reader = READERS.get(PurePosixPath(path).suffix)
+    runs = (rendered(path).startswith(".github/workflows/")
+            or name in ("action.yml", "action.yaml"))
+    return workflow if reader is yaml and runs else reader
+
+
+def _line_starts(text):
+    starts = [0]
+    for line in io.StringIO(text, newline=""):
+        starts.append(starts[-1] + len(line))
+    if starts[-1] == len(text) and len(starts) > 1:
+        starts.pop()
+    return starts
+
+
+@dataclass(frozen=True)
+class Line:
+    """One line: its number, comment text, whether it is only that, and width."""
+
+    number: int
+    said: str
+    comment: bool
+    blank: bool
+    width: int
+
+
+def scan(path, text):
+    """Each line of a file, as the comment rule reads it."""
+    comments = reader_for(path)(text)
+    starts = _line_starts(text)
+    whole = bytearray(len(text))
+    body = bytearray(len(text))
+    for comment in comments:
+        whole[comment.start:comment.end] = (
+            b"\1" * (comment.end - comment.start))
+        body[comment.body_start:comment.body_end] = (
+            b"\1" * (comment.body_end - comment.body_start))
+
+    lines = []
+    for number, start in enumerate(starts, 1):
+        end = starts[number] if number < len(starts) else len(text)
+        stop = _line_end(text, start)
+        said = "".join(ch if body[k] else " "
+                       for k, ch in enumerate(text[start:stop], start))
+        lines.append(Line(number, said,
+                          _comment_only(text, whole, start, stop, end),
+                          not text[start:stop].strip(), stop - start))
+    return lines
+
+
+def judge(path, text, added):
+    """Findings for one file after the change, given its added line numbers."""
+    return findings(path, scan(path, text), added)
+
+
+def is_prose(path):
+    """Whether the gate holds a path to the prose width: Markdown, outside the records it exempts."""
+    return path.endswith(".md") and not rendered(path).startswith(PROSE_EXEMPT)
+
+
+def prose_width(path, text, added):
+    """Findings for the added Markdown prose lines that run past PROSE_LIMIT.
+
+    A code block ends on the fence character that opened it, at least as long; front matter is a leading block with
+    no blank line before its closing rule.
+    """
+    found = []
+    fence = None
+    lines = [line.rstrip("\r") for line in text.split("\n")]
+    front_end = 0
+    if lines[:1] == ["---"]:
+        for number, line in enumerate(lines[1:], 2):
+            if not line.strip():
+                break
+            if line == "---":
+                front_end = number
+                break
+    for number, line in enumerate(lines, 1):
+        if number <= front_end:
+            continue
+        bodies = [line]
+        while marker := QUOTE.match(bodies[-1]):
+            bodies.append(bodies[-1][marker.end():])
+        body = bodies[-1]
+        if fence is not None and len(bodies) - 1 < fence[3]:
+            fence = None
+        if fence is not None:
+            if re.match(rf"^\s*{re.escape(fence[0])}{{{fence[1]},}}\s*$", bodies[fence[3]]):
+                fence = None
+            continue
+        opening = FENCE.match(body)
+        if opening:
+            fence = (opening.group(1)[0], len(opening.group(1)), number, len(bodies) - 1)
+            continue
+        if number not in added or UNWRAPPABLE.search(body):
+            continue
+        width = len(ADDRESS.sub("u", LINK_TARGET.sub("](t)", line)))
+        if width > PROSE_LIMIT:
+            found.append((path, number, f"a prose line runs {width} columns, over {PROSE_LIMIT}"))
+    if fence is not None and any(number >= fence[2] for number in added):
+        found.append((path, fence[2], "a code fence opens here and is never closed, so the lines after it are unread"))
+    return found
+
+
+def findings(path, lines, added):
+    """Findings for one scanned file, given the line numbers to judge."""
+    found = []
+    for line in lines:
+        if line.number not in added:
+            continue
+        for name, pattern, exempt in PATTERNS:
+            if not rendered(path).startswith(exempt) and pattern.search(line.said):
+                found.append((path, line.number, f"a comment names {name}"))
+
+    run = []
+    for line in lines + [None]:
+        if line is not None and line.comment:
+            run.append(line.number)
+            continue
+        if len(run) > BLOCK_LIMIT and added.intersection(run):
+            found.append((path, run[0],
+                          f"a comment block runs {len(run)} lines, over "
+                          f"{BLOCK_LIMIT}"))
+        run = []
+
+    if path.endswith(".cs"):
+        found.extend(_uncited_remarks(path, lines, added))
+    if path.endswith(".cs") and not GENERATED.search(path):
+        found.extend((path, line.number, f"a line runs {line.width} columns, "
+                                         f"over {WIDTH_LIMIT}")
+                     for line in lines
+                     if line.number in added and line.width > WIDTH_LIMIT)
+    return sorted(found, key=lambda finding: finding[1])
+
+
+def _uncited_remarks(path, lines, added):
+    found = []
+    spans = []
+    for line in lines:
+        # A tag opens a span only where it leads the comment, as a doc
+        # comment's does; one mentioned in passing is prose.
+        if line.said.lstrip().startswith("<remarks"):
+            spans.append((line.number, [], False))
+        if not spans or spans[-1][2]:
+            continue
+        opened, span, _ = spans[-1]
+        # An unclosed tag ends at the next opening tag or with its comment
+        # block, so nothing below it can cite for it or be judged in it.
+        if not line.comment:
+            spans[-1] = (opened, span, True)
+            continue
+        span.append(line)
+        if "</remarks>" in line.said or "<remarks/>" in line.said:
+            spans[-1] = (opened, span, True)
+    for opened, span, _ in spans:
+        cited = any(CITATION.search(line.said) for line in span)
+        if not cited and added.intersection(line.number for line in span):
+            found.append((path, opened,
+                          "a <remarks> cites no section, ADR or cref"))
+    return found
+
+
+def tally(lines, numbers):
+    """The comment lines and the code lines among the given line numbers."""
+    comment = code = 0
+    for line in lines:
+        if line.number not in numbers or line.blank:
+            continue
+        if line.comment:
+            comment += 1
+        else:
+            code += 1
+    return comment, code
+
+
+def _add(totals, path, counts):
+    for name, suffixes in REPORTED.items():
+        if path.endswith(suffixes):
+            comment, code = totals.get(name, (0, 0))
+            totals[name] = (comment + counts[0], code + counts[1])
+
+
+def _report(totals, what):
+    for name in REPORTED:
+        comment, code = totals.get(name, (0, 0))
+        share = round(comment * 100 / (comment + code)) if comment + code else 0
+        print(f"{what}, {name}: {comment} comment line(s), {code} code "
+              f"line(s), {share}% comment")
+
+
+def _exception():
+    """Why the pull request in the environment is excepted from the ratio."""
+    listed = os.environ.get("PR_LABELS") or "[]"
+    try:
+        labels = json.loads(listed)
+    except json.JSONDecodeError:
+        labels = None
+    if not isinstance(labels, list) or not all(
+            isinstance(label, str) for label in labels):
+        raise Unreadable(f"PR_LABELS is not a JSON list of names: {listed}")
+    if DOCS_TITLE.match(os.environ.get("PR_TITLE", "")):
+        return "its title is of the docs type"
+    if SWEEP_LABEL in labels:
+        return f"it is labelled {SWEEP_LABEL}"
+    return None
+
+
+def _outweighed(totals, exception):
+    """The ratio's finding, or None when the added C# is not mostly comment."""
+    comment, code = totals.get("C#", (0, 0))
+    if comment <= code:
+        return None
+    said = (f"the added C# is more comment than code, {comment} comment "
+            f"line(s) to {code} code line(s)")
+    return f"{said}, excepted because {exception}" if exception else said
+
+
+def _comment_only(text, whole, start, stop, end):
+    content = [k for k in range(start, stop) if text[k] not in " \t"]
+    if content:
+        return all(whole[k] for k in content)
+    return (stop < end and bool(whole[stop])
+            and start > 0 and bool(whole[start - 1]))
+
+
+def _git(*args):
+    result = subprocess.run(["git", *args], capture_output=True)
+    if result.returncode:
+        raise Unreadable(f"git {' '.join(args)}: "
+                         f"{result.stderr.decode(errors='replace').strip()}")
+    return result.stdout
+
+
+# The limit is git's own ceiling, so configuration cannot lower it and turn a
+# rename into a whole file of added lines.
+_RENAMES = ("-M", "-l32767")
+
+
+def added_lines(diff):
+    """Each file's added line numbers, from a `git diff -U0` of the change."""
+    added = {}
+    lines = diff.split("\n")
+    i = 0
+    path = None
+    hunk = re.compile(r"@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+    while i < len(lines):
+        line = lines[i]
+        i += 1
+        if line.startswith("+++ "):
+            # Git ends a name holding a space with a tab, and quotes any name
+            # holding a tab, so this tab is never part of the name.
+            name = line[4:].removesuffix("\t")
+            if name.startswith('"'):
+                raise Unreadable(f"a path git quotes: {name}")
+            if name.startswith("b/"):
+                path = name[2:]
+            elif name == "/dev/null":
+                path = None
+            else:
+                raise Unreadable(f"a diff header it does not know: {name}")
+            continue
+        match = hunk.match(line)
+        if not match or path is None:
+            continue
+        old = 1 if match.group(1) is None else int(match.group(1))
+        number = int(match.group(2))
+        new = 1 if match.group(3) is None else int(match.group(3))
+        numbers = added.setdefault(path, set())
+        while i < len(lines) and (old or new or lines[i].startswith("\\")):
+            kind = lines[i][:1]
+            i += 1
+            if kind == "+":
+                numbers.add(number)
+            if kind in ("+", " "):
+                number += 1
+                new -= 1
+            if kind in ("-", " "):
+                old -= 1
+    return added
+
+
+def tree(roots):
+    """Every line of the tracked files under the roots, as the tree holds them."""
+    try:
+        # Paths from the repository root, whatever the working directory:
+        # the workflow reader and the harness exemption both match on them.
+        top = Path(_git("rev-parse", "--show-toplevel").decode().strip())
+        paths = set()
+        for root in roots:
+            listed = _git("ls-files", "-z", "--full-name", "--",
+                          root).decode("utf-8", errors="strict")
+            read = [p for p in listed.split("\0") if p and reader_for(p)]
+            if not read:
+                raise Unreadable(f"no file it reads under {root}")
+            paths.update(read)
+        found = []
+        totals = {}
+        for path in sorted(paths):
+            try:
+                text = (top / path).read_bytes().decode("utf-8-sig")
+            except UnicodeDecodeError:
+                raise Unreadable(f"{path} is not UTF-8") from None
+            try:
+                lines = scan(path, text)
+            except Unreadable as error:
+                raise Unreadable(f"{path}: {error}") from None
+            every = {line.number for line in lines}
+            found.extend(findings(path, lines, every))
+            _add(totals, path, tally(lines, every))
+    except (Unreadable, UnicodeDecodeError, OSError) as error:
+        print(f"::error::comment gate refused the run: {error}")
+        return 2
+    for path, line, message in found:
+        print(f"{path}:{line}: {message}")
+    _report(totals, "the tree")
+    print(f"judged every line of {len(paths)} file(s) it reads, "
+          f"{len(found)} finding(s)")
+    return 1 if found else 0
+
+
+def main(argv):
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--base")
+    mode.add_argument("--tree", nargs="+", metavar="PATH")
+    parser.add_argument("--head")
+    args = parser.parse_args(argv[1:])
+    if args.tree:
+        if args.head is not None:
+            parser.error("--head names a diff's end, and --tree reads no diff")
+        return tree(args.tree)
+    args.head = args.head or "HEAD"
+    span = f"{args.base}...{args.head}"
+    try:
+        exception = _exception()
+        if not _git("diff", "--name-only", "-z", span).strip(b"\0"):
+            raise Unreadable(f"{span} changes no file, so the base or the "
+                             "head is not the pull request's")
+        changed = _git("diff", "--name-only", "-z", *_RENAMES,
+                       "--diff-filter=AMR", span).decode("utf-8",
+                                                         errors="strict")
+        paths = [p for p in changed.split("\0") if p]
+        diff = _git("-c", "core.quotePath=false", "diff", "-U0", "--no-color",
+                    "--no-ext-diff", "--text", "--no-textconv",
+                    "--diff-algorithm=myers", "--no-indent-heuristic",
+                    "--inter-hunk-context=0", "--src-prefix=a/",
+                    "--dst-prefix=b/", *_RENAMES, "--diff-filter=AMR", span)
+        # A textual patch of an image is not UTF-8, and only its line breaks
+        # and the headers around it are read; the file list above has already
+        # refused a path that is not.
+        added = added_lines(diff.decode("utf-8", errors="replace"))
+        found = []
+        totals = {}
+        judged = 0
+        # The file list, not the hunks, says what is read, so a file the diff
+        # is silent about is still opened.
+        for path in sorted(paths):
+            if reader_for(path) is None and not is_prose(path):
+                continue
+            numbers = added.get(path, set())
+            raw = _git("show", f"{args.head}:{path}")
+            try:
+                text = raw.decode("utf-8-sig")
+            except UnicodeDecodeError:
+                raise Unreadable(f"{path} is not UTF-8") from None
+            judged += 1
+            if is_prose(path):
+                found.extend(prose_width(path, text, numbers))
+                continue
+            try:
+                lines = scan(path, text)
+            except Unreadable as error:
+                raise Unreadable(f"{path}: {error}") from None
+            found.extend(findings(path, lines, numbers))
+            _add(totals, path, tally(lines, numbers))
+    except (Unreadable, UnicodeDecodeError) as error:
+        print(f"::error::comment gate refused the run: {error}")
+        return 2
+    for path, line, message in found:
+        print(f"::error file={path},line={line}::{message}")
+        print(f"{path}:{line}: {message}")
+    _report(totals, "added")
+    ratio = _outweighed(totals, exception)
+    if ratio and not exception:
+        print(f"::error::{ratio}")
+        found.append(ratio)
+    if ratio:
+        print(ratio)
+    print(f"judged the added lines of {judged} file(s) it reads, "
+          f"{len(found)} finding(s)")
+    return 1 if found else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

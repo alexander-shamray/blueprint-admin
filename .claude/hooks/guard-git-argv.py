@@ -1,75 +1,53 @@
 #!/usr/bin/env python3
 """Judge git on the argv the shell will execute, not on the string a caller types.
 
-**This exists because a permission rule matches the typed STRING and the shell
-executes an ARGV**, and the gap between those two is where blueprint-backend#30 lived.
+A permission rule matches the typed string and the shell executes an argv.
 `.claude/settings.json` denies `Bash(git *--output*)`, which closes the naive
 spelling and nothing more: the shell reassembles adjacent quoted fragments
 before `exec`, so `--out''put=<path>` reaches git as `--output=<path>` while
-never presenting the matcher with a contiguous `--output`. Measured, not
-reasoned about — `printf '%s' --out''put=/tmp/x` prints `--output=/tmp/x`.
-`docs/harness-boundaries.md` records that as an accepted limit and names the
-fix: "a helper that spells its own flags, or a rule over the executed argv
-rather than the typed string". This is the second. It was `CLAUDE.md`'s
-paragraph until the extraction; the pointer moved with the argument, because
-this comment names the file to rewrite when the bound changes rather than
-merely citing one.
+never presenting the matcher with a contiguous `--output`.
+`docs/harness-boundaries.md` states that limit and names a rule over the
+executed argv as its fix, which is this file.
 
-It also closes one thing the rule system provably cannot express. `Bash(git
-*ext::*)` passes settings validation and then matches NOTHING — the trailing
-`:*` is consumed as the prefix-wildcard form — while `Bash(git *ext::**)` is
-rejected at startup. So `ext::`, a git transport that RUNS its argument as a
-command, has no expressible Bash deny. It has one here.
+It also closes one thing the rule system cannot express. `Bash(git *ext::*)`
+passes settings validation and then matches nothing — the trailing `:*` is
+consumed as the prefix-wildcard form — while `Bash(git *ext::**)` is rejected
+at startup. So `ext::`, a git transport that runs its argument as a command,
+has no expressible Bash deny. It has one here.
 
-**The push half is an ALLOW-list, and that is the whole design (blueprint-backend#23).** It began
-as a deny-list of dangerous spellings and two review rounds took it apart, each
-finding a form nobody had listed: `--force-with-lease=<ref>` (not equal to the
-set entry), `--for` (git accepts unambiguous abbreviations), `-fv` (bundled
-shorts), `--all` and `--branches` and `--mirror` and `--prune` (no refspec to
-inspect), `refs/heads/*:refs/heads/*` (a wildcard destination that includes
-`main` and equals nothing), `git push origin HEAD` and bare `git push origin`
-(no destination named at all, so nothing can be shown NOT to be `main`).
+The push half is an allow-list, because a deny-list of dangerous spellings
+trails the grammar: `--force-with-lease=<ref>`, the abbreviation `--for`, the
+bundle `-fv`, `--all` and `--mirror` with no refspec to inspect, a wildcard
+destination that includes `main`, and `git push origin HEAD`, which names no
+destination at all, each walk past one. So a push is refused unless every part
+of it is recognised: one remote, one refspec that names a destination, and
+options drawn from a fixed set.
 
-That is the deny-list trailing the grammar — the exact failure blueprint-backend#23 is about,
-reappearing inside its fix in parser form. **So the question is inverted:** a
-push is refused unless every part of it is recognised. One remote, one refspec
-that names a destination, and options drawn from a fixed set. Everything else,
-including every spelling nobody has thought of yet, is refused. The three
-pushes `/ship` actually makes are pinned in the suite, so over-reach breaks
-there rather than in the delivery chain.
+Three things the parser has to do before it can judge anything:
 
-**Three things the parser has to do before it can judge anything**, each found
-by a reviewer after the previous fix looked complete:
-
-  * **heredoc bodies are data.** `shlex` knows nothing about them, so a commit
-    body was tokenised as arguments — refusing an honest commit that quoted a
-    push, and only passing the first test because an apostrophe forced the
-    fallback path. Stripped first.
-  * **operators without spaces still separate commands.** `shlex.split` left
+  * heredoc bodies are data. `shlex` knows nothing about them, so a commit
+    body would be tokenised as arguments. Stripped first.
+  * operators without spaces still separate commands. `shlex.split` leaves
     `--oneline&&git` as one element, so `git log --oneline&&git push origin
-    +HEAD:main` never started a second segment and the push was admitted.
-    `punctuation_chars=True` fixes it and leaves quoted content alone.
-  * **a command substitution is executed, not quoted away.** `git log "$(git
+    +HEAD:main` would never start a second segment.
+    `punctuation_chars=True` separates it and leaves quoted content alone.
+  * a command substitution is executed, not quoted away. `git log "$(git
     push origin +HEAD:main)"` is one `shlex` token and two commands to the
     shell. Substitutions are extracted and judged in their own right.
 
-**What a value-taking flag is depends on the SUBCOMMAND**, and defaulting the
-other way was a hole: `-m` takes a value for `commit` and takes none for `log`,
-so a global skip-list let `git log -m --out''put=<path> --format=%B` walk the
-skipped element straight past the check — blueprint-backend#30, reopened by its own fix. The map
-below is consulted per subcommand and **skips nothing by default**, because the
-failure directions are not symmetric: not skipping costs a false positive, and
-skipping wrongly costs a bypass.
+What a value-taking flag is depends on the subcommand: `-m` takes a value for
+`commit` and none for `log`, so a global skip-list would let
+`git log -m --out''put=<path> --format=%B` walk the skipped element past the
+check. The map below is consulted per subcommand and skips nothing by default,
+because not skipping costs a false positive and skipping wrongly costs a
+bypass.
 
-**The residuals, stated rather than left to be found.** `shlex` resolves
-quoting and command substitution is handled, but not *expansion of an
-argument*: a flag assembled at run time — `F=--output=x; git log $F` — arrives
-as the token `$F` after a literal `log` and is not seen. Closing that needs
-the argv after expansion, which no hook is given. A subcommand assembled the
-same way is refused: `F=push; git $F origin +HEAD:main` never presents `push`
-to the allow-list, and `Bash(git log:*)` auto-approves the compound that
-builds it. The value-flag map trails git's options the way any list does; it
-is load-bearing only for false positives now, never for a bypass.
+The residuals: `shlex` resolves quoting and command substitution is handled,
+but not expansion — a flag assembled at run time,
+`F=--output=x; git log $F`, arrives as the token `$F`, and closing that needs
+the argv after expansion, which no hook is given. And the value-flag map
+trails git's options the way any list does; it is load-bearing for false
+positives, never for a bypass.
 
 Protocol: PreToolUse, matcher `Bash`. Exit 0 and print nothing to allow; print
 the deny JSON to refuse. Exit 2 would also block, but the JSON form carries a
@@ -77,7 +55,6 @@ reason the caller can read, and a guard that refuses without saying why is one
 that gets worked around rather than fixed.
 """
 
-import collections
 import fnmatch
 import functools
 import json
@@ -85,223 +62,89 @@ import os
 import re
 import shlex
 import sys
-import threading
+import tempfile
 import traceback
+from bisect import bisect_left
 
-# Flags that reach outside what the grant was for. Matched on a PREFIX, so
+# Flags that write or execute rather than inspect. Matched on a prefix, so
 # `--exec-path=<dir>` — a directory of binaries for git to run — is the same act
-# as `--exec`; an earlier form matched exactly-or-`=` and admitted it, which the
-# crude substring deny had been catching all along.
-#
-# Three of the four write or execute. `--no-index` is the odd one and it is here
-# for the same boundary in the other direction: it makes git diff two paths as
-# plain files with no repository involved, so `git diff --no-index <secret>
-# /dev/null` prints that file to stdout. Measured, not reasoned about — it
-# printed this host's ~/.gitconfig. `Bash(git diff:*)` is granted in
-# settings.json and in four commands' frontmatter, and Read is bounded by the
-# harness, so without this line the read grant is wider than the Read tool it
-# sits beside. Raised by Copilot against PR #13; the deny in settings.json is
-# beside it as defence in depth, and this is the half that is not a speed bump.
-#
-# `--ext-diff` and `--textconv` are the fifth and sixth, and they are the
-# ones that execute. Neither carries a command itself — they ENABLE a command
-# git already has in configuration, `diff.external` and `diff.*.textconv`.
-# The `git -c` list below refuses setting those keys inline and never
-# refused activating an existing one, which is a boundary with the door left
-# open on the other side: a developer host can carry either key already, and
-# `.git/config` is writable through the redirection residual this file does
-# not close (blueprint-frontend#20). Measured in a scratch repository — with
-# `diff.external` set, `git diff --ext-diff` RAN it and printed its output.
-# So `git diff`, `git log` and `git show`, granted everywhere as read-only,
-# were host code execution one flag away. Raised by Copilot against PR #13.
-#
-# `--no-ext-diff` is the safe direction and stays admitted: neither the
-# prefix test nor the abbreviation test matches it against these names.
+# as `--exec`.
 FORBIDDEN_FLAGS = ("--output", "--upload-pack", "--receive-pack", "--exec",
-                   "--no-index", "--ext-diff", "--textconv", "--extcmd")
+                   "--ext-diff", "--textconv", "--extcmd",
+                   "--open-files-in-pager")
 
-# Git subcommands whose job is to run a program the tree names (#279): the
-# difftool and mergetool configuration, or `-x`/`--extcmd`, is a command line.
-# Nothing here runs either, so they are refused by name rather than by flag.
-GIT_EXECUTING_SUBCOMMANDS = frozenset({"difftool", "mergetool"})
-
-# Git subcommands that write the files they are given, which `READING_COMMANDS`
-# keeps from being judged when `git` leads a run (#278): `git rm` and `git mv`
-# are `rm` and `mv` against the same protected trees.
-GIT_WRITING_SUBCOMMANDS = frozenset({"rm", "mv"})
-
-# Programs on the reading and substitution lists with a flag that RUNS a program
-# the command line names (#278, #279): `rg --pre CMD` runs CMD on every file it
-# searches, `--hostname-bin` runs one for the hostname. Matched whole, with `=`
-# or abbreviated, so `--pre=CMD` is refused; a bare `--pre-glob` runs nothing
-# and is admitted.
-#
-# `sort` is the same shape: `-o FILE` and `--output` write one, and
-# `--compress-program` runs one, and it is a substitution program. The names are
-# matched whole, with `=`, or as GNU abbreviates a long flag (`--out`, `--compress`);
-# a short flag anywhere in a cluster (`-ofile`, `-uo file`), over-refusing a cluster
-# whose letter belongs to another option's argument, which is the safe direction.
-EXECUTING_PROGRAM_FLAGS = {
-    "rg": ("--pre", "--hostname-bin"),
-    "sort": ("-o", "--output", "--compress-program"),
-}
-
-# Environment variables git EXECUTES (#281), the spellings of `git -c` and
-# `--ext-diff` the global option scan cannot see because they are not options.
-# Also the generic names git and rg consult when theirs is unset (`PAGER`,
-# `EDITOR`, `VISUAL`, `SSH_ASKPASS`), the directories git reads configuration or
-# templates from (`HOME`, `XDG_CONFIG_HOME`, `GIT_DIR`, `GIT_COMMON_DIR`,
-# `GIT_TEMPLATE_DIR`), and `RIPGREP_CONFIG_PATH`, whose file may hold `--pre`.
-# Matched without regard to case, as Windows reads the environment. `GIT_WORK_TREE`
-# only points at files to read, and stays admitted.
-GIT_EXECUTING_ENVIRONMENT = re.compile(
-    r"^(?:GIT_(?:CONFIG_COUNT|CONFIG_KEY_\w+|CONFIG_VALUE_\w+|CONFIG_PARAMETERS"
-    r"|CONFIG_GLOBAL|CONFIG_SYSTEM|EXTERNAL_DIFF|SSH|SSH_COMMAND|EXEC_PATH"
-    r"|PAGER|ASKPASS|PROXY_COMMAND|EDITOR|SEQUENCE_EDITOR|DIR|COMMON_DIR"
-    r"|TEMPLATE_DIR)"
-    r"|PAGER|EDITOR|VISUAL|SSH_ASKPASS|HOME|XDG_CONFIG_HOME|RIPGREP_CONFIG_PATH"
-    r"|PATH|LESS|LESSOPEN|LESSCLOSE|BASH_ENV|ENV|SHELL|GIT_CONFIG"
-    r"|USERPROFILE|HOMEDRIVE|HOMEPATH)"
-    r"\+?=", re.IGNORECASE)
-
-# The only assignments admitted in a run that names git or rg (#298): none of
-# them changes which program, configuration file or pager either one runs.
-# Everything else is refused there, by name, so a variable nobody listed is
-# refused rather than admitted. `LC_*` is matched by prefix.
-INERT_ENVIRONMENT = frozenset({
-    "LANG", "LANGUAGE", "TERM", "TZ", "NO_COLOR", "COLUMNS", "LINES",
-    "GIT_WORK_TREE", "GIT_TERMINAL_PROMPT", "GIT_OPTIONAL_LOCKS",
-})
-
-ENVIRONMENT_REFUSAL = (
-    "`{name}` is an environment variable git or rg reads in a way that can "
-    "EXECUTE — a command, a pager, an ssh, an external diff or a configuration "
-    "file — or one this guard has not listed as inert. It is `git -c`, "
-    "`--ext-diff` or `--pre` spelled as an assignment, and those are refused; "
-    "this is too."
-)
-
-# Commands whose arguments are assignments, as `export GIT_PAGER=x` is.
-ASSIGNING_COMMANDS = frozenset({"env", "export", "declare", "typeset", "local", "readonly"})
+# Options of their own that the abbreviation test would read as a forbidden
+# flag cut short: `git diff --text` is not `--textconv`.
+WHOLE_OPTIONS = {"--text"}
 
 # Judged against a whole element, and only on a subcommand that takes a
 # repository — a branch name, a path or a commit body may carry the sequence
 # without using it as a transport.
 FORBIDDEN_SUBSTRINGS = ("ext::",)
 
-# **The trees a redirection or a writing verb may not write into (blueprint-frontend#20, blueprint-frontend#26),
-# and the reason this list is here rather than read off the deny rules is that
-# a hook cannot see them.**
-# `.claude/settings.json` denies `Edit(.claude/scripts/**)` and every editing
-# command denies the same trees in its own frontmatter — and all of that binds
-# the EDITING TOOLS. A `>` on any granted `Bash` command writes what every one
-# of those refuses (blueprint-frontend#20), measured on this repository's own hook: `ls >
-# .claude/settings.json`, `wc -l README.md > package.json` and `git log
-# --oneline > package.json` were all admitted, and in a scratch directory the
-# write landed.
-#
-# `/review-grok` answered this by denying `Bash` whole, which is available to
-# exactly one command: the other four editing commands have fixed helpers as
-# their API and cannot. So the rule moves here, where it binds the redirection
-# rather than the tool beside it.
-#
-# **A hook is handed a command, never the frontmatter that granted it**, so the
-# set cannot be derived at run time the way `test_harness_helpers.py` derives the
-# frontmatter denies from the frontmatter. What stands instead is a test whose
-# subject is this list: the suite asserts it covers `MACHINERY_TREES` and every
-# tracked root file, so a new tree or a new root file fails the suite until
-# somebody decides which side of the boundary it is on — the same shape
-# `CLAUDE.md` already describes for the harness suite as a whole.
-#
-# `.vscode` is here and is not in the suite's machinery set, because
-# `tasks.json` runs on folder open and this list is about writes rather than
-# about what a command may edit; the suite asserts coverage in one direction
-# only for exactly that reason.
-#
-# `.remember` is here because `.claude/settings.json` denies editing it
-# globally — session state no command writes by hand — and `ls` and `wc` are
-# approved just as globally, so `ls > .remember/now.md` wrote past that deny
-# exactly as the trees above were written past. Raised by Copilot.
-PROTECTED_TREES = frozenset({
-    ".claude", ".git", ".github", ".remember", ".vscode", "android", "ios",
-    "node_modules",
-    # MSBuild imports `<obj>/<project>.nuget.g.props` and `.targets` unasked, and
-    # a restore that finds nothing changed does not rewrite them (#311). This
-    # tree is build output (`artifacts/obj` here) and no command writes it.
-    "obj",
-})
-
-# **The root files, matched on the BASENAME, and the over-refusal is
-# deliberate.** A target is judged lexically — this hook has no `cwd` it can
-# trust and resolving one would be a second answer to the question
-# `guard-edit-target.py` already answers — so `src/app/README.md` is refused
-# along with `README.md`. That costs a redirection nobody makes and buys the
-# nested spellings that matter: an `eslint.config.js` or a `vite.config.ts` in
-# a subdirectory is loaded by EXECUTING it, and `../package.json` is the root
-# file under another name. The editing tools remain the way to write one, where
-# the permission rules see the path and judge it.
-PROTECTED_FILES = frozenset({
-    ".editorconfig", ".gitattributes", ".gitignore", ".npmrc", ".nvmrc",
-    ".codeindexignore", ".mcp.json",
-    "BlueprintAdmin.slnx", "Directory.Build.props", "Directory.Packages.props",
-    "global.json",
-    # What MSBuild and NuGet load without being asked, so a written file runs
-    # under the granted `host-checks.sh` (#311). Not tracked, like `.npmrc`.
-    "Directory.Build.targets", "Directory.Build.rsp", "MSBuild.rsp",
-    "Directory.Solution.props", "Directory.Solution.targets",
-    "NuGet.Config", "nuget.config",
-    "BlueprintAdmin.slnx.targets", "before.BlueprintAdmin.slnx.targets",
-    "after.BlueprintAdmin.slnx.targets",
-    ".prettierrc", ".prettierrc.cjs", ".prettierrc.js", ".prettierrc.json",
-    "AGENTS.md", "CLAUDE.md", "README.md",
-    "angular.json", "capacitor.config.ts", "ionic.config.json",
-    "eslint.config.cjs", "eslint.config.js", "eslint.config.mjs",
-    "jest.config.js", "karma.conf.js",
-    "npm-shrinkwrap.json", "package-lock.json", "package.json",
-    "playwright.config.ts",
-    "prettier.config.cjs", "prettier.config.js", "prettier.config.mjs",
-    "tsconfig.app.json", "tsconfig.json", "tsconfig.spec.json",
-    "vite.config.js", "vite.config.mts", "vite.config.ts",
-    "vitest.config.js", "vitest.config.mts", "vitest.config.ts",
-})
-
-# The comparison copies `protected_path` reads; the sets above stay in their
-# real spelling because the suite compares them against `git ls-files`.
-PROTECTED_TREES_FOLDED = frozenset(name.lower() for name in PROTECTED_TREES)
-PROTECTED_FILES_FOLDED = frozenset(name.lower() for name in PROTECTED_FILES)
-
-# `git -c <key>=<value>` sets configuration for one invocation, and a long list
-# of config keys are EXECUTED by git: `alias.*`, `core.pager`, `core.editor`,
-# `core.sshCommand`, `core.hooksPath`, `diff.external`, `diff.*.textconv`,
-# `filter.*.clean`, `credential.helper`, `sequence.editor`, `gpg.program`,
-# `uploadpack.packObjectsHook`. Measured, not reasoned about:
-# `git -c "alias.x=!echo PWNED" x` prints PWNED.
-#
-# **Enumerating the executing keys is the deny-list this repository has refused
-# twice**, and git's list grows on git's schedule rather than on ours. So the
-# OPTION is refused instead of its values being judged — nothing in this
-# repository passes `-c` or `--config-env` to git, which is what makes that
-# affordable. If a caller ever needs one, the honest change is an allow-list of
-# keys, not a list of the dangerous ones.
+# `git -c <key>=<value>` sets configuration for one invocation, and many config
+# keys are executed by git — `alias.*`, `core.pager`, `core.sshCommand`,
+# `diff.external`, `filter.*.clean` and `credential.helper` among them — so
+# `git -c "alias.x=!cmd" x` runs `cmd`. A list of the executing keys grows on
+# git's schedule, so the option is refused instead of its values being judged;
+# nothing in this repository passes `-c` or `--config-env` to git. A caller
+# that needs one wants an allow-list of keys.
 CONFIG_OPTIONS = ("-c", "--config-env")
+
+# Subcommands that exist to run something: the flag lists trail git, so these
+# are refused whole. Everything else stays admitted, as an allow-list would not.
+REFUSED_SUBCOMMANDS = {
+    "filter-branch": "runs the shell commands its --*-filter options carry",
+    "send-email": "runs the programs its --*-cmd and --smtp-server options name",
+    "instaweb": "starts the web server its --httpd option names",
+    "daemon": "starts a server that runs the services it is told to",
+    "http-backend": "is a CGI program that runs git for whoever calls it",
+    "web--browse": "starts the browser program it is given",
+    "difftool": "runs the program `diff.tool` names, the `--ext-diff` act by another verb",
+    "mergetool": "runs the program `merge.tool` names, the `--ext-diff` act by another verb",
+    "send-pack": "updates a remote ref past every check a `git push` gets",
+    "http-push": "updates a remote ref past every check a `git push` gets",
+    "receive-pack": "takes a push into a repository past every check a `git push` gets",
+}
 REPOSITORY_SUBCOMMANDS = {
     "fetch", "clone", "pull", "push", "remote", "submodule", "ls-remote",
     "archive", "bundle",
 }
 
-# Git's own options, which sit before the subcommand. Taken from git's synopsis
-# rather than from the options this file happened to hit — which is how `-C` was
-# missed, and then `--attr-source` in the fix for it. **This list still trails
-# git's globals and that is stated rather than implied**; it is load-bearing
-# only for locating a subcommand, never for the push check, which no longer asks
-# where the subcommand is.
+# The short spelling of a flag that runs a command, by subcommand, because a
+# letter means something else on another: `cherry-pick -x` records a trailer.
+# `archive -o` and `format-patch -o` only write a named file, so stay admitted.
+EXECUTING_SHORT_FLAGS = {
+    "rebase": "xs", "pull": "s", "clone": "u", "ls-remote": "u", "grep": "O",
+}
+
+# A flag that runs something on one subcommand only: `commit --template` only
+# reads a file. Matched whole or abbreviated, so `--strategy-option` is free.
+EXECUTING_LONG_FLAGS = {
+    "clone": ("--template",), "init": ("--template",),
+    "pull": ("--strategy",), "rebase": ("--strategy",),
+}
+
+# Subcommands that run the operand they are handed, which no flag check sees.
+EXECUTING_FORMS = {"bisect": "run", "submodule": "foreach",
+                   "submodule--helper": "foreach"}
+
+# Letters after which the rest of a word is a value, so `-Xours` holds no `-s`.
+GLUED_VALUE_LETTERS = {
+    "rebase": "X", "pull": "Xo", "clone": "bcjo", "grep": "efABCm", "fetch": "jo",
+}
+
+# Git's own options, which sit before the subcommand, taken from git's synopsis.
+# The list trails git's globals; it is load-bearing only for locating a
+# subcommand, never for the push check, which does not ask where the subcommand
+# is.
 GLOBAL_VALUE_FLAGS = {
     "-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env",
     "--attr-source",
 }
 
 # Per subcommand, because arity is not a property of a flag name: `-m` is a
-# message for `commit` and "show merge diffs" for `log`. Absent an entry, NOTHING
+# message for `commit` and "show merge diffs" for `log`. Absent an entry, nothing
 # is skipped — a false positive is cheap and a bypass is not.
 VALUE_FLAGS_BY_SUBCOMMAND = {
     "commit": {"-m", "--message", "-F", "--file", "-C", "--reuse-message",
@@ -314,9 +157,90 @@ VALUE_FLAGS_BY_SUBCOMMAND = {
     "revert": {"-m", "--mainline", "-S"},
     "cherry-pick": {"-m", "--mainline", "-S"},
     "branch": {"-u", "--set-upstream-to", "--contains", "--sort"},
+    "grep": {"-e", "-f", "-A", "-B", "-C", "-m"},
 }
 
 SEPARATORS = {"&&", "||", ";", "|", "&", "(", ")", "{", "}", "\n"}
+
+# ---- what a target protects ------------------------------------------------
+
+SETTINGS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "settings.json")
+EDIT_RULE = re.compile(r"^Edit\((?P<path>.*)\)$")
+
+
+@functools.lru_cache(maxsize=1)
+def edit_denies():
+    """This target's `Edit(...)` deny paths, root-relative and folded.
+
+    `.claude/settings.json` is the one list, so `.github` is protected only
+    where a target denies it; `/x` is the root's, and `//x` and `~/x` no path.
+    """
+    with open(SETTINGS, encoding="utf-8") as handle:
+        rules = json.load(handle).get("permissions", {}).get("deny", [])
+    paths = [EDIT_RULE.match(rule) for rule in rules]
+    folded = (match.group("path").lower() for match in paths if match)
+    return tuple(dict.fromkeys(
+        path[2:] if path.startswith("./") else path.removeprefix("/")
+        for path in folded if not path.startswith(("//", "~"))))
+
+
+def denied_path(relative, whole=False):
+    """The deny that holds `relative`, a path from a checkout's root, or `None`.
+
+    Anchored at the root and folded. With `whole`, a parent of a deny's prefix counts.
+    `fnmatchcase` wants a `/` before `**/`, so such a rule is asked again without it.
+    """
+    parts = [part for part in re.split(r"[\\/]+", relative)
+             if part not in ("", ".")]
+    path = "/".join(parts).lower()
+    if not path or path == ".." or path.startswith("../"):
+        return None
+    for rule in edit_denies():
+        literal = re.split(r"[*?\[]", rule, maxsplit=1)[0].rstrip("/")
+        if fnmatch.fnmatchcase(path, rule) or (
+                rule.startswith("**/") and fnmatch.fnmatchcase(path, rule[3:])) or (
+                rule.endswith("/**") and path == rule[:-3]) or (
+                whole and literal.startswith(path + "/")):
+            return f"`Edit({rule})`"
+    return None
+
+
+# ---- what the home directory holds -----------------------------------------
+
+# Named rather than bounded by an allow-list, which would refuse sibling
+# checkouts and the task list. `CLAUDE.md` and `AGENTS.md` stay out of the
+# control set: they are the owner's rules, not a grant. Both guards read these.
+HOME_TREES = frozenset({".ssh"})
+HOME_FILES = frozenset({
+    ".bash_login", ".bash_logout", ".bash_profile", ".bashrc", ".gitconfig",
+    ".profile", ".zlogin", ".zprofile", ".zshenv", ".zshrc",
+})
+CONTROL_DIRECTORIES = frozenset({
+    "agents", "commands", "hooks", "plugins", "sandbox", "scripts", "skills",
+})
+CONTROL_FILES = frozenset({
+    ".credentials.json", "settings.json", "settings.local.json",
+})
+# Below `~/.claude`, what later sessions load as the user's own. The editing
+# tools may save there, where a command's deny judges the path; a shell write
+# meets no such rule.
+STANDING_DIRECTORIES = frozenset({"output-styles", "projects"})
+
+
+def home_place(parts):
+    """What the path `parts` spells below the home is: `login`, `control` or `None`.
+
+    `parts` are folded by the caller: the edit guard as the filesystem does, this one always.
+    """
+    if parts[0] in HOME_TREES or (len(parts) == 1 and parts[0] in HOME_FILES):
+        return "login"
+    if parts[0] == ".claude" and len(parts) > 1 and (
+            parts[1] in CONTROL_DIRECTORIES
+            or (len(parts) == 2 and parts[1] in CONTROL_FILES)):
+        return "control"
+    return None
+
 
 # ---- the push allow-list ---------------------------------------------------
 
@@ -326,26 +250,14 @@ SEPARATORS = {"&&", "||", ";", "|", "&", "(", ")", "{", "}", "\n"}
 PUSH_ALLOWED_FLAGS = {
     "-u", "--set-upstream", "-q", "--quiet", "-v", "--verbose",
     "--porcelain", "--progress", "--no-progress", "--atomic", "--no-verify",
-    "-n", "--dry-run",
+    "--follow-tags", "-n", "--dry-run",
 }
-# `--follow-tags` is not in that set. It publishes every annotated tag
-# reachable from the named ref, which is extra destinations this allow-list
-# does not inspect — the same shape as `--all`, arriving as a flag.
 
 # A ref this guard is willing to read: no `*`, no `+`, no `:` beyond the one
-# separator, nothing that could be a pattern or an option. **Parentheses are
-# admitted because `/branch` names a feature branch `feat(<scope>)/...`**, and
-# a class without them made the chain's own naming table unpushable. Neither is
-# a pattern to git, whose one refspec wildcard is `*`, nor to bash, where `(`
-# opens an extended glob only after one of `?*+@!` — none of which this class
-# admits — so a destination that matches still names exactly one branch.
-# `PROTECTED_BRANCHES` is judged separately and is unaffected.
+# separator, nothing that could be a pattern or an option. Parentheses form
+# none of those, and /branch's `feat(<scope>)/` names carry them.
 SAFE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/()-]*$")
 SAFE_REMOTE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-# A subcommand this guard is willing to key the rest of the grammar off:
-# letters, digits, dots, underscores, hyphens. `$F`, `$(echo push)` and `p?sh`
-# are not that, and the push allow-list never sees the verb bash runs.
-SAFE_SUBCOMMAND = SAFE_REMOTE
 
 # Sources that name no destination of their own. `git push origin HEAD` updates
 # whatever branch you are standing on — `main`, if you are on `main` — and a
@@ -354,118 +266,25 @@ UNRESOLVABLE_SOURCES = {"HEAD", "@", "HEAD~", "@{u}", "@{upstream}"}
 
 PROTECTED_BRANCHES = {"main"}
 
-# Plumbing that updates a remote ref without the verb `push`, so the protected
-# branch, force and delete checks above never see it (#284). Refused by name:
-# nothing this repository does needs either, and `git push` is the one spelling
-# the checks can read.
-#
-# Besides the two push verbs: the remote helpers speak the push protocol over a
-# pipe, and `subtree push` runs `git push` itself with a destination this guard
-# never reads. Compared lower-cased, since Windows finds an external git command
-# by a case-insensitive file name.
-REF_UPDATING_PLUMBING = {"send-pack", "http-push", "receive-pack", "subtree"}
-
-# The git globals that take no value, from git's synopsis, so a word after one
-# is the subcommand and not a value to look past.
-BOOLEAN_GLOBALS = {
-    "-p", "--paginate", "-P", "--no-pager", "--bare", "--no-replace-objects",
-    "--literal-pathspecs", "--glob-pathspecs", "--noglob-pathspecs",
-    "--icase-pathspecs", "--no-optional-locks", "--no-advice", "--no-lazy-fetch",
-    "--exec-path", "--html-path", "--man-path", "--info-path", "--version", "--help",
-}
-
-
-def verb_name(word):
-    """A subcommand word as Windows resolves it: lower-cased, with trailing dots and
-    spaces dropped and one executable suffix (`.exe`, `.cmd`, `.bat`, `.com`) removed.
-
-    git finds an external command by file name, and Windows finds `git-push.exe`
-    for `push.exe`, `PUSH.` and `push `. The checks below compare this, not the
-    word as typed.
-    """
-    name = word.lower().rstrip(". ")
-    for suffix in (".exe", ".cmd", ".bat", ".com"):
-        if name.endswith(suffix):
-            return name[:-len(suffix)]
-    return name
-
-
-def plumbing_verb(segment):
-    """The ref-updating verb this segment runs, or None.
-
-    Not read from `subcommand_of`, which skips only the globals this file
-    lists: an unlisted value-taking one (`--super-prefix X send-pack`) would
-    make `X` the verb and hide the real one. So a word right after a flag this
-    file cannot place is either that flag's value or the verb, and the scan goes
-    on past it; after a listed value flag, a listed boolean or a `--flag=value`
-    the next word is the verb and the scan stops there, which is what keeps
-    `git --no-pager log remote-fix` and `git -C d log subtree` admitted. Every
-    `remote-*` helper counts as well.
-    """
-    after_unplaced_flag = False
-    index = 0
-    while index < len(segment):
-        element = segment[index]
-        if element.startswith("-"):
-            if element in GLOBAL_VALUE_FLAGS:
-                index += 2
-                after_unplaced_flag = False
-                continue
-            after_unplaced_flag = "=" not in element and element not in BOOLEAN_GLOBALS
-            index += 1
-            continue
-        lowered = verb_name(element)
-        if lowered in REF_UPDATING_PLUMBING or lowered.startswith("remote-"):
-            return element
-        if not after_unplaced_flag:
-            break
-        after_unplaced_flag = False
-        index += 1
-    return None
-
 # Heredoc introducers. The body between the introducer and its delimiter is data
 # the shell hands to a command, not a command line.
-# **A delimiter is a shell WORD, and matching an identifier-shaped prefix of
-# one was a bypass.** `<<EOF-1` matched `EOF`, no `^EOF$` line was ever found,
-# the whole tail was taken for an unterminated body — and the
-# `git push origin +HEAD:main` after the real `EOF-1` line went with it.
-# Measured: bash terminates on `EOF-1` and runs the push. Raised in review.
 #
-# `[ \t]*` rather than `\s*`, because a newline between `<<` and its delimiter
-# is not a heredoc to bash either. The quote characters are spelled \x27 and
-# \x22 so that neither this pattern nor anything quoting it has to escape them.
-# **And a WORD may be quoted in PARTS, which matching one alternative could not
-# express.** `<<E"OF"` names the delimiter `EOF` to bash and takes its body
-# verbatim; the three-alternative form matched `<<E`, left `"OF"` standing where
-# the subcommand goes, and `git <<E"OF" push origin +HEAD:main` was admitted
-# while bash ran the push. Raised in review; verified allowed. So the word is
-# one or more fragments — single-quoted, double-quoted, escaped or bare — and
-# `_heredoc_delimiter` below does the quote removal the shell does.
+# A delimiter is a shell word, not an identifier-shaped prefix of one: bash
+# terminates `<<EOF-1` at an `EOF-1` line, so reading `EOF` would take the whole
+# tail, and a push after it, for an unterminated body. `[ \t]*` rather than
+# `\s*`, because a newline between `<<` and its delimiter is not a heredoc to
+# bash either. The quote characters are spelled \x27 and \x22 so that neither
+# this pattern nor anything quoting it has to escape them.
 #
-# **`$'…'` is a quoting form and reading its `$` as bare was a fail-open.**
-# `<<$'EOF'` names `EOF`; taking the `$` for an ordinary character made the
-# delimiter `$EOF`, so a script terminating at a real `EOF` line had every
-# command after it swallowed as body text — `git push origin +HEAD:main`
-# included. Raised in review; verified allowed. `$"…"` is the locale form and
-# is listed beside it for the same reason.
-#
-# **A continuation may split the delimiter itself**, and the word class has to
-# say so before anything else can. `<<EO\<newline>F` names `EOF` to bash, which
-# removes the pair at the input level; reading the delimiter as `EO` made the
-# guard's body start a line early and end a line early, so the real command
-# line was swallowed as data and `git <<EO\<newline>F push origin +HEAD:main`
-# was admitted. `join_continuations` cannot help here — `strip_heredocs` runs
-# on the raw command, before it, and must, because a heredoc body is not a
-# command line. Raised in an adversarial audit; verified allowed, on `main` as
-# well. `\\\n` leads the alternatives because `\\.` cannot match a newline.
-#
-# **A quoted fragment ends at an UNESCAPED quote and never spans a line.**
-# `<<"E\\"OF"` names `E"OF` to bash; the fragment closed at the escaped quote,
-# the scan then ran on across the newline and took the next line into the
-# word, and the delimiter came out as nonsense — so `heredoc_spans` found no
-# body at all. That direction happened to refuse; the mirror of it, where the
-# nonsense delimiter matches a line the payload plants, swallows whatever sits
-# between. Raised in review.
+# The word is one or more fragments — single-quoted, double-quoted, `$'…'` or
+# `$"…"`, escaped, a line continuation, or bare — because bash reads
+# `<<E"OF"`, `<<$'EOF'` and `<<EO\<newline>F` all as `EOF`, and a delimiter
+# read short or long shifts the body over a command line such as
+# `git <<E"OF" push origin +HEAD:main`. `\\\n` leads the alternatives because
+# `\\.` cannot match a newline; `join_continuations` cannot help, because
+# `strip_heredocs` runs on the raw command before it. A quoted fragment ends at
+# an unescaped quote and never spans a line, or a planted line could close the
+# body. `_heredoc_delimiter` below does the quote removal the shell does.
 HEREDOC = re.compile(
     r"<<(?P<dash>-?)[ \t]*"
     r"(?P<word>(?:\\\n"
@@ -492,20 +311,17 @@ def _heredoc_delimiter(word):
     """The literal delimiter `word` names, and whether its body expands.
 
     Bash removes the quoting from a heredoc delimiter and expands the body only
-    when the word carried **no** quoting at all — and the quoting may be
-    partial, which is the whole of why this is a function rather than a group
-    in the pattern. `<<E"OF"`, `<<"EOF"`, `<<'EOF'` and `<<\\EOF` all name
-    `EOF` and all take their bodies verbatim; only a wholly bare `<<EOF`
-    expands.
+    when the word carried no quoting at all — and the quoting may be partial,
+    which is why this is a function rather than a group in the pattern.
+    `<<E"OF"`, `<<"EOF"`, `<<'EOF'` and `<<\\EOF` all name `EOF` and all take
+    their bodies verbatim; only a wholly bare `<<EOF` expands.
 
-    **`$'…'` decodes escapes, and this returns `None` rather than guess one.**
-    A delimiter the guard gets wrong is not symmetric: too long and the body
-    swallows the commands after it, which is the fail-open this whole function
-    exists to close. So an ANSI-C fragment carrying a backslash — the only part
-    of the form that needs decoding — makes the delimiter unknown, and
-    `heredoc_spans` then opens no body at all, leaving every following line to
-    be judged as the command it may be. Erring toward refusing is the direction
-    that costs a false positive rather than a force push.
+    A delimiter this cannot read exactly — an ANSI-C fragment whose escapes
+    need decoding, or a locale-quoted one, which is translated — is returned
+    as `None`, and `heredoc_spans` then opens no body at all, leaving every
+    following line to be judged as the command it may be. A delimiter read
+    too long swallows the commands after it, so refusing is the direction that
+    costs a false positive rather than a force push.
 
     The pattern admits a fragment only in complete form, so every quote opened
     here is closed and the searches below cannot fail.
@@ -514,43 +330,22 @@ def _heredoc_delimiter(word):
     while index < len(word):
         char = word[index]
         if char == "$" and _sigil_quote(word, index) is not None:
-            # **A continuation between the sigil and its quote does not break
-            # the pairing**, because bash removes the pair before it reads the
-            # word: `<<$\<newline>'EOF'` names `EOF`. Reading the `$` as an
-            # ordinary character gave `$EOF`, so the real `EOF` line terminated
-            # nothing and every command after it was swallowed as body text.
-            #
-            # Raised in review, and answered once before it was true: the case
-            # passed at the time for an unrelated reason — one of the expansion
-            # readings happened to rewrite inside the body — and only stopped
-            # passing when those readings were correctly stopped from rewriting
-            # a body that expands nothing. A test that passes for a reason
-            # nobody has checked is one that reports the wrong thing later.
+            # A continuation between the sigil and its quote does not break
+            # the pairing, because bash removes the pair before it reads the
+            # word: `<<$\<newline>'EOF'` names `EOF`, not `$EOF`.
             peek = _sigil_quote(word, index)
             quote = word[peek]
             close = word.index(quote, peek + 1)
             body = word[peek + 1:close]
             if quote == '"':
-                # **A locale-quoted delimiter is TRANSLATED**, exactly as
-                # a locale-quoted word is, and this branch was reading
-                # `$"EOF"` as the literal `EOF` while
-                # `undecodable_dollar_quote` refused the same construct
-                # three functions along. A catalogue naming `EOF` for
-                # `safe` ends the body where bash does not, and a push
-                # between the two lines is swallowed or exposed depending
-                # on which way the mismatch falls. Raised in review, which
-                # also caught the test that had just pinned `$"EOF"` as
-                # literal — the assertion and the defect landed together.
+                # A locale-quoted delimiter is translated, as a locale-quoted
+                # word is (`undecodable_dollar_quote`): a catalogue can end
+                # the body on a different line from the literal reading, and
+                # a push between the two is swallowed or exposed.
                 return None, False
-            # **Either sigil, and an earlier revision refused only the
-            # ANSI-C one.** `<<$"E\\"OF"` names `E"OF` to bash, where
-            # `word.index` finds the ESCAPED quote and derives `E\\OF` — a
-            # delimiter that matches nothing, so a line the payload plants
-            # can close the body early or late and take an intervening
-            # push with it. Raised in review; measured, and the reasoning
-            # that let the two sigils differ was that a locale quote
-            # "carries double-quote semantics", which is exactly why its
-            # closer is not the first quote.
+            # An ANSI-C body with a backslash needs its escapes decoded, and a
+            # guessed delimiter can let a line the payload plants close the
+            # body early or late.
             if "\\" in body:
                 return None, False
             out.append(body)
@@ -564,7 +359,7 @@ def _heredoc_delimiter(word):
             quoted = True
             continue
         if char == '"':
-            # Double quotes carry escapes, so the closer is the first UNESCAPED
+            # Double quotes carry escapes, so the closer is the first unescaped
             # one and `\"` contributes a quote rather than ending the fragment.
             scan, body = index + 1, []
             while scan < len(word):
@@ -613,19 +408,13 @@ def quote_states(command, quotes=True):
     every caller here already had one, and they differ — a continuation join
     deletes the pair, an expansion rewrite copies it through.
 
-    **This exists because five scanners in this file each carried their own
-    copy of bash's quote rules, and none of them learned about `$'…'`.**
-    `shell_positions` was made escape-aware for it, and
-    `without_substitutions`, `rewriting_expansions`, `dollar_quotes`,
-    `join_continuations` and `substitutions` were not — so `: $'x\'';` in
-    front of a command left every one of them one quote out of step, and
-    `$( )`, `${x:-push}`, a line continuation and a nested `$(git push …)`
-    each walked past the pass that exists to catch it. Four of the five were
-    verified allowed; all five are raised in review. **A fix that lands in one
-    function and not in its siblings is this file's most-repeated failure**,
-    and the answer is not a sixth careful copy.
+    The scanners in this file read bash's quote rules through here rather
+    than each carrying a copy, because a copy that misses a form — `$'…'` —
+    leaves its pass one quote out of step, and `$( )`, `${x:-push}`, a line
+    continuation or a nested `$(git push …)` then walks past the pass that
+    exists to catch it.
 
-    `quotes` is false for a heredoc BODY, where a quote is an ordinary
+    `quotes` is false for a heredoc body, where a quote is an ordinary
     character — the same flag its callers already take.
     """
     states = [""] * len(command)
@@ -634,100 +423,26 @@ def quote_states(command, quotes=True):
     return states
 
 
-def _quoting(command, quotes=True, data=(), ambiguous=None):
-    """Walk `command`, yielding `(index, state, escaped)` per character.
-
-    `data` is spans this scanner must read as data rather than as shell text —
-    heredoc bodies, and only `heredoc_spans` passes any. Inside one, a quote
-    opens nothing and a `#` starts nothing: the characters are yielded as
-    quoted, which is what every consumer of this scanner means by "not a
-    command line".
-
-    **One scanner, because both callers were defeated by the same thing.** A
-    regex search for `<<` found a heredoc opener inside a COMMENT, so
-    `git status # <<EOF` swallowed the real command on the next line before it
-    could be judged; and a paren counter that did not know about quotes let
-    `git log "$(printf ')'; git push origin +HEAD:main)"` close early, hiding
-    the push in the outer token. Both raised in review, both verified allowed.
-
-    `ambiguous`, when a list is passed, receives the index of every character
-    inside a `${...}` that this walk cannot read the way bash does: a `#` at the
-    start of a word and a `<<`, and, while a command substitution or backtick
-    that opened inside a `${` is open (its braces are not tracked, so the depth
-    is frozen until it closes), any such `#` or `<<`. Each is text in one
-    reading and a comment or a
-    heredoc in another, and a guess either way hides a live command (#285), so
-    `ambiguous_expansion` refuses the command rather than relying on one. A
-    substitution inside `${` with no `#` or `<<` after it is judged as before.
-
-    `state` is `"single"` inside `'…'`, `"double"` inside `"…"`, `"comment"`
-    in a comment, `"data"` inside one of `data`'s spans and `""` elsewhere.
-    Comments start at an unquoted `#` that begins a word and end at the
-    newline — which is bash's rule, and the reason `git log --grep=#x` is not
-    a comment.
-
-    **An ANSI-C word takes a backslash and an ordinary single-quoted one does
-    not**, and reading `$'…'` by the ordinary rule desynchronised every
-    consumer of this scanner from the position it was on. `$'''` is the
-    one-character word `'` to bash — the escaped quote does not close it — so
-    `$''' ; git 2>&1 push origin +HEAD:main` runs the push. Read by the
-    ordinary rule the word closes at the escaped quote, the quote after it
-    opens one that never closes, and the rest of the line is `in_quotes`: so
-    `redirection_spans` left `2>&1` standing, `is_boundary` read the glued
-    `>&` as a run boundary, and `git` was severed from its own subcommand.
-    Raised in review; verified allowed. `$"…"` needs nothing, because a
-    locale-quoted word already follows the double-quoted rule this scanner
-    applies to it.
-    """
-    # **Not copied and not sorted**: `heredoc_spans` appends to this list
+def _quoting(command, quotes=True, data=(), start=0):
+    """Yield `(index, state, escaped)` per character of `command`.
+    `data` is spans read as data: `heredoc_spans`, `_sums_in_group` pass it."""
+    # Not copied and not sorted: `heredoc_spans` appends to this list
     # while consuming the generator, and every span it appends starts ahead of
     # the cursor, so the order holds by construction.
     single = double = comment = False
     # Whether the single quote now open was introduced by a `$`, and whether
     # the character just yielded was an unquoted, unescaped `$`.
     ansi_c = dollar = False
-    # How many `${` are open and unclosed. Inside one a `#` is text, never a
-    # comment (#285): `ls ${x:- #}; git push origin +HEAD:main` runs the push,
-    # and reading `#}; git push ...` as a comment stripped it before any check.
-    # Over-counting only keeps more of the command in view, which is the safe
-    # direction; an unclosed `${` leaves the rest of the command judged.
-    brace_depth = 0
-    # The same for a `${` inside a double-quoted string, where the depth is lost
-    # for good (`string_braces` below).
-    lost = False
-    # How deep a command substitution that opened inside a `${` is, and whether
-    # it is a backtick one. Its own braces are not followed (`${x:-$(echo })}`),
-    # so `brace_depth` is frozen until its closing parenthesis or backtick, where
-    # the `${` it sat in is read again.
-    sub, tick, sub_start = 0, False, 0
-    # The same for a `${` inside a double-quoted string, where a `"` after the
-    # `:-` opens a quote of its own rather than ending the string, and the second
-    # one closes it: `echo "${x:-" #"}"; git push ...` prints ` #` and then runs
-    # the push, measured, while reading the first inner quote as the end of the
-    # string made the rest of the line a comment. One frame per open `${`, each
-    # holding whether a quote of its own is open, since a `}` inside that quote
-    # closes nothing and a `${` inside it opens a frame of its own: a single flag
-    # lost its place at `"${x:-"${y:-a}"}"` and left the rest of the line quoted.
-    string_braces = []
-    # Whether a command substitution or backtick has opened inside the double-
-    # quoted string now open. Its body (a heredoc with a stray `${` in it) is not
-    # followed, so any `${` after it in the same string cannot be framed.
-    string_command = False
-    # **Whether a `#` begins a WORD, tracked rather than inferred from the
-    # previous character.** The old test read `command[index - 1] in " \t…"`,
-    # which cannot tell a separating space from an escaped one: in
-    # `git log --grep=foo\\ #bar;git push origin +HEAD:main` bash keeps
-    # `#bar` inside the `--grep` argument and runs the push, while the guard
-    # read a comment and stripped the lot. Measured with a `git` shim. Raised
-    # in review.
+    # Whether a `#` begins a word, tracked rather than inferred from the
+    # previous character, which cannot tell a separating space from an escaped
+    # one: in `git log --grep=foo\\ #bar;git push origin +HEAD:main` bash keeps
+    # `#bar` inside the `--grep` argument and runs the push.
     at_word_start = True
-    index = 0
+    index = start  # Read as unquoted and as beginning a word.
     # Whether this character is the one the backslash before it escapes.
     pending = False
     # A cursor rather than a search: this walk is monotonic, so the spans are
-    # consumed in order. Searching them per character made a command carrying
-    # 200 heredocs ten times slower, and a quadratic path in this file is the
-    # shape that produced the memoisation fix.
+    # consumed in order, and a per-character search is quadratic in heredocs.
     cursor = 0
     while index < len(command):
         while cursor < len(data) and data[cursor][1] <= index:
@@ -762,41 +477,17 @@ def _quoting(command, quotes=True, data=(), ambiguous=None):
                     single = ansi_c = False
             elif double:
                 if char == "\\" and index + 1 < len(command):
-                    # **Both characters, because a consumer rebuilds text from
-                    # these positions.** Yielding only the backslash made
-                    # `strip_comments` DELETE the escaped character, so
-                    # `git log "$(printf \); git push …)"` lost its `)` and
-                    # changed shape on its way through the guard. A scanner that
-                    # silently edits its input is worse than one that misreads
-                    # it, because every later stage inherits the edit.
+                    # Both characters, because a consumer rebuilds text from
+                    # these positions: yielding only the backslash would make
+                    # `strip_comments` delete the escaped character, and every
+                    # later stage would inherit the edit.
                     yield index, "double", False
                     yield index + 1, "double", True
                     index += 2
                     dollar = False
                     continue
-                # `"$${y:-"` is not a `$$` pair followed by text: bash reads the
-                # second `$` with the `{` as an expansion and refuses the whole
-                # line (measured), so a frame opens here for every `${`.
-                if char == "$" and command.startswith("{", index + 1):
-                    if string_command and ambiguous is not None:
-                        ambiguous.append(index)
-                    yield index, "double", False
-                    yield index + 1, "double", False
-                    index += 2
-                    string_braces.append(False)
-                    continue
-                if char == "`" or (char == "$" and command.startswith("(", index + 1)):
-                    string_command = True
-                    if string_braces:
-                        lost = True
-                if string_braces:
-                    if char == '"':
-                        string_braces[-1] = not string_braces[-1]
-                    elif char == "}" and not string_braces[-1]:
-                        string_braces.pop()
-                elif char == '"':
+                if char == '"':
                     double = False
-                    string_command = False
             elif char == "\\" and index + 1 < len(command):
                 # An unquoted backslash escapes the next character, so that
                 # character is ordinary text — a space included, and an escaped
@@ -814,49 +505,7 @@ def _quoting(command, quotes=True, data=(), ambiguous=None):
             elif char == '"' and quotes:
                 double = True
                 at_word_start = False
-            elif char == "{" and dollar and not sub:
-                brace_depth += 1
-                at_word_start = False
-            elif char == "}" and brace_depth and not sub:
-                brace_depth -= 1
-                at_word_start = False
-            elif ambiguous is not None and (brace_depth or lost or sub) and (
-                    (char == "#" and at_word_start)
-                    or command.startswith("<<", index)):
-                # Inside `${`, or after its depth was lost: a `#` after a space
-                # is text to bash but a comment to a guess, and a `<<` is text
-                # where a guess opens a heredoc. Recorded, and the command
-                # refused by `ambiguous_expansion`.
-                ambiguous.append(index)
-                at_word_start = char in METACHARACTERS
-            elif sub and tick:
-                # Inside a backtick body the next backtick closes it; its own
-                # braces and parentheses are not followed.
-                if char == "`":
-                    sub, tick = 0, False
-                at_word_start = char in METACHARACTERS
-            elif sub and ((char == "{" and dollar) or char == "`"):
-                # A `${` or backtick inside the substitution has a close of its
-                # own that the parentheses count does not follow (`${b:-)}`
-                # holds a `)` that is text), so the depth cannot be trusted.
-                lost = True
-                at_word_start = True
-            elif sub and char in "()":
-                sub += 1 if char == "(" else -1
-                at_word_start = char == "("
-                if not sub and re.search(
-                        r"\bcase\b", command[sub_start:index]):
-                    # A `case` pattern's `)` closes nothing, so the count
-                    # above cannot be trusted for this body.
-                    lost = True
-            elif brace_depth and not sub and ((char == "(" and dollar) or char == "`"):
-                # A command substitution inside `${` has braces of its own
-                # (`${x:-$(echo })}`) that this walk does not follow. It is
-                # followed by its parentheses instead, and the `${` it sat in
-                # is read again at its closing parenthesis (#296).
-                sub, tick, sub_start = 1, char == "`", index
-                at_word_start = True
-            elif char == "#" and at_word_start and not brace_depth:
+            elif char == "#" and at_word_start:
                 comment = True
                 yield index, "comment", False
                 index += 1
@@ -871,154 +520,246 @@ def _quoting(command, quotes=True, data=(), ambiguous=None):
         pending = False
         dollar = char == "$" and not (single or double or comment)
         index += 1
-    if string_braces and ambiguous is not None:
-        # A `${` inside a double-quoted string that nothing closed: the rest of
-        # the command was read as that string's text. Bash closes the string at
-        # the quote when the `${` sat in a body this walk does not follow
-        # (`"$(cat <<'EOF' ... use ${ here ... EOF )"`), so a command after it
-        # would be hidden as quoted text. Recorded, and refused.
-        ambiguous.append(len(command))
 
 
-def _escaped(command, index):
-    """Whether the character at `index` is escaped: an odd run of backslashes before it."""
-    run = 0
-    while index - run > 0 and command[index - run - 1] == "\\":
-        run += 1
-    return run % 2 == 1
+def _opened_body(command, index, pending):
+    """`(start, end, expands)` for a `<<` at `index`, past `pending`: None if no body, `end` None if none closes it."""
+    # `<<<` is a here-string: `cat <<<EOF` passes the word `EOF` on stdin and the
+    # next line is an ordinary command, so matching `<<EOF` at its second
+    # character would swallow that line. Two tests, because the operator has two
+    # ends: an index inside a run of `<`, and an operator continuing past `<<`.
+    if index > 0 and command[index - 1] == "<":
+        return None
+    if command.startswith("<<<", index):
+        return None
+    match = HEREDOC.match(command, index)
+    if not match:
+        return None
+    # One parse of the delimiter word, quote removal included —
+    # `<<\EOF` is a quoted delimiter to bash the same way `<<'EOF'`
+    # is, and `<<E"OF"` is one in parts.
+    delimiter, expands = _heredoc_delimiter(match.group("word"))
+    if delimiter is None:
+        # A delimiter this file cannot decode opens no body, so the
+        # lines after it stay commands and are judged as such.
+        return None
+    intro_end, dash = match.end(), bool(match.group("dash"))
+
+    # An introducer inside an earlier body is body text, which the scanner
+    # settles by not walking a body at all. Two heredocs stacked on one
+    # line both introduce before either body starts, which is `pending`'s
+    # job below.
+
+    # A body begins on the next line: everything between the introducer
+    # and that newline is still command line, as the push in
+    # `cat <<'A' ; git push origin +HEAD:main` is.
+    newline = command.find("\n", intro_end)
+    if newline == -1:
+        # An introducer with no line after it opens no body at all.
+        return None
+
+    # Stacked bodies queue: the second starts where the first terminated,
+    # which is past its own line break.
+    start = max(newline + 1, pending)
+    # The terminator is the delimiter and nothing else: bash accepts no
+    # indented or trailing-spaced terminator — only `<<-` strips leading
+    # tabs — so a commit body that indents the word keeps going.
+    terminator = (
+        rf"^\t*{re.escape(delimiter)}$" if dash
+        else rf"^{re.escape(delimiter)}$")
+    closing = re.search(terminator, command[start:], re.MULTILINE)
+    return start, None if closing is None else start + closing.end(), expands
 
 
-def heredoc_spans(command):
+def _closes_inside_backtick(command, index, end):
+    """Whether a body ending at `end` does so before the backtick around `index` closes."""
+    return end is not None and command.find("`", index) > end
+
+
+def _sums_in_group(command, start):
+    """Whether each `(` of the group opening at `start` opens a sum, and its end."""
+    # As bash decides a `((`: quotes are read, and a heredoc only where a `$(…)`
+    # or a backtick runs commands. A sum closes on `))`: `((a) | b)` is two
+    # subshells. One pass over a stack, because `_closing_paren` per sum is
+    # quadratic and a timeout fails open.
+    verdicts, stack, previous, end = {}, [], None, len(command)
+    substitutions, doubled, ticked, unsettled = [], [], False, False
+    bodies, pending, hunting = [], 0, True
+    for index, state, escaped in _quoting(command, data=bodies, start=start):
+        if state or escaped:
+            continue
+        if command[index] == "(":
+            if stack and stack[-1] == index - 1:
+                doubled.append(index - 1)
+            stack.append(index)
+            if (command[index - 1:index] == "$"
+                    and command[index + 1:index + 2] != "("):
+                substitutions.append(index)
+        elif command[index] == ")":
+            opener = stack.pop()
+            verdicts[opener] = previous == (opener + 1, index - 1)
+            previous = (opener, index)
+            for parens in (substitutions, doubled):
+                if parens and parens[-1] == opener:
+                    parens.pop()
+            if not stack:
+                end = index + 1
+                break
+        elif command[index] == "`":
+            ticked = not ticked
+        elif command.startswith("<<", index) and (ticked or substitutions):
+            if not hunting or (not ticked and doubled and doubled[-1] > substitutions[-1]):
+                unsettled = True
+                continue
+            body = _opened_body(command, index, pending)
+            if body is None:
+                continue
+            # With no close in reach, the next `<<` would search to the end too.
+            hunting = body[1] is not None and (
+                not ticked or _closes_inside_backtick(command, index, body[1]))
+            if hunting:
+                pending = body[1]
+                bodies.append(body[:2])
+    verdicts.update(dict.fromkeys(stack, False))
+    # A `<<` this read could not settle may hide a close. A sum opens no body, so
+    # the lines after stay commands, and the cost is a false refusal.
+    return dict.fromkeys(verdicts, True) if unsettled else verdicts, end
+
+
+class _Sums:
+    """Which `<<` are shifts, for the walk `heredoc_spans` makes.
+
+    A group is read ahead only where a `<<` needs the verdict, and no two reads
+    overlap, so the walk stays linear.
+    """
+
+    def __init__(self, command):
+        self.command = command
+        # The parens open at the walk, those a `$` leads, and each `((` among
+        # them not yet refused, named by its outer paren. All three ascend.
+        self.opened, self.substitutions, self.pairs = [], [], []
+        self.verdicts, self.read_to, self.backtick, self.bodiless_to = {}, 0, None, 0
+
+    def open(self, index):
+        if self.opened and self.opened[-1] == index - 1:
+            self.pairs.append(index - 1)
+        if self.command[index - 1:index] == "$":
+            self.substitutions.append(index)
+        self.opened.append(index)
+
+    def close(self):
+        if not self.opened:
+            return
+        index = self.opened.pop()
+        for parens in (self.substitutions, self.pairs):
+            if parens and parens[-1] == index:
+                parens.pop()
+
+    def tick(self, index):
+        self.backtick = index if self.backtick is None else None
+
+    def is_shift(self, index, pending):
+        """Whether a `<<` at `index` is in a sum and opens no body."""
+        pairs, substitutions = self.pairs, self.substitutions
+        while pairs:
+            if pairs[-1] >= self.read_to:
+                first = pairs[bisect_left(pairs, self.read_to)]
+                verdicts, self.read_to = _sums_in_group(self.command, first)
+                self.verdicts.update(verdicts)
+            # A read that did not see this paren is one a body's lone quote put
+            # out of step, which is a syntax error in bash too. Reading a shift
+            # opens no body, so the lines after it stay commands.
+            if self.verdicts.get(pairs[-1], True):
+                if self.backtick is None or self.backtick < pairs[-1]:
+                    return not substitutions or substitutions[-1] <= pairs[-1]
+                return not self._backtick_holds_body(index, pending)
+            pairs.pop()
+        return False
+
+    def _backtick_holds_body(self, index, pending):
+        """Whether a `<<` at `index` closes its body before its backtick closes."""
+        if index < self.bodiless_to:
+            return False
+        body = _opened_body(self.command, index, pending)
+        if body is None:
+            return False
+        # A backtick's heredoc ends with its text, so the lines after that are
+        # commands. Once per backtick, or each `<<` in it searches to the end.
+        if not _closes_inside_backtick(self.command, index, body[1]):
+            close = self.command.find("`", index)
+            self.bodiless_to = len(self.command) if close == -1 else close
+            return False
+        return True
+
+
+def heredoc_spans(command, unclosed=None, openers=None):
     """Every heredoc body in `command`, as `(start, end, expands)`.
 
     `start` is just past the introducer and `end` just past the closing
     delimiter line, so `command[start:end]` is everything the shell hands over
     as data rather than reading as a command line.
 
-    **`expands` is the half this used to throw away**, and throwing it away was
-    a bypass rather than an imprecision. `<<'EOF'` and `<<"EOF"` hand the body
-    over verbatim; a bare `<<EOF` performs substitution and parameter expansion
-    on it first. A guard that treats both as inert misses a live
-    `$(git push origin +HEAD:main)` in the second, and a guard that treats both
-    as executable refuses an honest commit quoting one in the first. Only the
-    delimiter's quoting tells them apart, and `HEREDOC` has always captured it.
+    `expands` matters: `<<'EOF'` and `<<"EOF"` hand the body over verbatim,
+    while a bare `<<EOF` performs substitution and parameter expansion on it
+    first. A guard that treats both as inert misses a live
+    `$(git push origin +HEAD:main)` in the second, and one that treats both as
+    executable refuses an honest commit quoting one in the first.
 
-    **An opener is only an opener in executable position.** A `<<EOF` inside a
-    comment or inside quotes is text, and treating it as an operator let
-    `git status # <<EOF` delete the command on the following line — the guard
-    removing the very thing it exists to read.
+    An opener is only an opener in executable position. A `<<EOF` inside a
+    comment or inside quotes is text, and treating it as an operator would let
+    `git status # <<EOF` delete the command on the following line.
     """
-    # **A body is data, and its quotes are not the command line's.** An
-    # apostrophe in one used to open a quote that ran to the end of the
-    # command, so every later opener sat `in_quotes`, was skipped, and its
-    # body was left standing to be tokenised as commands. Found by hitting it:
-    # writing four replies to disk with `cat > f <<'EOF'` heredocs was refused
-    # because a body quoting `bash -c` reached the evaluator scan. Over-refusal
-    # in every direction probed — a push after such a body was refused before
-    # and after — which is how it survived this long.
+    # A body is data, and its quotes are not the command line's: an apostrophe
+    # in one would open a quote running to the end of the command, so every
+    # later opener would sit `in_quotes` and its body be tokenised as commands.
     #
-    # **`data` is handed to the scanner and appended to WHILE it walks**, which
-    # is what makes this one pass. Feeding the spans back between whole passes
-    # instead recovers exactly one body per pass, because each newly visible
-    # body breaks the state again at its own apostrophe: measured at n+1 passes
-    # for n heredocs, which is the quadratic shape this file already treats as
-    # a fail-open by timeout. The scanner consumes `data` through a cursor and
-    # this loop only ever appends spans that start ahead of it, so the list is
-    # sorted by construction and the walk stays monotonic.
+    # `data` is handed to the scanner and appended to while it walks, which is
+    # what makes this one pass; feeding spans back between whole passes
+    # recovers one body per pass, which is quadratic, and a timeout here fails
+    # open. The scanner consumes `data` through a cursor and this loop only
+    # appends spans that start ahead of it, so the list is sorted by
+    # construction and the walk stays monotonic.
     data, spans, pending = [], [], 0
-    for index, in_quotes, in_comment in shell_positions(command, data):
-        if in_quotes or in_comment:
+    sums = _Sums(command)
+    for index, state, escaped in _quoting(command, data=data):
+        if state:
             continue
-        if not command.startswith("<<", index):
+        if not escaped and command[index] == "(":
+            sums.open(index)
+        elif not escaped and command[index] == ")":
+            sums.close()
+        elif not escaped and command[index] == "`":
+            sums.tick(index)
+        if not command.startswith("<<", index) or sums.is_shift(index, pending):
             continue
-        if _escaped(command, index):
-            # A `<` the shell was told to read as a character opens no heredoc
-            # (#276): the lines after it are commands and must be judged as
-            # such. A shift inside `(( ))` is not counted here but refused by
-            # `ambiguous_arithmetic` (#277), because a count of `((` that bash
-            # does not share hides a live command in either direction.
+        body = _opened_body(command, index, pending)
+        if body is None:
             continue
-        # **`<<<` is a here-string, and it fed a push straight past this.**
-        # The bare-delimiter alternative excludes `<`, so no opener matched at
-        # the FIRST character of `<<<EOF` — and the scan then reached the
-        # second one, where `<<EOF` matched perfectly. `cat <<<EOF` passes the
-        # word `EOF` on stdin and the next line is an ordinary command:
-        # measured, `EOF` is printed and the push runs. Raised in review.
-        #
-        # Two tests rather than one, because the operator has two ends. An
-        # index inside a run of `<` is not the start of an operator, and an
-        # operator that continues past `<<` is not a heredoc.
-        if index > 0 and command[index - 1] == "<":
-            continue
-        if command.startswith("<<<", index):
-            continue
-        match = HEREDOC.match(command, index)
-        if not match:
-            continue
-        # One parse of the delimiter word, quote removal included —
-        # `<<\EOF` is a quoted delimiter to bash the same way `<<'EOF'`
-        # is, and `<<E"OF"` is one in parts.
-        delimiter, expands = _heredoc_delimiter(match.group("word"))
-        if delimiter is None:
-            # A delimiter this file cannot decode opens no body, so the
-            # lines after it stay commands and are judged as such.
-            continue
-        intro_end, dash = match.end(), bool(match.group("dash"))
-
-        # An introducer sitting inside an earlier body is body text, not an
-        # opener — which the scanner now settles by refusing to walk a body at
-        # all, so the containment test that used to stand here is gone rather
-        # than kept as a second answer to one question. Two heredocs stacked on
-        # ONE line both introduce before either body starts, and that is still
-        # `pending`'s job below rather than an ordering test's.
-
-        # **A body begins on the NEXT LINE, and taking it to begin at the
-        # introducer was a third admitted force push.** Everything between the
-        # introducer and that newline is still command line, so
-        # `cat <<'A' ; git push origin +HEAD:main` had the push swallowed as
-        # data and the hook returned nothing. Verified under bash: it runs.
-        newline = command.find("\n", intro_end)
-        if newline == -1:
-            # An introducer with no line after it opens no body at all.
-            continue
-
-        # Stacked bodies queue: the second starts where the first terminated,
-        # which is past its own line break.
-        start = max(newline + 1, pending)
-        # **The terminator is the delimiter and nothing else.** `^\s*…\s*$`
-        # accepted an indented or trailing-spaced line, and bash accepts
-        # neither — only `<<-` strips leading TABS, and no form ignores
-        # trailing whitespace. Measured: a heredoc body containing a line
-        # `  EOF` prints it and keeps going. So an ordinary commit body that
-        # indents the word had its remaining lines exposed as commands, which
-        # is a false positive on exactly the file this repository writes most.
-        # Raised in review.
-        terminator = (
-            rf"^\t*{re.escape(delimiter)}$" if dash
-            else rf"^{re.escape(delimiter)}$")
-        closing = re.search(terminator, command[start:], re.MULTILINE)
-        if closing is None:
-            # **No span, so nothing is stripped, and the fail direction is the
-            # point.** A delimiter this guard cannot find means one of two
-            # things: the heredoc really is unterminated, in which case the
-            # tail is data and scanning it over-refuses a malformed command; or
-            # the delimiter was read wrongly, in which case the tail holds
-            # commands. Dropping it served the first and hid the second, and
-            # the second is how `<<EOF-1` walked a push past this file.
-            # Scanning is wrong only in the safe direction.
+        start, end, expands = body
+        if end is None:
+            # No span, so nothing is stripped. A delimiter this guard cannot
+            # find means either an unterminated heredoc, whose tail is data and
+            # over-refuses, or a delimiter read wrongly, whose tail holds
+            # commands. Scanning the tail is wrong only in the safe direction.
+            if unclosed is not None:
+                unclosed.append(index)
             break
-        pending = start + closing.end()
+        pending = end
         spans.append((start, pending, expands))
         data.append((start, pending))
+        # One for one with `spans`: a reader pairing bodies with openers takes
+        # them here, since re-deriving the list disagrees with this scan's skips.
+        if openers is not None:
+            openers.append(index)
     return spans
 
 
 def strip_heredocs(command):
-    """`command` with every heredoc BODY removed, delimiters included.
+    """`command` with every heredoc body removed, delimiters included.
 
-    A heredoc body is an argument, and parsing it as a command line is how the
-    guard came to refuse an honest commit that quoted a push. The introducer is
-    left in place so the rest of the line still tokenises.
+    A heredoc body is an argument, and parsing it as a command line refuses an
+    honest commit that quotes a push. The introducer is left in place so the
+    rest of the line still tokenises.
     """
     out, cursor = [], 0
     for start, end, _expands in heredoc_spans(command):
@@ -1029,16 +770,13 @@ def strip_heredocs(command):
 
 
 def strip_comments(command):
-    """`command` with every shell COMMENT removed, newlines kept.
+    """`command` with every shell comment removed, newlines kept.
 
-    **bash's rule, not `shlex`'s, and the difference is a force push.**
-    `shlex.shlex` sets `commenters = "#"` and honours it at any character
-    position, so `git log --grep=#x ; git push origin +HEAD:main` tokenised to
-    three tokens and the push vanished with the rest of the line — admitted, and
-    verified running under bash, which starts a comment only where `#` begins a
-    word. The lexer's comment handling is switched off in `offence` and this
-    runs instead, over the scanner that already implements that rule for
-    heredoc openers.
+    Bash's rule, not `shlex`'s: `shlex.shlex` honours `#` at any character
+    position, so the push in `git log --grep=#x ; git push origin +HEAD:main`
+    would vanish with the rest of the line, while bash starts a comment only
+    where `#` begins a word. The lexer's comment handling is switched off in
+    `offence` and this runs instead.
     """
     return "".join(
         command[index]
@@ -1047,133 +785,27 @@ def strip_comments(command):
     )
 
 
-def ambiguous_arithmetic(command):
-    """Whether `command` has an unquoted `((` and an unquoted `<<` (#277).
-
-    Inside `(( ))` and `$(( ))` a `<<` is a left shift, and nothing opens a
-    heredoc; outside, the same two characters hide every line to the delimiter.
-    Telling them apart means parsing bash's arithmetic grammar: `(( 1 ) )` is two
-    subshells, `$(( (1+(2)) <<EOF ))` is arithmetic whose nested parentheses end
-    a naive count early, and an unmatched `((` is read as subshells. A counter
-    that was wrong in either direction either hid a live command or let an
-    undecodable delimiter past the refusal beside this one, so the combination is
-    refused instead of counted. No command this repository writes needs both.
-    Quoted text, comments and heredoc bodies do not count.
-    """
-    bodies = [(start, end) for start, end, _ in heredoc_spans(command)]
-    paren = shift = False
-    # Any unquoted, unescaped `[` attached to a word seen so far: an array
-    # subscript (`a[1<<EOF]=1`)
-    # is arithmetic as well, and bash reads its `<<` as a shift and runs the next
-    # line. Never matched against a `]`: an escaped one, one inside a `$(`, and one
-    # a later subscript closes all defeated a count, so any `[` before a `<<` is
-    # enough to refuse.
-    bracket = False
-
-    for index, in_quotes, in_comment in shell_positions(command, bodies):
-        if in_quotes or in_comment:
-            continue
-        if command.startswith("=(", index) or command.startswith("+=(", index):
-            # A compound assignment: every element may carry a subscript, spaced
-            # or not (`a=( [ 1<<EOF]=1 )`), and the element's shape is not worth
-            # parsing for a command nobody writes next to a heredoc.
-            bracket = True
-        elif (command.startswith("[", index) and index > 0
-                and not _escaped(command, index)
-                and (command[index - 1].isalnum() or command[index - 1] in "_]"
-                     or (command[index - 1] in " \t\n;&|("
-                         and command[index + 1:index + 2] not in ("", " ", "\t", "\n", "[")))):
-            # `name[`, or a `[` at a word start with something other than a space
-            # after it: the shapes of a subscript. `[ -f x ]`, `[[ ... ]]` and
-            # `*.[ch]` are not.
-            bracket = True
-        elif bracket and command.startswith("<<", index) and not _escaped(command, index):
-            return True
-        if command.startswith("$[", index):
-            # The legacy arithmetic expansion, where `<<` is a shift as well.
-            paren = True
-        elif command.startswith("(", index):
-            # `((` however it is spelled: bash joins `(\<newline>(` before it
-            # reads either.
-            after = index + 1
-            while command.startswith("\\\n", after):
-                after += 2
-            if command.startswith("(", after):
-                paren = True
-        elif command.startswith("<<", index) and not _escaped(command, index):
-            shift = True
-
-    return paren and shift
-
-
-def ambiguous_expansion(command):
-    """Whether `command` has text inside `${...}` this guard cannot read (#285).
-
-    See `_quoting`'s `ambiguous`: a `#` after a space or a `<<` inside a
-    parameter expansion, or after a command substitution opened in one. Honest
-    commands do not write them and every one is a way to make a stripped comment
-    or a hidden heredoc body out of a live command, so it is refused, not
-    interpreted.
-    """
-    bodies = [(start, end) for start, end, _ in heredoc_spans(command)]
-    found = []
-    for _ in _quoting(command, data=bodies, ambiguous=found):
-        pass
-
-    return bool(found)
-
-
 def undecodable_heredoc(command):
-    """Whether a heredoc names a delimiter this file cannot read.
-
-    **"Open no body and let the lines be judged" was the wrong fail-safe, and
-    review took it apart.** The reasoning was that a body left unstripped is
-    read as commands, which refuses rather than admits — true only while the
-    command still tokenises. A body carrying an unmatched quote sends `offence`
-    down its `ValueError` path, and that fallback scans for forbidden flags and
-    `ext::` alone: it does not enforce the push allow-list, so
-    `git commit -F - <<$'E\\x4fF'` with such a body admitted a force push.
-    Measured.
-
-    So an undecodable delimiter is refused outright rather than worked around.
-    The alternative is decoding every ANSI-C escape bash supports, which is a
-    list that trails bash's — the shape this file refuses elsewhere — and each
-    gap in it would reopen exactly this hole.
-
-    The scan asks `shell_positions` where the `<<` is, so a delimiter quoted
-    inside an argument is not one of these; the two guards below are
-    `heredoc_spans`', for the same reasons it states.
-    """
-    # **The bodies are computed FIRST and handed to the scanner**, which is
-    # the same fix `heredoc_spans` took one function above and the same
-    # oversight arriving in the function beside it: an apostrophe in an earlier
-    # body left the scanner in quote state, so a later undecodable opener
-    # looked quoted and this refusal never fired. Raised in review.
+    """Whether a heredoc names a delimiter this file cannot read, refused with a reason that says so."""
+    # The bodies are computed first and handed to the scanner, as in
+    # `heredoc_spans`: an apostrophe in an earlier body would leave the scanner
+    # in quote state, so a later undecodable opener would look quoted.
     bodies = heredoc_spans(command)
     quoted = set()
     for index, in_quotes, in_comment in shell_positions(
             command, [(start, end) for start, end, _ in bodies]):
         if in_quotes or in_comment:
             quoted.add(index)
-    # **Without the escape exclusion `heredoc_spans` makes (#276), on purpose.**
-    # That is a judgement about where a body starts; suppressing this refusal on
-    # it would let an undecodable delimiter through to the tokenising path that
-    # does not enforce the push allow-list. When in doubt this refuses.
-    # **A `<<` inside a heredoc BODY is data, not an opener**, and reading one
-    # as an opener refused an innocent filing: a body quoting `<<$'E\\x4fF'` —
-    # documentation of this very mechanism — was rejected as an undecodable
-    # delimiter. `heredoc_spans` is what knows where a body is, which is why it
-    # is asked above rather than here.
+    # A `<<` inside a heredoc body is data, not an opener, so a body quoting
+    # `<<$'E\\x4fF'` is not refused; `heredoc_spans` is what knows where a body
+    # is, which is why it is asked above.
     for match in HEREDOC.finditer(command):
         index = match.start()
         if index in quoted:
             # A body is among the spans handed to the scanner above, so an
-            # opener inside one arrives quoted and this is where it stops.
-            # **The containment test that used to stand here as well was the
-            # quadratic** — 3,200 heredocs meant ten million comparisons, and
-            # the hook's timeout is empty stdout, which is non-blocking. Raised
-            # in review against `stdin_scripts`, where the same test sat for
-            # the same reason; this copy was found by profiling the fix.
+            # opener inside one arrives quoted and stops here, with no
+            # containment test: that is quadratic in heredocs, and the hook's
+            # timeout is empty stdout, which is non-blocking.
             continue
         if index > 0 and command[index - 1] == "<":
             continue
@@ -1188,12 +820,11 @@ def undecodable_heredoc(command):
 def expansion_end(command, start):
     """The end of the parameter expansion at `start`, or None if there is none.
 
-    **The special parameters are expansions too**, and a scan that accepted
-    only `[A-Za-z0-9_]` never saw them: `$@`, `$*` and `$!` are empty in the
-    shell Claude Code runs commands in — no positional parameters, no
+    The special parameters are expansions too: `$@`, `$*` and `$!` are empty
+    in the shell Claude Code runs commands in — no positional parameters, no
     background job — so `git $@push origin +HEAD:main` closes up into a force
     push, and `--out$@put=` and `ext$@::` reopen the other two checks the same
-    way. Found by an adversarial audit; live on `main`.
+    way.
 
     `$#`, `$?`, `$$`, `$-` and `$0` are deliberately absent: each expands to
     something non-empty, so none of them can join two words.
@@ -1201,7 +832,8 @@ def expansion_end(command, start):
     if not command.startswith("$", start):
         return None
     if command.startswith("${", start):
-        close = _closing_brace(command, start + 2)
+        # A `#` straight after the brace is a length, and read afresh a comment.
+        close = _closing_brace(command, start + (3 if command.startswith("#", start + 2) else 2))
         return None if close is None else close + 1
     if command[start + 1:start + 2] in ("@", "*", "!"):
         return start + 2
@@ -1220,12 +852,8 @@ def glued(command, start, end):
     `--out${x}put=` is. This is the whole of the line between an expansion
     whose emptiness closes a word up and one that simply supplies a value.
 
-    **A quote is NOT a boundary**, and counting one as such left half of this
-    open: `git $x'push' origin +HEAD:main` runs the push, because quoting ends
-    no word in bash — `'pu'$x'sh'` is one word too. Found by an adversarial
-    audit after the `${x}` half had been closed, which is this file's own
-    lesson about fixing the case in front of you rather than the grammar
-    behind it.
+    A quote is not a boundary: `git $x'push' origin +HEAD:main` runs the push,
+    because quoting ends no word in bash — `'pu'$x'sh'` is one word too.
     """
     def boundary(position):
         if position < 0 or position >= len(command):
@@ -1238,37 +866,23 @@ def glued(command, start, end):
 def without_substitutions(command):
     """`command` with every command substitution deleted rather than tokenised.
 
-    **A substitution that prints nothing leaves the words around it joined**,
-    and that is quote removal rather than run-time content: the dangerous
-    string is literally in the source. `git $( )push origin +HEAD:main` runs
-    the push — measured — while `shlex(punctuation_chars=True)` emitted `(` and
-    `)` as their own tokens, `command_runs` ended the run there, and the second
-    run held no `git` token for `git_segments` to find. The same shape hid
-    `--out$( )put=` and `ext$( )::`, so it reopened all three checks at once.
-    Raised in an adversarial audit; verified allowed, on `main` as well.
+    A substitution that prints nothing leaves the words around it joined, and
+    the dangerous string is literally in the source: `git $( )push origin
+    +HEAD:main` runs the push, while `shlex(punctuation_chars=True)` emits `(`
+    and `)` as their own tokens and `command_runs` ends the run there. The same
+    shape hides `--out$( )put=` and `ext$( )::`. This string is judged beside
+    the ordinary one: one reading is what bash does when the substitution
+    prints something, the other what it does when it prints nothing, and both
+    have to be safe.
 
-    `word_end` already implements exactly this rule — a substitution is part of
-    the word it sits in — but only for a redirect target. Judging this string
-    **beside** the ordinary one is the general form: one reading is what bash
-    does when the substitution prints something, the other is what it does when
-    it prints nothing, and both have to be safe.
-
-    **A parameter expansion is deleted only where it is GLUED into a word**,
-    and the line between the two cases is the one the paragraph above draws.
-    `git ${x}push origin +HEAD:main` and `git log --out${x}put=/tmp/probe` run
-    exactly as their `$( )` spellings do — the dangerous string is literally in
-    the source and only an empty expansion is needed to close the word up. But
+    A parameter expansion is deleted only where it is glued into a word:
+    `git ${x}push origin +HEAD:main` runs as its `$( )` spelling does, but
     `git push origin $BRANCH` is traffic this repository writes, and deleting a
-    WHOLE word would refuse an honest push for naming no destination. So the
-    test is adjacency: an expansion touching other characters of its own word
-    goes, one standing alone stays. Raised in an adversarial audit, which
-    pointed out that the residual named in `docs/harness-boundaries.md` is
-    about a value assembled at run time — `F=--output=x; git log $F` — and that
-    this is not that.
+    whole word would refuse it for naming no destination. A value assembled at
+    run time, `F=--output=x; git log $F`, is the residual the module docstring
+    states, and this is not that.
     """
-    # One model of bash's quoting, shared: this scan used to keep its
-    # own, which never learned that `$'…'` takes escapes. See
-    # `quote_states`.
+    # One model of bash's quoting, shared (`quote_states`).
     states = quote_states(command)
     out, index = [], 0
     while index < len(command):
@@ -1304,12 +918,9 @@ def without_substitutions(command):
         if char == "$" and command[index + 1:index + 2] not in ("'", '"'):
             end = expansion_end(command, index)
             if end is None and command.startswith("${", index):
-                # **An unbalanced `${` must END the scan, the way `$(` and a
-                # backtick already do.** Advancing one character and rescanning
-                # from the next `${` is quadratic: `"${" * 20000` took the hook
-                # past its 60-second timeout, and a hook that produces no
-                # output in time is non-blocking — fail-open by exhaustion
-                # rather than by misreading. Found by an adversarial audit.
+                # An unbalanced `${` ends the scan, as `$(` and a backtick do:
+                # rescanning from the next `${` is quadratic, and a hook that
+                # produces no output within its timeout is non-blocking.
                 break
             if end is not None and glued(command, index, end):
                 index = end
@@ -1320,13 +931,11 @@ def without_substitutions(command):
 
 
 def outside_verbatim(command, reading):
-    """`reading` applied to `command` except inside a NON-expanding body.
+    """`reading` applied to `command` except inside a non-expanding body.
 
-    **A quoted heredoc body expands nothing**, so rewriting one is inventing
-    text the shell will never produce. The readings were run over the raw
-    command, and a body line reading `${x:-EOF}` was rewritten into an early
-    terminator — after which the rest of an innocent filing was read as
-    commands and refused. Raised in review; measured.
+    A quoted heredoc body expands nothing, so rewriting one invents text the
+    shell never produces: a body line reading `${x:-EOF}` would become an early
+    terminator, and the rest of an innocent filing would be read as commands.
 
     An expanding body is left to the reading, because bash does expand there.
     """
@@ -1350,9 +959,7 @@ def rewriting_expansions(command, replace):
     in its place, or None to leave it alone. Single-quoted regions are left
     untouched, because a `$` is literal there.
     """
-    # One model of bash's quoting, shared: this scan used to keep its
-    # own, which never learned that `$'…'` takes escapes. See
-    # `quote_states`.
+    # One model of bash's quoting, shared (`quote_states`).
     states = quote_states(command)
     out, index = [], 0
     while index < len(command):
@@ -1381,13 +988,11 @@ def rewriting_expansions(command, replace):
 
 
 def splitting_expansions(command):
-    """`command` with every parameter expansion read as WHITESPACE.
+    """`command` with every parameter expansion read as whitespace.
 
-    **An expansion can split one word into several, and nothing here modelled
-    that.** The whole expansion model was "an empty one joins its neighbours";
-    the converse is `${IFS}`, which holds a space by default, so
-    `git push${IFS}origin +HEAD:main` is the entire force push written as one
-    `shlex` token. Found by an adversarial audit; live on `main`.
+    An expansion can split one word into several: `${IFS}` holds a space by
+    default, so `git push${IFS}origin +HEAD:main` is the entire force push
+    written as one `shlex` token.
 
     Read beside the other readings rather than instead of them: an expansion is
     empty, or whitespace, or its own default text, and the command is only safe
@@ -1404,12 +1009,10 @@ DEFAULTED = re.compile(r"^\$\{[^{}:=?+-]*(?::?[-=?+])(?P<word>.*)\}$", re.DOTALL
 def defaulted_expansions(command):
     """`command` with every `${name:-word}` read as its `word`.
 
-    **This is not the residual the documentation already names.** That one is a
-    value assembled at run time — `F=--output=x; git log $F` — which no hook is
-    given. Here the dangerous text is literally in the source and an unset
-    variable is the default state of the shell, so `git ${x:-push} origin
-    +HEAD:main` is a force push written in plain sight. Found by an adversarial
-    audit; live on `main`.
+    This is not the run-time residual the module docstring states: the
+    dangerous text is literally in the source and an unset variable is the
+    default state of the shell, so `git ${x:-push} origin +HEAD:main` is a
+    force push written in plain sight.
     """
     def written(text):
         match = DEFAULTED.match(text)
@@ -1429,7 +1032,6 @@ def brace_expanded(command):
 
     A single-element range — `p{u..u}sh` — is exactly `push` to bash, and a
     list takes its first word, which is the reading that hides a literal.
-    Found by an adversarial audit; live on `main`.
     """
     def written(match):
         if match.group("to") is not None:
@@ -1442,21 +1044,16 @@ def brace_expanded(command):
 def dollar_quotes(command):
     """Every `$'…'` and `$"…"` in `command`, as `(start, end, ansi_c)`.
 
-    **These are QUOTING FORMS and `shlex` has no rule for either**, so the `$`
-    stayed glued outside the quote and the token was `$git` rather than `git`.
-    `program_name` then matched nothing, `git_segments` yielded no segment at
-    all, and every check that lives inside that loop — the push allow-list, the
-    forbidden flags, `ext::` — was skipped at once. Measured on bash 5.2.26:
-    `$'git' push origin +HEAD:main`, `$"git" …`, `$'g'it …` and
-    `git p$'ush' …` all run the push, and all were admitted here and on `main`.
-    Raised in an adversarial audit.
+    These are quoting forms and `shlex` has no rule for either, so the `$`
+    stays glued outside the quote and the token is `$git` rather than `git`:
+    `program_name` matches nothing and every check inside `git_segments`' loop
+    is skipped, while bash runs `$'git' push origin +HEAD:main`, `$'g'it …` and
+    `git p$'ush' …` as the push.
 
     `end` is just past the closing quote, and `ansi_c` says which form it is,
     because only `$'…'` decodes escapes.
     """
-    # One model of bash's quoting, shared: this scan used to keep its
-    # own, which never learned that `$'…'` takes escapes. See
-    # `quote_states`.
+    # One model of bash's quoting, shared (`quote_states`).
     states = quote_states(command)
     found, index = [], 0
     while index < len(command):
@@ -1469,24 +1066,15 @@ def dollar_quotes(command):
             continue
         if (char == "$"
                 and command[index + 1:index + 2] in ("'", '"')):
-            # **Neither form is a quoting form INSIDE double quotes**, and
-            # missing that broke this three ways at once. To bash
-            # `"regex $'\\d' matches"` is an ordinary message about a regex —
-            # it was refused. `"$'\\x22'"` was decoded and re-emitted as a
-            # single-quoted word *inside* the surrounding double quotes, which
-            # unbalanced the line, sent it to the `ValueError` path and let
-            # `git p''ush origin +HEAD:main` through beside it. And `"a$"`
-            # closed at the wrong quote, swallowing the rest of the line into
-            # one word. All three raised in an adversarial audit; all three
-            # this branch's own doing.
+            # Neither form is a quoting form inside double quotes, which the
+            # state test above settles: `"regex $'\\d' matches"` is an ordinary
+            # message, and decoding `"$'\\x22'"` into a single-quoted word
+            # inside the double quotes would unbalance the line and send it
+            # to the `ValueError` path, where the push allow-list does not run.
             #
-            # **Escape-aware, like every other closer in this file.** A plain
-            # `find` closed `$"\"'"` on the ESCAPED quote, resumed inside the
-            # string, read the `'` there as opening single quotes, and from
-            # then on saw nothing — so a later `$'push'` was never un-sigilled
-            # and `git $'push' origin +HEAD:main` was admitted. That is the
-            # `$'\''` desync of the round before, in the sibling form. Raised
-            # in an adversarial audit.
+            # The closer is escape-aware: a plain `find` closes `$"\"'"` on the
+            # escaped quote and reads the `'` after it as opening single
+            # quotes, hiding a later `$'push'`.
             quote = command[index + 1]
             close = index + 2
             while close < len(command):
@@ -1514,18 +1102,11 @@ ANSI_C_SIMPLE = {
 def decode_ansi_c(body):
     """The text `$'<body>'` names, or None where an escape is not decodable.
 
-    **Refusing every escape was safe and cost too much.** The first form of
-    this refused any `$'…'` carrying a backslash, which took `echo $'\\n'`,
-    `printf $'\\t'` and `grep -n $'\\t' file.txt` with it — ordinary traffic
-    that has nothing to do with git, refused by a git guard. Raised in an
-    adversarial audit.
-
-    Decoding instead is safe **because the list only decides how much honest
-    traffic is admitted, never whether a bypass gets through**: an escape this
-    does not know returns None and the command is refused, so a gap costs a
-    false positive rather than a force push. That is the opposite direction
-    from the deny-lists this file refuses elsewhere, and it is why a list is
-    affordable here.
+    Decoding rather than refusing every escape admits ordinary traffic such as
+    `grep -n $'\\t' file.txt`, and a list is affordable here because it only
+    decides how much honest traffic is admitted, never whether a bypass gets
+    through: an escape this does not know returns None and the command is
+    refused, so a gap costs a false positive rather than a force push.
     """
     out, index = [], 0
     while index < len(body):
@@ -1542,11 +1123,9 @@ def decode_ansi_c(body):
             index += 2
             continue
         if escape in "01234567":
-            # **`\\0nnn` counts its three digits AFTER the zero**, and reading
-            # the zero as one of them made `$\'\\0165\'` the two characters
-            # `\x0e5` where bash gives `u` — so `git p$\'\\0165\'sh origin
-            # +HEAD:main` was a push the guard could not see. Raised in review;
-            # verified allowed. The bare `\\nnn` form keeps its own count.
+            # `\\0nnn` counts its three digits after the zero — bash reads
+            # `$\'\\0165\'` as `u` — and the bare `\\nnn` form keeps its own
+            # count.
             first = index + 2 if escape == "0" else index + 1
             digits = body[first:first + 3]
             while digits and not all(d in "01234567" for d in digits):
@@ -1561,13 +1140,8 @@ def decode_ansi_c(body):
                 digits = digits[:-1]
             if not digits:
                 return None
-            # **`chr` raises above 0x10FFFF, and a hook that raises fails
-            # OPEN.** `$'\\UFFFFFFFF'` took the process down with an
-            # `OverflowError`: exit 1, empty stdout, which `PreToolUse` treats
-            # as a non-blocking error, so the command ran. Found by an
-            # adversarial audit, and it is the worst shape a defect in this
-            # file can take — every refusal in it is reached by returning a
-            # string, and none of that happens after a traceback.
+            # `chr` raises above 0x10FFFF, and a hook that raises fails open:
+            # exit 1 with empty stdout is a non-blocking error to `PreToolUse`.
             point = int(digits, 16)
             if point > 0x10FFFF:
                 return None
@@ -1577,14 +1151,9 @@ def decode_ansi_c(body):
         if escape == "c":
             if index + 2 >= len(body):
                 return None
-            # **`str.upper()` is not length-preserving in Unicode, and `ord`
-            # raises on what it returns.** `ß` upper-cases to `SS`, and
-            # `$'\cß'` took the hook down with a `TypeError` — exit 1, empty
-            # stdout, which `PreToolUse` treats as non-blocking, so the command
-            # ran. `ﬁ`, `ŉ`, `ǰ`, `ΐ`, `ẖ` and `ẚ` do the same. Found by an
-            # adversarial audit; a regression against `main`, introduced with
-            # the decoder, and the second crash this file has had from
-            # assuming a character-wise operation stays one character.
+            # `str.upper()` is not length-preserving in Unicode — `ß`
+            # upper-cases to `SS` — and `ord` raises on what it returns, which
+            # would fail the hook open.
             control = body[index + 2]
             folded = control.upper()
             if len(folded) != 1:
@@ -1593,12 +1162,8 @@ def decode_ansi_c(body):
             index += 3
             continue
         return None
-    # **A NUL truncates the word in bash, and keeping one changed what the
-    # word said.** `$'a\\0b'` is the single byte `a`, so `git p$'\\0'ush` is
-    # `git push` — measured — and the hook was holding a NUL in the middle of a
-    # token nothing would match. Truncating models the shell exactly, where
-    # refusing would have been the cruder answer. Found by an adversarial
-    # audit.
+    # A NUL truncates the word in bash: `$'a\\0b'` is the single byte `a`, so
+    # `git p$'\\0'ush` is `git push`. Truncating models the shell exactly.
     text = "".join(out)
     return text.split("\0", 1)[0]
 
@@ -1611,11 +1176,10 @@ def single_quoted(text):
 def unreadable_dollar_quote(command):
     """Why `command`'s `$'…'` or `$"…"` cannot be read, or None.
 
-    **Two different reasons, and one sentence for both said the wrong thing.**
-    A plain `$"safe"` carries no escape at all; it is refused because its
-    translation is a lookup in a catalogue this hook is not given. Reporting
-    that as an undecodable escape tells a caller to go looking for one, in a
-    command that has none. Raised in review.
+    Two different reasons: a plain `$"safe"` carries no escape at all, and is
+    refused because its translation is a lookup in a catalogue this hook is
+    not given, so reporting it as an undecodable escape would send a caller
+    looking for one.
     """
     for _start, _end, ansi_c in dollar_quotes(command):
         if not ansi_c:
@@ -1637,35 +1201,19 @@ def unreadable_dollar_quote(command):
 def undecodable_dollar_quote(command):
     """Whether a `$'…'` or `$"…"` in `command` carries an escape to decode.
 
-    The same decision `undecodable_heredoc` records, one construct along, and
-    for the same reason: decoding every escape bash supports is a list that
-    trails bash's, and each gap in one reopens the hole it was written to
-    close. `$'\\''` is the shape that forces the question — it is a single
-    quote produced by an escape, which desynchronised `substitutions` and sent
-    the whole command down the `ValueError` path, where the push allow-list
-    does not run.
+    The decision `undecodable_heredoc` makes, one construct along, for the
+    same reason: decoding every escape bash supports is a list that trails
+    bash's. `$'…'` fails when it carries an escape outside the set
+    `decode_ansi_c` knows.
 
-    **Both forms can fail, and the locale one always does.** `$'…'` can carry
-    an escape outside the set `decode_ansi_c` knows, so it fails when it does.
-    `$"…"` fails unconditionally, and the word *translated* is why.
-
-    **The translation is a lookup in a catalogue this hook is not given**, and
-    the first version of this paragraph named the wrong half of the problem. It
-    said `$"…"` is a translated double-quoted string and then refused only the
-    expansions inside it — as though `$"safe"` were the word `safe` once no
-    substitution was present. It is not: bash resolves `$"…"` through gettext
+    `$"…"` fails unconditionally, because bash resolves it through gettext
     against `TEXTDOMAIN` and `TEXTDOMAINDIR`, both ordinary environment
     variables, so a catalogue placed in the checkout decides what the word
-    says. Measured with a hand-built `.mo`: `$"safe"` printed `printf`, and in
-    command position `$"safe" RAN` **executed** it. The same lookup can return
-    `git`. Raised in review.
-
-    So this is the residual `docs/harness-boundaries.md` names — text the shell
-    is *told* rather than text it is given — arriving in a construct a caller
-    can type literally, and the answer is the one that file already states for
-    a script on disk: what cannot be read is not judged, and what is not judged
-    is refused. The cost is every `$"…"`, which nothing in this repository
-    writes.
+    says — `$"safe"` in command position can run `git`. That is the residual
+    `docs/harness-boundaries.md` names for a script on disk, text the shell is
+    told rather than given, and the answer is the same: what cannot be read is
+    not judged, and what is not judged is refused. Nothing in this repository
+    writes `$"…"`.
     """
     for start, end, ansi_c in dollar_quotes(command):
         if not ansi_c:
@@ -1678,10 +1226,8 @@ def undecodable_dollar_quote(command):
 def strip_dollar_quotes(command):
     """`command` with every `$'…'` and `$"…"` replaced by what it names.
 
-    `shlex` has no rule for either form, so the `$` stayed glued outside the
-    quote and `$'git'` tokenised as `$git` — which `program_name` did not match,
-    so `git_segments` yielded nothing and the push allow-list, the forbidden
-    flags and `ext::` were all skipped at once.
+    `shlex` has no rule for either form, so `$'git'` would tokenise as `$git`,
+    which `program_name` does not match (`dollar_quotes`).
 
     The escapes are decoded rather than dropped, so `$'\\x67it'` becomes `git`
     and is judged as one. A body this file cannot read is refused before this
@@ -1706,35 +1252,24 @@ def strip_dollar_quotes(command):
 def join_continuations(command, quotes=True):
     """`command` with every line continuation removed, as bash removes them.
 
-    **A backslash-newline is deleted before the shell tokenises anything**, so
+    A backslash-newline is deleted before the shell tokenises anything, so
     `git 2\\<newline>>&1 push origin +HEAD:main` reaches git as
-    `git push origin +HEAD:main` with `2>&1` applied — and the guard, reading
-    the backslash as an ordinary escape, stopped the descriptor scan at it,
-    stripped `>&1` alone and left `2` sitting where the subcommand goes. The
-    bare form `git \\<newline>push origin +HEAD:main` did the same thing with
-    no descriptor at all. Both raised in review, both verified allowed, and
-    both allowed on `main` before this file had a redirection strip.
+    `git push origin +HEAD:main` with `2>&1` applied, and
+    `git \\<newline>push origin +HEAD:main` is the push too. A continuation is
+    neither a separator (`separate_lines` keeps the pair) nor an argument, so
+    it is removed here, before anything reads a word, which is the order bash
+    uses.
 
-    `separate_lines` deliberately keeps the pair — a continuation is not a
-    separator — and that is still true; what was missing is that it is not an
-    argument either. It is removed here, before anything reads a word, which is
-    the order bash uses.
+    Inside single quotes a backslash is literal, so a continuation there is two
+    ordinary characters and stays. Inside double quotes bash removes it, and so
+    does this.
 
-    **Inside single quotes a backslash is literal**, so a continuation there is
-    two ordinary characters and stays. Inside double quotes bash removes it,
-    and so does this.
-
-    **`quotes` is false for a heredoc BODY, where a quote is an ordinary
-    character and the continuation goes anyway.** An expanding body removes
-    `\\<newline>` before it expands, so
-    `git commit -F - <<EOF` / `$\\<newline>(git push origin +HEAD:main)` / `EOF`
-    forms a live `$(…)` and runs the push — while this function, tracking
-    quotes that are not quotes, could reach the wrong conclusion about where
-    the escape sits. Raised in review; verified allowed.
+    `quotes` is false for a heredoc body, where a quote is an ordinary
+    character and the continuation goes anyway: an expanding body removes
+    `\\<newline>` before it expands, so `$\\<newline>(git push …)` in one forms
+    a live `$(…)`.
     """
-    # One model of bash's quoting, shared: this scan used to keep its
-    # own, which never learned that `$'…'` takes escapes. See
-    # `quote_states`.
+    # One model of bash's quoting, shared (`quote_states`).
     states = quote_states(command, quotes=quotes)
     out, index = [], 0
     while index < len(command):
@@ -1761,18 +1296,14 @@ def join_continuations(command, quotes=True):
 def separate_lines(command):
     """`command` with every unquoted newline turned into a `;`.
 
-    **A newline separates commands, and `shlex` made it disappear.** With
-    `whitespace_split=True` a newline is whitespace: it is never emitted as a
-    token, so the `"\n"` in `SEPARATORS` matched nothing and every line of a
-    script joined the run before it. Harmless while a `git` token anywhere was
-    an invocation — and a bypass the moment `DATA_ONLY_COMMANDS` arrived, since
+    A newline separates commands, and `shlex` makes it disappear: with
+    `whitespace_split=True` a newline is whitespace, never emitted as a token,
+    so every line of a script would join the run before it, and
 
         echo hi
         git push origin +HEAD:main
 
-    became one `echo`-led run and the push was exempt. Found while fixing a
-    narrower case from review; the reported input was a comment inside a
-    substitution, and this is why closing that one was not enough.
+    would be one `echo`-led run, exempt under `DATA_ONLY_COMMANDS`.
 
     A newline inside quotes is data and stays — `git commit -m "a<newline>b"`
     is one argument. So is one after a backslash, which is a line continuation
@@ -1797,64 +1328,32 @@ def separate_lines(command):
 
 
 # Redirection operators, longest first so that `>>` is never read as a `>`
-# with a stray `>` behind it. **`<<` and `<<<` are absent from this tuple
-# because they are matched before it**, each by a branch of its own:
+# with a stray `>` behind it. `<<` and `<<<` are absent from this tuple
+# because they are matched before it, each by a branch of its own:
 # `redirection_spans` argues both.
 REDIRECTION_OPERATORS = ("&>>", "&>", ">>", ">&", ">|", "<>", "<&", ">", "<")
 
-# **The operators that OPEN THE TARGET FOR WRITING**, which is the half blueprint-frontend#20 is
-# about. `<`, `<<` and `<<<` read, so a protected path on the right of one is a
-# read this hook has no quarrel with. `<>` is here because it opens read-write.
-#
-# `>&` and `<&` are the fd-duplication forms and are judged by their target
-# rather than by the operator: bash reads `>&1` and `>&-` as duplication and
-# `>&file` as `&>file`, redirecting both streams into a file. So the operator
-# alone cannot say, and `writes_to_a_file` asks about the word.
-WRITING_OPERATORS = frozenset({"&>>", "&>", ">>", ">|", "<>", ">"})
-DUPLICATING_OPERATORS = frozenset({">&", "<&"})
-
-# What `redirection_spans` found: the span bash consumes, the operator it read,
-# and the source text of the target word. `target` is the empty string for a
-# heredoc introducer, whose delimiter is a name rather than a path.
-Redirection = collections.namedtuple(
-    "Redirection", "start end operator target")
-
 
 def word_end(command, position, ordinary):
-    """The end of the shell WORD beginning at `position`.
+    """The end of the shell word beginning at `position`.
 
-    **One parse of a word, because there were two and they disagreed.**
-    `stdin_scripts` had its own, ending a here-string at the first
-    unquoted metacharacter — so `bash <<<$(printf 'git push origin
-    +HEAD:main')` yielded `$` as the script, the inner `printf` was judged
-    as the data it is, and the redirection strip removed the rest. The push
-    ran and the hook admitted it. Raised in review; verified allowed, with
-    the backtick spelling beside it — which is this parse's OWN fail-open,
-    recorded below, arriving a second time in the function that did not
-    share it.
+    One parse of a word, shared by the redirection strip and `stdin_scripts`,
+    because two parses disagree: ending a here-string at the first unquoted
+    metacharacter yields `$` as the script of
+    `bash <<<$(printf 'git push origin +HEAD:main')`.
 
-    **A substitution is part of the word, and stopping at its `(` was a
-    fail-open.** A word ends at an unquoted metacharacter — but the `(` of
-    `$(…)` is not one to bash, it opens a nested command list. Stopping
-    there left the parentheses standing, `is_boundary` read them as run
-    boundaries, and `git >/tmp/$(echo x) push origin +HEAD:main` had its
-    `git` severed from its own subcommand: the force push ran and the guard
-    admitted it. Raised in review; verified allowed, with `$((…))`, a bare
-    `$(…)` target and a backtick spelling beside it.
+    A substitution is part of the word: the `(` of `$(…)` is not a
+    metacharacter to bash but opens a nested command list, and stopping there
+    would leave parentheses that `is_boundary` reads as run boundaries,
+    severing `git` from its subcommand in
+    `git >/tmp/$(echo x) push origin +HEAD:main`. An unbalanced opener stops
+    the word instead of swallowing the rest of the line, which would hide
+    whatever followed.
 
-    An UNBALANCED opener stops the word instead of swallowing the rest of
-    the line, because consuming to the end would hide whatever followed —
-    the same fail-open one layer along.
-
-    **And a word may not BEGIN with `(`, which is the difference between a
-    substitution inside a target and a process substitution being one.**
-    `echo <(git push origin +HEAD:main)` is not a redirect with `(…)` for a
-    target: `<(` is one construct, the inner command runs, and consuming it
-    as a word deleted that push from the judged string outright. Caught by
-    `test_a_process_substitution_is_not_the_printers_argument`, which is
-    why it exists — the same reading applies to `> >(tee f)`, whose target
-    is a process substitution that also runs. Left alone, the parentheses
-    stay the run boundaries they already were and the inner command is
+    A word may not begin with `(`: `echo <(git push origin +HEAD:main)` is not
+    a redirect with `(…)` for a target but a process substitution that runs,
+    and consuming it as a word would delete that push from the judged string.
+    Left alone, the parentheses stay run boundaries and the inner command is
     judged in its own right.
     """
     def plain(offset):
@@ -1867,11 +1366,9 @@ def word_end(command, position, ordinary):
             position += 1
             continue
         if char == "`":
-            # **Escape-aware, because `\`` is how the legacy form nests.**
-            # A plain `find` ended the word at the inner delimiter of
-            # `` >/tmp/`echo \`echo x\`` `` and left the outer backtick
-            # sitting where the subcommand goes. `substitutions` already
-            # scans this way; the two agree on purpose.
+            # Escape-aware, because `\`` is how the legacy form nests, and in
+            # agreement with `substitutions`: a plain `find` ends the word at
+            # the inner delimiter of `` >/tmp/`echo \`echo x\`` ``.
             scan = position + 1
             while scan < len(command):
                 if command[scan] == "\\" and scan + 1 < len(command):
@@ -1885,10 +1382,10 @@ def word_end(command, position, ordinary):
             position = scan + 1
             continue
         if command.startswith("${", position):
-            # **A parameter expansion is part of the word, metacharacters
-            # and all.** `>${PATH:+/tmp/x;y}` redirects to `/tmp/x;y`, and
-            # returning at that `;` left a separator standing between `git`
-            # and its subcommand.
+            # A parameter expansion is part of the word, metacharacters
+            # and all: `>${PATH:+/tmp/x;y}` redirects to `/tmp/x;y`, and
+            # returning at that `;` would leave a separator standing between
+            # `git` and its subcommand.
             close = _closing_brace(command, position + 2)
             if close is None:
                 return position
@@ -1908,54 +1405,18 @@ def word_end(command, position, ordinary):
     return position
 
 
-def ordinary_positions(command):
-    """Whether each character of `command` is unquoted, unescaped shell text.
-
-    One mask for the two walks that split a command into words with their
-    quoting intact — `redirection_spans` and `raw_runs` — so that they cannot
-    disagree about which characters are syntax.
-    """
-    ordinary = [False] * len(command)
-    escaped = None
-    for index, in_quotes, in_comment in shell_positions(command):
-        if index == escaped:
-            escaped = None
-            continue
-        if command[index] == "\\" and not in_quotes and not in_comment:
-            escaped = index + 1
-            continue
-        ordinary[index] = not in_quotes and not in_comment
-    return ordinary
-
-
 def redirection_spans(command):
-    """Every redirection in `command`, as `Redirection` records.
+    """Every redirection in `command`, as `(start, end)` character offsets.
 
     `start` is the first character of the file descriptor where one is written
     and of the operator otherwise, and `end` is just past the target word — so
     `command[start:end]` is everything bash consumes as redirection syntax and
     never hands to the program.
 
-    **The operator and the target travel with the span because there were very
-    nearly two parses of this grammar.** `strip_redirections` wants only the
-    span; blueprint-frontend#20 wants the target, and a second walk to find it would be the
-    disagreement `word_end`'s own docstring records happening again one
-    function along. One parse, three consumers.
-
-    **A heredoc introducer IS one of these, and an earlier revision of this
-    docstring said the opposite.** The reasoning then was that `strip_heredocs`
-    leaves the introducer standing so the line still tokenises, and that
-    removing `<<` would strand its delimiter as a stray word. The second half
-    was true and the conclusion did not follow: `<<` is whole punctuation, so
-    leaving it made it a run boundary and severed `git` from its own
-    subcommand — a fail-open. The introducer goes **with** its delimiter, which
-    strands nothing, and `HEREDOC` is the one parse of that grammar this file
-    has. A here-string is matched before either, since `<<<` has `<<` as a
-    prefix.
-
-    Raised in review, and the paragraph is kept in this shape deliberately: a
-    docstring that still argued for the old behaviour is how the next edit
-    restores it.
+    A heredoc introducer is one of these, and goes with its delimiter, which
+    strands no stray word; left standing, `<<` is whole punctuation and a run
+    boundary. A here-string is matched before either, since `<<<` has `<<` as
+    a prefix.
     """
     ordinary = ordinary_positions(command)
 
@@ -1972,13 +1433,10 @@ def redirection_spans(command):
         while plain(digits) and command[digits].isdigit():
             digits += 1
         if digits == start and command[start] == "{":
-            # **The descriptor grammar is not only digits**, and reading it as
-            # digits alone left `git {fd}>&1 push origin +HEAD:main` admitted
-            # while bash ran the force push: `>&1` went, `{fd}` stayed, and
-            # `push_offence` took that word for the subcommand and stopped
-            # looking. Raised in review on the change that closed the digit
-            # half; verified allowed before the fix. Bash takes `{name}` where
-            # name is an identifier, so a leading digit is not one.
+            # The descriptor grammar is not only digits: bash takes `{name}`,
+            # where name is an identifier, so in `git {fd}>&1 push origin
+            # +HEAD:main` a left-behind `{fd}` would stand where the
+            # subcommand goes.
             close = start + 1
             if plain(close) and (command[close].isalpha() or command[close] == "_"):
                 while plain(close) and (command[close].isalnum()
@@ -1989,7 +1447,7 @@ def redirection_spans(command):
         begins_word = start == 0 or (
             ordinary[start - 1] and command[start - 1] in METACHARACTERS)
         if digits > start and not begins_word:
-            # **A descriptor is a WHOLE token glued to the operator**, which is
+            # A descriptor is a whole token glued to the operator, which is
             # bash's own rule rather than an approximation of it: in
             # `echo foo2>x` the word bash writes is `foo2` and only `>x` is
             # syntax. Reading the digits here would be editing an argument,
@@ -2000,40 +1458,27 @@ def redirection_spans(command):
         if command[digits:digits + 3] == "<<<":
             # A here-string's word is data the shell feeds in, exactly like a
             # redirect target — and it is checked before `<<`, which is a
-            # prefix of it. Left to the branch below, `<<<x` was reduced to a
-            # bare `<<` that still split the run.
+            # prefix of it.
             end = digits + 3
             while plain(end) and command[end] in " \t":
                 end += 1
-            target = end
             end = word_end(command, end, ordinary)
-            spans.append(Redirection(start, end, "<<<", command[target:end]))
+            spans.append((start, end))
             index = end
             continue
         if command[digits:digits + 2] == "<<":
-            # **A heredoc introducer goes WITH its delimiter, and leaving it
-            # standing was a fail-open.** `strip_heredocs` takes the body and
-            # leaves this behind so the rest of the line still tokenises — but
-            # `<<` is whole punctuation, so `is_boundary` ends the run there:
-            # in `git <<EOF push origin +HEAD:main` the `git` token was severed
-            # from its own subcommand, `git_segments` yielded nothing, and bash
-            # ran the force push. Raised in review; verified allowed, and
-            # allowed on `main` before this file grew a strip at all.
-            #
-            # Removing the delimiter with it is what leaves no stray word, and
-            # `HEREDOC` is the one parse of that grammar this file has — the
-            # dash form and both quoted spellings included.
+            # A heredoc introducer goes with its delimiter: `strip_heredocs`
+            # leaves it behind, and `<<` is whole punctuation, so in
+            # `git <<EOF push origin +HEAD:main` it would sever `git` from its
+            # subcommand. `HEREDOC` is the one parse of that grammar.
             introducer = HEREDOC.match(command, digits)
             if introducer is not None:
-                spans.append(
-                    Redirection(start, introducer.end(), "<<", ""))
+                spans.append((start, introducer.end()))
                 index = introducer.end()
                 continue
-            # An introducer this file cannot parse keeps its old treatment, and
-            # a descriptor in front of one is still the stray word every other
-            # spelling leaves.
+            # An introducer this file cannot parse loses only its descriptor.
             if digits > start:
-                spans.append(Redirection(start, digits, "<<", ""))
+                spans.append((start, digits))
             index = digits + 2
             continue
         operator = None
@@ -2049,29 +1494,19 @@ def redirection_spans(command):
         end = digits + len(operator)
         while plain(end) and command[end] in " \t":
             end += 1
-        # **A process substitution can BE the target, and leaving it to the run
-        # splitter hides the outer command.** In
-        # `git > >(tee /tmp/log) push origin +HEAD:main` both `>` characters
-        # were removed separately and `(tee /tmp/log)` stayed as a boundary
-        # between `git` and `push` — bash runs the force push and the guard
-        # admitted it. Raised in review, twice: the round before this one
-        # asserted in a comment that the run splitter covered this case, which
-        # was true of the INNER command and false of the outer one.
-        #
-        # So it is consumed as the word it is, and `substitutions` grew the
-        # same construct in the same change — a target nothing judged would be
-        # the hole this one closes, one layer along.
+        # A process substitution can be the target: left to the run splitter,
+        # `(tee /tmp/log)` in `git > >(tee /tmp/log) push origin +HEAD:main`
+        # stands as a boundary between `git` and `push`. It is consumed as the
+        # word it is, and `substitutions` judges the command inside it.
         if (command[end:end + 2] in (">(", "<(")
                 and plain(end) and plain(end + 1)):
             close = _closing_paren(command, end + 2)
             if close is not None:
-                spans.append(Redirection(
-                    start, close + 1, operator, command[end:close + 1]))
+                spans.append((start, close + 1))
                 index = close + 1
                 continue
-        target = end
         end = word_end(command, end, ordinary)
-        spans.append(Redirection(start, end, operator, command[target:end]))
+        spans.append((start, end))
         index = end
     return spans
 
@@ -2079,1988 +1514,33 @@ def redirection_spans(command):
 def strip_redirections(command):
     """`command` with every redirection removed, target word included.
 
-    **A redirection is shell syntax and the file descriptor in front of one is
-    not — to `shlex`.** `punctuation_chars=True` emits a maximal run of
-    `();<>|&` as ONE token, so `>&` arrives whole, but a digit is not
-    punctuation: the `2` of `2>&1` detaches and survives as an ordinary word.
-    That one stray word reached every check downstream that counts non-flags,
-    in three separate directions (blueprint-backend#183):
+    A redirection is shell syntax, and to `shlex` the file descriptor in front
+    of one is not: `punctuation_chars=True` emits `>&` whole, but the `2` of
+    `2>&1` survives as an ordinary word, which reaches every check that counts
+    non-flags. In `git push -u origin 2>&1 +HEAD:main` the `2` satisfies
+    `SAFE_REF` as the refspec while the real one falls into a run of its own;
+    in `git push -u origin feat 2>&1` an honest push names two refspecs.
 
-        git push -u origin feat 2>&1        three positionals where two are
-                                            required, so an honest push was
-                                            refused for naming two refspecs
-        git push -u origin 2>&1 +HEAD:main  `2` taken for the refspec — it
-                                            satisfies `SAFE_REF` — while the
-                                            real one fell past the `>&`
-                                            boundary into a run of its own: a
-                                            FORCE PUSH TO MAIN, admitted
-        git 2>&1 log --output=/tmp/probe    the run split at `>&`, the second
-                                            run led with `1` and held no `git`
-                                            token, so blueprint-backend#30's write primitive was
-                                            admitted
-
-    All measured against the guard as shipped. Removing the whole redirection
-    is what makes the remaining string the argv bash passes to the program,
-    which is the one thing this hook claims to judge — and it is one strip in
-    the pipeline both paths read rather than a relaxed count in whichever check
-    someone happened to be looking at.
+    Removing the whole redirection makes the remaining string the argv bash
+    passes to the program, which is the one thing this hook claims to judge,
+    in one strip every path reads.
     """
     out, cursor = [], 0
-    for span in redirection_spans(command):
-        out.append(command[cursor:span.start])
-        cursor = span.end
+    for start, end in redirection_spans(command):
+        out.append(command[cursor:start])
+        cursor = end
     out.append(command[cursor:])
     return "".join(out)
-
-
-def writes_to_a_file(span):
-    """Whether this redirection opens its target for writing.
-
-    The duplication operators are the only ones the operator cannot answer for.
-    Bash reads `>&1` and `>&-` as duplication of a descriptor, and `>&word` as
-    `&>word` — both streams into a FILE — so the word decides. A descriptor is
-    digits or `-`; anything else is a path.
-    """
-    if span.operator in WRITING_OPERATORS:
-        return True
-    if span.operator not in DUPLICATING_OPERATORS:
-        return False
-    word = span.target.strip()
-    return bool(word) and word != "-" and not word.isdigit()
-
-
-def globbed(word):
-    """Whether `word` carries an unquoted pathname-expansion metacharacter.
-
-    **Bash expands a redirection target, and the expansion is what opens the
-    file.** `ls > package.jso?` is expanded to the existing `package.json`
-    before the redirect is performed, while `shlex` hands back the literal
-    pattern — so `protected_path` compared a string that is not the file, and
-    the write landed on a name it would otherwise have refused. Raised by
-    Copilot against the commit that added the check.
-
-    Quoting is what turns it off, so quoting is what this asks about: `>
-    "package.jso?"` names a file with a question mark in it and expands to
-    nothing. `shell_positions` is the module's one answer to that question, and
-    an escaped metacharacter is counted as unquoted here — over-refusal in a
-    position where nothing legitimate writes.
-
-    **`extglob` adds three openers that are not in that set**: `@(`, `+(` and
-    `!(`. A shell started with `-O extglob` expands `package.@(json)` to the
-    existing `package.json` exactly as it expands `package.jso?`, so each of
-    them, unquoted and followed by `(`, counts as a pattern too. (`?(` and `*(`
-    were already caught by their first character.) Raised by Copilot.
-    """
-    for index, in_quotes, in_comment in shell_positions(word):
-        if in_quotes or in_comment:
-            continue
-        if word[index] in "*?[":
-            return True
-        if word[index] in "@+!" and word[index + 1:index + 2] == "(":
-            return True
-        # **A brace expansion is the same answer by another route.**
-        # `package.{j..j}son` is a range bash expands to `package.json` before
-        # the redirect opens it, and the literal holds no protected name.
-        # Every unquoted `{` counts, rather than the forms that expand, because
-        # enumerating those is how the range was missed. Raised by Copilot.
-        if word[index] == "{" and word[index - 1:index] != "$":
-            return True
-    return False
-
-
-def target_literal(word):
-    """The filename `word` names, or `None` when that cannot be read.
-
-    **A target built by a command substitution is refused rather than guessed
-    at**, which is the answer this file gives everywhere else the deciding text
-    is not in the source — `substitution_fed_shells`, `unmodelled_printer` and
-    the stdin-script scan all say it in their own words. `substitutions` is
-    asked rather than a `$(` scan written here, so single quotes still mean
-    what they mean.
-
-    A process substitution is the same answer for a nearer reason: `> >(sh -c
-    …)` writes through a command rather than to a path, so there is no
-    filename to judge.
-
-    **A parameter expansion is left in the literal here and judged by the
-    caller**, through `expanded_target`: this function answers what the word
-    spells, and whether a `$F` in it can be read is a question about the
-    variable rather than about the quoting.
-    """
-    if word.startswith(("<(", ">(")) or substitutions(word):
-        return None
-    try:
-        parsed = shlex.split(strip_dollar_quotes(word), posix=True)
-    except ValueError:
-        return None
-    return parsed[0] if parsed else None
-
-
-def protected_path(literal):
-    """Which protected surface `literal` names, or `None`.
-
-    Judged on the components of the path as written. `docs/../.claude/x` holds
-    a `.claude` component and is refused; so is `/tmp/checkout/.git/config`,
-    which is the point of matching a component rather than a prefix.
-
-    **Compared folded, on every host, because the filesystem decides and not
-    the string.** Windows and a default macOS volume look names up without
-    regard to case, so `ls > PACKAGE.JSON` and `ls > .CLAUDE/settings.json`
-    overwrite the protected file while matching neither set as spelled. This
-    hook cannot ask the volume — it has no `cwd` it can trust, which is the
-    reason it judges lexically at all — so it folds everywhere, and a Linux
-    redirect to a genuinely distinct `Package.json` is refused along with it.
-    Raised by Copilot.
-
-    Windows also discards trailing dots and spaces from a component, so
-    `package.json.` opens `package.json`; those are stripped before comparing.
-    An 8.3 short name — `PACKAG~1.JSO`, `CLAUDE~1` — is the same file under a
-    spelling no set can list, so a `~<digit>` component is refused when its
-    stem could abbreviate a protected name. Not every such component: Windows
-    spells the temp root itself that way (`C:/Users/RUNNER~1/…`), and refusing
-    those would take the session's scratch writes with it.
-
-    **An NTFS stream suffix names the same file too.** `package.json::$DATA`
-    opens the default data stream — the file's contents — while the component
-    as written is not `package.json`. So a component is compared up to its
-    first `:`. A drive letter is a component of its own (`C:`), which folds to
-    `c` and names nothing here. Raised by Copilot.
-    """
-    parts = [part for part in re.split(r"[\\/]+", literal)
-             if part not in ("", ".")]
-
-    def comparable(part):
-        return part.split(":", 1)[0].rstrip(". ").lower()
-
-    for part in parts:
-        short = re.match(r"([^~]+)~\d", part)
-        if short and any(
-                name.replace(".", "").startswith(short.group(1).lower())
-                for name in PROTECTED_TREES_FOLDED | PROTECTED_FILES_FOLDED):
-            return part
-        if comparable(part) in PROTECTED_TREES_FOLDED:
-            return part
-    if parts and comparable(parts[-1]) in PROTECTED_FILES_FOLDED:
-        return parts[-1]
-    # `<project>.csproj.user` is imported by the SDK's common targets (#311): a
-    # suffix rather than a name, because the project's name is the prefix.
-    if parts and comparable(parts[-1]).endswith(".csproj.user"):
-        return parts[-1]
-    return None
-
-
-# The variables a redirection target may expand, because this hook can read
-# their values from its own environment, which the session shares.
-EXPANDABLE_VARIABLES = frozenset({
-    "CLAUDE_PROJECT_DIR", "HOME", "TEMP", "TMP", "TMPDIR",
-})
-
-
-def expanded_target(literal, command):
-    """`literal` with its parameter expansions replaced, or `None`.
-
-    **A parameter-expanded target was the stated residual, and it was a bypass
-    on a globally approved command.** `F=.claude/settings.json; ls > $F` holds
-    no protected component in the target as written, and bash opens the
-    settings file. Raised by Copilot.
-
-    Refusing every `$` would take the ordinary `> "$TMP/out"` scratch write
-    with it, so the few variables whose values this hook shares with the
-    session are expanded from its own environment, and judged as the path they
-    produce. Everything else is refused: another name, a positional or special
-    parameter, any `${…}` operator, an unset variable, and an allowed name that
-    appears anywhere in the command other than as a plain reference — an
-    assignment, a `read`, an `export`, a `for` loop — because then its value at
-    the redirection is not the one this process holds.
-    """
-    references = re.compile(r"\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))")
-    failed = False
-
-    def replace(match):
-        nonlocal failed
-        name = match.group(1) or match.group(2)
-        value = os.environ.get(name)
-        if name not in EXPANDABLE_VARIABLES or not value:
-            failed = True
-            return ""
-        bare = references.sub("", command)
-        if re.search(rf"(?<![A-Za-z0-9_]){name}(?![A-Za-z0-9_])", bare):
-            failed = True
-            return ""
-        return value
-
-    expanded = references.sub(replace, literal)
-    if failed or "$" in expanded:
-        return None
-    return expanded
-
-
-# **The application trees a command denies, judged only at a checkout's root.**
-# `/review-branch` denies `Edit(src/**)`, `docs/**`, `e2e/**` and `public/**`,
-# and a globally approved `ls > src/app/x.ts` wrote past every one of them —
-# the list above named the machinery and nothing a read-only review exists not
-# to touch. Raised by Copilot. A hook cannot see which command is running, so
-# the union of every command's denies is what it protects.
-#
-# Matched as the FIRST component under the checkout containing the target,
-# not at any depth like the trees above: `src` and `docs` are ordinary names,
-# and refusing `/tmp/x/docs/out` would take scratch writes with them.
-APPLICATION_TREES = frozenset({"docs", "e2e", "public", "src", "tests", "tools"})
-
-
-def application_tree(literal):
-    """Which application tree `literal` writes into at a checkout's root."""
-    cwd = EVENT_CWD or os.getcwd()
-    joined = literal if os.path.isabs(literal) else os.path.join(cwd, literal)
-    lexical = os.path.normpath(os.path.abspath(joined))
-    for path in (lexical, os.path.realpath(joined)):
-        root = path
-        while not os.path.exists(os.path.join(root, ".git")):
-            parent = os.path.dirname(root)
-            if parent == root:
-                root = None
-                break
-            root = parent
-        if root is None:
-            continue
-        try:
-            relative = os.path.relpath(path, root)
-        except ValueError:
-            continue
-        first = re.split(r"[\\/]+", relative)[0]
-        if first.split(":", 1)[0].rstrip(". ").lower() in APPLICATION_TREES:
-            return first
-    return None
-
-
-# A command word that moves the shell's working directory, wherever it stands
-# in the command: after a separator, inside a group or a subshell, or behind
-# a `builtin`/`command` wrapper, which the leading boundary also admits.
-#
-# `source`, `.` and `eval` are here too: a sourced script runs in the current
-# shell and can `cd` in a file this hook never reads, and `eval` runs text it
-# may build. Raised by Copilot.
-#
-# **`.` is the command only where a command stands** (#357): after a separator,
-# a keyword or a wrapper, behind assignment words. As an operand it is a
-# directory (`git add .`), and reading it as the dot-command refused every
-# relative write beside it.
-#
-# **A wrapper that changes directory for the command it runs is one too** (#359):
-# `env -C .claude cp x settings.json` and `env --chdir=.claude tee settings.json`
-# land a relative target in `.claude` with no `cd` word in the command, and so
-# does `find … -execdir cp x ./hook.py \;`, which runs from the directory of
-# each match. `find`'s is a pattern below; `env`'s is `env_changes_directory`,
-# which reads words rather than a regex (see there).
-CHANGES_DIRECTORY = re.compile(
-    r"(?:^|[\s;&|(){}`])(?:cd|pushd|popd|source|eval)(?=$|[\s;&|()])"
-    r"|\s-(?:exec|ok)dir(?=$|[\s;&|()])"
-    r"|(?:^|[;&|(){}`!\n]|\b(?:then|do|else|elif|if|while|until|time|builtin"
-    r"|command|exec)\s(?:-\S*\s+)*)\s*(?:(?:\w+=(?:\"[^\"]*\"|'[^']*'|\S*)"
-    r"|\d*[<>]+&?\s*(?:\"[^\"]*\"|'[^']*'|\S+))\s+)*\.(?=$|[\s;&|()])")
-
-
-@functools.lru_cache(maxsize=32)
-def changes_directory(command):
-    """Whether `command` may change directory, read before AND after quotes.
-
-    **Asked once per command, not once per target** (#359): the answer is a
-    function of the text, `destination_offence` asks it for every redirect and
-    operand, and the word scan below made a command of many redirects cost
-    targets times length. The cache is on the string.
-
-    **The raw text is not what bash runs.** `c''d .claude` spells no `cd` and
-    bash runs `cd`, so the pattern is also asked of the command with every
-    quote, `$` before a quote, and backslash removed — over-matching a `cd`
-    inside a quoted string, which is the direction to be wrong in. An
-    expansion that joins into `cd` is judged by the readings `offence` runs
-    before this, each of which reaches here with the expansion gone. Raised
-    by Copilot.
-    """
-    unquoted = re.sub(r"\$?[\"']|\\", "", command)
-    # `env` is read three ways: as written (a Windows path keeps its
-    # backslashes), without quotes, and without quotes or backslashes
-    # (`en\v -C d` is `env -C d` to bash).
-    return bool(CHANGES_DIRECTORY.search(command)
-                or CHANGES_DIRECTORY.search(unquoted)
-                or env_changes_directory(command)
-                or env_changes_directory(re.sub(r"\$?[\"']", "", command))
-                or env_changes_directory(unquoted))
-
-
-def env_changes_directory(command):
-    """Whether an `env` in `command` carries a directory option (#359).
-
-    **Words, not a pattern, because a pattern had to choose between bounded and
-    quadratic.** `env` may stand behind a path (`/usr/bin/env`, `env.exe`, any
-    case, as Windows resolves it), take any number of `NAME=value` words and
-    options before its own, and spell the option `-C dir`, `-Cdir`, in a
-    cluster of env's own letters (`-iC`), or as an abbreviated `--chdir`.
-    **`-S` and `--split-string` count too**: their argument is split into more
-    words, and `env -S'-C .claude cp x settings.json'` hides the option inside
-    one.
-
-    **Neither where `env` stands nor where its words end is asked, because
-    asking failed open in review.** A position check missed a newline, a
-    redirect word, an assignment holding a space and every wrapper with
-    arguments of its own (`sudo -u root env`, `timeout 5 env`), and splitting
-    at separators missed one inside env's words (`env A=$(date) -C d`,
-    `env 'A=;' -C d`). So a piece of the word must BE `env` (split at a path
-    separator or a glued one, so `.env` and `printenv` are not), and the option
-    is looked for in every later word of the command. That over-matches an `-S`
-    or `-C` of the program env runs (`env X=1 ls -S`), `env -uC` (unset a
-    variable named `C`), `echo env -C`, and a directory component named env
-    (`grep foo app/env/x -C3`), which is the direction to be wrong in. Only the
-    FIRST such `env` is scanned, since its scan covers every later one, which
-    keeps this linear.
-    """
-    words = command.split()
-    for index, word in enumerate(words):
-        # Every piece of the word, so `env>/dev/null` and `/usr/bin/env` are
-        # env and `.env` and `printenv` are not.
-        if not any(piece.lower() in ("env", "env.exe")
-                   for piece in re.split(r"[\\/:(){}`;&|<>]", word)):
-            continue
-        for later in words[index + 1:]:
-            name = later.split("=", 1)[0]
-            if re.fullmatch(r"-[iv0uaPCS]*[CS].*", later) or (
-                    len(name) > 2 and name.startswith("--")
-                    and ("--chdir".startswith(name)
-                         or "--split-string".startswith(name))):
-                return True
-        return False
-    return False
-
-
-# The directory the session's command runs in, from the hook event. `None`
-# until `decision` reads one, and then the process's own directory stands in.
-# `decision` sets it on every event it judges, so a caller that judges many
-# events in one process cannot carry one command's directory into the next.
-EVENT_CWD = None
-
-# The scopes of the event `offence` is judging, while it judges it: the line
-# as bash performs it, and every script that line hands a shell on stdin
-# (`event_scopes`). A script a shell runs (`bash -c '...'`, `eval`, a
-# here-string, `$(...)`, a heredoc) is judged as a string of its own, and the
-# scopes around it are where that shell's environment is built:
-# `GIT_WORK_TREE=.claude bash -c 'git checkout HEAD -- settings.json'` was
-# admitted because the inner script named no relocation (#357). Empty outside
-# a judgement.
-EVENT_SCOPES = ()
-
-
-def linked_protected_path(literal):
-    """Which protected surface `literal` reaches THROUGH a link, or `None`.
-
-    **The lexical check reads the spelling, and bash opens the file.** A branch
-    can carry `docs/out -> ../.claude/settings.json`, and `ls > docs/out`
-    holds no protected component while the write lands on the denied file.
-    Raised by Copilot.
-
-    So the target is placed against the checkout that contains it, resolved
-    through the filesystem — a missing leaf beneath a linked parent included,
-    which `realpath` resolves as far as the path exists — and judged again
-    WHERE IT LANDS, but only where the two disagree. Comparing the resolution
-    to the root's own resolution plus the spelled remainder is what keeps a
-    checkout under a linked temp root (`/tmp` on macOS) from reading as a link
-    on every write. A target outside every checkout is left to the lexical
-    check: this list is the repository's machinery, not the filesystem's.
-    """
-    cwd = EVENT_CWD or os.getcwd()
-    joined = literal if os.path.isabs(literal) else os.path.join(cwd, literal)
-    lexical = os.path.normpath(os.path.abspath(joined))
-    root = lexical
-    while not os.path.exists(os.path.join(root, ".git")):
-        parent = os.path.dirname(root)
-        if parent == root:
-            return None
-        root = parent
-    real_root = os.path.realpath(root)
-    expected = os.path.normpath(
-        os.path.join(real_root, os.path.relpath(lexical, root)))
-    resolved = os.path.realpath(joined)
-    if os.path.normcase(expected) == os.path.normcase(resolved):
-        return None
-    try:
-        landed = os.path.relpath(resolved, real_root)
-    except ValueError:
-        landed = resolved
-    if landed == ".." or landed.startswith(".." + os.sep):
-        landed = resolved
-    return protected_path(landed)
-
-
-def cwd_protected_path(literal):
-    """Which protected surface a RELATIVE `literal` lands in from the event's cwd.
-
-    **The spelling carries no protected component when the session already
-    stands inside the tree** (#361). One call runs `cd .claude/hooks`, which
-    writes nothing; the next arrives with that directory as its `cwd`, and
-    `cp x evil.sh` holds no `.claude` component while bash writes
-    `.claude/hooks/evil.sh`. So a relative target is placed against the event's
-    `cwd`, and the path from the checkout that contains it is judged as a
-    spelling. An absolute target is left to the lexical check, and so is one
-    that lands outside every checkout: this list is the repository's
-    machinery, not the filesystem's.
-    """
-    if os.path.isabs(literal) or literal.startswith(("/", "\\")):
-        return None
-    if not EVENT_CWD:
-        return None
-    joined = os.path.join(EVENT_CWD, literal)
-    # Both readings, as `application_tree` takes them. `linked_protected_path`
-    # resolves a link too, but it walks up from the LEXICAL path to find the
-    # checkout, so a cwd that is a link living outside the checkout (`/tmp/l`
-    # into `.claude/hooks`) finds no root there and is left to this one.
-    for path in (os.path.normpath(os.path.abspath(joined)),
-                 os.path.realpath(joined)):
-        root = path
-        while not os.path.exists(os.path.join(root, ".git")):
-            parent = os.path.dirname(root)
-            if parent == root:
-                root = None
-                break
-            root = parent
-        if root is None:
-            continue
-        try:
-            relative = os.path.relpath(path, root)
-        except ValueError:
-            continue
-        named = protected_path(relative)
-        if named:
-            return named
-    return None
-
-
-def redirection_offence(command):
-    """The reason to refuse a redirection in `command`, or `None`.
-
-    **This is the half of the deny lists that was defence in depth and is now a
-    boundary.** Every `Edit(...)` entry in `.claude/settings.json` and in every
-    command's `disallowed-tools` binds the editing tools; `Bash(ls:*)` and
-    `Bash(wc:*)` are auto-approved for every session, and a `>` on either one
-    wrote what all of them refuse.
-
-    **The residual this docstring used to state was false, and it is kept here
-    in the past tense for that reason.** It said a redirection is not the only
-    way a command writes — `tee`, `cp`, `sed -i` and an interpreter all do —
-    and that those did not need judging because each "has to be granted
-    first". Under `"defaultMode": "auto"`, set in a user-level settings file
-    this repository never reads, nothing has to be granted: a `cp` onto the
-    `src` a redirection here had just refused was admitted and landed (blueprint-frontend#26).
-    `writing_verb_offence` judges the verbs now; what stays open is named
-    there.
-    """
-    for span in redirection_spans(command):
-        if not writes_to_a_file(span):
-            continue
-        # **An empty target is not a write and refusing it broke an admitted
-        # case.** `word_end` stops without consuming anything when the word
-        # would BEGIN with `(`, because `git log >(cat) -1` is a process
-        # substitution bash passes as an ARGUMENT rather than a redirect with
-        # `(cat)` for a target — so the span holds a bare `>` and there is no
-        # path here to judge. What runs inside those parentheses is judged by
-        # the run splitter, which is the arrangement
-        # `test_a_substitution_is_part_of_the_target_word` pins.
-        if not span.target.strip():
-            continue
-        refusal = destination_offence(
-            span.target, command, f"`{span.operator}`", "a redirection")
-        if refusal is not None:
-            return refusal
-    return None
-
-
-def destination_offence(word, command, writer, kind):
-    """The reason to refuse writing the file shell `word` names, or `None`.
-
-    `word` is raw shell text, quoting intact, because the quoting is what
-    decides whether a `~`, a `*` or a `$"…"` means anything. `writer` names the
-    operator or the program in a refusal, and `kind` names the way it writes.
-
-    **One judgement, two callers, and the second is why it was lifted out.**
-    It was `redirection_offence`'s loop body while a redirection was the only
-    write this file judged. A `cp` writes the same file by another spelling
-    (blueprint-frontend#26), and a second copy of these rules for it is the sibling-drift
-    `quote_states` records this file repeating five times.
-    """
-    if globbed(word):
-        return (
-            f"{kind}'s target carries an unquoted `*`, `?`, `[` or `{{`, so "
-            "bash expands it and the file written is not the string written "
-            "here — `> package.jso?` writes `package.json`. Refusing rather "
-            "than judging the pattern instead of the file: quote the name, or "
-            "write it out (blueprint-frontend#20, blueprint-frontend#26, docs/harness-boundaries.md)."
-        )
-    # **A dollar quote this guard cannot read is refused on the target
-    # itself**, because the command-wide check runs after the redirection
-    # strip has already removed it. `target_literal` read `$"HOME"/../src/…`
-    # as a `$HOME` expansion and judged `~/../src/…`, while bash opens the
-    # relative `HOME/../src/…` — the checkout's denied `src`. Raised by
-    # Copilot.
-    unreadable = unreadable_dollar_quote(word)
-    if unreadable is not None:
-        return f"{kind}'s target: {unreadable}"
-    literal = target_literal(word)
-    if literal is None:
-        return (
-            f"{kind}'s target is built by a command substitution, so the file "
-            "it writes cannot be read from this command; refusing rather than "
-            "admitting a write nothing judged. Name the path, or use the "
-            "editing tools, which the permission rules see (blueprint-frontend#20, blueprint-frontend#26, "
-            "docs/harness-boundaries.md)."
-        )
-    # **An unquoted leading `~` is expanded before the file opens.**
-    # `ls > ~/checkout/src/app/x.ts` reached the tree checks as a relative
-    # path whose first component is `~`, while bash wrote the checkout's
-    # `src`. Raised by Copilot. `~` and `~+` have values this hook shares
-    # with the session — the home directory, and the working directory the
-    # event names — so they are expanded and judged; `~-` and `~user`
-    # have none it can read, and are refused. A quoted `'~'` is a literal
-    # name, which is why the raw word is asked rather than the literal.
-    raw = word.strip()
-    if raw.startswith("~"):
-        prefix = re.match(r"~[^/\\]*", raw).group(0)
-        remainder = literal[len(prefix):]
-        if prefix == "~":
-            literal = os.environ.get("HOME") or os.path.expanduser("~")
-            literal += remainder
-        elif prefix == "~+":
-            literal = (EVENT_CWD or os.getcwd()) + remainder
-        else:
-            return (
-                f"{kind}'s target begins `{prefix}`, which bash expands to a "
-                "directory this guard cannot read — the previous working "
-                "directory, or another user's home. Refusing rather than "
-                "judging the tilde instead of the path (blueprint-frontend#20, blueprint-frontend#26, "
-                "docs/harness-boundaries.md)."
-            )
-    if "$" in literal:
-        expanded = expanded_target(literal, command)
-        if expanded is None:
-            return (
-                f"{writer} writes `{literal}`, whose path is built by a "
-                "parameter expansion this guard cannot read — a variable set "
-                "earlier in the same command, or one outside "
-                f"{', '.join(sorted(EXPANDABLE_VARIABLES))}. Refusing rather "
-                "than judging the name instead of the file it opens (blueprint-frontend#20, "
-                "blueprint-frontend#26, docs/harness-boundaries.md)."
-            )
-        # **An expanded value can be a pattern too**, and `globbed` ran on
-        # the word before it was expanded. With `TMPDIR=package.jso?`,
-        # `ls > $TMPDIR` opens `package.json` while the tree checks see
-        # the pattern. Refused whether or not the expansion was quoted: a
-        # temp root carrying `*`, `?`, `[` or `{` is not one to write
-        # scratch into. Raised by Copilot.
-        if any(char in expanded for char in "*?[{"):
-            return (
-                f"{kind}'s target `{literal}` expands to `{expanded}`, which "
-                "carries a pattern character, so the file bash opens is not "
-                "the string judged here (blueprint-frontend#20, blueprint-frontend#26, docs/harness-boundaries.md)."
-            )
-        literal = expanded
-    # **A relative target is placed against the event's `cwd`, and a
-    # directory change earlier in the command moves where it lands.**
-    # `ls >/dev/null; cd .claude; ls > settings.json` was judged as
-    # `<checkout>/settings.json` and bash wrote `.claude/settings.json`.
-    # Modelling `cd`, `pushd` and `popd` through subshells and compound
-    # commands is the kind of shell emulation this file refuses to guess
-    # at, so a relative write target is refused whenever the command can
-    # change directory. Name the path absolutely, or split the command.
-    # Raised by Copilot.
-    # A leading slash is absolute to bash on every host, and to
-    # `os.path.isabs` only where there is no drive letter to ask for.
-    absolute = os.path.isabs(literal) or literal.startswith(("/", "\\"))
-    if not absolute and changes_directory(command):
-        return (
-            f"{writer} writes the relative path `{literal}` in a command that "
-            "also changes directory, so where it lands is not the event's "
-            "working directory and this guard cannot place it. Name the path "
-            "absolutely, or run the `cd` as its own command (blueprint-frontend#20, blueprint-frontend#26, "
-            "docs/harness-boundaries.md)."
-        )
-    named = (protected_path(literal) or linked_protected_path(literal)
-             or cwd_protected_path(literal) or application_tree(literal))
-    if named is not None:
-        return (
-            f"{writer} would write `{literal}`, and `{named}` is the agent's "
-            "own machinery or the toolchain that runs on it. Every `Edit(...)` "
-            f"deny that names it binds the editing tools, so {kind} wrote "
-            "straight past them (blueprint-frontend#20, blueprint-frontend#26, docs/harness-boundaries.md). Write "
-            "it with an editing tool, where a permission rule judges the path."
-        )
-    return None
-
-
-# **The programs whose file operands are written, and which of them are.**
-# blueprint-frontend#26 measured the gap: a redirection onto `src/…` was refused, and the same
-# bytes written to scratch and then `cp`'d onto the same path were admitted and
-# landed. The residual this file stated for it — that `cp`, `tee` and the rest
-# "have to be granted first" — assumed a permission mode no file here sets; a
-# user-level `"defaultMode": "auto"` approves an un-granted `cp` outright.
-#
-# The value is the operand model, and every model is one `verb_offence` reads:
-#
-#   destination  the last operand, or a `-t`/`--target-directory` value; the
-#                other operands are sources and are only read
-#   every        every operand, because the verb writes, replaces or removes
-#                each one — `mv` removes its sources, which is a write to them
-#   in-place     the file operands, but only under `-i` / `--in-place`;
-#                `sed` also has its script read for `w`, `W` and `e`
-#   of           the `of=` operand
-#   find         the file an `-fprint*` or `-fls` action names, and the
-#                starting points of `-delete`
-#
-# **The list trails the programs that write, and says so.** `curl -o`,
-# `rsync`, `tar -x`, `unzip`, `patch` and an interpreter
-# (`python -c`, `node -e`, an `awk` script using its own `print >`) all write
-# and none is here. The suite asserts every name below reaches the check
-# through its model, and that the verbs blueprint-frontend#26 named are all on it — it cannot
-# assert that nothing is missing, and `docs/harness-boundaries.md` carries that
-# residual.
-WRITING_VERBS = {
-    "cp": "destination", "install": "destination", "ln": "destination",
-    "mv": "every", "rm": "every", "rmdir": "every", "shred": "every",
-    "tee": "every", "touch": "every", "truncate": "every", "unlink": "every",
-    "perl": "in-place", "sed": "in-place",
-    "dd": "of", "find": "find",
-}
-# `git restore`, `git checkout [<tree-ish>] -- PATH` and `git clean` write or
-# delete the paths they are given too. `git_path_writer_offence` reads the
-# subcommand and its operands: a pathspec on a protected surface is refused, a
-# branch checkout names no path, and `git checkout HEAD -- path` puts back the
-# committed copy and is admitted (#297).
-
-# The verbs a `-t DIR` or `--target-directory=DIR` sends every operand into.
-TARGET_OPTION_VERBS = frozenset({"cp", "install", "ln", "mv"})
-
-# Short options that take a value, per verb — the value is the rest of the
-# word, or the next word when nothing is glued. **Absent a letter, nothing is
-# skipped**, which is the direction `VALUE_FLAGS_BY_SUBCOMMAND` argues: a value
-# judged as a path costs an over-refusal on a name that is never protected,
-# and a path skipped as a value costs the write.
-SHORT_VALUE_OPTIONS = {
-    "cp": "S", "install": "gmoS", "ln": "S", "mv": "S", "sed": "l",
-    "shred": "ns", "touch": "dr", "truncate": "rs",
-}
-
-# The long forms, matched as GNU matches them: any unambiguous prefix.
-LONG_VALUE_OPTIONS = {
-    "cp": ("--suffix",), "install": ("--group", "--mode", "--owner",
-                                     "--strip-program", "--suffix"),
-    "ln": ("--suffix",), "mv": ("--suffix",),
-    "sed": ("--expression", "--file", "--line-length"),
-    "shred": ("--iterations", "--random-source", "--size"),
-    "touch": ("--date", "--reference", "--time"),
-    "truncate": ("--reference", "--size"),
-}
-
-# `find -exec cp {} dest \;` hands `cp` its words up to the terminator, and
-# `{}` is a name `find` supplies — so the terminator ends the verb's operands.
-FIND_EXECUTORS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
-
-# Reserved words that can stand before a command in the same run.
-SHELL_KEYWORDS = frozenset({
-    "!", "{", "}", "do", "done", "elif", "else", "fi", "if", "then", "time",
-    "until", "while",
-})
-
-
-def raw_runs(command):
-    """`command` split into command runs of raw words, quoting intact.
-
-    The token path cannot be asked this: `shlex` has already removed the quotes
-    that decide whether a `~`, a `*` or a `$` in a destination expands, which is
-    exactly what `destination_offence` has to read. `word_end` is the one parse
-    of a word, and a process substitution is kept whole as one — splitting at
-    its parenthesis would put `cp <(…) .claude/x`'s destination in a run of its
-    own, led by the path.
-    """
-    ordinary = ordinary_positions(command)
-    runs, current, index = [], [], 0
-    while index < len(command):
-        if ordinary[index] and command[index] in " \t":
-            index += 1
-            continue
-        # **The redirection strip has already taken the `<` of a `<(…)`**,
-        # reading it as an operator with an empty target, so what reaches here
-        # from `cp <(echo x) .claude/settings.json` is `cp (echo x) …`. A group
-        # standing where an argument stands is therefore one word, and its body
-        # is split as runs of its own as well, so `if (cp a b)` loses nothing.
-        opener = (2 if command[index:index + 2] in ("<(", ">(")
-                  else 1 if command[index] == "(" and current else 0)
-        if ordinary[index] and opener:
-            close = _closing_paren(command, index + opener)
-            if close is not None:
-                current.append(command[index:close + 1])
-                runs.extend(raw_runs(command[index + opener:close]))
-                index = close + 1
-                continue
-        end = word_end(command, index, ordinary)
-        if end == index:
-            if current:
-                runs.append(current)
-            current = []
-            index += 1
-            continue
-        current.append(command[index:end])
-        index = end
-    if current:
-        runs.append(current)
-    return runs
-
-
-def _glued_raw(raw, literal, cut):
-    """The raw text of `literal[cut:]`, quoted when `raw` spells it otherwise.
-
-    A value glued to an option — `-t.claude`, `--target-directory=src` — is a
-    word of its own to the verb, and its quoting still decides what expands. It
-    is taken from the raw word when the option in front is spelled plainly, and
-    single-quoted otherwise, since then the whole word was quoted and nothing
-    in the value expands either.
-    """
-    if raw.startswith(literal[:cut]):
-        return raw[cut:]
-    return shlex.quote(literal[cut:])
-
-
-def _unreadable_word(literal, command):
-    """Whether a word's value is not in the source: a substitution, or an
-    expansion `expanded_target` cannot read."""
-    return literal is None or (
-        "$" in literal and expanded_target(literal, command) is None)
-
-
-# `find` writes through four actions and removes through one. The file an
-# `-fprint`, `-fprint0`, `-fprintf` or `-fls` action names is created or
-# truncated, and `-delete` removes everything the starting points reach (#297).
-FIND_WRITING_ACTIONS = frozenset({"-fprint", "-fprint0", "-fprintf", "-fls"})
-
-
-def brace_group_expands(word, start):
-    """Whether the unquoted `{` at `start` opens a brace expansion.
-
-    It does when an unquoted comma or `..` stands at the group's own depth
-    before its unquoted `}`. A `}` inside quotes does not close it, so
-    `-e{'w a}','w b'}` is two words. A group with no unquoted closer is
-    literal to bash; one that still has a later `}` is refused anyway, since
-    this walk is not bash (#297).
-    """
-    depth, quote, i, multiplies = 0, None, start, False
-    while i < len(word):
-        char = word[i]
-        if quote == "'":
-            if char == "'":
-                quote = None
-        elif char == "\\":
-            i += 1
-        elif char == "'" and quote is None:
-            quote = "'"
-        elif char == '"':
-            quote = None if quote == '"' else '"'
-        elif quote is None:
-            if char == "{":
-                depth += 1
-            elif char == "}":
-                depth -= 1
-                if depth == 0:
-                    return multiplies
-            elif depth == 1 and (char == "," or word.startswith("..", i)):
-                multiplies = True
-        i += 1
-    return "}" in word[start:]
-
-
-def command_readings(command):
-    """The command as written, with its quotes and backslashes gone, and with
-    its parameter expansions removed as well: `"re"ad`, `GIT_WORK"_TREE"=x`
-    and `r${E}ead` are `read` and an assignment to bash (#297)."""
-    plain = re.sub(r"[\\'\"]", "", command)
-    return (command, plain, re.sub(r"\$\{[^}]*\}|\$\w+", "", plain))
-
-
-BASH_MANAGED_VARIABLES = frozenset({
-    "REPLY", "MAPFILE", "OLDPWD", "PWD", "OPTARG", "OPTIND", "RANDOM",
-    "SECONDS", "LINENO", "PIPESTATUS", "COMP_WORDS", "HISTCMD", "SHELLOPTS",
-    "DIRSTACK", "FUNCNAME", "HISTFILE", "GROUPS", "PATH", "IFS",
-})
-
-
-def environment_variable(word, command):
-    """Whether `word` is a lone `$NAME` or `${NAME}` that `command` never
-    mentions except as that expansion, so nothing in the command can have set
-    it (#297)."""
-    match = re.fullmatch(r'"?\$(?:(\w+)|\{(\w+)\})"?', word.strip())
-    if not match:
-        return False
-    name = match.group(1) or match.group(2)
-    # Only a conventional environment name: bash manages `$_`, `$REPLY`,
-    # `$OLDPWD`, `$MAPFILE` and the like, and sets them without naming them.
-    if (not re.fullmatch(r"[A-Z][A-Z0-9_]*", name) or name.startswith("BASH")
-            or name in BASH_MANAGED_VARIABLES or name in EXPANDABLE_VARIABLES):
-        return False
-    # Code built at run time can set a variable whose name never appears:
-    # `eval "$(printf '\\x46=.claude/x')"; git checkout $F`. The `.` builtin
-    # is a command word after a separator, a newline, a brace, a keyword or
-    # `builtin`/`command`.
-    dynamic = re.compile(
-            r"\beval\b|\bsource\b|`|\$\(|<\(|\$'|\$\{!"
-            r"|(?:^|[\s;&|(){!])\.(?=\s|$)"
-            r"|\b(?:read|mapfile|readarray|getopts|cd|pushd|popd|declare|typeset"
-            r"|export|readonly|local|let|set)\b|printf\s+-v", re.MULTILINE)
-    # Read the command as written and with its quotes and backslashes gone:
-    # `"re"ad` and `r\ead` are `read` to bash.
-    if any(dynamic.search(text) for text in command_readings(command)):
-        return False
-    # A value the hook itself inherited is the value the shell inherited.
-    inherited = os.environ.get(name)
-    if inherited and (os.path.isabs(inherited)
-                      or ".." in re.split(r"[\\/]", inherited)
-                      or protected_path(inherited)
-                      or linked_protected_path(inherited)
-                      or application_tree(inherited)):
-        return False
-    # Only the bare forms are the expansion: `${F:=.claude/x}` assigns, and
-    # leaves its name in the text for the search below to find.
-    rest = re.sub(r"\$" + re.escape(name) + r"\b|\$\{" + re.escape(name) + r"\}",
-                  "", command)
-    return re.search(r"\b" + re.escape(name) + r"\b", rest) is None
-
-
-def shell_expands(word):
-    """Whether bash expands something in the raw `word`: a `$` or a backtick
-    outside single quotes and not escaped, or an unquoted brace group that
-    holds a comma or `..`, which multiplies one word into several
-    (`-e{'w a','w b'}` is two scripts) (#297).
-
-    A `$` expands only before a name, a digit, a brace, a parenthesis, a quote
-    or a special parameter; `s/foo$/x/` and `{}` (find's placeholder) are
-    literal to bash and are not flagged.
-    """
-    quote, i = None, 0
-    while i < len(word):
-        char = word[i]
-        if quote == "'":
-            if char == "'":
-                quote = None
-        elif char == "\\":
-            i += 1
-        elif char == "'" and quote is None:
-            quote = "'"
-        elif char == '"':
-            quote = None if quote == '"' else '"'
-        elif char == "`":
-            return True
-        elif char == "$" and (
-                word[i + 1:i + 2].isalnum()
-                or word[i + 1:i + 2] in ("_", "{", "(", "[", "@", "*", "#", "?",
-                                         "!", "-", "$")
-                # `$'…'` and `$"…"` are forms only outside quotes; inside
-                # double quotes the quote after the `$` closes the string.
-                or (quote is None and word[i + 1:i + 2] in ("'", '"'))):
-            return True
-        elif char == "{" and quote is None and brace_group_expands(word, i):
-            return True
-        i += 1
-    return False
-
-
-# The `sed` commands that take no argument, `{` and `}` among them.
-SED_NO_ARGUMENT = frozenset("=dDgGhHnNpPxzF{}")
-
-
-def sed_script_actions(script):
-    """The writes and executions in a `sed` script, as `(command, text)`.
-
-    `w` and `W` write the file the rest of the line names, `s///w` likewise, and
-    `e` and `s///e` run a command; every other command is stepped over, so a `w`
-    inside an address, a regular expression, a replacement or the text of `a`,
-    `i` and `c` is not read as a command. A script this cannot read to its end
-    raises `ValueError`, and the caller refuses it (#297).
-    """
-    actions, i, n = [], 0, len(script)
-
-    def line_end(start, continued=False):
-        # A comment or a file name ends at the newline, whatever precedes it
-        # (GNU sed 4.9 measured); only the text of `a`, `i` and `c` is
-        # continued by a backslash.
-        j = start
-        while j < n and script[j] != "\n":
-            j += 2 if continued and script[j] == "\\" else 1
-        return min(j, n)
-
-    def delimited(start, delimiter):
-        j = start
-        while j < n and script[j] != delimiter:
-            j += 2 if script[j] == "\\" else 1
-        if j >= n:
-            raise ValueError("an unterminated pattern")
-        return j + 1
-
-    def digits(j):
-        while j < n and script[j].isdigit():
-            j += 1
-        return j
-
-    def address(j):
-        # The index after one address at `j`, or `None` when none starts there.
-        if script[j:j + 1].isdigit():
-            j = digits(j)
-            if script[j:j + 1] == "~":
-                j = digits(j + 1)
-            return j
-        if script[j:j + 1] == "$":
-            return j + 1
-        if script[j:j + 1] == "/":
-            j = delimited(j + 1, "/")
-        elif script[j:j + 1] == "\\" and j + 1 < n:
-            j = delimited(j + 2, script[j + 1])
-        else:
-            return None
-        while j < n and script[j] in "IM":
-            j += 1
-        return j
-
-    while i < n:
-        if script[i] in " \t\n;{}":
-            i += 1
-            continue
-        first = address(i)
-        if first is not None:
-            i = first
-            while i < n and script[i] in " \t":
-                i += 1
-            if script[i:i + 1] == ",":
-                i += 1
-                while i < n and script[i] in " \t":
-                    i += 1
-                if script[i:i + 1] in ("+", "~"):
-                    i = digits(i + 1)
-                else:
-                    second = address(i)
-                    if second is None:
-                        raise ValueError("an address that does not end")
-                    i = second
-            while i < n and script[i] in " \t!":
-                i += 1
-            if i >= n:
-                raise ValueError("an address with no command")
-        command = script[i]
-        i += 1
-        if command in SED_NO_ARGUMENT:
-            continue
-        if command == "#":
-            i = line_end(i)
-        elif command in "lLqQ":
-            while i < n and script[i] in " \t":
-                i += 1
-            i = digits(i)
-        elif command in "btTv:":
-            # A label ends at a blank as well as at `;`: `:x w out` writes
-            # `out` (GNU sed 4.9 measured). An older sed reads further, and
-            # reading less here only refuses more.
-            while i < n and script[i] in " \t":
-                i += 1
-            while i < n and script[i] not in " \t;\n":
-                i += 1
-        elif command in "aic":
-            i = line_end(i, True)
-        elif command in "rR":
-            i = line_end(i)
-        elif command in "wWe":
-            end = line_end(i)
-            text = script[i:end].strip()
-            if not text and command != "e":
-                raise ValueError(f"a `{command}` with no file")
-            actions.append((command, text))
-            i = end
-        elif command in "sy":
-            if i >= n:
-                raise ValueError("a command with no delimiter")
-            delimiter = script[i]
-            i = delimited(delimited(i + 1, delimiter), delimiter)
-            while command == "s" and i < n:
-                flag = script[i]
-                if flag == "w":
-                    end = line_end(i + 1)
-                    text = script[i + 1:end].strip()
-                    if not text:
-                        raise ValueError("a `w` flag with no file")
-                    actions.append(("w", text))
-                    i = end
-                    break
-                if flag == "e":
-                    actions.append(("e", ""))
-                elif flag not in "gpiImME0123456789":
-                    break
-                i += 1
-        else:
-            raise ValueError(f"the command `{command}`")
-    return actions
-
-
-def sed_script_offence(scripts, script_file, command):
-    """The reason to refuse the `sed` scripts given, or `None`.
-
-    A `sed` without `-i` writes nothing to its operands, and still writes any
-    file its script names (`w`, `W`, `s///w`) and runs any command it holds
-    (`e`, `s///e`). The files are judged as any destination; a command is
-    refused, as is a script read from a file or one this cannot read (#297).
-    """
-    if script_file:
-        return (
-            "`sed -f` runs a script read from a file, which can hold `w` and "
-            "`e` commands this guard cannot see; give the script with `-e` "
-            "(#297, docs/harness-boundaries.md)."
-        )
-    for script in scripts:
-        if script is None:
-            return (
-                "`sed` is handed a script built by a command substitution, "
-                "which can write a file or run a command; name the script "
-                "(#297, docs/harness-boundaries.md)."
-            )
-        try:
-            actions = sed_script_actions(script)
-        except ValueError as problem:
-            return (
-                f"`sed` is handed a script this guard cannot read to its end "
-                f"({problem}), and a `w` or `e` in it would write a file or "
-                "run a command nothing judged; refusing (#297, "
-                "docs/harness-boundaries.md)."
-            )
-        for letter, text in actions:
-            if letter == "e":
-                return (
-                    "`sed` runs a command through an `e` command or an "
-                    "`s///e` flag, and nothing here can say what it writes "
-                    "(#297, docs/harness-boundaries.md)."
-                )
-            refusal = destination_offence(shlex.quote(text), command, "`sed`", "`sed`")
-            if refusal is not None:
-                return refusal
-    return None
-
-
-def above_working_directory(word):
-    """The literal of the raw `word` when it is, or contains, the working
-    directory or the home directory, else `None` (#297).
-
-    A write started there reaches the protected trees without naming them:
-    `find . -delete`, `git restore .` and `git clean -fd` each did while a
-    path naming `.claude` was refused.
-    """
-    literal = target_literal(word)
-    if literal is None:
-        return None
-    plain = os.path.normpath(literal.replace("\\", "/")).replace("\\", "/")
-    if plain in (".", "..", "/") or plain.startswith("../") or (
-            word.strip().startswith("~")):
-        return literal
-    if os.path.isabs(literal) or literal.startswith("/"):
-        here = os.path.realpath(EVENT_CWD or os.getcwd())
-        real = os.path.realpath(literal)
-        if real == here or here.startswith(real.rstrip("/\\") + os.sep):
-            return literal
-    return None
-
-
-def contains_working_directory(word, command):
-    """The literal of the raw `word` when it is, or resolves to a parent of,
-    the working directory or the home directory, else `None` (#309).
-
-    The test `find -delete` applies to its starts, for the verbs that remove or
-    move what they are given: `rm -rf ..` and `rm -rf ../..` reach `.claude/`
-    and `package.json` without naming them. A path is **resolved**, so a
-    sibling (`rm -rf ../old`) is not one; a word carrying a glob is refused by
-    `destination_offence` already and is not judged here.
-    """
-    literal = target_literal(word)
-    if literal is None:
-        return None
-    if "$" in literal:
-        # Expanded as `destination_offence` expands it; a value nothing here
-        # can read is refused rather than judged as the text that spells it.
-        literal = expanded_target(literal, command)
-        if literal is None:
-            return word
-    plain = literal.replace("\\", "/")
-    if os.path.normpath(plain).replace("\\", "/") == "/" or (
-            word.strip() in ("~", "~/")):
-        return literal
-    here = os.path.realpath(EVENT_CWD or os.getcwd())
-    if word.strip().startswith("~"):
-        # `~` and `~/x` are the home directory; `~+`, `~-` and `~user` are
-        # other directories this guard does not resolve, so they are refused.
-        if not re.match(r"~(?:/|$)", plain):
-            return literal
-        plain = os.path.expanduser(plain)
-    real = os.path.realpath(plain if os.path.isabs(plain) else os.path.join(
-        here, plain))
-    if real == here or here.startswith(real.rstrip("/\\") + os.sep):
-        return literal
-    # The home directory itself, by whichever spelling reaches it, even from a
-    # working directory outside it: `rm -rf $HOME` and `rm -rf /home/user`.
-    if real == os.path.realpath(os.path.expanduser("~")):
-        return literal
-    return None
-
-
-# The verbs whose operands are removed or moved away, so one that is or holds
-# the working directory takes the protected trees with it (#309).
-REMOVING_VERBS = frozenset({"mv", "rm", "rmdir", "shred", "unlink"})
-
-
-# The git subcommands that overwrite or delete the paths they are given (#297).
-GIT_PATH_WRITERS = frozenset({"restore", "checkout", "clean"})
-
-# The subcommands whose writes a relocated work tree moves: the three above, and
-# `rm` and `mv`, which `verb_offence` judges by their operands (#358).
-GIT_RELOCATABLE = GIT_PATH_WRITERS | GIT_WRITING_SUBCOMMANDS
-
-# Per subcommand: the short options that take a value, and the long ones.
-GIT_PATH_VALUE_OPTIONS = {
-    "restore": ("s", ("--source", "--pathspec-from-file", "--conflict")),
-    "checkout": ("bB", ("--orphan", "--conflict", "--pathspec-from-file")),
-    "clean": ("e", ("--exclude",)),
-}
-
-
-def git_directory():
-    """The common git directory of the working directory, or `None` outside a
-    repository; one that cannot be read raises (#357).
-
-    Read from the file system, as `application_tree` reads `.git`: a hook that
-    ran `git` would inherit the very environment it judges, and a work tree
-    set in it would answer for the wrong repository.
-    """
-    root = os.path.realpath(EVENT_CWD or os.getcwd())
-    while True:
-        dot = os.path.join(root, ".git")
-        if os.path.isdir(dot):
-            return dot
-        if os.path.isfile(dot):
-            with open(dot, encoding="utf-8") as handle:
-                pointer = handle.read().strip()
-            if not pointer.startswith("gitdir:"):
-                raise ValueError(dot)
-            gitdir = os.path.normpath(os.path.join(
-                root, pointer[len("gitdir:"):].strip()))
-            with open(os.path.join(gitdir, "commondir"),
-                      encoding="utf-8") as handle:
-                return os.path.normpath(os.path.join(
-                    gitdir, handle.read().strip()))
-        parent = os.path.dirname(root)
-        if parent == root:
-            return None
-        root = parent
-
-
-def names_a_ref(literal):
-    """Whether `git checkout <literal>` may name a revision rather than a path.
-
-    A revision is a ref (a branch, a tag, or a branch only a remote has, which
-    git creates), `HEAD` and its kin, or anything shaped like one: an object id
-    prefix, or a name with a revision operator. **Anything else is a path**,
-    and a repository that cannot be read answers "not a ref", the direction
-    that judges more (#357).
-    """
-    if re.fullmatch(r"[0-9A-Fa-f]{4,40}", literal) or re.search(
-            r"[~^:@]", re.sub(r"^[A-Za-z]:[\\/]", "", literal)) or literal in (
-            "HEAD", "FETCH_HEAD", "ORIG_HEAD", "MERGE_HEAD", "-"):
-        return True
-    try:
-        gitdir = git_directory()
-    except (OSError, ValueError):
-        return False
-    if gitdir is None:
-        # Outside a repository `git checkout` writes nothing at all.
-        return True
-    name = literal.strip("/")
-    if not name or ".." in name:
-        return False
-    for prefix in ("refs/heads", "refs/tags", "refs/remotes"):
-        if os.path.isfile(os.path.join(gitdir, *prefix.split("/"), *name.split("/"))):
-            return True
-    remotes = os.path.join(gitdir, "refs", "remotes")
-    try:
-        for remote in os.listdir(remotes):
-            if os.path.isfile(os.path.join(remotes, remote, *name.split("/"))):
-                return True
-    except OSError:
-        pass
-    try:
-        with open(os.path.join(gitdir, "packed-refs"), encoding="utf-8") as handle:
-            for line in handle:
-                ref = line.split(" ", 1)[-1].strip()
-                parts = ref.split("/", 3)
-                if ref in (f"refs/heads/{name}", f"refs/tags/{name}",
-                           f"refs/remotes/{name}") or (
-                        parts[:2] == ["refs", "remotes"] and len(parts) == 4
-                        and parts[3] == name):
-                    return True
-    except OSError:
-        pass
-    return False
-
-
-def git_pathspec_offence(raw, name, separated, command, committed=False,
-                         many=False):
-    """The reason to refuse one pathspec operand of `git <name>`, or `None`."""
-    writer = f"`git {name}`"
-    literal = target_literal(raw)
-    if literal.startswith(":") or any(char in literal for char in "*?["):
-        return (
-            f"{writer} is given the pathspec `{literal}`, which git reads as "
-            "magic or a pattern, so the files it writes are not the string "
-            "written here; name the paths (#297, docs/harness-boundaries.md)."
-        )
-    bare = re.fullmatch(r'"?\$(?:(\w+)|\{(\w+)\})"?', raw.strip())
-    if bare and (bare.group(1) or bare.group(2)) in EXPANDABLE_VARIABLES:
-        return (
-            f"{writer} is given `{raw}`, a directory that is the checkout or "
-            "holds it, so it writes the whole tree; name the files (#297, "
-            "docs/harness-boundaries.md)."
-        )
-    above = above_working_directory(raw)
-    if above is not None:
-        return (
-            f"{writer} is given `{above}`, which is or contains the working "
-            "directory, so it writes the protected trees without naming them; "
-            "name the paths (#297, docs/harness-boundaries.md)."
-        )
-    if committed:
-        # `git checkout HEAD -- path` puts back the committed copy, which is how
-        # this repository restores a file; another tree-ish brings in content
-        # nobody reviewed on this branch, and stays judged.
-        return None
-    if name == "checkout" and not separated:
-        # With no `--` the operand is a branch or a path and git decides which,
-        # so a branch named `docs/x` must stay admitted: an application tree
-        # counts only for a name that exists or carries an extension (a dot
-        # and a letter: `spec-v1.2` is a branch, `x.ts` a file).
-        last = re.split(r"[\\/]+", literal.rstrip("/\\"))[-1]
-        named = protected_path(literal) or linked_protected_path(literal)
-        # A name no ref carries cannot be the branch git would switch to, so
-        # it is a path whether or not the file exists in the working tree:
-        # `git checkout Makefile` restores a deleted file, and after a `cd`
-        # `git checkout settings.json` restores a protected one (#357).
-        not_a_ref = not names_a_ref(literal)
-        if not named and (re.search(r"\.[A-Za-z][A-Za-z0-9]{0,5}$", last)
-                          or not_a_ref
-                          or os.path.exists(os.path.join(
-                              EVENT_CWD or os.getcwd(), literal))):
-            named = application_tree(literal)
-        # A word the shell expands is not the name it is written as: `git
-        # checkout $F` and `git checkout .claude{,}` are judged as paths.
-        # A lone `$NAME` the command never assigns is the environment's, not
-        # the command's, and `git checkout $BRANCH` is traffic this repository
-        # writes; anything else the shell expands is judged.
-        if not named and not (
-                (shell_expands(raw) and not environment_variable(raw, command))
-                or raw.strip().startswith("~")
-                or (changes_directory(command)
-                    and (many or not_a_ref or re.search(r"[./]", raw)))):
-            return None
-    return destination_offence(raw, command, writer, writer)
-
-
-# The value of `-m`, `-am` or `--message` when it is one quoted string that
-# expands nothing: a commit's message is text, and one that names `GIT_DIR` or
-# says `source` relocates and evaluates nothing (#357).
-INERT_MESSAGE = re.compile(
-    r"""(?<=\s)(-[A-Za-z]*m|--message)(=|\s+)("[^"$`\\]*"|'[^']*')""")
-
-
-def without_messages(command):
-    """`command` with each inert message value of a `git commit`, `tag` or
-    `merge` emptied. The run is read back to the last separator, and an option
-    cluster that carries `c`, `e` or `s` is a shell's (`bash -cm 'script'`),
-    never a message (#357)."""
-    # Where each character stands: outside every quote, or inside one. **A
-    # match is blanked only when it begins outside every quote** and the
-    # command's quotes balance, so a `-m '` inside a double-quoted `bash -c`
-    # script cannot pair its quote with a later one and hide the text between.
-    outside, state, index = [], None, 0
-    while index < len(command):
-        char = command[index]
-        outside.append(state is None)
-        if char == "\\" and state != "'" and index + 1 < len(command):
-            outside.append(state is None)
-            index += 1
-        elif state is None and char in "'\"":
-            state = char
-        elif state == char:
-            state = None
-        index += 1
-    if state is not None:
-        return command
-
-    def blank(match):
-        if not outside[match.start()] or (
-                match.end() < len(command)
-                and command[match.end()] not in " \t\n;&|)"):
-            return match.group(0)
-        before = command[:match.start()]
-        run = before[max(before.rfind(mark) for mark in ";&|\n(`") + 1:]
-        if re.search(r"\bgit\b.*\b(?:commit|tag|merge)\b", run) and not (
-                match.group(1) != "--message"
-                and re.search(r"[ces]", match.group(1))):
-            return match.group(1) + match.group(2) + '""'
-        return match.group(0)
-
-    return INERT_MESSAGE.sub(blank, command)
-
-
-def git_path_writer_offence(run, literals, command):
-    """The reason to refuse a `git restore`, `checkout` or `clean`, or `None`.
-
-    These write or delete the paths they are given, and a pathspec is judged as
-    any other destination: `git checkout origin/main -- .claude/settings.json`
-    put a branch's copy of a protected file in place, and `git clean -fd`, `git
-    restore .` and `git checkout .` reach the protected trees without naming
-    them. A branch checkout names no path and stays admitted, as does a restore
-    of `--staged` alone and a `clean -n`. A run led by a reader is not judged
-    unless git leads it (#297).
-    """
-    lead = next((literal for raw, literal in zip(run, literals)
-                 if literal is not None and not ASSIGNMENT.match(raw)
-                 and literal not in SHELL_KEYWORDS), None)
-    if lead is not None and program_name(lead) != "git" and program_name(
-            lead) in (READING_COMMANDS | DATA_ONLY_COMMANDS):
-        return None
-    # A computed word ahead of the verb (`$W git checkout ...`) is a wrapper
-    # this guard cannot read, so git does not lead.
-    computed = any(literal is None and not ASSIGNMENT.match(raw)
-                   for raw, literal in zip(run, literals))
-    led = (lead is not None and program_name(lead) == "git" and not computed)
-    candidates = [index for index, literal in enumerate(literals)
-                  if literal is not None and program_name(literal) == "git"]
-    for start in (candidates[:1] if led else candidates):
-        rest = literals[start + 1:]
-        named = [word for word in rest if word is not None]
-        stripped = after_global_options(named)
-        name = verb_name(stripped[0]) if stripped else ""
-        if name in GIT_RELOCATABLE:
-            break
-        hidden = next((verb_name(word) for word in stripped[1:]
-                       if not word.startswith("-")
-                       and verb_name(word) in GIT_RELOCATABLE), None)
-        leading = named[:len(named) - len(stripped)]
-        unknown = [word for word in leading if word.startswith("-")
-                   and "=" not in word
-                   and word not in GLOBAL_VALUE_FLAGS | BOOLEAN_GLOBALS]
-        if unknown and hidden:
-            # `--super-prefix x/ checkout ...`: the option's value is read as
-            # the verb, and the real verb follows it.
-            return (
-                f"`git {hidden}` follows an option this guard does not know, "
-                "which can take the verb's place; use only the global "
-                "options it names (#297, docs/harness-boundaries.md)."
-            )
-    else:
-        return None
-    writer = f"`git {name}`"
-    if not led:
-        # Behind `xargs`, `find -exec`, `env -C` or `sudo`, the paths arrive
-        # from elsewhere or the directory has moved, and the first `git` word
-        # may be an operand (`sudo -u git git restore ...`).
-        return (
-            f"{writer} runs behind a wrapper, which can supply its paths on "
-            "stdin, move its directory or hide which word is git; run it "
-            "directly (#297, docs/harness-boundaries.md)."
-        )
-    if len(named) != len(rest):
-        return (
-            f"{writer} is handed a word built by a command substitution, so "
-            "the paths it writes cannot be read from this command; name them "
-            "(#297, docs/harness-boundaries.md)."
-        )
-    skipped = len(rest) - len(stripped)
-    # A relocated work tree moves where git writes while the operand still looks
-    # ordinary: `GIT_WORK_TREE=.claude git checkout HEAD -- settings.json`. The
-    # environment arrives as assignment words ahead of git (or `env`'s), the
-    # config as `-c core.worktree=`; an `export` in an earlier Bash call is
-    # not seen, one anywhere in this command line is (docs/harness-boundaries.md).
-    relocated = any(
-        ASSIGNMENT.match(raw) and re.match(
-            r"(?i)(GIT_WORK_TREE|GIT_DIR|GIT_COMMON_DIR|GIT_INDEX_FILE|GIT_CONFIG\w*)\+?=",
-            raw)
-        for raw in run[:start])
-    # The names alone, in any reading of the command: `read GIT_WORK_TREE`,
-    # `printf -v GIT_DIR` and `declare -n` write them with no `=`. Code that
-    # builds a name, `eval` and `source` included, is refused beside a writer.
-    #
-    # A name reaches git only once it is exported, and bash exports by a
-    # closed list of routes (the manual's *Environment*): an assignment ahead
-    # of a command, `export` and `declare -x`, `allexport`, a nameref an
-    # `export` then follows, and code read from data. Each that can export a
-    # name this guard cannot read is refused here, so a name built in a
-    # spelling no line names is still never exported to git (#357). A program
-    # that sets its child's environment is one more route, which no list of
-    # launchers closes, so the list is of the wrappers that add nothing:
-    # a shell any other program starts is refused, and so is a program no
-    # list names handed a script that runs git (`unmodelled_shell_launch`,
-    # #397, #421). `env`, `sudo` and `doas` are refused besides when an
-    # expansion stands in their words. Refused, then: `env`, and
-    # a declaration builtin behind
-    # `command` or `builtin`, split `X=$Y` into a second name; any nameref,
-    # which a `for` loop can point at a computed name; `allexport` however it
-    # is set; and `BASH_ENV`, `ENV`, an interactive or login shell (`exec -l`
-    # and `exec -a -bash` among them), `zsh`, `fish`, `csh` and `tcsh`, which
-    # read a startup file on every start, `alias`, `enable` and `mapfile -C`,
-    # which run code. Binding a
-    # name without exporting it, `(( $N = 5 ))`, reaches no git process.
-    relocation = re.compile(
-        r"(?i)(?<!\w)(GIT_WORK_TREE|GIT_DIR|GIT_COMMON_DIR|GIT_INDEX_FILE"
-        r"|GIT_CONFIG\w*|SHELLOPTS|BASH_ENV|ZDOTDIR|allexport)\b"
-        r"|(?-i:(?<![\w$])ENV\b)|(?<![\w.-])(?:"
-        + "|".join(ALWAYS_STARTUP_SHELLS) + r")(?:-[\d.]+)?(?:\.exe)?(?![\w.-])"
-        r"|(?<![\w./-])exec\b(?:\s+-\S+)*?\s+-\w*[al]"
-        r"|(?<![\w./-])(?:eval|source|trap|alias|enable)(?![\w./-])"
-        r"|\b(?:mapfile|readarray)\b[^;&|\n]*\s-(?-i:[A-Za-z]*C)"
-        r"|(?<![\w.-])(?:env|sudo|doas)\b[^;&|\n]*[$`]"
-        r"|(?<![\w./-])(?:command|builtin)\b(?:\s+-\S+)*\s+"
-        r"(?:export|declare|typeset|local|readonly)\b[^;&|\n]*[$`]"
-        r"|\b(?:declare|typeset|local)\b(?:\s+[^\s;&|]+)*?\s+-\w*n"
-        r"|(?<![\w./-])set\b[^;&|\n]*\s-(?-i:[A-Za-z]*a)"
-        r"|(?<![\w./-])(?:set|shopt)\b[^;&|\n]*[$`'\"{}\\*?\[]"
-        r"|(?<![\w./-])shopt\b[^;&|\n]*\s-\w*o"
-        r"|\b(?:export|declare|typeset|local|readonly|env)\b[^;&|\n]*(?:\$\(|`)"
-        r"|\b(?:export|declare|typeset|local|readonly|env|read|mapfile|readarray)"
-        r"\b(?:\s+[^\s;&|]+)*?\s+[^\s=;&|]*\$|printf\s+-v\s+\S*\$"
-        r"|\b(?:export|declare|typeset|local|readonly)\b(?:\s+[^\s;&|]+)*?"
-        r"\s+-\w*n\w*\b[^;&|\n]*\$"
-        r"|\b(?:export|declare|typeset|local|readonly|env|read|mapfile|readarray)"
-        r"\b(?:\s+[^\s;&|]+)*?\s+[^\s=;&|]*[{*?\[\\'\"`]"
-        r"|printf\b[^;&|\n]*-\w*v\s*\S*[$\\{*?\[\\'\"`]"
-        r"|\bgetopts\b[^;&|\n]*[$\\{*?\[\\'\"`]"
-        r"|\bwait\b(?:\s+-\S+)*?\s+-\w*p\b[^;&|\n]*[$\\{*?\[\\'\"`]"
-        r"|(?<![^\s;&|(){}!])\.(?:\s+(?:\d*[<>]+&?\s*[^\s;&|<>]+\s+)*[^\s;&|<>]|\$)"
-        r"|<\(")
-    # Read on every scope of the event as well as this string, which a shell
-    # around it may run in an environment those scopes built (#357).
-    # A shell started to read a startup file: interactive, login, `-a`, or
-    # given one by name, anywhere in the shell's simple command, past any
-    # redirection (`bash -x>/dev/null -i`), quoted span (`>'a;b' -i`) or
-    # escape; a script's own option counts too, through the dequoted
-    # reading (`bash -c 'ls -la'`). It fails closed on what it cannot read:
-    # an option word holding a quote, backslash or `$` (`-x'i'`), a leading
-    # quote or backslash (`"-i"`), and any unquoted `$` or backtick. **Every
-    # character has one way to be read**: a quoted span or an escape is one
-    # unit, and `&` or `|` is read only after `<` or `>` or, for `&`, only
-    # before `>`. Two readings of `>&>` doubled the search per word, and a
-    # run past the time limit admits (#357).
-    startup_shell = re.compile(
-        r"(?i)(?<![\w.-])(?:" + "|".join(sorted(EVALUATORS)) + r")(?:\.exe)?\s"
-        r"(?:'[^']*'|\"(?:[^\"\\]|\\.)*\"|\\.|[^;&|\n'\"\\]"
-        r"|(?<=[<>])[&|]|(?<![<>])&(?=>))*?"
-        r"(?:(?<!\S)['\"\\]?(?:-(?-i:[A-Za-z]*[ail])"
-        r"|--(?:rcfile|init-file|login)|-[^\s'\"\\$`;&|]*['\"\\$`])|[$`])")
-    scopes = dict.fromkeys((command, *EVENT_SCOPES))
-    relocated = relocated or any(
-        relocation.search(text) or startup_shell.search(text)
-        for line in scopes
-        for text in command_readings(without_messages(line)))
-    # A shell another program starts, or a program no list names run as one,
-    # takes its environment from somewhere this guard cannot read: `envdir`
-    # and `chpst -e` load it from files (#397, #421).
-    relocated = relocated or any(
-        unmodelled_shell_in(without_messages(line)) for line in scopes)
-    if relocated or any(
-            word.startswith(("-C", "--work-tree", "--git-dir"))
-            or "core.worktree" in word.lower()
-            for word in rest[:skipped]):
-        return (
-            f"{writer} runs under `-C`, `--work-tree`, `--git-dir`, "
-            "`core.worktree` or a `GIT_WORK_TREE`, `GIT_DIR` or `GIT_CONFIG*` "
-            "assignment, or beside a construct that can export a name this "
-            "guard cannot read (a shell started by a program other than a "
-            "plain wrapper, or one this guard does not name, among them), "
-            "which moves the paths it writes away from the working directory "
-            "this guard judges against; run it from the checkout (#297, #357, "
-            "#397, #421, docs/harness-boundaries.md)."
-        )
-    if name in GIT_WRITING_SUBCOMMANDS:
-        # `git rm` and `git mv` are judged as the verbs `rm` and `mv` by
-        # `verb_offence`, which sees only the words after the verb and so
-        # cannot see the option that moved the work tree. Relocated, they are
-        # refused above; run from the checkout, their operands are judged there
-        # (#358).
-        return None
-    arguments = rest[skipped + 1:]
-    raws = run[start + 1 + skipped + 1:]
-    short_values, long_values = GIT_PATH_VALUE_OPTIONS[name]
-    operands, operand_literals, flags = [], [], []
-    separated, before, position, source = False, 0, 0, None
-
-    def has(flag):
-        # git takes any unambiguous prefix of a long option.
-        return any(len(given) > 2 and flag.startswith(given) for given in flags)
-
-    while position < len(arguments):
-        raw, literal = raws[position], arguments[position]
-        position += 1
-        if separated or not literal.startswith("-") or literal == "-":
-            operands.append(raw)
-            operand_literals.append(literal)
-        elif literal == "--":
-            separated = True
-            before = len(operands)
-        elif literal.startswith("--"):
-            option, equals, _ = literal.partition("=")
-            flags.append(option)
-            if name == "restore" and len(option) > 3 and "--source".startswith(
-                    option):
-                source = literal.partition("=")[2] if equals else (
-                    arguments[position] if position < len(arguments) else None)
-            elif name == "restore" and len(option) > 5 and (
-                    "--no-source".startswith(option)):
-                # git accepts the negated form, which resets the source to the
-                # index; it is no longer HEAD.
-                source = None
-            if not equals and any(len(option) > 2 and full.startswith(option)
-                                  for full in long_values):
-                position += 1
-        else:
-            for offset, letter in enumerate(literal[1:]):
-                flags.append("-" + letter)
-                if letter in short_values:
-                    if name == "restore" and letter == "s":
-                        source = literal[offset + 2:] or (
-                            arguments[position] if position < len(arguments)
-                            else None)
-                    if not literal[offset + 2:]:
-                        position += 1
-                    break
-
-    if has("--pathspec-from-file"):
-        return (
-            f"{writer} reads its paths from a file this guard cannot read; "
-            "name them (#297, docs/harness-boundaries.md)."
-        )
-    if name == "clean" and ("-n" in flags or has("--dry-run")):
-        return None
-    if name == "restore" and ("-S" in flags or has("--staged")) and not (
-            "-W" in flags or has("--worktree")):
-        return None
-    if not operands:
-        if name == "clean":
-            return (
-                f"{writer} with no pathspec removes untracked files from the "
-                "whole working directory, the protected trees among them; "
-                "name the paths (#297, docs/harness-boundaries.md)."
-            )
-        return None
-    from_head = (name == "checkout" and separated and before == 1
-                 and operand_literals[0] in ("HEAD", "@"))
-    committed = from_head or (name == "restore" and source in ("HEAD", "@"))
-    for raw in operands[before if from_head else 0:]:
-        refusal = git_pathspec_offence(raw, name, separated, command, committed,
-                                       len(operands) > 1)
-        if refusal is not None:
-            return refusal
-    return None
-
-
-def find_delete_offence(starts, files0, command):
-    """The reason to refuse a `find -delete` over `starts`, or `None`.
-
-    `-delete` removes everything its starting points reach, so a start that is
-    the working directory, a parent of it or the home directory reaches the
-    protected tree without naming it: `find . -delete` and `find .. -name x
-    -delete` were admitted while `find .claude/hooks -delete` was refused. No
-    starting point means the working directory. `-files0-from` reads the starts
-    from a file this guard cannot read. A start under a checkout is judged as
-    any other destination (#297).
-    """
-    if files0 or not starts:
-        return (
-            "`find -delete` has no starting point this guard can read — none "
-            "(which means the working directory) or `-files0-from` — so what "
-            "it removes cannot be placed. Name the starting points "
-            "(#297, docs/harness-boundaries.md)."
-        )
-    for word in starts:
-        above = above_working_directory(word)
-        if above is not None:
-            return (
-                f"`find -delete` starts at `{above}`, which is or contains "
-                "the working directory or the home directory, so it removes "
-                "the agent's own machinery without naming it. Start below "
-                "it, at a path that names what is to go "
-                "(#297, docs/harness-boundaries.md)."
-            )
-        refusal = destination_offence(word, command, "`find`", "`find`")
-        if refusal is not None:
-            return refusal
-    return None
-
-
-def find_offence(words, command):
-    """The reason to refuse a `find` that writes or deletes, or `None`.
-
-    The words before the first expression word are the starting points (the
-    current directory when there are none); `-H`, `-L`, `-P`, `-O<n>` and
-    `-D <flags>` stand among them and are not paths. Only `-delete` judges the
-    starting points, since only it acts on what they reach. A destination that
-    is computed is refused by `destination_offence`; an action word that is
-    itself computed (`find /tmp "$A"`) is not read, the same residual the other
-    models carry in `docs/harness-boundaries.md`.
-    """
-    literals = [target_literal(word) for word in words]
-    starts, destinations, deleting, expression = [], [], False, False
-    files0 = False
-    position = 0
-    while position < len(words):
-        raw, literal = words[position], literals[position]
-        position += 1
-        if not expression:
-            if literal in ("-H", "-L", "-P") or (
-                    literal is not None and literal.startswith("-O")):
-                continue
-            if literal == "-D":
-                position += 1
-                continue
-            if literal == "--":
-                continue
-            if literal is None or not literal.startswith(("-", "(", "!", ",")):
-                starts.append(raw)
-                continue
-            expression = True
-        if literal in FIND_EXECUTORS:
-            # The words up to the terminator are another program's, judged
-            # as that program's by `writing_verb_offence`.
-            while position < len(words) and literals[position] not in (";", "+"):
-                position += 1
-            position += 1
-        elif literal in FIND_WRITING_ACTIONS and position < len(words):
-            destinations.append(words[position])
-            position += 1
-        elif literal == "-delete":
-            deleting = True
-        elif literal == "-files0-from":
-            files0 = True
-
-    if deleting:
-        refusal = find_delete_offence(starts, files0, command)
-        if refusal is not None:
-            return refusal
-    for word in destinations:
-        refusal = destination_offence(word, command, "`find`", "`find`")
-        if refusal is not None:
-            return refusal
-    return None
-
-
-def verb_offence(verb, words, command):
-    """The reason to refuse `verb` run on the raw `words` after it, or `None`.
-
-    **Options are parsed, not skipped by a leading dash**, because an option
-    can carry the destination: `cp -t.claude/hooks x` writes into the hooks
-    while no operand names them, and `cp x y -S .bak` puts a value where a
-    last-operand rule would read the destination.
-    """
-    literals = [target_literal(word) for word in words]
-    writer = kind = f"`{verb}`"
-    model = WRITING_VERBS[verb]
-
-    if model == "find":
-        return find_offence(words, command)
-
-    if model == "of":
-        for raw, literal in zip(words, literals):
-            if literal is None:
-                return (
-                    "`dd` is handed an operand built by a command substitution, "
-                    "which can be its `of=`; refusing rather than admitting a "
-                    "write nothing judged (blueprint-frontend#26, docs/harness-boundaries.md)."
-                )
-            if literal.startswith("of="):
-                refusal = destination_offence(
-                    _glued_raw(raw, literal, 3), command, writer, kind)
-                if refusal is not None:
-                    return refusal
-        return None
-
-    operands, targets, suffixes = [], [], []
-    in_place = script_given = directory_mode = options_done = False
-    scripts, script_file = [], False
-    # **A hard link makes a source writable under the destination's name.**
-    # `ln .claude/settings.json notes/alias` judged only `notes/alias`, and a
-    # redirection to that admitted name then wrote the settings file's inode.
-    # Raised by Copilot. A symbolic link is judged where it lands already —
-    # `linked_protected_path` resolves it — so only the hard forms, `ln`
-    # without `-s` and `cp -l`, judge their sources too.
-    symbolic = hard_link = False
-    short_values = SHORT_VALUE_OPTIONS.get(verb, "")
-    long_values = LONG_VALUE_OPTIONS.get(verb, ())
-    position = 0
-    while position < len(words):
-        raw, literal = words[position], literals[position]
-        position += 1
-        if literal is None or options_done or literal in ("-", "") or (
-                not literal.startswith("-")):
-            operands.append(raw)
-            continue
-        if literal == "--":
-            options_done = True
-            continue
-        if literal.startswith("--"):
-            name, equals, _ = literal.partition("=")
-
-            def abbreviates(option):
-                return len(name) > 2 and option.startswith(name)
-
-            if verb in TARGET_OPTION_VERBS and abbreviates("--target-directory"):
-                if equals:
-                    targets.append(_glued_raw(raw, literal, len(name) + 1))
-                elif position < len(words):
-                    targets.append(words[position])
-                    position += 1
-                continue
-            if verb == "sed" and abbreviates("--in-place"):
-                in_place = True
-                if equals:
-                    suffixes.append(literal[len(name) + 1:])
-                continue
-            if verb == "ln" and abbreviates("--symbolic") and not abbreviates(
-                    "--suffix"):
-                symbolic = True
-                continue
-            if verb == "cp" and abbreviates("--link"):
-                hard_link = True
-                continue
-            if verb == "install" and abbreviates("--directory"):
-                directory_mode = True
-                continue
-            if verb == "sed" and abbreviates("--expression"):
-                script_given = True
-                scripts.append(literal[len(name) + 1:] if equals else (
-                    literals[position] if position < len(words) else ""))
-            elif verb == "sed" and abbreviates("--file"):
-                script_given = script_file = True
-            if not equals and any(abbreviates(option) for option in long_values):
-                position += 1
-            continue
-        letters = literal[1:]
-        for offset, letter in enumerate(letters):
-            cut = offset + 2
-            rest = letters[offset + 1:]
-            if verb in ("sed", "perl") and letter == "i":
-                in_place = True
-                if rest:
-                    suffixes.append(rest)
-                break
-            if verb == "ln" and letter == "s":
-                symbolic = True
-                continue
-            if verb == "cp" and letter == "l":
-                hard_link = True
-                continue
-            if verb in TARGET_OPTION_VERBS and letter == "t":
-                if rest:
-                    targets.append(_glued_raw(raw, literal, cut))
-                elif position < len(words):
-                    targets.append(words[position])
-                    position += 1
-                break
-            if verb == "install" and letter == "d":
-                directory_mode = True
-                continue
-            script_letter = (verb == "sed" and letter in "ef") or (
-                verb == "perl" and letter in "eE")
-            if script_letter:
-                script_given = True
-                if verb == "sed" and letter == "e":
-                    scripts.append(rest if rest else (
-                        literals[position] if position < len(words) else ""))
-                elif verb == "sed":
-                    script_file = True
-            if script_letter or letter in short_values:
-                if not rest:
-                    position += 1
-                break
-            if verb == "perl" and letter in "CDFIMdmx":
-                break
-
-    if verb == "sed":
-        # A word the shell expands is not the option or the script it will be:
-        # `-e"$(cat s)"` is read as an operand, and `s/a/$X/` as plain text.
-        for raw in words:
-            if raw == "--" and script_given:
-                # What follows a literal `--` is a file, and the script is
-                # already given, so an expansion there cannot be either.
-                break
-            if shell_expands(raw):
-                return (
-                    f"`sed` is handed `{raw}`, which the shell expands, so "
-                    "the options and the script it receives are not the ones "
-                    "written here and may write a file or run a command; "
-                    "name them literally (#297, docs/harness-boundaries.md)."
-                )
-        if not script_given and operands:
-            scripts.append(target_literal(operands[0]))
-        refusal = sed_script_offence(scripts, script_file, command)
-        if refusal is not None:
-            return refusal
-
-    unreadable = [raw for raw, literal in zip(words, literals)
-                  if _unreadable_word(literal, command)]
-    if model == "every" or directory_mode or hard_link or (
-            verb == "ln" and not symbolic):
-        judged = operands + targets
-    elif model == "destination":
-        # **A word whose value is not in the source can be an option**, and
-        # an option can be the destination: `cp "$X" y` is `cp -t .claude y`
-        # when `X` says so. The operands this model does not judge are read
-        # for that reason alone.
-        if unreadable:
-            return (
-                f"`{verb}` is handed `{unreadable[0]}`, whose value is built "
-                "by an expansion or a substitution this guard cannot read, and "
-                "it can be an option that moves the destination; refusing "
-                "rather than judging the words instead of the argv (blueprint-frontend#26, "
-                "docs/harness-boundaries.md)."
-            )
-        if targets:
-            judged = targets
-        elif len(operands) > 1:
-            judged = operands[-1:]
-        elif operands and verb == "ln":
-            # One operand links it into the working directory by its basename.
-            name = os.path.basename(target_literal(operands[0]).rstrip("/\\"))
-            judged = [shlex.quote(name)]
-        else:
-            judged = []
-    elif in_place:
-        judged = operands if script_given else operands[1:]
-        # **The backup is a second file written, and its name is built from
-        # the suffix.** `sed -i.json -e 1 package` backs `package` up as
-        # `package.json`, and GNU sed and Perl both replace a `*` in the
-        # suffix with the file's name — `-i'.claude/*'` writes the backup
-        # into the machinery. Raised by Copilot. A suffix is appended and
-        # judged; one carrying `*` or a separator is refused rather than
-        # modelled.
-        files = judged
-        for suffix in suffixes:
-            if any(char in suffix for char in "*/\\"):
-                return (
-                    f"`{verb} -i` is given the backup suffix `{suffix}`, which "
-                    "carries a `*` or a path separator, so the backup is "
-                    "written somewhere other than beside the file; refusing "
-                    "rather than modelling where (blueprint-frontend#26, "
-                    "docs/harness-boundaries.md)."
-                )
-            judged = judged + [word + shlex.quote(suffix) for word in files]
-    else:
-        judged = []
-
-    if verb in REMOVING_VERBS:
-        # What `mv` moves is every operand but the last, or all of them when
-        # `-t` names the destination; the destination is judged below.
-        gone = operands[:-1] if verb == "mv" and not targets else operands
-        for word in gone:
-            above = contains_working_directory(word, command)
-            if above is not None:
-                return (
-                    f"`{verb}` is given `{above}`, which is or contains the "
-                    "working directory or the home directory, so it removes "
-                    "the agent's own machinery without naming it. Name what "
-                    "is to go, below the working directory "
-                    "(#309, docs/harness-boundaries.md)."
-                )
-
-    for word in judged:
-        refusal = destination_offence(word, command, writer, kind)
-        if refusal is not None:
-            return refusal
-    return None
-
-
-def git_writes(literals):
-    """Whether a run led by `git` is a subcommand that writes its operands (#278)."""
-    words = [word for word in literals if word is not None]
-    for index, word in enumerate(words):
-        if program_name(word) == "git":
-            return subcommand_of(words[index + 1:]) in GIT_WRITING_SUBCOMMANDS
-
-    return False
-
-
-def writing_verb_offence(command):
-    """The reason to refuse a writing verb's destination in `command`, or `None`.
-
-    **The verb is looked for anywhere in the run, not only in the lead**,
-    because a wrapper puts it in the middle — `sudo tee`, `env cp`,
-    `find -exec cp`, `busybox mv` — and the wrapper list is the one this file
-    has refused to keep every time, since it fails open on the first name
-    nobody listed. What that costs is judged away by the lead instead: a run
-    led by a reader or a printer — `grep -n tee .claude/…`, `git log -- cp`,
-    `echo rm …` — is inspecting or printing those words and cannot run them.
-
-    **`xargs` in front of a verb is refused outright.** Its operands arrive on
-    stdin — `git ls-files .claude | xargs rm` names no path at all — so there
-    is nothing in the source to judge.
-    """
-    for run in raw_runs(command):
-        literals = [target_literal(word) for word in run]
-        refusal = git_path_writer_offence(run, literals, command)
-        if refusal is not None:
-            return refusal
-        lead = next((literal for raw, literal in zip(run, literals)
-                     if not ASSIGNMENT.match(raw)
-                     and literal not in SHELL_KEYWORDS), None)
-        # `git` is the only reader that writes, and only when it leads: a
-        # `git` further along (`grep -r git rm`, `cat git mv x`) is an
-        # operand the reader prints, not a subcommand it runs (#297).
-        if lead is not None and program_name(lead) in (
-                READING_COMMANDS | DATA_ONLY_COMMANDS) and not (
-                program_name(lead) == "git" and git_writes(literals)):
-            continue
-        for index, literal in enumerate(literals):
-            if literal is None or ASSIGNMENT.match(run[index]):
-                continue
-            verb = program_name(literal)
-            if verb not in WRITING_VERBS:
-                continue
-            before = [program_name(word) for word in literals[:index] if word]
-            if "xargs" in before:
-                return (
-                    f"`xargs` runs `{verb}` on names it reads from stdin, so "
-                    "the files it writes are not in this command; refusing "
-                    "rather than admitting a write nothing judged (blueprint-frontend#26, "
-                    "docs/harness-boundaries.md)."
-                )
-            words = run[index + 1:]
-            if any(word in FIND_EXECUTORS for word in literals[:index]):
-                for cut, word in enumerate(literals[index + 1:]):
-                    if word in (";", "+"):
-                        words = words[:cut]
-                        break
-            refusal = verb_offence(verb, words, command)
-            if refusal is not None:
-                return refusal
-    return None
 
 
 def expandable_regions(command):
     """Every part of `command` the shell would expand, as `(text, quotes)`.
 
-    Substitution extraction used to run over the raw string with a quote tracker
-    of its own and no notion of heredocs or comments, which made it disagree
-    with the rest of the guard in both directions at once — verified, both ways:
-
-    | Command | bash | the guard was |
-    |---|---|---|
-    | `git commit -F - <<'EOF'` … `$(git push origin +HEAD:main)` | does not expand | refusing |
-    | `git commit -F - <<EOF` … `don't $(git push origin +HEAD:main)` | expands | admitting |
-
-    The second is the one that matters: an apostrophe in the body is a quote to
-    a raw scanner and a character to bash, so the live substitution was skipped
-    and the push ran. `quotes` is what carries that — inside a heredoc body
-    there are no quotes to honour, only expansions to perform.
+    A quoted heredoc body expands nothing, so a `$(git push …)` in one is
+    prose, while an unquoted body expands, and an apostrophe in it is a
+    character to bash rather than a quote: `don't $(git push origin +HEAD:main)`
+    in one runs the push. `quotes` carries that — inside a heredoc body there
+    are no quotes to honour, only expansions to perform.
 
     The command line itself arrives with bodies and comments already gone, so a
     `$(…)` the shell would never reach cannot be judged as though it would.
@@ -4075,162 +1555,30 @@ def expandable_regions(command):
     return [(strip_comments("".join(line)), True)] + regions
 
 
-def substituted_gh_offence(inner):
-    """The reason to refuse `gh` run inside a substitution, or `None`.
-
-    **A substitution runs before the command that holds it, and the grant is
-    judged on the holder.** `bash .claude/scripts/gh-pr-merge.sh 1 $(gh pr
-    merge --merge 42 --admin)` matches the helper's prefix grant, and the merge
-    happens while bash is still building the helper's argv — before any of the
-    helper's own checks. The same holds on a globally approved `ls`. No command
-    here runs `gh` inside a substitution, so every `gh` there is refused rather
-    than its subcommand judged. Raised by Copilot.
-
-    **Every word, not the first program.** The first form stopped at the
-    first program it met, so `$(printf ok; gh pr merge 42 --admin)` reached
-    `printf` and was admitted, and `$(bash -c 'gh …')` hid it one level down.
-    Raised by Copilot. So the body is read after quote removal and split on
-    whitespace and shell punctuation, and a `gh` word anywhere in it refuses —
-    over-refusing a substitution that merely mentions `gh`, which nothing here
-    needs to do.
-    """
-    if contains_gh_word(inner):
-        return (
-            "a command substitution runs `gh`, and it runs before the "
-            "command that holds it is checked against its grant — so a "
-            "fixed helper's own validation never sees it. Nothing here "
-            "runs `gh` inside a substitution; call the helper directly."
-        )
-    if runs_unmodelled_program(inner):
-        return (
-            "a command substitution runs a program outside the short list "
-            "whose effects this guard models — a script path, an interpreter, "
-            "`awk` or `sed` — and it runs before the command that holds it is "
-            "checked against its grant. Run it as its own command, where the "
-            "permission rules see it."
-        )
-    return None
-
-
-def runs_unmodelled_program(text):
-    """Whether any command run in `text` is led by a program outside the list.
-
-    Led means the first word past assignments and the wrappers that run their
-    argument — `env`, `command`, `exec`, `nohup`, `time`, `xargs` — so wrapping
-    a program does not hide it. A word carrying a `/` is refused whatever its
-    basename, since `./tools/cat` is the branch's file and not `cat`.
-    """
-    unquoted = re.sub(r"\$?[\"']|\\", "", text)
-    for run in re.split(r"[;&|()\n`]+", unquoted):
-        for word in run.split():
-            if ASSIGNMENT.match(word) or word.startswith("-"):
-                continue
-            # Splitting at every parenthesis leaves the tail of a nested
-            # `${…}` or `$(…)` as its own "run": a bare `}` or `$` is that
-            # tail, not a program.
-            if re.fullmatch(r"[{}$]+", word):
-                continue
-            name = program_name(word)
-            if name in {"builtin", "command", "env", "exec", "nohup", "time",
-                        "xargs"}:
-                continue
-            if "/" in word or "\\" in word or name not in SUBSTITUTION_PROGRAMS:
-                return True
-            break
-    return False
-
-
-def names_gh(word):
-    """Whether `word` is `gh`, or a pattern or brace expansion bash makes `gh`."""
-    name = program_name(word)
-    for candidate in brace_alternatives(name):
-        if candidate == "gh" or (any(char in candidate for char in "*?[")
-                                 and fnmatch.fnmatchcase("gh", candidate)):
-            return True
-    return False
-
-
-def contains_gh_word(text):
-    """Whether `text`, with its quoting removed, may run `gh`.
-
-    **A literal word misses what bash expands first.** `/usr/bin/[g]h` holds no
-    `gh` and bash runs `gh`. Raised by Copilot. So a word is compared as a
-    pattern and a brace expansion would produce, anywhere in the body; and a
-    program word whose value is not in the source at all — a variable, a
-    backtick, a range or an extglob — is refused where a command stands,
-    since it may be `gh` too.
-    """
-    unquoted = re.sub(r"\$?[\"']|\\", "", text)
-    if any(names_gh(word) for word in re.split(r"[\s;&|()<>`]+", unquoted)):
-        return True
-    for run in re.split(r"[;&|()\n`]+", unquoted):
-        for word in run.split():
-            if ASSIGNMENT.match(word) or word.startswith("-"):
-                continue
-            if program_name(word) in {"builtin", "command", "env", "exec",
-                                      "nohup", "time", "xargs"}:
-                continue
-            if "$" in word or "{" in word or re.search(r"[@+!?*]\(", word) or (
-                    any(char in word for char in "*?[")):
-                return True
-            break
-    return False
-
-
-def process_substitution_bodies(command):
-    """The body of every `<(…)` and `>(…)` in `command`, by paren balance."""
-    bodies = []
-    # Only where bash would perform one: `"see <(foo)"` inside quotes is text,
-    # and so is a heredoc body, which the caller strips before asking.
-    quoted = {index for index, in_quotes, in_comment in shell_positions(command)
-              if in_quotes or in_comment}
-    for match in re.finditer(r"[<>]\(", command):
-        if match.start() in quoted:
-            continue
-        depth, index = 1, match.end()
-        while index < len(command) and depth:
-            depth += {"(": 1, ")": -1}.get(command[index], 0)
-            index += 1
-        bodies.append(command[match.end():index - 1 if depth == 0 else index])
-    return bodies
-
-
 def substitutions(command, quotes=True):
     """Every `$(...)` and backtick body in `command`, innermost included.
 
-    These are COMMANDS the shell executes, and `shlex` hands them back as one
+    These are commands the shell executes, and `shlex` hands them back as one
     quoted token — so `git log "$(git push origin +HEAD:main)"` contains no
     standalone `git` for the segment scan to find. Extracted and judged in
     their own right.
 
     `quotes` is false for a heredoc body, where `'` is an ordinary character
-    rather than a quote. See `expandable_regions` for what that cost.
+    rather than a quote (`expandable_regions`).
     """
     found = []
     index = 0
-    # One model of bash's quoting, shared: this scan used to keep its own,
-    # which never learned that `$'…'` takes escapes — so `: $'x\\''; git log
-    # "$(git push origin +HEAD:main)"` ran the nested push while this state
-    # machine closed at the escaped quote, reopened at the real closer, and
-    # never saw the `$(`. Raised in review; verified allowed. See
-    # `quote_states`.
-    #
-    # **`$(` is live inside DOUBLE quotes**, which is the whole shape of the
-    # bypass this pass exists for, so only the single-quoted state stops it —
-    # and the one branch below that DOES need the double-quoted state reads
-    # it from the same list rather than tracking a second thing.
+    # One model of bash's quoting, shared (`quote_states`). `$(` is live
+    # inside double quotes, so only the single-quoted state stops it, and the
+    # one branch below that needs the double-quoted state reads it from the
+    # same list.
     states = quote_states(command, quotes=quotes)
     while index < len(command):
         char = command[index]
         if states[index] == "single":
-            # **An apostrophe inside double quotes opens nothing**, and reading
-            # one as a quote suppressed every substitution after it:
-            # `git log "don't $(git push origin +HEAD:main)"` runs the push, and
-            # the scanner entered single-quote state at `don't`, never saw the
-            # `$(`, and handed `shlex` an opaque quoted argument. Raised in
-            # review; verified allowed, on `main` as well — and settled here by
-            # asking `quote_states` rather than by tracking a second flag,
-            # which is the same answer one layer up.
+            # An apostrophe inside double quotes opens nothing, so
+            # `git log "don't $(git push origin +HEAD:main)"` still reaches
+            # the `$(` below; `quote_states` settles which quotes are live.
             index += 1
             continue
         if char == "\\":
@@ -4249,20 +1597,12 @@ def substitutions(command, quotes=True):
         if (quotes and states[index] != "double"
                 and (command.startswith("<(", index)
                      or command.startswith(">(", index))):
-            # **A process substitution is a command the shell runs**, and until
-            # the redirection strip could consume one it was reached only by
-            # the run splitter — which sees it while it stands as its own run
-            # and not once it is part of a redirect target. Both halves of that
-            # are now true in one place.
-            #
-            # **`quotes` is false for a heredoc BODY, and a body performs no
-            # process substitution** — parameter, command and arithmetic
-            # expansion only. Reading one there made literal prose executable,
-            # so a heredoc quoting `<(git push …)` as an example was refused.
-            # Raised in review; measured, and it is the over-refusal this
-            # file's own docstring says gets a guard turned off. The flag is
-            # reused rather than a second one added, because it already means
-            # "this region is a command line" everywhere it is passed.
+            # A process substitution is a command the shell runs, including
+            # one the redirection strip consumes as a target, so it is
+            # extracted here. A heredoc body performs no process substitution
+            # — parameter, command and arithmetic expansion only — so with
+            # `quotes` false, meaning the region is not a command line, a
+            # body quoting `<(git push …)` as an example is prose.
             end = _closing_paren(command, index + 2)
             if end is None:
                 break
@@ -4271,16 +1611,12 @@ def substitutions(command, quotes=True):
             continue
         if command.startswith("${", index) and command[index + 2:index + 3] in (
                 " ", "\t", "\n", "|"):
-            # **bash 5.3's function substitution runs a command**, where every
+            # Bash 5.3's function substitution runs a command, where every
             # other `${…}` expands a parameter and runs nothing. `${ cmd; }`
             # and `${| cmd; }` are the two spellings, and the character after
-            # the brace is what separates them from `${VAR}`.
-            #
-            # **This host is 5.2.26 and does not support it** — measured,
-            # `bad substitution` — so it is closed BEFORE it is reachable
-            # rather than after. An exemption resting on a version is one that
-            # expires silently, and this file already carries that lesson about
-            # a hook directory that was safe until it was not.
+            # the brace is what separates them from `${VAR}`. Closed whether
+            # or not the host's bash supports it, because an exemption resting
+            # on a version expires silently.
             end = _closing_brace(command, index + 2)
             if end is None:
                 break
@@ -4288,13 +1624,9 @@ def substitutions(command, quotes=True):
             index = end + 1
             continue
         if char == "`":
-            # `find` ignored escapes, and a `\`` is a literal backtick to bash
-            # rather than a terminator. Raised in review. **The reported
-            # example is a bash SYNTAX ERROR** — measured, `unexpected EOF
-            # while looking for matching` — so it was never a live bypass; the
-            # scan is corrected anyway, because agreeing with the shell about
-            # where a substitution ends is the property, not the one input that
-            # exposed it.
+            # Escape-aware, because a `\`` is a literal backtick to bash rather
+            # than a terminator, and agreeing with the shell about where a
+            # substitution ends is the property.
             end = index + 1
             while end < len(command):
                 if command[end] == "\\" and end + 1 < len(command):
@@ -4305,12 +1637,10 @@ def substitutions(command, quotes=True):
                 end += 1
             if end >= len(command):
                 break
-            # **An escaped backtick is how the legacy form NESTS**, so skipping
-            # the escape and handing the body on unchanged skipped it twice:
-            # `git log "`echo \`git push origin +HEAD:main\``"` runs the push
-            # — measured — and the inner substitution was invisible to both
-            # passes. Unescaping on the way down is what makes the recursion
-            # see the nested command as a command.
+            # An escaped backtick is how the legacy form nests:
+            # `git log "`echo \`git push origin +HEAD:main\``"` runs the push,
+            # so the body is unescaped on the way down for the recursion to see
+            # the nested command as a command.
             found.append(command[index + 1:end].replace("\\`", "`"))
             index = end + 1
             continue
@@ -4326,7 +1656,7 @@ def _closing_brace(command, start):
     parameterised, because the two differ in what nests inside them and a
     shared one would have to be told.
 
-    **Over `command[start:]`, not over `command`.** A substitution body is
+    Over `command[start:]`, not over `command`: a substitution body is
     re-parsed as a fresh command line, so the outer context's quoting does not
     reach inside one — asking about absolute positions would mark the whole
     body of `"$(printf x)"` as double-quoted and lose its own closer.
@@ -4337,8 +1667,7 @@ def _closing_brace(command, start):
         char = command[index]
         if states[index - start] in ("single", "double", "comment"):
             # A `}` inside a quote or a comment closes nothing — a function
-            # substitution's body is a command list too. Raised in review, one
-            # bracket over.
+            # substitution's body is a command list too.
             index += 1
             continue
         if char == "\\" and index + 1 < len(command):
@@ -4357,21 +1686,12 @@ def _closing_brace(command, start):
 def _closing_paren(command, start):
     """Index of the `)` closing a substitution opened before `start`, or None.
 
-    **Quotes are tracked while balancing**, because a paren counter that reads
-    raw characters closes early on a quoted one:
-    `git log "$(printf ')'; git push origin +HEAD:main)"` ended extraction at
-    the `)` inside `'…'`, leaving the push hidden in the outer token. Raised in
-    review; verified allowed.
+    Quotes are tracked while balancing, through `quote_states`, because a paren
+    counter that reads raw characters closes
+    `git log "$(printf ')'; git push origin +HEAD:main)"` at the quoted `)`,
+    leaving the push hidden in the outer token.
 
-    **And the tracking is `quote_states`', not a seventh copy of it.** This
-    function kept its own, which never learned that `$'…'` takes escapes, so
-    `git log "$( : $'x\''; git push origin +HEAD:main)"` closed and reopened on
-    the wrong quotes and returned None — no substitution was extracted, `shlex`
-    kept the outer one opaque, and the push ran. Raised in review; verified
-    allowed, in the round after the five siblings were consolidated and this
-    one was missed.
-
-    **Over `command[start:]`, not over `command`.** A substitution body is
+    Over `command[start:]`, not over `command`: a substitution body is
     re-parsed as a fresh command line, so the outer context's quoting does not
     reach inside one — asking about absolute positions would mark the whole
     body of `"$(printf x)"` as double-quoted and lose its own closer.
@@ -4381,21 +1701,16 @@ def _closing_paren(command, start):
     while index < len(command):
         char = command[index]
         if states[index - start] in ("single", "double", "comment"):
-            # **A substitution's body is a command list, so `#` opens a comment
-            # inside it and a `)` in that comment closes nothing.**
-            # `git log "$(echo ok # )` / `git push origin +HEAD:main)"` ended
-            # extraction at the commented paren and left the push in the outer
-            # token — measured, bash runs it. Raised in review. A quoted paren
-            # closes nothing either, which is this function's first fix.
+            # A substitution's body is a command list, so `#` opens a comment
+            # inside it and a `)` in that comment closes nothing, as in
+            # `git log "$(echo ok # )` / `git push origin +HEAD:main)"`. A
+            # quoted paren closes nothing either.
             index += 1
             continue
         if char == "\\" and index + 1 < len(command):
-            # An unquoted `\)` is a literal paren to bash, so counting it closed
-            # the substitution early and hid the rest of it in the outer token:
-            # `git log "$(printf \); git push origin +HEAD:main)"`. The escape
-            # was handled inside double quotes and nowhere else. Raised in
-            # review; the bash behaviour measured — `printf` receives the paren
-            # and the push runs.
+            # An unquoted `\)` is a literal paren to bash, so counting it would
+            # close the substitution early and hide the rest of it in the outer
+            # token: `git log "$(printf \); git push origin +HEAD:main)"`.
             index += 2
             continue
         if command.startswith("$(", index):
@@ -4415,76 +1730,12 @@ def _closing_paren(command, start):
 # A shell invoked with `-c` runs its argument as a command line, and `eval` runs
 # the concatenation of its own. Both hand the guard a command it must read as
 # one rather than as data.
-#
-# **The POSIX family by every name it ships under, not the five a Linux host
-# installs by default (#397).** `mksh -c`, `ash -c` and `yash -c` ran their
-# script unread, so no git rule judged what it held, and the startup-file
-# pattern, which takes its names from here, never saw `mksh -l` either. A
-# shell under a name no list holds is `ANY_SCRIPT_FLAG`'s and
-# `unmodelled_shell_launch`'s; this list is what the guard reads as bash.
-EVALUATORS = {"ash", "bash", "dash", "ksh", "lksh", "mksh", "oksh", "pdksh",
-              "posh", "rbash", "sh", "yash", "zsh"}
-
-# The shells that read a startup file on every start, interactive or not: zsh
-# its `.zshenv`, fish its `config.fish`, csh and tcsh their `.cshrc`. Beside a
-# path writer the file can export a name this guard cannot read, so starting
-# one is refused there however it is started (#357, #397).
-ALWAYS_STARTUP_SHELLS = ("csh", "fish", "tcsh", "zsh")
+EVALUATORS = {"bash", "sh", "dash", "zsh", "ksh"}
 
 # `-c`, and the bundles that carry it — `bash -xc <script>` and `bash -cx
-# <script>` alike. **`c` need not come last**, which the first version of this
-# required: `bash -cx 'git push origin +HEAD:main'` runs the push, measured,
-# and matched nothing. Raised in review. A long option is never the script
-# introducer, so `--` forms are left alone.
+# <script>` alike, because `c` need not come last. A long option is never the
+# script introducer, so `--` forms are left alone.
 SCRIPT_FLAG = re.compile(r"^-[A-Za-z]*c[A-Za-z]*$")
-
-# **A shell is a program, not a name** (#397): after `cp /bin/bash /tmp/x`,
-# `/tmp/x -c 'git push origin +HEAD:main'` runs the push, and so do `fish -c`,
-# `su -c`, `flock f -c`, `cmd //c` and `pwsh -Command`. So the word after any
-# script flag, in a run of any program but those below, is judged as a
-# command line. That costs a refusal only where that word is itself a command
-# this guard refuses (`grep -c 'git push origin +HEAD:main'` would be one,
-# which is why the readers are left out); `dotnet test -c Release` hands it
-# `Release`, which refuses nothing. The Windows forms are `cmd`'s `/c` and
-# `/k`, doubled by Git Bash's path conversion, and PowerShell's `-Command`.
-ANY_SCRIPT_FLAG = re.compile(
-    r"^(?:-[A-Za-z]*c[A-Za-z]*|(?i:--?command)|/{1,2}[cCkK])$")
-
-# **An interpreter's code is not a command line**, and judging it as one buys
-# nothing: `python -c` opens `.claude/settings.json` without naming git at all,
-# which is the interpreter residual `docs/harness-boundaries.md` states. Read as
-# bash, a backtick in a string is a substitution, so it would only refuse.
-# Versioned and windowed names too: `python3.12`, `pythonw`, `perl5.38`.
-INTERPRETER = re.compile(
-    r"^(?:bun|deno|node(?:js)?|php[\d.]*|perl[\d.]*|py|pypy[\d.]*"
-    r"|python[\d.]*w?|ruby[\d.]*)$")
-
-
-def interpreter(word):
-    """Whether `word` names a program whose argument is code in its own language."""
-    return bool(INTERPRETER.match(program_name(word)))
-
-# Wrappers that run their command in the environment they were given, adding
-# no name to it. A shell behind one of these is started directly, and its
-# environment is the line's; behind anything else it is the program's (#421).
-# `sudo` and `doas` are not here: `-i` starts a login shell, and the policy
-# file decides which names survive.
-INERT_WRAPPERS = frozenset({"builtin", "chrt", "command", "env", "exec",
-                            "ionice", "nice", "nohup", "setsid", "stdbuf",
-                            "time", "timeout"})
-
-# The value an inert wrapper's option or operand takes: a priority, a class,
-# a duration (`timeout 5`, `nice -n 10`, `ionice -c 2`, `timeout 1.5m`).
-WRAPPER_VALUE = re.compile(r"^[+-]?\d+(?:\.\d+)?[smhd]?$")
-
-# The helpers that read their stdin as DATA — a title and a body — named as a
-# shell's script operand, in the one spelling the grants use. No quote, `$`,
-# glob, backslash or `..` can appear in it, so the word bash sees is the word
-# typed. **Only these two, not every helper**: the guard can read a heredoc,
-# and exempting one throws that reading away, which is right only for a
-# helper known to consume stdin as text. Raised by Copilot on PR #36.
-HELPER_SCRIPT = re.compile(
-    r"^(?:\./)?\.claude/scripts/gh-(?:sweep-)?issue-create\.sh$")
 
 
 # Windows resolves `git.exe`, `GIT.EXE` and `C:/Git/bin/git.exe` to one
@@ -4495,12 +1746,8 @@ EXECUTABLE_SUFFIXES = (".exe", ".cmd", ".bat", ".com")
 def program_name(token):
     """The program `token` names, normalised for comparison.
 
-    **The segment scan matched the literal `git` and a `/git` suffix**, so
-    `git.exe push origin +HEAD:main` walked straight past it — and so did
-    `bash.exe -c`. Verified on this host: `git.exe --version` and
-    `bash.exe -c` both run. Found by probing the shapes adjacent to a fix,
-    which is also how the platform came up: every case in this file had been
-    written in POSIX spelling on a machine that answers to both.
+    A literal `git` and a `/git` suffix are not the only spellings:
+    `git.exe push origin +HEAD:main` and `bash.exe -c` run on Windows.
 
     Lower-cased because Windows paths are case-insensitive. On a system where
     they are not, `GIT` names nothing and refusing it costs nothing.
@@ -4513,137 +1760,49 @@ def program_name(token):
 
 
 # `NAME=value` before a command sets a variable for it and is not the command.
-# **Four spellings, and the first version of this knew one.** Bash reads
-# `NAME=value`, `NAME+=value`, `NAME[i]=value` and `NAME[i]+=value` all as
-# assignment prefixes, so `X+=1 printf 'git p%ssh origin +HEAD:main' u | bash`
-# ran the push while both printer passes took `X+=1` for the command word and
-# left the run alone. Raised in review; verified allowed, with the `arr[0]=v`
-# form beside it.
+# Bash reads `NAME=value`, `NAME+=value`, `NAME[i]=value` and `NAME[i]+=value`
+# all as assignment prefixes, so each must be skipped to find the command word
+# of `X+=1 printf 'git p%ssh origin +HEAD:main' u | bash`.
 ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\[[^\]]*\])?\+?=")
+
+# A shell given a helper that reads stdin as a title and a body, in the spelling
+# the grants use: nothing here is a quote, an expansion or a `..`, and a
+# redirection before the helper is what `bash < a.sh <<EOF` runs the text with.
+ISSUE_HELPER_RUN = re.compile(
+    r"\s*(?:bash|sh)[ \t]+(?:\./)?\.claude/scripts/"
+    r"gh-issue-(?:create|hand|harness|mutation|sweep)\.sh(?=[\s<>]|$)")
+
+# Reserved words the next word of a run is a command word after. `done`, `fi`
+# and `}` end a construct and lead nothing.
+COMMAND_PREFIX_WORDS = frozenset({"!", "{", "do", "elif", "else", "if", "then",
+                                  "until", "while"})
 
 
 def leading_command(run):
-    """The command word of `run`, past any assignment prefix.
+    """The command word of `run`, past any assignment or reserved word.
 
-    **`X=1 bash` is a run led by `bash`**, and reading the first token instead
-    made it a run led by `X=1`: `X=1 bash <<<'git push origin +HEAD:main'` had
-    its here-string stripped as an ordinary redirect target, the evaluator scan
-    then saw a `bash` with no script, and the push ran. Raised in review;
-    verified allowed.
-
-    The same reading is owed to the printer half — `X=1 echo … | bash` — and to
-    the data-only exemption, which is why this is one function rather than a
-    test repeated at each site.
+    `X=1 bash` is a run led by `bash`, and `if echo … | bash; then` by `echo`:
+    one function, because the script and printer passes all owe that reading.
     """
     for token in run:
-        if not ASSIGNMENT.match(token):
+        if not ASSIGNMENT.match(token) and token not in COMMAND_PREFIX_WORDS:
             return token
     return ""
 
 
-def launched_program(run):
-    """The index of the program `run` starts, past assignments and inert wrappers.
-
-    `nohup`, `timeout 5`, `nice -n 10` and `env FOO=bar` start their command
-    in the environment they were handed, so the program past them is the one
-    whose environment is the line's. A word that is neither an assignment, an
-    option, a wrapper's value nor an inert wrapper is the program, whatever
-    it is, and `None` means the run holds no program at all (#421).
-    """
-    for index, token in enumerate(run):
-        if ASSIGNMENT.match(token) or token.startswith("-") or (
-                index and WRAPPER_VALUE.match(token)):
-            continue
-        if program_name(token) in INERT_WRAPPERS:
-            continue
-        return index
-    return None
-
-
-def unmodelled_shell_launch(run):
-    """Whether `run` starts a shell whose environment this guard cannot read.
-
-    Two shapes (#397, #421). A shell `EVALUATORS` names that is not the
-    program the run starts, so another program builds its environment:
-    `envdir /tmp/d bash -c ...` and `chpst -e /tmp/d bash -c ...` load it from
-    files. And a program `EVALUATORS` does not name handed a script that
-    runs git, whose startup files and environment this guard knows nothing
-    of: `/tmp/x -c 'git ...'`, `pwsh -c 'git ...'`. A run led by a printer, a
-    reader, a lookup (`which bash`), `gh` or an interpreter executes no shell
-    of its own here: the interpreter's code is the residual `INTERPRETER`
-    states.
-    """
-    start = launched_program(run)
-    if start is None:
-        return False
-    lead = program_name(run[start])
-    if interpreter(lead) or lead in DATA_ONLY_COMMANDS | READING_COMMANDS | {
-            "gh", "type", "where", "whereis", "which"}:
-        return False
-    if lead in EVALUATORS:
-        return False
-    rest = run[start + 1:]
-    if any(program_name(word) in EVALUATORS for word in rest):
-        return True
-    return any(ANY_SCRIPT_FLAG.match(word) and GIT_WORD.search(script)
-               for word, script in zip(rest, rest[1:]))
-
-
-# `git` as a word of a script, however it is spelt to Windows.
-GIT_WORD = re.compile(r"(?i)(?<![\w.-])git(?:\.exe)?(?![\w.-])")
-
-
-def unmodelled_shell_in(text, depth=0):
-    """Whether any command in `text`, or in a script it runs, is an
-    `unmodelled_shell_launch`.
-
-    Read as `_offence` reads a command: redirections gone, `$'…'` made plain
-    quoting, then `shlex`. A text it cannot tokenise, or nested past
-    `MAX_NESTING`, answers yes, so the path writer beside it is refused
-    rather than judged on part of the line. **The scripts are read too**,
-    because the scopes a writer is judged with are the event's line and the
-    writer's own script, not the shells between them: in `bash -c 'envdir
-    /tmp/d bash -c "git ..."'` the `envdir` is in neither.
-    """
-    if depth > MAX_NESTING:
-        return True
-    stripped = strip_dollar_quotes(strip_redirections(text))
-    try:
-        lexer = shlex.shlex(stripped, posix=True, punctuation_chars=True)
-        lexer.commenters = ""
-        lexer.whitespace_split = True
-        tokens = list(lexer)
-    except ValueError:
-        return True
-    return any(unmodelled_shell_launch(run) for run in command_runs(tokens)) or any(
-        unmodelled_shell_in(script, depth + 1)
-        for script in dict.fromkeys(evaluated_scripts(tokens)))
-
-
 def reads_stdin_as_script(words):
-    """Whether a run made of `words` will EXECUTE what arrives on its stdin.
+    """Whether a run made of `words` will execute what arrives on its stdin.
 
-    **The test used to be that the run's LEADING word is a shell**, and a
-    wrapper in front of one defeated it: `echo 'git push origin +HEAD:main' |
-    command bash` runs the push, and so does the `env bash` spelling, while
-    the leading word is `command` or `env` and no shell was found. Raised in
-    review; both verified allowed, and `env` found beside the one that was
-    reported.
-
-    **So the shell is looked for anywhere in the run, and the exemption is the
-    allow-list rather than the wrapper set.** Enumerating the wrappers that DO
-    exec their argument is the direction `DATA_ONLY_COMMANDS` argues against in
-    its own comment — it fails open on the first one nobody thought of, and
-    `command`, `env`, `nohup`, `nice`, `stdbuf`, `setsid`, `timeout`, `ionice`
-    and `chrt` are nine before anyone has looked hard. Reading any shell name
-    in the run costs an over-refusal instead, and it costs one only in the
-    shape `echo '…git push…' | grep bash`, because the printer half of the
-    pipeline pass has to match first.
+    A wrapper in front of a shell — `echo 'git push origin +HEAD:main' |
+    command bash`, or `env bash` — still runs the push, so the shell is looked
+    for anywhere in the run, and the exemption is `DATA_ONLY_COMMANDS`'
+    allow-list rather than a set of wrappers, which fails open on the first
+    one nobody listed. Reading any shell name in the run costs an over-refusal
+    only in the shape `echo '…git push…' | grep bash`, because the printer
+    half of the pipeline pass has to match first.
 
     A run carrying `-c` reads its script from the argv rather than from stdin,
     and `evaluated_scripts` judges that channel at any position already.
-    `_helper_reads_stdin_as_data` is the one exemption, and it is taken where
-    the run's position in the command is known rather than here.
     """
     body = [word for word in words if not ASSIGNMENT.match(word)]
     if not body or program_name(body[0]) in DATA_ONLY_COMMANDS:
@@ -4651,36 +1810,21 @@ def reads_stdin_as_script(words):
     for position, word in enumerate(body):
         if program_name(word) not in EVALUATORS:
             continue
-        # **A `-c` before the shell is the WRAPPER's option**, and reading the
-        # whole run for one confused the two: `ionice -c 2 bash` runs bash on
-        # its stdin, `-c` there being the scheduling class, and the run was
-        # dismissed as carrying its own script. Raised in review; verified
-        # allowed. Only what follows the shell token can be the shell's
-        # script flag.
+        # A `-c` before the shell is the wrapper's option: `ionice -c 2 bash`
+        # runs bash on its stdin, `-c` there being the scheduling class. Only
+        # what follows the shell token can be the shell's script flag.
         if not any(SCRIPT_FLAG.match(element) for element in body[position + 1:]):
             return True
     return False
 
 
 def _run_words(command, start, end, ordinary):
-    """`command[start:end]` split into words on its unquoted metacharacters.
-
-    **A redirection operator is kept as a word of its own.** Dropping it made
-    `bash < .claude/scripts/a.sh <<'EOF'` read as a shell with a script
-    operand, when the helper is a redirection target and the heredoc, the last
-    stdin redirection, is what bash runs.
-    """
+    """`command[start:end]` split into words on its unquoted metacharacters."""
     words, index = [], start
     while index < end:
         while index < end and command[index] in " 	":
             index += 1
         cursor = index
-        while cursor < end and ordinary[cursor] and command[cursor] in "<>":
-            cursor += 1
-        if cursor > index:
-            words.append(command[index:cursor])
-            index = cursor
-            continue
         while cursor < end and not (
                 ordinary[cursor] and command[cursor] in METACHARACTERS):
             cursor += 1
@@ -4704,39 +1848,8 @@ def _run_bounds(command, position, ordinary):
 def _ends_run(command, index, ordinary):
     """Whether the character at `index` ends the command run it is in.
 
-    **The `&` of a redirection operator is not a run boundary (blueprint-frontend#37).** Every
-    unquoted `&` was read as one, so in `bash >&2 <<'EOF'` the run was taken to
-    begin after the `&`, its words were `2` alone, no shell owned the heredoc,
-    and bash ran the body. `<&`, `N>&M`, `&>` and `&>>` did the same, and so
-    did `cat <<'EOF' 2>&1 | bash`, whose run ended before the pipe it feeds.
-    Found by Copilot on PR #36; all measured allowed.
-
-    Bash's lexer is greedy from the left, which settles each `&` by its two
-    neighbours: after an unquoted `<` or `>` it is the second half of `<&` or
-    `>&`; before an unquoted `>` it opens `&>` — unless an `&` or a `|` in front
-    has already claimed it as `&&` or `|&`, which are separators. A quoted or
-    escaped neighbour is a word character and claims nothing, so an `&` after
-    an escaped `>` still ends the run.
-
-    **The escape is counted here rather than read from `ordinary`**, because
-    `stdin_scripts` builds a mask that calls an escaped character ordinary and
-    tracks the escape beside it. Read from that mask alone, `echo \\>& bash
-    <<'EOF'` — a backgrounded echo, then a shell running the heredoc — joined
-    into one run led by `echo`, and a shape refused before this fix was
-    admitted by it. Measured while writing it.
-
-    **The same holds for the character being judged.** `bash 2>\\&1 <<'EOF'`
-    sends stderr to a file named `&1` and runs the heredoc, and an escaped `;`
-    or `|` is as much a word character; each split the run at a character bash
-    does not treat as a control operator. Found by the adversarial pass over
-    this fix, and allowed on `main` too.
-
-    **A neighbour is the next character bash tokenises, not the next byte.**
-    Bash removes a backslash-newline before it splits tokens, so
-    `bash >\\<newline>&2 <<'EOF'` is `bash >&2 <<'EOF'` and runs the heredoc,
-    and `&\\<newline>>` is `&>`; reading the byte beside the `&` saw the
-    newline and ended the run. Raised by Copilot on PR #38; measured under
-    Git Bash, and allowed on `main` too.
+    A redirection's `&` does not: bash's lexer is greedy from the left, so it
+    is half of `<&`, `>&` or `&>` unless `&` or `|` has claimed it as `&&`, `|&`.
     """
     if not (_unescaped(command, index, ordinary)
             and command[index] in RUN_SEPARATORS):
@@ -4760,13 +1873,17 @@ def _unescaped(command, index, ordinary):
     return ordinary[index] and slashes % 2 == 0
 
 
+def _continues(command, newline):
+    """Whether the newline at `newline` is escaped by an odd run of backslashes."""
+    slashes = 0
+    while newline - slashes > 0 and command[newline - slashes - 1] == "\\":
+        slashes += 1
+    return slashes % 2 == 1
+
+
 def _neighbour(command, index, step, ordinary):
     """The syntax character beside `index` in direction `step` (-1 or 1), past
-    any line continuations, or "" where that character is quoted or escaped.
-
-    A backslash straight after an unescaped `&` is unquoted and unescaped
-    itself, so a backslash-newline found walking forwards is always a
-    continuation; walking backwards, the newline's own escape is counted."""
+    any line continuations, or "" where that character is quoted or escaped."""
     cursor = index + step
     if step < 0:
         while (cursor > 0 and command[cursor] == "\n"
@@ -4780,25 +1897,14 @@ def _neighbour(command, index, step, ordinary):
     return command[cursor] if cursor < len(command) and ordinary[cursor] else ""
 
 
-def _continues(command, newline):
-    """Whether the newline at `newline` is escaped by an odd run of backslashes,
-    counted whatever the mask says of them: both masks mark them differently."""
-    slashes = 0
-    while newline - slashes > 0 and command[newline - slashes - 1] == "\\":
-        slashes += 1
-    return slashes % 2 == 1
-
-
 def forwards_to_evaluator(command, position, ordinary):
     """Whether the run at `position` writes into a shell later in its pipeline.
 
-    **A heredoc belongs to the run that opens it and its BYTES belong to
-    whatever is downstream of the pipe.** `cat <<'EOF' | bash` with a push in
-    the body runs it: the opener is `cat`'s, so `stdin_scripts` yielded
-    nothing, and `strip_heredocs` then removed the body — the only copy of the
-    script — before anything else could look. The here-string spelling
-    `cat <<<'git push origin +HEAD:main' | bash` fails the same way. Raised in
-    review; both verified allowed, and both live on `main`.
+    A heredoc belongs to the run that opens it and its bytes belong to
+    whatever is downstream of the pipe: `cat <<'EOF' | bash` with a push in the
+    body runs it, and so does `cat <<<'git push origin +HEAD:main' | bash`,
+    while the opener is `cat`'s and `strip_heredocs` removes the only copy of
+    the script.
 
     Only a `|` carries stdout onward, so `||` ends the walk rather than
     continuing it, and a `)` between the run and the pipe is stepped over
@@ -4822,69 +1928,32 @@ def forwards_to_evaluator(command, position, ordinary):
     return False
 
 
-def _helper_reads_stdin_as_data(command, start, words):
-    """Whether the run at `start`, made of `words`, is a shell handed one of the
-    issue helpers as its script file — so its stdin is that helper's data.
+def _helper_reads_stdin_as_data(command, start):
+    """Whether the run at `start` is a shell handed an issue helper as its script file.
 
-    **A shell handed a script FILE reads its stdin as data, and the stdin pass
-    refused every hand-filed issue that quoted code (blueprint-frontend#33).** `bash
-    .claude/scripts/gh-issue-create.sh bug medium <<'DELIM'` puts the title and
-    body on the helper's stdin; the backticks in the body were read as a script
-    building itself by substitution.
-
-    **The exemption is the one literal shape and nothing near it**, because
-    each widening Copilot found on PR #36 was a way to run the heredoc while
-    the helper's name stood in the argv, verified allowed each time:
-
-    * **The word straight after the shell is the helper**, spelled with nothing
-      a shell could expand (`HELPER_SCRIPT`). `bash /dev/stdin`,
-      `bash /dev/fd/3 3<<EOF` and `bash $X <<EOF` all run the heredoc; and
-      `bash X=1 <helper>` takes `X=1` as the script file.
-    * **The shell is the run's first word, spelled `bash` or `sh`.** At any
-      other position the helper is somebody else's argv —
-      `python -c 'exec(sys.stdin.read())' bash <helper> <<EOF` has Python run
-      the body. No assignment in front either: `BASH_ENV=/dev/stdin bash
-      <helper>` sources the heredoc before the helper starts.
-    * **The run is the command's first**, with nothing before it. A function
-      or alias defined earlier in the same command replaces the shell —
-      `bash() { source /dev/stdin; }; bash <helper> <<EOF` — and a `cd` can
-      move what the relative path names. Shell state does not survive between
-      Bash tool calls, so the command's own text is the only place such an
-      override can be set; what remains is a profile or a planted file, the
-      on-disk residual the module docstring names.
-
-    Every refusal this gives up is an over-refusal: `env bash <helper>` and a
-    helper run after `&&` are refused as they were before the exemption.
+    A shell handed a file reads stdin as data. Only this literal shape: an
+    assignment, a wrapper or a `cd` before it runs the text or moves the path.
     """
-    return (not command[:start].strip()
-            and len(words) > 1
-            and words[0] in ("bash", "sh")
-            and HELPER_SCRIPT.match(words[1]) is not None)
+    return not command[:start].strip() and ISSUE_HELPER_RUN.match(command, start) is not None
 
 
 def _consumes_as_script(command, position, ordinary):
     """Whether the script at `position` is executed by its own run or a later
     one in the same pipeline."""
     start, end = _run_bounds(command, position, ordinary)
-    words = _run_words(command, start, end, ordinary)
-    reads = (not _helper_reads_stdin_as_data(command, start, words)
-             and reads_stdin_as_script(words))
-    return reads or forwards_to_evaluator(command, position, ordinary)
+    return ((reads_stdin_as_script(_run_words(command, start, end, ordinary))
+             and not _helper_reads_stdin_as_data(command, start))
+            or forwards_to_evaluator(command, position, ordinary))
 
 
 def pipeline_groups(tokens):
     """`tokens` split into pipelines, each a list of the runs it joins.
 
-    **A pipe is not an adjacency**, and comparing neighbouring runs let an
-    intermediate stage carry the bytes past the check:
-    `printf 'git p%ssh origin +HEAD:main' u | cat | bash` pairs as
-    printf-then-cat and cat-then-bash, and neither pair is a printer feeding a
-    shell — while the shell still runs what the printer wrote. Raised in
-    review; verified allowed.
-
-    `command_runs` drops the boundary that separated two runs, which is what
-    made the distinction unavailable; this keeps it just long enough to say
-    whether the runs are in the same pipeline.
+    A pipe is not an adjacency: in
+    `printf 'git p%ssh origin +HEAD:main' u | cat | bash` neither neighbouring
+    pair is a printer feeding a shell, while the shell still runs what the
+    printer wrote. `command_runs` drops the boundary between runs; this keeps
+    it just long enough to say whether runs share a pipeline.
     """
     groups, current, run = [], [], []
     for token in tokens:
@@ -4907,13 +1976,13 @@ def pipeline_groups(tokens):
 
 
 def unmodelled_printer(tokens):
-    """Whether a printer whose OUTPUT this file cannot reproduce feeds a shell.
+    """Whether a printer whose output this file cannot reproduce feeds a shell.
 
-    **Joining a printer's argv is not the bytes it writes**, and where the two
+    Joining a printer's argv is not the bytes it writes, and where the two
     differ the join is the safe-looking one. `printf 'git p%ssh origin
     +HEAD:main' u | bash` runs the push; the join is `git p%ssh origin
     +HEAD:main u`, which every check reads as harmless. `echo -e` does the same
-    through its escapes. Raised in review; both verified allowed.
+    through its escapes.
 
     Reproducing `printf` is a specification this file will not carry — the same
     reason it refuses to enumerate git's executing config keys — so the
@@ -4927,84 +1996,47 @@ def unmodelled_printer(tokens):
         if not shells:
             continue
         for run in group[:max(shells)]:
-            # **A run can be assignments and nothing else**, and `leading_command`
-            # answers `""` for one — which `list.index` does not find, so
-            # `X=1 | bash` raised `ValueError` out of the hook. A crash is
-            # empty stdout, which `PreToolUse` treats as non-blocking: this
-            # was a fail-open on a shape a caller can type. Raised in review;
-            # verified as a crash.
+            # A run can be assignments and nothing else, for which
+            # `leading_command` answers `""`, which `list.index` would not
+            # find: `X=1 | bash` would crash the hook, and a crash is empty
+            # stdout, which `PreToolUse` treats as non-blocking.
             command_word = leading_command(run)
             if not command_word:
                 continue
             name = program_name(command_word)
             arguments = run[run.index(command_word) + 1:]
-            if unreproducible_print(name, arguments):
+            if name == "printf" and any("%" in element for element in arguments):
+                return True
+            if name == "echo" and any(element.startswith("-") and "e" in element
+                                      for element in arguments):
                 return True
     return False
 
 
-def unreproducible_print(name, arguments):
-    """Whether `name` run with `arguments` writes bytes other than its joined
-    words: `printf` with a conversion, or with a backslash escape, which its
-    format decodes without any `%` (`printf 'gi\\164 push'` writes `git
-    push`), and `echo` with `-e` or with any backslash. Raised in review of
-    #447 (R2, round 3). **Any backslash, not only under `xpg_echo`**: `dash`
-    and macOS `sh` decode an `echo` escape unasked, so `dash -c "echo
-    'gi\\0164 push …' | sh"` ran the push, and `shopt -s xpg_''echo` set the
-    option under a spelling no substring match reads (round 4)."""
-    if name == "printf":
-        return any("%" in word or "\\" in word for word in arguments)
-    if name == "echo":
-        return any("\\" in word or (word.startswith("-") and "e" in word)
-                   for word in arguments)
-    return False
-
-
 def stdin_scripts(command):
-    """Every script a shell in `command` is handed on its STDIN.
+    """Every script a shell in `command` is handed on its stdin.
 
-    **`evaluated_scripts` models one channel by which a shell receives a
-    script, and bash has three.** It reads the argv element after `-c`; a shell
-    also runs what arrives on stdin, and both spellings of that put the script
-    text in the command string where a hook can read it:
+    `evaluated_scripts` reads the argv element after `-c`; a shell also runs
+    what arrives on stdin, and both spellings of that put the script text in
+    the command string where a hook can read it:
 
         bash <<<'git push origin +HEAD:main'
         bash <<EOF
         git push origin +HEAD:main
         EOF
 
-    Both ran the push and both were admitted — on `main` as well. Found by an
-    adversarial audit, which generated 3,696 obfuscations, took the 919 the
-    guard allowed, ran each under a shimmed bash and found 431 that executed
-    the push.
-
-    **These are not the residual that file's docstring names.** That one is
-    `bash script.sh`, a file the hook is not given, and the computed shape
-    `sh -c "$(echo …)"`. Here nothing is computed and nothing is on disk: the
-    script is a literal word in the argv, exactly as it is in `bash -c '…'` —
-    which this guard already refuses. The two halves disagreed, and this is the
-    half that was wrong.
+    This is not the residual of a script on disk (`bash script.sh`) or a
+    computed one (`sh -c "$(echo …)"`): the script is a literal word in the
+    argv, as it is in `bash -c '…'`, which this guard refuses.
 
     Every other reader of these constructs is left alone, which is what keeps
     `git commit -F - <<EOF` a filing rather than a command: the leading word of
     the run has to be a shell.
     """
-    yield from _stdin_bodies(command, _consumes_as_script)
-
-
-def _stdin_bodies(command, consumes):
-    """Every heredoc body and here-string in `command` that `consumes` says
-    its reader takes in, as `stdin_scripts` describes them.
-
-    `consumes(command, position, ordinary)` is asked about the opener at
-    `position`; `stdin_scripts` asks whether a shell runs the text, and
-    `unclassified_stdin_writer` whether a program this file cannot classify
-    reads it (#397). One walk for both, so the pairing of bodies to openers
-    and the here-string's quote removal are decided once.
-    """
     # The bodies first, for `undecodable_heredoc`'s reason: an apostrophe in
-    # one used to leave this scan in quote state for everything after it.
-    spans = heredoc_spans(command)
+    # one would leave this scan in quote state for everything after it.
+    openers = []
+    spans = heredoc_spans(command, openers=openers)
     ordinary = [False] * len(command)
     literal = [False] * len(command)
     escaped = None
@@ -5012,11 +2044,10 @@ def _stdin_bodies(command, consumes):
             command, [(start, end) for start, end, _ in spans]):
         ordinary[index] = not in_quotes and not in_comment
         if index == escaped:
-            # **An escaped metacharacter is part of the word**, and treating
-            # one as a boundary cut the script short: the here-string of
-            # `bash <<<git\\ push\\ origin\\ +HEAD:main` yielded `git\\`
-            # alone, while the redirection strip removed the whole thing, so
-            # nothing downstream saw the push. Raised in review.
+            # An escaped metacharacter is part of the word: treated as a
+            # boundary, the here-string of
+            # `bash <<<git\\ push\\ origin\\ +HEAD:main` would yield `git\\`
+            # alone while the redirection strip removes the whole thing.
             literal[index] = True
             escaped = None
             continue
@@ -5028,66 +2059,35 @@ def _stdin_bodies(command, consumes):
         return (ordinary[position] and not literal[position]
                 and command[position] in METACHARACTERS)
 
-    # **Bodies belong to introducers in ORDER, and `rfind` gave every body the
-    # last introducer before it.** In `bash <<A; cat <<B` the first body is
-    # `bash`'s, and `rfind` found `<<B`, decided the reader was `cat`, and
-    # never judged the script bash runs. Raised in review; verified allowed.
-    #
-    # `heredoc_spans` yields its spans in opener order and skips an opener that
-    # sits inside an earlier body, so the pairing walks both lists together
-    # rather than searching backwards from each body.
-    openers = [
-        match.start() for match in HEREDOC.finditer(command)
-        if ordinary[match.start()]
-        and not (match.start() > 0 and command[match.start() - 1] == "<")
-        and not command.startswith("<<<", match.start())
-    ]
-    # **Two monotonic cursors, because the containment test that used to sit
-    # here was quadratic.** It re-scanned every earlier body for every
-    # opener/body pair, so a command carrying enough heredocs ran for long
-    # enough to hit the hook timeout — which is empty stdout, which is
-    # non-blocking. Raised in review, against the commit that had just removed
-    # the same shape from `heredoc_spans` and pinned only that function's
-    # timing. An opener inside a body is no longer in this list at all: the
-    # scan above is told where the bodies are, so it reports one as quoted.
-    cursor = 0
-    for start, end, _expands in spans:
-        while cursor < len(openers) and openers[cursor] >= start:
-            cursor += 1
-        if cursor >= len(openers):
-            break
-        opener = openers[cursor]
-        cursor += 1
-        if consumes(command, opener, ordinary):
+    # Bodies belong to introducers in order: in `bash <<A; cat <<B` the first
+    # body is `bash`'s, though the last introducer before it is `<<B`.
+    # `heredoc_spans` names each span's own opener, so a `<<` it did not read as
+    # one, a shift or an undecodable delimiter, holds no place here.
+    for (start, end, _expands), opener in zip(spans, openers):
+        if _consumes_as_script(command, opener, ordinary):
             yield command[start:end]
 
-    # Built once, not per here-string: per opener it made the walk openers
-    # times length, so a long ordinary line ran into `WATCHDOG_SECONDS`,
-    # which refuses it (R3, round 3 of #447).
-    unescaped = [not literal[position] and value
-                 for position, value in enumerate(ordinary)]
     index = 0
     while index < len(command):
         if not (ordinary[index] and command.startswith("<<<", index)):
             index += 1
             continue
-        consumed = consumes(command, index, ordinary)
+        consumed = _consumes_as_script(command, index, ordinary)
         cursor = index + 3
         while cursor < len(command) and command[cursor] in " \t":
             cursor += 1
-        word = word_end(command, cursor, unescaped)
+        word = word_end(command, cursor, [not literal[position] and value
+                                          for position, value
+                                          in enumerate(ordinary)])
         if consumed:
-            # **A here-string is quote-removed before the shell runs it, and
-            # `shlex` has no rule for either dollar quote.** So
-            # `bash <<<$'git push origin +HEAD:main'` handed the recursion
-            # `$git push …` — a name `program_name` does not match — while bash
-            # ran the push. `$'' + BS + BS + 'x67it …'` and the locale spelling did the
-            # same. Raised in review; verified allowed.
+            # A here-string is quote-removed before the shell runs it, and
+            # `shlex` has no rule for either dollar quote, so
+            # `bash <<<$'git push origin +HEAD:main'` would reach the recursion
+            # as `$git push …`, a name `program_name` does not match.
             #
             # An undecodable one is yielded whole rather than normalised: the
             # recursive judge applies the same fail-closed check to it and
-            # refuses with the reason that check states, which keeps one
-            # sentence for one decision.
+            # refuses with the reason that check states.
             text = command[cursor:word]
             if undecodable_dollar_quote(text):
                 yield text
@@ -5105,40 +2105,21 @@ def _stdin_bodies(command, consumes):
 def substitution_fed_shells(command):
     """Whether a process substitution supplies a shell in `command` its script.
 
-    **`bash < <(printf '%s\\n' 'git push origin +HEAD:main')` runs the push,
-    and every pass here judged the halves apart.** The inner `printf` is data,
-    correctly; the redirection strip then removes `< <(…)` whole, correctly,
-    because a process substitution IS the redirect target; and what is left is
-    a `bash` with no script, which is nothing at all. Raised in review;
-    verified allowed, and `bash <(echo …)` runs it too, the substitution being
+    `bash < <(printf '%s\\n' 'git push origin +HEAD:main')` runs the push,
+    while each pass judges a half: the inner `printf` is data, the redirection
+    strip removes `< <(…)` whole as the redirect target, and what is left is a
+    `bash` with no script. `bash <(echo …)` runs it too, the substitution being
     a filename the shell is told to execute.
 
-    **Refused rather than read, on `unmodelled_printer`'s argument.** What the
-    shell executes is the substitution's OUTPUT, and reproducing a command's
-    output is the specification this file declines to carry — the same reason
-    `printf 'git p%ssh …' u | bash` refuses instead of being modelled. Reading
-    the inner command instead would be right for `<(echo '…')` and wrong for
-    every spelling that computes, and the wrong half fails open.
+    Refused rather than read, on `unmodelled_printer`'s argument: what the
+    shell executes is the substitution's output, and reading the inner command
+    instead would be right for `<(echo '…')` and fail open for every spelling
+    that computes.
 
     A run led by a printer is left alone, exactly as the pipeline pass leaves
     one: `echo <(git push origin +HEAD:main)` is text, and the inner command is
     judged in its own right by `substitutions`.
     """
-    ordinary = _unquoted_positions(command)
-    for index in range(len(command) - 1):
-        if not (ordinary[index] and ordinary[index + 1]):
-            continue
-        if command[index:index + 2] not in ("<(", ">("):
-            continue
-        start, end = _run_bounds(command, index, ordinary)
-        if reads_stdin_as_script(_run_words(command, start, end, ordinary)):
-            return True
-    return False
-
-
-def _unquoted_positions(command):
-    """For each position of `command`, whether bash reads it outside quotes,
-    comments, heredoc bodies and backslash escapes."""
     ordinary = [False] * len(command)
     escaped = None
     bodies = [(start, end) for start, end, _ in heredoc_spans(command)]
@@ -5150,988 +2131,33 @@ def _unquoted_positions(command):
             escaped = index + 1
             continue
         ordinary[index] = not in_quotes and not in_comment
-    return ordinary
 
-
-# The programs whose stdin is DATA to them (#397): they read it, filter it,
-# file it or send it on, and execute none of it. **The safe side only**: a
-# program on no list, and no shell, is one this file cannot classify, so what
-# its stdin carries is judged by content (`unclassified_stdin_writer`).
-# `xargs` and `less` are left off on purpose, because each runs commands taken
-# from its input or its keys (`xargs` itself, `less`'s `!`), and so is `gh`,
-# whose `alias set` takes a `!` alias that a shell runs; so are `awk`, whose
-# `system` and `print |` run its input (the interpreter residual on #424), and
-# `read`, whose line a command word can then run (`do $line`). Off the list a
-# bare name keeps the content judgement, at the cost measured in
-# `docs/harness-boundaries.md`. **`sed` is on it**, because it runs its input only by a
-# script that says so (`e`, the `e` flag of `s`, a script file), and the `sed`
-# script pass refuses each of those; probed. `READING_COMMANDS`,
-# `DATA_ONLY_COMMANDS` and the interpreters are classified too.
-STDIN_DATA_READERS = frozenset({
-    "base64", "clip", "column", "comm", "cut", "fmt", "fold", "iconv", "jq",
-    "md5sum", "nl", "od", "paste", "pbcopy", "sed", "sha1sum", "sha256sum",
-    "sort", "tac", "tee", "tr", "uniq", "xxd", "yq",
-})
-
-
-# A redirection operator, as `_run_words` keeps it: its own word, its target
-# the next one.
-REDIRECTION_WORD = re.compile(r"^\d*(?:<<<|<<-|<<|<>|<&|>&|&>>|&>|>>|>\||<|>)$")
-
-# The redirections that give a run its stdin.
-STDIN_REDIRECTS = frozenset({"<", "<>", "<<<", "<<", "<<-"})
-
-
-# The words that open and close a group whose runs share one stdin.
-GROUP_OPENERS = frozenset({"{", "case", "for", "if", "select", "until", "while"})
-GROUP_CLOSERS = frozenset({"}", "done", "esac", "fi"})
-
-
-def _command_words(words):
-    """`words` without its redirections: each operator and its target. A
-    target is a file, never a program or an argument the program reads."""
-    kept, target = [], False
-    for position, word in enumerate(words):
-        if target:
-            target = False
-        elif REDIRECTION_WORD.match(word):
-            target = True
-        elif (word.isdigit() and position + 1 < len(words)
-              and REDIRECTION_WORD.match(words[position + 1])):
-            # A file descriptor's number, which `_run_words` keeps apart from
-            # its operator: `} 0< f` has no program (R1, round 2 of #447).
+    for index in range(len(command) - 1):
+        if not (ordinary[index] and ordinary[index + 1]):
             continue
-        else:
-            kept.append(word)
-    return kept
-
-
-def _launched(words):
-    """The program word the run made of `words` starts, or None. A reserved
-    word in front (`do`, `while`, `then`, …) is the shell's own syntax, so the
-    program is the word after it: in `… | while read line` the reader is
-    `read`, and in `do bash helper < f` it is `bash`. **A redirection is never
-    the program**, wherever it stands: `< /tmp/s /tmp/x` starts `/tmp/x`, and
-    took `<` for its program until a review of #447 found it (R1)."""
-    kept = _command_words(words)
-    position = 0
-    while position < len(kept) and kept[position] in SHELL_KEYWORDS:
-        position += 1
-    start = launched_program(kept[position:])
-    return None if start is None else kept[position + start]
-
-
-def _group_stdin(words):
-    """Whether the run made of `words` gives stdin to runs other than its own:
-    a stdin redirection with no program of its own, which feeds the compound
-    before it (`{ …; } < f`, `done < f`, `done <<<'…'`) or, on `exec`, every
-    run after it (`exec < f`). Raised in review of #447 (R1)."""
-    return _launched(words) is None and any(word in STDIN_REDIRECTS for word in words)
-
-
-def path_qualified(word):
-    """Whether `word` names its program by a path, which a copy can give any
-    name: `cp /bin/bash /tmp/sort` makes `/tmp/sort` a shell. On a line that
-    changes how a bare name resolves (`RESOLUTION_CHANGED`), every name is
-    as good as a path."""
-    return RESOLUTION_CHANGED or "/" in word or "\\" in word
-
-
-# Set by `unclassified_stdin_writer` for the line it judges, and cleared on the
-# way out: whether the line changes what a bare name runs.
-RESOLUTION_CHANGED = False
-
-# What makes a bare name run something else on the line that names it: a
-# `PATH` assignment, as a prefix or exported; `hash`, `alias` and `enable`;
-# a function defined either way; and `source` or `.`, which can define one.
-# `sort() { bash; }; echo 'git push …' | sort` ran the push. Raised by a
-# security review; verified admitted.
-#
-# **Read as bash reads a command word, not as text.** `h''ash`, `\hash` and
-# `'alias'` run the builtin all the same, so a run's program is taken after
-# quote removal; a body or a message that merely says "hash" or "PATH" is
-# none of this. Any write to `PATH` counts, not only `PATH=`: `export`,
-# `read`, `declare` and `unset` reach it too. A function definition and `.`
-# in command position are read on the unquoted syntax. Raised by a second
-# security review; each verified admitted.
-# `eval`, `trap` and `fc` are among them because each runs a string in this
-# shell, and the string can hold any of the others, which no word of this run
-# shows.
-RESOLVING_COMMANDS = frozenset({"alias", "enable", "eval", "fc", "function",
-                                "hash", "source", "trap", "unalias", "."})
-# The builtins that can write a variable this shell resolves names through.
-PATH_WRITERS = frozenset({"declare", "export", "getopts", "local", "mapfile",
-                          "printf", "read", "readarray", "readonly", "typeset",
-                          "unset"})
-# The builtins that take a variable name as an operand, whose subscript bash
-# evaluates as arithmetic: the writers, and `test -v`, `[[ -v`, `wait -p`.
-NAME_OPERAND_TAKERS = PATH_WRITERS | {"test", "[", "[[", "wait"}
-# The variables a command name resolves through: `PATH`, and bash's own tables
-# `BASH_CMDS` (what `hash -p` writes) and `BASH_ALIASES`. **Matched as an
-# identifier anywhere in a word, subscript or option glued on**, because a
-# writer spells its target many ways (`printf -vPATH`, `PATH[0]=`,
-# `BASH_CMDS[tee]=/tmp/x`): a list of spellings is the deny-list this file
-# argues against. Raised by a security review; each verified admitted.
-#
-# The prompt strings are among them because a prompt is expanded, arithmetic
-# included: `PS4` before every command `set -x` traces, the rest where a shell
-# prompts.
-RESOLUTION_VARIABLES = re.compile(
-    r"(?:^-[A-Za-z]*|(?<![A-Za-z0-9_]))"
-    r"(?:PATH|BASH_CMDS|BASH_ALIASES|PS[0-4]|PROMPT_COMMAND)(?![A-Za-z0-9_])")
-RESOLVING = re.compile(
-    r"(?<![\w.-])[A-Za-z_][\w.-]*\s*\(\s*\)"
-    r"|(?:^|[;&|(){}!\n]|(?<![\w.-])(?:if|then|do|else|elif|while|until|time)(?![\w.-]))\s*\.\s")
-
-
-# **Arithmetic is a writer too.** Bash reads a variable's value as an
-# expression in arithmetic, assignments in it included, so `x='PATH=0'; : $((x))`
-# writes `PATH` under no word that names it, and `0` is then a relative
-# directory to resolve from. Any arithmetic context counts: `((`, `$((`, `$[`,
-# a subscript (`${a[i]}`, `a[i]=`), a substring offset (`${s:i}`), an
-# arithmetic test in `[[`; and so does an expansion that assigns (`${n=…}`,
-# `${n:=…}`), an indirect `${!n}`, whose name can carry a subscript, any
-# `${…@…}` transformation (`@P` prompt-expands the value, arithmetic
-# included), a compound assignment's subscript (`a=([x]=1)`, read to the end
-# of the line, since an escaped `)` ends no list), and `set -x`, which
-# prompt-expands `PS4` before every traced command. Raised by security
-# reviews; the expansion half verified admitted.
-# Arithmetic over literals alone reads no variable, so `${PIPESTATUS[0]}`, the
-# commonest shape in the replayed commands, is not one.
-# **Each context is read to the bracket that closes it, in one pass, never
-# by a regular expression.** Brackets pair by kind, as bash pairs `$((…))`, a
-# subscript and `${…}`, so a name nested at any depth is read: `a[b[0]+x]=1`,
-# `(( (0)+x ))` and `${s:${#}+x}` each read `x`. Matched by regular
-# expressions, a context ended at its first closing bracket, which hid all
-# three, and two of them read across `[` in time cubic in the line's length
-# inside one match, which the watchdog cannot interrupt: `${[` repeated 2000
-# times took 30 s (rounds 5 and 6 of #447). An unclosed context runs to the
-# end of the text, which over-reads rather than under-reads.
-ARITHMETIC_OPENERS = re.compile(r"\(\(|\$\[|\[\[|(?<![\w-])[A-Za-z_]\w*\[")
-
-
-def _closing_brackets(text):
-    """Where each bracket of `text` closes, `(`, `[` and `{` each paired with
-    its own kind; an unclosed one is absent."""
-    closes, open_brackets = {}, {"(": [], "[": [], "{": []}
-    for index, char in enumerate(text):
-        if char in open_brackets:
-            open_brackets[char].append(index)
-        elif char in ")]}":
-            stack = open_brackets["([{"[")]}".index(char)]]
-            if stack:
-                closes[stack.pop()] = index
-    return closes
-
-
-def _first_from(text, pattern):
-    """For each offset of `text`, its end included, where `pattern` next
-    matches at or after it, or `len(text)` where it does not."""
-    starts = {match.start() for match in re.finditer(pattern, text)}
-    firsts, found = [len(text)] * (len(text) + 1), len(text)
-    for index in range(len(text) - 1, -1, -1):
-        if index in starts:
-            found = index
-        firsts[index] = found
-    return firsts
-
-
-def expansion_writes(expanded):
-    """Whether `expanded` (`_expanded_text`) holds an expansion that writes or
-    arithmetic that reads a name, each context read to the bracket that
-    closes it."""
-    length = len(expanded)
-    closes = _closing_brackets(expanded)
-    names = _first_from(expanded, r"[A-Za-z_]")
-    if "${" in expanded:
-        equals = _first_from(expanded, "=")
-        transforms = _first_from(expanded, r"@(?![]}])")
-        colons = _first_from(expanded, ":")
-        for match in re.finditer(r"\$\{", expanded):
-            brace = match.start() + 1
-            end = closes.get(brace, length)
-            colon = colons[brace]
-            # An indirect `${!n}`, an assignment `${n=…}`, a transformation
-            # `${n@P}`, or a substring offset `${s:i}` that is no `:-` default.
-            if (expanded.startswith("!", brace + 1) or equals[brace] < end
-                    or transforms[brace] < end
-                    or (colon < end and names[colon + 1] < end
-                        and expanded[colon + 1:colon + 2] not in ("-", "=", "+", "?"))):
-                return True
-    operators = (_first_from(expanded, r"\s(?=-(?:eq|ne|lt|le|gt|ge)\s)")
-                 if "[[" in expanded else None)
-    for match in ARITHMETIC_OPENERS.finditer(expanded):
-        opener = match.group()
-        bracket = match.start() if opener in ("((", "[[") else match.end() - 1
-        end = closes.get(bracket, length)
-        if (operators if opener == "[[" else names)[match.end()] < end:
+        if command[index:index + 2] not in ("<(", ">("):
+            continue
+        start, end = _run_bounds(command, index, ordinary)
+        if reads_stdin_as_script(_run_words(command, start, end, ordinary)):
             return True
-    # A compound assignment's subscript, read to the end of the line, since an
-    # escaped `)` ends no list.
-    assignment = expanded.find("=(")
-    if assignment >= 0:
-        values = _first_from(expanded, r"[A-Za-z_$`]")
-        for index in range(assignment + 2, length):
-            if expanded[index] == "[" and values[index + 1] < closes.get(index, length):
-                return True
-    return False
-
-
-def _expanded_text(command):
-    """`command` with what bash neither runs nor expands blanked: comments,
-    single- and ANSI-C-quoted text, a heredoc body that does not expand, and
-    the plain text inside double quotes or an expanding body, of which only a
-    `${…}`, `$((…))` or `$[…]` stays. So `grep 'PATH=' f` names nothing, and
-    `echo "${PATH:=/tmp}"` still writes."""
-    spans = heredoc_spans(command)
-    states = ["comment"] * len(command)
-    for index, state, _escaped in _quoting(
-            command, data=[(start, end) for start, end, _ in spans]):
-        states[index] = state
-    for start, end, expands in spans:
-        for index in range(start, min(end, len(command))):
-            states[index] = "double" if expands else "single"
-    text, index = [" "] * len(command), 0
-    while index < len(command):
-        state = states[index]
-        if state not in ("single", "double", "comment", "data"):
-            text[index] = command[index]
-            index += 1
-            continue
-        if state == "double" and command.startswith(("${", "$((", "$["), index):
-            opener = command[index + 1]
-            closer = {"{": "}", "(": ")", "[": "]"}[opener]
-            depth, cursor = 0, index + 1
-            while cursor < len(command):
-                if command[cursor] == opener:
-                    depth += 1
-                elif command[cursor] == closer:
-                    depth -= 1
-                    if depth == 0:
-                        break
-                cursor += 1
-            text[index:cursor + 1] = command[index:cursor + 1]
-            index = cursor + 1
-            continue
-        index += 1
-    return "".join(text)
-
-
-# The binary operators of `test` and `[[`, after which a word is an operand.
-TEST_BINARY = frozenset({"=", "==", "!=", "<", ">", "=~", "-eq", "-ne", "-lt",
-                         "-le", "-gt", "-ge", "-nt", "-ot", "-ef"})
-
-
-def _expanded_operator(name, arguments):
-    """Whether an expanded word in a `test` or `wait` argument list stands
-    where an operator or option could: for `test`, not the operand of a
-    literal operator before it, not the left side of a binary operator after
-    it, and not alone; for `wait`, whose flags (`-n`, `-f`) take no operand
-    and whose one expanded word can be a whole cluster, every expanded word
-    but `$!`. `[ -d "$d" ]` and `[ "$n" != 0 ]` are operands; `test $o
-    'a[x]'`, `wait -n $o 'a[x]'` and `wait "$pid"` are not."""
-    words = [word for word in arguments if word not in ("]", "]]")]
-    for index, word in enumerate(words):
-        if not re.search(r"[$`]", word):
-            continue
-        after = words[index + 1] if index + 1 < len(words) else None
-        before = words[index - 1] if index else None
-        # `wait` takes its options anywhere, and one expanded word can be a
-        # whole cluster (`o='-pa[x]'; wait $o`), so any expanded word counts
-        # but `$!`, which is only ever a process id. A line holding
-        # `wait $pid` is held strictly, at the cost measured in
-        # `docs/harness-boundaries.md`.
-        if name == "wait":
-            if word.strip('"') == "$!":
-                continue
-            return True
-        if after is None:
-            continue
-        if after in TEST_BINARY or after in ("-a", "-o", "&&", "||", ")"):
-            continue
-        if (before is not None and before.startswith("-") and before not in ("-a", "-o")
-                and not re.search(r"[$`]", before)):
-            continue
-        return True
-    return False
-
-
-def resolution_changed(command):
-    """Whether `command` changes what a bare name runs (`RESOLVING_COMMANDS`,
-    a write to a `RESOLUTION_VARIABLES` name, arithmetic, a function
-    definition, `.` in command position). A line that cannot be tokenised is
-    taken to change it."""
-    ordinary = _unquoted_positions(command)
-    syntax = "".join(char if ordinary[index] else " "
-                     for index, char in enumerate(command))
-    if RESOLVING.search(syntax):
-        return True
-    # **Fail closed on the names, not on the ways to write them.** Five reviews
-    # each found another construct that writes one (`for PATH in …`,
-    # `${PATH:=…}`, `printf -vPATH`, a subscript, a nameref), so any text bash
-    # expands that so much as names a resolution variable counts. Quoted text
-    # does not, which is what keeps `grep 'PATH=' f | head` a read.
-    expanded = _expanded_text(command)
-    if RESOLUTION_VARIABLES.search(expanded) or expansion_writes(expanded):
-        return True
-    stripped = strip_dollar_quotes(strip_redirections(
-        join_continuations(strip_comments(strip_heredocs(command)))))
-    try:
-        lexer = shlex.shlex(stripped, posix=True, punctuation_chars=True)
-        lexer.commenters = ""
-        lexer.whitespace_split = True
-        tokens = list(lexer)
-    except ValueError:
-        return True
-    for run in command_runs(tokens):
-        program = _launched(run)
-        if program is None:
-            continue
-        start = run.index(program)
-        name = program_name(program)
-        if name in RESOLVING_COMMANDS or name == "let":
-            return True
-        arguments = run[start + 1:]
-        if name == "printf" and not any(re.match(r"^-[A-Za-z]*v", word)
-                                        for word in arguments):
-            continue
-        # A writer's target is read after quote removal (`declare "PATH=/tmp"`),
-        # and a target built by an expansion is any name (`declare "$n=/tmp"`).
-        # A declaration writer's target is the part of a word before `=`; the
-        # value is read, not written: `export X="$HOME/bin"` writes `X` (R7,
-        # round 2 of #447).
-        targets = [word.split("=", 1)[0] for word in arguments]
-        if name in PATH_WRITERS | {"wait"} and any(
-                RESOLUTION_VARIABLES.search(word) for word in targets):
-            return True
-        # **A name operand is a writer however it is spelt.** Its subscript is
-        # arithmetic whether or not `=` follows and however it is quoted
-        # (`read 'a[x]'`, `unset a[x]`, `test -v a[x]`), and one that comes
-        # from an expansion is any name and any subscript (`test -v "$x"`,
-        # `wait -p "$x"`). For `test`, `[`, `[[` and `wait` only the operand of
-        # `-v`, `-R` or `-p` is a name, read as bash's option parser reads a
-        # cluster: `-fpNAME` carries it glued, `-fp NAME` in the next word.
-        # Raised by three security reviews.
-        if name in NAME_OPERAND_TAKERS:
-            operands = targets
-            # An option that comes from an expansion is any option, so a
-            # `test` or `wait` whose expanded word stands where an operator
-            # could reads every word as a name operand (`o=-v; test $o
-            # 'a[x]'`). Raised by a security review.
-            if name not in PATH_WRITERS and not _expanded_operator(name, arguments):
-                # `test` takes `-v` and `-R` whole; `wait` clusters its `-p`.
-                option = r"^-[vR]()$" if name != "wait" else r"^-[A-Za-z]*?p(.*)$"
-                operands = []
-                for index, word in enumerate(arguments):
-                    cluster = re.match(option, word)
-                    if not cluster:
-                        continue
-                    if cluster.group(1):
-                        operands.append(cluster.group(1))
-                    elif index + 1 < len(arguments):
-                        operands.append(arguments[index + 1])
-            if any(re.search(r"\[[^]]*[A-Za-z_$`]", word) or re.search(r"[$`]", word)
-                   for word in operands):
-                return True
-        # A nameref makes another name an alias of whatever it is set to, and
-        # an integer attribute makes every later assignment arithmetic.
-        if name in ("declare", "local", "typeset") and any(
-                re.match(r"^-[A-Za-z]*[ni]", word) for word in arguments):
-            return True
-        # `set -x` prompt-expands `PS4` before every traced command; read after
-        # quote removal, so `set -o 'xtrace'`, `set -euxo pipefail` and
-        # `shopt -so xtrace` count, and so does an option from an expansion.
-        # A brace or a glob can produce any option too (`set -{x,e}`). After
-        # `--`, `set` takes positional parameters, never options, which keeps
-        # the `set -- $pair` loop of the replayed commands a loop; `shopt`
-        # still takes option names there (`shopt -so -- xtrace`).
-        options = arguments
-        if name == "set" and "--" in arguments:
-            options = arguments[:arguments.index("--")]
-        if name in ("set", "shopt") and any(
-                word == "xtrace" or re.search(r"[$`{}\[\]?*]", word)
-                or (name == "set" and re.match(r"^-[A-Za-z]*x", word))
-                for word in options):
-            return True
-        # `mapfile -C` runs its callback string in this shell, as `eval` does.
-        if name in ("mapfile", "readarray") and any(
-                re.match(r"^-[A-Za-z]*C", word) for word in arguments):
-            return True
-    return False
-
-
-def stdin_classified(words):
-    """Whether the run made of `words` starts a program whose handling of its
-    stdin this file knows: a shell that reads its stdin as its script, which
-    the stdin pass reads as one, or a reader or interpreter, whose stdin is
-    data. A run that starts nothing reads nothing.
-
-    **A reader is classified by a bare name only.** A path names whatever was
-    copied there, so `/tmp/sort` is no `sort`; a shell by any spelling is still
-    a shell, which the stdin pass reads as one.
-
-    **A shell with a script of its own is not classified.** With `-c` its
-    script is its argv, and its stdin passes to whatever that script starts:
-    `bash -c pwsh <<<'git push …'` was admitted (R1, round 6 of #447).
-    """
-    program = _launched(words)
-    if program is None:
-        return True
-    name = program_name(program)
-    if name in EVALUATORS:
-        return reads_stdin_as_script(words)
-    if path_qualified(program):
-        return False
-    return (interpreter(name) or name in STDIN_DATA_READERS
-            or name in READING_COMMANDS or name in DATA_ONLY_COMMANDS)
-
-
-# Shells by their own names that `EVALUATORS` does not read as bash, each of
-# which runs what arrives on its stdin: `base64 -d <<<… | pwsh` runs whatever
-# the bytes decode to. Raised by a security review; `pwsh` and `cmd` are on
-# this host.
-FOREIGN_SHELLS = frozenset({"cmd", "csh", "elvish", "fish", "hush", "ion",
-                            "murex", "nu", "nushell", "osh", "powershell",
-                            "pwsh", "sash", "tcsh", "xonsh", "ysh"})
-
-# A shell under a packaged or versioned name, `ksh93`, `bash-static` or
-# `zsh-5.9`, which no list holds and which runs its stdin as the shell it
-# names does (R4, round 3 of #447).
-SHELL_VARIANT = re.compile(
-    r"^(?:" + "|".join(sorted(EVALUATORS | FOREIGN_SHELLS, key=len, reverse=True))
-    + r")(?:[\d.]+|-[\w.]+)$")
-
-
-def _foreign_shell(name):
-    """Whether `name` is a shell `EVALUATORS` does not read as bash."""
-    return name in FOREIGN_SHELLS or bool(SHELL_VARIANT.match(name))
-
-
-def _spoofable_reader(words):
-    """Whether the run made of `words` starts an unclassified program this file
-    must assume is a shell: one named by a path, the shape a copied shell
-    takes (or any name, on a line that changes resolution), a shell by a name
-    `EVALUATORS` does not read (`FOREIGN_SHELLS`), or a launcher of either,
-    whose stdin the program it starts inherits: a later word naming a shell
-    or a program by path (`sudo pwsh`, `flock l /tmp/x`). Raised in review
-    of #447 (R4)."""
-    program = _launched(words)
-    if program is None or stdin_classified(words):
-        return False
-    if path_qualified(program) or _foreign_shell(program_name(program)):
-        return True
-    # A redirection's target is a file, not a program the run launches:
-    # `mapfile -t lines < /tmp/f` launches nothing.
-    later = _command_words(words)
-    return any(_foreign_shell(program_name(word))
-               or program_name(word) in EVALUATORS
-               or LAUNCHED_PATH.match(word)
-               for word in later[later.index(program) + 1:])
-
-
-# A later word that names a program by path: absolute or explicitly relative,
-# no extension and no trailing slash. So `/tmp/x` and `./bin/tool` count, and
-# `awk -F'\t'`, an awk `/regex/` and a data file `src/a.md` do not; read
-# looser, the rule refused 40 replayed `gh … | awk -F'\t'` pipelines.
-LAUNCHED_PATH = re.compile(r"^(?:/|\./|\.\./|~/)[\w./~-]*[\w~-]$(?<!\.\w)(?<!\.\w\w)(?<!\.\w\w\w)(?<!\.\w\w\w\w)")
-
-
-def _reaches(command, position, ordinary, reader):
-    """Whether the text at `position` is read by a run `reader` accepts: the
-    run that opens it, or one later in its pipeline, since only a `|` carries
-    the bytes onward (`forwards_to_evaluator`'s walk)."""
-    start, index = _run_bounds(command, position, ordinary)
-    if reader(_run_words(command, start, index, ordinary)):
-        return True
-    # **Each answer is kept, per line, mask and reader, by the run end it
-    # walks on from**: asked afresh per opener, the walk was openers times
-    # length, so a long ordinary line ran into `WATCHDOG_SECONDS`, which
-    # refuses it (R3, round 3 of #447). The mask is held beside its answers,
-    # so its `id` stays its own.
-    _, answers = REACH_CACHE.setdefault((command, reader, id(ordinary)),
-                                        (ordinary, {}))
-    walked, answer = [], False
-    while index not in answers:
-        end = index
-        while index < len(command) and (
-                command[index] in " \t"
-                or (ordinary[index] and command[index] == ")")):
-            index += 1
-        if not (index < len(command) and ordinary[index]
-                and command[index] == "|") or command.startswith("||", index):
-            answers[end] = False
-            break
-        index += 2 if command.startswith("|&", index) else 1
-        # A pipeline goes on across a newline, and a subshell after a `|`
-        # inherits it: `echo … |<newline>pwsh`, `echo … | (pwsh)`. Raised in
-        # review of #447 (R2).
-        grouped = False
-        while index < len(command) and (command[index] in " \t\n" or (
-                ordinary[index] and command[index] == "(")):
-            grouped = grouped or command[index] == "("
-            index += 1
-        start = index
-        while index < len(command) and not _ends_run(command, index, ordinary):
-            index += 1
-        words = _run_words(command, start, index, ordinary)
-        # **A pipe into a group feeds every run in it** (`| (:; pwsh)`,
-        # `| { :; /tmp/x; }`), so each run from here to the line's end is
-        # asked. Reading past the group's close over-reaches, and only for
-        # text a reader is then refused for (R2, round 2 of #447).
-        if grouped or (words and words[0] in GROUP_OPENERS):
-            walked.append((end, reader(words)
-                           or _last_accepted(command, reader) >= start))
-            break
-        walked.append((end, reader(words)))
-    else:
-        answer = answers[index]
-    for end, accepted in reversed(walked):
-        answer = answer or accepted
-        answers[end] = answer
-    return answer
-
-
-# What `_reaches` has answered on the line `unclassified_stdin_writer` is
-# judging, which empties it for each line.
-REACH_CACHE = {}
-
-
-def _last_accepted(command, reader):
-    """The offset of the last run of `command` that `reader` accepts, or -1:
-    a pipe into a group at `start` reaches it when it is at or past `start`.
-    One walk per line and reader, as `_reaches` keeps its answers."""
-    if ("last", command, reader) not in REACH_CACHE:
-        ordinary = _unquoted_positions(command)
-        last, start, bodies = -1, 0, _body_starts(command)
-        for index in range(len(command) + 1):
-            if index < len(command) and not _ends_run(command, index, ordinary):
-                continue
-            words = [] if start in bodies else _run_words(command, start, index, ordinary)
-            if words and reader(words):
-                last = start
-            start = index + 1
-        REACH_CACHE["last", command, reader] = last
-    return REACH_CACHE["last", command, reader]
-
-
-def _unclassified_run(words):
-    return not stdin_classified(words) or _group_stdin(words)
-
-
-def _spoofable_run(words):
-    return _spoofable_reader(words) or (_group_stdin(words) and STRICT_LINE)
-
-
-def _reaches_unclassified(command, position, ordinary):
-    return _reaches(command, position, ordinary, _unclassified_run)
-
-
-def _reaches_spoofable(command, position, ordinary):
-    return _reaches(command, position, ordinary, _spoofable_run)
-
-
-def _as_typed(text):
-    """`text` as a shell reading it would join its words: continuations
-    joined, quotes and backslashes gone, `$IFS` a space. So `g''it push` and
-    `git$IFS'push'` read as the push they are; a name computed any other way
-    is `COMPUTED_TEXT`. **A backslash-newline goes first**, as `read` and a
-    shell join it, even in a quoted heredoc that no outer shell joined:
-    `while read l; do $l; done <<'EOF'` over `git \\<newline>push …` runs the
-    push (R5, round 6 of #447)."""
-    joined = re.sub(r"\\\r?\n", "", text)
-    return re.sub(r"\$\{?IFS\}?", " ", re.sub(r"[\"'\\]", "", joined))
-
-
-# Text whose words a shell would compute before running them: a command
-# substitution, either spelling, or an ANSI-C quote. What it computes is not in
-# the source, so an unclassified reader is refused it rather than having it
-# judged (`unmodelled_printer`'s argument).
-COMPUTED_TEXT = re.compile(r"\$\(|`|\$'")
-
-
-def computed_text(text):
-    """Whether `text` holds a `COMPUTED_TEXT` opener that no backslash escapes:
-    `\\`` is a literal backtick, `\\\\$(…)` an escaped backslash and a live
-    substitution, so the backslashes in front are counted, not just looked at."""
-    for match in COMPUTED_TEXT.finditer(text):
-        slashes = 0
-        while match.start() - slashes > 0 and text[match.start() - slashes - 1] == "\\":
-            slashes += 1
-        if slashes % 2 == 0:
-            return True
-    return False
-
-
-# A parameter expansion as the reading shell sees it.
-PARAMETER = re.compile(r"\$(?:\{[^}]*\}|[A-Za-z_]\w*|[0-9@*#?!$-])")
-
-# An expansion with a default or alternate word, captured.
-DEFAULTING = re.compile(r"\$\{[^}:=+?-]*:?[-=+?]([^}]*)\}")
-
-
-# Characters with which a shell builds a word from pieces: expansion, quoting,
-# escape, grouping, joining, globbing and cmd's caret.
-UNPLAIN = re.compile(r"""[$%(){}\[\]+&^'"`\\*?]""")
-
-
-def _offending_stdin(text, strict, computed=True):
-    """Whether `text`, read by an unclassified program, may run git to write:
-    computed (unless `computed` is false, for text no outer shell computes),
-    or holding a writing git line as typed. `strict` is a reader named by a
-    path, the copied shell's shape, which is refused any `git` word at all.
-    **The text is read twice**, as typed and with every parameter expansion
-    removed, since one the reading shell resolves empty rejoins a word:
-    `g$@it push`, `g${u}it push`. Raised in review of #447 (R3).
-
-    **A strict reader is handed plain words only.** It is taken for a shell
-    this file does not read, and a shell builds a word from pieces no match
-    can join: `g=gi; ${g}t push`, PowerShell's `& ("gi"+"t") push`, cmd's
-    `g^it push`. So text holding any `UNPLAIN` character is refused it
-    unread (R1, round 3 of #447)."""
-    if computed_text(text) and (computed or strict):
-        return True
-    if strict and UNPLAIN.search(text):
-        return True
-    typed = _as_typed(text)
-    search = GIT_WORD.search if strict else git_writer_line
-    # A defaulting expansion reads as its word when the name is unset
-    # (`${u:-git}`), and a glob in a command word's path names whatever it
-    # matches (`/usr/bin/gi? push`), which a strict reader is refused unread.
-    # Only the command word: a Markdown link mid-line is no program (R4,
-    # round 2 of #447).
-    if strict and re.search(r"(?m)(?:^|[;&|(])[ \t]*(?=[^\s;&|()]*/)[^\s;&|()]*[?*[]",
-                            typed):
-        return True
-    return bool(search(typed) or search(PARAMETER.sub("", typed))
-                or search(DEFAULTING.sub(r"\1", typed)))
-
-
-def _body_starts(command):
-    """Where each heredoc body of `command` starts. A body is the text a run
-    reads, not a run: read as one, an issue body's Markdown made a program
-    named by a path, so its whole line was held strictly (round 3 of
-    #447)."""
-    return {start for start, _, _ in heredoc_spans(command)}
-
-
-def _coprocess(words):
-    """Whether the run made of `words` starts a coprocess: `coproc` first, or
-    after reserved words and `time`'s `-p` and `--`, as `{ coproc …`, `then
-    coproc …`, `time coproc …`, `time -p -- coproc …` and `! coproc …` do.
-    Read at the first word only, each of those was admitted (round 5 of
-    #447); `time --` was too (round 6). Bash takes `time [-p] [--]` and
-    nothing more: `time -p -p` and `time -- --` are syntax errors."""
-    position = 0
-    while position < len(words) and (
-            words[position] in SHELL_KEYWORDS
-            or (words[position] in ("-p", "--")
-                and words[position - 1:position] == ["time"])
-            or words[max(position - 2, 0):position + 1] == ["time", "-p", "--"]):
-        position += 1
-    return words[position:position + 1] == ["coproc"]
-
-
-def _opens_function_substitution(command, index, ordinary):
-    """Whether the `|` at `index` opens bash 5.3's function substitution
-    `${| …; }`. Only an ordinary `$` and `{` open one, and a `$` that a `$`
-    before it pairs into `$$` does not: `\\${|` and `$${|` are text and a
-    pipe, and skipping that pipe hid the reader after it (round 4 of
-    #447)."""
-    if index < 2 or command[index - 2:index] != "${" or not ordinary[index - 1]:
-        return False
-    first = index - 2
-    while first > 0 and command[first - 1] == "$" and ordinary[first - 1]:
-        first -= 1
-    return ordinary[index - 2] and (index - 2 - first) % 2 == 0
-
-
-def _runs_with_feeds(command, ordinary):
-    """Every run of `command` as `(words, upstream)`, where `upstream` is the
-    runs a `|` joined before it in its pipeline, or None when no `|` feeds it.
-    An empty list is a pipe from something this walk does not see as a run,
-    such as a subshell."""
-    # `groups` holds, for each group open here, the stdin a pipe gave it:
-    # every run inside reads it, not only the first (R2, round 2 of #447).
-    runs, upstream, start, piped, groups = [], None, 0, False, []
-    bodies = _body_starts(command)
-    for index in range(len(command) + 1):
-        if index < len(command) and not _ends_run(command, index, ordinary):
-            continue
-        words = [] if start in bodies else _run_words(command, start, index, ordinary)
-        if words:
-            # **A coprocess reads what the line writes to its descriptors**, by
-            # number (`>&63`) as well as through `${COPROC[1]}`, a channel this
-            # walk does not see: it reads as a pipe from the unseen, and so
-            # does every run in a group it opens (R2, round 4 of #447).
-            coprocess = _coprocess(words)
-            if coprocess:
-                upstream = []
-            runs.append((words, upstream))
-            piped = False
-            if words[0] in GROUP_OPENERS or (coprocess and "{" in words):
-                groups.append(upstream)
-            elif words[0] in GROUP_CLOSERS and groups:
-                groups.pop()
-        start = index + 1
-        if index == len(command):
-            break
-        char = command[index]
-        # `${|` opens bash 5.3's function substitution, not a pipe: read as
-        # one, `echo ${| git push …; }` was `git` reading `${`, and this rule
-        # answered before the substitution rule could name the shape.
-        if (char == "|" and not command.startswith("||", index)
-                and not (index and command[index - 1] == "|")
-                and not _opens_function_substitution(command, index, ordinary)):
-            upstream = (upstream or []) + ([words] if words else [])
-            piped = True
-        elif char == "&" and index and command[index - 1] == "|":
-            pass  # the `&` of `|&`, which carries the pipe its `|` opened
-        elif char == "(":
-            fed = (piped and not words) or _coprocess(words)
-            groups.append(upstream if fed else None)
-            if not fed:
-                upstream = None
-        elif char == ")":
-            # A `)` ends a subshell whose output may still be piped on; its
-            # runs stay out of `upstream`, which then reads as a pipe from the
-            # unseen. A subshell a pipe fed must not hand that stdin on as its
-            # own output, so it reads as unseen at once; any other `)` (`f()`,
-            # `<(…)`, `feat(x)/y`) leaves `upstream` as it was.
-            if groups and groups.pop() is not None:
-                upstream = []
-        elif piped and not words and char == "\n":
-            pass  # a pipeline goes on across a newline (R2)
-        else:
-            upstream = groups[-1] if groups else None
-    return runs
-
-
-# Subcommands that write or run what they are handed beyond the rule sets
-# below, which judge each by its arguments on a command line: `apply`, `am`,
-# `rebase -x`, `filter-branch`, `bisect run`, `submodule foreach`, an
-# executing `-c` key, and `config`, which writes an alias. Text on an
-# unclassified reader's stdin is judged by its words, so the word alone
-# counts. Judging that text as a command line instead refused Markdown issue
-# bodies for their code fences. Raised in review of #447 (R6).
-GIT_STDIN_WRITERS = frozenset({"-c", "am", "apply", "bisect", "config",
-                               "filter-branch", "filter-repo", "rebase",
-                               "submodule"})
-
-# A subcommand that writes: the push and ref-updating rules' subcommands and
-# the path writers', each a whole word.
-GIT_WRITER_WORD = re.compile(
-    r"(?i)(?<![\w.-])(?:"
-    + "|".join(re.escape(word) for word in sorted(
-        {"push"} | GIT_PATH_WRITERS | GIT_WRITING_SUBCOMMANDS
-        | REF_UPDATING_PLUMBING | GIT_EXECUTING_SUBCOMMANDS
-        | GIT_STDIN_WRITERS))
-    + r")(?![\w.-])")
-
-
-def git_writer_line(text):
-    """Whether a line of `text` runs git with a subcommand that writes: a
-    `GIT_WRITER_WORD` after the line's first `git` word. **Searched on from
-    the first `git` word, never as one lazy pattern**, which tried the writers
-    at every later position from every `git` word, so 8000 `git` words took
-    7.7 s inside one match, which the watchdog cannot interrupt (R3, round 6
-    of #447)."""
-    for line in text.split("\n"):
-        first = GIT_WORD.search(line)
-        if first and GIT_WRITER_WORD.search(line, first.end()):
-            return True
-    return False
-
-
-def unclassified_stdin_writer(command):
-    """Whether a program this file cannot classify is handed, on its stdin,
-    text that runs git to write (#397).
-
-    **A shell is a program, not a name, and stdin is its third channel.** After
-    `cp /bin/bash /tmp/x`, `echo 'git push origin +HEAD:main' | /tmp/x` runs the
-    push, as do `/tmp/x <<<'…'` and `/tmp/x <<EOF`: `stdin_scripts` reads the
-    text only when the reader is a shell this file names. Judging every stdin
-    as a script would refuse the ordinary `py - <<'EOF'` whose Python holds a
-    backtick, and resolving the program on disk fails for a copy made on the
-    same line. **So the reader is classified first**, by `stdin_classified`,
-    and only a reader on no list has its stdin judged, by content: a heredoc
-    body, a here-string, a printer's text before it in the pipe or a process
-    substitution's body that holds a git writer line refuses. The owner's
-    direction on #397 of 2026-10-22.
-
-    **Three tightenings a security review asked for, each verified allowed
-    before them.** A reader is classified by a bare name only, so a copy at
-    `/tmp/sort` is unclassified (`stdin_classified`). Text is matched as typed
-    (`_as_typed`), so `g''it push` is the push, and computed text is refused
-    unread (`COMPUTED_TEXT`). A reader named by a path, the copied shell's
-    shape, is refused any `git` word, and any stdin it is handed from a file
-    or from anything but a printer, whose text alone is in the source.
-    """
-    global RESOLUTION_CHANGED, STRICT_LINE
-    ordinary = _unquoted_positions(command)
-    # **The scopes around a nested script are where its names resolve**:
-    # `PATH=/tmp bash -c "sort <<<'…'"` changes resolution outside the script
-    # it hands on. Raised in review of #447 (R5).
-    RESOLUTION_CHANGED = any(resolution_changed(scope)
-                             for scope in dict.fromkeys((command, *EVENT_SCOPES)))
-    STRICT_LINE = any(_spoofable_reader(words)
-                      for words, _ in _runs_with_feeds(command, ordinary))
-    REACH_CACHE.clear()
-    try:
-        return _unclassified_stdin_writer(command, ordinary)
-    finally:
-        RESOLUTION_CHANGED = False
-        STRICT_LINE = False
-        REACH_CACHE.clear()
-
-
-# Set by `unclassified_stdin_writer` for the line it judges: whether any run
-# on it is a reader `_spoofable_reader` holds strictly, which a group's stdin
-# redirection then feeds (`_group_stdin`).
-STRICT_LINE = False
-
-
-def _unclassified_stdin_writer(command, ordinary):
-    """`unclassified_stdin_writer`'s body, under the line's `RESOLUTION_CHANGED`."""
-    bodies = list(_stdin_bodies(command, _reaches_unclassified))
-    # The whole line's verdict, asked once: asked per run, it grew as runs
-    # times length (R3, round 3 of #447).
-    whole = functools.cache(lambda: _offending_stdin(command, False))
-    # **A here-string arrives quote-removed**, which loses what an escape
-    # escaped: `"\\\\$(printf gi)t push …"` comes back as `\\$(…)`, which reads
-    # escaped, while the outer shell runs the substitution and hands the
-    # reader `\\git push …`. So each here-string handed to an unclassified
-    # reader is also read raw for computed text, its own word and not the
-    # line around it: `npx x <<<hi; echo $(date)` hands `hi` (R5, round 2 of
-    # #447).
-    for match in re.finditer(r"<<<", command):
-        if not (ordinary[match.start()]
-                and _reaches_unclassified(command, match.start(), ordinary)):
-            continue
-        cursor = match.end()
-        while cursor < len(command) and command[cursor] in " \t":
-            cursor += 1
-        end = cursor
-        while end < len(command) and not (
-                ordinary[end] and command[end] in " \t\n;&|()<>"):
-            end += 1
-        if computed_text(command[cursor:end]):
-            return True
-    # **A quoted heredoc body reaches its reader as written**: no outer shell
-    # computes it, and a bare-named reader is taken to be the program it says
-    # (the residual `docs/harness-boundaries.md` states), so its backticks are
-    # Markdown: `gh issue comment 1 --body-file - <<'EOF'` with a code span.
-    # An expanding body and a here-string are still refused computed, and a
-    # strict reader any (R5, round 3 of #447).
-    spans = heredoc_spans(command)
-    expanding = {command[start:end] for start, end, expands in spans if expands}
-    quoted = {command[start:end] for start, end, expands in spans if not expands}
-    if any(_offending_stdin(body, False,
-                            computed=body in expanding or body not in quoted)
-           for body in bodies):
-        return True
-    if any(_offending_stdin(body, True)
-           for body in _stdin_bodies(command, _reaches_spoofable)):
-        return True
-
-    # **What a reader that must be taken for a shell is handed from anywhere
-    # but the line itself is refused, not judged.** Only a printer's text, a
-    # heredoc body and a here-string are in the source; a file, a subshell the
-    # walk does not see and a stage that transforms (`base64 -d`, `tr`) write
-    # text no content match can reproduce: `(echo 'git push …') | pwsh` and
-    # `base64 -d <<<… | pwsh` ran the push. `unmodelled_printer`'s argument,
-    # which three security reviews of this rule converged on; `/dev/null` is
-    # the one file that is no text. **For any other unclassified program, the
-    # stage's own words and the unseen subshell's line are judged by content**:
-    # refusing every pipe into a program on no list refused PowerShell's own
-    # pipelines (measured in `docs/harness-boundaries.md`), and a bare-named
-    # program's stdin from a file or a command is the residual stated there.
-    for words, upstream in _runs_with_feeds(command, ordinary):
-        redirected = [words[index + 1] for index, word in enumerate(words[:-1])
-                      if word in ("<", "<>")]
-        # A file a group's redirection hands every run in it (`{ …; } < f`,
-        # `done < f`, `exec < f`) reaches whatever reader is strict there (R1).
-        if (_group_stdin(words) and STRICT_LINE
-                and any(target != "/dev/null" for target in redirected)):
-            return True
-        if stdin_classified(words):
-            continue
-        strict = _spoofable_reader(words)
-        if strict and any(target != "/dev/null" for target in redirected):
-            return True
-        if upstream is None:
-            continue
-        if not upstream:
-            if strict or whole():
-                return True
-            continue
-        for before in upstream:
-            program = _launched(before)
-            name = program_name(program) if program else ""
-            if program is None:
-                # A compound's closer (`}`, `done`, `fi`) pipes what its runs
-                # wrote, which this walk does not see, so the line is judged
-                # whole, as a subshell's is (R3, round 2 of #447).
-                if strict or whole():
-                    return True
-                continue
-            if name not in DATA_ONLY_COMMANDS:
-                if strict or _offending_stdin(" ".join(before), False):
-                    return True
-                continue
-            spoken = before[before.index(program) + 1:]
-            # A printer whose output this file cannot reproduce writes text
-            # that is not in the source (`unmodelled_printer`).
-            if unreproducible_print(name, spoken):
-                return True
-            if _offending_stdin(" ".join(spoken), strict):
-                return True
-
-    for match in re.finditer(r"[<>]\(", command):
-        if not (ordinary[match.start()] and ordinary[match.start() + 1]):
-            continue
-        close = _closing_paren(command, match.end())
-        body = command[match.end():len(command) if close is None else close]
-        if command[match.start()] == "<":
-            # The body's output is the run's stdin.
-            start, end = _run_bounds(command, match.start(), ordinary)
-            run = _run_words(command, start, end, ordinary)
-            if not stdin_classified(run) and _offending_stdin(
-                    body, _spoofable_reader(run)):
-                return True
-        elif any(not stdin_classified(words) for words, _ in
-                 _runs_with_feeds(body, _unquoted_positions(body))):
-            # `>(…)`: the body reads what the run around it writes, which this
-            # walk does not trace, so a `git` word anywhere on the line refuses.
-            if GIT_WORD.search(_as_typed(command)) or computed_text(command):
-                return True
     return False
 
 
 def evaluated_scripts(tokens):
     """Every token a shell evaluator in `tokens` will execute as a command.
 
-    **`shlex` hands a quoted script back as one data token**, exactly as it does
-    a command substitution — so `git log "$(bash -c 'git push origin
-    +HEAD:main')"` reached the inner pass as `bash`, `-c` and one opaque string,
-    the segment scan found no `git`, and the push ran. Raised in review;
-    verified allowed, and the bash behaviour measured with a `git` shim.
+    `shlex` hands a quoted script back as one data token, as it does a command
+    substitution — so `git log "$(bash -c 'git push origin +HEAD:main')"`
+    would reach the inner pass as `bash`, `-c` and one opaque string, with no
+    `git` for the segment scan to find.
 
-    **The data-only boundary applies here too**, and it did not at first: a run
-    led by `echo` is text, so `echo bash -c \'git push …\'` was refused for
-    quoting a command. Raised in review — the same false-positive class the
-    boundary was added to close, left standing in the pass beside it, which is
-    this repository\'s most-repeated shape.
+    The data-only boundary applies here too: a run led by `echo` is text, so
+    `echo bash -c \'git push …\'` quotes a command rather than running one.
 
-    **The bound: a script this hook can READ.** `bash script.sh` runs a file,
-    and a hook is handed an argv rather than a filesystem — that is outside what
-    any argv guard can see, and it is the same shape as the parameter-expansion
-    residual rather than a new one.
-
-    **That bound was stated correctly and applied too widely.** `-c` is one of
-    three channels a shell takes a script through, and the other two —
-    `bash <<<'…'` and a heredoc — put the text in the command string, where it
-    is as readable as the argument to `-c` this function already judges.
-    `stdin_scripts` covers them; the file half is what remains outside.
+    The bound is a script this hook can read. `bash script.sh` runs a file,
+    and a hook is handed an argv rather than a filesystem, the same shape as
+    the parameter-expansion residual. A here-string or heredoc script is in
+    the command string, and `stdin_scripts` reads it.
     """
     for run in command_runs(tokens):
         if not run or program_name(run[0]) in DATA_ONLY_COMMANDS:
@@ -6148,21 +2174,11 @@ def evaluated_scripts(tokens):
                 argv = run[index + 1:]
                 if argv:
                     yield " ".join(argv)
-        # Any program's script, not only a named shell's (#397).
-        start = launched_program(run)
-        if start is None or interpreter(run[start]) or program_name(
-                run[start]) in READING_COMMANDS:
-            continue
-        for word, script in zip(run[start + 1:], run[start + 2:]):
-            if ANY_SCRIPT_FLAG.match(word):
-                yield script
 
-    # **A shell with no script of its own reads one from the pipe**, and the
-    # run before it is where that text is written: `echo 'git push origin
-    # +HEAD:main' | bash` ran the push and was admitted. The printer is exempt
-    # from the scan by `DATA_ONLY_COMMANDS` — correctly, its arguments are text
-    # — but they stop being text the moment a shell is on the other end of the
-    # pipe. Found by an adversarial audit.
+    # A shell with no script of its own reads one from the pipe, and the run
+    # before it is where that text is written: `echo 'git push origin
+    # +HEAD:main' | bash` runs the push. A printer's arguments are text under
+    # `DATA_ONLY_COMMANDS` until a shell is on the other end of the pipe.
     for group in pipeline_groups(tokens):
         shells = [position for position, run in enumerate(group)
                   if reads_stdin_as_script(run)]
@@ -6172,10 +2188,10 @@ def evaluated_scripts(tokens):
             command_word = leading_command(before)
             if program_name(command_word) not in DATA_ONLY_COMMANDS:
                 continue
-            # Sliced past the command WORD rather than past the first token:
-            # with an assignment prefix the two differ, and taking `before[1:]`
-            # handed the judgement a string beginning `echo`, which the
-            # data-only exemption then waved through.
+            # Sliced past the command word rather than past the first token:
+            # with an assignment prefix the two differ, and `before[1:]` would
+            # hand the judgement a string beginning `echo`, which the
+            # data-only exemption waves through.
             spoken = before[before.index(command_word) + 1:]
             written = [element for element in spoken
                        if not element.startswith("-")]
@@ -6183,111 +2199,48 @@ def evaluated_scripts(tokens):
                 yield " ".join(written)
 
 
-def split_string_payloads(tokens):
-    """Every string `env -S` / `--split-string` in `tokens` splits and runs.
-
-    **The payload is a command line held in one word**, the same shape as a
-    `bash -c` script: `env -S 'cp /tmp/a .claude/settings.json'` runs `cp`,
-    while every scan over words sees `env`, `-S` and one opaque string. Raised
-    by Copilot against blueprint-frontend#26's first round, where the verb scan claimed `env`
-    coverage it only had for the unsplit form — and the same string hid a
-    `git push` from the push grammar all along.
-
-    `-S` may be bundled after option letters that take no value (`-iS`), its
-    string glued or the next word, and GNU accepts `--s` for the long form.
-    `-u` and `-C` take a value, so an `S` after either is that value. The scan
-    stops at the first word that is neither an option nor an assignment,
-    because that word is the command env runs and its options are its own.
-    """
-    for run in command_runs(tokens):
-        if not run or program_name(run[0]) in DATA_ONLY_COMMANDS:
-            continue
-        for index, token in enumerate(run):
-            if program_name(token) != "env":
-                continue
-            argv = run[index + 1:]
-            position = 0
-            while position < len(argv):
-                element = argv[position]
-                position += 1
-                if element == "--":
-                    break
-                if element.startswith("--"):
-                    name, equals, value = element.partition("=")
-                    if len(name) > 2 and "--split-string".startswith(name):
-                        if equals:
-                            yield value
-                        elif position < len(argv):
-                            yield argv[position]
-                        break
-                    if not equals and name in ("--unset", "--chdir"):
-                        position += 1
-                    continue
-                if element.startswith("-") and len(element) > 1:
-                    letters = element[1:]
-                    for offset, letter in enumerate(letters):
-                        rest = letters[offset + 1:]
-                        if letter == "S":
-                            if rest:
-                                yield rest
-                            elif position < len(argv):
-                                yield argv[position]
-                            break
-                        if letter in "uC":
-                            if not rest:
-                                position += 1
-                            break
-                    else:
-                        continue
-                    if letter == "S":
-                        break
-                    continue
-                if ASSIGNMENT.match(element):
-                    continue
-                break
-
-
 # Commands whose arguments are text and never a command line.
 #
-# **An allow-list, and the direction is load-bearing.** A name missing from
-# here costs an over-refusal; the converse — listing the wrappers that DO
+# An allow-list, and the direction is load-bearing. A name missing from
+# here costs an over-refusal; the converse — listing the wrappers that do
 # execute their arguments — fails open on the first one nobody thought of, and
 # `timeout`, `env`, `nohup`, `xargs`, `sudo`, `command` and `time` all run
 # `git push origin +HEAD:main` perfectly well. A run led by anything not named
 # here keeps reaching the scan.
 DATA_ONLY_COMMANDS = {"echo", "printf", ":", "true", "false"}
 
+# A run led by one of these reads or lists the words after it, and cannot run
+# them: `grep -n tee .claude/x` writes nothing, and `git rm` is `git_path_offence`'s.
+READING_COMMANDS = frozenset({
+    "cat", "diff", "file", "git", "grep", "head", "ls", "stat", "tail", "wc",
+})
 
-# `shlex(punctuation_chars=True)` emits a maximal RUN of these as ONE token, so
+
+# `shlex(punctuation_chars=True)` emits a maximal run of these as one token, so
 # an operator can arrive glued to its neighbour and match no separator by name.
 PUNCTUATION = set("();<>|&")
 
-# What bash treats as a word separator when unquoted. **Not the same set as
-# PUNCTUATION**, which is `shlex`'s: this one carries the whitespace, because
-# the question it answers is where a WORD begins rather than where a token
+# What bash treats as a word separator when unquoted. Not the same set as
+# PUNCTUATION, which is `shlex`'s: this one carries the whitespace, because
+# the question it answers is where a word begins rather than where a token
 # does.
 METACHARACTERS = set("|&;()<> \t\n")
 
-# What ends a command RUN. A subset of METACHARACTERS: a redirection
+# What ends a command run. A subset of METACHARACTERS: a redirection
 # operator and a space separate words within one run rather than ending
-# it. **Read only through `_ends_run`**, because the `&` here is also the
-# second character of `>&` and `<&` and the first of `&>` (blueprint-frontend#37).
+# it.
 RUN_SEPARATORS = set(";&|()\n")
 
 
 def is_boundary(token):
     """Whether `token` ends the command run it appears in.
 
-    **`);` is one token, and it matched nothing.** So
-    `git log -1; (echo ok);git push origin +HEAD:main` left the push inside a
-    run still led by `echo`, the data-only exemption skipped it, and bash ran
-    it — measured with a `git` shim. Raised in review.
-
     A token made entirely of shell punctuation is a boundary whatever it is
-    glued into, which also settles `<(`: a process substitution is executed
-    BEFORE the command it is an argument to, so the `git` inside one belongs to
-    no printer's run. `echo <(git push origin +HEAD:main)` ran the push too,
-    measured the same way, and both are one question about where a run ends.
+    glued into: `);` is one token, and in
+    `git log -1; (echo ok);git push origin +HEAD:main` the push must not stay in
+    a run led by `echo`. That also settles `<(`: a process substitution is
+    executed before the command it is an argument to, so the `git` inside
+    `echo <(git push origin +HEAD:main)` belongs to no printer's run.
     """
     return token in SEPARATORS or (
         token != "" and all(char in PUNCTUATION for char in token))
@@ -6307,574 +2260,14 @@ def command_runs(tokens):
         yield current
 
 
-# Commands that only READ a file named in their arguments, so a writing verb's
-# name there is a file being inspected and not a verb being run. Anything else in
-# the leading position — `bash`, `sh`, `env`, `command`, `xargs`, `source` —
-# is judged, because the wrapper list is the one that fails open.
-#
-# **Only programs that cannot run a command.** `awk` was here and its
-# `system()` and `cmd | getline` run a shell; GNU `sed` runs one with `e`; and
-# `less` runs one with `!`. Each is removed, so a run they lead is judged like
-# any other. Raised by Copilot.
-READING_COMMANDS = frozenset({
-    "cat", "diff", "file", "git", "grep", "head", "ls", "rg", "stat", "tail",
-    "wc",
-})
-
-# **The only programs a substitution may run, and it is an allow-list.** A
-# substitution runs before the approved command holding it is judged, so what
-# runs inside one decides before any grant does. The first form listed the
-# programs whose argument is code — `awk`, `sed`, the interpreters — and a
-# branch-controlled executable walked around it: `ls "$(./tools/run)"` names
-# nothing on a list and runs whatever the branch put there, `gh` and the
-# ledger included. Raised by Copilot, twice. So only programs whose effects
-# are modelled or harmless run here, each by bare name — a word with a `/` is
-# a file somebody chose, whatever it is called — and everything else,
-# `awk` and `sed` among it, is refused. `git` is on the list because every
-# `git` word is judged by the rest of this file.
-SUBSTITUTION_PROGRAMS = frozenset({
-    "[", "basename", "cat", "cut", "date", "dirname", "echo", "expr", "false",
-    "git", "grep", "head", "hostname", "id", "jq", "ls", "printf", "pwd",
-    "readlink", "realpath", "rg", "seq", "sort", "stat", "tail", "test", "tr",
-    "true", "uname", "wc", "whoami",
-})
-# `uniq` was here and takes `INPUT OUTPUT`: its second operand is written (#297).
-
-
-# What runs the word after it as a script or a program, so a computed word in
-# that position is a program nobody can name from the source.
-LAUNCHERS = frozenset({
-    ".", "command", "env", "exec", "nohup", "source", "time", "xargs",
-}) | EVALUATORS
-
-
-class BraceExplosion(Exception):
-    """A brace expansion with more words than this guard will build (#362)."""
-
-
-# The most words one brace expansion may produce. `{,}` thirty times is 2^30
-# strings from a hundred characters, and a hook that times out is non-blocking,
-# so the expansion stops here and the command is refused instead.
-BRACE_WORD_LIMIT = 256
-
-
-def brace_alternatives(word):
-    """Every word a comma brace expansion in `word` produces, `word` if none.
-
-    Raises `BraceExplosion` past `BRACE_WORD_LIMIT` words; `decision` answers
-    that with a refusal.
-    """
-    pending, done = [word], []
-    while pending:
-        current = pending.pop()
-        match = re.search(r"\{([^{}]*,[^{}]*)\}", current)
-        if match is None:
-            done.append(current)
-            continue
-        choices = match.group(1).split(",")
-        if len(pending) + len(done) + len(choices) > BRACE_WORD_LIMIT:
-            raise BraceExplosion(word)
-        # Reversed, so the words come out in the order bash writes them.
-        pending.extend(
-            current[:match.start()] + choice + current[match.end():]
-            for choice in reversed(choices))
-    return done
-
-
-BRACE_RANGE = re.compile(
-    r"(-?\d+|[A-Za-z])\.\.(-?\d+|[A-Za-z])(?:\.\.(-?\d+))?")
-
-
-def _brace_group(text):
-    """The first brace group in `text` that bash expands, as `(start, end,
-    values)`, or `None`. A group is read with its braces balanced, so
-    `{a,{b,c}}` is one group of two alternatives; one with no top-level comma
-    and no range inside is literal to bash and is looked through for groups
-    nested in it (`{a{b,c}}` is `{ab}` and `{ac}`).
-
-    A backslash is not an escape here. The words arrive from `shlex` with their
-    quoting already removed, so a brace after an escaped backslash reaches this
-    after a single backslash while bash still expands it; reading that brace
-    as escaped would pass what bash runs. Treating every brace as live
-    over-expands (an escaped pair of braces is judged as two words) and a word
-    judged too often is refused, never allowed."""
-    index = 0
-    while index < len(text):
-        if text[index] != "{":
-            index += 1
-            continue
-        depth, cursor, commas = 1, index + 1, []
-        while cursor < len(text) and depth:
-            char = text[cursor]
-            if char == "{":
-                depth += 1
-            elif char == "}":
-                depth -= 1
-            elif char == "," and depth == 1:
-                commas.append(cursor)
-            cursor += 1
-        if depth:
-            index += 1
-            continue
-        end = cursor
-        inner = text[index + 1:end - 1]
-        if commas:
-            cuts = [index] + commas + [end - 1]
-            return index, end, [text[a + 1:b] for a, b in zip(cuts, cuts[1:])]
-        spec = BRACE_RANGE.fullmatch(inner)
-        if spec:
-            first, last, step = spec.groups()
-            numeric = [first.lstrip("-").isdigit(), last.lstrip("-").isdigit()]
-            if numeric[0] == numeric[1]:
-                step = abs(int(step or 1)) or 1
-                if numeric[0]:
-                    low, high, to_text = int(first), int(last), str
-                else:
-                    low, high, to_text = ord(first), ord(last), chr
-                # Counted before any value is built: `{1..999999999}` is a
-                # billion strings if the cap is checked after them.
-                if abs(high - low) // step + 1 > BRACE_WORD_LIMIT:
-                    raise BraceExplosion(text)
-                direction = step if low <= high else -step
-                return index, end, [to_text(n) for n in range(
-                    low, high + (1 if direction > 0 else -1), direction)]
-        index += 1
-    return None
-
-
-def brace_variants(word):
-    """Every word `word` becomes under brace expansion: comma lists and
-    `{a..e}`, `{1..3}` and `{1..9..2}` ranges, balanced and nested, expanded
-    until no group is left (#360). Bash makes each of them a separate word.
-
-    More than `BRACE_WORD_LIMIT` words raises `BraceExplosion`.
-    """
-    pending, out = [word], []
-    while pending:
-        current = pending.pop()
-        group = _brace_group(current)
-        if group is None:
-            out.append(current)
-            continue
-        start, end, values = group
-        if len(out) + len(pending) + len(values) > BRACE_WORD_LIMIT:
-            raise BraceExplosion(word)
-        pending.extend(
-            current[:start] + value + current[end:]
-            for value in reversed(values))
-    return out
-
-
-def computed_word(token):
-    """Whether `token` is a word bash computes, so its value is not in the source.
-
-    **A literal comparison misses what bash expands before it runs.** A word
-    carrying `$` or a backtick has a value that is not in the source at all. A
-    range, a nested brace or an extglob is computed too, rather than expanded
-    here: `x-{l..l}.sh` is `x-l.sh`, and the comma-only expansion cannot see
-    it. Modelling each form is the enumeration that missed these, so any `{`
-    left unmatched, and any extglob opener, is reported as computed. Raised by
-    Copilot.
-    """
-    return bool("$" in token or "`" in token
-                or re.search(r"(?<!\$)\{", token)
-                or re.search(r"[@+!?*]\(", token))
-
-
-def launched(run, index):
-    """Whether `run[index]` is in a position where it is RUN as a program."""
-    if ASSIGNMENT.match(run[index]):
-        return False
-    if run[index] == leading_command(run):
-        return True
-    # A `-c` script is a script, not a program name, and `evaluated_scripts`
-    # has already judged what it runs.
-    if index > 0 and SCRIPT_FLAG.match(run[index - 1]):
-        return False
-    previous = index - 1
-    while previous >= 0 and (run[previous].startswith("-")
-                             or ASSIGNMENT.match(run[previous])):
-        previous -= 1
-    return previous >= 0 and program_name(run[previous]) in LAUNCHERS
-
-
-def token_followed_by_group(tokens, run, index):
-    """Whether `run[index]` is immediately followed by a `(` in `tokens`.
-
-    `command_runs` drops the boundary, so the flat token list is searched for
-    this run's position — the last token of `run` only, which is the only one
-    a `(` can follow without ending the run first.
-    """
-    if index != len(run) - 1:
-        return False
-    for position in range(len(tokens) - 1):
-        if tokens[position] is run[index] and tokens[position + 1].startswith("("):
-            return True
-    return False
-
-
-def computed_program_offence(tokens):
-    """The reason to refuse a program word bash computes, or `None`."""
-    for run in command_runs(tokens):
-        if program_name(leading_command(run)) in READING_COMMANDS:
-            continue
-        for index, token in enumerate(run):
-            # The tokeniser splits an extglob at its parenthesis, so
-            # `run-@(a).sh` arrives as `run-@` with the group in a separate
-            # run. A word ending in an extglob operator is computed.
-            computed = computed_word(token) or (
-                token[-1:] in ("@", "+", "!", "?", "*")
-                and token_followed_by_group(tokens, run, index))
-            if computed and launched(run, index):
-                return (
-                    f"`{token}` is run as a program whose name bash computes "
-                    "— a variable, a substitution, a pattern or a brace "
-                    "expansion — so this guard cannot read which program "
-                    "runs. Refusing rather than judging the word instead of "
-                    "the program it opens."
-                )
-    return None
-
-
-def program_flag_offence(tokens):
-    """The reason to refuse a flag that makes a listed program run one, or `None`.
-
-    `rg --pre CMD` runs CMD on every searched file, which makes `rg`, listed as a
-    reader and as a substitution program, arbitrary execution (#278, #279). Only a
-    run where the program is launched counts, so `echo rg --pre` is text. The
-    scan sits on the token list every substitution body is judged through too.
-    """
-    for run in command_runs(tokens):
-        for index, token in enumerate(run):
-            flags = EXECUTING_PROGRAM_FLAGS.get(program_name(token))
-            # Not `launched()`: a launcher's option argument (`xargs -n 1 rg`,
-            # `env -C d rg`) or a launcher missing from LAUNCHERS (`sudo`,
-            # `timeout 5`, `nice`) leaves the program unrecognised by position.
-            # The program name anywhere in a run that is not data-only is
-            # judged, over-refusing `grep rg --pre`, which is the safe direction.
-            if (flags is None or ASSIGNMENT.match(token)
-                    or program_name(leading_command(run)) in DATA_ONLY_COMMANDS):
-                continue
-            for word in run[index + 1:]:
-                if word == "--":
-                    break  # what follows is a pattern or a path, never a flag
-                name = word.split("=", 1)[0]
-                if any(
-                        name == flag
-                        or (not flag.startswith("--") and word.startswith("-")
-                            and not word.startswith("--") and flag[1] in word[1:])
-                        or (flag.startswith("--") and name.startswith("--")
-                            and len(name) > 2 and flag.startswith(name))
-                        for flag in flags):
-                    return (
-                        f"`{program_name(token)} {word}` makes it run a program "
-                        "the command line names, on every file it reads; "
-                        "nothing here needs that, and `rg` is listed as a "
-                        "program that cannot run one."
-                    )
-    return None
-
-
-def env_removes_variables(words):
-    """Whether an `env` in `words` clears or unsets variables before its program.
-
-    Only `env`'s OWN options are read, from the `env` word to the first word
-    that is neither an option nor an assignment, so the program's arguments
-    (`env git log -S foo`, `env git diff -u`) are not mistaken for them. A short
-    cluster holding `u` or `i` counts (`-iu`), and so does any abbreviation of
-    `--unset`, `--ignore-environment` and `--split-string` that GNU getopt
-    accepts (`--ign`, `--uns`). `-C` and `-a` take the next word as their value,
-    a bare `-` is `-i`, and `--` ends the options.
-    """
-    # A run LED by git or rg: an `env` in it is an argument (`rg env -i src`,
-    # `git log --grep env -S foo`), not an invocation. Any other run reads every
-    # `env`, since which git word is the program cannot be told from the words
-    # alone (`env -a git nice env -u HOME rg x .` takes `git` as a value).
-    if words and program_name(words[0]) in ("git", "rg"):
-        return False
-    for start, env_word in enumerate(words):
-        if program_name(env_word) != "env":
-            continue
-        skip = False
-        for offset, word in enumerate(words[start + 1:], start + 1):
-            if skip:
-                skip = False
-                continue
-            if word == "--":
-                # The end of env's options; what follows may be another `env`, and
-                # a later one is still reached by the outer loop.
-                if (offset + 1 < len(words)
-                        and program_name(words[offset + 1]) == "env"):
-                    nested = env_removes_variables(words[offset + 1:])
-                    if nested:
-                        return nested
-                break
-            if word == "-":
-                return True  # a bare `-` is `--ignore-environment`
-            if not word.startswith("-"):
-                if ASSIGNMENT.match(word):
-                    continue
-                # The program: env's options are over. A program that is itself
-                # `env` (`env -a git env -u HOME rg`, where `git` was a value) is
-                # read from there, whatever git or rg word came before it.
-                if program_name(word) == "env":
-                    nested = env_removes_variables(words[offset:])
-                    if nested:
-                        return nested
-                break
-            if word.startswith("--"):
-                name = word.split("=", 1)[0]
-                if len(name) > 2 and "--split-string".startswith(name):
-                    return "split"
-                if len(name) > 2 and any(
-                        long.startswith(name)
-                        for long in ("--unset", "--ignore-environment")):
-                    return True
-                # Options that take a value, abbreviated as getopt allows.
-                # The signal options take an optional `=value` only and never the
-                # next word, so they are not listed.
-                skip = "=" not in word and len(name) > 2 and any(
-                    long.startswith(name) for long in ("--chdir", "--argv0"))
-            else:
-                # A short cluster, walked letter by letter: a letter that takes a
-                # value ends it, the value being the rest of the word or the next.
-                for position, letter in enumerate(word[1:], start=1):
-                    if letter == "S":
-                        return "split"
-                    if letter in "ui":
-                        return True
-                    if letter in "CaP":
-                        skip = position == len(word) - 1
-                        break
-    return False
-
-
-def git_environment_offence(tokens):
-    """The reason to refuse a git environment variable that executes, or `None`.
-
-    `GIT_EXTERNAL_DIFF=./x git diff` and `GIT_CONFIG_COUNT=1
-    GIT_CONFIG_KEY_0=core.sshCommand ...` are the spellings of `--ext-diff` and
-    `git -c` that arrive as assignment words, which `git_segments` never reads
-    (#281). Judged where a word is an assignment to the environment: the leading
-    assignments of a run, and the arguments of `env`, `export` and their kind.
-    """
-    for run in command_runs(tokens):
-        # Whether a word here is an assignment to the environment: at the start
-        # of a run, right after a launcher, and from `env` or `export` onward,
-        # wherever in the run they stand (`sudo env GIT_PAGER=x git log`).
-        assigning, sticky = True, False
-        # The generic names (`PATH`, `HOME`, `PAGER`) are ordinary for any other
-        # program, so they are judged only in a run that names git or rg. A
-        # script that runs git underneath is the gap #298 tracks.
-        # An assignment that persists (`export PATH=x`, `PATH=x;` with no
-        # command, `env`/`declare`) reaches a later run's git, so it is judged
-        # whatever else the run names; `BASH_ENV`, `ENV` and `SHELL` are acted
-        # on by the shell itself and are refused everywhere.
-        words = [word for word in run if not ASSIGNMENT.match(word)]
-        runs_git = any(program_name(word) in ("git", "rg") for word in words)
-        mentions = (runs_git or not words
-                    or any(program_name(word) in ASSIGNING_COMMANDS for word in words))
-        lead = program_name(words[0]) if words else ""
-        if lead in (ASSIGNING_COMMANDS - {"env"}) | {"read", "mapfile", "readarray"} or (
-                lead == "printf" and "-v" in words):
-            # A name set without an assignment word: `export GIT_PAGER` after an
-            # earlier assignment, `read GIT_PAGER`, `printf -v GIT_PAGER`.
-            for word in words[1:]:
-                if (not word.startswith("-")
-                        and GIT_EXECUTING_ENVIRONMENT.match(word.split("=", 1)[0] + "=")):
-                    return ENVIRONMENT_REFUSAL.format(name=word.split("=", 1)[0])
-        # `env -S 'cmd'` hands env a command string whose own options this guard
-        # does not read, with git inside the one word, so the text of every word is
-        # searched. A string with no git or rg in it (`env -S 'cp a b'`) is judged
-        # by its content as before.
-        removal = env_removes_variables(words)
-        names_git = runs_git or (bool(removal) and any(
-            re.search(r"\b(?:git|rg)\b", word) for word in words))
-        if names_git and removal:
-            # Removing a variable changes which configuration git reads.
-            return ENVIRONMENT_REFUSAL.format(name="env -u")
-        for word in run:
-            if ASSIGNMENT.match(word):
-                name = re.split(r"[\[+=]", word, maxsplit=1)[0].upper()
-                if (assigning or sticky) and runs_git and (
-                        name not in INERT_ENVIRONMENT and not name.startswith("LC_")):
-                    # An allow-list in a run that names git or rg: the denylist
-                    # below grows a name per review round (#298).
-                    return ENVIRONMENT_REFUSAL.format(name=name)
-                if ((assigning or sticky) and GIT_EXECUTING_ENVIRONMENT.match(word)
-                        and (mentions
-                             or word.upper().startswith(
-                                 ("GIT_", "RIPGREP_", "BASH_ENV=", "ENV=", "SHELL=")))):
-                    return ENVIRONMENT_REFUSAL.format(name=word.split("=", 1)[0])
-                continue
-            if word.startswith("-"):
-                continue  # an option of env, sudo or a launcher
-            name = program_name(word)
-            # `sudo` is sticky like `env`: its options take arguments of their own
-            # (`sudo -u x env A=1 git`), so a word after one cannot be told from
-            # the command by position alone.
-            sticky = sticky or name in ASSIGNING_COMMANDS or name == "sudo"
-            assigning = name in ASSIGNING_COMMANDS or name in LAUNCHERS or name == "sudo"
-    return None
-
-
-# `git config` flags that only READ. A write is anything else: `git config
-# alias.p push` makes `p origin HEAD:main` a push whose verb is `p`, and several
-# other keys (`core.pager`, `core.sshCommand`, `core.hooksPath`) are executed.
-# Allow-listed because the writing forms keep gaining spellings (`--add`,
-# `--unset`, `--edit`, `set`), the way `-c`'s keys do (#294).
-CONFIG_READ_FLAGS = frozenset({
-    "--get", "--get-all", "--get-regexp", "--get-urlmatch", "--list", "-l",
-    "--show-origin", "--show-scope", "--name-only", "--null", "-z",
-    "--local", "--global", "--system", "--worktree", "--includes",
-    "--no-includes", "--default", "--type", "--bool", "--int", "--path",
-})
-CONFIG_READ_ACTIONS = frozenset({
-    "--get", "--get-all", "--get-regexp", "--get-urlmatch", "--list", "-l",
-})
-
-DASHED_GIT = re.compile(r"^git-[a-z][a-z0-9-]*$")
-
-# Leads whose operands are names or patterns, never a program they run. `git`
-# is here because every git word is judged by the rest of this file, and its
-# operands include branch names (`git checkout -b chore/git-aliases`).
-INERT_OPERAND_LEADS = READING_COMMANDS | DATA_ONLY_COMMANDS | frozenset({
-    "basename", "cd", "chmod", "cp", "cut", "dirname", "du", "jq", "ln",
-    "mkdir", "mv", "pwd", "readlink", "realpath", "rm", "tee", "test", "touch",
-    "tr", "type", "which", "[",
-})
-# `npm exec`, `npm run` and `npx` run a program, `gh` aliases and extensions
-# and `dotnet exec` run one, and `sort --compress-program` runs one: those
-# leads are inert only for the subcommands that take a name as data.
-INERT_SUBCOMMANDS = {
-    "npm": frozenset({
-        "add", "ci", "i", "info", "install", "remove", "uninstall", "view",
-    }),
-    "gh": frozenset({
-        "api", "auth", "issue", "label", "pr", "release", "repo", "run",
-        "search", "status", "workflow",
-    }),
-    "dotnet": frozenset({
-        "build", "format", "pack", "publish", "restore", "test",
-    }),
-}
-
-
-VALUELESS_OPTIONS = frozenset({
-    "--global", "--ignore-scripts", "--no-audit", "--no-color", "--no-fund",
-    "--quiet", "--save-dev", "--save-exact", "--silent", "--verbose", "-D",
-    "-E", "-g", "-q",
-})
-
-
-def inert_operands(run, lead):
-    """Whether `run`'s lead only reads its operands as data."""
-    raw = leading_command(run)
-    if not raw:
-        # A run of assignments alone has no command word, so it runs nothing.
-        return True
-    # A word with a `/` is a file somebody chose, whatever it is called; `git`
-    # alone is exempt because every git word is judged by the rest of this file.
-    # `program_name` splits on a backslash too, so `'.\ls'` is a file as well.
-    if re.search(r"[\\/]", raw) and lead != "git":
-        return False
-    position = run.index(raw) + 1
-    if lead in INERT_OPERAND_LEADS:
-        return True
-    options = []
-    while position < len(run) and run[position].startswith("-"):
-        options.append(run[position])
-        position += 1
-    if lead in INERT_SUBCOMMANDS:
-        # An option the lead gives a value to (`npm --prefix install exec ...`)
-        # would make that value the "subcommand", so only options known to take
-        # none may stand before it.
-        return (all(option in VALUELESS_OPTIONS for option in options)
-                and position < len(run)
-                and run[position] in INERT_SUBCOMMANDS[lead])
-    # `command -v git-lfs` looks a name up and runs nothing; `find` runs a
-    # program only through one of its exec actions.
-    if lead == "command":
-        return any(re.fullmatch(r"-[pVv]*[Vv][pVv]*", option)
-                   for option in options)
-    return lead == "find" and not any(
-        word in ("-exec", "-execdir", "-ok", "-okdir") for word in run)
-
-
-def git_config_offence(segment):
-    """The reason to refuse a `git config` that is not a plain read, or `None`."""
-    stripped = after_global_options(segment)
-    if not stripped or stripped[0] != "config":
-        return None
-    flags = [word for word in stripped[1:] if word.startswith("-")]
-    positional = [word for word in stripped[1:] if not word.startswith("-")]
-    if all(flag in CONFIG_READ_FLAGS for flag in flags) and (
-            any(flag in CONFIG_READ_ACTIONS for flag in flags)
-            # `git config user.name` names one dotted key and no value: a read.
-            # A bare word is a verb (`edit`, `set`, `unset`), which is not.
-            or (len(positional) == 1 and "." in positional[0])):
-        return None
-    return (
-        "`git config` is refused unless it only reads (`--get`, `--get-all`, "
-        "`--get-regexp`, `--list`): a written `alias.*` rewrites a verb the "
-        "protected-ref checks read by name, and `core.pager`, `core.sshCommand` "
-        "and `core.hooksPath` are executed. It is `git -c` made persistent, "
-        "and that is refused too."
-    )
-
-
-def dashed_git_offence(tokens):
-    """The reason to refuse a `git-<verb>` executable, or `None`.
-
-    `git-send-pack origin HEAD:main` and `git-push` name the program, not the
-    subcommand, so `git_segments` never reads them as a git invocation and no
-    push check runs (#294). Nothing here runs one. A script (`git-trailer-pr.sh`)
-    carries its extension and is not an executable git dispatches to.
-    """
-    for run in command_runs(tokens):
-        lead = program_name(leading_command(run))
-        if lead in DATA_ONLY_COMMANDS:
-            continue
-        # Only a word that is RUN is judged, so `git checkout -b chore/git-x`,
-        # `git add git-hooks` and `npm i git-url-parse` are operands. A wrapper's
-        # whole run is judged, since `timeout 5 git-push` and `sudo -u x git-push`
-        # put the program after a word `launched()` does not read as a launcher.
-        # The subcommands of git that run a program, with a command string the
-        # scan cannot read (`bisect run`, `submodule foreach`, `rebase -x`), are
-        # refused by `git_subcommand_offence` instead.
-        # Inverted (#297): a lead is judged by what it runs, so the whole run is
-        # read unless the lead is known to treat its operands as data. A lead
-        # missing from `WRAPPERS` no longer fails open.
-        if lead in ("command", "find") and inert_operands(run, lead):
-            candidates = run[:1]
-        elif inert_operands(run, lead):
-            candidates = [token for index, token in enumerate(run)
-                          if launched(run, index)]
-        else:
-            candidates = run
-        for token in candidates:
-            # A quoted command string (`'git-push origin HEAD:main'`) names the
-            # program in its first word.
-            word = token.split(None, 1)
-            if (word and not ASSIGNMENT.match(token)
-                    and DASHED_GIT.match(program_name(word[0]))):
-                return (
-                    f"`{token}` is a git subcommand run as its own program, so "
-                    "the push, force and delete checks that read `git <verb>` "
-                    "never see it. Run it as `git <verb>`."
-                )
-    return None
-
-
 def git_segments(tokens):
     """Yield the argv slice of every `git` invocation in a compound command.
 
-    **A `git` token is only an invocation where a command can stand.**
-    `echo git push origin +HEAD:main` was refused, and a guard that refuses
-    honest traffic is the one this file's own docstring says somebody turns
-    off. Raised in review.
+    A `git` token is only an invocation where a command can stand:
+    `echo git push origin +HEAD:main` is text, and a guard that refuses honest
+    traffic gets turned off.
 
-    The test is the run's LEADING word, not where `git` sits inside it, because
+    The test is the run's leading word, not where `git` sits inside it, because
     a wrapper puts the real command in the middle — which is why the scan still
     covers the whole run.
     """
@@ -6884,13 +2277,7 @@ def git_segments(tokens):
         for index, token in enumerate(run):
             if program_name(token) != "git":
                 continue
-            # **Bash expands braces before git sees a word**, so
-            # `--{oneline,output=/tmp/y}` is two options, `--grep {x,--output=y}`
-            # a value and an option, and `git {log,push}` a subcommand with an
-            # operand. Every check reads the words git will receive, not the
-            # words typed (#360).
-            yield [word for typed in run[index + 1:]
-                   for word in brace_variants(typed)]
+            yield run[index + 1:]
 
 
 def after_global_options(segment):
@@ -6920,73 +2307,14 @@ def subcommand_of(segment):
     return stripped[0] if stripped else ""
 
 
-def git_subcommand_offence(segment):
-    """The reason to refuse a git subcommand this guard cannot read, or None.
-
-    **The push allow-list and the forbidden-flag scan both key off the
-    subcommand word.** `F=push; git $F origin +HEAD:main` tokenises `$F`, so
-    `push_offence` never sees `push`, and `Bash(git log:*)` auto-approves the
-    compound that builds it. The residual `docs/harness-boundaries.md` names
-    is an argument after a literal verb — `git log $F` — not the verb itself.
-    Raised by Copilot.
-    """
-    subcommand = subcommand_of(segment)
-    if verb_name(subcommand) in GIT_EXECUTING_SUBCOMMANDS:
-        return (
-            f"`git {subcommand}` runs the program its configuration or `-x` "
-            "names, which a branch can supply; nothing here uses it. Use "
-            "`git diff` and read the output."
-        )
-    arguments = after_global_options(segment)[1:]
-    # By `verb_name`, as the executing subcommands above are, so a case or quote
-    # variant is the same verb. A short cluster holding `x` (`-ix`) and any
-    # `--e...` abbreviation of `--exec` count for `rebase`; over-refusing
-    # `--empty` is the safe direction.
-    verb = verb_name(subcommand)
-    if verb in ("apply", "am"):
-        return (
-            f"`git {subcommand}` writes the files its patch names, which are in "
-            "the patch and not on the command line, so no path can be judged "
-            "(#297). Nothing here applies a patch."
-        )
-    if ((verb == "bisect" and "run" in arguments)
-            or (verb in ("submodule", "submodule--helper") and "foreach" in arguments)
-            or (verb == "filter-branch")
-            or (verb == "rebase" and any(
-                re.match(r"^-[A-Za-z]*x", argument) or argument.startswith("--e")
-                for argument in arguments))):
-        return (
-            f"`git {subcommand}` here runs a command string the command line "
-            "supplies (`bisect run`, `submodule foreach`, `filter-branch`, "
-            "`rebase -x`), which this guard cannot read as argv and nothing "
-            "here uses. Run the command itself."
-        )
-    if (plumbing := plumbing_verb(segment)) is not None:
-        return (
-            f"`git {plumbing}` updates a remote ref without the verb `push`, "
-            "so the protected-branch, force and delete checks never read it. "
-            "Use `git push <remote> <branch>`, which they do."
-        )
-    if not subcommand or SAFE_SUBCOMMAND.match(subcommand):
-        return None
-    return (
-        f"`git {subcommand}` names its subcommand with an expansion, a "
-        "substitution or a pattern this guard cannot read, so the push "
-        "allow-list never sees the argv bash executes. Prefix grants match "
-        "the typed string; refusing rather than judging the word instead of "
-        "the verb it becomes (docs/harness-boundaries.md)."
-    )
-
-
 def push_offence(segment):
-    """The reason to refuse a `git push`, or None — by ALLOW-list.
+    """The reason to refuse a `git push`, or None — by allow-list.
 
-    `push` is LOCATED rather than assumed to be first, so no global option,
-    known or not, can hide it: that was `-C`, and then `--attr-source` in the
-    fix for `-C`.
+    `push` is located rather than assumed to be first, so no global option,
+    known or not, can hide it.
     """
     # `push` is the subcommand when everything before it is either an option or
-    # an option's value — and a value is recognised STRUCTURALLY, as a non-flag
+    # an option's value — and a value is recognised structurally, as a non-flag
     # immediately preceded by a flag, rather than by consulting a list of
     # value-taking globals. That is what makes an unknown global harmless:
     # `git --attr-source HEAD push` and `git --some-future-global X push` both
@@ -6994,15 +2322,13 @@ def push_offence(segment):
     #
     # It also keeps `git log push` — a ref that happens to be called `push` —
     # out of the push checks, because `log` is a non-flag that no flag precedes,
-    # so `log` is the subcommand and `push` is one of its arguments. Refusing
-    # that was the one false positive the allow-list introduced, and trading it
-    # away would have been the wrong direction: a guard that fires on innocent
-    # traffic is one somebody turns off.
+    # so `log` is the subcommand and `push` is one of its arguments: a guard
+    # that fires on innocent traffic is one somebody turns off.
     start = None
     for index, element in enumerate(segment):
         if element.startswith("-"):
             continue
-        if verb_name(element) == "push":
+        if element == "push":
             start = index
             break
         if index == 0 or not segment[index - 1].startswith("-"):
@@ -7042,13 +2368,12 @@ def push_offence(segment):
             return "a `:branch` refspec deletes the remote branch"
     else:
         source, destination = refspec, refspec
-    # git matches an unqualified destination against the remote's refs by its
-    # rev-parse rules, one of which is `refs/<name>`, so `heads/main` is
-    # `refs/heads/main`. Both prefixes come off, in that order, before any
-    # comparison (#275).
-    for prefix in ("refs/", "heads/"):
+    # One prefix, not a loop: `refs/heads/heads/main` is a branch named
+    # `heads/main`, and `heads/refs/heads/main` another, neither of them main.
+    for prefix in ("refs/heads/", "heads/"):
         if destination.startswith(prefix):
             destination = destination[len(prefix):]
+            break
     if source in UNRESOLVABLE_SOURCES and destination == source:
         return (
             f"`{source}` names no destination of its own; it updates whatever "
@@ -7069,74 +2394,1053 @@ def push_offence(segment):
     return None
 
 
+# The checks below refuse a trap rather than an attack: the command does what it
+# says, and what it says loses work. Each message names the form that works, so
+# the remedy arrives at the refusal (`docs/harness-boundaries.md`, *Git argv
+# guard hook*).
+UNCHECKED_PUSH = (
+    "`git push` here pipes its output into another command and the pipeline "
+    "is chained with `&&` or `||`, so the chain reads the last command's exit "
+    "status, not the push's: a push that failed runs what follows as though it "
+    "landed. Put `set -o pipefail;` before the pipeline, or push unpiped and "
+    "compare `git ls-remote origin refs/heads/<branch>` with `git rev-parse "
+    "HEAD` before acting on it."
+)
+LITERAL_CACHEINFO = (
+    "`git update-index --cacheinfo` with a literal mode stages that mode "
+    "whatever the file had, so a hard-coded one drops or adds an executable "
+    "bit, and a Windows checkout never shows it in `git status`. Read the mode with "
+    "`git ls-files -s <path>` and pass it through, then expect no `mode change` "
+    "line in `git diff --summary origin/main...HEAD`."
+)
+REMOTE_RESET = (
+    "`git reset --soft` to a remote-tracking ref names a ref every worktree "
+    "shares and any fetch moves: a fetch between the fork and the reset puts "
+    "the branch on the new base with the old tree, and the recommit reverts "
+    "whatever landed meanwhile. Reset to the fork point by its SHA — "
+    "`git merge-base HEAD origin/main`, read before any fetch — and check "
+    "`git diff --stat origin/main...HEAD` before pushing."
+)
+STDIN_DATA_ROUTE = (
+    " If the shell runs a script file and this text is that script's input, "
+    "write the text to a file with `Write` and pass it as `< <path>`: this "
+    "guard reads a shell's stdin as a script, quoted delimiter or not, since "
+    "it cannot see what the script does with it. An issue helper is read as "
+    "taking data only as the first thing the command does, spelled "
+    "`bash .claude/scripts/gh-issue-sweep.sh <args> <<'DELIM'`, which is the "
+    "route where `Write` is denied, as in a sweep; "
+    "`docs/harness/pitfalls.md`, *Shell and encoding*, lists the shapes "
+    "another check refuses there too."
+)
+CACHEINFO_MODE = re.compile(r"^[0-7]{6}(?:,|$)")
+REMOTE_TRACKING = re.compile(r"^(?:refs/remotes/)?origin/")
+
+# A subset by hand of the keys a written value runs a program from, `git -c`
+# outliving the command. `core.editor`, `credential.helper` and the rest stay
+# admitted, with a read and a removal, or `rerere.enabled` is refused with them.
+RUNNING_CONFIG_KEY = re.compile(
+    r"(?i)^(?:alias\..+|core\.pager|core\.hookspath|core\.sshcommand|diff\.external|.+\.cmd)$")
+CONFIG_VALUE_OPTIONS = frozenset({"-f", "--file", "--blob", "--type", "--default",
+                                  "--comment", "--value"})
+CONFIG_WRITE_OPTIONS = frozenset({"--add", "--replace-all"})
+CONFIG_OTHER_OPTIONS = frozenset({
+    "--edit", "-e", "--get", "--get-all", "--get-color", "--get-colorbool",
+    "--get-regexp", "--get-urlmatch", "--list", "-l", "--remove-section",
+    "--rename-section", "--unset", "--unset-all"})
+CONFIG_OTHER_ACTIONS = frozenset({"edit", "get", "list", "remove-section",
+                                  "rename-section", "unset"})
+
+
+def _is_push(segment):
+    """Whether `segment` is a `git push`, located as `push_offence` locates it."""
+    for index, element in enumerate(segment):
+        if element.startswith("-"):
+            continue
+        if element == "push":
+            return True
+        if index == 0 or not segment[index - 1].startswith("-"):
+            return False
+    return False
+
+
+def _sets_pipefail(words):
+    """Whether a `set` run's arguments turn `pipefail` on: `-o pipefail`, or a cluster such as `-euo pipefail`."""
+    return any(word.startswith("-") and "o" in word[1:] and following == "pipefail"
+               for word, following in zip(words, words[1:]))
+
+
+def unchecked_push_pipeline(tokens):
+    """Whether a `git push` is piped and its pipeline chained by `&&` or `||` with no `set -o pipefail` first."""
+    runs, current = [], []
+    for token in list(tokens) + [";"]:
+        if is_boundary(token):
+            runs.append((current, token))
+            current = []
+        else:
+            current.append(token)
+    pipefail = piped_push = False
+    for run, separator in runs:
+        if run and program_name(run[0]) == "set":
+            pipefail = pipefail or _sets_pipefail(run[1:])
+        elif run and program_name(run[0]) not in DATA_ONLY_COMMANDS and any(
+                program_name(token) == "git" and _is_push(run[index + 1:])
+                for index, token in enumerate(run)):
+            piped_push = not pipefail and separator == "|"
+            continue
+        if piped_push and separator in ("&&", "||"):
+            return True
+        if separator != "|":
+            piped_push = False
+    return False
+
+
+def short_flag(element, subcommand, letters):
+    """Which of `letters` the short option word `element` carries, or `None`."""
+    if not element.startswith("-") or element.startswith("--"):
+        return None
+    stops = GLUED_VALUE_LETTERS.get(subcommand, "")
+    for letter in element[1:]:
+        if letter in letters:
+            return letter
+        if letter in stops:
+            return None
+    return None
+
+
+def xargs_supplies_push(tokens):
+    """Whether `xargs` hands a `git push` arguments this guard never sees.
+
+    Only the push, whose destination cannot be read: `xargs` before anything
+    else is ordinary, and a run led by a reader names it as data.
+    """
+    for run in command_runs(tokens):
+        if program_name(leading_command(run)) in (
+                READING_COMMANDS | DATA_ONLY_COMMANDS):
+            continue
+        names = [program_name(token) for token in run]
+        if "xargs" not in names:
+            continue
+        for index in range(names.index("xargs") + 1, len(run)):
+            if names[index] == "git" and subcommand_of(run[index + 1:]) == "push":
+                return True
+    return False
+
+
+def fetch_offence(segment):
+    """The reason to refuse a fetch or pull that can move a branch backwards.
+
+    `-f`, and a fetch's `-u`, are what discard local commits; `refspec_offence`
+    judges a `+` in a refspec, as it judges every destination.
+    """
+    stripped = after_global_options(segment)
+    if not stripped or stripped[0] not in ("fetch", "pull"):
+        return None
+    kind = stripped[0]
+    for element in stripped[1:]:
+        name = element.split("=", 1)[0]
+        if (short_flag(element, kind, "fu" if kind == "fetch" else "f")
+                or (len(name) > 3 and "--force".startswith(name))
+                or (kind == "fetch" and len(name) > 9
+                    and "--update-head-ok".startswith(name))):
+            return (
+                f"`git {kind} {element}` can move a local branch to a commit "
+                "that does not contain it, which discards local commits under "
+                "a read's grant. Fetch without it; `main:main` fast-forwards."
+            )
+    return None
+
+
+# A fetch's or a pull's options that take the next word as their value, so a
+# colon in it is no refspec's. One this misses reads as a refspec, which costs a
+# false refusal at worst.
+FETCH_VALUE_OPTIONS = frozenset({
+    "--deepen", "--depth", "--filter", "--jobs", "--negotiation-tip",
+    "--server-option", "--shallow-exclude", "--shallow-since", "--strategy",
+    "--strategy-option", "-X", "-j", "-o", "-s",
+})
+
+# A branch of origin onto its own tracking ref, or a tag onto itself: only the
+# value origin holds there, so it can poison nothing. The branch is named in full
+# because a short name takes origin's same-named tag first. A dependabot rebase
+# types that form with `$B` for both names.
+ORIGIN_OWN_REF = re.compile(
+    r"^\+?refs/(?:heads/(?P<branch>[^:]+):refs/remotes/origin/(?P=branch)"
+    r"|tags/(?P<tag>[^:]+):refs/tags/(?P=tag))$")
+
+
+def refspec_offence(segment):
+    """The reason to refuse a fetch or a pull writing a ref of its own choosing.
+
+    A destination, `--refmap` or `--stdin` writes what a sweep and `/ship`'s
+    review bar trust, under a read's grant; only `main:main` and `ORIGIN_OWN_REF`
+    stay, from origin."""
+    stripped = after_global_options(segment)
+    if not stripped or stripped[0] not in ("fetch", "pull"):
+        return None
+    operands, position = [], 1
+    while position < len(stripped):
+        word = stripped[position]
+        name = word.split("=", 1)[0]
+        position += 1
+        if word in FETCH_VALUE_OPTIONS:
+            position += 1
+        elif not word.startswith("-"):
+            operands.append(word)
+        elif ((len(name) > 4 and "--refmap".startswith(name))
+              or (stripped[0] == "fetch" and len(name) > 3
+                  and "--stdin".startswith(name))):
+            return (
+                f"`git {stripped[0]} {word}` writes a ref no refspec operand "
+                "names, under a read's grant. Fetch without it."
+            )
+    for refspec in operands[1:]:
+        destination = refspec.partition(":")[2]
+        # A reading of `$B` as empty or as whitespace leaves one ending in a
+        # slash, which git refuses as invalid; the raw reading judges the rest.
+        if destination and not destination.endswith("/") and not (
+                operands[0] == "origin" and (
+                    refspec == "main:main" or ORIGIN_OWN_REF.match(refspec))):
+            return (
+                f"`{refspec}` writes a ref a plain fetch would not, which a "
+                "sweep or a review may then trust. Fetch without a destination "
+                "and read FETCH_HEAD; `main:main` from origin fast-forwards, and "
+                "`refs/heads/<name>:refs/remotes/origin/<name>` tracks."
+            )
+    return None
+
+
+def pull_offence(segment):
+    """The reason to refuse an option that overrides `--ff-only`, or `None`."""
+    stripped = after_global_options(segment)
+    if not stripped or stripped[0] != "pull" or "--ff-only" not in stripped:
+        return None
+    for element in stripped[1:]:
+        name = element.split("=", 1)[0]
+        if (name in ("--no-ff", "--ff") or short_flag(element, "pull", "r")
+                or (len(name) > 4 and "--rebase".startswith(name))):
+            return (
+                f"`{element}` beside `--ff-only` overrides it, and the pull "
+                "that is granted is the one that cannot rewrite or merge. "
+                "Drop the option."
+            )
+    return None
+
+
+def config_offence(segment):
+    """The refusal for a `git config` writing a key that runs a program, or None."""
+    stripped = after_global_options(segment)
+    if not stripped or stripped[0] != "config":
+        return None
+    operands, options, position = [], set(), 1
+    while position < len(stripped):
+        word = stripped[position]
+        position += 1
+        if not word.startswith("-"):
+            operands.append(word)
+            continue
+        options.add(word.split("=", 1)[0])
+        if word in CONFIG_VALUE_OPTIONS:
+            position += 1
+    if options & CONFIG_OTHER_OPTIONS or (operands and operands[0] in CONFIG_OTHER_ACTIONS):
+        return None
+    if operands[:1] == ["set"]:
+        operands = operands[1:] + [""]
+    if len(operands) < 2 and not options & CONFIG_WRITE_OPTIONS:
+        return None
+    if not operands or not RUNNING_CONFIG_KEY.match(operands[0]):
+        return None
+    return (
+        f"`git config {operands[0]}` writes a key git runs a program from, the "
+        "`git -c` this guard refuses, in a file that outlives this command. "
+        "Hand it to the owner if it is wanted; other keys stay admitted."
+    )
+
+
+def trap_offence(segment):
+    """The refusal for a git command whose text shows it losing work, or None."""
+    stripped = after_global_options(segment)
+    if not stripped:
+        return None
+    subcommand, arguments = stripped[0], stripped[1:]
+    # `--add` stages a path the index lacks, which has no mode to read back.
+    if subcommand == "update-index" and "--add" not in arguments:
+        for index, element in enumerate(arguments):
+            value = None
+            if element == "--cacheinfo" and index + 1 < len(arguments):
+                value = arguments[index + 1]
+            elif element.startswith("--cacheinfo="):
+                value = element.split("=", 1)[1]
+            if value is not None and CACHEINFO_MODE.match(value):
+                return LITERAL_CACHEINFO
+    if subcommand == "reset" and "--soft" in arguments and any(
+            REMOTE_TRACKING.match(element) for element in arguments if not element.startswith("-")):
+        return REMOTE_RESET
+    return None
+
+
+# ---- what a command writes -------------------------------------------------
+
+# The directory the command runs in, from the hook event; `main` sets it.
+EVENT_CWD = None
+
+WRITING_REDIRECTION = re.compile(
+    r"^(?:\d+|\{\w+\})?(?P<operator>&>>|&>|>>|>&|>\||<>|>)[ \t]*(?P<target>.*)$",
+    re.DOTALL)
+
+# Variables whose value this process shares with the session.
+EXPANDABLE_VARIABLES = frozenset({
+    "CLAUDE_PROJECT_DIR", "HOME", "TEMP", "TMP", "TMPDIR",
+})
+VARIABLE_REFERENCE = re.compile(
+    r"\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))")
+
+# A worktree removed or not yet forked has no `.git`, and is still one.
+WORKTREE_BELOW = re.compile(r"(?i)^\.claude[\\/]worktrees[\\/][^\\/]+[\\/](.*)$")
+
+# Bash on Windows spells `C:\x` as `/c/x`, which `abspath` reads as `C:\c\x`.
+DRIVE_SPELLING = re.compile(r"^/([A-Za-z])(?=/|$)")
+
+# What each verb writes: `destination` the last operand or a `-t` value, `every`
+# each operand, `in-place` the files under `-i`, and `of` the `of=` operand.
+# The list trails the programs that write, which the boundaries file states.
+WRITING_VERBS = {
+    "cp": "destination", "install": "destination", "ln": "destination",
+    "mv": "every", "rm": "every", "rmdir": "every", "shred": "every",
+    "tee": "every", "touch": "every", "truncate": "every", "unlink": "every",
+    "perl": "in-place", "sed": "in-place",
+    "dd": "of",
+}
+TARGET_OPTION_VERBS = frozenset({"cp", "install", "ln", "mv"})
+# Verbs that remove, move or fill a directory whole, so its parent is a write.
+TREE_VERBS = frozenset({"cp", "install", "mv", "rm", "rmdir", "shred"})
+# Verbs whose operand goes away, so a parent of the checkout goes with it.
+REMOVING_VERBS = frozenset({"mv", "rm", "rmdir", "shred", "unlink"})
+
+# Options that take a value, so their value is not read as an operand.
+SHORT_VALUE_OPTIONS = {
+    "cp": "S", "install": "gmoS", "ln": "S", "mv": "S", "sed": "l",
+    "shred": "ns", "touch": "dr", "truncate": "rs",
+}
+LONG_VALUE_OPTIONS = {
+    "cp": ("--suffix",), "install": ("--group", "--mode", "--owner",
+                                     "--strip-program", "--suffix"),
+    "ln": ("--suffix",), "mv": ("--suffix",),
+    "sed": ("--expression", "--file", "--line-length"),
+    "shred": ("--iterations", "--random-source", "--size"),
+    "touch": ("--date", "--reference", "--time"),
+    "truncate": ("--reference", "--size"),
+}
+FIND_EXECUTORS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
+FIND_OUTPUT_FILES = frozenset({"-fls", "-fprint", "-fprint0", "-fprintf"})
+FIND_VALUE_OPTIONS = frozenset({"-D"})
+DIRECTORY_CHANGES = frozenset({"cd", "pushd", "popd"})
+DIRECTORY_WRAPPERS = frozenset({"builtin", "command"})
+
+
+def target_literal(word):
+    """The text shell `word` spells, or `None` for a substitution or a parse failure."""
+    if word.startswith(("<(", ">(")) or substitutions(word):
+        return None
+    try:
+        parsed = shlex.split(strip_dollar_quotes(word), posix=True)
+    except ValueError:
+        return None
+    return parsed[0] if parsed else None
+
+
+def expanded_target(literal, command):
+    """`literal` with its known variables replaced, or `None` if one is unknown.
+
+    Known means this process holds it and `command` does not set it.
+    """
+    assigned = VARIABLE_REFERENCE.sub("", command)
+    failed = False
+
+    def replace(match):
+        nonlocal failed
+        name = match.group(1) or match.group(2)
+        value = os.environ.get(name)
+        if (name not in EXPANDABLE_VARIABLES or not value or re.search(
+                rf"(?<![A-Za-z0-9_]){name}(?![A-Za-z0-9_])", assigned)):
+            failed = True
+            return ""
+        return value
+
+    expanded = VARIABLE_REFERENCE.sub(replace, literal)
+    return None if failed or "$" in expanded else expanded
+
+
+def written_path(word, cwd, command):
+    """The absolute path shell `word` names from `cwd`, or `None` if unreadable.
+
+    `None` admits: refusing an unknown variable or a computed word is the false
+    refusal the threat model files.
+    """
+    literal = target_literal(word)
+    if not literal:
+        return None
+    raw = word.strip()
+    if raw.startswith("~"):
+        prefix = re.match(r"~[^/\\]*", raw).group(0)
+        if prefix == "~":
+            home = os.environ.get("HOME") or os.path.expanduser("~")
+            literal = home + literal[1:]
+        elif prefix == "~+" and cwd:
+            literal = cwd + literal[2:]
+        else:
+            return None
+    if "$" in literal:
+        literal = expanded_target(literal, command)
+        if literal is None:
+            return None
+    if os.name == "nt":
+        # `abspath("C:")` is that drive's working directory, not the drive.
+        literal = DRIVE_SPELLING.sub(lambda match: match.group(1) + ":" + (
+            os.sep if match.end() == len(literal) else ""), literal)
+    if not (os.path.isabs(literal) or literal.startswith(("/", "\\"))):
+        if cwd is None:
+            return None
+        literal = os.path.join(cwd, literal)
+    return os.path.normpath(os.path.abspath(literal))
+
+
+def checkout_of(path):
+    """The root of the checkout holding `path`, or `None` outside one."""
+    root = path
+    while not os.path.exists(os.path.join(root, ".git")):
+        parent = os.path.dirname(root)
+        if parent == root:
+            return None
+        root = parent
+    return root
+
+
+def checkout_relative(path):
+    """`path` from the root of the checkout holding it, or `None` outside one."""
+    root = checkout_of(path)
+    if root is None:
+        return None
+    relative = os.path.relpath(path, root)
+    worktree = WORKTREE_BELOW.match(relative)
+    return worktree.group(1) if worktree else relative
+
+
+def in_linked_worktree(path):
+    """Whether `path` is in a linked worktree, removed from disk or not."""
+    root = checkout_of(path)
+    return root is not None and (
+        os.path.isfile(os.path.join(root, ".git"))
+        or WORKTREE_BELOW.match(os.path.relpath(path, root) + os.sep) is not None)
+
+
+def beneath(path, root):
+    """Whether resolved `path` is `root` or sits under it."""
+    path, root = os.path.normcase(path), os.path.normcase(root)
+    return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
+
+
+def scratch_checkout(path):
+    """Whether `path` is in a checkout under the temp root the session is not in.
+
+    A mutation proof copies into one, and this target's denies are not about it.
+    """
+    if not beneath(path, os.path.realpath(tempfile.gettempdir())):
+        return False
+    session = checkout_of(os.path.abspath(EVENT_CWD or os.getcwd()))
+    return session is None or not beneath(path, os.path.realpath(session))
+
+
+def protected_target(path, whole=False):
+    """The deny holding `path`, as spelled or where its links land, or `None`."""
+    if scratch_checkout(os.path.realpath(path)):
+        return None
+    for place in (path, os.path.realpath(path)):
+        relative = checkout_relative(place)
+        named = denied_path(relative, whole) if relative is not None else None
+        if named is not None:
+            return named
+    return None
+
+
+def home_target(path, cwd, command, whole=False, removing=False):
+    """The name below the home that shell-written `path` reaches, or `None`.
+
+    Judged as spelled and as resolved, the session's own checkout left to its denies. `whole` counts
+    `~/.claude` itself; `removing` frees a project's memory file, which no editing tool can remove.
+    """
+    if whole and os.path.basename(path) == "*":
+        path = os.path.dirname(path)
+    session = checkout_of(os.path.abspath(EVENT_CWD or os.getcwd()))
+    standing = (session, os.path.realpath(session)) if session is not None else ()
+    homes = [written_path("~", cwd, command), os.path.expanduser("~")]
+    roots = {root for home in homes if home
+             for root in (os.path.abspath(home), os.path.realpath(home))}
+    for place in (path, os.path.realpath(path)):
+        if any(beneath(place, checkout) for checkout in standing):
+            continue
+        for root in roots:
+            if not beneath(place, root) or os.path.normcase(place) == os.path.normcase(root):
+                continue
+            parts = os.path.relpath(place, root).replace("\\", "/").lower().split("/")
+            if removing and parts[:2] == [".claude", "projects"] and (
+                    len(parts) > 4 and parts[3] == "memory"
+                    and not any(mark in part for part in parts for mark in "*?[{")):
+                continue
+            if home_place(parts) is not None or (parts[0] == ".claude" and (
+                    (len(parts) > 1 and parts[1] in STANDING_DIRECTORIES)
+                    or (whole and len(parts) == 1))):
+                return "~/" + "/".join(parts)
+    return None
+
+
+def destination_offence(word, cwd, command, writer, whole=False, inside=None, removing=False):
+    """The reason to refuse writing the file shell `word` names, or `None`.
+
+    `inside` is the name a copy gives its source in the directory `word` names.
+    `removing` is `home_target`'s.
+    """
+    path = written_path(word, cwd, command)
+    if path is not None and inside is not None:
+        path = os.path.join(path, inside)
+    named = protected_target(path, whole) if path is not None else None
+    if named is None:
+        home = home_target(path, cwd, command, whole, removing) if path is not None else None
+        if home is None:
+            return None
+        return (
+            f"{writer} would write `{path}`, which is `{home}`: a key, a shell "
+            "profile, git's own configuration or what `~/.claude` applies to "
+            "later sessions. No rule judges a shell write there. Use an editing "
+            "tool, where one does, or hand it to the owner "
+            "(docs/harness-boundaries.md, *The edit-target guard*)."
+        )
+    return (
+        f"{writer} would write `{path}`, which {named} protects, and a deny "
+        "binds the editing tools alone, so this writes straight past it. Use "
+        "an editing tool, where the rule judges the path, or hand it to the "
+        "owner."
+    )
+
+
+def removal_offence(word, cwd, command, writer):
+    """The reason to refuse removing the place shell `word` names, or `None`.
+
+    The filesystem's root, the home directory and a strict parent of the checkout
+    the command starts in or has moved to; `rm -rf .` is the checkout itself.
+    """
+    path = written_path(word, cwd, command)
+    if path is None:
+        return None
+    # `rm -rf ../*` takes the checkout with the rest of what the star holds.
+    if os.path.basename(path) == "*":
+        path = os.path.dirname(path)
+    place = None
+    if os.path.dirname(path) == path:
+        place = "the filesystem's root"
+    elif os.path.normcase(path) == os.path.normcase(written_path("~", cwd, command) or ""):
+        place = "the home directory"
+    for start in (EVENT_CWD or os.getcwd(), cwd):
+        root = checkout_of(os.path.abspath(start)) if start else None
+        if place is None and root is not None and beneath(root, path) and (
+                os.path.normcase(root) != os.path.normcase(path)):
+            place = f"a parent of the checkout `{root}`"
+    if place is None:
+        return None
+    return (
+        f"{writer} would remove `{path}`, {place}, and this checkout or every "
+        "session's home with it. Name what is below it."
+    )
+
+
+def ordinary_positions(command):
+    """Whether each character of `command` is unquoted, unescaped shell text."""
+    ordinary = [False] * len(command)
+    escaped = None
+    for index, in_quotes, in_comment in shell_positions(command):
+        if index == escaped:
+            escaped = None
+            continue
+        if command[index] == "\\" and not in_quotes and not in_comment:
+            escaped = index + 1
+            continue
+        ordinary[index] = not in_quotes and not in_comment
+    return ordinary
+
+
+def raw_runs(command):
+    """`command`'s runs in order, as `(words, redirections)`, quoting intact.
+
+    `shlex` removes the quotes that decide whether `~` or `$` expands. A
+    subshell's `(` and `)` stand as themselves: a `cd` inside one ends with it.
+    """
+    ordinary = ordinary_positions(command)
+    spans = dict(redirection_spans(command))
+    runs, words, written, index = [], [], [], 0
+
+    def finish():
+        nonlocal words, written
+        if words or written:
+            runs.append((words, written))
+        words, written = [], []
+
+    while index < len(command):
+        if spans.get(index, index) > index:
+            written.append(command[index:spans[index]])
+            index = spans[index]
+            continue
+        if ordinary[index] and command[index] in " \t":
+            index += 1
+            continue
+        if ordinary[index] and command[index] == "(" and words:
+            close = _closing_paren(command, index + 1)
+            if close is None:
+                break
+            words.append(command[index:close + 1])
+            runs.extend(["(", *raw_runs(command[index + 1:close]), ")"])
+            index = close + 1
+            continue
+        end = word_end(command, index, ordinary)
+        if end == index:
+            finish()
+            # An opener with no closer stops the walk: bash cannot parse what
+            # follows it, and rescanning from each one would be quadratic.
+            if command[index] in "$`":
+                break
+            if command[index] in "()":
+                runs.append(command[index])
+            index += 1
+            continue
+        words.append(command[index:end])
+        index = end
+    finish()
+    return runs
+
+
+def _glued_raw(raw, literal, cut):
+    """The raw text of `literal[cut:]`, whose quoting still decides what expands."""
+    return raw[cut:] if raw.startswith(literal[:cut]) else shlex.quote(literal[cut:])
+
+
+def backup_word(word, suffix):
+    """The shell word naming `word`'s `-i` backup: `*` in `suffix` is its name."""
+    literal = target_literal(word)
+    if literal is None or "*" not in suffix:
+        return word + shlex.quote(suffix)
+    named = suffix.replace("*", os.path.basename(literal))
+    return shlex.quote(named if "/" in suffix
+                       else os.path.join(os.path.dirname(literal), named))
+
+
+def verb_destinations(verb, words):
+    """The raw words `verb` writes, each with the sources a copy puts inside it.
+
+    A hard link makes its source writable under another name, so its sources
+    count; a symbolic link is judged where it lands; a `-i` backup is a write.
+    """
+    literals = [target_literal(word) for word in words]
+    model = WRITING_VERBS[verb]
+    if model == "of":
+        return [(_glued_raw(raw, literal, 3), None, False)
+                for raw, literal in zip(words, literals)
+                if literal and literal.startswith("of=")]
+
+    operands, targets, suffixes = [], [], []
+    in_place = script_given = directory_mode = options_done = False
+    symbolic = hard_link = no_target = False
+    short_values = SHORT_VALUE_OPTIONS.get(verb, "")
+    long_values = LONG_VALUE_OPTIONS.get(verb, ())
+    position = 0
+    while position < len(words):
+        raw, literal = words[position], literals[position]
+        position += 1
+        if literal is None or options_done or literal in ("-", "") or (
+                not literal.startswith("-")):
+            operands.append(raw)
+            continue
+        if literal == "--":
+            options_done = True
+            continue
+        if literal.startswith("--"):
+            name, equals, _ = literal.partition("=")
+
+            def abbreviates(option):
+                return len(name) > 2 and option.startswith(name)
+
+            if verb in TARGET_OPTION_VERBS and abbreviates("--no-target-directory"):
+                no_target = True
+            elif verb in TARGET_OPTION_VERBS and abbreviates("--target-directory"):
+                if equals:
+                    targets.append(_glued_raw(raw, literal, len(name) + 1))
+                elif position < len(words):
+                    targets.append(words[position])
+                    position += 1
+            elif verb == "sed" and abbreviates("--in-place"):
+                in_place = True
+                if equals:
+                    suffixes.append(literal[len(name) + 1:])
+            elif verb == "ln" and abbreviates("--symbolic") and not abbreviates("--suffix"):
+                symbolic = True
+            elif verb == "cp" and abbreviates("--link"):
+                hard_link = True
+            elif verb == "install" and abbreviates("--directory"):
+                directory_mode = True
+            else:
+                if verb == "sed" and (abbreviates("--expression") or abbreviates("--file")):
+                    script_given = True
+                if not equals and any(abbreviates(option) for option in long_values):
+                    position += 1
+            continue
+        letters = literal[1:]
+        for offset, letter in enumerate(letters):
+            rest = letters[offset + 1:]
+            if verb in ("sed", "perl") and letter == "i":
+                in_place = True
+                if rest:
+                    suffixes.append(rest)
+                break
+            if verb == "ln" and letter == "s":
+                symbolic = True
+                continue
+            if verb == "cp" and letter == "l":
+                hard_link = True
+                continue
+            if verb in TARGET_OPTION_VERBS and letter == "T":
+                no_target = True
+                continue
+            if verb in TARGET_OPTION_VERBS and letter == "t":
+                if rest:
+                    targets.append(_glued_raw(raw, literal, offset + 2))
+                elif position < len(words):
+                    targets.append(words[position])
+                    position += 1
+                break
+            if verb == "install" and letter == "d":
+                directory_mode = True
+                continue
+            script_letter = (verb == "sed" and letter in "ef") or (
+                verb == "perl" and letter in "eE")
+            if script_letter:
+                script_given = True
+            if script_letter or letter in short_values:
+                if not rest:
+                    position += 1
+                break
+            if verb == "perl" and letter in "CDFIMdmx":
+                break
+
+    whole_list = model == "every" or directory_mode or hard_link or (
+        verb == "ln" and not symbolic)
+    if model != "in-place":
+        if verb in TARGET_OPTION_VERBS and not directory_mode and (
+                targets or len(operands) > 1):
+            sources = operands if targets else operands[:-1]
+            landed = [(word, None if no_target else sources,
+                       bool(targets) or len(sources) > 1)
+                      for word in (targets or operands[-1:])]
+            return [(word, None, False) for word in sources] * whole_list + landed
+        return [(word, None, False) for word in operands + targets] * whole_list
+    if not in_place:
+        return []
+    files = operands if script_given else operands[1:]
+    return [(word, None, False) for word in files + [
+        backup_word(word, suffix) for suffix in suffixes for word in files]]
+
+
+def landings(destination, sources, into, cwd, command):
+    """The names a copy or move gives `sources` inside `destination`, or `[None]`.
+
+    `None` is the destination itself: it is a file, or a source's name is not
+    known, as for a glob or a brace. A source of `.` or `..` fills the directory whole.
+    """
+    literal = target_literal(destination) or ""
+    path = written_path(destination, cwd, command)
+    if not (into or literal.endswith(("/", "\\")) or (path and os.path.isdir(path))):
+        return [None]
+    names = []
+    for source in sources:
+        spelled = (target_literal(source) or "").rstrip("/\\")
+        last = re.split(r"[\\/]", spelled)[-1]
+        found = written_path(source, cwd, command)
+        if last in ("", ".", "..") or found is None or any(
+                mark in spelled for mark in "*?[{"):
+            return [None]
+        names.append(os.path.basename(found))
+    return names or [None]
+
+
+def find_offence(words, cwd, command):
+    """The reason to refuse `find`'s own words: `-delete` from a start, an output file.
+
+    `-delete` is `rm -r` from each start, so `.`, no start and `-files0-from` are
+    the checkout at most. What an `-exec` runs is that verb's own to answer for.
+    """
+    literals = [target_literal(word) for word in words]
+    position, starts, files, deleting = 0, [], [], False
+    while position < len(words) and (literals[position] or "") in (
+            "-H", "-L", "-P", *FIND_VALUE_OPTIONS) or (
+            position < len(words) and (literals[position] or "").startswith("-O")):
+        position += 2 if literals[position] in FIND_VALUE_OPTIONS else 1
+    while position < len(words) and not (
+            literals[position] and literals[position][0] in "-(!),"):
+        starts.append(words[position])
+        position += 1
+    while position < len(words):
+        literal = literals[position]
+        position += 1
+        if literal == "-delete":
+            deleting = True
+        elif literal in FIND_OUTPUT_FILES and position < len(words):
+            files.append(words[position])
+            position += 1
+        elif literal in FIND_EXECUTORS:
+            while position < len(words) and literals[position] not in (";", "+"):
+                position += 1
+    for start in starts if deleting else ():
+        refusal = (removal_offence(start, cwd, command, "`find -delete`")
+                   or destination_offence(start, cwd, command, "`find -delete`", True))
+        if refusal is not None:
+            return refusal
+    for word in files:
+        refusal = destination_offence(word, cwd, command, "`find`")
+        if refusal is not None:
+            return refusal
+    return None
+
+
+def verb_offence(verb, operands, cwd, command, writer):
+    """The reason to refuse writing verb `verb` with `operands`, or `None`."""
+    for word, sources, into in verb_destinations(verb, operands):
+        refusal = removal_offence(word, cwd, command, writer) if (
+            sources is None and verb in REMOVING_VERBS) else None
+        if refusal is not None:
+            return refusal
+        names = [None] if sources is None or verb not in TREE_VERBS else (
+            landings(word, sources, into, cwd, command))
+        for name in names:
+            refusal = destination_offence(word, cwd, command, writer, verb in TREE_VERBS, name,
+                                          verb in ("rm", "unlink"))
+            if refusal is not None:
+                return refusal
+    return None
+
+
+def writing_verb_offence(words, cwd, command):
+    """The reason to refuse a writing verb in the run `words`, or `None`.
+
+    Anywhere in the run, since a wrapper puts it mid-run (`sudo tee`, `env cp`,
+    `find -exec cp`); a run led by a reader or a printer cannot run those words.
+    """
+    literals = [target_literal(word) for word in words]
+    if program_name(leading_command([word or "" for word in literals])) in (
+            READING_COMMANDS | DATA_ONLY_COMMANDS):
+        return None
+    for index, literal in enumerate(literals):
+        if literal is None or ASSIGNMENT.match(words[index]):
+            continue
+        verb = program_name(literal)
+        if verb == "find":
+            refusal = find_offence(words[index + 1:], cwd, command)
+            if refusal is not None:
+                return refusal
+        if verb not in WRITING_VERBS:
+            continue
+        operands = words[index + 1:]
+        if any(word in FIND_EXECUTORS for word in literals[:index]):
+            for cut, word in enumerate(literals[index + 1:]):
+                if word in (";", "+"):
+                    operands = operands[:cut]
+                    break
+        refusal = verb_offence(verb, operands, cwd, command, f"`{verb}`")
+        if refusal is not None:
+            return refusal
+    return None
+
+
+def _git_operands(words, literals, value_options):
+    """`(options, before, after)` of a git verb's words: `after` follows a `--`."""
+    options, before, after, position = [], [], None, 0
+    while position < len(words):
+        raw, literal = words[position], literals[position]
+        position += 1
+        # A word holding a substitution has no literal, and is an option all the same.
+        spelled = literal if literal is not None else raw.strip("\"'")
+        if after is not None:
+            after.append(raw)
+        elif literal == "--":
+            after = []
+        elif spelled.startswith("-") and spelled != "-":
+            options.append(spelled)
+            if literal in value_options:
+                if position < len(words):
+                    options.append(literals[position] or "$")
+                position += 1
+        else:
+            before.append(raw)
+    return options, before, after or []
+
+
+def _has_short_letter(options, letter):
+    """Whether a short cluster in `options` carries `letter`."""
+    return any(re.fullmatch(rf"-[A-Za-z]*{letter}[A-Za-z]*", option) for option in options)
+
+
+def _restore_source(options):
+    """The `--source` of `git restore`'s `options`, spelled any way git takes it."""
+    for index, option in enumerate(options):
+        name, equals, value = option.partition("=")
+        if name.startswith("--") and len(name) > 3 and "--source".startswith(name):
+            return value if equals else (options[index + 1] if index + 1 < len(options) else "")
+        cluster = re.fullmatch(r"-[A-Za-z]*s(.*)", option)
+        if cluster and not option.startswith("--"):
+            return cluster.group(1) or (options[index + 1] if index + 1 < len(options) else "")
+    return None
+
+
+def git_path_offence(words, cwd, command):
+    """The reason to refuse a git verb writing a denied path, or `None`.
+
+    `git rm`, `git mv` and a restore from another commit, from a literal `-C`. A
+    restore from `HEAD` puts the file back, and a worktree's write is in its diff.
+    """
+    literals = [target_literal(word) for word in words]
+    lead = leading_command([word or "" for word in literals])
+    if program_name(lead) != "git":
+        return None
+    position = literals.index(lead) + 1
+    while position < len(words) and (literals[position] or "").startswith("-"):
+        if literals[position] == "-C" and position + 1 < len(words):
+            cwd = written_path(words[position + 1], cwd, command)
+        position += 2 if literals[position] in GLOBAL_VALUE_FLAGS else 1
+    if position >= len(words) or cwd is None or in_linked_worktree(os.path.abspath(cwd)):
+        return None
+    verb, words, literals = literals[position], words[position + 1:], literals[position + 1:]
+    if verb in ("rm", "mv"):
+        options, _, _ = _git_operands(words, literals, ())
+        if set(options) & {"--cached", "--dry-run"} or _has_short_letter(options, "n"):
+            return None
+        return verb_offence(verb, words, cwd, command, f"`git {verb}`")
+    if verb == "checkout":
+        options, before, after = _git_operands(
+            words, literals, {"-b", "-B", "--orphan", "--conflict", "--pathspec-from-file"})
+        if set(options) & {"-b", "-B", "--orphan"}:
+            return None
+        # A source nothing can read is judged by its paths, which can be read.
+        source = (target_literal(before[0]) or "$") if before else None
+        # As git disambiguates: with no `--`, a first word naming a path is one.
+        first = written_path(before[0], cwd, command) if before and not after else None
+        if first is not None and os.path.lexists(first):
+            source = None
+        paths = after or before[1:]
+    elif verb == "restore":
+        options, before, after = _git_operands(
+            words, literals, {"-s", "--source", "--conflict", "--pathspec-from-file", "-U", "--unified"})
+        source = _restore_source(options)
+        # What follows a short `s` is its value: `-sStaging` is no `--staged`.
+        letters = [option.split("s", 1)[0] for option in options]
+        staged = "--staged" in options or _has_short_letter(letters, "S")
+        worktree = "--worktree" in options or _has_short_letter(letters, "W")
+        if staged and not worktree:
+            return None
+        paths = before + after
+    else:
+        return None
+    if source is None or source in ("HEAD", "@"):
+        return None
+    for word in paths:
+        refusal = destination_offence(word, cwd, command, f"`git {verb}` from `{source}`", True)
+        if refusal is not None:
+            return refusal
+    return None
+
+
+def directory_after(words, cwd, command):
+    """Where the run `words` leaves the shell: `cwd`, or `None` if unreadable."""
+    literals = [target_literal(word) for word in words]
+    lead = leading_command([word or "" for word in literals])
+    if not lead:
+        return cwd
+    start = literals.index(lead)
+    if program_name(lead) in DIRECTORY_WRAPPERS and start + 1 < len(literals):
+        start += 1
+    verb = program_name(literals[start] or "")
+    if verb not in DIRECTORY_CHANGES:
+        return cwd
+    operands = [word for word, literal in zip(words[start + 1:], literals[start + 1:])
+                if literal is None or not literal.startswith("-") or literal == "-"]
+    if verb == "popd" or target_literal(operands[0] if operands else "~") == "-":
+        return None
+    return written_path(operands[0] if operands else "~", cwd, command)
+
+
+def write_offence(command):
+    """The reason to refuse a write in `command`, or `None`.
+
+    A relative target is placed by following each literal `cd`, and after a
+    `cd` nothing can read, only an absolute target is judged.
+    """
+    cwd = EVENT_CWD or os.getcwd()
+    saved = []
+    for run in raw_runs(command):
+        if run == "(":
+            saved.append(cwd)
+            continue
+        if run == ")":
+            cwd = saved.pop() if saved else cwd
+            continue
+        words, written = run
+        for text in written:
+            match = WRITING_REDIRECTION.match(text)
+            if match is None:
+                continue
+            target = match.group("target").strip()
+            if not target or (match.group("operator") == ">&"
+                              and (target == "-" or target.isdigit())):
+                continue
+            refusal = destination_offence(
+                target, cwd, command, f"`{match.group('operator')}`")
+            if refusal is not None:
+                return refusal
+        refusal = (git_path_offence(words, cwd, command)
+                   or writing_verb_offence(words, cwd, command))
+        if refusal is not None:
+            return refusal
+        cwd = directory_after(words, cwd, command)
+    return None
+
+
 # Substitutions and evaluators both recurse, and a crafted nest of either would
 # otherwise reach Python's own limit — where the hook dies with a traceback
 # rather than a verdict, which is the one direction a guard must not fail in.
 MAX_NESTING = 24
 
 
-def event_scopes(command, depth=0):
-    """The texts a writer in `command` may run under (#357).
-
-    The line as bash performs it: a heredoc body and a comment are data, and
-    a backslash-newline is joined before bash reads a name, so a name split
-    by one is the variable. Then, recursively, every script the line hands a
-    shell on stdin, which is code: `bash <<'EOF'` around
-    `GIT_WORK_TREE=.claude bash -c '...'` builds the inner shell's
-    environment in the heredoc. A heredoc handed to anything else stays data,
-    so a `git commit -F -` body is not read.
-    """
-    scopes = [separate_lines(
-        join_continuations(strip_comments(strip_heredocs(command))))]
-    if depth < MAX_NESTING:
-        for script in stdin_scripts(command):
-            scopes.extend(event_scopes(script, depth + 1))
-    return scopes
-
-
-def offence(command, depth=0, judged=None):
+def offence(command, depth=0, judged=None, reading=False):
     """The reason to refuse `command`, or None to allow it.
 
-    **`judged` is a verdict cache, and it is what keeps the cost finite.** Each
-    of the four readings and each extracted substitution recurses onto a string
-    barely shorter than the one it came from, so a command nesting them
-    multiplies: `$( echo ${a:-{z,X}} )` repeated seven times is 155 characters
-    and took over sixty seconds — past the hook timeout, which produces no
-    verdict, which `PreToolUse` treats as non-blocking. Fail-open by
-    exhaustion, on an innocent command, and a regression from the commit that
-    added the readings. Found by an adversarial audit.
+    `judged` is a verdict cache, and it is what keeps the cost finite. Each
+    reading and each extracted substitution recurses onto a string barely
+    shorter than the one it came from, so a command nesting them multiplies —
+    a short `$( echo ${a:-{z,X}} )` nest runs past the hook timeout, which
+    produces no verdict, which `PreToolUse` treats as non-blocking.
 
-    **The cache holds the verdict rather than the visit**, which is the part
-    that has to be right: remembering only that a string had been seen would
-    return None the second time a refusing string appeared, and lose the
-    refusal. A string reached inside its own evaluation is recorded as None
+    The cache holds the verdict rather than the visit: remembering only that a
+    string had been seen would return None the second time a refusing string
+    appeared, and lose the refusal. A string reached inside its own evaluation is recorded as None
     first, so a cycle terminates without inventing a verdict — the outer call
     is the one that answers.
     """
-    global EVENT_SCOPES
     if judged is None:
         judged = {}
     if command in judged:
         return judged[command]
     judged[command] = None
 
-    # Only the outermost call names the event's line, and it clears it on the
-    # way out, so a caller judging many events cannot carry one into the next.
-    # They are fixed for the event, so a cached verdict never depends on the
-    # order its scopes were reached in.
-    outermost = depth == 0
-    try:
-        if outermost:
-            EVENT_SCOPES = tuple(dict.fromkeys(event_scopes(command)))
-        verdict = _offence(command, depth, judged)
-    finally:
-        if outermost:
-            EVENT_SCOPES = ()
+    verdict = _offence(command, depth, judged, reading)
     judged[command] = verdict
     return verdict
 
 
-def _offence(command, depth, judged):
+def _offence(command, depth, judged, reading):
     """`offence`'s body, called only through its cache."""
     if depth > MAX_NESTING:
         return (
@@ -7150,60 +3454,26 @@ def _offence(command, depth, judged):
             "cannot tell where the body ends or which lines after it are "
             "commands; refusing rather than reading part of it."
         )
-    # Judged as typed and with its line continuations removed, which bash does
-    # first: `a=\<newline>( [ 1<<EOF]=1 )` is a compound assignment only once the
-    # pair is gone, and either reading refusing is enough.
-    spellings = (command, join_continuations(command))
-    if any(ambiguous_expansion(text) for text in spellings):
-        return (
-            "a `#`, a `<<` or a command substitution inside `${...}`: bash "
-            "reads it as text where a comment or heredoc reading would strip the "
-            "lines after it, and this guard cannot tell which without parsing "
-            "the expansion. Write it outside the braces."
-        )
-    if any(ambiguous_arithmetic(text) for text in spellings):
-        return (
-            "`((` and `<<` in one command: inside arithmetic `<<` is a shift "
-            "and opens no heredoc, outside it hides every line to its "
-            "delimiter, and this guard cannot tell which without parsing "
-            "bash's arithmetic. Run the arithmetic and the heredoc as "
-            "separate commands."
-        )
 
 
-    # **What bash does when a substitution prints nothing, judged beside what
-    # it does when one prints something.** The words around an empty
-    # substitution join, so `git $( )push origin +HEAD:main` is a push — and
-    # the tokeniser saw `(` and `)` as run boundaries instead. Both readings
-    # have to be safe, and only one of them is the string that was typed.
-    # **An expansion has more than one reading, and the command is safe only if
-    # it is safe under all of them.** Empty joins the words around it,
-    # whitespace splits one into several, a default puts its own text on the
-    # line, and a single-element brace range is the text inside it. Each is
-    # what bash does in the shell these commands run in — no positional
-    # parameters, no variables set — so none of these is the run-time residual
-    # `docs/harness-boundaries.md` names; the dangerous string is in the source
-    # in every case.
-    for description, reading in (
+    # An expansion has more than one reading, and the command is safe only if
+    # it is safe under all of them: an empty substitution joins the words
+    # around it, whitespace splits one into several, a default puts its own
+    # text on the line, and a single-element brace range is the text inside it.
+    # Each is what bash does in the shell these commands run in — no positional
+    # parameters, no variables set — so none is the run-time residual
+    # `docs/harness-boundaries.md` names; the dangerous string is in the source.
+    for description, rewrite in (
         ("a command substitution taken as empty", without_substitutions),
         ("an expansion taken as whitespace", splitting_expansions),
         ("an expansion taken as its default", defaulted_expansions),
         ("a brace expansion taken as one word", brace_expanded),
     ):
-        variant = outside_verbatim(command, reading)
+        variant = outside_verbatim(command, rewrite)
         if variant != command:
-            refusal = offence(variant, depth + 1, judged)
+            refusal = offence(variant, depth + 1, judged, reading=True)
             if refusal is not None:
                 return f"with {description}: {refusal}"
-
-    if any(contains_gh_word(body) or runs_unmodelled_program(body)
-           for body in process_substitution_bodies(strip_heredocs(command))):
-        return (
-            "a process substitution runs `gh` or a program outside the short "
-            "list whose effects this guard models, and it executes before "
-            "the command holding it is checked against its grant. Run it as "
-            "its own command."
-        )
 
     if substitution_fed_shells(command):
         return (
@@ -7213,111 +3483,52 @@ def _offence(command, depth, judged):
             "result."
         )
 
-    if unclassified_stdin_writer(command):
-        return (
-            "a program this guard cannot classify as a shell or as a reader is "
-            "handed text on its stdin that runs git to write, or that this "
-            "guard cannot read (computed, built from pieces, or from a file "
-            "or a command), and under another name a shell would run it "
-            "(#397). Hand the text to a program by its own name, spell it "
-            "plainly, or run the git command as its own command."
-        )
-
     for script in stdin_scripts(command):
-        # **A substitution inside a script a shell will run supplies the
-        # command itself**, and no reading here models that:
-        # `bash <<<"$(printf git) push origin +HEAD:main"` runs the push, while
-        # the inner `printf git` is judged as the data it is and the
-        # empty-substitution reading leaves a bare `push …`. The same answer
-        # `unmodelled_printer` gives, for the same reason — the text that
-        # decides is not in the source. Raised in review; verified allowed.
+        # A substitution inside a script a shell will run can supply the
+        # command itself — `bash <<<"$(printf git) push origin +HEAD:main"` —
+        # and the text that decides is not in the source, so this refuses on
+        # `unmodelled_printer`'s argument.
         if substitutions(script):
             return (
                 "a script handed to a shell on stdin builds part of itself "
                 "with a command substitution, so what that shell runs cannot "
                 "be read; refusing rather than judging the source instead of "
-                "the result."
+                "the result." + STDIN_DATA_ROUTE
             )
         refusal = offence(script, depth + 1, judged)
         if refusal is not None:
-            return f"in a script handed to a shell on stdin: {refusal}"
+            return f"in a script handed to a shell on stdin: {refusal}" + STDIN_DATA_ROUTE
 
     for text, quotes in expandable_regions(command):
-        # **The continuation join has to happen before anything looks for a
-        # substitution, not only before the tokeniser.** Bash removes
-        # `\<newline>` inside double quotes too, so
-        # `git log "$\<newline>(git push origin +HEAD:main)"` becomes a live
-        # `$(` — and this scan, running on the raw text, saw no opener while
-        # `shlex` later returned the whole quoted value as data. Raised in
-        # review; verified allowed. Only for a command-line region: a heredoc
-        # body arrives with `quotes` false and is not a command line.
+        # The continuation join happens before anything looks for a
+        # substitution: bash removes `\<newline>` inside double quotes too, so
+        # `git log "$\<newline>(git push origin +HEAD:main)"` has a live `$(`.
+        # A heredoc body arrives with `quotes` false and is not a command line.
         text = join_continuations(text, quotes=quotes)
         for inner in substitutions(text, quotes=quotes):
-            # The body is judged in its own right first, so a refusal that
-            # names what it found — a shell evaluator, a push — is the one
-            # reported; the allow-list below then refuses what that admits.
             refusal = offence(inner, depth + 1, judged)
             if refusal is not None:
                 return f"inside a command substitution: {refusal}"
-            refusal = substituted_gh_offence(inner)
-            if refusal is not None:
-                return refusal
 
-    # Stripped once, and used by BOTH paths below. The fallback used to scan the
-    # raw `command`, which put the heredoc false positive straight back: a body
-    # that mentions a forbidden flag would be refused on the raw string the
-    # moment anything else in the line failed to tokenise. A body is data on
-    # every path, not only on the one that parses — and so is a comment, which
-    # is why `strip_comments` runs here rather than being left to the lexer.
+    # Stripped once, and used by both paths below, because a heredoc body and
+    # a comment are data on every path, not only on the one that parses.
     #
-    # `strip_redirections` is outermost because it is the only one of the four
-    # that wants the others' work done first: a redirection inside a heredoc
-    # body or a comment is not one bash performs, and there is nothing left of
-    # either by the time it runs.
-    # `join_continuations` sits after `strip_comments` because a backslash at
-    # the end of a COMMENT continues nothing — bash ends a comment at the
-    # newline — so joining first would have swallowed the next line into it.
+    # `strip_redirections` is outermost because a redirection inside a heredoc
+    # body or a comment is not one bash performs. `join_continuations` sits
+    # after `strip_comments` because a backslash at the end of a comment
+    # continues nothing — bash ends a comment at the newline.
     performed = separate_lines(
         join_continuations(strip_comments(strip_heredocs(command))))
-
-    # **Judged on the string the strip is about to read, and that is the whole
-    # placement argument.** A `>` inside a heredoc body or a comment is not a
-    # redirection bash performs, so judging the raw command would refuse a
-    # commit message describing this very change — the mistake
-    # `unreadable_dollar_quote` records making one line down. And judging after
-    # the strip is impossible: the strip is what removes the targets.
-    #
-    # Every reading above recurses through `offence`, so a target assembled by
-    # an expansion is judged under each of them too.
-    refusal = redirection_offence(performed)
-    if refusal is not None:
-        return refusal
-
     resolved = strip_redirections(performed)
 
-    # **The check and the code that acts on it must read the SAME string**, and
-    # putting this on the raw command was wrong twice over. It refused a
-    # heredoc body or a comment that merely mentions `$'\n'` — data on every
-    # path, which is the invariant the rest of this pipeline is built on, and
-    # it made a commit message describing this very change unwritable. And it
-    # missed `git $\<newline>'\x70ush' origin +HEAD:main`, where the sigil and
-    # its quote are separated by a continuation: nothing was there to refuse on
-    # the raw string, while `strip_dollar_quotes` — running after the join —
-    # found the quote and un-sigilled it, leaving `shlex` a literal
-    # `\x70ush` that is not `push`. Both raised in an adversarial audit; the
-    # bypass was live on `main` too, the over-refusal was this branch's own.
+    # The check and the code that acts on it read the same string: on the raw
+    # command, a heredoc body or comment mentioning `$'\n'` would be refused,
+    # and `git $\<newline>'\x70ush' origin +HEAD:main`, whose sigil and quote a
+    # continuation separates, would show nothing to refuse while
+    # `strip_dollar_quotes`, after the join, finds the quote.
     unreadable = unreadable_dollar_quote(resolved)
     if unreadable is not None:
         return unreadable
-
-    # **On the string with the redirections gone**, because a redirection's
-    # target is not an operand of the verb in front of it — `cp a b 2>
-    # .claude/x` has already been judged above as the redirection it is — and
-    # before the tokeniser, because the quoting a destination is judged by is
-    # what `shlex` is about to remove (blueprint-frontend#26).
-    refusal = writing_verb_offence(resolved)
-    if refusal is not None:
-        return refusal
 
     # `strip_dollar_quotes` turns `$'…'` and `$"…"` into the ordinary quoting
     # `shlex` resolves, on the string just checked.
@@ -7326,39 +3537,41 @@ def _offence(command, depth, judged):
         lexer = shlex.shlex(stripped, posix=True, punctuation_chars=True)
         # Comments are already gone, and `shlex` would take a second, wider view
         # of them: its `commenters` fires mid-word, where bash's fires only at
-        # the start of one. Left on, `--grep=#x ; git push origin +HEAD:main`
-        # lost the push to the lexer.
+        # the start of one (`strip_comments`).
         lexer.commenters = ""
         lexer.whitespace_split = True
         tokens = list(lexer)
     except ValueError:
-        # **Unparseable is not hostile.** The first version refused anything it
-        # could not tokenise, reasoning that bash would fail too — false about
-        # the parser in use, and it refused an ordinary commit. A parse failure
-        # DEGRADES to the substring scan the settings deny already performs:
-        # never weaker than the status quo, never a silent pass.
+        # Unparseable is refused below, whatever it is; the checks before that
+        # only give the refusal a sharper reason.
+        # Bash removes quotes and backslashes too, so `pu''sh` is still push here.
+        flat = re.sub(r"[\\'\"]", "", stripped)
         for needle in FORBIDDEN_FLAGS + FORBIDDEN_SUBSTRINGS:
-            if needle in stripped:
+            if needle in flat:
                 return (
                     f"`{needle}` appears in a command this guard could not "
-                    "tokenise; refusing on the raw string, which is the weaker "
-                    "check the settings deny already performs."
+                    "tokenise; refusing on the string with its quotes removed, "
+                    "a cruder check than the parsed one."
                 )
-        # **The push allow-list has to reach this path too, and it did not.**
-        # The fallback scanned for forbidden flags and `ext::` alone, so any
-        # command this guard cannot tokenise had the push grammar switched off
-        # entirely — and a line is easy to make untokenisable on purpose. An
-        # audit reached it through `$'\''`, whose escaped quote left `shlex`
-        # with no closing quotation; the push then sat in plain text and was
-        # admitted. Here the check can only be the crude one, which is the
-        # point of the path.
-        if re.search(r"\bgit\b[^;&|\n]*\bpush\b", stripped):
+        # An unterminated heredoc leaves its body in the string, so a quote in
+        # the body is what failed the parse, and the checks below would read the
+        # body as commands; refused outright, as an undecodable delimiter is.
+        unclosed = []
+        heredoc_spans(command, unclosed)
+        if unclosed:
             return (
-                "a `git push` appears in a command this guard could not "
-                "tokenise, so its remote and refspec cannot be read; refusing "
-                "rather than admitting a push nothing checked."
+                "a heredoc here has no closing delimiter and the command "
+                "cannot be tokenised, so what bash runs cannot be read; "
+                "refusing rather than judging its body as commands."
             )
-        return None
+        # Everything left is refused: a line is easy to make untokenisable on
+        # purpose, bash runs the lines before the one that breaks, and a glob,
+        # an expansion or another case can name git without its letters.
+        return (
+            "this command could not be tokenised, so what it runs cannot be "
+            "read; refusing rather than admitting a command nothing checked. "
+            "Balance its quotes, or move a body into a quoted heredoc."
+        )
 
     if unmodelled_printer(tokens):
         return (
@@ -7372,48 +3585,29 @@ def _offence(command, depth, judged):
         if refusal is not None:
             return f"inside a shell evaluator: {refusal}"
 
-    for payload in split_string_payloads(tokens):
-        # `env -S` undoes its own escapes and expands `${NAME}` before it
-        # splits, so a payload carrying either is not the argv it runs.
-        if "\\" in payload or "$" in payload:
-            return (
-                "`env -S` is handed a string carrying a backslash or a `$`, "
-                "which env rewrites before splitting it into the command it "
-                "runs; refusing rather than judging the text instead of that "
-                "argv (blueprint-frontend#26)."
-            )
-        # Judged behind its `env`, so an option in the payload (`-C dir`) is
-        # still env's and moves the directory a relative target lands in (#359).
-        refusal = offence("env " + payload, depth + 1, judged)
-        if refusal is not None:
-            return f"inside `env -S`: {refusal}"
+    if unchecked_push_pipeline(tokens):
+        return UNCHECKED_PUSH
 
-    refusal = computed_program_offence(tokens)
-    if refusal is not None:
-        return refusal
-
-    refusal = (program_flag_offence(tokens) or git_environment_offence(tokens)
-               or dashed_git_offence(tokens))
-    if refusal is not None:
-        return refusal
+    if xargs_supplies_push(tokens):
+        return (
+            "`xargs` supplies this `git push` with arguments read from stdin, "
+            "so its destination is not in the command and cannot be judged. "
+            "Name the remote and the refspec."
+        )
 
     for segment in git_segments(tokens):
-        refusal = git_subcommand_offence(segment) or git_config_offence(segment)
-        if refusal is not None:
-            return refusal
-        refusal = push_offence(segment)
+        refusal = (push_offence(segment) or trap_offence(segment)
+                   or fetch_offence(segment) or pull_offence(segment)
+                   or refspec_offence(segment) or config_offence(segment))
         if refusal is not None:
             return refusal
 
         for element in global_options(segment):
-            # `-cdiff.external=<cmd>` was raised in review as a compact form
-            # git accepts. **It does not**, on 2.45.1: `unknown option`, and
-            # the usage line spells the option `-c <name>=<value>`. So this is
-            # hardening rather than a fix, and it is cheap because the global
-            # option set is small and fixed — no git subcommand flag can reach
-            # here, since this loop only ever sees the tokens BEFORE the
-            # subcommand. `-C` is left alone, and the comparison is
-            # case-sensitive for exactly that reason.
+            # A compact `-c<name>=<value>` is refused as hardening: git's usage
+            # spells the option `-c <name>=<value>`. It is cheap because this
+            # loop sees only the tokens before the subcommand, where no
+            # subcommand flag can reach. The comparison is case-sensitive so
+            # `-C` is left alone.
             if element in CONFIG_OPTIONS or element.startswith("-c") or any(
                     element.startswith(option + "=") for option in CONFIG_OPTIONS):
                 return (
@@ -7425,6 +3619,22 @@ def _offence(command, depth, judged):
                 )
 
         subcommand = subcommand_of(segment)
+        if subcommand in REFUSED_SUBCOMMANDS:
+            return (
+                f"`git {subcommand}` {REFUSED_SUBCOMMANDS[subcommand]}, and "
+                "nothing here runs it, so it is refused whole."
+            )
+        operand = EXECUTING_FORMS.get(subcommand)
+        if operand is not None and operand in after_global_options(segment)[1:]:
+            return (
+                f"`git {subcommand} {operand}` runs the command it is given, "
+                "which no flag check can see, and nothing here runs it."
+            )
+        if subcommand == "subtree" and "push" in after_global_options(segment)[1:]:
+            return (
+                "`git subtree push` updates a remote ref past every check a "
+                "`git push` gets, and nothing here runs it."
+            )
         value_flags = VALUE_FLAGS_BY_SUBCOMMAND.get(subcommand, frozenset())
         skip = False
         for element in segment:
@@ -7434,32 +3644,33 @@ def _offence(command, depth, judged):
             if element in value_flags:
                 skip = True
                 continue
-            # **git accepts any unambiguous ABBREVIATION of a long option**,
-            # so a canonical-prefix test reads less than it looks like it does.
-            # Measured against a real remote: `--upload-p=<cmd>` and even
-            # `--upl=<cmd>` are accepted by `git fetch` and the command RUNS;
-            # only `--u` is refused, and for being ambiguous rather than
-            # unknown. Raised in review.
-            #
-            # So the test runs both ways — the element starting with a
-            # forbidden flag, and a forbidden flag starting with the element.
-            # An abbreviation of something harmless that happens to prefix one
-            # of these is refused too; that is over-refusal, which is the
-            # direction to be wrong in, and `--u` was never going to work.
+            # Git accepts any unambiguous abbreviation of a long option —
+            # `git fetch --upl=<cmd>` runs the command — so the test runs both
+            # ways: the element starting with a forbidden flag, and a forbidden
+            # flag starting with the element. An abbreviation of something
+            # harmless that prefixes one of these is refused too, which is the
+            # direction to be wrong in.
             name = element.split("=", 1)[0]
-            abbreviation = name.startswith("--") and len(name) > 2
-            for flag in FORBIDDEN_FLAGS:
-                if element.startswith(flag) or (
-                        abbreviation and flag.startswith(name)):
+            abbreviation = (name.startswith("--") and len(name) > 2
+                            and name not in WHOLE_OPTIONS)
+            for flag in FORBIDDEN_FLAGS + EXECUTING_LONG_FLAGS.get(subcommand, ()):
+                whole = (element.startswith(flag) if flag in FORBIDDEN_FLAGS
+                         else name == flag)
+                if whole or (abbreviation and flag.startswith(name)):
                     return (
-                        f"`git ... {flag}` is refused: it reaches outside the "
-                        "repository this grant was for — writing, executing a "
-                        "configured command (--ext-diff, --textconv), or in "
-                        "--no-index's case reading a path git would not "
-                        "otherwise open — and the settings deny it matches only "
-                        "the unquoted spelling. This hook compares the resolved "
-                        "argv, and any unambiguous abbreviation of it."
+                        f"`git ... {flag}` is refused: it writes or executes "
+                        "rather than inspects, and the settings deny it matches "
+                        "only the unquoted spelling. This hook compares the "
+                        "resolved argv, and any unambiguous abbreviation of it."
                     )
+            letter = short_flag(element, subcommand,
+                                EXECUTING_SHORT_FLAGS.get(subcommand, ""))
+            if letter is not None:
+                return (
+                    f"`git {subcommand} -{letter}` is the short spelling of a "
+                    "flag that runs a command, bundled or not, and the long "
+                    "spelling is refused too."
+                )
             if subcommand not in REPOSITORY_SUBCOMMANDS:
                 continue
             for substring in FORBIDDEN_SUBSTRINGS:
@@ -7469,150 +3680,84 @@ def _offence(command, depth, judged):
                         "argument as a command, and no Bash permission rule can "
                         "express it."
                     )
-    return None
+    # A reading of an expansion hides a program; it names no file bash opens.
+    return None if reading else write_offence(performed)
 
 
-# **Every scan here must finish inside the hook's timeout, because a hook that
-# times out is non-blocking.** `_closing_brace` and `_closing_paren` each
-# re-read the rest of the command per opener, so their work is openers times
-# length, bounded by `SCAN_BUDGET`; the scanners as a whole grow faster than
-# linearly in length alone, bounded by `LENGTH_BUDGET`. A command past either
-# is refused before any scan runs, which fails closed where the timeout would
-# fail open.
-SCAN_BUDGET = 2_000_000
+# Every scan here must finish inside the hook's timeout, because a hook that
+# times out is non-blocking. The scanners as a whole grow faster than
+# linearly in the command's length: measured here, 200,000 plain characters
+# took 6 seconds and 1,000,000 took 58, against a default timeout of 60. A
+# command past `LENGTH_BUDGET` is refused before any scan runs, which fails
+# closed where the timeout would fail open.
 LENGTH_BUDGET = 100_000
 
 
 def scan_budget(command):
     """The refusal for a command the scanners could not finish in time."""
-    openers = command.count("(") + command.count("${")
-    if len(command) <= LENGTH_BUDGET and openers * len(command) <= SCAN_BUDGET:
+    if len(command) <= LENGTH_BUDGET:
         return None
     return (
-        f"this command's {len(command)} characters and {openers} brackets or "
-        "parameter expansions are more than this guard can judge inside its "
-        "time limit, and a guard that times out admits the command, so it is "
-        "refused instead. Shorten it or split it into separate commands."
+        f"this command's {len(command)} characters are more than this guard "
+        "can judge inside its time limit, and a guard that times out admits "
+        "the command, so it is refused instead. Shorten it or split it into "
+        "separate commands."
     )
 
 
-def decision(event):
-    """The hook's answer for one event: `None` to allow, or the deny payload.
+# PowerShell is a language `offence` does not parse, so a command through that
+# tool is admitted only as one read-only cmdlet over plain words: no quote,
+# escape, variable, call, pipe, separator or wildcard, and no launcher, whose
+# arguments (an encoded command, say) can carry git in characters this allows.
+POWERSHELL_PLAIN = re.compile(r"[A-Za-z0-9 _./:,=-]*")
+POWERSHELL_GIT = re.compile(r"(?i)(?<![a-z0-9_])git(?![a-z0-9_])")
+POWERSHELL_READS = frozenset((
+    "get-childitem", "get-content", "get-item", "get-location", "resolve-path",
+    "select-string", "test-path", "write-output",
+))
 
-    **Split out of `main` so a caller can ask for a verdict without paying an
-    interpreter to answer it (#46).** The harness asks about a thousand times a
-    run, and a process per answer was the largest single spawn cost in the
-    suite. What is left in `main` is the stdin/stdout half and nothing else.
 
-    **The split is safe only while the two halves agree, so that is a case
-    rather than a claim.** `TheGitArgvGuard.test_the_spawned_hook_answers_what
-    _the_import_does` drives the same commands down both paths and compares the
-    payloads. Without it the suite would be reading a function no session calls:
-    delete `main`'s `json.dump` and every in-process assertion still passes
-    while the hook refuses nothing where it is actually wired.
-    """
-    if event.get("tool_name") != "Bash":
+def powershell_git(command):
+    """The refusal for a PowerShell command that is not one read-only cmdlet over plain words, or None."""
+    words = command.split()
+    if (words and words[0].lower() in POWERSHELL_READS and POWERSHELL_PLAIN.fullmatch(command)
+            and not POWERSHELL_GIT.search(command)):
         return None
-
-    command = (event.get("tool_input") or {}).get("command")
-    if not isinstance(command, str):
-        return None
-
-    global EVENT_CWD
-    cwd = event.get("cwd")
-    EVENT_CWD = cwd if isinstance(cwd, str) and cwd else None
-
-    try:
-        reason = scan_budget(command) or offence(command)
-    except BraceExplosion:
-        reason = (
-            f"a brace expansion in this command makes more than "
-            f"{BRACE_WORD_LIMIT} words, more than this guard can judge inside "
-            "its time limit, and a guard that times out admits the command, so "
-            "it is refused instead. Write the words out or split the command "
-            "(#362, docs/harness-boundaries.md)."
-        )
-    except Exception:  # noqa: BLE001 - the direction is the point
-        # **A crash is empty stdout, and `PreToolUse` reads empty stdout as
-        # non-blocking**, so every defect in this file has been a fail-open.
-        # Four have been found by review and audit — a `ValueError` out of
-        # `list.index`, two out of `str.index`, and one recursion — and each
-        # admitted whatever the command was.
-        #
-        # **This is not the malformed-event case above and the two answers
-        # differ on purpose.** An unreadable event says nothing about any
-        # command, so refusing there would stop the session for a defect in
-        # this file; a crash while judging THIS command says this command
-        # broke the parser, and refusing one command is proportionate and
-        # tells the caller exactly that.
-        traceback.print_exc(file=sys.stderr)
-        reason = (
-            "this command crashed the guard that judges it, so nothing about "
-            "it has been established; refusing rather than admitting what "
-            "could not be read. The traceback is on stderr."
-        )
-    if reason is None:
-        return None
-
-    return {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": reason,
-        }
-    }
+    return (
+        "a PowerShell command is admitted only as one read-only cmdlet over "
+        "plain words: this guard reads Bash's grammar, not PowerShell's, so a "
+        "launcher, quote, escape, variable, call or separator could run git "
+        "unseen. Run git, and anything else, through the Bash tool."
+    )
 
 
-# Seconds before the watchdog answers for a run that has not finished. The hook
-# entry in `.claude/settings.json` sets no timeout, and a hook that times out
-# is non-blocking, so a run still going at this point is refused here.
-WATCHDOG_SECONDS = 20
-
-
-# Whoever answers first holds this lock and records it, so the watchdog and the
-# main path cannot both write: two JSON documents on stdout are not an answer.
-ANSWER_LOCK = threading.Lock()
-ANSWERED = []
-
-
-def refuse_after(seconds, answer):
-    """Start a timer that writes `answer` and ends the process when it fires,
-    and return it so a run that finishes can cancel it (#362).
-
-    A thread, because `signal.alarm` is not on Windows. It fires between
-    bytecodes, so it answers for a Python loop that runs long; a single
-    regular-expression match holds the interpreter and is bounded by
-    `SCAN_BUDGET` and `LENGTH_BUDGET` instead.
-    """
-    def fire():
-        with ANSWER_LOCK:
-            if ANSWERED:
-                return
-            ANSWERED.append(True)
-            try:
-                json.dump(answer, sys.stdout)
-                sys.stdout.flush()
-            finally:
-                # A failed write must still end the run: `main` sees ANSWERED
-                # and would write nothing, which the harness reads as allow.
-                os._exit(0)
-
-    timer = threading.Timer(seconds, fire)
-    timer.daemon = True
-    timer.start()
-    return timer
+def refuse(reason):
+    """Print the deny JSON for `reason`; the exit status stays 0 either way."""
+    json.dump(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": reason,
+            }
+        },
+        sys.stdout,
+    )
+    return 0
 
 
 def main():
-    del ANSWERED[:]
+    # The bytes, decoded as UTF-8: Python reads a Windows pipe in the ANSI code
+    # page, which raises on bytes UTF-8 uses, and that raise reached the
+    # fail-open below. An event that is not UTF-8 holds a command nothing read.
     try:
-        # **Bytes, decoded as UTF-8, and never the locale's code page** (#363).
-        # `json.load(sys.stdin)` decodes with cp1252 on Windows, where a
-        # command holding a character such as `Á` (the bytes C3 81) raises,
-        # and the handler below allows an event it could not read: every check
-        # in this file skipped for a command anyone can write. `replace` keeps
-        # a byte that is not UTF-8 judged as text, not dropped.
-        event = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace"))
+        text = sys.stdin.buffer.read().decode("utf-8")
+    except UnicodeDecodeError:
+        return refuse(
+            "this hook event is not UTF-8, so the command in it cannot be "
+            "read; refusing rather than admitting what nothing judged.")
+    try:
+        event = json.loads(text)
     except (json.JSONDecodeError, ValueError):
         # A hook that cannot read its own input has established nothing. Say so
         # and allow: refusing every Bash call on a malformed event would take
@@ -7620,29 +3765,40 @@ def main():
         print("guard-git-argv: unreadable hook event; not judging", file=sys.stderr)
         return 0
 
-    timer = refuse_after(WATCHDOG_SECONDS, {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": (
-                f"this guard had not finished judging the command after "
-                f"{WATCHDOG_SECONDS} seconds, and a hook that times out is "
-                "non-blocking, so the command is refused instead. Shorten it "
-                "or split it into separate commands (#362, "
-                "docs/harness-boundaries.md)."
-            ),
-        }
-    })
-    payload = decision(event)
-    timer.cancel()
-    with ANSWER_LOCK:
-        # If the watchdog got here first it holds the lock until the process
-        # ends, so this line is reached only when it has not answered.
-        if not ANSWERED:
-            ANSWERED.append(True)
-            if payload is not None:
-                json.dump(payload, sys.stdout)
-    return 0
+    tool = event.get("tool_name")
+    if tool not in ("Bash", "PowerShell"):
+        return 0
+
+    global EVENT_CWD
+    cwd = event.get("cwd")
+    EVENT_CWD = cwd if isinstance(cwd, str) and cwd else None
+
+    command = (event.get("tool_input") or {}).get("command")
+    if not isinstance(command, str):
+        return 0
+
+    try:
+        reason = (powershell_git(command) if tool == "PowerShell"
+                  else scan_budget(command) or offence(command))
+    except Exception:  # noqa: BLE001 - the direction is the point
+        # A crash is empty stdout, and `PreToolUse` reads empty stdout as
+        # non-blocking, so an uncaught defect here would be a fail-open.
+        #
+        # This differs from the malformed-event case above on purpose: an
+        # unreadable event says nothing about any command, so refusing there
+        # would stop the session for a defect in this file, while a crash
+        # judging this command says this command broke the parser, and
+        # refusing one command is proportionate.
+        traceback.print_exc(file=sys.stderr)
+        reason = (
+            "this command crashed the guard that judges it, so nothing about "
+            "it has been established; refusing rather than admitting what "
+            "could not be read. The traceback is on stderr."
+        )
+    if reason is None:
+        return 0
+
+    return refuse(reason)
 
 
 if __name__ == "__main__":

@@ -1,20 +1,10 @@
-"""The hook that asks the index before a session's first symbol search.
+"""What `.claude/hooks/index-search-hint.py` refuses before a tool call, and
+when. It fails open and lets most calls through, so its exit status proves
+nothing; the cases run it as `settings.json` does, a process over stdin,
+beside a transcript and a temporary directory written for the case, and read
+what it printed."""
 
-**A hint that never fires looks exactly like one that is working**, and this
-one has already failed that way once in a sibling: shipped as a note after the
-search's result, it was read and ignored (#119, #120). So this file runs the
-hook itself, through its launcher, on the searches it must refuse once, on the
-searches it must never touch, and on the wiring that decides whether it runs
-at all.
-
-The subject is *what the hook looks at*, not only what it finds: a grep for
-text, a message or one file must stay unrefused, and the first search for a
-name must be refused exactly once per session however it is spelled.
-
-**Not a skip where `bash` or Python is missing.** A skip reports a pass, which
-is the fail-open `test_index_refresh_hook.py` refuses for the same tools.
-"""
-
+import importlib.util
 import json
 import os
 import re
@@ -23,355 +13,644 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
+from unittest import mock
+
+from review_helpers import python_as_py
 
 SCRIPTS = Path(__file__).resolve().parent
 CLAUDE = SCRIPTS.parent
-ROOT = CLAUDE.parent
+HINT = CLAUDE / "hooks" / "index-search-hint.py"
 SETTINGS = CLAUDE / "settings.json"
-HOOK = CLAUDE / "hooks" / "index-search-hint.py"
-LAUNCHER = CLAUDE / "hooks" / "index-hint-run.sh"
-PROMPT_HINT = CLAUDE / "hooks" / "index-query-hint.sh"
+SKILL = CLAUDE / "skills" / "codebase-index" / "SKILL.md"
+EVENT = "PreToolUse"
+MATCHER = "Grep|Bash|PowerShell"
+COMMAND = 'bash "${CLAUDE_PROJECT_DIR}/.claude/hooks/hint-bound.sh" PreToolUse index-search-hint.py'
 
-# The full path, never the bare name: on Windows `subprocess` searches System32
-# before PATH, where `bash` is WSL's.
-BASH = shutil.which("bash")
+# Each searches the tree for a named symbol, so a session's first is refused.
+SEARCHES = (
+    'grep -rn "ClaimAsync(" src',
+    "grep -R HealthProbe .",
+    "grep --recursive -n GiveUpAge src tests",
+    "git grep -n 'Order.Place'",
+    "git -C .claude grep OutboxRelay",
+    "rg TimeSpan src",
+    'grep -rE "Claim|Release" src',
+    'rg "(ClaimAsync|ReleaseAsync)" src',
+    'grep -rn "\\(ClaimAsync\\|ReleaseAsync\\)" src',
+    'grep -rn "Undeclared\\|Reached" src',
+    "LC_ALL=C grep -r Money .",
+    "cd src && grep -rn PlaceOrderHandler .",
+    "/usr/bin/grep -rn Saga src",
+    "rg -g '!*.md' OutboxRelay src",
+    "git grep -n OutboxRelay -- ':!*.md'",
+    "git grep -n OutboxRelay -- ':^docs'",
+    "git grep -n OutboxRelay -- ':(exclude)*.md'",
+    "cd src && git grep -n OutboxRelay -- ':!*.md'",
+    "git -C src grep -n OutboxRelay -- ':(exclude)*.md'",
+    "grep -r -e 'Retry(' src",
+    "(cd docs && grep -rn Saga .); grep -rn Retry src",
+    "grep -rn Retry \\\n  src",
+    "git status --short\ngrep -rn Retry src",
+    "grep -rn MAX_RETRIES src",
+    "rg OutboxRelay src > found.txt",
+    "# don't touch docs\ngrep -rn ClaimAsync src\n# that's it",
+    "echo 'see # this' && grep -rn ClaimAsync src",
+    'gh pr comment 1 --body "pipe it via cat <<EOF"\ngrep -rn ClaimAsync src',
+    "git commit -m \"$(cat <<'EOF'\nbody\nEOF\n)\" && grep -rn ClaimAsync src",
+    "# feed it with cat <<EOF\ngrep -rn ClaimAsync src",
+    "cat <<'A' <<'B'\nA body\nA\nB body\nB\ngrep -rn ClaimAsync src",
+)
 
-# How long the launcher may let the hook run in these tests. Its own bound is 10 s,
-# which a loaded Windows runner overruns while Python starts, and the launcher then
-# prints its "did not run" note instead of the verdict (#471). Well under the 60 s each
-# `subprocess.run` below allows, so bash start-up on a loaded runner cannot eat the
-# margin and a hung hook is ended by the launcher's bound, which one case below keeps
-# under test at its smallest.
-LOAD_BOUND = "40"
+# Each searches the tree for text, which grep lists whole and the index does not.
+TEXT = (
+    "rg 'class \\w+Options'",
+    "grep -rn health/ready src 2>/dev/null | head -5",
+    'grep -rn "connection refused" src',
+    "grep -rn timeout src",
+    "grep -rn TODO src",
+    'grep -rn "appsettings.json" src',
+    'rg "CLAUDE.md" .',
+    "grep -rn Directory.Packages.props .",
+    "rg Program.cs src",
+    "rg 'Claim.*Async' src",
+)
+
+# Each reads one file, a pipe or prose, which the index does not replace.
+NOT_SEARCHES = (
+    "grep -n Money src/Money.cs",
+    "git log --oneline | grep Fix",
+    "cat build.log | rg Error",
+    "rg Error < build.log",
+    "git diff | rg ClaimAsync -",
+    "grep -r ClaimAsync -",
+    "rg ClaimAsync <<< \"$text\"",
+    "grep -rn Saga docs/backend-architecture",
+    "grep -rn Saga docs 2>/dev/null",
+    "grep -rn Saga \\\n  docs",
+    "git grep -n OutboxRelay -- docs ':!docs/superpowers'",
+    "rg -g '!*.cs' OutboxRelay docs",
+    "grep -rn --include=*.cs OutboxRelay docs",
+    "grep -rn ClaimAsync docs  # chapters only",
+    "rg -g '*.md' Outbox",
+    "rg --type md Outbox",
+    "rg --type=md Outbox",
+    "rg -tmd Outbox",
+    "rg -g*.md Outbox",
+    "rg --iglob '*.MD' Outbox",
+    "rg --iglob=*.md Outbox",
+    "grep -r --include=*.md Outbox .",
+    "grep -r --include '*.md' Outbox .",
+    "rg --files src/Services",
+    "rg ClaimAsync .claude/settings.json",
+    "grep -rn ClaimAsync .claude/settings.json .claude/hooks/index-search-hint.py",
+    "echo grep -r Foo .",
+    "git commit -F - <<'EOF'\ngrep -rn Foo src\nEOF",
+    "cat <<-EOF > notes.txt\n\tgrep -rn Foo src\n\tEOF",
+    "cat <<'A' <<'B'\nA body\nA\ngrep -rn Foo src\nB",
+    "git commit -m \"$(cat <<'EOF'\nsee \"won't\"\ngrep -rn Foo src\nEOF\n)\"",
+    "echo \"$(date)\" && cat <<'EOF'\ngrep -rn Foo src\nEOF",
+    "gh issue comment 12 --body \"$(cat <<'EOF'\nChecked the \"won't fix\" label.\ngrep -rn ClaimAsync src\nEOF\n)\"",
+    "gh pr create --body \"$(cat <<'EOF'\nsee \"a # b\"\nrg ClaimAsync src\nEOF\n)\"",
+    'gh pr create --body "Steps:\ngrep -rn Foo src\n"',
+    "git status --short",
+    "dotnet build Platform.slnx",
+)
 
 
-def setUpModule():
-    if BASH is None:
-        raise RuntimeError("bash required and not on PATH: these tests run "
-                           "the launcher rather than a Python equivalent of it")
+def grep_call(pattern="ClaimAsync\\(", **extra):
+    return "Grep", {"pattern": pattern, **extra}
 
 
-def load_hook():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("index_search_hint", HOOK)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+def bash_call(command):
+    return "Bash", {"command": command}
+
+
+def tool_use(call_id, name, given):
+    return {"type": "assistant", "message": {"role": "assistant", "content": [
+        {"type": "tool_use", "id": call_id, "name": name, "input": given}]}}
 
 
 class Session:
-    """A throwaway checkout, a transcript and a private temp directory, so one
-    case's refusal record can never be another's."""
+    """A transcript of earlier tool calls, a temporary directory, and the
+    hook run before one more call."""
 
-    def __init__(self, case, worktree_of=None):
-        self.case = case
-        self.dir = Path(tempfile.mkdtemp())
-        case.addCleanup(shutil.rmtree, self.dir, True)
-        self.tmp = self.dir / "tmp"
-        self.tmp.mkdir()
-        self.main = self.dir / "main"
-        (self.main / ".git").mkdir(parents=True)
-        (self.main / "src").mkdir()
-        (self.main / "src" / "Program.cs").write_text("class Program {}\n")
-        (self.main / "docs").mkdir()
-        self.transcript = self.dir / "session.jsonl"
-        self.transcript.write_text("")
-        # A linked worktree: a `.git` file whose gitdir holds a `commondir`.
-        self.tree = self.main
-        if worktree_of:
-            gitdir = self.main / ".git" / "worktrees" / "wt"
-            gitdir.mkdir(parents=True)
-            (gitdir / "commondir").write_text("../..\n")
-            self.tree = self.dir / "wt"
-            (self.tree / "src").mkdir(parents=True)
-            (self.tree / ".git").write_text(f"gitdir: {gitdir}\n")
-        self.name = f"s{abs(hash(case.id())) % 10**8}"
+    def __init__(self, scratch: Path, earlier=(), lines=(), session=None):
+        self.path = scratch / "transcript.jsonl"
+        self.temp = scratch / "temp"
+        self.temp.mkdir(exist_ok=True)
+        self.id = session or uuid.uuid4().hex
+        rows = [tool_use(f"toolu_{index}", name, given) for index, (name, given) in enumerate(earlier)]
+        with self.path.open("w", encoding="utf-8") as handle:
+            for row in [*lines, *rows]:
+                handle.write(json.dumps(row, ensure_ascii=False) + "\n")
 
-    def event(self, tool, **given):
-        return {"session_id": self.name, "transcript_path": str(self.transcript),
-                "cwd": str(self.tree), "hook_event_name": "PreToolUse",
-                "tool_name": tool, "tool_input": given}
+    def event(self, name, given, cwd=None, **extra):
+        return json.dumps({"hook_event_name": EVENT, "session_id": self.id, "transcript_path": str(self.path),
+                           "cwd": str(cwd or CLAUDE.parent), "tool_name": name, "tool_input": given,
+                           "tool_use_id": "toolu_now", **extra}, ensure_ascii=False).encode("utf-8")
 
-    def run(self, event, project=None, launcher=True):
-        """The hook's stdout, stderr and status for one event, through the
-        launcher the wiring names or, for the verdict cases, directly. The
-        session's start folder is `project`, which is what the MCP server
-        serves."""
-        env = dict(os.environ)
-        env.update({"CLAUDE_PROJECT_DIR": str(project or (ROOT if launcher else self.main)),
-                    "HINT_BOUND_SECONDS": LOAD_BOUND,
-                    "TMP": str(self.tmp), "TEMP": str(self.tmp), "TMPDIR": str(self.tmp)})
-        if launcher:
-            argv = [BASH, str(LAUNCHER), "PreToolUse", "index-search-hint.py"]
-        else:
-            argv = [sys.executable, "-P", str(HOOK)]
-        done = subprocess.run(argv, input=json.dumps(event).encode("utf-8"),
-                              capture_output=True, env=env, timeout=60)
-        return done.stdout.decode("utf-8"), done.stderr.decode("utf-8"), done.returncode
-
-    def verdict(self, event, project=None):
-        out, err, status = self.run(event, project, launcher=False)
-        self.case.assertEqual((0, ""), (status, err))
-        if not out.strip():
-            return None
-        answer = json.loads(out)["hookSpecificOutput"]
-        self.case.assertEqual("PreToolUse", answer["hookEventName"])
-        self.case.assertEqual("deny", answer["permissionDecision"])
-        return answer["permissionDecisionReason"]
+    def before(self, name, given, cwd=None, project=None, **extra):
+        return run(self.event(name, given, cwd, **extra), self.temp, project)
 
 
-class TheFirstSymbolSearchIsRefusedOnce(unittest.TestCase):
-
-    def test_a_grep_for_a_name_is_refused_with_the_lookup_that_answers_it(self):
-        s = Session(self)
-        reason = s.verdict(s.event("Grep", pattern="RetentionMapRule", path="src"))
-        self.assertIn("`RetentionMapRule`", reason)
-        self.assertIn("mcp__codebase-index__find_refs", reason)
-        self.assertIn("mcp__codebase-index__find_symbol", reason)
-        self.assertIn("select:", reason)
-        self.assertIn("refused once", reason)
-
-    def test_the_same_search_rerun_passes(self):
-        s = Session(self)
-        first = s.event("Grep", pattern="RetentionMapRule", path="src")
-        self.assertIsNotNone(s.verdict(first))
-        self.assertIsNone(s.verdict(first))
-        # And so does a different name: one refusal per session, not per name.
-        self.assertIsNone(s.verdict(s.event("Grep", pattern="OtherRule", path="src")))
-
-    def test_another_session_is_refused_in_its_own_right(self):
-        s = Session(self)
-        s.name = "one"
-        self.assertIsNotNone(s.verdict(s.event("Grep", pattern="RetentionMapRule")))
-        s.name = "two"
-        self.assertIsNotNone(s.verdict(s.event("Grep", pattern="RetentionMapRule")))
-
-    def test_an_alternation_of_names_is_one_refusal_naming_each(self):
-        s = Session(self)
-        reason = s.verdict(s.event("Grep", pattern=r"JobRegistry\|ProcessRunner"))
-        self.assertIn("`JobRegistry`", reason)
-        self.assertIn("`ProcessRunner`", reason)
-
-    def test_a_shell_grep_over_the_tree_is_refused_like_the_tool(self):
-        for command in ('grep -rn "RetentionMapRule" src',
-                        'rg RetentionMapRule src | head',
-                        'cd src && grep -rln "RetentionMapRule" .',
-                        'git grep -n RetentionMapRule',
-                        'grep -rn -e RetentionMapRule src --include=*.cs'):
-            with self.subTest(command=command):
-                s = Session(self)
-                reason = s.verdict(s.event("Bash", command=command))
-                self.assertIn("`RetentionMapRule`", reason)
-
-    def test_the_wiring_reaches_the_hook_through_the_launcher(self):
-        s = Session(self)
-        out, err, status = s.run(s.event("Grep", pattern="RetentionMapRule", path="src"),
-                                 project=ROOT)
-        self.assertEqual((0, ""), (status, err))
-        self.assertEqual("deny", json.loads(out)["hookSpecificOutput"]["permissionDecision"])
+def environment(temp: Path, project: Path | None = None) -> dict:
+    """What the hook sees: a text stdin a Windows pipe gets, `temp` as the
+    temporary directory, so each case keeps its own record of asks, and
+    `project` as the folder the session started in, or none: a session running
+    this suite exports its own, which is no checkout a case built."""
+    env = dict(os.environ, PYTHONIOENCODING="cp1252:surrogateescape",
+               TMP=str(temp), TEMP=str(temp), TMPDIR=str(temp))
+    env.pop("CLAUDE_PROJECT_DIR", None)
+    if project is not None:
+        env["CLAUDE_PROJECT_DIR"] = str(project)
+    return env
 
 
-class WhatItNeverTouches(unittest.TestCase):
-
-    def silent(self, tool, **given):
-        s = Session(self)
-        self.assertIsNone(s.verdict(s.event(tool, **given)), given)
-
-    def test_text_a_message_or_a_pattern_is_grep_to_list_whole(self):
-        for pattern in ("timeout", "TODO", "not found", "CLAUDE.md",
-                        r"Error: .*failed", "foo.bar"):
-            with self.subTest(pattern=pattern):
-                self.silent("Grep", pattern=pattern, path="src")
-
-    def test_a_single_file_is_a_read(self):
-        self.silent("Grep", pattern="RetentionMapRule", path="src/Program.cs")
-        # Each recurses, so only the file test can save it: a plain `grep -n`
-        # has no recursion and returns before that test is reached.
-        self.silent("Bash", command='grep -rn "RetentionMapRule" src/Program.cs')
-        self.silent("Bash", command="rg RetentionMapRule src/Program.cs")
-        self.silent("Bash", command="cd src && rg RetentionMapRule Program.cs")
-
-    def test_a_grep_with_no_recursion_reads_a_pipe(self):
-        self.silent("Bash", command='cat src/Program.cs | grep RetentionMapRule')
-
-    def test_prose_is_not_a_question_the_index_answers(self):
-        self.silent("Grep", pattern="RetentionMapRule", path="docs")
-        self.silent("Grep", pattern="RetentionMapRule", glob="*.md")
-
-    def test_other_tools_and_other_trees_are_never_judged(self):
-        self.silent("Read", file_path="src/Program.cs")
-        s = Session(self)
-        elsewhere = str(s.dir)
-        self.assertIsNone(s.verdict(
-            s.event("Grep", pattern="RetentionMapRule", path=elsewhere)))
-
-    def test_a_subagent_is_never_refused(self):
-        s = Session(self)
-        event = s.event("Grep", pattern="RetentionMapRule", path="src")
-        event["agent_id"] = "a1"
-        self.assertIsNone(s.verdict(event))
-        self.assertFalse((s.tmp / "claude-index-ask").exists())
-
-    def test_input_it_cannot_read_goes_through(self):
-        s = Session(self)
-        for payload in ("", "not json", "[1, 2]", '{"tool_name": 7}'):
-            with self.subTest(payload=payload):
-                env = dict(os.environ, CLAUDE_PROJECT_DIR=str(ROOT), HINT_BOUND_SECONDS=LOAD_BOUND)
-                done = subprocess.run(
-                    [BASH, str(LAUNCHER), "PreToolUse", "index-search-hint.py"],
-                    input=payload.encode(), capture_output=True, env=env, timeout=60)
-                self.assertEqual((0, b""), (done.returncode, done.stdout))
-
-    def test_a_session_that_already_asked_the_index_is_not_refused(self):
-        calls = [
-            {"type": "tool_use", "id": "t1", "name": "mcp__codebase-index__find_refs",
-             "input": {"symbol": "X"}},
-            {"type": "tool_result", "tool_use_id": "t1", "content": "ok"},
-        ]
-        s = Session(self)
-        s.transcript.write_text(
-            "\n".join(json.dumps({"message": {"content": [c]}}) for c in calls) + "\n")
-        self.assertIsNone(s.verdict(s.event("Grep", pattern="RetentionMapRule")))
-
-    def test_a_lookup_that_was_itself_refused_does_not_count(self):
-        calls = [
-            {"type": "tool_use", "id": "t1", "name": "mcp__codebase-index__find_refs",
-             "input": {"symbol": "X"}},
-            {"type": "tool_result", "tool_use_id": "t1", "is_error": True,
-             "content": "denied by a hook"},
-        ]
-        s = Session(self)
-        s.transcript.write_text(
-            "\n".join(json.dumps({"message": {"content": [c]}}) for c in calls) + "\n")
-        self.assertIsNotNone(s.verdict(s.event("Grep", pattern="RetentionMapRule")))
-
-    def test_the_cli_run_through_bash_counts_as_a_lookup(self):
-        call = {"type": "tool_use", "id": "t1", "name": "Bash",
-                "input": {"command": 'codebase-index refs "X" --json'}}
-        s = Session(self)
-        s.transcript.write_text(json.dumps({"message": {"content": [call]}}) + "\n")
-        self.assertIsNone(s.verdict(s.event("Grep", pattern="RetentionMapRule")))
+def run(payload: bytes, temp: Path, project: Path | None = None):
+    return subprocess.run(
+        [sys.executable, str(HINT)], input=payload, capture_output=True,
+        timeout=30, check=False, env=environment(temp, project))
 
 
-class TheRouteFollowsTheServer(unittest.TestCase):
-
-    def test_from_the_checkout_the_session_started_in_it_names_the_mcp_tools(self):
-        s = Session(self)
-        reason = s.verdict(s.event("Grep", pattern="RetentionMapRule"), project=s.main)
-        self.assertIn("mcp__codebase-index__find_refs", reason)
-        self.assertNotIn("codebase-index refs", reason)
-
-    def test_from_a_worktree_entered_mid_session_it_names_the_cli_alone(self):
-        s = Session(self, worktree_of=True)
-        reason = s.verdict(s.event("Grep", pattern="RetentionMapRule"), project=s.main)
-        self.assertIn('`codebase-index refs "RetentionMapRule" --json`', reason)
-        self.assertIn("`--kind callers`", reason)
-        self.assertNotIn("mcp__", reason)
-
-    def test_a_session_started_in_the_worktree_is_served_by_it(self):
-        s = Session(self, worktree_of=True)
-        reason = s.verdict(s.event("Grep", pattern="RetentionMapRule"), project=s.tree)
-        self.assertIn("mcp__codebase-index__find_refs", reason)
-
-    def test_with_no_project_dir_a_linked_worktree_is_taken_to_be_off_it(self):
-        s = Session(self, worktree_of=True)
-        hook = load_hook()
-        saved = os.environ.pop("CLAUDE_PROJECT_DIR", None)
-        try:
-            self.assertTrue(hook.off_server(str(s.tree)))
-            self.assertFalse(hook.off_server(str(s.main)))
-        finally:
-            if saved is not None:
-                os.environ["CLAUDE_PROJECT_DIR"] = saved
+def reason(done) -> str:
+    """Why a run refused the call, or '' when it let it through."""
+    assert done.returncode == 0, done.stderr
+    if not done.stdout.strip():
+        return ""
+    answer = json.loads(done.stdout)
+    output = answer["hookSpecificOutput"]
+    assert output["hookEventName"] == EVENT, answer
+    assert output["permissionDecision"] == "deny", answer
+    return output["permissionDecisionReason"]
 
 
-class TheLauncherFailsOpen(unittest.TestCase):
-
-    def launch(self, *args, project=ROOT):
-        env = dict(os.environ, CLAUDE_PROJECT_DIR=str(project), HINT_BOUND_SECONDS=LOAD_BOUND)
-        done = subprocess.run([BASH, str(LAUNCHER), *args], input=b"{}",
-                              capture_output=True, env=env, timeout=60)
-        return done.stdout.decode(), done.returncode
-
-    def test_it_runs_only_the_one_hook_it_names(self):
-        for args in (("PreToolUse", "guard-git-argv.py"), ("PreToolUse", "../x.py"),
-                     ("UserPromptSubmit", "index-search-hint.py"), ()):
-            with self.subTest(args=args):
-                out, status = self.launch(*args)
-                self.assertEqual(0, status)
-                self.assertIn("did not run", json.loads(out)["hookSpecificOutput"]["additionalContext"])
-
-    def test_its_own_bound_still_ends_a_slow_hook_with_a_note(self):
-        """The other cases raise the bound for a loaded runner; this one tries the bound itself at its
-        smallest, so a launcher that stopped applying it, or stopped saying so, fails here."""
-        has_timeout = subprocess.run([BASH, "-c", "command -v timeout"],
-                                     capture_output=True, timeout=60).returncode == 0
-        env = dict(os.environ, CLAUDE_PROJECT_DIR=str(ROOT), HINT_BOUND_SECONDS="0.01")
-        done = subprocess.run([BASH, str(LAUNCHER), "PreToolUse", "index-search-hint.py"],
-                              input=b"{}", capture_output=True, env=env, timeout=60)
-        self.assertEqual(0, done.returncode)
-        if has_timeout:
-            context = json.loads(done.stdout)["hookSpecificOutput"]["additionalContext"]
-            self.assertIn("did not run", context)
-            self.assertIn("exit 124 after at most 0.01 s", context)
-        else:
-            # No `timeout` on this system (macOS): the launcher has no bound to apply, so it never says one fired.
-            self.assertNotIn("exit 124", done.stdout.decode())
-
-    def test_an_interpreter_that_cannot_find_the_hook_says_so_and_exits_zero(self):
-        with tempfile.TemporaryDirectory() as empty:
-            out, status = self.launch("PreToolUse", "index-search-hint.py", project=empty)
-        self.assertEqual(0, status)
-        context = json.loads(out)["hookSpecificOutput"]["additionalContext"]
-        self.assertIn("did not run", context)
-        # A missing hook exits non-zero by itself; a load timeout would say 124.
-        self.assertRegex(context, r"exit [1-9][0-9]* after")
-        self.assertNotIn("exit 124", context)
+def module():
+    """The hook loaded in this process, for the cases that watch its calls."""
+    spec = importlib.util.spec_from_file_location("index_search_hint", HINT)
+    hook = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(hook)
+    return hook
 
 
-class TheHintsAgree(unittest.TestCase):
+def tools(text: str) -> list[str]:
+    return re.findall(r"`mcp__codebase-index__(\w+)`", text)
 
-    def test_the_prompt_hint_carries_the_same_map_as_this_hook(self):
-        awk = PROMPT_HINT.read_text(encoding="utf-8")
-        mapped = dict(re.findall(r'TOOL\["([a-z]+)"\] = "([a-z_]+)"', awk))
-        self.assertEqual(load_hook().TOOLS, mapped)
 
-    def test_every_subcommand_it_maps_is_a_row_of_the_skill_route_table(self):
-        skill = (CLAUDE / "skills" / "codebase-index" / "SKILL.md").read_text(encoding="utf-8")
-        for subcommand in load_hook().TOOLS:
-            with self.subTest(subcommand=subcommand):
-                self.assertRegex(skill, rf"`codebase-index {subcommand} ")
+class Scratch(unittest.TestCase):
+    def setUp(self):
+        self._scratch = tempfile.TemporaryDirectory()
+        self.scratch = Path(self._scratch.name)
+
+    def tearDown(self):
+        self._scratch.cleanup()
+
+    def refused(self, name, given, earlier=(), **options) -> str:
+        return reason(Session(self.scratch, earlier).before(name, given, **options))
+
+    def worktree(self) -> tuple[Path, Path]:
+        main = self.scratch / "main"
+        (main / ".git" / "worktrees" / "wt").mkdir(parents=True)
+        (main / ".git" / "worktrees" / "wt" / "commondir").write_text("../..", encoding="utf-8")
+        tree = main / ".claude" / "worktrees" / "wt"
+        (tree / "src").mkdir(parents=True)
+        (tree / ".git").write_text(f"gitdir: {main / '.git' / 'worktrees' / 'wt'}\n", encoding="utf-8")
+        return main, tree
 
 
 class TheWiring(unittest.TestCase):
+    def test_it_runs_before_grep_and_both_shells_and_under_no_other_event(self):
+        hooks = json.loads(SETTINGS.read_text(encoding="utf-8"))["hooks"]
+        running = [
+            (event, entry.get("matcher")) for event, entries in hooks.items()
+            for entry in entries
+            for hook in entry.get("hooks", [])
+            if hook.get("command") == COMMAND
+        ]
 
-    def entries(self):
-        hooks = json.loads(SETTINGS.read_text(encoding="utf-8")).get("hooks") or {}
-        return [(event, entry.get("matcher") or "", h)
-                for event, group in hooks.items() for entry in group
-                for h in entry.get("hooks") or []
-                if "index-search-hint.py" in (h.get("command") or "")]
+        self.assertEqual([(EVENT, MATCHER)], running)
 
-    def test_it_runs_before_a_search_and_under_no_other_event(self):
-        # The event is the whole change: after the search it was read and
-        # ignored. Read across every event, so a second registration is red.
-        found = self.entries()
-        self.assertEqual(1, len(found), found)
-        event, matcher, hook = found[0]
-        self.assertEqual("PreToolUse", event)
-        for tool in ("Grep", "Bash"):
-            self.assertRegex(tool, f"^(?:{matcher})$")
-        self.assertEqual({"Grep", "Bash"}, set(matcher.split("|")))
+    def test_the_registered_command_survives_a_missing_file(self):
+        """Python exits 2 on a file it cannot open, a worktree emptied under a
+        running session; through `runpy` the same failure exits 1, and a
+        project path holding a quote still runs."""
+        argv = [shutil.which("bash"), str(CLAUDE / "hooks" / "hint-bound.sh"), EVENT, HINT.name]
+        with tempfile.TemporaryDirectory() as scratch:
+            transcript = Path(scratch) / "t.jsonl"
+            transcript.write_text("", encoding="utf-8")
+            quoted = Path(scratch) / "O'Brien"
+            (quoted / ".claude" / "hooks").mkdir(parents=True)
+            shutil.copyfile(HINT, quoted / ".claude" / "hooks" / HINT.name)
+            for root, refused in ((CLAUDE.parent, True), (quoted, True), (Path(scratch), False)):
+                event = json.dumps({"hook_event_name": EVENT, "session_id": uuid.uuid4().hex,
+                                    "transcript_path": str(transcript), "tool_name": "Grep",
+                                    "tool_input": {"pattern": "Money"}, "tool_use_id": "x"}).encode()
+                done = subprocess.run(
+                    argv, input=event, capture_output=True, timeout=30, check=False,
+                    env=python_as_py(dict(environment(Path(scratch)), CLAUDE_PROJECT_DIR=str(root)), scratch))
+                with self.subTest(root=str(root)):
+                    self.assertNotEqual(2, done.returncode, done.stderr)
+                    # A hook that cannot run leaves hint-bound.sh's line, and the call is never blocked.
+                    if refused:
+                        self.assertTrue(done.stdout.strip(), done.stderr)
+                        self.assertNotIn(b"did not run", done.stdout)
+                    else:
+                        self.assertIn(b"did not run", done.stdout)
 
-    def test_it_goes_through_the_launcher_that_cannot_block_a_call(self):
-        _, _, hook = self.entries()[0]
-        self.assertEqual(
-            'bash "${CLAUDE_PROJECT_DIR}/.claude/hooks/index-hint-run.sh" '
-            "PreToolUse index-search-hint.py", hook["command"])
-        # Longer than the launcher's own bound, so the harness never kills it
-        # and discards the note the launcher prints past that bound.
-        self.assertGreater(hook.get("timeout", 60), 10)
+
+class WhatCountsAsASearch(Scratch):
+    def test_each_tree_search_for_a_symbol_is_refused(self):
+        """Which route the reason names depends on the checkout the suite
+        runs in, which `OneRoute` fixes; here only the refusal is asked."""
+        for command in SEARCHES:
+            with self.subTest(command=command):
+                self.assertIn("Before searching for `", self.refused(*bash_call(command)))
+
+    def test_a_search_for_text_goes_through(self):
+        for command in TEXT:
+            with self.subTest(command=command):
+                self.assertEqual("", self.refused(*bash_call(command)))
+
+    def test_a_search_of_one_file_a_pipe_or_prose_goes_through(self):
+        for command in NOT_SEARCHES:
+            with self.subTest(command=command):
+                self.assertEqual("", self.refused(*bash_call(command)))
+
+    def test_the_grep_tool_is_a_search_unless_it_reads_prose_or_text(self):
+        self.assertTrue(self.refused(*grep_call()))
+        self.assertTrue(self.refused(*grep_call(path="src/Services")))
+        self.assertTrue(self.refused(*grep_call(glob="!*.md")))
+        for extra in ({"path": "docs/backend-architecture"}, {"glob": "*.md"},
+                      {"type": "md"}, {"path": "C:\\repo\\docs"}, {"pattern": "retry.*budget"}):
+            with self.subTest(extra=extra):
+                self.assertEqual("", self.refused(*grep_call(**extra)))
+
+    def test_the_grep_tool_reads_prose_where_its_path_lands_in_the_checkout(self):
+        """A checkout cloned under a directory named `docs` is still code, and
+        a Grep from inside `docs/` reads prose, as `grep -r` from there does."""
+        repo = self.scratch / "Docs" / "repo"
+        (repo / ".git").mkdir(parents=True)
+        (repo / "src").mkdir()
+        (repo / "docs").mkdir()
+        for given, cwd, refused in ((grep_call(path=str(repo / "src")), repo, True),
+                                    (grep_call(), repo, True),
+                                    (grep_call(), repo / "docs", False),
+                                    (bash_call("grep -rn ClaimAsync ."), repo / "docs", False)):
+            with self.subTest(given=given, cwd=cwd):
+                self.assertEqual(refused, bool(self.refused(*given, cwd=cwd)))
+
+    def test_a_powershell_search_is_a_search(self):
+        self.assertTrue(self.refused("PowerShell", {"command": "rg OutboxRelay src"}))
+        self.assertEqual("", self.refused("PowerShell", {"command": "rg OutboxRelay docs"}))
+        self.assertEqual("", self.refused("PowerShell", {"command": "rg OutboxRelay `\r\n  docs"}))
+        self.assertTrue(self.refused("PowerShell", {"command": "rg OutboxRelay `\n  src"}))
+
+    def test_the_grep_tool_aimed_at_one_file_is_not_a_search(self):
+        self.assertEqual("", self.refused(*grep_call(path=".claude/settings.json")))
+        self.assertEqual("", self.refused(*grep_call(path=str(SETTINGS))))
+        self.assertTrue(self.refused(*grep_call(path=".claude")))
+
+    def test_a_search_outside_the_checkout_is_not_a_search_of_its_index(self):
+        repo, other = self.scratch / "repo", self.scratch / "other"
+        (repo / ".git").mkdir(parents=True)
+        (repo / "src").mkdir()
+        other.mkdir()
+        for name, given, refused in (
+                (*grep_call(path=str(other)), False),
+                (*grep_call(path="../other"), False),
+                (*grep_call(path="src"), True),
+                (*grep_call(), True),
+                (*bash_call("git -C ../other grep OutboxRelay"), False),
+                (*bash_call("grep -rn OutboxRelay ../other"), False),
+                (*bash_call("git -C src grep OutboxRelay"), True),
+                (*bash_call("grep -rn OutboxRelay src"), True)):
+            with self.subTest(name=name, given=given):
+                self.assertEqual(refused, bool(self.refused(name, given, cwd=repo)))
+
+    def test_a_cd_before_the_search_moves_where_its_paths_are_read(self):
+        repo = self.scratch / "repo"
+        (repo / ".git").mkdir(parents=True)
+        (repo / "src").mkdir()
+        (repo / "src" / "Money.cs").write_text("class Money {}", encoding="utf-8")
+        (repo / "docs").mkdir()
+        (self.scratch / "other").mkdir()
+        for command, refused in (("cd ../other && grep -rn OutboxRelay .", False),
+                                 ("cd src && grep -rn Amount Money.cs", False),
+                                 ("cd docs && grep -rn Saga .", False),
+                                 ("(cd docs && grep -rn Saga .); grep -rn Saga src", True),
+                                 ("cd src; rg Amount", True),
+                                 ("cd src && git -C .. grep Amount", True),
+                                 ("cd src && grep -rn Amount .", True)):
+            with self.subTest(command=command):
+                self.assertEqual(refused, bool(self.refused(*bash_call(command), cwd=repo)))
+
+    def test_each_named_symbol_is_asked_about_up_to_three(self):
+        text = self.refused(*bash_call('grep -rnE "MapPost|MapPut|MapDelete|MapGet" src'))
+        for name in ("MapPost", "MapPut", "MapDelete"):
+            self.assertIn(f"`{name}`", text)
+        self.assertNotIn("MapGet", text)
+        self.assertIn("`Order.Place`", self.refused(*grep_call("\\bOrder.Place\\b")))
+
+    def test_other_tools_go_through(self):
+        for name, given in (("Read", {"file_path": "src/x.cs"}), ("Glob", {"pattern": "**/*.cs"}),
+                            ("Edit", {"file_path": "x", "old_string": "a", "new_string": "b"})):
+            with self.subTest(name=name):
+                self.assertEqual("", self.refused(name, given))
+
+
+class WhenItAsks(Scratch):
+    def test_a_session_that_made_a_lookup_is_not_refused(self):
+        for earlier in ((("mcp__codebase-index__find_refs", {"symbol": "X"}),),
+                        (("mcp__codebase-index__search_code", {"query": "x"}),),
+                        (bash_call('bash .claude/skills/codebase-index/scripts/cbx refs "X" --json'),),
+                        (bash_call("codebase-index search outbox --json"),),
+                        (("mcp__codebase-index__verify_evidence", {}),),
+                        (bash_call("bash .claude/skills/codebase-index/scripts/cbx verify --session t --json"),),
+                        (bash_call("pwsh -NoProfile -ExecutionPolicy Bypass -File "
+                                   ".claude/skills/codebase-index/scripts/cbx.ps1 search outbox --json"),),
+                        (bash_call("py -3.12 -P -m codebase_index refs X --json"),),
+                        (bash_call('pwsh -NoProfile -Command "& ./.claude/skills/codebase-index/scripts/cbx.ps1'
+                                   ' refs X --json"'),),
+                        (bash_call("bash -c 'bash .claude/skills/codebase-index/scripts/cbx refs X --json'"),),
+                        (bash_call("bash -x .claude/skills/codebase-index/scripts/cbx refs X --json"),),
+                        (bash_call("bash -lc 'bash .claude/skills/codebase-index/scripts/cbx refs X --json'"),),
+                        (bash_call("bash -o pipefail -c "
+                                   "'bash .claude/skills/codebase-index/scripts/cbx refs X --json'"),),
+                        (bash_call("git status\nbash .claude/skills/codebase-index/scripts/cbx refs X --json"),),
+                        (bash_call("CBX_NO_SKILL_AUTO_UPDATE=1 bash "
+                                   ".claude/skills/codebase-index/scripts/cbx refs X --json"),),
+                        (("PowerShell", {"command": "& C:\\repo\\.claude\\skills\\codebase-index\\scripts\\cbx.ps1"
+                                                    " refs X --json"}),)):
+            with self.subTest(earlier=earlier):
+                self.assertEqual("", self.refused(*grep_call(), earlier=earlier))
+
+    def test_a_command_that_only_names_the_cli_is_not_a_lookup(self):
+        for command in ('git log -p | grep "cbx refs"',
+                        'git commit -m "say cbx search first"',
+                        "echo codebase-index search",
+                        'py -3.12 -c "import codebase_index" search',
+                        "bash -c 'echo cbx refs X'",
+                        "git commit -F - <<'EOF'\nbash .claude/skills/codebase-index/scripts/cbx refs X --json\nEOF",
+                        'gh pr create --body "Run:\nbash .claude/skills/codebase-index/scripts/cbx refs X\n"'):
+            with self.subTest(command=command):
+                self.assertTrue(self.refused(*grep_call(), earlier=[bash_call(command)]))
+
+    def test_a_lookup_that_was_refused_or_failed_asked_nothing(self):
+        """A guard refuses `cbx … | head` as two commands, and an MCP tool
+        called before it is loaded errors: neither reached the index. A
+        shell command that exited non-zero after the lookup still ran it."""
+        lookup = bash_call("bash .claude/skills/codebase-index/scripts/cbx refs X --json | head -20")
+        for earlier, text, failed in (
+                (lookup, "PreToolUse:Bash hook error: refused", True),
+                (("mcp__codebase-index__find_refs", {"symbol": "X"}), "<tool_use_error>not loaded", True),
+                (("mcp__codebase-index__find_refs", {"symbol": "X"}), "{}", False),
+                (lookup, [{"type": "text", "text": "Exit code 1\n"}], False)):
+            result = {"type": "user", "message": {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "toolu_0", "is_error": text != "{}", "content": text}]}}
+            session = Session(self.scratch, earlier=[earlier])
+            with session.path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(result) + "\n")
+            with self.subTest(earlier=earlier, failed=failed):
+                self.assertEqual(failed, bool(reason(session.before(*grep_call()))))
+
+    def test_reading_the_index_without_asking_it_is_not_a_lookup(self):
+        for earlier in ((("mcp__codebase-index__healthcheck", {}),),
+                        (("mcp__codebase-index__index_stats", {}),),
+                        (bash_call("bash .claude/skills/codebase-index/scripts/cbx stats --json"),)):
+            with self.subTest(earlier=earlier):
+                self.assertTrue(self.refused(*grep_call(), earlier=earlier))
+
+    def test_it_refuses_once_per_session_and_the_rerun_goes_through(self):
+        session = Session(self.scratch)
+        self.assertTrue(reason(session.before(*grep_call())))
+        self.assertEqual("", reason(session.before(*grep_call())))
+        self.assertEqual("", reason(session.before(*bash_call("grep -rn OutboxRelay src"))))
+        self.assertTrue(reason(Session(self.scratch).before(*grep_call())))
+
+    def test_a_parallel_batch_is_refused_once(self):
+        session = Session(self.scratch)
+        event = session.event(*grep_call())
+        running = [subprocess.Popen([sys.executable, str(HINT)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE, env=environment(session.temp)) for _ in range(4)]
+        outputs = [process.communicate(event, timeout=30)[0] for process in running]
+
+        self.assertEqual(1, sum(bool(output.strip()) for output in outputs), outputs)
+
+    def test_a_call_that_is_not_refused_does_not_spend_the_ask(self):
+        session = Session(self.scratch)
+        for given in (bash_call("grep -rn timeout src"), bash_call("grep -n Money src/Money.cs"),
+                      grep_call(path="docs")):
+            self.assertEqual("", reason(session.before(*given)))
+        self.assertEqual("", reason(session.before(*grep_call(), agent_id="a1", agent_type="Explore")))
+        self.assertTrue(reason(session.before(*grep_call())))
+
+    def test_a_spent_ask_reads_no_transcript(self):
+        """Every search after the ask would otherwise scan the whole
+        transcript before the call it precedes could run."""
+        session = Session(self.scratch)
+        self.assertTrue(reason(session.before(*grep_call())))
+        hook = module()
+        event = json.loads(session.event(*grep_call()))
+        with (mock.patch.object(hook.tempfile, "tempdir", str(session.temp)),
+              mock.patch.object(hook, "looked", side_effect=AssertionError("read the transcript")) as read):
+            self.assertIsNone(hook.answer(event))
+        read.assert_not_called()
+
+    def test_the_transcript_is_read_only_to_the_first_lookup_answered(self):
+        """A session that asked the index early is not charged a parse of
+        every later line on each search it makes."""
+        answered = {"type": "user", "message": {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "toolu_0", "is_error": False, "content": "{}"}]}}
+        earlier = [("mcp__codebase-index__find_refs", {"symbol": "X"})]
+        session = Session(self.scratch, earlier=earlier)
+        others = [{"type": "user", "message": {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": f"toolu_other{index}", "content": "x"}]}} for index in range(50)]
+        later = [tool_use(f"toolu_late{index}", *bash_call("bash cbx refs Y")) for index in range(50)]
+        with session.path.open("a", encoding="utf-8") as handle:
+            greps = (tool_use(f"toolu_grep{index}", *grep_call()) for index in range(50))
+            for row in [*greps, *others, answered, *later]:
+                handle.write(json.dumps(row) + "\n")
+        hook = module()
+        with mock.patch.object(hook.json, "loads", wraps=json.loads) as parse:
+            self.assertTrue(hook.looked(session.path))
+        self.assertEqual(2, parse.call_count)
+
+    def test_a_lookup_does_not_spend_the_ask_either(self):
+        lookup = (("mcp__codebase-index__find_refs", {"symbol": "X"}),)
+        self.assertEqual("", reason(Session(self.scratch, lookup, session="same").before(*grep_call())))
+        self.assertTrue(reason(Session(self.scratch, session="same").before(*grep_call())))
+
+    def test_a_session_whose_ask_cannot_be_recorded_goes_through(self):
+        """Refusing without a record would refuse the rerun as well."""
+        for session in ("../escape", "a b", ""):
+            with self.subTest(session=session):
+                done = Session(self.scratch).before(*grep_call(), session_id=session)
+                self.assertEqual("", reason(done))
+        session = Session(self.scratch)
+        (session.temp / "claude-index-ask").write_text("", encoding="utf-8")
+        self.assertEqual("", reason(session.before(*grep_call())))
+
+    def test_text_that_mentions_a_tool_call_is_not_one(self):
+        mention = {"type": "user", "message": {"role": "user", "content": [
+            {"type": "text", "text": '{"type": "tool_use", "name": "mcp__codebase-index__find_refs"}'}]}}
+        session = Session(self.scratch, lines=[mention])
+
+        self.assertTrue(reason(session.before(*grep_call())))
+
+    def test_a_transcript_line_it_cannot_parse_is_skipped(self):
+        """A live transcript's last line can be half written; read as a
+        failure, it would let every search through for the session."""
+        session = Session(self.scratch)
+        with session.path.open("a", encoding="utf-8") as handle:
+            handle.write('{"tool_use": broken\n')
+
+        self.assertTrue(reason(session.before(*grep_call())))
+
+
+class OneRoute(Scratch):
+    def test_the_main_checkout_is_sent_to_the_mcp_tools_alone(self):
+        main, _tree = self.worktree()
+        text = self.refused(*grep_call(), cwd=main)
+
+        self.assertEqual(["find_refs", "find_symbol"], tools(text))
+        self.assertIn("select:mcp__codebase-index__find_refs,mcp__codebase-index__find_symbol", text)
+        self.assertNotIn("cbx", text)
+
+    def test_a_quote_inside_a_term_cannot_end_its_quoting(self):
+        single = module().single
+
+        self.assertEqual("'MapPost'", single("MapPost"))
+        self.assertEqual("'it'" + chr(92) + "''s'", single("it's"))
+
+    def test_with_no_project_dir_a_linked_worktree_is_sent_to_the_cli_alone(self):
+        _main, tree = self.worktree()
+        text = self.refused(*bash_call('grep -rnE "MapPost|MapPut" .'), cwd=tree / "src")
+
+        self.assertIn("cbx refs 'MapPost' --json", text)
+        self.assertIn("cbx refs 'MapPut' --json", text)
+        self.assertIn("cbx symbol 'MapPost' --json", text)
+        self.assertNotIn('"', text)
+        self.assertIn("codebase-index skill", text)
+        self.assertIn("from this checkout's root", text)
+        self.assertIn("each alone on its line", text)
+        self.assertIn("`--kind callers`", text)
+        self.assertNotIn("mcp__", text)
+
+    def test_a_session_started_in_the_worktree_is_served_by_it(self):
+        _main, tree = self.worktree()
+        text = self.refused(*grep_call(), cwd=tree / "src", project=tree)
+
+        self.assertEqual(["find_refs", "find_symbol"], tools(text))
+        self.assertNotIn("cbx", text)
+
+    def test_from_the_checkout_the_session_started_in_it_names_the_mcp_tools(self):
+        main, _tree = self.worktree()
+        text = self.refused(*grep_call(), cwd=main, project=main)
+
+        self.assertEqual(["find_refs", "find_symbol"], tools(text))
+        self.assertNotIn("cbx", text)
+
+    def test_from_a_worktree_entered_mid_session_it_names_the_cli_alone(self):
+        main, tree = self.worktree()
+        text = self.refused(*grep_call(), cwd=tree, project=main)
+
+        self.assertIn("cbx refs 'ClaimAsync' --json", text)
+        self.assertNotIn("mcp__", text)
+
+    def test_the_main_checkout_after_a_session_started_in_a_worktree_names_the_cli_alone(self):
+        main, tree = self.worktree()
+        text = self.refused(*grep_call(), cwd=main, project=tree)
+
+        self.assertIn("cbx refs 'ClaimAsync' --json", text)
+        self.assertIn("from this checkout's root", text)
+        self.assertNotIn("mcp__", text)
+
+    def test_with_no_project_dir_a_linked_worktree_is_taken_to_be_off_it(self):
+        main, tree = self.worktree()
+        hook = module()
+        with mock.patch.dict(os.environ):
+            os.environ.pop("CLAUDE_PROJECT_DIR", None)
+
+            self.assertTrue(hook.off_server(str(tree)))
+            self.assertFalse(hook.off_server(str(main)))
+
+    def test_with_no_checkout_at_the_project_dir_a_linked_worktree_is_taken_to_be_off_it(self):
+        main, tree = self.worktree()
+        nowhere = self.scratch / "nowhere"
+        nowhere.mkdir()
+        hook = module()
+        with mock.patch.dict(os.environ, CLAUDE_PROJECT_DIR=str(nowhere)):
+            self.assertTrue(hook.off_server(str(tree)))
+            self.assertFalse(hook.off_server(str(main)))
+
+    def test_with_both_checkouts_known_it_names_the_cli_where_the_mcp_call_is_refused(self):
+        """Naming the MCP tools where `index-mcp-root.py` refuses them sends the
+        session to a second refusal."""
+        spec = importlib.util.spec_from_file_location("index_mcp_root", CLAUDE / "hooks" / "index-mcp-root.py")
+        root = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(root)
+        hook = module()
+        main, tree = self.worktree()
+        for cwd, project in ((main, main), (main, tree), (tree, main), (tree, tree), (tree / "src", tree)):
+            event = {"tool_name": "mcp__codebase-index__find_refs", "tool_input": {"symbol": "X"}, "cwd": str(cwd)}
+            with self.subTest(cwd=cwd, project=project), mock.patch.dict(os.environ, CLAUDE_PROJECT_DIR=str(project)):
+                self.assertEqual(root.answer(event) is not None, hook.off_server(str(cwd)))
+
+    def test_the_commands_it_names_pass_the_index_guard(self):
+        _main, tree = self.worktree()
+        text = self.refused(*bash_call('grep -rnE "MapPost|MapPut" .'), cwd=tree)
+        spec = importlib.util.spec_from_file_location("guard_index_argv", CLAUDE / "hooks" / "guard-index-argv.py")
+        guard = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(guard)
+        commands = re.findall(r"`(bash \.claude/skills/codebase-index/scripts/cbx [^`]*)`", text)
+
+        self.assertEqual(3, len(commands), text)
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertIsNone(guard.offence(command, guard._git_guard()))
+
+    def test_a_submodule_is_not_a_worktree(self):
+        module = self.scratch / "module"
+        (self.scratch / ".git" / "modules" / "module").mkdir(parents=True)
+        module.mkdir()
+        (module / ".git").write_text("gitdir: ../.git/modules/module\n", encoding="utf-8")
+
+        self.assertEqual(["find_refs", "find_symbol"], tools(self.refused(*grep_call(), cwd=module)))
+
+
+class WhatItCannotRead(Scratch):
+    def test_input_it_cannot_read_goes_through(self):
+        for payload in (b"", b"<html>", b"\xff\xfe\x00", b"[1, 2]",
+                        b'{"tool_name": "Grep", "tool_input": {"pattern": "ClaimAsync"}, "session_id": "s1"}',
+                        json.dumps({"tool_name": "Grep", "tool_input": {"pattern": "ClaimAsync"}, "session_id": "s2",
+                                    "transcript_path": str(self.scratch / "absent.jsonl")}).encode(),
+                        b'{"tool_name": "Grep", "tool_input": "X", "transcript_path": "t", "session_id": "s"}'):
+            with self.subTest(payload=payload):
+                done = run(payload, self.scratch)
+                self.assertEqual(0, done.returncode, done.stderr)
+                self.assertEqual(b"", done.stdout.strip())
+
+    def test_a_pattern_outside_ascii_is_decoded_as_utf_8(self):
+        _main, tree = self.worktree()
+        text = self.refused(*grep_call("\u0141\u00f3d\u017aRelay"), cwd=tree)
+
+        self.assertIn("cbx refs '\u0141\u00f3d\u017aRelay'", text)
+
+
+class TheSkillAgrees(Scratch):
+    """A refusal naming a command the skill does not approve sends the session
+    to a permission prompt instead of the index."""
+
+    def test_every_cli_command_it_emits_is_one_the_skill_approves(self):
+        front = SKILL.read_text(encoding="utf-8").split("---")[1]
+        _main, tree = self.worktree()
+        commands = re.findall(r"`(bash [^`]+)`", self.refused(*grep_call(), cwd=tree))
+        self.assertTrue(commands)
+        for command in commands:
+            prefix = " ".join(command.split()[:3])
+            with self.subTest(command=command):
+                self.assertIn(f"Bash({prefix}:*)", front)
 
 
 if __name__ == "__main__":

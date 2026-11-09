@@ -1,19 +1,8 @@
 #!/usr/bin/env bash
-# Bring the current branch up to date with origin/main by rebasing it, and
-# publish the result. This is the only force push in this repository, and its
-# guards live here rather than in a permission rule because the ones that
-# matter are facts about the checkout: the branch is the one in hand, it is
-# not main, the tree is clean, the remote carries nothing the work did not
-# start from, no merge on the branch holds content neither parent has, and a
-# replay that stopped with anything staged or unstaged in the tree is
-# reported rather than skipped, and no run drops more commits than it set out
-# to replay. The staged-or-unstaged one is the difference between dropping an
-# empty commit and dropping somebody's work: `git rebase --skip` hard-resets
-# the worktree, and the index alone cannot see what that costs.
-# **This list is the owner** — the prose cites it and enumerates nothing of
-# its own, so a guard added below is added here too, or it is a guard no
-# reader knows to check.
-# `.claude/settings.json` denies the raw force push, and that deny is untouched.
+# Rebase the current branch onto origin/main and publish it under a lease.
+# Guards: the branch is in hand and not main, the tree clean, origin has nothing
+# unseen and one push URL, a two-parent merge differs from git's only in
+# conflicts, a replay keeps its todo, skips no stop, a retry holds the lease.
 
 # Four modes, because a conflict is the case rebase is here for. `start`
 # leaves a conflicted rebase in progress rather than aborting it: backing out
@@ -22,15 +11,10 @@
 # `continue` publishes once the caller has resolved and staged. `publish` is
 # the retry when the replay finished and only the push failed, and `abort` is
 # the way back out without a raw `git rebase` grant.
-#
-# There is no `skip` mode, and that is a decision rather than an omission.
-# The one thing it would be for is a resolution that leaves the replayed
-# commit empty, which `stopped` drops by itself: the merge backend already
-# drops such a commit without asking, so a mode would make the two backends
-# disagree about a state neither of them loses anything in. `/ship`'s grant
-# would admit one as it stands — the rule is a prefix over this script's
-# whole argument list — so what a mode lacks here is not permission but a
-# caller, the chain being unattended.
+
+# There is no `skip` mode, and nothing here skips. The merge backend, which
+# `start` spells, drops a commit a resolution emptied by itself; any other
+# commit a caller could skip holds content, and the chain is unattended.
 set -euo pipefail
 
 [ "$#" -eq 2 ] ||
@@ -46,12 +30,7 @@ case "$branch" in
   -*) echo "branch name may not start with '-'" >&2; exit 2 ;;
   *..*) echo "branch name may not contain '..'" >&2; exit 2 ;;
 esac
-# The set `git-branch-create.sh` and `git-worktree-fork.sh` admit, the two
-# helpers `/branch` makes a branch with, parentheses included: it names a
-# scoped feature `feat(<scope>)/<summary>`, and a name either can make and
-# this one refuses is a branch whose only way through a conflict is closed
-# (#181). The two guards above still hold, and `$`, `;` and blanks stay
-# outside the class; every use below is quoted.
+# Branch names here are <type>/<kebab>, and feat(scope)/ carries parentheses.
 [[ "$branch" =~ ^[A-Za-z0-9][A-Za-z0-9._/()-]*$ ]] ||
   { echo "not a branch name this helper will take: $branch" >&2; exit 2; }
 
@@ -68,14 +47,21 @@ case "$lowered" in
     echo "refusing to rebase or force-push main, spelled $branch" >&2; exit 3 ;;
 esac
 
-# Both backends, because which one runs is git's choice and not this file's:
-# the merge backend is the default and the am backend still appears behind
-# `--apply` and in older versions.
-#
-# A function rather than a single read, because the answer moves: a replay
-# that stops leaves state where there was none, and one that finishes takes
-# it away. `stopped` has to ask again for that reason, and asked it with a
-# second copy of this loop until #38 gave the two callers one.
+# A target's hooks never run inside this helper: its `pre-rebase`, `post-rewrite`
+# or `pre-push` hook could veto or alter a replay of published history. An empty
+# `core.hooksPath` is exported before any git runs, so the sequencer inherits
+# it; the caller's own entries are kept.
+no_hooks=$(mktemp -d)
+trap 'rmdir "$no_hooks" 2>/dev/null || :' EXIT
+hook_entry="${GIT_CONFIG_COUNT:-0}"
+export "GIT_CONFIG_KEY_$hook_entry=core.hooksPath" \
+  "GIT_CONFIG_VALUE_$hook_entry=$no_hooks" \
+  "GIT_CONFIG_COUNT=$((hook_entry + 1))"
+
+# Both state directories, although `start` only ever makes rebase-merge: a
+# rebase this helper did not start may be either, and it has to be seen to be
+# refused. A function, because the answer moves: a replay that stops leaves
+# state where there was none, and `stopped` has to ask again.
 current_state() {
   local candidate
   for candidate in "$(git rev-parse --git-path rebase-merge)" "$(git rev-parse --git-path rebase-apply)"; do
@@ -91,6 +77,14 @@ state=""
 in_progress=0
 if state=$(current_state); then
   in_progress=1
+fi
+
+# `git am` keeps its session in rebase-apply too, marked by this file. Every
+# mode would refuse it as some rebase, so the refusal names what it is.
+if [ -n "$state" ] && [ -f "$state/applying" ]; then
+  echo "a 'git am' session is in progress, not a rebase: finish it with 'git am --continue'" \
+       "or leave it with 'git am --abort'" >&2
+  exit 9
 fi
 
 # The branch under a rebase is not the current branch: HEAD is detached while
@@ -110,6 +104,18 @@ if [ -n "$state" ]; then
     fi
   done
 fi
+
+# The branch's tip on origin itself, empty when origin has none. `publish`
+# and `abort` ask this rather than the tracking ref, which a rejected push
+# leaves where it was: read stale, `publish` fails at the push on every
+# retry and `abort` keeps a record it cannot finish, each naming the other.
+remote_tip() {
+  local listed
+  listed=$(git ls-remote origin "refs/heads/$branch") ||
+    { echo "cannot ask origin where $branch is, so whether the replay can still be published is unknown" >&2
+      exit 12; }
+  printf '%s\n' "$listed" | awk -v ref="refs/heads/$branch" '$2 == ref { print $1 }'
+}
 
 require_remote_branch() {
   git show-ref --verify --quiet "refs/remotes/origin/$branch" ||
@@ -141,27 +147,15 @@ require_remote_carries_nothing_new() {
       exit 7; }
 }
 
-# The lease names an expected value. `--force-with-lease` left bare trusts the
-# remote-tracking ref, which any fetch in the session may have moved, so the
-# `<ref>:<sha>` form names the commit this run read and a push landing in
-# between is refused rather than overwritten. The destination ref is spelled out too:
-# `git push origin "$branch"` names a source only, so `remote.origin.push` in the
-# repository's config would decide which ref the force landed on (#343);
-# `refs/heads/<branch>` on both sides leaves it nothing to decide. The URL is the other
-# half: `remote.origin.pushurl`, `url.*.pushInsteadOf` and a second `url` value would point
-# the push at another repository, so a run refuses (exit 7) unless the one URL git will
-# push to names the same host and path the remote was added with. The lease backs that up
-# and does not replace it: any repository whose branch is not at `$lease` refuses the force.
-#
-# `host|path` of a remote URL, or non-zero when it has no such shape. The WHOLE path counts
-# (not its last components, which let `https://h/evil/o/r` or `https://h/x/../o/r` collide
-# with `https://h/o/r`). The host is empty for a local path (the test fixtures') and
-# lower-cased otherwise; a URL's scheme, user, port, leading slash and trailing `.git` do not
-# count, so https and ssh forms of one repository on one host agree.
+# `host|path` of a remote URL, or non-zero when it has no such shape. The whole
+# path counts, since its last components alone let `https://h/evil/o/r` collide
+# with `https://h/o/r`. The host is empty for a local path and lower-cased
+# otherwise; a scheme, user, port, leading slash and trailing `.git` do not
+# count, so the https and ssh forms of one repository on one host agree.
 repo_key() {
   local url=$1 host path
-  # A query or a fragment is not part of the path a server routes on, so the path of
-  # `https://host/x/y#/o/r` would read as `x/y#/o/r` while the push went to `x/y`.
+  # A query or a fragment is not part of the path a server routes on, so the
+  # path of `https://host/x/y#/o/r` would read as `x/y#/o/r` and push to `x/y`.
   [[ $url != *[\?#]* ]] || return 1
   url=${url%/}
   url=${url%.git}
@@ -172,10 +166,9 @@ repo_key() {
     host=${BASH_REMATCH[2]}
     path=${BASH_REMATCH[3]}
   else
-    # No host: only a plain path or a Windows drive path (`C:/x/o/r`) may be hostless. Anything
-    # else with a colon is a scheme or an scp-style address that failed both forms above
-    # (`ssh://h:o/r`, `git@h:/o/r`, `file:///o/r`, `ext::cmd`), and is refused rather than
-    # compared as a path.
+    # Only a plain or drive path may be hostless. Anything else with a colon is a
+    # scheme or scp-style address that fits neither form above (`ssh://h:o/r`,
+    # `git@h:/o/r`, `file:///o/r`, `ext::cmd`), and has no key.
     [[ $url =~ ^([A-Za-z]:)?[^:]*$ ]] || return 1
     host=
     path=$url
@@ -185,13 +178,19 @@ repo_key() {
     # A hosted path names an owner and a repository at least.
     [[ $path == */* ]] || return 1
   fi
-  # A dot segment or an empty one is a different path to the server than it reads as here.
+  # A dot or empty segment is a different path to the server than it reads here.
   case "/${path#/}/" in
     */./* | */../* | *//*) return 1 ;;
   esac
   printf '%s|%s' "$(printf '%s' "$host" | tr 'A-Z' 'a-z')" "$path"
 }
 
+# The lease names an expected value. `--force-with-lease` left bare trusts the
+# remote-tracking ref, which any fetch in the session may have moved, so the
+# `<ref>:<sha>` form names the commit this run read and a push landing in
+# between is refused rather than overwritten. Both sides of the refspec are
+# spelled, so no `remote.origin.push` mapping can send it to another ref the
+# lease does not name.
 publish() {
   local current head lease pushes configured resolved
   current=$(git branch --show-current)
@@ -202,13 +201,14 @@ publish() {
     { echo "no lease was approved, so nothing here may force" >&2; exit 7; }
   # A remote with several `url` values pushes to every one of them.
   pushes=$(git remote get-url --push --all origin | wc -l)
-  pushes=$((pushes))  # BSD wc pads its count with spaces; arithmetic reads it as a number
+  pushes=$((pushes))  # BSD wc pads its count, and arithmetic reads it as a number
   [ "$pushes" -eq 1 ] ||
     { echo "origin has $pushes push URLs; a force goes to every one of them, so nothing is published" >&2; exit 7; }
-  # The URL git will push to, after `pushurl`, `pushInsteadOf` and `insteadOf`, must name the
-  # same host and whole path as the URL the remote was added with. A protocol rewrite on the
-  # same host (https to ssh) passes; another host, another path, a one-component hosted path or
-  # a transport with no host (`ext::`, `fd::`) does not, and nothing is published.
+  # The refspec pins the ref and not the URL: `pushurl`, `pushInsteadOf` or
+  # `insteadOf` can point the force at another repository, so the URL git will
+  # push to must name the host and path the remote was added with. The lease
+  # backs that up and does not replace it. A protocol rewrite on one host passes;
+  # another host, another path or a transport with no host does not.
   configured=$(repo_key "$(git config --get remote.origin.url)") || configured=
   resolved=$(repo_key "$(git remote get-url --push origin)") || resolved=
   [ -n "$configured" ] && [ "$configured" = "$resolved" ] ||
@@ -216,40 +216,36 @@ publish() {
   head=$(git rev-parse HEAD)
   if [ "$head" = "$lease" ]; then
     rm -f "$pending"
-    echo "already published at $head; nothing to force"
+    echo "nothing to force: origin/$branch read $head when it was fetched"
     exit 0
   fi
-  remember_replay "$head"
-  git push --force-with-lease="refs/heads/$branch:$lease" origin "$branch:refs/heads/$branch"
+  git push --force-with-lease="refs/heads/$branch:$lease" origin "refs/heads/$branch:refs/heads/$branch"
   rm -f "$pending"
   echo "published $branch at $head"
 }
 
-# Read from three modes, so it is one function. `read` returns non-zero on a
-# record with no trailing newline, having already assigned the fields it did
-# manage to read — so the emptiness check below is what decides, never the
-# read's status.
-#
-# `|| true` changes nothing at any call site this script has. All three test
-# this function's status — `if read_pending; then` once and `read_pending ||`
-# twice — which suppresses `set -e` for its whole body, so a failing `read`
-# does not end the run with or without it. Measured by deleting it: the suite
-# stays green, and a case written to claim otherwise could not fail. It is
-# kept against a future call site that does not test the status, where a
-# truncated record would end the run on a bare exit 1 this script assigns to
-# nothing. The fields are assigned first so `set -u` cannot bite, and
-# returning 1 for "no record" keeps that case the caller's to word.
+# Read from three modes. `read` returns non-zero on a record with no trailing
+# newline, having assigned what it did read, so the emptiness check decides
+# and the read's status never does. Every call site tests this function's
+# status, which suspends `set -e` inside it; the `|| true` keeps a future
+# untested call from ending on a bare exit 1 this script assigns to nothing.
+# `abort` passes `abort` to be told of an unreadable record rather than
+# refused by it, since clearing one is the only way past it.
 recorded_branch=""
 recorded_lease=""
 recorded_head=""
+recorded_before=""
 read_pending() {
   recorded_branch=""
   recorded_lease=""
   recorded_head=""
+  recorded_before=""
   [ -f "$pending" ] || return 1
-  read -r recorded_branch recorded_lease recorded_head < "$pending" || true
-  [ -n "$recorded_branch" ] ||
-    { echo "the waiting record is unreadable; remove $pending by hand and start again" >&2; exit 9; }
+  read -r recorded_branch recorded_lease recorded_head recorded_before < "$pending" || true
+  [ -z "$recorded_branch" ] || return 0
+  [ "${1:-}" != abort ] || return 2
+  echo "the waiting record is unreadable; run 'abort' to clear it and start again" >&2
+  exit 9
 }
 
 # Written before the replay, so it survives a push that fails after it.
@@ -257,190 +253,142 @@ remember_lease() {
   printf '%s %s\n' "$branch" "$approved_lease" > "$pending"
 }
 
-# Rewritten once the replay has finished and before the push, so the record
-# names the commit this helper produced rather than merely the run that began.
-# Without it the two records are identical - a rebase refused before it started
-# leaves the same two fields a failed push does - and `publish` would force
-# whatever HEAD had since become over a branch nothing here ever replayed.
+# Rewritten by `start` and `continue` once the replay has finished and before
+# the push, so the record names the commit this helper produced; a retry
+# never rewrites it, whatever has since been committed on top. A record still
+# holding two fields is a replay that stopped or was abandoned, and without
+# the head `publish` would force whatever HEAD had since become. The fourth
+# field is the branch's tip before the replay, which is what `abort` puts back
+# when it gives up a replay `publish` could otherwise finish.
 remember_replay() {
-  printf '%s %s %s\n' "$branch" "$approved_lease" "$1" > "$pending"
+  printf '%s %s %s %s\n' "$branch" "$approved_lease" "$1" "$2" > "$pending"
 }
 
-# A rebase drops merge commits, and a merge can carry content that is in
-# neither parent — a conflict resolved while merging, or an edit made while
-# resolving. Replaying such a branch loses it before the push, which no lease
-# can see. `--cc` shows only what differs from every parent, so an ordinary
-# merge-forward prints nothing and is flattened without complaint, and one
-# that invented something stops the run. This is the only place in this
-# repository that reads it: `/ship` step 0's finished predicate asks ancestry
-# against the head a pull request merged rather than content, so a resolution
-# dropped here reaches no other check.
+# A conflicted file the merge took whole from one parent must still carry the
+# other parent's clean hunks, which `git merge-file --ours` lays over that side.
+# One with no single base or no blob on a side, an add/add say, is `--cc`'s, and
+# so is a binary file, which has no hunks to keep.
+dropped_a_clean_hunk() {
+  local merge=$1 first=$2 second=$3 base=$4 path=$5 took ours theirs from redone
+  # Still quoted under core.quotePath=false, so not a name rev-parse can read.
+  case "$path" in
+    \"*) echo "cannot name the conflicted path $path in $merge, so what a replay drops is unknown" >&2
+         exit 10 ;;
+  esac
+  case "$base" in "" | *$'\n'*) return 1 ;; esac
+  took=$(git rev-parse -q --verify "$merge:$path") || return 1
+  from=$(git rev-parse -q --verify "$base:$path") || return 1
+  ours=$(git rev-parse -q --verify "$first:$path") || return 1
+  theirs=$(git rev-parse -q --verify "$second:$path") || return 1
+  if [ "$took" = "$theirs" ]; then
+    theirs=$ours
+    ours=$took
+  elif [ "$took" != "$ours" ]; then
+    return 1
+  fi
+  # merge-file refuses if any of the three is binary, and a pair reads "-" if either is.
+  [ "$(git diff --numstat "$from" "$ours" | cut -f1)" != "-" ] || return 1
+  [ "$(git diff --numstat "$from" "$theirs" | cut -f1)" != "-" ] || return 1
+  redone=$(git merge-file --object-id --ours "$ours" "$from" "$theirs") || true
+  [ -n "$redone" ] ||
+    { echo "cannot replay the clean hunks of $path in $merge, so what a replay drops is unknown" >&2
+      exit 10; }
+  [ "$redone" != "$took" ]
+}
+
+# A rebase drops merge commits, so a merge holding what git's own merge of its
+# parents would not is lost before the push, where no lease can see it. Each
+# file git merges cleanly must be as git made it, and a conflicted one taken
+# whole from one side must keep the other's clean hunks; any other conflicted
+# file is left to `--cc` (docs/harness-boundaries.md), and so is an octopus.
 require_no_merge_invented_anything() {
-  local invented
+  local invented merge parents made status tree conflicted changed path kept base
   invented=$(git log --merges --cc --format="" "refs/remotes/origin/main..HEAD")
-  [ -z "$invented" ] ||
-    { echo "a merge on $branch carries content neither parent has, and a replay would drop it:" >&2
+  kept=""
+  for merge in $(git rev-list --merges "refs/remotes/origin/main..HEAD"); do
+    parents=$(git rev-list --parents -n 1 "$merge")
+    set -- $parents
+    [ "$#" -eq 3 ] || continue
+    status=0
+    # Unquoted, so a name with a non-ASCII byte is one rev-parse can read; both lists alike.
+    made=$(git -c core.quotePath=false merge-tree --write-tree --name-only --no-messages "$2" "$3") ||
+      status=$?
+    [ "$status" -le 1 ] ||
+      { echo "cannot merge the parents of $merge to compare with it, so what a replay drops is unknown" >&2
+        exit 10; }
+    tree=$(printf '%s\n' "$made" | sed -n 1p)
+    conflicted=$(printf '%s\n' "$made" | sed 1d)
+    changed=$(git -c core.quotePath=false diff --name-only "$tree" "$merge")
+    while IFS= read -r path; do
+      [ -n "$path" ] || continue
+      printf '%s\n' "$conflicted" | grep -qxF -- "$path" || kept="$kept$merge $path"$'\n'
+    done <<< "$changed"
+    base=$(git merge-base --all "$2" "$3") || base=""
+    while IFS= read -r path; do
+      [ -n "$path" ] || continue
+      ! dropped_a_clean_hunk "$merge" "$2" "$3" "$base" "$path" || kept="$kept$merge $path"$'\n'
+    done <<< "$conflicted"
+  done
+  [ -z "$invented" ] && [ -z "$kept" ] ||
+    { echo "a merge on $branch carries content git's own merge of its parents would not," >&2
+      echo "and a replay would drop it:" >&2
       git log --merges --oneline "refs/remotes/origin/main..HEAD" >&2
-      echo "land or re-commit that content before rebasing" >&2
+      [ -z "$kept" ] || { echo "where it differs from a clean merge:" >&2; printf '%s' "$kept" >&2; }
+      echo "land or re-commit that content before rebasing; and next time never merge main forward:" >&2
+      echo "run start on the branch instead, and on a conflict resolve it in the replayed commit" >&2
       exit 10; }
 }
 
-# A replay stops in one of three states, and this said "conflict" to all
-# three until #38. Only the first of them is one.
-#
-# The marker is what `continue` and `abort` look for. git removes this
-# directory when the rebase ends however it ends, so the mark cannot outlive
-# the thing it marks, and a rebase somebody ran by hand does not carry it.
-#
-# A loop rather than recursion, and a bounded one. A `git rebase --skip` that
-# fails while changing nothing — a worktree file another process holds open —
-# re-enters on an identical state, and `set -e` is suppressed throughout a
-# function invoked as the right-hand side of `||`, so nothing else would stop
-# it. The replay's own length is the bound: no run can drop more commits than
-# it set out to replay.
+# A replay stops in one of two states: something unmerged, which is the
+# conflict `continue` exists for, or a stop this helper cannot name, which is
+# reported and never skipped. The merge backend drops a commit a resolution
+# emptied without asking, and reschedules a pick it could not apply, so no
+# state here is one this helper may drop a commit from. The marker is what
+# `continue` and `abort` look for; git removes the state directory when the
+# rebase ends however it ends, and a rebase somebody ran by hand lacks it.
 stopped() {
-  # `left` is filled in at the first skip that wants it rather than here.
-  # `continue` reads `refs/remotes/origin/main` nowhere — no guard in that
-  # mode touches it — so computing the bound up front made a checkout whose
-  # remote-tracking main had gone answer "a skip cannot be bounded" in place
-  # of the conflict report it actually owed.
-  #
-  # `seen` is what the message below reads. `in_progress` is a per-mode
-  # constant — `start` refuses unless it is 0 and `continue` unless it is 1 —
-  # so it says which mode this is, not whether a rebase has run, and on the
-  # loop's second pass those are different questions.
-  local now unmerged left="" seen=0
+  local now unmerged untracked
+  now=$(current_state) ||
+    { # No state left, so nothing to continue. The record here is the
+      # two-field one `remember_lease` wrote, which `publish` refuses, and
+      # left behind it would refuse every later `start` on any branch.
+      rm -f "$pending"
+      if [ "$in_progress" -eq 1 ]; then
+        echo "the replay of $branch ended without finishing, so there is nothing to continue;" >&2
+      else
+        echo "the rebase did not start, so there is nothing to continue;" >&2
+        echo "if git says local changes would be overwritten while git status is clean, a file" >&2
+        echo "carries skip-worktree, which git ls-files -v marks S; that flag is the owner's to clear" >&2
+      fi
+      echo "git's own message is above" >&2
+      exit 11; }
+  # Checked, because an unwritten marker wedges the rebase: `continue` and
+  # `abort` both refuse one without it, and no raw `git rebase` is granted.
+  # It holds the commit the replay stopped at, where `continue` requires HEAD
+  # to be or one commit on, and the todo is copied beside it for `continue`.
+  { git rev-parse HEAD > "$now/started-by-this-helper" &&
+    { cat "$now/git-rebase-todo" 2>/dev/null || true; } > "$now/todo-at-stop"; } ||
+    { echo "cannot mark $now as this helper's; the replay is left where it is, and" >&2
+      echo "'abort' accepts it only if an earlier stop's mark is there, or else by hand" >&2
+      exit 14; }
 
-  while : ; do
-    now=$(current_state) ||
-      { # No state, so there is nothing left to continue — but not for the
-        # same reason each time it happens, and this said "the rebase did not
-        # start" at all of them. It is true only where no state has been seen:
-        # from `continue`, a rebase was in progress by that mode's own guard,
-        # and on a later pass this loop has been standing in one.
-        #
-        # Clearing the record is right either way. Only `publish` ever writes
-        # a replayed head, so the record here is the two-field one
-        # `remember_lease` wrote, and `publish` refuses a record with no
-        # head; leaving it would refuse every later `start`, on any branch,
-        # until somebody aborted from the branch it names.
-        rm -f "$pending"
-        if [ "$seen" -eq 1 ] || [ "$in_progress" -eq 1 ]; then
-          echo "the replay of $branch ended without finishing, so there is nothing to continue;" >&2
-        else
-          echo "the rebase did not start, so there is nothing to continue;" >&2
-        fi
-        echo "git's own message is above" >&2
-        exit 11; }
-    seen=1
-    # Checked, because `set -e` is suppressed for every line of this function
-    # — it is only ever the right-hand side of `||` — and an unwritten marker
-    # is a wedge rather than a nuisance: `continue` and `abort` both refuse a
-    # rebase that does not carry it, and there is no raw `git rebase` grant
-    # to get out with.
-    : > "$now/started-by-this-helper" ||
-      { echo "cannot mark $now as this helper's, so neither 'continue' nor 'abort'" >&2
-        echo "would accept the rebase afterwards; the replay is left where it is" >&2
-        exit 14; }
-
-    unmerged=$(git diff --name-only --diff-filter=U)
-    if [ -n "$unmerged" ]; then
-      echo "the rebase onto origin/main conflicts and is left in progress, which is the point:" >&2
-      printf '%s\n' "$unmerged" >&2
-      echo "resolve these, 'git add' them, then run this helper again with 'continue'" >&2
-      # The one fact that lets a later skip call this commit emptied rather than
-      # failed: this helper told the caller to resolve it. Unwritten, the skip
-      # below refuses, which fails closed.
-      : > "$now/conflict-reported" || true
-      exit 8
-    fi
-
-    # Nothing is unmerged, so "resolve these" names nothing and the caller
-    # has already done everything it asks — the wedge #38 filed, whose only
-    # granted way out was `abort` and the whole branch update with it. What
-    # is left is an empty replayed commit, dropped below, or a stop this
-    # helper cannot name, reported.
-    #
-    # **Two reads, because `git rebase --skip` hard-resets the worktree and
-    # the index cannot see what that would destroy.** `--continue` also
-    # refuses when a tracked file carries an unstaged edit, and that leaves
-    # the index equal to HEAD — so the emptiness test passes on its own and
-    # the reset takes the edit with it. Measured before the second read
-    # existed: an unstaged line in b.txt was gone and the branch was
-    # force-pushed without it.
-    #
-    # Both are asked of the tree rather than read off git's message, which is
-    # a locale and a version away from meaning something else, and both fail
-    # closed — a read that errors reports rather than drops anything.
-    git diff --cached --quiet HEAD ||
-      { echo "the replay of $branch stopped with nothing unmerged and a change still staged," >&2
-        echo "so it is not an empty commit and not this helper's to discard:" >&2
-        echo "git's own message is above; answer it, then 'continue', or 'abort'" >&2
-        exit 14; }
-    git diff --quiet ||
-      { echo "the replay of $branch stopped with unstaged changes in the tree," >&2
-        echo "which a skip would discard rather than drop an empty commit:" >&2
-        git diff --name-only >&2
-        echo "stage them or set them aside, then 'continue', or 'abort'" >&2
-        exit 14; }
-
-    # **A skip is for a commit the caller emptied, and nothing else (#187).**
-    # The reads above say the tree holds nothing to lose; they do not say the
-    # commit was ever applied. A patch that fails with no 3-way fallback leaves
-    # no unmerged path, a clean index and a clean tree too, and skipping that
-    # drops a commit carrying content before the force-push. So the skip needs
-    # the positive fact: `continue` found the marker the conflict report wrote,
-    # which means this helper asked the caller to resolve this very commit.
-    # A commit reached by a skip, or by `start`, has no such fact.
-    [ "${caller_resolved:-0}" -eq 1 ] ||
-      { echo "the replay of $branch stopped with nothing unmerged and nothing staged," >&2
-        echo "on a commit this helper never reported as a conflict, so it is not known to be empty:" >&2
-        echo "a skip would drop it if it carries content. Answer git's message above, then 'continue', or 'abort'" >&2
-        exit 14; }
-
-    # Counted here rather than before the loop, so a mode that never reads
-    # `origin/main` is not stopped by its absence until it actually wants a
-    # bound. The count is the pre-rebase length of the branch and therefore
-    # an upper bound on what can be replayed, which is all this needs.
-    if [ -z "$left" ]; then
-      left=$(git rev-list --count "refs/remotes/origin/main..refs/heads/$branch") || left=""
-      [ -n "$left" ] ||
-        { echo "cannot count what $branch is replaying, so a skip cannot be bounded" >&2; exit 14; }
-      # Zero here is not the bound running out, and the two must not share a
-      # message: a count of none means the branch holds nothing origin/main
-      # lacks, so there was never a commit for a skip to drop. Said once,
-      # where the count is taken, so the refusal below can speak only about
-      # attempts it actually made.
-      [ "$left" -gt 0 ] ||
-        { echo "$branch holds no commits origin/main lacks, so there is nothing to replay" >&2
-          echo "and nothing a skip could drop: 'abort' and start again" >&2
-          exit 14; }
-    fi
-    # Spent per attempt rather than per commit dropped, which is what bounds
-    # a skip that fails while changing nothing — so the message says
-    # attempted, not dropped. Claiming the commits had gone would name the
-    # opposite of what happened in the one case this bound exists for.
-    [ "$left" -gt 0 ] ||
-      { echo "this run has attempted as many skips as $branch had commits to replay," >&2
-        echo "so a further one is not progress: 'abort' and start again" >&2
-        exit 14; }
-    left=$((left - 1))
-
-    # Taking origin/main's side of a conflict verbatim is the commonest
-    # merge-forward resolution, and it leaves the replayed commit empty.
-    # Dropping it loses nothing the guards protect — its content is in the
-    # base it was being replayed onto, and the two reads above have just
-    # established that the tree holds nothing else — and the merge backend
-    # already drops it without asking, so this is what makes the two backends
-    # agree rather than a liberty taken with the branch. Only the apply
-    # backend reaches here.
-    echo "the resolution left this commit of $branch empty, so it is dropped and the replay goes on" >&2
-    # The next stop is a different commit, which has reported nothing yet.
-    caller_resolved=0
-    GIT_EDITOR=true git rebase --skip && return 0
-    # The skip failed, and the next commit conflicting is the ordinary reason.
-    # Round again: the states above are the same three.
-  done
+  unmerged=$(git diff --name-only --diff-filter=U)
+  if [ -n "$unmerged" ]; then
+    echo "the rebase onto origin/main conflicts and is left in progress, which is the point:" >&2
+    printf '%s\n' "$unmerged" >&2
+    echo "resolve these, 'git add' them, then run this helper again with 'continue'" >&2
+    exit 8
+  fi
+  # Untracked files are named because they are the commonest such stop: one
+  # standing where the next commit adds a file refuses the pick.
+  untracked=$(git ls-files --others --exclude-standard) || untracked=""
+  echo "the replay of $branch stopped with nothing unmerged, for a reason git gives above;" >&2
+  if [ -n "$untracked" ]; then
+    echo "these untracked files may be what stopped it:" >&2
+    printf '%s\n' "$untracked" >&2
+  fi
+  echo "answer it, then 'continue', or 'abort'" >&2
+  exit 14
 }
 
 case "$mode" in
@@ -448,10 +396,9 @@ case "$mode" in
     [ "$in_progress" -eq 0 ] ||
       { echo "a rebase is already in progress; finish it with 'continue' or leave it with 'abort'" >&2; exit 9; }
     if read_pending; then
-      # Named, because the record is one per checkout: the caller may be
-      # standing on a different branch, and both ways out want the branch the
-      # record belongs to. It is not skipped for another branch — `start`
-      # would overwrite the record and strand the branch holding it.
+      # Named, because the record is one per checkout and the caller may be
+      # on another branch. It is not overwritten for another branch, which
+      # would strand the branch it belongs to.
       echo "a replay of $recorded_branch is waiting to be published:" \
            "run 'publish' on that branch, or 'abort' there to discard it" >&2
       exit 9
@@ -466,6 +413,20 @@ case "$mode" in
     dirty=$(git status --porcelain)
     [ -z "$dirty" ] ||
       { echo "the tree is dirty; a rebase would carry or refuse it, and neither is this helper's call" >&2; exit 5; }
+    # A skip-worktree file reads clean in `git status` and is still local state
+    # the replay's checkout will not overwrite, so the replay would stop with
+    # git's "local changes would be overwritten" and name no file. It is
+    # refused here, by name, under the dirty tree's own exit. A sparse checkout
+    # sets the same flag on purpose, so one that says so is not read as a lift.
+    sparse=$(git config --type=bool core.sparseCheckout || :)
+    if [ "$sparse" != "true" ]; then
+      flagged=$(git ls-files -v | sed -n 's/^[Ss] //p')
+      [ -z "$flagged" ] ||
+        { echo "these tracked files carry skip-worktree, which git status does not show and a replay will not overwrite:" >&2
+          printf '%s\n' "$flagged" >&2
+          echo "clear the flag with 'git update-index --no-skip-worktree <file>', or restore the file, then start again" >&2
+          exit 5; }
+    fi
 
     git fetch origin
     git show-ref --verify --quiet refs/remotes/origin/main ||
@@ -475,11 +436,13 @@ case "$mode" in
     require_no_merge_invented_anything
     remember_lease
 
-    # The flags are spelled rather than inherited. `rebase.rebaseMerges` would
-    # keep the merge commits this helper exists to be rid of, and
-    # `rebase.updateRefs` would force-update other local branches' refs as a
-    # side effect — both from configuration this script does not own.
-    git rebase --no-rebase-merges --no-update-refs "refs/remotes/origin/main" || stopped
+    # Every `rebase.*` key that changes the replay is spelled over, three of
+    # them defensively (docs/harness-boundaries.md, *Grant inventory and push
+    # helpers*); `--merge` keeps the apply backend out.
+    before=$(git rev-parse HEAD)
+    git rebase --merge --no-rebase-merges --no-update-refs --no-autosquash \
+      --no-fork-point --no-autostash "refs/remotes/origin/main" || stopped
+    remember_replay "$(git rev-parse HEAD)" "$before"
     publish
     ;;
 
@@ -494,11 +457,46 @@ case "$mode" in
     # discard the branch's work with the guards all green.
     [ -f "$state/started-by-this-helper" ] ||
       { echo "this rebase was not started by this helper, so it will not be published" >&2; exit 9; }
+    # `start` spells `--merge`, so an apply-backend replay carrying the marker
+    # is an earlier version's, and continuing it can stop where nothing here
+    # would ever let it finish.
+    case "$state" in
+      */rebase-apply)
+        echo "this replay runs on the apply backend, which this helper no longer uses: 'abort' and start again" >&2
+        exit 9 ;;
+    esac
+    # And HEAD detached at the stop, or one non-merge commit on it: the
+    # caller's own committed resolution, which `--continue` keeps. Anything
+    # else — another branch, a merge, more commits, a reset — would be carried
+    # into a history this helper never replayed. The refusal names HEAD,
+    # because `abort` leaves a commit made here reachable only by the reflog.
+    stopped_at=$(cat "$state/started-by-this-helper")
+    head_now=$(git rev-parse HEAD)
+    parent=$(git rev-parse -q --verify "HEAD^") || parent=""
+    second=$(git rev-parse -q --verify "HEAD^2") || second=""
+    if git symbolic-ref -q HEAD > /dev/null || [ -z "$stopped_at" ] ||
+       { [ "$head_now" != "$stopped_at" ] && { [ "$parent" != "$stopped_at" ] || [ -n "$second" ]; }; }; then
+      echo "HEAD, $head_now, is not where the replay of $branch stopped (${stopped_at:-unrecorded})" >&2
+      echo "nor one commit on it, so what the move meant cannot be told from here: 'abort' the replay" >&2
+      echo "and start again, recovering anything committed here from $head_now first" >&2
+      exit 9
+    fi
+    # What is left to replay is what this helper planned: a todo edited since
+    # the stop could drop or reorder the branch's commits with every guard
+    # above green. A stop with no copy is an earlier version's, and fails closed.
+    todo_now=$(cat "$state/git-rebase-todo" 2>/dev/null) || todo_now=""
+    { [ -f "$state/todo-at-stop" ] && [ "$todo_now" = "$(cat "$state/todo-at-stop")" ]; } ||
+      { echo "the replay's todo list is not the one it stopped with, so what is left to replay is not" >&2
+        echo "what this helper planned: 'abort' the replay and start again" >&2
+        exit 9; }
     unmerged=$(git diff --name-only --diff-filter=U)
     [ -z "$unmerged" ] ||
       { echo "these are still unmerged; resolve and 'git add' them first:" >&2
         printf '%s\n' "$unmerged" >&2; exit 9; }
-    require_remote_branch
+    # Not `require_remote_branch`, whose way out is a normal push: mid-replay
+    # there is nothing to push until the replay ends, and it will not end here.
+    git show-ref --verify --quiet "refs/remotes/origin/$branch" ||
+      { echo "origin has no $branch any more, so the replay has nothing to force over: 'abort' it" >&2; exit 6; }
     # Fails closed, like the branch-name read above it. An unreadable starting
     # point means the divergence check cannot be made, and skipping it would
     # leave the lease as the only guard — which another session's already
@@ -511,13 +509,8 @@ case "$mode" in
 
     # The message is the replayed commit's own. An editor would stop the run on
     # a terminal nothing is attached to, so it is answered rather than opened.
-    # Read and cleared before the rebase runs, so the marker describes only
-    # the commit the caller has just resolved: a later stop on another commit
-    # must earn its own.
-    caller_resolved=0
-    if [ -f "$state/conflict-reported" ]; then caller_resolved=1; fi
-    rm -f "$state/conflict-reported"
     GIT_EDITOR=true git rebase --continue || stopped
+    remember_replay "$(git rev-parse HEAD)" "$started_from"
     publish
     ;;
 
@@ -531,23 +524,44 @@ case "$mode" in
       { echo "no replay is waiting to be published" >&2; exit 9; }
     [ "$recorded_branch" = "$branch" ] ||
       { echo "the waiting replay is $recorded_branch, not $branch" >&2; exit 4; }
-    # A record with no head is a run that stopped before one existed, which a
-    # refused rebase leaves looking exactly like a failed push.
+    current=$(git branch --show-current)
+    [ "$current" = "$branch" ] ||
+      { echo "on ${current:-a detached HEAD}, not $branch: this helper only ever touches the current branch" >&2
+        exit 4; }
+    # A record with no head is a run that stopped before one existed, and the
+    # replay is what gets republished, never whatever the branch has become.
     [ -n "$recorded_head" ] ||
       { echo "the waiting record names no replayed commit, so the rebase never finished: 'abort' and start again" >&2
         exit 9; }
-    # And the replay is what gets republished, never whatever the branch has
-    # become since. A commit amended or added after the push failed is a
-    # different tip, and forcing it is what this record exists to refuse.
-    [ "$(git rev-parse HEAD)" = "$recorded_head" ] ||
-      { echo "HEAD is not the commit this helper replayed: 'abort' the record and start again" >&2
+    # Commits made on top of the replay are this checkout's own and go with
+    # it. A HEAD that does not descend from it is a rewrite this helper did
+    # not make, and `abort` then only clears the record: the branch stays
+    # rewritten, which `start` refuses too, so the message says so.
+    git merge-base --is-ancestor "$recorded_head" HEAD ||
+      { echo "HEAD does not descend from $recorded_head, the commit this helper replayed:" >&2
+        echo "put that commit back under the branch and run 'publish' again; 'abort' only clears the" >&2
+        echo "record, and starting over needs $branch reset by hand to" >&2
+        echo "${recorded_before:-its tip before the replay}" >&2
         exit 9; }
-    require_remote_branch
     # The remote must still be where the guard left it. If it moved, this lease
     # was approved against a tip that no longer exists and re-approving it here
     # would be the re-read this helper exists to avoid.
-    [ "$(git rev-parse "refs/remotes/origin/$branch")" = "$recorded_lease" ] ||
-      { echo "origin/$branch has moved since the replay was approved: 'abort' the record and start again" >&2
+    remote_now=$(remote_tip)
+    [ -n "$remote_now" ] ||
+      { echo "origin has no $branch any more, so there is nothing to force: 'abort' the record and push it normally" >&2
+        exit 6; }
+    # A push that landed while its answer was lost reads as a moved remote,
+    # and is the one move that needs nothing further.
+    if [ "$remote_now" = "$(git rev-parse HEAD)" ]; then
+      rm -f "$pending"
+      echo "origin already has $branch at $remote_now; nothing to force"
+      exit 0
+    fi
+    # `start` refuses the rewritten branch against a moved remote as well, so
+    # the message does not send the caller there.
+    [ "$remote_now" = "$recorded_lease" ] ||
+      { echo "origin/$branch has moved since the replay was approved, and this checkout's $branch is rewritten:" >&2
+        echo "reconcile it with origin's $remote_now by hand; 'abort' only clears the record" >&2
         exit 7; }
     approved_lease="$recorded_lease"
     publish
@@ -555,12 +569,20 @@ case "$mode" in
 
   abort)
     if [ "$in_progress" -eq 0 ] && [ -f "$pending" ]; then
-      # The record is the only route left to a replayed branch, so discarding
-      # one that belongs to another branch strands its rewritten tip: `start`
-      # reads that tip as non-ancestral and `continue` finds no rebase. Both
-      # identities are checked, because the name passed and the branch in hand
-      # are different ways to reach the wrong record.
-      read_pending ||
+      # The record is the only route left to a replayed branch, so clearing
+      # one that belongs to another strands its rewritten tip. The name passed
+      # and the branch in hand are two ways to reach the wrong record.
+      readable=0
+      read_pending abort || readable=$?
+      # An unreadable record names no branch and no head, so `publish` can
+      # never finish it and there is no tip it could still reach; left, it
+      # refuses every mode on every branch.
+      if [ "$readable" -eq 2 ]; then
+        rm -f "$pending"
+        echo "cleared an unreadable waiting record; nothing was published"
+        exit 0
+      fi
+      [ "$readable" -eq 0 ] ||
         { echo "no replay is waiting to be abandoned" >&2; exit 9; }
       [ "$recorded_branch" = "$branch" ] ||
         { echo "the waiting replay is $recorded_branch, not $branch" >&2; exit 4; }
@@ -568,44 +590,35 @@ case "$mode" in
       [ "$current" = "$branch" ] ||
         { echo "on ${current:-a detached HEAD}, not $branch: this helper only ever touches the current branch" >&2
           exit 4; }
-      # A record `publish` can still finish must not be cleared: the branch is
-      # rewritten, and afterwards nothing reaches it — `start` reads that tip
-      # as non-ancestral, `continue` finds no rebase, and an ordinary push is
-      # not a fast-forward.
-      #
-      # **Both halves, or this deadlocks.** `publish` refuses when the remote
-      # has moved since the lease was approved and says to abort; if `abort`
-      # refused on the head alone it would answer "run publish", and the
-      # record would be reachable by neither. /ship fetches the branch
-      # immediately before calling this helper, so a remote that moved is the
-      # ordinary case rather than a rare one. When the lease is dead the
-      # replay is unpublishable and clearing the record is exactly right.
-      #
-      # Assigned rather than read inside `[ ]`, where a command substitution
-      # discards the exit status: a failed `git rev-parse` would read as "the
-      # head differs" and clear the record, which is the one outcome this
-      # guard exists to prevent.
+      # A record `publish` could finish, asked the way `publish` asks it —
+      # HEAD descending from the replay and origin's own tip at the lease — is
+      # never simply cleared, which would strand the rewritten branch. Where
+      # HEAD is the replay itself, the branch goes back to its tip before the
+      # replay, the state `start` began from, so a push origin keeps refusing
+      # cannot hold every later run hostage. Commits on top are this
+      # checkout's work, and are not reset away. Any record `publish` could
+      # not finish is cleared; a remote that cannot be asked stops the run.
       if [ -n "$recorded_head" ]; then
-        head_now=$(git rev-parse HEAD)
-        # Absence and failure are different answers, and folding them together
-        # defeats the paragraph above. `2>/dev/null || echo ""` made the
-        # assignment succeed whatever happened, so a `git rev-parse` failing
-        # on a ref that DOES exist read as "the lease is dead", passed the
-        # guard, and removed the record — the one outcome it exists to
-        # prevent. Asked separately, a ref that is genuinely gone gives "" and
-        # a git that failed takes the run down with the record intact.
-        #
-        # `--verify` also matters: bare `rev-parse` prints an argument it
-        # cannot resolve to stdout before failing, so the old line captured
-        # the ref NAME rather than the empty string it appears to promise.
-        if git show-ref --verify --quiet "refs/remotes/origin/$branch"; then
-          remote_now=$(git rev-parse --verify "refs/remotes/origin/$branch")
-        else
-          remote_now=""
+        remote_now=""
+        if git merge-base --is-ancestor "$recorded_head" HEAD; then
+          remote_now=$(remote_tip)
         fi
-        [ "$head_now" != "$recorded_head" ] || [ "$remote_now" != "$recorded_lease" ] ||
-          { echo "the replay of $branch is still at HEAD and 'publish' can finish it; refusing to strand it" >&2
-            exit 9; }
+        if [ "$remote_now" = "$recorded_lease" ]; then
+          [ "$(git rev-parse HEAD)" = "$recorded_head" ] ||
+            { echo "commits sit on the replay of $branch, so 'publish' is the way on; to give the replay up," >&2
+              echo "move them off it and run 'abort' again" >&2
+              exit 9; }
+          [ -n "$recorded_before" ] ||
+            { echo "the waiting record names no tip from before the replay, so $branch cannot be put back:" >&2
+              echo "'publish' it, or reset it by hand to its tip before the replay (ORIG_HEAD, or the reflog)" >&2
+              echo "and remove $pending" >&2
+              exit 9; }
+          git reset -q --keep "$recorded_before" ||
+            { echo "cannot put $branch back at $recorded_before; the record is kept" >&2; exit 9; }
+          rm -f "$pending"
+          echo "put $branch back at $recorded_before, where it was before the replay; nothing was published"
+          exit 0
+        fi
       fi
       rm -f "$pending"
       echo "cleared the waiting replay; $branch is left where it is and nothing was published"
@@ -617,6 +630,13 @@ case "$mode" in
       { echo "the rebase in progress is ${rebase_branch:-unreadable}, not $branch" >&2; exit 4; }
     [ -f "$state/started-by-this-helper" ] ||
       { echo "this rebase was not started by this helper, so it is not this helper's to undo" >&2; exit 9; }
+    # `git rebase --abort` resets the tree to the branch's tip, so an edit made
+    # during the stop goes with it, unstaged or not; it is named before it goes.
+    discarded=$(git status --porcelain --untracked-files=no) || discarded=""
+    if [ -n "$discarded" ]; then
+      echo "aborting discards these uncommitted changes, as 'git rebase --abort' does:" >&2
+      printf '%s\n' "$discarded" >&2
+    fi
     git rebase --abort
     rm -f "$pending"
     echo "aborted; $branch is where it was and nothing was published"

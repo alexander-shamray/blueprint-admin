@@ -3,20 +3,38 @@
 # creating the pull request, so the SHA rewrite lands before the first review round. A raw `git rebase -x` grant
 # would take any command (`docs/harness-boundaries.md`); this takes a number and spells the exec itself.
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/gh-read-bound.sh"
 
 [ "$#" -eq 1 ] || { echo "usage: git-trailer-pr.sh <pr-number>" >&2; exit 2; }
 pr="$1"
 [[ "$pr" =~ ^[0-9]+$ ]] || { echo "pr must be a number: $pr" >&2; exit 2; }
 
+# A target's hooks never run inside this helper, for git-rebase-onto-main.sh's reason: a `pre-rebase`,
+# `post-rewrite`, `commit-msg` or `pre-push` hook of its own would run in, and could veto or alter, a rewrite of
+# published history. `core.hooksPath` is an empty directory made for the run, set once through the environment before
+# any git runs, so the sequencer's git and the amend in the exec inherit it. The entry is appended to any the caller
+# already set.
+no_hooks=$(mktemp -d)
+trap 'rmdir "$no_hooks" 2>/dev/null || :' EXIT
+hook_entry="${GIT_CONFIG_COUNT:-0}"
+export "GIT_CONFIG_KEY_$hook_entry=core.hooksPath" \
+  "GIT_CONFIG_VALUE_$hook_entry=$no_hooks" \
+  "GIT_CONFIG_COUNT=$((hook_entry + 1))"
+
 branch=$(git branch --show-current)
-[ -n "$branch" ] && [ "$branch" != main ] ||
-  { echo "not on a PR branch: nothing to add the trailer to" >&2; exit 3; }
+[ -n "$branch" ] || { echo "not on a PR branch: nothing to add the trailer to" >&2; exit 3; }
+# Folded and spelled out as git-rebase-onto-main.sh does: on this host's case-insensitive filesystem `Main` is `main`'s
+# ref, and one string compare is one spelling.
+case "$(printf %s "$branch" | tr '[:upper:]' '[:lower:]')" in
+  main|heads/main|refs/heads/main|origin/main|refs/remotes/origin/main)
+    echo "refusing to rewrite main, spelled $branch: not on a PR branch" >&2; exit 3 ;;
+esac
 dirty=$(git status --porcelain)
 [ -z "$dirty" ] || { echo "the tree is not clean: commit or stash first" >&2; exit 3; }
 
 # The number is the caller's, so it is bound to this branch: a trailer naming another pull request is the one a
 # revert helper would act on.
-row=$(gh pr view "$pr" --json state,headRefName,baseRefName,isCrossRepository \
+row=$(gh_read pr view "$pr" --json state,headRefName,baseRefName,isCrossRepository \
   --jq '[.state, .headRefName, .baseRefName, (.isCrossRepository|tostring)] | @tsv') ||
   { echo "cannot read pull request #$pr" >&2; exit 3; }
 IFS=$'\t' read -r state head_branch base cross <<<"${row%$'\r'}"
@@ -60,14 +78,28 @@ fi
 # The exec skips a commit that has the trailer, so a rerun after a failed push changes nothing already done.
 if [ "$owned" -lt "$total" ]; then
   exec_cmd="git log -1 --format=%B | git interpret-trailers --parse | grep -qx '$wanted' || git commit --amend --no-edit --trailer '$wanted'"
-  # A concurrent git reader can hold the worktree index for an instant (#243), which aborts the rewrite with an
-  # `index.lock` message and nothing wrong. One more attempt after the abort is safe, since the abort restores the
-  # branch; any other failure, and a second lock failure, stops as before.
+  # A concurrent git reader can hold the worktree index for an instant, which fails the rewrite with an `index.lock`
+  # message and nothing wrong. One more attempt after the abort is safe, since the abort restores the branch; any other
+  # failure, and a second lock failure, stops. The wait comes first: the abort wants that lock too, and one that
+  # cannot take it leaves the rewrite in progress, which is said rather than called the branch as it was.
   attempt=1
-  until err=$(GIT_SEQUENCE_EDITOR=true git rebase --quiet -x "$exec_cmd" "$base_oid" 2>&1); do
-    git rebase --abort || true
+  # The flags are spelled, as git-rebase-onto-main.sh spells them, and the result is force-pushed. The last three are
+  # defensive: git limits `rebase.autoSquash` to interactive mode and takes no fork point when a base is named, so
+  # they hold against a change of git's version or mode.
+  until err=$(GIT_SEQUENCE_EDITOR=true git rebase --quiet --no-rebase-merges --no-update-refs --no-autosquash \
+      --no-fork-point --no-autostash -x "$exec_cmd" "$base_oid" 2>&1); do
+    retry=0
     if [ "$attempt" -eq 1 ] && [[ "$err" == *index.lock* ]]; then
-      attempt=2; sleep 1; continue
+      retry=1; sleep 1
+    fi
+    git rebase --abort 2>/dev/null || true
+    if [ -d "$(git rev-parse --git-path rebase-merge)" ]; then
+      printf '%s\n' "$err" >&2
+      echo "adding the trailer failed and the abort did too: run 'git rebase --abort' once nothing holds the index" >&2
+      exit 6
+    fi
+    if [ "$retry" -eq 1 ]; then
+      attempt=2; continue
     fi
     printf '%s\n' "$err" >&2
     echo "adding the trailer failed; the branch is as it was" >&2; exit 6

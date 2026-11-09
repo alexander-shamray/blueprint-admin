@@ -2,26 +2,7 @@
 """Refuse a session's first search for a named symbol once, with the index
 lookup that answers it as the reason, while the session has asked the index
 nothing; a call it cannot judge goes through, and it returns 0 whatever
-happens.
-
-**Before the search, not after (#119, #120).** A hint attached to a grep's
-result arrives once the answer is in hand, and asking the index then means
-redoing a search that already succeeded, which an agent does not do. So this
-runs under `PreToolUse` on `Grep` and `Bash` and answers only a search for a
-name: an identifier, or an alternation of identifiers, over the tree. A search
-for text, a message or a pattern is grep's to list whole and is never touched.
-The refusal is once per session, so it can be read past by exactly one call:
-rerunning the same search passes.
-
-**One route, the one that answers from this tree.** The MCP server reads the
-checkout the session started in. When the call is made from that checkout the
-reason names the MCP tools; from another one, a `/branch` worktree entered
-mid-session, it names the CLI alone, which reads the tree it is run in.
-
-Launched by `index-hint-run.sh`, never directly and never through
-`run-guard.sh`: that launcher leaves with 2 on every failure, and 2 blocks the
-tool call, where a hint must fail open.
-"""
+happens."""
 
 from __future__ import annotations
 
@@ -33,12 +14,11 @@ import sys
 import tempfile
 from pathlib import Path
 
-CLI = "codebase-index"
+CBX = "bash .claude/skills/codebase-index/scripts/cbx"
 MCP = "mcp__codebase-index__"
 
-# Each CLI subcommand a hint can name and the MCP tool answering the same
-# question; `index-query-hint.sh` carries the same map in its `TOOL` array and
-# `test_index_search_hint.py` holds the two equal.
+# Each `cbx` subcommand a hint can name and the MCP tool answering the same
+# question; `test_index_query_hint.py` holds the prompt hint's routes to it.
 TOOLS = {
     "search": "search_code",
     "explain": "explain_code",
@@ -62,14 +42,18 @@ ASKING = ("search", "explain", "architecture", "symbol", "refs", "impact",
 UPKEEP = {"healthcheck", "index_stats"}
 CLIS = {"cbx", "cbx.ps1", "codebase-index", "codebase_index"}
 
-# The tool that runs a command line, and the escape character the split reads.
-SHELLS = {"Bash": "\\"}
+# The tools that run a command line, and the escape character the split
+# reads for each: none for PowerShell, whose backslash is a path and whose
+# backtick only joins a continued line here.
+SHELLS = {"Bash": "\\", "PowerShell": ""}
 
 # The programs that run the script or module they are handed, and each one's
-# options that consume the next word.
+# options that consume the next word; PowerShell's are read in any case.
+POWERSHELLS = {"pwsh", "powershell"}
 PYTHONS = {"py", "python", "python3"}
 INTERPRETERS = {
     "bash": {"-o", "-O", "+o", "+O"}, "sh": {"-o", "+o"},
+    **dict.fromkeys(POWERSHELLS, {"-executionpolicy", "-ep", "-workingdirectory", "-wd"}),
     **dict.fromkeys(PYTHONS, {"-X", "-W"}),
 }
 
@@ -85,7 +69,7 @@ VALUED = {"-e", "-f", "-A", "-B", "-C", "-m", "-g", "-t", "-T", "-M",
           "--include", "--exclude", "--exclude-dir",
           "--regexp", "--file", "--context", "--before-context", "--after-context"}
 
-# The prose half of the tree is a grep question: which chapter owns a rule is
+# The prose half of the tree is a grep question: which section owns a rule is
 # not one the index answers, as the skill says.
 PROSE = re.compile(r"(?:^|[\\/])docs(?:[\\/]|$)|\.md$|^md$|^\*\.md$|^markdown$", re.IGNORECASE)
 
@@ -162,7 +146,7 @@ def cleaned(text: str, escape: str) -> str:
 def tokens(command: str, escape: str) -> list[str]:
     """The words and operators of `command`, a newline outside quotes being
     an operator; a line at a time when the whole will not split."""
-    text = cleaned(command.replace("\\\n", " ") if escape else command, escape)
+    text = cleaned(command.replace("\\\n", " ") if escape else re.sub(r"`\r?\n", " ", command), escape)
     try:
         lexer = shlex.shlex(text, posix=True, punctuation_chars="|&;<>()\n")
         lexer.whitespace, lexer.commenters, lexer.escape = " \t\r", "", escape
@@ -359,13 +343,16 @@ def runs_cli(argv: list[str], depth: int = 0) -> bool:
     if program in INTERPRETERS:
         rest = argv[1:]
         while rest and rest[0].startswith("-"):
-            option = rest[0]
+            option = rest[0].lower() if program in POWERSHELLS else rest[0]
             # bash and sh cluster short options, so `-lc` hands over a command as `-c` does.
-            clustered = program not in PYTHONS and re.match(r"^-[A-Za-z]*c[A-Za-z]*$", option)
-            if option == "-c" or clustered:
+            clustered = program not in POWERSHELLS | PYTHONS and re.match(r"^-[A-Za-z]*c[A-Za-z]*$", option)
+            if option in ("-c", "-command") or clustered:
+                escape = "" if program in POWERSHELLS else "\\"
                 return (program not in PYTHONS and depth < 2 and len(rest) > 1 and any(
-                    runs_cli(inner, depth + 1) for inner, _piped, _after in segments(rest[1], "\\")))
+                    runs_cli(inner, depth + 1) for inner, _piped, _after in segments(rest[1], escape)))
             rest = rest[2:] if option in INTERPRETERS[program] else rest[1:]
+            if program in POWERSHELLS and option in ("-f", "-file"):
+                break
         argv = rest
     return len(argv) > 1 and executable(argv[0]) in CLIS and argv[1] in ASKING
 
@@ -445,11 +432,11 @@ def in_worktree(cwd: str) -> bool:
 
 
 def off_server(cwd: str) -> bool:
-    """True when the MCP server reads another checkout than the one `cwd`
-    sits in. The server's root is the folder the session started in, which
-    `CLAUDE_PROJECT_DIR` names; without it, or without a checkout at either,
-    a linked worktree is taken to be off it, because that is the move it
-    does not follow."""
+    """True when the MCP server reads another checkout than the one `cwd` sits
+    in. The server's root is the folder the session started in, which
+    `CLAUDE_PROJECT_DIR` names, so this asks what `index-mcp-root.py` refuses a
+    call on; without it, or without a checkout at either, a linked worktree is
+    taken to be off it, because that is the move the server does not follow."""
     project = os.environ.get("CLAUDE_PROJECT_DIR")
     here = checkout(cwd) if cwd else None
     served = checkout(project) if project else None
@@ -500,16 +487,22 @@ def first(asked: Path) -> bool:
     return True
 
 
-def ask(found: list[str], elsewhere_served: bool) -> str:
+def single(term: str) -> str:
+    """`term` in single quotes, so bash expands nothing in it."""
+    return "'" + term.replace("'", "'\\''") + "'"
+
+
+def ask(found: list[str], off_it: bool) -> str:
     """The refusal's reason: one route to the index, the one that answers
     from this tree, because the MCP server serves the checkout it started in."""
     named = ", ".join(f"`{name}`" for name in found)
-    if elsewhere_served:
-        runs = ", ".join(f'`{CLI} refs "{name}" --json`' for name in found)
+    if off_it:
+        runs = ", ".join(f"`{CBX} refs {single(name)} --json`" for name in found)
         route = (f"load the codebase-index skill, whose grant the CLI runs under, then run from this "
                  f"checkout's root {runs}, adding `--kind callers` for call sites only, and "
-                 f"`{CLI} symbol \"{found[0]}\" --json` for where it is defined, each as a command of its "
-                 "own; the CLI reads the index of the tree it is run in")
+                 f"`{CBX} symbol {single(found[0])} --json` for where it is defined, each alone on its line, "
+                 "with no pipe, `;` or `&&`, which the index guard refuses; the CLI reads this checkout's "
+                 "own index")
     else:
         load = ",".join(MCP + TOOLS[tool] for tool in ("refs", "symbol"))
         route = (f"call `{MCP}{TOOLS['refs']}` for what uses each and `{MCP}{TOOLS['symbol']}` for where "

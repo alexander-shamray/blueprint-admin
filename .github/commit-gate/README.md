@@ -29,21 +29,30 @@ pull request.
 
 `check` takes parsed commits and is pure; `collect` is the only part that
 runs git. The suite tests the judgement from dictionaries and the reading
-against a throwaway repository. `docs/testing.md` has the live invocation.
+against a throwaway repository. The testing document `docs/harness-local.md`
+*Documents* names has the live invocation.
 
 ## How it runs
 
-[`commit-gate.yml`](../workflows/commit-gate.yml), on every pull request with
-no path filter. **The gate that judges is read out of the base commit**, while
-the suite runs the branch's copy, so a pull request cannot supply its own
-judge. The suite runs only after the gate has judged, so head test code cannot
-alter the run ahead of it; [`locality-gate.yml`](../workflows/locality-gate.yml)
-argues the order. The pull request that introduces the gate has no base copy
-and is judged by its own, with a notice; a base without the gate and a head
-without it fails. The workflow file itself is the branch's copy, as in
-[`locality-gate`](../workflows/locality-gate.yml): the required status check
-`main`'s ruleset lists holds a deleted job, and a job rewritten under the
-same name is the review's to read.
+[`commit-gate.yml`](../workflows/commit-gate.yml), on every pull request with no
+path filter. Dependabot's commits carry no trailer, so the gate stands down only
+where Dependabot opened the pull request and every commit's author and committer
+are Dependabot's. The opener alone is not enough, and the gate judges by the
+identities a commit records, not by who pushed it: a local amend or rebase
+keeps Dependabot as author but records the pusher as committer. Once the gate
+judges, it walks the whole range, so every commit must carry the trailer and
+the form, Dependabot's included, and the commits are rewritten or the branch
+replaced. **The gate that judges is read out of the base commit**, while the
+suite runs the branch's copy, so a pull
+request cannot supply its own judge. The suite runs only after the gate has
+judged, as in [`closure-gate`](../closure-gate/README.md), so head test code
+cannot alter the run ahead of it. The pull request that introduces the gate
+has no base copy and is judged by its own, with a notice; a base without the
+gate and a head without it fails. The workflow file itself is the branch's copy,
+as in [`closure-gate`](../closure-gate/README.md), and closing that needs the
+required status check the pull request that added this gate lists as an
+owner-only setting.
 
-[`ci.yml`](../workflows/ci.yml)'s `commits` job is the other half: it builds
-every commit before the head, which `host`, `web` and `smoke` already cover.
+The other half, where a target's own CI workflow has it, is a job that
+builds every commit before the head, which the build of the head already
+covers.

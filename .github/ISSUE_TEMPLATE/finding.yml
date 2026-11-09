@@ -2,7 +2,7 @@
 # the issue as it stands; .github/issue-form-gate/ owns the claim and the
 # shape this file must keep for its reader.
 name: Finding
-description: A defect or a gap, with what was found, where and how.
+description: A defect, a gap, a wrong statement or a requested change, with what was found, where and how.
 body:
   - type: markdown
     attributes:
@@ -13,10 +13,13 @@ body:
     id: kind
     attributes:
       label: Kind
-      description: What sort of finding this is.
+      description: What sort of finding or request this is.
       options:
         - bug
         - security
+        - test-gap
+        - enhancement
+        - documentation
     validations:
       required: true
   - type: dropdown
@@ -36,13 +39,14 @@ body:
     attributes:
       label: Area
       description: >-
-        The tree the finding is in, by each label's description on the Labels
-        page; choose every one that applies.
+        One of harness, code or documentation, by the tree the finding is
+        in; add test beside harness or code for a test suite.
       multiple: true
       options:
         - harness
         - code
         - documentation
+        - test
     validations:
       required: true
   - type: textarea
@@ -57,7 +61,7 @@ body:
     attributes:
       label: Where
       description: The file and line, or the symbol, it is in.
-      placeholder: src/Admin.Host/Program.cs:42
+      placeholder: src/Services/Catalog/Catalog.Domain/Product.cs:42
     validations:
       required: true
   - type: textarea

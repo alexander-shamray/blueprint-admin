@@ -1,112 +1,87 @@
 """git-worktree-fork.sh: the one worktree shape /branch step 5 creates.
 
-The helper is the whole of `/branch`'s `git worktree add`, so what it refuses
-is the boundary: a path anywhere but `.claude/worktrees/<name>`, a run from
-anywhere but the main checkout's root, a directory git does not ignore, and a
-branch that already exists. Each case below runs the script against a real
-repository with an `origin/main` to fork from, rather than a Python reading of
-its checks.
+The shared harness and the reason it shells out rather than
+re-implementing are `review_helpers.py`'s.
 """
 
 import json
-import os
-import shutil
-import subprocess
 import unittest
-from pathlib import Path
 
-SCRIPTS = Path(__file__).resolve().parent
+from review_helpers import (
+    SCRIPTS,
+    setUpModule,
+    temp_root,
+    run_bash,
+)
+
+
 FORK = SCRIPTS / "git-worktree-fork.sh"
 
-# The full path, never the bare name: on Windows `subprocess` searches System32
-# before PATH, where either of these may be WSL's. `git` is run only by bash,
-# so it is pinned by putting its directory first on the PATH bash gets.
-BASH = shutil.which("bash")
-GIT = shutil.which("git")
-
-
-def setUpModule():
-    # Not a skip: a skip on a missing tool reports a pass, and this suite would
-    # then have established nothing about the helper.
-    missing = [name for name, path in (("bash", BASH), ("git", GIT))
-               if path is None]
-    if missing:
-        raise RuntimeError(
-            f"{', '.join(missing)} required and not on PATH: these tests run "
-            "the script rather than a Python equivalent of it"
-        )
-
-
-def run_bash(script, **env_extra):
-    """Run a bash fragment with everything it needs in the environment.
-
-    Nothing crosses as an argument: an argv element entering `bash.exe` is
-    re-parsed by the MSYS runtime, so a fixture path would arrive mangled.
-    Ambient git configuration is not this suite's subject, so the global and
-    system files are replaced with nothing.
-    """
-    env = dict(os.environ)
-    env["GIT_CONFIG_GLOBAL"] = "/dev/null"
-    env["GIT_CONFIG_SYSTEM"] = "/dev/null"
-    env["GIT_CONFIG_NOSYSTEM"] = "1"
-    env["PATH"] = os.pathsep.join([str(Path(GIT).parent), env.get("PATH", "")])
-    env.update(env_extra)
-    return subprocess.run([BASH, "-c", script], capture_output=True,
-                          text=True, env=env)
-
-
-# An origin and a clone of it, so `origin/main` exists to fork from, made by
-# bash so the paths are the ones the script sees. `IGNORE` decides whether the
-# clone's .gitignore names the worktree directory, which is the check the
-# ignored and unignored cases turn on.
+# A repository with an origin/main to fork from, made by bash so the paths are
+# the ones the script sees. `IGNORE` decides whether .gitignore names the
+# worktree directory, which is the check the ignored/unignored cases turn on.
 FIXTURE = """
 set -e
-root=$(mktemp -d)
 git init -q -b main "$root/origin"
 git -C "$root/origin" -c user.name=t -c user.email=t@t commit -q --allow-empty -m base
 if [ "$HOOK" = yes ]; then
   mkdir -p "$root/origin/.claude/hooks"
-  printf '#!/bin/sh\\npwd > hook-ran\\n' > "$root/origin/.claude/hooks/refresh-index.sh"
+  printf 'import os\\nopen("hook-ran", "w").write(os.getcwd())\\n' > "$root/origin/.claude/hooks/refresh-index.py"
   git -C "$root/origin" add .claude
   git -C "$root/origin" -c user.name=t -c user.email=t@t commit -q -m hook
 fi
 git clone -q "$root/origin" "$root/checkout"
+# Committed after the clone, so only origin/main carries the dangling link. Its
+# target is the native spelling, which a Windows link resolves where bash does.
+if [ "$LINK" = yes ]; then
+  native=$(cd "$root" && { pwd -W 2>/dev/null || pwd; })
+  blob=$(printf %s "$native/outside.json" | git -C "$root/origin" hash-object -w --stdin)
+  git -C "$root/origin" update-index --add --cacheinfo "120000,$blob,.claude/settings.local.json"
+  git -C "$root/origin" -c user.name=t -c user.email=t@t commit -q -m link
+  git -C "$root/checkout" fetch -q origin
+fi
 if [ "$IGNORE" = yes ]; then printf '.claude/worktrees/\\n' > "$root/checkout/.gitignore"; fi
 mkdir -p "$root/checkout/src"
-printf '%s\\n' "$root"
 """
 
 
 class ForkShape(unittest.TestCase):
     """The helper forks `.claude/worktrees/<name>` from the main checkout only."""
 
-    def fixture(self, ignore="yes", hook="no"):
-        made = run_bash(FIXTURE, IGNORE=ignore, HOOK=hook)
+    def fixture(self, ignore="yes", hook="no", link="no"):
+        root = temp_root(self)
+        made = run_bash(FIXTURE, root=root, IGNORE=ignore, HOOK=hook, LINK=link)
         self.assertEqual(0, made.returncode, made.stderr)
-        root = made.stdout.strip()
-        self.addCleanup(lambda: run_bash('rm -rf "$TARGET"', TARGET=root))
         return root
 
     def fork(self, where, path, branch="feat/probe"):
         return run_bash('cd "$WHERE" && bash "$FORK" "$P" "$B"',
                         WHERE=where, FORK=str(FORK), P=path, B=branch)
 
+    def local_settings(self, root, text):
+        made = run_bash('mkdir -p "$C/.claude" && printf %s "$T" > "$C/.claude/settings.local.json"',
+                        C=f"{root}/checkout", T=text)
+        self.assertEqual(0, made.returncode, made.stderr)
+
+    def probe_settings(self, root):
+        return run_bash('cat "$W/.claude/settings.local.json"',
+                        W=f"{root}/checkout/.claude/worktrees/probe")
+
+    def checkout_file(self, root, name, text):
+        made = run_bash('printf %s "$T" > "$C/$N"', C=f"{root}/checkout", N=name, T=text)
+        self.assertEqual(0, made.returncode, made.stderr)
+
     def test_the_documented_shape_forks_with_no_upstream(self):
         root = self.fixture()
         result = self.fork(f"{root}/checkout", ".claude/worktrees/probe")
         self.assertEqual(0, result.returncode, result.stderr)
-        listed = run_bash('git -C "$C" worktree list --porcelain',
-                          C=f"{root}/checkout")
-        self.assertIn("refs/heads/feat/probe", listed.stdout)
         upstream = run_bash(
             'git -C "$C" rev-parse --abbrev-ref feat/probe@{upstream}',
             C=f"{root}/checkout")
         self.assertNotEqual(0, upstream.returncode)
-        # The worktree sits inside the checkout, and being ignored is what
-        # keeps it out of every `git status` the chain reads.
-        status = run_bash('git -C "$C" status --porcelain --ignored=no',
-                          C=f"{root}/checkout")
-        self.assertEqual(0, status.returncode, status.stderr)
+        # The worktree sits inside the checkout, and ignored is what keeps it
+        # out of every `git status` the chain reads.
+        status = run_bash('git -C "$C" status --porcelain', C=f"{root}/checkout")
         self.assertNotIn(".claude", status.stdout)
 
     def test_the_new_worktree_runs_its_own_index_refresh(self):
@@ -122,126 +97,146 @@ class ForkShape(unittest.TestCase):
             'done; exit 1',
             W=f"{root}/checkout/.claude/worktrees/probe")
         self.assertEqual(0, ran.returncode, "the fork never ran the refresh")
-        self.assertTrue(ran.stdout.strip().endswith("/.claude/worktrees/probe"),
-                        ran.stdout)
+        self.assertTrue(
+            ran.stdout.strip().replace("\\", "/").endswith("/.claude/worktrees/probe"),
+            ran.stdout)
 
-    def approve(self, root, local, mcp=None):
-        """Write the main checkout's untracked local settings, and optionally
-        its `.mcp.json`, as bash would find them."""
-        script = ('cd "$C" && mkdir -p .claude && '
-                  'printf %s "$L" > .claude/settings.local.json')
-        if mcp is not None:
-            script += ' && printf %s "$M" > .mcp.json'
-        made = run_bash(script, C=f"{root}/checkout", L=local, M=mcp or "")
-        self.assertEqual(0, made.returncode, made.stderr)
-
-    def carried(self, root):
-        """The worktree's own local settings, or None when it has none."""
-        read = run_bash('cat "$W/.claude/settings.local.json"',
-                        W=f"{root}/checkout/.claude/worktrees/probe")
-        return json.loads(read.stdout) if read.returncode == 0 else None
-
-    def test_the_mcp_approval_crosses_as_names_and_never_as_the_file(self):
-        # A session started in the worktree reads that directory's own local
-        # settings; without the names it reports `Pending approval` and falls
-        # back to grep (#117). The `permissions` rows are the main checkout's
-        # own grants and stay there.
+    def test_the_mcp_approval_crosses_and_no_permission_does(self):
+        # A session started in the worktree reads that directory's local
+        # settings, so the main checkout's approval is carried there alone.
         root = self.fixture()
-        self.approve(root, json.dumps({
-            "permissions": {"allow": ["Bash(gh pr *)"]},
+        self.local_settings(root, json.dumps({
+            "enableAllProjectMcpServers": True,
             "enabledMcpjsonServers": ["codebase-index"],
-            "somethingElse": 1}))
+            "permissions": {"allow": ["Bash(ls:*)"]}}))
         result = self.fork(f"{root}/checkout", ".claude/worktrees/probe")
         self.assertEqual(0, result.returncode, result.stderr)
+        copied = self.probe_settings(root)
+        self.assertEqual(0, copied.returncode, copied.stderr)
         self.assertEqual({"enabledMcpjsonServers": ["codebase-index"]},
-                         self.carried(root))
+                         json.loads(copied.stdout))
 
-    def test_an_approve_all_crosses_as_the_servers_defined_now(self):
-        root = self.fixture()
-        self.approve(root, json.dumps({"enableAllProjectMcpServers": True}),
-                     mcp=json.dumps({"mcpServers": {"a": {}, "b": {}}}))
+    def test_the_approval_is_not_written_through_a_link_the_branch_carries(self):
+        root = self.fixture(link="yes")
+        self.local_settings(root, json.dumps({"enabledMcpjsonServers": ["codebase-index"]}))
         result = self.fork(f"{root}/checkout", ".claude/worktrees/probe")
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual({"enabledMcpjsonServers": ["a", "b"]},
-                         self.carried(root))
+        linked = run_bash('[ -L "$W/.claude/settings.local.json" ]',
+                          W=f"{root}/checkout/.claude/worktrees/probe")
+        if linked.returncode != 0:
+            self.skipTest("git checked the link out as a file: no symbolic links here")
+        self.assertNotEqual(0, run_bash('[ -e "$R/outside.json" ]', R=root).returncode,
+                            "the approval was written through the link")
 
-    def test_a_disabled_server_is_never_approved_in_the_worktree(self):
+    def test_a_checkout_approving_nothing_gives_the_worktree_no_settings(self):
         root = self.fixture()
-        self.approve(root, json.dumps({
-            "enabledMcpjsonServers": ["a", "b"],
-            "disabledMcpjsonServers": ["b"]}))
+        self.local_settings(root, json.dumps({"permissions": {"allow": ["Bash(ls:*)"]}}))
         result = self.fork(f"{root}/checkout", ".claude/worktrees/probe")
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual({"enabledMcpjsonServers": ["a"]}, self.carried(root))
+        self.assertNotIn("could not copy", result.stderr)
+        self.assertNotEqual(0, self.probe_settings(root).returncode)
 
-    def test_no_approval_in_the_main_checkout_writes_nothing(self):
+    def test_an_unreadable_approval_still_forks_and_says_so(self):
         root = self.fixture()
+        self.local_settings(root, "{not json")
         result = self.fork(f"{root}/checkout", ".claude/worktrees/probe")
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIsNone(self.carried(root))
+        self.assertIn("could not copy the MCP approval", result.stderr)
+        self.assertIn("JSONDecodeError", result.stderr)
+        self.assertNotEqual(0, self.probe_settings(root).returncode)
 
-    def test_a_shape_it_cannot_copy_warns_and_leaves_the_fork_done(self):
+    def test_an_approval_list_that_is_not_names_warns(self):
+        # Anything else would leave the worktree's servers pending with
+        # nothing said.
         root = self.fixture()
-        self.approve(root, json.dumps({"enabledMcpjsonServers": "codebase-index"}))
+        self.local_settings(root, json.dumps({"enabledMcpjsonServers": "codebase-index"}))
         result = self.fork(f"{root}/checkout", ".claude/worktrees/probe")
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn("warning: could not copy the MCP approval", result.stderr)
-        self.assertIsNone(self.carried(root))
-        listed = run_bash('git -C "$C" worktree list --porcelain',
-                          C=f"{root}/checkout")
-        self.assertIn("refs/heads/feat/probe", listed.stdout)
+        self.assertIn("could not copy the MCP approval", result.stderr)
+        self.assertNotEqual(0, self.probe_settings(root).returncode)
+
+    def test_approving_every_server_crosses_as_the_servers_defined(self):
+        # Names cross, not the approve-all, so a server defined later still asks.
+        for local in ({"enableAllProjectMcpServers": True},
+                      {"enableAllProjectMcpServers": True, "enabledMcpjsonServers": ["codebase-index"]}):
+            with self.subTest(local=local):
+                root = self.fixture()
+                self.checkout_file(root, ".mcp.json", json.dumps(
+                    {"mcpServers": {"codebase-index": {}, "other": {}}}))
+                self.local_settings(root, json.dumps(local))
+                result = self.fork(f"{root}/checkout", ".claude/worktrees/probe")
+                self.assertEqual(0, result.returncode, result.stderr)
+                copied = self.probe_settings(root)
+                self.assertEqual(0, copied.returncode, copied.stderr)
+                self.assertEqual({"enabledMcpjsonServers": ["codebase-index", "other"]},
+                                 json.loads(copied.stdout))
+
+    def test_a_json_module_at_the_checkout_root_is_not_imported(self):
+        # The approval is read by a Python run from the checkout root, whose
+        # untracked files must not shadow the standard library.
+        root = self.fixture()
+        self.checkout_file(root, "json.py", 'raise SystemExit("shadowed")')
+        self.local_settings(root, json.dumps({"enabledMcpjsonServers": ["codebase-index"]}))
+        result = self.fork(f"{root}/checkout", ".claude/worktrees/probe")
+        self.assertEqual(0, result.returncode, result.stderr)
+        copied = self.probe_settings(root)
+        self.assertEqual(0, copied.returncode, copied.stderr)
+        self.assertEqual({"enabledMcpjsonServers": ["codebase-index"]},
+                         json.loads(copied.stdout))
+
+    def test_a_disabled_server_does_not_cross(self):
+        # The worktree may approve no server the main checkout refuses.
+        root = self.fixture()
+        self.local_settings(root, json.dumps({
+            "enabledMcpjsonServers": ["codebase-index", "other"],
+            "disabledMcpjsonServers": ["other"]}))
+        result = self.fork(f"{root}/checkout", ".claude/worktrees/probe")
+        self.assertEqual(0, result.returncode, result.stderr)
+        copied = self.probe_settings(root)
+        self.assertEqual(0, copied.returncode, copied.stderr)
+        self.assertEqual({"enabledMcpjsonServers": ["codebase-index"]},
+                         json.loads(copied.stdout))
 
     def test_any_other_path_is_refused(self):
         root = self.fixture()
-        for path in ("../sibling", ".claude/worktrees/../x",
-                     ".claude/worktrees/a/b", "/tmp/x",
-                     ".claude/worktrees/-f"):
+        for path in ("../sibling", ".claude/worktrees/../x", ".claude/worktrees/a/b",
+                     "/tmp/x", ".claude/worktrees/-f"):
             with self.subTest(path=path):
                 result = self.fork(f"{root}/checkout", path)
-                self.assertEqual(2, result.returncode, result.stderr)
+                self.assertEqual(2, result.returncode)
                 self.assertIn("must be .claude/worktrees/<name>", result.stderr)
-        # Refused before git ran: nothing was created on the way.
-        branches = run_bash('git -C "$C" branch --list feat/probe',
-                            C=f"{root}/checkout")
-        self.assertEqual("", branches.stdout.strip())
 
     def test_an_unignored_path_is_refused(self):
         root = self.fixture(ignore="no")
         result = self.fork(f"{root}/checkout", ".claude/worktrees/probe")
-        self.assertEqual(2, result.returncode, result.stderr)
+        self.assertEqual(2, result.returncode)
         self.assertIn("is not ignored", result.stderr)
 
     def test_a_subdirectory_is_refused(self):
         root = self.fixture()
         result = self.fork(f"{root}/checkout/src", ".claude/worktrees/probe")
-        self.assertEqual(2, result.returncode, result.stderr)
+        self.assertEqual(2, result.returncode)
         self.assertIn("checkout root", result.stderr)
 
     def test_a_linked_worktree_is_refused(self):
         root = self.fixture()
-        first = self.fork(f"{root}/checkout", ".claude/worktrees/first",
-                          "feat/first")
+        first = self.fork(f"{root}/checkout", ".claude/worktrees/first", "feat/first")
         self.assertEqual(0, first.returncode, first.stderr)
         result = self.fork(f"{root}/checkout/.claude/worktrees/first",
                            ".claude/worktrees/second", "feat/second")
-        self.assertEqual(2, result.returncode, result.stderr)
+        self.assertEqual(2, result.returncode)
         self.assertIn("not a linked worktree", result.stderr)
 
     def test_an_existing_branch_is_refused_rather_than_reset(self):
         root = self.fixture()
-        made = run_bash('git -C "$C" branch feat/probe', C=f"{root}/checkout")
-        self.assertEqual(0, made.returncode, made.stderr)
+        run_bash('git -C "$C" branch feat/probe', C=f"{root}/checkout")
         result = self.fork(f"{root}/checkout", ".claude/worktrees/probe")
-        self.assertEqual(3, result.returncode, result.stderr)
+        self.assertEqual(3, result.returncode)
         self.assertIn("branch already exists", result.stderr)
 
     def test_outside_a_repository_says_so(self):
-        made = run_bash('mktemp -d')
-        self.assertEqual(0, made.returncode, made.stderr)
-        outside = made.stdout.strip()
-        self.addCleanup(lambda: run_bash('rm -rf "$TARGET"', TARGET=outside))
-        result = self.fork(outside, ".claude/worktrees/probe")
-        self.assertEqual(2, result.returncode, result.stderr)
+        result = self.fork(temp_root(self), ".claude/worktrees/probe")
+        self.assertEqual(2, result.returncode)
         self.assertIn("not in a git repository", result.stderr)
 
 

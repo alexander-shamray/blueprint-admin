@@ -1,0 +1,924 @@
+"""The comment gate's subject: what it must find, and what it must not judge.
+
+Each reader's class pairs the comments it must find with the literals it must
+leave alone, and each rule's class pairs a finding with its innocent neighbour.
+"""
+
+import os
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+import comment_gate as gate
+
+GATE = Path(__file__).with_name("comment_gate.py")
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def said(reader, text):
+    return [text[c.body_start:c.body_end].strip() for c in reader(text)]
+
+
+def judged(path, text, added=None):
+    every = set(range(1, text.count("\n") + 2))
+    return gate.judge(path, text, every if added is None else added)
+
+
+class CSharpComments(unittest.TestCase):
+    def test_line_trailing_doc_and_block_comments_are_found(self):
+        text = ("/// <summary>doc</summary>\n"
+                "Call(); // trailing\n"
+                "// line\n"
+                "/* block */ Call();\n")
+        self.assertEqual(said(gate.csharp, text),
+                         ["<summary>doc</summary>", "trailing", "line",
+                          "block"])
+
+    def test_strings_of_every_kind_are_code(self):
+        text = ('var a = "// no";\n'
+                'var b = @"x "" // no";\n'
+                'var c = """\n// no\n""";\n'
+                'var d = $"{Name("// no")} // no";\n'
+                'var e = $$"""{{Name("// no")}} // no""";\n'
+                'var f = \'"\'; // yes\n')
+        self.assertEqual(said(gate.csharp, text), ["yes"])
+
+    def test_an_interpolation_hole_is_code_again(self):
+        text = 'var a = $"{(x ? "a" : "b")}"; // yes\n'
+        self.assertEqual(said(gate.csharp, text), ["yes"])
+
+    def test_a_format_clause_is_literal_text(self):
+        text = ('var a = $"{value:// #12}"; // yes\n'
+                'var b = $$"""{{value:// no}}"""; // also\n'
+                'var c = $"{global::A.B /* hole */}";\n')
+        self.assertEqual(said(gate.csharp, text), ["yes", "also", "hole"])
+
+    def test_a_directive_string_argument_is_not_a_comment(self):
+        text = ('#line 1 "https://host/#12" // yes\n'
+                '#pragma checksum "a.cs" "{406EA660}" "ab" // also\n'
+                '#line 2 "https://host/#13"\n')
+        self.assertEqual(said(gate.csharp, text), ["yes", "also"])
+
+    def test_a_directive_message_is_code_and_a_trailing_comment_is_not(self):
+        text = ("#region see http://example\n"
+                "#pragma warning disable CA1822 // why\n"
+                "#if DEBUG // also\n")
+        self.assertEqual(said(gate.csharp, text), ["why", "also"])
+
+
+class PythonComments(unittest.TestCase):
+    def test_comments_and_docstrings_are_found(self):
+        text = ('"""module"""\n'
+                "def f():\n"
+                "    '''function'''\n"
+                "    return 1  # trailing\n")
+        self.assertEqual(sorted(said(gate.python, text)),
+                         ["function", "module", "trailing"])
+
+    def test_other_strings_are_code(self):
+        text = ('x = 1\n'
+                '"""not first, so not a docstring"""\n'
+                'y = "# no"\n'
+                'z = f"{y} # no"\n')
+        self.assertEqual(said(gate.python, text), [])
+
+    def test_a_docstring_ends_where_its_expression_does(self):
+        self.assertEqual(said(gate.python, 'def f(): "doc"; v = "PR-7"\n'),
+                         ["doc"])
+        self.assertEqual(said(gate.python, 'def f(): "é"; v = "#1"\n'),
+                         ["é"])
+        self.assertEqual(judged("m.py", 'def f(): "doc"; v = "PR-7"\n'), [])
+
+    def test_python_that_does_not_parse_refuses_the_file(self):
+        with self.assertRaises(gate.Unreadable):
+            gate.python("def (:\n")
+
+
+class ShellComments(unittest.TestCase):
+    def test_a_hash_that_begins_a_word_is_a_comment(self):
+        text = "echo a # yes\necho a#no\n"
+        self.assertEqual(said(gate.shell, text), ["yes"])
+
+    def test_quotes_and_expansions_are_code(self):
+        text = ('echo "# no" \'# no\' $\'# no\' ${#arr[@]} $# '
+                '"$(echo "#no")" ${x#no}\n')
+        self.assertEqual(said(gate.shell, text), [])
+
+    def test_a_heredoc_body_is_code_and_the_line_after_it_is_not(self):
+        text = ("cat <<'EOF' # yes\n# no\nEOF\n"
+                "cat <<-EOF\n\t# no\n\tEOF\n"
+                "# after\n")
+        self.assertEqual(said(gate.shell, text), ["yes", "after"])
+
+    def test_a_continuation_inside_a_heredoc_word_is_removed(self):
+        text = "cat <<EO\\\nF\n# no\nEOF\n# after\n"
+        self.assertEqual(said(gate.shell, text), ["after"])
+
+    def test_a_backtick_substitution_is_code(self):
+        text = ("v=`echo ok # yes\n`\n"
+                'w="`echo ok # also` # no"\n'
+                "x=`echo '# no'` # last\n")
+        self.assertEqual(said(gate.shell, text), ["yes", "also", "last"])
+
+    def test_a_dollar_quoted_heredoc_word_loses_its_dollar(self):
+        for opener in ["$'EOF'", '$"EOF"']:
+            with self.subTest(opener=opener):
+                text = f"cat <<{opener}@# no@EOF@# after@".replace("@", "\n")
+                self.assertEqual(said(gate.shell, text), ["after"])
+
+    def test_a_substitution_inside_arithmetic_is_code(self):
+        text = ("v=$(( $(count # yes@) + 1 )) # also@"
+                "((w = `count # third@` << 2)) # last@").replace("@", "\n")
+        self.assertEqual(said(gate.shell, text),
+                         ["yes", "also", "third", "last"])
+
+    def test_an_escape_in_a_heredoc_word_refuses_the_file(self):
+        with self.assertRaises(gate.Unreadable):
+            gate.shell("cat <<$'E\\x4fF'@# no@EOF@".replace("@", "\n"))
+
+    def test_arithmetic_is_arithmetic_inside_quotes_and_parameters(self):
+        for line in ['x="$((mask << shift@))"', "x=${y:-$((mask << shift@))}"]:
+            with self.subTest(line=line):
+                text = (line + " # yes@# after@").replace("@", "\n")
+                self.assertEqual(said(gate.shell, text), ["yes", "after"])
+
+    def test_a_backtick_inside_a_parameter_is_code(self):
+        text = "x=${y:-`count # yes@`}@".replace("@", "\n")
+        self.assertEqual(said(gate.shell, text), ["yes"])
+
+    def test_a_continuation_joins_a_hash_to_the_word_before_it(self):
+        joined = "echo value\\@# no@".replace("@", "\n")
+        self.assertEqual(said(gate.shell, joined), [])
+        apart = "echo value \\@# yes@".replace("@", "\n")
+        self.assertEqual(said(gate.shell, apart), ["yes"])
+
+    def test_a_heredoc_word_is_read_whole(self):
+        for opener in ["END-OF-FILE", "END-OF'-FILE'", 'EN"D"-OF-FILE']:
+            with self.subTest(opener=opener):
+                text = f"cat <<{opener}\n# no\nEND-OF-FILE\n# after\n"
+                self.assertEqual(said(gate.shell, text), ["after"])
+
+    def test_a_number_is_a_heredoc_word_outside_arithmetic(self):
+        text = "cat <<2\n# no\n2\n# after\n"
+        self.assertEqual(said(gate.shell, text), ["after"])
+
+    def test_an_arithmetic_shift_is_not_a_heredoc(self):
+        for line in ["((mask << shift))", "x=$((1 << width))",
+                     "if ((a << (b + 1))); then :; fi"]:
+            with self.subTest(line=line):
+                text = f"{line} # yes\n# after\n"
+                self.assertEqual(said(gate.shell, text), ["yes", "after"])
+
+    def test_nested_subshells_are_not_arithmetic(self):
+        text = "((cat <<END\n# no\nEND\n); true) # yes\n"
+        self.assertEqual(said(gate.shell, text), ["yes"])
+
+    def test_a_here_string_is_not_a_heredoc(self):
+        text = 'grep x <<<"$y" # yes\n# also\n'
+        self.assertEqual(said(gate.shell, text), ["yes", "also"])
+
+    def test_a_command_substitution_holds_comments_of_its_own(self):
+        text = "x=$(\n  echo a # yes\n)\n"
+        self.assertEqual(said(gate.shell, text), ["yes"])
+
+
+class YamlComments(unittest.TestCase):
+    def test_a_hash_after_a_space_is_a_comment(self):
+        text = "key: value # yes\nurl: http://x#no\n# line\n"
+        self.assertEqual(said(gate.yaml, text), ["yes", "line"])
+
+    def test_quoted_scalars_and_block_scalars_are_code(self):
+        text = ("a: '# no'\n"
+                'b: "x # no"\n'
+                "c: it's # yes\n"
+                "d: |\n  # no\n  text\n"
+                "e: done # after\n")
+        self.assertEqual(said(gate.yaml, text), ["yes", "after"])
+
+    def test_a_run_block_is_read_as_the_shell_it_is(self):
+        text = ("steps:\n"
+                "  - run: |\n"
+                "      echo \"# no\" # yes\n"
+                "      cat <<EOF\n"
+                "      # no\n"
+                "      EOF\n"
+                "      # also\n"
+                "    name: x # sibling\n")
+        self.assertEqual(said(gate.workflow, text), ["yes", "also", "sibling"])
+
+    def test_a_quote_inside_a_plain_scalar_opens_nothing(self):
+        for line in ['key: tag:"value # yes', 'key: x - "y # yes',
+                     "- it's # yes"]:
+            with self.subTest(line=line):
+                self.assertEqual(said(gate.yaml, line + "\n"), ["yes"])
+
+    def test_a_quote_where_a_scalar_starts_opens_one(self):
+        for line in ['key: "a # no"', "- 'a # no'", '- - "a # no"',
+                     '{"a":"b # no"}', '[a, "b # no"]', '? "a # no"']:
+            with self.subTest(line=line):
+                self.assertEqual(said(gate.yaml, line + "\n"), [])
+
+    def test_every_spelling_of_the_run_key_is_shell(self):
+        for key in ["run", '"run"', "'run'", "run ", '"run" ']:
+            with self.subTest(key=key):
+                text = f"- {key}: |\n    echo '# no' # yes\n"
+                self.assertEqual(said(gate.workflow, text), ["yes"])
+
+    def test_a_node_property_comes_before_the_scalar_it_decorates(self):
+        for line in ['key: &name "x #12"', 'key: !!str "x #12"',
+                     "- !tag &a 'x #12'"]:
+            with self.subTest(line=line):
+                self.assertEqual(said(gate.yaml, line + "\n"), [])
+        self.assertEqual(said(gate.yaml, 'key: a !b "c # yes' + "\n"), ["yes"])
+
+    def test_a_plain_scalar_ending_in_an_indicator_opens_no_block(self):
+        for line in ["value: text |", "value: text >", "- text |"]:
+            with self.subTest(line=line):
+                text = f"{line}@  # yes@".replace("@", "\n")
+                self.assertEqual(said(gate.yaml, text), ["yes"])
+        for line in ["value: |", "value: !!str &a >-", "- |", '"key" : |']:
+            with self.subTest(line=line):
+                text = f"{line}@  # no@".replace("@", "\n")
+                self.assertEqual(said(gate.yaml, text), [])
+
+    def test_an_indentation_indicator_says_where_a_block_ends(self):
+        for text in ["key: |2@   # no@ # yes@", "- |2@   # no@ # yes@",
+                     "- key: >2-@     # no@   # yes@"]:
+            with self.subTest(text=text):
+                self.assertEqual(said(gate.yaml, text.replace("@", "\n")),
+                                 ["yes"])
+
+    def test_a_folded_run_block_is_read_folded(self):
+        folded = ("- run: >@    true # yes@    echo '#12'@"
+                  "      kept # own@@    last # end@").replace("@", "\n")
+        self.assertEqual(said(gate.workflow, folded),
+                         ["yes\n    echo '#12'", "own", "end"])
+        self.assertEqual(len(judged(".github/workflows/w.yml", folded)), 1)
+        literal = folded.replace(">", "|", 1)
+        self.assertEqual(judged(".github/workflows/w.yml", literal), [])
+
+    def test_an_explicit_run_key_is_shell_and_another_key_is_not(self):
+        text = "- ? run\n  : |\n    echo '# no' # yes\n"
+        self.assertEqual(said(gate.workflow, text), ["yes"])
+        other = "- ? run\n  : x\n  ? text\n  : |\n    echo # no\n"
+        self.assertEqual(said(gate.workflow, other), [])
+
+    def test_a_run_key_outside_a_workflow_is_a_literal(self):
+        text = "- run: |@    echo # no@".replace("@", "\n")
+        self.assertEqual(said(gate.yaml, text), [])
+        self.assertEqual(judged("deploy/values.yml", text), [])
+        for path in [".github/workflows/ci.yml", "tools/x/action.yml"]:
+            with self.subTest(path=path):
+                self.assertIs(gate.reader_for(path), gate.workflow)
+
+    def test_a_run_block_comment_lands_on_its_own_line(self):
+        text = "- run: |\n    true\n    # PR-1\n"
+        found = judged(".github/workflows/w.yml", text)
+        self.assertEqual([line for _, line, _ in found], [3])
+
+
+class MsbuildComments(unittest.TestCase):
+    def test_a_comment_is_found_and_cdata_is_code(self):
+        text = ("<Project><!-- yes -->\n"
+                "<X><![CDATA[ <!-- no --> ]]></X></Project>\n")
+        self.assertEqual(said(gate.msbuild, text), ["yes"])
+
+
+class EditorconfigComments(unittest.TestCase):
+    def test_whole_lines_only(self):
+        text = "# yes\n; also\nkey = a # no\n"
+        self.assertEqual(said(gate.editorconfig, text), ["yes", "also"])
+
+
+class WhichFilesAreRead(unittest.TestCase):
+    def test_each_language_the_rule_names_has_a_reader(self):
+        cases = {"a/B.cs": gate.csharp, "x.py": gate.python,
+                 "run.sh": gate.shell, "ci.yml": gate.yaml,
+                 "v.yaml": gate.yaml, "A.csproj": gate.msbuild,
+                 "Directory.Build.props": gate.msbuild,
+                 "x.targets": gate.msbuild, ".editorconfig": gate.editorconfig,
+                 "docs/README.md": None, "Dockerfile": None}
+        for path, reader in cases.items():
+            with self.subTest(path=path):
+                self.assertIs(gate.reader_for(path), reader)
+
+
+class ThePayloadsPaths(unittest.TestCase):
+    def test_a_payload_workflow_is_read_as_the_workflow_it_renders_to(self):
+        found = judged("payload/.github/workflows/w.yml",
+                       "- run: |\n    true\n    # PR-1\n")
+        self.assertEqual([line for _, line, _ in found], [3])
+
+    def test_the_payloads_harness_tree_may_name_its_reviewer(self):
+        text = "# Copilot's login\n"
+        self.assertEqual(judged("payload/.claude/scripts/a.sh", text), [])
+        self.assertEqual(len(judged("payload/deploy/a.sh", text)), 1)
+
+    def test_a_record_in_the_payload_is_not_prose(self):
+        self.assertFalse(gate.is_prose("payload/docs/superpowers/specs/a.md"))
+        self.assertTrue(gate.is_prose("payload/docs/a.md"))
+
+    def test_only_a_leading_payload_directory_renders(self):
+        path = "tools/payload/.github/workflows/w.yml"
+        self.assertIs(gate.reader_for(path), gate.yaml)
+
+
+class ThePatterns(unittest.TestCase):
+    def test_each_pattern_fails_a_comment_and_passes_as_code(self):
+        samples = ["see #12", "PR-7", "Copilot said so", "found in review",
+                   "it used to", "Used to be one", "went stale",
+                   "this comment said",
+                   "**stress**", "<b>stress</b>"]
+        for sample in samples:
+            with self.subTest(sample=sample):
+                self.assertEqual(len(judged("A.cs", f"x(); // {sample}\n")),
+                                 1)
+                self.assertEqual(judged("A.cs", f'x("{sample}");\n'), [])
+
+    def test_innocent_neighbours_pass(self):
+        for sample in ["refused to", "C# 14", "§13.2", "a*b*c",
+                       "the key is used for signing"]:
+            with self.subTest(sample=sample):
+                self.assertEqual(judged("A.cs", f"// {sample}\n"), [])
+
+    def test_the_harness_may_name_its_reviewer_and_nothing_else_may(self):
+        text = "# Copilot's login\n"
+        self.assertEqual(judged(".claude/scripts/a.sh", text), [])
+        self.assertEqual(len(judged("deploy/a.sh", text)), 1)
+        self.assertEqual(len(judged(".claude/scripts/a.sh", "# PR-1\n")), 1)
+
+    def test_only_added_lines_are_judged(self):
+        text = "// PR-1\n// PR-2\n"
+        self.assertEqual([line for _, line, _ in judged("A.cs", text, {2})],
+                         [2])
+
+
+class TheBlockRule(unittest.TestCase):
+    def block(self, n, marker="//"):
+        return "".join(f"{marker} line {k}\n" for k in range(n))
+
+    def test_the_limit_is_five_lines(self):
+        self.assertEqual(gate.BLOCK_LIMIT, 5)
+
+    def test_the_limit_passes_and_one_more_fails_at_the_first_line(self):
+        limit = gate.BLOCK_LIMIT
+        self.assertEqual(judged("A.cs", self.block(limit)), [])
+        self.assertEqual([line for _, line, _ in
+                          judged("A.cs", "x();\n" + self.block(limit + 1))],
+                         [2])
+
+    def test_one_added_line_judges_the_whole_old_block(self):
+        over = gate.BLOCK_LIMIT + 1
+        self.assertEqual(len(judged("A.cs", self.block(over), {3})), 1)
+        self.assertEqual(
+            judged("A.cs", self.block(over) + "x();\n", {over + 1}), [])
+
+    def test_a_blank_line_or_code_ends_a_block(self):
+        limit = gate.BLOCK_LIMIT
+        self.assertEqual(
+            judged("A.cs", self.block(limit) + "\n" + self.block(limit)), [])
+        trailing = "".join(f"x(); // {k}\n" for k in range(limit * 2))
+        self.assertEqual(judged("A.cs", trailing), [])
+
+    def test_a_docstring_is_a_block_blank_lines_and_all(self):
+        body = "\n".join(["x"] * 3 + [""] + ["y"] * 2)
+        self.assertEqual(len(judged("m.py", f'"""{body}\n"""\n')), 1)
+        self.assertEqual(judged("m.py", '"""one\n\ntwo\n"""\n'), [])
+
+
+class TheRemarksRule(unittest.TestCase):
+    def remarks(self, *body):
+        return ("/// <remarks>\n"
+                + "".join(f"/// {line}\n" for line in body)
+                + "/// </remarks>\nvoid M();\n")
+
+    def test_a_remarks_that_cites_nothing_fails_at_its_opening_line(self):
+        found = judged("A.cs", "x();\n" + self.remarks("Because it is."))
+        self.assertEqual(found, [("A.cs", 2, "a <remarks> cites no section, "
+                                             "ADR or cref")])
+
+    def test_a_section_an_adr_or_a_cref_is_a_citation(self):
+        for cited in ("Per §9.4.", "ADR-019 says so.", "Per E.6.13.",
+                      'See <see cref="Outbox"/>.'):
+            with self.subTest(cited=cited):
+                self.assertEqual(judged("A.cs", self.remarks(cited)), [])
+
+    def test_a_word_ending_in_e_and_numbers_is_not_an_appendix_section(self):
+        found = judged("A.cs", self.remarks("Because the SQLITE.6.13 is."))
+        self.assertEqual(len(found), 1)
+
+    def test_a_one_line_remarks_is_judged_too(self):
+        self.assertEqual(len(judged("A.cs", "/// <remarks>So.</remarks>\n")),
+                         1)
+
+    def test_an_old_remarks_is_judged_only_when_a_line_in_it_is_added(self):
+        text = "x();\n" + self.remarks("Because.")
+        self.assertEqual(judged("A.cs", text, {1}), [])
+        self.assertEqual(len(judged("A.cs", text, {3})), 1)
+
+    def test_a_tag_mentioned_in_passing_opens_nothing(self):
+        text = "// the <remarks> tag\n" + self.remarks("Because.")
+        self.assertEqual([line for _, line, _ in judged("A.cs", text)], [2])
+
+    def test_an_unclosed_remarks_is_judged_to_the_next_one(self):
+        text = "/// <remarks>Because.\n" + self.remarks("Per §9.")
+        self.assertEqual([line for _, line, _ in judged("A.cs", text)], [1])
+
+    def test_an_unclosed_remarks_ends_with_its_comment_block(self):
+        text = "/// <remarks>Because.\nvoid M();\nint y; // §9\n"
+        self.assertEqual([line for _, line, _ in judged("A.cs", text)], [1])
+        self.assertEqual(judged("A.cs", text, {3}), [])
+        text = "/// <remarks>Because.\nvoid M();\n// Per §9.\n"
+        self.assertEqual([line for _, line, _ in judged("A.cs", text)], [1])
+
+    def test_only_csharp_and_only_comments_are_read(self):
+        self.assertEqual(judged("m.py", "# <remarks>x</remarks>\n"), [])
+        self.assertEqual(
+            judged("A.cs", 'var s = "<remarks>x</remarks>";\n'), [])
+
+
+class TheWidthRule(unittest.TestCase):
+    def line(self, width, lead="x(", tail=");"):
+        return lead + "a" * (width - len(lead) - len(tail)) + tail + "\n"
+
+    def test_the_budget_is_120_columns(self):
+        self.assertEqual(gate.WIDTH_LIMIT, 120)
+
+    def test_the_budget_passes_and_one_column_more_fails(self):
+        self.assertEqual(len(self.line(121).rstrip("\n")), 121)
+        self.assertEqual(judged("A.cs", self.line(120)), [])
+        self.assertEqual(judged("A.cs", "x();\n" + self.line(121)),
+                         [("A.cs", 2, "a line runs 121 columns, over 120")])
+
+    def test_comments_and_literals_are_measured_as_code_is(self):
+        for lead, tail in (("// ", "."), ("/// ", "."),
+                           ('var s = """', '""";'), ('var s = $"', '";')):
+            with self.subTest(lead=lead):
+                self.assertEqual(
+                    len(judged("A.cs", self.line(121, lead, tail))), 1)
+
+    def test_a_line_break_is_not_a_column(self):
+        self.assertEqual(judged("A.cs", self.line(120).replace("\n", "\r\n")),
+                         [])
+
+    def test_only_added_lines_are_measured(self):
+        text = self.line(121) + "x();\n"
+        self.assertEqual(judged("A.cs", text, {2}), [])
+
+    def test_generated_migrations_and_designers_are_exempt(self):
+        for path in ("src/A.Infrastructure/Persistence/Migrations/1_Init.cs",
+                     "Migrations/Snapshot.cs", "src/Form.Designer.cs"):
+            with self.subTest(path=path):
+                self.assertEqual(judged(path, self.line(121)), [])
+        self.assertEqual(len(judged("src/MigrationsRunner.cs",
+                                    self.line(121))), 1)
+
+    def test_only_csharp_is_measured(self):
+        for path in ("a.py", "a.sh", "a.yml", "A.csproj"):
+            with self.subTest(path=path):
+                self.assertEqual(judged(path, "x" * 121 + "\n"), [])
+
+
+class TheProseWidth(unittest.TestCase):
+    def prose(self, width):
+        return "a " * (width // 2) + ("a" if width % 2 else "")
+
+    def wide(self, text, path="docs/a.md", added=None):
+        every = set(range(1, text.count("\n") + 2)) if added is None else added
+        return gate.prose_width(path, text, every)
+
+    def test_the_budget_is_80_columns_and_one_more_fails(self):
+        self.assertEqual(gate.PROSE_LIMIT, 80)
+        self.assertEqual(len(self.prose(81)), 81)
+        self.assertEqual(self.wide(self.prose(80) + "\n"), [])
+        self.assertEqual(self.wide("x\n" + self.prose(81) + "\n"),
+                         [("docs/a.md", 2, "a prose line runs 81 columns, over 80")])
+
+    def test_a_line_break_is_not_a_column(self):
+        self.assertEqual(self.wide(self.prose(80) + "\r\n"), [])
+
+    def test_the_guides_exemptions_are_not_prose(self):
+        long = "x" * 100
+        lines = ["| " + self.prose(90), "<p>" + self.prose(90), "# " + self.prose(90), "[a]: " + self.prose(90),
+                 "see [the page](" + long + ") for more", "see https://x.example/" + long + " ok",
+                 "see [a](b_(" + long + ").md) for more", "<https://x.example/" + long + "> is the page"]
+        for line in lines:
+            with self.subTest(line=line[:12]):
+                self.assertEqual(self.wide(line + "\n"), [])
+
+    def test_prose_around_a_link_or_an_address_is_still_measured(self):
+        lines = (self.prose(90) + " [a](b.md)", self.prose(90) + " https://x.example", "[" + self.prose(90) + "](b.md)",
+                 "<https://x.example> " + self.prose(90))
+        for line in lines:
+            with self.subTest(line=line[:12]):
+                self.assertEqual(len(self.wide(line + "\n")), 1)
+
+    def test_a_code_block_and_front_matter_are_not_prose(self):
+        for fence in ("```", "~~~"):
+            with self.subTest(fence=fence):
+                text = f"{fence}bash\n{self.prose(90)}\n{fence}\n{self.prose(90)}\n"
+                self.assertEqual([n for _, n, _ in self.wide(text)], [4])
+        front = f"---\ndescription: {self.prose(90)}\n---\n{self.prose(90)}\n"
+        self.assertEqual([n for _, n, _ in self.wide(front)], [4])
+        self.assertEqual([n for _, n, _ in self.wide(f"x\n---\n{self.prose(90)}\n")], [3])
+
+    def test_a_fence_ends_on_its_own_character_and_length(self):
+        nested = f"````md\n```\n{self.prose(90)}\n```\n{self.prose(90)}\n````\n{self.prose(90)}\n"
+        self.assertEqual([n for _, n, _ in self.wide(nested)], [7])
+        tilde = f"~~~\n```\n{self.prose(90)}\n~~~\n{self.prose(90)}\n"
+        self.assertEqual([n for _, n, _ in self.wide(tilde)], [5])
+
+    def test_a_quoted_fence_and_a_quoted_table_row_are_not_prose(self):
+        for quote in ("> ", ">", "> > ", "  > "):
+            with self.subTest(quote=quote):
+                text = (f"{quote}```\n{quote}{self.prose(90)}\n{quote}```\n{quote}| {self.prose(90)}\n"
+                        f"{quote}{self.prose(90)}\n")
+                self.assertEqual([n for _, n, _ in self.wide(text)], [5])
+
+    def test_a_quoted_fence_ends_where_its_quote_does(self):
+        text = f"> ```\n> {self.prose(90)}\n\n{self.prose(90)}\n"
+        self.assertEqual(self.wide(text), [("docs/a.md", 4, "a prose line runs 90 columns, over 80")])
+
+    def test_a_quoted_fence_closes_only_at_its_own_depth(self):
+        text = f"> ```md\n> > ```\n> > {self.prose(90)}\n> ```\n> {self.prose(90)}\n"
+        self.assertEqual([n for _, n, _ in self.wide(text)], [5])
+
+    def test_a_fence_in_a_nested_quote_ends_when_that_quote_does(self):
+        text = f"> > ```\n> > {self.prose(90)}\n> {self.prose(90)}\n"
+        self.assertEqual([n for _, n, _ in self.wide(text)], [3])
+
+    def test_a_quote_marker_inside_a_plain_fence_is_code(self):
+        text = f"```md\n> ```\n{self.prose(90)}\n```\n{self.prose(90)}\n"
+        self.assertEqual([n for _, n, _ in self.wide(text)], [5])
+
+    def test_a_fence_never_closed_is_a_finding_when_it_is_added(self):
+        text = f"x\n```\n{self.prose(90)}\n"
+        self.assertEqual(self.wide(text), [("docs/a.md", 2, "a code fence opens here and is never closed, "
+                                                             "so the lines after it are unread")])
+        self.assertEqual(self.wide(text, added={3}), self.wide(text), "an added line after it is unread too")
+        self.assertEqual(self.wide(text, added={1}), [])
+
+    def test_a_leading_thematic_break_is_not_front_matter_when_a_blank_line_follows_it(self):
+        text = f"---\n\n{self.prose(90)}\n---\n{self.prose(90)}\n"
+        self.assertEqual([n for _, n, _ in self.wide(text)], [3, 5])
+
+    def test_only_added_lines_are_measured(self):
+        text = self.prose(90) + "\n" + self.prose(90) + "\n"
+        self.assertEqual([n for _, n, _ in self.wide(text, added={2})], [2])
+
+    def test_which_paths_are_prose(self):
+        for path, expected in (("docs/a.md", True), ("README.md", True), (".claude/commands/x.md", True),
+                               ("docs/superpowers/specs/a.md", False), ("a.cs", False), ("a.txt", False)):
+            with self.subTest(path=path):
+                self.assertEqual(gate.is_prose(path), expected)
+
+    def test_markdown_still_has_no_comment_reader(self):
+        self.assertIsNone(gate.reader_for("docs/a.md"))
+
+
+class TheDiff(unittest.TestCase):
+    def test_hunks_give_the_added_line_numbers(self):
+        diff = ("diff --git a/A.cs b/A.cs\n"
+                "--- a/A.cs\n+++ b/A.cs\n"
+                "@@ -1,0 +2,2 @@\n+a\n++++ b/looks like a header\n"
+                "@@ -9 +10 @@\n-old\n\\ No newline at end of file\n+new\n"
+                "@@ -20,2 +20,0 @@\n-x\n-y\n"
+                "diff --git a/B.cs b/B.cs\n--- /dev/null\n+++ b/B.cs\n"
+                "@@ -0,0 +1 @@\n+z\n")
+        self.assertEqual(gate.added_lines(diff),
+                         {"A.cs": {2, 3, 10}, "B.cs": {1}})
+
+    def test_the_tab_git_ends_a_spaced_name_with_is_not_part_of_it(self):
+        diff = "+++ b/my file.cs\t\n@@ -0,0 +1 @@\n+x\n"
+        self.assertEqual(gate.added_lines(diff), {"my file.cs": {1}})
+
+    def test_a_header_it_does_not_know_refuses_the_run(self):
+        for header in ['+++ "b/odd\\tname.cs"', "+++ odd.cs"]:
+            with self.subTest(header=header):
+                with self.assertRaises(gate.Unreadable):
+                    gate.added_lines(f"{header}\n@@ -0,0 +1 @@\n+x\n")
+
+
+def git(repo, *args):
+    subprocess.run(["git", "-C", repo, "-c", "user.name=t",
+                    "-c", "user.email=t@t", "-c", "core.autocrlf=false",
+                    *args], check=True, capture_output=True)
+
+
+class TheGateOnARepository(unittest.TestCase):
+    def setUp(self):
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        self.repo = holder.name
+        git(self.repo, "init", "-q", "-b", "main")
+        self.write("Old.cs", "// PR-1\n" + "".join(
+            f"// {k}\n" for k in range(11)))
+        self.write("Moved.cs", "// PR-2\n")
+        self.commit("base")
+
+    def write(self, name, text, encoding="utf-8"):
+        target = Path(self.repo, name)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(text.encode(encoding))
+
+    def commit(self, message):
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-q", "--allow-empty", "-m", message)
+        return subprocess.run(["git", "-C", self.repo, "rev-parse", "HEAD"],
+                              capture_output=True, text=True, encoding="utf-8").stdout.strip()
+
+    def run_gate(self, base="main~1", head="HEAD", title=None, labels=None):
+        env = {name: value for name, value in os.environ.items()
+               if name not in ("PR_TITLE", "PR_LABELS")}
+        if title is not None:
+            env["PR_TITLE"] = title
+        if labels is not None:
+            env["PR_LABELS"] = labels
+        return subprocess.run(
+            [sys.executable, str(GATE), "--base", base, "--head", head],
+            cwd=self.repo, capture_output=True, text=True, encoding="utf-8",
+            env=env)
+
+    def test_an_added_prose_line_past_80_columns_fails_and_an_old_one_does_not(self):
+        wide, fine = "a " * 41, "a " * 40
+        self.write("docs/Old.md", wide.rstrip() + " word\n")
+        self.write("docs/superpowers/Spec.md", wide + "\n")
+        self.commit("old")
+        self.write("docs/Old.md", wide.rstrip() + " word\n" + wide + "\n" + fine.rstrip() + "\n")
+        self.write("docs/superpowers/Spec.md", wide + "\n" + wide + "\n")
+        self.commit("change")
+        result = self.run_gate()
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("docs/Old.md:2: a prose line runs 82 columns, over 80", result.stdout)
+        self.assertNotIn("docs/Old.md:1:", result.stdout)
+        self.assertNotIn("docs/Old.md:3:", result.stdout)
+        self.assertNotIn("Spec.md", result.stdout)
+
+    def test_an_added_finding_fails_and_old_ones_stay_unjudged(self):
+        self.write("New.cs", "x(); // see #3\n")
+        self.write("README.md", "PR-1 in prose is not a comment\n")
+        git(self.repo, "mv", "Moved.cs", "Renamed.cs")
+        self.commit("change")
+        result = self.run_gate()
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("New.cs:1: a comment names an issue", result.stdout)
+        self.assertNotIn("Renamed.cs", result.stdout)
+        self.assertNotIn("Old.cs", result.stdout)
+
+    def test_a_spaced_path_has_its_added_lines_judged(self):
+        # Real git rather than a written header: the file list and the diff
+        # must agree on the name, or the file counts as judged with nothing read.
+        self.write("my tools/my file.cs", "x(); // see #3\n")
+        self.write("docs/my notes.md", "a " * 41 + "\n")
+        self.commit("change")
+        result = self.run_gate()
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("my tools/my file.cs:1: a comment names an issue",
+                      result.stdout)
+        self.assertIn("docs/my notes.md:1: a prose line runs 82 columns",
+                      result.stdout)
+
+    def test_a_line_added_inside_an_old_block_fails_it(self):
+        text = Path(self.repo, "Old.cs").read_text().replace(
+            "// 5\n", "// 5\n// five\n")
+        self.write("Old.cs", text)
+        self.commit("change")
+        result = self.run_gate()
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("Old.cs:1: a comment block runs 13 lines",
+                      result.stdout)
+
+    def test_a_clean_change_passes_and_says_what_it_read(self):
+        self.write("New.cs", "// why, in one line\nx();\n")
+        self.commit("change")
+        result = self.run_gate()
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("judged the added lines of 1 file(s)", result.stdout)
+
+    OUTWEIGHED = ("the added C# is more comment than code, 2 comment "
+                  "line(s) to 1 code line(s)")
+
+    def outweigh(self):
+        self.write("New.cs", "// one\n// two\nx();\n")
+        self.commit("change")
+
+    def test_more_added_csharp_comment_than_code_fails_the_run(self):
+        self.outweigh()
+        result = self.run_gate(title="feat(catalog): add", labels='["bug"]')
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn(f"::error::{self.OUTWEIGHED}\n", result.stdout)
+        self.assertIn("1 finding(s)", result.stdout)
+
+    def test_a_docs_title_excepts_the_ratio_and_says_so(self):
+        self.outweigh()
+        for title in ("docs: cut", "docs(gate): cut"):
+            with self.subTest(title=title):
+                result = self.run_gate(title=title, labels="[]")
+                self.assertEqual(result.returncode, 0, result.stdout)
+                self.assertIn(f"{self.OUTWEIGHED}, excepted because its "
+                              "title is of the docs type", result.stdout)
+                self.assertNotIn("::error::", result.stdout)
+        for title in ("docsify: cut", "fix: docs(gate) cut"):
+            with self.subTest(title=title):
+                result = self.run_gate(title=title)
+                self.assertEqual(result.returncode, 1, result.stdout)
+
+    def test_the_sweep_label_excepts_the_ratio_and_says_so(self):
+        self.outweigh()
+        result = self.run_gate(title="refactor(catalog): cut",
+                               labels='["bug", "comment-sweep"]')
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn(f"{self.OUTWEIGHED}, excepted because it is labelled "
+                      "comment-sweep", result.stdout)
+        self.assertNotIn("::error::", result.stdout)
+        result = self.run_gate(labels='["sweep"]')
+        self.assertEqual(result.returncode, 1, result.stdout)
+
+    def test_as_much_csharp_comment_as_code_passes(self):
+        self.write("New.cs", "// one\nx();\n\n// two\n")
+        self.write("Two.cs", "y();\n")
+        self.commit("change")
+        result = self.run_gate()
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("added, C#: 2 comment line(s), 2 code line(s)",
+                      result.stdout)
+        self.assertNotIn("more comment than code", result.stdout)
+
+    def test_the_scripts_ratio_is_reported_and_fails_nothing(self):
+        self.write("new.py", "# one\n# two\nx = 1\n")
+        self.commit("change")
+        result = self.run_gate()
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("added, scripts: 2 comment line(s), 1 code line(s)",
+                      result.stdout)
+        self.assertNotIn("more comment than code", result.stdout)
+
+    def test_labels_that_are_not_a_json_list_refuse_the_run(self):
+        self.outweigh()
+        result = self.run_gate(labels="comment-sweep")
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("PR_LABELS is not a JSON list of names", result.stdout)
+
+    def test_the_tree_mode_weighs_no_ratio(self):
+        self.write("Only.cs", "// one\n// two\n")
+        self.commit("change")
+        result = self.run_tree("Only.cs")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertNotIn("more comment than code", result.stdout)
+
+    def test_the_report_weighs_added_comment_against_added_code(self):
+        self.write("New.cs", "// one\n// two\nx();\n\ny(); // three\n")
+        self.write("new.py", "# one\nx = 1\n")
+        self.write("new.yml", "# not weighed\n")
+        self.commit("change")
+        result = self.run_gate()
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("added, C#: 2 comment line(s), 2 code line(s), "
+                      "50% comment", result.stdout)
+        self.assertIn("added, scripts: 1 comment line(s), 1 code line(s), "
+                      "50% comment", result.stdout)
+
+    def run_tree(self, *roots):
+        return subprocess.run(
+            [sys.executable, str(GATE), "--tree", *roots],
+            cwd=self.repo, capture_output=True, text=True, encoding="utf-8")
+
+    def test_the_tree_mode_judges_every_line_under_the_roots(self):
+        Path(self.repo, "src").mkdir()
+        self.write("src/In.cs", "// PR-3\nx();\n")
+        self.commit("change")
+        result = self.run_tree("src")
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("src/In.cs:1: a comment names a delivery-plan row",
+                      result.stdout)
+        self.assertNotIn("Old.cs", result.stdout)
+        self.assertIn("the tree, C#: 1 comment line(s), 1 code line(s), "
+                      "50% comment", result.stdout)
+        self.assertIn("judged every line of 1 file(s)", result.stdout)
+
+    def test_the_tree_mode_judges_lines_no_commit_added(self):
+        self.write("New.cs", "x();\n")
+        self.commit("change")
+        result = self.run_tree("Old.cs")
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("Old.cs:1: a comment names a delivery-plan row",
+                      result.stdout)
+        self.assertIn("Old.cs:1: a comment block runs 12 lines",
+                      result.stdout)
+
+    def test_the_report_counts_only_the_lines_a_change_adds(self):
+        self.write("Moved.cs", "// PR-2\nx();\n")
+        self.commit("change")
+        result = self.run_gate()
+        self.assertIn("added, C#: 0 comment line(s), 1 code line(s), "
+                      "0% comment", result.stdout)
+
+    def test_the_tree_mode_refuses_a_head(self):
+        result = self.run_tree("Old.cs", "--head", "HEAD")
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("--tree reads no diff", result.stderr)
+
+    def test_the_tree_mode_reads_the_working_tree(self):
+        self.write("Moved.cs", "x();\n")
+        result = self.run_tree("Moved.cs")
+        self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_a_tree_holding_nothing_it_reads_refuses_the_run(self):
+        result = self.run_tree("nowhere")
+        self.assertEqual(result.returncode, 2, result.stdout)
+        result = self.run_tree("Old.cs", "nowhere")
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("nowhere", result.stdout)
+
+    def test_the_tree_mode_reads_root_paths_from_any_directory(self):
+        Path(self.repo, ".claude").mkdir()
+        self.write(".claude/Tool.cs", "// Copilot asks\n")
+        self.commit("change")
+        result = subprocess.run(
+            [sys.executable, str(GATE), "--tree", "."],
+            cwd=Path(self.repo, ".claude"), capture_output=True, text=True,
+            encoding="utf-8")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("judged every line of 1 file(s)", result.stdout)
+
+    def test_a_diff_that_changes_nothing_refuses_the_run(self):
+        result = self.run_gate(base="HEAD")
+        self.assertEqual(result.returncode, 2, result.stdout)
+
+    def test_an_added_line_past_the_budget_fails_the_run(self):
+        marked = chr(0xFEFF) + "x(" + "a" * 116 + ");\n"
+        self.assertEqual(len(marked.rstrip("\n")), 121)
+        self.write("Wide.cs", "x(" + "a" * 117 + ");\n")
+        self.write("Marked.cs", marked)
+        self.commit("change")
+        result = self.run_gate()
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("::error file=Wide.cs,line=1::a line runs 121 columns, "
+                      "over 120", result.stdout)
+        self.assertNotIn("Marked.cs", result.stdout)
+
+    def test_a_file_that_is_not_utf8_refuses_the_run(self):
+        self.write("Latin.cs", "// café\n", encoding="latin-1")
+        self.commit("change")
+        self.assertEqual(self.run_gate().returncode, 2)
+
+    def test_a_file_git_would_not_diff_is_judged_on_its_added_lines(self):
+        Path(self.repo, "Zero.cs").write_bytes(b"x(); // PR-1\x00\n")
+        self.write(".gitattributes", "Quiet.cs -diff\n")
+        self.write("Quiet.cs", "x(); // PR-2\n")
+        self.commit("change")
+        result = self.run_gate()
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("Zero.cs:1", result.stdout)
+        self.assertIn("Quiet.cs:1", result.stdout)
+
+    def test_a_binary_file_it_does_not_read_refuses_nothing(self):
+        Path(self.repo, "logo.png").write_bytes(b"\x89PNG\n\xff\xfe+++ b/x\n")
+        self.write("New.cs", "x();\n")
+        self.commit("change")
+        self.assertEqual(self.run_gate().returncode, 0)
+
+    def test_a_change_that_only_deletes_adds_nothing_and_passes(self):
+        self.write("Old.cs", "x(); // PR-1\n")
+        self.commit("old")
+        Path(self.repo, "Old.cs").unlink()
+        self.commit("change")
+        result = self.run_gate(base="HEAD~1")
+        self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_a_change_git_calls_binary_refuses_the_run(self):
+        Path(self.repo, "Bin.cs").write_bytes(b"\x00\xff\xfe// PR-1\n")
+        self.commit("change")
+        self.assertEqual(self.run_gate().returncode, 2)
+
+    def test_fused_hunks_judge_only_their_added_lines(self):
+        lines = [f"x{k}();\n" for k in range(10)]
+        lines[3] = "// PR-3\n"
+        self.write("Fused.cs", "".join(lines))
+        self.commit("old")
+        lines[1] = "y();\n"
+        lines[5] = "y();\n"
+        self.write("Fused.cs", "".join(lines))
+        self.commit("change")
+        git(self.repo, "config", "diff.interHunkContext", "5")
+        result = self.run_gate(base="HEAD~1")
+        self.assertEqual(result.returncode, 0, result.stdout)
+
+
+class TheShippedTree(unittest.TestCase):
+    def test_every_tracked_file_it_reads_can_be_read(self):
+        listed = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z"],
+                                capture_output=True, check=True).stdout
+        paths = [p for p in listed.decode("utf-8").split("\0")
+                 if p and gate.reader_for(p)]
+        self.assertGreater(len(paths), 100)
+        for path in paths:
+            with self.subTest(path=path):
+                text = (ROOT / path).read_text(encoding="utf-8-sig")
+                gate.judge(path, text, set())
+
+
+if __name__ == "__main__":
+    unittest.main()

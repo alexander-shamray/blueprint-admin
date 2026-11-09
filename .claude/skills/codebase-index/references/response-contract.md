@@ -36,16 +36,9 @@ Prefer a more specific command or a larger token budget before paging.
 
 ## Freshness
 
-The `index` object is part of the evidence contract:
-
-```text
-exists=false                           → index
-stale=true, files_changed_since_build<20 → update
-stale=true, files_changed_since_build≥20 → full index
-stale=false                            → proceed
-```
-
-Repeat the original query after rebuilding or updating.
+The `index` object is part of the evidence contract. The evidence
+protocol in [SKILL.md](../SKILL.md) owns the missing / stale / fresh
+decision. Repeat the original query after rebuilding or updating.
 
 ## Weak results
 
@@ -63,8 +56,8 @@ Avoid a full-repository scan unless targeted fallback also fails.
 If several queries are weak:
 
 ```bash
-codebase-index stats --json
-codebase-index doctor
+bash .claude/skills/codebase-index/scripts/cbx stats --json
+bash .claude/skills/codebase-index/scripts/cbx doctor
 ```
 
 Report the limitation instead of inventing certainty.
