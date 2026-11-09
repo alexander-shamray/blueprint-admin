@@ -53,10 +53,11 @@ A gate that reports a pass over nothing is ranked critical by `/bug-sweep`. Here
 that means the locality gate, the pin gate, the `harness` and `gates` jobs,
 `dotnet test`, `npm test` and `smoke`.
 
-The checks `/ship` step 6's wait requires: `commit-gate`, `commits`, `drift`,
-`harness (macos-latest)`, `harness (ubuntu-latest)`, `harness (windows-latest)`,
-`host (ubuntu-latest)`, `host (windows-latest)`, `locality-gate`, `smoke` and
-`web`. `rulesets/main.json` in `blueprint-harness` owns what the `main` ruleset
+The checks `/ship` step 6's wait requires: `closure-gate`, `commit-gate`,
+`commits`, `drift`, `harness (macos-latest)`, `harness (ubuntu-latest)`,
+`harness (windows-latest)`, `harness-drift`, `host (ubuntu-latest)`,
+`host (windows-latest)`, `locality-gate`, `smoke` and `web`.
+`rulesets/main.json` in `blueprint-harness` owns what the `main` ruleset
 requires. A check is added here first, so the wait is not short of the ruleset;
 no gate compares the two.
 
