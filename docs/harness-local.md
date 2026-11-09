@@ -119,9 +119,9 @@ outside-the-checkout rule judges.
 **The SPA toolchain is editable, and the granted runners execute it.** This
 repository's `/ship` and `/pr` denied `package.json`, `angular.json`, `tsconfig`,
 the eslint and prettier configs and `**/*.config.*` in their frontmatter, and
-`/style-pass` all of those but `*.config.ts`. The payload's commands carry none
-of it, and `npm-checks.sh` and `spa-ci.sh` are settings allows that hold every
-turn. A session can therefore edit a script or a config and run it with no
+`/style-pass` a narrower set, without the eslint and prettier files it edits. The
+payload's commands carry none of it, and `npm-checks.sh` and `spa-ci.sh` are
+settings allows that hold every turn. A session can therefore edit a script or a config and run it with no
 prompt, as it already can with a spec through `npm test`. No settings deny
 replaces them, since 25 edits in three weeks were ordinary Class E and tooling
 work; review and CI stand. Only `.npmrc`, which no session edited and which
@@ -168,8 +168,10 @@ no longer refuses on a fault; the `harness` job does.
 **The output gate does not run here yet.** `.github/output-gate/output_gate.py`
 reads a solution named `Platform.slnx`, and this repository's is
 `BlueprintAdmin.slnx`, so its invocation waits on the payload
-(blueprint-harness#315). Its suite and the plan-size gate's join CI with plan 6
-Task 8, which adds the new gate directories.
+(blueprint-harness#315). Its suite and the plan-size gate's run in no job here
+until Task 8 of blueprint-backend's
+`docs/superpowers/plans/2026-11-08-shared-harness-6-admin-sync.md` adds them to
+`ci.yml`.
 
 ## Review examples
 
