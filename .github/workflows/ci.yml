@@ -298,15 +298,11 @@ jobs:
           gh label list --repo "$GITHUB_REPOSITORY" --limit 1000 --json name |
             python .github/issue-form-gate/issue_form_gate.py
 
-  # Every gate suite under .github/, in the shape of the harness's own
-  # `payload-suites` gate step, on a push to main too: a gate's own workflow
-  # runs its suite on a pull request alone, and a gate with no workflow would
-  # otherwise run nowhere. Being in this workflow is what puts it in the set
-  # main-red.yml watches. The loop finds the directories, so a suite a sync
-  # adds is covered with no line here, and finding none fails. Each suite runs
-  # from its own directory, as those workflows run it. The output gate's suite
-  # runs here; its invocation waits on blueprint-harness#315
-  # (docs/harness-local.md).
+  # Every gate suite under .github/, in the shape of the harness's `payload-suites`
+  # gate step, on a push to main too: a gate's own workflow runs its suite on a
+  # pull request alone, and a gate with no workflow would run nowhere. The loop
+  # finds the directories, so a suite a sync adds needs no line here, and finding
+  # none fails. Being in this workflow puts it in the set main-red.yml watches.
   gates:
     runs-on: ubuntu-latest
     # Bounds a step that never exits. Headroom over the usual run, not a duration.
