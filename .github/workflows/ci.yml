@@ -300,9 +300,9 @@ jobs:
 
   # Every gate suite under .github/, in the shape of the harness's `payload-suites`
   # gate step, on a push to main too: a gate's own workflow runs its suite on a
-  # pull request alone, and a gate with no workflow would run nowhere. The loop
-  # finds the directories, so a suite a sync adds needs no line here, and finding
-  # none fails. Being in this workflow puts it in the set main-red.yml watches.
+  # pull request alone, and one neither a workflow nor `harness` names runs nowhere.
+  # The loop finds the directories, so a suite a sync adds needs no line here, and
+  # finding none fails. Being in this workflow puts it in the set main-red.yml watches.
   gates:
     runs-on: ubuntu-latest
     # Bounds a step that never exits. Headroom over the usual run, not a duration.
