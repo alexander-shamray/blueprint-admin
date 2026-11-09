@@ -88,9 +88,10 @@ that may not do. The `harness` job in `ci.yml` is the matrix.
 ## Commit gate
 
 `python -m unittest` in `.github/commit-gate/` is the gate's own suite, and
-the `harness` job runs it too. The `commit-gate` workflow runs it on every
-pull request, then enforces the **base** copy of the gate. It reads git
-rather than `gh`, so a branch can run it once its pull request exists:
+the `harness` job runs it too. The `commit-gate` workflow enforces the
+**base** copy of the gate on every pull request and runs the suite after it,
+for the reason `locality-gate.yml` argues. The gate reads git rather than
+`gh`, so a branch can run it once its pull request exists:
 
 ```bash
 git fetch origin main
@@ -142,6 +143,7 @@ What it reads and claims is [its README](../.github/issue-form-gate/README.md)'s
 ## Locality
 
 `python -m unittest` in `.github/locality-gate/` is the gate's own suite.
-CI runs it on every pull request, then enforces the **base** copy of the
-gate against the PR body. Bootstrap: the first PR that lands the directory
-is judged by HEAD, with a warning.
+On every pull request CI enforces the **base** copy of the gate against the
+PR body and runs the suite after it, for the reason `locality-gate.yml`
+argues. Bootstrap: the first PR that lands the directory is judged by HEAD,
+with a warning.
