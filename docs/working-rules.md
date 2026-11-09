@@ -1,10 +1,11 @@
 # Working rules
 
-The rules `CLAUDE.md` used to carry in full, moved here so a session loads
-them when it needs one rather than on every turn. `CLAUDE.md` keeps the
-hard rules as one line each and cites the section below that argues it.
-Read the section for what you are about to touch; the file is not for
-reading whole.
+What only this repository adds to the rules every target on the harness shares.
+Those are `.harness/agent-rules.md`, which every session loads, and
+`docs/harness/working-rules.md`, read before the act each of its sections names;
+neither is restated here. `CLAUDE.md` keeps this repository's hard rules as one
+line each and cites the section below that argues it. Read the section for what
+you are about to touch; the file is not for reading whole.
 
 ## Build policy
 
@@ -22,11 +23,6 @@ pins Node.
 The host refuses to start if `Admin:BackendDir` / `Admin:FrontendDir` are
 wrong, naming the key. It does **not** run `npm ci` in the frontend clone.
 
-One lesson stays here, because its subject is every other rule: **a gate that
-silently stops covering the newest surface is the most-repeated failure in
-these repositories**, and the only defence is a test whose subject is *what
-the gate is looking at*, not what it found.
-
 ## Style
 
 C# follows [`.editorconfig`](../.editorconfig), copied from the backend so
@@ -34,7 +30,7 @@ this host reads like the code it operates. The prose version of each rule is
 **blueprint-backend's** `docs/style-guide.md` — it is not in this tree.
 Angular follows the sibling client: standalone, `inject()` at field level,
 signals for state. [`style-guide.md`](style-guide.md) points at both
-dialects.
+dialects, and owns what a comment says.
 
 - **Prose wraps at 80 columns** (tables, links and code may exceed it),
   **C# at 120**, **TypeScript at the SPA formatter's width** (Prettier,
@@ -50,8 +46,6 @@ dialects.
   components** with an explicit `imports` array.
 - **No `#pragma` suppressions and no real credentials.** Spec §8's loopback
   and the realm passwords in `AdminOptions` are the stated local exception.
-- **A comment says why and cites the owner** — no history, no inventory, no
-  PR named. A finding against a comment is closed by cutting it.
 - **Test names are sentences with underscores** (CA1707 is suppressed on
   `*Tests` projects for that reason).
 
@@ -59,152 +53,46 @@ dialects.
 
 - **Read before you edit**: the claim you are about to change is usually
   stated more than once. `Program.cs` is the host composition root.
-- **Commit messages** are semantic and present-tense — `docs:`,
-  `feat(<scope>):`, `fix:`, `chore:`, `refactor:`, `test:` — and the body
-  argues the change. A `Closes #n` in a commit body fires on merge whatever
-  the description says, so the description is reconciled to the commits and
-  never the reverse.
-- **Every commit carries `PR: #<n>`, and every intermediate commit
-  builds.** A pull request lands by rebase, so the trailer is the only
-  record of which pull request a commit on `main` came from; `/pr` adds it
-  once the number exists, `/commit` writes it after, and
-  [the commit gate](../.github/commit-gate/README.md) refuses a range
-  without it. The `commits` job in `ci.yml` builds each commit but the head,
-  which `host`, `web` and `smoke` cover, so `git bisect` meets only commits
-  that compile. Reverting a pull request is
-  `bash .claude/scripts/git-revert-pr.sh <n>`.
-- **A reply is not a resolution.** Resolve a review thread in the same act as
-  the reply, and leave an `Ask` open on purpose.
-- **Uncommitted work in the tree belongs in the PR being worked on**, in its
-  own commit with a body that argues it. **Never revert it to clean the tree**;
-  if it does not belong here, say so and ask rather than decide by deleting.
+- **Every intermediate commit builds**, by
+  `docs/harness/working-rules.md`, *Commits*. Here the `commits` job in
+  `ci.yml` builds each commit but the head, which `host`, `web` and `smoke`
+  cover, so `git bisect` meets only commits that compile, and
+  [the commit gate](../.github/commit-gate/README.md) refuses a range without
+  the trailer.
 - **Do not invent platform behaviour.** 401/403/409/422 pass through as the
   gateway returned them. A fake's answer is recorded from the live service
   where one can be, and says where it is not.
-- **The task list is `.todo/blueprint-admin.md` in the main checkout's
-  parent directory: outside every checkout, local, never committed.** It is
-  for the user, and it lists open PRs (with the unpaused issues each closes)
-  and every other open issue.
-  **Where a row sits is a function of state, so every agent that works here
-  re-derives it at each event** (work starts on an issue, a PR opens, merges
-  or closes, an issue is filed, closed, reopened, paused or unpaused, labelled
-  or unlabelled `tracking`, work is abandoned) **and writes the result in the
-  same act**:
-
-  | State | Where |
-  |---|---|
-  | Open issue not labelled `tracking`, nothing built for it | **Remaining**, in its wave |
-  | Open issue labelled `tracking`, not `paused`: it records work done elsewhere or a measurement over time, and no PR implements it | **Tracking**, in its wave |
-  | Open issue labelled `paused` | **Paused**, whatever else is true of it |
-  | Open issue a session has taken up (about to be branched, or with a branch or a worktree) and no open PR | **In progress**, with the branch once it is named |
-  | Open PR | **In progress**, one row for the PR naming the open, unpaused issues it closes, or `—` when there are none; an issue so named has no row of its own |
-  | Closed issue; merged or closed PR | no row, and no note of what landed, which git and the closed issues already keep |
-
-  Two things follow. Work that stops without landing (a claim abandoned,
-  a PR closed unmerged, or one merged without closing its issue) leaves the
-  issue open and ends its claim, so its row is re-derived by the table:
-  **In progress** with the branch if one remains, otherwise back to its wave.
-  Whatever the work found and filed has its own row by the same table,
-  written when it is filed.
-
-  It lives outside the checkout because Claude Code's isolation refuses a
-  session moved into `.claude/worktrees/` with `EnterWorktree` every path in
-  the main checkout outside that worktree, `TODO.md` at its root included,
-  and admits one that no checkout contains (#603; measured in
-  blueprint-backend#1590). So every session writes it by that path from
-  wherever it stands, at the event itself, and a report carries an update
-  as owed only where it could not be made: a direct `/branch` run, which
-  cannot edit files and owes the row's move to its caller, and a write the
-  permission check or the edit guard refused. `guard-edit-target.py`
-  admits that one file and nothing else beside the checkout
-  (`docs/harness-boundaries.md`, *The edit guard admits one file outside
-  every checkout*). The permission check still sees a path outside the
-  project: under `acceptEdits` the write prompts unless the user's own
-  settings list the directory under `additionalDirectories`; auto mode wrote
-  it unprompted when blueprint-backend#1590 measured it. The main checkout's
-  root may hold `TODO.md`, gitignored, as a link to it for the user's
-  editor; a session writes the file by its own path, never through the link,
-  which the edit guard refuses because its target resolves out of the
-  checkout. The file's own note, topmost, holds the section and column
-  rules. When in doubt, rebuild it from `gh pr list --limit 1000` and
-  `gh issue list --limit 1000`, because the default of 30 truncates
-  silently.
+- **The task list** is `.harness/agent-rules.md`, *Working in a target*, for
+  where it lives and when it changes, and `docs/harness/working-rules.md`,
+  *Issues and the task list*, for where a row sits.
+  `docs/harness-local.md` *Residuals* holds how a session reaches it here.
 
 ## Merging beside other agents
 
-Several sessions keep pull requests open at once, and `protect-main`, the
-repository's ruleset, owns how they land: rebase only, with no rule that a
-branch be up to date first. So no pull request is tested against the `main`
-it lands on, and the run of `ci` on the push to `main` is the first to see
-two pull requests together.
+`docs/harness/working-rules.md` owns how pull requests land side by side:
+*Pull requests* when a branch is updated, *CI* what a red `main` is owed, a
+check that belongs to `main` and auto-merge. Two things only this repository
+has stay here.
 
-- **Do not update an open pull request because another one merged.** No
-  rebase, and no *Update branch* button. A branch is updated only when
-  GitHub reports a conflict, or when its checks went red with a red `main`
-  that has since turned green (the last bullet), and the update is
-  `bash .claude/scripts/git-rebase-onto-main.sh <branch> start`, which
-  fetches, replays onto `origin/main` and publishes under a lease. A rebase
-  landing refused is `/ship` step 6's own update, with its exit codes;
-  `mergeable` reading `CONFLICTING` stops `/ship`, and the update is the
-  caller's, run by hand before `/ship` resumes. The raw spelling's push,
-  `git push --force-with-lease`, is denied in `.claude/settings.json`,
-  because a lease cannot check what the helper's guards do.
-- **Never force-push a branch another session owns**, even through the
-  helper. Its pull request is that session's, and so is the conflict.
-- **Each clone sets `git config rerere.enabled true` once.** Worktrees share
-  the clone's config, so a resolution recorded in one is replayed in the
-  next. It does not stage what it replays, so the helper's `continue` still
-  follows a `git add`.
-- **Auto-merge waits on `protect-main`'s required checks and nothing
-  else**: not on the review, not on an open `main is red` issue, and not on
-  a branch being up to date. So a pull request is set to auto-merge only
-  once its review has ended and no `main is red` issue is open. When one
-  opens, whoever answers it (below), by a revert or by a comment on the
-  flaky tracker, also turns auto-merge off (`gh pr merge <n>
-  --disable-auto`) on every pull request that has it, since it would
-  otherwise land through the issue. Nothing automates that, as nothing
-  automates the revert. `/ship` does not
-  set it: step 6 waits on every check of the pushed head, stops on an open
-  `main is red` issue, and lands with `gh-pr-merge.sh` against the head it
-  read.
 - **Every `ci` job also runs on the push to `main`**, `commits` included,
   which builds the commits the landing replayed onto a `main` their pull
-  request was never tested against. Only `commit-gate.yml` and
-  `locality-gate.yml` run on pull requests alone, and that gap is accepted:
-  they judge a range's trailers and a body's touch set, which landing does
-  not change.
-- **A red `main` is reverted first and fixed forward after.**
-  [`main-red.yml`](../.github/workflows/main-red.yml) turns a failed `ci`
-  run on `main`'s tip into an issue, which outlives the run and the mail,
-  and closes it on the next green run. **That open issue is the signal, not
-  a pull request's own checks**: a `pull_request` run is pinned to the
-  merge it started on and never reruns when `main` moves, so a pull request
-  last pushed before `main` went red still reads green. So an open
-  `main is red` issue stops a landing as a red check would, and `/ship`
-  step 6 reads it with `.claude/scripts/main-red-open.sh` after its checks
-  wait. The pull request that turned it red is
-  reverted with `bash .claude/scripts/git-revert-pr.sh <n>`, run by hand,
-  since no command grants it (`docs/harness-boundaries.md` says so), and
-  the revert lands as its own pull request, through a `/ship` started for
-  the red issue's own number, the one run step 6's read lets through; the
-  fix lands after it, once the issue has closed, and a fix forward with no
-  revert lands as the revert would. A flake is the exception, a comment on
-  the flaky tracker by the user-level rule, and whoever comments also reruns
-  `ci`'s failed jobs on `main`'s tip (`gh run rerun <run> --failed`, by
-  hand, as no command grants it): only a green run on that tip closes the
-  issue, and while it is open step 6 stops every other landing.
-  A check that is red on a pull request and on `main` belongs to `main`, so
-  a pull request that touched none of it waits for that issue to close and
-  is not changed to make it pass. Once the issue closes, a rerun would still
-  read the old merge with the red `main`, so that pull request is updated
-  through `git-rebase-onto-main.sh`, the one update no conflict asked for.
+  request was never tested against. `commit-gate.yml`, `locality-gate.yml`,
+  `closure-gate.yml`, `comment-gate.yml` and `harness-drift.yml` run on pull
+  requests alone, and that gap is accepted: they judge a range's trailers, a
+  body's touch set and closures, its added lines and the managed files, which
+  landing does not change.
+- **A red `main` is an issue because of
+  [`main-red.yml`](../.github/workflows/main-red.yml)**, which turns a failed
+  `ci` run on `main`'s tip into one, which outlives the run and the mail, and
+  closes it on the next green run. A revert runs `git-revert-pr.sh` and a flake's
+  rerun `gh run rerun <run> --failed`, each by hand, as no command grants them
+  (`docs/harness-boundaries.md`).
 
 ## One owner per fact
 
-Every fact has exactly one owner, and every other mention cites the owner by
-symbol or file, never by value. `CLAUDE.md` is inside the rule too, and **no
-gate reads it**: a rule stated there and argued in `.editorconfig` or
-`Directory.Build.props` moves in both.
+The rule is `docs/harness/working-rules.md`, *Review*, and
+[`change-locality.md`](change-locality.md) §2. Here a rule stated in `CLAUDE.md`
+and argued in `.editorconfig` or `Directory.Build.props` moves in both.
 
 ## Precedence where two documents disagree
 
@@ -231,8 +119,5 @@ Skills (always on, not slash commands): **codebase-index** before a "where is
 X" question; **admin-invariants** before a new endpoint, screen or host
 command.
 
-[`harness-boundaries.md`](harness-boundaries.md) is the inventory of what the
-harness grants. **Read its index first, then only the section you need,
-before touching anything under `.claude/`.** Checks are
-`bash .claude/scripts/host-checks.sh` and
+Checks are `bash .claude/scripts/host-checks.sh` and
 `bash .claude/scripts/npm-checks.sh` (the latter `cd`s into `src/Admin.Web`).
