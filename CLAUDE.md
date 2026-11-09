@@ -9,11 +9,16 @@ whole.
 | | |
 |---|---|
 | [`README.md`](README.md) | How to run it, what the screens do today, known limits |
-| `.todo/blueprint-admin.md` in the main checkout's parent directory (local) | Open PRs and issues, for the user; every task change edits it, from a worktree too |
-| [`docs/working-rules.md`](docs/working-rules.md) | Build policy, style, working rules, precedence, commands |
+| `.todo/blueprint-admin.md` in the main checkout's parent directory (local) | The task list, for the user; `.harness/agent-rules.md` says when it changes |
+| [`docs/working-rules.md`](docs/working-rules.md) | Build policy, style, what only this repository adds to the shared rules, precedence, commands |
 | [`docs/change-locality.md`](docs/change-locality.md) | The operating contract: trust order, classes, touch sets; the gate reads `.github/locality-gate/classes.yml` |
-| [`docs/harness-boundaries.md`](docs/harness-boundaries.md) | What the harness grants these commands, and refuses; start at its index |
-| [`docs/commands/`](docs/commands/) | The argument for each long command in `.claude/commands/`, whose runbook cites it by heading; read only when a command is disputed or edited |
+| [`.harness/agent-rules.md`](.harness/agent-rules.md) | The rules every repository on the harness shares, imported below; managed |
+| [`docs/harness/working-rules.md`](docs/harness/working-rules.md) | Their detail for commits, pull requests, review, CI, tests and issues, and the review bar; managed |
+| [`docs/harness/token-rules.md`](docs/harness/token-rules.md) | The reasons behind the subagent, review-round and plan rules; managed |
+| [`docs/harness/pitfalls.md`](docs/harness/pitfalls.md) | Shell, git, machine and auto-mode traps; managed |
+| [`docs/harness-boundaries.md`](docs/harness-boundaries.md) | What the harness grants these commands, and refuses; managed; start at its index |
+| [`docs/harness-local.md`](docs/harness-local.md) | What the managed commands name by role, filled in for this repository: its documents, *Ship checks*, residuals and review examples |
+| [`docs/commands/`](docs/commands/) | The argument for each long command in `.claude/commands/`, whose runbook cites it by heading; managed, but for `review-branch.md`, this repository's own as its command is; read only when a command is disputed or edited |
 | [`docs/style-guide.md`](docs/style-guide.md) | Pointers to the two dialects; `/style-pass` records a newly settled form here |
 | [`docs/testing.md`](docs/testing.md) | Host vs SPA vs smoke vs harness; FakePlatform for e2e |
 | [`docs/token-plan.md`](docs/token-plan.md), [`docs/token-usage.md`](docs/token-usage.md) | Where a session's tokens go, and the plan to cut them |
@@ -54,6 +59,8 @@ tools/token-usage/         Transcript report for the token plan
 
 | Fact | Owner |
 |---|---|
+| A rule every repository on the harness shares | `.harness/agent-rules.md`, and `docs/harness/` for its detail |
+| Which files are managed | `.harness/manifest.json`; `.harness/config.json`'s `local` list names what stays here |
 | Ports, sibling dirs, FakePlatform | `AdminOptions.cs` |
 | Which services the platform has, and what hangs from each | `PlatformServices.All` in `src/Admin.Host/Config/PlatformServices.cs` |
 | SPA dev server and `/api` proxy | `src/Admin.Web/angular.json`, `proxy.conf.json` |
@@ -112,27 +119,12 @@ Checks are `bash .claude/scripts/host-checks.sh` and
 `bash .claude/scripts/npm-checks.sh`. The host refuses to start if
 `Admin:BackendDir` / `Admin:FrontendDir` are wrong, naming the key.
 
-## Subagents, review rounds and plans
-
-Every turn re-sends the whole context, so an agent costs what it reads times
-the turns it takes; `docs/token-plan.md` is where the spend was measured.
-
-- **Delegate with a brief.** A subagent is handed the files, diff or question
-  it needs and returns a short structured answer, findings as `file:line`.
-  `Explore` before `general-purpose` for a search; nothing is delegated that
-  one `Grep` answers.
-- **The review loop** is `/ship` step 5's: rounds of one read-only
-  `branch-reviewer`, handed the diff under `artifacts/review/` and not the
-  author's conclusions. The ceiling, and when a round is a recheck of the
-  diff since the last round rather than a full pass, are `/ship` step 5's.
-  Never `general-purpose`, never the session reviewing its own diff.
-- **Plans.** A change that fits one PR takes plan mode, not a plan file; a
-  plan cites code by path and symbol rather than pasting it.
-- **One task per session**: `/clear` between tasks.
-
 ## Hard rules
 
-Each is argued in [`docs/working-rules.md`](docs/working-rules.md).
+Each is argued in [`docs/working-rules.md`](docs/working-rules.md). The harness
+half (uncommitted work, branch updates, a red `main`, commit messages, review
+threads, the task list, `.claude/`) is `.harness/agent-rules.md`'s, imported
+below, and `docs/harness/working-rules.md`'s.
 
 - **`npm ci`, never `npm install`**: `install` may rewrite the lockfile.
 - **A `.cs` written with LF fails IDE0055 on every line**; `.gitattributes`
@@ -146,17 +138,14 @@ Each is argued in [`docs/working-rules.md`](docs/working-rules.md).
   IDE0161). No `#pragma`, and no real credentials.
 - **Do not invent platform behaviour.** 401/403/409/422 pass through as the
   gateway returned them.
-- **Never revert uncommitted work to clean the tree**; it belongs in the PR
-  being worked on, or ask.
-- **Another PR merging is no reason to touch yours**, and a red `main` is
-  reverted first: `docs/working-rules.md`, *Merging beside other agents*,
-  owns when a branch is updated and what a red `main` is owed.
-- **Commit messages** are semantic and present-tense, and the body argues.
-  Resolve a review thread in the same act as the reply.
-- **The task list** is local and outside every checkout, and every agent
-  keeps it true: at each event re-derive a row's section from the state
-  table in `docs/working-rules.md`, which says where the file lives, and
-  write it by that path from wherever the session stands, never through a
-  `TODO.md` link.
-- **Read `docs/harness-boundaries.md` by its index** before touching
-  anything under `.claude/`.
+
+## The harness
+
+Every path `.harness/manifest.json` lists is managed: `blueprint-harness` owns
+it, synced at the commit the manifest names, and a sync pull request brings it
+here. A residual only this repository has goes in `docs/harness-local.md`
+*Residuals*, which also says what a bare `#NN` in a managed file names, and a
+working rule only this repository has in `docs/working-rules.md` or
+`docs/change-locality.md` §6.
+
+@.harness/agent-rules.md
