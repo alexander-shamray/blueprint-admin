@@ -145,9 +145,9 @@ reopens #613.
 checkout, and the edit guard admits that one file (`.harness/config.json`
 `task_list` names it). Under `acceptEdits` the write prompts unless the user's
 settings list the directory under `additionalDirectories`; auto mode wrote it
-unprompted when blueprint-backend#1590 measured it. The main checkout's root may hold a
-gitignored `TODO.md` link for the user's editor; the guard refuses a write
-through it.
+unprompted when blueprint-backend#1590 measured it. The main checkout's root
+may hold a gitignored `TODO.md` link for the user's editor; the guard refuses a
+write through it.
 
 **A cheaper reviewer or model answers to this repository's recall.** The managed
 `docs/harness/token-rules.md` waits on a target's recall sets; here they are
