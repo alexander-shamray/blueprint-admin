@@ -121,8 +121,9 @@ Checks are `bash .claude/scripts/host-checks.sh` and
 
 ## Hard rules
 
-Each is argued in [`docs/working-rules.md`](docs/working-rules.md). The harness
-half (uncommitted work, branch updates, a red `main`, commit messages, review
+Each carries its reason, or is argued in
+[`docs/working-rules.md`](docs/working-rules.md) or
+[`docs/change-locality.md`](docs/change-locality.md) §6. The harness half (uncommitted work, branch updates, a red `main`, commit messages, review
 threads, the task list, `.claude/`) is `.harness/agent-rules.md`'s, imported
 below, and `docs/harness/working-rules.md`'s.
 

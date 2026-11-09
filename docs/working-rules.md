@@ -4,8 +4,8 @@ What only this repository adds to the rules every target on the harness shares.
 Those are `.harness/agent-rules.md`, which every session loads, and
 `docs/harness/working-rules.md`, read before the act each of its sections names;
 neither is restated here. `CLAUDE.md` keeps this repository's hard rules as one
-line each and cites the section below that argues it. Read the section for what
-you are about to touch; the file is not for reading whole.
+line each, and the sections below argue those that need it. Read the section for
+what you are about to touch; the file is not for reading whole.
 
 ## Build policy
 
@@ -76,17 +76,15 @@ has stay here.
 
 - **Every `ci` job also runs on the push to `main`**, `commits` included,
   which builds the commits the landing replayed onto a `main` their pull
-  request was never tested against. `commit-gate.yml`, `locality-gate.yml`,
-  `closure-gate.yml`, `comment-gate.yml` and `harness-drift.yml` run on pull
-  requests alone, and that gap is accepted: they judge a range's trailers, a
-  body's touch set and closures, its added lines and the managed files, which
-  landing does not change.
+  request was never tested against. The gates *CI* names run on pull requests
+  alone, and so does `locality-gate.yml`, and here that gap is accepted: landing
+  does not change what they judge.
 - **A red `main` is an issue because of
   [`main-red.yml`](../.github/workflows/main-red.yml)**, which turns a failed
   `ci` run on `main`'s tip into one, which outlives the run and the mail, and
-  closes it on the next green run. A revert runs `git-revert-pr.sh` and a flake's
-  rerun `gh run rerun <run> --failed`, each by hand, as no command grants them
-  (`docs/harness-boundaries.md`).
+  closes it on the next green run. A revert runs `git-revert-pr.sh` and a
+  flake's rerun `gh run rerun <run> --failed`, each by hand, as neither
+  `.claude/settings.json` nor a command grants them.
 
 ## One owner per fact
 
