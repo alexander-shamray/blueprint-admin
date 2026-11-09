@@ -102,8 +102,8 @@ forms.
 3. **Run cheap gates when the range touches them:**
    `bash .claude/scripts/host-checks.sh [all|fast]` and
    `bash .claude/scripts/npm-checks.sh [all|fast|lint|test|build]` for `src/`
-   or toolchain files; `bash .claude/scripts/harness-checks.sh` for
-   `.claude/**`, `.github/locality-gate/**` or `tools/**`. The Playwright suite is CI's
+   or toolchain files; `bash .claude/scripts/harness-checks.sh` for what
+   `docs/harness-local.md`, *Ship checks*, names. The Playwright suite is CI's
    `smoke` job: say it was not run, never imply it was.
 4. **Author findings only when verified.** Quote the conflicting sites.
    Severity: **bug** | **suggestion** | **nit**.

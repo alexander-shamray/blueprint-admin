@@ -153,8 +153,8 @@ already correct — are also non-findings.
      toolchain reads:
      `bash .claude/scripts/host-checks.sh [all|fast]` and
      `bash .claude/scripts/npm-checks.sh [all|fast|lint|test|build]`
-   - The harness suite, when the range touches `.claude/**`,
-     `.github/locality-gate/**` or `tools/**`:
+   - The harness suite, when the range touches what
+     `docs/harness-local.md`, *Ship checks*, names for it:
      `bash .claude/scripts/harness-checks.sh`
 
    **The Playwright suite is nobody's gate here.** It needs the Host under
