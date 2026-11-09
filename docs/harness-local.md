@@ -162,7 +162,8 @@ no longer refuses on a fault; the `harness` job does.
 
 **The output gate does not run here yet.** `.github/output-gate/output_gate.py`
 reads a solution named `Platform.slnx`, and this repository's is
-`BlueprintAdmin.slnx`, so its suite runs and its invocation waits on the payload.
+`BlueprintAdmin.slnx`, so its suite runs and its invocation waits on the payload
+(blueprint-harness#315).
 
 ## Review examples
 
