@@ -82,23 +82,24 @@ the trust boundary stands** (#310). `/ship` can write `src/**`, `tests/**` and
 `tools/**` beside `host-checks.sh`, `npm-checks.sh` and `harness-checks.sh`,
 which run what the tree holds, so a written test, spec or
 `tools/token-usage/test_*.py` module executes as host code no hook judges. That
-is the job, so the residual is stated and not closed: the unattended chain's only
-input is the branch it works on, the review reads the diff before the merge, and
-`/ship` step 6 merges only once every check on the pushed head has passed.
-`main`'s ruleset (`protect-main`, id 23805274) carries the required checks, so a
-merge outside `/ship` waits on them too (#530). A required check is matched by
-its job's name, so it holds a red or missing job and not one a pull request
-rewrote under the same name: that is the review's to read.
+is the job, so the residual is stated and not closed: the unattended chain's
+only input is the branch it works on, the review reads the diff before the
+merge, and `/ship` step 6 merges only once every check on the pushed head has
+passed. `main`'s ruleset (id 23805274) carries the required checks, so a merge
+outside `/ship` waits on them too (#530). A required check is matched by its
+job's name, so it holds a red or missing job and not one a pull request rewrote
+under the same name: that is the review's to read.
 
 **A project file stays editable, and the pin gate is what holds it** (#542,
 #547). `*.csproj` is MSBuild that `host-checks.sh` runs, the same class of input
 as `src/**`, and a supply-chain input the denied `Directory.Packages.props` does
-not close: it can name its own version with `VersionOverride`, opt out of central
-management or add a feed. `.github/pin-gate/` refuses each in CI. A session can
-edit that gate too, since `.github/**` is not denied here, a deny on it being a
-new stop on ordinary CI work: CI's read of the head and the review hold it.
-`/style-pass` used to deny `*.csproj` in its frontmatter; a managed command has no
-per-target line and a settings deny would also stop `/ship`, so that is lost.
+not close: it can name its own version with `VersionOverride`, opt out of
+central management or add a feed. `.github/pin-gate/` refuses each in CI. A
+session can edit that gate too, since `.github/**` is not denied here, a deny on
+it being a new stop on ordinary CI work: CI's read of the head and the review
+hold it. `/style-pass` used to deny `*.csproj` in its frontmatter; a managed
+command has no per-target line and a settings deny would also stop `/ship`, so
+that is lost.
 
 **The files MSBuild and NuGet load without being asked are denied by name**
 (#311). `Directory.Build.targets` and `.rsp`, `Directory.Solution.props` and
@@ -106,54 +107,58 @@ per-target line and a settings deny would also stop `/ship`, so that is lost.
 `before.`/`after.`/plain `.slnx.targets` are untracked, so no listing of tracked
 files reaches them, yet an `Exec` in one runs under the granted `host-checks.sh`
 and the build reports success. The root `nuget.config`, which names the GitHub
-Packages feed the assistant's core restores from (#435), may be tracked and stays
-denied like the rest, so a change to it is the owner's. `.harness/config.json`
-denies them at the root in both spellings and by family at any depth, with
-`MSBuild.rsp`, any `global.json`, `Directory.Packages.*`, `*.csproj.user` and any
-`obj` tree, where a restore that finds nothing changed does not rewrite a planted
-`*.nuget.g.targets`. Not covered: a `Directory.Build.props` above the checkout,
-which the edit guard's outside-the-checkout rule judges.
+Packages feed the assistant's core restores from (#435), may be tracked and
+stays denied like the rest, so a change to it is the owner's.
+`.harness/config.json` denies them at the root in both spellings and by family
+at any depth, with `MSBuild.rsp`, any `global.json`, `Directory.Packages.*`,
+`*.csproj.user` and any `obj` tree, where a restore that finds nothing changed
+does not rewrite a planted `*.nuget.g.targets`. Not covered: a
+`Directory.Build.props` above the checkout, which the edit guard's
+outside-the-checkout rule judges.
 
 **The SPA toolchain is editable, and the granted runners execute it.** This
-repository's `/ship`, `/pr` and `/style-pass` denied `package.json`,
-`angular.json`, `tsconfig`, the eslint and prettier configs and `**/*.config.*`
-in their frontmatter, which the payload's commands do not carry, and
-`npm-checks.sh` and `spa-ci.sh` are settings allows that hold every turn. A
-session can therefore edit a script or a config and run it with no prompt, as it
-already can with a spec through `npm test`. No settings deny replaces them, since
-25 edits in three weeks were ordinary Class E and tooling work; review and CI
-stand. Only `.npmrc`, which no session edited and which moves the registry
-`spa-ci.sh` installs from, is denied. `/style-pass` edits `eslint.config.js` and
-runs the linter it configures, which is the pass's job. `*.config.ts` was never
-denied as a family, since Angular's tracked `app.config.ts` is a providers file.
+repository's `/ship` and `/pr` denied `package.json`, `angular.json`, `tsconfig`,
+the eslint and prettier configs and `**/*.config.*` in their frontmatter, and
+`/style-pass` all of those but `*.config.ts`. The payload's commands carry none
+of it, and `npm-checks.sh` and `spa-ci.sh` are settings allows that hold every
+turn. A session can therefore edit a script or a config and run it with no
+prompt, as it already can with a spec through `npm test`. No settings deny
+replaces them, since 25 edits in three weeks were ordinary Class E and tooling
+work; review and CI stand. Only `.npmrc`, which no session edited and which
+moves the registry `spa-ci.sh` installs from, is denied. `/style-pass` edits
+`eslint.config.js` and runs the linter it configures, which is the pass's job.
+Only the local `/review-branch` still denies the executed configs, and
+`test_the_auto_load_surface_is_denied` holds that list.
 
-**The auto-mode classifier has refused `/ship`'s merge, and no grant in this tree
-answers it** (#613). Under a user-level `"defaultMode": "auto"`,
-`gh-pr-merge.sh` was refused as "Merge Without Review" with every step 6 gate read
-in the same turn: it refused #611, #612 and #614 and let #609 through. The owner's
-`autoMode.environment` already trusted this repository's `origin` throughout, so
-trust was not the remedy; the owner added an `autoMode.allow` entry on 2026-11-01,
-#615 then landed unrefused and #613 closed. One landing is not a proof, so a new
-refusal stays `/ship`'s stop with the owner's line, and reopens #613.
+**The auto-mode classifier has refused `/ship`'s merge, and no grant in this
+tree answers it** (#613). Under a user-level `"defaultMode": "auto"`,
+`gh-pr-merge.sh` was refused as "Merge Without Review" with every step 6 gate
+read in the same turn: it refused #611, #612 and #614 and let #609 through. The
+owner's `autoMode.environment` already trusted this repository's `origin`
+throughout, so trust was not the remedy; the owner added an `autoMode.allow`
+entry on 2026-11-01, #615 then landed unrefused and #613 closed. One landing is
+not a proof, so a new refusal stays `/ship`'s stop with the owner's line, and
+reopens #613.
 
 **A session writes the task list by its own path.** The file sits outside every
 checkout, and the edit guard admits that one file (`docs/working-rules.md` says
-which). Under `acceptEdits` the write prompts unless the user's settings list the
-directory under `additionalDirectories`; auto mode wrote it unprompted when
-blueprint-backend#1590 measured it. The main checkout's root may hold a gitignored
-`TODO.md` link for the user's editor; the guard refuses a write through it.
+which). Under `acceptEdits` the write prompts unless the user's settings list
+the directory under `additionalDirectories`; auto mode wrote it unprompted when
+blueprint-backend#1590 measured it. The main checkout's root may hold a
+gitignored `TODO.md` link for the user's editor; the guard refuses a write
+through it.
 
 **A cheaper reviewer or model answers to this repository's recall.** The managed
 `docs/harness/token-rules.md` waits on a target's recall sets; here they are
-`docs/token-quality-sets.md`. To claim a reviewer or a prompt change, check out a
-row's merge base so the defect is present, run the candidate, count a row found
-when a finding names its file and the same fault, and hold the count at no fewer
-than the baseline that file records. A cut that loses a finding is not a saving
-(`docs/token-plan.md`, §3).
+`docs/token-quality-sets.md`. To claim a reviewer or a prompt change, check out
+a row's merge base so the defect is present, run the candidate, count a row
+found when a finding names its file and the same fault, and hold the count at no
+fewer than the baseline that file records. A cut that loses a finding is not a
+saving (`docs/token-plan.md`, §3).
 
 **The lockfile leaves the sweep's helper.** This repository's own
-`sweep-slices.sh` counted `src/Admin.Web/package-lock.json` as generated and read
-it mechanically. The payload's helper reads no lockfile, so
+`sweep-slices.sh` counted `src/Admin.Web/package-lock.json` as generated and
+read it mechanically. The payload's helper reads no lockfile, so
 `.harness/sweep-rows.tsv` gives it a `samples` row, which counts a file with no
 fence unread, and `TheLockfile` in `.claude/scripts/test_sweep_slices_admin.py`
 holds the two promises instead: every `resolved` on the npm registry over https,
@@ -162,8 +167,9 @@ no longer refuses on a fault; the `harness` job does.
 
 **The output gate does not run here yet.** `.github/output-gate/output_gate.py`
 reads a solution named `Platform.slnx`, and this repository's is
-`BlueprintAdmin.slnx`, so its suite runs and its invocation waits on the payload
-(blueprint-harness#315).
+`BlueprintAdmin.slnx`, so its invocation waits on the payload
+(blueprint-harness#315). Its suite and the plan-size gate's join CI with plan 6
+Task 8, which adds the new gate directories.
 
 ## Review examples
 
