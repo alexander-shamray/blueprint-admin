@@ -4,7 +4,7 @@ The payload's suites hold everything shared. What stays here reads this reposito
 npm toolchain, the settings its config renders, or a script `.harness/config.json` keeps local.
 
 Run: py -3.12 -m unittest test_harness_helpers_admin, from .claude/scripts.
-Needs bash, git and jq on PATH; needs no network, no Docker, no gh and no SDK.
+Needs bash and git on PATH; needs no network, no Docker, no gh and no SDK.
 """
 
 import importlib.util
@@ -24,7 +24,6 @@ HOOK = SCRIPTS.parent / "hooks" / "guard-git-argv.py"
 
 BASH = shutil.which("bash")
 GIT = shutil.which("git")
-JQ = shutil.which("jq")
 
 
 def setUpModule():
@@ -34,7 +33,7 @@ def setUpModule():
     # these, this suite has established nothing and says so.
     missing = [
         name for name, path in
-        (("bash", BASH), ("git", GIT), ("jq", JQ))
+        (("bash", BASH), ("git", GIT))
         if path is None
     ]
     if missing:
