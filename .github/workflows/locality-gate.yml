@@ -167,8 +167,9 @@ jobs:
       # The head copy, deliberately: this step's subject is the gate this pull
       # request proposes. The suite is negative cases with the positive
       # controls beside them — a clean diff that must pass, a matcher that must
-      # match — plus reads of the shipped map, so a proposal that fails its own
-      # suite belongs red here. Last, for the order argued at the top.
+      # match — plus reads of the shipped map and workflows, so a proposal that
+      # fails its own suite belongs red here. Last, for the order argued at the
+      # top.
       - name: Test the proposed gate
         if: steps.dependabot.outputs.own != 'true'
         working-directory: .github/locality-gate
