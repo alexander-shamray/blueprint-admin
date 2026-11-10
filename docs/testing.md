@@ -148,6 +148,20 @@ py -3.12 .github/pin-gate/judge_build.py artifacts/build.binlog
 Its suite's live cases, which build a repository made for each case, skip
 where no .NET SDK runs.
 
+## Output gate
+
+`python -m unittest` in `.github/output-gate/` is the gate's own suite, which
+the `gates` job runs. The gate reads what a build left, so `ci.yml` runs it on
+both `host` legs after the Release build's judge and before the tests; run on
+its own it needs a restore and a build in front of it:
+
+```bash
+dotnet build BlueprintAdmin.slnx
+py -3.12 .github/output-gate/output_gate.py
+```
+
+What it reads and claims is [its README](../.github/output-gate/README.md)'s.
+
 ## Issue-form gate
 
 `python -m unittest` in `.github/issue-form-gate/` is the gate's own suite,
