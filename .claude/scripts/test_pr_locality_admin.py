@@ -117,7 +117,7 @@ class TheVerdict(Case):
             ["class A+D", "inside src/Admin.Host/Jobs/X.cs", "inside docs/b.md", "outside docs/c.md"], result.stdout.splitlines())
 
     def test_a_reason_after_the_closing_backtick_is_dropped_unread(self):
-        # #659: the form `/pr` prescribes for a widened token, which the gate reads too
+        # The form `/pr` prescribes for a widened token, which the gate reads too
         # (`.github/locality-gate/test_locality_gate.py`); the reason's comma and braces are its own.
         result = self.run_helper(
             body("D", "`docs/a.md` (added: a cite, {and} more), docs/b.md"), files=("docs/a.md", "docs/b.md"))
