@@ -247,8 +247,9 @@ def _split_outside_braces(cell: str) -> list[str]:
 
 # Where a widened token's reason goes (docs/change-locality.md section 3).
 # Said by the backtick and not-a-path-list refusals of the Touch set row,
-# which a reason out of form reaches; one holding an unbalanced `{`/`}` or a
-# `|` meets the brace or cell refusal first, and those name their own fault.
+# which a reason out of form reaches; a `|` meets the cell refusal first, and
+# an unbalanced `{`/`}` outside a reason's parenthesis the brace refusal,
+# and those name their own fault.
 TOUCH_SET_HINT = (
     "a widened token takes its reason after its closing backtick, as `docs/x.md` (added: why), "
     "and a reason outside that form goes in a sentence below the table"
