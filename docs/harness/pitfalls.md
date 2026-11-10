@@ -98,6 +98,14 @@ when a step behaves unexpectedly.
 
 ## Git and worktrees
 
+- **`git pull --ff-only` failing with `Cannot fast-forward to multiple
+  branches`.** One `/ship` step 0 sent a pull in the same message as
+  `git-worktree-fork.sh`, and the pull failed so on a `main` with one merge
+  source; run alone it passed at once. The helper runs no fetch, so another
+  fetch writing `FETCH_HEAD` at that moment, such as another session's in
+  the same checkout, is the inferred cause, not a reproduced one. Safe:
+  rerun the pull alone; sending it in a message of its own is a precaution
+  only, since it does not stop another session's fetch.
 - **`EnterWorktree` outside `.claude/worktrees/` prompts**, and no
   permission rule suppresses it, so an unattended chain waits on a human.
   Safe: worktrees live under `.claude/worktrees/<slug>`, which `/branch`
