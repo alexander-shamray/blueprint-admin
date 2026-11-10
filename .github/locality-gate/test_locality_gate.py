@@ -147,7 +147,7 @@ class TouchSetGrammar(unittest.TestCase):
             read_rows(body("A", "`src/**"))
 
     def test_a_reason_after_the_closing_backtick_is_dropped_unread(self) -> None:
-        # #659: the form `/pr` prescribes for a widened token; the reason's
+        # The form `/pr` prescribes for a widened token; the reason's
         # comma and braces are its own, not a split or a glob.
         _, tokens = read_rows(body("D", "`docs/x.md` (added: a cite, {and} more), `docs/y.md`, docs/z.md"))
         self.assertEqual(tokens, ["docs/x.md", "docs/y.md", "docs/z.md"])

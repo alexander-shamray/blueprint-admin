@@ -62,11 +62,11 @@ cannot be true of the system described — not pure style taste. Prefer:
    so the helper consumes the cell and only its own two words leave. Each
    `outside` line is a finding, and its resolution is a narrower diff, a
    row widened with its reason beside the token, in the form §3 gives,
-   when the path is inside the class's tree set, or a different class when it is not —
-   never a row
-   widened silently (`docs/change-locality.md` §3). Where the helper prints
-   nothing or cannot run — a `--local` review with no PR yet, or a body
-   carrying neither row — say so
+   when the path is inside the class's tree set, or a different class
+   when it is not — never a row widened silently
+   (`docs/change-locality.md` §3). Where the helper prints nothing or
+   cannot run — a `--local` review with no PR yet, or a body carrying
+   neither row — say so
    and skip this check rather than inferring a class. **CI also enforces
    both rows** via `.github/workflows/locality-gate.yml`. This helper is an
    early read of the same verdict, so a skipped or unparseable result leaves

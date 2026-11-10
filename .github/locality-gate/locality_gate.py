@@ -28,10 +28,7 @@ The glob dialect and the row grammar are `pr-locality.sh`'s. `**` crosses
 directories, `*` and `?` do not, `{a,b}` is an alternation, a token also
 covers everything beneath the directory it names, and every token is
 repository-relative: no leading `/`, no `./`, no `..` segment, brace
-alternatives included. A backticked token may carry its reason after it, as
-`` `docs/x.md` (added: why) ``: one parenthesis holding no backtick and no
-nested one, whose commas and braces are its own, dropped unread; a bare token
-takes none. The harness helper cannot run Python under its grant,
+alternatives included. The harness helper cannot run Python under its grant,
 and CI fetches its own payload, `changedFiles` and the files endpoint included,
 rather than the helper's field set, so the grammar has two implementations,
 which must accept and refuse the same tokens.
