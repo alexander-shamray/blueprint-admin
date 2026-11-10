@@ -53,6 +53,12 @@ jobs:
         env:
           GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} .github/pin-gate/judge_build.py ${{ runner.temp }}/release.binlog
+      # The output gate (.github/output-gate/README.md): no bin/ or obj/ beside
+      # the source, and every project restored and built into artifacts/. It
+      # reads what the builds above left, so it runs behind both and before the
+      # tests, on both legs, since each runner's build is its own.
+      - name: No build output landed beside the source
+        run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} .github/output-gate/output_gate.py
       - run: dotnet test --configuration Release --no-build
 
   # The owner-drift gate: the facts this console copies, read against the
