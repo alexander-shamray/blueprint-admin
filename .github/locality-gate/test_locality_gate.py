@@ -127,8 +127,11 @@ class TouchSetGrammar(unittest.TestCase):
             read_rows(body("A+A", "`docs/**`"))
 
     def test_three_classes_are_refused(self) -> None:
-        with self.assertRaisesRegex(InputRefused, "Class row is not a class"):
-            read_rows(body("A+B+C", "`docs/**`"))
+        # A+D+E too, which the managed pr-locality.sh reads: section 3 here
+        # admits no three-member class.
+        for cell in ("A+B+C", "A+D+E"):
+            with self.subTest(cell=cell), self.assertRaisesRegex(InputRefused, "Class row is not a class"):
+                read_rows(body(cell, "`docs/**`"))
 
     def test_an_empty_touch_set_is_refused(self) -> None:
         with self.assertRaisesRegex(InputRefused, "Touch set row is empty"):

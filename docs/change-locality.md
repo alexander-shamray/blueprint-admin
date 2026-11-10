@@ -52,7 +52,9 @@ restatement.
 ## 3. Change classes
 
 Name the class and the touch set before editing. A change that needs two
-classes names both (`C+E`, `A+D`) and its touch set is the union.
+classes names both (`C+E`, `A+D`) and its touch set is the union. None takes
+three: the `A+D+E` that `/pr` admits is backend's, for a service's own work,
+and this repository has no service, so the gate refuses it.
 
 **CI reads both rows.** `.github/workflows/locality-gate.yml` fails a PR on a
 path outside the class map or the declared touch set. `/review-branch`

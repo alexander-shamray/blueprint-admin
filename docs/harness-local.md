@@ -141,6 +141,13 @@ entry on 2026-11-01, #615 then landed unrefused and #613 closed. One landing is
 not a proof, so a new refusal stays `/ship`'s stop with the owner's line, and
 reopens #613.
 
+**The managed `pr-locality.sh` reads class `A+D+E`, and the gate here refuses
+it.** `/pr` admits the one three-member class backend's contract argues; this
+repository's `docs/change-locality.md` section 3 admits none, so
+`.github/locality-gate/locality_gate.py` refuses the cell. A body naming
+`A+D+E` gets a verdict from the helper and goes red in CI; the class is the
+fault, and two classes, or two pull requests, are the answer.
+
 **A session writes the task list by its own path.** The file sits outside every
 checkout, and the edit guard admits that one file (`.harness/config.json`
 `task_list` names it). Under `acceptEdits` the write prompts unless the user's
