@@ -116,6 +116,15 @@ class TheVerdict(Case):
         self.assertEqual(
             ["class A+D", "inside src/Admin.Host/Jobs/X.cs", "inside docs/b.md", "outside docs/c.md"], result.stdout.splitlines())
 
+    def test_a_reason_after_the_closing_backtick_is_dropped_unread(self):
+        # #659: the form `/pr` prescribes for a widened token, which the gate reads too
+        # (`.github/locality-gate/test_locality_gate.py`); the reason's comma and braces are its own.
+        result = self.run_helper(
+            body("D", "`docs/a.md` (added: a cite, {and} more), docs/b.md"), files=("docs/a.md", "docs/b.md"))
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(["class D", "inside docs/a.md", "inside docs/b.md"], result.stdout.splitlines())
+
     def test_the_touch_set_cell_is_never_printed(self):
         result = self.run_helper(body("D", "docs/**"))
 
@@ -157,6 +166,8 @@ class TheRefusalsMirrorTheGate(Case):
         ("an unbalanced backtick", "D", "`docs/a.md", "an unbalanced backtick"),
         ("a reason beside a path", "D", "`docs/a.md` because", "an unbalanced backtick"),
         ("a reason as its own item", "D", "docs/a.md, because we need it", "is not a path list"),
+        ("a reason outside its grammar", "D", "`docs/a.md` (added `why`)", "has a reason outside its grammar"),
+        ("an unclosed reason", "D", "`docs/a.md` (added: why, `docs/b.md`", "has an unbalanced parenthesis"),
         ("an unbalanced opening brace", "D", "docs/{a,b.md", "has an unbalanced brace"),
         ("an unbalanced closing brace", "D", "docs/a,b}.md", "has an unbalanced brace"),
         ("prose", "D", "just some words", "is not a path list"),
