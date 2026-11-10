@@ -1,5 +1,5 @@
 {
-  "harness_commit": "054486a50cd6faea1dec978cc6085b75d13d7a80",
+  "harness_commit": "ebdf2e5b152919a1e5524f661411ec8937a57edb",
   "files": {
     ".claude/agents/branch-reviewer.md": "c6bdaa06cfa86d674b80afc2180d58d27e0c277bbc6e2280bf46102339385740",
     ".claude/agents/bug-auditor.md": "6219201313c10252798ff249570298f4de6ad6a66690f3dc40510fd76859b4d7",
@@ -140,9 +140,9 @@
     ".github/closure-gate/README.md": "a7b49a6a3f54a63734a5e6c477100ee855873adecb34de8141a516ad514f16ef",
     ".github/closure-gate/closure_gate.py": "cb7e8ff5627d48cdfeb6cb23c2a0d6f6184db38446d8f00318b296a639cd1fe8",
     ".github/closure-gate/test_closure_gate.py": "e5cd29771fd9f8455c21441d96051c17a38cd8c5fb75bf2fc7ccfbb13ace8222",
-    ".github/comment-gate/README.md": "f1b9b8b55c3ef8f5a4c45a7ec07b3ed06057e5e23fb2af0e5ca9d956c938c7f7",
-    ".github/comment-gate/comment_gate.py": "8228cbc5c3c1d4db1d521d807140c79902c5c40782a451601bc9e6c37af71278",
-    ".github/comment-gate/test_comment_gate.py": "b8dcb360f7a0035c1fc178ef081ab8d2d378e4359006a22394ab01cca01d1e4d",
+    ".github/comment-gate/README.md": "df037dd71936bafefa671f7d4bc3f0860f56f360c5570caa064472fa0c60354a",
+    ".github/comment-gate/comment_gate.py": "7666c26d7839504e014bd83d3fee517892343c2eeb29d4b38424f959f048036c",
+    ".github/comment-gate/test_comment_gate.py": "b4ea856d4baf8f2d17177209a80707eaf7980a126e45ecf11e932ca8283d87b2",
     ".github/commit-gate/README.md": "e249105d15fcf0124cc80f314ae6b6fbff01882ad1520445f1a76f391d82d0fe",
     ".github/commit-gate/commit_gate.py": "4a7d8b14dc702e48b0931872af0153a725c01c79bb0324888109ac979a060fbc",
     ".github/commit-gate/test_commit_gate.py": "eafab74dbeba6fa1fce02eca5b70416daacb4c729c66efe0c120734940cbe1ee",
@@ -174,7 +174,7 @@
     "docs/commands/ship.md": "78e1b65fb1c46037f26c37b0d25dee46d61dc78a225435f3b4467f86fce3f354",
     "docs/commands/team.md": "1cdc4bcab8a82727ec98ab1a56d0420d115fc37e6f4b8075dad8c7cfdd8311b2",
     "docs/harness-boundaries.md": "4f035f0c4b68788e744e23224a879f6c2818d65302da04a56327f4f87a287bf3",
-    "docs/harness/pitfalls.md": "b3651992be53669bc36c1e1144a6fb23f5704aeb47e9779cb0c8ef6f73d971ee",
+    "docs/harness/pitfalls.md": "c4f0bc2d370c52dff440ca1e1787f2f389a7faa046b7faf11714cdbee2ee51e4",
     "docs/harness/token-rules.md": "cd83a078de693e468130242357b1eb6994df7e5beb0fad5c5dff510c6e4c7300",
     "docs/harness/working-rules.md": "8d1d48808a2767ed3ad4ac21cc864e36e2b05a642c4e8873b55cfb9ba6c2a9b9"
   }
