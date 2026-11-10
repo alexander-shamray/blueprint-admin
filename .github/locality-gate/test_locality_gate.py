@@ -146,10 +146,21 @@ class TouchSetGrammar(unittest.TestCase):
         with self.assertRaisesRegex(InputRefused, "unbalanced backtick"):
             read_rows(body("A", "`src/**"))
 
-    def test_a_reason_beside_a_path_is_refused_naming_where_it_goes(self) -> None:
-        # #308: /pr once said to widen the row "with its reason beside it".
-        with self.assertRaisesRegex(InputRefused, "below the table"):
-            read_rows(body("A", "`docs/a.md`, `docs/b.md` (added in review)"))
+    def test_a_reason_after_the_closing_backtick_is_dropped_unread(self) -> None:
+        # #659: the form `/pr` prescribes for a widened token; the reason's
+        # comma and braces are its own, not a split or a glob.
+        _, tokens = read_rows(body("D", "`docs/x.md` (added: a cite, {and} more), `docs/y.md`, docs/z.md"))
+        self.assertEqual(tokens, ["docs/x.md", "docs/y.md", "docs/z.md"])
+
+    def test_a_reason_outside_its_grammar_is_refused(self) -> None:
+        # A backtick in it, a nested parenthesis, or text after it.
+        for cell in ("`docs/x.md` (added `why`)", "`docs/x.md` (added (why))", "`docs/x.md` (added) trailing"):
+            with self.subTest(cell=cell), self.assertRaisesRegex(InputRefused, "reason outside its grammar"):
+                read_rows(body("D", cell))
+
+    def test_an_unclosed_reason_is_refused(self) -> None:
+        with self.assertRaisesRegex(InputRefused, "unbalanced parenthesis"):
+            read_rows(body("D", "`docs/x.md` (added: why, `docs/y.md`"))
 
     def test_a_reason_as_its_own_item_or_beside_a_bare_path_names_where_it_goes(self) -> None:
         for row in ("`docs/a.md`, added in review", "docs/a.md (added in review)"):

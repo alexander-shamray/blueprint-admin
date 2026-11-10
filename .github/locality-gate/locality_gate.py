@@ -28,7 +28,10 @@ The glob dialect and the row grammar are `pr-locality.sh`'s. `**` crosses
 directories, `*` and `?` do not, `{a,b}` is an alternation, a token also
 covers everything beneath the directory it names, and every token is
 repository-relative: no leading `/`, no `./`, no `..` segment, brace
-alternatives included. The harness helper cannot run Python under its grant,
+alternatives included. A backticked token may carry its reason after it, as
+`` `docs/x.md` (added: why) ``: one parenthesis holding no backtick and no
+nested one, whose commas and braces are its own, dropped unread; a bare token
+takes none. The harness helper cannot run Python under its grant,
 and CI fetches its own payload, `changedFiles` and the files endpoint included,
 rather than the helper's field set, so the grammar has two implementations,
 which must accept and refuse the same tokens.
@@ -76,6 +79,11 @@ _TOKEN = re.compile(r"^[A-Za-z0-9_./*?{},()@+-]+$")
 # A changed path, as the diff names it. Narrower than a token by every
 # glob character; the same set pr-locality.sh admits.
 _PLAIN_PATH = re.compile(r"^[A-Za-z0-9_./@+()-]+$")
+# A widened token's reason, the form `/pr` prescribes: a backticked token, a
+# space and one parenthesis holding no backtick and no nested parenthesis.
+# The pattern is pr-locality.sh's, and the reason is dropped unread.
+_REASONED = re.compile(r"(`[^`]+`)[ \t\n\r\f\v]+\([^`()]*\)")
+_REASON_OPENED = re.compile(r"`[^`]+`[ \t\n\r\f\v]+\(.*", re.DOTALL)
 
 _CLASS_ROW = re.compile(r"^\| *Class *\|(.*)$")
 _TOUCH_ROW = re.compile(r"^\| *Touch set *\|(.*)$")
@@ -180,13 +188,19 @@ def _read_touch_set(rest: str) -> list[str]:
         raise InputRefused("the Touch set row is empty")
     tokens = []
     for item in _split_outside_braces(cell):
-        token = item.strip()
+        token = item.strip(" ")
+        reasoned = _REASONED.fullmatch(token)
+        if reasoned:
+            token = reasoned.group(1)
+        elif _REASON_OPENED.fullmatch(token):
+            # Named as a reason, not as the backtick it would otherwise read as.
+            raise InputRefused("the Touch set row has a reason outside its grammar")
         if token.startswith("`") and token.endswith("`") and len(token) >= 2:
             token = token[1:-1]
         elif "`" in token:
             raise InputRefused(
                 "the Touch set row has an item that is not one path: an "
-                "unbalanced backtick, or text beside a path. The cell holds paths only; "
+                "unbalanced backtick, or text beside a path that is not a reason. "
                 + TOUCH_SET_HINT
             )
         tokens.append(_normalise_token(token, where="the Touch set row"))
@@ -194,9 +208,24 @@ def _read_touch_set(rest: str) -> list[str]:
 
 
 def _split_outside_braces(cell: str) -> list[str]:
+    # A `(` outside backticks and after whitespace opens a reason, whose
+    # commas and braces are its own; pr-locality.sh splits the same way.
     items, current, depth = [], "", 0
+    in_backticks, reason_depth, previous = False, 0, ""
     for character in cell:
-        if character == "{":
+        if reason_depth:
+            if character == "(":
+                reason_depth += 1
+            elif character == ")":
+                reason_depth -= 1
+            current += character
+            previous = character
+            continue
+        if character == "`":
+            in_backticks = not in_backticks
+        elif character == "(" and not in_backticks and previous and previous in " \t\n\r\f\v":
+            reason_depth = 1
+        elif character == "{":
             depth += 1
         elif character == "}":
             depth -= 1
@@ -204,20 +233,26 @@ def _split_outside_braces(cell: str) -> list[str]:
                 raise InputRefused("the Touch set row has an unbalanced brace")
         elif character == "," and depth == 0:
             items.append(current)
-            current = ""
+            current, previous = "", ""
             continue
         current += character
+        previous = character
+    if reason_depth:
+        raise InputRefused("the Touch set row has an unbalanced parenthesis")
     if depth != 0:
         raise InputRefused("the Touch set row has an unbalanced brace")
     items.append(current)
     return items
 
 
-# Where a widened row's reason goes (docs/change-locality.md section 3). Said
-# by the backtick and not-a-path-list refusals of the Touch set row, which a
-# plain-words reason reaches; one holding an unbalanced `{`/`}` or a `|` meets
-# the brace or cell refusal first, and those name their own fault.
-TOUCH_SET_HINT = "a widened row's reason goes in a sentence below the table"
+# Where a widened token's reason goes (docs/change-locality.md section 3).
+# Said by the backtick and not-a-path-list refusals of the Touch set row,
+# which a reason out of form reaches; one holding an unbalanced `{`/`}` or a
+# `|` meets the brace or cell refusal first, and those name their own fault.
+TOUCH_SET_HINT = (
+    "a widened token takes its reason after its closing backtick, as `docs/x.md` (added: why), "
+    "and a reason outside that form goes in a sentence below the table"
+)
 
 
 def _normalise_token(token: str, *, where: str) -> str:
@@ -371,8 +406,7 @@ def check(payload: dict, class_map: dict[str, list[str]]) -> list[str]:
         if not any(match(path) for match in own):
             problems.append(
                 f"`{path}` is outside the declared touch set; docs/change-locality.md section 3: "
-                f"narrow the diff, or add the path to the `| Touch set |` row and state its reason "
-                f"in a sentence below the table"
+                f"narrow the diff, or add the path to the `| Touch set |` row with its reason beside it"
             )
     return problems
 
