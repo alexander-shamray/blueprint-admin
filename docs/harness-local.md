@@ -148,13 +148,12 @@ repository's `docs/change-locality.md` section 3 admits none, so
 `A+D+E` gets a verdict from the helper and goes red in CI; the class is the
 fault, and two classes, or two pull requests, are the answer.
 
-**A session writes the task list by its own path.** The file sits outside every
-checkout, and the edit guard admits that one file (`.harness/config.json`
-`task_list` names it). Under `acceptEdits` the write prompts unless the user's
-settings list the directory under `additionalDirectories`; auto mode wrote it
-unprompted when blueprint-backend#1590 measured it. The main checkout's root
-may hold a gitignored `TODO.md` link for the user's editor; the guard refuses a
-write through it.
+**A session reaches the task list only through `dispatch_board.py tasks`.** The
+file sits outside every checkout; the granted run-less `tasks` calls find it
+from the main checkout's `.harness/config.json` `task_list`, from a worktree as
+well, and `.harness/agent-rules.md`, *Working in a target*, says no session
+edits it by hand. The main checkout's root may hold a gitignored `TODO.md` link
+for the user's editor; the edit guard refuses a write through it.
 
 **A cheaper reviewer or model answers to this repository's recall.** The managed
 `docs/harness/token-rules.md` waits on a target's recall sets; here they are
