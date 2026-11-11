@@ -20,13 +20,10 @@ permissions:
   # whole of what it needs; it changes nothing and posts nothing.
   pull-requests: read
 
-# No concurrency group, as in closure-gate.yml: each run reads the body and the
-# file list as they are when it runs, and a run the group cancelled stays on the
-# head as a required check reading CANCELLED that blocks the merge. A push and a
-# body edit land together whenever Dependabot rebases, so two runs start for one
-# head and either can finish last. Keying the group by the head as well changes
-# nothing there, since both runs share it, and `cancel-in-progress: false`
-# still cancels a waiting run when a third event, or a rerun, queues behind it.
+# No concurrency group, as in closure-gate.yml: a Dependabot rebase pushes and
+# edits the body at once, and a run the group cancelled stays on that head as a
+# required check reading CANCELLED. A group keyed by head too is shared by both
+# runs, and `cancel-in-progress: false` still cancels a waiting run.
 # TheGatesConcurrency in test_locality_gate.py reads that there is none.
 
 # Proposal and enforcement are two executions, on the closure gate's design:
