@@ -63,8 +63,8 @@ dialects, and owns what a comment says.
   gateway returned them. A fake's answer is recorded from the live service
   where one can be, and says where it is not.
 - **The task list** is `.harness/agent-rules.md`, *Working in a target*, for
-  where it lives and when it changes, and `docs/harness/task-list.md`,
-  *Where a row sits*, for where a row sits.
+  where it lives and when it changes, and `docs/harness/working-rules.md`,
+  *Issues and the task list*, for the document that owns where a row sits.
   `docs/harness-local.md` *Residuals* holds how a session reaches it here.
 
 ## Merging beside other agents
