@@ -27,7 +27,7 @@ permissions:
 # head and either can finish last. Keying the group by the head as well changes
 # nothing there, since both runs share it, and `cancel-in-progress: false`
 # still cancels a waiting run when a third event, or a rerun, queues behind it.
-# TheShippedWorkflows in test_locality_gate.py reads that there is none.
+# TheGatesConcurrency in test_locality_gate.py reads that there is none.
 
 # Proposal and enforcement are two executions, on the closure gate's design:
 # the suite runs the head copy, because testing a proposed gate is the point of
