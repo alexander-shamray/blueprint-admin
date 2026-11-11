@@ -724,5 +724,31 @@ class TheShippedWorkflows(unittest.TestCase):
                 head_code_ahead_of_gate(workflow)
 
 
+def concurrency_keys(workflow: str) -> list[str]:
+    """Each `concurrency:` key a workflow sets, at its own level or a job's, comments dropped."""
+    return [line.strip() for line in workflow.splitlines()
+            if not line.lstrip().startswith("#") and re.match(r"\s*concurrency\s*:", line)]
+
+
+class TheGatesConcurrency(unittest.TestCase):
+    """No concurrency group on the gate: a run it cancels stays on the head as a required check reading CANCELLED."""
+
+    def test_the_shipped_gate_sets_no_concurrency_group(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "locality-gate.yml").read_text(encoding="utf-8")
+        self.assertIn("edited", workflow)
+        self.assertEqual([], concurrency_keys(workflow))
+
+    def test_a_workflow_level_group_is_named(self) -> None:
+        workflow = "concurrency:\n  group: gate-${{ github.event.pull_request.number }}\n  cancel-in-progress: true\n"
+        self.assertEqual(["concurrency:"], concurrency_keys(workflow))
+
+    def test_a_job_level_group_is_named(self) -> None:
+        workflow = "jobs:\n  gate:\n    concurrency: gate\n    runs-on: ubuntu-latest\n"
+        self.assertEqual(["concurrency: gate"], concurrency_keys(workflow))
+
+    def test_a_comment_naming_a_group_is_not_one(self) -> None:
+        self.assertEqual([], concurrency_keys("# No concurrency group here.\n  # concurrency: gate\n"))
+
+
 if __name__ == "__main__":
     unittest.main()
