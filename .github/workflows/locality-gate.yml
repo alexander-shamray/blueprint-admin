@@ -23,7 +23,7 @@ permissions:
 # No concurrency group, as in closure-gate.yml: a Dependabot rebase pushes and
 # edits the body at once, and a run the group cancelled stays on that head as a
 # required check reading CANCELLED. A group keyed by head too is shared by both
-# runs, and `cancel-in-progress: false` still cancels a waiting run.
+# runs, and with `cancel-in-progress: false` a third run cancels a waiting one.
 # TheGatesConcurrency in test_locality_gate.py reads that there is none.
 
 # Proposal and enforcement are two executions, on the closure gate's design:
