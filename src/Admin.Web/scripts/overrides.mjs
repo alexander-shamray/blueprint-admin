@@ -3,7 +3,7 @@
 // An `overrides` entry forces a version that some dependant's declared range refuses. Once every dependant's range
 // accepts it, the entry forces nothing, and it goes on pinning that version past every later release unnoticed:
 // Dependabot raises a dependant but never drops an override. So this fails on an entry no dependant still needs, and
-// says which ranges accept it, so the entry is dropped and the lockfile re-derived from `npm install`'s answer.
+// says which ranges accept it, so the entry is dropped and the lockfile re-derived with it.
 //
 // The dependants' ranges come from package-lock.json, which records each package's declared range, not the override's
 // result. It reads only a flat entry pinning an exact version, which is all the pin rule allows (CLAUDE.md, *Hard
