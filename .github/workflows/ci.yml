@@ -124,9 +124,8 @@ jobs:
         working-directory: src/Admin.Web
       - run: npm run build
         working-directory: src/Admin.Web
-      # `--with-deps` installs Playwright's system packages from the live Ubuntu mirrors, and an
-      # outage there once held this job until its own 20 minutes ran out. Retries make a blip
-      # cheap, and the step's own bound makes an outage fail in minutes, so a rerun is cheap too.
+      # `--with-deps` installs Playwright's system packages from the live Ubuntu mirrors: retries
+      # make a blip cheap, and the step's own bound makes an outage fail before the job's does.
       - run: echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-retries
       - run: npx playwright install --with-deps chromium
         timeout-minutes: 8
