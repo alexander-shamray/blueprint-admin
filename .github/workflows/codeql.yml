@@ -1,0 +1,94 @@
+name: CodeQL
+
+# Code scanning in advanced setup. A pull request analyses only the languages
+# its files reach; a push to main, the weekly run and a manual one analyse all
+# four, so main keeps a full baseline in every category a pull request is
+# compared against. The categories are default setup's, so its alerts carry on.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# No concurrency group: a rerun of an older head's run would cancel the newest,
+# as commit-gate.yml says, leaving that head unanalysed.
+jobs:
+  languages:
+    runs-on: ubuntu-latest
+    # Bounds a step that never exits. Headroom over the usual run, not a duration.
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      languages: ${{ steps.pick.outputs.languages }}
+    steps:
+      - id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          CHANGED: ${{ github.event.pull_request.changed_files }}
+        run: |
+          all='["actions","csharp","javascript-typescript","python"]'
+          # The files endpoint lists at most 3000 files, so a longer pull
+          # request cannot be read whole and takes every language.
+          if [ "$EVENT" != pull_request ] || [ "$CHANGED" -ge 3000 ]; then
+            echo "languages=$all" >> "$GITHUB_OUTPUT"
+            echo "Analysing every language: $EVENT, $CHANGED files"
+            exit 0
+          fi
+          gh api --paginate "repos/$REPO/pulls/$PR/files" \
+            --jq '.[] | .filename, (.previous_filename // empty)' > files.txt
+          actions=0 csharp=0 js=0 python=0
+          while IFS= read -r f; do
+            case "$f" in
+              .github/workflows/codeql.yml) actions=1 csharp=1 js=1 python=1 ;;
+              .github/workflows/*|.github/actions/*|action.yml|action.yaml|*/action.yml|*/action.yaml) actions=1 ;;
+            esac
+            case "$f" in
+              *.cs|*.csproj|*.props|*.targets|*.slnx|global.json|nuget.config) csharp=1 ;;
+              src/Admin.Web/*|*.js|*.mjs|*.cjs|*.jsx|*.ts|*.mts|*.cts|*.tsx|*.html|*.htm) js=1 ;;
+              *.py|*.pyi) python=1 ;;
+            esac
+          done < files.txt
+          picked=()
+          if [ "$actions" = 1 ]; then picked+=('"actions"'); fi
+          if [ "$csharp" = 1 ]; then picked+=('"csharp"'); fi
+          if [ "$js" = 1 ]; then picked+=('"javascript-typescript"'); fi
+          if [ "$python" = 1 ]; then picked+=('"python"'); fi
+          languages="[$(IFS=,; echo "${picked[*]}")]"
+          echo "languages=$languages" >> "$GITHUB_OUTPUT"
+          echo "Analysing $languages from $(wc -l < files.txt) paths"
+
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    needs: languages
+    if: needs.languages.outputs.languages != '[]'
+    runs-on: ubuntu-latest
+    # Bounds a step that never exits. Headroom over the usual run, not a duration.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ${{ fromJSON(needs.languages.outputs.languages) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
