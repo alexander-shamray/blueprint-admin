@@ -139,6 +139,54 @@ smaller resident prompt, measured by the step 1 report.
 [`commands/`](commands/), which `test_command_runbooks.py` holds. The exit is
 not measured: it waits on sessions run since (#123).
 
+### Step 7 — the context a session carries
+
+The backend's step 7 (its #840, the wait route of #1668 and #1670): what a
+session accumulates and re-sends on a wake, rather than what it is handed.
+Each part, as it stands here:
+
+- The report's `mean_context` column, so an exit reads the context a call
+  re-sends from the report. **Landed** with the report itself (#139); its
+  column is in [`tools/token-usage/README.md`](../tools/token-usage/README.md).
+- A wait runs as one background task whose exit is the only wake. The rule
+  is `.harness/agent-rules.md`'s *A wait wakes once*, its reason
+  `docs/harness/token-rules.md`'s *Waits*, and `/ship` step 6 applies it.
+  **Landed** with the first harness sync (#655).
+- `/validate-blueprint`'s main session dispatching its passes. **No
+  subject**: this repository has no such command.
+- A check on the planning rule's size limit, over every plan file added
+  after the rule. **Landed** with #655: the plan-size gate
+  ([`.github/plan-size-gate/`](../.github/plan-size-gate/README.md)).
+- A plan-writing agent handed the spec and the symbols it cites, writing in
+  one pass. **Landed** with #655, in `.harness/agent-rules.md`'s *Plans*.
+
+**Exit.** Measured over a span since #655: a `/ship` main session's mean
+context, read from `mean_context`, holds step 2's exit; and every plan
+added since the gate is within the limit. **Not measured**: no span has
+been read since #655, and no plan has been added since the rule.
+
+### Step 7d — which model a subagent runs on
+
+The backend's step 7d (its #896, and the Opus pin of #1294). Which task
+takes which model is `docs/harness/token-rules.md`'s *Which model a
+subagent runs on*, and the rule `.harness/agent-rules.md`'s *Choose the
+model by who catches its error*; neither is restated here.
+
+- The report's `--models` view, splitting each row by the model that
+  answered. **Landed** with #139; [`token-usage.md`](token-usage.md) reads
+  it from 2026-10-15.
+- The rule, and `model: opus` in the frontmatter of the read-only agents
+  whose error is a silent miss. **Landed** with #655.
+- **Owed:** the rows that table moves to Sonnet only once recall holds —
+  a review recheck and a plan task's implementer — wait on this
+  repository's quality sets, step 1's owed runs among them, and on the
+  backend settling its own (`alexander-shamray/blueprint-backend#857`).
+
+**Exit.** Measured with `--models` over a span after #655: the rows the
+table moves run on the named model, and the input equivalent priced per
+model falls, with nothing kept on the parent's model losing recall on
+[`token-quality-sets.md`](token-quality-sets.md). **Not measured.**
+
 ## 3. What each step may not do
 
 A cut that loses a finding is not a saving. Steps 4–6 each hold recall
