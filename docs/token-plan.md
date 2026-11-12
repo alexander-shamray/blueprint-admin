@@ -178,9 +178,9 @@ model by who catches its error*; neither is restated here.
 - The rule, and `model: opus` in the frontmatter of the read-only agents
   whose error is a silent miss. **Landed** with #655.
 - **Owed:** the rows that table moves to Sonnet only once recall holds —
-  a review recheck and a plan task's implementer — wait on this
-  repository's quality sets, step 1's owed runs among them, and on the
-  backend settling its own (`alexander-shamray/blueprint-backend#857`).
+  a review recheck and a plan task's implementer — wait on a run of each
+  on Sonnet over this repository's quality sets finding no fewer rows, and
+  on the backend settling its own (`alexander-shamray/blueprint-backend#857`).
 
 **Exit.** Measured with `--models` over a span after #655: the rows the
 table moves run on the named model, and the input equivalent priced per
