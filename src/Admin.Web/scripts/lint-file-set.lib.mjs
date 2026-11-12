@@ -11,7 +11,7 @@ export const patternsFrom = (angular) => {
 
 // A pattern is `<dir>/**/*.<ext>` or a plain path; anything else is refused rather than guessed at.
 const matcher = (pattern) => {
-  const tree = /^([^*]+)\/\*\*\/\*\.([a-z]+)$/.exec(pattern);
+  const tree = /^([^*?{}[\]!]+)\/\*\*\/\*\.([a-z]+)$/.exec(pattern);
   if (tree) return (file) => file.startsWith(`${tree[1]}/`) && file.endsWith(`.${tree[2]}`);
   if (!/[*?{}[\]!]/.test(pattern)) return (file) => file === pattern;
   throw new Error(`lintFilePatterns entry "${pattern}" is neither <dir>/**/*.<ext> nor a plain path`);
