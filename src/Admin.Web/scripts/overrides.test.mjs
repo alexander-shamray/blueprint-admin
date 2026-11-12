@@ -1,9 +1,13 @@
 // The stale-override check's own cases, run by `npm run overrides:check` before the check itself, so a check that
 // stopped reading the lockfile fails here rather than passing over nothing.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { satisfies, staleOverrides } from './check-overrides.mjs';
+import { satisfies, staleOverrides } from './overrides.mjs';
 
 const lockWith = (ranges) => ({
   lockfileVersion: 3,
@@ -105,4 +109,30 @@ test("this repository's overrides are read through their real dependants", () =>
       `${name} never reads stale`,
     );
   }
+});
+
+// The entry file itself, run as `npm run overrides:check` runs it, so a check that exits without reading fails here.
+const runCheck = (dir) =>
+  spawnSync(process.execPath, [fileURLToPath(new URL('./check-overrides.mjs', import.meta.url)), dir], {
+    encoding: 'utf8',
+  });
+
+test('the check, run over a stale fixture, exits 1 naming the entry', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'check-overrides-'));
+  try {
+    writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest));
+    writeFileSync(join(dir, 'package-lock.json'), JSON.stringify(lockWith({ eslint: '^11.0.0' })));
+    const run = runCheck(dir);
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /overrides\.minimatch 11\.0\.5 is stale: every dependant already accepts it \(eslint/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the check, run over this repository's package, names each override it still needs", () => {
+  const own = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  const run = runCheck(fileURLToPath(new URL('..', import.meta.url)));
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.stdout.trim(), `Overrides still needed: ${Object.keys(own.overrides ?? {}).join(', ') || 'none'}.`);
 });
