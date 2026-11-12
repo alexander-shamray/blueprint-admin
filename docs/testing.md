@@ -38,7 +38,7 @@ translation lacks a message. After changing a string, `npm run i18n:extract`
 and translate what it adds, in the terms `src/locale/GLOSSARY.md` keeps. The `@angular-eslint/template/i18n` rule runs on
 the templates `eslint.config.js` lists as translated.
 
-It ends with `npm run overrides:check`: `scripts/overrides.test.mjs`, then
+It then runs `npm run overrides:check`: `scripts/overrides.test.mjs`, then
 `scripts/check-overrides.mjs`, which fails when an `overrides` entry in
 `package.json` is one every dependant's range in the lockfile already accepts.
 Dependabot never drops an override, so the entry would go on pinning that
