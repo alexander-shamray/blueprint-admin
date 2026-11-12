@@ -150,10 +150,11 @@ fault, and two classes, or two pull requests, are the answer.
 
 **A session writes the task list as `.harness/agent-rules.md` says, by no route
 of this repository's own.** The file sits outside every checkout;
-`.harness/config.json` `task_list` names it, and `dispatch_board.py tasks`
-`start`, `state`, `done` and `back` with no run find it from the main
-checkout's copy, from a worktree as well (`task_list()`); the forms that take a
-run read the path passed in `--tasks`. *Working in a target* in
+`.harness/config.json` `task_list` names it, and a `dispatch_board.py tasks`
+call with no run finds it from the main checkout's copy, from a worktree as
+well (`task_list()`); the forms that take a run read the path passed in
+`--tasks`. `docs/harness/task-list.md`, *The events and their calls*, says which
+forms are which. *Working in a target* in
 `.harness/agent-rules.md` says which writes go through those calls. The main
 checkout's root may hold a gitignored `TODO.md` link for the user's editor; the
 edit guard refuses a write through it.
