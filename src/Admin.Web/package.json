@@ -9,9 +9,10 @@
     "test": "ng test --watch=false",
     "format": "prettier --write \"src/**/*.{ts,html,css}\" \"e2e/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.{ts,html,css}\" \"e2e/**/*.ts\"",
-    "lint": "ng lint && npm run format:check && npm run i18n:check",
+    "lint": "ng lint && npm run format:check && npm run i18n:check && npm run overrides:check",
     "i18n:extract": "ng extract-i18n",
     "i18n:check": "ng extract-i18n --output-path .i18n-check && node scripts/check-translations.mjs .i18n-check/messages.en-US.json",
+    "overrides:check": "node --test scripts/check-overrides.test.mjs && node scripts/check-overrides.mjs",
     "e2e": "playwright test"
   },
   "private": true,

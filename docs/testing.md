@@ -38,6 +38,13 @@ translation lacks a message. After changing a string, `npm run i18n:extract`
 and translate what it adds, in the terms `src/locale/GLOSSARY.md` keeps. The `@angular-eslint/template/i18n` rule runs on
 the templates `eslint.config.js` lists as translated.
 
+It ends with `npm run overrides:check`: `scripts/check-overrides.test.mjs`,
+then `scripts/check-overrides.mjs`, which fails when an `overrides` entry in
+`package.json` is one every dependant's range in the lockfile already accepts.
+Dependabot never drops an override, so the entry would go on pinning that
+version past every later fix. Drop the entry it names and re-derive the
+lockfile in the same commit.
+
 CI's `web` job also runs `npm audit --audit-level=high` after `npm ci`, dev
 dependencies included, so a new high or critical advisory turns the build red.
 `npm-checks.sh` leaves it out because it asks the registry; run it by hand in
