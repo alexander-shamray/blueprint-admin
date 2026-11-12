@@ -78,7 +78,8 @@
     ".claude/scripts/test_*_admin.py",
     ".claude/skills/admin-invariants/SKILL.md",
     "docs/commands/review-branch.md",
-    ".github/issue-form-gate/test_issue_form_gate_admin.py"
+    ".github/issue-form-gate/test_issue_form_gate_admin.py",
+    ".github/locality-gate/locality_gate.py"
   ],
   "exclude": []
 }
