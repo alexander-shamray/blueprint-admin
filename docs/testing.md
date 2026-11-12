@@ -104,8 +104,11 @@ to 63 minutes on a loaded Windows host, so run the module a change touches while
 working.
 
 The `harness` job in `ci.yml` is the matrix, in the shape the harness's own
-`payload-suites` job certifies: the shard runner on Linux and the whole suite
-serially on Windows and macOS, then the same five roots on each. The local files
+`payload-suites` job certifies: the shard runner on each of Linux, Windows and
+macOS, then the same five roots on each. On a pull request `harness-legs.py`
+decides whether the Windows and macOS legs run the payload's suite at all
+(`docs/harness-boundaries.md`, *The harness legs decision*); the five roots run
+on every leg either way. The local files
 under `.claude/` are `.harness/config.json`'s `local` list; everything else
 there is the payload's, changed in `blueprint-harness`.
 
