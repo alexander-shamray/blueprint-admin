@@ -45,6 +45,14 @@ Dependabot never drops an override, so the entry would go on pinning that
 version past every later fix. Drop the entry it names and re-derive the
 lockfile in the same commit.
 
+`npm run lint:files` follows it: `scripts/lint-file-set.test.mjs`, then
+`scripts/lint-file-set.mjs`, which fails when the files ESLint lints for
+`lintFilePatterns` in `angular.json` differ from the files on disk those
+patterns name. The `minimatch` override forces a newer matcher than eslint
+declares; a matcher reading a pattern differently would narrow or widen
+what `ng lint` reads with every other check green. A new `lintFilePatterns`
+shape the script does not read is refused, and extended there.
+
 CI's `web` job also runs `npm audit --audit-level=high` after `npm ci`, dev
 dependencies included, so a new high or critical advisory turns the build red.
 `npm-checks.sh` leaves it out because it asks the registry; run it by hand in
