@@ -14,6 +14,17 @@ permissions:
   contents: read
   packages: read
 
+# A newer push to a pull request cancels the run of the head it superseded. On
+# `main` each commit has a group of its own and nothing is cancelled, so every
+# landing is built and `main-red.yml` sees its conclusion. A rerun has a group
+# of its own too, so rerunning a stale head cannot cancel a newer head's
+# required checks. blueprint-harness's `ci.yml` holds the same group.
+concurrency:
+  group: >-
+    ci-${{ github.ref }}-${{ github.ref == 'refs/heads/main' && github.sha || '' }}${{
+    github.run_attempt != '1' && format('-{0}', github.run_id) || '' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   host:
     strategy:
