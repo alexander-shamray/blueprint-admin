@@ -74,9 +74,14 @@ jobs:
     runs-on: ubuntu-latest
     # Bounds a step that never exits. Headroom over the usual run, not a duration.
     timeout-minutes: 30
+    # The C# leg restores the assistant's core from GitHub Packages through
+    # nuget.config, which asks for a token even for a public package, as in ci.yml.
     permissions:
       contents: read
+      packages: read
       security-events: write
+    env:
+      GITHUB_PACKAGES_TOKEN: ${{ matrix.language == 'csharp' && github.token || '' }}
     strategy:
       fail-fast: false
       matrix:
