@@ -6,9 +6,8 @@
 // says which ranges accept it, so the entry is dropped and the lockfile re-derived with it.
 //
 // The dependants' ranges come from package-lock.json, which records each package's declared range, not the override's
-// result. It reads only a flat entry pinning an exact version, which is all the pin rule allows (CLAUDE.md, *Hard
-// rules*), and the range syntax npm writes; anything else stops it, rather than letting it pass over what it cannot
-// read.
+// result. It reads only a flat entry pinning an exact version, and the range syntax npm writes; a nested entry or any
+// other form stops it, rather than letting it pass over what it cannot read.
 const DEPENDENCY_FIELDS = ['dependencies', 'optionalDependencies', 'peerDependencies'];
 const VERSION = /^(\d+)\.(\d+)\.(\d+)$/;
 const PARTIAL = /^(\d+|[xX*])(?:\.(\d+|[xX*]))?(?:\.(\d+|[xX*]))?$/;
