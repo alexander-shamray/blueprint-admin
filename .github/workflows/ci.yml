@@ -280,28 +280,41 @@ jobs:
       contents: read
       issues: read
     steps:
+      # Depth 2 keeps the merge commit's parents, which the decision below
+      # compares.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
+      # harness-legs.py owns the rule and what reaches these legs
+      # (docs/harness-boundaries.md, *The harness legs decision*). A pull
+      # request that reaches none of it still reports each leg, with the
+      # payload's suite skipped; Linux, a push and this repository's own
+      # suites always run.
+      - name: Decide whether this leg tests
+        id: reach
+        if: runner.os != 'Linux'
+        shell: bash
+        run: python .claude/scripts/harness-legs.py >> "$GITHUB_OUTPUT"
       - if: runner.os == 'Windows'
         run: choco install jq --no-progress -y
       - if: runner.os == 'macOS'
         run: brew install jq
       - name: The suite reads `git ls-files`, so the checkout must be a real one
         run: git rev-parse --is-inside-work-tree
-      # The payload's suite whole, in the shape the harness's own
-      # `payload-suites` job certifies: the shard runner on Linux and serially
-      # elsewhere. Git's bash on Windows, so one script serves all three.
+      # The payload's suite whole through the shard runner on every leg, the
+      # shape the harness's own `payload-suites` job certifies. Git's bash on
+      # Windows, so one script serves all three. Serially this step took 23.1
+      # min at p50 on Windows and 8.1 on macOS over the 40 green runs to
+      # 2026-11-12, Ubuntu 2.0 sharded.
       - name: The payload's suite
+        if: runner.os == 'Linux' || steps.reach.outputs.test != 'false'
         shell: bash
         run: |
           bash --version | head -n 1
-          if [ "$RUNNER_OS" = Linux ]; then
-            python .claude/scripts/shard-harness-suite.py
-          else
-            python -m unittest discover -s .claude/scripts -v
-          fi
+          python .claude/scripts/shard-harness-suite.py
       # The roots that runner does not know, as harness-checks.sh runs them;
       # test_harness_helpers_admin.py holds the two lists together. A gate's own
       # workflow is a different subject, the base copy of the gate judged against
