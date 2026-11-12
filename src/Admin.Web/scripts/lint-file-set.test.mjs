@@ -28,6 +28,8 @@ test('a tree pattern and a plain path name their files and nothing else', () => 
 
 test('a pattern shape the reader does not know is refused', () => {
   assert.throws(() => expectedFiles(['src/**/!(x).ts'], files), /neither/);
+  assert.throws(() => expectedFiles(['src/{a,x}/**/*.ts'], files), /neither/);
+  assert.throws(() => expectedFiles(['src/?/**/*.ts'], files), /neither/);
 });
 
 test('a narrowed or widened lint set shows as a difference', () => {
