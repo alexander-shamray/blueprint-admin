@@ -306,9 +306,7 @@ jobs:
         run: git rev-parse --is-inside-work-tree
       # The payload's suite whole through the shard runner on every leg, the
       # shape the harness's own `payload-suites` job certifies. Git's bash on
-      # Windows, so one script serves all three. Serially this step took 23.1
-      # min at p50 on Windows and 8.1 on macOS over the 40 green runs to
-      # 2026-11-12, Ubuntu 2.0 sharded.
+      # Windows, so one script serves all three.
       - name: The payload's suite
         if: runner.os == 'Linux' || steps.reach.outputs.test != 'false'
         shell: bash
