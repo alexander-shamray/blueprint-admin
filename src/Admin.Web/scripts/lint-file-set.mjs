@@ -29,7 +29,9 @@ const walk = (current) => {
 walk(dir);
 
 const expected = expectedFiles(patterns, onDisk);
-const eslint = new ESLint({ cwd: resolve(dir) });
+// With warnIgnored on, a plain-path pattern naming an existing file is returned as a "File ignored" result even when
+// no config matches it, so a file the matcher dropped would still count as linted.
+const eslint = new ESLint({ cwd: resolve(dir), warnIgnored: false });
 const linted = (await eslint.lintFiles(patterns)).map((r) => relative(resolve(dir), r.filePath).split(sep).join('/'));
 
 const missing = setDifference(expected, linted);
