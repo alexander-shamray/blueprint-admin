@@ -48,8 +48,10 @@ one at a time.
 - The baseline run of `branch-reviewer` over the review set is recorded in
   the same file: 4 of 12 rows found. **Landed.** A step that shortens a
   prompt or changes a reviewer claims its exit by finding no fewer.
-- **Owed:** the same run with `bug-auditor`, the reviewer's findings that
-  matched no row verified, and a run against each PR's head, not `main`.
+- The same run with `bug-auditor`, the reviewer's findings that matched no row
+  verified, and a run against each PR's head, not `main`. **Landed** with #168:
+  [`token-quality-sets.md`](token-quality-sets.md), its three 2026-10-15 and
+  2026-10-20 sections that cite #168.
 
 **Exit.** Attribution holds on a known session. **Passed** on the `/ship`
 run `token-usage.md` names: its 88 calls are counted under `/ship` and its
