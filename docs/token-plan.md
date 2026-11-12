@@ -143,7 +143,7 @@ not measured: it waits on sessions run since (#123).
 
 The backend's step 7 (its #840, the wait route of #1668 and #1670): what a
 session accumulates and re-sends on a wake, rather than what it is handed.
-Each part, as it stands here:
+#616 carries it here. Each part, as it stands:
 
 - The report's `mean_context` column, so an exit reads the context a call
   re-sends from the report. **Landed** with the report itself (#139); its
@@ -167,10 +167,11 @@ been read since #655, and no plan has been added since the rule.
 
 ### Step 7d — which model a subagent runs on
 
-The backend's step 7d (its #896, and the Opus pin of #1294). Which task
-takes which model is `docs/harness/token-rules.md`'s *Which model a
-subagent runs on*, and the rule `.harness/agent-rules.md`'s *Choose the
-model by who catches its error*; neither is restated here.
+The backend's step 7d (its #896, and the Opus pin of #1294), carried here
+by #616, as step 7 is. Which task takes which model is
+`docs/harness/token-rules.md`'s *Which model a subagent runs on*, and the
+rule `.harness/agent-rules.md`'s *Choose the model by who catches its
+error*; neither is restated here.
 
 - The report's `--models` view, splitting each row by the model that
   answered. **Landed** with #139; [`token-usage.md`](token-usage.md) reads
