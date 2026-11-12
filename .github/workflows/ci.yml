@@ -70,7 +70,16 @@ jobs:
       # tests, on both legs, since each runner's build is its own.
       - name: No build output landed beside the source
         run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} .github/output-gate/output_gate.py
-      - run: dotnet test --configuration Release --no-build
+      # The TRX keeps each test's duration after the log is gone (#705); under
+      # artifacts/, which is ignored and which the output gate reads only by
+      # its bin/ and obj/. Uploaded on a failure too, where it is wanted most.
+      - run: dotnet test --configuration Release --no-build --report-xunit-trx --results-directory artifacts/test-results
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: host-trx-${{ matrix.os }}
+          path: artifacts/test-results/*.trx
+          retention-days: 7
 
   # The owner-drift gate: the facts this console copies, read against the
   # backend's main. The host job skips these tests because no clone sits
