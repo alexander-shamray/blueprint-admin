@@ -70,14 +70,15 @@ public sealed class ProductImageUploaderTests
     [Fact]
     public async Task A_long_body_is_cut_in_bytes_and_never_splits_a_character()
     {
-        byte[] bytes = System.Text.Encoding.UTF8.GetBytes(new string('é', RequestProxy.MaxBodyBytes));
+        // One ASCII byte first puts the cut, at an even byte count, inside a two-byte é.
+        byte[] bytes = System.Text.Encoding.UTF8.GetBytes("a" + new string('é', RequestProxy.MaxBodyBytes));
 
         ProxyResponded responded = (await Uploader(() => new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) }, new FakeTimeProvider())
             .SendAsync(Request, TestContext.Current.CancellationToken)).ShouldBeOfType<ProxyResponded>();
 
         responded.BodyTruncated.ShouldBeTrue();
-        responded.Body.Length.ShouldBe(RequestProxy.MaxBodyBytes / 2);
-        responded.Body.ShouldAllBe(c => c == 'é');
+        responded.Body.Length.ShouldBe(1 + ((RequestProxy.MaxBodyBytes - 1) / 2));
+        responded.Body[1..].ShouldAllBe(c => c == 'é');
     }
 
     /// <summary>Content whose read fails with <paramref name="failure"/>, or, with none, advances the clock past the deadline and waits.</summary>
