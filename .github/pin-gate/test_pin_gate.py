@@ -509,10 +509,9 @@ class TheCiWiring(unittest.TestCase):
             self.assertLess(loop.index(before), loop.index(after))
 
     def test_the_commits_job_stops_on_a_range_git_cannot_read(self) -> None:
-        # #746: the `|| true` meant for grep's empty list also swallowed a
-        # failing `git rev-list`, so a base git cannot resolve passed having
-        # built nothing. Read on a line of its own, the range stops the step
-        # under `set -e`, and the filter that forgives grep never runs git.
+        # Read on a line of its own, the range stops the step under `set -e`
+        # when git cannot resolve it, and the filter that forgives grep's empty
+        # list never runs git.
         block = job("commits")
         read = 'range=$(git rev-list --reverse "$BASE_SHA..$HEAD_SHA")\n'
         self.assertIn(read, block)
