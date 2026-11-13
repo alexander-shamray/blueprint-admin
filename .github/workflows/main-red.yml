@@ -60,8 +60,8 @@ jobs:
               # before the rerun replaces them.
               failed=$(gh run view "$RUN_ID" --attempt 1 --json jobs --jq '
                 .jobs[] | select(.conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral")
-                | "- `\(.name)` (\(.conclusion)): \([.steps[]? | select(.conclusion == "failure" or .conclusion == "cancelled"
-                or .conclusion == "timed_out") | "`\(.name)`"] | if length == 0 then "no step failed" else join(", ") end)"' ||
+                | "- \u0060\(.name)\u0060 (\(.conclusion)): \([.steps[]? | select(.conclusion == "failure" or .conclusion == "cancelled"
+                or .conclusion == "timed_out") | "\u0060\(.name)\u0060"] | if length == 0 then "no step failed" else join(", ") end)"' ||
                 echo '- its jobs could not be read')
               if gh run rerun "$RUN_ID" --failed; then
                 # A flake that reruns green is still written down, or the
@@ -81,7 +81,7 @@ jobs:
                   '' \
                   "A green second attempt makes it a flake; a red one on \`main\`'s tip is reported on \`$TITLE\`." \
                   '' \
-                  'Commented by `.github/workflows/main-red.yml`.' |
+                  "Commented by \`.github/workflows/main-red.yml\`." |
                   gh issue comment "$tracker" --body-file -
                 exit 0
               fi
