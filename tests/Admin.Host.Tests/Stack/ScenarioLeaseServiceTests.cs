@@ -588,6 +588,68 @@ public sealed class ScenarioLeaseServiceTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task A_journal_another_process_holds_open_at_the_start_is_tried_again_once_it_is_free()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(journal)!);
+        await File.WriteAllTextAsync(
+            journal,
+            $$"""{"id":"abc","change":"stop-inventory","label":"a run","since":"{{time.GetUtcNow():O}}","expiresAt":"{{time.GetUtcNow().AddMinutes(2):O}}"}""",
+            Token);
+
+        using (new FileStream(journal, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            await leases.ReconcileAsync();
+
+            runner.Started.ShouldBeEmpty();
+            leases.Current.ShouldBeNull();
+        }
+
+        File.Exists(journal).ShouldBeTrue();
+        time.Advance(ScenarioLeaseService.RetryAfter + TimeSpan.FromSeconds(1));
+        await WaitUntilAsync(() => !File.Exists(journal));
+
+        runner.Started.Select(s => string.Join(' ', s.Arguments)).ShouldContain(Prefix + "up -d --no-deps --wait inventory-api");
+    }
+
+    [Fact]
+    public async Task A_lease_is_refused_while_a_journal_the_start_has_not_restored_waits_and_taken_once_it_is()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(journal)!);
+        string left = $$"""{"id":"abc","change":"stop-inventory","label":"a run","since":"{{time.GetUtcNow():O}}","expiresAt":"{{time.GetUtcNow().AddMinutes(2):O}}"}""";
+        await File.WriteAllTextAsync(journal, left, Token);
+        Job busy = gate.Claim("up", () => registry.Create(new ProcessSpec("docker", [], "/"))).Job;
+        await leases.ReconcileAsync();
+        busy.MarkExited(0);
+
+        AcquireResult refused = await Acquire(ScenarioControl.ShortWaits);
+
+        refused.Outcome.ShouldBe(AcquireOutcome.Unrestored);
+        refused.Detail.ShouldNotBeNull().ShouldContain(journal);
+        runner.Started.ShouldBeEmpty();
+        (await File.ReadAllTextAsync(journal, Token)).ShouldBe(left);
+
+        time.Advance(ScenarioLeaseService.RetryAfter + TimeSpan.FromSeconds(1));
+        await WaitUntilAsync(() => !File.Exists(journal));
+
+        (await Acquire(ScenarioControl.ShortWaits)).Outcome.ShouldBe(AcquireOutcome.Held);
+    }
+
+    [Fact]
+    public async Task A_lease_is_refused_while_a_journal_left_for_a_person_is_on_disk_and_does_not_overwrite_it()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(journal)!);
+        const string Left = """{"id":"abc","change":"stop-everything","since":"2026-10-16T00:00:00Z","expiresAt":"2026-10-16T00:05:00Z"}""";
+        await File.WriteAllTextAsync(journal, Left, Token);
+        await leases.ReconcileAsync();
+
+        AcquireResult refused = await Acquire();
+
+        refused.Outcome.ShouldBe(AcquireOutcome.Unrestored);
+        runner.Started.ShouldBeEmpty();
+        (await File.ReadAllTextAsync(journal, Token)).ShouldBe(Left);
+    }
+
+    [Fact]
     public async Task A_journal_that_cannot_be_deleted_keeps_the_lease_and_the_gate_and_arms_a_retry()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows refuses to delete a read-only file for every account.");

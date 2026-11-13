@@ -467,10 +467,12 @@ paragraph first:
 - **The limit, stated.** A host killed outright cannot run its own `finally`.
   Until the next start the stack stays as the run left it. The Stack screen
   shows the lease the host holds, what it changed and since when, with a Restore
-  button. The journal is read once, in the background, at host start: until
-  that restore sets the lease the screen shows none, and a journal the host
-  cannot read, or that names a change it does not know, is logged and left in
-  place for a person.
+  button. The journal is read in the background at host start: until
+  that restore sets the lease the screen shows none. A journal the gate will not
+  let it restore yet, or whose file it cannot open, is tried again every
+  30 seconds; one it cannot parse, or that names a change it does not know, is
+  logged and left in place for a person. While a journal waits with no lease
+  held, a new lease is refused, so its record is never overwritten.
 - **Visible and stoppable.** Before Run the Scenario page names what the script
   will change, in the host's own words from `GET /stack/lease`, and the longest
   the host will hold it. A script that holds a lease has a `lease` step first and
