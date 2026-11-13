@@ -349,7 +349,7 @@ jobs:
   # pull request alone, and one neither a workflow nor `harness` names runs nowhere.
   # The loop finds the directories, so a suite a sync adds needs no line here, and
   # finding none fails. Being in this workflow puts it in the set main-red.yml watches.
-  gates:
+  gate-suites:
     runs-on: ubuntu-latest
     # Bounds a step that never exits. Headroom over the usual run, not a duration.
     timeout-minutes: 15

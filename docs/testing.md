@@ -113,7 +113,7 @@ decision*); the five roots run on every leg either way. The local files under
 `.claude/` are `.harness/config.json`'s `local` list; everything else there is
 the payload's, changed in `blueprint-harness`.
 
-The `gates` job in `ci.yml` runs every `test_*.py` under a `.github/*/`
+The `gate-suites` job in `ci.yml` runs every `test_*.py` under a `.github/*/`
 directory, from that directory, on Linux and on a push to `main` too, since a
 gate's own workflow runs its suite on a pull request alone and a gate that
 neither a workflow nor the `harness` job names would run nowhere. It finds the
@@ -171,9 +171,9 @@ where no .NET SDK runs.
 ## Output gate
 
 `python -m unittest` in `.github/output-gate/` is the gate's own suite, which
-the `gates` job runs. The gate reads what a build left, so `ci.yml` runs it on
-both `host` legs after the Release build's judge and before the tests; run on
-its own it needs a restore and a build in front of it:
+the `gate-suites` job runs. The gate reads what a build left, so `ci.yml` runs
+it on both `host` legs after the Release build's judge and before the tests;
+run on its own it needs a restore and a build in front of it:
 
 ```bash
 dotnet build BlueprintAdmin.slnx
