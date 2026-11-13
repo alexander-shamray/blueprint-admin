@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { Subject, of } from 'rxjs';
 import { HostClient } from '../../../core/host/host-client';
 import { ApiCatalogView, ApiOperation, ProxyResult } from '../../../core/host/host-types';
 import { IdentityState } from '../../../core/identity/identity-state';
@@ -216,6 +216,22 @@ describe('the API request and API history widgets', () => {
 
       second.destroy();
       expect(TestBed.inject(IdentityState).choice()).toEqual({ kind: 'custom', username: 'alice', password: '' });
+    });
+
+    it('keeps a send in flight when the widget is destroyed, so its answer still reaches the history', () => {
+      const answer = new Subject<ProxyResult>();
+      host['proxy'].mockReturnValueOnce(answer);
+      const fixture = request();
+      fixture.componentInstance.chooseIdentity('anonymous');
+      fixture.componentInstance.send();
+      const clockReads = host['tokenClock'].mock.calls.length;
+
+      fixture.destroy();
+      expect(answer.observed).toBe(true);
+      answer.next(responded);
+
+      expect(TestBed.inject(ApiHistory).entries().length).toBe(1);
+      expect(host['tokenClock'].mock.calls.length).toBe(clockReads);
     });
 
     it('is not in what the history keeps', () => {
