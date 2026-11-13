@@ -428,13 +428,10 @@ jobs:
       - name: Lint every workflow
         run: ./actionlint
 
-  # A later attempt of a push run on `main`, which main-red.yml does not hear:
-  # it reruns a red first attempt's failed jobs once, and a rerun the job token
-  # starts may raise no `workflow_run`. This job needs every other, so a rerun
-  # of the failed jobs reruns it too, and it reports what the attempt ended as,
-  # by the same issue and the same tip rule as main-red.yml. A second attempt
-  # started by hand reports here as well. pin-gate's TheCiWiring holds `needs`
-  # to every other job.
+  # A later attempt of a push run on `main`, which main-red.yml does not hear,
+  # as a rerun the job token starts may raise no `workflow_run`. Needing every
+  # other job, this one is rerun with the failed jobs and reports the attempt by
+  # main-red.yml's issue and tip rule; pin-gate's TheCiWiring holds `needs`.
   main-red:
     needs: [host, drift, web, smoke, commits, harness, gate-suites, workflow-lint]
     if: always() && github.event_name == 'push' && github.run_attempt != '1'
