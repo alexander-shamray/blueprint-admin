@@ -168,6 +168,21 @@ describe('WorkspaceService', () => {
     expectSave('"e9"').flush(null, { headers: { ETag: '"e10"' } });
   });
 
+  it('does not let a timer armed during a save send over the 412 that save met', () => {
+    load();
+    service.renamePage('stack', 'One');
+    vi.advanceTimersByTime(SAVE_DELAY_MS);
+    const first = expectSave('"e1"');
+    service.renamePage('stack', 'Two');
+    vi.advanceTimersByTime(SAVE_DELAY_MS / 2);
+    first.flush(defaultWorkspace(), { status: 412, statusText: 'Precondition Failed', headers: { ETag: '"e9"' } });
+    expect(service.saveState().kind).toBe('conflict');
+
+    vi.advanceTimersByTime(SAVE_DELAY_MS * 3);
+    http.expectNone((r) => r.method === 'PUT');
+    expect(service.saveState().kind).toBe('conflict');
+  });
+
   it('saves this tab over a 412 when the operator keeps it', () => {
     load();
     service.renamePage('stack', 'Mine');
