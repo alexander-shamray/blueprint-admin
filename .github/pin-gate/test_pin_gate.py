@@ -361,10 +361,9 @@ class OtherRestoreInputs(unittest.TestCase):
         self.assertTrue(check_other("global.json", "{"))
 
     def test_a_nuget_lock_file_anywhere_fails(self) -> None:
-        # #747: NuGet takes transitive versions from a lock file beside a
-        # project whose direct dependencies it matches, with
-        # RestorePackagesWithLockFile unset, so the pin file never sees them;
-        # a per-project packages.<name>.lock.json is read before the plain one.
+        # NuGet takes transitive versions from a lock file beside a project,
+        # with RestorePackagesWithLockFile unset, so the pin file never sees
+        # them; a per-project packages.<name>.lock.json is read first.
         for path in ("packages.lock.json", "src/Admin.Host/packages.lock.json",
                      "tests/X/Packages.Lock.JSON", "src/Admin.Host/packages.Admin.Host.lock.json"):
             with self.subTest(path=path):
@@ -460,7 +459,7 @@ class TheTree(unittest.TestCase):
             Path("C.csproj").write_text(project(
                 '<ItemGroup><ProjectReference Include="..\\outside\\x.csproj" /></ItemGroup>'),
                 encoding="utf-8")
-            # #747: a NuGet lock file, which chooses transitive versions.
+            # A NuGet lock file, which chooses transitive versions.
             Path("src").mkdir()
             Path("src/packages.lock.json").write_text('{"version": 1}', encoding="utf-8")
             run("git", "add", ".")
