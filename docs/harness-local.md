@@ -50,8 +50,8 @@ Selected by what the diff touched:
   run.
 
 A gate that reports a pass over nothing is ranked critical by `/bug-sweep`. Here
-that means the locality gate, the pin gate, the `harness` and `gates` jobs,
-`dotnet test`, `npm test` and `smoke`.
+that means the locality gate, the pin gate, the `harness` and `gate-suites`
+jobs, `dotnet test`, `npm test` and `smoke`.
 
 The checks `/ship` step 6's wait requires: `closure-gate`, `commit-gate`,
 `commits`, `drift`, `harness (macos-latest)`, `harness (ubuntu-latest)`,
