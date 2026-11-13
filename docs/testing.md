@@ -220,5 +220,5 @@ What it reads and claims is [its README](../.github/issue-form-gate/README.md)'s
 On every pull request CI enforces the **base** copy of the gate against the
 PR body and runs the suite after it, for the reason `gates.yml`
 argues. Bootstrap: a base with no `locality_gate.py` has no gate to run, so
-`gates.yml` posts no `locality-gate` check for that PR and only the head's
-suite runs.
+the `locality-gate` check `gates.yml` always posts passes with nothing judged
+for that PR, and only the head's suite runs.
