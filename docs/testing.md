@@ -105,6 +105,13 @@ A full run took 26 to 63 minutes on a loaded Windows host, which is why the
 local run selects and the `harness` job below runs the whole suite; run the
 module a change touches while working.
 
+`host-checks.sh`, `npm-checks.sh` and `harness-checks.sh` each end by recording
+one line of their wall time, mode and exit with `harness_timings.py record`,
+outside every checkout (`docs/harness-boundaries.md`, *The suite's shard
+runner*, owns where), and exit as their checks did whatever the record does.
+`py -3.12 .claude/scripts/harness_timings.py report` prints p50, p90 and the
+maximum per script and mode.
+
 The `harness` job in `ci.yml` is the matrix: the shard runner on Linux and
 macOS, as the harness's own `payload-suites` job runs it, and the whole suite
 serially on Windows, this job's own choice, since there parallel workers fail

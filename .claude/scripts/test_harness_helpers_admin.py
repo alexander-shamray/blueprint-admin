@@ -233,7 +233,8 @@ class AdminStack(unittest.TestCase):
         self.assertIn("npm test", source)
         self.assertIn("npm run build", source)
         self.assertNotIn('"$@"', source)
-        self.assertNotIn("$mode\"", source.replace('"$mode" in', ""))
+        # The one other use is the timing record's label, which runs nothing.
+        self.assertNotIn("$mode\"", source.replace('"$mode" in', "").replace('--mode "$mode"', ""))
 
     def test_the_check_runner_offers_no_e2e_mode(self):
         # Playwright needs a browser download and the backend's Compose stack.
@@ -360,6 +361,65 @@ class TheLocalRunIsSelective(unittest.TestCase):
         self.assertIn("run_py .claude/scripts/shard-harness-suite.py --selective\n", checks)
         self.assertIn("python .claude/scripts/shard-harness-suite.py\n", ci)
         self.assertNotIn("--selective", ci)
+
+
+class EachCheckScriptRecordsItsTime(unittest.TestCase):
+    """Each check script ends with one timing line, and its exit stays its checks' whatever the line says.
+
+    The tools are `BASH_ENV` functions rather than files earlier on PATH, which a Windows bash can pass over.
+    """
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp(prefix="check-timing-"))
+        self.addCleanup(shutil.rmtree, str(self.dir), ignore_errors=True)
+        self.lines = self.dir / "timings.jsonl"
+
+    def run_check(self, shim, script, *args):
+        env_file = self.dir / "shim.sh"
+        env_file.write_text(shim, encoding="utf-8", newline="\n")
+        env = {**os.environ, "BASH_ENV": env_file.as_posix(), "HARNESS_TIMINGS": str(self.lines)}
+        return subprocess.run([BASH, str(SCRIPTS / script), *args], capture_output=True, text=True, env=env,
+                              cwd=str(SCRIPTS.parent.parent))
+
+    def assert_recorded(self, script, mode, code):
+        [line] = [json.loads(text) for text in self.lines.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual((script, mode, code), (line["script"], line["mode"], line["exit"]))
+        self.assertGreaterEqual(line["wall"], 0)
+
+    def test_host_checks_records_a_failing_run_and_keeps_its_exit(self):
+        out = self.run_check("dotnet() { return 3; }\n", "host-checks.sh", "fast")
+        self.assertEqual(3, out.returncode, out.stderr)
+        self.assert_recorded("host-checks.sh", "fast", 3)
+
+    def test_npm_checks_records_the_step_that_failed(self):
+        out = self.run_check('npm() { if [ "$1" = test ]; then return 4; fi; }\n', "npm-checks.sh", "fast")
+        self.assertEqual(4, out.returncode, out.stderr)
+        self.assert_recorded("npm-checks.sh", "fast", 4)
+
+    def test_a_passing_run_is_recorded_as_one(self):
+        out = self.run_check("npm() { :; }\n", "npm-checks.sh", "all")
+        self.assertEqual(0, out.returncode, out.stderr)
+        self.assert_recorded("npm-checks.sh", "all", 0)
+
+    def test_a_usage_error_runs_and_records_nothing(self):
+        out = self.run_check("dotnet() { return 0; }\n", "host-checks.sh", "nope")
+        self.assertEqual(2, out.returncode, out.stderr)
+        self.assertFalse(self.lines.exists())
+
+    def test_harness_checks_records_its_exit_after_a_selective_run(self):
+        log = self.dir / "ran"
+        shim = ("py() {\n"
+                '  if [ "$1" = -3.12 ]; then shift; fi\n'
+                '  if [ "$1" = -c ]; then return 0; fi\n'
+                f'  printf "%s\\n" "$*" >> {log.as_posix()!r}\n'
+                '  case "$*" in *pin-gate*) return 7 ;; esac\n'
+                "}\n")
+        out = self.run_check(shim, "harness-checks.sh")
+        self.assertEqual(7, out.returncode, out.stderr)
+        ran = log.read_text(encoding="utf-8").splitlines()
+        self.assertIn(".claude/scripts/shard-harness-suite.py --selective", ran)
+        self.assertRegex(ran[-1], r"^\.claude/scripts/harness_timings\.py record --script harness-checks\.sh "
+                                  r"--mode selective --wall \d+ --exit 7$")
 
 if __name__ == "__main__":
     unittest.main()
