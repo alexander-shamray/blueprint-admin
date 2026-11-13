@@ -69,7 +69,7 @@ public sealed class ResetService(
     {
         reset.Append(OutputStream.Stdout, $"$ {step.Spec.CommandLine}");
 
-        await foreach (OutputLine line in step.Follow(-1, CancellationToken.None))
+        await foreach (OutputLine line in step.FollowToEnd(CancellationToken.None))
         {
             reset.Append(line.Stream, line.Text);
         }

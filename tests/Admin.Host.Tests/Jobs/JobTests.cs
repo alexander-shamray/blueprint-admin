@@ -129,6 +129,53 @@ public sealed class JobTests
     }
 
     [Fact]
+    public async Task A_follower_to_the_end_that_falls_a_ring_behind_still_receives_every_line()
+    {
+        Job job = NewJob(capacity: 3);
+        IAsyncEnumerable<OutputLine> follower = job.FollowToEnd(TestContext.Current.CancellationToken);
+
+        // Nobody reads while ten lines go through a three-line ring.
+        await Task.Run(() =>
+        {
+            for (int i = 0; i < 10; i++)
+            {
+                job.Append(OutputStream.Stdout, $"line {i}");
+            }
+        }, TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        job.FollowerCount.ShouldBe(1);
+        job.MarkExited(0);
+
+        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(5));
+        List<long> seen = [];
+        await foreach (OutputLine line in follower.WithCancellation(timeout.Token))
+        {
+            seen.Add(line.Sequence);
+        }
+
+        seen.ShouldBe([.. Enumerable.Range(0, 10).Select(i => (long)i)]);
+        job.FollowerCount.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task A_follower_to_the_end_replays_from_the_start_and_ends_on_an_exited_job()
+    {
+        Job job = NewJob();
+        job.Append(OutputStream.Stdout, "first");
+        job.Append(OutputStream.Stderr, "second");
+        job.MarkExited(1);
+
+        List<string> seen = [];
+        await foreach (OutputLine line in job.FollowToEnd(TestContext.Current.CancellationToken))
+        {
+            seen.Add(line.Text);
+        }
+
+        seen.ShouldBe(["first", "second"]);
+    }
+
+    [Fact]
     public async Task A_follower_that_keeps_up_receives_every_line_past_the_capacity()
     {
         Job job = NewJob(capacity: 3);
