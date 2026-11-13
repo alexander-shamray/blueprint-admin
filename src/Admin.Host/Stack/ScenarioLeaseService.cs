@@ -28,7 +28,9 @@ public enum AcquireOutcome
     BadHold,
     Busy,
 
-    /// <summary>A journal a previous host left is still on disk and not yet restored, so a new one would overwrite its record.</summary>
+    /// <summary>
+    /// A journal a previous host left is still on disk and not yet restored, so a new one would overwrite its record.
+    /// </summary>
     Unrestored,
     Failed,
 }
@@ -111,12 +113,12 @@ public sealed partial class ScenarioLeaseService(
 
         try
         {
-            // A journal with no lease held is one the start reconcile has not restored yet (the gate was busy, the file could not
-            // be read) or has left for a person (a change this host does not know). A new lease would write its own journal over
-            // it, and the change it records would never be undone.
+            // A journal with no lease held is one the start reconcile has not restored yet (the gate was busy, the
+            // file could not be read) or has left for a person (a change this host does not know). A new lease would
+            // write its own journal over it, and the change it records would never be undone.
             if (current is null && File.Exists(journalPath))
             {
-                return new(AcquireOutcome.Unrestored, null, null, $"The lease journal a previous host left at {journalPath} has not been restored yet, so no lease was taken. The host tries it again every {RetryAfter.TotalSeconds:0} seconds; one it cannot parse, or that names a change it does not know, stays for a person to read and remove.");
+                return new(AcquireOutcome.Unrestored, null, null, UnrestoredDetail());
             }
 
             DateTimeOffset now = time.GetUtcNow();
@@ -312,8 +314,8 @@ public sealed partial class ScenarioLeaseService(
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                // Another process holds the file, or it is denied for now. The lease it records is still unrestored, so it is
-                // read again shortly rather than at the next host start.
+                // Another process holds the file, or it is denied for now. The lease it records is still unrestored,
+                // so it is read again shortly rather than at the next host start.
                 JournalUnreadable(logger, journalPath, ex);
                 ArmReconcileRetry();
                 return;
@@ -354,8 +356,14 @@ public sealed partial class ScenarioLeaseService(
     private void ArmReconcileRetry()
     {
         reconcileRetry?.Dispose();
-        reconcileRetry = time.CreateTimer(_ => { _ = RetryReconcileAsync(); }, null, RetryAfter, Timeout.InfiniteTimeSpan);
+        reconcileRetry = time.CreateTimer(
+            _ => { _ = RetryReconcileAsync(); }, null, RetryAfter, Timeout.InfiniteTimeSpan);
     }
+
+    private string UnrestoredDetail() =>
+        $"The lease journal a previous host left at {journalPath} has not been restored yet, so no lease was taken. "
+        + $"The host tries it again every {RetryAfter.TotalSeconds:0} seconds; one it cannot parse, or that names a "
+        + "change it does not know, stays for a person to read and remove.";
 
     private async Task RetryReconcileAsync()
     {
@@ -465,7 +473,9 @@ public sealed partial class ScenarioLeaseService(
     [LoggerMessage(Level = LogLevel.Warning, Message = "The lease journal at {Path} names no change this host knows; it was left in place for a person to read.")]
     private static partial void JournalUnknown(ILogger logger, string path);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "The lease journal at {Path} could not be read; the host tries it again shortly.")]
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The lease journal at {Path} could not be read; the host tries it again shortly.")]
     private static partial void JournalUnreadable(ILogger logger, string path, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "The host found the lease {Id} ({Changes}) in its journal and is restoring it.")]
