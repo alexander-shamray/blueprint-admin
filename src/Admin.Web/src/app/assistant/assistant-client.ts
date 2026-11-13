@@ -197,15 +197,20 @@ export class AssistantConversation {
     const id = this.ids.get();
     if (!id) return;
     const sent = this.sends;
-    let view: ConversationView | null;
+    let view: ConversationView | null = null;
+    let failure: unknown = null;
     try {
       view = await this.client.read(id);
     } catch (e) {
+      failure = e ?? new Error('read failed');
+    }
+    // A send since the read began makes its answer someone else's, whichever way it came back.
+    if (sent !== this.sends) return;
+    if (failure !== null) {
       // A 5xx or a dropped connection says nothing about the host's memory: the id stays for the next reload.
-      if (sent !== this.sends) return;
       this.update({
         ...this.state,
-        problem: { code: 'unreadable', detail: e instanceof Error ? e.message : String(e) },
+        problem: { code: 'unreadable', detail: failure instanceof Error ? failure.message : String(failure) },
       });
       return;
     }
