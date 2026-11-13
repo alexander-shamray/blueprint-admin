@@ -82,10 +82,10 @@ jobs:
           retention-days: 7
 
   # The owner-drift gate: the facts this console copies, read against the
-  # backend commit .github/drift/backend.sha pins, which drift-pin.yml keeps
-  # level with the backend's main. The host job skips these tests because no
-  # clone sits beside it; ADMIN_DRIFT_REQUIRED makes a missing clone a failure
-  # here, so this job cannot pass by not finding what it checked out.
+  # backend commit .github/drift/backend.sha pins; drift-pin.yml keeps an
+  # issue open while that pin is behind the backend's main. The host job skips
+  # these tests, as no clone sits beside it; ADMIN_DRIFT_REQUIRED makes a
+  # missing clone a failure here, so this job cannot pass by not finding it.
   drift:
     runs-on: ubuntu-latest
     steps:
