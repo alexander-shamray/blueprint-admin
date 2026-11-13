@@ -325,6 +325,9 @@ export class WorkspaceService {
         this.inFlight = false;
         if (epoch !== this.epoch) return this.resumeAfterImport();
         if (answer.kind === 'stale') {
+          // An edit made during this save armed a timer that would send over the conflict just found.
+          if (this.timer !== null) clearTimeout(this.timer);
+          this.timer = null;
           this.saveState.set({ kind: 'conflict', theirs: answer.workspace, etag: answer.etag });
           return;
         }
