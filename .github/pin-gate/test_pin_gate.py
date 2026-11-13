@@ -536,6 +536,29 @@ class TheCiWiring(unittest.TestCase):
         self.assertNotIn("git rev-list", mapped)
         self.assertLess(block.index(read), block.index(mapped))
 
+    def test_main_red_needs_every_other_job(self) -> None:
+        # main-red reruns only as a dependent of the jobs a rerun replays, and
+        # reads only the results it needs, so a job it does not need is one
+        # whose red later attempt on main nobody reports.
+        others, needs = main_red_needs((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+        self.assertTrue({"host", "commits", "smoke", "workflow-lint"} <= set(others), others)
+        self.assertEqual(sorted(others), sorted(needs))
+
+    def test_the_needs_reading_sees_a_job_left_out(self) -> None:
+        text = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        cut = re.sub(r"(^  main-red:\n    needs: \[[^\]]*), workflow-lint\]", r"\1]", text, flags=re.MULTILINE)
+        self.assertNotEqual(cut, text)
+        others, needs = main_red_needs(cut)
+        self.assertEqual(sorted(set(others) - set(needs)), ["workflow-lint"])
+
+
+def main_red_needs(text: str) -> tuple[list[str], list[str]]:
+    """ci.yml's jobs other than main-red, and the jobs main-red needs."""
+    jobs = re.findall(r"^  ([a-z-]+):\n", text[text.index("\njobs:\n"):], re.MULTILINE)
+    needs = re.search(r"^  main-red:\n    needs: \[([^\]]*)\]", text, re.MULTILINE)
+    assert needs, "ci.yml's main-red job names no needs list"
+    return [name for name in jobs if name != "main-red"], [n.strip() for n in needs.group(1).split(",")]
+
 
 if __name__ == "__main__":
     unittest.main()
