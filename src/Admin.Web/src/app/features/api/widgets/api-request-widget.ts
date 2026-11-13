@@ -182,7 +182,9 @@ export class ApiRequestWidget {
     destroyRef.onDestroy(() => {
       this.apiHistory.editors.update((n) => n - 1);
       this.watchingProjection?.unsubscribe();
-      this.sends.forEach((send) => send.unsubscribe());
+      // A send in flight is not cancelled: the platform may already have acted on it, and its answer still reaches the
+      // history. Bumping the generation leaves it only that, with no clock read or projection watch begun on a dead widget.
+      this.editorGeneration++;
       this.fetchingToken?.unsubscribe();
       this.readingClock?.unsubscribe();
       // The choice outlives the widget, a custom password does not stay in the shared identity state: it is in this
