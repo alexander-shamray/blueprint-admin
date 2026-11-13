@@ -122,10 +122,9 @@ runner*, owns where), and exit as their checks did whatever the record does.
 `py -3.12 .claude/scripts/harness_timings.py report` prints p50, p90 and the
 maximum per script and mode.
 
-The `harness` job in `ci.yml` is the matrix: the shard runner on Linux and
-macOS, as the harness's own `payload-suites` job runs it, and the whole suite
-serially on Windows, this job's own choice, since there parallel workers fail
-cases that fork or time under load; then the same five roots on each. On a pull
+The `harness` job in `ci.yml` is the matrix: the shard runner on Linux, macOS
+and Windows, as the harness's own `payload-suites` job runs it; then the same
+five roots on each. On a pull
 request `harness-legs.py` decides whether the Windows and macOS legs run the
 payload's suite at all (`docs/harness-boundaries.md`, *The harness legs
 decision*); the five roots run on every leg either way. The local files under
