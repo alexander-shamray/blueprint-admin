@@ -1,15 +1,6 @@
 #!/usr/bin/env python3
-"""Negative cases for the locality gate.
-
-Running the gate against a pull request whose diff sits inside its declared
-set passes, which says nothing about what it would catch. Every test below is
-a defect the gate has to find, a malformed input it has to refuse rather than
-judge, or a well-formed input it must not invent a finding for. The last two
-blocks read what this repository actually ships: the map, because a gate whose
-tests only ever see a fixture map has not been observed looking at the file
-CI hands it, and gates.yml, for the one fact it has to keep: no concurrency
-group.
-
+"""Negative cases: a defect the gate must find, an input it must refuse, or one it must pass.
+The last blocks read what ships here: the map, and gates.yml for its absent concurrency group.
     py -3.12 -m unittest discover -s .github/locality-gate
 """
 
