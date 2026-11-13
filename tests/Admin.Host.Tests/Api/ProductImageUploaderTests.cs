@@ -54,6 +54,32 @@ public sealed class ProductImageUploaderTests
         responded.Body.ShouldBe("done");
     }
 
+    [Fact]
+    public async Task An_unknown_charset_is_read_as_utf8_not_a_500()
+    {
+        ByteArrayContent content = new("<Error>naïve</Error>"u8.ToArray());
+        content.Headers.TryAddWithoutValidation("Content-Type", "application/xml; charset=no-such-charset");
+
+        ProxyResponded responded = (await Uploader(() => new HttpResponseMessage(HttpStatusCode.Forbidden) { Content = content }, new FakeTimeProvider())
+            .SendAsync(Request, TestContext.Current.CancellationToken)).ShouldBeOfType<ProxyResponded>();
+
+        responded.Status.ShouldBe(403);
+        responded.Body.ShouldBe("<Error>naïve</Error>");
+    }
+
+    [Fact]
+    public async Task A_long_body_is_cut_in_bytes_and_never_splits_a_character()
+    {
+        byte[] bytes = System.Text.Encoding.UTF8.GetBytes(new string('é', RequestProxy.MaxBodyBytes));
+
+        ProxyResponded responded = (await Uploader(() => new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) }, new FakeTimeProvider())
+            .SendAsync(Request, TestContext.Current.CancellationToken)).ShouldBeOfType<ProxyResponded>();
+
+        responded.BodyTruncated.ShouldBeTrue();
+        responded.Body.Length.ShouldBe(RequestProxy.MaxBodyBytes / 2);
+        responded.Body.ShouldAllBe(c => c == 'é');
+    }
+
     /// <summary>Content whose read fails with <paramref name="failure"/>, or, with none, advances the clock past the deadline and waits.</summary>
     private sealed class BreakingContent(Exception? failure, FakeTimeProvider? time) : HttpContent
     {
@@ -69,6 +95,17 @@ public sealed class ProductImageUploaderTests
         }
 
         protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context) => SerializeToStreamAsync(stream, context, CancellationToken.None);
+
+        // The uploader reads a stream, as off the wire, so the read is given the deadline's token.
+        protected override async Task<Stream> CreateContentReadStreamAsync(CancellationToken cancellationToken)
+        {
+            MemoryStream stream = new();
+            await SerializeToStreamAsync(stream, null, cancellationToken);
+
+            return stream;
+        }
+
+        protected override Task<Stream> CreateContentReadStreamAsync() => CreateContentReadStreamAsync(CancellationToken.None);
 
         protected override bool TryComputeLength(out long length)
         {
