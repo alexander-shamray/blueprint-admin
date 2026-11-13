@@ -24,7 +24,9 @@ gets skipped. A line outside that shape, a missing class, a repeated class or
 a class with no items refuses the whole map: a half-read map is a gate reading
 a file other than the one a reader sees.
 
-The glob dialect and the row grammar are `pr-locality.sh`'s. `**` crosses
+The glob dialect and the row grammar are `pr-locality.sh`'s, but for one
+difference: rows inside a fenced code block are skipped here and counted
+there, a residual `docs/harness-local.md` records. `**` crosses
 directories, `*` and `?` do not, `{a,b}` is an alternation, a token also
 covers everything beneath the directory it names, and every token is
 repository-relative: no leading `/`, no `./`, no `..` segment, brace
