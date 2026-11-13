@@ -1,31 +1,48 @@
 name: main red
 
-# This makes a failed `ci` run on `main` one open issue, closed by the next
-# green run; only main's tip acts, as `ci`'s concurrency group cancels nothing
-# on `main` and a later push's run can finish first. What it is
-# owed is docs/harness/working-rules.md, *CI*. Nothing from the run is checked
-# out or executed, so the write token never meets the failed code.
+# This makes a red `ci` run on `main` one open issue, closed by the next green
+# run; only main's tip acts, as `ci`'s concurrency group cancels nothing on
+# `main` and a later push's run can finish first. What it is owed is
+# docs/harness/working-rules.md, *CI*. Nothing from the run is checked out or
+# executed, so the write token never meets the failed code.
+#
+# It hears a run's first attempt alone. A red first attempt is rerun once, its
+# failed jobs only, and written on the flaky tests tracker; it is filed here
+# only when GitHub refuses the rerun, so it is never left silent. Every later
+# attempt, this rerun or one started by hand, is reported by `ci.yml`'s
+# `main-red` job, which reruns with the failed jobs: a rerun the job token
+# starts may raise no `workflow_run`, so this watcher cannot be relied on to
+# hear it. A run cannot rerun itself while one of its own jobs still runs,
+# which is why the rerun is started from here.
 on:
   workflow_run:
     workflows: [ci]
     types: [completed]
     branches: [main]
 
-permissions:
-  contents: read
-  issues: write
+permissions: {}
 
 jobs:
   alert:
-    if: github.event.workflow_run.event == 'push'
+    if: >-
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.run_attempt == 1
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # No concurrency group: GitHub replaces a group's pending job when a newer
+    # one queues, and a first attempt dropped so would be neither rerun nor filed.
+    permissions:
+      actions: write
+      contents: read
+      issues: write
     steps:
-      - name: Open, comment on or close the red-main issue
+      - name: Close on green, or rerun a red first attempt once
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           CONCLUSION: ${{ github.event.workflow_run.conclusion }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
           RUN_URL: ${{ github.event.workflow_run.html_url }}
           TITLE: main is red
         run: |
@@ -39,7 +56,39 @@ jobs:
             --jq 'map(select(.title == env.TITLE)) | .[0].number // empty')
           case "$CONCLUSION" in
             failure|timed_out|startup_failure|action_required)
-              body="\`ci\` ended \`$CONCLUSION\` on \`main\` at $HEAD_SHA: $RUN_URL"
+              # Each job that did not pass, and its steps that did not, read
+              # before the rerun replaces them.
+              failed=$(gh run view "$RUN_ID" --attempt 1 --json jobs --jq '
+                .jobs[] | select(.conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral")
+                | "- `\(.name)` (\(.conclusion)): \([.steps[]? | select(.conclusion == "failure" or .conclusion == "cancelled"
+                or .conclusion == "timed_out") | "`\(.name)`"] | if length == 0 then "no step failed" else join(", ") end)"' ||
+                echo '- its jobs could not be read')
+              if gh run rerun "$RUN_ID" --failed; then
+                # A flake that reruns green is still written down, or the
+                # tracker goes blind. A missing tracker is a warning: the rerun,
+                # which is what unblocks `main`, has already started.
+                tracker=$(gh issue list --state open --label flaky --limit 100 --json number,title \
+                  --jq 'map(select(.title == "Flaky tests tracker")) | .[0].number // empty')
+                if [ -z "$tracker" ]; then
+                  echo "::warning::no open Flaky tests tracker issue, so the first red attempt is not recorded"
+                  exit 0
+                fi
+                printf '%s\n' \
+                  "\`ci\` ended \`$CONCLUSION\` on \`main\` at $HEAD_SHA on its first attempt, and its failed jobs" \
+                  "were rerun once: $RUN_URL" \
+                  '' \
+                  "$failed" \
+                  '' \
+                  "A green second attempt makes it a flake; a red one opens \`$TITLE\` from that attempt." \
+                  '' \
+                  'Commented by `.github/workflows/main-red.yml`.' |
+                  gh issue comment "$tracker" --body-file -
+                exit 0
+              fi
+              echo "::error::the failed jobs could not be rerun, so the first attempt is filed"
+              body="\`ci\` ended \`$CONCLUSION\` on \`main\` at $HEAD_SHA, and its failed jobs could not be rerun: $RUN_URL
+
+          $failed"
               if [ -n "$open" ]; then
                 gh issue comment "$open" --body "$body"
               else

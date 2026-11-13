@@ -80,11 +80,13 @@ has stay here.
   alone, and so does the `locality-gate` check `gates.yml` posts, and here
   that gap is accepted: landing does not change what they judge.
 - **A red `main` is an issue because of
-  [`main-red.yml`](../.github/workflows/main-red.yml)**, which turns a failed
-  `ci` run on `main`'s tip into one, which outlives the run and the mail, and
-  closes it on the next green run. A revert runs `git-revert-pr.sh` and a
-  flake's rerun `gh run rerun <run> --failed`, each by hand, as neither
-  `.claude/settings.json` nor a command grants them.
+  [`main-red.yml`](../.github/workflows/main-red.yml)**, which reruns the
+  failed jobs of a red first attempt of `ci` on `main`'s tip once, writing it
+  on the flaky tests tracker, and `ci.yml`'s `main-red` job turns a red later
+  attempt into one, which outlives the run and the mail; whichever hears the
+  next green run closes it. A revert runs `git-revert-pr.sh` by hand, as
+  neither `.claude/settings.json` nor a command grants it, and so does any
+  rerun past the one the workflow starts.
 
 ## One owner per fact
 
