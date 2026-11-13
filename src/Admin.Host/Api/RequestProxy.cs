@@ -19,7 +19,7 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
 
     public const int MaxBodyBytes = 1_048_576;
 
-    private static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(30);
+    internal static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(30);
 
     private static readonly string[] Methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
 
