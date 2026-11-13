@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 # No concurrency group: a rerun of an older head's run would cancel the newest,
-# as commit-gate.yml says, leaving that head unanalysed.
+# as gates.yml says, leaving that head unanalysed.
 jobs:
   languages:
     runs-on: ubuntu-latest
