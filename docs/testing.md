@@ -95,13 +95,15 @@ pinned the old answer moves with it.
 ## Harness
 
 `bash .claude/scripts/harness-checks.sh` — Python 3.12, plus Bash, `grep`, Git
-and `jq` on PATH. Python plus `jq` alone fails before a case runs. It runs the
-payload's `.claude/scripts` suite through `shard-harness-suite.py`, as parallel
-workers (`docs/harness-boundaries.md` owns what that may not do), then
-`.github/locality-gate`, `.github/commit-gate`, `.github/pin-gate`,
-`.github/issue-form-gate` and `tools/token-usage` serially. A full run took 26
-to 63 minutes on a loaded Windows host, so run the module a change touches while
-working.
+and `jq` on PATH. Python plus `jq` alone fails before a case runs. It runs what
+the change reaches of the payload's `.claude/scripts` suite, through
+`shard-harness-suite.py --selective`, as parallel workers
+(`docs/harness-boundaries.md` owns what that may not do and what a selection
+falls back to), then `.github/locality-gate`, `.github/commit-gate`,
+`.github/pin-gate`, `.github/issue-form-gate` and `tools/token-usage` serially.
+A full run took 26 to 63 minutes on a loaded Windows host, which is why the
+local run selects and the `harness` job below runs the whole suite; run the
+module a change touches while working.
 
 The `harness` job in `ci.yml` is the matrix: the shard runner on Linux and
 macOS, as the harness's own `payload-suites` job runs it, and the whole suite
