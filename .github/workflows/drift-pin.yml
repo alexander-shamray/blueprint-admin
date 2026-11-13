@@ -106,7 +106,9 @@ jobs:
               *"$TIP"*) echo "#$open already names $TIP" ;;
               *)
                 gh issue comment "$open" --body "$line"
-                gh issue edit "$open" --add-label "$severity" --remove-label "$other"
+                body=$(gh issue view "$open" --json body --jq .body)
+                gh issue edit "$open" --add-label "$severity" --remove-label "$other" \
+                  --body "${body/"**Severity:** $other"/"**Severity:** $severity"}"
                 ;;
             esac
           else
