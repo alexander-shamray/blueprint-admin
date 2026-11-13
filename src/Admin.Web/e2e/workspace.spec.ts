@@ -282,6 +282,8 @@ test('a widget type with one preset is added in one press, and one with several 
 test('the layout is locked until Edit layout', async ({ page }) => {
   await page.goto('/logs');
 
+  // The widget is rendered first, so the count of none below is of a grid that is there, not of an empty page.
+  await expect(page.locator('gridster-item .ws-head .ws-title')).toHaveCount(1);
   await expect(page.locator('gridster-item .handle-se')).toHaveCount(0);
   await page.getByRole('button', { name: 'Edit layout' }).click();
   await expect(page.locator('gridster-item .handle-se')).toHaveCount(1);
