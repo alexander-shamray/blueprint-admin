@@ -79,7 +79,7 @@ jobs:
                   '' \
                   "$failed" \
                   '' \
-                  "A green second attempt makes it a flake; a red one opens \`$TITLE\` from that attempt." \
+                  "A green second attempt makes it a flake; a red one on \`main\`'s tip is reported on \`$TITLE\`." \
                   '' \
                   'Commented by `.github/workflows/main-red.yml`.' |
                   gh issue comment "$tracker" --body-file -
