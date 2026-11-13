@@ -531,11 +531,12 @@ export class ScenarioRunner {
 
     for (;;) {
       const found = await this.findInCarrierLog(key, bookings, bookingBody);
-      if (found === null) return false;
+      // A Cancel while a read was in flight ends the step without another read or wait; the later wait cannot see it.
+      if (found === null || this.cancelled) return false;
       let feed: CarrierEntry[] = [];
       if (carrier.outcome === 'strange' && polls) {
         const read = await this.findInCarrierLog(key, polls, withFeedOrder(polls.exampleBody ?? '', orderId));
-        if (read === null) return false;
+        if (read === null || this.cancelled) return false;
         feed = read;
       }
 
@@ -684,7 +685,8 @@ export class ScenarioRunner {
 
     for (;;) {
       const result = await this.exchange(key, read.method, url, '', identity, correlationId, sentUnderId);
-      if (result === null) return false;
+      // A Cancel while the read was in flight ends the step without another wait.
+      if (result === null || this.cancelled) return false;
       sentUnderId = true;
 
       const v = reservationVerdict(result.status, result.body);
@@ -1136,7 +1138,8 @@ export class ScenarioRunner {
 
     for (;;) {
       const result = await this.exchange(key, read.method, url, '', identity, correlationId, sentUnderId);
-      if (result === null) return false;
+      // A Cancel while the read was in flight ends the step without another wait.
+      if (result === null || this.cancelled) return false;
       sentUnderId = true;
 
       if (result.status === 404 && !this.orderAnswered) {
@@ -1172,6 +1175,7 @@ export class ScenarioRunner {
           ...all.slice(-(SAGA_READS_KEPT - 1)),
           { readAt, status: order.status, asOf: order.asOf, timeline: order.timeline, saga },
         ]);
+        if (this.cancelled) return false;
 
         const v = verdict(key, order);
         if (v.kind === 'reached') {
