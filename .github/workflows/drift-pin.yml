@@ -1,0 +1,117 @@
+name: drift pin
+
+# ci's drift job reads blueprint-backend at the commit .github/drift/backend.sha
+# pins, so a backend merge cannot turn this repository's main red. This keeps
+# one open issue while the pin is behind the backend's main, saying whether the
+# drift tests pass against that tip; a pull request that bumps the file fixes it.
+# Actions opens no such pull request: here it may not, and its checks would not run.
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  push:
+    branches: [main]
+    paths: ['.github/drift/backend.sha']
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: drift-pin
+  cancel-in-progress: false
+
+jobs:
+  # Reads and tests with a read-only token; only the report job may write, and
+  # it checks nothing out, so the write token never meets the tested code.
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      pin: ${{ steps.read.outputs.pin }}
+      tip: ${{ steps.read.outputs.tip }}
+      drift: ${{ steps.drift.outcome }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: read
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          pin=$(tr -d '[:space:]' < .github/drift/backend.sha)
+          if ! printf '%s' "$pin" | grep -Eqx '[0-9a-f]{40}'; then
+            echo "::error file=.github/drift/backend.sha::not one 40-hex commit id: '$pin'"
+            exit 1
+          fi
+          tip=$(gh api repos/alexander-shamray/blueprint-backend/commits/main --jq .sha)
+          echo "pin=$pin" >> "$GITHUB_OUTPUT"
+          echo "tip=$tip" >> "$GITHUB_OUTPUT"
+      - if: steps.read.outputs.pin != steps.read.outputs.tip
+        uses: actions/checkout@v7
+        with:
+          repository: alexander-shamray/blueprint-backend
+          ref: ${{ steps.read.outputs.tip }}
+          path: .drift/blueprint-backend
+          persist-credentials: false
+      - if: steps.read.outputs.pin != steps.read.outputs.tip
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      # A red result is the answer this job exists to give, so it is an output
+      # for the report rather than a failed run.
+      - id: drift
+        if: steps.read.outputs.pin != steps.read.outputs.tip
+        continue-on-error: true
+        run: dotnet test tests/Admin.Host.Tests --filter-namespace "Admin.Host.Tests.Drift"
+        env:
+          BLUEPRINT_Admin__BackendDir: ${{ github.workspace }}/.drift/blueprint-backend
+          ADMIN_DRIFT_REQUIRED: 'true'
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  report:
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Open, comment on or close the pin-behind issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PIN: ${{ needs.check.outputs.pin }}
+          TIP: ${{ needs.check.outputs.tip }}
+          DRIFT: ${{ needs.check.outputs.drift }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TITLE: drift pin is behind blueprint-backend's main
+        run: |
+          set -euo pipefail
+          open=$(gh issue list --state open --label enhancement --search "in:title \"$TITLE\"" --json number,title \
+            --jq 'map(select(.title == env.TITLE)) | .[0].number // empty')
+          if [ "$PIN" = "$TIP" ]; then
+            if [ -n "$open" ]; then
+              gh issue close "$open" --comment "The pin is at blueprint-backend's main, $TIP: $RUN_URL"
+            fi
+            exit 0
+          fi
+          case "$DRIFT" in
+            success) severity=low; verdict="green: bumping the pin is the whole change" ;;
+            failure) severity=medium; verdict="red: the bump carries the fix that brings the copied facts back in line" ;;
+            *) echo "unexpected drift outcome '$DRIFT'"; exit 1 ;;
+          esac
+          compare="https://github.com/alexander-shamray/blueprint-backend/compare/$PIN...$TIP"
+          line="The drift tests against blueprint-backend's main at $TIP are $verdict. Compare: $compare. Run: $RUN_URL"
+          if [ -n "$open" ]; then
+            seen=$(gh issue view "$open" --json body,comments --jq '[.body, .comments[].body] | join("\n")')
+            case "$seen" in
+              *"$TIP"*) echo "#$open already names $TIP" ;;
+              *) gh issue comment "$open" --body "$line" ;;
+            esac
+          else
+            gh issue create --title "$TITLE" --label enhancement --label "$severity" --label code --body "**Kind:** enhancement. **Severity:** $severity: \`ci\`'s \`drift\` job reads blueprint-backend at the commit \`.github/drift/backend.sha\` pins, $PIN, and the backend's main has moved past it.
+
+          $line
+
+          Bump \`.github/drift/backend.sha\` to the newest tip in a pull request; its \`drift\` check says whether the copied facts still hold. This issue closes on the first run that finds the pin at the backend's main.
+
+          Found by \`.github/workflows/drift-pin.yml\`, which reads the backend's main daily and on every change to the pin."
+          fi

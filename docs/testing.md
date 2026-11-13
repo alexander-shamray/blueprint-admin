@@ -18,7 +18,16 @@ Container-spawning tests in the Host use `node` for long-running children
 the way the host resolves `Admin:BackendDir` and overridden by the same
 `BLUEPRINT_Admin__BackendDir`. With no clone those tests skip; with
 `ADMIN_DRIFT_REQUIRED=true` they fail instead, which is how CI's `drift`
-job runs them against the backend's `main`. The `run-locally.md` checks
+job runs them against the backend commit `.github/drift/backend.sha` pins.
+The pin keeps a backend merge from turning this repository's `main` red:
+`drift-pin.yml` reads the backend's `main` daily and on every change to the
+pin, runs the same tests against it, and keeps one open issue while the pin
+is behind, saying whether they pass there. A pull request that bumps the pin
+is its fix, and that pull request's `drift` check is where a real drift
+turns red. Actions opens none: this repository does not let it, and a pull
+request its token opened would run no checks. The local run reads the
+sibling clone as it stands, not the pin, because that clone is what the
+console runs against. The `run-locally.md` checks
 skip in CI regardless: that file is at the workspace root, in no
 repository. `DriftCoverageTests` needs no clone and always runs. A source
 file that names `blueprint-backend` without a drift check or a listed
@@ -74,9 +83,10 @@ blueprint-backend's `Common.Assistant` package, keeps under
 `src/Admin.Web/src/app/assistant/golden/`, and three tests hold the copy:
 `protocol.spec.ts` the TypeScript mirror to it, the host's
 `ProtocolGoldenTests` the pinned package's records to it, and the drift
-job's `AssistantProtocolDriftTests` it to the backend's `main`. So a field
-changed on one side alone fails, and a golden file the backend changes fails
-the drift job before a package carrying it is pinned. A new body or event is
+job's `AssistantProtocolDriftTests` it to the pinned backend commit. So a
+field changed on one side alone fails, and a golden file the backend changes
+fails the drift job, on the pull request that bumps the pin, before a
+package carrying it is pinned. A new body or event is
 a new golden file: copied here, the C# test fails one it does not pin, but
 `protocol.spec.ts` imports each file by name, so the new one is added there
 by hand.

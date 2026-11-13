@@ -82,16 +82,28 @@ jobs:
           retention-days: 7
 
   # The owner-drift gate: the facts this console copies, read against the
-  # backend's main. The host job skips these tests because no clone sits
-  # beside it; ADMIN_DRIFT_REQUIRED makes a missing clone a failure here, so
-  # this job cannot pass by not finding what it checked out.
+  # backend commit .github/drift/backend.sha pins, which drift-pin.yml keeps
+  # level with the backend's main. The host job skips these tests because no
+  # clone sits beside it; ADMIN_DRIFT_REQUIRED makes a missing clone a failure
+  # here, so this job cannot pass by not finding what it checked out.
   drift:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      # An empty ref would check out the backend's default branch, so anything
+      # but one whole commit id fails here rather than reading main unasked.
+      - id: pin
+        run: |
+          sha=$(tr -d '[:space:]' < .github/drift/backend.sha)
+          if ! printf '%s' "$sha" | grep -Eqx '[0-9a-f]{40}'; then
+            echo "::error file=.github/drift/backend.sha::not one 40-hex commit id: '$sha'"
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v7
         with:
           repository: alexander-shamray/blueprint-backend
+          ref: ${{ steps.pin.outputs.sha }}
           path: .drift/blueprint-backend
           persist-credentials: false
       - uses: actions/setup-dotnet@v6
