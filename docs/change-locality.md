@@ -58,8 +58,8 @@ and this repository has no service, so the gate refuses it.
 
 **CI reads both rows.** The `gates` job in `.github/workflows/gates.yml`
 judges the change, and the workflow posts the verdict as `locality-gate`,
-which fails a PR on a path outside the class map or the declared touch set. `/review-branch`
-and `/ship` also run `bash .claude/scripts/pr-locality.sh`.
+which fails a PR on a path outside the class map or the declared touch set.
+`/review-branch` and `/ship` also run `bash .claude/scripts/pr-locality.sh`.
 
 | Class | Examples | May touch | Never touches |
 |---|---|---|---|
@@ -130,16 +130,16 @@ What this repository adds:
 - Exact pins, both toolchains.
 - A Dependabot pull request (`.github/dependabot.yml`) declares no class and
   no touch set and carries no `PR:` trailer, so the `gates` job's
-  `locality-gate` and `commit-gate` stand down when `dependabot[bot]` opened it **and made
-  every commit in it**: Dependabot's address as author and GitHub's
-  (`noreply@github.com`) as committer, as its own commits and rebases carry.
-  The other jobs in `ci.yml` run on it as on any pull request. A local rebase
-  or amend keeps Dependabot as the author but makes you the committer, so it
-  runs both gates. So do a commit anyone else pushes and a merge commit from
-  *Update branch*, and the pull request then needs the rows and the trailers
-  like any other. `@dependabot recreate` drops such commits. A commit that only
-  claims both addresses is a deliberate bypass: branch protection and the
-  owner's review bound that, not this check (#400).
+  `locality-gate` and `commit-gate` stand down when `dependabot[bot]` opened
+  it **and made every commit in it**: Dependabot's address as author and
+  GitHub's (`noreply@github.com`) as committer, as its own commits and
+  rebases carry. The other jobs in `ci.yml` run on it as on any pull request.
+  A local rebase or amend keeps Dependabot as the author but makes you the
+  committer, so it runs both gates. So do a commit anyone else pushes and a
+  merge commit from *Update branch*, and the pull request then needs the rows
+  and the trailers like any other. `@dependabot recreate` drops such commits.
+  A commit that only claims both addresses is a deliberate bypass: branch
+  protection and the owner's review bound that, not this check (#400).
 - The dialect in [`style-guide.md`](style-guide.md).
 - Loopback only; no credential store (spec §8).
 
