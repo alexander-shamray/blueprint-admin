@@ -104,6 +104,8 @@ public static partial class StackEndpoints
                     detail: result.Busy!.Kind == ComposeGate.LeaseKind
                         ? $"A Scenario already holds a lease (job {result.Busy.Job.Id}). Restore it first."
                         : $"A {result.Busy.Kind} (job {result.Busy.Job.Id}) is still running, so no lease was taken. Wait for it to end."),
+                AcquireOutcome.Unrestored => TypedResults.Problem(
+                    statusCode: StatusCodes.Status409Conflict, title: "A previous lease is not restored yet", detail: result.Detail),
                 _ => TypedResults.Problem(statusCode: StatusCodes.Status500InternalServerError, title: "The change failed", detail: result.Detail),
             };
         });
