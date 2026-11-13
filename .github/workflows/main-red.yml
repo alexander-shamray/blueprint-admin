@@ -1,28 +1,24 @@
 name: main red
 
-# This hears the first attempt of a `ci` run on `main`: a green one closes the
-# open `main is red` issue, and a red one is rerun once, its failed jobs only,
-# and written on the flaky tests tracker, filed as that issue here only when
-# GitHub refuses the rerun, so it is never left silent. Only main's tip acts,
-# as `ci`'s concurrency group cancels nothing on `main` and a later push's run
-# can finish first. What a red `main` is owed is
-# docs/harness/working-rules.md, *CI*. Nothing from the run is checked out or
-# executed, so the write token never meets the failed code.
-#
-# Every later attempt, this rerun or one started by hand, is reported by
-# `ci.yml`'s `main-red` job, which reruns with the failed jobs: a rerun the job
-# token starts may raise no `workflow_run`, so this watcher cannot be relied on
-# to hear it. A run cannot rerun itself while one of its own jobs still runs,
-# which is why the rerun is started from here.
+# A `ci` run's first attempt on `main`: green closes the open `main is red`
+# issue; red is rerun once, failed jobs only, and written on the flaky tests
+# tracker, filed here only if GitHub refuses the rerun. Only main's tip acts, as
+# a later push's run can finish first. What a red `main` is owed is
+# docs/harness/working-rules.md, *CI*.
 on:
   workflow_run:
     workflows: [ci]
     types: [completed]
     branches: [main]
 
+# Nothing from the run is checked out or executed, so the write token never
+# meets the failed code.
 permissions: {}
 
 jobs:
+  # A later attempt, this rerun or one by hand, is ci.yml's `main-red` job's to
+  # report: a rerun the job token starts may raise no `workflow_run`. A run
+  # cannot rerun itself while one of its jobs still runs, so the rerun starts here.
   alert:
     if: >-
       github.event.workflow_run.event == 'push' &&
