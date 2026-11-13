@@ -75,10 +75,12 @@ public sealed class ProductImageUploader(HttpClient http, IOptions<AdminOptions>
                     headers[name] = [.. values];
                 }
 
-                // From here the store has answered; the proxy's own read caps it in bytes and decodes it as the proxy does.
-                (string body, bool truncated, string? bodyError) = await RequestProxy.ReadBodyAsync(response.Content, timeout.Token, cancellationToken);
+                // From here the store has answered; the proxy's own read caps it in bytes and decodes it.
+                (string body, bool truncated, string? bodyError) =
+                    await RequestProxy.ReadBodyAsync(response.Content, timeout.Token, cancellationToken);
 
-                return new ProxyResponded(status.Value, headers, body, truncated, bodyError, Elapsed(started), correlationId);
+                return new ProxyResponded(
+                    status.Value, headers, body, truncated, bodyError, Elapsed(started), correlationId);
             }
             catch (HttpRequestException e)
             {

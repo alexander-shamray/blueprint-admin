@@ -60,7 +60,9 @@ public sealed class ProductImageUploaderTests
         ByteArrayContent content = new("<Error>naïve</Error>"u8.ToArray());
         content.Headers.TryAddWithoutValidation("Content-Type", "application/xml; charset=no-such-charset");
 
-        ProxyResponded responded = (await Uploader(() => new HttpResponseMessage(HttpStatusCode.Forbidden) { Content = content }, new FakeTimeProvider())
+        HttpResponseMessage answer = new(HttpStatusCode.Forbidden) { Content = content };
+
+        ProxyResponded responded = (await Uploader(() => answer, new FakeTimeProvider())
             .SendAsync(Request, TestContext.Current.CancellationToken)).ShouldBeOfType<ProxyResponded>();
 
         responded.Status.ShouldBe(403);
@@ -73,7 +75,9 @@ public sealed class ProductImageUploaderTests
         // One ASCII byte first puts the cut, at an even byte count, inside a two-byte é.
         byte[] bytes = System.Text.Encoding.UTF8.GetBytes("a" + new string('é', RequestProxy.MaxBodyBytes));
 
-        ProxyResponded responded = (await Uploader(() => new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) }, new FakeTimeProvider())
+        HttpResponseMessage answer = new(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) };
+
+        ProxyResponded responded = (await Uploader(() => answer, new FakeTimeProvider())
             .SendAsync(Request, TestContext.Current.CancellationToken)).ShouldBeOfType<ProxyResponded>();
 
         responded.BodyTruncated.ShouldBeTrue();
@@ -106,7 +110,8 @@ public sealed class ProductImageUploaderTests
             return stream;
         }
 
-        protected override Task<Stream> CreateContentReadStreamAsync() => CreateContentReadStreamAsync(CancellationToken.None);
+        protected override Task<Stream> CreateContentReadStreamAsync() =>
+            CreateContentReadStreamAsync(CancellationToken.None);
 
         protected override bool TryComputeLength(out long length)
         {
