@@ -56,9 +56,9 @@ classes names both (`C+E`, `A+D`) and its touch set is the union. None takes
 three: the `A+D+E` that `/pr` admits is backend's, for a service's own work,
 and this repository has no service, so the gate refuses it.
 
-**CI reads both rows.** The `gates` job in `.github/workflows/gates.yml` posts
-`locality-gate`, which fails a PR on a path outside the class map or the
-declared touch set. `/review-branch`
+**CI reads both rows.** The `gates` job in `.github/workflows/gates.yml`
+judges the change, and the workflow posts the verdict as `locality-gate`,
+which fails a PR on a path outside the class map or the declared touch set. `/review-branch`
 and `/ship` also run `bash .claude/scripts/pr-locality.sh`.
 
 | Class | Examples | May touch | Never touches |
