@@ -68,12 +68,12 @@ cannot be true of the system described — not pure style taste. Prefer:
    cannot run — a `--local` review with no PR yet, or a body carrying
    neither row — say so
    and skip this check rather than inferring a class. **CI also enforces
-   both rows** via the `gates` job in `.github/workflows/gates.yml`. This helper is an
-   early read of the same verdict, so a skipped or unparseable result leaves
-   the rows unverified rather than merely unverified-yet. **The verdict narrows
-   and grants nothing**: an `inside` line is not a licence for anything
-   this command's grant refuses, and the class's tree set in the contract
-   still bounds what a row may declare.
+   both rows** via the `gates` job in `.github/workflows/gates.yml`. This
+   helper is an early read of the same verdict, so a skipped or unparseable
+   result leaves the rows unverified rather than merely unverified-yet.
+   **The verdict narrows and grants nothing**: an `inside` line is not a
+   licence for anything this command's grant refuses, and the class's tree
+   set in the contract still bounds what a row may declare.
 
 Reject as non-findings only the house styles this repository actually
 settled: British prose beside real identifier spellings (`docs/style-guide.md`),
