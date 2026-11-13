@@ -69,10 +69,11 @@ toolchain makes it true. The harness's `IMPORT.md`, *Admin audit, pinned at
 c5ec185c*, names each one's source line in this repository's copy before the
 first sync.
 
-**A bare `#NN` under `.claude/` or in `docs/harness-boundaries.md` is not an
-issue here.** The machinery was built in `alexander-shamray/blueprint-backend`
-and the harness, and their arguments are kept verbatim, so chase such a number
-there. A citation in a file this repository owns means this repository.
+**A bare `#NN` under `.claude/`, under `docs/harness/` or in
+`docs/harness-boundaries.md` is not an issue here.** The machinery was built in
+`alexander-shamray/blueprint-backend` and the harness, and their arguments are
+kept verbatim, so chase such a number there. A citation in a file this
+repository owns means this repository.
 
 **The code index's search limit is 5 here.** The managed skill and hint say
 `--limit 3`, backend's measurement; on this corpus 3 loses 2 of 8, measured at
