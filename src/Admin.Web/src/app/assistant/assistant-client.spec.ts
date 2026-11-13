@@ -463,6 +463,65 @@ describe('AssistantConversation', () => {
     expect(host.streams).toEqual([]);
   });
 
+  it('keeps the id and says so when a reload cannot read the conversation', async () => {
+    const ids = memoryIds('c1');
+    const { host, conversation } = setup(ids);
+    host.on('GET', /\/conversations\/c1$/, () => new Response(null, { status: 502 }));
+
+    await conversation.resume();
+
+    expect(ids.id).toBe('c1');
+    expect(conversation.current.problem?.code).toBe('failed');
+  });
+
+  it('keeps the id when the stream is lost and the read fails with a 5xx', async () => {
+    const { host, conversation, ids } = setup();
+    await conversation.send('logs?', null, 'en-US');
+    host.on('GET', /\/conversations\/c1$/, () => new Response(null, { status: 503 }));
+
+    host.stream.lose();
+    await settle();
+
+    expect(ids.id).toBe('c1');
+    expect(conversation.current.id).toBe('c1');
+    expect(conversation.current.running).toBe(false);
+    expect(conversation.current.problem?.code).toBe('failed');
+  });
+
+  it('a start over while the first message opens its conversation sends nothing and forgets the conversation', async () => {
+    const host = new FakeHost()
+      .on('POST', /\/conversations$/, () => json({ id: 'c1' }))
+      .on('POST', /\/turns$/, () => new Response(null, { status: 202 }))
+      .on('DELETE', /\/conversations\/c1$/, () => new Response(null, { status: 204 }));
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const gated = async (input: string, init?: RequestInit): Promise<Response> => {
+      if (input.endsWith('/conversations') && init?.method === 'POST') await gate;
+      return host.fetch(input, init);
+    };
+    const ids = memoryIds();
+    const client = new AssistantClient('/api/assistant', gated, host.openStream);
+    const conversation = new AssistantConversation(
+      client,
+      new ClientToolRegistry(),
+      () => OPENING,
+      ids,
+      () => undefined,
+    );
+
+    const sending = conversation.send('logs?', null, 'en-US');
+    await settle();
+    await conversation.startOver();
+    release();
+    await sending;
+    await settle();
+
+    expect(host.requests.some((r) => r.url.endsWith('/turns'))).toBe(false);
+    expect(host.requests.some((r) => r.method === 'DELETE' && r.url.endsWith('/conversations/c1'))).toBe(true);
+    expect(ids.id).toBeNull();
+    expect(conversation.current).toEqual({ id: null, items: [], running: false, lastEventId: 0, problem: null });
+  });
+
   it('holds no stream while idle and hidden, and opens one while visible', async () => {
     const ids = memoryIds('c1');
     const { host, conversation } = setup(ids);
