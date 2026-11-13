@@ -119,6 +119,14 @@ class TouchSetGrammar(unittest.TestCase):
         text = "````\n```\n| Class | D |\n```\n| Touch set | `docs/**` |\n````\n" + body("A", "`src/**`")
         self.assertEqual(read_rows(text), (["A"], ["src/**"]))
 
+    def test_a_fence_closes_only_on_a_line_of_fence_alone(self) -> None:
+        text = "```\n``` not a closer\n| Class | D |\n```\n" + body("A", "`src/**`")
+        self.assertEqual(read_rows(text), (["A"], ["src/**"]))
+
+    def test_a_backtick_run_with_a_backtick_in_its_info_string_opens_no_fence(self) -> None:
+        text = "```a`b\n" + body("A", "`src/**`")
+        self.assertEqual(read_rows(text), (["A"], ["src/**"]))
+
     def test_a_class_letter_outside_a_to_e_is_refused(self) -> None:
         with self.assertRaisesRegex(InputRefused, "Class row is not a class"):
             read_rows(body("Z", "`docs/**`"))
