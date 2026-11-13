@@ -4,3 +4,8 @@
 CEILINGS = {
     "review-branch.md": 12200,
 }
+
+# Its own suites that list the tree, in `suite_select`'s `TREE_READERS` shape: (pattern, (selector, ...)) rows.
+TREE_READERS = (
+    ("**", ("test_harness_helpers_admin.AdminStack", "test_sweep_slices_admin.TheRealTree")),
+)
