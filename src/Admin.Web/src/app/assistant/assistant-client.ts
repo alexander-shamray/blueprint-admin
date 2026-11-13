@@ -196,7 +196,14 @@ export class AssistantConversation {
   async resume(): Promise<void> {
     const id = this.ids.get();
     if (!id) return;
-    const view = await this.client.read(id).catch(() => null);
+    let view: ConversationView | null;
+    try {
+      view = await this.client.read(id);
+    } catch (e) {
+      // A 5xx or a dropped connection says nothing about the host's memory: the id stays for the next reload.
+      this.update({ ...this.state, problem: { code: 'failed', detail: e instanceof Error ? e.message : String(e) } });
+      return;
+    }
     if (!view) {
       this.ids.set(null);
       return;
@@ -220,19 +227,24 @@ export class AssistantConversation {
     hostOptions: Record<string, unknown> | null = null,
   ): Promise<void> {
     if (this.state.running || text.trim() === '') return;
-    this.sends++;
+    const sent = ++this.sends;
     const items: ConversationItem[] = [...this.state.items, { kind: 'operator', text }];
     this.update({ ...this.state, items, running: true, problem: null });
     try {
-      let id = this.state.id ?? (await this.openNew());
+      let id = this.state.id ?? (await this.openNew(sent));
+      // A start over while the message waited drops it: nothing is sent, and no conversation is opened for it.
+      if (id === null) return;
       this.settleStream();
       let outcome = await this.client.send(id, { text, context, locale, hostOptions });
+      if (sent !== this.sends) return;
       if (outcome === 'gone') {
         // The host was restarted, or forgot the conversation: the same words go to a new one.
         this.stopStream();
-        id = await this.openNew();
+        id = await this.openNew(sent);
+        if (id === null) return;
         this.settleStream();
         outcome = await this.client.send(id, { text, context, locale, hostOptions });
+        if (sent !== this.sends) return;
       }
       if (outcome === 'running') {
         this.update({
@@ -242,6 +254,7 @@ export class AssistantConversation {
         });
       }
     } catch (e) {
+      if (sent !== this.sends) return;
       this.update({
         ...this.state,
         running: false,
@@ -258,6 +271,7 @@ export class AssistantConversation {
   /** Forgets the conversation here and on the host; the next message opens a new one. */
   async startOver(): Promise<void> {
     const id = this.state.id;
+    this.sends++;
     this.stopStream();
     this.ids.set(null);
     this.answered.clear();
@@ -265,8 +279,13 @@ export class AssistantConversation {
     if (id) await this.client.forget(id).catch(() => undefined);
   }
 
-  private async openNew(): Promise<string> {
+  /** Opens a conversation for the send numbered `sent`; null, the conversation forgotten, when a start over came first. */
+  private async openNew(sent: number): Promise<string | null> {
     const id = await this.client.open(this.opening());
+    if (sent !== this.sends) {
+      await this.client.forget(id).catch(() => undefined);
+      return null;
+    }
     this.ids.set(id);
     this.update({ ...this.state, id, lastEventId: 0 });
     return id;
@@ -361,9 +380,27 @@ export class AssistantConversation {
     this.stopStream();
     const id = this.state.id;
     const sent = this.sends;
-    const view = id ? await this.client.read(id).catch(() => null) : null;
+    let view: ConversationView | null = null;
+    let failure: unknown = null;
+    if (id) {
+      try {
+        view = await this.client.read(id);
+      } catch (e) {
+        failure = e;
+      }
+    }
     // A send, a new conversation or a start-over since the read began makes its answer someone else's.
     if (sent !== this.sends || id !== this.state.id) return;
+    if (failure !== null) {
+      // A 5xx or a dropped connection is not the host forgetting: the id stays, and the stream stays closed until
+      // something asks for it again.
+      this.update({
+        ...this.state,
+        running: false,
+        problem: { code: 'failed', detail: failure instanceof Error ? failure.message : String(failure) },
+      });
+      return;
+    }
     if (view) {
       this.update({ ...this.state, items: view.items, running: view.running, lastEventId: view.lastEventId });
       this.settleStream();
