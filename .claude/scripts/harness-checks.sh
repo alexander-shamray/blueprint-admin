@@ -32,6 +32,18 @@ run_py() {
   exit 2
 }
 
+# One line of how long this run took and how it ended, outside every checkout
+# (docs/harness-boundaries.md, *The suite's shard runner*), beside the one the
+# runner writes for its part. The exit stays the suites': a record that cannot
+# be made is said and never changes it.
+record_run() {
+  code=$?
+  (run_py .claude/scripts/harness_timings.py record --script harness-checks.sh \
+    --mode selective --wall "$SECONDS" --exit "$code") || true
+  exit "$code"
+}
+trap record_run EXIT
+
 # `--selective` runs the classes the change reaches against origin/main, and
 # the whole suite for a change it cannot place; the `harness` job in ci.yml
 # runs it whole. The worker count is the host's, capped: a caller who could

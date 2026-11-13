@@ -44,6 +44,23 @@ mode="${1:-all}"
 root="$(git rev-parse --show-toplevel)"
 cd "$root/src/Admin.Web"
 
+# One line of how long this run took and how it ended, outside every checkout
+# (docs/harness-boundaries.md, *The suite's shard runner*). The exit stays the
+# checks': a record that cannot be made is said and never changes it.
+record_run() {
+  code=$?
+  for py in "py -3.12" "py -3" python3 python; do
+    if $py -c 'import sys; sys.exit(sys.version_info < (3, 12))' >/dev/null 2>&1; then
+      $py "$root/.claude/scripts/harness_timings.py" record --script npm-checks.sh \
+        --mode "$mode" --wall "$SECONDS" --exit "$code" || true
+      exit "$code"
+    fi
+  done
+  echo "npm-checks.sh: no Python 3.12+, so the run's time was not recorded" >&2
+  exit "$code"
+}
+trap record_run EXIT
+
 case "$mode" in
   all)
     # The web job of .github/workflows/ci.yml, in its order, less `npm ci`,
@@ -53,25 +70,26 @@ case "$mode" in
     # has usually already surfaced in the tests.
     npm run lint
     npm test
-    exec npm run build
+    npm run build
     ;;
   fast)
     # Everything but the production build. `ng build` is the long pole, and it
     # re-typechecks what `ng test` has already compiled, so this is the mode for
     # a loop that runs on every edit.
     npm run lint
-    exec npm test
+    npm test
     ;;
   lint)
-    exec npm run lint
+    npm run lint
     ;;
   test)
-    exec npm test
+    npm test
     ;;
   build)
-    exec npm run build
+    npm run build
     ;;
   *)
+    trap - EXIT
     echo "usage: npm-checks.sh [all|fast|lint|test|build]" >&2
     exit 2
     ;;
