@@ -24,9 +24,7 @@ gets skipped. A line outside that shape, a missing class, a repeated class or
 a class with no items refuses the whole map: a half-read map is a gate reading
 a file other than the one a reader sees.
 
-The glob dialect and the row grammar are `pr-locality.sh`'s, but for one
-difference: rows inside a fenced code block are skipped here and counted
-there, a residual `docs/harness-local.md` records. `**` crosses
+The glob dialect and the row grammar are `pr-locality.sh`'s. `**` crosses
 directories, `*` and `?` do not, `{a,b}` is an alternation, a token also
 covers everything beneath the directory it names, and every token is
 repository-relative: no leading `/`, no `./`, no `..` segment, brace
@@ -87,6 +85,7 @@ _REASON_OPENED = re.compile(r"`[^`]+`[ \t\n\r\f\v]+\(.*", re.DOTALL)
 _CLASS_ROW = re.compile(r"^\| *Class *\|(.*)$")
 _TOUCH_ROW = re.compile(r"^\| *Touch set *\|(.*)$")
 # CommonMark: a backtick opener's info string holds no backtick, and a closer is the fence alone.
+# The one row rule pr-locality.sh lacks: docs/harness-local.md, Residuals.
 _FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}(?=[^`]*$)|~{3,})")
 _FENCE_CLOSE = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*$")
 _MAP_CLASS = re.compile(r"^([A-E]):\s*$")

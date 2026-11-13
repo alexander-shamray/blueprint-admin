@@ -237,7 +237,8 @@ public sealed class RequestProxy(HttpClient http, TokenService tokens, IOptions<
     }
 
     /// <summary>The body up to <see cref="MaxBodyBytes"/>, whether it was longer, and why it stopped early if it did.</summary>
-    internal static async Task<(string Body, bool Truncated, string? Error)> ReadBodyAsync(HttpContent content, CancellationToken timeout, CancellationToken cancellationToken)
+    internal static async Task<(string Body, bool Truncated, string? Error)> ReadBodyAsync(
+        HttpContent content, CancellationToken timeout, CancellationToken cancellationToken)
     {
         byte[] buffer = new byte[MaxBodyBytes + 1];
         int read = 0;
