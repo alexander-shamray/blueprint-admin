@@ -350,5 +350,16 @@ class TheLocalRoots(unittest.TestCase):
         self.assertEqual(found, self.roots(ci))
 
 
+
+class TheLocalRunIsSelective(unittest.TestCase):
+    """The check runs what the change reaches of the payload's suite, and CI's job runs all of it."""
+
+    def test_the_check_selects_and_the_ci_job_does_not(self):
+        checks = (SCRIPTS / "harness-checks.sh").read_text(encoding="utf-8")
+        ci = (SCRIPTS.parent.parent / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        self.assertIn("run_py .claude/scripts/shard-harness-suite.py --selective\n", checks)
+        self.assertIn("python .claude/scripts/shard-harness-suite.py\n", ci)
+        self.assertNotIn("--selective", ci)
+
 if __name__ == "__main__":
     unittest.main()

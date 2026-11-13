@@ -32,9 +32,11 @@ run_py() {
   exit 2
 }
 
-# It takes no arguments: the worker count is the host's, capped, and a caller
-# who could set it would be a second opinion about what the suite is.
-run_py .claude/scripts/shard-harness-suite.py
+# `--selective` runs the classes the change reaches against origin/main, and
+# the whole suite for a change it cannot place; the `harness` job in ci.yml
+# runs it whole. The worker count is the host's, capped: a caller who could
+# set it would be a second opinion about what the suite is.
+run_py .claude/scripts/shard-harness-suite.py --selective
 
 # The roots the payload's runner does not know, each serial. `unittest discover`
 # exits 5 on no tests from 3.12 on, so an empty discovery refuses this check.

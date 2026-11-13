@@ -41,8 +41,9 @@ Selected by what the diff touched:
   `package.json` or the lockfile is dirty.
 - **`bash .claude/scripts/harness-checks.sh`** whenever it reaches `.claude/**`,
   `.harness/**`, `.github/locality-gate/**`, `.github/commit-gate/**`,
-  `.github/pin-gate/**`, `.github/issue-form-gate/**` or `tools/**`. It runs the
-  payload's suite through `shard-harness-suite.py`, then those roots.
+  `.github/pin-gate/**`, `.github/issue-form-gate/**` or `tools/**`. It runs
+  what the change reaches of the payload's suite, through
+  `shard-harness-suite.py --selective`, then those roots; CI runs it whole.
 - A docs-only change runs `fast` or nothing and says which.
 - **The Playwright suite is CI's `smoke` job and is not run here**: it needs the
   host under FakePlatform and a browser, and a suite that passed because nothing
