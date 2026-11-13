@@ -603,7 +603,7 @@ def concurrency_keys(workflow: str) -> list[str]:
 
 
 class TheGatesConcurrency(unittest.TestCase):
-    """No concurrency group on the gate: a run it cancels stays on the head as a required check reading CANCELLED."""
+    """No concurrency group on gates.yml: a cancelled run leaves its gates unposted and the merge refused."""
 
     def test_the_shipped_gate_sets_no_concurrency_group(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "gates.yml").read_text(encoding="utf-8")
