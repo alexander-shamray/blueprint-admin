@@ -646,8 +646,11 @@ class TheShippedWorkflows(unittest.TestCase):
     SUITE = "      - name: suite\n        run: python -m unittest\n"
     GATE = '      - name: gate\n        run: python "$RUNNER_TEMP/gate/gate.py"\n'
 
+    # The commit gate's step order is the payload's, in its `gates.yml`, and its `test_commit_gate.py` holds it.
+    WORKFLOWS = ("locality-gate.yml",)
+
     def test_the_head_suite_runs_after_the_enforcing_gate(self) -> None:
-        for name in ("locality-gate.yml", "commit-gate.yml"):
+        for name in self.WORKFLOWS:
             with self.subTest(workflow=name):
                 workflow = (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
                 self.assertTrue(suite_follows_gate(workflow))
@@ -671,7 +674,7 @@ class TheShippedWorkflows(unittest.TestCase):
             suite_follows_gate(self.GATE + "      # python -m unittest\n")
 
     def test_nothing_of_the_heads_runs_ahead_of_the_enforcing_gate(self) -> None:
-        for name in ("locality-gate.yml", "commit-gate.yml"):
+        for name in self.WORKFLOWS:
             with self.subTest(workflow=name):
                 workflow = (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
                 self.assertEqual([], head_code_ahead_of_gate(workflow))
