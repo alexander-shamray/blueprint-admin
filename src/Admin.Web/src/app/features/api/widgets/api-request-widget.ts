@@ -61,8 +61,6 @@ export class ApiRequestWidget {
   private readonly workspace = inject(WorkspaceService);
   private readonly context = injectWidgetContext();
   private readonly apiHistory = inject(ApiHistory);
-  /** Sends still in flight. They are not cancelled when the editor moves on: the platform may already have acted on one. */
-  private readonly sends = new Set<Subscription>();
   /** Bumped when the editor is replaced (select, restore); a send finishing under an older value only reaches history. */
   private editorGeneration = 0;
   /** A restored entry's commandId handling, used when its operation is no longer in the catalog. */
@@ -429,7 +427,8 @@ export class ApiRequestWidget {
     this.pending.set(true);
     const generation = this.editorGeneration;
     const current = () => generation === this.editorGeneration;
-    const send = this.host.proxy(request).subscribe({
+    // Never unsubscribed: a send runs to its answer, which the history keeps, wherever the editor has gone.
+    this.host.proxy(request).subscribe({
       next: (result) => {
         if (current()) {
           this.result.set(result);
@@ -470,10 +469,6 @@ export class ApiRequestWidget {
         }
       },
     });
-    if (!send.closed) {
-      this.sends.add(send);
-      send.add(() => this.sends.delete(send));
-    }
   }
 
   /**
