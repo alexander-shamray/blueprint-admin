@@ -129,8 +129,8 @@ reads and claims is [its README](../.github/workflow-lint/README.md)'s.
 
 `python -m unittest` in `.github/commit-gate/` is the gate's own suite, and
 the `harness` job runs it too. The `gates` job in `gates.yml` enforces the
-**base** copy of the gate on every pull request, posts it as `commit-gate`, and
-runs the suite after it,
+**base** copy of the gate on every pull request and runs the suite after it,
+and the workflow posts the verdict as `commit-gate`,
 for the reason `gates.yml` argues. The gate reads git rather than
 `gh`, so a branch can run it once its pull request exists:
 
