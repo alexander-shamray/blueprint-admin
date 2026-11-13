@@ -551,10 +551,17 @@ class TheCiWiring(unittest.TestCase):
         others, needs = main_red_needs(cut)
         self.assertEqual(sorted(set(others) - set(needs)), ["workflow-lint"])
 
+    def test_the_needs_reading_sees_a_job_id_with_digits_underscores_and_a_comment(self) -> None:
+        text = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        added = text.replace("\n  main-red:\n", "\n  e2e_2:  # a job\n    runs-on: ubuntu-latest\n\n  main-red:\n", 1)
+        self.assertNotEqual(added, text)
+        others, needs = main_red_needs(added)
+        self.assertEqual(sorted(set(others) - set(needs)), ["e2e_2"])
+
 
 def main_red_needs(text: str) -> tuple[list[str], list[str]]:
     """ci.yml's jobs other than main-red, and the jobs main-red needs."""
-    jobs = re.findall(r"^  ([a-z-]+):\n", text[text.index("\njobs:\n"):], re.MULTILINE)
+    jobs = re.findall(r"^  ([A-Za-z0-9_-]+):[ \t]*(?:#.*)?$", text[text.index("\njobs:\n"):], re.MULTILINE)
     needs = re.search(r"^  main-red:\n    needs: \[([^\]]*)\]", text, re.MULTILINE)
     assert needs, "ci.yml's main-red job names no needs list"
     return [name for name in jobs if name != "main-red"], [n.strip() for n in needs.group(1).split(",")]
