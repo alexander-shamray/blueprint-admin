@@ -25,6 +25,14 @@ FEED_FILE = "nuget.config"
 SDK_FILE = "global.json"
 SOLUTION_FILE = "BlueprintAdmin.slnx"
 
+# NuGet's lock file, the per-project packages.<name>.lock.json included,
+# which it reads before the plain one. Restore takes transitive versions from
+# one beside a project whose direct dependencies it matches, with
+# RestorePackagesWithLockFile unset, and the build's judge compares only the
+# pin file's names (#747). Its path is moved only by a NuGet* property, which
+# is refused below, so a tracked one is refused wherever it sits.
+LOCK_FILE = re.compile(r"^packages(?:\..+)?\.lock\.json$", re.IGNORECASE)
+
 # What is read as MSBuild by its name: every *proj, .props and .targets at any
 # depth, and the .user file the SDK imports beside a project. A file whose
 # root is <Project> may be imported under any other name too, so every
@@ -285,10 +293,13 @@ def check_pin_file(data: bytes | str) -> list[str]:
 
 def check_other(path: str, data: bytes | str, known: frozenset[str] | None = None) -> list[str]:
     """A tracked restore input that is not an MSBuild file: a response file,
-    a second solution or feed list, or an SDK pin naming MSBuild SDKs."""
+    a second solution or feed list, an SDK pin naming MSBuild SDKs, or a
+    NuGet lock file."""
     base = PurePosixPath(path).name.lower()
     if base.endswith(".rsp"):
         return [f"{path}: a response file hands MSBuild properties no project shows"]
+    if LOCK_FILE.match(base):
+        return [f"{path}: a NuGet lock file chooses transitive versions {PIN_FILE} never sees"]
     if base.endswith((".sln", ".slnx")):
         if path != SOLUTION_FILE:
             return [f"{path}: a second solution beside {SOLUTION_FILE}"]
@@ -319,7 +330,8 @@ def check_other(path: str, data: bytes | str, known: frozenset[str] | None = Non
 
 def _is_other(path: str) -> bool:
     base = PurePosixPath(path).name.lower()
-    return base.endswith((".rsp", ".sln", ".slnx")) or base in (FEED_FILE, SDK_FILE, PIN_FILE.lower())
+    return (base.endswith((".rsp", ".sln", ".slnx")) or base in (FEED_FILE, SDK_FILE, PIN_FILE.lower())
+            or LOCK_FILE.match(base) is not None)
 
 
 class _Root(Exception):

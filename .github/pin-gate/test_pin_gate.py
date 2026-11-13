@@ -360,6 +360,18 @@ class OtherRestoreInputs(unittest.TestCase):
         self.assertTrue(check_other("src/global.json", '{"sdk": {"version": "10.0.100"}}'))
         self.assertTrue(check_other("global.json", "{"))
 
+    def test_a_nuget_lock_file_anywhere_fails(self) -> None:
+        # #747: NuGet takes transitive versions from a lock file beside a
+        # project whose direct dependencies it matches, with
+        # RestorePackagesWithLockFile unset, so the pin file never sees them;
+        # a per-project packages.<name>.lock.json is read before the plain one.
+        for path in ("packages.lock.json", "src/Admin.Host/packages.lock.json",
+                     "tests/X/Packages.Lock.JSON", "src/Admin.Host/packages.Admin.Host.lock.json"):
+            with self.subTest(path=path):
+                self.assertTrue(check_other(path, '{"version": 1, "dependencies": {}}'))
+        # npm's lock file is no restore input of NuGet's.
+        self.assertEqual(check_other("src/Admin.Web/package-lock.json", "{}"), [])
+
 
 @contextlib.contextmanager
 def inside(path: Path):
@@ -412,6 +424,8 @@ class TheTree(unittest.TestCase):
             Path("src/other.xml").write_text("<configuration />", encoding="utf-8")
             Path("src/wide.csproj").write_bytes(PLAIN.encode("utf-16"))
             Path("src/logo.png").write_bytes(b"\x89PNG\r\n\x1a\n\xff\xfe\x00")
+            # npm's lock file, beside the NuGet one the next case refuses.
+            Path("src/package-lock.json").write_text("{}", encoding="utf-8")
             run("git", "add", ".")
             Path("src/Untracked.csproj").write_text(project('<Import Project="x" />'), encoding="utf-8")
             self.assertEqual(collect(), ["Admin.Assistant/Admin.Assistant.csproj", PIN_FILE, "dirs.proj",
@@ -446,12 +460,16 @@ class TheTree(unittest.TestCase):
             Path("C.csproj").write_text(project(
                 '<ItemGroup><ProjectReference Include="..\\outside\\x.csproj" /></ItemGroup>'),
                 encoding="utf-8")
+            # #747: a NuGet lock file, which chooses transitive versions.
+            Path("src").mkdir()
+            Path("src/packages.lock.json").write_text('{"version": 1}', encoding="utf-8")
             run("git", "add", ".")
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
                 self.assertEqual(main([]), 1)
             for path in ("A.csproj.user", "Directory.Build.rsp", "after.anything", "B.csproj",
-                         "wide32.xml", "dtd.xml", "jis.xml", "unicode.xml", "C.csproj"):
+                         "wide32.xml", "dtd.xml", "jis.xml", "unicode.xml", "C.csproj",
+                         "src/packages.lock.json"):
                 with self.subTest(path=path):
                     self.assertIn(f"::error::{path}", out.getvalue())
 

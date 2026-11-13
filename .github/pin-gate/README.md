@@ -96,8 +96,14 @@ which outrank the pin file), a `Directory.Packages.props` below the root
 subtree), a `nuget.config` or a `global.json` anywhere but the root (each is
 the nearest for its subtree too), a root `global.json` carrying
 `msbuild-sdks`, a solution other than
-`BlueprintAdmin.slnx`, and a project entry in that one naming anything but a
-literal path to a tracked `*proj`.
+`BlueprintAdmin.slnx`, a project entry in that one naming anything but a
+literal path to a tracked `*proj`, and a NuGet lock file anywhere
+(`packages.lock.json`, or the per-project `packages.<name>.lock.json` NuGet
+reads before it): restore takes transitive versions from one beside a
+project whose direct dependencies it matches, even with
+`RestorePackagesWithLockFile` unset, and the build's judge compares only the
+names the pin file lists (#747). Its path moves only by a `NuGet*` property,
+which the first list refuses; npm's `package-lock.json` is none of NuGet's.
 
 ## What the build's judge refuses
 
