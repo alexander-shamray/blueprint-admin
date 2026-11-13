@@ -361,9 +361,8 @@ class OtherRestoreInputs(unittest.TestCase):
         self.assertTrue(check_other("global.json", "{"))
 
     def test_a_nuget_lock_file_anywhere_fails(self) -> None:
-        # NuGet takes transitive versions from a lock file beside a project,
-        # with RestorePackagesWithLockFile unset, so the pin file never sees
-        # them; a per-project packages.<name>.lock.json is read first.
+        # The plain name and the per-project one, as the README's restore
+        # inputs list them.
         for path in ("packages.lock.json", "src/Admin.Host/packages.lock.json",
                      "tests/X/Packages.Lock.JSON", "src/Admin.Host/packages.Admin.Host.lock.json"):
             with self.subTest(path=path):
