@@ -455,14 +455,18 @@ jobs:
             echo "$GITHUB_SHA is not main's tip ($tip); the run for the tip reports"
             exit 0
           fi
-          open=$(gh issue list --state open --label bug --search "in:title \"$TITLE\"" --json number,title \
-            --jq 'map(select(.title == env.TITLE)) | .[0].number // empty')
+          # Every open one, as main-red.yml reads them: green closes them all.
+          all_open=$(gh issue list --state open --label bug --search "in:title \"$TITLE\"" --json number,title \
+            --jq 'map(select(.title == env.TITLE)) | sort_by(.number) | .[].number')
+          open=$(head -n 1 <<<"$all_open")
           red=$(jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped")
             | "- `\(.key)` (\(.value.result))"' <<<"$NEEDS")
           if [ -z "$red" ]; then
-            if [ -n "$open" ]; then
-              gh issue close "$open" --comment "\`ci\` is green on \`main\` again at $GITHUB_SHA on attempt $GITHUB_RUN_ATTEMPT: $RUN_URL"
-            fi
+            while read -r number; do
+              if [ -n "$number" ]; then
+                gh issue close "$number" --comment "\`ci\` is green on \`main\` again at $GITHUB_SHA on attempt $GITHUB_RUN_ATTEMPT: $RUN_URL"
+              fi
+            done <<<"$all_open"
             exit 0
           fi
           body="\`ci\` is red on \`main\` at $GITHUB_SHA on attempt $GITHUB_RUN_ATTEMPT, after its failed jobs were rerun: $RUN_URL

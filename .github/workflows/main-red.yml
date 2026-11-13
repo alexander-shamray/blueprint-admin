@@ -48,8 +48,11 @@ jobs:
             echo "$HEAD_SHA is not main's tip ($tip); the run for the tip reports"
             exit 0
           fi
-          open=$(gh issue list --state open --label bug --search "in:title \"$TITLE\"" --json number,title \
-            --jq 'map(select(.title == env.TITLE)) | .[0].number // empty')
+          # Every open one, as a duplicate (search lag, or one by hand) left open
+          # keeps main-red-open.sh reporting red; red writes on the oldest.
+          all_open=$(gh issue list --state open --label bug --search "in:title \"$TITLE\"" --json number,title \
+            --jq 'map(select(.title == env.TITLE)) | sort_by(.number) | .[].number')
+          open=$(head -n 1 <<<"$all_open")
           case "$CONCLUSION" in
             failure|timed_out|startup_failure|action_required)
               # Each job that did not pass, and its steps that did not, read
@@ -94,8 +97,10 @@ jobs:
               fi
               ;;
             success)
-              if [ -n "$open" ]; then
-                gh issue close "$open" --comment "\`ci\` is green on \`main\` again at $HEAD_SHA: $RUN_URL"
-              fi
+              while read -r number; do
+                if [ -n "$number" ]; then
+                  gh issue close "$number" --comment "\`ci\` is green on \`main\` again at $HEAD_SHA: $RUN_URL"
+                fi
+              done <<<"$all_open"
               ;;
           esac
