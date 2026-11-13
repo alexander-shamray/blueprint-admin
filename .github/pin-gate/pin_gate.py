@@ -26,9 +26,8 @@ SDK_FILE = "global.json"
 SOLUTION_FILE = "BlueprintAdmin.slnx"
 
 # NuGet's lock file, and the per-project packages.<name>.lock.json it reads
-# first: restore takes transitive versions from one beside a project, with
-# RestorePackagesWithLockFile unset, and the build's judge compares only the
-# pin file's names. Only a NuGet* property, refused below, moves its path.
+# first: either can choose transitive versions the pin file never lists, as
+# the README's restore inputs say.
 LOCK_FILE = re.compile(r"^packages(?:\..+)?\.lock\.json$", re.IGNORECASE)
 
 # What is read as MSBuild by its name: every *proj, .props and .targets at any
