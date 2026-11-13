@@ -261,10 +261,18 @@ public sealed class AssistantEndpointsTests : IClassFixture<AdminHostFactory>
 
         (await offClient.GetFromJsonAsync<AssistantStatus>("/api/assistant", Web, Ct)).ShouldBe(AssistantStatus.Off);
         (await offClient.PostAsJsonAsync("/api/assistant/conversations", Open(), Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
-        (await offClient.GetAsync("/api/assistant/conversations/x", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
-        (await offClient.GetAsync("/api/assistant/conversations/x/events", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
-        (await offClient.PostAsJsonAsync("/api/assistant/conversations/x/turns", new { text = "hi" }, Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
-        (await offClient.DeleteAsync("/api/assistant/conversations/x", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        // An on host answers an unknown id with a 404 too, so each must be the unmapped route's, not that problem.
+        foreach (HttpResponseMessage response in new[]
+        {
+            await offClient.GetAsync("/api/assistant/conversations/x", Ct),
+            await offClient.GetAsync("/api/assistant/conversations/x/events", Ct),
+            await offClient.PostAsJsonAsync("/api/assistant/conversations/x/turns", new { text = "hi" }, Ct),
+            await offClient.DeleteAsync("/api/assistant/conversations/x", Ct),
+        })
+        {
+            response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+            (await response.Content.ReadAsStringAsync(Ct)).ShouldNotContain("No such conversation");
+        }
 
         AssistantRuntime runtime = off.Services.GetRequiredService<AssistantRuntime>();
         runtime.ProviderId.ShouldBe("off");
