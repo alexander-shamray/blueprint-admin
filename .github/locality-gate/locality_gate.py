@@ -84,7 +84,9 @@ _REASON_OPENED = re.compile(r"`[^`]+`[ \t\n\r\f\v]+\(.*", re.DOTALL)
 
 _CLASS_ROW = re.compile(r"^\| *Class *\|(.*)$")
 _TOUCH_ROW = re.compile(r"^\| *Touch set *\|(.*)$")
-_FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+# CommonMark: a backtick opener's info string holds no backtick, and a closer is the fence alone.
+_FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}(?=[^`]*$)|~{3,})")
+_FENCE_CLOSE = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*$")
 _MAP_CLASS = re.compile(r"^([A-E]):\s*$")
 _MAP_ITEM = re.compile(r"^  - '([^']+)'\s*$")
 
@@ -166,11 +168,11 @@ def _unfenced(body: str) -> list[str]:
     lines: list[str] = []
     fence = ""
     for line in body.splitlines():
-        opened = _FENCE.match(line)
         if fence:
-            if opened and opened.group(1)[0] == fence[0] and len(opened.group(1)) >= len(fence):
+            closed = _FENCE_CLOSE.match(line)
+            if closed and closed.group(1)[0] == fence[0] and len(closed.group(1)) >= len(fence):
                 fence = ""
-        elif opened:
+        elif opened := _FENCE_OPEN.match(line):
             fence = opened.group(1)
         else:
             lines.append(line)
