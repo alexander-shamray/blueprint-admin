@@ -34,14 +34,10 @@ permissions:
 # is judged by the base's map and not its own.
 
 # The enforcing step comes first and the suite last. Test code can write to
-# $GITHUB_ENV or $GITHUB_PATH or replace a tool on the runner, and every later
-# step inherits that, so a suite ahead of the gate could choose the verdict with
-# no workflow edit. A later step cannot turn an earlier failure green, and
-# `python -I` on the gate would leave a replaced `python`, `gh` or `jq` in
-# place, so the order is the control; TheShippedWorkflows in
-# test_locality_gate.py reads it in this workflow. The commit gate's order is
-# the payload's, in its gates.yml (blueprint-harness#439). The cost is that a
-# run the gate refuses reports no suite result.
+# $GITHUB_ENV or $GITHUB_PATH or replace `python`, `gh` or `jq` on the runner,
+# every later step inherits that, and `python -I` on the gate would not undo it;
+# so the order is the control, and TheShippedWorkflows holds this workflow to
+# it. The cost is that a run the gate refuses reports no suite result.
 
 # The bootstrap is the one departure from the closure gate, which fails when
 # the base carries no gate. This one has to land once, and on the pull request
