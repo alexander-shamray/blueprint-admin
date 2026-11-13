@@ -77,8 +77,8 @@ has stay here.
 - **Every `ci` job also runs on the push to `main`**, `commits` included,
   which builds the commits the landing replayed onto a `main` their pull
   request was never tested against. The gates *CI* names run on pull requests
-  alone, and so does `gates.yml`, and here that gap is accepted: landing
-  does not change what they judge.
+  alone, and so does the `locality-gate` check `gates.yml` posts, and here
+  that gap is accepted: landing does not change what they judge.
 - **A red `main` is an issue because of
   [`main-red.yml`](../.github/workflows/main-red.yml)**, which turns a failed
   `ci` run on `main`'s tip into one, which outlives the run and the mail, and
