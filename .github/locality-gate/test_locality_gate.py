@@ -105,6 +105,20 @@ class TouchSetGrammar(unittest.TestCase):
         with self.assertRaisesRegex(InputRefused, "more than one `\\| Touch set \\|` row"):
             read_rows(text)
 
+    def test_a_fenced_example_beside_the_table_is_not_a_second_declaration(self) -> None:
+        example = "\n```markdown\n| Class | D |\n| Touch set | `docs/**` |\n```\n"
+        klass, tokens = read_rows(example + body("A", "`src/**`"))
+        self.assertEqual((klass, tokens), (["A"], ["src/**"]))
+
+    def test_a_fenced_example_alone_is_no_declaration(self) -> None:
+        text = "Prose.\n\n~~~\n| Class | A |\n| Touch set | `src/**` |\n~~~\n"
+        with self.assertRaisesRegex(InputRefused, "no `\\| Class \\|` row"):
+            read_rows(text)
+
+    def test_a_shorter_fence_inside_a_longer_one_does_not_close_it(self) -> None:
+        text = "````\n```\n| Class | D |\n```\n| Touch set | `docs/**` |\n````\n" + body("A", "`src/**`")
+        self.assertEqual(read_rows(text), (["A"], ["src/**"]))
+
     def test_a_class_letter_outside_a_to_e_is_refused(self) -> None:
         with self.assertRaisesRegex(InputRefused, "Class row is not a class"):
             read_rows(body("Z", "`docs/**`"))

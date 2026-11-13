@@ -84,6 +84,7 @@ _REASON_OPENED = re.compile(r"`[^`]+`[ \t\n\r\f\v]+\(.*", re.DOTALL)
 
 _CLASS_ROW = re.compile(r"^\| *Class *\|(.*)$")
 _TOUCH_ROW = re.compile(r"^\| *Touch set *\|(.*)$")
+_FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 _MAP_CLASS = re.compile(r"^([A-E]):\s*$")
 _MAP_ITEM = re.compile(r"^  - '([^']+)'\s*$")
 
@@ -140,8 +141,9 @@ def read_rows(body: str) -> tuple[list[str], list[str]]:
     Exactly one row of each. The refusal messages name the row and never its
     content, for the reason the module docstring gives.
     """
-    class_rows = [m.group(1) for m in map(_CLASS_ROW.match, body.splitlines()) if m]
-    touch_rows = [m.group(1) for m in map(_TOUCH_ROW.match, body.splitlines()) if m]
+    lines = _unfenced(body)
+    class_rows = [m.group(1) for m in map(_CLASS_ROW.match, lines) if m]
+    touch_rows = [m.group(1) for m in map(_TOUCH_ROW.match, lines) if m]
     if len(class_rows) > 1:
         raise InputRefused("the body carries more than one `| Class |` row")
     if len(touch_rows) > 1:
@@ -157,6 +159,22 @@ def read_rows(body: str) -> tuple[list[str], list[str]]:
             "the PR body to name the class and the touch set"
         )
     return _read_class(class_rows[0]), _read_touch_set(touch_rows[0])
+
+
+def _unfenced(body: str) -> list[str]:
+    """The body's lines outside fenced code blocks, where a quoted row is an example, not the declaration."""
+    lines: list[str] = []
+    fence = ""
+    for line in body.splitlines():
+        opened = _FENCE.match(line)
+        if fence:
+            if opened and opened.group(1)[0] == fence[0] and len(opened.group(1)) >= len(fence):
+                fence = ""
+        elif opened:
+            fence = opened.group(1)
+        else:
+            lines.append(line)
+    return lines
 
 
 def _cell(rest: str, row: str) -> str:
