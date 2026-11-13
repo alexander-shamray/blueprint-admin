@@ -240,7 +240,7 @@ public sealed partial class DeadLetterService(
         Job step = runner.Start(MoveSpec(verb, queue, messageIds, files, paths, password));
         job.Append(OutputStream.Stdout, $"$ {step.Spec.CommandLine}");
 
-        await foreach (OutputLine line in step.Follow(-1, CancellationToken.None))
+        await foreach (OutputLine line in step.FollowToEnd(CancellationToken.None))
         {
             job.Append(line.Stream, line.Text);
 

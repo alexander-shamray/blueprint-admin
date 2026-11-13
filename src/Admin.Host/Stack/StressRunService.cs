@@ -485,7 +485,7 @@ public sealed partial class StressRunService(
         List<string> stdout = [];
         run.Append(OutputStream.Stdout, $"== {next.Name} (job {job.Id})");
 
-        await foreach (OutputLine line in job.Follow(-1, CancellationToken.None))
+        await foreach (OutputLine line in job.FollowToEnd(CancellationToken.None))
         {
             run.Append(line.Stream, line.Text);
 
