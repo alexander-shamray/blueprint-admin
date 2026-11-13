@@ -94,17 +94,20 @@ jobs:
             exit 0
           fi
           case "$DRIFT" in
-            success) severity=low; verdict="green: bumping the pin is the whole change" ;;
-            failure) severity=medium; verdict="red: the bump carries the fix that brings the copied facts back in line" ;;
+            success) severity=low; other=medium; verdict="green: bumping the pin is the whole change" ;;
+            failure) severity=medium; other=low; verdict="red: the bump carries the fix that brings the copied facts back in line" ;;
             *) echo "unexpected drift outcome '$DRIFT'"; exit 1 ;;
           esac
           compare="https://github.com/alexander-shamray/blueprint-backend/compare/$PIN...$TIP"
-          line="The drift tests against blueprint-backend's main at $TIP are $verdict. Compare: $compare. Run: $RUN_URL"
+          line="The drift tests against blueprint-backend's main at $TIP are $verdict; severity $severity. Compare: $compare. Run: $RUN_URL"
           if [ -n "$open" ]; then
             seen=$(gh issue view "$open" --json body,comments --jq '[.body, .comments[].body] | join("\n")')
             case "$seen" in
               *"$TIP"*) echo "#$open already names $TIP" ;;
-              *) gh issue comment "$open" --body "$line" ;;
+              *)
+                gh issue comment "$open" --body "$line"
+                gh issue edit "$open" --add-label "$severity" --remove-label "$other"
+                ;;
             esac
           else
             gh issue create --title "$TITLE" --label enhancement --label "$severity" --label code --body "**Kind:** enhancement. **Severity:** $severity: \`ci\`'s \`drift\` job reads blueprint-backend at the commit \`.github/drift/backend.sha\` pins, $PIN, and the backend's main has moved past it.
