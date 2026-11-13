@@ -1,18 +1,18 @@
 name: main red
 
-# This makes a red `ci` run on `main` one open issue, closed by the next green
-# run; only main's tip acts, as `ci`'s concurrency group cancels nothing on
-# `main` and a later push's run can finish first. What it is owed is
+# This hears the first attempt of a `ci` run on `main`: a green one closes the
+# open `main is red` issue, and a red one is rerun once, its failed jobs only,
+# and written on the flaky tests tracker, filed as that issue here only when
+# GitHub refuses the rerun, so it is never left silent. Only main's tip acts,
+# as `ci`'s concurrency group cancels nothing on `main` and a later push's run
+# can finish first. What a red `main` is owed is
 # docs/harness/working-rules.md, *CI*. Nothing from the run is checked out or
 # executed, so the write token never meets the failed code.
 #
-# It hears a run's first attempt alone. A red first attempt is rerun once, its
-# failed jobs only, and written on the flaky tests tracker; it is filed here
-# only when GitHub refuses the rerun, so it is never left silent. Every later
-# attempt, this rerun or one started by hand, is reported by `ci.yml`'s
-# `main-red` job, which reruns with the failed jobs: a rerun the job token
-# starts may raise no `workflow_run`, so this watcher cannot be relied on to
-# hear it. A run cannot rerun itself while one of its own jobs still runs,
+# Every later attempt, this rerun or one started by hand, is reported by
+# `ci.yml`'s `main-red` job, which reruns with the failed jobs: a rerun the job
+# token starts may raise no `workflow_run`, so this watcher cannot be relied on
+# to hear it. A run cannot rerun itself while one of its own jobs still runs,
 # which is why the rerun is started from here.
 on:
   workflow_run:
