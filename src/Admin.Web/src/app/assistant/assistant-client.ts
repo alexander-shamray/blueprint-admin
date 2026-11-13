@@ -146,7 +146,7 @@ export interface ConversationState {
   running: boolean;
   lastEventId: number;
   /** Why the last action failed, as a code the client words, with the host's detail when it gave one. */
-  problem: { code: 'turn-running' | 'failed' | 'provider' | 'gone'; detail: string | null } | null;
+  problem: { code: 'turn-running' | 'failed' | 'unreadable' | 'provider' | 'gone'; detail: string | null } | null;
 }
 
 export const EMPTY_CONVERSATION: ConversationState = {
@@ -177,7 +177,7 @@ export class AssistantConversation {
   private readonly answered = new Set<string>();
   /** The client calls being run, one after another. */
   private running: Promise<unknown> = Promise.resolve();
-  /** Counts messages sent, so a read begun before the latest one never overwrites what it started. */
+  /** Counts messages sent and start overs, so a read begun before either never overwrites what followed. */
   private sends = 0;
 
   constructor(
@@ -196,12 +196,17 @@ export class AssistantConversation {
   async resume(): Promise<void> {
     const id = this.ids.get();
     if (!id) return;
+    const sent = this.sends;
     let view: ConversationView | null;
     try {
       view = await this.client.read(id);
     } catch (e) {
       // A 5xx or a dropped connection says nothing about the host's memory: the id stays for the next reload.
-      this.update({ ...this.state, problem: { code: 'failed', detail: e instanceof Error ? e.message : String(e) } });
+      if (sent !== this.sends) return;
+      this.update({
+        ...this.state,
+        problem: { code: 'unreadable', detail: e instanceof Error ? e.message : String(e) },
+      });
       return;
     }
     if (!view) {
@@ -232,7 +237,7 @@ export class AssistantConversation {
     this.update({ ...this.state, items, running: true, problem: null });
     try {
       let id = this.state.id ?? (await this.openNew(sent));
-      // A start over while the message waited drops it: nothing is sent, and no conversation is opened for it.
+      // A start over while the message waited drops it: nothing is sent, and the conversation opened for it is forgotten.
       if (id === null) return;
       this.settleStream();
       let outcome = await this.client.send(id, { text, context, locale, hostOptions });
@@ -397,7 +402,7 @@ export class AssistantConversation {
       this.update({
         ...this.state,
         running: false,
-        problem: { code: 'failed', detail: failure instanceof Error ? failure.message : String(failure) },
+        problem: { code: 'unreadable', detail: failure instanceof Error ? failure.message : String(failure) },
       });
       return;
     }

@@ -471,7 +471,7 @@ describe('AssistantConversation', () => {
     await conversation.resume();
 
     expect(ids.id).toBe('c1');
-    expect(conversation.current.problem?.code).toBe('failed');
+    expect(conversation.current.problem?.code).toBe('unreadable');
   });
 
   it('keeps the id when the stream is lost and the read fails with a 5xx', async () => {
@@ -485,7 +485,7 @@ describe('AssistantConversation', () => {
     expect(ids.id).toBe('c1');
     expect(conversation.current.id).toBe('c1');
     expect(conversation.current.running).toBe(false);
-    expect(conversation.current.problem?.code).toBe('failed');
+    expect(conversation.current.problem?.code).toBe('unreadable');
   });
 
   it('a start over while the first message opens its conversation sends nothing and forgets the conversation', async () => {
