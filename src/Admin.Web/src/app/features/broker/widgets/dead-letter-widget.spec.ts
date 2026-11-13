@@ -237,6 +237,28 @@ describe('DeadLetterWidget', () => {
     expect(fixture.nativeElement.querySelector('app-output-pane')).toBeNull();
   });
 
+  it('a dry run or real run refused after the listing was replaced shows its refusal nowhere', () => {
+    const lateDry = new Subject<JobSummary>();
+    const lateReal = new Subject<JobSummary>();
+    const fixture = render();
+    open(fixture);
+    host.deadLetterMove.mockReturnValueOnce(lateDry.asObservable());
+    click(fixture, 'button.dry-replay');
+    open(fixture, 'bff-order-events_skipped');
+    lateDry.error(new Error('the tool refused queue A'));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.error')).toBeNull();
+
+    click(fixture, 'button.dry-replay');
+    type(fixture, '--execute');
+    host.deadLetterMove.mockReturnValueOnce(lateReal.asObservable());
+    click(fixture, 'button.execute');
+    open(fixture, 'ordering-catalog-events_error');
+    lateReal.error(new Error('the tool refused queue B'));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.error')).toBeNull();
+  });
+
   it('keeps the latest request made while a queue is being read, and opens it when that read ends', () => {
     const first = new Subject<DeadLetterInspection>();
     host.deadLetters.mockReturnValueOnce(first.asObservable());

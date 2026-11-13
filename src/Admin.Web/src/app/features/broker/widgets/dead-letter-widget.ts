@@ -379,7 +379,10 @@ export class DeadLetterWidget {
         this.follow(job.id);
         this.armed.set({ messageId, verb });
       },
-      error: (e: unknown) => this.error.set(describeError(e)),
+      error: (e: unknown) => {
+        if (listing !== this.generation) return;
+        this.error.set(describeError(e));
+      },
     });
   }
 
@@ -402,7 +405,10 @@ export class DeadLetterWidget {
         this.inspection.set(null);
         this.moved.set(armed.messageId);
       },
-      error: (e: unknown) => this.error.set(describeError(e)),
+      error: (e: unknown) => {
+        if (listing !== this.generation) return;
+        this.error.set(describeError(e));
+      },
     });
     this.executeText.set('');
   }
