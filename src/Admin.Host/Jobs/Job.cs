@@ -5,20 +5,9 @@ using Admin.Host.Compose;
 namespace Admin.Host.Jobs;
 
 /// <summary>
-/// One run of a child process: its output as a bounded ring of numbered lines,
-/// and a channel per live follower. One-shot commands and long-running ones
-/// are the same type, so every listed command's output is visible the same way
-/// by id; a read the registry does not keep (ProcessSpec.Listed) reaches a
-/// screen only as the view its caller parses.
-/// A <see cref="Follow"/> channel holds at most a ring's worth of lines: one that falls
-/// that far behind is ended rather than buffered without bound, and resumes
-/// from the ring by sequence number (an EventSource does this on its own).
-/// A step runner copying a child job into its own has no such reconnect, and
-/// by then the ring may have moved past what it missed, so it follows with
-/// <see cref="FollowToEnd"/>, whose channel is never full and never dropped.
-/// A job that runs Compose with <c>--progress json</c> writes a layer's progress many times a second, so a long pull
-/// scrolls its early layers out of the ring: the last line of each Compose resource is kept beside it, and a follower
-/// replaying from the start receives those first, so a page opened late still sees every image and container.
+/// One run of a child process, one-shot or long-running alike: its output as a bounded ring of numbered lines, the
+/// last line of each Compose resource a long <c>--progress json</c> pull scrolled out of it, and a channel per live
+/// follower; <see cref="Follow"/> and <see cref="FollowToEnd"/> say how far behind each may fall.
 /// </summary>
 public sealed class Job
 {
@@ -161,22 +150,16 @@ public sealed class Job
     /// after the last line yielded; <see cref="HasLinesAfter"/> tells the two apart.
     /// </summary>
     public IAsyncEnumerable<OutputLine> Follow(long afterSequence, CancellationToken cancellationToken) =>
-        Subscribe(afterSequence, () => Channel.CreateBounded<OutputLine>(new BoundedChannelOptions(ring.Length)
-        {
-            SingleReader = true,
-            FullMode = BoundedChannelFullMode.Wait,
-        }), cancellationToken);
+        Subscribe(afterSequence, bounded: true, cancellationToken);
 
     /// <summary>
-    /// Replay everything still buffered, then every new line until the job exits, however far behind the
-    /// reader falls: its channel is unbounded, so a stalled reader holds the backlog in memory rather than
-    /// losing it. For a reader in this process that copies a step to its end and has no reconnect to
-    /// recover lines that left the ring; a browser follows with <see cref="Follow"/>.
+    /// Replay the ring, then every new line until the job exits, however far behind: the channel is unbounded and never
+    /// dropped. For a step runner copying a child job, which has no reconnect to recover lines that left the ring.
     /// </summary>
     public IAsyncEnumerable<OutputLine> FollowToEnd(CancellationToken cancellationToken) =>
-        Subscribe(-1, () => Channel.CreateUnbounded<OutputLine>(new UnboundedChannelOptions { SingleReader = true }), cancellationToken);
+        Subscribe(-1, bounded: false, cancellationToken);
 
-    private IAsyncEnumerable<OutputLine> Subscribe(long afterSequence, Func<Channel<OutputLine>> channel, CancellationToken cancellationToken)
+    private IAsyncEnumerable<OutputLine> Subscribe(long afterSequence, bool bounded, CancellationToken token)
     {
         IReadOnlyList<OutputLine> replay;
         Channel<OutputLine>? live = null;
@@ -187,12 +170,18 @@ public sealed class Job
 
             if (State == JobState.Running)
             {
-                live = channel();
+                live = bounded
+                    ? Channel.CreateBounded<OutputLine>(new BoundedChannelOptions(ring.Length)
+                    {
+                        SingleReader = true,
+                        FullMode = BoundedChannelFullMode.Wait,
+                    })
+                    : Channel.CreateUnbounded<OutputLine>(new UnboundedChannelOptions { SingleReader = true });
                 followers.Add(live);
             }
         }
 
-        return FollowCore(replay, live, cancellationToken);
+        return FollowCore(replay, live, token);
     }
 
     private async IAsyncEnumerable<OutputLine> FollowCore(

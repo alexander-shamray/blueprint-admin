@@ -141,12 +141,14 @@ public sealed class JobTests
             {
                 job.Append(OutputStream.Stdout, $"line {i}");
             }
-        }, TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        }, TestContext.Current.CancellationToken)
+            .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         job.FollowerCount.ShouldBe(1);
         job.MarkExited(0);
 
-        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        using CancellationTokenSource timeout =
+            CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(5));
         List<long> seen = [];
         await foreach (OutputLine line in follower.WithCancellation(timeout.Token))
