@@ -18,7 +18,8 @@ public sealed record ProductImageUploadRequest(string UploadUrl, IReadOnlyDictio
 /// </summary>
 public sealed class ProductImageUploader(HttpClient http, IOptions<AdminOptions> options, TimeProvider time, OperatorTranscript transcript)
 {
-    private static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(30);
+    // The proxy's, since its body read says this deadline in its message.
+    private static readonly TimeSpan SendTimeout = RequestProxy.SendTimeout;
 
     public string? Validate(ProductImageUploadRequest request)
     {
