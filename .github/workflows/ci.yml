@@ -427,26 +427,14 @@ jobs:
           grep -F 'property "absent" is not defined' fixture.out
       - name: Lint every workflow
         run: ./actionlint
-      # A job `main-red` does not need is one whose red second attempt nobody
-      # reports, so a job added without it fails here. Finding no job fails too.
-      - name: main-red needs every other job
-        run: |
-          set -euo pipefail
-          jobs=$(yq '.jobs | keys | .[] | select(. != "main-red")' .github/workflows/ci.yml | LC_ALL=C sort)
-          needs=$(yq '.jobs["main-red"].needs[]' .github/workflows/ci.yml | LC_ALL=C sort)
-          if [ -z "$jobs" ]; then echo "::error::no job read from ci.yml"; exit 1; fi
-          if [ "$jobs" != "$needs" ]; then
-            echo "::error::main-red's needs differ from ci.yml's other jobs"
-            diff <(printf '%s\n' "$jobs") <(printf '%s\n' "$needs") || true
-            exit 1
-          fi
 
   # A later attempt of a push run on `main`, which main-red.yml does not hear:
   # it reruns a red first attempt's failed jobs once, and a rerun the job token
   # starts may raise no `workflow_run`. This job needs every other, so a rerun
   # of the failed jobs reruns it too, and it reports what the attempt ended as,
   # by the same issue and the same tip rule as main-red.yml. A second attempt
-  # started by hand reports here as well.
+  # started by hand reports here as well. pin-gate's TheCiWiring holds `needs`
+  # to every other job.
   main-red:
     needs: [host, drift, web, smoke, commits, harness, gate-suites, workflow-lint]
     if: always() && github.event_name == 'push' && github.run_attempt != '1'
