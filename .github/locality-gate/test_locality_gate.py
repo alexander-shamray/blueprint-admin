@@ -646,7 +646,8 @@ class TheShippedWorkflows(unittest.TestCase):
     SUITE = "      - name: suite\n        run: python -m unittest\n"
     GATE = '      - name: gate\n        run: python "$RUNNER_TEMP/gate/gate.py"\n'
 
-    # The commit gate's step order is the payload's, in its `gates.yml`, and its `test_commit_gate.py` holds it.
+    # This repository's own workflow only: commit-gate.yml leaves with the harness sync that brings the payload's
+    # gates.yml, whose order no case holds yet (blueprint-harness#439), and gates.yml has more than one enforcing step.
     WORKFLOWS = ("locality-gate.yml",)
 
     def test_the_head_suite_runs_after_the_enforcing_gate(self) -> None:
