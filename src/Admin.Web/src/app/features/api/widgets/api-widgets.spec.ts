@@ -222,7 +222,8 @@ describe('the API request and API history widgets', () => {
       const answer = new Subject<ProxyResult>();
       host['proxy'].mockReturnValueOnce(answer);
       const fixture = request();
-      fixture.componentInstance.chooseIdentity('anonymous');
+      // Anonymous has no clock, so only a user identity shows a clock read begun after the destroy.
+      fixture.componentInstance.chooseIdentity('user:demo');
       fixture.componentInstance.send();
       const clockReads = host['tokenClock'].mock.calls.length;
 
