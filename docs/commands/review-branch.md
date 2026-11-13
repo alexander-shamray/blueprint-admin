@@ -68,7 +68,7 @@ cannot be true of the system described — not pure style taste. Prefer:
    cannot run — a `--local` review with no PR yet, or a body carrying
    neither row — say so
    and skip this check rather than inferring a class. **CI also enforces
-   both rows** via `.github/workflows/locality-gate.yml`. This helper is an
+   both rows** via the `gates` job in `.github/workflows/gates.yml`. This helper is an
    early read of the same verdict, so a skipped or unparseable result leaves
    the rows unverified rather than merely unverified-yet. **The verdict narrows
    and grants nothing**: an `inside` line is not a licence for anything

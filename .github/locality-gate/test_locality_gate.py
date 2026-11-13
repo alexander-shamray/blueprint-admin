@@ -581,9 +581,9 @@ class TheShippedMap(unittest.TestCase):
 
     def test_this_gate_is_a_class_d_change(self) -> None:
         files = [".github/locality-gate/classes.yml", ".github/locality-gate/locality_gate.py",
-                 ".github/workflows/locality-gate.yml", "docs/change-locality.md", "CLAUDE.md",
+                 ".github/workflows/ci.yml", "docs/change-locality.md", "CLAUDE.md",
                  ".gitattributes"]
-        touch = ("`.github/locality-gate/**`, `.github/workflows/locality-gate.yml`, `docs/**`, "
+        touch = ("`.github/locality-gate/**`, `.github/workflows/ci.yml`, `docs/**`, "
                  "`CLAUDE.md`, `.gitattributes`")
         self.assertEqual(check(payload(files, class_cell="D", touch_cell=touch), self.map), [])
 
@@ -596,138 +596,6 @@ class TheShippedMap(unittest.TestCase):
         self.assertIn(".github/locality-gate/classes.yml", contract)
 
 
-ENFORCING = re.compile(r'python "\$RUNNER_TEMP/[\w./-]+\.py"')
-# Copied from HEAD_CODE in blueprint-harness's harness_sync/tests/test_gate_workflows.py, which owns the list and reads
-# only the payload's workflows; that suite does not render into a target. Its ISOLATED exemption is not copied, since
-# no step here needs it: a `python -I -c` ahead of the gate is named until one is argued.
-HEAD_CODE = re.compile(
-    r"(?<![-\w])python3?(?:\.\d+)?(?=\s)|\bpytest\b|\bunittest\b"
-    r"|(?<![-\w])(?:bash|sh|source)[ \t]+\S|^\s*(?:- )?(?:run: )?[\w./-]*/[\w./-]+"
-    r"|^\s*(?:- )?uses: \./|^\s*working-directory:", re.M)
-
-
-def steps(workflow: str) -> list[str]:
-    """A workflow's steps in order, comments dropped so that one naming a command cannot stand in for it."""
-    found: list[str] = []
-    for line in workflow.splitlines():
-        if line.lstrip().startswith("#"):
-            continue
-        if line.startswith("      - "):
-            found.append(line)
-        elif found:
-            found[-1] += "\n" + line
-    return found
-
-
-def suite_follows_gate(workflow: str) -> bool:
-    """Whether every step running the head's suite comes after every step running the base's gate."""
-    listed = steps(workflow)
-    suites = [index for index, step in enumerate(listed) if "-m unittest" in step]
-    gates = [index for index, step in enumerate(listed) if ENFORCING.search(step)]
-    if not suites or not gates:
-        raise ValueError(f"found {len(suites)} suite and {len(gates)} gate steps in {len(listed)} steps")
-    return min(suites) > max(gates)
-
-
-def head_code_ahead_of_gate(workflow: str) -> list[str]:
-    """The first line of each step running head code ahead of the base's gate, the gate's own step above it included."""
-    listed = steps(workflow)
-    gates = [(index, match) for index, step in enumerate(listed) for match in ENFORCING.finditer(step)]
-    if len(gates) != 1:
-        raise ValueError(f"expected one enforcing command, found {len(gates)}")
-    index, match = gates[0]
-    ahead = [*listed[:index], listed[index][:match.start()]]
-    return [step.splitlines()[0].strip() for step in ahead if HEAD_CODE.search(step)]
-
-
-class TheShippedWorkflows(unittest.TestCase):
-    """The order of the head's code and the verdict, in the workflows CI runs."""
-
-    SUITE = "      - name: suite\n        run: python -m unittest\n"
-    GATE = '      - name: gate\n        run: python "$RUNNER_TEMP/gate/gate.py"\n'
-
-    # This repository's own workflow only: commit-gate.yml leaves with the harness sync that brings the payload's
-    # gates.yml, whose order is the payload's to hold, and gates.yml has more than one enforcing step.
-    WORKFLOWS = ("locality-gate.yml",)
-
-    def test_the_head_suite_runs_after_the_enforcing_gate(self) -> None:
-        for name in self.WORKFLOWS:
-            with self.subTest(workflow=name):
-                workflow = (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
-                self.assertTrue(suite_follows_gate(workflow))
-
-    def test_a_suite_ahead_of_the_gate_is_caught(self) -> None:
-        self.assertFalse(suite_follows_gate(self.SUITE + self.GATE))
-
-    def test_a_suite_after_the_gate_is_accepted(self) -> None:
-        self.assertTrue(suite_follows_gate(self.GATE + self.SUITE))
-
-    def test_a_second_suite_ahead_of_the_gate_is_caught(self) -> None:
-        self.assertFalse(suite_follows_gate(self.SUITE + self.GATE + self.SUITE))
-
-    def test_a_workflow_without_either_step_is_refused_rather_than_passed(self) -> None:
-        for workflow in (self.SUITE, self.GATE, ""):
-            with self.assertRaisesRegex(ValueError, "suite and .* gate steps"):
-                suite_follows_gate(workflow)
-
-    def test_a_comment_naming_the_suite_is_not_a_step(self) -> None:
-        with self.assertRaisesRegex(ValueError, "found 0 suite and 1 gate steps"):
-            suite_follows_gate(self.GATE + "      # python -m unittest\n")
-
-    def test_nothing_of_the_heads_runs_ahead_of_the_enforcing_gate(self) -> None:
-        for name in self.WORKFLOWS:
-            with self.subTest(workflow=name):
-                workflow = (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
-                self.assertEqual([], head_code_ahead_of_gate(workflow))
-
-    def test_each_spelling_of_head_code_ahead_of_the_gate_is_named(self) -> None:
-        for spelling in ("        run: python -m unittest",
-                         "        run: python .github/locality-gate/check.py",
-                         "        run: python3 -m pytest",
-                         "        run: python3.12 .github/locality-gate/check.py",
-                         "        run: bash .github/locality-gate/suite.sh",
-                         "        run: sh .github/locality-gate/suite.sh",
-                         "        run: source .github/locality-gate/suite.sh",
-                         "        run: ./.github/locality-gate/suite.sh",
-                         "        run: .github/locality-gate/suite.sh",
-                         "        run: |\n          set -e\n          .github/locality-gate/suite.sh",
-                         "        uses: ./.github/actions/suite",
-                         "        working-directory: .github/locality-gate\n        run: make"):
-            with self.subTest(spelling=spelling):
-                step = f"      - name: ahead\n{spelling}\n"
-                self.assertEqual(["- name: ahead"], head_code_ahead_of_gate(step + self.GATE))
-
-    def test_a_path_run_by_a_nameless_step_is_named(self) -> None:
-        step = "      - run: ./.github/locality-gate/suite.sh\n"
-        self.assertEqual(["- run: ./.github/locality-gate/suite.sh"], head_code_ahead_of_gate(step + self.GATE))
-
-    def test_the_same_code_after_the_gate_is_not_named(self) -> None:
-        self.assertEqual([], head_code_ahead_of_gate(self.GATE + "      - name: after\n        run: bash suite.sh\n"))
-
-    def test_head_code_above_the_gate_in_its_own_step_is_named(self) -> None:
-        command = 'python "$RUNNER_TEMP/gate/gate.py"'
-        above = f"      - name: both\n        run: |\n          python check.py\n          {command}\n"
-        below = f"      - name: both\n        run: |\n          {command}\n          python check.py\n"
-        self.assertEqual(["- name: both"], head_code_ahead_of_gate(above))
-        self.assertEqual([], head_code_ahead_of_gate(below))
-
-    def test_what_runs_nothing_from_the_checkout_is_not_named(self) -> None:
-        for spelling in ("        uses: actions/setup-python@v7\n        with:\n          python-version: '3.12'",
-                         "        shell: bash\n        env:\n          GATE: .github/gate/gate.py\n        run: true",
-                         '        run: git show "$BASE_SHA:$GATE" > "$RUNNER_TEMP/gate/gate.py"',
-                         "        # python -m unittest\n        run: true"):
-            with self.subTest(spelling=spelling):
-                step = f"      - name: ahead\n{spelling}\n"
-                self.assertEqual([], head_code_ahead_of_gate(step + self.GATE))
-
-    def test_a_workflow_with_no_gate_or_two_is_refused_rather_than_read(self) -> None:
-        two_in_a_step = '      - name: gate\n        run: |\n          python "$RUNNER_TEMP/a.py"\n' \
-                        '          python "$RUNNER_TEMP/b.py"\n'
-        for workflow in (self.SUITE, self.GATE + self.GATE, two_in_a_step):
-            with self.subTest(workflow=workflow), self.assertRaisesRegex(ValueError, "one enforcing command"):
-                head_code_ahead_of_gate(workflow)
-
-
 def concurrency_keys(workflow: str) -> list[str]:
     """Each `concurrency:` key a workflow sets, at its own level or a job's, comments dropped."""
     return [line.strip() for line in workflow.splitlines()
@@ -738,7 +606,7 @@ class TheGatesConcurrency(unittest.TestCase):
     """No concurrency group on the gate: a run it cancels stays on the head as a required check reading CANCELLED."""
 
     def test_the_shipped_gate_sets_no_concurrency_group(self) -> None:
-        workflow = (ROOT / ".github" / "workflows" / "locality-gate.yml").read_text(encoding="utf-8")
+        workflow = (ROOT / ".github" / "workflows" / "gates.yml").read_text(encoding="utf-8")
         self.assertIn("edited", workflow)
         self.assertEqual([], concurrency_keys(workflow))
 

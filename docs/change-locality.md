@@ -56,8 +56,9 @@ classes names both (`C+E`, `A+D`) and its touch set is the union. None takes
 three: the `A+D+E` that `/pr` admits is backend's, for a service's own work,
 and this repository has no service, so the gate refuses it.
 
-**CI reads both rows.** `.github/workflows/locality-gate.yml` fails a PR on a
-path outside the class map or the declared touch set. `/review-branch`
+**CI reads both rows.** The `gates` job in `.github/workflows/gates.yml` posts
+`locality-gate`, which fails a PR on a path outside the class map or the
+declared touch set. `/review-branch`
 and `/ship` also run `bash .claude/scripts/pr-locality.sh`.
 
 | Class | Examples | May touch | Never touches |
@@ -128,8 +129,8 @@ What this repository adds:
   Playwright smoke covers its screen.
 - Exact pins, both toolchains.
 - A Dependabot pull request (`.github/dependabot.yml`) declares no class and
-  no touch set and carries no `PR:` trailer, so `locality-gate.yml` and
-  `commit-gate.yml` stand down when `dependabot[bot]` opened it **and made
+  no touch set and carries no `PR:` trailer, so the `gates` job's
+  `locality-gate` and `commit-gate` stand down when `dependabot[bot]` opened it **and made
   every commit in it**: Dependabot's address as author and GitHub's
   (`noreply@github.com`) as committer, as its own commits and rebases carry.
   The other jobs in `ci.yml` run on it as on any pull request. A local rebase
