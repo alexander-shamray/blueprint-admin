@@ -524,6 +524,19 @@ class TheCiWiring(unittest.TestCase):
         for before, after in zip(order, order[1:]):
             self.assertLess(loop.index(before), loop.index(after))
 
+    def test_the_commits_job_stops_on_a_range_git_cannot_read(self) -> None:
+        # #746: the `|| true` meant for grep's empty list also swallowed a
+        # failing `git rev-list`, so a base git cannot resolve passed having
+        # built nothing. Read on a line of its own, the range stops the step
+        # under `set -e`, and the filter that forgives grep never runs git.
+        block = job("commits")
+        read = 'range=$(git rev-list --reverse "$BASE_SHA..$HEAD_SHA")\n'
+        self.assertIn(read, block)
+        self.assertLess(block.index("set -euo pipefail"), block.index(read))
+        mapped = next(line for line in block.splitlines() if "mapfile -t shas" in line)
+        self.assertNotIn("git rev-list", mapped)
+        self.assertLess(block.index(read), block.index(mapped))
+
 
 if __name__ == "__main__":
     unittest.main()
