@@ -591,10 +591,7 @@ public sealed class ScenarioLeaseServiceTests : IAsyncDisposable
     public async Task A_journal_another_process_holds_open_at_the_start_is_tried_again_once_it_is_free()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(journal)!);
-        await File.WriteAllTextAsync(
-            journal,
-            $$"""{"id":"abc","change":"stop-inventory","label":"a run","since":"{{time.GetUtcNow():O}}","expiresAt":"{{time.GetUtcNow().AddMinutes(2):O}}"}""",
-            Token);
+        await File.WriteAllTextAsync(journal, DeadHostJournal(), Token);
 
         using (new FileStream(journal, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
         {
@@ -608,14 +605,14 @@ public sealed class ScenarioLeaseServiceTests : IAsyncDisposable
         time.Advance(ScenarioLeaseService.RetryAfter + TimeSpan.FromSeconds(1));
         await WaitUntilAsync(() => !File.Exists(journal));
 
-        runner.Started.Select(s => string.Join(' ', s.Arguments)).ShouldContain(Prefix + "up -d --no-deps --wait inventory-api");
+        Commands().ShouldContain(Prefix + "up -d --no-deps --wait inventory-api");
     }
 
     [Fact]
     public async Task A_lease_is_refused_while_a_journal_the_start_has_not_restored_waits_and_taken_once_it_is()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(journal)!);
-        string left = $$"""{"id":"abc","change":"stop-inventory","label":"a run","since":"{{time.GetUtcNow():O}}","expiresAt":"{{time.GetUtcNow().AddMinutes(2):O}}"}""";
+        string left = DeadHostJournal();
         await File.WriteAllTextAsync(journal, left, Token);
         Job busy = gate.Claim("up", () => registry.Create(new ProcessSpec("docker", [], "/"))).Job;
         await leases.ReconcileAsync();
@@ -638,15 +635,24 @@ public sealed class ScenarioLeaseServiceTests : IAsyncDisposable
     public async Task A_lease_is_refused_while_a_journal_left_for_a_person_is_on_disk_and_does_not_overwrite_it()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(journal)!);
-        const string Left = """{"id":"abc","change":"stop-everything","since":"2026-10-16T00:00:00Z","expiresAt":"2026-10-16T00:05:00Z"}""";
-        await File.WriteAllTextAsync(journal, Left, Token);
+        string left = DeadHostJournal("stop-everything");
+        await File.WriteAllTextAsync(journal, left, Token);
         await leases.ReconcileAsync();
 
         AcquireResult refused = await Acquire();
 
         refused.Outcome.ShouldBe(AcquireOutcome.Unrestored);
         runner.Started.ShouldBeEmpty();
-        (await File.ReadAllTextAsync(journal, Token)).ShouldBe(Left);
+        (await File.ReadAllTextAsync(journal, Token)).ShouldBe(left);
+    }
+
+    /// <summary>The journal a host that died holding <paramref name="change"/> leaves, due in two minutes.</summary>
+    private string DeadHostJournal(string change = ScenarioControl.StopInventory)
+    {
+        string since = time.GetUtcNow().ToString("O");
+        string due = time.GetUtcNow().AddMinutes(2).ToString("O");
+
+        return $$"""{"id":"abc","change":"{{change}}","since":"{{since}}","expiresAt":"{{due}}"}""";
     }
 
     [Fact]
