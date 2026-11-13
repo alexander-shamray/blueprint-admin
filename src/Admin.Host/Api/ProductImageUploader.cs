@@ -74,27 +74,10 @@ public sealed class ProductImageUploader(HttpClient http, IOptions<AdminOptions>
                     headers[name] = [.. values];
                 }
 
-                // From here the store has answered; a body that breaks off is still its answer, as the proxy treats one.
-                string body = "";
-                string? bodyError = null;
+                // From here the store has answered; the proxy's own read caps it in bytes and decodes it as the proxy does.
+                (string body, bool truncated, string? bodyError) = await RequestProxy.ReadBodyAsync(response.Content, timeout.Token, cancellationToken);
 
-                try
-                {
-                    body = await response.Content.ReadAsStringAsync(timeout.Token);
-                }
-                catch (Exception e) when (e is IOException or HttpRequestException)
-                {
-                    bodyError = e.Message;
-                }
-                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-                {
-                    bodyError = $"The body did not finish within {SendTimeout.TotalSeconds:0} s.";
-                }
-
-                bool truncated = body.Length > RequestProxy.MaxBodyBytes;
-
-                return new ProxyResponded(status.Value, headers, truncated ? body[..RequestProxy.MaxBodyBytes] : body,
-                    truncated, bodyError, Elapsed(started), correlationId);
+                return new ProxyResponded(status.Value, headers, body, truncated, bodyError, Elapsed(started), correlationId);
             }
             catch (HttpRequestException e)
             {
