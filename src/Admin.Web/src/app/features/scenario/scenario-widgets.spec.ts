@@ -264,6 +264,26 @@ function isRead(request: ProxyRequest): boolean {
   return request.url.endsWith(`/bff/v1/orders/${orderId}`);
 }
 
+/**
+ * Lands the in-flight read Cancel was pressed during, under a clock that never moves: a run that took another poll
+ * interval before seeing the Cancel would still be running here, since its wait was set on the frozen clock.
+ */
+async function endsWithoutAnotherWait(
+  page: { running(): boolean },
+  running: Promise<void>,
+  land: () => void,
+): Promise<void> {
+  vi.useFakeTimers();
+  try {
+    land();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(page.running()).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+  await running;
+}
+
 /** The host's `ScenarioControl.Table` as `GET /api/stack/lease` lists it. */
 const leaseChanges = [
   { id: 'stop-inventory', title: 'Inventory stopped', service: 'inventory-api', description: '', maxHoldSeconds: 600 },
@@ -1015,6 +1035,28 @@ describe('ScenarioWidget', () => {
       ).toEqual(['POST', 'GET']);
     });
 
+    it('cancels from the console while the booking log is read: no feed read and no further wait', async () => {
+      const find = new Subject<ProxyResult>();
+      host.proxy.mockImplementation((request: ProxyRequest) => {
+        if (request.url.endsWith('/__admin/requests/find')) return find.asObservable();
+        return isRead(request) ? of(responded(200, confirmedOrder, '')) : of(platform(request));
+      });
+      const finds = () => sent().filter((r) => r.url.endsWith('/__admin/requests/find'));
+      const page = render().componentInstance.runner;
+      page.pick('carrier-strange');
+      const running = page.run();
+      await vi.waitFor(() => expect(finds().length).toBe(1));
+
+      page.cancel();
+      await endsWithoutAnotherWait(page, running, () => {
+        find.next(responded(200, JSON.stringify([logged(2, 201)]), ''));
+        find.complete();
+      });
+
+      expect(finds().length).toBe(1);
+      expect(page.steps().find((s) => s.key === 'carrier')!.detail).toBe('Cancelled.');
+    });
+
     it("asks for the feed of the order it placed, by that order's own path", async () => {
       simulator(
         () => [logged(2, 201)],
@@ -1331,8 +1373,7 @@ describe('ScenarioWidget', () => {
       await vi.waitFor(() => expect(sent().some(isRead)).toBe(true));
 
       page.cancel();
-      read.next(responded(200, order('placed'), ''));
-      await running;
+      await endsWithoutAnotherWait(page, running, () => read.next(responded(200, order('placed'), '')));
 
       expect(page.steps().map((s) => [s.key, s.state])).toEqual([
         ['lease', 'ok'],
@@ -1696,9 +1737,10 @@ describe('ScenarioWidget', () => {
       await vi.waitFor(() => expect(sent().some((r) => r.url.includes('/inventory/reservations/'))).toBe(true));
 
       page.cancel();
-      read.next(responded(404, '', ''));
-      read.complete();
-      await running;
+      await endsWithoutAnotherWait(page, running, () => {
+        read.next(responded(404, '', ''));
+        read.complete();
+      });
 
       expect(page.steps().find((s) => s.key === 'stop')!.state).toBe('skipped');
       expect(host.leaseAddChange).not.toHaveBeenCalled();
