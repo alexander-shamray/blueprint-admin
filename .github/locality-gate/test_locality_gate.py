@@ -7,8 +7,8 @@ a defect the gate has to find, a malformed input it has to refuse rather than
 judge, or a well-formed input it must not invent a finding for. The last two
 blocks read what this repository actually ships: the map, because a gate whose
 tests only ever see a fixture map has not been observed looking at the file
-CI hands it, and the workflows, because a suite ahead of the gate could choose
-its verdict.
+CI hands it, and gates.yml, for the one fact it has to keep: no concurrency
+group.
 
     py -3.12 -m unittest discover -s .github/locality-gate
 """
