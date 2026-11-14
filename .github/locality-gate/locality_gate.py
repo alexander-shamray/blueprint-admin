@@ -85,8 +85,6 @@ _REASON_OPENED = re.compile(r"`[^`]+`[ \t\n\r\f\v]+\(.*", re.DOTALL)
 _CLASS_ROW = re.compile(r"^\| *Class *\|(.*)$")
 _TOUCH_ROW = re.compile(r"^\| *Touch set *\|(.*)$")
 # CommonMark: a backtick opener's info string holds no backtick, and a closer is the fence alone.
-# Which lines count as rows, a step before the row grammar, is the one rule pr-locality.sh
-# lacks: docs/harness-local.md, Residuals.
 _FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}(?=[^`]*$)|~{3,})")
 _FENCE_CLOSE = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*$")
 _MAP_CLASS = re.compile(r"^([A-E]):\s*$")
