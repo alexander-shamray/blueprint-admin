@@ -144,6 +144,11 @@
       {{ h.completionsPending ?? '—' }}
     </p>
   }
+} @else if (run.holdersError(); as error) {
+  <p class="error" role="alert">
+    <ng-container i18n>The holders could not be read: {{ error }}</ng-container>
+    <button type="button" (click)="run.loadHolders()" i18n>Retry</button>
+  </p>
 } @else {
   <p i18n>Loading…</p>
 }

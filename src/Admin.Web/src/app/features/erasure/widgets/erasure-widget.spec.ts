@@ -91,6 +91,34 @@ describe('ErasureWidget', () => {
     expect(fixture.nativeElement.querySelector('.completions').textContent).toContain('1');
   });
 
+  it('says why the holders could not be read instead of loading for good, and reads them again on retry', () => {
+    const first = new Subject<HoldersView>();
+    const erasureHolders = vi.fn().mockReturnValueOnce(first).mockReturnValue(of(holders));
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([]),
+        {
+          provide: HostClient,
+          useValue: { config: () => of({ urls: { gateway: '' } }), erasureHolders, proxy: vi.fn() },
+        },
+      ],
+    });
+    const fixture = TestBed.createComponent(ErasureWidget);
+    fixture.detectChanges();
+    first.error(new Error('Http failure response for /api/erasure/holders: 502'));
+    fixture.detectChanges();
+
+    expect(text(fixture, '[role="alert"]').join(' ')).toContain('502');
+    expect(text(fixture, 'p').join(' ')).not.toContain('Loading');
+
+    (fixture.nativeElement.querySelector('[role="alert"] button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(erasureHolders).toHaveBeenCalledTimes(2);
+    expect(text(fixture, 'table.holders tbody tr')).toHaveLength(2);
+    expect(fixture.nativeElement.querySelector('[role="alert"]')).toBeNull();
+  });
+
   it('raises as the privacy login through the gateway, then reads the request it was given', () => {
     const fixture = render([responded(200, JSON.stringify(REQUEST_ID)), responded(200, JSON.stringify(view({})))]);
     fixture.componentInstance.subject.set(SUBJECT);
