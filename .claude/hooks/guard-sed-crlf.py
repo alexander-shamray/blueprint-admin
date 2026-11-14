@@ -51,7 +51,11 @@ WRAPPERS = {
 SHELLS = {"bash", "sh", "bash.exe", "sh.exe"}
 # Stands for a heredoc body in the line `prepared` returns: a NUL, which no bash command line can carry.
 BODY = "\x00"
-SHELL_COMMAND = re.compile(r"-[A-Za-z]*c[A-Za-z]*")
+# Bash's long options, which it reads before any cluster with one dash or two, and those that take the next word as
+# their value; a short option's value is the next word for each `o` and `O` in its cluster.
+SHELL_LONG = {"debug", "debugger", "dump-po-strings", "dump-strings", "help", "login", "noediting", "noprofile", "norc",
+              "posix", "pretty-print", "protected", "restricted", "verbose", "version", "wordexp"}
+SHELL_VALUED = {"rcfile", "init-file"}
 MAX_DEPTH = 3
 
 ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
@@ -281,22 +285,33 @@ def echoed(segment):
 
 
 def shell_line(arguments, stdin):
-    """The command line a shell with these arguments runs: its `-c` line, or its input where it reads that."""
+    """The command line a shell with these arguments runs: its `-c` line, or its input where it reads that.
+
+    As bash reads them: the long options, `-login` or `--login`, then the clusters, each `o` or `O` taking a word; the
+    first operand after them is the `-c` line, or a script, which reads its input as data unless `-s` was given."""
     index = 0
-    reads_input = False
+    while index < len(arguments) and arguments[index].startswith("-"):
+        name = arguments[index][2 if arguments[index].startswith("--") else 1:]
+        if name not in SHELL_LONG and name not in SHELL_VALUED:
+            break
+        index += 2 if name in SHELL_VALUED else 1
+    command = reads_input = False
     while index < len(arguments):
         argument = arguments[index]
-        if SHELL_COMMAND.fullmatch(argument):
-            return arguments[index + 1] if index + 1 < len(arguments) else None
-        if argument in ("-o", "+o"):
-            index += 2
-            continue
-        if argument == "--" or not argument.startswith(("-", "+")):
-            # An operand is a script, which reads its input as data, unless `-s` said to read commands from it.
-            return stdin if reads_input else None
-        reads_input = reads_input or (not argument.startswith("--") and "s" in argument)
+        if argument in ("--", "-"):
+            index += 1
+            break
+        if not argument.startswith(("-", "+")):
+            break
         index += 1
-    return stdin
+        if not argument.startswith("--"):
+            letters = argument[1:]
+            command = command or "c" in letters
+            reads_input = reads_input or "s" in letters
+            index += letters.count("o") + letters.count("O")
+    if index < len(arguments):
+        return arguments[index] if command else (stdin if reads_input else None)
+    return None if command else stdin
 
 
 def long_option(name):

@@ -355,7 +355,8 @@ only an `.exe` or a `.com` counts, never `PATHEXT`'s `.bat` or `.cmd`: those
 run through `cmd.exe` in the checkout, which looks there first for every
 command the script names, so a shim found safely would reopen the search this
 closes. pip writes the console script as an `.exe`. The worker runs that
-script, then the module through its own interpreter: `py -3.12 -m pip` is a
+script, then, on Python 3.11 or later, the module through its own interpreter,
+where `-P` keeps the checkout off the import path: `py -3.12 -m pip` is a
 supported install that leaves the script in a directory that need not be on
 `PATH`, so both `cbx` wrappers fall back the same way, and a pipx install has
 no module this interpreter can import, so the script is not dropped for it.
@@ -1679,14 +1680,15 @@ where the old grant was `/ship`'s alone, so what bounds the subcommand is its
 own proof: it runs `verify <n> --head <oid>` and refuses a failure, so a test
 file committed on a local branch, with that branch's `HEAD` as the pin, runs
 nothing. It then refuses a `HEAD` other than the oid or a tree `git status
---short` says is not clean, the comparison the sync section requires and which
-`dispatch_board.py sync-launch` and `run` compare before a `--dispatched` run
-starts in it, and runs each path `local-suites` derives from
-`.harness/config.json` and `git ls-files` as `py -3.12 -m unittest discover -s
-<dir> -p <file>`. A target's *Ship checks* that runs the whole `.claude/scripts`
-suite runs `shard-harness-suite.py`, granted with no `:*` so that its `--ids
-<file>` and `--queue <file>`, its workers' own, stay out; its `--selective`
-is granted as a second whole command for the same reason. Residual: those suites
+--short --untracked-files=all` says is not clean, the comparison the sync
+section requires and which `dispatch_board.py sync-launch` and `run` compare
+before a `--dispatched` run starts in it, and runs each path `local-suites`
+derives from `.harness/config.json` and `git ls-files` as `py -3.12 -m
+unittest discover -s <dir> -p <file>`. A target's *Ship checks* that runs the
+whole `.claude/scripts` suite runs `shard-harness-suite.py`, granted with no
+`:*` so that its `--ids <file>` and `--queue <file>`, its workers' own, stay
+out; its `--selective` is granted as a second whole command for the same
+reason. Residual: those suites
 run with the session's credentials, and what they run is an open sync's head,
 which its pull request shows; a session can still run any test file by a command
 no grant names, which asks in the default mode and under `auto` is the
@@ -2826,6 +2828,7 @@ decision accepts, and Linux still judges them on every pull request.
 - name: Decide whether this leg tests
   id: reach
   if: runner.os != 'Linux'
+  shell: bash
   run: python .claude/scripts/harness-legs.py >> "$GITHUB_OUTPUT"
 - name: Test the harness
   if: runner.os == 'Linux' || steps.reach.outputs.test != 'false'

@@ -317,6 +317,11 @@ def _prompt_for(directory, gid, entry, run, flag=False, left=""):
     return prompt(_entry_group(gid, entry), _task_text(directory, gid) + left, run, flag)
 
 
+# What a tree holds that is not committed, every untracked file named: status.showUntrackedFiles=no would read
+# untracked work as a clean tree.
+HELD = ("status", "--porcelain", "--untracked-files=all")
+
+
 def _plural(count, noun):
     return f"{count} {noun}{'' if count == 1 else 's'}"
 
@@ -343,7 +348,7 @@ def _left_behind(root, entry):
     except (Refusal, ValueError):
         pass
     try:
-        if git(tree, "status", "--porcelain").strip():
+        if git(tree, *HELD).strip():
             parts.append("uncommitted work in its tree")
     except Refusal:
         pass
@@ -394,7 +399,7 @@ def _bound_to(root, worktree, oid):
     head = git(tree, "rev-parse", "HEAD").strip()
     if head != oid:
         raise Moved(f"{worktree} is at {head}, not the proved {oid}")
-    held = git(tree, "status", "--porcelain").strip()
+    held = git(tree, *HELD).strip()
     if held:
         raise Refusal(f"{worktree} is not clean: {one_line(held, 200)}")
 
@@ -1142,7 +1147,7 @@ def _merged_unreported(root, gid, entry, worktree, issues):
         return None
     tree = Path(root) / worktree
     try:
-        if git(tree, "status", "--porcelain").strip():
+        if git(tree, *HELD).strip():
             return None
         tip = git(tree, "rev-parse", "HEAD").strip()
         # A sync's proof binds one head: a tree elsewhere stays `run`'s refusal, which the report's Syncs line names.

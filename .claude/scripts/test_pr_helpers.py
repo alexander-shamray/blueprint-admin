@@ -582,6 +582,16 @@ class NoCommandReadsAPullRequestFeedUnfiltered(GhShim, unittest.TestCase):
                 self.assertEqual(3, r.returncode, r.stderr)
                 self.assertEqual("", r.stdout)
 
+    def test_a_row_with_no_closing_pipe_is_not_one_cell(self):
+        # The CI gate's `_cell` refuses a row whose cell is not closed by a `|`, so the local verdict must too.
+        for body in ("| Class | D\n| Touch set | docs/x.md |\n", "| Class | D |\n| Touch set | docs/x.md\n",
+                     "| Class | D\n| Touch set | docs/x.md\n"):
+            with self.subTest(body=body):
+                r = self._run_locality_with_gh(self._gh_printing(body))
+                self.assertEqual(3, r.returncode, r.stderr)
+                self.assertIn("is not one cell", r.stderr)
+                self.assertEqual("", r.stdout)
+
     def test_a_class_is_one_letter_two_distinct_ones_or_a_d_e(self):
         # The gate unions every listed map, so a class grammar that admitted
         # `A+A` or `A+B+C` would make a wide class a wide tree; `A+D+E` is

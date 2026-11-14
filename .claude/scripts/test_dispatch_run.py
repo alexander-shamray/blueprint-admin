@@ -551,6 +551,8 @@ class LaunchTests(InRoot):
                          "resume from there, and end the turn only on the result) --dispatched "
                          f"artifacts/dispatch/{RUN}", seen["stdin"])
         self.assertIn(("rev-list", "--count", "origin/main..HEAD"), reads)
+        # status.showUntrackedFiles=no would otherwise read untracked work as nothing left.
+        self.assertIn(("status", "--porcelain", "--untracked-files=all"), reads)
 
     def test_a_first_launch_reads_nothing_it_left(self):
         record(RUN, "S1", status="running", branch=BRANCH, worktree=WORKTREE)
