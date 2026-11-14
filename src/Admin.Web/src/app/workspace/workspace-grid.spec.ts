@@ -158,16 +158,17 @@ describe('WorkspaceGrid', () => {
   it('drops an open draft when a preset is chosen, the widget is removed, or the page changes', () => {
     const job: WidgetInstance = { id: 'j', type: 'job-output', x: 0, y: 0, cols: 12, rows: 6, config: { jobId: 'x' } };
     const fixture = render([job], true);
+    const panel = (): Element | null => fixture.nativeElement.querySelector('.ws-settings');
+    // Each drop below is proved only against a panel that was open, so every open is checked.
     const open = (): void => {
       (fixture.nativeElement.querySelector('button.ws-configure') as HTMLButtonElement).click();
       fixture.detectChanges();
       document.querySelector<HTMLElement>('.ws-edit-settings')?.click();
       fixture.detectChanges();
+      expect(panel()).not.toBeNull();
     };
-    const panel = (): Element | null => fixture.nativeElement.querySelector('.ws-settings');
 
     open();
-    expect(panel()).not.toBeNull();
     fixture.componentInstance.choosePreset(fixture.componentInstance.items()[0], JOB_OUTPUT.presets[0]);
     fixture.detectChanges();
     expect(panel()).toBeNull();

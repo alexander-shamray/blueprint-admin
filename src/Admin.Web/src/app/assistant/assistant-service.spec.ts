@@ -58,6 +58,32 @@ describe('AssistantService notice (AI assistant design §10)', () => {
     vi.restoreAllMocks();
   });
 
+  /** Answers the open and the turn as the host does, so a send reaches `/turns`; the stream opens onto nothing. */
+  function hostAnswers(): void {
+    vi.stubGlobal(
+      'EventSource',
+      class {
+        readonly readyState = 0;
+        readonly addEventListener = vi.fn();
+        readonly close = vi.fn();
+      },
+    );
+    fetched.mockImplementation((input: string) =>
+      Promise.resolve(
+        input.endsWith('/conversations')
+          ? new Response(JSON.stringify({ id: 'c1' }), { status: 201, headers: { 'Content-Type': 'application/json' } })
+          : new Response(null, { status: input.endsWith('/turns') ? 202 : 404 }),
+      ),
+    );
+  }
+
+  /** The `hostOptions` the turn carried, not the open: the open carries them too, so it would hide a turn sending none. */
+  function turnHostOptions(): unknown {
+    const turn = fetched.mock.calls.find(([input]) => (input as string).endsWith('/turns'));
+    expect(turn).toBeDefined();
+    return JSON.parse(turn![1].body as string).hostOptions;
+  }
+
   it('needs none while the assistant is off, unread, or a provider that sends nothing out', () => {
     const assistant = service();
     expect(assistant.needsNotice()).toBe(false);
@@ -101,6 +127,7 @@ describe('AssistantService notice (AI assistant design §10)', () => {
 
   it('pins the realm user for the tab, sends it as hostOptions.identity, and lets the host choose again once it is taken off', async () => {
     sessionStorage.clear();
+    hostAnswers();
     const assistant = service();
     assistant.status.set({ enabled: true, provider: 'fake', model: 'scripted', reason: null });
 
@@ -111,7 +138,7 @@ describe('AssistantService notice (AI assistant design §10)', () => {
     const pinned = service();
     pinned.status.set({ enabled: true, provider: 'fake', model: 'scripted', reason: null });
     await pinned.send('is the stack running?');
-    expect(JSON.parse(fetched.mock.calls[0][1].body as string).hostOptions).toEqual({ identity: 'browser' });
+    expect(turnHostOptions()).toEqual({ identity: 'browser' });
 
     pinned.pin(null);
     expect(sessionStorage.getItem(IDENTITY_KEY)).toBeNull();
@@ -120,7 +147,7 @@ describe('AssistantService notice (AI assistant design §10)', () => {
     automatic.status.set({ enabled: true, provider: 'fake', model: 'scripted', reason: null });
     await automatic.send('is the stack running?');
     // Not null: the host keeps an open conversation's options from the turn before when a turn sends none.
-    expect(JSON.parse(fetched.mock.calls[0][1].body as string).hostOptions).toEqual({});
+    expect(turnHostOptions()).toEqual({});
   });
 
   it('drops a pin the host no longer lists once the users arrive', () => {
@@ -135,6 +162,7 @@ describe('AssistantService notice (AI assistant design §10)', () => {
   });
 
   it('does not send a pin the host has said it does not list, while the panel has not yet dropped it', async () => {
+    hostAnswers();
     const assistant = service();
     assistant.status.set({ enabled: true, provider: 'fake', model: 'scripted', reason: null });
     assistant.pin('mallory');
@@ -142,7 +170,7 @@ describe('AssistantService notice (AI assistant design §10)', () => {
 
     await assistant.send('is the stack running?');
 
-    expect(JSON.parse(fetched.mock.calls[0][1].body as string).hostOptions).toEqual({});
+    expect(turnHostOptions()).toEqual({});
   });
 
   it('keeps a pin the host lists', () => {
