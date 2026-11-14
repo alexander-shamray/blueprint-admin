@@ -58,8 +58,21 @@ describe('ReadinessTracker', () => {
     expect(tracker.snapshot()?.ended).toBe(true);
   });
 
-  it('keeps only the polls behind the toggle; the marker and the verdict stay in the log', () => {
+  it('counts every surface the host listed, the ones up at the first probe included', () => {
+    const tracker = new ReadinessTracker();
+    tracker.add(line(0, '== readiness: up to 120 s'));
+    expect(tracker.add(line(1, 'surfaces: gateway, catalog, ordering, bff'))).toBe(true);
+    tracker.add(line(1, 'waiting for: ordering, bff'));
+    expect(states(tracker)).toEqual(['gateway up', 'catalog up', 'ordering waiting', 'bff waiting']);
+
+    tracker.add(line(120, 'not ready after 120 s: bff'));
+
+    expect(states(tracker)).toEqual(['gateway up', 'catalog up', 'ordering up', 'bff failed']);
+  });
+
+  it('keeps only the polls and the surface list behind the toggle; the marker and the verdict stay in the log', () => {
     expect(ReadinessTracker.isPoll('waiting for: ordering')).toBe(true);
+    expect(ReadinessTracker.isPoll('surfaces: gateway, ordering')).toBe(true);
     expect(ReadinessTracker.isPoll('== readiness: up to 120 s')).toBe(false);
     expect(ReadinessTracker.isPoll('ready: gateway')).toBe(false);
     expect(ReadinessTracker.isPoll('not ready after 120 s: ordering')).toBe(false);

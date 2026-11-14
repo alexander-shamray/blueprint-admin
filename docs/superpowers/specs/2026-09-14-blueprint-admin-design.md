@@ -320,11 +320,13 @@ is kept (`ComposeService.ExecListedAsync`).
   reads the host's count (`GET /stack`) only once its job has printed a k6 line.
 - Reset's readiness wait is a checklist (`ReadinessTracker`) with a countdown. The
   host writes the cap into the wait's marker line, `== readiness: up to <n> s`
-  (`ResetService.ReadinessCap`), so the SPA restates no value; every surface the
-  first `waiting for:` line names is listed, ticked when a later poll no longer
-  names it, all ticked on `ready:` and the named ones marked failed on
-  `not ready after`. The polls leave the log behind the toggle; the marker and the
-  verdict stay in it. The count starts at the marker's own host time, so a pane
+  (`ResetService.ReadinessCap`), so the SPA restates no value. Unless the first
+  probe finds every surface up, the host then writes every surface it judges
+  once, `surfaces: a, b, c`, which the checklist lists, the ones already up
+  included; a surface is ticked when a poll's `waiting for:` no longer names it,
+  all are ticked on `ready:` and the named ones marked failed on
+  `not ready after`. The surface list and the polls leave the log behind the
+  toggle; the marker and the verdict stay in it. The count starts at the marker's own host time, so a pane
   re-attached after a page change counts from the same moment.
 - `Down(wipeVolumes)`: `down` or `down -v`. The endpoint requires
   `confirm: "down -v"` in the body when `wipeVolumes` is true.

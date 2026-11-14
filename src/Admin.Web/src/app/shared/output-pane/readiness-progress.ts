@@ -18,11 +18,13 @@ export interface ReadinessProgress {
 }
 
 /**
- * Reset's last step, as the host writes it (`ResetService.WaitForReadinessAsync`): a marker that carries the cap, then
- * `waiting for: a, b` on every poll, then `ready: a, b, c` or `not ready after 120 s: a, b`. Lines before the marker are
- * not the wait's, so a `waiting for:` from any other job is left in its log.
+ * Reset's last step, as the host writes it (`ResetService.WaitForReadinessAsync`): a marker that carries the cap, then,
+ * unless the first probe found every surface up, `surfaces: a, b, c` once and `waiting for: a, b` on every poll, then
+ * `ready: a, b, c` or `not ready after 120 s: a, b`. Lines before the marker are not the wait's, so a `waiting for:`
+ * from any other job is left in its log.
  */
 const MARKER = /^== readiness: up to (\d+) s$/;
+const SURFACES = /^surfaces: (.+)$/;
 const WAITING = /^waiting for: (.+)$/;
 const READY = /^ready: (.+)$/;
 const NOT_READY = /^not ready after \d+ s: (.+)$/;
@@ -37,9 +39,12 @@ export class ReadinessTracker {
   private startedAt = NaN;
   private ended = false;
 
-  /** A poll's `waiting for:` is the line the pane keeps behind its toggle; the marker and the verdict stay in the log. */
+  /**
+   * A poll's `waiting for:`, and the `surfaces:` list the checklist is seeded from, are the lines the pane keeps behind
+   * its toggle; the marker and the verdict stay in the log.
+   */
   static isPoll(text: string): boolean {
-    return WAITING.test(text);
+    return WAITING.test(text) || SURFACES.test(text);
   }
 
   /** Whether the line is part of the wait, which only a line after the marker is. */
@@ -53,6 +58,13 @@ export class ReadinessTracker {
       return true;
     }
     if (!this.surfaces) return false;
+
+    const listed = SURFACES.exec(line.text);
+    if (listed) {
+      for (const name of names(listed[1]))
+        if (!this.surfaces.some((s) => s.name === name)) this.surfaces.push({ name, state: 'waiting' });
+      return true;
+    }
 
     const waiting = WAITING.exec(line.text);
     if (waiting) {
