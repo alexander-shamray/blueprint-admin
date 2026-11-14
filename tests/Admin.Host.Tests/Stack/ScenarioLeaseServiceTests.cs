@@ -735,7 +735,7 @@ public sealed class ScenarioLeaseServiceTests : IAsyncDisposable
     /// <summary>Wraps the fake runner to see a start as it happens, to fail or hang chosen commands, and to change what ps says.</summary>
     private sealed class TestRunner(FakeProcessRunner inner, JobRegistry registry) : IProcessRunner
     {
-        // A deadline's restore starts and stops on a pool thread while the test reads, so every list is read and written under one lock.
+        // A deadline's restore starts and stops on a pool thread while the test reads, so one lock guards every list.
         private readonly Lock gate = new();
         private readonly List<ProcessSpec> started = [];
         private readonly List<Job> hungJobs = [];

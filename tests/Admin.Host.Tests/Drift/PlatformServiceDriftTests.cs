@@ -32,9 +32,12 @@ public sealed partial class PlatformServiceDriftTests
         Match table = ComposeOfLiteral().Match(source);
         table.Success.ShouldBeTrue("COMPOSE_OF is no longer an object literal this test can read");
 
-        string[] entries = table.Groups[1].Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        string[] entries = table.Groups[1].Value.Split(
+            ',',
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         // An entry the pattern cannot read, a quoted key among them, would otherwise drop out of the comparison unseen.
-        entries.Where(entry => !PairLiteral().IsMatch(entry)).ShouldBeEmpty("COMPOSE_OF holds an entry this test cannot read");
+        entries.Where(entry => !PairLiteral().IsMatch(entry))
+            .ShouldBeEmpty("COMPOSE_OF holds an entry this test cannot read");
 
         Dictionary<string, string> listed = entries
             .Select(entry => PairLiteral().Match(entry))

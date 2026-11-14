@@ -168,7 +168,7 @@ public sealed class WorkspaceEndpointsTests : IClassFixture<AdminHostFactory>
         request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
         request.Headers.TransferEncodingChunked = true;
 
-        // The header check refuses a declared length before the read loop runs, so the loop's bound is what this proves only while no length goes out.
+        // The header check refuses a declared length before the read loop runs; with none sent, the loop's bound is proved.
         request.Content.Headers.ContentLength.ShouldBeNull();
 
         using HttpResponseMessage response = await client.SendAsync(request, Ct);
