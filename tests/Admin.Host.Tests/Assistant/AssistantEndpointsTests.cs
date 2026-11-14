@@ -104,11 +104,15 @@ public sealed class AssistantEndpointsTests : IClassFixture<AdminHostFactory>
         view.ToJsonString().ShouldNotContain("opened /logs");
     }
 
+    private const string StockedProduct = "0199a1b2-0000-7000-8000-00000000000a";
+
+    private const string PaidOrder = "0199a1b2-0000-7000-8000-000000000002";
+
     [Theory]
-    [InlineData("how many are in stock for product {0}?", "0199a1b2-0000-7000-8000-00000000000a", "10 in stock, 0 reserved.")]
-    [InlineData("what is the payment status of order {0}?", "0199a1b2-0000-7000-8000-000000000002", "The payment is Authorised.")]
-    [InlineData("сколько на складе товара {0}?", "0199a1b2-0000-7000-8000-00000000000a", "В наличии: 10, в резерве: 0.")]
-    public async Task A_question_about_stock_or_a_payment_is_answered_from_a_platform_read_the_conversation_opened_with(
+    [InlineData("how many are in stock for product {0}?", StockedProduct, "10 in stock, 0 reserved.")]
+    [InlineData("what is the payment status of order {0}?", PaidOrder, "The payment is Authorised.")]
+    [InlineData("сколько на складе товара {0}?", StockedProduct, "В наличии: 10, в резерве: 0.")]
+    public async Task A_question_about_stock_or_a_payment_is_answered_from_a_platform_read_its_conversation_opened_with(
         string asked,
         string read,
         string answer)
