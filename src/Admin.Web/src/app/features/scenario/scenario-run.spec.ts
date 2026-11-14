@@ -1028,6 +1028,8 @@ describe('sagaStrip', () => {
     ])!;
 
     expect(strip.unchangedForMs).toBe(1_000);
+    expect(strip.unchangedReads).toBe(2);
+    expect(strip.reads).toBe(3);
     expect(strip.stalled).toBe(false);
   });
 

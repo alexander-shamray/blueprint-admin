@@ -80,7 +80,7 @@
     @if (s.stalled) {
       <p class="saga-stalled" role="status" i18n>
         [stalled] The status has stood at {{ s.status }} for {{ seconds(s.unchangedForMs) }} s across
-        {{ s.reads }} reads.
+        {{ s.unchangedReads }} reads.
       </p>
     }
   } @else {

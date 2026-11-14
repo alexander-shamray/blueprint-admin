@@ -205,6 +205,7 @@ describe('buildExport', () => {
       reads: 3,
       transitions: [{ from: 'placed' as const, to: 'confirmed' as const, seconds: 1 }],
       unchangedForMs: 40_000,
+      unchangedReads: 2,
       stalled: true,
       statusChangedAt: '2026-10-05T12:00:01Z',
       saga: null,
@@ -227,6 +228,7 @@ describe('buildExport', () => {
       reads: 1,
       transitions: [],
       unchangedForMs: 0,
+      unchangedReads: 1,
       stalled: false,
       statusChangedAt: '2026-10-05T12:00:04Z',
       saga: {
