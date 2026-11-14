@@ -880,6 +880,7 @@
     "9013923908711025542": "{$name} has no Compose service to follow.",
     "2340355140474344321": "The Logs widget on this page now shows {$service}.",
     "4555205079439640872": "The dead-letter workbench on this page opened {$queue}.",
+    "7403813253677685796": "The dead-letter workbench on this page is not showing; restore the page's layout to open {$queue} in it.",
     "2519871698020578918": "The Queues widget on this page shows {$queue}.",
     "3097328085675178311": "Names are separated by commas; leave a field empty for the default.",
     "4391289919356861627": "Apply",
