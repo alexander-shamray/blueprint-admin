@@ -60,7 +60,10 @@ TOOLING_SCRATCH = (".remember/", ".superpowers/", ".claude/cache/",
 
 def blanket_ignore(path):
     """Whether this ignore file excludes everything beneath its directory."""
-    lines = [line.strip() for line in path.read_text(encoding="utf-8").splitlines()]
+    # utf-8-sig, as test_root_ignore_covers_nested.py reads them: a BOM read
+    # as utf-8 makes a leading `*` the string `\ufeff*`, which is not in
+    # BLANKET, and the directory drops off the report.
+    lines = [line.strip() for line in path.read_text(encoding="utf-8-sig").splitlines()]
     rules = [line for line in lines if line and not line.startswith("#")]
     return any(rule in BLANKET for rule in rules) and not any(
         rule.startswith("!") for rule in rules)
@@ -179,6 +182,12 @@ class TheScan(unittest.TestCase):
     def test_it_reports_a_directory_excluded_only_from_the_inside(self):
         self.write(".gitignore", "/artifacts/\n")
         self.write("scratch/.gitignore", "*\n")
+        self.assertEqual(excluded_from_inside_only(self.repo), ["scratch/"])
+
+    def test_a_blanket_ignore_written_with_a_bom_is_still_reported(self):
+        # An editor on Windows may save the nested file with a BOM.
+        self.write(".gitignore", "/artifacts/\n")
+        self.write("scratch/.gitignore", "\ufeff*\n")
         self.assertEqual(excluded_from_inside_only(self.repo), ["scratch/"])
 
     def test_a_root_rule_takes_that_directory_off_the_list(self):
