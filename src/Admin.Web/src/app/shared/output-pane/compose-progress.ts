@@ -28,6 +28,13 @@ const CONTAINER_LINE = /^\s*Container\s+(\S+)\s+(\w+)\s*$/;
  */
 const SETTLED = new Set(['Healthy', 'Removed', 'Stopped', 'Exited']);
 
+/**
+ * A Down's removal after its stop: it carries the stopped container on rather than starting it over, so the row stays
+ * settled and its time runs from Stopping to Removed. A Stop job ends at Stopped, which is why Stopped settles at all.
+ */
+const REMOVAL = new Set(['Removing', 'Removed']);
+const REMOVED_FROM = new Set(['Stopped', 'Removing']);
+
 interface Container {
   name: string;
   verb: string;
@@ -59,7 +66,8 @@ export class ComposeTracker {
     const failed = verb === 'Error' || (event !== null && composeFailed(event));
     const at = Date.parse(line.at);
     let container = this.containers.get(name);
-    if (!container || container.settledAt !== null) {
+    const removal = container !== undefined && REMOVAL.has(verb) && REMOVED_FROM.has(container.verb);
+    if (!container || (container.settledAt !== null && !removal)) {
       container = { name, verb, failed, startedAt: at, settledAt: null };
       this.containers.set(name, container);
     }
