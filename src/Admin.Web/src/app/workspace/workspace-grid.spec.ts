@@ -220,6 +220,32 @@ describe('WorkspaceGrid', () => {
     await fixture.whenStable();
   });
 
+  it('says a widget whose code did not load did not, with a retry that loads it', async () => {
+    const real = NOTE.component;
+    const load = vi
+      .spyOn(NOTE, 'component')
+      .mockImplementationOnce(() => Promise.reject(new Error('Failed to fetch dynamically imported module')))
+      .mockImplementation(real);
+    const note: WidgetInstance = { id: 'n', type: 'note', x: 0, y: 0, cols: 12, rows: 6, config: { source: '# Mine' } };
+    const fixture = render([note], false);
+    const element: HTMLElement = fixture.nativeElement;
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(element.querySelector('.ws-load-error')?.textContent).toContain(
+      'Failed to fetch dynamically imported module',
+    );
+
+    (element.querySelector('.ws-load-error button') as HTMLButtonElement).click();
+    await NOTE.component();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(element.querySelector('.ws-load-error')).toBeNull();
+    expect(element.querySelector('app-note-widget')).not.toBeNull();
+    load.mockRestore();
+  });
+
   it('maximises one widget across the page and restores the grid, keeping the layout', () => {
     const fixture = render([known, { ...known, id: 'w3', x: 12 }], false);
     const element: HTMLElement = fixture.nativeElement;

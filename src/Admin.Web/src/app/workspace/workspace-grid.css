@@ -82,3 +82,6 @@ gridster.editing {
 .ws-unknown {
   color: var(--app-muted);
 }
+.ws-load-error {
+  margin: 0;
+}

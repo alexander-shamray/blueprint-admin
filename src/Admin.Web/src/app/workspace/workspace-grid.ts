@@ -85,6 +85,11 @@ export class WorkspaceGrid {
 
   /** The loaded component of each type, so `*ngComponentOutlet` has a class to render. */
   private readonly components = signal<ReadonlyMap<string, Type<unknown>>>(new Map());
+  /**
+   * Why a type's component did not load, as a tab left open across a rebuild asks for a chunk that is gone; the body
+   * says so with a retry rather than staying blank.
+   */
+  private readonly loadErrors = signal<ReadonlyMap<string, string>>(new Map());
 
   constructor() {
     effect(() => {
@@ -291,10 +296,29 @@ export class WorkspaceGrid {
     );
   }
 
+  loadErrorOf(item: GridItem): string | null {
+    return item.kind ? (this.loadErrors().get(item.kind.type) ?? null) : null;
+  }
+
+  retryLoad(item: GridItem): void {
+    const kind = item.kind;
+    if (!kind) return;
+    this.loadErrors.update((errors) => {
+      const left = new Map(errors);
+      left.delete(kind.type);
+      return left;
+    });
+    this.loadComponent(kind);
+  }
+
   private loadComponent(kind: WidgetType): void {
-    if (untracked(this.components).has(kind.type)) return;
-    void kind
-      .component()
-      .then((component) => this.components.update((loaded) => new Map(loaded).set(kind.type, component)));
+    if (untracked(this.components).has(kind.type) || untracked(this.loadErrors).has(kind.type)) return;
+    kind.component().then(
+      (component) => this.components.update((loaded) => new Map(loaded).set(kind.type, component)),
+      (error: unknown) => {
+        const message = error instanceof Error && error.message !== '' ? error.message : String(error);
+        this.loadErrors.update((errors) => new Map(errors).set(kind.type, message));
+      },
+    );
   }
 }

@@ -884,6 +884,7 @@
     "2519871698020578918": "The Queues widget on this page shows {$queue}.",
     "3097328085675178311": "Names are separated by commas; leave a field empty for the default.",
     "4391289919356861627": "Apply",
+    "1409202160408119093": "This widget's code did not load: {$INTERPOLATION}. A console rebuilt since this tab opened needs the page reloaded.",
     "176608883185932417": " This console does not know the widget type {$START_TAG_CODE}{$INTERPOLATION}{$CLOSE_TAG_CODE}. It is kept, and saved back as it was. ",
     "8254605600240883299": "Edit settings…",
     "8784071266253543659": "Unknown widget ({$type})",
