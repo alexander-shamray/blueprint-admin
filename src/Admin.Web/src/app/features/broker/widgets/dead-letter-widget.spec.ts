@@ -4,6 +4,7 @@ import { Subject, of, throwError } from 'rxjs';
 import { HostClient } from '../../../core/host/host-client';
 import { DeadLetterInspection, JobSummary } from '../../../core/host/host-types';
 import { SseClient } from '../../../core/host/sse-client';
+import { WIDGET_CONTEXT } from '../../../workspace/widget-context';
 import { BrokerFeed } from '../broker-feed';
 import { brokerHost, inspection, job } from '../broker-testing';
 import { DeadLetterWidget } from './dead-letter-widget';
@@ -299,6 +300,10 @@ describe('DeadLetterWidget', () => {
   });
 
   it('is re-created closed, with the dry-run gate and the typed confirmation both empty', () => {
+    // Inside the grid a widget's session state outlives it, so the re-created one shares the first one's instance.
+    TestBed.configureTestingModule({
+      providers: [{ provide: WIDGET_CONTEXT, useValue: { instanceId: 'w1', pageId: 'p1' } }],
+    });
     const first = render();
     open(first);
     click(first, 'button.dry-replay');

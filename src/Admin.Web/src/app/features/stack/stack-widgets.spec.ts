@@ -1282,11 +1282,24 @@ describe('StackWidgets', () => {
 
     it('reads again on request, and not while a read is in flight', async () => {
       const { fixture, q } = await render();
+      const inFlight = new Subject<typeof deviceReads>();
+      host.frontendDeviceReads.mockReturnValueOnce(inFlight);
 
       q('button.device-read')!.click();
       fixture.detectChanges();
-
       expect(host.frontendDeviceReads).toHaveBeenCalledTimes(2);
+      expect(q('button.device-read')!.disabled).toBe(true);
+
+      // The disabled button stops a click, and the guard stops a call that reaches the widget all the same.
+      q('button.device-read')!.click();
+      fixture.debugElement.query(By.directive(ReferenceClientWidget)).componentInstance.checkDevice();
+      fixture.detectChanges();
+      expect(host.frontendDeviceReads).toHaveBeenCalledTimes(2);
+
+      inFlight.next(deviceReads);
+      inFlight.complete();
+      fixture.detectChanges();
+      expect(q('button.device-read')!.disabled).toBe(false);
     });
 
     it('keeps the last reads and says so when the host does not answer', async () => {

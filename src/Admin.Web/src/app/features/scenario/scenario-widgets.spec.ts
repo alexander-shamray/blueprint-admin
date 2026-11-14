@@ -387,6 +387,9 @@ describe('ScenarioWidget', () => {
     });
   });
 
+  // A test that fakes the clock restores it on its success path only, so a failed assertion would leave the next test faked.
+  afterEach(() => vi.useRealTimers());
+
   function render() {
     const fixture = TestBed.createComponent(ScenarioWidget);
     fixture.detectChanges();
