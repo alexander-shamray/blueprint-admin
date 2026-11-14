@@ -344,7 +344,10 @@ public sealed partial class DeadLetterService(
             using JsonDocument document = JsonDocument.Parse(string.Join('\n', stdout));
             JsonElement root = document.RootElement;
 
-            if (!root.TryGetProperty("schema", out JsonElement schema) || schema.ValueKind != JsonValueKind.Number || !schema.TryGetInt32(out int version) || version != 1)
+            if (!root.TryGetProperty("schema", out JsonElement schema)
+                || schema.ValueKind != JsonValueKind.Number
+                || !schema.TryGetInt32(out int version)
+                || version != 1)
             {
                 return Failed(queue, "The tool's JSON is not schema 1, the one this console reads; see the tool's README, \"The JSON contract\".");
             }

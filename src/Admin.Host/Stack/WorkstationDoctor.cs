@@ -391,7 +391,9 @@ public sealed partial class WorkstationDoctor(
 
         if (tracking == "gone")
         {
-            return new(name, DoctorState.Unknown, $"main's upstream {branch.Groups["upstream"].Value} is gone, so its last fetch cannot say where main stands.{dirty}");
+            string gone = $"main's upstream {branch.Groups["upstream"].Value} is gone";
+
+            return new(name, DoctorState.Unknown, $"{gone}, so its last fetch cannot say where main stands.{dirty}");
         }
 
         if (behind.Success)
