@@ -37,7 +37,7 @@ MARKER = 'Importing project "'
 RESTORE_OUTPUT = (".nuget.g.props", ".nuget.g.targets")
 ASSETS = "project.assets.json"
 
-PIN_ITEMS = ("PackageVersion", "GlobalPackageReference")
+PIN_ITEMS = ("packageversion", "globalpackagereference")
 
 
 class JudgeError(RuntimeError):
@@ -72,16 +72,38 @@ def imports(lines) -> list[tuple[str, str]]:
 
 def pin_versions(data: bytes | str) -> dict[tuple[str, str], str]:
     """The pin file's literal versions, by item type and package, keyed
-    without regard to case as MSBuild reads both."""
+    without regard to case as MSBuild reads both, from a Version attribute or
+    a Version child element, the two forms pin_gate.py admits."""
     versions: dict[tuple[str, str], str] = {}
+    # The pin item open now, and the depth its element opened at.
+    item: list[tuple[tuple[str, str], int]] = []
+    depth = [0]
+    text: list[str] = []
 
     def start(tag: str, attrs: dict[str, str]) -> None:
-        kind = tag.rsplit("}", 1)[-1]
-        if kind in PIN_ITEMS and "Include" in attrs:
-            versions[(kind.lower(), attrs["Include"].lower())] = attrs.get("Version", "")
+        kind = tag.rsplit("}", 1)[-1].lower()
+        named = {key.lower(): value for key, value in attrs.items()}
+        if not item and kind in PIN_ITEMS and "include" in named:
+            key = (kind, named["include"].lower())
+            versions[key] = named.get("version", "")
+            item.append((key, depth[0]))
+        text.clear()
+        depth[0] += 1
+
+    def end(tag: str) -> None:
+        depth[0] -= 1
+        if item:
+            key, at = item[0]
+            if depth[0] == at + 1 and tag.rsplit("}", 1)[-1].lower() == "version":
+                versions[key] = "".join(text).strip()
+            elif depth[0] == at:
+                item.clear()
+        text.clear()
 
     parser = _parser()
     parser.StartElementHandler = start
+    parser.EndElementHandler = end
+    parser.CharacterDataHandler = text.append
     try:
         parser.Parse(data, True)
     except expat.ExpatError as error:

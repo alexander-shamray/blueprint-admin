@@ -71,6 +71,14 @@ class TheConfigAndThePinFile(unittest.TestCase):
     def test_the_pin_files_literal_versions_are_read_by_type_and_name(self) -> None:
         self.assertEqual(pin_versions(PIN), {("packageversion", "anthropic"): "1.0.0"})
 
+    def test_a_pin_is_read_whatever_its_casing_and_from_a_child_version_as_pin_gate_admits(self) -> None:
+        pin = ('<Project><ItemGroup><packageversion include="Anthropic"><Version> 1.0.0 </Version></packageversion>'
+               '<GLOBALPACKAGEREFERENCE Include="Analyzer" VERSION="2.0.0" />'
+               '<PackageVersion Include="Other" Version="3.0.0"><Note>x</Note></PackageVersion></ItemGroup></Project>')
+        self.assertEqual(pin_versions(pin), {("packageversion", "anthropic"): "1.0.0",
+                                             ("globalpackagereference", "analyzer"): "2.0.0",
+                                             ("packageversion", "other"): "3.0.0"})
+
     def test_a_doctype_is_refused_in_either(self) -> None:
         with self.assertRaises(JudgeError):
             pin_versions('<!DOCTYPE Project [<!ENTITY e "x">]><Project />')
