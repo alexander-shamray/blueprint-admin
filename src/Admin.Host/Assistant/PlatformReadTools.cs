@@ -182,7 +182,8 @@ public sealed class PlatformReadTools(ApiCatalog catalog, RequestProxy proxy, To
             IdentityRequest identity = new(user.Username, null);
             TokenOutcome? token = await tokens.ForAsync(identity, cancellationToken);
 
-            if (token is TokenIssued issued && IdentityEndpoints.Permissions(issued.Claims).Contains(operation.EdgePolicy, StringComparer.Ordinal))
+            if (token is TokenIssued issued
+                && IdentityEndpoints.Permissions(issued.Claims).Contains(operation.EdgePolicy, StringComparer.Ordinal))
             {
                 return (identity, null);
             }
@@ -196,8 +197,10 @@ public sealed class PlatformReadTools(ApiCatalog catalog, RequestProxy proxy, To
         }
 
         return unanswered is null
-            ? (null, $"No configured realm user holds the permission {operation.EdgePolicy} this route asks for; nothing was sent.")
-            : (null, $"No user could be shown to hold the permission {operation.EdgePolicy} this route asks for, since {unanswered}; nothing was sent.");
+            ? (null, $"No configured realm user holds the permission {operation.EdgePolicy} this route asks for; "
+                + "nothing was sent.")
+            : (null, $"No user could be shown to hold the permission {operation.EdgePolicy} this route asks for, "
+                + $"since {unanswered}; nothing was sent.");
     }
 
     /// <summary>The URL the input names, or null when the input is not what the operation takes.</summary>

@@ -203,7 +203,9 @@ public sealed class PlatformReadToolsTests(AdminHostFactory factory) : IClassFix
         });
         PlatformReadTools tools = await Prepared(host);
 
-        ToolOutcome outcome = await tools.InvokeAsync("get_stock", new JsonObject { ["productId"] = StockedProduct }, Context(), Ct);
+        JsonObject input = new() { ["productId"] = StockedProduct };
+
+        ToolOutcome outcome = await tools.InvokeAsync("get_stock", input, Context(), Ct);
 
         outcome.Ok.ShouldBeFalse();
         outcome.Content.ShouldContain("inventory:admin");

@@ -187,7 +187,10 @@ public sealed class WorkstationDoctorTests(AdminHostFactory factory) : IClassFix
     [InlineData("## feat/x...origin/feat/x", DoctorState.Problem, "On feat/x, not main.")]
     [InlineData("## HEAD (no branch)", DoctorState.Problem, "On HEAD, not main.")]
     [InlineData("## main", DoctorState.Ok, "On main, with no upstream as last fetched.")]
-    [InlineData("## main...origin/main [gone]", DoctorState.Unknown, "main's upstream origin/main is gone, so its last fetch cannot say where main stands.")]
+    [InlineData(
+        "## main...origin/main [gone]",
+        DoctorState.Unknown,
+        "main's upstream origin/main is gone, so its last fetch cannot say where main stands.")]
     public void A_clone_is_judged_by_its_branch_and_its_last_fetch(string line, DoctorState expected, string detail)
     {
         DoctorCheck check = WorkstationDoctor.Clone("Backend clone", Said(line));
