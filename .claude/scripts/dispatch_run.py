@@ -18,8 +18,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from dispatch_board import (BRANCH_NAME, DISPATCHED, MODEL, MODELS, NOT_OWNERS, Group, Refusal, _blocker, _bodies,
-                            _held, _number,
+from dispatch_board import (BRANCH_NAME, DISPATCHED, MODEL, MODELS, NOT_OWNERS, Group, OpenIssues, Refusal, _blocker,
+                            _bodies, _held, _number,
                             _read, _row, _write, git, group_claim, groups, helper, model_problem, one_line,
                             parse_tasks, path_which, pick, released, row_branch, runnable, strangers)
 from sync_pr import SYNC_HEAD
@@ -326,14 +326,15 @@ def _plural(count, noun):
     return f"{count} {noun}{'' if count == 1 else 's'}"
 
 
-def _left_behind(root, entry):
+def _left_behind(root, entry, earlier=False):
     """What a relaunched group's earlier session left in its worktree, as a clause for the prompt.
 
-    Each read is best effort: one that fails or answers out of shape drops its part, and /ship's own state read
-    still decides what is owed. A sync is held to its proved head instead; a first launch left nothing.
-    """
+    Each read is best effort: one that fails or answers out of shape drops its part. A sync is held to its proved
+    head instead; a first launch left nothing. `earlier`, a pid file an earlier `run` left, marks a `running` group
+    as one `resume` relaunched."""
     branch, worktree = entry.get("branch"), entry.get("worktree")
-    if entry.get("kind") == "sync" or entry.get("status") not in RELAUNCHED:
+    relaunched = entry.get("status") in RELAUNCHED or (earlier and entry.get("status") == "running")
+    if entry.get("kind") == "sync" or not relaunched:
         return ""
     if not isinstance(branch, str) or not BRANCH_NAME.fullmatch(branch) or not isinstance(worktree, str):
         return ""
@@ -483,7 +484,12 @@ def _sync_may_launch(directory, entries, gid, red_source):
         raise Refusal("stop file: the owner ended the night, so nothing more launches")
     # A sync holds no rows, so a report can close its run with the executor alive, in the worktree a re-take reuses.
     for earlier in sorted(p.parent for p in directory.parent.glob(f"*/{gid}.pid")):
-        if alive(_pid(earlier, gid)):
+        try:
+            pid = _pid(earlier, gid)
+        except Refusal as unknown:
+            # An earlier run's file, so the owner is told which one to read or clear.
+            raise Refusal(f"{gid} in run {earlier.name}: {unknown}: {earlier / f'{gid}.pid'}") from None
+        if alive(pid):
             raise Refusal(f"{gid}'s executor from run {earlier.name} is still running")
     # It changes .claude/ for every group after it, so it starts only with nothing beside it.
     for other, entry in entries.items():
@@ -561,14 +567,33 @@ def run_session(root, run, gid):
 def _launch(root, directory, run, gid, entry, flag=False):
     """Everything up to a started executor, which is returned with its prompt, start time and temp directory; a
     refusal starts none and leaves no temp directory."""
+    # `launch` removed an earlier launch's pid file, so one here is an earlier `run`'s.
+    earlier = (directory / f"{gid}.pid").exists()
     # A relaunch's earlier session was read, so it goes before the launch checks; a record this removal missed is
     # read as absent beside a marker or a refusal line. Its pid goes too: `result --refused` reads a pid file as an
-    # executor started, and one this removal missed as the cautious side. An earlier launch's went at `launch`.
+    # executor started, and one this removal missed as the cautious side.
     _remove_stale(directory / f"{gid}.json", directory / f"{gid}.session.json", directory / f"{gid}.pid")
+    # Until the executor's pid replaces it, the file names this process, which is alive while it launches: with no
+    # file a `resume` in that window would read no executor and relaunch beside this one. A refusal removes it, so
+    # `result` reads no pid file as nothing launched, as before.
+    pid_file = directory / f"{gid}.pid"
+    _write(pid_file, f"{os.getpid()}\n")
+    try:
+        return _start(root, directory, run, gid, entry, flag, pid_file, earlier)
+    except BaseException:
+        try:
+            if pid_file.read_text(encoding="utf-8").strip() == str(os.getpid()):
+                pid_file.unlink()
+        except OSError:
+            pass
+        raise
+
+
+def _start(root, directory, run, gid, entry, flag, pid_file, earlier=False):
     # The owner's stop file ends relaunches too, not only the next wake's launches.
     if (directory / "STOP").exists():
         raise Refusal("stop file: the owner ended the night, so nothing more launches")
-    text = _prompt_for(directory, gid, entry, run, flag, _left_behind(root, entry))
+    text = _prompt_for(directory, gid, entry, run, flag, _left_behind(root, entry, earlier))
     flag = model_flag(entry.get("model"))
     worktree = Path(root) / _field(entry, gid, "worktree", _path_text)
     if not worktree.is_dir():
@@ -598,7 +623,7 @@ def _launch(root, directory, run, gid, entry, flag=False):
         _remove_temp(scratch)
         raise Refusal(f"could not start claude: {error}") from None
     try:
-        _write(directory / f"{gid}.pid", f"{child.pid}\n")
+        _write(pid_file, f"{child.pid}\n")
     except Refusal:
         # An executor resume cannot see would be relaunched over; Popen.kill is the intended stop here.
         child.kill()
@@ -1036,10 +1061,19 @@ def reviewer_spawned(transcript):
 
 
 def _pid(directory, gid):
+    """The pid a group's pid file holds, or None when there is no file. A file that cannot be read, or holds no pid,
+    is refused: read as no executor, it would let `resume` relaunch over one that is running."""
+    path = Path(directory) / f"{gid}.pid"
     try:
-        return int(_read(Path(directory) / f"{gid}.pid").strip())
-    except (OSError, ValueError):
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
         return None
+    except OSError as error:
+        raise Refusal(f"its pid file cannot be read, so whether its executor runs is unknown: {error}") from None
+    try:
+        return int(text.strip())
+    except ValueError:
+        raise Refusal("its pid file holds no pid, so whether its executor runs is unknown") from None
 
 
 def _read_already(directory, gid, entry):
@@ -1368,7 +1402,9 @@ def sync_close(root, run, gid):
     entry = _entry(state, gid)
     if entry.get("kind") != "sync":
         raise Refusal(f"{gid} is not a sync group; tasks done and back close its rows")
-    if entry.get("status") in ACTIVE and not _worktree_kept(root, entry):
+    # Every active status is read for a live executor and an unread exit, a kept worktree's too: a relaunch keeps
+    # `window`, which a sync may otherwise close, while its executor runs.
+    if entry.get("status") in ACTIVE:
         pid = _pid(directory, gid)
         if pid is not None and alive(pid):
             raise Refusal(f"{gid}'s executor is still running")
@@ -1376,6 +1412,7 @@ def sync_close(root, run, gid):
         if _refused(directory, gid, entry) is not None or (record.exists()
                                                             and not _read_already(directory, gid, entry)):
             raise Refusal(f"{gid} has an exit not yet read; run result first")
+    if entry.get("status") in ACTIVE and not _worktree_kept(root, entry):
         # Nothing can relaunch it, and it would hold `wake` and `sync-launch` all night. It may have merged or left
         # work, so it ends as a hand-back, which the report puts before a human.
         entry.update(status="crash-hand-back", reason="its worktree is gone, so how its executor ended is unknown")
@@ -1528,7 +1565,7 @@ def wake(root, run, tasks_path, today, body_source, open_source, branch_source, 
         return out + [f"held: {', '.join(claimed)} merge claimed, not yet verified", "launch: none"]
     tasks = parse_tasks(_read(tasks_path))
     bodies = _bodies(tasks, directory, body_source)
-    open_set = set(open_source())
+    open_set = OpenIssues.of(open_source())
     candidates = groups(tasks)
     flag, kept = berserk(state)
     owned = owned_source()
@@ -1570,7 +1607,11 @@ def resume(root, run):
         # A sync holds no row, so its lines lead to `sync-close`, never `tasks done` or `tasks back`.
         sync = entry.get("kind") == "sync"
         if status in ACTIVE:
-            pid = _pid(directory, gid)
+            try:
+                pid = _pid(directory, gid)
+            except Refusal as unknown:
+                out.append(f"refused {gid}: {unknown}")
+                continue
             if pid is not None and alive(pid):
                 out.append(f"refused {gid}: its executor is still running")
                 continue
@@ -1809,7 +1850,7 @@ def report(root, run, tasks_path, today, body_source, open_source, owned_source)
     if held:
         interrupted.append(f"resume: run /dispatch again in the main checkout; it resumes run {run}")
     bodies = _bodies(tasks, directory, body_source)
-    open_set = set(open_source())
+    open_set = OpenIssues.of(open_source())
     left = []
     owned = owned_source()
     for group in groups(tasks):

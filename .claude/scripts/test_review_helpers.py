@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 
 from review_helpers import (  # noqa: F401
-    GIT, copy_template, fixture_template, no_maintenance, run_bash, setUpModule)
+    GIT, copy_template, fixture_template, git_commands, no_maintenance, run_bash, setUpModule)
 
 QUIET = {"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
 
@@ -101,6 +101,16 @@ class CopyTemplate(unittest.TestCase):
         result = subprocess.run([GIT, "-C", str(self.root / "work"), "log", "--format=%s"], capture_output=True,
                                 text=True, encoding="utf-8", env={**os.environ, **QUIET})
         self.assertEqual("base", result.stdout.strip())
+
+
+class GitCommandsReadsPastTheLead(unittest.TestCase):
+
+    def test_a_quoted_assignment_in_front_is_stripped_whole(self):
+        # An assignment's value may be quoted and hold a space; cut at the space, the command reads as `b" git …`.
+        for source in ('FOO="a b" git push origin x', "FOO='a b' git push origin x",
+                       'A=1 B="x y" git push origin x', 'if ! FOO="a b" git push origin x; then :; fi'):
+            with self.subTest(source=source):
+                self.assertEqual(["git push origin x"], git_commands(source))
 
 
 if __name__ == "__main__":

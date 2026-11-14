@@ -576,6 +576,8 @@ def judge(command, cwd, git, checked, depth):
     # The directory each subshell stands in. One opened here starts where its parent stands when it is first seen,
     # which is where bash forks it, since the commands are read in order.
     directories = {(): cwd}
+    # Each subshell's `pushd` stack, inherited as its directory is.
+    stacks = {(): []}
     for position, segment in enumerate(found):
         previous = found[position - 1] if position else None
         scope = segment.scope
@@ -583,6 +585,7 @@ def judge(command, cwd, git, checked, depth):
             parent = next(scope[:length] for length in range(len(scope) - 1, -1, -1)
                           if scope[:length] in directories)
             directories[scope] = directories[parent]
+            stacks[scope] = None if stacks[parent] is None else list(stacks[parent])
         cwd = directories[scope]
         words = segment.words
         start = command_word(words)
@@ -590,17 +593,36 @@ def judge(command, cwd, git, checked, depth):
             continue
         name = words[start]
         arguments = words[start + 1:]
-        if name == "cd":
-            # A pipeline stage's `cd` moves nothing after it. Only a plain `cd <dir>` can be followed; any other form
-            # leaves the files after it unplaceable.
+        if name in ("cd", "pushd", "popd"):
+            # A pipeline stage's `cd` moves nothing after it. Only a plain `cd <dir>` or `pushd <dir>`, and a bare
+            # `popd` back to a placed entry, can be followed; any other form leaves the files after it unplaceable.
             if segment.piped:
                 continue
-            if len(arguments) != 1 or "$" in arguments[0] or arguments[0] == "-":
-                directories[scope] = None
-            else:
+            if name == "popd":
+                stack = stacks[scope]
+                directories[scope] = stack.pop() if not arguments and stack else None
+                if arguments:
+                    stacks[scope] = None
+                continue
+            plain = not (len(arguments) != 1 or "$" in arguments[0] or arguments[0] == "-" or (
+                name == "pushd" and arguments[0][:1] in ("+", "-")))
+            if plain:
                 target = native(arguments[0])
-                directories[scope] = (target if os.path.isabs(target)
-                                      else (os.path.join(cwd, target) if cwd else None))
+                target = target if os.path.isabs(target) else (os.path.join(cwd, target) if cwd else None)
+                # Bash refuses a directory that is not there and stays put, and a failed `pushd` pushes nothing; one an
+                # earlier command on the line makes is not there yet either. Either way the move is not followed.
+                if target is not None and not os.path.isdir(target):
+                    plain, target = False, None
+            else:
+                target = None
+            if name == "pushd":
+                # Any other `pushd` form, `-n <dir>` among them, changes the stack in ways not followed here, so every
+                # `popd` after it is unplaceable too.
+                if plain and stacks[scope] is not None:
+                    stacks[scope].append(cwd)
+                else:
+                    stacks[scope] = None
+            directories[scope] = target
             continue
         program = os.path.basename(native(name)).lower()
         if program in SHELLS:

@@ -400,7 +400,11 @@ the group would again hold its slot all night. `run` names both refusals
 on its exit line, which the runbook hands to `result` as `--refused` after
 every exit 2; `result` reads it only when it finds no marker from this
 launch and no session record it has not already read. `run` removes an
-earlier pid file before its launch checks: with none, `result` records
+earlier pid file before its launch checks and writes its own pid there
+until the executor's replaces it, so a `resume` in between reads the group
+as running rather than relaunching beside it; a refusal removes it again,
+and a pid file that cannot be read is refused rather than read as none.
+With no pid file, `result` records
 `crashed-before-launch`; with one whose process has ended,
 `crash-hand-back`, since the executor ran and may have merged and only its
 worktree says so; with one still alive, it refuses. A refusal before that

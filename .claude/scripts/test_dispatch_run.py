@@ -511,6 +511,40 @@ class LaunchTests(InRoot):
             self.assertTrue((state_dir() / name).is_file(), f"a second launch removed the executor's {name}")
         self.assertEqual("running", group_state(RUN, "S1")["status"])
 
+    def test_a_resume_while_run_launches_reads_the_executor_as_running(self):
+        # `run` removes the earlier launch's pid file before it starts claude and writes the new one after: a resume
+        # between the two that read no file as no executor would relaunch a second one into the same worktree.
+        seen = []
+        real = subprocess.Popen
+
+        def popen(*args, **kwargs):
+            if not seen:
+                seen.append(None)
+                seen[0] = run_cli(["resume", RUN])
+            return real(*args, **kwargs)
+
+        with mock.patch.object(dr.subprocess, "Popen", popen):
+            run_fake_claude()
+        self.assertIn("refused S1: its executor is still running", seen[0])
+        self.assertNotIn("relaunch S1", seen[0])
+        self.assertNotEqual(os.getpid(), int((state_dir() / "S1.pid").read_text(encoding="utf-8")),
+                            "the executor's pid replaces the launcher's")
+
+    def test_a_refused_run_leaves_no_pid_file_for_result_to_read_as_a_launch(self):
+        record(RUN, "S1", status="running", branch=BRANCH, worktree=WORKTREE)
+        (state_dir() / "STOP").write_text("", encoding="utf-8")
+        self.assertIn("refused: stop file", run_cli(["run", RUN, "S1"]))
+        self.assertFalse((state_dir() / "S1.pid").exists())
+
+    def test_a_pid_file_that_holds_no_pid_is_not_read_as_no_executor(self):
+        record(RUN, "S1", status="running", branch=BRANCH, worktree=WORKTREE)
+        for text in ("", "garbled\n", "12a\n"):
+            with self.subTest(text=text):
+                (state_dir() / "S1.pid").write_text(text, encoding="utf-8")
+                out = run_cli(["resume", RUN])
+                self.assertIn("refused S1: its pid file holds no pid", out)
+                self.assertNotIn("relaunch S1", out)
+
     def test_run_passes_the_prompt_on_stdin_and_no_skip_permissions_flag(self):
         record(RUN, "S1", status="running", branch=BRANCH, worktree=WORKTREE)
         stale = Path(WORKTREE) / "artifacts" / "dispatch" / RUN / "S1.json"
@@ -553,6 +587,20 @@ class LaunchTests(InRoot):
         self.assertIn(("rev-list", "--count", "origin/main..HEAD"), reads)
         # status.showUntrackedFiles=no would otherwise read untracked work as nothing left.
         self.assertIn(("status", "--porcelain", "--untracked-files=all"), reads)
+
+    def test_a_resumed_running_group_is_told_what_the_earlier_session_left(self):
+        # `resume` relaunches a `running` group whose executor died unrecorded; the pid file it left is the sign.
+        record(RUN, "S1", status="running", branch=BRANCH, worktree=WORKTREE)
+        (state_dir() / "S1.pid").write_text(f"{finished_pid()}\n", encoding="utf-8")
+
+        def fake_git(root, *args):
+            return {"rev-list": "2\n"}.get(args[0], "")
+
+        with mock.patch.object(dr, "git", fake_git), mock.patch.object(dr, "helper", lambda root, *a: "[]"):
+            run_fake_claude(stdout=json.dumps(SUCCESS).encode("utf-8"), description="Narrow")
+        seen = json.loads(Path("fake/seen.json").read_text(encoding="utf-8"))
+        self.assertIn(f"(relaunched: the previous session ended with no result the dispatcher accepted, and left "
+                      f"{BRANCH} 2 commits ahead of origin/main;", seen["stdin"])
 
     def test_a_first_launch_reads_nothing_it_left(self):
         record(RUN, "S1", status="running", branch=BRANCH, worktree=WORKTREE)
@@ -1370,13 +1418,21 @@ class BerserkTests(InRoot):
     def wake(self, text, **sources):
         with open("todo.md", "w", encoding="utf-8", newline="") as handle:
             handle.write(text)
+        sources.setdefault("open_source", set)
         with mock.patch.object(dr, "PROJECTS", self.root / "projects"):
             return run_cli(["wake", RUN, "--tasks", "todo.md", "--today", "2026-11-01"],
-                           body_source=lambda n: self.BODIES.get(n, ""), open_source=set,
-                           branch_source=NO_BRANCH, **sources).splitlines()
+                           body_source=lambda n: self.BODIES.get(n, ""), branch_source=NO_BRANCH,
+                           **sources).splitlines()
 
     def state(self, **fields):
         dr.save_state(state_dir(), {"run": RUN, "pairs": 2, "lang": "en", "berserk": True, "groups": {}, **fields})
+
+    def test_the_wake_keeps_the_numbers_the_issue_list_knows(self):
+        # A number no issue in the list holds, a typo or a pull request's, is no closed issue's pass to launch.
+        self.state()
+        listed = lambda: db.OpenIssues({1440}, known={1440, 99})  # noqa: E731
+        self.assertEqual("end: drained", self.wake(tasks_of(line(depends="after #1441")), open_source=listed)[-1])
+        self.assertEqual("launch: Z1", self.wake(tasks_of(line(depends="after #99")), open_source=listed)[-1])
 
     def s1(self):
         return next(g for g in db.groups(db.parse_tasks(FIXTURE)) if g.id == "S1")
@@ -1466,7 +1522,7 @@ class BerserkTests(InRoot):
         with open("todo.md", encoding="utf-8", newline="") as handle:
             text = handle.read()
         self.assertIn(f"| OWNER; {db.SENT_BACK} |", text)
-        self.assertNotIn("S3", self.wake(text)[-1])
+        self.assertEqual("launch: S1 M1", self.wake(text)[-1])
 
     def test_a_later_flagged_run_does_not_lift_a_row_an_earlier_one_tried(self):
         self.state()
@@ -2007,7 +2063,7 @@ class WeeklyTests(InRoot):
         self.assertEqual((1, "no token file"), (failed["count"], failed["why"]))
         with self.assertRaises(dr.ReadingFailed):
             dr.read_weekly(broken)
-        self.assertNotEqual("end: week", self.wake(broken)[-1])
+        self.assertEqual("launch: S1 S3", self.wake(broken)[-1])
 
     def test_failures_keep_a_count_and_the_last_reason_not_a_list(self):
         for n in range(5):
@@ -2040,7 +2096,7 @@ class WeeklyTests(InRoot):
         self.assertTrue(dr.week_ends_night(dr.WeeklyReading(0.0, stamp)))
         self.assertFalse(dr.week_ends_night(dr.WeeklyReading(2.0, stamp)))
         self.assertEqual("end: week", self.wake(lambda: {"percentUsed": 99, "resetsAt": self.RESET})[-1])
-        self.assertNotEqual("end: week", self.wake(lambda: {"percentUsed": 98, "resetsAt": self.RESET})[-1])
+        self.assertEqual("launch: S1 S3", self.wake(lambda: {"percentUsed": 98, "resetsAt": self.RESET})[-1])
 
     def test_the_reading_maps_percent_used_to_percent_left(self):
         reading = dr.read_weekly(lambda: {"percentUsed": 37.5, "resetsAt": self.RESET})

@@ -49,8 +49,9 @@ IFS=$'\t' read -r state head_branch base cross < <(printf '%s\n' "${row%$'\r'}")
 origin_pushes_where_added || exit 8
 
 # Rewriting is only safe over what origin already holds: an unpushed commit would be published by the lease, and an
-# unseen one discarded by it.
-git fetch --quiet origin main "$branch"
+# unseen one discarded by it. Both refspecs are spelled out, as git-push-force.sh's is, since a narrowed
+# remote.origin.fetch updates neither tracking ref read below.
+git fetch --quiet origin "+refs/heads/main:refs/remotes/origin/main" "+refs/heads/$branch:refs/remotes/origin/$branch"
 remote=$(git rev-parse "refs/remotes/origin/$branch")
 tip=$(git rev-parse HEAD)
 # A rewrite whose push failed leaves the same trees, commit for commit, under new messages, so origin's tip is
