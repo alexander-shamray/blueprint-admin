@@ -146,6 +146,8 @@ export function blocks(markdown: string): Block[] {
       for (; i + 1 < lines.length; i++) {
         const next = lines[i + 1];
         const nextItem = ITEM.exec(next);
+        // A fence indented under an item is a code block of its own, never words of the item's.
+        if (next.trimStart().startsWith('```')) break;
         if (nextItem) {
           entries.push(entryOf(nextItem));
         } else if (/^\s+\S/.test(next)) {
