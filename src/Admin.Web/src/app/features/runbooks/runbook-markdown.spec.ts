@@ -63,6 +63,21 @@ describe('runbook markdown', () => {
     expect(resumed.items[0].number).toBe(2);
   });
 
+  it('ends a list at a fence indented under its item, whose body is code and not the item text', () => {
+    const result = blocks(['1. Start', '   ```bash', 'up -d', '   ```', '2. Open Logs'].join('\n'));
+
+    expect(result.map((b) => b.kind)).toEqual(['list', 'code', 'list']);
+    const [first, code, resumed] = result as [
+      { kind: 'list'; items: ListItem[] },
+      { kind: 'code'; text: string; lang?: string },
+      { kind: 'list'; items: ListItem[] },
+    ];
+    expect(first.items.map(text)).toEqual(['Start']);
+    expect(code).toEqual({ kind: 'code', text: 'up -d', lang: 'bash' });
+    expect(resumed.items.map(text)).toEqual(['Open Logs']);
+    expect(resumed.items[0].number).toBe(2);
+  });
+
   it('keeps an indented item under the item before it, to any depth, and returns to the outer list after it', () => {
     const result = blocks(
       ['1. drain', '   - check `a`', '   - check `b`', '     - deeper', '2. restore', '   continued'].join('\n'),
