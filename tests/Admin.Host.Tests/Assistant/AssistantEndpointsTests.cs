@@ -105,11 +105,15 @@ public sealed class AssistantEndpointsTests : IClassFixture<AdminHostFactory>
     }
 
     [Theory]
-    [InlineData("how many are in stock for product 0199a1b2-0000-7000-8000-00000000000a?", "0199a1b2-0000-7000-8000-00000000000a", "10 in stock, 0 reserved.")]
-    [InlineData("what is the payment status of order 0199a1b2-0000-7000-8000-000000000002?", "0199a1b2-0000-7000-8000-000000000002", "The payment is Authorised.")]
-    [InlineData("сколько на складе товара 0199a1b2-0000-7000-8000-00000000000a?", "0199a1b2-0000-7000-8000-00000000000a", "В наличии: 10, в резерве: 0.")]
-    public async Task A_question_about_stock_or_a_payment_is_answered_from_a_platform_read_the_conversation_opened_with(string question, string read, string answer)
+    [InlineData("how many are in stock for product {0}?", "0199a1b2-0000-7000-8000-00000000000a", "10 in stock, 0 reserved.")]
+    [InlineData("what is the payment status of order {0}?", "0199a1b2-0000-7000-8000-000000000002", "The payment is Authorised.")]
+    [InlineData("сколько на складе товара {0}?", "0199a1b2-0000-7000-8000-00000000000a", "В наличии: 10, в резерве: 0.")]
+    public async Task A_question_about_stock_or_a_payment_is_answered_from_a_platform_read_the_conversation_opened_with(
+        string asked,
+        string read,
+        string answer)
     {
+        string question = string.Format(System.Globalization.CultureInfo.InvariantCulture, asked, read);
         string id = await Opened();
         // The transcript is the class's, shared by every row, so only an entry this turn added counts.
         long before = JsonNode.Parse(await client.GetStringAsync("/api/transcript", Ct))!["entries"]!.AsArray()
