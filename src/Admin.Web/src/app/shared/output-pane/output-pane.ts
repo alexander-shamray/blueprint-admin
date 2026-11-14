@@ -27,6 +27,9 @@ const PROBLEM = /\b(error|unhealthy|failed|denied)\b/i;
 /** The verdicts a Reset writes on stderr when it stops, as `ResetService.cs` words them. */
 const RESET_VERDICT = /^not ready after \d+ s: |exited with -?\d+; the reset stops here\.$/;
 
+/** A Compose progress line in its plain form: a container's, a network's, a volume's or an image's verb. */
+const COMPOSE_LINE = /^\s*(?:Container|Network|Volume|Image)\s+\S+\s+\w+/;
+
 /**
  * A line as the log shows it: Compose's JSON written back as its plain form, and whether a table above the log shows
  * it instead (a pull's progress, a container's verb).
@@ -37,6 +40,8 @@ interface Entry {
   text: string;
   failed: boolean;
   tabulated: boolean;
+  /** Whether the line is Compose's own progress, which a job writes on stderr whether or not anything went wrong. */
+  compose: boolean;
 }
 
 /**
@@ -375,12 +380,11 @@ export class OutputPane {
   readonly jobId = input<string | null>(null);
   /**
    * Set for a `docker compose` job, which writes all of its progress to stderr: a stderr line is then marked only
-   * when it says something went wrong, so a healthy Up does not read as a wall of errors. A job that writes a Compose
-   * progress line is read the same way without it, so a Recreate, a stress run's `up` or a reopened Compose job is too.
+   * when it says something went wrong, so a healthy Up does not read as a wall of errors. Without it, Compose's own
+   * progress lines are still left unmarked, so a Recreate, a stress run's `up` or a reopened Compose job does not read
+   * as failing, while every other stderr line of the job, its own verdicts included, is marked.
    */
   readonly composeStderr = input(false);
-  /** Whether the followed job has written a Compose progress line: a container's, an image's or a JSON event. */
-  private readonly composeSeen = signal(false);
   /** Set where the pane is a widget's whole body: it then takes that body's height, and its parts scroll inside it. */
   readonly fill = input(false);
   /**
@@ -439,7 +443,7 @@ export class OutputPane {
   isProblem(entry: Entry): boolean {
     return (
       entry.stream === 'Stderr' &&
-      (!(this.composeStderr() || this.composeSeen()) ||
+      (!(this.composeStderr() || entry.compose) ||
         entry.failed ||
         PROBLEM.test(entry.text) ||
         RESET_VERDICT.test(entry.text))
@@ -663,7 +667,6 @@ export class OutputPane {
       this.steps.set(null);
       this.k6.set(null);
       this.readiness.set(null);
-      this.composeSeen.set(false);
       this.showRawLines.set(false);
       if (!id) {
         return;
@@ -710,7 +713,6 @@ export class OutputPane {
     if (claimed) this.claimed.emit(line);
     const event = composeEvent(line.text);
     const failed = event !== null && composeFailed(event);
-    if ((pull || container || event !== null) && !this.composeSeen()) this.composeSeen.set(true);
     // A failure stays in the log, but it is also where an image's or a container's row turns failed.
     if (pull || failed) this.pull.set(this.tracker.snapshot());
     if (container || (failed && line.text.includes('Container '))) this.containers.set(this.composeTracker.snapshot());
@@ -725,6 +727,7 @@ export class OutputPane {
       text: event ? composePlain(event) : line.text,
       failed,
       tabulated: pull || container || progress || claimed || (wait && ReadinessTracker.isPoll(line.text)),
+      compose: pull || container || event !== null || COMPOSE_LINE.test(line.text),
     };
     this.entries.update((all) => [...all, entry]);
   }

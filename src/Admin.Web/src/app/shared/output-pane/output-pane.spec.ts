@@ -90,6 +90,30 @@ describe('OutputPane', () => {
     expect(marked).toEqual(['[stderr] Error response from daemon']);
   });
 
+  it("keeps the mark on a job's own stderr lines after it wrote Compose progress, nobody having said Compose", () => {
+    const events = new Subject<JobEvent>();
+    const sse = { follow: vi.fn(() => events.asObservable()) };
+    TestBed.configureTestingModule({ imports: [OutputPane], providers: [{ provide: SseClient, useValue: sse }] });
+    const fixture = TestBed.createComponent(OutputPane);
+    fixture.componentRef.setInput('jobId', 'stress');
+    fixture.detectChanges();
+    const send = (sequence: number, text: string) =>
+      events.next({ kind: 'line', line: { sequence, at: '', stream: 'Stderr', text } });
+
+    send(0, 'k6 could not start');
+    send(1, ' Container commerce-ordering-1  Started');
+    send(2, 'The stack stopped before the run; the stress run stops here.');
+    fixture.detectChanges();
+
+    const marked = Array.from(fixture.nativeElement.querySelectorAll('pre .stderr')).map((e) =>
+      (e as HTMLElement).textContent?.trim(),
+    );
+    expect(marked).toEqual([
+      '[stderr] k6 could not start',
+      '[stderr] The stack stopped before the run; the stress run stops here.',
+    ]);
+  });
+
   it('marks the verdicts a Reset writes on stderr when it stops, in a Compose pane', () => {
     const events = new Subject<JobEvent>();
     const sse = { follow: vi.fn(() => events.asObservable()) };
