@@ -151,15 +151,6 @@ repository's `docs/change-locality.md` section 3 admits none, so
 `A+D+E` gets a verdict from the helper and goes red in CI; the class is the
 fault, and two classes, or two pull requests, are the answer.
 
-**The gate skips rows inside a fenced code block, and the managed
-`pr-locality.sh` does not.** `_unfenced` in
-`.github/locality-gate/locality_gate.py` reads a fence as CommonMark does; the
-helper counts every line. A body with a
-fenced example row beside the table is refused by the helper and judged by the
-gate, and one whose only rows are fenced gets a verdict from the helper and a
-refusal in CI. Until blueprint-harness#498 brings the helper level, a fenced
-example writes its rows with a leading space, which neither reader takes.
-
 **A session writes the task list as `.harness/agent-rules.md` says, by no route
 of this repository's own.** The file sits outside every checkout;
 `.harness/config.json` `task_list` names it, and a `dispatch_board.py tasks`
