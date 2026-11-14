@@ -215,13 +215,26 @@ describe('RunbooksWidgets', () => {
     const fixture = render();
     open(fixture, 'outbox-growth');
 
-    const outer = el(fixture).querySelectorAll('.runbook-text > ul');
+    const outer = el(fixture).querySelectorAll('.runbook-text > ol');
     expect(outer).toHaveLength(1);
+    expect(outer[0].getAttribute('start')).toBe('1');
     expect(outer[0].querySelectorAll(':scope > li')).toHaveLength(2);
     expect(Array.from(outer[0].querySelectorAll(':scope > li > ul > li')).map((li) => li.textContent?.trim())).toEqual([
       'check a',
       'check b',
     ]);
+  });
+
+  it('numbers a list a fence split from where it left off', () => {
+    host.runbookText.mockReturnValue(
+      of({ runbook: 'x', markdown: ['1. drain', '', '```bash', 'up', '```', '', '2. restore'].join('\n') }),
+    );
+    const fixture = render();
+    open(fixture, 'outbox-growth');
+
+    const lists = Array.from(el(fixture).querySelectorAll('.runbook-text > ol'));
+    expect(lists.map((ol) => ol.getAttribute('start'))).toEqual(['1', '2']);
+    expect(el(fixture).querySelectorAll('.runbook-text > ul')).toHaveLength(0);
   });
 
   it("shows the alert's state beside the runbook rendered from the clone, and reads the alerts again on the poll", () => {
