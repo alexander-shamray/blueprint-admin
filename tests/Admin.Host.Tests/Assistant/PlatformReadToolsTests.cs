@@ -191,6 +191,27 @@ public sealed class PlatformReadToolsTests(AdminHostFactory factory) : IClassFix
         transcript.Read().Entries.ShouldBeEmpty();
     }
 
+    [Fact]
+    public async Task A_token_that_was_not_issued_is_named_rather_than_read_as_nobody_holding_the_permission()
+    {
+        using WebApplicationFactory<Program> host = factory.WithWebHostBuilder(b =>
+        {
+            b.UseSetting("Admin:Users:0:Username", "browser");
+            b.UseSetting("Admin:Users:0:Password", "browser");
+            b.UseSetting("Admin:Users:1:Username", "privacy");
+            b.UseSetting("Admin:Users:1:Password", "not-privacy");
+        });
+        PlatformReadTools tools = await Prepared(host);
+
+        ToolOutcome outcome = await tools.InvokeAsync("get_stock", new JsonObject { ["productId"] = StockedProduct }, Context(), Ct);
+
+        outcome.Ok.ShouldBeFalse();
+        outcome.Content.ShouldContain("inventory:admin");
+        outcome.Content.ShouldContain("the token request for privacy answered 401");
+        outcome.Content.ShouldNotContain("No configured realm user holds");
+        host.Services.GetRequiredService<OperatorTranscript>().Read().Entries.ShouldBeEmpty();
+    }
+
     [Theory]
     [InlineData("""{}""")]
     [InlineData("""{"productId":""}""")]
