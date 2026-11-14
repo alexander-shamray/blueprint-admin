@@ -699,6 +699,30 @@ describe('ScenarioWidget', () => {
     expect(page.exportError()).toBeNull();
   });
 
+  it('exports the finished run even when the next run starts while the export reads the host', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockImplementation(() => 'blob:x');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const transcript = new Subject<string>();
+    host.transcriptScript.mockReturnValue(transcript);
+    const page = render().componentInstance.runner;
+    await page.run();
+
+    const exported = page.export();
+    host.proxy.mockReturnValue(new Subject<ProxyResult>());
+    page.username.set('browser');
+    void page.run();
+    await vi.waitFor(() => expect(page.strip()).toBeNull());
+    transcript.next('curl http://x');
+    transcript.complete();
+    await exported;
+
+    const doc = host.scenarioExport.mock.calls[0][0] as string;
+    expect(doc).toContain('# Scenario run abcdef12: ');
+    expect(doc).toContain('- Run as: demo');
+    expect(doc).toContain('The last read answered `delivered`');
+  });
+
   it("exports the whole session's transcript, and says so, when the run's starting point could not be read", async () => {
     vi.spyOn(URL, 'createObjectURL').mockImplementation(() => 'blob:x');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
