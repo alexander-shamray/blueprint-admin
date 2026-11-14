@@ -389,6 +389,11 @@ public sealed partial class WorkstationDoctor(
             return new(name, DoctorState.Problem, $"On {on}, not main.{dirty}");
         }
 
+        if (tracking == "gone")
+        {
+            return new(name, DoctorState.Unknown, $"main's upstream {branch.Groups["upstream"].Value} is gone, so its last fetch cannot say where main stands.{dirty}");
+        }
+
         if (behind.Success)
         {
             return new(name, DoctorState.Problem, $"main is {behind.Groups[1].Value} behind its upstream as last fetched.{dirty}");
