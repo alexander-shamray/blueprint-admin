@@ -124,6 +124,9 @@ public sealed class AssistantOptions
             MaxConversations = MaxConversations,
             MaxCallers = MaxCallers,
             IdleTimeout = IdleTimeout,
+            // The one caller is the operator on loopback, and from 0.3.0 the core
+            // withholds a provider failure's message unless this is set.
+            ErrorDetail = true,
         };
     }
 
