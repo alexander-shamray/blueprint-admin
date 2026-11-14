@@ -155,10 +155,13 @@ public sealed class StackEndpointTests : IClassFixture<AdminHostFactory>
     [InlineData("gateway\n")]
     public async Task Follow_logs_refuses_a_name_that_is_not_a_compose_service_name_and_starts_no_job(string name)
     {
+        int followsBefore = Runner.Started.Count(s => s.Arguments.Contains("logs"));
+
         HttpResponseMessage response = await client.PostAsJsonAsync("/api/logs/follow", new { services = new[] { "gateway", name } }, TestContext.Current.CancellationToken);
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         (await response.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken)).GetProperty("title").GetString().ShouldBe("Not a service name");
+        Runner.Started.Count(s => s.Arguments.Contains("logs")).ShouldBe(followsBefore);
     }
 
     [Fact]

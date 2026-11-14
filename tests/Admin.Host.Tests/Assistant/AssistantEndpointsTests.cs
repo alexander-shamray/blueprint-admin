@@ -105,12 +105,15 @@ public sealed class AssistantEndpointsTests : IClassFixture<AdminHostFactory>
     }
 
     [Theory]
-    [InlineData("how many are in stock for product 0199a1b2-0000-7000-8000-00000000000a?", "10 in stock, 0 reserved.")]
-    [InlineData("what is the payment status of order 0199a1b2-0000-7000-8000-000000000002?", "The payment is Authorised.")]
-    [InlineData("сколько на складе товара 0199a1b2-0000-7000-8000-00000000000a?", "В наличии: 10, в резерве: 0.")]
-    public async Task A_question_about_stock_or_a_payment_is_answered_from_a_platform_read_the_conversation_opened_with(string question, string answer)
+    [InlineData("how many are in stock for product 0199a1b2-0000-7000-8000-00000000000a?", "0199a1b2-0000-7000-8000-00000000000a", "10 in stock, 0 reserved.")]
+    [InlineData("what is the payment status of order 0199a1b2-0000-7000-8000-000000000002?", "0199a1b2-0000-7000-8000-000000000002", "The payment is Authorised.")]
+    [InlineData("сколько на складе товара 0199a1b2-0000-7000-8000-00000000000a?", "0199a1b2-0000-7000-8000-00000000000a", "В наличии: 10, в резерве: 0.")]
+    public async Task A_question_about_stock_or_a_payment_is_answered_from_a_platform_read_the_conversation_opened_with(string question, string read, string answer)
     {
         string id = await Opened();
+        // The transcript is the class's, shared by every row, so only an entry this turn added counts.
+        long before = JsonNode.Parse(await client.GetStringAsync("/api/transcript", Ct))!["entries"]!.AsArray()
+            .Select(e => e!["sequence"]!.GetValue<long>()).DefaultIfEmpty(0).Max();
 
         (await client.PostAsJsonAsync($"/api/assistant/conversations/{id}/turns", new { text = question }, Ct)).StatusCode.ShouldBe(HttpStatusCode.Accepted);
         await Ended(id);
@@ -120,7 +123,10 @@ public sealed class AssistantEndpointsTests : IClassFixture<AdminHostFactory>
         view.ShouldContain(answer);
         // The read is in the operator's transcript, marked as the assistant's.
         JsonNode transcript = JsonNode.Parse(await client.GetStringAsync("/api/transcript", Ct))!;
-        transcript["entries"]!.AsArray().ShouldContain(e => e!["assistant"]!.GetValue<bool>() && e["command"]!.GetValue<string>().Contains("0199a1b2", StringComparison.Ordinal));
+        transcript["entries"]!.AsArray().ShouldContain(e =>
+            e!["sequence"]!.GetValue<long>() > before
+            && e["assistant"]!.GetValue<bool>()
+            && e["command"]!.GetValue<string>().Contains(read, StringComparison.Ordinal));
     }
 
     [Fact]
