@@ -148,16 +148,30 @@ export class TopologyWidget {
     else if (pointed === null) void this.router.navigateByUrl('/logs');
   }
 
-  /** A parked queue opens in the dead-letter workbench; any other points a Queues widget at it, or opens the Broker page. */
+  /**
+   * A parked queue opens in the dead-letter workbench; any other points a Queues widget at it, or opens the Broker page.
+   * A workbench this page holds but is not showing, as while this diagram is maximised, is said rather than left for
+   * the Broker page, which would drop the page's state.
+   */
   private openQueue(node: TopologyNode): void {
     if (node.parkedQueue !== null && this.broker.workbenches() > 0) {
       this.broker.requestOpen(node.parkedQueue);
       this.notice.set($localize`The dead-letter workbench on this page opened ${node.parkedQueue}:queue:.`);
+    } else if (node.parkedQueue !== null && this.onPage('dead-letters')) {
+      this.notice.set(
+        $localize`The dead-letter workbench on this page is not showing; restore the page's layout to open ${node.parkedQueue}:queue: in it.`,
+      );
     } else {
       const pointed = node.parkedQueue === null ? this.point('queues', 'broker', node.name) : null;
       if (pointed === 'here') this.notice.set($localize`The Queues widget on this page shows ${node.name}:queue:.`);
       else if (pointed === null) void this.router.navigateByUrl('/broker');
     }
+  }
+
+  /** Whether the page being shown holds a widget of `type`, whether or not it is showing. */
+  private onPage(type: string): boolean {
+    const current = this.workspace.currentPage();
+    return current ? widgetsOf(current).some((w) => w.type === type) : false;
   }
 
   /**

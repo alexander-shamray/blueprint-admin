@@ -263,6 +263,21 @@ describe('TopologyWidget', () => {
       expect(router.navigateByUrl).toHaveBeenCalledWith('/broker');
     });
 
+    it('says so and stays when the page holds a workbench that is not showing, as while the diagram is maximised', async () => {
+      onPage = [widget('w-dead', 'dead-letters', {})];
+      const fixture = await render();
+      const el: HTMLElement = fixture.nativeElement;
+
+      click(el, 'ordering-catalog-events');
+      fixture.detectChanges();
+
+      expect(broker.requestOpen).not.toHaveBeenCalled();
+      expect(router.navigateByUrl).not.toHaveBeenCalled();
+      expect(el.querySelector('.notice')?.textContent).toContain(
+        'The dead-letter workbench on this page is not showing',
+      );
+    });
+
     const quiet: PlatformMapView = {
       ...map,
       services: map.services.map((s) => ({ ...s, queues: s.queues.filter((q) => q.parked === null) })),
