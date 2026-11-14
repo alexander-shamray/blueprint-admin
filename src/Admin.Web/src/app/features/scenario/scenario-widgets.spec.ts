@@ -711,7 +711,7 @@ describe('ScenarioWidget', () => {
     await page.run();
 
     const exported = page.export();
-    // The next run differs in every field the report takes from the runner: script, user, strip, depths, transcript mark.
+    // The next run differs in each field export() once read after its await: script, user, strip, depths, transcript mark.
     host.proxy.mockReturnValue(new Subject<ProxyResult>());
     host.transcript.mockReturnValue(throwError(() => new Error('no')));
     page.pick('cancel');
