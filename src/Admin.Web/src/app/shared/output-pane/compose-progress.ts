@@ -47,7 +47,8 @@ interface Container {
  * The containers a `docker compose` job names, read a line at a time. Compose writes its progress as
  * `Container <name>  <Verb>` lines, many per container, or with `--progress json` as the same pair in a JSON line; the
  * last verb a container printed is where it stands. An Up reads from Waiting to Healthy, a Down from Stopping to
- * Removed; a container named again after it settled starts over, as in a Reset, whose Up follows its Down. Only
+ * Removed; a container named again after it settled starts over, as in a Reset, whose Up follows its Down, but for a
+ * removal after its stop, which carries it on (`REMOVAL`). Only
  * containers are listed: a volume or a network is not a platform service. A line that does not name a container is not
  * parsed, because an Up that pulls writes thousands of layer lines.
  */
