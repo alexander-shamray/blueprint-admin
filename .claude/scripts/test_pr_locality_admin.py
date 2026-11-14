@@ -243,8 +243,8 @@ class TheFencesMirrorTheGate(Case):
         self.assertEqual((0, ""), (result.returncode, result.stdout), result.stderr)
 
     def test_a_fence_closes_only_on_a_line_of_fence_alone(self):
-        # A run with text after it is fenced content: were it read as a closer, the fenced Class row would be a
-        # second one and the helper would refuse.
+        # A run with text after it is fenced content: were it read as a closer, the bare run after the Class row
+        # would open a fence hiding the table, and the helper would refuse a Class row without a Touch set row.
         result = self.run_helper(
             "```\n``` not a closer\n| Class | D |\n```\n\n" + body("A", "src/**"), files=("src/Admin.Host/Program.cs",))
 
