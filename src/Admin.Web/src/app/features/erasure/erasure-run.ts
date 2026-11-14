@@ -113,14 +113,32 @@ export class ErasureRun {
 
   readonly overdue = computed(() => this.request()?.status === 'Overdue');
 
+  /** Why the holders could not be read, while none has been: shown in place of a list, with a retry. */
+  readonly holdersError = signal<string | null>(null);
+
   constructor() {
+    this.loadHolders();
+  }
+
+  /**
+   * Reads the holders when none has been read yet: the run is a root singleton, so a failed first read is otherwise
+   * never made again. A widget opening calls it, and so does its retry.
+   */
+  loadHolders(): void {
+    if (this.holders() !== null) return;
+    this.holdersError.set(null);
     this.host
       .erasureHolders()
-      .pipe(
-        takeUntilDestroyed(this.destroyRef),
-        catchError(() => of(null)),
-      )
-      .subscribe((view) => this.holders.set(view));
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (view) => this.holders.set(view),
+        error: (err: unknown) => {
+          const message = (err as { message?: unknown } | null)?.message;
+          this.holdersError.set(
+            typeof message === 'string' && message !== '' ? message : $localize`The host did not answer.`,
+          );
+        },
+      });
   }
 
   /** `POST /api/v1/privacy/erasure-requests`: asking again for a subject with a request open answers that request. */

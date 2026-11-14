@@ -24,6 +24,8 @@ export class ErasureWidget {
 
   constructor() {
     const destroyRef = inject(DestroyRef);
+    // A first read that failed is made again when the widget opens, rather than leaving the list loading for good.
+    if (this.run.holdersError() !== null) this.run.loadHolders();
     effect((onCleanup) => {
       if (this.run.watch()) onCleanup(this.run.watchFeed.attach(destroyRef));
     });
