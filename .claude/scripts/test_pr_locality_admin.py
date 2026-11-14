@@ -242,6 +242,22 @@ class TheFencesMirrorTheGate(Case):
 
         self.assertEqual((0, ""), (result.returncode, result.stdout), result.stderr)
 
+    def test_a_fence_closes_only_on_a_line_of_fence_alone(self):
+        # A run with text after it is fenced content: were it read as a closer, the fenced Class row would be a
+        # second one and the helper would refuse.
+        result = self.run_helper(
+            "```\n``` not a closer\n| Class | D |\n```\n\n" + body("A", "src/**"), files=("src/Admin.Host/Program.cs",))
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(["class A", "inside src/Admin.Host/Program.cs"], result.stdout.splitlines())
+
+    def test_a_backtick_run_with_a_backtick_in_its_info_string_opens_no_fence(self):
+        # Were it read as an opener, the fence would run to the end and hide the table.
+        result = self.run_helper("```a`b\n" + body("D", "docs/**"))
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(["class D", "inside docs/a.md"], result.stdout.splitlines())
+
 
 if __name__ == "__main__":
     unittest.main()
