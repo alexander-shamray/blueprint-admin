@@ -385,7 +385,18 @@ case "$mode" in
     # Ahead of the fetch, so a redirect reads nothing from where it points and the
     # branch is not replayed; `publish` asks again, since `continue` comes later.
     origin_pushes_where_added || exit 7
-    git fetch origin
+    # Into the tracking refs by explicit refspecs, as git-push-force.sh fetches:
+    # under a narrowed remote.origin.fetch a bare fetch leaves both where they
+    # were, and the base and the lease would be stale. Origin is asked first,
+    # since a refspec naming a ref it lacks fails the fetch without saying which.
+    on_origin=$(git ls-remote origin refs/heads/main "refs/heads/$branch") ||
+      { echo "cannot ask origin for main and $branch, so nothing is replayed" >&2; exit 12; }
+    printf '%s\n' "$on_origin" | awk '$2 == "refs/heads/main" { found = 1 } END { exit !found }' ||
+      { echo "origin has no main, so no refs/remotes/origin/main to rebase onto" >&2; exit 6; }
+    printf '%s\n' "$on_origin" | awk -v ref="refs/heads/$branch" '$2 == ref { found = 1 } END { exit !found }' ||
+      { echo "origin has no $branch: push it normally first, since there is nothing to force" >&2; exit 6; }
+    git fetch origin "+refs/heads/main:refs/remotes/origin/main" "+refs/heads/$branch:refs/remotes/origin/$branch" ||
+      { echo "cannot fetch main and $branch from origin, so nothing is replayed" >&2; exit 12; }
     git show-ref --verify --quiet refs/remotes/origin/main ||
       { echo "no refs/remotes/origin/main to rebase onto" >&2; exit 6; }
     require_remote_branch

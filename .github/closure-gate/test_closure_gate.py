@@ -10,7 +10,12 @@ passes silently while the merge closes an issue nobody declared.
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
 import unittest
+from pathlib import Path
 
 from closure_gate import check, closing_references, declared_in_table, repository_of
 
@@ -550,6 +555,30 @@ class DependabotDescription(unittest.TestCase):
         legacy = payload(body=self.NOTES)
         del legacy["author"]
         self.assertEqual(len(check(legacy)), 1)
+
+
+class TheInput(unittest.TestCase):
+    """stdin is `gh`'s UTF-8 whatever the locale says, the local pipe included."""
+
+    GATE = Path(__file__).with_name("closure_gate.py")
+
+    def run_gate(self, data: bytes) -> subprocess.CompletedProcess:
+        # cp1252 is what a Windows console hands Python, and it has no
+        # character for 0x9D, the last byte of a right double quote.
+        env = {**os.environ, "PYTHONIOENCODING": "cp1252", "PYTHONUTF8": "0"}
+        return subprocess.run([sys.executable, str(self.GATE)], input=data,
+                              capture_output=True, env=env)
+
+    def test_utf8_on_stdin_is_read_as_utf8_whatever_the_locale(self):
+        text = json.dumps(payload(body="a “quoted” body"), ensure_ascii=False)
+        result = self.run_gate(text.encode("utf-8"))
+        self.assertEqual(0, result.returncode, result.stderr.decode("utf-8", "replace"))
+
+    def test_stdin_that_is_not_utf8_is_refused_with_a_verdict(self):
+        result = self.run_gate(b'{"body": "\xff"}')
+        self.assertEqual(2, result.returncode)
+        self.assertIn(b"not UTF-8", result.stderr)
+        self.assertNotIn(b"Traceback", result.stderr)
 
 
 if __name__ == "__main__":
