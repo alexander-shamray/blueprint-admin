@@ -453,6 +453,24 @@ describe('AssistantConversation', () => {
     expect(conversation.current.items.at(-1)).toEqual({ kind: 'reply', text: 'Opening Logs.' });
   });
 
+  it('a reload read a new message overtook never undoes it', async () => {
+    const ids = memoryIds('c1');
+    const { host, conversation } = setup(ids);
+    host.on('GET', /\/conversations\/c1$/, () =>
+      json({ id: 'c1', items: [{ kind: 'operator', text: 'old' }], running: false, lastEventId: 4, pendingCalls: [] }),
+    );
+    host.on('POST', /\/conversations$/, () => json({ id: 'c2' }));
+
+    const resumed = conversation.resume();
+    await conversation.send('new', null, 'en-US');
+    await resumed;
+    await settle();
+
+    expect(ids.id).toBe('c2');
+    expect(conversation.current.items).toEqual([{ kind: 'operator', text: 'new' }]);
+    expect(conversation.current.running).toBe(true);
+  });
+
   it('forgets an id the host no longer holds', async () => {
     const ids = memoryIds('gone');
     const { host, conversation } = setup(ids);
