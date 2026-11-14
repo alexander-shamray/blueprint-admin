@@ -469,6 +469,9 @@ test('Cancel ends a run that is waiting and still restores the stack', async ({ 
   const list = page.locator('ol.steps li.step');
   await expect(list.last().locator('.state')).toHaveText('[ok]', { timeout: 30_000 });
   await expect(list.last().locator('.detail')).toHaveText('The stack is as the run found it.');
+  // An uncancelled run ends with every step [ok] and the same restore, so only the steps Cancel left unrun show it acted.
+  await expect(list.locator('.state', { hasText: '[not run]' }).first()).toBeVisible();
+  await expect(list.locator('.detail', { hasText: 'The run was cancelled.' }).first()).toBeVisible();
   const state = await (await request.get('/api/stack/lease')).json();
   expect(state.lease).toBeNull();
 });
