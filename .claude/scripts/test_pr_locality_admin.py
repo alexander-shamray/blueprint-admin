@@ -221,5 +221,27 @@ class TheRefusalsMirrorTheGate(Case):
         self.assertEqual(3, result.returncode, result.stdout)
 
 
+class TheFencesMirrorTheGate(Case):
+    """A row inside a fenced code block is an example, not the table: the gate's `_unfenced` skips it, and so
+    does the helper."""
+
+    def test_a_fenced_example_beside_the_table_is_skipped(self):
+        for name, example in (
+            ("a backtick fence with an info string", "```markdown\n| Class | A |\n| Touch set | src/** |\n```\n"),
+            ("a tilde fence", "~~~\n| Class | A |\n| Touch set | src/** |\n~~~\n"),
+            ("a shorter fence nested inside a longer one", "````\n```\n| Class | A |\n```\n| Touch set | src/** |\n````\n"),
+        ):
+            with self.subTest(case=name):
+                result = self.run_helper(example + "\n" + body("D", "docs/**"))
+
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertEqual(["class D", "inside docs/a.md"], result.stdout.splitlines())
+
+    def test_rows_only_inside_a_fence_are_no_rows(self):
+        result = self.run_helper("```\n| Class | D |\n| Touch set | docs/** |\n```\n")
+
+        self.assertEqual((0, ""), (result.returncode, result.stdout), result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
