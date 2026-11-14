@@ -66,6 +66,21 @@ describe('composeProgress', () => {
     ]);
   });
 
+  it('carries a stopped container on through its removal, settled throughout and timed from its Stopping', () => {
+    const tracker = new ComposeTracker();
+    tracker.add(at(0, ' Container a-1  Stopping'));
+    tracker.add(at(4, ' Container a-1  Stopped'));
+    expect(tracker.snapshot().settled).toBe(1);
+
+    tracker.add(at(5, ' Container a-1  Removing'));
+    expect(tracker.snapshot().settled).toBe(1);
+    tracker.add(at(6, ' Container a-1  Removed'));
+
+    const progress = tracker.snapshot();
+    expect(progress.services.map((s) => [s.verb, s.settled, s.seconds])).toEqual([['Removed', true, 6]]);
+    expect(progress.settled).toBe(1);
+  });
+
   it('turns a container whose line says Error to failed, which is settled for the count and not for the row', () => {
     const tracker = new ComposeTracker();
     const folded = [
