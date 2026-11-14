@@ -189,18 +189,19 @@ public sealed class Job
         Channel<OutputLine>? live,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        foreach (OutputLine line in replay)
-        {
-            yield return line;
-        }
-
-        if (live is null)
-        {
-            yield break;
-        }
-
+        // The replay is inside the try: a reader that stops during it still unregisters the follower Subscribe added.
         try
         {
+            foreach (OutputLine line in replay)
+            {
+                yield return line;
+            }
+
+            if (live is null)
+            {
+                yield break;
+            }
+
             await foreach (OutputLine line in live.Reader.ReadAllAsync(cancellationToken))
             {
                 yield return line;
@@ -208,9 +209,12 @@ public sealed class Job
         }
         finally
         {
-            lock (gate)
+            if (live is not null)
             {
-                followers.Remove(live);
+                lock (gate)
+                {
+                    followers.Remove(live);
+                }
             }
         }
     }

@@ -178,6 +178,25 @@ public sealed class JobTests
     }
 
     [Fact]
+    public async Task A_follower_dropped_during_its_replay_is_removed()
+    {
+        Job job = NewJob();
+        job.Append(OutputStream.Stdout, "first");
+        job.Append(OutputStream.Stdout, "second");
+
+        CancellationToken token = TestContext.Current.CancellationToken;
+        await using (IAsyncEnumerator<OutputLine> follower = job.Follow(-1, token).GetAsyncEnumerator(token))
+        {
+            (await follower.MoveNextAsync()).ShouldBeTrue();
+            follower.Current.Text.ShouldBe("first");
+            job.FollowerCount.ShouldBe(1);
+        }
+
+        job.FollowerCount.ShouldBe(0);
+        job.State.ShouldBe(JobState.Running);
+    }
+
+    [Fact]
     public async Task A_follower_that_keeps_up_receives_every_line_past_the_capacity()
     {
         Job job = NewJob(capacity: 3);
