@@ -705,22 +705,29 @@ describe('ScenarioWidget', () => {
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
     const transcript = new Subject<string>();
     host.transcriptScript.mockReturnValue(transcript);
+    const queue = { name: 'ordering-events', messages: 3, consumer: null, parked: null, runbook: null };
+    host.brokerQueues.mockReturnValue(of({ ...drained, queues: [queue] }));
     const page = render().componentInstance.runner;
     await page.run();
 
     const exported = page.export();
+    // The next run differs in every field the report takes from the runner: script, user, strip, depths, transcript mark.
     host.proxy.mockReturnValue(new Subject<ProxyResult>());
+    host.transcript.mockReturnValue(throwError(() => new Error('no')));
+    page.pick('cancel');
     page.username.set('browser');
     void page.run();
-    await vi.waitFor(() => expect(page.strip()).toBeNull());
+    await vi.waitFor(() => expect(page.steps().map((s) => s.key)).toContain('cancel'));
     transcript.next('curl http://x');
     transcript.complete();
     await exported;
 
     const doc = host.scenarioExport.mock.calls[0][0] as string;
-    expect(doc).toContain('# Scenario run abcdef12: ');
+    expect(doc).toContain('# Scenario run abcdef12: Order to delivered');
     expect(doc).toContain('- Run as: demo');
     expect(doc).toContain('The last read answered `delivered`');
+    expect(doc).toContain('| `ordering-events` | 3 | 3 |');
+    expect(doc).toContain('from when this run began');
   });
 
   it("exports the whole session's transcript, and says so, when the run's starting point could not be read", async () => {
