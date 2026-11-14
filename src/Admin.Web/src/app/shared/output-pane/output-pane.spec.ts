@@ -69,6 +69,52 @@ describe('OutputPane', () => {
     expect(fixture.nativeElement.querySelector('pre .stderr')?.textContent).toContain('Error response');
   });
 
+  it('reads a job that writes Compose progress as Compose though nobody said so', () => {
+    const events = new Subject<JobEvent>();
+    const sse = { follow: vi.fn(() => events.asObservable()) };
+    TestBed.configureTestingModule({ imports: [OutputPane], providers: [{ provide: SseClient, useValue: sse }] });
+    const fixture = TestBed.createComponent(OutputPane);
+    fixture.componentRef.setInput('jobId', 'recreate');
+    fixture.detectChanges();
+    const send = (sequence: number, text: string) =>
+      events.next({ kind: 'line', line: { sequence, at: '', stream: 'Stderr', text } });
+
+    send(0, ' Container commerce-ordering-1  Recreate');
+    send(1, ' Network commerce_default  Creating');
+    send(2, 'Error response from daemon');
+    fixture.detectChanges();
+
+    const marked = Array.from(fixture.nativeElement.querySelectorAll('pre .stderr')).map((e) =>
+      (e as HTMLElement).textContent?.trim(),
+    );
+    expect(marked).toEqual(['[stderr] Error response from daemon']);
+  });
+
+  it('marks the verdicts a Reset writes on stderr when it stops, in a Compose pane', () => {
+    const events = new Subject<JobEvent>();
+    const sse = { follow: vi.fn(() => events.asObservable()) };
+    TestBed.configureTestingModule({ imports: [OutputPane], providers: [{ provide: SseClient, useValue: sse }] });
+    const fixture = TestBed.createComponent(OutputPane);
+    fixture.componentRef.setInput('jobId', 'reset');
+    fixture.componentRef.setInput('composeStderr', true);
+    fixture.detectChanges();
+    const send = (sequence: number, text: string) =>
+      events.next({ kind: 'line', line: { sequence, at: '', stream: 'Stderr', text } });
+
+    send(0, 'Pulling the layers');
+    send(1, 'not ready after 120 s: ordering, payments');
+    send(2, 'docker compose up -d --wait exited with 1; the reset stops here.');
+    fixture.detectChanges();
+
+    const marked = Array.from(fixture.nativeElement.querySelectorAll('pre .stderr')).map((e) =>
+      (e as HTMLElement).textContent?.trim(),
+    );
+    expect(marked).toEqual([
+      '[stderr] not ready after 120 s: ordering, payments',
+      '[stderr] docker compose up -d --wait exited with 1; the reset stops here.',
+    ]);
+  });
+
   it('shows the stream error and keeps the lines already received', () => {
     const events = new Subject<JobEvent>();
     const sse = { follow: vi.fn(() => events.asObservable()) };
