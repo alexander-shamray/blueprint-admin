@@ -735,7 +735,11 @@ public sealed class ScenarioLeaseServiceTests : IAsyncDisposable
     /// <summary>Wraps the fake runner to see a start as it happens, to fail or hang chosen commands, and to change what ps says.</summary>
     private sealed class TestRunner(FakeProcessRunner inner, JobRegistry registry) : IProcessRunner
     {
+        // A deadline's restore starts and stops on a pool thread while the test reads, so every list is read and written under one lock.
+        private readonly Lock gate = new();
         private readonly List<ProcessSpec> started = [];
+        private readonly List<Job> hungJobs = [];
+        private readonly List<Job> stopped = [];
 
         public Action<ProcessSpec>? OnStart { get; set; }
 
@@ -744,21 +748,47 @@ public sealed class ScenarioLeaseServiceTests : IAsyncDisposable
         public Func<ProcessSpec, bool>? Hang { get; set; }
 
         /// <summary>The jobs <see cref="Hang"/> held open, in start order, for a test to let go of.</summary>
-        public List<Job> HungJobs { get; } = [];
+        public IReadOnlyList<Job> HungJobs
+        {
+            get
+            {
+                lock (gate)
+                {
+                    return [.. hungJobs];
+                }
+            }
+        }
 
         public string[]? PsLines { get; set; }
 
-        public IReadOnlyList<ProcessSpec> Started => [.. started];
+        public IReadOnlyList<ProcessSpec> Started
+        {
+            get
+            {
+                lock (gate)
+                {
+                    return [.. started];
+                }
+            }
+        }
 
         public Job Start(ProcessSpec spec)
         {
-            started.Add(spec);
+            lock (gate)
+            {
+                started.Add(spec);
+            }
+
             OnStart?.Invoke(spec);
 
             if (Hang?.Invoke(spec) == true)
             {
                 Job hung = registry.Create(spec);
-                HungJobs.Add(hung);
+
+                lock (gate)
+                {
+                    hungJobs.Add(hung);
+                }
 
                 return hung;
             }
@@ -789,11 +819,23 @@ public sealed class ScenarioLeaseServiceTests : IAsyncDisposable
             return inner.Start(spec);
         }
 
-        public List<Job> Stopped { get; } = [];
+        public IReadOnlyList<Job> Stopped
+        {
+            get
+            {
+                lock (gate)
+                {
+                    return [.. stopped];
+                }
+            }
+        }
 
         public Task StopAsync(Job job, CancellationToken cancellationToken)
         {
-            Stopped.Add(job);
+            lock (gate)
+            {
+                stopped.Add(job);
+            }
 
             return inner.StopAsync(job, cancellationToken);
         }

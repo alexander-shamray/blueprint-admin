@@ -363,6 +363,7 @@ public sealed partial class WorkspaceStoreTests : IDisposable
     [Theory]
     [InlineData(int.MaxValue, 2)]
     [InlineData(25, 1)]
+    [InlineData(1, int.MaxValue)]
     public void A_cell_pair_whose_sum_would_overflow_is_refused_not_wrapped(int x, int cols)
     {
         JsonObject doc = Valid();

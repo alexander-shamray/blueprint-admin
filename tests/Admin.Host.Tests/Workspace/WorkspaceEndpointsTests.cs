@@ -162,15 +162,19 @@ public sealed class WorkspaceEndpointsTests : IClassFixture<AdminHostFactory>
         string etag = await CurrentEtag();
         using HttpRequestMessage request = new(HttpMethod.Put, "/api/workspace")
         {
-            Content = new StreamContent(new MemoryStream(new byte[WorkspaceSchema.MaxDocumentBytes + 1])),
+            Content = new UnsizedContent(WorkspaceSchema.MaxDocumentBytes + 1),
         };
         request.Headers.TryAddWithoutValidation("If-Match", etag);
         request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
         request.Headers.TransferEncodingChunked = true;
 
+        // The header check refuses a declared length before the read loop runs, so the loop's bound is what this proves only while no length goes out.
+        request.Content.Headers.ContentLength.ShouldBeNull();
+
         using HttpResponseMessage response = await client.SendAsync(request, Ct);
 
         response.StatusCode.ShouldBe(HttpStatusCode.RequestEntityTooLarge);
+        (await CurrentEtag()).ShouldBe(etag);
     }
 
     [Fact]
@@ -268,5 +272,18 @@ public sealed class WorkspaceEndpointsTests : IClassFixture<AdminHostFactory>
         using HttpResponseMessage response = await client.SendAsync(request, Ct);
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    private sealed class UnsizedContent(int size) : HttpContent
+    {
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context) =>
+            stream.WriteAsync(new byte[size]).AsTask();
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+
+            return false;
+        }
     }
 }

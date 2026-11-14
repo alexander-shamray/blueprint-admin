@@ -90,7 +90,7 @@ public sealed partial class AdminReadToolsTests(AdminHostFactory factory) : ICla
         JsonNode filtered = JsonNode.Parse((await Tools(host).InvokeAsync("recent_logs", new JsonObject { ["filter"] = word.ToUpperInvariant() }, Context, Ct)).Content)!;
 
         two["follow"]!["id"]!.GetValue<string>().ShouldBe(follow.Id);
-        two["lines"]!.AsArray().Count.ShouldBeInRange(1, 2);
+        two["lines"]!.AsArray().Count.ShouldBe(2);
         filtered["lines"]!.AsArray().ShouldNotBeEmpty();
         filtered["lines"]!.AsArray().ShouldAllBe(l => l!["text"]!.GetValue<string>().Contains(word, StringComparison.OrdinalIgnoreCase));
         host.Services.GetRequiredService<LogFollower>().Current.ShouldBeSameAs(follow);
