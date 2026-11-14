@@ -243,14 +243,24 @@
 }
 
 <ng-template #listItems let-items>
-  <ul>
-    @for (item of items; track $index) {
-      <li>
-        <app-runbook-spans [spans]="item.spans" />
-        @if (item.children.length > 0) {
-          <ng-container *ngTemplateOutlet="listItems; context: { $implicit: item.children }" />
-        }
-      </li>
-    }
-  </ul>
+  @if (items[0]?.ordered) {
+    <ol [attr.start]="items[0].number ?? null">
+      <ng-container *ngTemplateOutlet="listEntries; context: { $implicit: items }" />
+    </ol>
+  } @else {
+    <ul>
+      <ng-container *ngTemplateOutlet="listEntries; context: { $implicit: items }" />
+    </ul>
+  }
+</ng-template>
+
+<ng-template #listEntries let-items>
+  @for (item of items; track $index) {
+    <li>
+      <app-runbook-spans [spans]="item.spans" />
+      @if (item.children.length > 0) {
+        <ng-container *ngTemplateOutlet="listItems; context: { $implicit: item.children }" />
+      }
+    </li>
+  }
 </ng-template>
