@@ -260,26 +260,33 @@ export class ScenarioRunner {
     this.exporting.set(true);
     this.exportError.set(null);
     try {
+      // Everything the report says of the run is read before the first await: Run stays enabled while exporting, and a run
+      // started meanwhile resets these fields.
       const steps = this.steps();
+      const title = SCRIPTS[this.exportedScript].title;
+      const username = this.exportedUser;
+      const strip = this.strip();
+      const queuesBefore = this.queuesBefore;
+      const transcriptAfter = this.transcriptAfter;
       const ids = [...new Set(steps.flatMap((s) => (s.correlationId ? [s.correlationId] : [])))];
       const [transcript, queuesAfter, ...traces] = await Promise.all([
-        firstValueFrom(this.host.transcriptScript(this.transcriptAfter ?? undefined)).catch(() => null),
+        firstValueFrom(this.host.transcriptScript(transcriptAfter ?? undefined)).catch(() => null),
         firstValueFrom(this.host.brokerQueues()).catch(() => null),
         ...ids.map((id) => firstValueFrom(this.host.trace(id)).catch((e: unknown): TraceRead => describe(e))),
       ]);
       const read: Record<string, TraceRead> = {};
       ids.forEach((id, i) => (read[id] = traces[i]));
       const markdown = buildExport({
-        title: SCRIPTS[this.exportedScript].title,
+        title,
         run,
-        username: this.exportedUser,
+        username,
         exportedAt: new Date().toISOString(),
         steps,
-        strip: this.strip(),
+        strip,
         transcript,
-        transcriptScope: this.transcriptAfter === null ? 'session' : 'run',
+        transcriptScope: transcriptAfter === null ? 'session' : 'run',
         traces: read,
-        queuesBefore: this.queuesBefore,
+        queuesBefore,
         queuesAfter,
       });
       const scrubbed = await firstValueFrom(this.host.scenarioExport(markdown));
