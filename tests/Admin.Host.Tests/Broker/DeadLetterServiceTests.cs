@@ -252,10 +252,13 @@ public sealed class DeadLetterServiceTests : IAsyncDisposable
     [InlineData("abc\n", false)]
     public void A_message_id_never_reads_as_a_flag(string id, bool accepted) => DeadLetterService.IsMessageId(id).ShouldBe(accepted);
 
-    [Fact]
-    public void A_document_of_another_schema_is_said_rather_than_read()
+    [Theory]
+    [InlineData("2")]
+    [InlineData("1.5")]
+    [InlineData("4294967296")]
+    public void A_document_of_another_schema_is_said_rather_than_read(string schema)
     {
-        DeadLetterInspection inspection = DeadLetterService.Parse(Queue, ["""{"schema": 2, "command": "inspect", "messages": []}"""]);
+        DeadLetterInspection inspection = DeadLetterService.Parse(Queue, [$$"""{"schema": {{schema}}, "command": "inspect", "messages": []}"""]);
 
         inspection.Error!.ShouldContain("not schema 1");
     }
