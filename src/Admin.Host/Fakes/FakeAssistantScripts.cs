@@ -119,9 +119,13 @@ public static partial class FakeAssistantScripts
     public static string NotRead(string why, bool russian) =>
         russian ? $"Не удалось прочитать состояние стека: {why}" : $"The stack could not be read: {why}";
 
-    /// <summary>Each screen's path in <c>BUILT_IN_PAGES</c> (the SPA's <c>built-in-pages.ts</c>) and the words that name it.</summary>
+    /// <summary>
+    /// Each screen's path in <c>BUILT_IN_PAGES</c> (the SPA's <c>built-in-pages.ts</c>) and the words that name it. The
+    /// transcript is first, since its "журнал команд" holds the logs' bare "журнал" and the first match wins.
+    /// </summary>
     public static readonly IReadOnlyList<(string Screen, string[] Words)> Screens =
     [
+        ("transcript", ["transcript", "транскрипт", "журнал команд"]),
         ("stack", ["stack", "стек", "compose"]),
         ("logs", ["logs", "log lines", "логи", "лог", "журнал"]),
         ("broker", ["broker", "queue", "rabbit", "брокер", "очеред"]),
@@ -132,7 +136,6 @@ public static partial class FakeAssistantScripts
         ("trace", ["trace", "трасс", "трейс"]),
         ("scenario", ["scenario", "сценари"]),
         ("runbooks", ["runbook", "ранбук", "регламент"]),
-        ("transcript", ["transcript", "транскрипт", "журнал команд"]),
     ];
 
     /// <summary>The screen a message names, the first in <see cref="Screens"/>' order, or null.</summary>
