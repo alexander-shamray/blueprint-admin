@@ -84,6 +84,10 @@ public sealed class ResetServiceTests : IAsyncDisposable
 
         exitCode.ShouldBe(0);
         Texts(reset)[^1].ShouldBe("ready: gateway, ordering");
+
+        // Every surface the wait judges is listed once, before the first poll names only the one still down.
+        string[] wait = [.. Texts(reset).SkipWhile(t => !t.StartsWith("== readiness", StringComparison.Ordinal))];
+        wait.ShouldBe([$"== readiness: up to {ResetService.ReadinessCap.TotalSeconds:0} s", "surfaces: gateway, ordering", "waiting for: ordering", "ready: gateway, ordering"]);
     }
 
     [Fact]

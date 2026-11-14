@@ -89,6 +89,7 @@ public sealed class ResetService(
         // The cap is written here, once, so the Job output counts down to it without restating the value.
         reset.Append(OutputStream.Stdout, $"== {ReadinessStep}: up to {ReadinessCap.TotalSeconds:0} s");
         DateTimeOffset deadline = time.GetUtcNow() + ReadinessCap;
+        bool listed = false;
 
         while (true)
         {
@@ -99,6 +100,14 @@ public sealed class ResetService(
             {
                 reset.Append(OutputStream.Stdout, $"ready: {string.Join(", ", surfaces.Select(r => r.Name))}");
                 return true;
+            }
+
+            // A poll names only what has not answered, so every surface the wait judges is written once, before the
+            // first: the Job output's checklist counts from it, the ones up at the first probe included.
+            if (!listed)
+            {
+                reset.Append(OutputStream.Stdout, $"surfaces: {string.Join(", ", surfaces.Select(r => r.Name))}");
+                listed = true;
             }
 
             if (time.GetUtcNow() >= deadline)
