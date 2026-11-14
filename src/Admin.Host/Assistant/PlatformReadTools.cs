@@ -173,18 +173,31 @@ public sealed class PlatformReadTools(ApiCatalog catalog, RequestProxy proxy, To
                     : (null, "No realm user is configured to read as; nothing was sent.");
         }
 
+        // A user whose token was not issued may hold the permission, so the first such outcome is named rather than
+        // read as nobody holding it: a Keycloak outage is not a permission problem.
+        string? unanswered = null;
+
         foreach (RealmUser user in users)
         {
             IdentityRequest identity = new(user.Username, null);
+            TokenOutcome? token = await tokens.ForAsync(identity, cancellationToken);
 
-            if (await tokens.ForAsync(identity, cancellationToken) is TokenIssued issued
-                && IdentityEndpoints.Permissions(issued.Claims).Contains(operation.EdgePolicy, StringComparer.Ordinal))
+            if (token is TokenIssued issued && IdentityEndpoints.Permissions(issued.Claims).Contains(operation.EdgePolicy, StringComparer.Ordinal))
             {
                 return (identity, null);
             }
+
+            unanswered ??= token switch
+            {
+                TokenRejected rejected => $"the token request for {user.Username} answered {rejected.Status}",
+                KeycloakUnreachable unreachable => $"Keycloak did not answer: {unreachable.Error}",
+                _ => null,
+            };
         }
 
-        return (null, $"No configured realm user holds the permission {operation.EdgePolicy} this route asks for; nothing was sent.");
+        return unanswered is null
+            ? (null, $"No configured realm user holds the permission {operation.EdgePolicy} this route asks for; nothing was sent.")
+            : (null, $"No user could be shown to hold the permission {operation.EdgePolicy} this route asks for, since {unanswered}; nothing was sent.");
     }
 
     /// <summary>The URL the input names, or null when the input is not what the operation takes.</summary>
