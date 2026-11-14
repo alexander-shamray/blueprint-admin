@@ -100,6 +100,8 @@ test('a correlation-id link re-points a Trace widget that follows on the same pa
   await page.getByRole('button', { name: 'Page actions' }).click();
   await page.getByRole('menuitem', { name: 'Delete' }).click();
   await expect(page).not.toHaveURL(here);
+  // The delete is saved like any change; leave the shared host without the page.
+  await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
 });
 
 test('the Platform map polls nothing until its auto-refresh is switched on in its settings', async ({ page }) => {
@@ -479,6 +481,7 @@ test('a click on a service in the platform diagram points the Logs widget on the
   await page.goto('/stack');
   await page.getByRole('button', { name: 'New page' }).click();
   await expect(page).toHaveURL(/\/page\/page-/);
+  const made = page.url();
 
   await page.getByRole('button', { name: 'Add widget' }).click();
   await page.getByRole('menuitem', { name: 'Platform diagram' }).click();
@@ -498,6 +501,8 @@ test('a click on a service in the platform diagram points the Logs widget on the
 
   await page.getByRole('button', { name: 'Page actions' }).click();
   await page.getByRole('menuitem', { name: 'Delete' }).click();
+  // A count of none can hold before the save starts; once the open page has moved on, it is this delete's save.
+  await expect(page).not.toHaveURL(made);
   await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
 });
 
