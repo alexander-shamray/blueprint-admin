@@ -589,7 +589,9 @@ more value `Admin:Assistant:Provider` accepts. A provider on the workstation
 `MaxSteps`, `MaxOutputTokens`, `ConversationTokenBudget`,
 `ClientToolTimeout`, `ServerToolTimeout`, `MaxConversations`, `MaxCallers`,
 `IdleTimeout`, `PlatformReads` (§6.5). The limits' defaults are the core's,
-in `AssistantLimits`; the options only let configuration move them.
+in `AssistantLimits`; the options only let configuration move them, but for
+`ErrorDetail`, which the host sets on and no option moves: its one caller is
+the operator (§5.2), who needs a provider failure's message to act on it.
 No option holds a credential, and the options validator refuses one named
 like a secret, as the workspace validator does (workspace note §6.4).
 

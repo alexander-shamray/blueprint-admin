@@ -14,7 +14,7 @@ public sealed class AssistantOptions
     public const string Fake = "fake";
     public const string Anthropic = "anthropic";
 
-    // The core owns the defaults; these options only let configuration move them.
+    // The core owns the defaults, ErrorDetail aside; these options only let configuration move them.
     private static readonly AssistantLimits Defaults = new();
 
     /// <summary>Catalog, Inventory, Ordering, Payments and the BFF (§6.5, §9).</summary>
