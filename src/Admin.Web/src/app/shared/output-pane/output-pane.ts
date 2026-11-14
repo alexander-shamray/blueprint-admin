@@ -24,6 +24,9 @@ import { StepRow, StepState, StepTracker } from './step-progress';
 /** What marks a Compose stderr line as a failure rather than progress. */
 const PROBLEM = /\b(error|unhealthy|failed|denied)\b/i;
 
+/** The verdicts a Reset writes on stderr when it stops, as `ResetService.cs` words them. */
+const RESET_VERDICT = /^not ready after \d+ s: |exited with -?\d+; the reset stops here\.$/;
+
 /**
  * A line as the log shows it: Compose's JSON written back as its plain form, and whether a table above the log shows
  * it instead (a pull's progress, a container's verb).
@@ -372,9 +375,12 @@ export class OutputPane {
   readonly jobId = input<string | null>(null);
   /**
    * Set for a `docker compose` job, which writes all of its progress to stderr: a stderr line is then marked only
-   * when it says something went wrong, so a healthy Up does not read as a wall of errors.
+   * when it says something went wrong, so a healthy Up does not read as a wall of errors. A job that writes a Compose
+   * progress line is read the same way without it, so a Recreate, a stress run's `up` or a reopened Compose job is too.
    */
   readonly composeStderr = input(false);
+  /** Whether the followed job has written a Compose progress line: a container's, an image's or a JSON event. */
+  private readonly composeSeen = signal(false);
   /** Set where the pane is a widget's whole body: it then takes that body's height, and its parts scroll inside it. */
   readonly fill = input(false);
   /**
@@ -431,7 +437,13 @@ export class OutputPane {
   });
 
   isProblem(entry: Entry): boolean {
-    return entry.stream === 'Stderr' && (!this.composeStderr() || entry.failed || PROBLEM.test(entry.text));
+    return (
+      entry.stream === 'Stderr' &&
+      (!(this.composeStderr() || this.composeSeen()) ||
+        entry.failed ||
+        PROBLEM.test(entry.text) ||
+        RESET_VERDICT.test(entry.text))
+    );
   }
 
   /** Bytes so far against the size, or the size alone once pulled; `~` while a layer has not said its size. */
@@ -651,6 +663,7 @@ export class OutputPane {
       this.steps.set(null);
       this.k6.set(null);
       this.readiness.set(null);
+      this.composeSeen.set(false);
       this.showRawLines.set(false);
       if (!id) {
         return;
@@ -697,6 +710,7 @@ export class OutputPane {
     if (claimed) this.claimed.emit(line);
     const event = composeEvent(line.text);
     const failed = event !== null && composeFailed(event);
+    if ((pull || container || event !== null) && !this.composeSeen()) this.composeSeen.set(true);
     // A failure stays in the log, but it is also where an image's or a container's row turns failed.
     if (pull || failed) this.pull.set(this.tracker.snapshot());
     if (container || (failed && line.text.includes('Container '))) this.containers.set(this.composeTracker.snapshot());
