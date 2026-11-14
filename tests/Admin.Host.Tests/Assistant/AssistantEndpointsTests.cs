@@ -379,6 +379,12 @@ public sealed class AssistantEndpointsTests : IClassFixture<AdminHostFactory>
     }
 
     [Fact]
+    public void The_limits_keep_the_providers_failure_message_for_the_operator()
+    {
+        new AssistantOptions().Limits().ErrorDetail.ShouldBeTrue();
+    }
+
+    [Fact]
     public void An_option_named_for_a_credential_is_still_refused_with_the_anthropic_provider_on()
     {
         IConfiguration configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Admin:Assistant:ApiKey"] = "sk-ant-nope" }).Build();
