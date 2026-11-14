@@ -1211,6 +1211,8 @@ export interface SagaStrip {
   transitions: SagaTransition[];
   /** From the first of the trailing reads that show this status to the last, on the console's clock. */
   unchangedForMs: number;
+  /** How many trailing reads show this status, the last included: the reads it has stood unchanged across. */
+  unchangedReads: number;
   stalled: boolean;
   /** The platform's stamp for the step the buyer's status is at, or null where the order read carries none. */
   statusChangedAt: string | null;
@@ -1240,7 +1242,8 @@ export function sagaStrip(reads: readonly SagaRead[]): SagaStrip | null {
   if (!last) return null;
 
   let first = last;
-  for (let i = reads.length - 2; i >= 0 && reads[i].status === last.status; i--) first = reads[i];
+  let unchangedReads = 1;
+  for (let i = reads.length - 2; i >= 0 && reads[i].status === last.status; i--, unchangedReads++) first = reads[i];
 
   const stamped = TIMELINE_STEPS.filter((step) => last.timeline[step] !== null);
   const transitions: SagaTransition[] = [];
@@ -1269,6 +1272,7 @@ export function sagaStrip(reads: readonly SagaRead[]): SagaStrip | null {
     reads: reads.length,
     transitions,
     unchangedForMs,
+    unchangedReads,
     stalled: unchangedForMs >= STALL_AFTER_MS && !SETTLED.includes(last.status),
   };
 }
