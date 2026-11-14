@@ -64,11 +64,13 @@ done < <(printf '%s\n' "$body")
 [ "$touch_rows" -le 1 ] || refuse "more than one Touch set row"
 if [ -z "$class_row" ] && [ -z "$touch_row" ]; then exit 0; fi
 [ -n "$class_row" ] && [ -n "$touch_row" ] || refuse "one row without the other"
-# Cut `cell`, a row labelled `$1`, to the text after its label's `|`, less a closing `|` and the spaces around both.
+# Cut `cell`, a row labelled `$1`, to the text after its label's `|`, less its closing `|` and the spaces around both.
+# A row with no closing `|` is not one cell, as the CI gate's `_cell` refuses it.
 cell_of() {
   local head="^\\| *$1 *\\| *" tail=' *\| *$'
   if [[ "$cell" =~ $head ]]; then cell=${cell:${#BASH_REMATCH[0]}}; fi
-  if [[ "$cell" =~ $tail ]]; then cell=${cell:0:${#cell}-${#BASH_REMATCH[0]}}; fi
+  [[ "$cell" =~ $tail ]] || refuse "the $1 row is not one cell"
+  cell=${cell:0:${#cell}-${#BASH_REMATCH[0]}}
 }
 cell=$class_row
 cell_of Class
