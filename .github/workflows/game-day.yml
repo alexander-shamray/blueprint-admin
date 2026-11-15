@@ -55,11 +55,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # The backend at the commit ci.yml's drift job reads, so the console is
-      # judged against the platform it was last proved to match. The checkout
-      # takes the whole history and the pin is checked out after it, so no
-      # step output reaches a checkout's ref: a dispatched job that checks out
-      # a computed ref runs its later steps on code it cannot vouch for.
+      # The backend at ci.yml's drift pin, the platform the console was last
+      # proved to match. The pin is checked out after a whole-history checkout,
+      # so actions/checkout's ref never takes a step output, which code scanning
+      # reads as cache poisoning in a dispatched job; the pin comes from a
+      # committed file and is checked to be one commit id first.
       - uses: actions/checkout@v7
         with:
           repository: alexander-shamray/blueprint-backend
