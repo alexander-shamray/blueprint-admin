@@ -152,7 +152,28 @@ class TheRunner(unittest.TestCase):
         scenario = Scripted(cause_raises=True)
         findings = game_day.run(scenario, world({}))
         self.assertEqual(scenario.done, ["cause", "restore"])
-        self.assertEqual(findings, ["scripted: the cause or the check failed: half-way"])
+        self.assertEqual(findings, ["scripted: the cause or the check failed: GameDayError: half-way"])
+
+    def test_any_raise_is_a_finding_and_all_goes_on_to_the_next(self):
+        # No `docker` or `lsof` on PATH, or a body missing its field: the run must still report and carry on.
+        class Missing(Scripted):
+            def cause(self, world):
+                self.done.append("cause")
+                raise FileNotFoundError("lsof")
+
+        first, second = Missing(), Scripted()
+        out = io.StringIO()
+        original = game_day.load_all
+        game_day.load_all = lambda: [first, second]
+        try:
+            with redirect_stdout(out):
+                code = game_day.main(["all"], world=world({}))
+        finally:
+            game_day.load_all = original
+        self.assertEqual(code, 1)
+        self.assertIn("FINDING: scripted: the cause or the check failed: FileNotFoundError: lsof", out.getvalue())
+        self.assertEqual(first.done, ["cause", "restore"])
+        self.assertEqual(second.done, ["cause", "check", "restore"])
 
     def test_an_unsettled_start_causes_nothing(self):
         scenario = Scripted(settled=False)
