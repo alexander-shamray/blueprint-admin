@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -172,15 +173,33 @@ class Hosts:
         self.cwd = cwd
 
     def start_expecting_refusal(self, args: list[str], seconds: float) -> HostRun:
+        # `dotnet run` starts the host as a child that holds the output pipe, so a host that does start is killed as a
+        # tree, from a group of its own; killing the CLI alone would leave it serving and the read below never ending.
+        group = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if sys.platform.startswith("win")
+                 else {"start_new_session": True})
         with subprocess.Popen([*self.command, *args], cwd=self.cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                              text=True, env=os.environ.copy()) as process:
+                              text=True, env=os.environ.copy(), **group) as process:
             try:
                 output, _ = process.communicate(timeout=seconds)
                 return HostRun(process.returncode, output)
             except subprocess.TimeoutExpired:
-                process.kill()
-                output, _ = process.communicate()
+                kill_tree(process)
+                try:
+                    output, _ = process.communicate(timeout=30)
+                except subprocess.TimeoutExpired:
+                    output = "(the output pipe stayed open after the tree was killed)"
                 return HostRun(None, output)
+
+
+def kill_tree(process: subprocess.Popen) -> None:
+    if sys.platform.startswith("win"):
+        subprocess.run(["taskkill", "/T", "/F", "/PID", str(process.pid)], capture_output=True, check=False)
+    else:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    process.kill()
 
 
 @dataclass
