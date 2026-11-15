@@ -1,0 +1,123 @@
+name: Game day
+
+# `suite` is the runner's stack-free suite: every check against fakes, and every
+# scenario file listed. `run` causes each failure for real, against the backend's
+# Compose stack and the reference client, with the host under test beside them;
+# it is workflow_dispatch only, since it builds and starts the whole platform.
+# tools/game-day/README.md's *Running it in CI* says why.
+
+on:
+  pull_request:
+    paths:
+      - 'tools/game-day/**'
+      - '.github/workflows/game-day.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tools/game-day/**'
+      - '.github/workflows/game-day.yml'
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: 'A scenario name (game_day.py --list), or all'
+        default: 'all'
+
+# The host restores the assistant's core from GitHub Packages, as ci.yml's host
+# job does, with the job's own token.
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: game-day-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  suite:
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: The runner and every scenario's check, against fakes
+        run: python -m unittest discover -s tools/game-day -p 'test_*.py'
+
+  run:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      BACKEND: ${{ github.workspace }}/.clones/blueprint-backend
+      FRONTEND: ${{ github.workspace }}/.clones/blueprint-frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      # The backend at the commit ci.yml's drift job reads, so the console is
+      # judged against the platform it was last proved to match.
+      - id: pin
+        run: echo "sha=$(tr -d '[:space:]' < .github/drift/backend.sha)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7
+        with:
+          repository: alexander-shamray/blueprint-backend
+          ref: ${{ steps.pin.outputs.sha }}
+          path: .clones/blueprint-backend
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: alexander-shamray/blueprint-frontend
+          path: .clones/blueprint-frontend
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .clones/blueprint-frontend/.nvmrc
+
+      - name: Build the host
+        run: dotnet build src/Admin.Host
+        env:
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install the reference client, as run-locally.md does
+        run: npm ci
+        working-directory: .clones/blueprint-frontend
+
+      - name: Start the stack
+        run: docker compose -f "$BACKEND/deploy/compose/docker-compose.yml" up -d --wait --quiet-pull
+
+      - name: Start the host under test
+        env:
+          BLUEPRINT_Admin__BackendDir: ${{ env.BACKEND }}
+          BLUEPRINT_Admin__FrontendDir: ${{ env.FRONTEND }}
+        run: |
+          nohup dotnet run --project src/Admin.Host --no-build --no-launch-profile > host.log 2>&1 &
+          for _ in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:5300/api/config > /dev/null && exit 0
+            sleep 2
+          done
+          cat host.log
+          exit 1
+
+      - name: Cause each failure and check the console reports it
+        env:
+          SCENARIO: ${{ inputs.scenario }}
+          BLUEPRINT_Admin__BackendDir: ${{ env.BACKEND }}
+          BLUEPRINT_Admin__FrontendDir: ${{ env.FRONTEND }}
+        run: python tools/game-day/game_day.py "$SCENARIO" --compose-file "$BACKEND/deploy/compose/docker-compose.yml"
+
+      - name: Show state on failure
+        if: failure()
+        run: |
+          tail -n 200 host.log || true
+          docker compose -f "$BACKEND/deploy/compose/docker-compose.yml" ps -a
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f "$BACKEND/deploy/compose/docker-compose.yml" down -v
