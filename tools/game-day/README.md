@@ -1,10 +1,12 @@
 # The console's game day
 
 blueprint-backend's game day causes a runbook's alert and checks it fires; this
-console only shows that catalogue (`GameDayService.cs`). This directory is the
-console's own: it causes, for real, each failure the console is written to
-survive or report, and checks that the host's `/api` says what the code
-promises. FakePlatform cannot do this: a recording of a failure is not one.
+console lists its runbooks and runs their causes and restores through the
+backend's own tool (`GameDayService.cs`, whose `tools/game-day/README.md` is
+blueprint-backend's, not this file). This directory is the console's own: it
+causes, for real, each failure the console is written to survive or report,
+and checks that the host's `/api` says what the code promises. FakePlatform
+cannot do this: a recording of a failure is not one.
 
 ## What a pass proves, and what it does not
 
