@@ -58,7 +58,8 @@ jobs:
       # The backend at the commit ci.yml's drift job reads, so the console is
       # judged against the platform it was last proved to match. The checkout
       # takes the whole history and the pin is checked out after it, so no
-      # step output reaches a checkout's ref (CodeQL's cache-poisoning rule).
+      # step output reaches a checkout's ref: a dispatched job that checks out
+      # a computed ref runs its later steps on code it cannot vouch for.
       - uses: actions/checkout@v7
         with:
           repository: alexander-shamray/blueprint-backend
