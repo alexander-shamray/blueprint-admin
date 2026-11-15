@@ -77,11 +77,20 @@ def check(world: harness.World) -> list[str]:
         findings.append(str(error))
 
     port = int(world.notes.get("port") or _port(world))
+    job = _job(world)
+    if job is not None and job.get("state") == "Running":
+        # A second start would be refused while the console still holds the first; the finding above already says why.
+        findings.append("the tree-kill half was not run: the killed job still reads Running")
+        return findings
     try:
         _start(world, port)
-        status, body = world.console.call("POST", "/api/stack/frontend/stop")
-        if status != 200:
-            findings.append(f"frontend stop answered {status}: {str(body)[:300]}")
+    except harness.GameDayError as error:
+        findings.append(f"the tree-kill half could not start the dev server again: {error}")
+        return findings
+    status, body = world.console.call("POST", "/api/stack/frontend/stop")
+    if status != 200:
+        findings.append(f"frontend stop answered {status}: {str(body)[:300]}")
+    try:
         world.wait(lambda: (not world.ports.listeners(port), f"listeners={world.ports.listeners(port)}"),
                    GONE_SECONDS, "nothing on the client port after the console's stop")
         world.say("console stop: the tree is gone, nothing holds the client port")

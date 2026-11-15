@@ -324,6 +324,19 @@ class TheFrontend(unittest.TestCase):
             w.notes["port"] = 5173
             self.assertTrue(frontend_killed.check(w), job)
 
+    def test_a_job_still_running_keeps_its_finding_and_skips_the_second_start(self):
+        # The console refuses a second start with a 409 while it holds the first; that refusal must not replace the
+        # finding about the job, which is the one a reader needs.
+        w = world({("GET", "/api/stack"): stack(reach=[probe("client", True, "http://localhost:5173/")],
+                                                frontend={"job": {"state": "Running"}, "installed": True}),
+                   ("POST", "/api/stack/frontend/start"): (409, {"title": "Frontend already running"})})
+        w.notes["port"] = 5173
+        findings = frontend_killed.check(w)
+        self.assertEqual(len(findings), 2)
+        self.assertIn("reading Exited", findings[0])
+        self.assertIn("tree-kill half was not run", findings[1])
+        self.assertNotIn(("POST", "/api/stack/frontend/start"), w.console.calls)
+
     def test_a_stop_that_leaves_the_port_held_is_the_tree_kill_finding(self):
         ports = FakePorts([])
         w = world({("GET", "/api/stack"): stack(reach=[probe("client", True, "http://localhost:5173/")],
