@@ -7,6 +7,7 @@ from __future__ import annotations
 import io
 import subprocess
 import sys
+import time
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -359,6 +360,17 @@ class TheHarness(unittest.TestCase):
         with self.assertRaisesRegex(harness.GameDayError, "docker compose stop x exited 1: no"):
             compose.stop("x")
         self.assertEqual(seen[0][:4], ["docker", "compose", "-f", "f.yml"])
+
+    def test_a_host_that_starts_is_killed_as_a_tree_and_the_read_ends(self):
+        # `dotnet run`'s shape: a parent that starts a child holding the same output pipe, and both stay up.
+        child = "import time; time.sleep(600)"
+        parent = (f"import subprocess, sys, time; subprocess.Popen([sys.executable, '-c', {child!r}]); "
+                  "print('Now listening', flush=True); time.sleep(600)")
+        started = time.monotonic()
+        run = harness.Hosts([sys.executable, "-c", parent]).start_expecting_refusal([], 3)
+        self.assertLess(time.monotonic() - started, 45)
+        self.assertIsNone(run.exit_code)
+        self.assertIn("Now listening", run.output)
 
     def test_ports_read_pids_on_both_platforms(self):
         linux = harness.Ports(run=lambda args: done("101\n202\n"), platform="linux")
