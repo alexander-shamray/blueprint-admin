@@ -18,6 +18,24 @@ from typing import Callable
 REPO = Path(__file__).resolve().parents[2]
 
 
+def main_checkout(root: Path) -> Path:
+    """The checkout the siblings sit beside: `root` itself, or, for a linked worktree, the main checkout it belongs
+    to, read as RepoRoot.MainCheckout (src/Admin.Host/Config/RepoRoot.cs) reads it, so a default here resolves where
+    the host's Admin:BackendDir does."""
+    dot_git = root / ".git"
+    if not dot_git.is_file():
+        return root
+    pointer = dot_git.read_text(encoding="utf-8").strip()
+    if not pointer.startswith("gitdir:"):
+        return root
+    git_dir = (root / pointer.removeprefix("gitdir:").strip()).resolve()
+    common_file = git_dir / "commondir"
+    if not common_file.is_file():
+        return root
+    common = (git_dir / common_file.read_text(encoding="utf-8").strip()).resolve()
+    return common.parent if common.name == ".git" else root
+
+
 class GameDayError(Exception):
     """A cause, a check's read or a restore that could not be done; the runner turns it into a finding."""
 

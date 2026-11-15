@@ -7,6 +7,7 @@ from __future__ import annotations
 import io
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 from contextlib import redirect_stdout
@@ -371,6 +372,18 @@ class TheHarness(unittest.TestCase):
         self.assertLess(time.monotonic() - started, 45)
         self.assertIsNone(run.exit_code)
         self.assertIn("Now listening", run.output)
+
+    def test_a_linked_worktree_resolves_to_its_main_checkout(self):
+        with tempfile.TemporaryDirectory() as temp:
+            main = Path(temp) / "admin"
+            linked = main / ".claude" / "worktrees" / "x"
+            git_dir = main / ".git" / "worktrees" / "x"
+            git_dir.mkdir(parents=True)
+            linked.mkdir(parents=True)
+            (git_dir / "commondir").write_text("../..\n", encoding="utf-8")
+            (linked / ".git").write_text(f"gitdir: {git_dir}\n", encoding="utf-8")
+            self.assertEqual(harness.main_checkout(linked), main.resolve())
+            self.assertEqual(harness.main_checkout(main), main)
 
     def test_ports_read_pids_on_both_platforms(self):
         linux = harness.Ports(run=lambda args: done("101\n202\n"), platform="linux")
