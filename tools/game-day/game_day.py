@@ -39,8 +39,8 @@ def quiet_start(scenario: ModuleType, world: harness.World) -> str | None:
     before the cause; a stack already broken would make every scenario after it a finding about the wrong thing."""
     try:
         ok, seen = scenario.settled(world)
-    except harness.GameDayError as error:
-        return f"{scenario.NAME}: could not read the starting state: {error}"
+    except Exception as error:  # noqa: BLE001 - as in run: an unreadable start refuses this scenario, not the run
+        return f"{scenario.NAME}: could not read the starting state: {type(error).__name__}: {error}"
     return None if ok else f"{scenario.NAME}: not starting from a settled state ({seen}); restore it and rerun"
 
 
@@ -59,8 +59,8 @@ def run(scenario: ModuleType, world: harness.World, *, cause: bool = True, resto
             world.say(f"{scenario.NAME}: causing it; the claim: {scenario.CLAIM}")
             scenario.cause(world)
             findings.extend(scenario.check(world))
-    except harness.GameDayError as error:
-        findings.append(f"the cause or the check failed: {error}")
+    except Exception as error:  # noqa: BLE001 - a missing tool or a body without its field is a finding, not the end of `all`
+        findings.append(f"the cause or the check failed: {type(error).__name__}: {error}")
     finally:
         if restore:
             findings.extend(_restore(scenario, world))
