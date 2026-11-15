@@ -94,8 +94,8 @@ def parse(argv: list[str]) -> argparse.Namespace:
     halves.add_argument("--cause", action="store_true", help="cause and check, and leave the failure in place")
     halves.add_argument("--restore", action="store_true", help="only put back what --cause left")
     parser.add_argument("--host", default="http://127.0.0.1:5300", help="the console under test (Admin:Port's default)")
-    parser.add_argument("--compose-file", default=str(harness.REPO.parent / "blueprint-backend" / "deploy" / "compose"
-                                                      / "docker-compose.yml"),
+    backend = harness.main_checkout(harness.REPO).parent / "blueprint-backend"
+    parser.add_argument("--compose-file", default=str(backend / "deploy" / "compose" / "docker-compose.yml"),
                         help="the backend's Compose file, as Admin:BackendDir and Admin:ComposeFile resolve it")
     parser.add_argument("--host-command", default="dotnet run --project src/Admin.Host --no-build --no-launch-profile --",
                         help="how to start a second host, from the repository root, for sibling-dirs")
