@@ -56,15 +56,23 @@ jobs:
       - uses: actions/checkout@v7
 
       # The backend at the commit ci.yml's drift job reads, so the console is
-      # judged against the platform it was last proved to match.
-      - id: pin
-        run: echo "sha=$(tr -d '[:space:]' < .github/drift/backend.sha)" >> "$GITHUB_OUTPUT"
+      # judged against the platform it was last proved to match. The checkout
+      # takes the whole history and the pin is checked out after it, so no
+      # step output reaches a checkout's ref (CodeQL's cache-poisoning rule).
       - uses: actions/checkout@v7
         with:
           repository: alexander-shamray/blueprint-backend
-          ref: ${{ steps.pin.outputs.sha }}
           path: .clones/blueprint-backend
+          fetch-depth: 0
           persist-credentials: false
+      - name: The backend at the pinned commit
+        run: |
+          sha=$(tr -d '[:space:]' < .github/drift/backend.sha)
+          if ! printf '%s' "$sha" | grep -Eqx '[0-9a-f]{40}'; then
+            echo "::error file=.github/drift/backend.sha::not one 40-hex commit id: '$sha'"
+            exit 1
+          fi
+          git -C "$BACKEND" checkout --detach "$sha"
       - uses: actions/checkout@v7
         with:
           repository: alexander-shamray/blueprint-frontend
