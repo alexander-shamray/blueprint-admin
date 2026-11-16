@@ -177,7 +177,7 @@ class Ports:
         return sorted(pid for pid in pids if pid > 0)
 
     def kill(self, pid: int) -> None:
-        if self._windows:
+        if self._platform.startswith("win"):
             done = self._run(["taskkill", "/F", "/PID", str(pid)])
         else:
             done = self._run(["kill", "-KILL", str(pid)])
