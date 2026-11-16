@@ -261,6 +261,15 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
             .GetProperty("status").GetInt32().ShouldBe(204);
     }
 
+    [Theory]
+    [InlineData("release")]
+    [InlineData("reinstate")]
+    public async Task A_reservation_release_or_reinstate_for_an_id_the_fake_never_placed_is_a_404(string action)
+    {
+        (await ProxyAsync(new { method = "POST", url = $"http://localhost:5000/api/v1/inventory/reservations/0199a1b2-0000-7000-8000-0000000000ff/{action}", identity = new { username = "demo" } }))
+            .GetProperty("status").GetInt32().ShouldBe(404);
+    }
+
     [Fact]
     public async Task A_stock_count_written_for_the_recorded_product_reads_back()
     {

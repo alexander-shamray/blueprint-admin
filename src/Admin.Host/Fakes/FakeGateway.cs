@@ -178,7 +178,10 @@ internal static partial class FakeGateway
             ("GET", _, true) when reservation.Groups["action"].Value == "" && reservation.Groups["id"].Value == PlacedOrderId => FakeHttp.Json(HttpStatusCode.OK, Reservation),
             ("GET", _, true) when reservation.Groups["action"].Value == "" && orders.ReservedProduct(reservation.Groups["id"].Value) is { } product =>
                 FakeHttp.Json(HttpStatusCode.OK, Reservation.Replace(PlacedOrderId, reservation.Groups["id"].Value, StringComparison.Ordinal).Replace(StockedProductId, product, StringComparison.Ordinal)),
-            ("POST", _, true) when reservation.Groups["action"].Value != "" => new HttpResponseMessage(HttpStatusCode.NoContent),
+            // A release or reinstate is answered for a reservation the fake holds and changes nothing: the read after it is unmoved.
+            ("POST", _, true) when reservation.Groups["action"].Value != ""
+                && (reservation.Groups["id"].Value == PlacedOrderId || orders.ReservedProduct(reservation.Groups["id"].Value) is not null) =>
+                new HttpResponseMessage(HttpStatusCode.NoContent),
             _ => FakeHttp.Problem(HttpStatusCode.NotFound, "Not Found"),
         };
     }
