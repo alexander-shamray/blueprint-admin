@@ -127,6 +127,63 @@ class TouchSetGrammar(unittest.TestCase):
         text = "```a`b\n" + body("A", "`src/**`")
         self.assertEqual(read_rows(text), (["A"], ["src/**"]))
 
+    def test_a_row_in_a_fence_after_a_container_is_refused(self) -> None:
+        # GitHub ends a fence opened in a list item when the list ends and hides one in an HTML comment, so a
+        # fenced row after a list, block quote or HTML block may be what the page shows as the table. These are
+        # pr-locality.sh's cases, which the helper refuses with the same words.
+        table = "| Class | D |\n| Touch set | `docs/**` |\n"
+        example = "| Class | A |\n| Touch set | `src/**` |\n"
+        bodies = [(name, lead + table + "```\n" + example + "```\n") for name, lead in (
+            ("list item", "- note\n\n  ```\n"),
+            ("numbered item", "1. note\n\n   ```\n"),
+            ("block quote", "> note\n\n```\n"),
+            ("html comment", "<!--\n```\n-->\n"),
+            ("container long before the fence", "* note\n\ntext\n\n```\n"),
+        )]
+        bodies += [(f"row {row!r}", "- note\n\n  ```\n" + row + "\n```\n" + table)
+                   for row in (" | Class | D |", "Class | D |", "\t|Touch set| `docs/**` |")]
+        for name, text in bodies:
+            with self.subTest(name=name), self.assertRaisesRegex(
+                    InputRefused, "^a Class or Touch set row sits in a fenced block after a list, block quote "
+                                  "or HTML block$"):
+                read_rows(text)
+
+    def test_a_fence_after_a_container_that_hides_no_row_is_read(self) -> None:
+        # A dash with no blank after it, or four spaces of indent, starts no list item.
+        table = "| Class | D |\n| Touch set | `docs/**` |\n"
+        example = "| Class | A |\n| Touch set | `src/**` |\n"
+        for name, text in (
+            ("fence holds no row", "- item\n\n```\ncode\n```\n" + table),
+            ("container after the table", table + "\n- item\n\n```\ncode\n```\n"),
+            ("not a list item", "-note\n\n```\n" + example + "```\n" + table),
+            ("indented four", "    - note\n\n```\n" + example + "```\n" + table),
+        ):
+            with self.subTest(name=name):
+                self.assertEqual(read_rows(text), (["D"], ["docs/**"]))
+
+    def test_a_lone_carriage_return_is_refused(self) -> None:
+        # A lone CR ends a line for GitHub and not for pr-locality.sh, so `note` + CR + an opener fences the table
+        # on the page and not in the helper: both refuse it, and CRLF endings are still read.
+        table = "| Class | D |\n| Touch set | `docs/**` |\n"
+        example = "| Class | A |\n| Touch set | `src/**` |\n"
+        for name, text in (
+            ("before an opener", "note\r```\n" + table + "```\n" + example),
+            ("inside a row", "| Class | D |\r| Touch set | `docs/**` |\n"),
+            ("at the end", table + "\r"),
+        ):
+            with self.subTest(name=name), self.assertRaisesRegex(
+                    InputRefused, "^the body carries a carriage return that is not part of a CRLF line ending$"):
+                read_rows(text)
+        crlf = (table + "\n```\n" + example + "```\n").replace("\n", "\r\n")
+        self.assertEqual(read_rows(crlf), (["D"], ["docs/**"]))
+
+    def test_lines_end_on_a_newline_alone_as_the_helper_reads_them(self) -> None:
+        # `str.splitlines` would also end a line on a form feed or a line separator, which neither GitHub nor the
+        # helper does, and so read a row the page shows as the tail of a line of prose.
+        for separator in ("\x0c", "\x1c", " "):
+            with self.subTest(separator=repr(separator)), self.assertRaisesRegex(InputRefused, "no `\\| Class \\|` row"):
+                read_rows("prose" + separator + "| Class | D |\nprose" + separator + "| Touch set | `docs/**` |\n")
+
     def test_a_class_letter_outside_a_to_e_is_refused(self) -> None:
         with self.assertRaisesRegex(InputRefused, "Class row is not a class"):
             read_rows(body("Z", "`docs/**`"))
