@@ -75,7 +75,8 @@ public sealed class McpServer(IAdminHost host)
 
         if (id is null)
         {
-            return null;
+            // No id key is a notification; an id that is null is a request MCP forbids, answered rather than dropped.
+            return request.ContainsKey("id") ? Failure(null, InvalidRequest, "An id is a string or a number.") : null;
         }
 
         try
