@@ -346,6 +346,8 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
     /// A cancel for an order never placed changes nothing and is accepted, as the fake's cancel always answered 204 for
     /// any id. One asked of an order Shipping has already despatched is refused, as the platform refuses it (422
     /// <c>order.already_shipped</c>, run-locally.md "After despatch there is nothing to compensate"), and changes nothing.
+    /// A cancel of a scripted order other than the payment wait above is answered 204 and changes nothing: it still ends as its
+    /// script says, and the read says <c>cancellable=false</c>; the platform's refusal of it is not recorded, so none is invented.
     /// </summary>
     public CancelOutcome Cancel(string orderId)
     {
@@ -356,7 +358,7 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
                 return CancelOutcome.Accepted;
             }
 
-            if (order.CancelAskedAt is null && Moments(order).Dispatched is not null)
+            if (Moments(order) is { Dispatched: not null, Cancelled: null })
             {
                 return CancelOutcome.AlreadyShipped;
             }
