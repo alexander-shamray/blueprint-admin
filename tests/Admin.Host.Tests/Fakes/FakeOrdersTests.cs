@@ -173,6 +173,31 @@ public sealed class FakeOrdersTests
     }
 
     [Fact]
+    public void A_cancel_of_a_carrier_coded_order_the_fake_never_dispatched_is_taken_however_late()
+    {
+        FakeOrders orders = new(time);
+        string id = orders.Place(postalCode: FakeOrders.StrangePostalCode);
+        time.Advance(FakeOrders.Step * 2);
+
+        orders.Cancel(id).ShouldBe(CancelOutcome.Accepted);
+    }
+
+    [Fact]
+    public void A_stock_count_reads_back_for_a_published_product_and_for_the_recorded_one()
+    {
+        FakeOrders orders = new(time);
+        string product = orders.Publish(19.99m);
+
+        orders.OnHandOf(product).ShouldBeNull();
+        orders.Stock(product, 5);
+        orders.OnHandOf(product).ShouldBe(5);
+        orders.OnHandOf(FakeGateway.StockedProductId).ShouldBeNull();
+        orders.Stock(FakeGateway.StockedProductId, 0);
+        orders.OnHandOf(FakeGateway.StockedProductId).ShouldBe(0);
+        orders.OnHandOf("0199a1b2-0000-7000-8000-0000000000ff").ShouldBeNull();
+    }
+
+    [Fact]
     public void An_order_placed_with_inventory_stopped_ends_out_of_stock_only_when_the_sagas_stock_wait_lapses()
     {
         FakeStack stack = new() { InventoryStopped = true, ShortWaits = true };

@@ -262,6 +262,19 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
     }
 
     [Fact]
+    public async Task A_stock_count_written_for_the_recorded_product_reads_back()
+    {
+        const string url = "http://localhost:5000/api/v1/inventory/stock/0199a1b2-0000-7000-8000-00000000000a";
+        (await ProxyAsync(new { method = "PUT", url, body = """{"onHand":0}""", identity = new { username = "demo" } }))
+            .GetProperty("status").GetInt32().ShouldBe(204);
+
+        JsonElement result = await ProxyAsync(new { method = "GET", url, identity = new { username = "demo" } });
+
+        using JsonDocument body = JsonDocument.Parse(result.GetProperty("body").GetString()!);
+        body.RootElement.GetProperty("available").GetInt32().ShouldBe(0);
+    }
+
+    [Fact]
     public async Task The_placed_orders_payment_is_authorised_with_the_simulators_reference()
     {
         JsonElement result = await ProxyAsync(new { method = "GET", url = "http://localhost:5000/api/v1/payments/0199a1b2-0000-7000-8000-000000000002", identity = new { username = "demo" } });
