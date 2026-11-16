@@ -9,7 +9,7 @@ export interface WorkspaceToolsHost {
   currentPage(): Page | null;
   /** The widgets a page shows: its own, or the built-in defaults of a page not yet changed. */
   widgetsOf(page: Page): readonly WidgetInstance[];
-  /** Routes the console to a page; false when it did not navigate. */
+  /** Routes the console to a page; true once it shows, navigated or already open; false when refused. */
   open(page: Page): Promise<boolean>;
   /** Scrolls to and outlines a widget instance, waiting for it to be drawn; false when it never was. */
   highlight(instanceId: string): Promise<boolean>;
