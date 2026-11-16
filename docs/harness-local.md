@@ -116,9 +116,18 @@ stays denied like the rest, so a change to it is the owner's.
 `.harness/config.json` denies them at the root in both spellings and by family
 at any depth, with `MSBuild.rsp`, any `global.json`, `Directory.Packages.*`,
 `*.csproj.user` and any `obj` tree, where a restore that finds nothing changed
-does not rewrite a planted `*.nuget.g.targets`. Not covered: a
-`Directory.Build.props` above the checkout, which the edit guard's
-outside-the-checkout rule judges.
+does not rewrite a planted `*.nuget.g.targets`. Not covered: what sits above
+the checkout (#795). The root holds `Directory.Build.props` but no
+`Directory.Build.targets`, `Directory.Build.rsp` or `Directory.Solution.*`, so
+MSBuild's walk upward for those passes it. NuGet merges a `NuGet.Config` from
+every directory above the root, and takes any `config` key or fallback folder
+the root `nuget.config` leaves unset. The denies are written relative to the
+checkout. The edit guard judges a path outside every checkout only against the
+home names `home_offence` holds. So a file planted in the checkout's parent is
+neither denied nor refused, and the next `host-checks.sh` imports it. An empty
+root file under each MSBuild name would stop the walk; the pin gate admits an
+empty `Directory.Build.rsp` for that. The NuGet half waits on the guard
+(blueprint-harness#596).
 
 **The SPA toolchain is editable, and the granted runners execute it.** This
 repository's `/ship` and `/pr` denied `package.json`, `angular.json`, `tsconfig`,
