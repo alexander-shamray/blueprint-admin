@@ -267,7 +267,10 @@ public sealed partial class WorkstationDoctor(
         if (!Uri.TryCreate(clientUrl, UriKind.Absolute, out Uri? clientUri)
             || (clientUri.Scheme != Uri.UriSchemeHttp && clientUri.Scheme != Uri.UriSchemeHttps))
         {
-            return new(name, DoctorState.Problem, $"Admin:ClientUrl is not an absolute http(s) URL ('{clientUrl}'), so the client's origin cannot be checked against the gateway's list.");
+            return new(
+                name,
+                DoctorState.Problem,
+                $"Admin:ClientUrl is not an absolute http(s) URL ('{clientUrl}'); the client's origin is unchecked.");
         }
 
         string client = clientUri.GetLeftPart(UriPartial.Authority);
