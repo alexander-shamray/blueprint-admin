@@ -67,8 +67,18 @@ export class ApiHistory {
     this.entries.update((all) => [{ ...entry, seq: ++this.seq, at: new Date() }, ...all].slice(0, MAX_HISTORY));
   }
 
+  private claimedRestore = 0;
+
   requestRestore(entry: HistoryEntry): void {
     this.restoreRequest.update((last) => ({ entry, n: (last?.n ?? 0) + 1 }));
+  }
+
+  /** Hands request `n` to the first editor that asks, and to none after it: one restore lands in one editor. */
+  claimRestore(n: number): HistoryEntry | null {
+    const request = this.restoreRequest();
+    if (!request || request.n !== n || n <= this.claimedRestore) return null;
+    this.claimedRestore = n;
+    return request.entry;
   }
 
   /** A short line for one entry: how it ended, what it was, and who sent it. */

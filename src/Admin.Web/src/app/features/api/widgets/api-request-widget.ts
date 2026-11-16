@@ -256,7 +256,8 @@ export class ApiRequestWidget {
       const request = this.apiHistory.restoreRequest();
       if (request && request.n > handled) {
         handled = request.n;
-        untracked(() => this.restore(request.entry));
+        const entry = this.apiHistory.claimRestore(request.n);
+        if (entry) untracked(() => this.restore(entry));
       }
     });
     this.host.operations().subscribe({

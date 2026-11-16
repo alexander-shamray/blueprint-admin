@@ -315,7 +315,8 @@ export class DeadLetterWidget {
       const request = this.feed.openRequest();
       if (request && request.n > handled) {
         handled = request.n;
-        untracked(() => this.open(request.queue));
+        const queue = this.feed.claimOpen(request.n);
+        if (queue !== null) untracked(() => this.open(queue));
       }
     });
   }

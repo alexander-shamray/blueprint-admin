@@ -85,8 +85,18 @@ export class BrokerFeed {
    */
   readonly openRequest = signal<{ queue: string; n: number } | null>(null);
 
+  private claimedOpen = 0;
+
   requestOpen(queue: string): void {
     this.openRequest.update((last) => ({ queue, n: (last?.n ?? 0) + 1 }));
+  }
+
+  /** Hands request `n` to the first workbench that asks, and to none after it: one Open runs in one workbench. */
+  claimOpen(n: number): string | null {
+    const request = this.openRequest();
+    if (!request || request.n !== n || n <= this.claimedOpen) return null;
+    this.claimedOpen = n;
+    return request.queue;
   }
 }
 
