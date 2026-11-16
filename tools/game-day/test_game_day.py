@@ -446,6 +446,15 @@ class TheHarness(unittest.TestCase):
         self.assertEqual((linux.listeners(5173), windows.listeners(1), mac.listeners(1)), ([101, 202], [303], [404]))
         self.assertEqual(seen[0], ["ss", "-Hltnp", "sport = :5173"])
 
+    def test_kill_spells_each_platform_and_raises_on_a_refusal(self):
+        seen = []
+        for platform in ("linux", "win32", "darwin"):
+            harness.Ports(run=lambda args: seen.append(args) or done(), platform=platform).kill(7)
+        self.assertEqual(seen, [["kill", "-KILL", "7"], ["taskkill", "/F", "/PID", "7"], ["kill", "-KILL", "7"]])
+        refused = harness.Ports(run=lambda args: done("", 1, "No such process"), platform="linux")
+        with self.assertRaisesRegex(harness.GameDayError, "could not kill 7: No such process"):
+            refused.kill(7)
+
     def test_a_listener_read_that_fails_says_so_rather_than_reading_empty(self):
         broken = harness.Ports(run=lambda args: done("", 1, "Cannot open netlink socket"), platform="linux")
         nobody = harness.Ports(run=lambda args: done("", 0, ""), platform="linux")
