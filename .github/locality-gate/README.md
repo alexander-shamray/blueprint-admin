@@ -68,16 +68,15 @@ the tree, so it is not judged.
 
 The ignore rules are the checkout's, so a pull request that also un-ignores the
 path passes that check. So the paths `OWNER_ONLY` in `locality_gate.py` names,
-that file and `.mcp.json` (#797), are refused in every class whatever the
-ignore rules say, each for the reason it carries there; the gate's code is
+`.claude/settings.local.json` and `.mcp.json` (#797), are refused in every
+class whatever the ignore rules say, each for the reason it carries there; the gate's code is
 taken from the base commit, so the same pull request cannot lift that.
 `docs/harness-local.md` *Residuals* states what this leaves open.
 
 ## Running it
 
-Stdlib only, on the licence gate's terms. The deciding takes JSON on stdin and
-the fetching is two `gh` calls in the workflow, `deploy/canary/canary.py`'s
-split. A file entry is a plain path or the endpoint's own
+Stdlib only, for the reason *The map* gives. The deciding takes JSON on stdin
+and the fetching is two `gh` calls in the workflow. A file entry is a plain path or the endpoint's own
 `{filename, previous_filename, status}`. `--root` names the checkout whose
 ignore rules judge, the working directory by default.
 
