@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -173,7 +174,7 @@ internal static partial class FakeGateway
         {
             ("PUT", true, _) => Stocked(orders, stock.Groups["id"].Value, request),
             ("GET", true, _) when StockCount(orders, stock.Groups["id"].Value) is { } count =>
-                FakeHttp.Json(HttpStatusCode.OK, Stock.Replace("\"available\":10", $"\"available\":{count}", StringComparison.Ordinal).Replace(StockedProductId, stock.Groups["id"].Value, StringComparison.Ordinal)),
+                FakeHttp.Json(HttpStatusCode.OK, Stock.Replace("\"available\":10", $"\"available\":{count.ToString(CultureInfo.InvariantCulture)}", StringComparison.Ordinal).Replace(StockedProductId, stock.Groups["id"].Value, StringComparison.Ordinal)),
             ("GET", _, true) when reservation.Groups["action"].Value == "" && reservation.Groups["id"].Value == PlacedOrderId => FakeHttp.Json(HttpStatusCode.OK, Reservation),
             ("GET", _, true) when reservation.Groups["action"].Value == "" && orders.ReservedProduct(reservation.Groups["id"].Value) is { } product =>
                 FakeHttp.Json(HttpStatusCode.OK, Reservation.Replace(PlacedOrderId, reservation.Groups["id"].Value, StringComparison.Ordinal).Replace(StockedProductId, product, StringComparison.Ordinal)),
