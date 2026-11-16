@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -156,16 +157,24 @@ class Ports:
 
     def __init__(self, run: Callable[..., subprocess.CompletedProcess] = run_process, platform: str = sys.platform) -> None:
         self._run = run
-        self._windows = platform.startswith("win")
+        self._platform = platform
 
     def listeners(self, port: int) -> list[int]:
-        if self._windows:
+        if self._platform.startswith("win"):
             done = self._run(["powershell", "-NoProfile", "-Command",
                               f"(Get-NetTCPConnection -LocalPort {port} -State Listen -ErrorAction SilentlyContinue)"
                               ".OwningProcess"])
+            return sorted({int(word) for word in done.stdout.split() if word.isdigit() and int(word) > 0})
+        if self._platform.startswith("linux"):
+            # iproute2's ss is on every Linux image; lsof saw nothing on a GitHub runner whose dev server ss lists.
+            done = self._run(["ss", "-Hltnp", f"sport = :{port}"])
+            pids = {int(pid) for pid in re.findall(r"pid=(\d+)", done.stdout)}
         else:
             done = self._run(["lsof", "-t", f"-iTCP:{port}", "-sTCP:LISTEN"])
-        return sorted({int(word) for word in done.stdout.split() if word.isdigit() and int(word) > 0})
+            pids = {int(word) for word in done.stdout.split() if word.isdigit()}
+        if not pids and done.stderr.strip():
+            raise GameDayError(f"could not read the listeners on {port}: {done.stderr.strip()[:200]}")
+        return sorted(pid for pid in pids if pid > 0)
 
     def kill(self, pid: int) -> None:
         if self._windows:

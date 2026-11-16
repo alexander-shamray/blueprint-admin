@@ -435,10 +435,23 @@ class TheHarness(unittest.TestCase):
             self.assertEqual(harness.main_checkout(linked), main.resolve())
             self.assertEqual(harness.main_checkout(main), main)
 
-    def test_ports_read_pids_on_both_platforms(self):
-        linux = harness.Ports(run=lambda args: done("101\n202\n"), platform="linux")
+    def test_ports_read_pids_on_every_platform(self):
+        # ss's line as a GitHub runner prints it for `ng serve` on ::1 and 127.0.0.1.
+        ss = ('LISTEN 0 511 [::1]:5173 [::]:* users:(("node",pid=101,fd=40))\n'
+              'LISTEN 0 511 127.0.0.1:5173 0.0.0.0:* users:(("node",pid=202,fd=41),("node",pid=101,fd=42))\n')
+        seen = []
+        linux = harness.Ports(run=lambda args: seen.append(args) or done(ss), platform="linux")
         windows = harness.Ports(run=lambda args: done("0\r\n303\r\n303\r\n"), platform="win32")
-        self.assertEqual((linux.listeners(1), windows.listeners(1)), ([101, 202], [303]))
+        mac = harness.Ports(run=lambda args: done("404\n"), platform="darwin")
+        self.assertEqual((linux.listeners(5173), windows.listeners(1), mac.listeners(1)), ([101, 202], [303], [404]))
+        self.assertEqual(seen[0], ["ss", "-Hltnp", "sport = :5173"])
+
+    def test_a_listener_read_that_fails_says_so_rather_than_reading_empty(self):
+        broken = harness.Ports(run=lambda args: done("", 1, "Cannot open netlink socket"), platform="linux")
+        nobody = harness.Ports(run=lambda args: done("", 0, ""), platform="linux")
+        with self.assertRaisesRegex(harness.GameDayError, "netlink"):
+            broken.listeners(5173)
+        self.assertEqual(nobody.listeners(5173), [])
 
 
 if __name__ == "__main__":
