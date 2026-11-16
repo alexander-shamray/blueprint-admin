@@ -651,7 +651,7 @@ class OwnerOnly(unittest.TestCase):
 
 
 class IgnoredPaths(unittest.TestCase):
-    """A path the tree ignores is refused when a diff leaves it there, judged by git in a scratch repository (#799)."""
+    """A path the tree ignores is refused when a diff leaves it there, judged by git in a scratch repository."""
 
     def setUp(self) -> None:
         scratch = tempfile.TemporaryDirectory()
