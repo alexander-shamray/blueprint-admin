@@ -126,6 +126,7 @@ public sealed class McpServerTests
     [Theory]
     [InlineData("not json", -32700)]
     [InlineData("[1,2]", -32600)]
+    [InlineData("""{"jsonrpc":"2.0","id":null,"method":"ping"}""", -32600)]
     [InlineData("""{"jsonrpc":"2.0","id":1,"method":"prompts/list"}""", -32601)]
     public async Task A_message_that_is_not_a_request_this_server_has_is_refused_with_the_JSON_RPC_code(string request, int code)
     {
