@@ -13,7 +13,7 @@ import sys
 import unittest
 from pathlib import Path
 
-from review_helpers import GIT, temp_root
+from review_helpers import sign_nothing, GIT, temp_root
 
 SCRIPTS = Path(__file__).resolve().parent
 ROOT = SCRIPTS.parent.parent
@@ -46,6 +46,7 @@ LEGS = loaded()
 
 class PullRequestTests(unittest.TestCase):
     def setUp(self) -> None:
+        sign_nothing(self)
         self.assertIsNotNone(GIT, "git is not on PATH, so no merge commit can be built")
         self.root = Path(temp_root(self))
         self.git("init", "-q", "-b", "main")

@@ -316,6 +316,32 @@ class TheHelperRefusesBeforeItRewrites(unittest.TestCase):
         self.assertEqual(6, result.returncode, result.stderr)
         self.assertIn("no refs/remotes/origin/main", result.stderr)
 
+    def narrow_and_push(self, ref, change):
+        # Only the other ref is fetched by default: a bare `git fetch origin` succeeds and leaves `ref`'s stale.
+        other = "feat/x" if ref == "main" else "main"
+        self.at(f"git config remote.origin.fetch +refs/heads/{other}:refs/remotes/origin/{other}")
+        pushed = run_bash('cd "$R" && git clone -q remote.git third && cd third '
+                          '&& git config user.email t@e.invalid && git config user.name T '
+                          '&& git checkout -q "$F" && echo "$C" > "$C.txt" && git add -A '
+                          '&& git commit -qm "$C" && git push -q origin "$F"', R=self.root, F=ref, C=change)
+        self.assertEqual(0, pushed.returncode, pushed.stderr)
+        return run_bash('cd "$R/remote.git" && git rev-parse "refs/heads/$F"', R=self.root, F=ref).stdout.strip()
+
+    def test_a_narrowed_fetch_refspec_still_replays_onto_the_fresh_main(self):
+        main = self.narrow_and_push("main", "again")
+        result = self.helper("feat/x")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(0, self.at(f"git merge-base --is-ancestor {main} HEAD").returncode,
+                         "the replay's base is a main origin no longer holds")
+
+    def test_a_narrowed_fetch_refspec_still_sees_the_remote_branchs_new_commits(self):
+        before = self.head()
+        self.narrow_and_push("feat/x", "theirs")
+        result = self.helper("feat/x")
+        self.assertEqual(7, result.returncode, result.stderr)
+        self.assertIn("carries commits this checkout did not start from", result.stderr)
+        self.assertEqual(before, self.head(), "the branch was rewritten before the refusal")
+
     def test_commits_only_the_remote_has_stop_it(self):
         # A lease is satisfied by a commit this checkout has fetched, so it
         # would not stop a push that knowingly discards another session's work.

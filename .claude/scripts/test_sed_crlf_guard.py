@@ -212,7 +212,7 @@ class ARewriteOfATrackedCrlfFileIsRefused(ACheckout):
                 self.assertRefused(command, ".txt")
 
     def test_a_shell_option_s_value_is_not_its_operand(self):
-        # Issue 528: only `-o` and `+o` took a value, so `-O extglob` read as a script and the line went unjudged.
+        # `-O` and `+O` take a word as `-o` and `+o` do, so the `-c` line or heredoc after it is still judged.
         for command in (
             "bash -O extglob -c \"sed -i 's/one/uno/' crlf.txt\"",
             "bash +O extglob -c \"sed -i 's/one/uno/' crlf.txt\"",
@@ -237,6 +237,33 @@ class ARewriteOfATrackedCrlfFileIsRefused(ACheckout):
     def test_a_cd_moves_the_files_after_it(self):
         self.assertRefused("cd sub && sed -i 's/one/uno/' inner.txt", "inner.txt")
         self.assertRefused("(cd sub && sed -i 's/one/uno/' inner.txt)", "inner.txt")
+
+    def test_a_pushd_moves_the_files_after_it_and_a_popd_moves_them_back(self):
+        # Only `cd` was once followed, so after `pushd sub` the operand was looked up where the line started.
+        self.assertRefused("pushd sub && sed -i 's/one/uno/' inner.txt", "inner.txt")
+        self.assertRefused("pushd sub && popd && sed -i 's/one/uno/' crlf.txt", "crlf.txt")
+        self.assertRefused("pushd sub; pushd ..; popd; sed -i 's/one/uno/' inner.txt", "inner.txt")
+        # A rotation is not followed, and a `popd` past what the line pushed reads a stack it did not build: unplaceable.
+        self.put(os.path.join("sub", "crlf.txt"), b"one\r\n")
+        self.git("-c", "core.autocrlf=false", "add", "sub/crlf.txt")
+        self.assertAdmitted("pushd sub && pushd +1 && sed -i 's/one/uno/' crlf.txt")
+        self.assertAdmitted("popd; sed -i 's/one/uno/' crlf.txt")
+        # `pushd -n sub` puts sub on the stack without moving, so the `popd` after it is unplaceable too.
+        self.assertAdmitted("pushd -n sub && popd && sed -i 's/one/uno/' crlf.txt")
+        # `popd +1` drops sub from the stack, so the bare `popd` after it lands here, not in sub: unplaceable too.
+        self.assertAdmitted("pushd sub; pushd ..; popd +1; popd; sed -i 's/one/uno/' crlf.txt")
+
+    def test_a_cd_or_pushd_to_a_missing_directory_is_unplaceable(self):
+        # Bash refuses a directory that is not there and stays put, and a failed `pushd` pushes nothing, so after `;`
+        # these lines run their `sed` in the line's own directory, where no inner.txt is. Followed as moves, the `pushd`
+        # line was placed in sub and refused everywhere, the `cd` line only on Windows, which resolves `nowhere/..`
+        # without `nowhere` existing.
+        for command in (
+            "cd sub; cd nowhere; cd ..; sed -i 's/one/uno/' inner.txt",
+            "pushd sub; pushd nowhere; popd; sed -i 's/one/uno/' inner.txt",
+        ):
+            with self.subTest(command=command):
+                self.assertAdmitted(command)
 
     def test_a_cd_in_a_subshell_or_a_pipeline_stays_there(self):
         # Review R4: bash runs a `( … )` group and each pipeline stage in a subshell, so the `cd` is gone after it.

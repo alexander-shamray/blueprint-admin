@@ -53,6 +53,14 @@ class Judgement(unittest.TestCase):
     def test_a_wrong_trailer_beside_the_right_one_fails(self) -> None:
         self.assertEqual(len(check(7, [commit(trailers=(("PR", "#7"), ("PR", "#8")))])), 1)
 
+    def test_the_right_trailer_twice_fails(self) -> None:
+        # git-revert-pr.sh and git-trailer-pr.sh compare every parsed PR: line, joined, with one, so a doubled
+        # trailer is left out of a revert of this pull request; git appends one on its own when another
+        # trailer sits between the two.
+        problems = check(7, [commit(trailers=(("PR", "#7"), ("Co-Authored-By", "Claude"), ("PR", "#7")))])
+        self.assertEqual(len(problems), 1)
+        self.assertIn("twice", problems[0])
+
     def test_a_trailer_of_another_key_is_not_the_trailer(self) -> None:
         self.assertEqual(len(check(7, [commit(trailers=(("Reverts", "#7"),))])), 1)
 

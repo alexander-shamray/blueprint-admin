@@ -13,6 +13,7 @@ import unittest
 from pathlib import Path
 
 from review_helpers import (
+    sign_nothing,
     SCRIPTS,
     BASH,
     COMMANDS,
@@ -33,6 +34,7 @@ def git(repo, *args):
 class PrCreateHelper(unittest.TestCase):
 
     def setUp(self):
+        sign_nothing(self)
         holder = tempfile.TemporaryDirectory(prefix="pr-create-")
         self.addCleanup(holder.cleanup)
         self.dir = Path(holder.name)

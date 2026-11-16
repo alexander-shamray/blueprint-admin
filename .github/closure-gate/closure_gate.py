@@ -350,14 +350,21 @@ def main(argv: list[str]) -> int:
     parser.add_argument(
         "payload",
         nargs="?",
-        type=argparse.FileType(encoding="utf-8"),
-        default=sys.stdin,
+        type=argparse.FileType("rb"),
+        default=None,
         help="`gh pr view --json ...` output; stdin by default",
     )
     args = parser.parse_args(argv[1:])
 
+    # Bytes, decoded here: argparse never passes a default through `type`, so
+    # stdin would otherwise be read in the locale's encoding, which is not
+    # `gh`'s UTF-8 on Windows.
+    source = args.payload if args.payload is not None else sys.stdin.buffer
     try:
-        payload = json.load(args.payload)
+        payload = json.loads(source.read().decode("utf-8"))
+    except UnicodeDecodeError as error:
+        print(f"closure-gate: the input is not UTF-8: {error}", file=sys.stderr)
+        return 2
     except json.JSONDecodeError as error:
         print(f"closure-gate: the input is not JSON: {error}", file=sys.stderr)
         return 2

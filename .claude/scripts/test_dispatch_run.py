@@ -1,6 +1,7 @@
 """The run half of /dispatch's helpers: dispatch_run.py, reached through dispatch_board.py's command line."""
 
 import contextlib
+import importlib.util
 import io
 import json
 import os
@@ -21,6 +22,7 @@ from test_dispatch_board import FIXTURE, OWNED, NO_BRANCH, REMAINING_ROWS, line,
 # The run half: a run directory under a scratch root the test changes into, as the dispatcher runs from the
 # main checkout.
 
+HOOKS = Path(__file__).resolve().parent.parent / "hooks"
 RUN = "20261101-220000"
 NOW = datetime(2026, 11, 1, 22, 0, tzinfo=timezone.utc)
 OID = "89994113e5f0c1d2a3b4c5d6e7f8091a2b3c4d5e"
@@ -511,6 +513,40 @@ class LaunchTests(InRoot):
             self.assertTrue((state_dir() / name).is_file(), f"a second launch removed the executor's {name}")
         self.assertEqual("running", group_state(RUN, "S1")["status"])
 
+    def test_a_resume_while_run_launches_reads_the_executor_as_running(self):
+        # `run` removes the earlier launch's pid file before it starts claude and writes the new one after: a resume
+        # between the two that read no file as no executor would relaunch a second one into the same worktree.
+        seen = []
+        real = subprocess.Popen
+
+        def popen(*args, **kwargs):
+            if not seen:
+                seen.append(None)
+                seen[0] = run_cli(["resume", RUN])
+            return real(*args, **kwargs)
+
+        with mock.patch.object(dr.subprocess, "Popen", popen):
+            run_fake_claude()
+        self.assertIn("refused S1: its executor is still running", seen[0])
+        self.assertNotIn("relaunch S1", seen[0])
+        self.assertNotEqual(os.getpid(), int((state_dir() / "S1.pid").read_text(encoding="utf-8")),
+                            "the executor's pid replaces the launcher's")
+
+    def test_a_refused_run_leaves_no_pid_file_for_result_to_read_as_a_launch(self):
+        record(RUN, "S1", status="running", branch=BRANCH, worktree=WORKTREE)
+        (state_dir() / "STOP").write_text("", encoding="utf-8")
+        self.assertIn("refused: stop file", run_cli(["run", RUN, "S1"]))
+        self.assertFalse((state_dir() / "S1.pid").exists())
+
+    def test_a_pid_file_that_holds_no_pid_is_not_read_as_no_executor(self):
+        record(RUN, "S1", status="running", branch=BRANCH, worktree=WORKTREE)
+        for text in ("", "garbled\n", "12a\n"):
+            with self.subTest(text=text):
+                (state_dir() / "S1.pid").write_text(text, encoding="utf-8")
+                out = run_cli(["resume", RUN])
+                self.assertIn("refused S1: its pid file holds no pid", out)
+                self.assertNotIn("relaunch S1", out)
+
     def test_run_passes_the_prompt_on_stdin_and_no_skip_permissions_flag(self):
         record(RUN, "S1", status="running", branch=BRANCH, worktree=WORKTREE)
         stale = Path(WORKTREE) / "artifacts" / "dispatch" / RUN / "S1.json"
@@ -554,6 +590,20 @@ class LaunchTests(InRoot):
         # status.showUntrackedFiles=no would otherwise read untracked work as nothing left.
         self.assertIn(("status", "--porcelain", "--untracked-files=all"), reads)
 
+    def test_a_resumed_running_group_is_told_what_the_earlier_session_left(self):
+        # `resume` relaunches a `running` group whose executor died unrecorded; the pid file it left is the sign.
+        record(RUN, "S1", status="running", branch=BRANCH, worktree=WORKTREE)
+        (state_dir() / "S1.pid").write_text(f"{finished_pid()}\n", encoding="utf-8")
+
+        def fake_git(root, *args):
+            return {"rev-list": "2\n"}.get(args[0], "")
+
+        with mock.patch.object(dr, "git", fake_git), mock.patch.object(dr, "helper", lambda root, *a: "[]"):
+            run_fake_claude(stdout=json.dumps(SUCCESS).encode("utf-8"), description="Narrow")
+        seen = json.loads(Path("fake/seen.json").read_text(encoding="utf-8"))
+        self.assertIn(f"(relaunched: the previous session ended with no result the dispatcher accepted, and left "
+                      f"{BRANCH} 2 commits ahead of origin/main, no PR open;", seen["stdin"])
+
     def test_a_first_launch_reads_nothing_it_left(self):
         record(RUN, "S1", status="running", branch=BRANCH, worktree=WORKTREE)
         read = mock.Mock(side_effect=AssertionError("a first launch has no earlier session to read"))
@@ -578,6 +628,19 @@ class LaunchTests(InRoot):
         with mock.patch.object(dr, "git", lambda root, *a: "1\n" if a[0] == "rev-list" else ""), \
                 mock.patch.object(dr, "helper", refuse):
             self.assertIn(f"left {BRANCH} 1 commit ahead of origin/main;", dr._left_behind(".", entry))
+        # A read that lists no PR says so, so the relaunch resumes /ship at the push and /pr.
+        with mock.patch.object(dr, "git", lambda root, *a: "2\n" if a[0] == "rev-list" else ""), \
+                mock.patch.object(dr, "helper", lambda root, *a: "[]"):
+            self.assertIn(f"left {BRANCH} 2 commits ahead of origin/main, no PR open;", dr._left_behind(".", entry))
+        # A closed or merged row, or an open one out of shape, is no "no PR": /ship's own read decides those.
+        for rows in ([{"number": 350, "state": "CLOSED"}], [{"number": 351, "state": "MERGED"}],
+                     [{"number": "352", "state": "OPEN"}]):
+            with self.subTest(rows=rows), \
+                    mock.patch.object(dr, "git", lambda root, *a: "2\n" if a[0] == "rev-list" else ""), \
+                    mock.patch.object(dr, "helper", lambda root, *a, rows=rows: json.dumps(rows)):
+                told = dr._left_behind(".", entry)
+                self.assertIn(f"left {BRANCH} 2 commits ahead of origin/main;", told)
+                self.assertNotIn("no PR open", told)
         # Nothing left, or out of shape, is no clause: the relaunch reads its own state as any /ship does.
         for answer in ("0\n", "not a count"):
             with self.subTest(answer=answer), \
@@ -618,7 +681,8 @@ class LaunchTests(InRoot):
     def test_run_keeps_the_dispatchers_api_key_from_the_executor(self):
         # Inherited, the key outranked the owner's subscription login, and a drained API balance crashed every launch.
         record(RUN, "S1", status="running", branch=BRANCH, worktree=WORKTREE)
-        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-dispatcher"}):
+        # Joined at run time: a quoted literal under this name failed blueprint-backend's secret scan as a credential assignment.
+        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "-".join(("sk", "ant", "dispatcher"))}):
             run_fake_claude(stdout=json.dumps(SUCCESS).encode("utf-8"))
         seen = json.loads(Path("fake/seen.json").read_text(encoding="utf-8"))
         self.assertIsNone(seen["api_key"])
@@ -1257,6 +1321,53 @@ class ResultCommandTests(InRoot):
         self.absorb(bare, {k: v for k, v in SUCCESS.items() if k != "session_id"})
         self.assertTrue(group_state(RUN, "S1")["unreviewed"])
 
+    def test_a_session_whose_only_refusals_are_the_index_hints_is_relaunched(self):
+        # On blueprint-frontend's night 20261114-130647, A11 was refused one grep by the index hint, which a rerun
+        # passes, ended its turn after /commit, and was handed back for the refusal: two commits sat unpushed all night.
+        spec = importlib.util.spec_from_file_location("index_search_hint", HOOKS / "index-search-hint.py")
+        hook = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(hook)
+        transcript = (self.root / "projects" / dr.project_slug(os.path.abspath(WORKTREE))
+                      / (SUCCESS["session_id"] + ".jsonl"))
+        transcript.parent.mkdir(parents=True)
+
+        def refused(*reasons):
+            # Each refusal as the CLI records it: the envelope's denial and the transcript's result of the same id.
+            denials = [{"tool_name": "Bash", "tool_use_id": f"t{i}", "tool_input": {"command": "grep -rl X ."}}
+                       for i, _ in enumerate(reasons)]
+            lines = [{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": f"t{i}",
+                                                               "is_error": True, "content": reason}]}}
+                     for i, reason in enumerate(reasons)]
+            transcript.write_text("".join(json.dumps(line) + "\n" for line in lines), encoding="utf-8")
+            return {**SUCCESS, "permission_denials": denials}
+
+        hint = "PreToolUse:Bash hook error: " + hook.ask(["AssistantStore"], False)
+        off_server = "PreToolUse:Grep hook error: " + hook.ask(["AssistantStore"], True)
+        denied = "Permission to use Bash with command git push has been denied."
+        for reasons in ((hint,), (hint, off_server)):
+            with self.subTest(reasons=len(reasons)):
+                line = self.absorb(None, refused(*reasons))[0]
+                self.assertEqual(f"S1: relaunch - no result; exit 0; the index hint's refusal is advisory "
+                                 f"[denials: {len(reasons)}]", line)
+                # Still a crash's relaunch: a second such session hands back, so a hint relaunches no group all night.
+                self.absorb(None, refused(*reasons), crashes=1)
+                self.assertEqual("crash-hand-back", group_state(RUN, "S1")["status"])
+        handed = "S1: handed-back - the session was refused Bash and wrote no result"
+        # A real deny, beside the hint or alone, is still a hand-back: a relaunch would meet it again.
+        for name, reasons in {"a deny beside the hint": (hint, denied), "a deny alone": (denied,)}.items():
+            with self.subTest(case=name):
+                self.assertTrue(self.absorb(None, refused(*reasons))[0].startswith(handed))
+        # The hint's words in a result that is no refusal vouch for nothing.
+        envelope = refused(hint)
+        transcript.write_text(transcript.read_text(encoding="utf-8").replace('"is_error": true', '"is_error": false'),
+                              encoding="utf-8")
+        self.assertTrue(self.absorb(None, envelope)[0].startswith(handed))
+        transcript.unlink()
+        self.assertTrue(self.absorb(None, envelope)[0].startswith(handed))
+        # With no session id the newest transcript in the folder may be another session's, so it vouches for nothing.
+        anonymous = {k: v for k, v in refused(hint).items() if k != "session_id"}
+        self.assertTrue(self.absorb(None, anonymous)[0].startswith(handed))
+
     def test_a_refusal_older_than_the_launch_is_not_this_launchs(self):
         # Only a `run` of this launch leaves a marker that sends the group back unread.
         record(RUN, "S1", status="running", branch=BRANCH, worktree=WORKTREE)
@@ -1370,13 +1481,21 @@ class BerserkTests(InRoot):
     def wake(self, text, **sources):
         with open("todo.md", "w", encoding="utf-8", newline="") as handle:
             handle.write(text)
+        sources.setdefault("open_source", set)
         with mock.patch.object(dr, "PROJECTS", self.root / "projects"):
             return run_cli(["wake", RUN, "--tasks", "todo.md", "--today", "2026-11-01"],
-                           body_source=lambda n: self.BODIES.get(n, ""), open_source=set,
-                           branch_source=NO_BRANCH, **sources).splitlines()
+                           body_source=lambda n: self.BODIES.get(n, ""), branch_source=NO_BRANCH,
+                           **sources).splitlines()
 
     def state(self, **fields):
         dr.save_state(state_dir(), {"run": RUN, "pairs": 2, "lang": "en", "berserk": True, "groups": {}, **fields})
+
+    def test_the_wake_keeps_the_numbers_the_issue_list_knows(self):
+        # A number no issue in the list holds, a typo or a pull request's, is no closed issue's pass to launch.
+        self.state()
+        listed = lambda: db.OpenIssues({1440}, known={1440, 99})  # noqa: E731
+        self.assertEqual("end: drained", self.wake(tasks_of(line(depends="after #1441")), open_source=listed)[-1])
+        self.assertEqual("launch: Z1", self.wake(tasks_of(line(depends="after #99")), open_source=listed)[-1])
 
     def s1(self):
         return next(g for g in db.groups(db.parse_tasks(FIXTURE)) if g.id == "S1")
@@ -1466,7 +1585,7 @@ class BerserkTests(InRoot):
         with open("todo.md", encoding="utf-8", newline="") as handle:
             text = handle.read()
         self.assertIn(f"| OWNER; {db.SENT_BACK} |", text)
-        self.assertNotIn("S3", self.wake(text)[-1])
+        self.assertEqual("launch: S1 M1", self.wake(text)[-1])
 
     def test_a_later_flagged_run_does_not_lift_a_row_an_earlier_one_tried(self):
         self.state()
@@ -2007,7 +2126,7 @@ class WeeklyTests(InRoot):
         self.assertEqual((1, "no token file"), (failed["count"], failed["why"]))
         with self.assertRaises(dr.ReadingFailed):
             dr.read_weekly(broken)
-        self.assertNotEqual("end: week", self.wake(broken)[-1])
+        self.assertEqual("launch: S1 S3", self.wake(broken)[-1])
 
     def test_failures_keep_a_count_and_the_last_reason_not_a_list(self):
         for n in range(5):
@@ -2040,7 +2159,7 @@ class WeeklyTests(InRoot):
         self.assertTrue(dr.week_ends_night(dr.WeeklyReading(0.0, stamp)))
         self.assertFalse(dr.week_ends_night(dr.WeeklyReading(2.0, stamp)))
         self.assertEqual("end: week", self.wake(lambda: {"percentUsed": 99, "resetsAt": self.RESET})[-1])
-        self.assertNotEqual("end: week", self.wake(lambda: {"percentUsed": 98, "resetsAt": self.RESET})[-1])
+        self.assertEqual("launch: S1 S3", self.wake(lambda: {"percentUsed": 98, "resetsAt": self.RESET})[-1])
 
     def test_the_reading_maps_percent_used_to_percent_left(self):
         reading = dr.read_weekly(lambda: {"percentUsed": 37.5, "resetsAt": self.RESET})

@@ -33,38 +33,40 @@ def setUpModule():
     links, and the junction fallback would otherwise go unexercised.
     """
     global SYMLINKS, JUNCTIONS
-    # Removed at the end of this function, so a run leaves no tree behind.
+    # Removed however this function ends, so a run leaves no tree behind.
     probe = tempfile.mkdtemp()
-    target = os.path.join(probe, "target")
-    os.mkdir(target)
     try:
-        os.symlink(target, os.path.join(probe, "link"),
-                   target_is_directory=True)
-        SYMLINKS = True
-    except (OSError, NotImplementedError, AttributeError):
-        SYMLINKS = False
-    try:
-        from _winapi import CreateJunction
-    except ImportError:
-        CreateJunction = None
-    if CreateJunction is not None:
-        CreateJunction(target, os.path.join(probe, "junction"))
-        JUNCTIONS = CreateJunction
+        target = os.path.join(probe, "target")
+        os.mkdir(target)
+        try:
+            os.symlink(target, os.path.join(probe, "link"),
+                       target_is_directory=True)
+            SYMLINKS = True
+        except (OSError, NotImplementedError, AttributeError):
+            SYMLINKS = False
+        try:
+            from _winapi import CreateJunction
+        except ImportError:
+            CreateJunction = None
+        if CreateJunction is not None:
+            CreateJunction(target, os.path.join(probe, "junction"))
+            JUNCTIONS = CreateJunction
 
-    if not SYMLINKS and JUNCTIONS is None:
-        raise AssertionError(
-            "this platform grants neither a symbolic link nor a junction, so "
-            "the guard's whole subject is unreachable here and a green run "
-            "would mean nothing")
+        if not SYMLINKS and JUNCTIONS is None:
+            raise AssertionError(
+                "this platform grants neither a symbolic link nor a junction, so "
+                "the guard's whole subject is unreachable here and a green run "
+                "would mean nothing")
 
-    if not HOOK.exists():
-        raise AssertionError(f"the hook is missing: {HOOK}")
+        if not HOOK.exists():
+            raise AssertionError(f"the hook is missing: {HOOK}")
 
-    # Say what was exercised, because a green run does not: `unittest` names a
-    # subtest only when it fails, so a job that never reached the junction
-    # fallback reads the same as one that ran both.
-    print(f"link primitives exercised: {', '.join(linkers())}", file=sys.stderr)
-    shutil.rmtree(probe, ignore_errors=True)
+        # Say what was exercised, because a green run does not: `unittest` names a
+        # subtest only when it fails, so a job that never reached the junction
+        # fallback reads the same as one that ran both.
+        print(f"link primitives exercised: {', '.join(linkers())}", file=sys.stderr)
+    finally:
+        shutil.rmtree(probe, ignore_errors=True)
 
 
 def linkers():
@@ -140,7 +142,7 @@ class GuardCase(unittest.TestCase):
         return linkpath
 
     def judge(self, file_path, tool="Edit", cwd=None, key="file_path",
-              project=None, process_cwd=None, hook=HOOK, env=None):
+              project=None, process_cwd=None, hook=HOOK, env=None, extra=None):
         """The hook's verdict on one call: the reason, or `None` for allowed.
 
         `cwd` is the event's, for a relative path; `process_cwd` the hook
@@ -150,7 +152,7 @@ class GuardCase(unittest.TestCase):
             "hook_event_name": "PreToolUse",
             "cwd": self.root if cwd is None else cwd,
             "tool_name": tool,
-            "tool_input": {} if file_path is None else {key: file_path},
+            "tool_input": ({} if file_path is None else {key: file_path}) | (extra or {}),
         }
         result = subprocess.run(
             [sys.executable, str(hook)],
@@ -385,6 +387,15 @@ class ALinkIsNotTheFileItIsSpelledAs(GuardCase):
             with self.subTest(link=linker):
                 self.assertRefused(self.link_to("book", target, linker),
                                    tool="NotebookEdit", key="notebook_path")
+
+    def test_a_harmless_file_path_beside_the_notebook_path_excuses_nothing(self):
+        # Every key a call carries is judged: the first one read is not the one the tool writes through.
+        target = os.path.join(self.root, ".claude", "scripts", "helper.sh")
+        harmless = {"file_path": os.path.join(self.root, "docs", "chapter.md")}
+        for linker in linkers():
+            with self.subTest(link=linker):
+                self.assertRefused(self.link_to("book2", target, linker),
+                                   tool="NotebookEdit", key="notebook_path", extra=harmless)
 
 
 class TheOrdinaryWriteIsNotDisturbed(GuardCase):
@@ -634,6 +645,22 @@ class TheOrdinaryWriteIsNotDisturbed(GuardCase):
                 else:
                     self.assertAdmitted(plain)
                     self.assertAdmitted(through)
+
+    def test_a_differently_cased_link_to_the_checkout_is_judged_from_its_root(self):
+        # An anchor spelled through a link has a real root elsewhere, and a
+        # relative part taken by a comparison that does not fold climbs out of
+        # the spelled root to re-enter it, so the expected path lands beside
+        # the real root and an ordinary write reads as resolving elsewhere.
+        for linker in linkers():
+            with self.subTest(link=linker):
+                alias = os.path.join(self.outside, f"Alias-{linker}")
+                if linker == "symlink":
+                    os.symlink(self.root, alias, target_is_directory=True)
+                else:
+                    JUNCTIONS(self.root, alias)
+                other_case = os.path.join(
+                    self.outside, f"aLIAS-{linker}", "docs", "chapter.md")
+                self.assertAdmitted(other_case, project=alias)
 
     def test_the_case_of_a_windows_spelling_is_not_a_difference(self):
         # Windows' `realpath` answers with the on-disk case, so `DOCS` comes
