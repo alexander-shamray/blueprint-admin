@@ -1,9 +1,8 @@
 import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { HostClient } from '../../core/host/host-client';
-import { OutputLine } from '../../core/host/host-types';
 import { SseClient } from '../../core/host/sse-client';
-import { composeProgress } from '../../shared/output-pane/compose-progress';
+import { ComposeProgress, ComposeTracker } from '../../shared/output-pane/compose-progress';
 import { PolledFeed, TabVisibility } from '../../workspace/polled-feed';
 import { RunningWork } from '../../workspace/running-work';
 
@@ -48,7 +47,8 @@ export interface ComposeJob {
 export class ComposeRun {
   private readonly sse = inject(SseClient);
   private subscription?: Subscription;
-  private readonly lines = signal<OutputLine[]>([]);
+  private tracker = new ComposeTracker();
+  private readonly snapshot = signal<ComposeProgress>(this.tracker.snapshot());
 
   readonly job = signal<ComposeJob | null>(null);
   readonly running = computed(() => {
@@ -56,7 +56,7 @@ export class ComposeRun {
     return job !== null && job.exitCode === null;
   });
   /** Each container at the last verb Compose printed for it. */
-  readonly progress = computed(() => (this.job() ? composeProgress(this.lines()) : null));
+  readonly progress = computed(() => (this.job() ? this.snapshot() : null));
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.subscription?.unsubscribe());
@@ -70,12 +70,15 @@ export class ComposeRun {
 
   started(id: string, label: string): void {
     this.subscription?.unsubscribe();
-    this.lines.set([]);
+    this.tracker = new ComposeTracker();
+    this.snapshot.set(this.tracker.snapshot());
     this.job.set({ id, label, startedAt: Date.now(), endedAt: null, exitCode: null });
     this.subscription = this.sse.follow(id).subscribe({
       next: (event) => {
         if (event.kind === 'line') {
-          this.lines.update((all) => [...all, event.line]);
+          // Read once, not with the lines before it: an Up that pulls writes thousands.
+          this.tracker.add(event.line);
+          this.snapshot.set(this.tracker.snapshot());
         } else if (event.kind === 'exited') {
           this.job.update((job) => (job?.id === id ? { ...job, exitCode: event.exitCode, endedAt: Date.now() } : job));
         }
