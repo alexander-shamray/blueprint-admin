@@ -166,7 +166,7 @@ class Ports:
                               ".OwningProcess"])
             return sorted({int(word) for word in done.stdout.split() if word.isdigit() and int(word) > 0})
         if self._platform.startswith("linux"):
-            # iproute2's ss is on every Linux image; lsof saw nothing on a GitHub runner whose dev server ss lists.
+            # ss, not lsof: on ubuntu-latest ss names the pid of a listener that `lsof -t` misses.
             done = self._run(["ss", "-Hltnp", f"sport = :{port}"])
             pids = {int(pid) for pid in re.findall(r"pid=(\d+)", done.stdout)}
         else:
