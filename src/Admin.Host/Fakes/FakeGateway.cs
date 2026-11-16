@@ -160,8 +160,8 @@ internal static partial class FakeGateway
 
     /// <summary>
     /// Inventory behind its route. A write answers 204 for any id, as the live PUT did although the document says
-    /// 200: both end in the same ToHttpResult. A read answers the count the write set, and the 404 the live
-    /// service gave for an id with none.
+    /// 200: both end in the same ToHttpResult. A read answers the count the write set for a product this
+    /// fake published and for the recorded one, and the 404 the live service gave for any other id.
     /// </summary>
     private static HttpResponseMessage Inventory(FakeOrders orders, HttpRequestMessage request, string path)
     {
