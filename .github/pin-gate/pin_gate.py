@@ -295,7 +295,7 @@ def check_other(path: str, data: bytes | str, known: frozenset[str] | None = Non
     NuGet lock file."""
     base = PurePosixPath(path).name.lower()
     # MSBuild reads the nearest Directory.Build.rsp upward from the build, so an empty one at the root
-    # stops the walk before it reaches a file planted above the checkout (#795), and hands MSBuild nothing.
+    # stops the walk before it reaches a file planted above the checkout, and hands MSBuild nothing.
     if path == ROOT_RESPONSE_FILE and _hands_nothing(data):
         return []
     if base.endswith(".rsp"):
@@ -331,8 +331,8 @@ def check_other(path: str, data: bytes | str, known: frozenset[str] | None = Non
 
 
 def _hands_nothing(data: bytes | str) -> bool:
-    """Whether a response file is blank lines and `#` comments only. Printable ASCII alone, split on `\\n`
-    and opening `#` in its first column, so no character MSBuild and Python read differently decides it."""
+    """Whether a response file is blank lines and `#` comments only. Printable ASCII alone, split where
+    ReadLine splits, and `#` in the first column, so no character MSBuild and Python read differently decides it."""
     if isinstance(data, bytes):
         try:
             data = data.decode("ascii")
@@ -340,7 +340,7 @@ def _hands_nothing(data: bytes | str) -> bool:
             return False
     if any(not (" " <= c <= "~" or c in "\t\r\n") for c in data):
         return False
-    return all(not line.strip(" \t\r") or line.startswith("#") for line in data.split("\n"))
+    return all(not line.strip(" \t") or line.startswith("#") for line in re.split(r"\r\n|\r|\n", data))
 
 
 def _is_other(path: str) -> bool:

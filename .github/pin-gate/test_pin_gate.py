@@ -327,14 +327,15 @@ class OtherRestoreInputs(unittest.TestCase):
                 self.assertTrue(check_other(path, "-p:RestoreSources=https://x"))
 
     def test_only_an_empty_response_file_at_the_root_passes(self) -> None:
-        # #795: it stops MSBuild's upward search at the checkout, and hands MSBuild nothing.
+        # It stops MSBuild's upward search at the checkout, and hands MSBuild nothing.
         for data in ("", "\n", "# Stops the walk upward.\n", b"# bytes\r\n\r\n"):
             with self.subTest(data=data):
                 self.assertEqual(check_other("Directory.Build.rsp", data), [])
         for path, data in (("Directory.Build.rsp", "# comment\n-p:RestoreSources=https://x\n"),
                            ("Directory.Build.rsp", "-logger:X,C:/x.dll"),
-                           ("Directory.Build.rsp", "\x1f# -p:X=1"), ("Directory.Build.rsp", "# a -p:X=1"),
-                           ("Directory.Build.rsp", "  # indented"), ("Directory.Build.rsp", b"\xef\xbb\xbf# bom"),
+                           ("Directory.Build.rsp", "\x1f# -p:X=1"), ("Directory.Build.rsp", "# a\u2028-p:X=1"),
+                           ("Directory.Build.rsp", "# a\r-p:X=1"), ("Directory.Build.rsp", "  # indented"),
+                           ("Directory.Build.rsp", b"\xef\xbb\xbf# bom"),
                            ("src/Directory.Build.rsp", ""), ("MSBuild.rsp", "")):
             with self.subTest(path=path, data=data):
                 self.assertTrue(check_other(path, data))
