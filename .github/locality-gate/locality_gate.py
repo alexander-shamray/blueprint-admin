@@ -168,13 +168,9 @@ def read_rows(body: str) -> tuple[list[str], list[str]]:
 
 
 def _unfenced(body: str) -> list[str]:
-    """The body's lines outside fenced code blocks, where a quoted row is an example, not the declaration.
-
-    Lines end on a newline alone, as pr-locality.sh reads them. A lone CR ends a line for GitHub and not here, so
-    it is refused rather than read as part of a line. After a list item, block quote or HTML block, GitHub can end
-    a fence sooner than this reader does, so a row inside such a fence may be what the page shows as the table: it
-    is refused, not skipped.
-    """
+    """The body's lines outside fenced code blocks, where a quoted row is an example, not the declaration. Lines
+    end on a newline alone, as pr-locality.sh reads them; a lone CR, which ends a line for GitHub only, is refused,
+    and so is a fenced row after a list, block quote or HTML block, since GitHub can end that fence sooner."""
     body = body.replace("\r\n", "\n")
     if "\r" in body:
         raise InputRefused("the body carries a carriage return that is not part of a CRLF line ending")
