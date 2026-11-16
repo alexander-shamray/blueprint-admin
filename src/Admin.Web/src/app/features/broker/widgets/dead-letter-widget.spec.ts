@@ -75,6 +75,17 @@ describe('DeadLetterWidget', () => {
     expect(host.deadLetters).toHaveBeenCalledWith('ordering-catalog-events_error');
   });
 
+  it('opens a queue in one workbench when two are showing, so the other is not refused for a run already going', () => {
+    const first = render();
+    const second = render();
+
+    TestBed.inject(BrokerFeed).requestOpen('ordering-catalog-events_error');
+    first.detectChanges();
+    second.detectChanges();
+
+    expect(host.deadLetters).toHaveBeenCalledTimes(1);
+  });
+
   it('opens a queue into its messages, the correlation id a link into Trace', () => {
     const fixture = render();
     open(fixture);

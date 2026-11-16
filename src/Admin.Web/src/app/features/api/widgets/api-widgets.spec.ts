@@ -290,6 +290,22 @@ describe('the API request and API history widgets', () => {
       expect(restore).toHaveBeenCalledTimes(1);
     });
 
+    it('restores an entry into one request widget when two are showing, not into both', () => {
+      const restore = vi.spyOn(ApiRequestWidget.prototype, 'restore');
+      const first = request();
+      const second = request();
+      first.componentInstance.chooseIdentity('anonymous');
+      first.componentInstance.send();
+      second.componentInstance.select(catalog.operations[0]);
+      const fixture = history();
+
+      (fixture.nativeElement.querySelector('li button') as HTMLButtonElement).click();
+      first.detectChanges();
+      second.detectChanges();
+
+      expect(restore).toHaveBeenCalledTimes(1);
+    });
+
     it('keeps the editor and the last answer for the tab (session state), and takes the configured operation as no reason to replace them', () => {
       const first = request({ operation: 'catalog:GetProducts' });
       first.componentInstance.select(catalog.operations[1], false);

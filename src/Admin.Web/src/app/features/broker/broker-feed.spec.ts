@@ -71,6 +71,18 @@ describe('BrokerFeed', () => {
     expect(feed.openRequest()).toEqual({ queue: 'a_error', n: 2 });
   });
 
+  it('hands an open request to the first workbench that claims it, and to none after', () => {
+    const feed = TestBed.inject(BrokerFeed);
+
+    feed.requestOpen('a_error');
+
+    expect(feed.claimOpen(1)).toBe('a_error');
+    expect(feed.claimOpen(1)).toBeNull();
+    feed.requestOpen('b_error');
+    expect(feed.claimOpen(1)).toBeNull();
+    expect(feed.claimOpen(2)).toBe('b_error');
+  });
+
   it('names the default exchange and reads a config filter case-insensitively', () => {
     expect(exchangeName('')).toBe('(default)');
     expect(exchangeName('amq.topic')).toBe('amq.topic');
