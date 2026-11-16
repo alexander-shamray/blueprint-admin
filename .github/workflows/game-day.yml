@@ -98,8 +98,13 @@ jobs:
         run: npm ci
         working-directory: .clones/blueprint-frontend
 
+      # A fresh runner holds none of the backend's own images and no registry
+      # serves their names, so they are built first and `up` pulls only the
+      # third-party ones; a workstation that built them keeps run-locally.md's `up`.
+      - name: Build the backend's images
+        run: docker compose -f "$BACKEND/deploy/compose/docker-compose.yml" build
       - name: Start the stack
-        run: docker compose -f "$BACKEND/deploy/compose/docker-compose.yml" up -d --wait --quiet-pull
+        run: docker compose -f "$BACKEND/deploy/compose/docker-compose.yml" up -d --wait --quiet-pull --no-build
 
       - name: Start the host under test
         env:
