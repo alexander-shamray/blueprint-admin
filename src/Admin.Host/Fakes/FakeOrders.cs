@@ -382,7 +382,7 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
                 return CancelOutcome.Accepted;
             }
 
-            // A scripted order's cancel is answered 204 and changes nothing: its script ends it.
+            // The write cancels an unscripted order; a scripted one is answered 204 and its script still ends it.
             if (order.CancelAskedAt is null)
             {
                 placed[orderId] = order with { CancelAskedAt = now };
