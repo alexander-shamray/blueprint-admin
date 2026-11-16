@@ -108,7 +108,7 @@ class ALauncherCheckout:
         for path in self.source.glob("run-guard.*"):
             shutil.copy2(path, self.hooks / path.name)
         if guards:
-            for path in self.source.glob("guard-*.py"):
+            for path in [*self.source.glob("guard-*.py"), self.source / "path_grammar.py"]:
                 shutil.copy2(path, self.hooks / path.name)
         self.launcher = self.hooks / "run-guard.sh"
         self.cache = self.root / ".claude" / "cache"
@@ -249,7 +249,7 @@ class TheHookWiringRunsOnMoreThanOneOperatingSystem(LauncherMarkCases, unittest.
         self.addCleanup(shutil.rmtree, str(parent), ignore_errors=True)
         hooks = parent / "O'Brien" / ".claude" / "hooks"
         hooks.mkdir(parents=True)
-        for name in ("run-guard.sh", "run-guard.py", "guard-git-argv.py"):
+        for name in ("run-guard.sh", "run-guard.py", "guard-git-argv.py", "path_grammar.py"):
             shutil.copy2(self.LAUNCHER.parent / name, hooks / name)
         event = json.dumps(REFUSES[0][1])
         for shell in sorted({BASH, shutil.which("sh")} - {None}):

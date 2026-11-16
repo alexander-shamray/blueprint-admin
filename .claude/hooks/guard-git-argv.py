@@ -64,7 +64,21 @@ import shlex
 import sys
 import tempfile
 import traceback
+import types
 from bisect import bisect_left
+
+
+def path_grammar():
+    """`path_grammar.py` beside this file, which names a path on another machine; compiled, so no bytecode is left."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "path_grammar.py")
+    module = types.ModuleType("path_grammar")
+    module.__file__ = path
+    with open(path, encoding="utf-8") as handle:
+        exec(compile(handle.read(), path, "exec"), module.__dict__)
+    return module
+
+
+GRAMMAR = path_grammar()
 
 # Flags that write or execute rather than inspect. Matched on a prefix, so
 # `--exec-path=<dir>` — a directory of binaries for git to run — is the same act
@@ -227,6 +241,12 @@ HOME_FILES = frozenset({
     ".bash_login", ".bash_logout", ".bash_profile", ".bashrc", ".gitconfig",
     ".profile", ".zlogin", ".zprofile", ".zshenv", ".zshrc",
 })
+# Deeper files that run as `.gitconfig` does: git reads its XDG config beside the home one, so a
+# `core.fsmonitor` or `core.sshCommand` there runs at the next git call.
+HOME_NESTED_FILES = frozenset({(".config", "git", "config")})
+# Beside `~/.claude` rather than in it: Claude Code's user state, whose MCP servers
+# and project grants every later session starts under.
+HOME_CONTROL_FILES = frozenset({".claude.json"})
 CONTROL_DIRECTORIES = frozenset({
     "agents", "commands", "hooks", "plugins", "sandbox", "scripts", "skills",
 })
@@ -235,8 +255,10 @@ CONTROL_FILES = frozenset({
 })
 # Below `~/.claude`, what later sessions load as the user's own. The editing
 # tools may save there, where a command's deny judges the path; a shell write
-# meets no such rule.
+# meets no such rule. `CLAUDE.md` is the owner's rules, so it is standing and
+# not control: an editing tool outside a writing command may still save it.
 STANDING_DIRECTORIES = frozenset({"output-styles", "projects"})
+STANDING_FILES = frozenset({"claude.md"})
 
 
 def home_place(parts):
@@ -244,8 +266,11 @@ def home_place(parts):
 
     `parts` are folded by the caller: the edit guard as the filesystem does, this one always.
     """
-    if parts[0] in HOME_TREES or (len(parts) == 1 and parts[0] in HOME_FILES):
+    if parts[0] in HOME_TREES or (len(parts) == 1 and parts[0] in HOME_FILES) or (
+            tuple(parts) in HOME_NESTED_FILES):
         return "login"
+    if len(parts) == 1 and parts[0] in HOME_CONTROL_FILES:
+        return "control"
     if parts[0] == ".claude" and len(parts) > 1 and (
             parts[1] in CONTROL_DIRECTORIES
             or (len(parts) == 2 and parts[1] in CONTROL_FILES)):
@@ -2871,11 +2896,21 @@ def written_path(word, cwd, command):
         if cwd is None:
             return None
         literal = os.path.join(cwd, literal)
+    if elsewhere(literal):
+        # As spelled: `abspath` puts the cwd's drive before `\??\`, which Windows reads as the share all the same.
+        return os.path.normpath(literal)
     return os.path.normpath(os.path.abspath(literal))
 
 
+def elsewhere(path):
+    """Whether `path` is on a share the session does not stand on, which no check here may open."""
+    return GRAMMAR.foreign(path, EVENT_CWD, os.getcwd(), os.environ.get("CLAUDE_PROJECT_DIR"))
+
+
 def checkout_of(path):
-    """The root of the checkout holding `path`, or `None` outside one."""
+    """The root of the checkout holding `path`, or `None` outside one or on another machine."""
+    if elsewhere(path):
+        return None
     root = path
     while not os.path.exists(os.path.join(root, ".git")):
         parent = os.path.dirname(root)
@@ -2955,7 +2990,9 @@ def home_target(path, cwd, command, whole=False, removing=False):
                 continue
             if home_place(parts) is not None or (parts[0] == ".claude" and (
                     (len(parts) > 1 and parts[1] in STANDING_DIRECTORIES)
-                    or (whole and len(parts) == 1))):
+                    or (len(parts) == 2 and parts[1] in STANDING_FILES)
+                    or (whole and len(parts) == 1))) or (whole and any(
+                        tuple(parts) == nested[:len(parts)] for nested in HOME_NESTED_FILES)):
                 return "~/" + "/".join(parts)
     return None
 
@@ -2969,6 +3006,15 @@ def destination_offence(word, cwd, command, writer, whole=False, inside=None, re
     path = written_path(word, cwd, command)
     if path is not None and inside is not None:
         path = os.path.join(path, inside)
+    # As spelled too: `abspath` puts the cwd drive before `\??\`, which Windows then reads as the share.
+    if path is not None and (elsewhere(path) or elsewhere(target_literal(word) or "")):
+        return (
+            f"{writer} would write `{path}`, a share or device path that no place "
+            "this session stands on holds. The guard does not open it to judge it: "
+            "a share would get your Windows credentials before you answer, and a "
+            "device spelling of a local file passes the denies. Run it yourself if "
+            "it is meant (docs/harness-boundaries.md, *Paths on another machine*)."
+        )
     named = protected_target(path, whole) if path is not None else None
     if named is None:
         home = home_target(path, cwd, command, whole, removing) if path is not None else None
@@ -2976,8 +3022,8 @@ def destination_offence(word, cwd, command, writer, whole=False, inside=None, re
             return None
         return (
             f"{writer} would write `{path}`, which is `{home}`: a key, a shell "
-            "profile, git's own configuration or what `~/.claude` applies to "
-            "later sessions. No rule judges a shell write there. Use an editing "
+            "profile, git's own configuration or what `~/.claude` or "
+            "`~/.claude.json` applies to later sessions. No rule judges a shell write there. Use an editing "
             "tool, where one does, or hand it to the owner "
             "(docs/harness-boundaries.md, *The edit-target guard*)."
         )
@@ -3007,7 +3053,7 @@ def removal_offence(word, cwd, command, writer):
     elif os.path.normcase(path) == os.path.normcase(written_path("~", cwd, command) or ""):
         place = "the home directory"
     for start in (EVENT_CWD or os.getcwd(), cwd):
-        root = checkout_of(os.path.abspath(start)) if start else None
+        root = checkout_of(os.path.abspath(start)) if start and not elsewhere(start) else None
         if place is None and root is not None and beneath(root, path) and (
                 os.path.normcase(root) != os.path.normcase(path)):
             place = f"a parent of the checkout `{root}`"
@@ -3221,7 +3267,8 @@ def landings(destination, sources, into, cwd, command):
     """
     literal = target_literal(destination) or ""
     path = written_path(destination, cwd, command)
-    if not (into or literal.endswith(("/", "\\")) or (path and os.path.isdir(path))):
+    if not (into or literal.endswith(("/", "\\")) or (
+            path and not elsewhere(path) and os.path.isdir(path))):
         return [None]
     names = []
     for source in sources:
@@ -3378,7 +3425,8 @@ def git_path_offence(words, cwd, command):
         if literals[position] == "-C" and position + 1 < len(words):
             cwd = written_path(words[position + 1], cwd, command)
         position += 2 if literals[position] in GLOBAL_VALUE_FLAGS else 1
-    if position >= len(words) or cwd is None or in_linked_worktree(os.path.abspath(cwd)):
+    if position >= len(words) or cwd is None or (
+            not elsewhere(cwd) and in_linked_worktree(os.path.abspath(cwd))):
         return None
     verb, words, literals = literals[position], words[position + 1:], literals[position + 1:]
     if verb in ("rm", "mv"):
@@ -3395,7 +3443,7 @@ def git_path_offence(words, cwd, command):
         source = (target_literal(before[0]) or "$") if before else None
         # As git disambiguates: with no `--`, a first word naming a path is one.
         first = written_path(before[0], cwd, command) if before and not after else None
-        if first is not None and os.path.lexists(first):
+        if first is not None and not elsewhere(first) and os.path.lexists(first):
             source = None
         paths = after or before[1:]
     elif verb == "restore":
