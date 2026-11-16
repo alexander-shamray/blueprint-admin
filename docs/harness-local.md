@@ -81,6 +81,25 @@ among them.
 5, and a managed file has no seam for it. A search here carries `--limit 5`,
 which the grant admits.
 
+**`.mcp.json` is tracked here, so a branch carries its own MCP server command**
+(#797). `docs/harness-boundaries.md` takes the file to be gitignored; here it is
+shared, so Claude in every clone uses the same map, and Claude Code approves its
+servers by name. A branch that rewrites the `codebase-index` entry's `command`,
+`args` or `env` runs that command at session start under the existing approval,
+before any hook, once the owner checks it out, and `Edit(.mcp.json)` stops only
+this session's own edits, never a checkout. What holds is narrower: the locality
+gate refuses `.mcp.json` in every class, so a change to it reaches `main` only
+by a pull request that first changes the gate, and nothing guards a branch
+checked out before its pull request is judged. The managed text's correction is
+the harness's: blueprint-harness#600.
+
+**The code index's MCP route opens the index unjudged** (#798). `cbx` asks
+`index_openable` before the CLI opens the index; the `mcp__codebase-index__*`
+tools reach the server `.mcp.json` starts, whose only hook compares checkout
+roots, so a rollback journal or a link a checked-out branch tracks under
+`.claude/cache/codebase-index/` is replayed or written through there. The hook
+is managed, so the fix is the harness's: blueprint-harness#599.
+
 **Code a session writes runs unjudged through a granted check helper, and only
 the trust boundary stands** (#310). `/ship` can write `src/**`, `tests/**` and
 `tools/**` beside `host-checks.sh`, `npm-checks.sh` and `harness-checks.sh`,
