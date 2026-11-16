@@ -506,7 +506,8 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
         DateTimeOffset now = time.GetUtcNow();
         bool scripted = order.Ended is not null;
         DateTimeOffset? cancelled = scripted ? (p + order.EndDelay <= now ? p + order.EndDelay : null)
-            : order.CancelAskedAt is { } c && (order.Carrier is not null || c + Step < p + (2 * Step)) && c + Step <= now
+            : order.CancelAskedAt is { } c && (order.Carrier is not null || c + Step < p + (2 * Step))
+                && c + Step <= now
                 ? c + Step
                 : null;
         DateTimeOffset? confirmed = scripted ? null : Reached(p + Step, now, cancelled);
