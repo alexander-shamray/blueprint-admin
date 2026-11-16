@@ -57,7 +57,7 @@ public sealed partial class MailSinkClient(HttpClient http, IOptions<AdminOption
             }
 
             SinkList list = JsonSerializer.Deserialize<SinkList>(body, Sink) ?? throw new JsonException("The message list is null.");
-            SinkSummary[] listed = list.Messages ?? [];
+            SinkSummary[] listed = [.. (list.Messages ?? []).OfType<SinkSummary>()];
             string?[] correlations = new string?[listed.Length];
 
             await Parallel.ForEachAsync(
