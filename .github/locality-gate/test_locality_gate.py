@@ -713,6 +713,11 @@ class IgnoredPaths(unittest.TestCase):
         self.assertEqual(len(problems), 1)
         self.assertIn("`docs/local.json`", problems[0])
 
+    def test_an_owner_only_path_gets_no_un_ignore_remedy(self) -> None:
+        # check() refuses it whatever .gitignore says, so offering the un-ignore route would contradict it.
+        self.assertEqual(ignored_paths([".claude/settings.local.json"], self.root), {".claude/settings.local.json"})
+        self.assertEqual(check_ignored(payload([".claude/settings.local.json"]), self.root), [])
+
     def test_main_exits_one_on_a_force_add_and_zero_on_its_removal(self) -> None:
         import json
         added = payload([{"filename": "docs/local.json", "previous_filename": None, "status": "added"}],
