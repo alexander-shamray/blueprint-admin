@@ -183,7 +183,9 @@ export class AssistantService {
       pages: () => this.workspace.pages(),
       currentPage: () => this.workspace.currentPage(),
       widgetsOf: (page) => widgetsOf(page),
-      open: (page) => this.router.navigate(this.workspace.pageLink(page.id)),
+      // The router ignores a navigation to the address showing and resolves false; the page is open all the same.
+      open: async (page) =>
+        this.workspace.currentPageId() === page.id || (await this.router.navigate(this.workspace.pageLink(page.id))),
       highlight: (instanceId) => highlightWidget(this.document, instanceId),
     });
     this.conversation = new AssistantConversation(

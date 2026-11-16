@@ -15,6 +15,7 @@ import {
   PANEL_PINNED_KEY,
   catalogue,
 } from './assistant-service';
+import { ClientToolRegistry } from './client-tools';
 import { AssistantStatus } from './protocol';
 
 const anthropic: AssistantStatus = { enabled: true, provider: 'anthropic', model: 'claude-opus-5-5', reason: null };
@@ -415,5 +416,30 @@ describe('the catalogue the assistant explains (AI assistant design §6.1)', () 
     expect(entries.find((e) => e.id === 'widget:queues')?.where).toBe('/broker');
     expect(entries.find((e) => e.id === 'widget:job-output')?.where).toBe('/stack');
     expect(entries.find((e) => e.id === 'widget:platform-diagram')?.where).toContain('Add widget');
+  });
+});
+
+describe('the client tools that open a page (AI assistant design §6.4)', () => {
+  const pages = [{ id: 'p1', title: 'Stack', builtIn: 'stack', hidden: false, widgets: null }];
+  const tools = (assistant: AssistantService): ClientToolRegistry =>
+    (assistant as unknown as { tools: ClientToolRegistry }).tools;
+
+  it('reports the page opened, without navigating, when it is the one already showing', async () => {
+    const assistant = service({ pages: () => pages, pageLink: () => ['/', 'stack'] });
+    const navigate = TestBed.inject(Router).navigate as ReturnType<typeof vi.fn>;
+
+    expect(await tools(assistant).run('open_page', { page: 'Stack' })).toMatchObject({ ok: true });
+    expect(await tools(assistant).run('open_screen', { path: 'stack' })).toMatchObject({ ok: true });
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('navigates when another page is showing, and reports a refused navigation', async () => {
+    const assistant = service({ pages: () => pages, pageLink: () => ['/', 'stack'], currentPageId: () => 'other' });
+    const navigate = TestBed.inject(Router).navigate as ReturnType<typeof vi.fn>;
+
+    expect(await tools(assistant).run('open_page', { page: 'Stack' })).toMatchObject({ ok: true });
+    expect(navigate).toHaveBeenCalledWith(['/', 'stack']);
+    navigate.mockResolvedValueOnce(false);
+    expect(await tools(assistant).run('open_page', { page: 'Stack' })).toMatchObject({ ok: false });
   });
 });
