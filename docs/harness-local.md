@@ -126,8 +126,11 @@ checkout. The edit guard judges a path outside every checkout only against the
 home names `home_offence` holds. So a file planted in the checkout's parent is
 neither denied nor refused, and the next `host-checks.sh` imports it. A root
 `<Project />` under each XML name, and a root `Directory.Build.rsp` holding
-only comments, would stop the walk; the pin gate admits that `.rsp`. The NuGet
-half waits on the guard (blueprint-harness#596).
+only comments, would stop the walk; the pin gate admits that `.rsp`. They are
+not there yet: each is denied to a session, and
+`.claude/scripts/test_harness_helpers_admin.py` holds all four untracked
+outside its `TRACKED_BY_DESIGN`, so adding them, and the test's line, is the
+owner's. The NuGet half waits on the guard (blueprint-harness#596).
 
 **The SPA toolchain is editable, and the granted runners execute it.** This
 repository's `/ship` and `/pr` denied `package.json`, `angular.json`, `tsconfig`,
