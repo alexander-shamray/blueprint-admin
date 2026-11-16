@@ -142,6 +142,7 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
     /// <summary>The erasure requests Privacy has been asked to raise; they live beside the orders so they outlast the handlers the client factory rotates.</summary>
     internal FakeErasures Erasures { get; } = new(time);
     private long nextProduct = FirstLaterProductId;
+    private int? recordedOnHand;
 
     /// <summary>
     /// Publishes a product at <paramref name="amount"/> and answers with its id: <see cref="FakeGateway.PublishedProductId"/>
@@ -233,7 +234,10 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
         }
     }
 
-    /// <summary>Sets what Inventory holds on hand for a product this fake published; any other id changes nothing, as the fake's write answers 204 for any.</summary>
+    /// <summary>
+    /// Sets what Inventory holds on hand for a product this fake published; any other id changes nothing a sale reads, as the
+    /// fake's write answers 204 for any. The recorded stocked product keeps the count only for <see cref="OnHandOf"/>.
+    /// </summary>
     public void Stock(string productId, int onHand)
     {
         lock (gate)
@@ -242,6 +246,21 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
             {
                 products[productId] = product with { OnHand = onHand };
             }
+            else if (string.Equals(productId, FakeGateway.StockedProductId, StringComparison.OrdinalIgnoreCase))
+            {
+                recordedOnHand = onHand;
+            }
+        }
+    }
+
+    /// <summary>The count a stock read answers for <paramref name="productId"/>: a published product's, or the recorded stocked product's once written; null where Inventory has none to report.</summary>
+    public int? OnHandOf(string productId)
+    {
+        lock (gate)
+        {
+            return products.TryGetValue(productId, out Product? product) ? product.OnHand
+                : string.Equals(productId, FakeGateway.StockedProductId, StringComparison.OrdinalIgnoreCase) ? recordedOnHand
+                : null;
         }
     }
 
@@ -331,7 +350,7 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
                 return CancelOutcome.Accepted;
             }
 
-            if (order.Ended is null && order.At + (2 * Step) <= time.GetUtcNow() && order.CancelAskedAt is null)
+            if (order.CancelAskedAt is null && Moments(order).Dispatched is not null)
             {
                 return CancelOutcome.AlreadyShipped;
             }
