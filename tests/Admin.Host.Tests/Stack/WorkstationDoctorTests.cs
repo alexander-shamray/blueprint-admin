@@ -122,6 +122,8 @@ public sealed class WorkstationDoctorTests(AdminHostFactory factory) : IClassFix
     [InlineData("")]
     [InlineData("/relative/path")]
     [InlineData("not a url")]
+    [InlineData("localhost:5173/")]
+    [InlineData("ftp://localhost/")]
     public void An_unparseable_client_url_is_the_cors_rows_problem_and_throws_nothing(string clientUrl)
     {
         using JsonDocument model = JsonDocument.Parse(Model);
