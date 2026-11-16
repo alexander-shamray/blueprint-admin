@@ -369,6 +369,50 @@ describe('ErasureWidget', () => {
     expect(run.error()).toBeNull();
   });
 
+  it('does not hear a tick for the request read before, landing after the operator has read another', async () => {
+    vi.useFakeTimers();
+    const other = '0199a1b2-0000-7000-8000-000000000301';
+    const fixture = render([]);
+    const late = new Subject<ProxyResult>();
+    proxy.mockReturnValueOnce(late).mockReturnValueOnce(of(responded(200, JSON.stringify(view({ requestId: other })))));
+    const run = TestBed.inject(ErasureRun);
+    run.requestId.set(REQUEST_ID);
+    run.setWatch(true);
+    fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(proxy).toHaveBeenCalledTimes(1);
+
+    run.requestId.set(other);
+    run.read();
+    expect(run.request()?.requestId).toBe(other);
+
+    // The old request has closed: its answer neither replaces the one now shown nor switches the watch off.
+    late.next(responded(200, JSON.stringify(view({ status: 'Closed', missing: [], closedAt: 't' }))));
+    late.complete();
+    expect(run.request()?.requestId).toBe(other);
+    expect(run.watch()).toBe(true);
+    expect(run.error()).toBeNull();
+  });
+
+  it('does not show the failure of a tick for the request read before, landing after the operator has read another', async () => {
+    vi.useFakeTimers();
+    const other = '0199a1b2-0000-7000-8000-000000000301';
+    const fixture = render([]);
+    const late = new Subject<ProxyResult>();
+    proxy.mockReturnValueOnce(late).mockReturnValueOnce(of(responded(200, JSON.stringify(view({ requestId: other })))));
+    const run = TestBed.inject(ErasureRun);
+    run.requestId.set(REQUEST_ID);
+    run.setWatch(true);
+    fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(0);
+
+    run.requestId.set(other);
+    run.read();
+    late.error(new Error('host gone'));
+    expect(run.error()).toBeNull();
+    expect(run.request()?.requestId).toBe(other);
+  });
+
   it('reads nothing once the widget is gone, though the watch stays on for the next one', async () => {
     vi.useFakeTimers();
     const fixture = render([responded(200, JSON.stringify(view({})))]);

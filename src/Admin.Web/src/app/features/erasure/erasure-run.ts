@@ -187,10 +187,14 @@ export class ErasureRun {
 
   /** `quiet` is the watch's read: it is not a call of the operator's, so it neither counts as busy nor clears an error. */
   private fetchRequest(quiet = false): Observable<void> {
-    return this.send('GET', `/api/v1/privacy/erasure-requests/${this.requestId().trim()}`, null, quiet).pipe(
+    const id = this.requestId().trim();
+    // An answer for an id the operator has since replaced is not heard, quiet or not: it would show, reissue or stop
+    // watching a request other than the one the input names.
+    const stale = () => this.requestId().trim() !== id;
+    return this.send('GET', `/api/v1/privacy/erasure-requests/${id}`, null, quiet, stale).pipe(
       tap((result) => {
         // A tick whose answer lands after an operator's call has begun is not heard: that call's own read follows it.
-        if (quiet && this.busy()) return;
+        if ((quiet && this.busy()) || stale()) return;
         const body = this.expect(result, $localize`Reading the request`);
         if (body === null) {
           if (quiet) this.quietFailure = true;
@@ -226,7 +230,14 @@ export class ErasureRun {
       .subscribe((view) => view && this.holders.set(view));
   }
 
-  private send(method: string, path: string, body: string | null = null, quiet = false): Observable<ProxyResult> {
+  /** `stale` says, when the call fails, that its answer is no longer wanted, so the failure is not shown. */
+  private send(
+    method: string,
+    path: string,
+    body: string | null = null,
+    quiet = false,
+    stale: () => boolean = () => false,
+  ): Observable<ProxyResult> {
     const gateway = this.config()?.urls.gateway ?? '';
     // Before the host's configuration answers, or for good if it fails, there is no gateway to address: say so, not a host-less path.
     if (gateway === '') {
@@ -251,7 +262,7 @@ export class ErasureRun {
       .pipe(
         takeUntilDestroyed(this.destroyRef),
         catchError((e: unknown) => {
-          if (quiet && this.busy()) return EMPTY;
+          if ((quiet && this.busy()) || stale()) return EMPTY;
           if (quiet) this.quietFailure = true;
           this.error.set(this.describe(e));
           return EMPTY;
