@@ -231,6 +231,7 @@
     "3904268884020533868": "Reissuing the request",
     "6000880775363846371": "Reading the request",
     "1842149475647804950": "Privacy answered something that is not an erasure request: {$body}",
+    "2268708499942523503": "The host's configuration has not loaded, so the gateway's address is not known.",
     "4432738454181974232": "{$what}: the request never got an answer ({$error}).",
     "4339258577168814569": "{$what}: Keycloak refused the privacy login ({$status}). A realm imported before it existed needs docker compose down -v.",
     "4129022360285947121": "{$what}: the gateway answered {$status} — {$body}",

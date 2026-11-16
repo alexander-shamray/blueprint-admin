@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { Subject, of } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
 import { HostClient } from '../../../core/host/host-client';
 import { ErasureRequestView, HoldersView, ProxyResult } from '../../../core/host/host-types';
 import { WIDGET_CONTEXT } from '../../../workspace/widget-context';
@@ -162,6 +162,27 @@ describe('ErasureWidget', () => {
 
     expect(fixture.componentInstance.run.busy()).toBe(false);
     expect(fixture.componentInstance.canRaise()).toBe(true);
+  });
+
+  it('sends nothing, and says why, while the host config has not answered', () => {
+    proxy = vi.fn();
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([]),
+        {
+          provide: HostClient,
+          useValue: { config: () => throwError(() => new Error('down')), erasureHolders: () => of(holders), proxy },
+        },
+      ],
+    });
+    const fixture = TestBed.createComponent(ErasureWidget);
+    fixture.detectChanges();
+    fixture.componentInstance.subject.set(SUBJECT);
+    fixture.componentInstance.raise();
+
+    expect(proxy).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.run.error()).toContain('configuration has not loaded');
+    expect(fixture.componentInstance.run.busy()).toBe(false);
   });
 
   it('refuses a subject that is not a GUID before anything is sent', () => {
