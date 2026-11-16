@@ -180,6 +180,9 @@ public sealed class FakeOrdersTests
         time.Advance(FakeOrders.Step * 2);
 
         orders.Cancel(id).ShouldBe(CancelOutcome.Accepted);
+        time.Advance(FakeOrders.Step);
+
+        Status(orders.Detail(id)!).ShouldBe("cancelled");
     }
 
     [Fact]
