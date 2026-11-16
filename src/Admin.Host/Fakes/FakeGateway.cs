@@ -161,9 +161,8 @@ internal static partial class FakeGateway
 
     /// <summary>
     /// Inventory behind its route. A write answers 204 for any id, as the live PUT did although the document says
-    /// 200: both end in the same ToHttpResult. A read is <see cref="StockCount"/>'s: a product this fake
-    /// published answers once a write has set its count, the recorded one answers its recorded count until a write replaces
-    /// it, and any other read is the 404 the live service gave.
+    /// 200: both end in the same ToHttpResult. A read is <see cref="StockCount"/>'s: a published product answers once
+    /// a write has set its count, the recorded one until a write replaces its count, any other read is the live 404.
     /// </summary>
     private static HttpResponseMessage Inventory(FakeOrders orders, HttpRequestMessage request, string path)
     {
@@ -175,7 +174,7 @@ internal static partial class FakeGateway
         {
             ("PUT", true, _) => Stocked(orders, stock.Groups["id"].Value, request),
             ("GET", true, _) when StockCount(orders, stock.Groups["id"].Value) is { } count =>
-                FakeHttp.Json(HttpStatusCode.OK, Stock.Replace("\"available\":10", $"\"available\":{count.ToString(CultureInfo.InvariantCulture)}", StringComparison.Ordinal).Replace(StockedProductId, stock.Groups["id"].Value, StringComparison.Ordinal)),
+                FakeHttp.Json(HttpStatusCode.OK, StockBody(stock.Groups["id"].Value, count)),
             ("GET", _, true) when reservation.Groups["action"].Value == "" && reservation.Groups["id"].Value == PlacedOrderId => FakeHttp.Json(HttpStatusCode.OK, Reservation),
             ("GET", _, true) when reservation.Groups["action"].Value == "" && orders.ReservedProduct(reservation.Groups["id"].Value) is { } product =>
                 FakeHttp.Json(HttpStatusCode.OK, Reservation.Replace(PlacedOrderId, reservation.Groups["id"].Value, StringComparison.Ordinal).Replace(StockedProductId, product, StringComparison.Ordinal)),
@@ -362,9 +361,19 @@ internal static partial class FakeGateway
         return Guid.Empty.ToString("D");
     }
 
-    /// <summary>What a stock read reports: the fake's own count, else the recorded 10 for the recorded product until a write replaces it.</summary>
+    /// <summary>What a stock read reports: the fake's own count, else the recorded 10 for the recorded product.</summary>
     private static int? StockCount(FakeOrders orders, string productId) =>
-        orders.OnHandOf(productId) ?? (string.Equals(productId, StockedProductId, StringComparison.OrdinalIgnoreCase) ? 10 : null);
+        orders.OnHandOf(productId)
+        ?? (string.Equals(productId, StockedProductId, StringComparison.OrdinalIgnoreCase) ? 10 : null);
+
+    private static string StockBody(string productId, int available)
+    {
+        string count = available.ToString(CultureInfo.InvariantCulture);
+
+        return Stock
+            .Replace("\"available\":10", $"\"available\":{count}", StringComparison.Ordinal)
+            .Replace(StockedProductId, productId, StringComparison.Ordinal);
+    }
 
     private static HttpResponseMessage Stocked(FakeOrders orders, string productId, HttpRequestMessage request)
     {
