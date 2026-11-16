@@ -178,9 +178,9 @@ internal static partial class FakeGateway
             ("GET", _, true) when reservation.Groups["action"].Value == "" && reservation.Groups["id"].Value == PlacedOrderId => FakeHttp.Json(HttpStatusCode.OK, Reservation),
             ("GET", _, true) when reservation.Groups["action"].Value == "" && orders.ReservedProduct(reservation.Groups["id"].Value) is { } product =>
                 FakeHttp.Json(HttpStatusCode.OK, Reservation.Replace(PlacedOrderId, reservation.Groups["id"].Value, StringComparison.Ordinal).Replace(StockedProductId, product, StringComparison.Ordinal)),
-            // A release or reinstate is answered for a reservation the fake holds and changes nothing: the read after it is unmoved.
+            // A release or reinstate is answered for a reservation the fake holds, and changes nothing.
             ("POST", _, true) when reservation.Groups["action"].Value != ""
-                && (reservation.Groups["id"].Value == PlacedOrderId || orders.ReservedProduct(reservation.Groups["id"].Value) is not null) =>
+                && Holds(orders, reservation.Groups["id"].Value) =>
                 new HttpResponseMessage(HttpStatusCode.NoContent),
             _ => FakeHttp.Problem(HttpStatusCode.NotFound, "Not Found"),
         };
@@ -363,6 +363,10 @@ internal static partial class FakeGateway
 
         return Guid.Empty.ToString("D");
     }
+
+    /// <summary>Whether the fake holds the reservation: the recorded order's, or one an order it placed made.</summary>
+    private static bool Holds(FakeOrders orders, string orderId) =>
+        orderId == PlacedOrderId || orders.ReservedProduct(orderId) is not null;
 
     /// <summary>What a stock read reports: the fake's count, else the recorded 10 for the recorded product.</summary>
     private static int? StockCount(FakeOrders orders, string productId) =>

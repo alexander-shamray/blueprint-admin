@@ -37,7 +37,9 @@ public sealed class ComposePsParserTests
     [Fact]
     public void A_null_row_or_a_bare_null_line_is_skipped()
     {
-        ComposePsParser.Parse(["null", $"[null,{Gateway}]", Migrator]).Select(s => s.Service).ShouldBe(["gateway", "catalog-migrator"]);
+        IReadOnlyList<ServiceStatus> services = ComposePsParser.Parse(["null", $"[null,{Gateway}]", Migrator]);
+
+        services.Select(s => s.Service).ShouldBe(["gateway", "catalog-migrator"]);
     }
 
     [Fact]
