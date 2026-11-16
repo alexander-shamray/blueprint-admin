@@ -124,10 +124,10 @@ every directory above the root, and takes any `config` key or fallback folder
 the root `nuget.config` leaves unset. The denies are written relative to the
 checkout. The edit guard judges a path outside every checkout only against the
 home names `home_offence` holds. So a file planted in the checkout's parent is
-neither denied nor refused, and the next `host-checks.sh` imports it. An empty
-root file under each MSBuild name would stop the walk; the pin gate admits an
-empty `Directory.Build.rsp` for that. The NuGet half waits on the guard
-(blueprint-harness#596).
+neither denied nor refused, and the next `host-checks.sh` imports it. A root
+`<Project />` under each XML name, and a root `Directory.Build.rsp` holding
+only comments, would stop the walk; the pin gate admits that `.rsp`. The NuGet
+half waits on the guard (blueprint-harness#596).
 
 **The SPA toolchain is editable, and the granted runners execute it.** This
 repository's `/ship` and `/pr` denied `package.json`, `angular.json`, `tsconfig`,
