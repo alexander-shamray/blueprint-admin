@@ -228,6 +228,12 @@ export class ErasureRun {
 
   private send(method: string, path: string, body: string | null = null, quiet = false): Observable<ProxyResult> {
     const gateway = this.config()?.urls.gateway ?? '';
+    // Before the host's configuration answers, or for good if it fails, there is no gateway to address: say so, not a host-less path.
+    if (gateway === '') {
+      if (quiet) this.quietFailure = true;
+      this.error.set($localize`The host's configuration has not loaded, so the gateway's address is not known.`);
+      return EMPTY;
+    }
     if (!quiet) {
       this.inFlight.update((n) => n + 1);
       this.error.set(null);
