@@ -333,6 +333,8 @@ class OtherRestoreInputs(unittest.TestCase):
                 self.assertEqual(check_other("Directory.Build.rsp", data), [])
         for path, data in (("Directory.Build.rsp", "# comment\n-p:RestoreSources=https://x\n"),
                            ("Directory.Build.rsp", "-logger:X,C:/x.dll"),
+                           ("Directory.Build.rsp", "\x1f# -p:X=1"), ("Directory.Build.rsp", "# a -p:X=1"),
+                           ("Directory.Build.rsp", "  # indented"), ("Directory.Build.rsp", b"\xef\xbb\xbf# bom"),
                            ("src/Directory.Build.rsp", ""), ("MSBuild.rsp", "")):
             with self.subTest(path=path, data=data):
                 self.assertTrue(check_other(path, data))
