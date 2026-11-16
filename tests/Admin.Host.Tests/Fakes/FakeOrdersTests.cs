@@ -173,6 +173,34 @@ public sealed class FakeOrdersTests
     }
 
     [Fact]
+    public void A_second_cancel_after_a_first_that_never_took_effect_is_refused_once_the_order_has_despatched()
+    {
+        FakeOrders orders = new(time);
+        string id = orders.Place();
+        time.Advance(FakeOrders.Step * 1.5);
+
+        orders.Cancel(id).ShouldBe(CancelOutcome.Accepted);
+        time.Advance(FakeOrders.Step);
+
+        Status(orders.Detail(id)!).ShouldBe("dispatched");
+        orders.Cancel(id).ShouldBe(CancelOutcome.AlreadyShipped);
+    }
+
+    [Fact]
+    public void A_cancel_of_a_scripted_order_is_answered_and_the_order_still_ends_as_scripted()
+    {
+        FakeOrders orders = new(time, new FakeStack { InventoryStopped = true, ShortWaits = true });
+        string id = orders.Place();
+
+        orders.Cancel(id).ShouldBe(CancelOutcome.Accepted);
+        time.Advance(FakeOrders.ShortStockWait);
+
+        Status(orders.Detail(id)!).ShouldBe("out_of_stock");
+        using JsonDocument read = JsonDocument.Parse(orders.Detail(id)!);
+        read.RootElement.GetProperty("cancellable").GetBoolean().ShouldBeFalse();
+    }
+
+    [Fact]
     public void A_cancel_of_a_carrier_coded_order_the_fake_never_dispatched_is_taken_however_late()
     {
         FakeOrders orders = new(time);
