@@ -382,7 +382,8 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
                 return CancelOutcome.Accepted;
             }
 
-            // The write cancels an unscripted order; a scripted one is answered 204 and its script still ends it.
+            // The write records the ask; Moments decides whether it cancels an unscripted order,
+            // and a scripted one's script still ends it.
             if (order.CancelAskedAt is null)
             {
                 placed[orderId] = order with { CancelAskedAt = now };
