@@ -87,6 +87,10 @@ _TOUCH_ROW = re.compile(r"^\| *Touch set *\|(.*)$")
 # CommonMark: a backtick opener's info string holds no backtick, and a closer is the fence alone.
 _FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}(?=[^`]*$)|~{3,})")
 _FENCE_CLOSE = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*$")
+# A list item, block quote or HTML block start, after which GitHub can end a fence sooner than a line reader does,
+# and a row in any spelling GitHub could render once the fence ends: indented, or without its leading pipe.
+_CONTAINER = re.compile(r"^ {0,3}([-+*]|[0-9]{1,9}[.)])([ \t]|$)|^ {0,3}[<>]")
+_ROWISH = re.compile(r"^[ \t]*\|?[ \t]*(Class|Touch set)[ \t]*\|")
 _MAP_CLASS = re.compile(r"^([A-E]):\s*$")
 _MAP_ITEM = re.compile(r"^  - '([^']+)'\s*$")
 
@@ -164,16 +168,34 @@ def read_rows(body: str) -> tuple[list[str], list[str]]:
 
 
 def _unfenced(body: str) -> list[str]:
-    """The body's lines outside fenced code blocks, where a quoted row is an example, not the declaration."""
+    """The body's lines outside fenced code blocks, where a quoted row is an example, not the declaration.
+
+    Lines end on a newline alone, as pr-locality.sh reads them. A lone CR ends a line for GitHub and not here, so
+    it is refused rather than read as part of a line. After a list item, block quote or HTML block, GitHub can end
+    a fence sooner than this reader does, so a row inside such a fence may be what the page shows as the table: it
+    is refused, not skipped.
+    """
+    body = body.replace("\r\n", "\n")
+    if "\r" in body:
+        raise InputRefused("the body carries a carriage return that is not part of a CRLF line ending")
     lines: list[str] = []
     fence = ""
-    for line in body.splitlines():
+    after_container = contained = False
+    for line in body.split("\n"):
         if fence:
+            if contained and _ROWISH.match(line):
+                raise InputRefused(
+                    "a Class or Touch set row sits in a fenced block after a list, block quote or HTML block"
+                )
             closed = _FENCE_CLOSE.match(line)
             if closed and closed.group(1)[0] == fence[0] and len(closed.group(1)) >= len(fence):
                 fence = ""
-        elif opened := _FENCE_OPEN.match(line):
+            continue
+        if _CONTAINER.match(line):
+            after_container = True
+        if opened := _FENCE_OPEN.match(line):
             fence = opened.group(1)
+            contained = after_container
         else:
             lines.append(line)
     return lines
