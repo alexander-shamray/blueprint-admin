@@ -50,6 +50,7 @@ C:
 
 # D -- docs or harness. Never src/**: that absence is the load-bearing half
 # of this class, and the gate enforces it by this list having no code entry.
+# Nor .mcp.json, which no class admits: locality_gate.py's OWNER_ONLY says why.
 D:
   - '.harness/**'
   - 'docs/**'
@@ -62,7 +63,6 @@ D:
   - '.editorconfig'
   - '.gitattributes'
   - '.gitignore'
-  - '.mcp.json'
   - '.codeindexignore'
 
 # E -- dependency graph. Exact pins on both toolchains, the solution, the

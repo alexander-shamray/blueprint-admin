@@ -1,19 +1,26 @@
 #!/usr/bin/env python3
 """Negative cases: a defect the gate must find, an input it must refuse, or one it must pass.
-The last blocks read what ships here: the map, and gates.yml for its absent concurrency group.
+The last blocks read what ships here: the map, the ignore rules, and gates.yml for its absent concurrency group.
     py -3.12 -m unittest discover -s .github/locality-gate
 """
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
+import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 import locality_gate
 from locality_gate import (
     InputRefused,
+    arriving,
     check,
+    check_ignored,
+    ignored_paths,
     matcher,
     read_map,
     read_rows,
@@ -554,7 +561,7 @@ class Verdicts(unittest.TestCase):
 class Main(unittest.TestCase):
     """The exit codes, because the workflow reads nothing else."""
 
-    def run_main(self, payload_text: str, map_text: str = MAP) -> tuple[int, str, str]:
+    def run_main(self, payload_text: str, map_text: str = MAP, *extra: str) -> tuple[int, str, str]:
         import io
         import tempfile
         from contextlib import redirect_stderr, redirect_stdout
@@ -564,9 +571,13 @@ class Main(unittest.TestCase):
             map_path.write_text(map_text, encoding="utf-8")
             payload_path = Path(directory) / "payload.json"
             payload_path.write_text(payload_text, encoding="utf-8")
+            # A scratch repository by default, so the verdict never depends on where the suite runs from.
+            if "--root" not in extra:
+                git(Path(directory), "init", "-q")
+                extra = ("--root", directory, *extra)
             out, err = io.StringIO(), io.StringIO()
             with redirect_stdout(out), redirect_stderr(err):
-                code = locality_gate.main(["locality_gate.py", "--map", str(map_path), str(payload_path)])
+                code = locality_gate.main(["locality_gate.py", "--map", str(map_path), *extra, str(payload_path)])
         return code, out.getvalue(), err.getvalue()
 
     def test_a_clean_pull_request_exits_zero(self) -> None:
@@ -597,6 +608,125 @@ class Main(unittest.TestCase):
         code, _, err = self.run_main("{not json")
         self.assertEqual(code, 2)
         self.assertIn("not JSON", err)
+
+
+def git(root: Path, *args: str) -> None:
+    subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+
+
+class OwnerOnly(unittest.TestCase):
+    """`.mcp.json` is refused in every class, whatever the touch set says (#797)."""
+
+    def test_every_class_refuses_it_and_names_the_owner(self) -> None:
+        class_map = read_map(MAP)
+        for klass in "ABCDE":
+            problems = check(payload([".mcp.json"], class_cell=klass, touch_cell="`.mcp.json`"), class_map)
+            self.assertEqual(len(problems), 1, klass)
+            self.assertIn("owner's", problems[0])
+
+    def test_a_case_folded_spelling_and_either_end_of_a_rename_are_refused(self) -> None:
+        class_map = read_map(MAP)
+        for entry in (".MCP.json", {"filename": "docs/x.json", "previous_filename": ".mcp.json"}):
+            problems = check(payload([entry], class_cell="D", touch_cell="`.MCP.json`, `.mcp.json`, `docs/**`"),
+                             class_map)
+            self.assertEqual(len(problems), 1, entry)
+            self.assertIn("owner's", problems[0])
+
+    def test_a_nested_file_of_that_name_is_not_the_root_one(self) -> None:
+        problems = check(payload(["docs/.mcp.json"], class_cell="D", touch_cell="`docs/**`"), read_map(MAP))
+        self.assertEqual(problems, [])
+
+
+class IgnoredPaths(unittest.TestCase):
+    """A path the tree ignores is refused when a diff leaves it there, judged by git in a scratch repository (#799)."""
+
+    def setUp(self) -> None:
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        self.root = Path(scratch.name)
+        git(self.root, "init", "-q")
+        (self.root / ".gitignore").write_text("docs/local.json\n.claude/settings.local.json\n", encoding="utf-8")
+
+    def test_a_removal_leaves_nothing_and_a_rename_leaves_its_destination(self) -> None:
+        entries = ["docs/a.md",
+                   {"filename": "docs/b.md", "previous_filename": "docs/local.json", "status": "renamed"},
+                   {"filename": "docs/local.json", "previous_filename": None, "status": "removed"}]
+        self.assertEqual(arriving(entries), ["docs/a.md", "docs/b.md"])
+
+    def test_an_ignored_path_is_reported_and_a_plain_one_is_not(self) -> None:
+        found = ignored_paths(["docs/local.json", ".claude/settings.local.json", "docs/a.md"], self.root)
+        self.assertEqual(found, {"docs/local.json", ".claude/settings.local.json"})
+
+    def test_a_force_added_path_is_still_reported(self) -> None:
+        # Tracked is the state a force-add leaves, and git's own check-ignore
+        # passes over a tracked path unless it is told not to read the index.
+        (self.root / ".claude").mkdir()
+        (self.root / ".claude" / "settings.local.json").write_text("{}\n", encoding="utf-8")
+        git(self.root, "add", "-f", ".claude/settings.local.json")
+        self.assertEqual(ignored_paths([".claude/settings.local.json"], self.root), {".claude/settings.local.json"})
+
+    def test_a_path_differing_only_in_case_is_reported_on_a_case_sensitive_checkout(self) -> None:
+        # CI's runner matches case-sensitively; a Windows checkout would open
+        # `.Claude/Settings.Local.json` as the ignored file.
+        git(self.root, "config", "core.ignorecase", "false")
+        self.assertEqual(ignored_paths([".Claude/Settings.Local.json"], self.root), {".Claude/Settings.Local.json"})
+
+    def test_a_path_un_ignored_in_the_same_tree_passes(self) -> None:
+        (self.root / ".gitignore").write_text(".claude/settings.local.json\n", encoding="utf-8")
+        self.assertEqual(ignored_paths(["docs/local.json"], self.root), set())
+
+    def test_a_user_excludes_file_is_not_read(self) -> None:
+        # A developer's global excludes are not the tree's rules, and CI has none to read.
+        excludes = self.root / "user-ignore"
+        excludes.write_text("*.md\n", encoding="utf-8")
+        config = self.root / "user-config"
+        config.write_text(f"[core]\n\texcludesFile = {excludes.as_posix()}\n", encoding="utf-8")
+        with unittest.mock.patch.dict("os.environ", {"GIT_CONFIG_GLOBAL": str(config)}):
+            self.assertEqual(ignored_paths(["docs/a.md", "docs/local.json"], self.root), {"docs/local.json"})
+
+    def test_a_directory_outside_any_repository_refuses_the_run(self) -> None:
+        with tempfile.TemporaryDirectory() as outside:
+            ceiling = {"GIT_CEILING_DIRECTORIES": str(Path(outside).parent)}
+            with unittest.mock.patch.dict("os.environ", ceiling):
+                with self.assertRaisesRegex(InputRefused, "could not say"):
+                    ignored_paths(["docs/a.md"], Path(outside))
+
+    def test_a_path_git_cannot_judge_refuses_the_run_rather_than_reading_as_not_ignored(self) -> None:
+        with self.assertRaisesRegex(InputRefused, "check-ignore failed"):
+            ignored_paths(["../outside.json"], self.root)
+
+    def test_the_problem_names_the_path(self) -> None:
+        problems = check_ignored(payload(["docs/a.md", "docs/local.json"]), self.root)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("`docs/local.json`", problems[0])
+
+    def test_main_exits_one_on_a_force_add_and_zero_on_its_removal(self) -> None:
+        import json
+        added = payload([{"filename": "docs/local.json", "previous_filename": None, "status": "added"}],
+                        class_cell="D", touch_cell="`docs/**`")
+        code, _, err = Main().run_main(json.dumps(added), MAP, "--root", str(self.root))
+        self.assertEqual(code, 1)
+        self.assertIn("docs/local.json", err)
+        added["files"][0]["status"] = "removed"
+        code, _, _ = Main().run_main(json.dumps(added), MAP, "--root", str(self.root))
+        self.assertEqual(code, 0)
+
+
+class TheShippedIgnoreRules(unittest.TestCase):
+    """What the ignored-path check reads in CI: this repository's own tree."""
+
+    def test_the_local_settings_file_is_ignored(self) -> None:
+        wanted = {".claude/settings.local.json"}
+        self.assertEqual(ignored_paths(sorted(wanted), ROOT), wanted)
+
+    def test_no_tracked_file_is_ignored(self) -> None:
+        tracked = subprocess.run(["git", "-C", str(ROOT), "ls-files"], capture_output=True,
+                                 encoding="utf-8", check=True).stdout.splitlines()
+        self.assertGreater(len(tracked), 100, "ls-files found almost nothing")
+        listed = subprocess.run(["git", "-C", str(ROOT), "-c", "core.ignorecase=true",
+                                 "-c", f"core.excludesFile={os.devnull}", "ls-files", "-ci", "--exclude-standard"],
+                                capture_output=True, encoding="utf-8", check=True).stdout.splitlines()
+        self.assertEqual(listed, [])
 
 
 class TheShippedMap(unittest.TestCase):
@@ -656,6 +786,11 @@ class TheShippedMap(unittest.TestCase):
         touch = ("`.github/locality-gate/**`, `.github/workflows/ci.yml`, `docs/**`, "
                  "`CLAUDE.md`, `.gitattributes`")
         self.assertEqual(check(payload(files, class_cell="D", touch_cell=touch), self.map), [])
+
+    def test_no_class_reaches_an_owner_only_path(self) -> None:
+        reached = sorted(f"{klass}: {token} -> {path}" for klass, tokens in self.map.items() for token in tokens
+                         for path in locality_gate.OWNER_ONLY if matcher(token)(path))
+        self.assertEqual(reached, [])
 
     def test_the_harness_sync_files_are_a_class_d_change(self) -> None:
         files = [".harness/config.json", ".harness/manifest.json", ".claude/settings.json"]

@@ -44,15 +44,27 @@ the payload carries GitHub's `changedFiles` count and a shorter list is
 refused. A rename arrives as one entry with the source in `previous_filename`,
 so both ends of a rename are judged.
 
+Two paths are judged on more than their class. A path the diff leaves in the
+tree that this checkout's ignore rules match is refused (#799): a force-added
+`.claude/settings.local.json` is tracked, which git's own `check-ignore` passes
+over unless it is told not to read the index, and once on `main` it reaches
+every clone and every fork with grants and hooks no settings render controls.
+And `.mcp.json` is the owner's (#797): Claude Code approves its servers by
+name, so a branch that changes the file runs its own command under the
+existing approval. No class admits it; it lands only by a pull request that
+first changes this gate, which this gate's base copy then judges.
+
 Stdlib only, on the licence gate's terms. The deciding takes JSON on stdin and
 the fetching is two `gh` calls in the workflow, `deploy/canary/canary.py`'s
 split. A file entry is a plain path or the endpoint's own
-`{filename, previous_filename}`.
+`{filename, previous_filename, status}`, and a `removed` one leaves nothing in
+the tree for the ignore rules to judge. `--root` names the checkout whose
+ignore rules judge, the working directory by default.
 
     {"number": 190, "body": "<the PR body>", "changedFiles": 2,
-     "files": [{"filename": "<path>", "previous_filename": null}, ...]}
+     "files": [{"filename": "<path>", "previous_filename": null, "status": "added"}, ...]}
 
-    gh api "repos/{owner}/{repo}/pulls/<n>/files" --paginate --jq '.[] | {filename, previous_filename}' |
+    gh api "repos/{owner}/{repo}/pulls/<n>/files" --paginate --jq '.[] | {filename, previous_filename, status}' |
         jq -s --argjson pr "$(gh pr view <n> --json number,body,changedFiles)" '$pr + {files: .}' |
         py -3.12 .github/locality-gate/locality_gate.py
 """
@@ -61,7 +73,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -69,6 +83,10 @@ from pathlib import Path
 DEFAULT_MAP = Path(__file__).resolve().parent / "classes.yml"
 
 CLASSES = "ABCDE"
+
+# Paths no class admits, compared case-folded because the Windows checkouts
+# that read them open `.MCP.json` as `.mcp.json`.
+OWNER_ONLY = (".mcp.json",)
 
 # A touch-set token: path, glob characters, and the two extra characters
 # git permits in a name (`@`, `+`). Same set pr-locality.sh admits.
@@ -434,6 +452,13 @@ def check(payload: dict, class_map: dict[str, list[str]]) -> list[str]:
     label = "+".join(members)
     problems = []
     for path in paths:
+        if path.lower() in OWNER_ONLY:
+            problems.append(
+                f"`{path}` is the owner's, and no class admits it: Claude Code approves its MCP servers by "
+                f"name, so a branch that changes it runs its own command under the existing approval (#797). "
+                f"Leave it out; the owner lands it by a pull request that first changes this gate"
+            )
+            continue
         if not any(match(path) for match in allowed):
             problems.append(
                 f"`{path}` is outside class {label}'s tree set in .github/locality-gate/classes.yml; "
@@ -447,12 +472,61 @@ def check(payload: dict, class_map: dict[str, list[str]]) -> list[str]:
     return problems
 
 
+# --------------------------------------------------------------------------
+# the ignored paths
+# --------------------------------------------------------------------------
+
+def arriving(entries: list) -> list[str]:
+    """The paths a diff leaves in the tree: every destination but a removal's."""
+    paths = []
+    for entry in entries:
+        if isinstance(entry, dict) and entry.get("status") == "removed":
+            continue
+        paths.append(_names(entry)[0])
+    return paths
+
+
+def ignored_paths(paths: list[str], root: Path) -> set[str]:
+    """Which of `paths` the ignore rules of the tree holding `root` exclude, asked of git.
+
+    `--no-index` because a force-added file is tracked, which git otherwise never reports as ignored,
+    case-folded because the Windows checkouts that read these files fold `.Claude/` to `.claude/`, and with
+    no user excludes file, which is the developer's and not the tree's."""
+    if not paths:
+        return set()
+    try:
+        top = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+                             capture_output=True, encoding="utf-8", check=True).stdout.strip()
+        result = subprocess.run(["git", "-c", "core.ignorecase=true", "-c", f"core.excludesFile={os.devnull}",
+                                 "check-ignore", "--no-index", "--stdin", "-z"],
+                                cwd=top,
+                                input="\0".join(paths) + "\0", capture_output=True, encoding="utf-8")
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise InputRefused(f"git could not say which changed paths the tree ignores: {error}") from error
+    # Exit 1 is git's "none of them"; anything above it is git failing to answer.
+    if result.returncode not in (0, 1):
+        raise InputRefused(f"git check-ignore failed: {result.stderr.strip()}")
+    return {path for path in result.stdout.split("\0") if path}
+
+
+def check_ignored(payload: dict, root: Path) -> list[str]:
+    """Every path the diff leaves in the tree that the ignore rules match case-folded; empty when there is none."""
+    excluded = ignored_paths(arriving(payload["files"]), root)
+    return [
+        f"`{path}` matches this checkout's ignore rules read case-folded, as a Windows checkout reads them; "
+        f"leave it out, or un-ignore it in .gitignore in the same pull request"
+        for path in sorted(excluded)
+    ]
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("payload", nargs="?", type=argparse.FileType(encoding="utf-8"), default=sys.stdin,
                         help="JSON with `number`, `body` and `files`; stdin by default")
     parser.add_argument("--map", type=Path, default=DEFAULT_MAP,
                         help="the class -> tree-set map; classes.yml beside this file by default")
+    parser.add_argument("--root", type=Path, default=Path.cwd(),
+                        help="a directory in the checkout whose .gitignore judges the diff; the current one by default")
     args = parser.parse_args(argv[1:])
 
     try:
@@ -467,6 +541,7 @@ def main(argv: list[str]) -> int:
     try:
         class_map = read_map(args.map.read_text(encoding="utf-8"))
         problems = check(payload, class_map)
+        problems += check_ignored(payload, args.root)
     except InputRefused as refusal:
         print(f"locality-gate: refused: {refusal}", file=sys.stderr)
         return 2
