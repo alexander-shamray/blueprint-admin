@@ -111,7 +111,7 @@ public sealed class MailSinkTests : IClassFixture<AdminHostFactory>
     {
         MailSinkClient mail = Client(new ScriptedHandler(request =>
             request.RequestUri!.AbsolutePath == "/api/v1/messages"
-                ? Json("""{"total":2,"messages":[null,{"ID":"abc123","Subject":"Hello","Created":"2026-10-15T12:11:07.205Z","Read":false}]}""")
+                ? Json("""{"total":2,"messages":[null,{"ID":"abc123","Created":"2026-10-15T12:11:07.205Z"}]}""")
                 : Answer(request)));
 
         MailListView list = await mail.ListAsync(TestContext.Current.CancellationToken);

@@ -266,7 +266,10 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
     [InlineData("reinstate")]
     public async Task A_reservation_release_or_reinstate_for_an_id_the_fake_never_placed_is_a_404(string action)
     {
-        (await ProxyAsync(new { method = "POST", url = $"http://localhost:5000/api/v1/inventory/reservations/0199a1b2-0000-7000-8000-0000000000ff/{action}", identity = new { username = "demo" } }))
+        const string unknown = "0199a1b2-0000-7000-8000-0000000000ff";
+        string url = $"http://localhost:5000/api/v1/inventory/reservations/{unknown}/{action}";
+
+        (await ProxyAsync(new { method = "POST", url, identity = new { username = "demo" } }))
             .GetProperty("status").GetInt32().ShouldBe(404);
     }
 
