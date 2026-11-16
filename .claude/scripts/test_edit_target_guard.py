@@ -695,9 +695,27 @@ class TheHomeDirectoryKeepsWhatRunsAtLogin(GuardCase):
             os.path.join(self.HOME, ".profile"),
             os.path.join(self.HOME, ".zshrc"),
             os.path.join(self.HOME, ".gitconfig"),
+            # git's XDG config runs as `.gitconfig` does.
+            os.path.join(self.HOME, ".config", "git", "config"),
         ):
             with self.subTest(target=target):
                 self.assertIn("what runs at login", self.assertRefused(target))
+
+    def test_git_reads_its_xdg_config_where_the_variable_moves_it(self):
+        # git reads `$XDG_CONFIG_HOME/git/config` when the variable is set, wherever it points.
+        moved = os.path.join(self.outside, "xdg")
+        env = {"XDG_CONFIG_HOME": moved}
+        for target in (os.path.join(moved, "git", "config"),
+                       os.path.join(moved, "other", "..", "git", "config")):
+            with self.subTest(target=target):
+                self.assertIn("what runs at login", self.assertRefused(target, env=env))
+        for target in (os.path.join(moved, "git", "ignore"), os.path.join(moved, "other", "config")):
+            with self.subTest(target=target):
+                self.assertAdmitted(target, env=env)
+        self.assertAdmitted(os.path.join(moved, "git", "config"), env={"XDG_CONFIG_HOME": ""})
+        # A relative value is git's from where the session runs, not where the hook process does.
+        self.assertIn("what runs at login", self.assertRefused(
+            os.path.join(moved, "git", "config"), cwd=self.outside, env={"XDG_CONFIG_HOME": "xdg"}))
 
     def test_a_link_into_the_keys_is_held(self):
         for linker in linkers():
@@ -721,6 +739,9 @@ class TheHomeDirectoryKeepsWhatRunsAtLogin(GuardCase):
             os.path.join(self.HOME, "notes.md"),
             os.path.join(self.HOME, "projects", ".ssh-notes.md"),
             os.path.join(self.HOME, "projects", ".bashrc"),
+            os.path.join(self.HOME, ".config", "other", "config"),
+            os.path.join(self.HOME, ".config", "git", "ignore"),
+            os.path.join(self.HOME, "projects", ".claude.json"),
         ):
             with self.subTest(target=target):
                 self.assertAdmitted(target)
@@ -734,6 +755,8 @@ class TheHomeDirectoryKeepsWhatRunsAtLogin(GuardCase):
             os.path.join(self.CLAUDE, "commands", "anything.md"),
             os.path.join(self.CLAUDE, "agents", "anything.md"),
             os.path.join(self.CLAUDE, "plugins", "p", "skills", "s", "SKILL.md"),
+            # Beside `~/.claude`, the user state whose MCP servers every session starts.
+            os.path.join(self.HOME, ".claude.json"),
         ):
             with self.subTest(target=target):
                 self.assertIn("control surface", self.assertRefused(target))
@@ -793,19 +816,22 @@ class TheHomeDirectoryKeepsWhatRunsAtLogin(GuardCase):
         self.assertIn("what runs at login", self.assertRefused(
             os.path.join(keys, "authorized_keys"), project=keys, env=env))
 
-    def test_names_that_cannot_be_read_refuse_the_home_and_nothing_else(self):
-        # They live in `guard-git-argv.py`, so a guard copied without it fails
-        # closed under the home directory and leaves the rest of the outside.
+    def test_names_that_cannot_be_read_refuse_the_home_and_the_xdg_config_only(self):
+        # They live in `guard-git-argv.py`, so a guard copied without it fails closed under the
+        # home directory and at a `git/config` while `XDG_CONFIG_HOME` is set, and leaves the rest.
         alone = os.path.join(self.outside, "lone", ".claude", "hooks")
         home = os.path.join(self.outside, "home")
         os.makedirs(alone)
         os.makedirs(home)
         guard = shutil.copy(HOOK, alone)
+        shutil.copy(HOOK.parent / "path_grammar.py", alone)
         event = {"tool_name": "Write", "cwd": self.outside}
         # A Windows runner's temp root is under its real home, so this one is set.
         env = {key: value for key, value in os.environ.items() if key != "CLAUDE_PROJECT_DIR"}
-        env.update(HOME=home, USERPROFILE=home)
+        # Set as a CI runner sets it: only a file git could read there is refused.
+        env.update(HOME=home, USERPROFILE=home, XDG_CONFIG_HOME=os.path.join(self.outside, "xdg"))
         for target, reason in ((os.path.join(home, "notes.md"), "cannot be read"),
+                               (os.path.join(self.outside, "xdg", "git", "config"), "cannot be read"),
                                (os.path.join(self.outside, "loot.txt"), None)):
             with self.subTest(target=target):
                 result = subprocess.run(
@@ -869,7 +895,7 @@ class AWorktreeTheSessionHasNotEntered(GuardCase):
         root = os.path.join(self.outside, "owner")
         hooks = os.path.join(root, ".claude", "hooks")
         os.makedirs(hooks, exist_ok=True)
-        for name in ("guard-edit-target.py", "guard-git-argv.py"):
+        for name in ("guard-edit-target.py", "guard-git-argv.py", "path_grammar.py"):
             shutil.copy(HOOK.parent / name, hooks)
         self.write(os.path.join(root, ".claude", "settings.json"), json.dumps(
             {"permissions": {"deny": [f"Edit({rule})" for rule in denies]}}))

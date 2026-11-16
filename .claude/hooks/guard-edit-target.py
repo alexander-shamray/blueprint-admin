@@ -9,6 +9,7 @@ import importlib.util
 import json
 import os
 import sys
+import types
 import unicodedata
 
 # The tools that write a file. `MultiEdit` is listed although this repository's
@@ -22,6 +23,20 @@ EDITING_TOOLS = ("Edit", "Write", "NotebookEdit", "MultiEdit")
 # carrying neither is refused rather than waved through — a write whose target
 # this file cannot see is one it has established nothing about.
 PATH_KEYS = ("file_path", "notebook_path")
+
+
+def path_grammar():
+    """`path_grammar.py` beside this file, which names a path on another machine; compiled, so no bytecode is left."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "path_grammar.py")
+    module = types.ModuleType("path_grammar")
+    module.__file__ = path
+    with open(path, encoding="utf-8") as handle:
+        exec(compile(handle.read(), path, "exec"), module.__dict__)
+    return module
+
+
+GRAMMAR = path_grammar()
+
 
 GIT_GUARD = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                          "guard-git-argv.py")
@@ -42,7 +57,7 @@ GIT_GUARD = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 # ordinary path.
 def alternate_alphabet(path):
     """Whether `path` is spelled in Windows' non-drive path grammar."""
-    return os.name == "nt" and path[:2].replace("/", "\\") == "\\\\"
+    return GRAMMAR.other_grammar(path)
 
 
 def case_insensitive(path):
@@ -190,11 +205,19 @@ def verified_gitdir(root):
             text = handle.read().strip()
         if not text.startswith("gitdir:"):
             return None
-        gitdir = os.path.realpath(
-            os.path.join(root, text.split(":", 1)[1].strip()))
+        spelled = text.split(":", 1)[1].strip()
+        pointer = os.path.join(root, spelled)
+        if any(GRAMMAR.foreign(place, root, os.getcwd(), os.environ.get("CLAUDE_PROJECT_DIR"))
+               for place in (spelled, pointer)):
+            return None
+        gitdir = os.path.realpath(pointer)
         with open(os.path.join(gitdir, "gitdir"), encoding="utf-8") as handle:
-            backlink = os.path.join(gitdir, handle.read().strip())
+            named = handle.read().strip()
+        backlink = os.path.join(gitdir, named)
     except (OSError, ValueError):
+        return None
+    if any(GRAMMAR.foreign(place, root, os.getcwd(), os.environ.get("CLAUDE_PROJECT_DIR"))
+           for place in (named, backlink)):
         return None
     if os.path.normcase(os.path.realpath(backlink)) != os.path.normcase(
             os.path.realpath(marker)):
@@ -239,7 +262,12 @@ def common_git_dir(root):
         return None
     try:
         with open(os.path.join(gitdir, "commondir"), encoding="utf-8") as handle:
-            common = os.path.realpath(os.path.join(gitdir, handle.read().strip()))
+            spelled = handle.read().strip()
+        pointer = os.path.join(gitdir, spelled)
+        if any(GRAMMAR.foreign(place, gitdir, os.getcwd(), os.environ.get("CLAUDE_PROJECT_DIR"))
+               for place in (spelled, pointer)):
+            return None
+        common = os.path.realpath(pointer)
     except (OSError, ValueError):
         return None
     return common if os.path.isdir(common) else None
@@ -287,7 +315,7 @@ def protected_in_worktree(path, root):
         return "this target's deny list, which cannot be read"
 
 
-def home_offence(spelled, lexical, resolved):
+def home_offence(spelled, lexical, resolved, cwd=None):
     """The reason to refuse a target the home protects, or `None`.
 
     Asked whatever checkout holds it; spelling and resolution are both judged.
@@ -322,10 +350,29 @@ def home_offence(spelled, lexical, resolved):
             if place == "control":
                 return (
                     f"guard-edit-target: {spelled} resolves to {resolved}, "
-                    f"inside the harness's own control surface: `{parts[1]}` "
+                    f"inside the harness's own control surface: `{parts[1] if len(parts) > 1 else parts[0]}` "
                     "applies to every project, and a change to it is the "
                     "owner's to run (docs/harness-boundaries.md)."
                 )
+    try:
+        xdg = any(git_guard().xdg_git_config(path, cwd) for path in (lexical, resolved))
+    except (OSError, ValueError, TypeError, AttributeError):
+        if not os.environ.get("XDG_CONFIG_HOME") or not any(
+                os.path.normcase(path).replace("\\", "/").lower().endswith("/git/config")
+                for path in (lexical, resolved)):
+            return None
+        return (
+            f"guard-edit-target: {spelled} may be git's configuration at "
+            "`$XDG_CONFIG_HOME/git/config`, and the names that guard it "
+            f"cannot be read from {GIT_GUARD} (docs/harness-boundaries.md)."
+        )
+    if xdg:
+        return (
+            f"guard-edit-target: {spelled} resolves to {resolved}, git's own "
+            "configuration at `$XDG_CONFIG_HOME/git/config`: what runs at "
+            "login, under every session, which no checkout's rules own "
+            "(docs/harness-boundaries.md)."
+        )
     return None
 
 
@@ -535,7 +582,7 @@ def target_offence(event, spelled):
                 )
 
     # Reached when every anchor containing the target agreed.
-    return home_offence(spelled, lexical, resolved)
+    return home_offence(spelled, lexical, resolved, cwd)
 
 
 def main():

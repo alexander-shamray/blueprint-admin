@@ -78,7 +78,9 @@ FAKE_CLAUDE = """import json, os, sys
 here = os.path.dirname(os.path.abspath(__file__))
 seen = {"argv": sys.argv[1:], "cwd": os.getcwd(), "stdin": sys.stdin.buffer.read().decode("utf-8"),
         "temp": {name: os.environ.get(name) for name in ("TMP", "TEMP", "TMPDIR")},
-        "dispatched": os.environ.get("HARNESS_DISPATCHED"), "api_key": os.environ.get("ANTHROPIC_API_KEY")}
+        "dispatched": os.environ.get("HARNESS_DISPATCHED"), "api_key": os.environ.get("ANTHROPIC_API_KEY"),
+        "no_cwd_search": [value for name, value in os.environ.items()
+                          if name.upper() == "NODEFAULTCURRENTDIRECTORYINEXEPATH"]}
 with open(os.path.join(here, "seen.json"), "w", encoding="utf-8") as handle:
     json.dump(seen, handle)
 with open(os.path.join(here, "reply.bin"), "rb") as handle:
@@ -686,6 +688,17 @@ class LaunchTests(InRoot):
             run_fake_claude(stdout=json.dumps(SUCCESS).encode("utf-8"))
         seen = json.loads(Path("fake/seen.json").read_text(encoding="utf-8"))
         self.assertIsNone(seen["api_key"])
+
+    def test_run_starts_the_executor_with_no_working_directory_search(self):
+        # The npm `claude.cmd` shim's bare `node` was looked for in the worktree, which a merged branch fills.
+        # The parent's own value, in either case, is replaced rather than sent beside it.
+        record(RUN, "S1", status="running", branch=BRANCH, worktree=WORKTREE)
+        with mock.patch.dict(os.environ, {"NODEFAULTCURRENTDIRECTORYINEXEPATH": "0"}):
+            run_fake_claude(stdout=json.dumps(SUCCESS).encode("utf-8"))
+        seen = json.loads(Path("fake/seen.json").read_text(encoding="utf-8"))
+        # Every spelling the executor received, so a parent's copy sent beside the new one fails where names are
+        # case-sensitive; Windows keeps one name per variable whatever was sent.
+        self.assertEqual(["1"], seen["no_cwd_search"])
 
     def test_run_removes_the_executors_temp_directory_once_it_exits(self):
         # Each launch's mkdtemp directory outlived its executor and piled up under the system temp root.

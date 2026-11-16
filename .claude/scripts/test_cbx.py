@@ -20,6 +20,13 @@ SCRIPTS = Path(__file__).resolve().parent
 CBX = SCRIPTS.parent / "skills" / "codebase-index" / "scripts" / "cbx"
 CBX_PS1 = CBX.with_suffix(".ps1")
 SKILL = SCRIPTS.parent / "skills" / "codebase-index"
+NO_CWD_SEARCH = "NoDefaultCurrentDirectoryInExePath"
+# The variables a wrapper sets for what it starts; Windows spells an environment name in any case.
+WRAPPER_VARS = {"PYTHONSAFEPATH", "CBX_NO_SKILL_AUTO_UPDATE", NO_CWD_SEARCH.upper()}
+
+
+def _without_wrapper_vars():
+    return {name: value for name, value in os.environ.items() if name.upper() not in WRAPPER_VARS}
 
 # The bare console script `codebase-index <subcommand>`, which no wrapper pins to the interpreter or holds to the
 # allow list. Anywhere but after a word character, `/`, `.` or `-`, so a quote, a parenthesis or `$(` before it still
@@ -96,7 +103,7 @@ def _ps_in_the_callers_process(subcommand, env):
     script = str(CBX_PS1).replace("'", "''")
     command = (f"& '{script}' {subcommand} X; "
                'Write-Output "code=$LASTEXITCODE safe=[$env:PYTHONSAFEPATH] '
-               'auto=[$env:CBX_NO_SKILL_AUTO_UPDATE]"')
+               'auto=[$env:CBX_NO_SKILL_AUTO_UPDATE] nocwd=[$env:NoDefaultCurrentDirectoryInExePath]"')
     return subprocess.run(
         [_powershell(), "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
         capture_output=True, text=True, encoding="utf-8", env=env)
@@ -551,10 +558,9 @@ class CbxWrapper(unittest.TestCase):
         def nothing(fake):
             return fake + os.pathsep + _path_without_launchers(*_PS_HIDDEN), 4, ""
 
-        ours = {name: value for name, value in os.environ.items()
-                if name not in ("PYTHONSAFEPATH", "CBX_NO_SKILL_AUTO_UPDATE")}
+        ours = _without_wrapper_vars()
         for route in (path_cli, module, nothing):
-            for held in ({}, {"PYTHONSAFEPATH": "kept", "CBX_NO_SKILL_AUTO_UPDATE": "mine"}):
+            for held in ({}, {"PYTHONSAFEPATH": "kept", "CBX_NO_SKILL_AUTO_UPDATE": "mine", NO_CWD_SEARCH: "0"}):
                 with self.subTest(route=route.__name__, held=held), \
                         tempfile.TemporaryDirectory(prefix="cbx-ps-env-") as fake:
                     path, code, said = route(fake)
@@ -562,7 +568,8 @@ class CbxWrapper(unittest.TestCase):
                     self.assertIn(f"code={code} ", out.stdout, out.stdout + out.stderr)
                     self.assertIn(said, out.stdout, out.stdout + out.stderr)
                     self.assertIn(
-                        f"safe=[{held.get('PYTHONSAFEPATH', '')}] auto=[{held.get('CBX_NO_SKILL_AUTO_UPDATE', '')}]",
+                        f"safe=[{held.get('PYTHONSAFEPATH', '')}] auto=[{held.get('CBX_NO_SKILL_AUTO_UPDATE', '')}]"
+                        f" nocwd=[{held.get(NO_CWD_SEARCH, '')}]",
                         out.stdout)
 
     def test_powershell_py_fallback_when_cli_is_absent(self):
@@ -697,12 +704,41 @@ class CbxWrapper(unittest.TestCase):
     def test_powershell_puts_both_variables_back_when_the_gate_refuses(self):
         with tempfile.TemporaryDirectory(prefix="cbx-ps-gate-env-") as fake:
             _write_ps_stub(fake, "py", _PY_LAUNCHER_STUB)
-            env = {name: value for name, value in os.environ.items()
-                   if name not in ("PYTHONSAFEPATH", "CBX_NO_SKILL_AUTO_UPDATE")}
+            env = _without_wrapper_vars()
             env["CBX_STUB_GATE_EXIT"] = "3"
             env["PATH"] = fake + os.pathsep + _path_without_launchers(*_PS_HIDDEN)
             out = _ps_in_the_callers_process("search", env)
-            self.assertIn("code=3 safe=[] auto=[]", out.stdout, out.stdout + out.stderr)
+            self.assertIn("code=3 safe=[] auto=[] nocwd=[]", out.stdout, out.stdout + out.stderr)
+
+    def test_the_bash_wrapper_starts_the_cli_with_no_working_directory_search(self):
+        """Windows runs a bare `git` from the working directory before PATH, and the CLI calls git from the
+        checkout, which any merged branch can plant a `git.exe` in. The variable is what turns that search off."""
+        with tempfile.TemporaryDirectory(prefix="cbx-nocwd-") as fake:
+            stub = Path(fake) / "codebase-index"
+            stub.write_text(f'#!/bin/sh\necho "NOCWD=[${NO_CWD_SEARCH}]"\n', encoding="utf-8")
+            stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
+            env = {**_without_wrapper_vars(), "PATH": fake + os.pathsep + os.environ.get("PATH", "")}
+            out = subprocess.run(
+                [_bash(), str(CBX), "search", "X"],
+                capture_output=True, text=True, encoding="utf-8", env=env, cwd=fake)
+            self.assertEqual(0, out.returncode, out.stderr)
+            self.assertIn("NOCWD=[1]", out.stdout)
+
+    def test_the_powershell_wrapper_starts_the_cli_with_no_working_directory_search(self):
+        """As the bash case has it; the restore cases above hold it put back afterwards."""
+        with tempfile.TemporaryDirectory(prefix="cbx-ps-nocwd-") as fake:
+            if os.name == "nt":
+                stub = Path(fake) / "codebase-index.cmd"
+                stub.write_text(f"@echo off\r\necho NOCWD=[%{NO_CWD_SEARCH}%]\r\n", encoding="utf-8")
+            else:
+                stub = Path(fake) / "codebase-index"
+                stub.write_text(f'#!/bin/sh\necho "NOCWD=[${NO_CWD_SEARCH}]"\n', encoding="utf-8")
+                stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
+            _write_ps_stub(fake, "py", _PY_LAUNCHER_STUB)
+            env = {**_without_wrapper_vars(), "PATH": fake + os.pathsep + os.environ.get("PATH", "")}
+            out = _ps_invoke(CBX_PS1, "search", "X", env=env, cwd=fake)
+            self.assertEqual(0, out.returncode, out.stderr)
+            self.assertIn("NOCWD=[1]", out.stdout)
 
 
 if __name__ == "__main__":

@@ -61,6 +61,8 @@ STILL_ACTIVE = 259
 ERROR_ACCESS_DENIED = 5
 # The executor's command, resolved from PATH when None; a suite points it at a fake, never through the environment.
 CLAUDE_COMMAND = None
+# Windows runs a bare executable name from the current directory before PATH unless this is set.
+NO_CWD_SEARCH = "NoDefaultCurrentDirectoryInExePath"
 # The root of the executors' temp directories, the system's when None; a suite points it at its own directory.
 TEMP_ROOT = None
 PROJECTS = Path.home() / ".claude" / "projects"
@@ -616,8 +618,12 @@ def _start(root, directory, run, gid, entry, flag, pid_file, earlier=False):
     # Parallel executors sharing the system temp directory ran each other's scratch scripts. The marker makes the
     # task-list helper refuse the executor's writes: the dispatcher is the list's one writer while it runs.
     # An inherited ANTHROPIC_API_KEY outranks the owner's subscription login in a headless claude, so it is dropped.
-    env = {name: value for name, value in os.environ.items() if name != "ANTHROPIC_API_KEY"}
-    env.update({"TMP": str(scratch), "TEMP": str(scratch), "TMPDIR": str(scratch), DISPATCHED: "1"})
+    # The npm `claude.cmd` shim runs a bare `node`, which Windows looks for in the worktree before PATH, and any
+    # merged branch can put one there: NO_CWD_SEARCH turns that search off, set once whatever case it came in.
+    env = {name: value for name, value in os.environ.items()
+           if name != "ANTHROPIC_API_KEY" and name.upper() != NO_CWD_SEARCH.upper()}
+    env.update({"TMP": str(scratch), "TEMP": str(scratch), "TMPDIR": str(scratch), DISPATCHED: "1",
+                NO_CWD_SEARCH: "1"})
     started = now()
     # The permission mode is the settings' own, never a flag here (spec section 6.2); the prompt goes on stdin.
     try:
