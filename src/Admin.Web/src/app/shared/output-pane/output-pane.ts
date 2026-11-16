@@ -21,10 +21,10 @@ import { ImagePull, PullProgress, PullState, PullTracker } from './pull-progress
 import { ReadinessProgress, ReadinessTracker, SurfaceState } from './readiness-progress';
 import { StepRow, StepState, StepTracker } from './step-progress';
 
-/** What marks a Compose stderr line as a failure rather than progress. */
 /** The most lines the pane keeps; the oldest go first, as the log follower's cap does, so a long job costs a bounded read per line. */
 export const MAX_ENTRIES = 5000;
 
+/** What marks a Compose stderr line as a failure rather than progress. */
 const PROBLEM = /\b(error|unhealthy|failed|denied)\b/i;
 
 /** The verdicts a Reset writes on stderr when it stops, as `ResetService.cs` words them. */
