@@ -361,7 +361,7 @@ internal static partial class FakeGateway
         return Guid.Empty.ToString("D");
     }
 
-    /// <summary>What a stock read reports: the fake's own count, else the recorded 10 for the recorded product.</summary>
+    /// <summary>What a stock read reports: the fake's count, else the recorded 10 for the recorded product.</summary>
     private static int? StockCount(FakeOrders orders, string productId) =>
         orders.OnHandOf(productId)
         ?? (string.Equals(productId, StockedProductId, StringComparison.OrdinalIgnoreCase) ? 10 : null);
