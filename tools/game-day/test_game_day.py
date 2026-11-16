@@ -369,6 +369,22 @@ class TheFrontend(unittest.TestCase):
         self.assertEqual(len(findings), 1)
         self.assertIn("tree kill", findings[0])
 
+    def routes_for_a_server_that_never_listens(self, job: dict) -> dict:
+        return {("GET", "/api/stack"): stack(reach=[probe("client", False, "http://localhost:5173/")],
+                                             frontend={"job": job, "installed": True}),
+                ("POST", "/api/stack/frontend/start"): (202, {"id": "j1"}),
+                ("GET", "/api/jobs/j1"): (200, {"summary": job, "lines": [{"text": "Error: Cannot find module"}]})}
+
+    def test_npm_gone_before_listening_says_so_with_its_output(self):
+        w = world(self.routes_for_a_server_that_never_listens({"id": "j1", "state": "Exited", "exitCode": 1}))
+        with self.assertRaisesRegex(harness.GameDayError, "exited 1 before listening.*Cannot find module"):
+            frontend_killed.cause(w)
+
+    def test_a_server_still_compiling_at_the_deadline_shows_its_output(self):
+        w = world(self.routes_for_a_server_that_never_listens({"id": "j1", "state": "Running", "exitCode": None}))
+        with self.assertRaisesRegex(harness.Timeout, "job=Running.*last lines: Error: Cannot find module"):
+            frontend_killed.cause(w)
+
     def test_an_uninstalled_clone_is_not_a_settled_start(self):
         w = world({("GET", "/api/stack"): stack(reach=[probe("client", False, "http://localhost:5173/")],
                                                 frontend={"job": None, "installed": False, "installProblem": "no node_modules"})})

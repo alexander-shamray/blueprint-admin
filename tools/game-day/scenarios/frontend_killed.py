@@ -40,12 +40,34 @@ def settled(world: harness.World) -> tuple[bool, str]:
     return not running and not held, f"job={job and job.get('state')}, listeners on the client port={held}"
 
 
+def _tail(world: harness.World, job_id: str, lines: int = 15) -> str:
+    """The last lines `npm start` wrote, as the console holds them (`GET /api/jobs/{id}`), so a dev server that never
+    listened says why: npm gone at once and one still compiling read alike on the port."""
+    status, view = world.console.call("GET", f"/api/jobs/{job_id}")
+    if status != 200 or not isinstance(view, dict):
+        return f"(job {job_id}'s output unreadable: {status})"
+    return " | ".join(line.get("text", "") for line in view.get("lines", [])[-lines:])
+
+
 def _start(world: harness.World, port: int) -> None:
     status, body = world.console.call("POST", "/api/stack/frontend/start")
     if status != 202:
         raise harness.GameDayError(f"frontend start answered {status}: {str(body)[:300]}")
-    world.wait(lambda: (bool(world.ports.listeners(port)), f"listeners={world.ports.listeners(port)}"),
-               UP_SECONDS, "the dev server listening on the client port")
+    job_id = body.get("id") if isinstance(body, dict) else None
+
+    def listening() -> tuple[bool, str]:
+        held = world.ports.listeners(port)
+        job = _job(world)
+        if not held and job is not None and job.get("state") == "Exited":
+            raise harness.GameDayError(f"npm start exited {job.get('exitCode')} before listening on {port}: "
+                                       f"{_tail(world, job['id']) if job.get('id') else ''}")
+        return bool(held), f"listeners={held}, job={job and job.get('state')}"
+
+    try:
+        world.wait(listening, UP_SECONDS, "the dev server listening on the client port")
+    except harness.Timeout as error:
+        raise harness.Timeout(f"{error}; npm start's last lines: {_tail(world, job_id) if job_id else '(no job id)'}") \
+            from error
 
 
 def _exited(world: harness.World) -> tuple[bool, str]:
