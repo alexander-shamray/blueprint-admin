@@ -93,6 +93,14 @@ by a pull request that first changes the gate, and nothing guards a branch
 checked out before its pull request is judged. The managed text's correction is
 the harness's: blueprint-harness#600.
 
+**The locality gate reads the pull request's own ignore rules** (#799).
+`gates.yml` runs it in the pull request's checkout, so a path force-added
+beside a `.gitignore` edit that un-ignores it passes the ignored-path check.
+What holds is `OWNER_ONLY`, code the base copy carries, which refuses
+`.claude/settings.local.json` and `.mcp.json` in every class whatever the
+ignore rules say; any other ignored path, un-ignored in the same pull request,
+is the review's to read.
+
 **The code index's MCP route opens the index unjudged** (#798). `cbx` asks
 `index_openable` before the CLI opens the index; the `mcp__codebase-index__*`
 tools reach the server `.mcp.json` starts, whose only hook compares checkout

@@ -59,9 +59,9 @@ and this repository has no service, so the gate refuses it.
 **CI reads both rows.** The `gates` job in `.github/workflows/gates.yml`
 judges the change, and the workflow posts the verdict as `locality-gate`,
 which fails a PR on a path outside the class map or the declared touch set,
-on a path it leaves in the tree that `.gitignore` matches, force-added or not,
-and on `.mcp.json` in any class, which is the owner's (`OWNER_ONLY` in
-`.github/locality-gate/locality_gate.py` says why).
+on a path it leaves in the tree that its own `.gitignore` matches, force-added
+or not, and in any class on a path `OWNER_ONLY` in
+`.github/locality-gate/locality_gate.py` names, with its reason.
 `/review-branch` and `/ship` also run `bash .claude/scripts/pr-locality.sh`.
 
 | Class | Examples | May touch | Never touches |

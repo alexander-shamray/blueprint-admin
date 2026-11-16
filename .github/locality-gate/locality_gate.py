@@ -44,15 +44,15 @@ the payload carries GitHub's `changedFiles` count and a shorter list is
 refused. A rename arrives as one entry with the source in `previous_filename`,
 so both ends of a rename are judged.
 
-Two paths are judged on more than their class. A path the diff leaves in the
+Some paths are judged on more than their class. A path the diff leaves in the
 tree that this checkout's ignore rules match is refused (#799): a force-added
 `.claude/settings.local.json` is tracked, which git's own `check-ignore` passes
 over unless it is told not to read the index, and once on `main` it reaches
 every clone and every fork with grants and hooks no settings render controls.
-And `.mcp.json` is the owner's (#797): Claude Code approves its servers by
-name, so a branch that changes the file runs its own command under the
-existing approval. No class admits it; it lands only by a pull request that
-first changes this gate, which this gate's base copy then judges.
+The ignore rules are the checkout's, so a pull request that also un-ignores the
+path passes that check. So the paths `OWNER_ONLY` names, that file and
+`.mcp.json` (#797), are refused in every class whatever the ignore rules say,
+each for the reason it carries there.
 
 Stdlib only, on the licence gate's terms. The deciding takes JSON on stdin and
 the fetching is two `gh` calls in the workflow, `deploy/canary/canary.py`'s
@@ -84,9 +84,18 @@ DEFAULT_MAP = Path(__file__).resolve().parent / "classes.yml"
 
 CLASSES = "ABCDE"
 
-# Paths no class admits, compared case-folded because the Windows checkouts
-# that read them open `.MCP.json` as `.mcp.json`.
-OWNER_ONLY = (".mcp.json",)
+# Paths no class admits, each with why, compared case-folded because the
+# Windows checkouts that read them open `.MCP.json` as `.mcp.json`. The
+# ignored-path check reads the pull request's own .gitignore, which the same
+# pull request can edit; this list is code, so the base copy CI runs holds it.
+OWNER_ONLY = {
+    ".mcp.json": "Claude Code approves its MCP servers by name, so a branch that changes it runs its own "
+                 "command under the existing approval (#797); the owner lands it by a pull request that "
+                 "first changes this gate",
+    ".claude/settings.local.json": "Claude Code loads it as the checkout's own settings, so a tracked copy "
+                                   "reaches every clone and fork with grants and hooks no settings render "
+                                   "controls (#799); it is never tracked",
+}
 
 # A touch-set token: path, glob characters, and the two extra characters
 # git permits in a name (`@`, `+`). Same set pr-locality.sh admits.
@@ -453,11 +462,8 @@ def check(payload: dict, class_map: dict[str, list[str]]) -> list[str]:
     problems = []
     for path in paths:
         if path.lower() in OWNER_ONLY:
-            problems.append(
-                f"`{path}` is the owner's, and no class admits it: Claude Code approves its MCP servers by "
-                f"name, so a branch that changes it runs its own command under the existing approval (#797). "
-                f"Leave it out; the owner lands it by a pull request that first changes this gate"
-            )
+            problems.append(f"`{path}` is the owner's, and no class admits it: {OWNER_ONLY[path.lower()]}. "
+                            f"Leave it out")
             continue
         if not any(match(path) for match in allowed):
             problems.append(
