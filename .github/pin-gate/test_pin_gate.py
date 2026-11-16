@@ -326,6 +326,17 @@ class OtherRestoreInputs(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertTrue(check_other(path, "-p:RestoreSources=https://x"))
 
+    def test_only_an_empty_response_file_at_the_root_passes(self) -> None:
+        # #795: it stops MSBuild's upward search at the checkout, and hands MSBuild nothing.
+        for data in ("", "\n", "# Stops the walk upward.\n", b"# bytes\r\n\r\n"):
+            with self.subTest(data=data):
+                self.assertEqual(check_other("Directory.Build.rsp", data), [])
+        for path, data in (("Directory.Build.rsp", "# comment\n-p:RestoreSources=https://x\n"),
+                           ("Directory.Build.rsp", "-logger:X,C:/x.dll"),
+                           ("src/Directory.Build.rsp", ""), ("MSBuild.rsp", "")):
+            with self.subTest(path=path, data=data):
+                self.assertTrue(check_other(path, data))
+
     def test_only_the_one_solution_naming_only_projects_passes(self) -> None:
         good = '<Solution><Folder Name="/src/"><Project Path="src/A/A.csproj" /></Folder></Solution>'
         self.assertEqual(check_other("BlueprintAdmin.slnx", good), [])

@@ -24,6 +24,7 @@ PIN_FILE = "Directory.Packages.props"
 FEED_FILE = "nuget.config"
 SDK_FILE = "global.json"
 SOLUTION_FILE = "BlueprintAdmin.slnx"
+ROOT_RESPONSE_FILE = "Directory.Build.rsp"
 
 # NuGet's lock file, and the per-project packages.<name>.lock.json it reads
 # first: either can choose transitive versions the pin file never lists, as
@@ -293,6 +294,10 @@ def check_other(path: str, data: bytes | str, known: frozenset[str] | None = Non
     a second solution or feed list, an SDK pin naming MSBuild SDKs, or a
     NuGet lock file."""
     base = PurePosixPath(path).name.lower()
+    # MSBuild reads the nearest Directory.Build.rsp upward from the build, so an empty one at the root
+    # stops the walk before it reaches a file planted above the checkout (#795), and hands MSBuild nothing.
+    if path == ROOT_RESPONSE_FILE and _hands_nothing(data):
+        return []
     if base.endswith(".rsp"):
         return [f"{path}: a response file hands MSBuild properties no project shows"]
     if LOCK_FILE.match(base):
@@ -323,6 +328,12 @@ def check_other(path: str, data: bytes | str, known: frozenset[str] | None = Non
         if isinstance(pins, dict) and any(k.lower() == "msbuild-sdks" for k in pins):
             return [f"{path}: msbuild-sdks fetches MSBuild SDKs by a version {PIN_FILE} never sees"]
     return []
+
+
+def _hands_nothing(data: bytes | str) -> bool:
+    """Whether a response file is blank lines and `#` comments only."""
+    text = data.decode("utf-8-sig", errors="replace") if isinstance(data, bytes) else data
+    return all(not line.strip() or line.lstrip().startswith("#") for line in text.splitlines())
 
 
 def _is_other(path: str) -> bool:
