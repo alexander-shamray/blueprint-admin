@@ -99,7 +99,7 @@ export class ComposeTracker {
   }
 }
 
-/** The containers of the lines so far; the Stack controls tile counts them for the running Compose job. */
+/** The containers of the lines so far, read all at once; a running job is read a line at a time by `ComposeTracker`. */
 export function composeProgress(lines: readonly OutputLine[]): ComposeProgress {
   const tracker = new ComposeTracker();
   for (const line of lines) tracker.add(line);
