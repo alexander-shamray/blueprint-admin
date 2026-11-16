@@ -516,8 +516,10 @@ def ignored_paths(paths: list[str], root: Path) -> set[str]:
 
 
 def check_ignored(payload: dict, root: Path) -> list[str]:
-    """Every path the diff leaves in the tree that the ignore rules match case-folded; empty when there is none."""
-    excluded = ignored_paths(arriving(payload["files"]), root)
+    """Every path the diff leaves in the tree that the ignore rules match case-folded; empty when there is none.
+
+    An `OWNER_ONLY` path is left to `check`, whose refusal un-ignoring does not lift."""
+    excluded = ignored_paths([path for path in arriving(payload["files"]) if path.lower() not in OWNER_ONLY], root)
     return [
         f"`{path}` matches this checkout's ignore rules read case-folded, as a Windows checkout reads them; "
         f"leave it out, or un-ignore it in .gitignore in the same pull request"
