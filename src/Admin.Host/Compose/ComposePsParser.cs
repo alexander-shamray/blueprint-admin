@@ -26,11 +26,11 @@ public static class ComposePsParser
 
             if (line[0] == '[')
             {
-                services.AddRange(JsonSerializer.Deserialize<List<PsRow>>(line, Options)!.Select(ToStatus));
+                services.AddRange((JsonSerializer.Deserialize<List<PsRow?>>(line, Options) ?? []).OfType<PsRow>().Select(ToStatus));
             }
-            else
+            else if (JsonSerializer.Deserialize<PsRow>(line, Options) is { } row)
             {
-                services.Add(ToStatus(JsonSerializer.Deserialize<PsRow>(line, Options)!));
+                services.Add(ToStatus(row));
             }
         }
 

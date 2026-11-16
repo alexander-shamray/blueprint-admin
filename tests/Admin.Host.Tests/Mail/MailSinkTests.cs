@@ -107,6 +107,20 @@ public sealed class MailSinkTests : IClassFixture<AdminHostFactory>
     }
 
     [Fact]
+    public async Task A_null_entry_in_the_sinks_message_list_is_skipped_and_the_rest_listed()
+    {
+        MailSinkClient mail = Client(new ScriptedHandler(request =>
+            request.RequestUri!.AbsolutePath == "/api/v1/messages"
+                ? Json("""{"total":2,"messages":[null,{"ID":"abc123","Subject":"Hello","Created":"2026-10-15T12:11:07.205Z","Read":false}]}""")
+                : Answer(request)));
+
+        MailListView list = await mail.ListAsync(TestContext.Current.CancellationToken);
+
+        list.Reachable.ShouldBeTrue();
+        list.Messages.Single().Id.ShouldBe("abc123");
+    }
+
+    [Fact]
     public async Task A_correlation_header_the_backend_would_not_adopt_is_no_link()
     {
         MailSinkClient mail = Client(new ScriptedHandler(request =>
