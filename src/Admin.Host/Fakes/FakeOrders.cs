@@ -21,8 +21,7 @@ internal sealed record FakeMail(string Id, string MessageId, string Template, st
 /// order, and these have to move. The bodies are blueprint-backend's <c>OrderDetail</c> and <c>OrderSummary</c>
 /// (<c>src/BFF/Web.Bff/Orders/OrderResponses.cs</c>), the status chosen as <c>BuyerStatus.Of</c> chooses it, and
 /// the cadence is the fake's own: one <see cref="Step"/> from the place to confirmed, to dispatched, to delivered. A
-/// cancel takes effect one step after it is asked for, unless the order is dispatched first; a carrier-coded order is
-/// never dispatched, so its cancel takes effect however late it is asked.
+/// cancel takes effect one step after it is asked for, unless the order is dispatched first.
 /// </summary>
 /// <remarks>
 /// The first order is <see cref="FakeGateway.PlacedOrderId"/>, the id the reservation and payment recordings carry;
@@ -236,8 +235,8 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
     }
 
     /// <summary>
-    /// Sets what Inventory holds on hand for a product this fake published; any other id changes nothing a sale reads, as the
-    /// fake's write answers 204 for any. The recorded stocked product keeps the count only for <see cref="OnHandOf"/>.
+    /// Sets what Inventory holds on hand for a product this fake published; any other id changes nothing a sale
+    /// reads, as the write answers 204 for any. The recorded product keeps it only for <see cref="OnHandOf"/>.
     /// </summary>
     public void Stock(string productId, int onHand)
     {
@@ -247,20 +246,26 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
             {
                 products[productId] = product with { OnHand = onHand };
             }
-            else if (string.Equals(productId, FakeGateway.StockedProductId, StringComparison.OrdinalIgnoreCase))
+            else if (IsRecordedProduct(productId))
             {
                 recordedOnHand = onHand;
             }
         }
     }
 
-    /// <summary>The count a stock read answers for <paramref name="productId"/>: a published product's, or the recorded stocked product's once written; null where Inventory has none to report.</summary>
+    private static bool IsRecordedProduct(string productId) =>
+        string.Equals(productId, FakeGateway.StockedProductId, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The count a stock read answers for <paramref name="productId"/>: a published product's, or the recorded one's
+    /// once written; null where Inventory has none to report.
+    /// </summary>
     public int? OnHandOf(string productId)
     {
         lock (gate)
         {
             return products.TryGetValue(productId, out Product? product) ? product.OnHand
-                : string.Equals(productId, FakeGateway.StockedProductId, StringComparison.OrdinalIgnoreCase) ? recordedOnHand
+                : IsRecordedProduct(productId) ? recordedOnHand
                 : null;
         }
     }
@@ -501,7 +506,9 @@ public sealed class FakeOrders(TimeProvider time, FakeStack stack)
         DateTimeOffset now = time.GetUtcNow();
         bool scripted = order.Ended is not null;
         DateTimeOffset? cancelled = scripted ? (p + order.EndDelay <= now ? p + order.EndDelay : null)
-            : order.CancelAskedAt is { } c && (order.Carrier is not null || c + Step < p + (2 * Step)) && c + Step <= now ? c + Step : null;
+            : order.CancelAskedAt is { } c && (order.Carrier is not null || c + Step < p + (2 * Step)) && c + Step <= now
+                ? c + Step
+                : null;
         DateTimeOffset? confirmed = scripted ? null : Reached(p + Step, now, cancelled);
         DateTimeOffset? dispatched = scripted || order.Carrier is not null ? null : Reached(p + (2 * Step), now, cancelled);
         DateTimeOffset? delivered = scripted || order.InTransit || order.Carrier is not null ? null : Reached(p + (3 * Step), now, cancelled);
