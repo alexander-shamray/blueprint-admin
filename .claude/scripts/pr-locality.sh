@@ -31,10 +31,14 @@ to_regex() {
 # The body is captured before it is filtered, so a `gh` failure — no
 # authentication, no network, no such pull request — is fatal under `set -e`
 # rather than indistinguishable from a body with no rows. The rows are found
-# and cut by bash itself, as a token is.
-body=$(gh_read pr view "$pr" --json body --jq .body)
-# A body saved on Windows or through the web form ends each line in CR, which no row grammar below expects.
-body=${body//$'\r'/}
+# and cut by bash itself, as a token is. The `.` keeps the body's own last
+# line ending from the cut a capture makes, and is dropped after it.
+body=$(gh_read pr view "$pr" --json body --jq '.body + "."')
+body=${body%.}
+# A body saved on Windows or through the web form ends each line in CR, which no row grammar below expects. A
+# lone CR ends a line for GitHub and not here, so it is refused as the CI gate refuses it.
+body=${body//$'\r\n'/$'\n'}
+case "$body" in *$'\r'*) refuse "the body carries a carriage return that is not part of a CRLF line ending" ;; esac
 class_row="" touch_row="" class_rows=0 touch_rows=0
 class_at='^\| *Class *\|' touch_at='^\| *Touch set *\|'
 # A row inside a fenced code block is an example, not the declaration, and is skipped as the CI gate skips it, by
@@ -42,16 +46,25 @@ class_at='^\| *Class *\|' touch_at='^\| *Touch set *\|'
 # info string holding no backtick, closed only by a run of the same character, at least as long, then blanks alone.
 # The run is greedy, so a backtick left in the rest is one in the info string. An unclosed fence runs to the end.
 fence="" fence_open='^ {0,3}(`{3,}|~{3,})(.*)$' fence_close='^ {0,3}(`{3,}|~{3,})[[:blank:]]*$'
+# After a list item, block quote or HTML block start, GitHub can end a fence sooner than a line reader does, so a
+# row in any spelling it could render, indented or without its pipe, is refused there rather than skipped.
+container='^ {0,3}([-+*]|[0123456789]{1,9}[.)])([[:blank:]]|$)|^ {0,3}[<>]'
+rowish='^[[:blank:]]*\|?[[:blank:]]*(Class|Touch set)[[:blank:]]*\|'
+after_container=0 contained=0
 while IFS= read -r line; do
   if [ -n "$fence" ]; then
+    if [ "$contained" -eq 1 ] && [[ "$line" =~ $rowish ]]; then
+      refuse "a Class or Touch set row sits in a fenced block after a list, block quote or HTML block"
+    fi
     if [[ "$line" =~ $fence_close ]] && [ "${BASH_REMATCH[1]:0:1}" = "${fence:0:1}" ] &&
       [ "${#BASH_REMATCH[1]}" -ge "${#fence}" ]; then fence=""; fi
     continue
   fi
+  if [[ "$line" =~ $container ]]; then after_container=1; fi
   if [[ "$line" =~ $fence_open ]]; then
     case "${BASH_REMATCH[1]:0:1}${BASH_REMATCH[2]}" in
       '`'*'`'*) ;;
-      *) fence=${BASH_REMATCH[1]}; continue ;;
+      *) fence=${BASH_REMATCH[1]}; contained=$after_container; continue ;;
     esac
   fi
   if [[ "$line" =~ $class_at ]]; then class_row=$line; class_rows=$((class_rows + 1)); fi

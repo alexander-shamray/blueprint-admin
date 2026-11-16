@@ -63,6 +63,9 @@ def check(pr: int, commits: list[dict]) -> list[str]:
             problems.append(
                 f"{sha} carries `{TRAILER_KEY}: {', '.join(named)}`, not `{TRAILER_KEY}: {wanted}`"
             )
+        elif len(named) > 1:
+            # git-revert-pr.sh compares every parsed PR: line, joined, with one `PR: #<n>`, so it would leave this out.
+            problems.append(f"{sha} carries `{TRAILER_KEY}: {wanted}` twice or more, not once")
     return problems
 
 

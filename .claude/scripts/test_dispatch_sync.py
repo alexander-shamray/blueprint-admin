@@ -44,6 +44,11 @@ def flat(text):
     return " ".join(text.replace("`", "").split())
 
 
+# The caller's global and system config off, as the sibling git suites run: signing, a hooks path or
+# `status.showUntrackedFiles` there would change what these repositories report.
+QUIET = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+
+
 def git_in(cwd, *args):
     done = subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=cwd, capture_output=True,
                           encoding="utf-8", check=True, timeout=60)
@@ -124,6 +129,8 @@ class Bound(InRoot):
 
     def setUp(self):
         super().setUp()
+        # Through the environment, so the helpers under test run git under it as well.
+        self.enterContext(mock.patch.dict(os.environ, QUIET))
         git_in(".", "init", "-q", "-b", "main")
         # What the executor leaves under artifacts/ is ignored in a target, so it never reads as a dirty tree.
         Path(".gitignore").write_text("artifacts/\n", encoding="utf-8")
@@ -237,6 +244,18 @@ class SyncLaunch(Bound):
         pid = earlier / f"{GID}.pid"
         pid.write_text(f"{os.getpid()}\n", encoding="utf-8")
         self.refused(f"{GID}'s executor from run 20261031-220000 is still running")
+        pid.write_text(f"{finished_pid()}\n", encoding="utf-8")
+        self.assertEqual("", self.sync_launch())
+
+    def test_an_earlier_runs_pid_file_that_holds_no_pid_is_named_where_it_is(self):
+        # Read as no executor it would launch beside one; refused, the owner is told which file to read or clear.
+        earlier = state_dir("20261031-220000")
+        earlier.mkdir(parents=True)
+        pid = earlier / f"{GID}.pid"
+        pid.write_text("garbled\n", encoding="utf-8")
+        self.refused(f"{GID} in run 20261031-220000: its pid file holds no pid")
+        out = self.sync_launch()
+        self.assertIn(str(pid), out)
         pid.write_text(f"{finished_pid()}\n", encoding="utf-8")
         self.assertEqual("", self.sync_launch())
 
@@ -643,6 +662,19 @@ class SyncClose(InRoot):
         (state_dir() / f"{GID}.pid").write_text(f"{os.getpid()}\n", encoding="utf-8")
         self.assertIn(f"refused: {GID}'s executor is still running", run_cli(["sync-close", RUN, GID]))
         self.assertEqual("running", group_state(RUN, GID)["status"])
+
+    def test_a_relaunched_window_sync_with_its_worktree_is_read_before_it_closes(self):
+        # A relaunch keeps `window` while its executor runs, so the closable status alone says nothing about it.
+        record_sync(status="window")
+        pid = state_dir() / f"{GID}.pid"
+        pid.write_text(f"{os.getpid()}\n", encoding="utf-8")
+        self.assertIn(f"refused: {GID}'s executor is still running", run_cli(["sync-close", RUN, GID]))
+        self.assertEqual("window", group_state(RUN, GID)["status"])
+        pid.unlink()
+        record = state_dir() / f"{GID}.session.json"
+        record.write_text(json.dumps({"started": NOW.isoformat(), "stdout": "{}"}), encoding="utf-8")
+        self.assertIn(f"refused: {GID} has an exit not yet read; run result first", run_cli(["sync-close", RUN, GID]))
+        self.assertEqual("window", group_state(RUN, GID)["status"])
 
     def test_a_group_with_rows_is_not_closed_this_way(self):
         record(RUN, "S1", status="verified")

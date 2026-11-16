@@ -142,6 +142,17 @@ def under(child, parent, traits):
     return child.startswith(parent)
 
 
+def below(child, parent):
+    """The part of `child` beneath `parent`, in `child`'s own spelling.
+
+    Counted rather than compared, where `under` holds: `os.path.relpath`
+    folds case on Windows alone, and elsewhere climbs out of a cased root.
+    """
+    parts = [part for part in os.path.normpath(child).split(os.sep) if part]
+    depth = len([part for part in os.path.normpath(parent).split(os.sep) if part])
+    return os.path.join(*parts[depth:]) if parts[depth:] else os.curdir
+
+
 def checkout_root(path):
     """The nearest ancestor of `path` holding a `.git`, or `None`.
 
@@ -366,20 +377,29 @@ def offence(event):
     # path: either way this file cannot see where the write lands. The loop
     # variable is `name`, not `key`, which is a function in this module.
     tool_input = event.get("tool_input")
-    spelled = None
+    spellings = []
     if isinstance(tool_input, dict):
         for name in PATH_KEYS:
             value = tool_input.get(name)
             if isinstance(value, str) and value:
-                spelled = value
-                break
-    if spelled is None:
+                spellings.append(value)
+    if not spellings:
         return (
             f"guard-edit-target: {tool} carries no file path this guard can "
             "read, so nothing has been established about where it writes. "
             "Refusing rather than waving it through."
         )
+    # Every key carried is judged, since the one read first need not be the
+    # one the tool writes through.
+    for spelled in spellings:
+        reason = target_offence(event, spelled)
+        if reason is not None:
+            return reason
+    return None
 
+
+def target_offence(event, spelled):
+    """The reason to refuse a write to `spelled`, or `None`."""
     cwd = event.get("cwd")
     if not isinstance(cwd, str) or not cwd:
         cwd = os.getcwd()
@@ -461,7 +481,7 @@ def offence(event):
         judged = True
 
         expected = os.path.normpath(
-            os.path.join(real_root, os.path.relpath(lexical, base)))
+            os.path.join(real_root, below(lexical, base)))
 
         # The traits are measured at the root and a child can disagree: Windows
         # sets case sensitivity per directory (`fsutil file
@@ -530,6 +550,8 @@ def main():
               file=sys.stderr)
         return 0
 
+    # The same exception: JSON that is not an object names no tool and no
+    # path, so it is as unreadable as text that is not JSON at all.
     if not isinstance(event, dict):
         print("guard-edit-target: hook event is not an object; not judging",
               file=sys.stderr)

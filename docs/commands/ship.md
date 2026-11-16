@@ -949,14 +949,15 @@ mergeable does not become less so because the reviewer had more to say.
 Report the state plainly — findings per round and whether the rate was
 still flat when the budget ran out is the useful signal — and merge.
 
-**Of the four reads in the runbook's step 6 gate block, `pr-state.sh` and `gh pr
-checks` read the remote, and `git status --short` and `git log
-<headRefOid>..HEAD` read the workspace.** `headRefOid`, the checks and
-`--match-head-commit` all agree happily about a head this checkout has since
-moved past: a commit made after the last review, or an edit made while the
-review ran, is invisible to all three. The merge would then succeed for the
-older head and the teardown remove the worktree, stranding the newer work on a
-merged branch — step 0's whole argument, arriving at the other end of the run.
+**Of the five reads in the runbook's step 6 gate block, `pr-state.sh`, `gh pr
+checks` and `main-red-open.sh` read the remote, and `git status --short
+--untracked-files=all` and `git log <headRefOid>..HEAD` read the workspace.**
+`headRefOid`, the checks and `--match-head-commit` all agree happily about a
+head this checkout has since moved past: a commit made after the last review, or
+an edit made while the review ran, is invisible to all three. The merge would
+then succeed for the older head and the teardown remove the worktree, stranding
+the newer work on a merged branch — step 0's whole argument, arriving at the
+other end of the run.
 
 **`git log <headRefOid>..HEAD` is the read rather than an equality**, and
 the asymmetry is deliberate: a HEAD carrying anything the remote lacks is
