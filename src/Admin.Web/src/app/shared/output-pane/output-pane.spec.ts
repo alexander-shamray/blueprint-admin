@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { Subject } from 'rxjs';
 import { JobEvent, SseClient } from '../../core/host/sse-client';
-import { OutputPane } from './output-pane';
+import { MAX_ENTRIES, OutputPane } from './output-pane';
 
 describe('OutputPane', () => {
   it('renders lines as they arrive and the exit code at the end', async () => {
@@ -23,6 +23,24 @@ describe('OutputPane', () => {
     expect(pre.querySelector('.stderr')?.textContent?.trim()).toBe('[stderr] two');
     expect(pre.textContent).not.toContain('[stderr] one');
     expect(fixture.nativeElement.textContent).toContain('exited 3');
+  });
+
+  it('keeps the newest lines only, so a long job holds a bounded log', () => {
+    const events = new Subject<JobEvent>();
+    const sse = { follow: vi.fn(() => events.asObservable()) };
+    TestBed.configureTestingModule({ imports: [OutputPane], providers: [{ provide: SseClient, useValue: sse }] });
+    const fixture = TestBed.createComponent(OutputPane);
+    fixture.componentRef.setInput('jobId', 'j1');
+    fixture.detectChanges();
+
+    for (let i = 0; i < MAX_ENTRIES + 3; i++) {
+      events.next({ kind: 'line', line: { sequence: i, at: '', stream: 'Stdout', text: `line ${i}` } });
+    }
+
+    const entries = fixture.componentInstance.entries();
+    expect(entries.length).toBe(MAX_ENTRIES);
+    expect(entries[0].text).toBe('line 3');
+    expect(entries[entries.length - 1].text).toBe(`line ${MAX_ENTRIES + 2}`);
   });
 
   it('is a log that is read on demand and never announced line by line, with a status that says only start and end', () => {

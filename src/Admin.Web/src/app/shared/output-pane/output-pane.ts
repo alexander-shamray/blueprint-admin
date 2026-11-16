@@ -22,6 +22,9 @@ import { ReadinessProgress, ReadinessTracker, SurfaceState } from './readiness-p
 import { StepRow, StepState, StepTracker } from './step-progress';
 
 /** What marks a Compose stderr line as a failure rather than progress. */
+/** The most lines the pane keeps; the oldest go first, as the log follower's cap does, so a long job costs a bounded read per line. */
+export const MAX_ENTRIES = 5000;
+
 const PROBLEM = /\b(error|unhealthy|failed|denied)\b/i;
 
 /** The verdicts a Reset writes on stderr when it stops, as `ResetService.cs` words them. */
@@ -729,6 +732,6 @@ export class OutputPane {
       tabulated: pull || container || progress || claimed || (wait && ReadinessTracker.isPoll(line.text)),
       compose: pull || container || event !== null || COMPOSE_LINE.test(line.text),
     };
-    this.entries.update((all) => [...all, entry]);
+    this.entries.update((all) => (all.length >= MAX_ENTRIES ? [...all.slice(1), entry] : [...all, entry]));
   }
 }
