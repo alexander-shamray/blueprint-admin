@@ -615,14 +615,27 @@ def git(root: Path, *args: str) -> None:
 
 
 class OwnerOnly(unittest.TestCase):
-    """`.mcp.json` is refused in every class, whatever the touch set says (#797)."""
+    """`.mcp.json` and `.claude/settings.local.json` are refused in every class, whatever the touch set says."""
 
-    def test_every_class_refuses_it_and_names_the_owner(self) -> None:
+    def test_every_class_refuses_each_and_gives_its_reason(self) -> None:
         class_map = read_map(MAP)
-        for klass in "ABCDE":
-            problems = check(payload([".mcp.json"], class_cell=klass, touch_cell="`.mcp.json`"), class_map)
-            self.assertEqual(len(problems), 1, klass)
-            self.assertIn("owner's", problems[0])
+        for path, issue in ((".mcp.json", "#797"), (".claude/settings.local.json", "#799")):
+            for klass in "ABCDE":
+                problems = check(payload([path], class_cell=klass, touch_cell=f"`{path}`"), class_map)
+                self.assertEqual(len(problems), 1, (path, klass))
+                self.assertIn("owner's", problems[0])
+                self.assertIn(issue, problems[0])
+
+    def test_the_local_settings_file_is_refused_even_where_the_tree_no_longer_ignores_it(self) -> None:
+        # The ignore rules are the pull request's own, so un-ignoring the file
+        # beside the force-add passes check_ignored; the class check still refuses it.
+        with tempfile.TemporaryDirectory() as directory:
+            git(Path(directory), "init", "-q")
+            self.assertEqual(ignored_paths([".claude/settings.local.json"], Path(directory)), set())
+        problems = check(payload([".claude/settings.local.json"], class_cell="D", touch_cell="`.claude/**`"),
+                         read_map(MAP))
+        self.assertEqual(len(problems), 1)
+        self.assertIn("`.claude/settings.local.json` is the owner's", problems[0])
 
     def test_a_case_folded_spelling_and_either_end_of_a_rename_are_refused(self) -> None:
         class_map = read_map(MAP)
@@ -787,10 +800,15 @@ class TheShippedMap(unittest.TestCase):
                  "`CLAUDE.md`, `.gitattributes`")
         self.assertEqual(check(payload(files, class_cell="D", touch_cell=touch), self.map), [])
 
-    def test_no_class_reaches_an_owner_only_path(self) -> None:
-        reached = sorted(f"{klass}: {token} -> {path}" for klass, tokens in self.map.items() for token in tokens
-                         for path in locality_gate.OWNER_ONLY if matcher(token)(path))
-        self.assertEqual(reached, [])
+    def test_no_class_names_mcp_json_and_every_class_refuses_each_owner_only_path(self) -> None:
+        named = sorted(f"{klass}: {token}" for klass, tokens in self.map.items() for token in tokens
+                       if matcher(token)(".mcp.json"))
+        self.assertEqual(named, [])
+        admitted = sorted(f"{klass}: {path}" for klass, tokens in self.map.items()
+                          for path in locality_gate.OWNER_ONLY
+                          if "owner's" not in "".join(check(payload([path], class_cell=klass,
+                                                                    touch_cell=f"`{path}`"), self.map)))
+        self.assertEqual(admitted, [])
 
     def test_the_harness_sync_files_are_a_class_d_change(self) -> None:
         files = [".harness/config.json", ".harness/manifest.json", ".claude/settings.json"]
