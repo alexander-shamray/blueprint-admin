@@ -262,7 +262,14 @@ public sealed partial class WorkstationDoctor(
     internal static DoctorCheck Cors(JsonDocument? model, CommandOutput config, string clientUrl)
     {
         const string name = "Gateway CORS";
-        string client = new Uri(clientUrl).GetLeftPart(UriPartial.Authority);
+
+        // The console's own setting, so a value that is no URL is this row's problem, not the whole doctor's.
+        if (!Uri.TryCreate(clientUrl, UriKind.Absolute, out Uri? clientUri))
+        {
+            return new(name, DoctorState.Problem, $"Admin:ClientUrl is not an absolute URL ('{clientUrl}'), so the client's origin cannot be checked against the gateway's list.");
+        }
+
+        string client = clientUri.GetLeftPart(UriPartial.Authority);
 
         if (model is null)
         {

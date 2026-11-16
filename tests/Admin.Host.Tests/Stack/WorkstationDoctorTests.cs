@@ -119,6 +119,20 @@ public sealed class WorkstationDoctorTests(AdminHostFactory factory) : IClassFix
     }
 
     [Theory]
+    [InlineData("")]
+    [InlineData("/relative/path")]
+    [InlineData("not a url")]
+    public void An_unparseable_client_url_is_the_cors_rows_problem_and_throws_nothing(string clientUrl)
+    {
+        using JsonDocument model = JsonDocument.Parse(Model);
+
+        DoctorCheck check = WorkstationDoctor.Cors(model, Said(Model), clientUrl);
+
+        check.State.ShouldBe(DoctorState.Problem);
+        check.Detail.ShouldContain("Admin:ClientUrl");
+    }
+
+    [Theory]
     [InlineData("v22.23.2", "22.23.2", DoctorState.Ok)]
     [InlineData("v22.23.2", "22", DoctorState.Ok)]
     [InlineData("v22.23.2", "v22.23", DoctorState.Ok)]
