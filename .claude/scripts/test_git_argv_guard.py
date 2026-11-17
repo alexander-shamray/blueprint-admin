@@ -3883,7 +3883,9 @@ class AWriteIntoWhatTheTargetDenies(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, str(hook)], input=json.dumps(event),
             capture_output=True, text=True, encoding="utf-8",
-            timeout=HOOK_TIMEOUT, env={**os.environ, **(env or {})},
+            # A `/dispatch` executor runs this suite with the variable set, which only `env` may set here.
+            timeout=HOOK_TIMEOUT, env={**{name: value for name, value in os.environ.items()
+                                          if name != "HARNESS_DISPATCHED"}, **(env or {})},
         )
         self.assertEqual(0, result.returncode, result.stderr)
         if not result.stdout.strip():
@@ -3897,6 +3899,64 @@ class AWriteIntoWhatTheTargetDenies(unittest.TestCase):
         self.assertIsNotNone(reason, f"admitted: {command}")
         self.assertNotIn("crashed the guard", reason)
         return reason
+
+    def test_a_dispatched_session_writes_no_dispatch_state_in_main(self):
+        # Each run's `state.json` and `handbacks.json` decide what the dispatcher launches.
+        worktree = os.path.join(self.root, ".claude", "worktrees", "executor")
+        os.makedirs(worktree)
+        with open(os.path.join(worktree, ".git"), "w", encoding="utf-8") as handle:
+            handle.write("gitdir: " + os.path.join(self.root, ".git", "worktrees", "executor") + "\n")
+        state = self.spelled("artifacts", "dispatch")
+        dispatched = {"HARNESS_DISPATCHED": "1"}
+        writes = (f"ls > {state}/handbacks.json", f"echo x | tee {state}/20261117-152904/state.json",
+                  "cp /tmp/a ../../../artifacts/dispatch/handbacks.json",
+                  f"touch {state}/handbacks.json", f"rm -rf {self.spelled('artifacts')}",
+                  f"mv {state}/handbacks.json /tmp/b")
+        # Each by this rule's message, not another layer's refusal.
+        def this_rule(*commands):
+            for command in commands:
+                with self.subTest(command=command):
+                    self.assertIn("dispatcher's own state", self.assertRefused(command, cwd=worktree, env=dispatched))
+        this_rule(*writes)
+        # A `.git` made inside the state is not a checkout of its own that hides it.
+        os.makedirs(os.path.join(self.root, "artifacts", "dispatch", "r", ".git"))
+        with open(os.path.join(self.root, "artifacts", ".git"), "w", encoding="utf-8") as handle:
+            handle.write("gitdir: /elsewhere\n")
+        this_rule(f"ls > {state}/r/state.json", f"ls > {state}/handbacks.json")
+        self.admitted("ls > artifacts/dispatch/20261117-152904/G1.json",
+                      f"ls > {self.spelled('artifacts', 'review', 'x.diff')}",
+                      f"ls > {self.spelled('artifacts', 'dispatched')}/x", cwd=worktree, env=dispatched)
+        self.admitted(*writes[:4], cwd=worktree)
+
+    def test_a_build_loads_nothing_written_above_the_checkout(self):
+        # The .NET SDK and NuGet read these names from every directory above a project.
+        writes = ("echo x > ../Directory.Build.targets", "ls > ../NuGet.Config", "ls >> ../nuget.config",
+                  "echo x | tee ../NUGET.CONFIG", "cp /tmp/a ../global.json", "ln -s /tmp/a ../Directory.Build.rsp",
+                  "touch ../../Directory.Packages.props", "mv /tmp/a ../Directory.Solution.props",
+                  f"echo x > {self.spelled('..')}/Directory.Solution.targets",
+                  "cp /tmp/Directory.Build.props ..", "echo x > '../global.json.'",
+                  "echo x > '../NuGet.Config '", "echo x > ../NuGet.Config:x",
+                  "echo x >> ../nuget.conf?g", "sed -i s/a/b/ ../NuGet.Conf*")
+        for command in writes:
+            with self.subTest(command=command):
+                self.assertIn("loads from a directory above", self.assertRefused(command))
+        self.admitted("echo x > Directory.Build.props", "echo x > notes/nuget.config",
+                      "echo x > ../sibling/NuGet.Config", "echo x > ../notes.md")
+        # A glob, a brace or a `.` lands under names not known: refused where it can be a build's.
+        for command in ("mv * ..", "cp /tmp/x/*.config ..", "cp -r /tmp/x/. ..", "cp /tmp/{a,b} ..",
+                        "mv /tmp/x/?uget.config ../", "cp -rT /tmp/x ..", "cp /tmp/x/[^x]uget.config ..",
+                        "cp /tmp/x/[[:alpha:]]uget.config ..", "cp $X ..", "cp /tmp/x/nuget.c*:s ..",
+                        "cp /tmp/x/nuget.confi[g]. .."):
+            with self.subTest(command=command):
+                self.assertIn("may be one the .NET SDK", self.assertRefused(command))
+        self.admitted("mv *.md ..", "cp /tmp/x/*.txt ..", "cp -r /tmp/x/. notes", "mv * ../sibling")
+        # A worktree's build walks up through its main checkout, whose root is above it.
+        worktree = os.path.join(self.root, ".claude", "worktrees", "w")
+        os.makedirs(worktree)
+        with open(os.path.join(worktree, ".git"), "w", encoding="utf-8") as handle:
+            handle.write("gitdir: elsewhere\n")
+        self.assertIn("loads from a directory above", self.assertRefused(
+            "echo x > ../../../Directory.Build.props", cwd=worktree))
 
     def assertAdmitted(self, command, **kwargs):
         self.assertIsNone(self.judge(command, **kwargs), f"refused: {command}")
@@ -3928,6 +3988,7 @@ class AWriteIntoWhatTheTargetDenies(unittest.TestCase):
         owner = temp_root(self)
         os.makedirs(os.path.join(owner, ".claude", "hooks"))
         hook = shutil.copy(HOOK, os.path.join(owner, ".claude", "hooks"))
+        shutil.copy(HOOK.parent / "path_grammar.py", os.path.join(owner, ".claude", "hooks"))
         with open(os.path.join(owner, ".claude", "settings.json"), "w", encoding="utf-8") as handle:
             json.dump({"permissions": {"deny": [f"Edit({rule})" for rule in denies]}}, handle)
         return hook
@@ -4218,7 +4279,48 @@ class AWriteIntoWhatTheTargetDenies(unittest.TestCase):
         for command in ("ls > ~/.gitconfig", "git show HEAD:x > ~/.gitconfig", "echo x >> ~/.bashrc",
                         "ls > $HOME/.zshrc", 'ls > "$HOME/.profile"', "ls > ~/.ssh/authorized_keys",
                         "tee ~/.gitconfig", "cp a ~/.bash_profile", "rm ~/.ssh/config",
-                        f"ls > {Path(home, '.gitconfig').as_posix()}"):
+                        f"ls > {Path(home, '.gitconfig').as_posix()}",
+                        # git's XDG config runs as `.gitconfig` does, and so does its removal's parent.
+                        "ls > ~/.config/git/config", 'echo x >> "$HOME/.config/git/config"',
+                        "tee ~/.config/git/config", "cp a ~/.config/git/config", "rm -rf ~/.config/git",
+                        "rm -rf ~/.config", "mv ~/.config/git /tmp/x",
+                        # A link where the directory goes puts the link's `config` where git reads it.
+                        "ln -s staged ~/.config/git", "ln -s staged ~/.config", "ln -sfn staged ~/.config/git",
+                        "ln -sfh staged ~/.config/git",
+                        # `-n` links inside a real directory still, so what lands there is judged too.
+                        "ln -sn /tmp/evil/.bashrc ~/", "ln --no-dereference -s /tmp/evil/.gitconfig ~",
+                        # npm's user config: its `script-shell` and `node-options` run under each npm script.
+                        "echo script-shell=/tmp/x >> ~/.npmrc", 'ls > "$HOME/.npmrc"', "tee ~/.npmrc",
+                        "cp a ~/.npmrc", "mv /tmp/a ~/.npmrc", "rm ~/.npmrc", "ln -s /tmp/a ~/.npmrc"):
+            with self.subTest(command=command):
+                self.assertIn("No rule judges a shell write", self.assertRefused(command, env=env))
+
+    def test_git_reads_its_xdg_config_where_the_variable_moves_it(self):
+        # git reads `$XDG_CONFIG_HOME/git/config` when the variable is set, wherever it points.
+        _, env = self.real_home()
+        holder = Path(temp_root(self)).as_posix()
+        moved = os.path.join(holder, "a", "b")
+        spelled = Path(moved).as_posix()
+        env = {**env, "XDG_CONFIG_HOME": moved}
+        # A directory holding it, which a move or a copy puts in place whole, as `~/.config` is.
+        for command in (f"ls > {spelled}/git/config", 'echo x >> "$XDG_CONFIG_HOME/git/config"',
+                        "tee ${XDG_CONFIG_HOME}/git/config", f"cp a {spelled}/git/config",
+                        f"rm -rf {spelled}/git", f"rm -rf {spelled}", f"mv {spelled}/git /tmp/x",
+                        f"mv staged {holder}/a", f"cp -r staged {holder}/a", f"rm -rf {holder}",
+                        f"ln -s staged {spelled}/git", f"ln -s staged {spelled}", 'ln -s staged "$XDG_CONFIG_HOME"',
+                        f"ln -s staged {holder}/a"):
+            with self.subTest(command=command):
+                self.assertIn("$XDG_CONFIG_HOME/git/config", self.assertRefused(command, env=env))
+        self.admitted(f"ls > {spelled}/git/ignore", f"ls > {spelled}/other/config",
+                      'ls > "$XDG_CONFIG_HOME/git/ignore"', f"cat {spelled}/git/config",
+                      f"mv staged {holder}/c", f"ln -s staged {holder}/c", env=env)
+        self.admitted(f"ls > {spelled}/git/config", env={**env, "XDG_CONFIG_HOME": ""})
+
+    def test_the_claude_code_user_state_is_refused_in_a_home_that_is_no_checkout(self):
+        # `~/.claude.json` sits beside `~/.claude`, and its MCP servers start with every later session.
+        _, env = self.real_home()
+        for command in ("ls > ~/.claude.json", 'echo x > "$HOME/.claude.json"', "tee ~/.claude.json",
+                        "cp a ~/.claude.json", "mv /tmp/a ~/.claude.json", "rm ~/.claude.json"):
             with self.subTest(command=command):
                 self.assertIn("No rule judges a shell write", self.assertRefused(command, env=env))
 
@@ -4233,7 +4335,10 @@ class AWriteIntoWhatTheTargetDenies(unittest.TestCase):
                         "echo x > $HOME/.claude/output-styles/a.md",
                         "tee ~/.claude/output-styles/a.md", "rm ~/.claude/output-styles/a.md",
                         "rm -rf ~/.claude", "rm -rf ~/.claude/*", "mv ~/.claude /tmp/x",
-                        "find ~/.claude/projects -delete"):
+                        "find ~/.claude/projects -delete",
+                        # The owner's rules, which the writing commands deny their editing tools too.
+                        "ls > ~/.claude/CLAUDE.md", 'echo x >> "$HOME/.claude/CLAUDE.md"',
+                        "tee -a ~/.claude/CLAUDE.md", "cp a ~/.claude/CLAUDE.md", "rm ~/.claude/CLAUDE.md"):
             with self.subTest(command=command):
                 self.assertIn("No rule judges a shell write", self.assertRefused(command, env=env))
 
@@ -4261,9 +4366,12 @@ class AWriteIntoWhatTheTargetDenies(unittest.TestCase):
     def test_the_rest_of_the_home_stays_admitted(self):
         _, env = self.real_home()
         self.admitted("ls > ~/notes.md", "ls > ~/projects/.bashrc", "ls > ~/.ssh-notes",
-                      "ls > ~/.claude/CLAUDE.md", "ls > ~/.claude/scratch/x", "ls > ~/.claude/.last",
+                      "ls > ~/.claude/x/CLAUDE.md", "ls > ~/.claude/scratch/x", "ls > ~/.claude/.last",
+                      "cat ~/.claude/CLAUDE.md",
                       "rm ~/.claude/scratch/x", "ls > '~/.gitconfig'", "ls ~/.ssh", "cat ~/.gitconfig",
-                      "ls > $HOME/.claude/scratch/x", env=env)
+                      "ls > $HOME/.claude/scratch/x", "ls > ~/.config/other/config", "ls > ~/.config/git/ignore",
+                      "ls > ~/.claude.json.bak", "cat ~/.claude.json", "cat ~/.config/git/config",
+                      "cat ~/.npmrc", "ls > ~/projects/.npmrc", "ls > ~/.npmrc.bak", env=env)
 
     def test_a_checkout_inside_a_home_place_is_not_left_to_its_denies(self):
         # As the edit guard's `home_offence` asks it: a checkout at
@@ -4297,11 +4405,13 @@ class AWriteIntoWhatTheTargetDenies(unittest.TestCase):
                              (control, "echo x > settings.json"),
                              (control, "ls > hooks/x.py"),
                              (control, "echo x > ~/.claude/settings.local.json"),
+                             # The owner's rules, by the name this checkout gives them.
+                             (control, "ls > CLAUDE.md"),
                              (keys, "ls >> authorized_keys")):
             with self.subTest(cwd=cwd, command=command):
                 self.assertIn("No rule judges a shell write",
                               self.assertRefused(command, cwd=cwd, env=env))
-        self.admitted("ls > notes/todo.md", "ls > CLAUDE.md", cwd=control, env=env)
+        self.admitted("ls > notes/todo.md", "ls > notes/CLAUDE.md", cwd=control, env=env)
 
     def test_a_dotfiles_checkout_at_the_home_is_not_left_to_its_denies(self):
         # Its denies name none of these, as the edit guard's home anchor does not.
@@ -4391,8 +4501,12 @@ class AWriteIntoWhatTheTargetDenies(unittest.TestCase):
         self.refused("rm -rf .claude", "rm -r ./.claude/", "mv .claude /tmp/x",
                      "cp -r /tmp/hooks .claude/", "rmdir .claude", "shred -u .claude",
                      "install -d /tmp/a .claude", "cp -rt .claude /tmp/hooks",
-                     "mv /tmp/hooks .CLAUDE")
+                     "mv /tmp/hooks .CLAUDE", "ln -sT /tmp/evil .claude", "ln -s /tmp/hooks .claude/",
+                     # `-n` replaces a link to a directory, which reads as the directory.
+                     "ln -sfn /tmp/evil .claude", "ln --no-dereference -sf /tmp/evil .claude",
+                     "ln -sfh /tmp/evil .claude")
         self.admitted("rm -rf .claude/worktrees/x", "rm -rf artifacts", "rm -rf .",
+                      "ln -s /tmp/notes.md .claude/", "ln -s .claude notes/alias",
                       "rm -rf .claude/cache", "cp -r .claude /tmp/backup",
                       "ls > .claude/notes.md", "touch .claude/notes.md",
                       "rm -rf notes", "mv notes /tmp/x")
@@ -4514,7 +4628,9 @@ class TheListsTheGuardReads(unittest.TestCase):
         home = temp_root(self)
         for rule in home_rules:
             with self.subTest(rule=rule):
-                path = os.path.join(home, *rule[2:].removesuffix("/**").split("/"), "x")
+                # A tree's rule is asked of a file in it, and a file's of the file itself, as the repository's are.
+                path = os.path.join(home, *rule[2:].removesuffix("/**").split("/"),
+                                    *(["x"] if rule.endswith("/**") else []))
                 with mock.patch.dict(os.environ, {"HOME": home}):
                     self.assertIsNotNone(module.home_target(path, home, ""), rule)
 
