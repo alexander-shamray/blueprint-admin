@@ -551,7 +551,8 @@ class AWritingCommandDeniesTheUsersMemoryAndOutputStyles(unittest.TestCase):
     The managed commands are the subject: a target's own are its to hold (`docs/harness-boundaries.md`).
     """
 
-    REQUIRED = ("Edit(~/.claude/projects/**)", "Edit(~/.claude/output-styles/**)")
+    # `~/.claude/CLAUDE.md` is loaded into every later session as the owner's own rules.
+    REQUIRED = ("Edit(~/.claude/projects/**)", "Edit(~/.claude/output-styles/**)", "Edit(~/.claude/CLAUDE.md)")
     MANIFEST = COMMANDS.parent.parent / ".harness" / "manifest.json"
 
     @staticmethod
@@ -578,7 +579,7 @@ class AWritingCommandDeniesTheUsersMemoryAndOutputStyles(unittest.TestCase):
             with self.subTest(tool=tool):
                 self.assertFalse(self.writes(tool))
 
-    def test_every_command_granting_write_or_edit_denies_both_paths(self):
+    def test_every_command_granting_write_or_edit_denies_each_path(self):
         for path in self.writers():
             rules = frontmatter_list(path.read_text(encoding="utf-8"), "disallowed-tools")
             for required in self.REQUIRED:
