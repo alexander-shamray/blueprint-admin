@@ -223,7 +223,34 @@ class TheRefusalsMirrorTheGate(Case):
 
 class TheFencesMirrorTheGate(Case):
     """A row inside a fenced code block is an example, not the table: the gate's `_unfenced` skips it, and so
-    does the helper."""
+    does the helper. Two bodies both refuse rather than read: a row in a fence opened after a list item, block
+    quote or HTML block, which GitHub can end sooner, and a carriage return that ends no CRLF line."""
+
+    def test_a_contained_fence_and_a_lone_carriage_return_are_refused_by_both(self):
+        # Adjacent string literals are one message to Python, so they are joined before a phrase is looked for.
+        gate = re.sub(r'"\s*\n\s*f?"', "", GATE.read_text(encoding="utf-8"))
+        example = "| Class | A |\n| Touch set | src/** |\n"
+        for name, text, phrase in (
+            ("a row in a fence after a list item", "- note\n\n  ```\n" + example + "```\n\n" + body(),
+             "row sits in a fenced block after a list, block quote or HTML block"),
+            ("a row in a fence after a block quote", "> note\n\n```\n" + example + "```\n\n" + body(),
+             "row sits in a fenced block after a list, block quote or HTML block"),
+            ("a lone carriage return", "note\r```\n" + body() + "```\n",
+             "carriage return that is not part of a CRLF line ending"),
+        ):
+            with self.subTest(case=name):
+                result = self.run_helper(text)
+
+                self.assertEqual(3, result.returncode, f"{name}: {result.stdout!r} {result.stderr!r}")
+                self.assertIn(phrase, result.stderr)
+                self.assertEqual("", result.stdout, "a refusal prints no verdict")
+                self.assertTrue(phrase in gate, f"the Python gate no longer carries {phrase!r}")
+
+    def test_a_fence_after_a_container_that_holds_no_row_is_still_skipped(self):
+        result = self.run_helper("- item\n\n```\ncode\n```\n\n" + body("D", "docs/**"))
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(["class D", "inside docs/a.md"], result.stdout.splitlines())
 
     def test_a_fenced_example_beside_the_table_is_skipped(self):
         for name, example in (
