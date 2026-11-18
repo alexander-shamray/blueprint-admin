@@ -136,9 +136,13 @@ already correct — are also non-findings.
    - `--local`: `git status --short` and `git diff HEAD` (include untracked
      that matter; skip bulk tooling noise).
 2. **Read the change, starting from its blast radius.** Where the
-   `codebase-index` CLI answers, run
-   `codebase-index diff-impact --base <merge-base> --json` before anything
-   else, or `--base HEAD` under `--local`, whose range is the working tree
+   `codebase-index` CLI answers, run it through `cbx`,
+   `bash .claude/skills/codebase-index/scripts/cbx diff-impact --base
+   <merge-base> --json`, before anything else, or `--base HEAD` under
+   `--local`. The bare CLI would skip `gate_index`, and the branch under
+   review can force-track a rollback journal or a link under
+   `.claude/cache/codebase-index/` that the gate refuses. The `--local` range
+   is the working tree
    against `HEAD` and so has no merge base to carry: the symbols and files
    the diff reaches through the graph are where a contradiction outside the
    changed lines lives. Prefer full source of load-bearing files over the diff

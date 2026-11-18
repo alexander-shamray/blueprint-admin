@@ -1,7 +1,7 @@
 ---
 description: Review branch vs main for contradictions; recheck suggestions.md when it already exists
 argument-hint: "[recheck | full | --local]"
-allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git merge-base:*), Bash(codebase-index diff-impact:*), Bash(git branch --list:*), Bash(git branch --show-current), Bash(git branch -a), Bash(bash .claude/scripts/npm-checks.sh:*), Bash(bash .claude/scripts/host-checks.sh:*), Bash(bash .claude/scripts/harness-checks.sh:*), Bash(bash .claude/scripts/pr-for-branch.sh:*), Bash(bash .claude/scripts/pr-locality.sh:*), Bash(rm suggestions.md)
+allowed-tools: Read, Grep, Glob, Write, Edit, Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git merge-base:*), Bash(bash .claude/skills/codebase-index/scripts/cbx diff-impact:*), Bash(git branch --list:*), Bash(git branch --show-current), Bash(git branch -a), Bash(bash .claude/scripts/npm-checks.sh:*), Bash(bash .claude/scripts/host-checks.sh:*), Bash(bash .claude/scripts/harness-checks.sh:*), Bash(bash .claude/scripts/pr-for-branch.sh:*), Bash(bash .claude/scripts/pr-locality.sh:*), Bash(rm suggestions.md)
 disallowed-tools: Edit(.git/**), Edit(./.git/**), Edit(.git), Edit(./.git), Edit(.claude/**), Edit(./.claude/**), Edit(.remember/**), Edit(./.remember/**), Edit(.github/**), Edit(./.github/**), Edit(.harness/**), Edit(./.harness/**), Edit(.vscode/**), Edit(./.vscode/**), Edit(android/**), Edit(./android/**), Edit(docs/**), Edit(./docs/**), Edit(e2e/**), Edit(./e2e/**), Edit(ios/**), Edit(./ios/**), Edit(public/**), Edit(./public/**), Edit(src/**), Edit(./src/**), Edit(tests/**), Edit(./tests/**), Edit(tools/**), Edit(./tools/**), Edit(.editorconfig), Edit(./.editorconfig), Edit(.gitattributes), Edit(./.gitattributes), Edit(.gitignore), Edit(./.gitignore), Edit(.nvmrc), Edit(./.nvmrc), Edit(.prettierrc), Edit(./.prettierrc), Edit(AGENTS.md), Edit(./AGENTS.md), Edit(CLAUDE.md), Edit(./CLAUDE.md), Edit(README.md), Edit(./README.md), Edit(angular.json), Edit(./angular.json), Edit(capacitor.config.ts), Edit(./capacitor.config.ts), Edit(eslint.config.js), Edit(./eslint.config.js), Edit(ionic.config.json), Edit(./ionic.config.json), Edit(package-lock.json), Edit(./package-lock.json), Edit(package.json), Edit(./package.json), Edit(playwright.config.ts), Edit(./playwright.config.ts), Edit(tsconfig.app.json), Edit(./tsconfig.app.json), Edit(tsconfig.json), Edit(./tsconfig.json), Edit(tsconfig.spec.json), Edit(./tsconfig.spec.json), Edit(.npmrc), Edit(./.npmrc), Edit(npm-shrinkwrap.json), Edit(./npm-shrinkwrap.json), Edit(vitest.config.ts), Edit(./vitest.config.ts), Edit(vitest.config.js), Edit(./vitest.config.js), Edit(vitest.config.mts), Edit(./vitest.config.mts), Edit(vite.config.ts), Edit(./vite.config.ts), Edit(vite.config.js), Edit(./vite.config.js), Edit(vite.config.mts), Edit(./vite.config.mts), Edit(eslint.config.mjs), Edit(./eslint.config.mjs), Edit(eslint.config.cjs), Edit(./eslint.config.cjs), Edit(prettier.config.js), Edit(./prettier.config.js), Edit(prettier.config.cjs), Edit(./prettier.config.cjs), Edit(prettier.config.mjs), Edit(./prettier.config.mjs), Edit(.prettierrc.js), Edit(./.prettierrc.js), Edit(.prettierrc.cjs), Edit(./.prettierrc.cjs), Edit(.prettierrc.json), Edit(./.prettierrc.json), Edit(karma.conf.js), Edit(./karma.conf.js), Edit(jest.config.js), Edit(./jest.config.js), Edit(**/*.config.js), Edit(**/*.config.cjs), Edit(**/*.config.mjs), Edit(**/*.config.ts), Edit(**/*.config.mts), Edit(**/package.json), Edit(**/.npmrc), Edit(**/tsconfig*.json), Edit(**/.prettierrc*), Bash(git push:*), Edit(node_modules/**), Edit(./node_modules/**), Edit(Directory.Build.props), Edit(./Directory.Build.props), Edit(Directory.Packages.props), Edit(./Directory.Packages.props), Edit(global.json), Edit(./global.json), Edit(BlueprintAdmin.slnx), Edit(./BlueprintAdmin.slnx), Edit(.mcp.json), Edit(./.mcp.json), Edit(.codeindexignore), Edit(./.codeindexignore), Edit(~/.claude/projects/**), Edit(~/.claude/output-styles/**), Edit(~/.claude/CLAUDE.md), Edit(Directory.Build.targets), Edit(./Directory.Build.targets), Edit(Directory.Build.rsp), Edit(./Directory.Build.rsp), Edit(Directory.Solution.props), Edit(./Directory.Solution.props), Edit(Directory.Solution.targets), Edit(./Directory.Solution.targets), Edit(NuGet.Config), Edit(./NuGet.Config), Edit(nuget.config), Edit(./nuget.config), Edit(NuGet.config), Edit(./NuGet.config), Edit(BlueprintAdmin.slnx.targets), Edit(./BlueprintAdmin.slnx.targets), Edit(before.BlueprintAdmin.slnx.targets), Edit(./before.BlueprintAdmin.slnx.targets), Edit(after.BlueprintAdmin.slnx.targets), Edit(./after.BlueprintAdmin.slnx.targets), Edit(**/Directory.Build.*), Edit(**/Directory.Solution.*), Edit(**/NuGet.Config), Edit(**/nuget.config), Edit(**/NuGet.config), Edit(**/*.slnx.targets), Edit(**/Directory.Packages.*), Edit(**/*.csproj.user), Edit(**/obj/**), Edit(MSBuild.rsp), Edit(./MSBuild.rsp), Edit(msbuild.rsp), Edit(./msbuild.rsp), Edit(**/MSBuild.rsp), Edit(**/msbuild.rsp), Edit(**/global.json)
 ---
 
@@ -13,17 +13,17 @@ argument is in `docs/commands/review-branch.md`. The same bar is the one the
 ## Mode selection (do this first)
 
 **Before choosing a mode, check whether `suggestions.md` exists at the repo
-root.** That file is the running record of open issues; when it is present, the
-default job is to re-verify it, not to start a fresh review.
+root.** It records the open issues; when it is present, the default job is to
+re-verify it, not to start a fresh review.
 
 | Condition | Mode |
 |---|---|
 | `suggestions.md` **exists** and `$ARGUMENTS` is empty or `recheck` | **Recheck** (below) |
 | `suggestions.md` **missing** and `$ARGUMENTS` is empty | **Full review** — branch vs `main` |
-| `$ARGUMENTS` is `full` or `full --local` | **Full review**, even if `suggestions.md` exists (replace the file from scratch after the new pass) |
+| `$ARGUMENTS` is `full` or `full --local` | **Full review**, even if `suggestions.md` exists (rewrite the file after the new pass) |
 | `$ARGUMENTS` is `--local` only, no `suggestions.md` | **Full review** of the working tree |
 | `$ARGUMENTS` is `--local` and `suggestions.md` exists | **Recheck** first (same as default when the file exists); do not silently switch to a full local sweep unless the user also passed `full` |
-| `$ARGUMENTS` is `recheck` and `suggestions.md` **missing** | Stop: say there is nothing to recheck and offer a full review — do not enter recheck mode against a file that is not there |
+| `$ARGUMENTS` is `recheck` and `suggestions.md` **missing** | Stop: say there is nothing to recheck and offer a full review |
 
 Prefer the file's presence over the empty argument list.
 
@@ -93,7 +93,8 @@ forms.
    `git diff --stat` / `--name-only` / full, and `git log --oneline`, over
    `<merge-base>..HEAD`. `--local`: `git status --short` and `git diff HEAD`.
 2. **Read the change, starting from its blast radius.** Run
-   `codebase-index diff-impact --base <merge-base> --json` first, or
+   `bash .claude/skills/codebase-index/scripts/cbx diff-impact --base
+   <merge-base> --json` first (never the bare CLI: `cbx` gates the index), or
    `--base HEAD` under `--local`; its list is where the search starts, not
    where it stops, since it names no absences. Prefer full source of
    load-bearing files over the diff; Grep `src/`, `e2e/` and `docs/` for every
