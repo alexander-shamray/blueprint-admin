@@ -50,13 +50,13 @@ trap record_run EXIT
 # set it would be a second opinion about what the suite is.
 run_py .claude/scripts/shard-harness-suite.py --selective
 
-# The roots the payload's runner does not know, each serial; an empty discovery
-# exits 5 from 3.12 on and refuses this check. ci.yml's `harness` job runs the
-# same list, held to it by test_harness_helpers_admin.py. `-P` keeps the root off
-# `sys.path`, where `-m` would put it first for an untracked `unittest.py` to
-# shadow the standard library; discover still adds each start dir.
+# The roots the payload's runner does not know, each serial. `unittest discover`
+# exits 5 on no tests from 3.12 on, so an empty discovery refuses this check.
+# The `harness` job in ci.yml runs the same list, and
+# test_harness_helpers_admin.py holds the two together. `-P` keeps the root off
+# `sys.path`, where `-m` would put a planted `unittest.py` before the stdlib's.
 run_py -P -m unittest discover -s .github/locality-gate -p 'test*.py'
 run_py -P -m unittest discover -s .github/commit-gate -p 'test*.py'
 run_py -P -m unittest discover -s .github/pin-gate -p 'test*.py'
 run_py -P -m unittest discover -s .github/issue-form-gate -p 'test*.py'
-run_py -m unittest discover -s tools/token-usage -p 'test_*.py'
+run_py -P -m unittest discover -s tools/token-usage -p 'test_*.py'

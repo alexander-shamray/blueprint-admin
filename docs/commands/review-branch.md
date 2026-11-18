@@ -277,9 +277,15 @@ to the root and runs `python -m unittest discover`, and `-m` puts the working
 directory first on `sys.path`, so an untracked `unittest.py`, `runpy.py` or
 `argparse.py` written at the root would shadow the standard library and run as
 host code under the grant. Both halves are closed again: the check runs each
-of those suites with `-P`, which keeps the working directory off `sys.path`
-while `discover` still adds the start directory its tests import from, and
-this command denies `*.py` and `./*.py`, so a review writes no Python at all.
+of its `-m` suites with `-P`, which keeps the working directory off `sys.path`
+while `discover` still adds the start directory its tests import from; and
+this command denies `*.py` and `./*.py`, so a review writes no Python module
+at the root, where that working directory would import it. `PYTHONSAFEPATH`
+would close more, but it also drops a script's own directory, which the
+payload's scripts import their siblings from. A payload test that starts a
+`-c` child from the root, as three do, still puts the root first for that
+child; the deny is what holds there, and the payload change is
+blueprint-harness's.
 
 **Which half is measured is worth saying.** The exact-filename form is the one
 this file has always used and the one the suite reads. The `**/` globs are the
