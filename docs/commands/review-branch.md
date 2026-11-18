@@ -272,6 +272,15 @@ spelling this file already uses, plus `**/*.config.js`, `**/*.config.cjs`,
 `**/*.config.mjs`, `**/*.config.ts`, `**/*.config.mts`, `**/package.json`,
 `**/.npmrc`, `**/tsconfig*.json` and `**/.prettierrc*` for the class.
 
+**Python has the same shape, through `harness-checks.sh`.** That check `cd`s
+to the root and runs `python -m unittest discover`, and `-m` puts the working
+directory first on `sys.path`, so an untracked `unittest.py`, `runpy.py` or
+`argparse.py` written at the root would shadow the standard library and run as
+host code under the grant. Both halves are closed again: the check runs each
+of those suites with `-P`, which keeps the working directory off `sys.path`
+while `discover` still adds the start directory its tests import from, and
+this command denies `*.py` and `./*.py`, so a review writes no Python at all.
+
 **Which half is measured is worth saying.** The exact-filename form is the one
 this file has always used and the one the suite reads. The `**/` globs are the
 documented gitignore-style syntax and are **not** measured here — they are
