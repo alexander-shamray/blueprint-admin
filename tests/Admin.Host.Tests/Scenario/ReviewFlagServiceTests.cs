@@ -128,7 +128,7 @@ public sealed class ReviewFlagServiceTests
 
         await Service(handler).ReadAsync(OrderId, TimeSpan.FromMinutes(30), Token);
 
-        Uri query = handler.Requests.Last().Request.RequestUri!;
+        Uri query = handler.Requests[^1].Request.RequestUri!;
         string decoded = Uri.UnescapeDataString(query.Query);
         decoded.ShouldContain(ReviewFlagService.LogQl(OrderId.ToString("D")));
         decoded.ShouldContain($"start={Now.AddMinutes(-30).ToUnixTimeMilliseconds() * 1_000_000L}");
