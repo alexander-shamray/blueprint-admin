@@ -19,14 +19,18 @@ interface Step {
   detail: string | null;
 }
 
-/** What a job writes when a step ends it: `the load run stops here.`, `… exited with 1; the reset stops here.` */
-const STOPS = /\bstops here\.?$|\bexited \d+\b/;
+/**
+ * What a job writes on Stderr when a step fails: `the load run stops here.`, `… exited with 1; the reset stops here.`,
+ * `k6 exited 99: …`, and the projection rebuild's `<command line> exited with 1.`, after which that job goes on.
+ */
+const STOPS = /\bstops here\.?$|\bexited (?:with )?-?\d+\b/;
 
 /**
  * The steps of a job that runs several under one (`ProcessSpec.Steps`): the load run, the stress run, Reset and the
  * projection rebuild. The host names the steps before the first line; each starts at the marker line the job writes,
  * `== name` or a `$ command line` that contains the name, and a step the job never reaches stays pending until the
- * job ends. Nothing is read that the job does not print.
+ * job ends. A step's failure line ends it failed there, because the projection rebuild starts the BFF again after a
+ * failed replay. Nothing is read that the job does not print.
  */
 export class StepTracker {
   private readonly steps: Step[];
@@ -54,12 +58,18 @@ export class StepTracker {
       this.steps[next].startedAt = at;
     } else if (this.current >= 0 && line.stream === 'Stderr' && STOPS.test(line.text)) {
       this.steps[this.current].detail = line.text;
+      this.end('failed', at);
     }
   }
 
-  /** The job ended: the step it was in ends with it, failed unless the job exited 0, and the steps it never reached are skipped. */
+  /**
+   * The job ended: the step it was in ends with it, and the steps it never reached are skipped. That step failed when
+   * the job did, unless an earlier step failed or was passed over, which is then why the job exited non-zero.
+   */
   finish(exitCode: number): void {
-    this.end(exitCode === 0 ? 'done' : 'failed', this.lastAt);
+    const earlier = this.steps.slice(0, Math.max(this.current, 0));
+    const explained = earlier.some((s) => s.state === 'failed' || s.state === 'pending');
+    this.end(exitCode === 0 || explained ? 'done' : 'failed', this.lastAt);
     for (const step of this.steps) if (step.state === 'pending') step.state = 'skipped';
   }
 
