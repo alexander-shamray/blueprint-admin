@@ -2,7 +2,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { Component, DestroyRef, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { EMPTY, Observable, Subject, catchError, combineLatest, merge, of, switchMap, timer } from 'rxjs';
+import { EMPTY, Observable, Subject, catchError, exhaustMap, of, startWith, switchMap, timer } from 'rxjs';
 import { HostClient } from '../../../core/host/host-client';
 import {
   AlertStripView,
@@ -145,16 +145,23 @@ export class RunbooksWidget {
       )
       .subscribe(() => this.now.set(Date.now()));
 
-    // Read while the tab is showing: a hidden tab polls nothing (§4.3), and the widget is gone with its page.
-    combineLatest([this.visible, merge(timer(0, ALERT_POLL_MS), this.alertsNow)])
+    // Read while the tab is showing: a hidden tab polls nothing (§4.3), and the widget is gone with its page. A tick
+    // while a read is out is skipped rather than cancelling it, as `PolledFeed` does, because a Grafana call may outlast
+    // the tick (`GrafanaClient.CallTimeout`); a read asked for at once (`jobEnded`) restarts the poll with a fresh one.
+    const read = () =>
+      this.host.telemetryAlerts().pipe(
+        catchError((e: unknown) => {
+          this.alertsError.set(this.describeError(e));
+          return of(null);
+        }),
+      );
+    this.visible
       .pipe(
-        switchMap(([visible]) =>
+        switchMap((visible) =>
           visible
-            ? this.host.telemetryAlerts().pipe(
-                catchError((e: unknown) => {
-                  this.alertsError.set(this.describeError(e));
-                  return of(null);
-                }),
+            ? this.alertsNow.pipe(
+                startWith(undefined),
+                switchMap(() => timer(0, ALERT_POLL_MS).pipe(exhaustMap(read))),
               )
             : EMPTY,
         ),
