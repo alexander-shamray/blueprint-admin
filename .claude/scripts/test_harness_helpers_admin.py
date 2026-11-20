@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent
@@ -177,7 +178,24 @@ class AdminStack(unittest.TestCase):
         "**/MSBuild.rsp", "**/msbuild.rsp", "**/global.json",
     )
 
-    TRACKED_BY_DESIGN = ("nuget.config",)
+    # An empty root file under each of these names ends MSBuild's upward search for it at the checkout, so
+    # one planted in the parent is never imported; each is still denied (docs/harness-local.md, Residuals).
+    ROOT_STOPPERS = ("Directory.Build.targets", "Directory.Solution.props", "Directory.Solution.targets")
+
+    TRACKED_BY_DESIGN = ("nuget.config",) + ROOT_STOPPERS
+
+    def test_the_root_stoppers_are_tracked_and_empty(self):
+        # Deleting one reopens the search above the checkout and fails no other case.
+        tracked = self.tracked_root_files()
+        root = SCRIPTS.parent.parent
+        for name in self.ROOT_STOPPERS:
+            with self.subTest(name=name):
+                self.assertIn(name, tracked)
+                project = ET.parse(root / name).getroot()
+                self.assertEqual(project.tag, "Project")
+                self.assertEqual(len(project), 0)
+                self.assertEqual(project.attrib, {})
+                self.assertEqual((project.text or "").strip(), "")
 
     def _msbuild_rules(self):
         rules = []

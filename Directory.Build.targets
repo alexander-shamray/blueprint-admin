@@ -1,0 +1,7 @@
+<Project>
+
+  <!-- Empty on purpose: MSBuild imports the nearest Directory.Build.targets found by walking up
+       from a build, so this one stops the walk at the root and a file planted above the
+       checkout is never imported: docs/harness-local.md, Residuals. -->
+
+</Project>

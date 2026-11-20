@@ -33,7 +33,7 @@ Selected by what the diff touched:
 
 - **`bash .claude/scripts/host-checks.sh all`** whenever the change reaches
   `src/Admin.Host/**`, `src/Admin.Mcp/**`, `tests/**`, `*.csproj`,
-  `Directory.*.props` or `BlueprintAdmin.slnx`.
+  `Directory.*.props`, `Directory.*.targets` or `BlueprintAdmin.slnx`.
 - **`bash .claude/scripts/npm-checks.sh all`** whenever it reaches
   `src/Admin.Web/**` or that project's lockfile, eslint or prettier config.
   **A new worktree has no `node_modules`**: run
@@ -133,19 +133,27 @@ command has no per-target line and a settings deny would also stop `/ship`, so
 that is lost.
 
 **The files MSBuild and NuGet load without being asked are denied by name**
-(#311). `Directory.Build.targets` and `.rsp`, `Directory.Solution.props` and
-`.targets`, `NuGet.Config` in each casing and the solution's
+(#311). `Directory.Build.rsp`, `NuGet.Config` in each casing and the solution's
 `before.`/`after.`/plain `.slnx.targets` are untracked, so no listing of tracked
 files reaches them, yet an `Exec` in one runs under the granted `host-checks.sh`
 and the build reports success. The root `nuget.config`, which names the GitHub
 Packages feed the assistant's core restores from (#435), may be tracked and
-stays denied like the rest, so a change to it is the owner's.
-`.harness/config.json` denies them at the root in both spellings and by family
-at any depth, with `MSBuild.rsp`, any `global.json`, `Directory.Packages.*`,
-`*.csproj.user` and any `obj` tree, where a restore that finds nothing changed
-does not rewrite a planted `*.nuget.g.targets`. Not covered: a
-`Directory.Build.props` above the checkout, which the edit guard's
-outside-the-checkout rule judges.
+stays denied like the rest, so a change to it is the owner's. So are the root
+stoppers, `Directory.Build.targets`, `Directory.Solution.props` and
+`Directory.Solution.targets` (#795): each is an empty project, tracked so that
+MSBuild's walk upward for its name ends at the root, as `Directory.Build.props`
+already ends it for that name. `.harness/config.json` denies them all at the
+root in both spellings and by family at any depth, with `MSBuild.rsp`, any
+`global.json`, `Directory.Packages.*`, `*.csproj.user` and any `obj` tree, where
+a restore that finds nothing changed does not rewrite a planted
+`*.nuget.g.targets`. Not covered: what sits above the checkout under the other
+names. MSBuild still walks past the root for `Directory.Build.rsp`, whose
+stopper the pin gate refuses as it refuses every tracked `.rsp` (#805), and
+NuGet merges a `NuGet.Config` from every directory above the root. The denies
+are written relative to the checkout, and the edit guard judges a path outside
+every checkout only against the home names `home_offence` holds, so a file
+planted in the checkout's parent under either name is neither denied nor
+refused; the guard is managed, and blueprint-harness#596 is its fix.
 
 **The SPA toolchain is editable, and the granted runners execute it.** This
 repository's `/ship` and `/pr` denied `package.json`, `angular.json`, `tsconfig`,
