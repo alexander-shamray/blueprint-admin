@@ -108,7 +108,7 @@ public sealed class ProjectionRebuildService(
     {
         try
         {
-            bool ok = mode == RebuildMode.Repair ? await StepAsync(job, Replay(reset: false)) : await RebuildAsync(job);
+            bool ok = mode == RebuildMode.Repair ? await ReplayAsync(job, reset: false) : await RebuildAsync(job);
 
             if (ok)
             {
@@ -135,24 +135,7 @@ public sealed class ProjectionRebuildService(
             return false;
         }
 
-        bool replayed;
-        ProcessSpec replay = ReplaySpec(reset: true, paths, options.Value);
-
-        // The marker goes before the start can throw, so the step strip fails the tool's own step and not the stop's.
-        job.Append(OutputStream.Stdout, $"$ {replay.CommandLine}");
-
-        try
-        {
-            replayed = await FollowAsync(job, runner.Start(replay));
-        }
-        catch (Exception ex)
-        {
-            // Anything the runner or the follow throws once the BFF is stopped is the tool not finishing, and must not
-            // skip the start below. -1 is what IProcessRunner reports for a process that cannot start.
-            job.Append(OutputStream.Stderr, $"The tool could not run: {ex.Message}");
-            job.Append(OutputStream.Stderr, $"{replay.CommandLine} exited with -1.");
-            replayed = false;
-        }
+        bool replayed = await ReplayAsync(job, reset: true);
 
         if (!replayed)
         {
@@ -173,7 +156,29 @@ public sealed class ProjectionRebuildService(
         Environment = BffReplayConnections.For(options),
     };
 
-    private Job Replay(bool reset) => runner.Start(ReplaySpec(reset, paths, options.Value));
+    /// <summary>
+    /// The tool's step, for a rebuild and a repair alike. The marker goes before the start can throw, so the step strip
+    /// fails the tool's own step and not the one before it, or none.
+    /// </summary>
+    private async Task<bool> ReplayAsync(Job job, bool reset)
+    {
+        ProcessSpec replay = ReplaySpec(reset, paths, options.Value);
+        job.Append(OutputStream.Stdout, $"$ {replay.CommandLine}");
+
+        try
+        {
+            return await FollowAsync(job, runner.Start(replay));
+        }
+        catch (Exception ex)
+        {
+            // Anything the runner or the follow throws is the tool not finishing, and once a rebuild has stopped the
+            // BFF must not skip its start. -1 is what IProcessRunner reports for a process that cannot start.
+            job.Append(OutputStream.Stderr, $"The tool could not run: {ex.Message}");
+            job.Append(OutputStream.Stderr, $"{replay.CommandLine} exited with -1.");
+
+            return false;
+        }
+    }
 
     /// <summary>Copies a step's lines into the job as they arrive; a step that fails ends the run there.</summary>
     private static Task<bool> StepAsync(Job job, Job step)

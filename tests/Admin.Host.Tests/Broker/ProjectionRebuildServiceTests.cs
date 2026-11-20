@@ -273,6 +273,27 @@ public sealed class ProjectionRebuildServiceTests : IAsyncDisposable
         ]);
     }
 
+    [Fact]
+    public async Task A_runner_that_throws_for_a_repairs_tool_fails_the_tools_step_after_its_marker()
+    {
+        ThrowingRunner throwing = new(runner, "dotnet");
+        ComposeService compose = new(throwing, Paths, time);
+        IOptions<AdminOptions> options = Options.Create(new AdminOptions());
+        ProjectionRebuildService service = new(
+            compose, gate, throwing, new BrokerService(compose, options), registry, Paths, options, time);
+
+        Job job = service.Start(RebuildMode.Repair).Job;
+        int exit = await job.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        exit.ShouldBe(1);
+        Texts(job).ShouldBe(
+        [
+            "$ dotnet run --project tools/bff-replay",
+            "The tool could not run: boom",
+            "dotnet run --project tools/bff-replay exited with -1.",
+        ]);
+    }
+
     /// <summary>Throws from <c>Start</c> for one executable, as a process that cannot be started for a reason the runner does not catch.</summary>
     private sealed class ThrowingRunner(IProcessRunner inner, string fileName) : IProcessRunner
     {
