@@ -1,10 +1,10 @@
 import { TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { Subject, of } from 'rxjs';
 import { HostClient } from '../../../core/host/host-client';
 import { AlertStripView, JobSummary, RunbookCatalogue } from '../../../core/host/host-types';
 import { SseClient } from '../../../core/host/sse-client';
 import { WIDGET_CONTEXT } from '../../../workspace/widget-context';
-import { RunbooksWidget } from './runbooks-widget';
+import { ALERT_POLL_MS, RunbooksWidget } from './runbooks-widget';
 
 const catalogue: RunbookCatalogue = {
   error: null,
@@ -140,6 +140,25 @@ describe('RunbooksWidget', () => {
     again.componentInstance.jobEnded();
     again.detectChanges();
     expect((again.nativeElement.querySelector('button.undo') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('lets a slow alert read finish rather than cancelling it each tick, and reads afresh when a job ends', () => {
+    const slow = new Subject<AlertStripView>();
+    host['telemetryAlerts'].mockReturnValue(slow);
+    const fixture = render();
+    expect(host['telemetryAlerts']).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(ALERT_POLL_MS * 2);
+    expect(host['telemetryAlerts']).toHaveBeenCalledTimes(1);
+    expect(slow.observed).toBe(true);
+
+    slow.next(strip);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.alertState('anything')).toBe('not loaded');
+
+    fixture.componentInstance.jobEnded();
+    vi.advanceTimersByTime(0);
+    expect(host['telemetryAlerts']).toHaveBeenCalledTimes(2);
   });
 
   describe('countdowns', () => {
