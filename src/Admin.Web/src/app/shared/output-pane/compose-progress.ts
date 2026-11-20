@@ -35,6 +35,12 @@ const SETTLED = new Set(['Healthy', 'Removed', 'Stopped', 'Exited']);
 const REMOVAL = new Set(['Removing', 'Removed']);
 const REMOVED_FROM = new Set(['Stopped', 'Removing']);
 
+/**
+ * What `ComposeTracker.add` made of a line: a container's progress, which the log leaves out until asked; a container's
+ * failure, which the log keeps; or no container's line at all.
+ */
+export type ComposeLine = 'progress' | 'failed' | null;
+
 interface Container {
   name: string;
   verb: string;
@@ -56,12 +62,15 @@ export class ComposeTracker {
   private readonly containers = new Map<string, Container>();
   private lines = 0;
 
-  /** Reads one line, and says whether it was a container's, which the log then leaves out. A failure never is. */
-  add(line: OutputLine): boolean {
-    if (!line.text.includes('Container ')) return false;
+  /**
+   * Reads one line, and says whether it was a container's progress or its failure (`ComposeLine`). Both move the
+   * container table; only progress leaves the log, and a plain `Container x  Error` is a failure as its JSON form is.
+   */
+  add(line: OutputLine): ComposeLine {
+    if (!line.text.includes('Container ')) return null;
     const event = composeEvent(line.text);
     const match = CONTAINER_LINE.exec(event ? composePlain(event) : line.text);
-    if (!match) return false;
+    if (!match) return null;
 
     const [, name, verb] = match;
     const failed = verb === 'Error' || (event !== null && composeFailed(event));
@@ -76,9 +85,9 @@ export class ComposeTracker {
     container.failed = failed;
     if (failed || SETTLED.has(verb)) container.settledAt = at;
 
-    if (failed) return false;
+    if (failed) return 'failed';
     this.lines++;
-    return true;
+    return 'progress';
   }
 
   /** Where every container stands. */
