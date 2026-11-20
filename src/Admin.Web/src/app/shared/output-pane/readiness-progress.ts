@@ -69,8 +69,9 @@ export class ReadinessTracker {
     const waiting = WAITING.exec(line.text);
     if (waiting) {
       const still = names(waiting[1]);
-      // The first poll names every surface that has not answered; a later one names fewer, and the rest have answered.
-      for (const surface of this.surfaces) if (!still.includes(surface.name)) surface.state = 'up';
+      // Each poll re-probes every surface (`ResetService`), so the line is the whole answer: a surface it names is
+      // waiting, even one an earlier poll ticked, and the rest have answered.
+      for (const surface of this.surfaces) surface.state = still.includes(surface.name) ? 'waiting' : 'up';
       for (const name of still)
         if (!this.surfaces.some((s) => s.name === name)) this.surfaces.push({ name, state: 'waiting' });
       return true;
