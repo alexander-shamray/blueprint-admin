@@ -135,6 +135,28 @@ public sealed class McpServerTests
         reply!["error"]!["code"]!.GetValue<int>().ShouldBe(code);
     }
 
+    [Theory]
+    [InlineData("""{"jsonrpc":"2.0","id":true,"method":"ping"}""", -32600, "An id is a string or a number.", null)]
+    [InlineData("""{"jsonrpc":"2.0","id":{"a":1},"method":"ping"}""", -32600, "An id is a string or a number.", null)]
+    [InlineData("""{"jsonrpc":"2.0","id":[1],"method":"ping"}""", -32600, "An id is a string or a number.", null)]
+    [InlineData("""{"jsonrpc":"2.0","id":true}""", -32600, "An id is a string or a number.", null)]
+    [InlineData("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":[]}""", -32602, "params is an object.", 1)]
+    [InlineData("""{"jsonrpc":"2.0","id":1,"method":"tools/call","params":"x"}""", -32602, "params is an object.", 1)]
+    [InlineData(
+        """{"jsonrpc":"2.0","id":1,"method":"prompts/list","params":[]}""",
+        -32601,
+        "prompts/list is not a method this server has.",
+        1)]
+    public async Task An_id_or_params_of_the_wrong_kind_is_refused_as_that_fault_and_a_bad_id_is_never_echoed(
+        string request, int code, string message, int? id)
+    {
+        JsonNode? reply = await Ask(new ScriptedHost(), request);
+
+        reply!["error"]!["code"]!.GetValue<int>().ShouldBe(code);
+        reply["error"]!["message"]!.GetValue<string>().ShouldBe(message);
+        (reply["id"]?.GetValue<int>()).ShouldBe(id);
+    }
+
     [Fact]
     public async Task Run_reads_lines_until_the_input_ends_and_writes_one_line_per_reply()
     {
