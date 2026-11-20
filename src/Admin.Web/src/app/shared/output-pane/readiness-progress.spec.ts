@@ -35,6 +35,18 @@ describe('ReadinessTracker', () => {
     });
   });
 
+  it('unticks a surface a later poll names again, since every poll probes every surface', () => {
+    const tracker = new ReadinessTracker();
+    tracker.add(line(0, '== readiness: up to 120 s'));
+    tracker.add(line(3, 'waiting for: gateway, ordering'));
+    tracker.add(line(6, 'waiting for: ordering'));
+    expect(states(tracker)).toEqual(['gateway up', 'ordering waiting']);
+
+    tracker.add(line(9, 'waiting for: gateway'));
+
+    expect(states(tracker)).toEqual(['gateway waiting', 'ordering up']);
+  });
+
   it('ticks every surface on ready, including ones no poll named', () => {
     const tracker = new ReadinessTracker();
     tracker.add(line(0, '== readiness: up to 120 s'));
