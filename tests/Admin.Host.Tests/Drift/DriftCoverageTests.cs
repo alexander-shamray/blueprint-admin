@@ -101,7 +101,7 @@ public sealed class DriftCoverageTests
     }
 
     /// <summary>
-    /// The host's and the MCP route's C#, project files and JSON fixtures, and the SPA's TypeScript, specs
+    /// The host's and the MCP route's C#, project files and JSON fixtures, and the SPA's TypeScript and JSON, specs
     /// excluded: a fixture path in a spec is test data, not a copy. .NET build output is outside every root by
     /// Directory.Build.props; the SPA's build lands in the host's wwwroot, which is skipped.
     /// </summary>
@@ -113,6 +113,8 @@ public sealed class DriftCoverageTests
             ("src/Admin.Host", "*.json"), ("src/Admin.Host", "*.jsonl"),
             ("src/Admin.Mcp", "*.cs"), ("src/Admin.Mcp", "*.csproj"), ("src/Admin.Mcp", "*.json"),
             ("src/Admin.Web/src", "*.ts"),
+            ("src/Admin.Web/src", "*.json"),
+            ("src/Admin.Web/public", "*.json"),
         ];
         string wwwroot = Path.Combine(Backend.AdminRoot, "src", "Admin.Host", "wwwroot") + Path.DirectorySeparatorChar;
 
