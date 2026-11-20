@@ -59,9 +59,16 @@ public sealed class DriftCoverageTests
         ["src/Admin.Web/src/app/features/scenario/scenario-run.ts"] = typeof(LiteralDriftTests),
     };
 
-    /// <summary>Files that name the backend without copying anything from it.</summary>
+    /// <summary>
+    /// Files that name the backend without copying anything from it by hand: a recording the fakes replay is kept
+    /// current by re-recording it, not by a drift check.
+    /// </summary>
     private static readonly Dictionary<string, string> CitesWithoutCopying = new(StringComparer.Ordinal)
     {
+        ["src/Admin.Host/Admin.Host.csproj"] = "says where the assistant's packages come from; it pins nothing",
+        ["src/Admin.Host/appsettings.json"] = "names the sibling clone's default directory, validated at start",
+        ["src/Admin.Host/Fakes/fixtures/compose-ps.jsonl"] =
+            "a recorded docker compose ps that FixtureRecordings re-records from the stack; nothing copied by hand",
         ["src/Admin.Host/Api/OpenApiReader.cs"] = "names where a document's example comes from, and reads the documents live",
         ["src/Admin.Host/Assistant/AnthropicProviderFactory.cs"] = "cites the package owner's issue for a gap in its provider; copies nothing",
         ["src/Admin.Web/src/app/features/scenario/scenario-runner.ts"] = "says a product-specific signal would be a backend change",
@@ -89,21 +96,33 @@ public sealed class DriftCoverageTests
 
         citing.ShouldContain(f => f.StartsWith("src/Admin.Host/", StringComparison.Ordinal));
         citing.ShouldContain(f => f.StartsWith("src/Admin.Web/src/", StringComparison.Ordinal));
+        citing.ShouldContain(f => f.EndsWith(".csproj", StringComparison.Ordinal));
+        citing.ShouldContain(f => f.EndsWith(".jsonl", StringComparison.Ordinal));
     }
 
     /// <summary>
-    /// Host C# and SPA TypeScript under the two source roots, specs excluded: a fixture path in a
-    /// spec is test data, not a copy. Build output is outside both roots by Directory.Build.props.
+    /// The host's and the MCP route's C#, project files and JSON fixtures, and the SPA's TypeScript, specs
+    /// excluded: a fixture path in a spec is test data, not a copy. .NET build output is outside every root by
+    /// Directory.Build.props; the SPA's build lands in the host's wwwroot, which is skipped.
     /// </summary>
     private static IEnumerable<string> Citing()
     {
-        (string Root, string Pattern)[] scanned = [("src/Admin.Host", "*.cs"), ("src/Admin.Web/src", "*.ts")];
+        (string Root, string Pattern)[] scanned =
+        [
+            ("src/Admin.Host", "*.cs"), ("src/Admin.Host", "*.csproj"),
+            ("src/Admin.Host", "*.json"), ("src/Admin.Host", "*.jsonl"),
+            ("src/Admin.Mcp", "*.cs"), ("src/Admin.Mcp", "*.csproj"), ("src/Admin.Mcp", "*.json"),
+            ("src/Admin.Web/src", "*.ts"),
+        ];
+        string wwwroot = Path.Combine(Backend.AdminRoot, "src", "Admin.Host", "wwwroot") + Path.DirectorySeparatorChar;
 
         foreach ((string root, string pattern) in scanned)
         {
             foreach (string file in Directory.EnumerateFiles(Path.Combine(Backend.AdminRoot, root), pattern, SearchOption.AllDirectories))
             {
-                if (file.EndsWith(".spec.ts", StringComparison.Ordinal) || !File.ReadAllText(file).Contains(Citation, StringComparison.Ordinal))
+                if (Path.GetFullPath(file).StartsWith(wwwroot, StringComparison.Ordinal)
+                    || file.EndsWith(".spec.ts", StringComparison.Ordinal)
+                    || !File.ReadAllText(file).Contains(Citation, StringComparison.Ordinal))
                 {
                     continue;
                 }
