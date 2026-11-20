@@ -94,7 +94,13 @@ public sealed class PlatformProbeTests
         Reachability gateway = result.Single(r => r.Name == "gateway");
         gateway.Up.ShouldBeFalse();
         gateway.Status.ShouldBeNull();
-        result.Where(r => r.Name != "gateway").ShouldAllBe(r => r.Up);
+        Reachability[] rest = [.. result.Where(r => r.Name != "gateway")];
+        rest.Select(r => r.Name).ShouldBe(
+        [
+            "catalog", "ordering", "bff", "inventory", "payments", "privacy",
+            "object-store", "image-edge", "keycloak", "grafana", "client",
+        ]);
+        rest.ShouldAllBe(r => r.Up);
     }
 
     [Fact]
