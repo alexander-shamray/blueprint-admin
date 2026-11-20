@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Admin.Mcp;
@@ -67,6 +68,12 @@ public sealed class McpServer(IAdminHost host)
 
         JsonNode? id = request["id"]?.DeepClone();
 
+        // An id of any kind but a string or a number is refused, and not echoed: no client sent it as an id.
+        if (id is not null && id.GetValueKind() is not (JsonValueKind.String or JsonValueKind.Number))
+        {
+            return Failure(null, InvalidRequest, "An id is a string or a number.");
+        }
+
         // A message with no method is a response, and this server asks the client for nothing.
         if (request["method"] is not JsonValue method || !method.TryGetValue(out string? name))
         {
@@ -85,6 +92,11 @@ public sealed class McpServer(IAdminHost host)
 
             return name switch
             {
+                // MCP's params are an object: a present one of another kind is refused, not read as {}, and only for a
+                // method this server has, so an unknown method is still named as that.
+                "initialize" or "ping" or "tools/list" or "tools/call" or "resources/list" or "resources/read"
+                    when request["params"] is not (null or JsonObject)
+                    => Failure(id, InvalidParams, "params is an object."),
                 "initialize" => Success(id, Initialize(parameters)),
                 "ping" => Success(id, []),
                 "tools/list" => Success(id, await ListToolsAsync(cancellationToken)),
