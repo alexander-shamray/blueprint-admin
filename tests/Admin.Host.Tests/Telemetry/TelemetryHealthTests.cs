@@ -215,8 +215,6 @@ public sealed class TelemetryHealthTests(AdminHostFactory factory) : IClassFixtu
         // The case above never reaches the fan-out. This one does, and the six fanned-out queries must
         // read the uid the first one cached. The list answers late, so that queries started together would
         // all be waiting on it and each ask; a synchronous answer would cache before a second one began.
-        // Counted here rather than through ScriptedHandler.Requests, a plain List the fan-out may add to from
-        // more than one thread.
         int listRequests = 0;
         int queryRequests = 0;
         TelemetryHealthService health = new(new GrafanaClient(
