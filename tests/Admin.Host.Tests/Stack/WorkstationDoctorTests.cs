@@ -80,11 +80,24 @@ public sealed class WorkstationDoctorTests(AdminHostFactory factory) : IClassFix
     }
 
     [Fact]
-    public void No_listeners_at_all_is_every_port_free()
+    public void No_listener_on_a_published_port_is_every_port_free()
     {
         using JsonDocument model = JsonDocument.Parse(Model);
 
-        WorkstationDoctor.Ports(model, Said(Model), Said(), Down).Detail.ShouldBe("All 3 published ports are free.");
+        DoctorCheck check = WorkstationDoctor.Ports(model, Said(Model), Said("[]"), Down);
+
+        check.Detail.ShouldBe("All 3 published ports are free.");
+    }
+
+    [Fact]
+    public void A_listener_read_that_prints_nothing_is_unknown_not_every_port_free()
+    {
+        using JsonDocument model = JsonDocument.Parse(Model);
+
+        DoctorCheck check = WorkstationDoctor.Ports(model, Said(Model), Said(), Down);
+
+        check.State.ShouldBe(DoctorState.Unknown);
+        check.Detail.ShouldBe("The listeners line printed nothing, so they could not be read.");
     }
 
     [Fact]

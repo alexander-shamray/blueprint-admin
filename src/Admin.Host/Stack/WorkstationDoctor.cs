@@ -133,6 +133,13 @@ public sealed partial class WorkstationDoctor(
             return new(name, DoctorState.Unknown, $"The listeners could not be read: {error}");
         }
 
+        // The line's SilentlyContinue makes a failed Get-NetTCPConnection print nothing and exit 0, and a host always
+        // has listeners, so nothing printed is a read that failed, not every port free.
+        if (Joined(listeners).Trim().Length == 0)
+        {
+            return new(name, DoctorState.Unknown, "The listeners line printed nothing, so they could not be read.");
+        }
+
         SortedSet<int> published = [.. PublishedPorts(model)];
         List<Listener> held;
 
@@ -526,11 +533,6 @@ public sealed partial class WorkstationDoctor(
     /// <summary>ConvertTo-Json prints one listener as an object and several as an array.</summary>
     private static IEnumerable<Listener> ReadListeners(string json)
     {
-        if (json.Trim().Length == 0)
-        {
-            return [];
-        }
-
         using JsonDocument document = JsonDocument.Parse(json);
         JsonElement root = document.RootElement;
         JsonElement[] items = root.ValueKind == JsonValueKind.Array ? [.. root.EnumerateArray()] : [root];
