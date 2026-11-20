@@ -302,11 +302,13 @@ is kept (`ComposeService.ExecListedAsync`).
 - A job with `ProcessSpec.Steps` shows a strip above its log (`StepTracker`):
   every step pending, running, done, failed or not run, each started by its marker
   line, `== <step>` or a `$ <command line>` that contains the step's name, with
-  the seconds it took and, for a failed one, the job's "stops here" line. Reset
-  writes `== readiness` for its last step, which has no command; the stress run's
-  last step is the summary it copies in. Nothing is shown that the job does not
-  print: the steps are the host's names for what it runs, and a step the job
-  never reaches is "not run".
+  the seconds it took and, for a failed one, the line the job wrote when it
+  failed. A failed step is not always where the job stopped: the projection
+  rebuild starts the BFF again after a failed replay, so a later step can be
+  done after it. Reset writes `== readiness` for its last step, which has no
+  command; the stress run's last step is the summary it copies in. Nothing is
+  shown that the job does not print: the steps are the host's names for what it
+  runs, and a step the job never reaches is "not run".
 - A k6 run's per-second lines become a bar above the log (`K6Tracker`): the
   latest `running (…), n/max VUs, … complete and … interrupted iterations` line
   gives the elapsed time, the users against the most and the iterations, and the
