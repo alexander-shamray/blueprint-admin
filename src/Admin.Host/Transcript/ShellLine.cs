@@ -102,6 +102,7 @@ public static partial class ShellLine
         return value;
     }
 
-    [GeneratedRegex(@"^[A-Za-z0-9_@%+=:,./-]+$")]
+    // \z, not $: .NET's $ also matches before a final \n, and a word ending in one would be left unquoted.
+    [GeneratedRegex(@"^[A-Za-z0-9_@%+=:,./-]+\z")]
     private static partial Regex Plain();
 }
