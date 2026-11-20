@@ -191,7 +191,9 @@ public sealed partial class MailSinkClient(HttpClient http, IOptions<AdminOption
         (e is HttpRequestException or JsonException or OperationCanceledException or NotSupportedException or IOException)
         && !cancellationToken.IsCancellationRequested;
 
-    [GeneratedRegex("^[A-Za-z0-9]{1,64}$")]
+    // \z, not $: a $ also matches before a final newline, which would let "abc\n" into the sink URL, as
+    // DeadLetterService.ParkedName says.
+    [GeneratedRegex(@"^[A-Za-z0-9]{1,64}\z")]
     private static partial Regex MessageId();
 
     private sealed record SinkAddress(string? Name, string? Address);

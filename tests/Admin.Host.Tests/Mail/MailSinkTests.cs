@@ -68,6 +68,7 @@ public sealed class MailSinkTests : IClassFixture<AdminHostFactory>
     [InlineData("..%2Fchaos")]
     [InlineData("abc%3Flimit%3D1")]
     [InlineData("abc-def")]
+    [InlineData("abc%0A")]
     public async Task An_id_that_could_reach_another_path_is_refused_before_the_sink_is_asked(string id)
     {
         HttpResponseMessage response = await client.GetAsync($"/api/mail/messages/{id}", TestContext.Current.CancellationToken);
