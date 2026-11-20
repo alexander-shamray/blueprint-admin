@@ -707,7 +707,8 @@ export class OutputPane {
 
   private append(line: OutputLine): void {
     const pull = this.tracker.add(line);
-    const container = !pull && this.composeTracker.add(line);
+    const compose = pull ? null : this.composeTracker.add(line);
+    const container = compose === 'progress';
     const progress = !pull && !container && this.k6Tracker.add(line.text);
     if (progress) this.k6.set(this.k6Tracker.snapshot());
     const wait = !pull && !container && this.readinessTracker.add(line);
@@ -715,10 +716,12 @@ export class OutputPane {
     const claimed = !pull && !container && !progress && (this.claims()?.(line.text) ?? false);
     if (claimed) this.claimed.emit(line);
     const event = composeEvent(line.text);
-    const failed = event !== null && composeFailed(event);
-    // A failure stays in the log, but it is also where an image's or a container's row turns failed.
-    if (pull || failed) this.pull.set(this.tracker.snapshot());
-    if (container || (failed && line.text.includes('Container '))) this.containers.set(this.composeTracker.snapshot());
+    const eventFailed = event !== null && composeFailed(event);
+    const failed = eventFailed || compose === 'failed';
+    // A failure stays in the log, but it is also where an image's or a container's row turns failed; a container's
+    // plain-text Error has no JSON event, so the tracker's verdict is what publishes it.
+    if (pull || eventFailed) this.pull.set(this.tracker.snapshot());
+    if (compose !== null) this.containers.set(this.composeTracker.snapshot());
     if (this.stepTracker) {
       this.stepTracker.add(line);
       this.steps.set(this.stepTracker.snapshot());

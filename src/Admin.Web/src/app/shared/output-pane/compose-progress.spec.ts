@@ -89,7 +89,7 @@ describe('composeProgress', () => {
       tracker.add(at(2, ' Container b-1  Error')),
     ];
 
-    expect(folded).toEqual([true, false, false]);
+    expect(folded).toEqual(['progress', 'failed', 'failed']);
     const progress = tracker.snapshot();
     expect(progress.services.map((s) => [s.name, s.failed, s.settled])).toEqual([
       ['a-1', true, false],

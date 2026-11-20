@@ -352,6 +352,25 @@ describe('OutputPane', () => {
       expect(fixture.nativeElement.querySelector('pre')?.textContent).toContain('Container commerce-sql-1  Error');
     });
 
+    it('turns a container to failed when its last line is a plain-text Error, and marks that line in the log', () => {
+      const events = new Subject<JobEvent>();
+      const fixture = open(events);
+
+      send(events, 0, ' Container ordering-api-1  Recreate');
+      send(events, 1, ' Container ordering-api-1  Starting');
+      send(events, 2, ' Container ordering-api-1  Error');
+      fixture.detectChanges();
+
+      const section = fixture.nativeElement.querySelector('section.containers') as HTMLElement;
+      expect(section.querySelector('tbody tr')?.className).toBe('failed');
+      expect(section.querySelector('.pull-summary')?.textContent).toBe('Containers settled: 1 of 1');
+      const marked = Array.from(
+        fixture.nativeElement.querySelectorAll('pre .stderr'),
+        (e) => (e as HTMLElement).textContent,
+      );
+      expect(marked).toEqual([expect.stringContaining('Container ordering-api-1  Error')]);
+    });
+
     it('keeps the steps it has read when a reconnect names them again', () => {
       const events = new Subject<JobEvent>();
       const fixture = open(events);
