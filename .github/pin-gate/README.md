@@ -91,7 +91,10 @@ which the first list refuses.
 
 Beside them, the restore inputs no project names: any tracked `.rsp` (an
 `MSBuild.rsp` or `Directory.Build.rsp` hands MSBuild global properties,
-which outrank the pin file), a `Directory.Packages.props` below the root
+which outrank the pin file) but a root `Directory.Build.rsp` of printable
+ASCII holding only blank lines and lines opening `#` in their first column,
+with no BOM, which hands MSBuild nothing and stops its walk
+upward at the checkout (#795), a `Directory.Packages.props` below the root
 (NuGet takes the nearest above a project, so it would be the pin file for its
 subtree), a `nuget.config` or a `global.json` anywhere but the root (each is
 the nearest for its subtree too), a root `global.json` carrying
