@@ -135,7 +135,7 @@ public sealed class ApiEndpointTests(AdminHostFactory factory) : IClassFixture<A
 
     [Theory]
     [InlineData("[1,2]")]
-    [InlineData("""{"permission":"catalog:write"}""")]
+    [InlineData("""{"permission":"orders:write"}""")]
     [InlineData("""{"permission":[1]}""")]
     public async Task A_pasted_token_with_unexpected_claim_shapes_is_refused_not_a_host_error(string payload)
     {

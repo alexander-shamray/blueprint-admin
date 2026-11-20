@@ -147,6 +147,13 @@ public sealed class FakeGatewayPolicyTests
         Send("GET", "/api/v1/privacy/anything", Jwt("""["catalog:write"]""")).ShouldBe(HttpStatusCode.Forbidden);
 
     [Fact]
+    public void A_permission_claim_that_is_one_bare_string_is_one_grant_as_the_identity_screen_reads_it()
+    {
+        Send("POST", "/api/v1/orders", Jwt("\"orders:write\"")).ShouldBe(HttpStatusCode.OK);
+        Send("GET", "/api/v1/privacy/anything", Jwt("\"catalog:write\"")).ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
     public void An_anonymous_route_answers_with_no_token() =>
         Send("GET", "/api/v1/catalog/products", token: null).ShouldBe(HttpStatusCode.OK);
 
