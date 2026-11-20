@@ -260,8 +260,17 @@ public sealed class ProjectionRebuildServiceTests : IAsyncDisposable
 
         exit.ShouldBe(1);
         runner.Started.Select(s => s.Arguments[^1]).ShouldBe(["web-bff", "web-bff"]);
-        Texts(job).ShouldContain("The tool could not run: boom");
-        Texts(job).ShouldContain("Started");
+        List<string> texts = Texts(job);
+        texts.ShouldContain("Started");
+
+        // The tool's marker comes before its failure, so the step strip fails bff-replay rather than the stop.
+        int at = texts.IndexOf("$ dotnet run --project tools/bff-replay -- --reset");
+        at.ShouldBeGreaterThan(texts.FindIndex(t => t.EndsWith("stop web-bff", StringComparison.Ordinal)));
+        texts.GetRange(at + 1, 2).ShouldBe(
+        [
+            "The tool could not run: boom",
+            "dotnet run --project tools/bff-replay -- --reset exited with -1.",
+        ]);
     }
 
     /// <summary>Throws from <c>Start</c> for one executable, as a process that cannot be started for a reason the runner does not catch.</summary>

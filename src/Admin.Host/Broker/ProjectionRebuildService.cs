@@ -136,16 +136,21 @@ public sealed class ProjectionRebuildService(
         }
 
         bool replayed;
+        ProcessSpec replay = ReplaySpec(reset: true, paths, options.Value);
+
+        // The marker goes before the start can throw, so the step strip fails the tool's own step and not the stop's.
+        job.Append(OutputStream.Stdout, $"$ {replay.CommandLine}");
 
         try
         {
-            replayed = await StepAsync(job, Replay(reset: true));
+            replayed = await FollowAsync(job, runner.Start(replay));
         }
         catch (Exception ex)
         {
             // Anything the runner or the follow throws once the BFF is stopped is the tool not finishing, and must not
-            // skip the start below.
+            // skip the start below. -1 is what IProcessRunner reports for a process that cannot start.
             job.Append(OutputStream.Stderr, $"The tool could not run: {ex.Message}");
+            job.Append(OutputStream.Stderr, $"{replay.CommandLine} exited with -1.");
             replayed = false;
         }
 
@@ -171,10 +176,16 @@ public sealed class ProjectionRebuildService(
     private Job Replay(bool reset) => runner.Start(ReplaySpec(reset, paths, options.Value));
 
     /// <summary>Copies a step's lines into the job as they arrive; a step that fails ends the run there.</summary>
-    private static async Task<bool> StepAsync(Job job, Job step)
+    private static Task<bool> StepAsync(Job job, Job step)
     {
         job.Append(OutputStream.Stdout, $"$ {step.Spec.CommandLine}");
 
+        return FollowAsync(job, step);
+    }
+
+    /// <summary>The rest of <see cref="StepAsync"/>, once the step's marker line is written.</summary>
+    private static async Task<bool> FollowAsync(Job job, Job step)
+    {
         await foreach (OutputLine line in step.FollowToEnd(CancellationToken.None))
         {
             job.Append(line.Stream, line.Text);
