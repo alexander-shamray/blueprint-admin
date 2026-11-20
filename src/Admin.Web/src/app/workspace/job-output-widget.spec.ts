@@ -3,7 +3,7 @@ import { By } from '@angular/platform-browser';
 import { NEVER, Subject, of } from 'rxjs';
 import { HostClient } from '../core/host/host-client';
 import { JobEvent, SseClient } from '../core/host/sse-client';
-import { ComposeRun } from '../features/stack/stack-feed';
+import { ComposeRun, StackFeed } from '../features/stack/stack-feed';
 import { OutputPane } from '../shared/output-pane/output-pane';
 import { JobOutputWidget } from './job-output-widget';
 import { PageJobs } from './page-jobs';
@@ -101,6 +101,26 @@ describe('JobOutputWidget', () => {
 
       expect(stack).toHaveBeenCalled();
       expect(pane()?.staircase()).toEqual(progress);
+    });
+
+    it('stops reading the stack once the page’s job changes to one that printed no k6 line', async () => {
+      const { fixture } = render({ jobId: 'stress-1' });
+      const release = vi.fn();
+      const attach = vi.spyOn(TestBed.inject(StackFeed).stack, 'attach').mockReturnValue(release);
+
+      k6Line();
+      fixture.detectChanges();
+      await settle();
+      expect(attach).toHaveBeenCalledTimes(1);
+      expect(release).not.toHaveBeenCalled();
+
+      fixture.componentRef.setInput('config', { jobId: 'plain-1' });
+      fixture.detectChanges();
+      await settle();
+      fixture.detectChanges();
+
+      expect(release).toHaveBeenCalledTimes(1);
+      expect(attach).toHaveBeenCalledTimes(1);
     });
 
     it('hands a job that is not the stress run’s nothing', async () => {

@@ -51,14 +51,15 @@ export class JobOutputWidget {
     return run?.job.id === this.jobId() ? run.progress : null;
   });
 
+  /** Whether the followed job has printed a k6 line; the pane clears it when the job changes. */
+  private readonly hasK6 = computed(() => !!this.pane()?.k6());
+
   constructor() {
-    // The stack is polled for the staircase only once the job has printed a k6 line, so a page of other jobs never asks.
+    // The stack is polled for the staircase only while the job has printed a k6 line, so a page of other jobs never
+    // asks, and a page that moves on to one stops asking.
     const destroyRef = inject(DestroyRef);
-    let attached = false;
-    effect(() => {
-      if (attached || !this.pane()?.k6()) return;
-      attached = true;
-      this.feed.stack.attach(destroyRef);
+    effect((onCleanup) => {
+      if (this.hasK6()) onCleanup(this.feed.stack.attach(destroyRef));
     });
   }
 }
