@@ -12,7 +12,22 @@ import re
 import shlex
 import subprocess
 import sys
+import traceback
+import types
 from pathlib import Path
+
+
+def path_grammar():
+    """`path_grammar.py` beside this file, which names a path on another machine; compiled, so no bytecode is left."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "path_grammar.py")
+    module = types.ModuleType("path_grammar")
+    module.__file__ = path
+    with open(path, encoding="utf-8") as handle:
+        exec(compile(handle.read(), path, "exec"), module.__dict__)
+    return module
+
+
+GRAMMAR = path_grammar()
 
 # What a refusal names as the forms that keep the file's endings. `--binary` is admitted: measured under Git Bash's
 # GNU sed 4.9, `sed --binary -i` writes the CR back where a plain `-i` drops it.
@@ -364,6 +379,36 @@ def in_place_files(arguments):
     return operands if script_given else operands[1:]
 
 
+# The event's `cwd`, an own place beside the hook's and the project; `offence` sets it.
+SESSION_CWD = None
+
+
+def elsewhere(path):
+    """Whether `path` is on a share the session does not stand on, which this hook must not open."""
+    return GRAMMAR.foreign(path, SESSION_CWD, os.getcwd(), os.environ.get("CLAUDE_PROJECT_DIR"))
+
+
+def pointed_elsewhere(directory):
+    """Whether the checkout holding `directory` names its git directory on such a share, which git would open."""
+    current = directory
+    while not os.path.isdir(os.path.join(current, ".git")):
+        marker = os.path.join(current, ".git")
+        if os.path.isfile(marker):
+            try:
+                with open(marker, encoding="utf-8") as handle:
+                    text = handle.read().strip()
+            except (OSError, ValueError):
+                return True
+            pointer = text[len("gitdir:"):].strip()
+            # As spelled too: a join puts the cwd drive before `\??\`, and git reads it unjoined.
+            return text.startswith("gitdir:") and (elsewhere(pointer) or elsewhere(os.path.join(current, pointer)))
+        parent = os.path.dirname(current)
+        if parent == current:
+            return False
+        current = parent
+    return False
+
+
 def native(path):
     """`path` as this platform's Python opens it: Git Bash's `/c/...` is `C:/...` on Windows."""
     if os.name == "nt":
@@ -475,6 +520,8 @@ def candidates(operand, cwd):
     walked = 0
     for word in words:
         path = native(word)
+        if elsewhere(path):
+            continue
         if not os.path.isabs(path):
             if cwd is None:
                 continue
@@ -538,6 +585,8 @@ def tracked(path, git):
     names, and the path is the session's to choose; `GIT_OPTIONAL_LOCKS=0` keeps the read from refreshing the index.
     """
     directory, name = os.path.split(os.path.abspath(path))
+    if pointed_elsewhere(directory):
+        return False
     try:
         result = subprocess.run(
             # `--literal-pathspecs`, or an untracked `x[ab].txt` would match a tracked `xa.txt`.
@@ -563,8 +612,10 @@ def offence(event, strips_cr=os.name == "nt"):
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
     if not isinstance(command, str) or "sed" not in command:
         return None
+    global SESSION_CWD
     cwd = event.get("cwd")
     cwd = cwd if isinstance(cwd, str) and cwd else os.getcwd()
+    SESSION_CWD = cwd
     return judge(command, cwd, git_on_path(cwd), [0], 0)
 
 
@@ -608,10 +659,11 @@ def judge(command, cwd, git, checked, depth):
                 name == "pushd" and arguments[0][:1] in ("+", "-")))
             if plain:
                 target = native(arguments[0])
-                target = target if os.path.isabs(target) else (os.path.join(cwd, target) if cwd else None)
+                if not (os.path.isabs(target) or elsewhere(target)):
+                    target = os.path.join(cwd, target) if cwd else None
                 # Bash refuses a directory that is not there and stays put, and a failed `pushd` pushes nothing; one an
                 # earlier command on the line makes is not there yet either. Either way the move is not followed.
-                if target is not None and not os.path.isdir(target):
+                if target is not None and (elsewhere(target) or not os.path.isdir(target)):
                     plain, target = False, None
             else:
                 target = None
@@ -657,21 +709,7 @@ def judge(command, cwd, git, checked, depth):
     return None
 
 
-def main():
-    try:
-        event = json.loads(sys.stdin.buffer.read().decode("utf-8"))
-    except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
-        # As in guard-edit-target.py: a hook that cannot read its own input has established nothing, and refusing
-        # every command on a malformed event would turn a defect here into a dead session.
-        print("guard-sed-crlf: unreadable hook event; not judging", file=sys.stderr)
-        return 0
-    if not isinstance(event, dict):
-        print("guard-sed-crlf: hook event is not an object; not judging", file=sys.stderr)
-        return 0
-
-    reason = offence(event)
-    if reason is None:
-        return 0
+def deny(reason):
     json.dump(
         {
             "hookSpecificOutput": {
@@ -683,6 +721,37 @@ def main():
         sys.stdout,
     )
     return 0
+
+
+def main():
+    # An event that is not UTF-8 holds a command nothing read, so it is refused, as the argv guards refuse one.
+    try:
+        text = sys.stdin.buffer.read().decode("utf-8")
+    except UnicodeDecodeError:
+        return deny("guard-sed-crlf: this hook event is not UTF-8, so the command in it cannot be read; refusing "
+                    "rather than admitting what nothing judged.")
+    try:
+        event = json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        # As in guard-edit-target.py: a hook that cannot read its own input has established nothing, and refusing
+        # every command on a malformed event would turn a defect here into a dead session.
+        print("guard-sed-crlf: unreadable hook event; not judging", file=sys.stderr)
+        return 0
+    if not isinstance(event, dict):
+        print("guard-sed-crlf: hook event is not an object; not judging", file=sys.stderr)
+        return 0
+
+    # A crash here would be empty stdout, which PreToolUse reads as admitted: the argv guards' fail-open, refused as
+    # they refuse it (`docs/harness-boundaries.md`, *The sed line-ending guard*).
+    try:
+        reason = offence(event)
+    except Exception:  # noqa: BLE001
+        traceback.print_exc(file=sys.stderr)
+        reason = ("guard-sed-crlf: this command crashed the sed line-ending guard, so nothing about it is "
+                  "established; refusing rather than admitting what nothing judged. The traceback is on stderr.")
+    if reason is None:
+        return 0
+    return deny(reason)
 
 
 if __name__ == "__main__":
