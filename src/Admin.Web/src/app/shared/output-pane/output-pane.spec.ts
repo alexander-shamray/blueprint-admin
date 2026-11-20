@@ -369,6 +369,8 @@ describe('OutputPane', () => {
         (e) => (e as HTMLElement).textContent,
       );
       expect(marked).toEqual([expect.stringContaining('Container ordering-api-1  Error')]);
+      // PROBLEM alone would mark the line, so the entry's own flag is what shows the tracker's verdict reached it.
+      expect(fixture.componentInstance.entries().at(-1)?.failed).toBe(true);
     });
 
     it('keeps the steps it has read when a reconnect names them again', () => {
