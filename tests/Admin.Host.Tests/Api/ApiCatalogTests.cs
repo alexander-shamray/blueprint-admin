@@ -161,7 +161,11 @@ public sealed class ApiCatalogTests : IDisposable
         ordering.Available.ShouldBeFalse();
         ordering.Error.ShouldNotBeNull().ShouldContain("Connection refused");
         view.Operations.ShouldNotContain(o => o.Source == "ordering");
-        view.Operations.Where(o => o.Source == "catalog").ShouldAllBe(o => o.Available);
+        view.Operations.Where(o => o.Source == "catalog").Select(o => (o.Name, o.Available)).ShouldBe(
+        [
+            ("PublishProduct", true), ("GetProducts", true), ("ChangePrice", true), ("WithdrawProduct", true),
+            ("GetOwnProducts", true), ("GetProduct", true),
+        ]);
     }
 
     [Fact]
@@ -179,7 +183,9 @@ public sealed class ApiCatalogTests : IDisposable
         view.Sources.Single(s => s.Name == "ordering").Error.ShouldBe("http://localhost:5101/openapi/v1.json answered 503.");
 
         orderingUp = true;
-        (await catalog.ReloadAsync(Token)).Operations.Where(o => o.Source == "ordering").ShouldAllBe(o => o.Available);
+        ApiCatalogView recovered = await catalog.ReloadAsync(Token);
+        recovered.Operations.Where(o => o.Source == "ordering").Select(o => (o.Name, o.Available))
+            .ShouldBe([("PlaceOrder", true), ("CancelOrder", true), ("GetOrderSagaState", true)]);
     }
 
     [Fact]
@@ -191,6 +197,7 @@ public sealed class ApiCatalogTests : IDisposable
 
         ApiCatalogView view = await Catalog(handler).GetAsync(Token);
 
+        view.Sources.Select(s => s.Name).ShouldBe(["catalog", "ordering", "inventory", "payments", "privacy"]);
         view.Sources.ShouldAllBe(s => !s.Available && s.Error == "The token request for demo answered 401.");
         view.Operations.Select(o => o.Source).Distinct().ShouldBe(["bff", "edge", "health", "simulator", "carrier"]);
     }
