@@ -162,6 +162,15 @@ class AdminStack(unittest.TestCase):
                     self.assertIn(f"Edit({target})", rules)
                     self.assertIn(f"Edit(./{target})", rules)
 
+    def test_a_root_python_module_is_denied(self):
+        # harness-checks.sh runs Python from the root, so a root module named after the standard library's would
+        # be imported in its place; `-P` is the check's half, this deny the command's.
+        for name in self.SUBJECTS:
+            rules = self.disallowed(name)
+            with self.subTest(command=name):
+                self.assertIn("Edit(*.py)", rules)
+                self.assertIn("Edit(./*.py)", rules)
+
     MSBUILD_AUTO_IMPORTED = (
         "Directory.Build.targets", "Directory.Build.rsp", "MSBuild.rsp", "msbuild.rsp",
         "Directory.Solution.props", "Directory.Solution.targets",
@@ -350,6 +359,21 @@ class TheLocalRoots(unittest.TestCase):
         self.assertGreaterEqual(len(found), 5, found)
         self.assertEqual(found, self.roots(ci))
 
+
+
+class TheCheckKeepsTheRootOffSysPath(unittest.TestCase):
+    """`-m` puts the working directory first on `sys.path`, and the check runs from the root."""
+
+    def test_every_module_run_carries_dash_p(self):
+        # A script run puts its own directory first, which its sibling imports need; a `-m` run puts the root
+        # there, so each one carries `-P`. PYTHONSAFEPATH would drop the script's directory too.
+        checks = (SCRIPTS / "harness-checks.sh").read_text(encoding="utf-8")
+        runs = re.findall(r"^run_py (.*)$", checks, re.MULTILINE)
+        modules = [run for run in runs if " -m " in f" {run} "]
+        self.assertGreaterEqual(len(modules), 5, runs)
+        for run in modules:
+            with self.subTest(run=run):
+                self.assertTrue(run.startswith("-P -m "), run)
 
 
 class TheLocalRunIsSelective(unittest.TestCase):
