@@ -460,9 +460,9 @@ internal static partial class FakeGateway
         : allowed();
 
     /// <summary>
-    /// The token's <c>permission</c> claim; null when there is no readable bearer token. A pasted token's
-    /// payload may be any JSON: one that is not an object is unreadable, and a claim that is not an array
-    /// of strings grants nothing.
+    /// The token's <c>permission</c> claim, read as <see cref="IdentityEndpoints.Permissions"/> reads it, so a bare
+    /// string is one grant as the realm's multivalued mapper writes it; null when there is no readable bearer token.
+    /// A pasted token's payload may be any JSON: one that is not an object is unreadable.
     /// </summary>
     internal static string[]? Permissions(HttpRequestMessage request)
     {
@@ -489,8 +489,6 @@ internal static partial class FakeGateway
             return null;
         }
 
-        return claims.TryGetProperty("permission", out JsonElement granted) && granted.ValueKind == JsonValueKind.Array
-            ? [.. granted.EnumerateArray().Where(p => p.ValueKind == JsonValueKind.String).Select(p => p.GetString()!)]
-            : [];
+        return IdentityEndpoints.Permissions(claims);
     }
 }
