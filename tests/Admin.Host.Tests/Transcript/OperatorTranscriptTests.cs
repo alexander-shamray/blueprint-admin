@@ -109,6 +109,7 @@ public sealed class OperatorTranscriptTests
     [InlineData("it's", "'it'\\''s'")]
     [InlineData("$HOME", "'$HOME'")]
     [InlineData("", "''")]
+    [InlineData("42\n", "'42\n'")]
     public void A_word_the_shell_would_split_or_expand_is_single_quoted(string word, string quoted)
     {
         ShellLine.Quote(word).ShouldBe(quoted);
