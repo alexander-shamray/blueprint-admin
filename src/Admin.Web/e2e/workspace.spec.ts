@@ -2,8 +2,9 @@
 // browser has it from the build's polyfills and this Node process does not.
 import '@angular/localize/init';
 import { readFile } from 'node:fs/promises';
-import { Locator, Page, expect, test } from '@playwright/test';
+import { Locator, Page, Request, expect, test } from '@playwright/test';
 import { openPalette } from './palette';
+import { join } from 'node:path';
 import { SCREENS } from '../src/app/screens';
 
 // The widget workspace (#383, widget-workspace spec §11). Against the fake platform, whose workspace file lives in a
@@ -490,11 +491,24 @@ test('a click on a service in the platform diagram points the Logs widget on the
   await page.getByRole('button', { name: 'Done' }).click();
   await expect(page.locator('.save-state')).toHaveCount(0, { timeout: 10_000 });
 
+  // The indicator shows only while a save is pending or running, and a FakePlatform save ends inside an expect's
+  // retry, so the saves themselves are counted, over a window well past the save's delay. SAVE_DELAY_MS is read from
+  // its owner's source: importing workspace-service.ts loads a service this Node process cannot compile.
+  const owner = await readFile(join(__dirname, '../src/app/workspace/workspace-service.ts'), 'utf8');
+  const saveDelay = Number(/export const SAVE_DELAY_MS = (\d+);/.exec(owner)?.[1]);
+  expect(saveDelay).toBeGreaterThan(0);
+  let saves = 0;
+  const countSave = (r: Request): void => {
+    if (r.method() === 'PUT' && new URL(r.url()).pathname === '/api/workspace') saves++;
+  };
+  page.on('request', countSave);
   const nodes = page.getByRole('list', { name: 'Nodes of the diagram' });
   await nodes.getByRole('button', { name: 'ordering', exact: true }).click();
 
   await expect(page.locator('app-logs-widget .pointed')).toContainText('Pointed at ordering-api');
-  await expect(page.locator('.save-state')).toHaveCount(0);
+  await page.waitForTimeout(saveDelay + 1500);
+  page.off('request', countSave);
+  expect(saves).toBe(0);
 
   await page.locator('app-logs-widget button.unpoint').click();
   await expect(page.locator('app-logs-widget .pointed')).toHaveCount(0);

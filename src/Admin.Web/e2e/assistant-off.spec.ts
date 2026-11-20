@@ -12,8 +12,13 @@ test('with the assistant off there is no panel, no toggle and no palette entry',
   expect(await (await status).json()).toEqual({ enabled: false, provider: null, model: null, reason: 'off' });
   await expect(page.getByRole('navigation', { name: 'Pages' })).toBeVisible();
 
-  await expect(page.getByRole('button', { name: 'Assistant', exact: true })).toHaveCount(0);
-  await expect(page.locator('app-assistant-panel')).toHaveCount(0);
+  // The response arriving is not the shell applying it, and an absence holds at once: so it is held over an interval
+  // well past the render that applies the status, not checked once.
+  for (let i = 0; i < 5; i++) {
+    await expect(page.getByRole('button', { name: 'Assistant', exact: true })).toHaveCount(0);
+    await expect(page.locator('app-assistant-panel')).toHaveCount(0);
+    await page.waitForTimeout(200);
+  }
 
   await openPalette(page);
   await page.keyboard.type('assistant');

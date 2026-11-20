@@ -145,6 +145,8 @@ test('a page left and returned to finds the dead-letter gates empty', async ({ p
   await expect(page).toHaveURL(/\/stack$/);
   await page.getByRole('link', { name: 'Broker' }).click();
   await expect(page).toHaveURL(/\/broker$/);
+  // The workbench is lazy-loaded: the absences below mean something only once it has rendered again, closed.
+  await expect(panel.locator('section.dead-letters p.empty')).toBeVisible();
 
   await expect(panel.locator('article.dead-letter')).toHaveCount(0);
   await expect(panel.getByRole('button', { name: 'Replay for real' })).toHaveCount(0);

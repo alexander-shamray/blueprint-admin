@@ -42,6 +42,8 @@ test('a link carrying a correlation id opens the mail already filtered to it', a
 
   await page.goto('/mail?correlationId=another-order');
   await expect(page.getByLabel('Correlation id')).toHaveValue('another-order');
+  // The table is not rendered before the list answers, so its count of none means something only once the list has.
+  await expect(page.locator('.count')).toContainText('0 of the 4 listed');
   await expect(page.locator('table.messages tbody tr')).toHaveCount(0);
 });
 
