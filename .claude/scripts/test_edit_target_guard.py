@@ -158,7 +158,8 @@ class GuardCase(unittest.TestCase):
             [sys.executable, str(hook)],
             input=json.dumps(event), capture_output=True, text=True, encoding="utf-8",
             cwd=process_cwd,
-            env={**os.environ,
+            # A `/dispatch` executor runs this suite with the variable set, which only `env` may set here.
+            env={**{name: value for name, value in os.environ.items() if name != "HARNESS_DISPATCHED"},
                  "CLAUDE_PROJECT_DIR": self.root if project is None else project,
                  **(env or {})},
         )
@@ -535,9 +536,19 @@ class TheOrdinaryWriteIsNotDisturbed(GuardCase):
                 self.assertNotEqual(guard.key(composed, (folded, False)),
                                     guard.key(decomposed, (folded, False)))
 
-        os.makedirs(composed, exist_ok=True)
+        # The end-to-end half puts the name in the checkout's own root, as the
+        # differently-cased prefix case does: a spelling that differs only
+        # beneath an ASCII root sits under the anchor composed or not, and a
+        # `..` after it is gone before any key is taken.
+        checkout = os.path.join(self.outside, unicodedata.normalize("NFC", name))
+        respelled = os.path.join(self.outside, unicodedata.normalize("NFD", name))
+        for tree in ("docs", os.path.join(".claude", "scripts"), ".git"):
+            os.makedirs(os.path.join(checkout, tree), exist_ok=True)
+        self.write(os.path.join(checkout, "docs", "chapter.md"), "prose\n")
+        scripts = os.path.join(checkout, ".claude", "scripts")
+        self.write(os.path.join(scripts, "helper.sh"), "ok\n")
         try:
-            here, there = os.stat(composed), os.stat(decomposed)
+            here, there = os.stat(checkout), os.stat(respelled)
             one_directory = (here.st_dev, here.st_ino) == (there.st_dev,
                                                            there.st_ino)
         except OSError:
@@ -548,13 +559,27 @@ class TheOrdinaryWriteIsNotDisturbed(GuardCase):
                   file=sys.stderr)
             return
 
-        target = os.path.join(self.root, ".claude", "scripts", "helper.sh")
+        # The plain write is the control: it is admitted with or without
+        # composing. The link is what composing decides: composed, the
+        # respelled root is the anchor and the link resolves elsewhere in it;
+        # not composed, it is refused as a spelling no checkout recognises,
+        # which the reason assertion tells apart.
+        anchored = {"cwd": checkout, "project": checkout}
+        self.assertAdmitted(os.path.join(respelled, "docs", "chapter.md"),
+                            **anchored)
         for linker in linkers():
             with self.subTest(link=linker):
-                link = self.link_to("composed", target, linker)
-                through = os.path.join(
-                    decomposed, "..", os.path.relpath(link, self.root))
-                self.assertRefused(through)
+                link = os.path.join(checkout, "docs", f"composed-{linker}")
+                if linker == "symlink":
+                    os.symlink(os.path.join(scripts, "helper.sh"), link)
+                    spelled = os.path.join("docs", f"composed-{linker}")
+                else:
+                    JUNCTIONS(scripts, link)
+                    spelled = os.path.join("docs", f"composed-{linker}",
+                                           "helper.sh")
+                through = os.path.join(respelled, spelled)
+                self.assertIn("resolves elsewhere in it",
+                              self.assertRefused(through, **anchored))
 
     def test_two_names_that_can_coexist_are_not_folded_into_one(self):
         # On a normalisation-sensitive filesystem, NTFS and ext4 among them, a
@@ -695,22 +720,71 @@ class TheHomeDirectoryKeepsWhatRunsAtLogin(GuardCase):
             os.path.join(self.HOME, ".profile"),
             os.path.join(self.HOME, ".zshrc"),
             os.path.join(self.HOME, ".gitconfig"),
+            # git's XDG config runs as `.gitconfig` does.
+            os.path.join(self.HOME, ".config", "git", "config"),
+            # npm's user config: its `script-shell` and `node-options` run under each npm script.
+            os.path.join(self.HOME, ".npmrc"),
+            *self.recased(os.path.join(self.HOME, ".NPMRC")),
         ):
             with self.subTest(target=target):
                 self.assertIn("what runs at login", self.assertRefused(target))
 
+    def test_git_reads_its_xdg_config_where_the_variable_moves_it(self):
+        # git reads `$XDG_CONFIG_HOME/git/config` when the variable is set, wherever it points.
+        moved = os.path.join(self.outside, "xdg")
+        env = {"XDG_CONFIG_HOME": moved}
+        for target in (os.path.join(moved, "git", "config"),
+                       os.path.join(moved, "other", "..", "git", "config")):
+            with self.subTest(target=target):
+                self.assertIn("what runs at login", self.assertRefused(target, env=env))
+        for target in (os.path.join(moved, "git", "ignore"), os.path.join(moved, "other", "config")):
+            with self.subTest(target=target):
+                self.assertAdmitted(target, env=env)
+        self.assertAdmitted(os.path.join(moved, "git", "config"), env={"XDG_CONFIG_HOME": ""})
+        # A relative value is git's from where the session runs, not where the hook process does.
+        self.assertIn("what runs at login", self.assertRefused(
+            os.path.join(moved, "git", "config"), cwd=self.outside, env={"XDG_CONFIG_HOME": "xdg"}))
+
+    def test_npm_reads_its_user_config_where_the_variable_moves_it(self):
+        # npm reads `$NPM_CONFIG_USERCONFIG`, in either spelling, in place of `~/.npmrc`.
+        moved = os.path.join(self.outside, "npm", "userrc")
+        # Windows holds one variable whatever its case, so the two spellings are two only elsewhere.
+        names = ("NPM_CONFIG_USERCONFIG",) if os.name == "nt" else ("NPM_CONFIG_USERCONFIG", "npm_config_userconfig")
+        cleared = {name: "" for name in names}
+        for name in names:
+            env = {**cleared, name: moved}
+            with self.subTest(variable=name):
+                reason = self.assertRefused(moved, env=env)
+                self.assertIn("what runs at login", reason)
+                self.assertRegex(reason, r"\$(?i:npm_config_userconfig)")
+                self.assertAdmitted(os.path.join(self.outside, "npm", "other"), env=env)
+        self.assertAdmitted(moved, env=cleared)
+
+    def test_npms_windows_global_config_below_the_home_is_refused(self):
+        # npm's default prefix on Windows is `%APPDATA%\npm`, so its global config sits below the home.
+        target = os.path.join(self.HOME, "AppData", "Roaming", "npm", "etc", "npmrc")
+        if os.name == "nt":
+            self.assertIn("what runs at login", self.assertRefused(target))
+        self.assertIn("what runs at login", self.assertRefused(
+            os.path.join(self.HOME, "appdata", "roaming", "npm", "etc", "npmrc")))
+        self.assertAdmitted(os.path.join(self.HOME, "appdata", "roaming", "npm", "etc", "other"))
+
     def test_a_link_into_the_keys_is_held(self):
+        # A home built here, so the case has its subject on a host whose real home holds no `.ssh`.
+        home = os.path.join(self.outside, "home")
+        real = os.path.join(home, ".ssh")
+        os.makedirs(real)
+        env = {"HOME": home, "USERPROFILE": home}
         for linker in linkers():
             with self.subTest(link=linker):
                 link = os.path.join(self.outside, f"keys-{linker}")
-                real = os.path.join(self.HOME, ".ssh")
-                if not os.path.isdir(real):
-                    self.skipTest("no ~/.ssh to link to")
                 if linker == "symlink":
                     os.symlink(real, link, target_is_directory=True)
                 else:
                     JUNCTIONS(real, link)
-                self.assertRefused(os.path.join(link, "authorized_keys"))
+                self.assertIn("what runs at login",
+                              self.assertRefused(os.path.join(link, "authorized_keys"), env=env))
+                self.assertAdmitted(os.path.join(self.outside, "keys.md"), env=env)
 
     def test_the_rest_of_the_outside_stays_admitted(self):
         # What the allow-list would have refused: 22 edits to a sibling
@@ -721,6 +795,10 @@ class TheHomeDirectoryKeepsWhatRunsAtLogin(GuardCase):
             os.path.join(self.HOME, "notes.md"),
             os.path.join(self.HOME, "projects", ".ssh-notes.md"),
             os.path.join(self.HOME, "projects", ".bashrc"),
+            os.path.join(self.HOME, ".config", "other", "config"),
+            os.path.join(self.HOME, ".config", "git", "ignore"),
+            os.path.join(self.HOME, "projects", ".claude.json"),
+            os.path.join(self.HOME, "projects", ".npmrc"),
         ):
             with self.subTest(target=target):
                 self.assertAdmitted(target)
@@ -734,6 +812,8 @@ class TheHomeDirectoryKeepsWhatRunsAtLogin(GuardCase):
             os.path.join(self.CLAUDE, "commands", "anything.md"),
             os.path.join(self.CLAUDE, "agents", "anything.md"),
             os.path.join(self.CLAUDE, "plugins", "p", "skills", "s", "SKILL.md"),
+            # Beside `~/.claude`, the user state whose MCP servers every session starts.
+            os.path.join(self.HOME, ".claude.json"),
         ):
             with self.subTest(target=target):
                 self.assertIn("control surface", self.assertRefused(target))
@@ -793,19 +873,26 @@ class TheHomeDirectoryKeepsWhatRunsAtLogin(GuardCase):
         self.assertIn("what runs at login", self.assertRefused(
             os.path.join(keys, "authorized_keys"), project=keys, env=env))
 
-    def test_names_that_cannot_be_read_refuse_the_home_and_nothing_else(self):
-        # They live in `guard-git-argv.py`, so a guard copied without it fails
-        # closed under the home directory and leaves the rest of the outside.
+    def test_names_that_cannot_be_read_refuse_the_home_the_xdg_config_and_build_names_only(self):
+        # They live in `guard-git-argv.py`, so a guard copied without it fails closed under the home
+        # directory, at a `git/config` while `XDG_CONFIG_HOME` is set and at a build's name, and leaves the rest.
         alone = os.path.join(self.outside, "lone", ".claude", "hooks")
         home = os.path.join(self.outside, "home")
         os.makedirs(alone)
         os.makedirs(home)
         guard = shutil.copy(HOOK, alone)
+        shutil.copy(HOOK.parent / "path_grammar.py", alone)
         event = {"tool_name": "Write", "cwd": self.outside}
         # A Windows runner's temp root is under its real home, so this one is set.
         env = {key: value for key, value in os.environ.items() if key != "CLAUDE_PROJECT_DIR"}
-        env.update(HOME=home, USERPROFILE=home)
+        # Set as a CI runner sets it: only a file git could read there is refused.
+        env.update(HOME=home, USERPROFILE=home, XDG_CONFIG_HOME=os.path.join(self.outside, "xdg"),
+                   NPM_CONFIG_USERCONFIG=os.path.join(self.outside, "npm", "userrc"))
         for target, reason in ((os.path.join(home, "notes.md"), "cannot be read"),
+                               (os.path.join(self.outside, "xdg", "git", "config"), "cannot be read"),
+                               # Judged by its name alone, which errs towards refusing a file of that name.
+                               (os.path.join(self.outside, "npm", "userrc"), "cannot be read"),
+                               (os.path.join(self.outside, "NuGet.Config"), "cannot be read"),
                                (os.path.join(self.outside, "loot.txt"), None)):
             with self.subTest(target=target):
                 result = subprocess.run(
@@ -869,11 +956,26 @@ class AWorktreeTheSessionHasNotEntered(GuardCase):
         root = os.path.join(self.outside, "owner")
         hooks = os.path.join(root, ".claude", "hooks")
         os.makedirs(hooks, exist_ok=True)
-        for name in ("guard-edit-target.py", "guard-git-argv.py"):
+        for name in ("guard-edit-target.py", "guard-git-argv.py", "path_grammar.py"):
             shutil.copy(HOOK.parent / name, hooks)
         self.write(os.path.join(root, ".claude", "settings.json"), json.dumps(
             {"permissions": {"deny": [f"Edit({rule})" for rule in denies]}}))
         return os.path.join(hooks, "guard-edit-target.py")
+
+    def test_a_crash_in_judging_refuses_the_write(self):
+        # A sibling guard broken mid-edit raises outside every handler offence() holds; the hook must still deny.
+        hook = self.hook_denying()
+        self.write(os.path.join(os.path.dirname(hook), "guard-git-argv.py"), "def (\n")
+        worktree = self.linked()
+        reason = self.assertRefused(os.path.join(worktree, "docs", "note.md"), hook=hook)
+        self.assertIn("crashed the edit target guard", reason)
+
+    def test_a_grammar_that_will_not_load_refuses_every_write(self):
+        # path_grammar.py loads at import, before main()'s try, so a broken one must still end in the refusal.
+        hook = self.hook_denying()
+        self.write(os.path.join(os.path.dirname(hook), "path_grammar.py"), "def (\n")
+        reason = self.assertRefused(os.path.join(self.root, "docs", "note.md"), hook=hook)
+        self.assertIn("crashed the edit target guard", reason)
 
     def test_its_denied_trees_are_refused_from_outside_it(self):
         worktree = self.linked()
@@ -1014,6 +1116,113 @@ class AWorktreeTheSessionHasNotEntered(GuardCase):
                 self.assertIn("resolves outside the checkout", reason)
 
 
+class ADispatchedSessionLeavesTheDispatchersState(GuardCase):
+    """Under `HARNESS_DISPATCHED`, the main checkout's `artifacts/dispatch/` is refused."""
+
+    DISPATCHED = {"HARNESS_DISPATCHED": "1"}
+
+    def setUp(self):
+        super().setUp()
+        beside = os.path.join(self.root, ".claude", "worktrees")
+        os.makedirs(beside, exist_ok=True)
+        self.worktree = AWorktreeTheSessionHasNotEntered.linked(self, "executor", beside=beside)
+
+    def from_worktree(self, **kwargs):
+        return {"cwd": self.worktree, "project": self.worktree} | kwargs
+
+    def assertThisRule(self, path, env=None):
+        """Refused by this rule rather than by another layer, which its message tells apart."""
+        reason = self.assertRefused(path, **self.from_worktree(env=self.DISPATCHED if env is None else env))
+        self.assertIn("dispatcher's own state", reason)
+
+    def test_the_main_checkouts_dispatch_state_is_refused(self):
+        for parts in (("artifacts", "dispatch", "handbacks.json"),
+                      ("artifacts", "dispatch", "20261117-152904", "state.json"),
+                      ("artifacts", "dispatch", "20261117-152904", "G1.json"),
+                      ("artifacts", "dispatch")):
+            with self.subTest(parts=parts):
+                self.assertThisRule(os.path.join(self.root, *parts))
+        self.assertThisRule(os.path.join(self.worktree, "..", "..", "..", "artifacts", "dispatch", "x.json"))
+        # A `.git` made inside the state is not a checkout of its own that hides it.
+        planted = os.path.join(self.root, "artifacts", "dispatch", "20261117-152904")
+        for name in (".git", os.path.join("..", ".git")):
+            os.makedirs(os.path.join(planted, name), exist_ok=True)
+        self.assertThisRule(os.path.join(planted, "state.json"))
+        # Set at all is the test, as the task list's.
+        self.assertThisRule(os.path.join(self.root, "artifacts", "dispatch", "handbacks.json"),
+                            env={"HARNESS_DISPATCHED": ""})
+
+    def test_a_case_folded_spelling_is_refused_where_the_filesystem_folds(self):
+        if not self.guard_module().case_insensitive(self.root):
+            self.skipTest("this filesystem tells the two spellings apart")
+        self.assertThisRule(os.path.join(self.root, "Artifacts", "DISPATCH", "handbacks.json"))
+
+    def test_the_executors_own_result_and_the_rest_of_main_are_admitted(self):
+        for path in (os.path.join(self.worktree, "artifacts", "dispatch", "20261117-152904", "G1.json"),
+                     os.path.join("artifacts", "dispatch", "20261117-152904", "G1.json"),
+                     os.path.join(self.root, "artifacts", "review", "x-r1.diff"),
+                     os.path.join(self.root, "artifacts", "dispatched", "x.json"),
+                     os.path.join(self.root, "docs", "note.md")):
+            with self.subTest(path=path):
+                self.assertAdmitted(path, **self.from_worktree(env=self.DISPATCHED))
+
+    def test_a_session_not_dispatched_is_not_this_rule(self):
+        self.assertAdmitted(os.path.join(self.root, "artifacts", "dispatch", "handbacks.json"),
+                            **self.from_worktree())
+        self.assertAdmitted(os.path.join(self.root, "artifacts", "dispatch", "20261117-152904", "state.json"))
+
+
+class ABuildLoadsNothingPlantedAboveTheCheckout(GuardCase):
+    """The .NET SDK and NuGet read these names from every directory above a project."""
+
+    NAMES = ("Directory.Build.props", "Directory.Build.targets", "Directory.Build.rsp",
+             "Directory.Solution.props", "Directory.Solution.targets", "Directory.Packages.props",
+             "NuGet.Config", "nuget.config", "NUGET.CONFIG", "global.json")
+
+    def setUp(self):
+        super().setUp()
+        self.parent = os.path.join(self.outside, "parent")
+        self.checkout = os.path.join(self.parent, "repo")
+        os.makedirs(os.path.join(self.checkout, ".git"))
+        self.inside = {"project": self.checkout, "cwd": self.checkout}
+
+    def test_each_name_in_a_directory_above_the_checkout_is_refused(self):
+        for directory in (self.parent, self.outside):
+            for name in self.NAMES:
+                with self.subTest(directory=directory, name=name):
+                    self.assertIn("loads from a directory above", self.assertRefused(
+                        os.path.join(directory, name), tool="Write", **self.inside))
+        self.assertIn("loads from a directory above", self.assertRefused(
+            os.path.join("..", "Directory.Build.targets"), **self.inside))
+        # Windows opens the same file through its default stream and with trailing dots or spaces.
+        for name in ("NuGet.Config::$DATA", "global.json.", "NuGet.Config "):
+            with self.subTest(name=name):
+                self.assertIn("loads from a directory above", self.assertRefused(
+                    os.path.join(self.parent, name), tool="Write", **self.inside))
+
+    def test_the_checkout_root_a_sibling_and_other_names_stay_admitted(self):
+        for target in (os.path.join(self.checkout, "Directory.Build.props"),
+                       os.path.join(self.checkout, "src", "nuget.config"),
+                       os.path.join(self.parent, "sibling", "NuGet.Config"),
+                       os.path.join(self.parent, "notes.md"),
+                       # No shell expands an editing tool's path, so a brace or a class is its own name.
+                       os.path.join(self.parent, "a{b}.md"),
+                       os.path.join(self.parent, "[n]uget.config")):
+            with self.subTest(target=target):
+                self.assertAdmitted(target, tool="Write", **self.inside)
+
+    def test_a_worktree_takes_nothing_from_its_main_checkout_root(self):
+        # The worktree's build walks up through the main checkout, so its root is above the worktree's.
+        worktree = os.path.join(self.checkout, ".claude", "worktrees", "w")
+        os.makedirs(worktree)
+        self.write(os.path.join(worktree, ".git"), "gitdir: elsewhere\n")
+        for target in (os.path.join(self.checkout, "Directory.Build.props"),
+                       os.path.join(self.checkout, ".claude", "worktrees", "global.json")):
+            with self.subTest(target=target):
+                self.assertIn("loads from a directory above", self.assertRefused(
+                    target, tool="Write", project=worktree, cwd=worktree))
+
+
 class WhatThisGuardIsNotTheSubjectOf(GuardCase):
     """The residuals, written as passing cases so nobody assumes they closed."""
 
@@ -1073,6 +1282,14 @@ class WhatThisGuardIsNotTheSubjectOf(GuardCase):
                 self.assertEqual(0, result.returncode)
                 self.assertEqual("", result.stdout.strip())
                 self.assertIn("guard-edit-target", result.stderr)
+
+    def test_an_event_that_is_not_utf8_is_refused(self):
+        # Not the fail-open above: bytes nothing could decode hold a path nothing read.
+        result = subprocess.run([sys.executable, str(HOOK)], input=b"\xff", capture_output=True)
+        self.assertEqual(0, result.returncode)
+        verdict = json.loads(result.stdout.decode("utf-8"))["hookSpecificOutput"]
+        self.assertEqual("deny", verdict["permissionDecision"])
+        self.assertIn("not UTF-8", verdict["permissionDecisionReason"])
 
 
 class TheWiringWithoutWhichNoneOfTheAboveRuns(unittest.TestCase):
