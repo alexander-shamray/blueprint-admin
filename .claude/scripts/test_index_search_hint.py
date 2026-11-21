@@ -84,6 +84,9 @@ NOT_SEARCHES = (
     "cat build.log | rg Error",
     "rg Error < build.log",
     "git diff | rg ClaimAsync -",
+    "git diff |(rg ClaimAsync)",
+    "git diff | (rg ClaimAsync)",
+    "(git diff)| rg ClaimAsync",
     "grep -r ClaimAsync -",
     "rg ClaimAsync <<< \"$text\"",
     "grep -rn Saga docs/backend-architecture",
@@ -242,6 +245,7 @@ class TheWiring(unittest.TestCase):
             quoted = Path(scratch) / "O'Brien"
             (quoted / ".claude" / "hooks").mkdir(parents=True)
             shutil.copyfile(HINT, quoted / ".claude" / "hooks" / HINT.name)
+            shutil.copyfile(HINT.parent / "path_grammar.py", quoted / ".claude" / "hooks" / "path_grammar.py")
             for root, refused in ((CLAUDE.parent, True), (quoted, True), (Path(scratch), False)):
                 event = json.dumps({"hook_event_name": EVENT, "session_id": uuid.uuid4().hex,
                                     "transcript_path": str(transcript), "tool_name": "Grep",
