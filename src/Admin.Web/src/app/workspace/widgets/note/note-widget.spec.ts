@@ -21,6 +21,14 @@ const HOSTILE = [
   FENCE,
 ].join('\n');
 
+/** Every element under `root`, the open shadow roots it hosts included, where the diagram is drawn. */
+function everyElement(root: Element): Element[] {
+  return [...root.querySelectorAll('*')].flatMap((e) => [
+    e,
+    ...(e.shadowRoot ? everyElement(e.shadowRoot as unknown as Element) : []),
+  ]);
+}
+
 describe('NoteWidget', () => {
   let draw: ReturnType<typeof vi.fn<(source: string) => Promise<string>>>;
 
@@ -52,8 +60,9 @@ describe('NoteWidget', () => {
   it('never lets a script or an event handler in the source reach the DOM', async () => {
     const element: HTMLElement = (await render(HOSTILE)).nativeElement;
 
-    expect(element.querySelector('script')).toBeNull();
-    for (const node of element.querySelectorAll('*')) {
+    const nodes = everyElement(element);
+    expect(nodes.filter((n) => n.localName === 'script')).toEqual([]);
+    for (const node of nodes) {
       expect([...node.attributes].map((a) => a.name).filter((n) => n.startsWith('on'))).toEqual([]);
       expect(node.getAttribute('href') ?? '').not.toMatch(/javascript:/i);
     }
@@ -61,7 +70,19 @@ describe('NoteWidget', () => {
     expect(element.textContent).toContain('<script>alert(2)</script>');
     expect(element.querySelector('h3')?.textContent).toBe('Title <img src=x onerror=alert(1)>');
     // The drawing the stub returned kept its text and lost its script and handler.
-    expect(element.querySelector('svg text')?.textContent).toBe('ok');
+    expect(nodes.find((n) => n.localName === 'text')?.textContent).toBe('ok');
+  });
+
+  it('draws a diagram, and the <style> it carries, inside a shadow root, so its rules style nothing else', async () => {
+    draw.mockResolvedValue(
+      '<svg xmlns="http://www.w3.org/2000/svg" id="m1"><style>#m1 text{fill:red} button{display:none}</style><text>ok</text></svg>',
+    );
+    const element: HTMLElement = (await render([`${FENCE}mermaid`, 'flowchart LR', FENCE].join('\n'))).nativeElement;
+
+    const drawing = element.querySelector('app-mermaid-diagram .drawing') as HTMLElement;
+    expect(drawing.hidden).toBe(false);
+    expect(drawing.shadowRoot?.querySelector('svg style')?.textContent).toContain('button{display:none}');
+    expect(element.querySelector('style, svg')).toBeNull();
   });
 
   it('draws a mermaid fence as a diagram and any other fence as code', async () => {

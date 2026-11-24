@@ -489,7 +489,9 @@ slow?*
 - **Safety**: Mermaid runs with `securityLevel: 'strict'`, no HTML labels
   and a `secure` list that refuses a diagram's own `%%{init}%%` directive the
   styling keys (`themeCSS` and its neighbours, owned by `MERMAID_CONFIG`), so
-  no diagram restyles the console around it;
+  no diagram restyles the console around it; the `<style>` Mermaid puts in
+  its own drawing is kept, and the drawing is drawn into a shadow root, so
+  its rules reach nothing outside it;
   Markdown is rendered to elements with no raw HTML, as the Runbooks screen
   renders a runbook (spec §5.14). Nothing the operator writes executes.
 - Mermaid is lazy-loaded, shared by §8.2 and §8.3.
