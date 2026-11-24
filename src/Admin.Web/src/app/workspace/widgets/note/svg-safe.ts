@@ -37,6 +37,8 @@ const LINKING = new Set(['href', 'src']);
 const OUTSIDE_URL = /url\(\s*(?!['"]?#)/i;
 const OUTSIDE_IMPORT = /@import/i;
 const IMAGE_SET = /image-set\(/i;
+/** A rule for the element a shadow root hangs from, which is outside the drawing (`mermaid-diagram.ts`). */
+const SHADOW_HOST = /:host/i;
 
 /** CSS read the way a browser reads it: `u\72l(` is `url(`. Applied before any of the tests above. */
 function unescapeCss(value: string): string {
@@ -71,7 +73,8 @@ export function safeSvg(svg: string): SVGElement | null {
       if (child.namespaceURI !== SVG_NAMESPACE || !ALLOWED.has(child.localName.toLowerCase())) child.remove();
       else walk(child);
     }
-    if (element.localName.toLowerCase() === 'style' && reachesOutside(element.textContent ?? ''))
+    const css = element.textContent ?? '';
+    if (element.localName.toLowerCase() === 'style' && (reachesOutside(css) || SHADOW_HOST.test(unescapeCss(css))))
       element.textContent = '';
     for (const attribute of [...element.attributes]) {
       const name = attribute.localName.toLowerCase();
