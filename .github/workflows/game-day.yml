@@ -38,8 +38,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.12'
       - name: The runner and every scenario's check, against fakes
@@ -55,7 +55,7 @@ jobs:
     steps:
       # npm ci below runs the frontend's lifecycle scripts in this workspace,
       # so no checkout leaves the job token in a .git/config they can read.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
@@ -64,7 +64,7 @@ jobs:
       # so actions/checkout's ref never takes a step output, which code scanning
       # reads as cache poisoning in a dispatched job; the pin comes from a
       # committed file and is checked to be one commit id first.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: alexander-shamray/blueprint-backend
           path: .clones/blueprint-backend
@@ -78,19 +78,19 @@ jobs:
             exit 1
           fi
           git -C "$BACKEND" checkout --detach "$sha"
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: alexander-shamray/blueprint-frontend
           path: .clones/blueprint-frontend
           persist-credentials: false
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.12'
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           global-json-file: global.json
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: .clones/blueprint-frontend/.nvmrc
 
