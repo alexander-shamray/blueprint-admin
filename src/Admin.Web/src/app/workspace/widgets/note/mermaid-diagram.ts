@@ -19,7 +19,7 @@ export const DIAGRAM_RENDERER = new InjectionToken<(source: string) => Promise<s
       <p class="error" role="alert" i18n>The diagram could not be drawn: {{ message }}</p>
       <pre class="source" tabindex="0">{{ source() }}</pre>
     }
-    <div class="drawing" #drawing></div>
+    <div class="drawing" #drawing [hidden]="!drawn()"></div>
   `,
   styles: `
     :host {
@@ -32,13 +32,6 @@ export const DIAGRAM_RENDERER = new InjectionToken<(source: string) => Promise<s
       border-radius: 0.25rem;
       padding: 0.5rem;
       overflow: auto;
-    }
-    .drawing:empty {
-      display: none;
-    }
-    .drawing :is(svg) {
-      max-width: 100%;
-      height: auto;
     }
     .error {
       color: var(--mat-sys-error);
@@ -56,6 +49,7 @@ export class MermaidDiagram {
 
   readonly source = input.required<string>();
   protected readonly error = signal<string | null>(null);
+  protected readonly drawn = signal(false);
 
   /** Bumped by each draw, so a slow one that is overtaken by a newer source does not put its drawing back. */
   private latest = 0;
@@ -63,21 +57,36 @@ export class MermaidDiagram {
   constructor() {
     effect(() => {
       const source = this.source();
-      const target = this.drawing().nativeElement;
+      const target = this.shadow();
       const mine = ++this.latest;
       this.draw(source).then(
         (svg) => {
           if (mine !== this.latest) return;
           const drawn = safeSvg(svg);
-          target.replaceChildren(...(drawn ? [drawn] : []));
+          target.replaceChildren(...(drawn ? [frame(), drawn] : []));
+          this.drawn.set(drawn !== null);
           this.error.set(drawn ? null : $localize`Mermaid did not return a drawing.`);
         },
         (e: unknown) => {
           if (mine !== this.latest) return;
           target.replaceChildren();
+          this.drawn.set(false);
           this.error.set(e instanceof Error ? e.message : String(e));
         },
       );
     });
   }
+
+  // The drawing keeps Mermaid's <style>, whose rules would otherwise reach the whole console (§8.3), so it is drawn
+  // into a shadow root, where they style the drawing alone.
+  private shadow(): ShadowRoot {
+    const host = this.drawing().nativeElement;
+    return host.shadowRoot ?? host.attachShadow({ mode: 'open' });
+  }
+}
+
+function frame(): HTMLStyleElement {
+  const style = document.createElement('style');
+  style.textContent = 'svg { max-width: 100%; height: auto; }';
+  return style;
 }
