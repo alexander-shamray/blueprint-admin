@@ -32,7 +32,7 @@ jobs:
       tip: ${{ steps.read.outputs.tip }}
       drift: ${{ steps.drift.outcome }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - id: read
         env:
           GH_TOKEN: ${{ github.token }}
@@ -47,14 +47,14 @@ jobs:
           echo "pin=$pin" >> "$GITHUB_OUTPUT"
           echo "tip=$tip" >> "$GITHUB_OUTPUT"
       - if: steps.read.outputs.pin != steps.read.outputs.tip
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: alexander-shamray/blueprint-backend
           ref: ${{ steps.read.outputs.tip }}
           path: .drift/blueprint-backend
           persist-credentials: false
       - if: steps.read.outputs.pin != steps.read.outputs.tip
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           global-json-file: global.json
       # A red result is the answer this job exists to give, so it is an output
