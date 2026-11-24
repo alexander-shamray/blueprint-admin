@@ -1286,7 +1286,9 @@ tool and nothing else. The host binds `127.0.0.1` only, refuses to start on
 any other address, and sets no CORS headers, so a page on another origin
 cannot drive it. `/api` also refuses a request whose `Sec-Fetch-Site` is
 anything but `same-origin` or `none`, so a page on another localhost port
-(`same-site`) cannot either. Every response the application produces also
+(`same-site`) cannot either; from a browser that sends no `Sec-Fetch-Site`, it
+refuses an `Origin` whose scheme, host or port is not the request's own. Every
+response the application produces also
 forbids framing (`frame-ancestors 'none'`,
 `X-Frame-Options: DENY`), because a page that frames the console makes no
 cross-site request: the clicks inside the frame are the console's own. There is

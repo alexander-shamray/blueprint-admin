@@ -46,8 +46,24 @@ public static class LoopbackOriginGuard
 
         string origin = request.Headers.Origin.ToString();
 
-        return origin.Length > 0 && !IsLoopbackOrigin(origin);
+        if (origin.Length == 0)
+        {
+            return false;
+        }
+
+        // With no Sec-Fetch-Site, a page on another loopback port is told apart by Origin alone (spec §8).
+        return site.Length > 0 ? !IsLoopbackOrigin(origin) : !IsOwnOrigin(origin, request);
     }
+
+    private static bool IsOwnOrigin(string origin, HttpRequest request) =>
+        IsLoopbackOrigin(origin)
+        && Uri.TryCreate(origin, UriKind.Absolute, out Uri? uri)
+        && string.Equals(uri.Scheme, request.Scheme, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(uri.Host, request.Host.Host, StringComparison.OrdinalIgnoreCase)
+        && uri.Port == (request.Host.Port ?? DefaultPort(request.Scheme));
+
+    private static int DefaultPort(string scheme) =>
+        string.Equals(scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ? 443 : 80;
 
     private static bool IsLoopbackOrigin(string origin) =>
         Uri.TryCreate(origin, UriKind.Absolute, out Uri? uri)
