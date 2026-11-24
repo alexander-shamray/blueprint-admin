@@ -11,7 +11,7 @@ a developer does by hand.**
 | **Frontend** | `alexander-shamray/blueprint-frontend`, checked out beside this repository at `../blueprint-frontend` |
 | **Toolkit** | .NET 10 / C# 14 minimal API host; Angular 22 standalone SPA; xunit, Vitest, Playwright |
 | **Runs on** | The developer's workstation, loopback only. Never deployed, never multi-user |
-| **Prerequisites** | Docker Desktop, Node 22.22 or newer, .NET 10 SDK, both sibling clones, and `GITHUB_PACKAGES_TOKEN` set to a GitHub token with `read:packages` (`gh auth refresh -s read:packages`, then `gh auth token`): the assistant's core is a package on GitHub Packages, which asks for one even for a public package (`nuget.config`) |
+| **Prerequisites** | Docker Desktop, Node 22.22 or newer, .NET 10 SDK, both sibling clones, and `GITHUB_PACKAGES_TOKEN` set to a classic personal access token with `read:packages` and no other scope: the assistant's core is a package on GitHub Packages, which asks for one even for a public package (`nuget.config`), and every build, script and agent the shell starts inherits the variable. `gh auth token` would do, after `gh auth refresh -s read:packages`, but it is the CLI login's own token, with `repo` and often `workflow` beside it |
 
 ## 1. Purpose
 

@@ -19,10 +19,11 @@ Docker Desktop, the .NET SDK pinned in `global.json`, the Node version in
 A restore also needs `GITHUB_PACKAGES_TOKEN`, a GitHub token with
 `read:packages`: the assistant's core is blueprint-backend's package on
 GitHub Packages, which asks for a token even for a public package
-(`nuget.config`). With the GitHub CLI, run
-`gh auth refresh -h github.com -s read:packages` once, then set the variable
-from `gh auth token` in the shell that builds, or in the one that starts an
-agent session. The design spec's Prerequisites row is the owner.
+(`nuget.config`). Every build, script and agent session the shell starts
+inherits the variable, so make it a classic personal access token with
+`read:packages` alone, not the GitHub CLI's `gh auth token`, which is your
+login's token with `repo` and often `workflow` too. The design spec's
+Prerequisites row is the owner.
 
 Other locations: set `Admin:BackendDir` and `Admin:FrontendDir` (see
 `src/Admin.Host/Config/AdminOptions.cs`) on the command line
