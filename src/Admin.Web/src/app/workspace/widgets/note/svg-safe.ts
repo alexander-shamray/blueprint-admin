@@ -78,10 +78,10 @@ export function safeSvg(svg: string): SVGElement | null {
       else walk(child);
     }
     const css = element.textContent ?? '';
-    // A browser drops a comment before it reads a token, so `:/**/host` is `:host`.
-    const read = unescapeCss(css.replace(COMMENT, ''));
-    if (element.localName.toLowerCase() === 'style' && (reachesOutside(css) || PAST_THE_SHADOW.test(read)))
-      element.textContent = '';
+    // A browser drops a comment before it reads a token, so `:/**/host` is `:host`; but a `/*` in a string is no
+    // comment, so the text is judged with comments dropped and as it stands, and either match empties it.
+    const past = [unescapeCss(css.replace(COMMENT, '')), unescapeCss(css)].some((read) => PAST_THE_SHADOW.test(read));
+    if (element.localName.toLowerCase() === 'style' && (reachesOutside(css) || past)) element.textContent = '';
     for (const attribute of [...element.attributes]) {
       const name = attribute.localName.toLowerCase();
       const outside = !attribute.value.trim().startsWith('#');
