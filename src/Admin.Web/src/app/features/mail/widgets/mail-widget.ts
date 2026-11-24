@@ -10,7 +10,7 @@ import { widgetSession } from '../../../workspace/widget-session-store';
 import { TraceLink } from '../../trace/trace-follow';
 
 // The sandbox stops script, not fetches: a remote image or stylesheet in a mail would load when it is opened, a read
-// beacon. The policy goes after a leading doctype, which must stay first or the mail renders in quirks mode.
+// beacon (spec §5.12). The policy goes after a leading doctype, which must stay first to set the mail's own mode.
 const FRAME_POLICY =
   '<meta http-equiv="Content-Security-Policy" ' +
   `content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">`;
