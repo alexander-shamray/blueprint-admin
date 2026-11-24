@@ -236,6 +236,16 @@ public sealed class LoadRunServiceTests : IAsyncDisposable
             .ShouldBe(LoadRunService.Product);
     }
 
+    [Fact]
+    public void A_block_that_reads_no_database_is_given_no_sql_password()
+    {
+        ProcessSpec spec = LoadRunService.Spec(LoadRunService.TokenCheck, Paths, "Other_Pa55!");
+
+        spec.Environment.ShouldBeNull();
+        spec.Secrets.ShouldBeEmpty();
+        spec.Arguments[^1].ShouldBe(LoadRunService.TokenCheck);
+    }
+
     private LoadRunService Service() => new(runner, registry, Paths, Options.Create(new AdminOptions()));
 
     /// <summary>Every block as the live run recorded it, the run's exit being <paramref name="run"/>.</summary>
