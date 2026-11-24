@@ -6,6 +6,7 @@ using Admin.Host.Fakes;
 using Admin.Host.Jobs;
 using Admin.Host.Stack;
 using Admin.Host.Tests.TestSupport;
+using Admin.Host.Transcript;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -218,14 +219,21 @@ public sealed class LoadRunServiceTests : IAsyncDisposable
     }
 
     [Fact]
-    public void A_stack_with_another_sql_password_has_it_in_the_blocks_that_read_the_database()
+    public void A_stack_with_another_sql_password_hands_it_to_the_blocks_that_read_the_database_as_a_variable()
     {
         ProcessSpec spec = LoadRunService.Spec(LoadRunService.Product, Paths, "Other_Pa55!");
 
-        spec.Arguments[^1].ShouldContain("-P 'Other_Pa55!'");
+        spec.Arguments[^1].ShouldContain($"-P $env:{LoadRunService.SqlPasswordVariable}");
         spec.Arguments[^1].ShouldNotContain(LoadRunService.RunLocallySqlPassword);
+        spec.Arguments[^1].ShouldNotContain("Other_Pa55!");
+        spec.Environment.ShouldNotBeNull().ShouldHaveSingleItem()
+            .ShouldBe(new(LoadRunService.SqlPasswordVariable, "Other_Pa55!"));
+        spec.Secrets.ShouldHaveSingleItem().ShouldBe("Other_Pa55!");
+        spec.CommandLine.ShouldNotContain("Other_Pa55!");
+        ShellLine.Command(spec).ShouldNotContain("Other_Pa55!");
         LoadRunService.Spec(LoadRunService.Product, Paths).Arguments[^1].ShouldBe(LoadRunService.Product);
-        LoadRunService.Spec(LoadRunService.Product, Paths, "It's").Arguments[^1].ShouldContain("-P 'It''s'");
+        LoadRunService.Spec(LoadRunService.Product, Paths, LoadRunService.RunLocallySqlPassword).Arguments[^1]
+            .ShouldBe(LoadRunService.Product);
     }
 
     private LoadRunService Service() => new(runner, registry, Paths, Options.Create(new AdminOptions()));
