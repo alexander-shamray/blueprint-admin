@@ -353,8 +353,11 @@ public sealed partial class StressRunService(
 
                     ProcessSpec spec = LoadRunService.Spec(next.Block, paths, options.Value.SqlPassword);
 
-                    // The choice reaches only the run block, as the document sets it before that block.
-                    job = runner.Start(ReferenceEquals(next, Steps[^1]) ? spec with { Environment = choice?.Environment } : spec);
+                    // The choice reaches only the run block, as the document sets it before that block, beside any
+                    // variable Spec already gave it.
+                    job = runner.Start(ReferenceEquals(next, Steps[^1])
+                        ? spec with { Environment = Merged(spec.Environment, choice?.Environment) }
+                        : spec);
                     step = job;
                 }
 
@@ -504,8 +507,12 @@ public sealed partial class StressRunService(
         return (await job.Completion, stdout);
     }
 
-    /// <summary>Whether a step's job is the run block's, as it was started: with the configured <c>sa</c> password swapped in.</summary>
+    /// <summary>Whether a step's job is the run block's, as <see cref="LoadRunService.Spec"/> built it.</summary>
     private bool IsRun(Job job) => job.Spec.Arguments is [.., var block] && block == LoadRunService.Spec(Run, paths, options.Value.SqlPassword).Arguments[^1];
+
+    private static IReadOnlyDictionary<string, string>? Merged(
+        IReadOnlyDictionary<string, string>? first, IReadOnlyDictionary<string, string>? second) =>
+        first is null ? second : second is null ? first : new Dictionary<string, string>(first.Concat(second));
 
     /// <summary>A block as the document prints it, one line to a newline, whatever line ending this file was checked out with.</summary>
     private static string Block(string text) => text.ReplaceLineEndings("\n");
