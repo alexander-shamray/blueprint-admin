@@ -75,6 +75,33 @@ public sealed class LoopbackOriginGuardTests : IClassFixture<AdminHostFactory>
     }
 
     [Theory]
+    [InlineData("http://localhost:3000")]
+    [InlineData("https://localhost")]
+    [InlineData("http://127.0.0.1")]
+    public async Task Another_loopback_origin_without_fetch_metadata_is_forbidden_and_starts_no_job(string origin)
+    {
+        int startedBefore = Runner.Started.Count;
+        using HttpRequestMessage request = new(HttpMethod.Post, "/api/stack/backend/up");
+        request.Headers.Add("Origin", origin);
+
+        using HttpResponseMessage response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        Runner.Started.Count.ShouldBe(startedBefore);
+    }
+
+    [Fact]
+    public async Task A_post_from_the_consoles_own_origin_without_fetch_metadata_is_accepted()
+    {
+        using HttpRequestMessage request = new(HttpMethod.Post, "/api/stack/backend/up");
+        request.Headers.Add("Origin", client.BaseAddress!.GetLeftPart(UriPartial.Authority));
+
+        using HttpResponseMessage response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Accepted);
+    }
+
+    [Theory]
     [InlineData("http://127.0.0.1:5301")]
     [InlineData("http://localhost:5300")]
     [InlineData("http://[::1]:5300")]
