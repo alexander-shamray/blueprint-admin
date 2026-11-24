@@ -79,6 +79,7 @@ describe('safeSvg', () => {
       ':/**/host{display:none}',
       '@font-face{font-family:Roboto;src:local(Comic Sans MS)}',
       '@property --mat-sys-error{syntax:"*";inherits:false}',
+      '#m1 a{font-family:"/*"} :host{position:fixed;inset:0} #m1 b{font-family:"*/"}',
     ]) {
       const svg = safeSvg(wrap(`<style>#m1 text{fill:red} ${rule}</style><text>ok</text>`))!;
       expect(svg.querySelector('style')?.textContent).toBe('');
