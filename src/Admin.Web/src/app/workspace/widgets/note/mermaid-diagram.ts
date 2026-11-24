@@ -32,6 +32,8 @@ export const DIAGRAM_RENDERER = new InjectionToken<(source: string) => Promise<s
       border-radius: 0.25rem;
       padding: 0.5rem;
       overflow: auto;
+      /* A shadow root scopes selectors, not layout: this keeps a fixed or absolute shape inside the drawing. */
+      contain: paint;
     }
     .error {
       color: var(--mat-sys-error);

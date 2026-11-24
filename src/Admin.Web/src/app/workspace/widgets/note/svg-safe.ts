@@ -37,8 +37,12 @@ const LINKING = new Set(['href', 'src']);
 const OUTSIDE_URL = /url\(\s*(?!['"]?#)/i;
 const OUTSIDE_IMPORT = /@import/i;
 const IMAGE_SET = /image-set\(/i;
-/** A rule for the element a shadow root hangs from, which is outside the drawing (`mermaid-diagram.ts`). */
-const SHADOW_HOST = /:host/i;
+/**
+ * What reaches past the shadow root the drawing is drawn under (`mermaid-diagram.ts`): a rule for its host, and the
+ * at-rules some engines register for the whole document. Mermaid writes none of them.
+ */
+const PAST_THE_SHADOW = /:host|@font-face|@property/i;
+const COMMENT = /\/\*[\s\S]*?(\*\/|$)/g;
 
 /** CSS read the way a browser reads it: `u\72l(` is `url(`. Applied before any of the tests above. */
 function unescapeCss(value: string): string {
@@ -74,7 +78,9 @@ export function safeSvg(svg: string): SVGElement | null {
       else walk(child);
     }
     const css = element.textContent ?? '';
-    if (element.localName.toLowerCase() === 'style' && (reachesOutside(css) || SHADOW_HOST.test(unescapeCss(css))))
+    // A browser drops a comment before it reads a token, so `:/**/host` is `:host`.
+    const read = unescapeCss(css.replace(COMMENT, ''));
+    if (element.localName.toLowerCase() === 'style' && (reachesOutside(css) || PAST_THE_SHADOW.test(read)))
       element.textContent = '';
     for (const attribute of [...element.attributes]) {
       const name = attribute.localName.toLowerCase();

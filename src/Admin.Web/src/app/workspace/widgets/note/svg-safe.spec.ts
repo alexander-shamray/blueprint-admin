@@ -71,8 +71,15 @@ describe('safeSvg', () => {
     expect(svg.querySelector('#b')?.getAttribute('filter')).toBe('url(#f)');
   });
 
-  it('drops a style that styles the shadow host the drawing is drawn under, escaped or not', () => {
-    for (const rule of [':host{position:fixed;inset:0}', ':HOST(.drawing){display:none}', '\\3a host{z-index:9}']) {
+  it('drops a style that reaches past the shadow root the drawing is drawn under, however it is spelt', () => {
+    for (const rule of [
+      ':host{position:fixed;inset:0}',
+      ':HOST(.drawing){display:none}',
+      '\\3a host{z-index:9}',
+      ':/**/host{display:none}',
+      '@font-face{font-family:Roboto;src:local(Comic Sans MS)}',
+      '@property --mat-sys-error{syntax:"*";inherits:false}',
+    ]) {
       const svg = safeSvg(wrap(`<style>#m1 text{fill:red} ${rule}</style><text>ok</text>`))!;
       expect(svg.querySelector('style')?.textContent).toBe('');
     }
