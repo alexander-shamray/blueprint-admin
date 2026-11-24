@@ -71,6 +71,16 @@ describe('safeSvg', () => {
     expect(svg.querySelector('#b')?.getAttribute('filter')).toBe('url(#f)');
   });
 
+  it('drops a style that styles the shadow host the drawing is drawn under, escaped or not', () => {
+    for (const rule of [':host{position:fixed;inset:0}', ':HOST(.drawing){display:none}', '\\3a host{z-index:9}']) {
+      const svg = safeSvg(wrap(`<style>#m1 text{fill:red} ${rule}</style><text>ok</text>`))!;
+      expect(svg.querySelector('style')?.textContent).toBe('');
+    }
+    expect(safeSvg(wrap('<style>#m1 text{fill:red}</style>'))!.querySelector('style')?.textContent).toBe(
+      '#m1 text{fill:red}',
+    );
+  });
+
   it('answers null for text that is not one SVG document', () => {
     expect(safeSvg('<div>no</div>')).toBeNull();
     expect(safeSvg('<svg')).toBeNull();
