@@ -91,6 +91,24 @@ public sealed class OperatorTranscriptTests
         curl.ShouldNotContain("3f9a1c0e7b2d44aa");
     }
 
+    [Theory]
+    [InlineData("X-Api-Key")]
+    [InlineData("X-Auth-Token")]
+    [InlineData("X-Client-Secret")]
+    [InlineData("X-Upstream-Auth")]
+    public void A_header_named_as_a_credential_keeps_nothing_of_its_value(string name)
+    {
+        using HttpRequestMessage message = new(HttpMethod.Get, "http://localhost:5000/api/v1/orders");
+        message.Headers.TryAddWithoutValidation(name, "3f9a1c0e7b2d44aa");
+        message.Headers.TryAddWithoutValidation("X-Request-Id", "r-42");
+
+        string curl = ShellLine.Curl(message, null);
+
+        curl.ShouldContain($"-H '{name}: <scrubbed>'");
+        curl.ShouldNotContain("3f9a1c0e7b2d44aa");
+        curl.ShouldContain("-H 'X-Request-Id: r-42'");
+    }
+
     [Fact]
     public void A_read_a_screen_polls_is_left_out_by_the_line_api_jobs_draws()
     {
