@@ -1025,7 +1025,10 @@ The body is shown as the sink split it. An HTML part renders in an `iframe`
 whose `sandbox` is empty, so no script in it runs and it has an opaque origin
 that cannot reach the console's; the SPA hands it to the frame unsanitised,
 because Angular's sanitiser would strip the template's styles, and the empty
-sandbox is what makes that safe. No CSP is relaxed for it. A plain-text part,
+sandbox is what makes that safe. No CSP is relaxed for it. The sandbox does
+not stop fetches, so the part is given a policy of its own, a CSP `meta` that
+admits inline styles and `data:` images and nothing remote: a mail's remote
+image would otherwise tell its sender when it was opened. A plain-text part,
 which is what the backend sends today, is shown as text.
 
 ### 5.13 The saga strip and the Scenario export

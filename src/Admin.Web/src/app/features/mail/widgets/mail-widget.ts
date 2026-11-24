@@ -9,6 +9,17 @@ import { Mailbox, MailListView, MailMessageView } from '../../../core/host/host-
 import { widgetSession } from '../../../workspace/widget-session-store';
 import { TraceLink } from '../../trace/trace-follow';
 
+// The sandbox stops script, not fetches: a remote image or stylesheet in a mail would load when it is opened, a read
+// beacon. The policy goes after a leading doctype, which must stay first or the mail renders in quirks mode.
+const FRAME_POLICY =
+  '<meta http-equiv="Content-Security-Policy" ' +
+  `content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">`;
+
+export function withFramePolicy(html: string): string {
+  const doctype = /^\s*<!doctype[^>]*>/i.exec(html)?.[0] ?? '';
+  return doctype + FRAME_POLICY + html.slice(doctype.length);
+}
+
 /**
  * What the platform sent, read from the mail sink through the host (spec §5.12). The widget only reads: clearing the
  * sink is done in its own UI, which the widget links, and the sink's chaos API is never called from here. Config:
@@ -75,7 +86,7 @@ export class MailWidget {
    */
   readonly html = computed<SafeHtml | null>(() => {
     const html = this.opened()?.html ?? '';
-    return html ? this.sanitizer.bypassSecurityTrustHtml(html) : null;
+    return html ? this.sanitizer.bypassSecurityTrustHtml(withFramePolicy(html)) : null;
   });
 
   constructor() {

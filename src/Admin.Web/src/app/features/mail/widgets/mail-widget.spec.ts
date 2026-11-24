@@ -6,7 +6,7 @@ import { HostClient } from '../../../core/host/host-client';
 import { MailListView, MailMessageRead, MailSummary } from '../../../core/host/host-types';
 import { WIDGET_CONTEXT } from '../../../workspace/widget-context';
 import { WidgetSessionStore } from '../../../workspace/widget-session-store';
-import { MailWidget } from './mail-widget';
+import { MailWidget, withFramePolicy } from './mail-widget';
 
 const ORDER = '01a13f79-2194-77a5-bbad-eaf2d69eacd6';
 
@@ -186,6 +186,18 @@ describe('MailWidget', () => {
     expect(frame.getAttribute('sandbox')).toBe('');
     expect(frame.srcdoc).toContain('<style>p{color:red}</style>');
     expect(el(fixture).querySelector('pre.body-text')).toBeNull();
+  });
+
+  it('gives the HTML part a policy that loads nothing remote, after any leading doctype', () => {
+    const policy =
+      '<meta http-equiv="Content-Security-Policy" ' +
+      `content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">`;
+    expect(withFramePolicy('<p>Hi <img src="https://track.example/p.gif"></p>')).toBe(
+      `${policy}<p>Hi <img src="https://track.example/p.gif"></p>`,
+    );
+    expect(withFramePolicy('<!DOCTYPE html><html><body>Hi</body></html>')).toBe(
+      `<!DOCTYPE html>${policy}<html><body>Hi</body></html>`,
+    );
   });
 
   it("shows the sink's own answer when a message is gone", () => {
