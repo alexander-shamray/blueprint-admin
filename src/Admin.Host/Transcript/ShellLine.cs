@@ -99,8 +99,13 @@ public static partial class ShellLine
                 .Select(pair => pair.Contains('=') ? $"{pair.Split('=', 2)[0]}={FixtureScrubber.Scrubbed}" : FixtureScrubber.Scrubbed));
         }
 
-        return value;
+        // X-Api-Key and its kind carry an opaque credential the scrubber's patterns cannot see in a "Name: value" word.
+        bool credential = CredentialNameParts.Any(part => name.Contains(part, StringComparison.OrdinalIgnoreCase));
+
+        return credential ? FixtureScrubber.Scrubbed : value;
     }
+
+    private static readonly string[] CredentialNameParts = ["key", "token", "secret", "auth"];
 
     // \z, not $: .NET's $ also matches before a final \n, and a word ending in one would be left unquoted.
     [GeneratedRegex(@"^[A-Za-z0-9_@%+=:,./-]+\z")]

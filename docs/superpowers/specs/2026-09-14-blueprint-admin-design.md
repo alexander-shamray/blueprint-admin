@@ -983,7 +983,9 @@ order is the order things began and a send abandoned mid-flight is still on the
 record. A token the proxy attached, and any Authorization a caller pasted, keep
 their scheme and lose their value, and a Cookie keeps its names and loses its
 values: the headers the API screen's history drops, which no pattern can
-recognise by value. A value a spec names in `ProcessSpec.Secrets`, the
+recognise by value. Any other header whose name holds `key`, `token`, `secret`
+or `auth`, such as `X-Api-Key`, loses its whole value for the same reason. A
+value a spec names in `ProcessSpec.Secrets`, the
 dead-letter operator's per-run password, is scrubbed outright for the same
 reason, whether it is an argument or a variable's value, and so is it in the
 spec's `CommandLine`, which the job list and the host's log print. Every word
