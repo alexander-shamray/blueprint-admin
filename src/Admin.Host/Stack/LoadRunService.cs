@@ -222,8 +222,8 @@ public sealed class LoadRunService(IProcessRunner runner, JobRegistry registry, 
 
     /// <summary>
     /// One block run whole, from the backend clone, as run-locally.md's PowerShell blocks are. Another
-    /// <c>SQL_PASSWORD</c> reaches the block as <see cref="SqlPasswordVariable"/>, never in it, so no command line,
-    /// job list or transcript holds it.
+    /// <c>SQL_PASSWORD</c> reaches the block as <see cref="SqlPasswordVariable"/>, never in it, so the host's command
+    /// line, job list and transcript do not hold it; the <c>docker</c> the block runs still takes it as an argument.
     /// </summary>
     public static ProcessSpec Spec(string block, RepoPaths paths, string? sqlPassword = null)
     {
@@ -328,7 +328,7 @@ public sealed class LoadRunService(IProcessRunner runner, JobRegistry registry, 
         return (await job.Completion, stdout);
     }
 
-    /// <summary>Whether a step's job is k6's own, the last block, as it was started: with the configured <c>sa</c> password swapped in.</summary>
+    /// <summary>Whether a step's job is k6's own, the last block, as <see cref="Spec"/> built it.</summary>
     private bool IsRun(Job job) => job.Spec.Arguments is [.., var block] && block == Spec(Run, paths, options.Value.SqlPassword).Arguments[^1];
 
     private static string Verdict(int exitCode) => Verdicts.TryGetValue(exitCode, out string? verdict) ? verdict : "k6's own code, which run-locally.md does not read";

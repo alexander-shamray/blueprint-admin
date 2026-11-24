@@ -166,9 +166,13 @@ public sealed class StressRunServiceTests : IAsyncDisposable
 
         Job run = service.Start().Job;
         await WaitUntilAsync(() => runner.Started.Count == 4 && runner.LastStarted is { State: JobState.Running });
+        Job k6 = runner.LastStarted!;
         await service.StopAsync().WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
         Texts(run)[^1].ShouldBe(StressRunService.StoppedInRun);
+        k6.Spec.Environment.ShouldNotBeNull()[LoadRunService.SqlPasswordVariable].ShouldBe(password);
+        k6.Spec.Environment.ShouldContainKey("STRESS_PROFILE");
+        k6.Spec.Secrets.ShouldContain(password);
     }
 
     [Fact]
