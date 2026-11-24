@@ -53,7 +53,11 @@ jobs:
       BACKEND: ${{ github.workspace }}/.clones/blueprint-backend
       FRONTEND: ${{ github.workspace }}/.clones/blueprint-frontend
     steps:
+      # npm ci below runs the frontend's lifecycle scripts in this workspace,
+      # so no checkout leaves the job token in a .git/config they can read.
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       # The backend at ci.yml's drift pin, the platform the console was last
       # proved to match. The pin is checked out after a whole-history checkout,
