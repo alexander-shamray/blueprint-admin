@@ -227,7 +227,9 @@ public sealed class LoadRunService(IProcessRunner runner, JobRegistry registry, 
     /// </summary>
     public static ProcessSpec Spec(string block, RepoPaths paths, string? sqlPassword = null)
     {
-        if (sqlPassword is null || sqlPassword == RunLocallySqlPassword)
+        // A block that reads no database is given no password to inherit or show.
+        if (sqlPassword is null || sqlPassword == RunLocallySqlPassword
+            || !block.Contains(QuotedLiteral, StringComparison.Ordinal))
         {
             return new("powershell", Arguments(block), paths.BackendDir);
         }
