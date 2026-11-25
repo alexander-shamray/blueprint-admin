@@ -10,9 +10,24 @@ import json
 import os
 import re
 import shlex
+import stat
 import sys
 import tempfile
+import types
 from pathlib import Path
+
+
+def path_grammar():
+    """`path_grammar.py` beside this file, which names a path on another machine; compiled, so no bytecode is left."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "path_grammar.py")
+    module = types.ModuleType("path_grammar")
+    module.__file__ = path
+    with open(path, encoding="utf-8") as handle:
+        exec(compile(handle.read(), path, "exec"), module.__dict__)
+    return module
+
+
+GRAMMAR = path_grammar()
 
 CBX = "bash .claude/skills/codebase-index/scripts/cbx"
 MCP = "mcp__codebase-index__"
@@ -169,7 +184,10 @@ def segments(command: str, escape: str = "\\"):
             skip = False
         elif token and set(token) <= SEPARATORS:
             yield argv, piped, token
-            argv, piped = [], token.strip("\n") in ("|", "|&")
+            # shlex fuses a run of operators, so `|(` and `)|` pipe as `|` does; a bare `(` opens a
+            # subshell that reads what its own command would have read.
+            opens = set(token) == {"("}
+            argv, piped = [], piped if opens else token.strip("\n()") in ("|", "|&")
         elif token and set(token) <= SEPARATORS | REDIRECTS:
             skip, piped = True, piped or set(token) == {"<"}
         elif not (token.isdigit() and following and set(following) & REDIRECTS
@@ -195,7 +213,17 @@ def located(cwd: str, path: str) -> Path:
     drive = re.match(r"^/([A-Za-z])(?=/|$)", text)
     if sys.platform == "win32" and drive:
         text = f"{drive.group(1)}:/{text[3:]}"
-    return Path(cwd or ".", text)
+    # Unjoined: a join puts the cwd drive before `\??\`, and no join moves a share to another host.
+    return Path(text) if GRAMMAR.other_grammar(text) else Path(cwd or ".", text)
+
+
+def remote(paths: list[str], base: str, cwd: str) -> bool:
+    """True when a path the search names, or where it runs, is on a share
+    the session does not stand on, which no check here may open."""
+    project = os.environ.get("CLAUDE_PROJECT_DIR")
+    # As spelled too: a join puts the cwd drive before `\??\`, which Windows then reads as the share.
+    return any(GRAMMAR.foreign(place, cwd, project) for path in paths or ["."]
+               for place in (path.strip("'\""), str(located(base, path))))
 
 
 def files_only(paths: list[str], cwd: str) -> bool:
@@ -307,7 +335,8 @@ def shell_search(command: str, cwd: str, escape: str = "\\") -> str | None:
         # A `-` operand with no path reads standard input, as a pipe does.
         if stdin and not paths:
             tree = recursive = False
-        if (tree or recursive) and pattern and not prose_only(shown(paths, base, cwd), filters) \
+        if (tree or recursive) and pattern and not remote(paths, base, cwd) \
+                and not prose_only(shown(paths, base, cwd), filters) \
                 and not files_only(paths, base) and not elsewhere(paths, base, cwd):
             return pattern
     return None
@@ -321,7 +350,8 @@ def search(name: str, given: dict, cwd: str) -> str | None:
             return None
         paths = [given["path"]] if isinstance(given.get("path"), str) else []
         filters = [given[key] for key in ("glob", "type") if isinstance(given.get(key), str)]
-        if prose_only(shown(paths, cwd, cwd), filters) or files_only(paths, cwd) or elsewhere(paths, cwd, cwd):
+        if remote(paths, cwd, cwd) or prose_only(shown(paths, cwd, cwd), filters) or files_only(paths, cwd) \
+                or elsewhere(paths, cwd, cwd):
             return None
         return pattern
     if name in SHELLS and isinstance(given.get("command"), str):
@@ -424,7 +454,12 @@ def in_worktree(cwd: str) -> bool:
                 text = marker.read_text(encoding="utf-8").strip()
                 if not text.startswith("gitdir:"):
                     return False
-                git_dir = (candidate / text[len("gitdir:"):].strip()).resolve()
+                spelled = text[len("gitdir:"):].strip()
+                pointer = candidate / spelled
+                if any(GRAMMAR.foreign(place, cwd, os.environ.get("CLAUDE_PROJECT_DIR"))
+                       for place in (spelled, str(pointer))):
+                    return False
+                git_dir = pointer.resolve()
                 return (git_dir / "commondir").is_file()
     except (OSError, ValueError):
         return False
@@ -473,15 +508,34 @@ def record(session: object) -> Path | None:
     cannot name one."""
     if not isinstance(session, str) or not SESSION.match(session):
         return None
-    return Path(tempfile.gettempdir()) / ASKED / session
+    # The temp root is shared on POSIX, so each user's records sit apart.
+    uid = os.getuid() if hasattr(os, "getuid") else None
+    return Path(tempfile.gettempdir()) / (ASKED if uid is None else f"{ASKED}-{uid}") / session
+
+
+def private(directory: Path) -> bool:
+    """True when `directory` is this user's own, not a link and shut to
+    others; Windows keeps a temp root per user, so there it is a directory."""
+    try:
+        found = os.lstat(directory)
+    except OSError:
+        return False
+    if not stat.S_ISDIR(found.st_mode):
+        return False
+    if not hasattr(os, "getuid"):
+        return True
+    return found.st_uid == os.getuid() and not found.st_mode & 0o077
 
 
 def first(asked: Path) -> bool:
     """True for the one call that creates `asked`, so a parallel batch is
-    refused once."""
+    refused once. A directory another user made or reached by a link is
+    never written into, and the call goes through as one unrecorded would."""
     try:
-        asked.parent.mkdir(exist_ok=True)
-        os.close(os.open(asked, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+        asked.parent.mkdir(mode=0o700, exist_ok=True)
+        if not private(asked.parent):
+            return False
+        os.close(os.open(asked, os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0), 0o600))
     except OSError:
         return False
     return True
