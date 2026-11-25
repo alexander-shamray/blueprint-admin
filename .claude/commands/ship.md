@@ -2,7 +2,7 @@
 description: Start from a clean main, fork a worktree where one can be forked, branch, commit, push and open a PR, run the local review until a round has nothing open, then merge the PR and tear the workspace down. Decides for itself rather than stopping to ask
 argument-hint: "[what the change does | sync #<n>] [--sleep] [--dispatched <run-dir>] [--berserk] — omit and each step derives its own"
 allowed-tools: Read, Grep, Glob, Write, Skill, Agent(branch-reviewer), Agent(check-auditor), EnterWorktree, ExitWorktree, Bash(git status:*), Bash(git diff:*), Bash(git branch --list:*), Bash(git branch --show-current), Bash(git branch -a), Bash(git log:*), Bash(git fetch origin:*), Bash(bash .claude/scripts/git-branch-create.sh:*), Bash(bash .claude/scripts/git-worktree-fork.sh:*), Bash(bash .claude/scripts/git-switch-existing.sh:*), Bash(bash .claude/scripts/git-rebase-onto-main.sh:*), Bash(git rev-parse:*), Bash(git worktree list:*), Bash(ls:*), Bash(git add:*), Bash(git commit:*), Bash(bash .claude/scripts/git-unstage.sh:*), Bash(git push -u origin:*), Bash(git push origin:*), Bash(wc:*), Bash(bash .claude/scripts/gh-pr-create.sh:*), Bash(bash .claude/scripts/pr-state.sh:*), Bash(bash .claude/scripts/pr-for-branch.sh:*), Bash(bash .claude/scripts/git-trailer-pr.sh:*), Bash(gh pr checks:*), Bash(bash .claude/scripts/gh-pr-merge.sh:*), Bash(git pull --ff-only), Bash(git merge-base --is-ancestor:*), Bash(bash .claude/scripts/git-worktree-remove.sh:*), Bash(git worktree prune:*), Bash(bash .claude/scripts/pr-locality.sh:*), Bash(bash .claude/scripts/gh-issue-hand.sh:*), Bash(bash .claude/scripts/system-sleep.sh), Bash(py -3.12 .claude/scripts/sync_pr.py:*), Bash(bash .claude/scripts/git-worktree-sync.sh:*), Bash(bash .claude/scripts/gh-issue-harness.sh:*), Bash(py -3.12 .claude/scripts/shard-harness-suite.py), Bash(py -3.12 .claude/scripts/shard-harness-suite.py --selective), Bash(bash .claude/scripts/gh-issue-list.sh), Bash(bash .claude/scripts/gh-issue-suppresses.sh:*), Bash(bash .claude/scripts/git-branch-drop.sh:*), Bash(bash .claude/scripts/main-red-open.sh), Bash(git merge-base origin/main HEAD), Bash(bash .claude/skills/codebase-index/scripts/cbx search:*), Bash(bash .claude/skills/codebase-index/scripts/cbx refs:*), Bash(bash .claude/skills/codebase-index/scripts/cbx impact:*), Bash(bash .claude/skills/codebase-index/scripts/cbx diff-impact:*), Bash(py -3.12 .claude/scripts/dispatch_board.py tasks start:*), Bash(py -3.12 .claude/scripts/dispatch_board.py tasks state:*), Bash(py -3.12 .claude/scripts/dispatch_board.py tasks done:*), Bash(py -3.12 .claude/scripts/dispatch_board.py tasks back:*)
-disallowed-tools: Agent(general-purpose), Agent(claude), Agent(Explore), Agent(Plan), Agent(claude-code-guide), Agent(statusline-setup), Agent(fork), Agent(bug-auditor), Agent(security-auditor), Agent(team-peer), Edit(~/.claude/projects/**), Edit(~/.claude/output-styles/**)
+disallowed-tools: Agent(general-purpose), Agent(claude), Agent(Explore), Agent(Plan), Agent(claude-code-guide), Agent(statusline-setup), Agent(fork), Agent(bug-auditor), Agent(security-auditor), Agent(team-peer), Edit(~/.claude/projects/**), Edit(~/.claude/output-styles/**), Edit(~/.claude/CLAUDE.md)
 ---
 
 Take the working tree from wherever it is to a merged PR. Description:
@@ -83,6 +83,18 @@ checkout and removes the worktree, however the review ended.
   setting, secret, environment, ruleset, release or visibility and opens no
   billing: such an issue ends as a hand-back with its recommended answer. (why:
   docs/commands/ship.md, *Dispatched: the one token /dispatch passes*)
+- **A dispatched hand-back on a denied edit leaves its script in the
+  worktree**, not the scratchpad, which the dispatcher removes: everything
+  else committed, so the tree is clean, it writes the script to
+  `artifacts/handoff/`, its receipt as `docs/harness/working-rules.md`
+  *Hand-back scripts* shapes it, and `artifacts/handoff/resume.json`
+  holding exactly `group`, `issues`, `branch`, `head` (`git rev-parse
+  HEAD`), `script` and `receipt` (both worktree-relative) and `paths`, the
+  files the script edits; `reason` gives the owner the script's line. Once
+  the owner runs it, a later `/dispatch` launches this worktree again, its
+  prompt saying so: the dirty-tree row commits the edits, the body saying
+  the owner applied them from the script. (why: docs/commands/ship.md,
+  *Dispatched: the one token /dispatch passes*)
 - **The review hitting its ceiling is not a stop**: it ends the review,
   reported unconverged, and step 6 merges anyway.
 - **Never skip step 2**: this command merges, so it is the last gate before
