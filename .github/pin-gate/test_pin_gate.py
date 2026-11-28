@@ -488,6 +488,16 @@ def job(name: str) -> str:
     return match.group(1)
 
 
+def step(block: str, text: str) -> str:
+    """The whole step of a job block that holds `text`, from its `- ` line to the next step's."""
+    at = block.index(text)
+    # The bound reaches past `text`'s first two characters, so a `text` that opens with `- ` finds its own line.
+    start = block.rindex("\n      - ", 0, at + 2) + 1
+    # A step ends where the next one, or the comment above it, begins.
+    end = re.compile(r"\n      [-#]").search(block, at)
+    return block[start:] if end is None else block[start:end.start() + 1]
+
+
 class TheCiWiring(unittest.TestCase):
     # #547: a gate nothing runs reads exactly like one that passes.
 
@@ -501,7 +511,10 @@ class TheCiWiring(unittest.TestCase):
         # merge outside /ship too, with no ruleset change.
         block = job("host")
         self.gate_before_build(block, "python3 .github/pin-gate/pin_gate.py")
-        self.assertIn("runner.os == 'Linux'", block)
+        # The step whole, so a condition that never holds or a failure let through is a finding.
+        self.assertEqual("      - if: runner.os == 'Linux'\n        run: python3 .github/pin-gate/pin_gate.py\n",
+                         step(block, "run: python3 .github/pin-gate/pin_gate.py"))
+        self.assertNotIn("continue-on-error", block)
 
     def test_the_commits_job_runs_the_gate_on_each_commit_before_building_it(self) -> None:
         # Each commit before the head is what a later bisect restores. The

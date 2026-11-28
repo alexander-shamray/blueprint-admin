@@ -44,7 +44,7 @@ ROOT_IGNORE = ".gitignore"
 # Patterns that exclude a directory's whole contents. A file carrying one of
 # these and no negation says "nothing here is code", which is exactly the claim
 # the root has to be making too.
-BLANKET = {"*", "/*", "**", "/**"}
+BLANKET = {"*", "/*", "**", "/**", "**/*", "/**/*"}
 
 # The directories this repository's own tooling creates and never commits.
 # The first two carry a blanket ignore inside them; the third holds machine-
@@ -183,6 +183,14 @@ class TheScan(unittest.TestCase):
         self.write(".gitignore", "/artifacts/\n")
         self.write("scratch/.gitignore", "*\n")
         self.assertEqual(excluded_from_inside_only(self.repo), ["scratch/"])
+
+    def test_every_spelling_of_a_blanket_ignore_is_reported(self):
+        self.write(".gitignore", "/artifacts/\n")
+        # Literal, not BLANKET, so a spelling dropped from the constant drops no case.
+        for rule in ("*", "/*", "**", "/**", "**/*", "/**/*"):
+            with self.subTest(rule=rule):
+                self.write("scratch/.gitignore", rule + "\n")
+                self.assertEqual(excluded_from_inside_only(self.repo), ["scratch/"])
 
     def test_a_blanket_ignore_written_with_a_bom_is_still_reported(self):
         # An editor on Windows may save the nested file with a BOM.
