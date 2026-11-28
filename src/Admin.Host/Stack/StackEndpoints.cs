@@ -43,8 +43,9 @@ public static partial class StackEndpoints
                 ? TypedResults.Ok(JobSummary.Of(stopped))
                 : TypedResults.Problem(statusCode: StatusCodes.Status409Conflict, title: "No load run going", detail: "There is no load run to stop."));
 
-        // The backend's stress run as one job under ComposeGate (spec §5.3), since its up recreates services: one going answers a
-        // second Run with itself and an Up, a Down, a reset or a lease is refused while it runs. A load run going refuses it.
+        // The backend's stress run as one job under ComposeGate (spec §5.3), since its up recreates services: one going
+        // answers a second Run of its choice with itself and refuses one of another, an Up, a Down, a reset or a lease.
+        // A load run going refuses it.
         // The body names the level and the stop rule, each optional, and a value the backend does not name is refused before anything
         // starts. It is read here, not bound: a POST with no content type and no body, which is what asks for the defaults, is a 404 to the binder.
         app.MapPost("/api/stack/stress-run", async Task<Results<Accepted<JobSummary>, ProblemHttpResult>> (HttpRequest http, StressRunService stressRun, LoadRunService loadRun, CancellationToken cancellationToken) =>
@@ -87,9 +88,18 @@ public static partial class StackEndpoints
 
             lock (K6Runs)
             {
-                return loadRun.Current is { State: JobState.Running } load
-                    ? Busy("stress run", "load run", load)
-                    : stressRun.Start(choice).Answer(StressRunService.Kind);
+                if (loadRun.Current is { State: JobState.Running } load)
+                {
+                    return Busy("stress run", "load run", load);
+                }
+
+                // The run going answers a second Run only when it is the run asked for: another choice would be
+                // dropped unseen.
+                Claim claim = stressRun.Start(choice);
+
+                return claim.Kind == StressRunService.Kind && stressRun.Choice is { } going && going != choice
+                    ? OtherChoice(going, choice, claim.Job)
+                    : claim.Answer(StressRunService.Kind);
             }
         });
 
@@ -212,6 +222,15 @@ public static partial class StackEndpoints
             statusCode: StatusCodes.Status409Conflict,
             title: "A run is already going",
             detail: $"A {going} (job {job.Id}) is still running, so this {wanted} was not started. Stop it or wait for it to end.");
+
+    /// <summary>The refusal of a stress run asked for while one with another choice goes.</summary>
+    private static ProblemHttpResult OtherChoice(StressChoice going, StressChoice asked, Job job) =>
+        TypedResults.Problem(
+            statusCode: StatusCodes.Status409Conflict,
+            title: "A run is already going",
+            detail: $"A stress run at {going.Level}, stopping at {going.Stop} (job {job.Id}), is still running, "
+                + $"so this one at {asked.Level}, stopping at {asked.Stop}, was not started. "
+                + "Stop it or wait for it to end.");
 
     private static ProblemHttpResult StressBodyRefused() =>
         TypedResults.Problem(

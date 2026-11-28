@@ -546,7 +546,9 @@ knee are theirs, and the blocks are held to the document word for word
 - **One job, under the gate.** It is built as the load run is (§5.3 above),
   but it claims `ComposeGate`, because its up recreates each service the
   override changes: an Up, a Down, a reset or a lease is refused while it runs, and a
-  second Run answers with the run going. One k6 run at a time: a load run
+  second Run answers with the run going when it asks the same level and stop
+  rule, and is refused with a 409 naming the run's own when it asks another,
+  which would otherwise be dropped unseen. One k6 run at a time: a load run
   going refuses a stress run, and the other way round, since each would read
   the other's traffic as its own.
 - **The level and the stop rule are the operator's.** Two lists beside Run

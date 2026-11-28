@@ -150,6 +150,9 @@ public sealed partial class StressRunService(
     /// <summary>The last stress run, running or exited, for the Stack screen; null before the first.</summary>
     public Job? Current => current;
 
+    /// <summary>What the last run was asked for, running or exited; null before the first.</summary>
+    public StressChoice? Choice => choice;
+
     /// <summary>The last run with its step and its knee, as the Stack screen reads it; null before the first.</summary>
     public StressRunView? View() =>
         current is { } run ? new StressRunView(JobSummary.Of(run), staircase?.Current, knee, choice, ended, firstToGiveUp) : null;

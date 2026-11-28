@@ -34,4 +34,32 @@ public sealed class StressRunBareRequestTests(AdminHostFactory factory) : IClass
         stack.GetProperty("stressRun").GetProperty("choice").GetProperty("stop").GetString().ShouldBe("errors");
         (await client.PostAsync("/api/stack/stress-run/stop", null, TestContext.Current.CancellationToken)).StatusCode.ShouldBe(HttpStatusCode.OK);
     }
+
+    [Fact]
+    public async Task A_second_run_asked_for_another_choice_is_refused_and_the_same_choice_answers_with_the_run()
+    {
+        HttpResponseMessage first = await client.PostAsJsonAsync(
+            "/api/stack/stress-run", new { level = "high", stop = "errors" }, TestContext.Current.CancellationToken);
+        first.StatusCode.ShouldBe(HttpStatusCode.Accepted);
+        string? id = (await first.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken))
+            .GetProperty("id").GetString();
+
+        HttpResponseMessage other = await client.PostAsJsonAsync(
+            "/api/stack/stress-run", new { level = "low", stop = "knee" }, TestContext.Current.CancellationToken);
+
+        other.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        string detail = (await other.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken))
+            .GetProperty("detail").GetString().ShouldNotBeNull();
+        detail.ShouldContain("at high, stopping at errors");
+        detail.ShouldContain(id!);
+
+        HttpResponseMessage same = await client.PostAsJsonAsync(
+            "/api/stack/stress-run", new { level = "high", stop = "errors" }, TestContext.Current.CancellationToken);
+
+        same.StatusCode.ShouldBe(HttpStatusCode.Accepted);
+        (await same.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken))
+            .GetProperty("id").GetString().ShouldBe(id);
+        (await client.PostAsync("/api/stack/stress-run/stop", null, TestContext.Current.CancellationToken))
+            .StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
 }
