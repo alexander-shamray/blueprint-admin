@@ -25,6 +25,8 @@ public sealed class StackEndpointTests : IClassFixture<AdminHostFactory>
 
     private FakeProcessRunner Runner => factory.Services.GetRequiredService<FakeProcessRunner>();
 
+    private int StressSpecs => Runner.Started.Count(s => s.Arguments.Contains(Admin.Host.Stack.StressRunService.Up));
+
     [Fact]
     public async Task Stack_reports_compose_services_and_reachability()
     {
@@ -85,6 +87,46 @@ public sealed class StackEndpointTests : IClassFixture<AdminHostFactory>
 
         response.StatusCode.ShouldBe(HttpStatusCode.UnsupportedMediaType);
         Runner.Started.Count(s => s.Arguments.Contains(Admin.Host.Stack.StressRunService.Up)).ShouldBe(stressSpecsBefore);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_stress_run_with_a_body_that_names_no_type_is_refused_rather_than_run(bool sized)
+    {
+        int stressSpecsBefore = StressSpecs;
+        string text = "{\"level\":\"high\"}";
+        using HttpContent content = sized ? new StringContent(text) : new UnsizedContent(text);
+        content.Headers.ContentType = null;
+        using HttpRequestMessage request = new(HttpMethod.Post, "/api/stack/stress-run") { Content = content };
+        request.Headers.TransferEncodingChunked = !sized;
+
+        // With no length sent, it is the one-byte read that finds the body.
+        content.Headers.ContentLength.ShouldBe(sized ? (long?)text.Length : null);
+
+        HttpResponseMessage response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.UnsupportedMediaType);
+        StressSpecs.ShouldBe(stressSpecsBefore);
+    }
+
+    [Theory]
+    [InlineData("{\"profile\":\"xhigh\"}")]
+    [InlineData("{\"level\":\"high\",\"lvl\":\"low\"}")]
+    [InlineData("null")]
+    public async Task A_stress_run_with_a_json_body_that_names_neither_key_is_refused_rather_than_run(string body)
+    {
+        int stressSpecsBefore = StressSpecs;
+        using StringContent content = new(body, System.Text.Encoding.UTF8, "application/json");
+
+        HttpResponseMessage response = await client.PostAsync(
+            "/api/stack/stress-run", content, TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        JsonElement problem = await response.Content.ReadFromJsonAsync<JsonElement>(
+            TestContext.Current.CancellationToken);
+        problem.GetProperty("title").GetString().ShouldBe("Stress run refused");
+        StressSpecs.ShouldBe(stressSpecsBefore);
     }
 
     [Fact]
@@ -207,5 +249,19 @@ public sealed class StackEndpointTests : IClassFixture<AdminHostFactory>
         stopped.StatusCode.ShouldBe(HttpStatusCode.NoContent);
         JsonElement secondNow = await client.GetFromJsonAsync<JsonElement>($"/api/jobs/{secondId}", TestContext.Current.CancellationToken);
         secondNow.GetProperty("summary").GetProperty("state").GetString().ShouldBe("Running");
+    }
+
+    /// <summary>A body whose length is not worked out first, so the request goes with no Content-Length.</summary>
+    private sealed class UnsizedContent(string text) : HttpContent
+    {
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context) =>
+            stream.WriteAsync(System.Text.Encoding.UTF8.GetBytes(text)).AsTask();
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+
+            return false;
+        }
     }
 }
