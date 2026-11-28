@@ -16,7 +16,7 @@ from pathlib import Path
 
 from judge_build import (JudgeError, config_sources, imports, judge, judge_assets, main, pin_versions,
                          read_assets)
-from test_pin_gate import inside as cwd, job, run
+from test_pin_gate import inside as cwd, job, run, step
 
 PIN = """<Project>
   <PropertyGroup>
@@ -372,9 +372,13 @@ class TheCiWiring(unittest.TestCase):
         for text in order:
             self.assertIn(text, block[at:], text)
             at = block.index(text, at) + len(text)
-        # `- run:` opens each judge step, so no `if:` precedes it; none may follow.
-        for step in (order[1], order[3]):
-            self.assertNotIn("if:", block[block.index(step) + len(step):].split("\n", 1)[0])
+        # `- run:` opens each judge step, so no `if:` precedes it; none may follow anywhere in the step.
+        for text in (order[1], order[3]):
+            whole = step(block, text)
+            self.assertTrue(whole.lstrip(" ").startswith(text), whole)
+            for key in ("if:", "continue-on-error"):
+                with self.subTest(step=text, key=key):
+                    self.assertNotIn(key, whole)
 
     def test_the_commits_job_judges_each_commits_build(self) -> None:
         # The static read before the build, the judge of its log after, each

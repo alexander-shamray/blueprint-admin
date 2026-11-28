@@ -221,8 +221,11 @@ class AdminStack(unittest.TestCase):
                      "Edit(CLAUDE.local.md)", "Edit(./CLAUDE.local.md)"):
             with self.subTest(rule=rule):
                 self.assertIn(rule, denied)
-        self.assertNotIn("Edit(CLAUDE.md)", denied)
-        self.assertNotIn("Edit(.claude/**)", denied)
+        # Every deny above is held in both spellings, so the absence is too.
+        for rule in ("Edit(CLAUDE.md)", "Edit(./CLAUDE.md)",
+                     "Edit(.claude/**)", "Edit(./.claude/**)"):
+            with self.subTest(rule=rule):
+                self.assertNotIn(rule, denied)
 
     def test_the_msbuild_and_nuget_names_are_protected_files_and_untracked(self):
         # Untracked save TRACKED_BY_DESIGN; protected without exception.
@@ -250,9 +253,15 @@ class AdminStack(unittest.TestCase):
         self.assertIn("npm run lint", source)
         self.assertIn("npm test", source)
         self.assertIn("npm run build", source)
-        self.assertNotIn('"$@"', source)
-        # The one other use is the timing record's label, which runs nothing.
-        self.assertNotIn("$mode\"", source.replace('"$mode" in', "").replace('--mode "$mode"', ""))
+        # No argument reaches a command in any spelling: the mode is read once,
+        # matched against a fixed case, and otherwise only labels the timing
+        # record, which runs nothing.
+        code = self.code_lines(source)
+        for allowed in ('mode="${1:-all}"', 'case "$mode" in', '--mode "$mode" --wall "$SECONDS"'):
+            self.assertEqual(1, code.count(allowed), allowed)
+            code = code.replace(allowed, "")
+        self.assertIsNone(
+            re.search(r"\$(?:@|\*|[1-9]|\{[1-9#@*]|\{?mode\b)", code), code)
 
     def test_the_check_runner_offers_no_e2e_mode(self):
         # Playwright needs a browser download and the backend's Compose stack.
@@ -260,7 +269,18 @@ class AdminStack(unittest.TestCase):
         # was listening, which is the fail-open shape every gate in this
         # repository is written against. CI owns that suite.
         source = (SCRIPTS / "npm-checks.sh").read_text(encoding="utf-8")
-        self.assertNotIn("npm run e2e", source)
+        labels = re.findall(r"(?m)^  ([^\s#()][^\s()]*)\)\s*$", source)
+        self.assertEqual(["all", "fast", "lint", "test", "build", "*"], labels)
+        code = self.code_lines(source)
+        for word in ("e2e", "playwright"):
+            with self.subTest(word=word):
+                self.assertNotIn(word, code.lower())
+
+    @staticmethod
+    def code_lines(source):
+        """The script less its comment lines, which name what it refuses."""
+        return "\n".join(line for line in source.splitlines()
+                         if not line.lstrip().startswith("#"))
 
     def test_the_repository_tracks_no_symbolic_link(self):
         # A path deny is held by spelling, and
@@ -359,7 +379,10 @@ class TheLocalRoots(unittest.TestCase):
     """The roots the payload's runner does not know are run in two places, and the two lists are one fact."""
 
     def roots(self, text):
-        return re.findall(r"discover -s (?!\.claude/scripts)(\S+) -p '(\S+)'", text)
+        # Anchored per line, so a commented-out root no longer counts as run.
+        return re.findall(
+            r"(?m)^[ \t]*(?:run_py|python) -m unittest discover -s (?!\.claude/scripts)(\S+) -p '(\S+)'[ \t]*$",
+            text)
 
     def test_the_check_and_the_ci_job_run_the_same_roots(self):
         checks = (SCRIPTS / "harness-checks.sh").read_text(encoding="utf-8")
@@ -376,8 +399,11 @@ class TheLocalRunIsSelective(unittest.TestCase):
     def test_the_check_selects_and_the_ci_job_does_not(self):
         checks = (SCRIPTS / "harness-checks.sh").read_text(encoding="utf-8")
         ci = (SCRIPTS.parent.parent / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-        self.assertIn("run_py .claude/scripts/shard-harness-suite.py --selective\n", checks)
-        self.assertIn("python .claude/scripts/shard-harness-suite.py\n", ci)
+        self.assertRegex(checks, r"(?m)^run_py \.claude/scripts/shard-harness-suite\.py --selective$")
+        # Inside its named step, and uncommented.
+        step = re.search(r"(?ms)^      - name: The payload's suite\n(.*?)(?=^      - |\Z)", ci)
+        self.assertIsNotNone(step)
+        self.assertRegex(step.group(1), r"(?m)^          python \.claude/scripts/shard-harness-suite\.py$")
         self.assertNotIn("--selective", ci)
 
 
