@@ -125,8 +125,20 @@ public sealed class AdminReadTools(
             + "script can cause them, and each phase's impact. Says why when the list could not be read."),
     ];
 
-    public async ValueTask<ToolOutcome> InvokeAsync(string name, JsonObject input, ToolContext context, CancellationToken cancellationToken) =>
-        name switch
+    public async ValueTask<ToolOutcome> InvokeAsync(
+        string name, JsonObject input, ToolContext context, CancellationToken cancellationToken)
+    {
+        // Each schema says additionalProperties: false and nothing upstream holds input to it, so a misnamed key would
+        // be dropped and read as the default, as PlatformReadTools refuses one.
+        if (Tools.FirstOrDefault(t => t.Name == name)?.InputSchema["properties"] is JsonObject known
+            && input.Select(p => p.Key).FirstOrDefault(k => !known.ContainsKey(k)) is { } unknown)
+        {
+            return new ToolOutcome(false, known.Count == 0
+                ? $"{name} takes no input, and was given {unknown}."
+                : $"{name} takes only {string.Join(", ", known.Select(p => p.Key))}, and was given {unknown}.");
+        }
+
+        return name switch
         {
             // GET /api/stack
             "stack_status" => Result(await StackEndpoints.ReadAsync(compose, frontend, probe(), leases, loadRun, stressRun, cancellationToken)),
@@ -151,6 +163,7 @@ public sealed class AdminReadTools(
 
             _ => new ToolOutcome(false, $"There is no tool named {name}."),
         };
+    }
 
     private static ToolDescriptor Tool(string name, string title, string description, JsonObject? properties = null, string[]? required = null)
     {

@@ -101,6 +101,8 @@ public sealed partial class AdminReadToolsTests(AdminHostFactory factory) : ICla
     [InlineData("""{"lines":201}""")]
     [InlineData("""{"lines":"ten"}""")]
     [InlineData("""{"filter":5}""")]
+    [InlineData("""{"query":"ordering-api","count":5}""")]
+    [InlineData("""{"filter":"ordering-api","count":5}""")]
     public async Task Recent_logs_refuses_input_outside_its_schema(string input)
     {
         ToolOutcome outcome = await factory.Services.GetRequiredService<AdminReadTools>()
@@ -113,12 +115,27 @@ public sealed partial class AdminReadToolsTests(AdminHostFactory factory) : ICla
     [InlineData("""{}""")]
     [InlineData("""{"correlationId":"a\"b"}""")]
     [InlineData("""{"correlationId":"fake-corr-0001","window":"forever"}""")]
+    [InlineData("""{"correlationId":"fake-corr-0001","since":"6h"}""")]
     public async Task Trace_summary_refuses_what_the_trace_endpoint_refuses(string input)
     {
         ToolOutcome outcome = await factory.Services.GetRequiredService<AdminReadTools>()
             .InvokeAsync("trace_summary", JsonNode.Parse(input)!.AsObject(), Context, Ct);
 
         outcome.Ok.ShouldBeFalse();
+    }
+
+    [Theory]
+    [MemberData(nameof(Names))]
+    public async Task Every_read_refuses_a_key_its_schema_does_not_name(string name)
+    {
+        JsonObject input = Input(name);
+        input["unnamed"] = 1;
+
+        ToolOutcome outcome = await factory.Services.GetRequiredService<AdminReadTools>()
+            .InvokeAsync(name, input, Context, Ct);
+
+        outcome.Ok.ShouldBeFalse();
+        outcome.Content.ShouldContain("unnamed");
     }
 
     [Theory]
