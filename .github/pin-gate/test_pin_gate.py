@@ -489,13 +489,42 @@ def job(name: str) -> str:
 
 
 def step(block: str, text: str) -> str:
-    """The whole step of a job block that holds `text`, from its `- ` line to the next step's."""
+    """The step of a job block that holds `text`, from its `- ` line, less its comment and blank lines.
+
+    It ends at the next step or at a line indented less than its keys. A comment at any indent does not end it,
+    since YAML admits one inside a mapping, so a key after one is still read.
+    """
     at = block.index(text)
     # The bound reaches past `text`'s first two characters, so a `text` that opens with `- ` finds its own line.
     start = block.rindex("\n      - ", 0, at + 2) + 1
-    # A step ends where the next one, or the comment above it, begins.
-    end = re.compile(r"\n      [-#]").search(block, at)
-    return block[start:] if end is None else block[start:end.start() + 1]
+    lines = block[start:].splitlines(keepends=True)
+    kept = lines[:1]
+    for line in lines[1:]:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if line.startswith("      - ") or len(line) - len(line.lstrip(" ")) < 8:
+            break
+        kept.append(line)
+    return "".join(kept)
+
+
+class TheStepSlice(unittest.TestCase):
+    """`step()` reads what a judge or gate step holds, the surface TheCiWiring's cases judge."""
+
+    BLOCK = ("\n      - name: before\n        run: true\n"
+             "      - run: python3 gate.py\n"
+             "      # a comment at the step's own indent\n"
+             "        continue-on-error: true\n"
+             "      # the next step's comment\n"
+             "      - run: dotnet build\n")
+
+    def test_a_key_after_a_comment_inside_the_step_is_read(self) -> None:
+        self.assertEqual("      - run: python3 gate.py\n        continue-on-error: true\n",
+                         step(self.BLOCK, "- run: python3 gate.py"))
+
+    def test_the_step_ends_at_the_next_step_and_at_a_shallower_line(self) -> None:
+        self.assertNotIn("dotnet build", step(self.BLOCK, "gate.py"))
+        self.assertEqual("      - run: x\n", step("\n      - run: x\n    env:\n        A: 1\n", "run: x"))
 
 
 class TheCiWiring(unittest.TestCase):

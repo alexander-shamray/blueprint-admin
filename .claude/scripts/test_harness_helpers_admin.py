@@ -253,15 +253,28 @@ class AdminStack(unittest.TestCase):
         self.assertIn("npm run lint", source)
         self.assertIn("npm test", source)
         self.assertIn("npm run build", source)
-        # No argument reaches a command in any spelling: the mode is read once,
-        # matched against a fixed case, and otherwise only labels the timing
-        # record, which runs nothing.
+        # Positional, all-argument, indirect (`${!…}`) and BASH_ARGV spellings
+        # are refused. The mode is read once, matched against a fixed case,
+        # and otherwise only labels the timing record.
         code = self.code_lines(source)
         for allowed in ('mode="${1:-all}"', 'case "$mode" in', '--mode "$mode" --wall "$SECONDS"'):
             self.assertEqual(1, code.count(allowed), allowed)
             code = code.replace(allowed, "")
-        self.assertIsNone(
-            re.search(r"\$(?:@|\*|[1-9]|\{[1-9#@*]|\{?mode\b)", code), code)
+        self.assertIsNone(self.FORWARDED.search(code), code)
+
+    # An argument, or the mode, spelled where a command would receive it.
+    FORWARDED = re.compile(r"\$(?:@|\*|[1-9]|\{[1-9#@*!]|\{?mode\b|\{?BASH_ARGV)")
+
+    def test_the_free_parameter_pattern_refuses_each_spelling_it_names(self):
+        # The real script holds none of these, so only a case like this one
+        # shows that each alternative still refuses what it is there for.
+        for line in ('npm test -- "$1"', "npm test $@", "npm test $*", "npm run $mode", "npm test ${2}",
+                     'npm test "${@}"', 'npm run "${!#}"', 'npm run "${BASH_ARGV[0]}"'):
+            with self.subTest(line=line):
+                self.assertIsNotNone(self.FORWARDED.search(line))
+        for line in ('exit "$code"', "$py -c x", 'echo "usage: $0"', '"$SECONDS"'):
+            with self.subTest(line=line):
+                self.assertIsNone(self.FORWARDED.search(line))
 
     def test_the_check_runner_offers_no_e2e_mode(self):
         # Playwright needs a browser download and the backend's Compose stack.
