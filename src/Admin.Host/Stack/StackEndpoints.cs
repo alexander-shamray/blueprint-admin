@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Admin.Host.Compose;
 using Admin.Host.Frontend;
@@ -14,6 +15,8 @@ public static partial class StackEndpoints
     private const string Down = "down";
 
     private const string DownWipe = "down -v";
+
+    private const string StressBodyForm = "The body is not a JSON object of the form {\"level\": …, \"stop\": …}.";
 
     /// <summary>Held across one k6 run's check of the other and its own start, so two requests at once cannot start both.</summary>
     private static readonly Lock K6Runs = new();
@@ -49,7 +52,13 @@ public static partial class StackEndpoints
             StressRunRequest? request = null;
 
             // A chunked body has no length, so the type decides: a request that names one and is not JSON has a body to refuse.
-            if (http.ContentLength != 0 && http.ContentType is not null && !http.HasJsonContentType())
+            // One that names none has a body if its length says so or, with no length, if a byte can be read.
+            // A body with no type, a misnamed key or a bare null names nothing, so is refused, not run at the defaults.
+            bool hasBody = http.ContentType is not null
+                ? http.ContentLength != 0
+                : await HasBodyAsync(http, cancellationToken);
+
+            if (!http.HasJsonContentType() && hasBody)
             {
                 return TypedResults.Problem(statusCode: StatusCodes.Status415UnsupportedMediaType, title: "Stress run refused", detail: "The body, if there is one, is JSON.");
             }
@@ -62,7 +71,12 @@ public static partial class StackEndpoints
                 }
                 catch (JsonException)
                 {
-                    return TypedResults.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Stress run refused", detail: "The body is not a JSON object of the form {\"level\": …, \"stop\": …}.");
+                    return StressBodyRefused();
+                }
+
+                if (request is null)
+                {
+                    return StressBodyRefused();
                 }
             }
 
@@ -199,6 +213,28 @@ public static partial class StackEndpoints
             title: "A run is already going",
             detail: $"A {going} (job {job.Id}) is still running, so this {wanted} was not started. Stop it or wait for it to end.");
 
+    private static ProblemHttpResult StressBodyRefused() =>
+        TypedResults.Problem(
+            statusCode: StatusCodes.Status400BadRequest,
+            title: "Stress run refused",
+            detail: StressBodyForm);
+
+    /// <summary>
+    /// Whether a request that names no type carries a body: a stated length says so, and a chunked one is read
+    /// for a byte.
+    /// </summary>
+    private static async Task<bool> HasBodyAsync(HttpRequest http, CancellationToken cancellationToken)
+    {
+        if (http.ContentLength is long length)
+        {
+            return length > 0;
+        }
+
+        byte[] probe = new byte[1];
+
+        return await http.Body.ReadAsync(probe, cancellationToken) > 0;
+    }
+
     /// <summary>
     /// The Stack screen's read: the backend's services, the frontend, what answers on its port, the lease, the last load run, the
     /// last stress run and which services run on the stress override. <c>GET /api/stack</c> and the assistant's
@@ -256,6 +292,11 @@ public sealed record LeaseRequest(string[]? Changes, int HoldSeconds, string? La
 public sealed record LeaseChangeRequest(string? Change);
 
 /// <summary>The level and the stop rule a stress run is asked for, as <see cref="StressChoice"/> names them; each defaults when left out.</summary>
+/// <remarks>
+/// An unknown key is refused rather than skipped, since a misnamed one would otherwise read as
+/// <see cref="StressChoice"/>'s defaults.
+/// </remarks>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record StressRunRequest(string? Level, string? Stop);
 
 public sealed record DownRequest(bool WipeVolumes, string? Confirm);
